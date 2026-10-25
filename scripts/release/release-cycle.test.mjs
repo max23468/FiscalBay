@@ -15,6 +15,8 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import {
   assertBase,
+  assertQualificationBase,
+  independentBase,
   waitUpdatedHead,
   expectedRun,
   candidateRef,
@@ -347,6 +349,65 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     assert.doesNotThrow(() => assertBase(sha, sha));
     assert.throws(() => assertBase(sha, "b".repeat(40)), /base/u);
     assert.throws(() => assertBase("", ""), /base/u);
+  });
+
+  it("non riqualifica per una base avanzata su file disgiunti e non globali", () => {
+    assert.equal(independentBase(["app/routes/stores.tsx"], []), true);
+    assert.equal(independentBase(["app/routes/stores.tsx"], ["app/routes/orders.tsx"]), true);
+    assert.equal(independentBase(["migrations/0041_a.sql"], ["app/routes/orders.tsx"]), true);
+    for (const [own, base] of [
+      [["app/copy/copy-it.ts"], ["app/copy/copy-it.ts", "README.md"]],
+      [["migrations/0041_a.sql"], ["migrations/0041_b.sql"]],
+      [["app/routes/stores.tsx"], ["pnpm-lock.yaml"]],
+      [["package.json"], ["app/routes/orders.tsx"]],
+      [["app/routes/stores.tsx"], [".github/workflows/ci.yml"]],
+      [["app/routes/stores.tsx"], ["scripts/release/release.mjs"]],
+      [["app/routes/stores.tsx"], ["vite.config.ts"]],
+      [["app/routes/stores.tsx"], ["e2e/fixtures.ts"]],
+    ])
+      assert.equal(independentBase(own, base), false, `${own} ${base}`);
+    assert.equal(independentBase(["e2e/stores.spec.ts"], ["e2e/orders.spec.ts"]), true);
+  });
+
+  it("ammette verso develop una base attuale compatibile, verso main soltanto quella provata", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "qualification-base-"));
+    const git = (...args) =>
+      (spawnSync("git", args, { cwd: directory, encoding: "utf8" }).stdout ?? "").trim();
+    const run = (...args) => {
+      const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
+      if (result.status !== 0) throw new Error(result.stderr);
+      return result.stdout.trim();
+    };
+    const commit = (file, text) => {
+      mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+      writeFileSync(path.join(directory, file), text);
+      git("add", "--all");
+      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", file);
+      return git("rev-parse", "HEAD");
+    };
+    try {
+      git("init", "--quiet", "--initial-branch", "develop");
+      const tested = commit("app/a.ts", "a\n");
+      const disjoint = commit("app/b.ts", "b\n");
+      const shared = commit("app/a.ts", "a2\n");
+      git("switch", "--quiet", "-c", "feature", tested);
+      const head = commit("app/c.ts", "c\n");
+      git("switch", "--quiet", "-c", "overlap", tested);
+      const overlap = commit("app/b.ts", "b2\n");
+      assert.doesNotThrow(() => assertQualificationBase("develop", tested, tested, head, run));
+      assert.doesNotThrow(() => assertQualificationBase("develop", tested, disjoint, head, run));
+      assert.throws(
+        () => assertQualificationBase("develop", tested, disjoint, overlap, run),
+        /file comuni/u,
+      );
+      assert.doesNotThrow(() => assertQualificationBase("develop", disjoint, shared, head, run));
+      assert.throws(() => assertQualificationBase("develop", "", tested, head, run), /base/u);
+      assert.throws(() => assertQualificationBase("main", tested, disjoint, head, run), /base/u);
+      assert.throws(() => assertQualificationBase("main", disjoint, disjoint, head, run), /base/u);
+      assert.doesNotThrow(() => assertQualificationBase("main", tested, tested, head, run));
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("segue la run più recente sul commit atteso, non quella annullata", () => {

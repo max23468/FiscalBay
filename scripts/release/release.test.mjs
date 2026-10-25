@@ -5,7 +5,9 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import {
   declaredReview,
+  migrationEntry,
   migrationPlan,
+  requiredReview,
   reviewAdded,
   publish,
   productionReadiness,
@@ -210,6 +212,12 @@ describe("pubblicazione riprendibile", () => {
     );
     assert.equal(declaredReview(undefined), "");
     assert.equal(declaredReview(`testo reviewed-migrations: ${digest}`), "");
+    // La verifica locale mostra la stessa riga prima dell'apertura della PR.
+    assert.deepEqual(requiredReview([additive, unsafe]), { names: ["b.sql"], digest });
+    assert.equal(requiredReview([additive]), undefined);
+    const entry = migrationEntry("migrations/0041_c.sql", Buffer.from(unsafe.sql));
+    assert.deepEqual([entry.name, entry.sql], ["0041_c.sql", unsafe.sql]);
+    assert.match(entry.digest, /^[0-9a-f]{64}$/u);
   });
 
   it("recupera solo la ricevuta non scaduta del tentativo precedente della stessa run", () => {

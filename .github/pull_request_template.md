@@ -11,4 +11,4 @@ se cambiano requisiti, checkpoint, stato dei task, avanzamento significativo o q
 Le prove dell'intervento restano nella PR, nella CI e nelle ricevute applicabili.
 
 Se la PR aggiunge migration non additive, dopo l'esame aggiungi qui la riga
-`reviewed-migrations: <digest>` indicata dal controllo `Verify`.
+`reviewed-migrations: <digest>` indicata da `pnpm verify:changed`, prima di aprire la PR.

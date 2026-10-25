@@ -21,6 +21,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { plan } from "../classify-changes.mjs";
 import { assertBrowserEvidence } from "./release-notes.mjs";
+import { addedMigrations, reviewAdded } from "./release.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
 
 const execute = (command, args, options = {}) =>
@@ -108,6 +109,53 @@ export function assertBase(expected, current) {
     throw new Error("La base della PR è avanzata: aggiornarla prima della qualifica finale.");
 }
 
+// File che valgono per tutto il prodotto o per la procedura di qualifica: se cambiano da una
+// delle due parti, la PR si riqualifica sulla base attuale.
+const globalFile =
+  /^(?:package\.json|pnpm-(?:lock|workspace)\.yaml|tsconfig[^/]*\.json|[^/]+\.config\.ts|\.github\/|scripts\/(?:classify-changes\.mjs|release\/)|e2e\/(?![^/]+\.spec\.ts$))/u;
+
+/**
+ * Vero se i commit entrati nella base non richiedono di riqualificare la PR: file disgiunti,
+ * nessun file globale da una delle due parti e migration nuove da una parte sola. Il push su
+ * `develop` riesegue comunque il gate sul tree integrato prima del deploy test.
+ */
+export function independentBase(prFiles, baseFiles) {
+  if (!baseFiles.length) return true;
+  const own = new Set(prFiles);
+  const migrations = (files) => files.some((file) => file.startsWith("migrations/"));
+  return !(
+    baseFiles.some((file) => own.has(file)) ||
+    [...prFiles, ...baseFiles].some((file) => globalFile.test(file)) ||
+    (migrations(prFiles) && migrations(baseFiles))
+  );
+}
+
+/**
+ * Confronta la base qualificata `tested` con quella attuale: i file della PR partono dal punto
+ * di divergenza fra `tested` e la testa, quelli della base da `tested`.
+ */
+export function compatibleBase(tested, current, head, run = git) {
+  if (tested === current) return true;
+  const files = (from, to) => run("diff", "--name-only", from, to).split("\n").filter(Boolean);
+  return independentBase(files(run("merge-base", tested, head), head), files(tested, current));
+}
+
+/**
+ * Base della qualifica finale: `main` riceve soltanto `develop` già aggiornato; verso `develop`
+ * basta una base attuale compatibile con quella provata.
+ */
+export function assertQualificationBase(ref, tested, current, head, run = git) {
+  if (ref === "main") {
+    assertBase(tested, current);
+    if (!contains(tested, head, run)) throw new Error("La promozione non contiene la base.");
+    return;
+  }
+  if (!/^[0-9a-f]{40}$/u.test(tested ?? "") || !compatibleBase(tested, current, head, run))
+    throw new Error(
+      "La base della PR è avanzata su file comuni o globali: aggiornarla e riqualificarla.",
+    );
+}
+
 /**
  * `gh pr update-branch` risponde prima che GitHub crei il merge con la base: la PR va riletta
  * finché la sua testa cambia e contiene la base, altrimenti il ciclo attenderebbe la run sul
@@ -122,9 +170,9 @@ export async function waitUpdatedHead(read, previous, contains, attempts = 30, d
   throw new Error("Base della PR non aggiornata da GitHub: nessun rilancio automatico.");
 }
 
-function contains(base, head) {
+function contains(base, head, run = git) {
   try {
-    git("merge-base", "--is-ancestor", base, head);
+    run("merge-base", "--is-ancestor", base, head);
     return true;
   } catch {
     return false;
@@ -686,7 +734,7 @@ async function main() {
     if (command === "pr") {
       if (!/^\d+$/u.test(number ?? "")) throw new Error("Numero PR non valido.");
       const fields =
-        "state,isDraft,autoMergeRequest,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,headRepository";
+        "state,isDraft,autoMergeRequest,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,headRepository,body";
       let pr = json("pr", "view", number, "--repo", repository, "--json", fields);
       if (pr.baseRefName !== "develop" || pr.headRepository?.nameWithOwner !== repository)
         throw new Error(
@@ -703,14 +751,54 @@ async function main() {
           gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
         const fetchHead = (...refs) =>
           localGit(() => git("fetch", "origin", ...refs, pr.headRefName));
-        // Una base avanzata durante la qualifica la fa fallire: il ciclo aggiorna la PR e
+        // Una base avanzata richiede una nuova qualifica soltanto se tocca file della PR o globali.
+        const independent = (base) =>
+          compatibleBase(git("merge-base", base, pr.headRefOid), base, pr.headRefOid);
+        // Le migration non additive si approvano prima della qualifica: senza la riga il ciclo
+        // si ferma subito; con la riga aggiunta dopo l'apertura ripete il `Verify` fallito.
+        fetchHead("develop");
+        const forkPoint = git("merge-base", "origin/develop", pr.headRefOid);
+        if (reviewAdded(addedMigrations(forkPoint, pr.headRefOid), pr.body)) {
+          const last = json(
+            "run",
+            "list",
+            "--repo",
+            repository,
+            "--workflow",
+            "ci.yml",
+            "--commit",
+            pr.headRefOid,
+            "--event",
+            "pull_request",
+            "--limit",
+            "1",
+            "--json",
+            "databaseId,status,conclusion",
+          )[0];
+          const blocked =
+            last?.conclusion === "failure" &&
+            json("api", `repos/${repository}/actions/runs/${last.databaseId}/jobs?per_page=100`)
+              .jobs.flatMap((job) => job.steps ?? [])
+              .some(
+                (step) => step.name === "Check migration review" && step.conclusion === "failure",
+              );
+          if (blocked) {
+            gh("run", "rerun", String(last.databaseId), "--repo", repository, "--failed");
+            for (let attempt = 0; attempt < 30; attempt++) {
+              const run = json("api", `repos/${repository}/actions/runs/${last.databaseId}`);
+              if (run.status !== "completed") break;
+              await pause(2000);
+            }
+          }
+        }
+        // Una base avanzata su file comuni fa fallire la qualifica: il ciclo aggiorna la PR e
         // segue la nuova qualifica, fino a tre volte, senza rimetterla in bozza.
         const qualify = async () => {
           for (let attempt = 1; ; attempt++) {
             const base = develop();
             fetchHead("develop");
             let since = 0;
-            if (!contains(base, pr.headRefOid)) {
+            if (!independent(base)) {
               since = Date.now() - 1000;
               gh("pr", "update-branch", number, "--repo", repository);
               pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
@@ -734,14 +822,16 @@ async function main() {
               );
               return;
             } catch (error) {
-              if (attempt === 3 || develop() === base) throw error;
-              console.log("Base avanzata durante la qualifica: aggiornamento della PR.");
+              const current = develop();
+              fetchHead("develop");
+              if (attempt === 3 || independent(current)) throw error;
+              console.log("Base avanzata su file comuni durante la qualifica: aggiornamento.");
               pr = read();
             }
           }
         };
         // Un merge alla volta: le qualifiche delle altre PR proseguono intanto, e la PR entra
-        // soltanto se la sua testa contiene ancora la base attuale, altrimenti si riqualifica.
+        // soltanto se la base attuale resta compatibile con la sua testa, altrimenti si riqualifica.
         for (let round = 1; pr.state === "OPEN"; round++) {
           await qualify();
           const expectedHead = pr.headRefOid;
@@ -750,10 +840,10 @@ async function main() {
             pr = read();
             if (pr.headRefOid !== expectedHead)
               throw new Error("PR modificata durante la qualifica.");
-            if (!contains(develop(), pr.headRefOid)) {
+            if (!independent(develop())) {
               if (round === 3)
                 throw new Error("Base avanzata più volte: ciclo riprendibile dalla stessa PR.");
-              console.log("Base avanzata in attesa del merge: nuova qualifica.");
+              console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
               return true;
             }
             gh(

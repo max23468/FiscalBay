@@ -9,14 +9,25 @@
  * - `full`: ogni altro file, un diff vuoto o un confronto non disponibile, `pnpm verify`.
  * La sequenza di ogni livello esiste soltanto negli script di package.json; ogni livello comprende
  * il precedente. Il classificatore sceglie anche le prove browser e il deploy test.
- * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--github-output] [--run]
- * Senza --base confronta il checkout, file non tracciati inclusi, con origin/develop.
+ * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--all] [--github-output] [--run]
+ * Senza --base confronta il checkout, file non tracciati inclusi, con l'ultimo verde locale di
+ * `--run` nello stesso worktree, oppure con origin/develop se manca o con `--all`.
  */
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync, existsSync } from "node:fs";
+import {
+  appendFileSync,
+  copyFileSync,
+  readFileSync,
+  existsSync,
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { criticalModule } from "./mutation.mjs";
+import { migrationEntry, requiredReview } from "./release/release.mjs";
 import { importGraph } from "./verify-repo.mjs";
 
 /** Script di package.json eseguito da ciascun livello, dal più leggero. */
@@ -47,6 +58,9 @@ const tooling = [
 
 // Test applicativi: non entrano nell'artefatto né nelle prove browser.
 const unit = /^(?:test\/|vitest(?:\.(?:cloudflare|unit))?\.config\.ts$)/u;
+
+// Spec browser: una spec modificata seleziona se stessa; gli altri file di `e2e/` servono a tutte.
+const browserSpec = /^e2e\/([^/]+\.spec)\.ts$/u;
 
 // Prove browser e loro strumenti: provano la build ma non cambiano l'artefatto distribuito.
 const browser =
@@ -139,10 +153,13 @@ export function plan(files, sources = [], complete = false, changes = {}) {
   const gate = everything
     ? "full"
     : levels[Math.max(...impacts.map(({ level }) => levels.indexOf(level)))];
-  const product = files.filter((_, index) => ["build", "full"].includes(impacts[index].level));
   const e2e = everything || impacts.some((impact) => impact.e2e);
   // Un diff vuoto distribuisce; prove e soli strumenti no.
   const deploy = files.length === 0 || impacts.some((impact) => impact.deploy);
+
+  // Moduli che cambiano ciò che le prove browser visitano; le spec si selezionano per nome.
+  const product = files.filter((file, index) => impacts[index].e2e && !browserSpec.test(file));
+  const specs = files.flatMap((file) => browserSpec.exec(file)?.[1] ?? []);
 
   const graph = importGraph(sources);
   const affected = consumers(files, graph);
@@ -157,29 +174,30 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     if (/security|admin|auth|sign-in/u.test(route)) areas.add("auth");
     if (/legal|site|robots/u.test(route)) areas.add("public");
   }
-  // Una selezione per area vale soltanto per moduli applicativi risolti fino alle route.
+  // Una selezione per area vale soltanto per moduli applicativi risolti fino alle route; senza
+  // moduli applicativi bastano le spec modificate.
+  const resolved = product.every(
+    (file) =>
+      graph.has(file) &&
+      !/^app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links|app\.css|components\/(?:ui\/|app-shell|account))/u.test(
+        file,
+      ),
+  );
   const targeted =
-    e2e &&
-    !complete &&
-    areas.size > 0 &&
-    product.every(
-      (file) =>
-        graph.has(file) &&
-        !/^app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links|app\.css|components\/(?:ui\/|app-shell|account))/u.test(
-          file,
-        ),
-    );
+    e2e && !complete && (product.length ? areas.size > 0 && resolved : specs.length > 0);
   const browserGrep = targeted
     ? [
-        "app-shell.spec",
-        "app-components.spec",
-        "@smoke",
-        ...[...areas].map((area) => areaPatterns[area]),
+        ...(product.length
+          ? ["app-shell.spec", "@smoke", ...[...areas].map((area) => areaPatterns[area])]
+          : []),
+        ...specs,
       ].join("|")
     : ".";
+  // Una spec modificata gira come nel candidato, in entrambi i browser.
   const browsers = !e2e
     ? ""
     : !targeted ||
+        specs.length > 0 ||
         areas.has("auth") ||
         files.some((file) => /i18n|view-models|date|\.tsx$/u.test(file))
       ? "chromium,webkit"
@@ -221,14 +239,39 @@ function committedChanges(base, head) {
   }
 }
 
-function localChanges() {
-  const mergeBase = git("merge-base", "origin/develop", "HEAD").trim();
+function localChanges(mergeBase) {
   return [
     ...new Set([
       ...lines(git("diff", "--name-only", mergeBase)),
       ...lines(git("ls-files", "--others", "--exclude-standard")),
     ]),
   ];
+}
+
+/** Tree dell'intero checkout, file non tracciati compresi, senza toccare l'indice del worktree. */
+function checkoutTree() {
+  const directory = mkdtempSync(path.join(tmpdir(), "verify-changed-"));
+  const env = { ...process.env, GIT_INDEX_FILE: path.join(directory, "index") };
+  try {
+    const index = git("rev-parse", "--git-path", "index").trim();
+    if (existsSync(index)) copyFileSync(index, env.GIT_INDEX_FILE);
+    execFileSync("git", ["add", "--all"], { env });
+    return execFileSync("git", ["write-tree"], { env, encoding: "utf8" }).trim();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+// Ultimo tree verde del gate locale, per worktree; un tree non più presente vale come assente.
+const greenFile = () => git("rev-parse", "--git-path", "verify-changed.json").trim();
+function lastGreen() {
+  try {
+    const { tree } = JSON.parse(readFileSync(greenFile(), "utf8"));
+    execFileSync("git", ["cat-file", "-e", `${tree}^{tree}`], { stdio: "ignore" });
+    return tree;
+  } catch {
+    return undefined;
+  }
 }
 
 // Versione di un file a un commit; `undefined` se manca o il confronto non è disponibile.
@@ -257,8 +300,21 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   // Base vuota, a zeri o non raggiungibile (avvio manuale, nuovo branch, storia riscritta):
   // il diff resta vuoto e il gate completo.
   const committed = args.includes("--base");
-  const files = committed ? committedChanges(option("--base"), option("--head")) : localChanges();
-  const before = committed ? option("--base") : git("merge-base", "origin/develop", "HEAD").trim();
+  const mergeBase = committed ? undefined : git("merge-base", "origin/develop", "HEAD").trim();
+  // In locale una nuova verifica prova soltanto ciò che è cambiato dall'ultimo verde.
+  const tree = committed ? undefined : checkoutTree();
+  const green =
+    committed || args.includes("--all") || args.includes("--complete") ? undefined : lastGreen();
+  if (green && green === tree) {
+    console.log("Nessuna modifica dall'ultimo verde locale: nessun controllo da ripetere.");
+    process.exit(0);
+  }
+  const files = committed
+    ? committedChanges(option("--base"), option("--head"))
+    : green
+      ? lines(git("diff", "--name-only", green, tree))
+      : localChanges(mergeBase);
+  const before = committed ? option("--base") : (green ?? mergeBase);
   const changes = files.includes(configFile)
     ? {
         [configFile]: {
@@ -276,6 +332,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
   const result = plan(files, sources, args.includes("--complete"), changes);
 
+  if (green) console.log(`Confronto con l'ultimo verde locale ${green.slice(0, 12)}.`);
   for (const file of files) console.log(`${fileLevel(file, changes[file])}: ${file}`);
   const summary = `Gate ${result.gate} (\`pnpm ${result.script}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;
   console.log(summary);
@@ -287,6 +344,19 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   if (process.env.GITHUB_STEP_SUMMARY && !args.includes("--gate-only"))
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Piano dei controlli\n\n${summary}\n`);
   if (args.includes("--json")) console.log(JSON.stringify(result));
+  // La riga di approvazione entra nel corpo della PR prima della sua apertura, non dopo un
+  // `Verify` fallito.
+  if (!committed) {
+    const added = localChanges(mergeBase)
+      .filter((file) => /^migrations\/.+\.sql$/u.test(file) && existsSync(file))
+      .filter((file) => show(mergeBase, file) === undefined)
+      .map((file) => migrationEntry(file, readFileSync(file)));
+    const review = requiredReview(added);
+    if (review)
+      console.log(
+        `Migration non additive: ${review.names.join(", ")}. Dopo l'esame aggiungere al corpo della PR la riga "reviewed-migrations: ${review.digest}".`,
+      );
+  }
 
   if (args.includes("--run")) {
     run("pnpm", [result.script]);
@@ -296,5 +366,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
         ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", result.browsers],
         { E2E_PREBUILT: "1" },
       );
+    if (tree) writeFileSync(greenFile(), `${JSON.stringify({ tree })}\n`);
   }
 }
