@@ -1767,7 +1767,9 @@ export function loadScenario(
       scenario = {
         ...common,
         account: account({
-          trialAvailable: false,
+          // Senza copertura né abbonamento aperto la prova mai usata resta disponibile, come
+          // nell'area reale.
+          trialAvailable: id === "lifetime-rimborsato",
           ...{
             "pagamento-in-attivazione": { payment: { state: "pending" as const } },
             "rinnovo-non-riuscito": {

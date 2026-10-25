@@ -688,6 +688,10 @@ test.describe("abbonamento nel piano", () => {
         await expect(
           section.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }),
         ).toHaveCount(0);
+        // La prova mai usata resta disponibile su entrambe le superfici.
+        await expect(
+          section.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
+        ).toBeVisible();
         // In locale l'area reale non ha la chiave Stripe e non mostra acquisti.
         if (surface === "preview")
           await expect(
