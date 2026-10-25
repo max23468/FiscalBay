@@ -40,6 +40,106 @@ const watch = (args) =>
   });
 
 /**
+ * `gh pr` e `gh repo view` passano da GraphQL, che le sessioni Claude Code cloud non
+ * raggiungono: repository, PR, file e controlli si leggono con l'API REST. Merge automatico e
+ * uscita dalla bozza esistono soltanto in GraphQL: nel cloud passano dalle route del proxy.
+ */
+export function pullRequestView(pull) {
+  const merged = Boolean(pull.merged_at);
+  return {
+    state: merged ? "MERGED" : pull.state.toUpperCase(),
+    isDraft: pull.draft,
+    autoMergeRequest: pull.auto_merge,
+    headRefName: pull.head.ref,
+    headRefOid: pull.head.sha,
+    baseRefName: pull.base.ref,
+    baseRefOid: pull.base.sha,
+    mergeCommit: merged ? { oid: pull.merge_commit_sha } : null,
+    headRepository: pull.head.repo ? { nameWithOwner: pull.head.repo.full_name } : null,
+    body: pull.body ?? "",
+  };
+}
+
+export function pullRequestAction(action, repository, number, head, env = process.env) {
+  const pull = `repos/${repository}/pulls/${number}`;
+  if (env.CLAUDE_CODE_REMOTE === "true")
+    return {
+      "enable-auto": ["api", "-X", "PUT", `${pull}/ccr/auto_merge`, "-f", "merge_method=squash"],
+      "disable-auto": ["api", "-X", "DELETE", `${pull}/ccr/auto_merge`],
+      ready: ["api", "-X", "POST", `${pull}/ccr/ready_for_review`],
+    }[action];
+  return {
+    "enable-auto": [
+      "pr",
+      "merge",
+      number,
+      "--repo",
+      repository,
+      "--auto",
+      "--squash",
+      "--match-head-commit",
+      head,
+    ],
+    "disable-auto": ["pr", "merge", number, "--disable-auto", "--repo", repository],
+    ready: ["pr", "ready", number, "--repo", repository],
+  }[action];
+}
+
+export function checksOutcome(checkRuns) {
+  // Come GitHub, conta soltanto l'ultima esecuzione di ogni controllo: una run annullata da
+  // quella successiva non fa fallire la PR.
+  const latest = new Map();
+  for (const check of checkRuns)
+    if (!latest.has(check.name) || latest.get(check.name).id < check.id)
+      latest.set(check.name, check);
+  const current = [...latest.values()];
+  const failed = ["failure", "cancelled", "timed_out", "action_required", "startup_failure"];
+  if (current.some((check) => failed.includes(check.conclusion))) return "failed";
+  return current.every((check) => check.status === "completed") ? "passed" : "pending";
+}
+
+/**
+ * GitHub rifiuta il merge automatico di una PR già unibile; `gh pr merge --auto` in quel caso
+ * unisce subito, e nel cloud si fa lo stesso con il merge REST vincolato alla testa.
+ */
+function enableAutoMerge(repository, number, head) {
+  try {
+    gh(...pullRequestAction("enable-auto", repository, number, head));
+  } catch (error) {
+    if (!/is in (clean|unstable) status/u.test(String(error.stderr ?? ""))) throw error;
+    gh(
+      "api",
+      "-X",
+      "PUT",
+      `repos/${repository}/pulls/${number}/merge`,
+      "-f",
+      "merge_method=squash",
+      "-f",
+      `sha=${head}`,
+    );
+  }
+}
+
+const readPullRequest = (repository, number) =>
+  pullRequestView(json("api", `repos/${repository}/pulls/${number}`));
+
+async function waitChecks(repository, sha) {
+  for (;;) {
+    const outcome = checksOutcome(
+      json(
+        "api",
+        "--paginate",
+        "--slurp",
+        `repos/${repository}/commits/${sha}/check-runs?per_page=100`,
+      ).flatMap((page) => page.check_runs),
+    );
+    if (outcome === "failed") throw new Error("Monitoraggio terminato con controlli falliti.");
+    if (outcome === "passed") return;
+    await pause(30_000);
+  }
+}
+
+/**
  * Blocco a cartella con il PID del titolare. Quello di un processo terminato si rimuove; una
  * cartella ancora senza titolare è appena nata in un altro ciclo, salvo che sia vecchia di un
  * minuto e quindi rimasta da un processo interrotto.
@@ -609,21 +709,13 @@ function cleanupIntegratedBranches(repository) {
     .map((ref) => ref.replace(/^origin\//u, ""));
   const residuals = [];
   for (const branch of new Set([...locals, ...remotes].filter(Boolean))) {
-    const prs = json(
-      "pr",
-      "list",
-      "--repo",
-      repository,
-      "--head",
-      branch,
-      "--state",
-      "merged",
-      "--limit",
-      "1",
-      "--json",
-      "number,headRefName,headRefOid,baseRefName,mergeCommit",
-    );
-    const pr = prs[0];
+    const owner = repository.split("/")[0];
+    const pr = json(
+      "api",
+      `repos/${repository}/pulls?state=closed&head=${owner}:${encodeURIComponent(branch)}&per_page=100`,
+    )
+      .filter((pull) => pull.merged_at)
+      .map((pull) => ({ number: pull.number, ...pullRequestView(pull) }))[0];
     if (!pr || !["main", "develop"].includes(pr.baseRefName)) {
       residuals.push(`${branch}: lavoro non integrato o PR non riconciliata`);
       continue;
@@ -663,7 +755,7 @@ async function main() {
     throw new Error(
       "Uso: release:cycle status <run> | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run>.",
     );
-  const repository = json("repo", "view", "--json", "nameWithOwner").nameWithOwner;
+  const repository = json("api", "repos/{owner}/{repo}").full_name;
   if (command === "status") {
     if (!/^\d+$/u.test(number ?? "")) throw new Error("Run non valida.");
     summary(repository, number);
@@ -733,9 +825,7 @@ async function main() {
     }
     if (command === "pr") {
       if (!/^\d+$/u.test(number ?? "")) throw new Error("Numero PR non valido.");
-      const fields =
-        "state,isDraft,autoMergeRequest,headRefName,headRefOid,baseRefName,baseRefOid,mergeCommit,headRepository,body";
-      let pr = json("pr", "view", number, "--repo", repository, "--json", fields);
+      let pr = readPullRequest(repository, number);
       if (pr.baseRefName !== "develop" || pr.headRepository?.nameWithOwner !== repository)
         throw new Error(
           "Il ciclo PR gestisce soltanto branch dello stesso repository verso develop.",
@@ -745,8 +835,9 @@ async function main() {
       if (pr.state === "CLOSED") throw new Error("PR chiusa senza merge.");
       if (pr.state === "OPEN") {
         // Il merge automatico resta sospeso finché la testa non è qualificata sulla base attuale.
-        if (pr.autoMergeRequest) gh("pr", "merge", number, "--disable-auto", "--repo", repository);
-        const read = () => json("pr", "view", number, "--repo", repository, "--json", fields);
+        if (pr.autoMergeRequest)
+          gh(...pullRequestAction("disable-auto", repository, number, pr.headRefOid));
+        const read = () => readPullRequest(repository, number);
         const develop = () =>
           gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
         const fetchHead = (...refs) =>
@@ -800,7 +891,14 @@ async function main() {
             let since = 0;
             if (!independent(base)) {
               since = Date.now() - 1000;
-              gh("pr", "update-branch", number, "--repo", repository);
+              gh(
+                "api",
+                "-X",
+                "PUT",
+                `repos/${repository}/pulls/${number}/update-branch`,
+                "-f",
+                `expected_head_sha=${pr.headRefOid}`,
+              );
               pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
                 fetchHead();
                 return contains(base, head);
@@ -808,7 +906,7 @@ async function main() {
             }
             if (pr.isDraft) {
               since = Date.now() - 1000;
-              gh("pr", "ready", number, "--repo", repository);
+              gh(...pullRequestAction("ready", repository, number, pr.headRefOid));
             }
             // Senza aggiornamento vale la run già avviata sulla testa, anche se ancora in corso.
             try {
@@ -846,27 +944,8 @@ async function main() {
               console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
               return true;
             }
-            gh(
-              "pr",
-              "merge",
-              number,
-              "--repo",
-              repository,
-              "--auto",
-              "--squash",
-              "--match-head-commit",
-              pr.headRefOid,
-            );
-            await watch([
-              "pr",
-              "checks",
-              number,
-              "--repo",
-              repository,
-              "--watch",
-              "--interval",
-              "30",
-            ]);
+            enableAutoMerge(repository, number, pr.headRefOid);
+            await waitChecks(repository, pr.headRefOid);
             // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
             for (let attempt = 0; attempt < 180; attempt++) {
               pr = read();
@@ -884,9 +963,14 @@ async function main() {
         throw new Error("Merge non confermato: ciclo riprendibile dalla stessa PR.");
       const run = await waitRun(repository, "ci.yml", pr.mergeCommit.oid, "develop");
       const jobs = json("api", `repos/${repository}/actions/runs/${run.id}/jobs?per_page=100`).jobs;
-      const files = json("pr", "view", number, "--repo", repository, "--json", "files").files.map(
-        (file) => file.path,
-      );
+      const files = json(
+        "api",
+        "--paginate",
+        "--slurp",
+        `repos/${repository}/pulls/${number}/files?per_page=100`,
+      )
+        .flat()
+        .map((file) => file.filename);
       const deployed = checkCycleJobs(jobs, plan(files).deploy);
       if (deployed) readback(repository, run, "test");
       localGit(() => {
