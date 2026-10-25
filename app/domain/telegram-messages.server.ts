@@ -65,6 +65,8 @@ export type OrderNotice = {
   createdAt: string;
   buyer: string | null;
   items: Array<{ title: string; quantity: number }>;
+  /** Prima immagine d'inserzione fra gli articoli, dagli host d'immagine di eBay. */
+  imageUrl: string | null;
   totalMinor: number;
   currency: string;
   fiscal: FiscalSituation;
@@ -85,6 +87,7 @@ export function orderNotice(order: VisibleOrder, environment: EbayEnvironment): 
     createdAt: order.creationTime,
     buyer: buyerNameView(buyer?.name ?? null) ?? buyer?.username ?? null,
     items: order.summary.lineItems.map((item) => ({ title: item.title, quantity: item.quantity })),
+    imageUrl: order.summary.lineItems.find((item) => item.imageUrl)?.imageUrl ?? null,
     totalMinor: order.totalMinor,
     currency: order.currency,
     fiscal: order.fiscalState,
@@ -121,6 +124,28 @@ export function fiscalKey(notice: Pick<OrderNotice, "values">): string {
 /** Impronta di un ordine senza dato fiscale. */
 export const emptyFiscalKey = fiscalKey({ values: [] });
 
+/** Icone a inizio riga: sostituiscono le etichette e danno a ogni dato un posto fisso. */
+export const icons = {
+  change: { new: "🛒", available: "✅", changed: "✏️", removed: "⚠️" },
+  fiscal: {
+    checking: "⏳",
+    missing: "➖",
+    foreign: "🌍",
+    error: "⚠️",
+    locked: "🔒",
+    available: "🧾",
+  },
+  buyer: "👤",
+  total: "💶",
+  items: "📦",
+  time: "🕑",
+  digest: "🗓",
+  import: "📥",
+  link: "🔗",
+  ebay: "🛍",
+  copy: "📋",
+} as const;
+
 const text = {
   it: {
     change: {
@@ -139,7 +164,7 @@ const text = {
       missing: "Nessun dato fiscale",
       foreign: (country: string) => `Fatturazione estera (${country})`,
       error: "Dato fiscale non letto: riprova da FiscalBay",
-      locked: "Dato fiscale da sbloccare in FiscalBay",
+      locked: "Da sbloccare in FiscalBay",
       available: "",
     } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
     checkingNote: "Se arriva, ricevi un nuovo messaggio.",
@@ -152,8 +177,8 @@ const text = {
       `${count === 1 ? "Un ordine" : `${count} ordini`} dall'ultimo riepilogo`,
     import: {
       title: "Importazione completata",
-      orders: (count: number, fiscal: number) =>
-        `${count === 1 ? "Un ordine acquisito" : `${count} ordini acquisiti`}, ${fiscal} con dato fiscale`,
+      orders: (count: number) => (count === 1 ? "Un ordine" : `${count} ordini`),
+      fiscal: "con dato fiscale",
       period: (from: string, until: string) => `dal ${from} al ${until}`,
       note: "Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.",
     },
@@ -175,7 +200,7 @@ const text = {
       missing: "No tax ID",
       foreign: (country: string) => `Billing abroad (${country})`,
       error: "Tax ID not read: try again from FiscalBay",
-      locked: "Tax ID to unlock in FiscalBay",
+      locked: "To unlock in FiscalBay",
       available: "",
     } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
     checkingNote: "If it arrives, you get a new message.",
@@ -188,8 +213,8 @@ const text = {
       `${count === 1 ? "One order" : `${count} orders`} since the last summary`,
     import: {
       title: "Import completed",
-      orders: (count: number, fiscal: number) =>
-        `${count === 1 ? "One order imported" : `${count} orders imported`}, ${fiscal} with a tax ID`,
+      orders: (count: number) => (count === 1 ? "One order" : `${count} orders`),
+      fiscal: "with a tax ID",
       period: (from: string, until: string) => `from ${from} to ${until}`,
       note: "Imported orders get no individual messages: new orders arrive from now on.",
     },
@@ -273,13 +298,16 @@ function fiscalLines(language: Language, notice: OrderNotice): string[] {
   if (notice.values.length === 0) {
     const state = copy.fiscal[notice.fiscal];
     const line = typeof state === "function" ? state(notice.country ?? "") : state;
-    return line ? [escape(line)] : [];
+    return line ? [`${icons.fiscal[notice.fiscal]} ${escape(line)}`] : [];
   }
   return notice.values.map((value) => {
     const label = value.kind === "OTHER" ? value.label : copy.kinds[value.kind];
-    return `${label ? `${escape(label)} ` : ""}<code>${escape(value.value)}</code>`;
+    return `${icons.fiscal.available} ${label ? `${escape(label)} ` : ""}<code>${escape(value.value)}</code>`;
   });
 }
+
+const amount = (language: Language, notice: OrderNotice) =>
+  `${icons.total} <b>${escape(formatAmount(notice.totalMinor, notice.currency, language))}</b>`;
 
 /** Pulsanti di un ordine: dettaglio, eBay per i negozi reali e copia del CF autorizzato. */
 export function orderButtons(
@@ -291,12 +319,12 @@ export function orderButtons(
   const cf = notice.values.find((value) => value.kind === "CF");
   return [
     [
-      { text: copy.open, url: orderUrl(env, language, notice) },
+      { text: `${icons.link} ${copy.open}`, url: orderUrl(env, language, notice) },
       ...(notice.environment === "production"
-        ? [{ text: copy.ebay, url: ebayOrderHref(notice.ebayOrderId) }]
+        ? [{ text: `${icons.ebay} ${copy.ebay}`, url: ebayOrderHref(notice.ebayOrderId) }]
         : []),
     ],
-    ...(cf ? [[{ text: copy.copy, copy_text: { text: cf.value } }]] : []),
+    ...(cf ? [[{ text: `${icons.copy} ${copy.copy}`, copy_text: { text: cf.value } }]] : []),
   ];
 }
 
@@ -315,29 +343,30 @@ export function orderMessage(
   const copy = text[language];
   const items = notice.items
     .slice(0, maxItems)
-    .map((item) => `${item.quantity} × ${escape(clip(item.title, 80))}`);
+    .map((item) => `${icons.items} ${item.quantity} × ${escape(clip(item.title, 80))}`);
   if (notice.items.length > maxItems) items.push(escape(copy.more(notice.items.length - maxItems)));
   const head = [
-    `<b>${escape(copy.change[change])}</b> · ${escape(notice.storeName)}`,
+    `${icons.change[change]} <b>${escape(copy.change[change])}</b> · ${escape(notice.storeName)}`,
     ...(change === "removed" ? [escape(copy.removedNote)] : []),
     ...fiscalLines(language, notice),
     ...(change === "new" && notice.fiscal === "checking" ? [escape(copy.checkingNote)] : []),
   ];
   const details = [
-    [
-      notice.buyer ? escape(clip(notice.buyer, 64)) : null,
-      escape(formatAmount(notice.totalMinor, notice.currency, language)),
-    ]
-      .filter(Boolean)
-      .join(" · "),
+    ...(notice.buyer ? [`${icons.buyer} ${escape(clip(notice.buyer, 64))}`] : []),
+    amount(language, notice),
     ...items,
-    `<i>${escape(notice.ebayOrderId)} · ${escape(when(language, timeZone, notice.createdAt, now))}</i>`,
+    `${icons.time} <i>${escape(when(language, timeZone, notice.createdAt, now))} · ${escape(notice.ebayOrderId)}</i>`,
   ];
   const parts = splitBlocks([head.join("\n"), `<blockquote>${details.join("\n")}</blockquote>`]);
-  return parts.map((html, index) => ({
-    html,
-    ...(index === parts.length - 1 ? { buttons: orderButtons(env, language, notice) } : {}),
-  }));
+  return parts.map((html, index) =>
+    index === parts.length - 1
+      ? {
+          html,
+          buttons: orderButtons(env, language, notice),
+          ...(notice.imageUrl ? { preview: notice.imageUrl } : {}),
+        }
+      : { html },
+  );
 }
 
 /**
@@ -355,11 +384,13 @@ export function orderEntry(
   const copy = text[language];
   return [
     `<a href="${escape(orderUrl(env, language, notice)).replaceAll('"', "&quot;")}">${escape(notice.ebayOrderId)}</a> · ${escape(notice.storeName)}`,
-    ...(change && change !== "new" ? [`<i>${escape(copy.change[change])}</i>`] : []),
+    ...(change && change !== "new"
+      ? [`${icons.change[change]} <i>${escape(copy.change[change])}</i>`]
+      : []),
     [
-      notice.buyer ? escape(clip(notice.buyer, 64)) : null,
-      escape(formatAmount(notice.totalMinor, notice.currency, language)),
-      escape(when(language, timeZone, notice.createdAt, now)),
+      notice.buyer ? `${icons.buyer} ${escape(clip(notice.buyer, 64))}` : null,
+      amount(language, notice),
+      `<i>${escape(when(language, timeZone, notice.createdAt, now))}</i>`,
     ]
       .filter(Boolean)
       .join(" · "),
@@ -378,7 +409,7 @@ export function digestMessage(
 ): BotMessage[] {
   const copy = text[language];
   const parts = splitBlocks([
-    `<b>${escape(copy.digest(date(language, timeZone, at, now)))}</b>\n${escape(copy.digestCount(entries.length))}`,
+    `${icons.digest} <b>${escape(copy.digest(date(language, timeZone, at, now)))}</b>\n<i>${escape(copy.digestCount(entries.length))}</i>`,
     ...entries.map(({ notice, change }) =>
       orderEntry(env, language, timeZone, notice, change, now),
     ),
@@ -394,7 +425,7 @@ export function digestMessage(
           buttons: [
             [
               {
-                text: copy.orders,
+                text: `${icons.link} ${copy.orders}`,
                 url: appUrl(env, language, ordersPath, environment, { periodo: "7" }),
               },
             ],
@@ -423,20 +454,20 @@ export function importMessage(
   const copy = text[language].import;
   return {
     html: [
-      `<b>${escape(copy.title)}</b> · ${escape(summary.storeName)}`,
-      escape(copy.orders(summary.orders, summary.fiscal)),
-      escape(
+      `${icons.import} <b>${escape(copy.title)}</b> · ${escape(summary.storeName)}`,
+      `${icons.items} ${escape(copy.orders(summary.orders))} · ${icons.fiscal.available} <b>${summary.fiscal}</b> ${escape(copy.fiscal)}`,
+      `${icons.digest} ${escape(
         copy.period(
           date(language, timeZone, summary.from, now),
           date(language, timeZone, summary.until, now),
         ),
-      ),
+      )}`,
       `<i>${escape(copy.note)}</i>`,
     ].join("\n"),
     buttons: [
       [
         {
-          text: text[language].orders,
+          text: `${icons.link} ${text[language].orders}`,
           url: appUrl(env, language, ordersPath, summary.environment, {
             negozio: summary.storeId,
           }),

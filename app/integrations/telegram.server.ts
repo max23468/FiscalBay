@@ -240,8 +240,11 @@ export type BotButton =
   | { text: string; callback_data: string }
   | { text: string; copy_text: { text: string } };
 
-/** Messaggio del bot in HTML, con il testo già sottoposto a escape e i pulsanti per riga. */
-export type BotMessage = { html: string; buttons?: BotButton[][] };
+/**
+ * Messaggio del bot in HTML, con il testo già sottoposto a escape e i pulsanti per riga.
+ * `preview`: immagine mostrata in piccolo sotto il testo, senza comparire nel testo.
+ */
+export type BotMessage = { html: string; buttons?: BotButton[][]; preview?: string };
 
 const sentSchema = z.object({ message_id: z.number() });
 
@@ -249,7 +252,9 @@ function messageParams(message: BotMessage) {
   return {
     text: message.html,
     parse_mode: "HTML",
-    link_preview_options: { is_disabled: true },
+    link_preview_options: message.preview
+      ? { url: message.preview, prefer_small_media: true, show_above_text: false }
+      : { is_disabled: true },
     ...(message.buttons?.length ? { reply_markup: { inline_keyboard: message.buttons } } : {}),
   };
 }

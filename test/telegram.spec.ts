@@ -1003,10 +1003,19 @@ describe("invii degli ordini", () => {
   it("invia il nuovo ordine con il CF normalizzato, senza contatti dell'acquirente, una volta sola", async () => {
     const seller = await linked("invio");
     await order(seller.store, "o-invio", { cf: "rss mra80a01h501u" });
+    const image = "https://i.ebayimg.com/images/g/lampada/s-l500.jpg";
+    await env.DB.prepare("UPDATE order_items SET image_url = ? WHERE order_id = 'o-invio'")
+      .bind(image)
+      .run();
     const api = bot();
     await run(api.fetcher, 10);
     const [sent] = api.texts();
-    expect(sent!.params).toMatchObject({ chat_id: "601", parse_mode: "HTML" });
+    // La miniatura dell'articolo arriva dall'anteprima del link, fuori dal testo.
+    expect(sent!.params).toMatchObject({
+      chat_id: "601",
+      parse_mode: "HTML",
+      link_preview_options: { url: image, prefer_small_media: true, show_above_text: false },
+    });
     const text = String(sent!.params.text);
     expect(text).toContain("<b>Nuovo ordine</b>");
     expect(text).toContain("<code>RSSMRA80A01H501U</code>");
@@ -1014,15 +1023,15 @@ describe("invii degli ordini", () => {
     expect(text).toContain("2 × Lampada &lt;vintage&gt; &amp; paralume");
     // Il dato fiscale in testa, i dettagli in citazione con numero e data relativa.
     expect(text).toMatch(
-      /^<b>Nuovo ordine<\/b> · .+\n<code>RSSMRA80A01H501U<\/code>\n\n<blockquote>/u,
+      /^🛒 <b>Nuovo ordine<\/b> · .+\n🧾 <code>RSSMRA80A01H501U<\/code>\n\n<blockquote>👤 Mario Rossi\n💶 <b>34,90/u,
     );
-    expect(text).toContain("<i>ebay-o-invio · oggi 22:01</i></blockquote>");
+    expect(text).toContain("🕑 <i>oggi 22:01 · ebay-o-invio</i></blockquote>");
     for (const hidden of ["mario@example.invalid", "Via Roma", "333"])
       expect(text).not.toContain(hidden);
     expect(keyboard(sent!).flat()).toEqual([
-      { text: "Apri in FiscalBay", url: `${origin}/app/ordini/o-invio` },
-      { text: "Apri su eBay", url: ebayOrderHref("ebay-o-invio") },
-      { text: "Copia Codice Fiscale", copy_text: { text: "RSSMRA80A01H501U" } },
+      { text: "🔗 Apri in FiscalBay", url: `${origin}/app/ordini/o-invio` },
+      { text: "🛍 Apri su eBay", url: ebayOrderHref("ebay-o-invio") },
+      { text: "📋 Copia Codice Fiscale", copy_text: { text: "RSSMRA80A01H501U" } },
     ]);
     // Una nuova esecuzione, anche ripetuta dopo un'interruzione, non ripete l'evento.
     await run(api.fetcher, 20);
@@ -1101,9 +1110,9 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 20);
     await run(api.fetcher, 30);
     expect(sentTexts(api)).toEqual([expect.stringContaining("Importazione completata")]);
-    expect(sentTexts(api)[0]).toContain("Un ordine acquisito, 1 con dato fiscale");
+    expect(sentTexts(api)[0]).toContain("📦 Un ordine · 🧾 <b>1</b> con dato fiscale");
     expect(keyboard(api.texts()[0]!)).toEqual([
-      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?negozio=${seller.store}` }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?negozio=${seller.store}` }],
     ]);
   });
 
@@ -1138,7 +1147,7 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 120);
     expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-prima")]);
     expect(keyboard(api.texts()[0]!)).toEqual([
-      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
     ]);
     // Un ordine dopo l'orario non fa partire un secondo riepilogo, né uno tardivo.
     await order(seller.store, "o-dopo-orario", {
@@ -1213,7 +1222,7 @@ describe("invii degli ordini", () => {
     for (const id of ids)
       expect(parts.filter((part) => part.includes(`>ebay-${id}</a>`))).toHaveLength(1);
     expect(keyboard(api.texts().at(-1)!)).toEqual([
-      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
     ]);
   });
 
@@ -1464,10 +1473,10 @@ describe("comandi e pulsanti del bot", () => {
     const status = api.texts()[0]!;
     expect(String(status.params.text)).toContain("Premium fino al");
     expect(String(status.params.text)).toContain(
-      "Notifiche attive, solo ordini con dato fiscale\nUn messaggio per ordine",
+      "🔔 Notifiche attive · solo con dato fiscale\n📨 Un messaggio per ordine",
     );
     const gen = await generation(seller.workspace);
-    expect(keyboard(status)[0]![0]).toEqual({ text: "Preferenze", callback_data: `${gen}:pr` });
+    expect(keyboard(status)[0]![0]).toEqual({ text: "⚙️ Preferenze", callback_data: `${gen}:pr` });
 
     await tap(`${gen}:fi:all`, seller.chat, api.fetcher);
     // Un tocco ripetuto porta lo stesso valore: la scelta non si inverte.
@@ -1557,14 +1566,14 @@ describe("comandi e pulsanti del bot", () => {
     // Un solo messaggio con cinque ordini, dal più recente; il numero apre il dettaglio.
     const [list] = sentTexts(api);
     expect(sentTexts(api)).toHaveLength(1);
-    expect(list).toContain("<b>Ultimi ordini</b> · 1–5 di 7");
+    expect(list).toContain("🛒 <b>Ultimi ordini</b> · <i>1–5 di 7</i>");
     expect(list).toContain(`<a href="${origin}/app/ordini/o-ultimi-6">ebay-o-ultimi-6</a>`);
     expect(list).not.toContain("ebay-o-ultimi-1");
     expect(list).not.toContain("o-escluso");
     const gen = await generation(seller.workspace);
     expect(keyboard(api.texts()[0]!)).toEqual([
-      [{ text: "Altri 5", callback_data: `${gen}:la:5` }],
-      [{ text: "Apri gli ordini", url: `${origin}/app/ordini` }],
+      [{ text: "Altri 5 ›", callback_data: `${gen}:la:5` }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini` }],
     ]);
     // Le pagine aggiornano lo stesso messaggio; un tocco ripetuto lo riscrive uguale.
     await tap(`${gen}:la:5`, seller.chat, api.fetcher);
@@ -1575,7 +1584,9 @@ describe("comandi e pulsanti del bot", () => {
     expect(edits[0]!.params.text).toEqual(edits[1]!.params.text);
     expect(String(edits[0]!.params.text)).toContain("1–5 di 7".replace("1–5", "6–7"));
     expect(String(edits[0]!.params.text)).toContain("ebay-o-ultimi-0");
-    expect(keyboard(edits[0]!)[0]).toEqual([{ text: "Precedenti", callback_data: `${gen}:la:0` }]);
+    expect(keyboard(edits[0]!)[0]).toEqual([
+      { text: "‹ Precedenti", callback_data: `${gen}:la:0` },
+    ]);
   });
 
   it("senza Premium lo stato dice Free e le preferenze rimandano al piano", async () => {

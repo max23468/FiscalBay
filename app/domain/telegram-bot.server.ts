@@ -11,6 +11,7 @@ import {
   appUrl,
   date,
   escape,
+  icons,
   orderEntry,
   orderNotice,
   settingsUrl,
@@ -57,10 +58,11 @@ const copy = {
     freeNote: "Con il piano Free le notifiche sono ferme.",
     enabled: "Notifiche attive",
     paused: "Notifiche in pausa",
-    filters: { fiscal: "solo ordini con dato fiscale", all: "tutti gli ordini" },
+    filters: { fiscal: "solo con dato fiscale", all: "tutti gli ordini" },
+    filterTitles: { fiscal: "Solo ordini con dato fiscale", all: "Tutti gli ordini" },
     modes: {
       each: "Un messaggio per ordine",
-      digest: (time: string, zone: string) => `Riepilogo ogni giorno alle ${time}, ${zone}`,
+      digest: (time: string, zone: string) => `Riepilogo alle ${time} · ${zone}`,
     },
     stores: "Negozi",
     excluded: "escluso",
@@ -74,16 +76,16 @@ const copy = {
     choosePlan: "Scegli il piano",
     premiumRequired:
       "Notifiche e ultimi ordini nel bot sono compresi in Premium, nella prova e nel lifetime.",
-    zoneNote: "Il fuso del riepilogo si cambia dal sito.",
+    zoneNote: "Il fuso si cambia dal sito.",
     pause: "Metti in pausa",
     resume: "Riprendi le notifiche",
     fiscalOnly: "Solo con dato fiscale",
     allOrders: "Tutti gli ordini",
     each: "Uno per ordine",
-    digest: "Riepilogo giornaliero",
-    time: (time: string) => `Orario del riepilogo: ${time}`,
+    digest: "Riepilogo",
+    time: (time: string) => `Orario: ${time}`,
     timeTitle: "Orario del riepilogo",
-    storeCount: (included: number, total: number) => `Negozi inclusi: ${included} di ${total}`,
+    storeCount: (included: number, total: number) => `Negozi: ${included} di ${total}`,
     storesTitle: "Negozi nelle notifiche",
     back: "Indietro",
     unlink: "Scollega la chat",
@@ -126,10 +128,11 @@ const copy = {
     freeNote: "Notifications are stopped on the Free plan.",
     enabled: "Notifications on",
     paused: "Notifications paused",
-    filters: { fiscal: "only orders with a tax ID", all: "all orders" },
+    filters: { fiscal: "only with a tax ID", all: "all orders" },
+    filterTitles: { fiscal: "Only orders with a tax ID", all: "All orders" },
     modes: {
       each: "One message per order",
-      digest: (time: string, zone: string) => `Daily summary at ${time}, ${zone}`,
+      digest: (time: string, zone: string) => `Summary at ${time} · ${zone}`,
     },
     stores: "Stores",
     excluded: "excluded",
@@ -143,16 +146,16 @@ const copy = {
     choosePlan: "Choose a plan",
     premiumRequired:
       "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
-    zoneNote: "The summary time zone is changed on the website.",
+    zoneNote: "The time zone is changed on the website.",
     pause: "Pause",
     resume: "Resume notifications",
     fiscalOnly: "Only with a tax ID",
     allOrders: "All orders",
     each: "One per order",
-    digest: "Daily summary",
-    time: (time: string) => `Summary time: ${time}`,
+    digest: "Summary",
+    time: (time: string) => `Time: ${time}`,
     timeTitle: "Summary time",
-    storeCount: (included: number, total: number) => `Included stores: ${included} of ${total}`,
+    storeCount: (included: number, total: number) => `Stores: ${included} of ${total}`,
     storesTitle: "Stores in notifications",
     back: "Back",
     unlink: "Unlink this chat",
@@ -308,17 +311,19 @@ function helpMessage(env: Env, language: Language): BotMessage {
       help.commands.map(([command, what]) => `${command}  ${escape(what)}`).join("\n"),
       `<i>${escape(help.site)}</i>`,
     ].join("\n\n"),
-    buttons: [[{ text: copy[language].openSettings, url: settingsUrl(env, language) }]],
+    buttons: [
+      [{ text: `${icons.link} ${copy[language].openSettings}`, url: settingsUrl(env, language) }],
+    ],
   };
 }
 
 function premiumMessage(env: Env, language: Language): BotMessage {
   return {
-    html: escape(copy[language].premiumRequired),
+    html: `⭐ ${escape(copy[language].premiumRequired)}`,
     buttons: [
       [
         {
-          text: copy[language].choosePlan,
+          text: `⭐ ${copy[language].choosePlan}`,
           url: appUrl(env, language, `${settingsPath}/piano`),
         },
       ],
@@ -387,21 +392,28 @@ async function readState(db: D1Database, link: Link, now: Date) {
   };
 }
 
+/** Icone del bot, accanto a quelle dei messaggi degli ordini. */
+const marks = {
+  plan: "⭐",
+  enabled: "🔔",
+  paused: "⏸",
+  resume: "▶️",
+  digest: "🕘",
+  each: "📨",
+  stores: "🏪",
+  delivery: "📨",
+  warning: "⚠️",
+  settings: "⚙️",
+  unlink: "🔌",
+  store: { active: "🟢", excluded: "⚪", reconnect: "🔴", suspended: "⏸" },
+} as const;
+
 /** Frequenza del riepilogo con orario e fuso, come nelle Impostazioni. */
 function modeLine(language: Language, preferences: Preferences) {
   const text = copy[language];
   return preferences.mode === "each"
-    ? text.modes.each
-    : text.modes.digest(preferences.digestTime, zoneName(language, preferences.timeZone));
-}
-
-/** Stato delle notifiche in due righe: attive o in pausa con il filtro, poi la frequenza. */
-function preferenceLines(language: Language, preferences: Preferences) {
-  const text = copy[language];
-  return [
-    preferences.enabled ? `${text.enabled}, ${text.filters[preferences.filter]}` : text.paused,
-    modeLine(language, preferences),
-  ].map(escape);
+    ? `${marks.each} ${escape(text.modes.each)}`
+    : `${marks.digest} ${escape(text.modes.digest(preferences.digestTime, zoneName(language, preferences.timeZone)))}`;
 }
 
 async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
@@ -417,33 +429,42 @@ async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessag
         ? text.plans.trial(until(coverage.endsAt!))
         : text.plans.premium(until(coverage.endsAt!));
   const shown = state.stores.slice(0, 10).map((store) => {
-    const note = store.paused
-      ? text.suspended
+    const [mark, note] = store.paused
+      ? [marks.store.suspended, text.suspended]
       : store.reconnect
-        ? text.reconnect
+        ? [marks.store.reconnect, text.reconnect]
         : store.enabled
-          ? null
-          : text.excluded;
+          ? [marks.store.active, null]
+          : [marks.store.excluded, text.excluded];
     const name = escape(store.name.slice(0, 40));
-    return note ? `${name} · <i>${escape(note)}</i>` : name;
+    return `${mark} ${note ? `${name} · <i>${escape(note)}</i>` : name}`;
   });
   if (state.stores.length > 10) shown.push(`+${state.stores.length - 10}`);
   const blocks = [
     [
-      `<b>${escape(plan)}</b>`,
-      ...(coverage ? preferenceLines(link.language, preferences) : [escape(text.freeNote)]),
+      `${marks.plan} <b>${escape(plan)}</b>`,
+      ...(coverage
+        ? [
+            preferences.enabled
+              ? `${marks.enabled} ${escape(`${text.enabled} · ${text.filters[preferences.filter]}`)}`
+              : `${marks.paused} ${escape(text.paused)}`,
+            modeLine(link.language, preferences),
+          ]
+        : [`${marks.paused} ${escape(text.freeNote)}`]),
     ].join("\n"),
-    ...(shown.length ? [`<b>${escape(text.stores)}</b>\n${shown.join("\n")}`] : []),
+    ...(shown.length ? [`${marks.stores} <b>${escape(text.stores)}</b>\n${shown.join("\n")}`] : []),
     [
-      escape(
+      `${marks.delivery} <i>${escape(
         preferences.lastDelivery
           ? text.lastDelivery(
               when(link.language, preferences.timeZone, preferences.lastDelivery, now),
             )
           : text.noDelivery,
-      ),
+      )}</i>`,
       // Un blocco si chiude già con il messaggio che ha chiesto lo stato.
-      ...(preferences.failure === "unreachable" ? [escape(text.unreachable)] : []),
+      ...(preferences.failure === "unreachable"
+        ? [`${marks.warning} ${escape(text.unreachable)}`]
+        : []),
     ].join("\n"),
   ];
   return {
@@ -451,9 +472,12 @@ async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessag
     buttons: [
       [
         coverage
-          ? { text: text.preferences, callback_data: data(link, "pr") }
-          : { text: text.choosePlan, url: appUrl(env, link.language, `${settingsPath}/piano`) },
-        { text: text.openSettings, url: settingsUrl(env, link.language) },
+          ? { text: `${marks.settings} ${text.preferences}`, callback_data: data(link, "pr") }
+          : {
+              text: `${marks.plan} ${text.choosePlan}`,
+              url: appUrl(env, link.language, `${settingsPath}/piano`),
+            },
+        { text: `${icons.link} ${text.openSettings}`, url: settingsUrl(env, link.language) },
       ],
     ],
   };
@@ -469,25 +493,30 @@ async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotM
   const state = await readState(env.DB, link, now);
   const { preferences } = state;
   const active = state.stores.filter((store) => !store.paused);
-  const [status, mode] = preferenceLines(link.language, preferences);
   const html = [
-    `<b>${status}</b>`,
-    mode,
+    preferences.enabled
+      ? `${marks.enabled} <b>${escape(text.enabled)}</b>`
+      : `${marks.paused} <b>${escape(text.paused)}</b>`,
+    `${preferences.filter === "fiscal" ? icons.fiscal.available : icons.items} ${escape(text.filterTitles[preferences.filter])}`,
+    modeLine(link.language, preferences),
     ...(preferences.mode === "digest" ? [`<i>${escape(text.zoneNote)}</i>`] : []),
   ].join("\n");
   const footer: BotButton[] = [
-    { text: text.unlink, callback_data: data(link, "ul") },
-    { text: text.openSettings, url: settingsUrl(env, link.language) },
+    { text: `${marks.unlink} ${text.unlink}`, callback_data: data(link, "ul") },
+    { text: `${icons.link} ${text.openSettings}`, url: settingsUrl(env, link.language) },
   ];
   if (!preferences.enabled)
     return {
       html,
-      buttons: [[{ text: text.resume, callback_data: data(link, "en", 1) }], footer],
+      buttons: [
+        [{ text: `${marks.resume} ${text.resume}`, callback_data: data(link, "en", 1) }],
+        footer,
+      ],
     };
   return {
     html,
     buttons: [
-      [{ text: text.pause, callback_data: data(link, "en", 0) }],
+      [{ text: `${marks.paused} ${text.pause}`, callback_data: data(link, "en", 0) }],
       [
         {
           text: choice(preferences.filter === "fiscal", text.fiscalOnly),
@@ -508,24 +537,26 @@ async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotM
           callback_data: data(link, "mo", "digest"),
         },
       ],
-      ...(preferences.mode === "digest"
-        ? [[{ text: text.time(preferences.digestTime), callback_data: data(link, "tm") }]]
-        : []),
-      ...(state.stores.length > 0
-        ? [
-            [
+      [
+        ...(preferences.mode === "digest"
+          ? [
               {
-                text: text.storeCount(
-                  active.filter((store) => store.enabled).length,
-                  active.length,
-                ),
+                text: `${marks.digest} ${text.time(preferences.digestTime)}`,
+                callback_data: data(link, "tm"),
+              },
+            ]
+          : []),
+        ...(state.stores.length > 0
+          ? [
+              {
+                text: `${marks.stores} ${text.storeCount(active.filter((store) => store.enabled).length, active.length)}`,
                 callback_data: data(link, "ss", 0),
               },
-            ],
-          ]
-        : []),
+            ]
+          : []),
+      ],
       footer,
-    ],
+    ].filter((row) => row.length > 0),
   };
 }
 
@@ -533,13 +564,13 @@ async function timesMessage(env: Env, link: Link, now: Date): Promise<BotMessage
   const text = copy[link.language];
   const { preferences } = await readState(env.DB, link, now);
   return {
-    html: `<b>${escape(text.timeTitle)}</b>\n${escape(zoneName(link.language, preferences.timeZone))}\n<i>${escape(text.zoneNote)}</i>`,
+    html: `${marks.digest} <b>${escape(text.timeTitle)}</b>\n${escape(zoneName(link.language, preferences.timeZone))}\n<i>${escape(text.zoneNote)}</i>`,
     buttons: [
       telegramDigestTimes.map((time) => ({
         text: choice(preferences.digestTime === time, time),
         callback_data: data(link, "tm", time.replace(":", "")),
       })),
-      [{ text: text.back, callback_data: data(link, "pr") }],
+      [{ text: `‹ ${text.back}`, callback_data: data(link, "pr") }],
     ],
   };
 }
@@ -551,12 +582,12 @@ async function storesMessage(env: Env, link: Link, page: number, now: Date): Pro
   const current = Math.min(Math.max(page, 0), pages - 1);
   const shown = stores.slice(current * storesPerPage, (current + 1) * storesPerPage);
   return {
-    html: `<b>${escape(text.storesTitle)}</b>`,
+    html: `${marks.stores} <b>${escape(text.storesTitle)}</b>`,
     buttons: [
       ...shown.map((store) => [
         store.paused
           ? {
-              text: `${store.name.slice(0, 40)} · ${text.suspended}`,
+              text: `${marks.store.suspended} ${store.name.slice(0, 40)} · ${text.suspended}`,
               callback_data: data(link, "ss", current),
             }
           : {
@@ -574,7 +605,7 @@ async function storesMessage(env: Env, link: Link, page: number, now: Date): Pro
             ],
           ]
         : []),
-      [{ text: text.back, callback_data: data(link, "pr") }],
+      [{ text: `‹ ${text.back}`, callback_data: data(link, "pr") }],
     ],
   };
 }
@@ -613,7 +644,7 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
     ? "sandbox"
     : "production";
   const html = splitBlocks([
-    `<b>${escape(text.latest)}</b> · ${escape(text.latestRange(offset + 1, offset + page.length, listed.length))}`,
+    `${icons.change.new} <b>${escape(text.latest)}</b> · <i>${escape(text.latestRange(offset + 1, offset + page.length, listed.length))}</i>`,
     ...page.map(({ order, environment }) =>
       orderEntry(
         env,
@@ -630,13 +661,18 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
     buttons: [
       [
         ...(offset > 0
-          ? [{ text: text.previous, callback_data: data(link, "la", offset - latestPage) }]
+          ? [{ text: `‹ ${text.previous}`, callback_data: data(link, "la", offset - latestPage) }]
           : []),
         ...(offset + latestPage < listed.length
-          ? [{ text: text.more, callback_data: data(link, "la", offset + latestPage) }]
+          ? [{ text: `${text.more} ›`, callback_data: data(link, "la", offset + latestPage) }]
           : []),
       ],
-      [{ text: text.orders, url: appUrl(env, link.language, ordersPath, environment) }],
+      [
+        {
+          text: `${icons.link} ${text.orders}`,
+          url: appUrl(env, link.language, ordersPath, environment),
+        },
+      ],
     ].filter((row) => row.length > 0),
   };
 }
