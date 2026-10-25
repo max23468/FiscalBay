@@ -10,7 +10,7 @@ import {
 } from "../integrations/telegram.server";
 import { UpstreamError } from "../integrations/http.server";
 import { isProduction } from "../app-links";
-import { localizedPath, type Language } from "../i18n";
+import { languages, localizedPath, type Language } from "../i18n";
 import { telegramDigestTimes, telegramLinkMinutes } from "../preferences";
 import type { TelegramView } from "../view-models";
 
@@ -118,7 +118,7 @@ export async function consumeTelegramStart(
   // sconosciuta non risponde, così il bot di prova non si presenta a chi lo trova per caso.
   const both = async (kind: "help" | "invalid") => {
     if (isProduction(env))
-      await reply(`${replies.it[kind](url("it"))}\n\n${replies.en[kind](url("en"))}`);
+      await reply(languages.map((language) => replies[language][kind](url(language))).join("\n\n"));
   };
   if (!start.tokenHash) return both("help");
   const request = await db
@@ -325,16 +325,21 @@ export async function saveTelegramChange(
   }
   const column = columns[change.name];
   const zone = change.name === "mode" || change.name === "digestTime";
-  const value = typeof change.value === "boolean" ? (change.value ? 1 : 0) : change.value;
   const saved = await db
     .prepare(`INSERT INTO telegram_preferences (workspace_id, ${column}, time_zone, updated_at)
     SELECT workspace_id, ?1, ?2, ?3 FROM workspace_members WHERE user_id = ?4
     ON CONFLICT(workspace_id) DO UPDATE SET ${column} = excluded.${column},
       updated_at = excluded.updated_at,
       ${zone ? "time_zone = excluded.time_zone," : ""}
-      events_from = CASE WHEN ${change.name === "enabled" ? "telegram_preferences.enabled = 0 AND excluded.enabled = 1" : "false"}
+      events_from = CASE WHEN ${
+        // Stryker disable next-line ConditionalExpression: per le altre scelte `excluded.enabled` vale il predefinito 1, quindi a notifiche spente la condizione sposterebbe soltanto un inizio che la riattivazione riscrive.
+        change.name === "enabled"
+          ? "telegram_preferences.enabled = 0 AND excluded.enabled = 1"
+          : "false"
+      }
         THEN excluded.updated_at ELSE telegram_preferences.events_from END`)
-    .bind(value, timeZone, at, userId)
+    // D1 registra un booleano come 1 o 0.
+    .bind(change.value, timeZone, at, userId)
     .run();
   return saved.meta.changes > 0;
 }

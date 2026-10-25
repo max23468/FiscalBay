@@ -7,6 +7,7 @@ import {
   consumeTelegramStart,
   parseTelegramChange,
   saveTelegramChange,
+  startTelegramLink,
   storeNotifications,
   telegramRecipient,
   telegramSettings,
@@ -15,6 +16,7 @@ import {
   chatLabel,
   sendText,
   telegramConfigured,
+  linkToken,
   verifyTelegramUpdate,
 } from "../app/integrations/telegram.server";
 import { consumeWebhooks, receiveWebhook } from "../app/integrations/webhooks.server";
@@ -38,6 +40,8 @@ function bot(reply?: (call: BotCall) => Response | undefined) {
   const fetcher = vi.fn<typeof fetch>(async (input, init) => {
     const url = String(input);
     expect(url.startsWith(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/`)).toBe(true);
+    expect(init?.method).toBe("POST");
+    expect(new Headers(init?.headers).get("content-type")).toBe("application/json");
     const call = {
       method: url.split("/").at(-1)!,
       params: JSON.parse(String(init?.body)) as Record<string, unknown>,
@@ -178,6 +182,15 @@ describe("ingresso del bot", () => {
     const off = { ...environment, TELEGRAM_BOT_TOKEN: undefined } as Env;
     expect(telegramConfigured(off)).toBe(false);
     expect(telegramConfigured({ ...environment, TELEGRAM_BOT_USERNAME: "" } as Env)).toBe(false);
+    for (const change of [
+      { TELEGRAM_BOT_USERNAME: undefined },
+      { TELEGRAM_WEBHOOK_SECRET: undefined },
+      { TELEGRAM_BOT_USERNAME: "@FiscalBayTestBot" },
+      { TELEGRAM_BOT_USERNAME: "FiscalBayTestBot!" },
+      { TELEGRAM_WEBHOOK_SECRET: `!${"a".repeat(40)}` },
+      { TELEGRAM_WEBHOOK_SECRET: `${"a".repeat(40)}!` },
+    ])
+      expect(telegramConfigured({ ...environment, ...change } as Env)).toBe(false);
     expect(telegramConfigured({ ...environment, TELEGRAM_WEBHOOK_SECRET: "corto" } as Env)).toBe(
       false,
     );
@@ -216,6 +229,21 @@ describe("ingresso del bot", () => {
     expect(start("/start")).toMatchObject({ tokenHash: null });
     expect(start("/stop")).toBeNull();
     expect(start(`/start ${"c".repeat(43)} altro`)).toBeNull();
+    // Spazi in più e in coda non cambiano il token; un testo prima del comando non è un comando.
+    expect(start(`/start   ${"d".repeat(43)}  `)?.tokenHash).toHaveLength(64);
+    expect(start(`ciao /start ${"d".repeat(43)}`)).toBeNull();
+    // Il token ha esattamente 43 caratteri ammessi.
+    expect(start(`/start ${"e".repeat(44)}`)).toMatchObject({ tokenHash: null });
+    expect(start(`/start !${"e".repeat(43)}`)).toMatchObject({ tokenHash: null });
+    // Un messaggio senza testo, come una foto, non è un comando.
+    const photo = { update_id: ++updateId, message: { date: 1, chat: { id: 1, type: "private" } } };
+    expect(verifyTelegramUpdate(JSON.stringify(photo), secret, env)).toBeNull();
+  });
+
+  it("il token del deep link ha il formato accettato da Telegram", () => {
+    const token = linkToken();
+    expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/u);
+    expect(linkToken()).not.toBe(token);
   });
 });
 
@@ -606,6 +634,118 @@ describe("preferenze e destinatario", () => {
   });
 });
 
+describe("casi limite del collegamento e delle preferenze", () => {
+  it("senza Premium il dominio non crea il link e lo dice", async () => {
+    const free = await account("limite-free", false);
+    const session = await env.DB.prepare('SELECT id FROM "session" WHERE "userId" = ?')
+      .bind(free.userId)
+      .first<{ id: string }>();
+    expect(
+      await startTelegramLink(env.DB, env, {
+        userId: free.userId,
+        sessionId: session!.id,
+        language: "it",
+        timeZone: "Europe/Rome",
+      }),
+    ).toEqual({ reason: "premium_required" });
+  });
+
+  it("un errore temporaneo nel leggere la chat fa riprovare senza collegare", async () => {
+    const seller = await account("limite-getchat");
+    const down = bot((call) =>
+      call.method === "getChat" ? new Response("{}", { status: 503 }) : undefined,
+    );
+    const message = await deliver(`/start ${await linkToken(seller.cookie)}`, 1701, down.fetcher);
+    expect(message.retry).toHaveBeenCalledOnce();
+    expect(await link(seller.workspace)).toBeNull();
+    expect(down.texts()).toEqual([]);
+  });
+
+  it("la stessa chat che riavvia il bot aggiorna soltanto il nome mostrato", async () => {
+    const seller = await account("limite-nome");
+    await deliver(`/start ${await linkToken(seller.cookie)}`, 1801);
+    const first = (await link(seller.workspace))!;
+    const renamed = bot((call) =>
+      call.method === "getChat"
+        ? Response.json({ ok: true, result: { username: "nuovo_nome" } })
+        : undefined,
+    );
+    await deliver(`/start ${await linkToken(seller.cookie)}`, 1801, renamed.fetcher, later(5));
+    expect(await link(seller.workspace)).toEqual({ ...first, chat_label: "@nuovo_nome" });
+  });
+
+  it("il collegamento fissa il fuso della richiesta e lo conserva", async () => {
+    const seller = await account("limite-fuso");
+    const response = (await settingsAction({
+      request: new Request(`${origin}/app/impostazioni/notifiche`, {
+        method: "POST",
+        headers: { cookie: `${seller.cookie}; fiscalbay_fuso=America%2FNew_York`, origin },
+        body: new URLSearchParams({ intent: "telegram-link" }),
+      }),
+    } as Parameters<typeof settingsAction>[0])) as Response;
+    const token = new URL(response.headers.get("location")!).searchParams.get("start")!;
+    await deliver(`/start ${token}`, 1901);
+    expect((await telegramSettings(env.DB, seller.userId, "Europe/Berlin")).timeZone).toBe(
+      "America/New_York",
+    );
+    await saveTelegramChange(env.DB, seller.userId, { name: "mode", value: "digest" }, "UTC");
+    expect(await telegramSettings(env.DB, seller.userId, "Europe/Berlin")).toMatchObject({
+      mode: "digest",
+      timeZone: "UTC",
+    });
+  });
+
+  it("senza spazio valgono i predefiniti e nessuna scelta si salva", async () => {
+    const { userId, cookie } = await verifiedSession("limite-senza-spazio@example.invalid");
+    expect(await telegramSettings(env.DB, userId, "Europe/Rome")).toEqual({
+      chat: null,
+      enabled: true,
+      filter: "fiscal",
+      mode: "each",
+      digestTime: "18:00",
+      timeZone: "Europe/Rome",
+      stores: [],
+    });
+    expect(
+      await saveTelegramChange(env.DB, userId, { name: "filter", value: "all" }, "Europe/Rome"),
+    ).toBe(false);
+    expect(
+      await settingsForm(cookie, { intent: "save", name: "telegram-filter", value: "all" }),
+    ).toMatchObject({ init: { status: 404 } });
+  });
+
+  it("legge notifiche spente, scelte salvate e negozi in pausa per il piano", async () => {
+    const seller = await account("limite-stato");
+    // Collegata senza preferenze salvate: valgono i predefiniti. La pausa del piano si scrive
+    // dopo, perché le Impostazioni di uno spazio Premium la tolgono.
+    await deliver(`/start ${await linkToken(seller.cookie)}`, 2001);
+    await env.DB.prepare(
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES (?, 'plan', ?)",
+    )
+      .bind(seller.store, now)
+      .run();
+    await env.DB.prepare("DELETE FROM telegram_preferences WHERE workspace_id = ?")
+      .bind(seller.workspace)
+      .run();
+    expect(await telegramSettings(env.DB, seller.userId, "UTC")).toMatchObject({
+      enabled: true,
+      stores: [{ id: seller.store, paused: true }],
+    });
+    await saveTelegramChange(env.DB, seller.userId, { name: "enabled", value: false }, "UTC");
+    expect((await telegramSettings(env.DB, seller.userId, "UTC")).enabled).toBe(false);
+  });
+
+  it("accetta i valori predefiniti e rifiuta un negozio con un nome di troppo", () => {
+    expect(parseTelegramChange("telegram-filter", "fiscal")).toEqual({
+      name: "filter",
+      value: "fiscal",
+    });
+    expect(parseTelegramChange("telegram-mode", "each")).toEqual({ name: "mode", value: "each" });
+    expect(parseTelegramChange(`store-notifications:${"s".repeat(129)}`, "true")).toBeNull();
+    expect(parseTelegramChange("x-store-notifications:s-1", "true")).toBeNull();
+  });
+});
+
 describe("pagine", () => {
   it("le Impostazioni mostrano chat, preferenze e negozi dello spazio", async () => {
     const seller = await account("pagina");
@@ -678,11 +818,22 @@ describe("Bot API e conservazione", () => {
       failure: "unavailable",
       details: { status: 502 },
     });
+    expect(await failure(answer(new Response("{}", { status: 500 })))).toMatchObject({
+      failure: "unavailable",
+      details: { status: 500 },
+    });
     expect(
       await failure(answer(new Response("", { status: 429, headers: { "retry-after": "3" } }))),
     ).toMatchObject({ failure: "rate_limited", details: { retryAfter: 3 } });
+    // Una risposta JSON senza parametri lascia l'attesa all'intestazione.
+    expect(
+      await failure(
+        answer(Response.json({ ok: false }, { status: 429, headers: { "retry-after": "4" } })),
+      ),
+    ).toMatchObject({ failure: "rate_limited", details: { retryAfter: 4 } });
     expect(await failure(answer(new Response("{}", { status: 401 })))).toMatchObject({
       failure: "credentials",
+      details: { status: 401 },
     });
     expect(await failure(answer(new Response("{}", { status: 404 })))).toMatchObject({
       failure: "credentials",
@@ -691,20 +842,40 @@ describe("Bot API e conservazione", () => {
       failure: "rejected",
       details: { status: 400 },
     });
-    expect(await failure(answer(Response.json({ ok: false })))).toMatchObject({
+    // Con stato 200 contano `ok` e la forma del risultato.
+    expect(
+      await failure(answer(Response.json({ ok: false, result: { message_id: 1 } }))),
+    ).toMatchObject({ failure: "invalid_response", details: { status: 200 } });
+    expect(await failure(answer(new Response("non json")))).toMatchObject({
       failure: "invalid_response",
+      details: { status: 200 },
     });
     expect(await failure(answer(Response.json({ ok: true, result: {} })))).toMatchObject({
       failure: "invalid_response",
+      details: { status: 200 },
     });
     expect(await failure(answer(new Response("x".repeat(70_000))))).toMatchObject({
       failure: "invalid_response",
+      details: { status: 200 },
+    });
+    // Il messaggio parte senza anteprima dei link, verso la chat indicata.
+    const sent = answer(Response.json({ ok: true, result: { message_id: 1 } }));
+    await sendText(env, "77", "testo", sent);
+    expect(JSON.parse(String(sent.mock.calls[0]![1]?.body))).toEqual({
+      chat_id: "77",
+      text: "testo",
+      link_preview_options: { is_disabled: true },
     });
     const named = (result: Record<string, string>) =>
       chatLabel(env, "1", answer(Response.json({ ok: true, result })));
     expect(await named({ first_name: "Mario", last_name: "Rossi" })).toBe("Mario Rossi");
-    expect(await named({ first_name: "Mario" })).toBe("Mario");
+    expect(await named({ first_name: "Mario " })).toBe("Mario");
+    expect(await named({ last_name: "Rossi" })).toBe("Rossi");
+    expect(await named({ username: "u".repeat(140) })).toHaveLength(128);
     expect(await named({})).toBeNull();
+    const asked = answer(Response.json({ ok: true, result: { username: "venditore" } }));
+    await chatLabel(env, "88", asked);
+    expect(JSON.parse(String(asked.mock.calls[0]![1]?.body))).toEqual({ chat_id: "88" });
   });
 
   it("elimina le richieste un giorno dopo la scadenza", async () => {

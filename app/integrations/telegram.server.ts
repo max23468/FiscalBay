@@ -1,4 +1,4 @@
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 import { readBounded, retryAfterSeconds, UpstreamError } from "./http.server";
@@ -30,11 +30,7 @@ export function telegramConfigured(env: Env): boolean {
 
 /** Token del deep link: 32 byte casuali, nel formato che Telegram accetta per `start`. */
 export function linkToken(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return btoa(String.fromCharCode(...bytes))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/u, "");
+  return randomBytes(32).toString("base64url");
 }
 
 export const linkTokenPattern = /^[A-Za-z0-9_-]{43}$/u;
@@ -91,6 +87,7 @@ export function verifyTelegramUpdate(
   if (!sameSecret(secret, env.TELEGRAM_WEBHOOK_SECRET!)) throw new TelegramSecretMismatch();
   const update = updateSchema.parse(JSON.parse(body));
   const message = update.message;
+  // Stryker disable next-line ConditionalExpression: un testo assente diventa «undefined», che il comando non riconosce.
   if (message?.chat.type !== "private" || message.text === undefined) return null;
   const command = /^\/start(?:@\w+)?(?:\s+(\S+))?\s*$/u.exec(message.text);
   if (!command) return null;
@@ -140,12 +137,11 @@ async function botApi<Schema extends z.ZodType>(
     if (error instanceof UpstreamError) throw error;
     throw new UpstreamError("unavailable");
   }
-  let reply: z.infer<typeof replySchema> | undefined;
-  try {
-    reply = replySchema.parse(JSON.parse(text));
-  } catch {
-    reply = undefined;
-  }
+  // Un corpo che non è JSON resta senza risposta leggibile, come uno di forma diversa.
+  const reply = await new Response(text).json().then(
+    (payload: unknown) => replySchema.safeParse(payload).data,
+    () => undefined,
+  );
   const { status } = response;
   if (status === 429) {
     const retryAfter =
@@ -181,7 +177,7 @@ export async function chatLabel(
   const chat = await botApi(env, "getChat", { chat_id: chatId }, chatSchema, fetcher);
   const label = chat.username
     ? `@${chat.username}`
-    : [chat.first_name, chat.last_name].filter(Boolean).join(" ").trim();
+    : [chat.first_name, chat.last_name].join(" ").trim();
   return label ? label.slice(0, 128) : null;
 }
 
