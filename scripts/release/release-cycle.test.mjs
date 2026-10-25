@@ -240,6 +240,63 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     }
   });
 
+  it("elimina un branch locale rimasto indietro e conserva quello con commit propri", () => {
+    const directory = realpathSync(mkdtempSync(path.join(tmpdir(), "cycle-behind-")));
+    const origin = path.join(directory, "origin.git");
+    const main = path.join(directory, "main");
+    const run = (cwd, ...args) => {
+      const result = spawnSync("git", args, { cwd, encoding: "utf8" });
+      assert.equal(result.status, 0, result.stderr);
+      return result.stdout.trim();
+    };
+    try {
+      run(directory, "init", "-q", "--bare", "--initial-branch=develop", origin);
+      run(directory, "clone", "-q", origin, main);
+      run(main, "config", "user.name", "Synthetic test");
+      run(main, "config", "user.email", "test@example.invalid");
+      writeFileSync(path.join(main, "value.js"), "export const value=false;\n");
+      run(main, "add", ".");
+      run(main, "commit", "-qm", "base");
+      run(main, "push", "-q", "origin", "develop");
+      run(main, "switch", "-qc", "codex/feature");
+      writeFileSync(path.join(main, "value.js"), "export const value=true;\n");
+      run(main, "commit", "-qam", "feature");
+      const stale = run(main, "rev-parse", "HEAD");
+      // Il ciclo aggiorna la testa sul remoto; il checkout locale passa a un altro lavoro.
+      writeFileSync(path.join(main, "other.js"), "export const other=true;\n");
+      run(main, "add", ".");
+      run(main, "commit", "-qm", "base aggiornata");
+      run(main, "push", "-q", "origin", "codex/feature");
+      const head = run(main, "rev-parse", "HEAD");
+      run(main, "switch", "-q", "develop");
+      run(main, "merge", "--squash", "codex/feature");
+      run(main, "commit", "-qm", "squash");
+      run(main, "push", "-q", "origin", "develop");
+      const merged = run(main, "rev-parse", "HEAD");
+      run(main, "switch", "-qc", "altro-lavoro");
+      const pr = {
+        headRefName: "codex/feature",
+        headRefOid: head,
+        baseRefName: "develop",
+        mergeCommit: { oid: merged },
+      };
+      run(main, "branch", "-f", "codex/feature", stale);
+      run(main, "switch", "-q", "codex/feature");
+      writeFileSync(path.join(main, "own.js"), "export const own=true;\n");
+      run(main, "add", ".");
+      run(main, "commit", "-qm", "lavoro locale");
+      run(main, "switch", "-q", "altro-lavoro");
+      assert.throws(() => cleanup(pr, main), /non riconciliato/u);
+      run(main, "branch", "-f", "codex/feature", stale);
+      cleanup(pr, main);
+      assert.equal(run(main, "branch", "--show-current"), "altro-lavoro");
+      assert.equal(run(main, "for-each-ref", "refs/heads/codex/feature"), "");
+      assert.equal(run(main, "ls-remote", "origin", "refs/heads/codex/feature"), "");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("ammette develop soltanto per la qualifica senza deploy", () => {
     assert.equal(candidateRef("candidate", "develop"), "develop");
     assert.equal(candidateRef("candidate"), "main");
