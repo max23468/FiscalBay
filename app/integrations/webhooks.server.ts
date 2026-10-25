@@ -259,7 +259,11 @@ export async function receiveWebhook(
     )
       throw new InvalidWebhook(409);
     if (!receipt.queued_at && !receipt.completed_at) {
-      await enqueueReceipt(env, receipt.id, now);
+      const answered =
+        receipt.provider === "telegram" &&
+        interactiveTopics.has(receipt.topic) &&
+        (await consumeNow(env, receipt.id, fetcher, now));
+      if (!answered) await enqueueReceipt(env, receipt.id, now);
     }
     return new Response(null, { status: 204 });
   } catch (error) {
@@ -272,6 +276,34 @@ export async function receiveWebhook(
     if (status === 503) logFailure({ error, operation: "webhook_ingress" });
     return new Response(null, { status });
   }
+}
+
+/**
+ * Aggiornamenti del bot a cui risponde chi scrive: la coda aggiungerebbe da pochi decimi a
+ * diversi secondi prima della risposta.
+ */
+const interactiveTopics = new Set(["start", "command", "callback"]);
+
+/**
+ * Esegue subito la ricevuta, con lo stesso lease del consumer. False se non si è completata:
+ * allora la ricevuta passa alla coda come le altre, e un'interruzione la lascia al recupero.
+ */
+async function consumeNow(env: Env, receiptId: string, fetcher: typeof fetch, now: Date) {
+  let done = false;
+  const message = {
+    id: receiptId,
+    timestamp: now,
+    body: { receiptId },
+    attempts: 1,
+    ack: () => {
+      done = true;
+    },
+    retry: () => {
+      done = false;
+    },
+  } satisfies Message<unknown>;
+  await consumeWebhooks({ messages: [message] }, env, fetcher, now);
+  return done;
 }
 
 /** Aggiornamenti accettati per chat in un minuto: oltre, il bot non risponde. */
