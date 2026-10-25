@@ -672,6 +672,8 @@ function stripeAccount() {
       paidAt: string;
       /** Fattura senza abbonamento: senza origine, oppure da un preventivo. */
       orphan?: "none" | "quote";
+      /** Pagamento della fattura; senza, `pi_<fattura>`. */
+      paymentIntent?: string;
     }>,
     /** Sessioni Checkout: quelle create dal test di acquisto si aggiungono qui. */
     sessions: [] as Array<
@@ -740,7 +742,10 @@ function stripeAccount() {
       data: [
         {
           status: "paid",
-          payment: { type: "payment_intent", payment_intent: `pi_${paid.id}` },
+          payment: {
+            type: "payment_intent",
+            payment_intent: paid.paymentIntent ?? `pi_${paid.id}`,
+          },
         },
       ],
     },
@@ -874,7 +879,9 @@ function stripeAccount() {
     if (url.pathname === "/v1/invoice_payments") {
       expect(url.searchParams.get("payment[type]")).toBe("payment_intent");
       const intent = url.searchParams.get("payment[payment_intent]");
-      const paid = state.invoices.find((candidate) => `pi_${candidate.id}` === intent);
+      const paid = state.invoices.find(
+        (candidate) => (candidate.paymentIntent ?? `pi_${candidate.id}`) === intent,
+      );
       return list(paid ? [{ object: "invoice_payment", invoice: paid.id, status: "paid" }] : []);
     }
     const missing = () =>
@@ -2347,6 +2354,16 @@ describe("Lifetime e concessioni", () => {
         reason: "Omaggio",
       }),
     ).toBe("done");
+    // Managed Payments emette una fattura anche per l'acquisto una tantum.
+    stripe.state.invoices.push({
+      id: "in_lifetime",
+      start: now,
+      end: now,
+      amount: 18178,
+      paidAt: now,
+      orphan: "none",
+      paymentIntent: "pi_cs_lifetime_1",
+    });
     stripe.state.charges
       .find((charge) => charge.id === "ch_cs_lifetime_1")!
       .refunds.push({
