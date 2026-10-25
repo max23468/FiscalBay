@@ -616,16 +616,26 @@ describe("PR tramite API REST", () => {
     ]);
   });
 
-  it("attende i controlli in corso e si ferma sul primo fallito", () => {
-    const done = { status: "completed", conclusion: "success" };
-    assert.equal(checksOutcome([done, { status: "completed", conclusion: "skipped" }]), "passed");
-    assert.equal(checksOutcome([done, { status: "in_progress", conclusion: null }]), "pending");
+  it("attende i controlli in corso e conta solo l'ultima esecuzione di ognuno", () => {
+    const check = (id, name, status, conclusion) => ({ id, name, status, conclusion });
+    assert.equal(
+      checksOutcome([check(1, "a", "completed", "success"), check(2, "b", "completed", "skipped")]),
+      "passed",
+    );
+    assert.equal(
+      checksOutcome([check(1, "a", "completed", "success"), check(2, "b", "in_progress", null)]),
+      "pending",
+    );
+    assert.equal(
+      checksOutcome([check(1, "a", "in_progress", null), check(2, "b", "completed", "failure")]),
+      "failed",
+    );
     assert.equal(
       checksOutcome([
-        { status: "in_progress", conclusion: null },
-        { status: "completed", conclusion: "failure" },
+        check(3, "Node 26", "completed", "success"),
+        check(2, "Node 26", "completed", "cancelled"),
       ]),
-      "failed",
+      "passed",
     );
   });
 });

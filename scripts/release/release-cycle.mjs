@@ -86,9 +86,38 @@ export function pullRequestAction(action, repository, number, head, env = proces
 }
 
 export function checksOutcome(checkRuns) {
+  // Come GitHub, conta soltanto l'ultima esecuzione di ogni controllo: una run annullata da
+  // quella successiva non fa fallire la PR.
+  const latest = new Map();
+  for (const check of checkRuns)
+    if (!latest.has(check.name) || latest.get(check.name).id < check.id)
+      latest.set(check.name, check);
+  const current = [...latest.values()];
   const failed = ["failure", "cancelled", "timed_out", "action_required", "startup_failure"];
-  if (checkRuns.some((check) => failed.includes(check.conclusion))) return "failed";
-  return checkRuns.every((check) => check.status === "completed") ? "passed" : "pending";
+  if (current.some((check) => failed.includes(check.conclusion))) return "failed";
+  return current.every((check) => check.status === "completed") ? "passed" : "pending";
+}
+
+/**
+ * GitHub rifiuta il merge automatico di una PR già unibile; `gh pr merge --auto` in quel caso
+ * unisce subito, e nel cloud si fa lo stesso con il merge REST vincolato alla testa.
+ */
+function enableAutoMerge(repository, number, head) {
+  try {
+    gh(...pullRequestAction("enable-auto", repository, number, head));
+  } catch (error) {
+    if (!/is in (clean|unstable) status/u.test(String(error.stderr ?? ""))) throw error;
+    gh(
+      "api",
+      "-X",
+      "PUT",
+      `repos/${repository}/pulls/${number}/merge`,
+      "-f",
+      "merge_method=squash",
+      "-f",
+      `sha=${head}`,
+    );
+  }
 }
 
 const readPullRequest = (repository, number) =>
@@ -915,7 +944,7 @@ async function main() {
               console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
               return true;
             }
-            gh(...pullRequestAction("enable-auto", repository, number, pr.headRefOid));
+            enableAutoMerge(repository, number, pr.headRefOid);
             await waitChecks(repository, pr.headRefOid);
             // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
             for (let attempt = 0; attempt < 180; attempt++) {
