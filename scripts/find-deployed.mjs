@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 /**
- * Commit dell'ultimo deploy test riuscito, base del confronto sui push a `develop`:
- * una run annullata o un deploy fallito restano nel diff della run successiva.
+ * Base del confronto sui push a `develop`: l'ultimo deploy test riuscito oppure, se più recente,
+ * l'ultima run riuscita le cui modifiche da quel deploy non chiedono un deploy. Una run annullata
+ * o un deploy fallito restano nel diff della run successiva; le prove e gli strumenti già
+ * qualificati da una run verde non si ripetono finché non arriva il deploy seguente.
  * Senza un deploy riuscito antenato di HEAD l'output resta vuoto e il gate completo.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { needsDeploy } from "./classify-changes.mjs";
 
 /** Prima run, dalla più recente, con il job di deploy test riuscito su un antenato di HEAD. */
 export function lastDeployed(runs, jobsOf, isAncestor) {
@@ -19,6 +22,22 @@ export function lastDeployed(runs, jobsOf, isAncestor) {
   return undefined;
 }
 
+/**
+ * Run più recente, riuscita, antenata di HEAD e successiva all'ultimo deploy, senza modifiche da
+ * distribuire rispetto a quel deploy; altrimenti il deploy stesso. Le run sono dalla più recente.
+ */
+export function comparisonBase(runs, jobsOf, isAncestor, needsDeployFrom) {
+  const deployed = lastDeployed(runs, jobsOf, isAncestor);
+  if (!deployed) return undefined;
+  for (const run of runs) {
+    if (run.head_sha === deployed) break;
+    if (!["push", "workflow_dispatch"].includes(run.event) || run.conclusion !== "success")
+      continue;
+    if (isAncestor(run.head_sha) && !needsDeployFrom(deployed, run.head_sha)) return run.head_sha;
+  }
+  return deployed;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const repository = process.env.REPOSITORY;
   if (!repository) throw new Error("Repository non identificato.");
@@ -26,7 +45,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const runs = api(
     `repos/${repository}/actions/workflows/ci.yml/runs?branch=develop&status=completed&per_page=50`,
   ).workflow_runs.filter(({ id }) => String(id) !== process.env.GITHUB_RUN_ID);
-  const sha = lastDeployed(
+  const sha = comparisonBase(
     runs,
     (run) => api(`repos/${repository}/actions/runs/${run.id}/jobs?per_page=50`).jobs,
     (commit) => {
@@ -37,9 +56,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
         return false;
       }
     },
+    needsDeploy,
   );
   if (sha) {
     appendFileSync(process.env.GITHUB_OUTPUT, `sha=${sha}\n`);
-    console.log(`Ultimo deploy test riuscito: ${sha}.`);
+    console.log(`Base del confronto: ${sha}.`);
   } else console.log("Nessun deploy test riuscito fra le run recenti: gate completo.");
 }
