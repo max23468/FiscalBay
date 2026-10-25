@@ -1,6 +1,7 @@
 import { FileText, ShieldCheck } from "lucide-react";
 import { buttonLink } from "~/components/ui/button-variants";
 
+import { SiteFooter } from "~/components/site-footer";
 import { StandalonePage } from "~/components/standalone-page";
 import type { Route } from "./+types/legal";
 import { appCopy, pageTitle } from "../app-copy";
@@ -32,6 +33,7 @@ export default function Legal({ loaderData }: Route.ComponentProps) {
       tone="neutral"
       title={t[document]}
       homeHref={localizedPath(language)}
+      footer={<SiteFooter language={language} />}
     >
       <p className="text-sm text-muted-foreground">{t.version(version)}</p>
       <p className="leading-relaxed text-pretty text-muted-foreground">{t.draft}</p>

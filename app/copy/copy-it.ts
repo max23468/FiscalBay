@@ -449,7 +449,7 @@ export const it = {
       },
       privacy: {
         title: "Dati e privacy",
-        description: "Informativa, esportazione e cancellazione",
+        description: "Termini, informativa, esportazione e cancellazione",
       },
       supporto: { title: "Supporto", description: "Domande frequenti e assistenza" },
     },
@@ -457,7 +457,7 @@ export const it = {
     limitedDescriptions: {
       piano: "Piano e sblocchi",
       notifiche: "Comunicazioni via email",
-      privacy: "Informativa sulla privacy",
+      privacy: "Termini e informativa sulla privacy",
     },
     premiumBadge: "Premium",
     saved: "Salvato",
@@ -704,6 +704,9 @@ export const it = {
       leave: "Lascia la pagina",
     },
     privacy: {
+      terms: "Termini di servizio",
+      termsBody: "Le condizioni d’uso di FiscalBay.",
+      readTerms: "Leggi i termini",
       privacyPolicy: "Informativa privacy",
       privacyPolicyBody: "Quali dati trattiamo, per quanto tempo e con quali fornitori.",
       readPolicy: "Leggi l’informativa",
