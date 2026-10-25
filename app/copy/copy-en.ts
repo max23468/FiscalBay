@@ -470,6 +470,17 @@ export const en: AppCopy = {
       priceMonthlyNote: "Renews every month.",
       priceAnnualNote: (months) => `12 months for the price of ${months}.`,
       priceLifetimeNote: "One-off payment, no renewals.",
+      lifetimeCredit: (amount: string) => `Less ${amount} for the unused paid period.`,
+      lifetimeReplaces: "Your subscription ends with no further renewals.",
+      lifetimeCreditName: "Unused paid period",
+      lifetimeSoldOut: "Sold out",
+      lifetimeUnavailable: "Lifetime places are sold out.",
+      lifetimeRenewing:
+        "Your subscription renews shortly: you can switch to lifetime right after the renewal.",
+      lifetimeUpgradeTitle: "Switch to lifetime",
+      lifetimeProcessingTitle: "Activating lifetime Premium",
+      lifetimeProcessingBody:
+        "Lifetime Premium starts as soon as Stripe confirms the payment; until then your plan stays as it is. Receipts and invoices come from Stripe.",
       trialPurchaseNote:
         "With monthly or annual you don't pay today: your trial days stay and the first charge comes when the trial ends.",
       trialEndingPurchaseNote:
@@ -512,6 +523,8 @@ export const en: AppCopy = {
         lifetime: "Premium, lifetime",
       },
       premiumLifetime: "One-off purchase, no renewals.",
+      premiumLifetimeGranted: "Granted by FiscalBay, no renewals.",
+      grantEnds: (date: string) => `Premium granted until ${date}.`,
       premiumRenews: (date) => `Renews on ${date}.`,
       premiumEnds: (date) => `Renewal cancelled: Premium stays active until ${date}.`,
       renewalFailedTitle: "Renewal failed",

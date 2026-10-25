@@ -299,7 +299,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     const seller = await linkedSeller("scollega@example.invalid");
     await grantImportedOrder(seller);
     await env.DB.prepare(
-      "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (1, ?, 'active', ?)",
+      "INSERT INTO lifetime_allocations (slot, workspace_id, status, activated_at, created_at) VALUES (1, ?1, 'active', ?2, ?2)",
     )
       .bind(seller.workspaceId, now)
       .run();

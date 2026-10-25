@@ -1082,10 +1082,12 @@ describe("percorso ordini", () => {
   it("acquisisce durante la copertura tutti gli identificativi e conserva il diritto nel consolidamento", async () => {
     await seed();
     await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('live', 'w-a', 'lifetime', ?, NULL)`)
-      .bind(now)
-      .run();
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, activated_at, created_at)
+        VALUES (1, 'w-a', 'active', ?1, ?1)`).bind(now),
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+        VALUES ('live', 'w-a', 'lifetime', ?, NULL)`).bind(now),
+    ]);
     await insertTaxIdentifiers({
       id: "during",
       orderId: "o-a",
@@ -1294,27 +1296,27 @@ describe("percorso ordini", () => {
       ).run(),
     ).rejects.toThrow();
     await env.DB.prepare(
-      "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (20, 'w-a', 'reserved', ?)",
+      "INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at) VALUES (20, 'w-a', 'reserved', ?1, ?1)",
     )
       .bind(now)
       .run();
     await expect(
       env.DB.prepare(
-        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (20, 'w-b', 'reserved', ?)",
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at) VALUES (20, 'w-b', 'reserved', ?1, ?1)",
       )
         .bind(now)
         .run(),
     ).rejects.toThrow();
     await expect(
       env.DB.prepare(
-        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (21, 'w-b', 'reserved', ?)",
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at) VALUES (21, 'w-b', 'reserved', ?1, ?1)",
       )
         .bind(now)
         .run(),
     ).rejects.toThrow();
     await expect(
       env.DB.prepare(
-        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (19, 'w-a', 'reserved', ?)",
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at) VALUES (19, 'w-a', 'reserved', ?1, ?1)",
       )
         .bind(now)
         .run(),
@@ -1328,12 +1330,12 @@ describe("percorso ordini", () => {
     await seed();
     const outcomes = await Promise.allSettled([
       env.DB.prepare(
-        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (20, 'w-a', 'reserved', ?)",
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at) VALUES (20, 'w-a', 'reserved', ?1, ?1)",
       )
         .bind(now)
         .run(),
       env.DB.prepare(
-        "INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at) VALUES (20, 'w-b', 'reserved', ?)",
+        "INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at) VALUES (20, 'w-b', 'reserved', ?1, ?1)",
       )
         .bind(now)
         .run(),
@@ -1343,6 +1345,47 @@ describe("percorso ordini", () => {
     expect(
       await env.DB.prepare("SELECT COUNT(*) AS total FROM lifetime_allocations").first(),
     ).toEqual({ total: 1 });
+  });
+
+  it("non libera un posto lifetime attivo e lega il diritto a un posto dello spazio", async () => {
+    await seed();
+    const allocation = (status: string, expires: string | null, activated: string | null) =>
+      env.DB.prepare(`INSERT INTO lifetime_allocations
+        (slot, workspace_id, status, expires_at, activated_at, created_at)
+        VALUES (1, 'w-a', ?, ?, ?, ?)`).bind(status, expires, activated, now);
+    const lifetime = (id: string) =>
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at)
+        VALUES (?, 'w-a', 'lifetime', ?)`).bind(id, now);
+    // Una prenotazione scade con la sua sessione; un posto attivo ha l'istante di attivazione.
+    await expect(allocation("reserved", null, null).run()).rejects.toThrow(
+      "invalid_lifetime_allocation",
+    );
+    await expect(allocation("active", null, null).run()).rejects.toThrow(
+      "invalid_lifetime_allocation",
+    );
+    await expect(lifetime("senza-posto").run()).rejects.toThrow("lifetime_not_allocated");
+    await allocation("reserved", now, null).run();
+    await expect(lifetime("prenotato").run()).rejects.toThrow("lifetime_not_allocated");
+    await env.DB.prepare(
+      "UPDATE lifetime_allocations SET status = 'active', activated_at = ?, expires_at = NULL",
+    )
+      .bind(now)
+      .run();
+    await lifetime("attivo").run();
+    await expect(lifetime("secondo").run()).rejects.toThrow();
+    // Un posto attivo non si libera né cambia, anche dopo un rimborso.
+    for (const change of [
+      "DELETE FROM lifetime_allocations",
+      "UPDATE lifetime_allocations SET status = 'reserved'",
+      "UPDATE lifetime_allocations SET workspace_id = 'w-b'",
+      "UPDATE lifetime_allocations SET slot = 2",
+    ])
+      await expect(env.DB.prepare(change).run()).rejects.toThrow("immutable_lifetime_allocation");
+    // La cancellazione dello spazio lascia il posto occupato, senza spazio.
+    await env.DB.prepare("DELETE FROM workspaces WHERE id = 'w-a'").run();
+    expect(
+      await env.DB.prepare("SELECT slot, workspace_id, status FROM lifetime_allocations").first(),
+    ).toEqual({ slot: 1, workspace_id: null, status: "active" });
   });
 });
 

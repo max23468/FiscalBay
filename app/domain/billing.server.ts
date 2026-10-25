@@ -15,6 +15,11 @@ import {
 } from "../integrations/stripe.server";
 import type { AccountView } from "../view-models";
 import { activeEntitlementSql, openSubscriptionStatuses } from "./grants.server";
+import {
+  isLifetimeSession,
+  reconcileLifetime,
+  reconcileLifetimeReservations,
+} from "./lifetime.server";
 
 /**
  * Effetti commerciali di Stripe. Webhook e riconciliazione periodica arrivano qui con un solo
@@ -98,18 +103,25 @@ export function paidCoverage(invoice: Stripe.Invoice) {
   };
 }
 
-/** Abbonamento a cui si riferisce l'evento; null per gli eventi senza effetti commerciali. */
-async function eventSubscription(stripe: Stripe, topic: string, objectId: string) {
-  if (topic.startsWith("customer.subscription.")) return objectId;
+/**
+ * Oggetto a cui si riferisce l'evento: un abbonamento o una sessione lifetime; null per gli
+ * eventi senza effetti commerciali.
+ */
+async function eventTarget(
+  stripe: Stripe,
+  topic: string,
+  objectId: string,
+): Promise<{ subscription: string } | { lifetime: string } | null> {
+  if (topic.startsWith("customer.subscription.")) return { subscription: objectId };
   if (topic.startsWith("checkout.session.")) {
     const session = await stripeRead(() => stripe.checkout.sessions.retrieve(objectId));
-    // Una sessione di pagamento una tantum non ha abbonamento.
-    return session.subscription ? idOf(session.subscription) : null;
+    if (session.subscription) return { subscription: idOf(session.subscription) };
+    return isLifetimeSession(session) ? { lifetime: session.id } : null;
   }
   if (topic.startsWith("invoice.")) {
     const invoice = await stripeRead(() => stripe.invoices.retrieve(objectId));
     const subscription = invoice.parent?.subscription_details?.subscription;
-    return subscription ? idOf(subscription) : null;
+    return subscription ? { subscription: idOf(subscription) } : null;
   }
   return null;
 }
@@ -126,15 +138,17 @@ export async function applyStripeEvent(
 ) {
   if (!env.STRIPE_SECRET_KEY) throw new ApplicationError("UPSTREAM_UNAVAILABLE");
   const stripe = await createStripeReader(env.STRIPE_SECRET_KEY, fetcher);
-  let subscription: string | null;
+  let target: Awaited<ReturnType<typeof eventTarget>>;
   try {
-    subscription = await eventSubscription(stripe, receipt.topic, receipt.objectId);
+    target = await eventTarget(stripe, receipt.topic, receipt.objectId);
   } catch (error) {
     if (!isMissingObject(error as UpstreamError)) throw error;
     logFailure({ error, operation: "billing" });
     return;
   }
-  if (subscription) await reconcileSubscription(env, stripe, subscription, now);
+  if (target && "subscription" in target)
+    await reconcileSubscription(env, stripe, target.subscription, now);
+  else if (target) await reconcileLifetime(env, stripe, target.lifetime, now);
 }
 
 /**
@@ -236,13 +250,14 @@ const batchSize = 25;
 
 /**
  * Rete di sicurezza del cron per i webhook mancati o tardivi, anche con il browser chiuso.
- * Prima le sessioni completate degli ultimi due giorni senza abbonamento locale, poi gli
- * abbonamenti dovuti: rinnovo scaduto o tutela del prezzo finita e non ancora riletti, poi
- * attivazioni in attesa da oltre un'ora, infine una rilettura al giorno. Ogni tentativo,
- * riuscito o no, aggiorna `checked_at`: un abbonamento che fallisce non torna in testa a ogni
- * turno. Con 25 abbonamenti e due richieste ciascuno per turno orario il carico resta molto
- * sotto i limiti di Stripe. Ogni passo registra il proprio errore senza fermare gli altri e il
- * turno si conclude: quanto non riuscito torna al turno seguente.
+ * Prima le sessioni completate degli ultimi due giorni senza abbonamento locale o senza posto
+ * lifetime attivo, poi le prenotazioni dei posti, poi gli abbonamenti dovuti: rinnovo scaduto
+ * o tutela del prezzo finita e non ancora riletti, poi attivazioni in attesa da oltre un'ora,
+ * infine una rilettura al giorno. Ogni tentativo, riuscito o no, aggiorna `checked_at`: un
+ * abbonamento che fallisce non torna in testa a ogni turno. Con 25 abbonamenti e due richieste
+ * ciascuno, più al massimo venti posti, per turno orario il carico resta molto sotto i limiti
+ * di Stripe. Ogni passo registra il proprio errore senza fermare gli altri e il turno si
+ * conclude: quanto non riuscito torna al turno seguente.
  */
 export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, now = new Date()) {
   if (!env.STRIPE_SECRET_KEY) return;
@@ -272,16 +287,33 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
         ),
       ),
     ];
+    const lifetimes = sessions.data.filter(isLifetimeSession).map((session) => session.id);
     const { results: known } = await env.DB.prepare(
-      `SELECT id FROM stripe_subscriptions WHERE id IN (${ids.map(() => "?").join(", ")})`,
+      `SELECT id FROM stripe_subscriptions WHERE id IN (${ids.map(() => "?").join(", ")})
+      UNION SELECT provider_reference FROM lifetime_allocations WHERE status = 'active'
+        AND provider_reference IN (${lifetimes.map(() => "?").join(", ")})`,
     )
-      .bind(...ids)
+      .bind(...ids, ...lifetimes)
       .all<{ id: string }>();
     const local = new Set(known.map((row) => row.id));
     await inSequence(ids.filter((id) => !local.has(id)));
+    await lifetimes
+      .filter((session) => !local.has(session))
+      .reduce<Promise<void>>(
+        (previous, id) =>
+          previous.then(() =>
+            reconcileLifetime(env, stripe, id, now).catch((error: unknown) =>
+              logFailure({ error, operation: "billing" }),
+            ),
+          ),
+        Promise.resolve(),
+      );
   } catch (error) {
     logFailure({ error, operation: "billing" });
   }
+  await reconcileLifetimeReservations(env, stripe, now).catch((error: unknown) =>
+    logFailure({ error, operation: "billing" }),
+  );
   const at = now.toISOString();
   const { results } = await env.DB.prepare(`UPDATE stripe_subscriptions SET checked_at = ?1
     WHERE id IN (SELECT s.id FROM stripe_subscriptions s
@@ -307,10 +339,11 @@ const dueSql = `(julianday(s.current_period_end) <= julianday(?1)
 const pendingSql = `NOT ${activeEntitlementSql("s.workspace_id", "?1")}`;
 
 /**
- * Stato del pagamento mostrato nel piano. Con una copertura pagata: periodicità, rinnovo o
- * fine dopo la disdetta. Senza, o con la sola prova: pagamento in attesa di conferma oppure
- * rinnovo non riuscito, con il prezzo protetto fino a sette giorni dall'inizio del periodo
- * non pagato.
+ * Stato del pagamento mostrato nel piano. Il lifetime prevale su tutto, senza rinnovi. Con una
+ * copertura pagata, o concessa a un abbonamento che si rinnova: periodicità, rinnovo o fine
+ * dopo la disdetta. Una concessione senza abbonamento indica la sua fine. Senza copertura, o con
+ * la sola prova: pagamento in attesa di conferma oppure rinnovo non riuscito, con il prezzo
+ * protetto fino a sette giorni dall'inizio del periodo non pagato.
  */
 export async function subscriptionView(
   db: D1Database,
@@ -318,7 +351,32 @@ export async function subscriptionView(
   workspaceId: string,
   coverage: { source: string; endsAt: string | null } | null,
   now = new Date(),
-): Promise<Pick<AccountView, "premium" | "payment">> {
+): Promise<Pick<AccountView, "premium" | "payment" | "grant">> {
+  if (coverage?.source === "lifetime") {
+    const allocation = await db
+      .prepare("SELECT kind FROM lifetime_allocations WHERE workspace_id = ? AND status = 'active'")
+      .bind(workspaceId)
+      .first<{ kind: "sale" | "gift" }>();
+    return {
+      premium: {
+        period: "lifetime",
+        renewsAt: null,
+        ...(allocation?.kind === "gift" ? { granted: true as const } : {}),
+      },
+    };
+  }
+  const grant =
+    coverage?.source === "admin" && coverage.endsAt ? { grant: { endsAt: coverage.endsAt } } : {};
+  // Lifetime completato su Stripe con il pagamento ancora da confermare: senza copertura è
+  // l'attivazione in corso, con un abbonamento il passaggio a vita in conferma.
+  const pending = (await db
+    .prepare(`SELECT 1 FROM lifetime_allocations WHERE workspace_id = ? AND status = 'reserved'
+      AND completed_at IS NOT NULL`)
+    .bind(workspaceId)
+    .first())
+    ? { payment: { state: "pending" as const, lifetime: true as const } }
+    : {};
+  if (pending.payment && (!coverage || coverage.source === "trial")) return pending;
   const row = await db
     .prepare(`SELECT offer, renewal_offer, status, current_period_start, current_period_end,
         cancel_at_period_end
@@ -334,23 +392,38 @@ export async function subscriptionView(
       current_period_end: string;
       cancel_at_period_end: number;
     }>();
-  if (!row) return {};
-  if (coverage?.source === "premium")
+  if (!row) return { ...grant, ...pending };
+  // Una concessione a un abbonamento che si rinnova ne ha rinviato il rinnovo alla sua fine.
+  if (
+    coverage?.source === "premium" ||
+    (coverage?.source === "admin" && ["active", "trialing"].includes(row.status))
+  ) {
+    if (!row.cancel_at_period_end)
+      return {
+        ...pending,
+        premium: {
+          period: row.offer,
+          renewsAt: row.current_period_end,
+          // Cambio di periodicità programmato: vale dal rinnovo.
+          ...(row.renewal_offer && row.renewal_offer !== row.offer
+            ? { nextPeriod: row.renewal_offer }
+            : {}),
+        },
+      };
+    // Dopo la disdetta Premium dura fino all'ultima copertura, concessioni comprese.
+    const last = await db
+      .prepare(`SELECT MAX(ends_at) AS ends_at FROM workspace_entitlements WHERE workspace_id = ?1
+        AND revoked_at IS NULL AND julianday(ends_at) > julianday(?2)`)
+      .bind(workspaceId, now.toISOString())
+      .first<{ ends_at: string | null }>();
     return {
-      premium: row.cancel_at_period_end
-        ? { period: row.offer, renewsAt: null, endsAt: coverage.endsAt }
-        : {
-            period: row.offer,
-            renewsAt: row.current_period_end,
-            // Cambio di periodicità programmato: vale dal rinnovo.
-            ...(row.renewal_offer && row.renewal_offer !== row.offer
-              ? { nextPeriod: row.renewal_offer }
-              : {}),
-          },
+      ...pending,
+      premium: { period: row.offer, renewsAt: null, endsAt: last?.ends_at ?? coverage.endsAt },
     };
+  }
   // Durante la prova un acquisto ancora da confermare resta visibile; un'altra copertura,
   // come una concessione, prevale.
-  if (coverage && coverage.source !== "trial") return {};
+  if (coverage && coverage.source !== "trial") return { ...grant, ...pending };
   // Scelto durante la prova: nessun incasso finché la prova non finisce; disdetto, nessuno.
   if (coverage?.source === "trial" && row.status === "trialing")
     return {
@@ -375,7 +448,10 @@ export async function subscriptionView(
   return row.status === "paused" ? {} : { payment: { state: "pending" } };
 }
 
-/** Abbonamento rinnovabile dello spazio: periodo pagato in corso e nessuna disdetta. */
+/**
+ * Abbonamento rinnovabile dello spazio: periodo pagato in corso, o concessione che ne ha
+ * rinviato il rinnovo, e nessuna disdetta.
+ */
 async function renewingSubscription(db: D1Database, env: Env, userId: string, now: Date) {
   return db
     .prepare(`SELECT s.id, s.workspace_id, s.price_generation FROM stripe_subscriptions s
@@ -383,7 +459,7 @@ async function renewingSubscription(db: D1Database, env: Env, userId: string, no
       WHERE wm.user_id = ?1 AND s.environment = ?2 AND s.unavailable_at IS NULL
         AND s.status IN ('active', 'trialing') AND s.cancel_at_period_end = 0
         AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = s.workspace_id
-          AND e.source = 'premium' AND e.revoked_at IS NULL
+          AND e.source IN ('premium', 'admin') AND e.revoked_at IS NULL
           AND julianday(e.starts_at) <= julianday(?3) AND julianday(?3) < julianday(e.ends_at))
       ORDER BY julianday(s.current_period_start) DESC LIMIT 1`)
     .bind(userId, environmentOf(env), now.toISOString())
@@ -506,17 +582,21 @@ export async function openBillingPortal(
   language: Language,
 ): Promise<string | null> {
   if (!env.STRIPE_SECRET_KEY) return null;
-  const row = await env.DB.prepare(`SELECT s.customer_id FROM stripe_subscriptions s
-      JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
-      WHERE wm.user_id = ?1 AND s.environment = ?2
-      ORDER BY julianday(s.current_period_start) DESC LIMIT 1`)
+  // Il cliente del lifetime acquistato prevale su quello di un abbonamento precedente.
+  const row = await env.DB.prepare(`SELECT COALESCE(
+      (SELECT a.customer_id FROM lifetime_allocations a WHERE a.workspace_id = wm.workspace_id
+        AND a.status = 'active' AND a.customer_id IS NOT NULL),
+      (SELECT s.customer_id FROM stripe_subscriptions s WHERE s.workspace_id = wm.workspace_id
+        AND s.environment = ?2 ORDER BY julianday(s.current_period_start) DESC LIMIT 1)
+    ) AS customer_id FROM workspace_members wm WHERE wm.user_id = ?1`)
     .bind(userId, environmentOf(env))
-    .first<{ customer_id: string }>();
-  if (!row) return null;
+    .first<{ customer_id: string | null }>();
+  const customer = row?.customer_id;
+  if (!customer) return null;
   const stripe = await createStripeClient(env.STRIPE_SECRET_KEY);
   const session = await stripeRead(() =>
     stripe.billingPortal.sessions.create({
-      customer: row.customer_id,
+      customer,
       return_url: returnUrl,
       locale: language,
     }),

@@ -484,6 +484,17 @@ export const it = {
       priceMonthlyNote: "Si rinnova ogni mese.",
       priceAnnualNote: (months: number) => `12 mesi al prezzo di ${months}.`,
       priceLifetimeNote: "Pagamento unico, senza rinnovi.",
+      lifetimeCredit: (amount: string) => `Meno ${amount} del periodo pagato non usato.`,
+      lifetimeReplaces: "L’abbonamento si chiude senza altri rinnovi.",
+      lifetimeCreditName: "Periodo pagato non usato",
+      lifetimeSoldOut: "Posti esauriti",
+      lifetimeUnavailable: "I posti a vita sono esauriti.",
+      lifetimeRenewing:
+        "Il tuo abbonamento si rinnova a breve: potrai passare a vita subito dopo il rinnovo.",
+      lifetimeUpgradeTitle: "Passa a vita",
+      lifetimeProcessingTitle: "Premium a vita in attivazione",
+      lifetimeProcessingBody:
+        "Premium a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale. Ricevuta e fattura arrivano da Stripe.",
       trialPurchaseNote:
         "Con mensile o annuale oggi non paghi: i giorni di prova restano e il primo addebito arriva quando la prova finisce.",
       trialEndingPurchaseNote:
@@ -522,6 +533,8 @@ export const it = {
         lifetime: "Premium a vita",
       },
       premiumLifetime: "Acquisto una tantum, senza rinnovi.",
+      premiumLifetimeGranted: "Concesso da FiscalBay, senza rinnovi.",
+      grantEnds: (date: string) => `Premium concesso fino al ${date}.`,
       premiumRenews: (date: string) => `Si rinnova il ${date}.`,
       premiumEnds: (date: string) => `Rinnovo disdetto: Premium resta attivo fino al ${date}.`,
       renewalFailedTitle: "Rinnovo non riuscito",
