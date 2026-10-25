@@ -58,13 +58,13 @@ function activeSql(workspace: string, at: string, trial: boolean) {
  * anche senza ordini. Un diritto in corso diverso dalla prova lo ferma; durante la prova
  * l'acquisto resta possibile e ne conserva i giorni residui (`trialEndsAt`). Lo ferma anche un
  * abbonamento che può ancora incassare, come un pagamento da confermare o un rinnovo da
- * regolarizzare, o un lifetime pagato e in attesa della conferma.
+ * regolarizzare, o un lifetime pagato e in attesa della conferma; un lifetime rimborsato no.
  */
 export async function purchaseState(db: D1Database, userId: string, now = new Date()) {
   const row = await db
     .prepare(`SELECT w.id, (${activeSql("w.id", "?2", false)} OR ${openSubscriptionSql("w.id")}
         OR EXISTS (SELECT 1 FROM lifetime_allocations a WHERE a.workspace_id = w.id
-          AND a.completed_at IS NOT NULL)) AS covered,
+          AND a.status = 'reserved' AND a.completed_at IS NOT NULL)) AS covered,
       ${activeSql("w.id", "?2", true)} AS trial_ends_at, ${storeReadSql("w.id")} AS synced
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?1`)
@@ -219,7 +219,9 @@ async function startLifetimeCheckout(
       lifetime: {
         expiresAt: reservation.expiresAt,
         ...(coupon ? { coupon: coupon.id } : {}),
-        ...(context.subscription ? { customerId: context.subscription.customerId } : {}),
+        ...(context.subscription?.customerId
+          ? { customerId: context.subscription.customerId }
+          : {}),
       },
     });
     if (session.managed_payments?.enabled !== true) {

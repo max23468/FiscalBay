@@ -322,11 +322,13 @@ export interface AccountView {
   /**
    * Pagamento senza copertura in corso: in attesa della conferma di Stripe, anche per il
    * lifetime (`lifetime`), abbonamento scelto durante la prova con il primo addebito alla sua
-   * fine (`chargeAt`), che dopo la disdetta (`cancelled`) non arriva più, oppure rinnovo non
-   * riuscito con il prezzo protetto fino a `protectedUntil`.
+   * fine (`chargeAt`), che dopo la disdetta (`cancelled`) non arriva più, rinnovo non
+   * riuscito con il prezzo protetto fino a `protectedUntil`, oppure pagamento rimborsato del
+   * lifetime o del periodo in corso, con il rinnovo se l'abbonamento continua.
    */
   payment?:
     | { state: "pending"; lifetime?: true }
+    | { state: "refunded"; lifetime?: true; renewsAt?: string }
     | { state: "scheduled"; period: "monthly" | "annual"; chargeAt: string; cancelled?: true }
     | { state: "renewal-failed"; protectedUntil: string };
 }

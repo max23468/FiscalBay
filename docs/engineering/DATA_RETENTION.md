@@ -21,6 +21,11 @@ la perdono, `purge_after` conserva trenta giorni dal downgrade. Gli ordini dei n
 esclusi restano non consultabili e vengono eliminati trenta giorni dopo la pausa. Un
 termine non si allunga mai: la grace non rinvia eliminazioni già dovute o richieste.
 
+Una copertura revocata dopo un rimborso totale o una disputa persa conta come finita
+all'istante della revoca: il downgrade parte allora e gli ordini sbloccati soltanto da
+quella copertura tornano bloccati, mentre gli sblocchi del ciclo Free e quelli di
+un'altra copertura restano.
+
 Il riallineamento parte dal cron ogni dieci minuti, prima dello smistamento delle
 letture, a ogni pagina dell'area riservata e al collegamento di un negozio, quindi le
 letture dell'utente lo trovano già applicato anche prima della pulizia. Il cron rivede

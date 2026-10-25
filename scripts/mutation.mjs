@@ -25,7 +25,7 @@ import { importGraph } from "./verify-repo.mjs";
 export function criticalModule(file) {
   return (
     file === "app/tax-quality.ts" ||
-    /^app\/(?:auth(?:-route)?|domain\/(?:billing|orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+    /^app\/(?:auth(?:-route)?|domain\/(?:billing|refunds|orders|order-import|order-acquisition|order-sync|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export)|integrations\/(?:webhooks|stripe|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
       file,
     )
   );
