@@ -3,12 +3,8 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import {
-  deliverTelegram,
-  localClock,
-  zonedInstant,
-} from "../app/domain/telegram-deliveries.server";
-import { escape, splitBlocks } from "../app/domain/telegram-messages.server";
+import { deliverTelegram, zonedInstant } from "../app/domain/telegram-deliveries.server";
+import { escape, localClock, splitBlocks, when } from "../app/domain/telegram-messages.server";
 import {
   consumeTelegramStart,
   parseTelegramChange,
@@ -1007,21 +1003,35 @@ describe("invii degli ordini", () => {
   it("invia il nuovo ordine con il CF normalizzato, senza contatti dell'acquirente, una volta sola", async () => {
     const seller = await linked("invio");
     await order(seller.store, "o-invio", { cf: "rss mra80a01h501u" });
+    const image = "https://i.ebayimg.com/images/g/lampada/s-l500.jpg";
+    await env.DB.prepare("UPDATE order_items SET image_url = ? WHERE order_id = 'o-invio'")
+      .bind(image)
+      .run();
     const api = bot();
     await run(api.fetcher, 10);
     const [sent] = api.texts();
-    expect(sent!.params).toMatchObject({ chat_id: "601", parse_mode: "HTML" });
+    // La miniatura dell'articolo arriva dall'anteprima del link, fuori dal testo.
+    expect(sent!.params).toMatchObject({
+      chat_id: "601",
+      parse_mode: "HTML",
+      link_preview_options: { url: image, prefer_small_media: true, show_above_text: false },
+    });
     const text = String(sent!.params.text);
     expect(text).toContain("<b>Nuovo ordine</b>");
     expect(text).toContain("<code>RSSMRA80A01H501U</code>");
     expect(text).toContain("Mario Rossi");
     expect(text).toContain("2 × Lampada &lt;vintage&gt; &amp; paralume");
+    // Il dato fiscale in testa, i dettagli in citazione con numero e data relativa.
+    expect(text).toMatch(
+      /^🛒 <b>Nuovo ordine<\/b> · .+\n🧾 <code>RSSMRA80A01H501U<\/code>\n\n<blockquote>👤 Mario Rossi\n💶 <b>34,90/u,
+    );
+    expect(text).toContain("🕑 <i>oggi 22:01 · ebay-o-invio</i></blockquote>");
     for (const hidden of ["mario@example.invalid", "Via Roma", "333"])
       expect(text).not.toContain(hidden);
     expect(keyboard(sent!).flat()).toEqual([
-      { text: "Apri in FiscalBay", url: `${origin}/app/ordini/o-invio` },
-      { text: "Apri su eBay", url: ebayOrderHref("ebay-o-invio") },
-      { text: "Copia Codice Fiscale", copy_text: { text: "RSSMRA80A01H501U" } },
+      { text: "🔗 Apri in FiscalBay", url: `${origin}/app/ordini/o-invio` },
+      { text: "🛍 Apri su eBay", url: ebayOrderHref("ebay-o-invio") },
+      { text: "📋 Copia Codice Fiscale", copy_text: { text: "RSSMRA80A01H501U" } },
     ]);
     // Una nuova esecuzione, anche ripetuta dopo un'interruzione, non ripete l'evento.
     await run(api.fetcher, 20);
@@ -1100,9 +1110,9 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 20);
     await run(api.fetcher, 30);
     expect(sentTexts(api)).toEqual([expect.stringContaining("Importazione completata")]);
-    expect(sentTexts(api)[0]).toContain("Un ordine acquisito, 1 con dato fiscale.");
+    expect(sentTexts(api)[0]).toContain("📦 Un ordine · 🧾 <b>1</b> con dato fiscale");
     expect(keyboard(api.texts()[0]!)).toEqual([
-      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?negozio=${seller.store}` }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?negozio=${seller.store}` }],
     ]);
   });
 
@@ -1137,7 +1147,7 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 120);
     expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-prima")]);
     expect(keyboard(api.texts()[0]!)).toEqual([
-      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
     ]);
     // Un ordine dopo l'orario non fa partire un secondo riepilogo, né uno tardivo.
     await order(seller.store, "o-dopo-orario", {
@@ -1210,9 +1220,9 @@ describe("invii degli ordini", () => {
     const parts = [sentTexts(broken)[0]!, ...sentTexts(api)];
     expect(parts.length).toBeGreaterThan(1);
     for (const id of ids)
-      expect(parts.filter((part) => part.includes(`ebay-${id}\n`))).toHaveLength(1);
+      expect(parts.filter((part) => part.includes(`>ebay-${id}</a>`))).toHaveLength(1);
     expect(keyboard(api.texts().at(-1)!)).toEqual([
-      [{ text: "Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?periodo=7` }],
     ]);
   });
 
@@ -1253,7 +1263,7 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 70);
     expect(api.texts()).toHaveLength(1);
     const digest = sentTexts(api)[0]!;
-    expect(digest).toContain("Riepilogo ordini");
+    expect(digest).toContain("<b>Riepilogo del 13 set</b>");
     expect(digest).toContain("2 ordini");
     expect(digest).toContain("RSSMRA80A01H501U");
     expect(digest).toContain("BNCLGU80A01H501Z");
@@ -1284,7 +1294,7 @@ describe("invii degli ordini", () => {
     expect(api.calls).toHaveLength(0);
     // La chat scrive di nuovo: lo stato risponde e gli invii riprendono dagli eventi successivi.
     await deliver("/stato", seller.chat, api.fetcher, later(30));
-    expect(sentTexts(api)[0]).toContain("Stato di FiscalBay");
+    expect(sentTexts(api)[0]).toContain("Premium fino al");
     expect((await telegramSettings(env.DB, seller.userId, "UTC")).chat?.failure).toBeUndefined();
     await order(seller.store, "o-dopo", { cf: "VRDGPP80A01H501X", created: 35, listed: 40 });
     await run(api.fetcher, 45);
@@ -1410,6 +1420,13 @@ describe("invii degli ordini", () => {
       day: "2026-10-25",
       time: "02:30",
     });
+    // Le date si leggono come le direbbe una persona, nel fuso scelto.
+    const at = new Date("2026-10-25T21:30:00Z");
+    expect(when("it", "Europe/Rome", "2026-10-25T21:10:00Z", at)).toBe("oggi 22:10");
+    expect(when("it", "Europe/Rome", "2026-10-24T08:00:00Z", at)).toBe("ieri 10:00");
+    expect(when("en", "Europe/Rome", "2026-10-24T08:00:00Z", at)).toBe("yesterday 10:00");
+    expect(when("it", "Europe/Rome", "2026-10-20T08:00:00Z", at)).toBe("20 ott 10:00");
+    expect(when("en", "Europe/Rome", "2025-12-31T08:00:00Z", at)).toBe("31 Dec 2025 09:00");
     // L'orario del riepilogo nel fuso, prima e dopo i cambi di ora legale.
     for (const [zone, day, time, instant] of [
       ["Europe/Rome", "2026-10-24", "08:00", "2026-10-24T06:00:00.000Z"],
@@ -1455,9 +1472,11 @@ describe("comandi e pulsanti del bot", () => {
     await deliver("/stato", seller.chat, api.fetcher);
     const status = api.texts()[0]!;
     expect(String(status.params.text)).toContain("Premium fino al");
-    expect(String(status.params.text)).toContain("Ordini: solo con dato fiscale");
+    expect(String(status.params.text)).toContain(
+      "🔔 Notifiche attive · solo con dato fiscale\n📨 Un messaggio per ordine",
+    );
     const gen = await generation(seller.workspace);
-    expect(keyboard(status)[0]![0]).toEqual({ text: "Preferenze", callback_data: `${gen}:pr` });
+    expect(keyboard(status)[0]![0]).toEqual({ text: "⚙️ Preferenze", callback_data: `${gen}:pr` });
 
     await tap(`${gen}:fi:all`, seller.chat, api.fetcher);
     // Un tocco ripetuto porta lo stesso valore: la scelta non si inverte.
@@ -1467,7 +1486,7 @@ describe("comandi e pulsanti del bot", () => {
     const edited = api.calls.filter((call) => call.method === "editMessageText").at(-1)!;
     expect(edited.params).toMatchObject({ chat_id: "601", message_id: 42 });
     expect(keyboard(edited)[1]![1]).toEqual({
-      text: "✓ Tutti gli ordini",
+      text: "● Tutti gli ordini",
       callback_data: `${gen}:fi:all`,
     });
 
@@ -1544,23 +1563,30 @@ describe("comandi e pulsanti del bot", () => {
       await order("s-ultimi-escluso", `o-escluso-${index}`, { created: index - 20, listed: 1 });
     const api = bot();
     await deliver("/ultimi", seller.chat, api.fetcher);
-    const texts = sentTexts(api);
-    expect(texts).toHaveLength(6);
-    expect(texts[0]).toContain("ebay-o-ultimi-6");
-    expect(texts[5]).toBe("Ordini dal 1 al 5.");
+    // Un solo messaggio con cinque ordini, dal più recente; il numero apre il dettaglio.
+    const [list] = sentTexts(api);
+    expect(sentTexts(api)).toHaveLength(1);
+    expect(list).toContain("🛒 <b>Ultimi ordini</b> · <i>1–5 di 7</i>");
+    expect(list).toContain(`<a href="${origin}/app/ordini/o-ultimi-6">ebay-o-ultimi-6</a>`);
+    expect(list).not.toContain("ebay-o-ultimi-1");
+    expect(list).not.toContain("o-escluso");
     const gen = await generation(seller.workspace);
-    expect(keyboard(api.texts()[5]!)).toEqual([
-      [{ text: "Altri 5", callback_data: `${gen}:la:5` }],
+    expect(keyboard(api.texts()[0]!)).toEqual([
+      [{ text: "Altri 5 ›", callback_data: `${gen}:la:5` }],
+      [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini` }],
     ]);
+    // Le pagine aggiornano lo stesso messaggio; un tocco ripetuto lo riscrive uguale.
     await tap(`${gen}:la:5`, seller.chat, api.fetcher);
-    expect(sentTexts(api).slice(6)).toEqual([
-      expect.stringContaining("ebay-o-ultimi-1"),
-      expect.stringContaining("ebay-o-ultimi-0"),
-      "Ordini dal 6 al 7.",
+    await tap(`${gen}:la:5`, seller.chat, api.fetcher);
+    const edits = api.calls.filter((call) => call.method === "editMessageText");
+    expect(api.texts()).toHaveLength(1);
+    expect(edits).toHaveLength(2);
+    expect(edits[0]!.params.text).toEqual(edits[1]!.params.text);
+    expect(String(edits[0]!.params.text)).toContain("1–5 di 7".replace("1–5", "6–7"));
+    expect(String(edits[0]!.params.text)).toContain("ebay-o-ultimi-0");
+    expect(keyboard(edits[0]!)[0]).toEqual([
+      { text: "‹ Precedenti", callback_data: `${gen}:la:0` },
     ]);
-    // Un secondo tocco sullo stesso pulsante, arrivato prima che sparisse, non ripete la pagina.
-    await tap(`${gen}:la:5`, seller.chat, api.fetcher);
-    expect(api.texts()).toHaveLength(9);
   });
 
   it("senza Premium lo stato dice Free e le preferenze rimandano al piano", async () => {
@@ -1573,8 +1599,8 @@ describe("comandi e pulsanti del bot", () => {
     await deliver("/preferences", seller.chat, api.fetcher, later(2));
     await deliver("/aiuto", seller.chat, api.fetcher, later(3));
     expect(sentTexts(api)).toEqual([
-      expect.stringContaining("Free: le notifiche sono ferme"),
-      expect.stringContaining("comprese in Premium"),
+      expect.stringContaining("Con il piano Free le notifiche sono ferme."),
+      expect.stringContaining("compresi in Premium"),
       expect.stringContaining("/ultimi"),
     ]);
   });
