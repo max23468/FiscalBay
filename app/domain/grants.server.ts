@@ -1,3 +1,4 @@
+import { purchasesOpenSql, waitingSql } from "./admission-state.server";
 import { consultableStore } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 
@@ -74,13 +75,14 @@ export function storeReadSql(workspace: string) {
 
 /**
  * La prova si offre allo spazio che non l'ha mai avuta, senza una copertura in corso né un
- * abbonamento che può ancora incassare, dopo la prima lettura riuscita di un suo negozio.
+ * abbonamento che può ancora incassare, dopo la prima lettura riuscita di un suo negozio, e
+ * soltanto con gli acquisti aperti: senza capacità per nuovi Premium la prova non è erogabile.
  */
 function trialAvailableSql(workspace: string, at: string) {
   return `(NOT EXISTS (SELECT 1 FROM workspace_entitlements e
       WHERE e.workspace_id = ${workspace} AND e.source = 'trial')
     AND NOT ${activeEntitlementSql(workspace, at)} AND NOT ${openSubscriptionSql(workspace)}
-    AND ${storeReadSql(workspace)})`;
+    AND ${storeReadSql(workspace)} AND ${purchasesOpenSql})`;
 }
 
 /**
@@ -216,7 +218,8 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
     .prepare(`SELECT w.id, w.free_cycle_anchor_at, ${activeEntitlementSql("w.id", "?1")} AS premium,
       ${activeCoverageSql("source", "w.id", "?1")} AS coverage,
       ${activeCoverageSql("ends_at", "w.id", "?1")} AS coverage_ends_at,
-      ${trialAvailableSql("w.id", "?1")} AS trial_available
+      ${trialAvailableSql("w.id", "?1")} AS trial_available, ${waitingSql("w.id")} AS waiting,
+      ${purchasesOpenSql} AS purchases_open
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?2`)
     .bind(at, userId)
@@ -227,6 +230,8 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
       coverage: EntitlementSource | null;
       coverage_ends_at: string | null;
       trial_available: number;
+      waiting: number;
+      purchases_open: number;
     }>();
   if (!workspace) return null;
   const current = db
@@ -261,8 +266,16 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
       ? { source: workspace.coverage, endsAt: workspace.coverage_ends_at }
       : null,
     trialAvailable: !!workspace.trial_available,
+    /** In lista d'attesa senza copertura: il Free, con i suoi sblocchi, non è ancora erogato. */
+    waiting: !workspace.premium && !!workspace.waiting,
+    /** Acquisti e prove aperti. */
+    purchasesOpen: !!workspace.purchases_open,
     cycle,
-    remaining: workspace.premium ? null : cycle ? cycle.quota - cycle.used : 0,
+    remaining: workspace.premium
+      ? null
+      : cycle && !workspace.waiting
+        ? cycle.quota - cycle.used
+        : 0,
   };
 }
 
@@ -283,6 +296,7 @@ export async function unlockOrders(
   const unique = [...new Set(ids)];
   const allowance = await orderAllowance(db, userId, now);
   if (!allowance?.cycle) throw new UnlockError("order_not_available");
+  if (allowance.waiting) throw new UnlockError("free_quota_exhausted");
   const at = now.toISOString();
   const access = orderAccessSql("o.id", "?2", "?4");
   const grants = [

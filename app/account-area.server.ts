@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
+import { recordActivity } from "./domain/admission.server";
 import { applyFreePlan } from "./domain/free-store.server";
 import { listNotifications } from "./domain/notifications.server";
 import { readPreferences, type Preferences } from "./domain/preferences.server";
@@ -41,7 +42,8 @@ export async function currentSession(request: Request) {
 
 /**
  * Sessione, registrazione e preferenze. Il piano dello spazio si riallinea prima di ogni
- * lettura della pagina: dopo un downgrade i negozi esclusi sono già in pausa. Se Auth o il
+ * lettura della pagina: dopo un downgrade i negozi esclusi sono già in pausa. La pagina aperta
+ * con una sessione è l'attività umana che conta per l'inattività del Free. Se Auth o il
  * database non rispondono la pagina non promette dati che non ha letto: risponde 503 con la
  * sola indicazione di riprovare.
  */
@@ -54,6 +56,7 @@ async function readAccount(request: Request) {
             registrationStatus(env.DB, session.user.id),
             readPreferences(env.DB, session.user.id),
             applyFreePlan(env.DB, session.user.id),
+            recordActivity(env.DB, session.user.id),
           ]),
         )
       : [null, null];

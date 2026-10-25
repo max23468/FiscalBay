@@ -183,11 +183,12 @@ describe("percorso ordini", () => {
       }) as Parameters<typeof unlockAction>[0];
     const denied = await unlockAction(unlockRequest("o-b"));
     expect(denied).toMatchObject({ init: { status: 409 }, data: { error: true, unlocked: [] } });
-    // Un guasto che non è un rifiuto dello sblocco resta un errore della pagina (500). Il primo
-    // batch della richiesta riallinea il piano dello spazio, il secondo è lo sblocco.
+    // Un guasto che non è un rifiuto dello sblocco resta un errore della pagina (500). I primi
+    // batch della richiesta riallineano il piano e registrano l'attività, il terzo è lo sblocco.
     const batch = env.DB.batch.bind(env.DB);
     const outage = vi
       .spyOn(env.DB, "batch")
+      .mockImplementationOnce(batch)
       .mockImplementationOnce(batch)
       .mockRejectedValueOnce(new Error("D1_ERROR: guasto"));
     await expect(unlockAction(unlockRequest("o-a"))).rejects.toThrow("D1_ERROR: guasto");

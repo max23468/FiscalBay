@@ -249,9 +249,11 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
             storeName: store.name,
             at: store.lastSyncAt!,
           }))),
-    ...(!premium && cycle && allowance?.remaining === 0 && facets.locked
-      ? [{ kind: "quota" as const, until: cycle.ends_at }]
-      : []),
+    ...(allowance?.waiting
+      ? [{ kind: "waitlist" as const, purchase: allowance.purchasesOpen }]
+      : !premium && cycle && allowance?.remaining === 0 && facets.locked
+        ? [{ kind: "quota" as const, until: cycle.ends_at }]
+        : []),
     ...(environmentStores.some((store) => store.history?.done === false)
       ? [
           {
@@ -281,9 +283,16 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
       trialAvailable: allowance?.trialAvailable ?? false,
       ...accountCoverage(allowance),
       // Prima del primo collegamento nessun ciclo è avviato e nessuno sblocco è disponibile.
+      // Anche in lista d'attesa nessuno sblocco del Free è disponibile.
       quota: premium
         ? undefined
-        : { used: cycle?.used ?? 0, limit: cycle?.quota ?? 0, cycleEndsAt: cycle?.ends_at ?? null },
+        : allowance?.waiting
+          ? { used: 0, limit: 0, cycleEndsAt: null }
+          : {
+              used: cycle?.used ?? 0,
+              limit: cycle?.quota ?? 0,
+              cycleEndsAt: cycle?.ends_at ?? null,
+            },
     },
     notices,
     sync: {

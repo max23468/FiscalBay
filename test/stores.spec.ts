@@ -1,6 +1,11 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { unlockOrders } from "../app/domain/grants.server";
+import { orderAllowance, startTrial, unlockOrders } from "../app/domain/grants.server";
+import { admission, applyInactivity, recordActivity } from "../app/domain/admission.server";
+import { purchaseState } from "../app/domain/checkout.server";
+import { lifetimeContext } from "../app/domain/lifetime.server";
+import { dispatchStoreSyncs, requestStoreSync } from "../app/domain/order-sync.server";
+import { action as storeLinkAction } from "../app/routes/store-link";
 import { listVisibleOrders } from "../app/domain/orders.server";
 import { revokeSession } from "../app/domain/sessions.server";
 import {
@@ -159,6 +164,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         ebayEnvironment: "production",
         connection: "active",
         pauseReasons: [],
+        inactiveSince: null,
         consentGrantedAt: expect.any(String),
         consentExpiresAt: "2027-02-01T00:00:00.000Z",
         lastSyncAt: expect.any(String),
@@ -1390,6 +1396,241 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       await coverage(seller.workspaceId, "trial", Date.now() - day, Date.now() + day);
       expect((await settingsPage(seller.cookie)).page.freeStore).toBeNull();
       expect(await pauses(seller.userId)).toEqual({ [seller.storeId]: [], secondo: [] });
+    });
+  });
+  describe("inattività del Free e ammissione", () => {
+    let base = 0;
+    beforeEach(() => {
+      base = Date.now();
+    });
+    const at = (days: number) => new Date(base + days * day);
+    /** Invio delle email finto, nell'ambiente passato al compito. */
+    const mailer = () => {
+      const send = vi.fn<Env["AUTH_EMAIL"]["send"]>().mockResolvedValue({ messageId: "synthetic" });
+      return { send, mail: { ...env, AUTH_EMAIL: { send } } as unknown as Env };
+    };
+    const workspace = (id: string) =>
+      env.DB.prepare("SELECT active_at, inactivity_notice_at FROM workspaces WHERE id = ?")
+        .bind(id)
+        .first<{ active_at: string; inactivity_notice_at: string | null }>();
+    const pauses = async (userId: string) =>
+      (await listStores(env.DB, userId)).map((store) => store.pauseReasons);
+    const admissionSettings = (waitlist: 0 | 1, open: 0 | 1) =>
+      env.DB.prepare(
+        `INSERT INTO admission_settings (id, free_waitlist, purchases_open, updated_at)
+         VALUES (1, ?1, ?2, ?3) ON CONFLICT(id) DO UPDATE SET free_waitlist = ?1,
+           purchases_open = ?2, updated_at = ?3`,
+      )
+        .bind(waitlist, open, new Date().toISOString())
+        .run();
+    const cron = {
+      ...env,
+      WORK_QUEUE: { send: vi.fn(), sendBatch: vi.fn().mockResolvedValue(undefined) },
+    } as unknown as Env;
+
+    it("dopo 30 giorni senza accessi avvisa una volta e dopo altri 7 mette in pausa le letture", async () => {
+      const seller = await linkedSeller("inattivo@example.invalid");
+      const { send: email, mail } = mailer();
+      const cycle = await env.DB.prepare("SELECT * FROM free_cycles").all();
+      await applyInactivity(mail, at(29));
+      expect(email).not.toHaveBeenCalled();
+
+      await applyInactivity(mail, at(30.1));
+      expect(email).toHaveBeenCalledOnce();
+      expect(email.mock.calls[0]![0]).toMatchObject({
+        to: "inattivo@example.invalid",
+        subject: "I tuoi negozi su FiscalBay smetteranno di aggiornarsi",
+      });
+      expect((await workspace(seller.workspaceId))!.inactivity_notice_at).toBe(
+        at(30.1).toISOString(),
+      );
+      // Un preavviso per periodo, e nessuna pausa prima dei 7 giorni.
+      await applyInactivity(mail, at(36.9));
+      expect(email).toHaveBeenCalledOnce();
+      expect(await pauses(seller.userId)).toEqual([[]]);
+
+      await applyInactivity(mail, at(37.2));
+      const [store] = await listStores(env.DB, seller.userId);
+      expect(store).toMatchObject({
+        connection: "paused",
+        pauseReasons: ["inactivity"],
+        inactiveSince: at(37.2).toISOString(),
+      });
+      // Le letture si fermano, i dati restano consultabili.
+      expect(await dispatchStoreSyncs(cron, at(37.3))).toEqual([]);
+      expect(await listVisibleOrders(env.DB, seller.userId)).toHaveLength(1);
+
+      // La pagina aperta registra l'attività ma non riprende le letture senza conferma.
+      const page = await storesPage("/app/negozi", seller.cookie);
+      expect(page.data.page.stores[0]).toMatchObject({ pauseReason: "inactivity" });
+      expect(page.data.shell.notifications).toContainEqual(
+        expect.objectContaining({ id: `inactivity:${at(37.2).toISOString()}`, href: "negozi" }),
+      );
+      expect(await pauses(seller.userId)).toEqual([["inactivity"]]);
+
+      const resumed = await storeForm(seller.cookie, {
+        intent: "store-resume",
+        store: seller.storeId,
+      });
+      expect(resumed).toMatchObject({ ok: true });
+      expect(await pauses(seller.userId)).toEqual([[]]);
+      expect(
+        await env.DB.prepare("SELECT requested_at FROM sync_state").first("requested_at"),
+      ).not.toBeNull();
+      // Quota, ciclo e prova restano come prima della pausa.
+      expect((await env.DB.prepare("SELECT * FROM free_cycles").all()).results).toEqual(
+        cycle.results,
+      );
+      expect(await count("workspace_entitlements")).toBe(0);
+      expect((await settingsPage(seller.cookie)).page.account.trialAvailable).toBe(true);
+    });
+
+    it("un accesso durante il preavviso lo annulla e un invio non riuscito si riprova", async () => {
+      const seller = await linkedSeller("preavviso@example.invalid");
+      const { send: email, mail } = mailer();
+      email.mockRejectedValueOnce(new Error("synthetic"));
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      await applyInactivity(mail, at(31));
+      expect((await workspace(seller.workspaceId))!.inactivity_notice_at).toBeNull();
+      await applyInactivity(mail, at(31.1));
+      expect(email).toHaveBeenCalledTimes(2);
+      expect((await workspace(seller.workspaceId))!.inactivity_notice_at).toBe(
+        at(31.1).toISOString(),
+      );
+      await recordActivity(env.DB, seller.userId, at(33));
+      await applyInactivity(mail, at(40));
+      expect(await pauses(seller.userId)).toEqual([[]]);
+      expect(email).toHaveBeenCalledTimes(2);
+      // Un nuovo periodo di inattività riceve un nuovo preavviso.
+      await applyInactivity(mail, at(63.1));
+      expect(email).toHaveBeenCalledTimes(3);
+      errors.mockRestore();
+    });
+
+    it("una copertura non va mai in pausa per inattività e toglie pausa e preavviso", async () => {
+      const seller = await linkedSeller("coperto@example.invalid");
+      const { send: email, mail } = mailer();
+      await applyInactivity(mail, at(31));
+      await applyInactivity(mail, at(38));
+      expect(await pauses(seller.userId)).toEqual([["inactivity"]]);
+      await env.DB.prepare(
+        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+         VALUES ('concessione', ?, 'admin', ?, ?)`,
+      )
+        .bind(seller.workspaceId, at(38).toISOString(), at(120).toISOString())
+        .run();
+      await applyFreePlans(env.DB, at(38.1));
+      expect(await pauses(seller.userId)).toEqual([[]]);
+      expect((await workspace(seller.workspaceId))!.inactivity_notice_at).toBeNull();
+      await applyInactivity(mail, at(100));
+      expect(email).toHaveBeenCalledOnce();
+      expect(await pauses(seller.userId)).toEqual([[]]);
+      // Alla fine della copertura il Free riceve un nuovo preavviso prima di una nuova pausa.
+      await applyInactivity(mail, at(120.1));
+      expect(email).toHaveBeenCalledTimes(2);
+      expect(await pauses(seller.userId)).toEqual([[]]);
+    });
+
+    it("uno spazio senza attività registrata inizia il conteggio dal compito", async () => {
+      const seller = await linkedSeller("senza-attivita@example.invalid");
+      await env.DB.prepare("UPDATE workspaces SET active_at = NULL").run();
+      const { send: email, mail } = mailer();
+      await applyInactivity(mail, at(100));
+      expect((await workspace(seller.workspaceId))!.active_at).toBe(at(100).toISOString());
+      expect(email).not.toHaveBeenCalled();
+    });
+
+    it("un nuovo account non ripete prova e Free ricollegando lo stesso negozio", async () => {
+      const seller = await linkedSeller("primo-account@example.invalid");
+      await disconnectStore(env.DB, seller.userId, seller.storeId);
+      expect(await deleteStoreData(env.DB, seller.userId, seller.storeId, "venditore")).toBe(
+        "done",
+      );
+      const other = await verifiedSession("nuovo-account@example.invalid");
+      const state = (await beginStoreLink(other.cookie)).searchParams.get("state");
+      const attempt = await handleAuthRequest(
+        storeCallback(`state=${state}&code=codice`, other.cookie),
+        env,
+        syntheticEbay(),
+      );
+      expect(attempt.headers.get("location")).toContain("negozio=altro-spazio");
+      expect(await startTrial(env.DB, other.userId)).toBeNull();
+      // Il tentativo crea lo spazio vuoto, senza ciclo del Free né sblocchi.
+      expect(await orderAllowance(env.DB, other.userId)).toMatchObject({
+        cycle: null,
+        remaining: 0,
+        trialAvailable: false,
+      });
+    });
+
+    it("la lista d'attesa vale per i nuovi Free: prima lettura e prova se gli acquisti sono aperti", async () => {
+      const existing = await verifiedSession("esistente@example.invalid");
+      await admissionSettings(1, 1);
+      const seller = await linkedSeller("attesa@example.invalid");
+      expect(await admission(env.DB, existing.userId)).toEqual({
+        waiting: false,
+        purchasesOpen: true,
+      });
+      expect(await admission(env.DB, seller.userId)).toEqual({
+        waiting: true,
+        purchasesOpen: true,
+      });
+      // Collegamento e prima lettura, poi nessuna lettura del Free e nessuno sblocco.
+      expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({ importedOrders: 1 });
+      expect(await dispatchStoreSyncs(cron, new Date())).toEqual([]);
+      expect(await requestStoreSync(cron, seller.userId, seller.storeId)).toBe("invalid");
+      expect(await orderAllowance(env.DB, seller.userId)).toMatchObject({
+        waiting: true,
+        remaining: 0,
+      });
+      const [order] = await listVisibleOrders(env.DB, seller.userId);
+      await expect(unlockOrders(env.DB, seller.userId, [order!.id])).rejects.toMatchObject({
+        code: "free_quota_exhausted",
+      });
+      const page = (await settingsPage(seller.cookie)).page;
+      expect(page.account).toMatchObject({ waitlisted: true, trialAvailable: true });
+      expect(page.purchase.state).toBe("available");
+      // La prova non scorre in attesa: parte soltanto se scelta, e con essa le letture.
+      expect(await startTrial(env.DB, seller.userId)).toEqual(expect.any(String));
+      expect(await dispatchStoreSyncs(cron, at(0.01))).toEqual([seller.storeId]);
+      expect((await settingsPage(seller.cookie)).page.account.waitlisted).toBeUndefined();
+    });
+
+    it("senza capacità per nuovi Premium ferma acquisti, prova e collegamenti in attesa", async () => {
+      const admitted = await linkedSeller("ammesso@example.invalid");
+      await admissionSettings(1, 0);
+      expect(await purchaseState(env.DB, admitted.userId)).toMatchObject({ state: "closed" });
+      expect((await lifetimeContext(env.DB, env, admitted.userId))!.offer).toMatchObject({
+        state: "closed",
+      });
+      expect(await startTrial(env.DB, admitted.userId)).toBeNull();
+      const page = (await settingsPage(admitted.cookie)).page;
+      expect(page.account.trialAvailable).toBe(false);
+      expect(page.account.waitlisted).toBeUndefined();
+      // Un utente esistente continua a leggere i suoi negozi.
+      expect(await dispatchStoreSyncs(cron, at(0.03))).toEqual([admitted.storeId]);
+
+      const waiting = await verifiedSession("bloccato@example.invalid");
+      const refused = (await storeLinkAction({
+        request: new Request("http://localhost:5173/app/negozi/collega", {
+          method: "POST",
+          headers: { cookie: waiting.cookie, origin: "http://localhost:5173" },
+        }),
+      } as Parameters<typeof storeLinkAction>[0])) as Response;
+      expect(refused.headers.get("location")).toBe("/app/ordini?negozio=lista-attesa");
+      expect((await settingsPage(waiting.cookie)).page).toMatchObject({
+        account: { waitlisted: true },
+        purchase: { state: "closed" },
+      });
+
+      // Spenta la lista d'attesa, chi era in attesa viene ammesso e resta ammesso.
+      await admissionSettings(0, 1);
+      await applyInactivity(env, new Date());
+      await admissionSettings(1, 1);
+      expect(await admission(env.DB, waiting.userId)).toEqual({
+        waiting: false,
+        purchasesOpen: true,
+      });
     });
   });
 });

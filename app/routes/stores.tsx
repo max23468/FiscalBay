@@ -62,7 +62,9 @@ function storeView(store: StoreStatus, notifications: Map<string, boolean> | nul
         ? undefined
         : store.pauseReasons.includes("plan")
           ? "plan"
-          : "manual",
+          : store.pauseReasons.includes("inactivity")
+            ? "inactivity"
+            : "manual",
     issue: store.connection === "reconnect_required" ? "reconnect" : undefined,
     syncing: store.syncing,
     lastSyncAt: store.lastSyncAt,

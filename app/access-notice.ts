@@ -11,6 +11,7 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "troppi-tentativi": "warning",
   accesso: "warning",
   "altro-spazio": "warning",
+  "lista-attesa": "warning",
   "negozio-diverso": "warning",
   registrato: "success",
   "verifica-inviata": "success",

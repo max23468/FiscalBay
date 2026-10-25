@@ -179,8 +179,8 @@ async function workspaceFor(
   const workspaceId = crypto.randomUUID();
   const results = await db.batch<{ workspace_id: string }>([
     db
-      .prepare(`INSERT INTO workspaces (id, name, created_at)
-        SELECT ?1, ?2, ?3 WHERE NOT EXISTS (
+      .prepare(`INSERT INTO workspaces (id, name, created_at, active_at)
+        SELECT ?1, ?2, ?3, ?3 WHERE NOT EXISTS (
           SELECT 1 FROM workspace_members WHERE user_id = ?4)`)
       .bind(workspaceId, workspaceNames[language], now, userId),
     db

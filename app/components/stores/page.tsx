@@ -1,4 +1,4 @@
-import { Plus, Store } from "lucide-react";
+import { Play, Plus, Store } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
@@ -9,6 +9,7 @@ import { PageTitle } from "~/components/icon-tile";
 import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
+import { Spinner } from "~/components/ui/spinner";
 import { supportEmail, type AppCopy } from "../../app-copy";
 import type { AppLinks } from "../../app-links";
 import { usePageTiming } from "../../page-timing";
@@ -77,6 +78,7 @@ export function StoresPage({
       ) : (
         <>
           {premium ? null : <FreeNotes stores={data.stores} t={t} />}
+          <InactivityNotice stores={data.stores} t={t} />
           {data.stores.length === 1 ? (
             <StoreOverview store={data.stores[0]!} data={data} t={t} links={links} />
           ) : (
@@ -111,6 +113,31 @@ function FreeNotes({ stores, t }: { stores: StoreView[]; t: AppCopy }) {
     <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
       {t.stores.freeLimit}
     </p>
+  );
+}
+
+/**
+ * Letture del Free in pausa per inattività: la ripresa di un negozio è la conferma dell'utente
+ * e riprende tutti quelli dello spazio.
+ */
+function InactivityNotice({ stores, t }: { stores: StoreView[]; t: AppCopy }) {
+  const action = useAction();
+  const store = stores.find((candidate) => candidate.pauseReason === "inactivity");
+  if (!store) return null;
+  return (
+    <StatusAlert tone="warning" title={t.stores.inactivityTitle}>
+      <span className="grid justify-items-start gap-3">
+        {t.stores.inactivityBody}
+        <Button
+          size="sm"
+          disabled={action.pending}
+          onClick={() => action.run("store-resume", { store: store.id })}
+        >
+          {action.pending ? <Spinner /> : <Play aria-hidden="true" data-icon="inline-start" />}
+          {t.stores.inactivityResume}
+        </Button>
+      </span>
+    </StatusAlert>
   );
 }
 

@@ -6,6 +6,7 @@ import { priceGeneration, type LifetimeOffer, type PremiumOffer } from "../catal
 import { ApplicationError, logFailure } from "../errors";
 import { isMissingObject, stripeRead } from "../integrations/stripe.server";
 import type { UpstreamError } from "../integrations/http.server";
+import { purchasesOpenSql } from "./admission-state.server";
 import { openSubscriptionStatuses, storeReadSql } from "./grants.server";
 import { paymentReversal, reversalStatements } from "./refunds.server";
 
@@ -93,7 +94,7 @@ export async function lifetimeContext(
 ): Promise<LifetimeContext | null> {
   const at = now.toISOString();
   const workspace = await db
-    .prepare(`SELECT w.id, ${storeReadSql("w.id")} AS synced,
+    .prepare(`SELECT w.id, ${storeReadSql("w.id")} AS synced, ${purchasesOpenSql} AS open,
         (SELECT COUNT(*) FROM lifetime_allocations) AS taken,
         a.slot, a.status, a.provider_reference, a.completed_at
       FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
@@ -103,6 +104,7 @@ export async function lifetimeContext(
     .first<{
       id: string;
       synced: number;
+      open: number;
       taken: number;
       slot: number | null;
       status: "reserved" | "active" | null;
@@ -167,11 +169,16 @@ export async function lifetimeContext(
   const credit = period
     ? unusedCredit(net, { startsAt: period.starts_at, endsAt: period.ends_at }, now)
     : 0;
-  const state = !workspace.synced
-    ? "needs-sync"
-    : !reservation && workspace.taken >= lifetimeSlots
-      ? "sold-out"
-      : "available";
+  // Senza capacità per nuovi Premium si ferma il lifetime di chi non è già abbonato; il
+  // passaggio di un abbonato non aggiunge carico.
+  const state =
+    !workspace.open && !row?.open
+      ? "closed"
+      : !workspace.synced
+        ? "needs-sync"
+        : !reservation && workspace.taken >= lifetimeSlots
+          ? "sold-out"
+          : "available";
   return { ...context, offer: { state, credit, replaces: !!row?.open } };
 }
 

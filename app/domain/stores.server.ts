@@ -1,5 +1,6 @@
 import { syncMinutes } from "./order-sync.server";
 import { dayMilliseconds } from "../time";
+import { resumeAfterInactivity } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
 import { storeNameSql } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
@@ -28,6 +29,8 @@ export type StoreStatus = {
   feedback: { score: number; positivePercent: number | null; topRated: boolean } | null;
   connection: StoreConnection;
   pauseReasons: PauseReason[];
+  /** Inizio della pausa per inattività del Free, se c'è. */
+  inactiveSince: string | null;
   /** Inizio del consenso corrente; null per un negozio scollegato. */
   consentGrantedAt: string | null;
   consentExpiresAt: string | null;
@@ -135,6 +138,7 @@ type StoreRow = {
   history_done_at: string | null;
   syncing: number | null;
   pauses: string | null;
+  inactive_since: string | null;
   premium: number;
   orders: number;
   marketplace: string | null;
@@ -157,7 +161,10 @@ export async function listStores(
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
               ss.history_done_at, ss.locked_until > ?2 AS syncing,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
-                AS pauses, ${activeEntitlementSql("s.workspace_id", "?2")} AS premium,
+                AS pauses,
+              (SELECT paused_at FROM ebay_store_pauses p WHERE p.store_id = s.id
+                AND p.reason = 'inactivity') AS inactive_since,
+              ${activeEntitlementSql("s.workspace_id", "?2")} AS premium,
               (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
                 AND o.retention_until > ?2
                 AND o.is_provisional = 0) AS orders,
@@ -239,6 +246,7 @@ export async function listStores(
             },
       connection,
       pauseReasons,
+      inactiveSince: row.inactive_since,
       consentGrantedAt: row.disconnected_at ? null : row.granted_at,
       consentExpiresAt: row.disconnected_at ? null : expiresAt,
       lastSyncAt: row.last_success_at,
@@ -284,17 +292,26 @@ export async function pauseStore(
   return "done";
 }
 
-/** Toglie soltanto la pausa manuale: piano, inattività e amministrazione restano. */
+/**
+ * Toglie la pausa manuale. La ripresa di un negozio in pausa per inattività è la conferma
+ * dell'utente e riprende tutti i negozi dello spazio; piano e amministrazione restano.
+ */
 export async function resumeStore(
   db: D1Database,
   userId: string,
   storeId: string,
+  now = new Date(),
 ): Promise<StoreActionResult> {
   if (!(await ownedStore(db, userId, storeId))) return "not_found";
-  await db
-    .prepare("DELETE FROM ebay_store_pauses WHERE store_id = ? AND reason = 'manual'")
-    .bind(storeId)
-    .run();
+  const [, { results }] = await db.batch([
+    db
+      .prepare("DELETE FROM ebay_store_pauses WHERE store_id = ? AND reason = 'manual'")
+      .bind(storeId),
+    db
+      .prepare("SELECT 1 FROM ebay_store_pauses WHERE store_id = ? AND reason = 'inactivity'")
+      .bind(storeId),
+  ]);
+  if (results.length > 0) await resumeAfterInactivity(db, userId, now);
   return "done";
 }
 
