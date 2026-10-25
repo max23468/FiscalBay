@@ -407,3 +407,12 @@ jobs:
             test-results/browser/
             reports/release.json
           retention-days: 7
+
+      # Conferma finale nel job, con i segreti e la rete del runner: ricevuta, collaudo remoto
+      # completo e versione ancora attiva. Un esito negativo non torna indietro: la run fallisce
+      # e `release:cycle` la legge senza accedere al provider dalla sessione.
+      - name: Confirm provider readback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/release.mjs confirm --environment test

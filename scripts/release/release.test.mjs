@@ -18,6 +18,7 @@ import {
   readReceipt,
   releaseIdentity,
   retryReadback,
+  assertTestEvidence,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
 
@@ -281,6 +282,29 @@ describe("pubblicazione riprendibile", () => {
     const identity = releaseIdentity({ sha: "a".repeat(40), digest: "b".repeat(64) });
     assert.ok(identity.length <= 100);
     assert.ok(identity.startsWith(`${"a".repeat(40)}:`));
+  });
+
+  it("conferma il test soltanto con un collaudo remoto completo dello stesso commit", () => {
+    const report = {
+      status: "passed",
+      partial: false,
+      dirty: false,
+      sha: "commit",
+      environment: "test",
+      baseURL: "https://test.fiscalbay.it",
+      counts: { passed: 1 },
+    };
+    assert.doesNotThrow(() => assertTestEvidence(report, "commit"));
+    for (const change of [
+      { status: "failed" },
+      { partial: true },
+      { dirty: true },
+      { sha: "other" },
+      { counts: { passed: 0 } },
+      { environment: "local" },
+      { baseURL: "https://fiscalbay.it" },
+    ])
+      assert.throws(() => assertTestEvidence({ ...report, ...change }, "commit"));
   });
 
   it("rileva la manomissione dell'artefatto", () => {

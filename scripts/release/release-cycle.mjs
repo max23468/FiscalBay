@@ -5,22 +5,11 @@
  * precedenti si riconciliano a lotti con cleanup e a ogni Production.
  */
 import { execFileSync, spawn } from "node:child_process";
-import {
-  mkdirSync,
-  readFileSync,
-  writeFileSync,
-  rmSync,
-  existsSync,
-  mkdtempSync,
-  cpSync,
-  statSync,
-} from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { plan } from "../classify-changes.mjs";
-import { assertBrowserEvidence } from "./release-notes.mjs";
 import { addedMigrations, reviewAdded } from "./release.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
 
@@ -320,35 +309,26 @@ export function checkCycleJobs(jobs, deployRequired) {
     throw new Error("Deploy test richiesto ma non confermato.");
   if (deploy && !["success", "skipped"].includes(deploy.conclusion))
     throw new Error("Deploy test non riuscito.");
+  if (deploy?.conclusion === "success") assertConfirmed(jobs, "test");
   return deploy?.conclusion === "success";
 }
 
-export function assertCycleReceipt(receipt, sha, environment) {
-  if (
-    receipt.sha !== sha ||
-    receipt.environment !== environment ||
-    !receipt.deployed ||
-    !receipt.readback ||
-    receipt.rolledBack ||
-    !receipt.version ||
-    !receipt.digest
-  )
-    throw new Error("Ricevuta di distribuzione assente, parziale o di un altro candidato.");
+// Il readback provider chiude il job di distribuzione, con segreti e rete del workflow: il ciclo
+// ne legge l'esito con l'API REST, anche da una sessione senza accesso a Cloudflare.
+const confirmation = {
+  test: ["Deploy test", "Confirm provider readback"],
+  production: ["Distribuisci e verifica", "Create immutable tag and release"],
+};
+
+export function assertConfirmed(jobs, environment) {
+  const [jobName, stepName] = confirmation[environment];
+  const job = jobs.find((item) => item.name === jobName);
+  if (job?.steps?.find((step) => step.name === stepName)?.conclusion !== "success")
+    throw new Error(`Readback provider non confermato nella run: ${environment}.`);
 }
 
-export function assertRemoteEvidence(report, sha, environment) {
-  if (environment === "production") return assertBrowserEvidence(report, sha);
-  if (
-    report.status !== "passed" ||
-    report.partial ||
-    report.dirty !== false ||
-    report.sha !== sha ||
-    report.environment !== "test" ||
-    report.baseURL !== "https://test.fiscalbay.it" ||
-    !(report.counts?.passed > 0)
-  )
-    throw new Error("Collaudo remoto test incompleto o di un altro candidato.");
-}
+const runJobs = (repository, id) =>
+  json("api", `repos/${repository}/actions/runs/${id}/jobs?per_page=100`).jobs;
 
 export function assertPublishedRelease(release, tagSha, sha, version) {
   if (release.isDraft || release.tagName !== `v${version}` || tagSha !== sha || !release.url)
@@ -358,16 +338,9 @@ export function assertPublishedRelease(release, tagSha, sha, version) {
 function publishedRelease(repository, sha, version) {
   const releases = version
     ? [{ tagName: `v${version}` }]
-    : json(
-        "release",
-        "list",
-        "--repo",
-        repository,
-        "--limit",
-        "50",
-        "--json",
-        "tagName,isDraft",
-      ).filter((release) => !release.isDraft);
+    : json("api", `repos/${repository}/releases?per_page=50`)
+        .filter((release) => !release.draft)
+        .map((release) => ({ tagName: release.tag_name }));
   for (const release of releases) {
     const ref = json("api", `repos/${repository}/git/ref/tags/${release.tagName}`);
     const commit =
@@ -375,15 +348,8 @@ function publishedRelease(repository, sha, version) {
         ? json("api", `repos/${repository}/git/tags/${ref.object.sha}`).object.sha
         : ref.object.sha;
     if (commit !== sha && !version) continue;
-    const details = json(
-      "release",
-      "view",
-      release.tagName,
-      "--repo",
-      repository,
-      "--json",
-      "url,tagName,isDraft",
-    );
+    const found = json("api", `repos/${repository}/releases/tags/${release.tagName}`);
+    const details = { tagName: found.tag_name, isDraft: found.draft, url: found.html_url };
     assertPublishedRelease(details, commit, sha, version ?? release.tagName.slice(1));
     console.log(`Release verificata: ${details.url}.`);
     return;
@@ -413,15 +379,6 @@ function candidateAvailable(repository, tree) {
     if (verifiedBuildOrigin(artifact, run, jobs, repositoryId, "candidate")) return true;
   }
   return false;
-}
-
-export function effectiveProductionVariable(read, repository, name) {
-  try {
-    return read(`repos/${repository}/environments/production/variables/${name}`);
-  } catch (error) {
-    if (!/HTTP 404/u.test(String(error.stderr ?? error.message))) throw error;
-    return read(`repos/${repository}/actions/variables/${name}`);
-  }
 }
 
 function summary(repository, runId) {
@@ -518,120 +475,6 @@ async function waitRun(
     await pause(10000);
   }
   throw new Error("Workflow non osservato sul commit atteso: nessun rilancio automatico.");
-}
-
-function readback(repository, run, environment) {
-  const directory = mkdtempSync(path.join(tmpdir(), "release-readback-"));
-  const checkout = path.join(directory, "checkout");
-  let attached = false;
-  try {
-    localGit(() => {
-      git("fetch", "origin", environment === "test" ? "develop" : "main");
-      git("worktree", "add", "--detach", checkout, run.head_sha);
-    });
-    attached = true;
-    const executeHere = (command, args, options = {}) =>
-      execute(command, args, { cwd: checkout, ...options });
-    executeHere("pnpm", ["install", "--frozen-lockfile"], { stdio: "inherit" });
-    const output = path.join(directory, "build-output");
-    executeHere(
-      process.execPath,
-      ["scripts/find-build.mjs", ...(environment === "production" ? ["--candidate"] : [])],
-      {
-        env: {
-          ...process.env,
-          REPOSITORY: repository,
-          REPOSITORY_ID: String(json("api", `repos/${repository}`).id),
-          GITHUB_OUTPUT: output,
-        },
-      },
-    );
-    if (!existsSync(output))
-      throw new Error("Artefatto qualificato non disponibile per il readback.");
-    const fields = Object.fromEntries(
-      readFileSync(output, "utf8")
-        .trim()
-        .split("\n")
-        .map((line) => line.split("=")),
-    );
-    executeHere("gh", [
-      "run",
-      "download",
-      fields["run-id"],
-      "--repo",
-      repository,
-      "--name",
-      fields.artifact,
-      "--dir",
-      ".cloudflare/output",
-    ]);
-    const artifacts = json(
-      "api",
-      `repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`,
-    ).artifacts;
-    const prefix = environment === "test" ? "deployed" : "release-receipt";
-    const artifact = artifacts.find(
-      (item) => item.name === `${prefix}-${run.id}-${run.run_attempt}` && !item.expired,
-    );
-    if (!artifact) throw new Error("Ricevuta del deploy non disponibile.");
-    gh(
-      "run",
-      "download",
-      String(run.id),
-      "--repo",
-      repository,
-      "--name",
-      artifact.name,
-      "--dir",
-      path.join(directory, "receipt"),
-    );
-    const receiptFile = path.join(directory, "receipt/reports/release.json");
-    assertCycleReceipt(JSON.parse(readFileSync(receiptFile, "utf8")), run.head_sha, environment);
-    for (const name of environment === "test"
-      ? ["test-smoke", "test-pages"]
-      : ["production-remote"]) {
-      const evidence = path.join(directory, `receipt/test-results/browser/${name}.json`);
-      if (!existsSync(evidence)) throw new Error(`Collaudo remoto non disponibile: ${name}.`);
-      assertRemoteEvidence(JSON.parse(readFileSync(evidence, "utf8")), run.head_sha, environment);
-    }
-    mkdirSync(path.join(checkout, "reports"), { recursive: true });
-    cpSync(receiptFile, path.join(checkout, "reports/release.json"));
-    executeHere(
-      process.execPath,
-      [
-        "scripts/release/release.mjs",
-        "confirm",
-        "--environment",
-        environment,
-        "--expected-sha",
-        run.head_sha,
-      ],
-      {
-        stdio: "inherit",
-        env: {
-          ...process.env,
-          ...(environment === "production"
-            ? {
-                PRODUCTION_PUBLISH_ENABLED: effectiveProductionVariable(
-                  (endpoint) => gh("api", endpoint, "--jq", ".value"),
-                  repository,
-                  "PRODUCTION_PUBLISH_ENABLED",
-                ),
-                OWNER_APPROVED_SHA: effectiveProductionVariable(
-                  (endpoint) => gh("api", endpoint, "--jq", ".value"),
-                  repository,
-                  "OWNER_APPROVED_SHA",
-                ),
-              }
-            : {}),
-        },
-      },
-    );
-    console.log(`Readback provider confermato: ${environment}, ${run.head_sha}.`);
-  } finally {
-    if (attached) localGit(() => git("worktree", "remove", "--force", checkout));
-    rmSync(directory, { recursive: true, force: true });
-  }
 }
 
 /** I cloni delle sessioni cloud sono superficiali: merge-base e merge-tree richiedono la storia. */
@@ -811,7 +654,7 @@ async function main() {
         ]);
       run = summary(repository, number);
       if (run.conclusion !== "success") throw new Error("Ripresa non riuscita.");
-      const jobs = json("api", `repos/${repository}/actions/runs/${number}/jobs?per_page=100`).jobs;
+      const jobs = runJobs(repository, number);
       const environment = run.path.endsWith("publish.yml") ? "production" : "test";
       if (
         jobs.some(
@@ -820,7 +663,7 @@ async function main() {
             job.conclusion === "success",
         )
       ) {
-        readback(repository, run, environment);
+        assertConfirmed(jobs, environment);
         if (environment === "production") {
           publishedRelease(repository, run.head_sha, values.version);
           cleanupIntegrated(repository);
@@ -979,8 +822,8 @@ async function main() {
       )
         .flat()
         .map((file) => file.filename);
-      const deployed = checkCycleJobs(jobs, plan(files).deploy);
-      if (deployed) readback(repository, run, "test");
+      if (checkCycleJobs(jobs, plan(files).deploy))
+        console.log("Deploy test, collaudo remoto e readback provider confermati nella run.");
       localGit(() => {
         git("fetch", "origin", "develop", `refs/pull/${number}/head`);
         if (git("branch", "--show-current") === pr.headRefName && !git("status", "--porcelain"))
@@ -1028,7 +871,7 @@ async function main() {
         );
       if (command === "production" && publish.conclusion === "success") {
         const run = summary(repository, existing.databaseId);
-        readback(repository, run, "production");
+        assertConfirmed(jobs, "production");
         publishedRelease(repository, run.head_sha, values.version);
         cleanupIntegrated(repository);
         return;
@@ -1068,7 +911,7 @@ async function main() {
       since,
     );
     if (command === "production") {
-      readback(repository, run, "production");
+      assertConfirmed(runJobs(repository, run.id), "production");
       publishedRelease(repository, run.head_sha, values.version);
       cleanupIntegrated(repository);
     }
