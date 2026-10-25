@@ -75,9 +75,9 @@ export default defineConfig((ctx) => ({
             APP_ORIGIN: bindings.text("https://fiscalbay.it"),
             REGISTRATION_MODE: bindings.text("open"),
             EBAY_SANDBOX_ENABLED: bindings.text("false"),
-            STRIPE_PRICE_MONTHLY: bindings.text(""),
-            STRIPE_PRICE_ANNUAL: bindings.text(""),
-            STRIPE_PRICE_LIFETIME: bindings.text(""),
+            STRIPE_PRICE_MONTHLY: bindings.text("price_1UHl21JP7SSN14ZpQyiVmdoP"),
+            STRIPE_PRICE_ANNUAL: bindings.text("price_1UHl21JP7SSN14ZpqDoFn3Sb"),
+            STRIPE_PRICE_LIFETIME: bindings.text("price_1UHl21JP7SSN14Zp0J41hMVs"),
             // Bot attuale, riusato come identità della 2.0; token e segreto restano in custodia.
             TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_bot"),
           },

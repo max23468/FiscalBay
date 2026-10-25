@@ -14,8 +14,9 @@ import {
 
 const config = readFileSync(configFile, "utf8");
 const configChange = (after) => ({ [configFile]: { before: config, after } });
+// Il prezzo del Worker test: anche quello live è un valore testuale, ma di Production.
 const testValue = config.replace(
-  /(STRIPE_PRICE_MONTHLY: bindings\.text\()"price_[^"]+"/u,
+  /(domain: "test\.fiscalbay\.it",[\s\S]*?STRIPE_PRICE_MONTHLY: bindings\.text\()"price_[^"]+"/u,
   '$1"price_other"',
 );
 

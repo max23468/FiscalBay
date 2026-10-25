@@ -6,12 +6,13 @@ import { priceGeneration } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import type { Language } from "../i18n";
 import type { UpstreamError } from "../integrations/http.server";
+import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
-  catalogMismatch,
   createStripeClient,
   createStripeReader,
   isMissingObject,
   stripeRead,
+  stripeSecretKey,
 } from "../integrations/stripe.server";
 import type { AccountView } from "../view-models";
 import { openSubscriptionStatuses } from "./grants.server";
@@ -177,8 +178,9 @@ export async function applyStripeEvent(
   fetcher: typeof fetch = fetch,
   now = new Date(),
 ) {
-  if (!env.STRIPE_SECRET_KEY) throw new ApplicationError("UPSTREAM_UNAVAILABLE");
-  const stripe = await createStripeReader(env.STRIPE_SECRET_KEY, fetcher);
+  const key = stripeSecretKey(env);
+  if (!key) throw new ApplicationError("UPSTREAM_UNAVAILABLE");
+  const stripe = await createStripeReader(key, fetcher);
   let target: Awaited<ReturnType<typeof eventTarget>>;
   try {
     target = await eventTarget(stripe, receipt.topic, receipt.objectId);
@@ -326,8 +328,9 @@ const batchSize = 25;
  * conclude: quanto non riuscito torna al turno seguente.
  */
 export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, now = new Date()) {
-  if (!env.STRIPE_SECRET_KEY) return;
-  const stripe = await createStripeReader(env.STRIPE_SECRET_KEY, fetcher);
+  const key = stripeSecretKey(env);
+  if (!key) return;
+  const stripe = await createStripeReader(key, fetcher);
   const attempt = (subscription: string) =>
     reconcileSubscription(env, stripe, subscription, now).catch((error: unknown) =>
       logFailure({ error, operation: "billing" }),
@@ -625,9 +628,10 @@ export async function changeSubscriptionPeriod(
 ): Promise<PeriodChange> {
   const local = await renewingSubscription(env.DB, env, userId, now);
   if (!local) return "not_allowed";
-  if (!env.STRIPE_SECRET_KEY) return "unavailable";
+  const key = stripeSecretKey(env);
+  if (!key) return "unavailable";
   try {
-    const stripe = await createStripeClient(env.STRIPE_SECRET_KEY);
+    const stripe = await createStripeClient(key);
     const subscription = await stripeRead(() => stripe.subscriptions.retrieve(local.id));
     const owner = ownerSchema.safeParse(subscription.metadata);
     const item = subscription.items.data[0];
@@ -682,7 +686,8 @@ export async function openBillingPortal(
   returnUrl: string,
   language: Language,
 ): Promise<string | null> {
-  if (!env.STRIPE_SECRET_KEY) return null;
+  const key = stripeSecretKey(env);
+  if (!key) return null;
   // Il cliente del lifetime acquistato prevale su quello di un abbonamento precedente.
   // Un cliente con i dati finanziari cancellati non si riapre.
   const row = await env.DB.prepare(`SELECT COALESCE(
@@ -696,7 +701,7 @@ export async function openBillingPortal(
     .first<{ customer_id: string | null }>();
   const customer = row?.customer_id;
   if (!customer) return null;
-  const stripe = await createStripeClient(env.STRIPE_SECRET_KEY);
+  const stripe = await createStripeClient(key);
   const session = await stripeRead(() =>
     stripe.billingPortal.sessions.create({
       customer,
@@ -734,9 +739,10 @@ export async function stopRenewals(
     ),
   ]);
   if (!subscriptions!.results.length && !sessions!.results.length) return true;
-  if (!env.STRIPE_SECRET_KEY) return false;
+  const key = stripeSecretKey(env);
+  if (!key) return false;
   try {
-    const stripe = await createStripeReader(env.STRIPE_SECRET_KEY, fetcher);
+    const stripe = await createStripeReader(key, fetcher);
     const stop = async (id: string) => {
       let status: string;
       try {

@@ -1,5 +1,6 @@
 import type Stripe from "stripe";
 
+import { isProduction } from "../app-links";
 import type { PremiumOffer } from "../catalog";
 import type { Language } from "../i18n";
 import { readBounded, retryAfterSeconds, UpstreamError } from "./http.server";
@@ -13,6 +14,18 @@ declare global {
   namespace Cloudflare {
     interface Env extends Partial<StripeSecrets> {}
   }
+}
+
+/**
+ * Chiave Stripe utilizzabile nell'ambiente: una chiave di test fuori da Production, soltanto
+ * una chiave live con limitazioni in Production. La chiave dell'altro ambiente o la chiave
+ * segreta standard live valgono come chiave assente: acquisti, portale e letture restano fermi
+ * invece di agire sugli oggetti sbagliati.
+ */
+export function stripeSecretKey(env: Pick<Env, "APP_ORIGIN" | "STRIPE_SECRET_KEY">) {
+  const key = env.STRIPE_SECRET_KEY;
+  const accepted = isProduction(env) ? /^rk_live_./u : /^[rs]k_test_./u;
+  return key && accepted.test(key) ? key : undefined;
 }
 
 const integrationIdentifier = "fiscalbay_mp_qnwjrzta";
@@ -158,42 +171,6 @@ export function buildManagedCheckoutParams(input: {
     success_url: `${input.successUrl}?checkout=${input.offer === "lifetime" ? "lifetime" : "processing"}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${input.cancelUrl}?checkout=cancelled`,
   };
-}
-
-/** Motivo per cui un prezzo non corrisponde al listino: soltanto un'etichetta fissa. */
-export type CatalogMismatch =
-  | "inactive"
-  | "currency"
-  | "amount"
-  | "tax_behavior"
-  | "billing_period"
-  | "tax_code";
-
-/**
- * Il prezzo configurato su Stripe deve essere quello del listino: attivo, in euro, netto con
- * le imposte aggiunte da Stripe, con la periodicità dell'offerta e un prodotto con codice
- * fiscale, senza il quale Managed Payments non copre la vendita.
- */
-export function catalogMismatch(
-  price: Stripe.Price,
-  offer: PremiumOffer,
-  netCents: number,
-): CatalogMismatch | null {
-  const product = typeof price.product === "string" || price.product.deleted ? null : price.product;
-  if (!price.active || !product?.active) return "inactive";
-  if (price.currency !== "eur") return "currency";
-  if (price.unit_amount !== netCents) return "amount";
-  // Senza indicazione esplicita conterebbe l'impostazione dell'account, che può includerle.
-  if (price.tax_behavior !== "exclusive") return "tax_behavior";
-  const interval = offer === "monthly" ? "month" : offer === "annual" ? "year" : null;
-  if (
-    interval
-      ? price.recurring?.interval !== interval || price.recurring.interval_count !== 1
-      : price.type !== "one_time"
-  )
-    return "billing_period";
-  if (!product.tax_code) return "tax_code";
-  return null;
 }
 
 export async function retrieveCatalogPrice(stripe: Stripe, priceId: string) {
