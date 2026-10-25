@@ -381,7 +381,7 @@ export const it = {
     disconnectBody:
       "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito.",
     disconnectSubscription:
-      "Scollegare il negozio non disdice l’abbonamento Premium, che continua a rinnovarsi.",
+      "Scollegare il negozio non disdice l’abbonamento Premium: gli addebiti previsti restano.",
     disconnectSubscriptionLink: "Gestisci l’abbonamento",
     deleteBody:
       "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
@@ -506,6 +506,9 @@ export const it = {
       trialChosenTitle: (plan: string) => `${plan} scelto`,
       trialChosenBody: (date: string) =>
         `La prova continua: il primo addebito arriva il ${date}, quando finisce. Fino ad allora non paghi nulla.`,
+      trialChosenCancelledTitle: (plan: string) => `${plan} disdetto`,
+      trialChosenCancelledBody: (date: string) =>
+        `Nessun addebito: il ${date}, alla fine della prova, torni al Free. Fino ad allora puoi riattivarlo su Stripe.`,
       pricesNote:
         "Prezzi IVA esclusa. Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
       purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",

@@ -424,9 +424,16 @@ export async function subscriptionView(
   // Durante la prova un acquisto ancora da confermare resta visibile; un'altra copertura,
   // come una concessione, prevale.
   if (coverage && coverage.source !== "trial") return { ...grant, ...pending };
-  // Scelto durante la prova: nessun incasso finché la prova non finisce.
+  // Scelto durante la prova: nessun incasso finché la prova non finisce; disdetto, nessuno.
   if (coverage?.source === "trial" && row.status === "trialing")
-    return { payment: { state: "scheduled", period: row.offer, chargeAt: row.current_period_end } };
+    return {
+      payment: {
+        state: "scheduled",
+        period: row.offer,
+        chargeAt: row.current_period_end,
+        ...(row.cancel_at_period_end ? { cancelled: true as const } : {}),
+      },
+    };
   if ((lapsedStatuses as readonly string[]).includes(row.status)) {
     const protectedUntil = Date.parse(row.current_period_start) + pricePromiseMs;
     return protectedUntil > now.getTime()
@@ -459,14 +466,20 @@ async function renewingSubscription(db: D1Database, env: Env, userId: string, no
     .first<{ id: string; workspace_id: string; price_generation: string }>();
 }
 
-/** Lo spazio ha un abbonamento con un periodo pagato in corso che si rinnoverà. */
-export async function subscriptionRenews(
-  db: D1Database,
-  env: Env,
-  userId: string,
-  now = new Date(),
-) {
-  return !!(await renewingSubscription(db, env, userId, now));
+/**
+ * Lo spazio ha un abbonamento che addebiterà ancora: un periodo pagato che si rinnova oppure
+ * quello scelto durante la prova, con il primo addebito alla sua fine. Scollegare l'ultimo
+ * negozio non lo ferma.
+ */
+export async function subscriptionRenews(db: D1Database, env: Env, userId: string) {
+  const row = await db
+    .prepare(`SELECT 1 FROM stripe_subscriptions s
+      JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
+      WHERE wm.user_id = ?1 AND s.environment = ?2 AND s.unavailable_at IS NULL
+        AND s.status IN ('active', 'trialing') AND s.cancel_at_period_end = 0 LIMIT 1`)
+    .bind(userId, environmentOf(env))
+    .first();
+  return !!row;
 }
 
 /**
