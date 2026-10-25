@@ -475,6 +475,7 @@ it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito
   expect(sendBatch).toHaveBeenNthCalledWith(1, [
     { body: { task: "maintenance", slot: "2026-10-11T00:00:00.000Z" } },
     { body: { task: "token_refresh", slot: now.toISOString() } },
+    { body: { task: "inactivity", slot: now.toISOString() } },
     { body: { task: "billing", slot: now.toISOString() } },
   ]);
   expect(sendBatch).toHaveBeenNthCalledWith(2, [{ body: { syncStore: "webhook-store" } }]);

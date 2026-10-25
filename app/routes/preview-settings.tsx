@@ -98,9 +98,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         (scenario.account.payment &&
           !(scenario.account.payment.state === "refunded" && scenario.account.payment.lifetime))
           ? "covered"
-          : scenario.onboarding.some((step) => step.label === "stepSync" && step.done)
-            ? "available"
-            : "needs-sync",
+          : scenario.purchasesClosed
+            ? "closed"
+            : scenario.onboarding.some((step) => step.label === "stepSync" && step.done)
+              ? "available"
+              : "needs-sync",
       offers: premiumOffers,
       lifetime: previewLifetime(scenario),
       checkout: checkoutReturn(query),

@@ -1,7 +1,7 @@
 import { waitUntil } from "cloudflare:workers";
 
 import { supportEmail } from "./app-copy";
-import { accessPath, securityPath } from "./app-links";
+import { accessPath, securityPath, storesPath } from "./app-links";
 import { logFailure } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 
@@ -15,9 +15,9 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-const buttons: Record<Language, { continue: string; security: string }> = {
-  it: { continue: "Continua su FiscalBay", security: "Apri Sicurezza" },
-  en: { continue: "Continue to FiscalBay", security: "Open Security" },
+const buttons: Record<Language, { continue: string; security: string; stores: string }> = {
+  it: { continue: "Continua su FiscalBay", security: "Apri Sicurezza", stores: "Apri Negozi" },
+  en: { continue: "Continue to FiscalBay", security: "Open Security", stores: "Open Stores" },
 };
 
 async function sendAccountEmail(
@@ -225,4 +225,29 @@ export function notifySecurityEvent(environment: Env, userId: string, event: Sec
       });
     })().catch((error: unknown) => logFailure({ error, operation: "account_email" })),
   );
+}
+
+/**
+ * Preavviso di inattività del Free: senza un accesso entro `deadline` le letture dei negozi si
+ * fermano. Il compito che lo invia registra il preavviso soltanto se l'invio riesce.
+ */
+export async function sendInactivityNotice(
+  environment: Env,
+  input: { to: string; language: Language; deadline: string },
+): Promise<void> {
+  const { language, deadline } = input;
+  await sendAccountEmail(environment, {
+    to: input.to,
+    url: new URL(localizedPath(language, storesPath), environment.APP_ORIGIN).toString(),
+    button: buttons[language].stores,
+    ...(language === "en"
+      ? {
+          subject: "Your FiscalBay stores will stop updating",
+          message: `You have not opened FiscalBay for 30 days. With the Free plan, sign in by ${deadline} to keep reading new orders from eBay; otherwise reading pauses until you resume it from Stores. Your orders stay available.`,
+        }
+      : {
+          subject: "I tuoi negozi su FiscalBay smetteranno di aggiornarsi",
+          message: `Non apri FiscalBay da 30 giorni. Con il piano Free, accedi entro il ${deadline} per continuare a leggere i nuovi ordini da eBay; altrimenti le letture si fermano finché non le riprendi da Negozi. I tuoi ordini restano disponibili.`,
+        }),
+  });
 }

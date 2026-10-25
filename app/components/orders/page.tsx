@@ -285,6 +285,24 @@ function OrdersNotices({
                 </span>
               </StatusAlert>
             );
+          case "waitlist":
+            return (
+              <StatusAlert key={notice.kind} tone="info" title={t.orders.waitlistTitle}>
+                <span className="grid justify-items-start gap-3">
+                  {notice.purchase
+                    ? `${t.settings.plan.waitlisted} ${t.settings.plan.waitlistedPurchase}`
+                    : t.settings.plan.waitlisted}
+                  {notice.purchase && data.settings ? (
+                    <Link
+                      to={appHref(links, "impostazioni/piano")}
+                      {...buttonLink({ variant: "outline", size: "sm" })}
+                    >
+                      {t.orders.quotaAction}
+                    </Link>
+                  ) : null}
+                </span>
+              </StatusAlert>
+            );
           case "store-issue":
             return (
               <StoreIssueAlert

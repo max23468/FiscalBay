@@ -6,8 +6,9 @@ import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
 
 /**
  * Notifiche della campanella, derivate dallo stato corrente: un problema risolto esce dalla
- * campanella. Oggi le fonti sono i collegamenti dei negozi scaduti o in scadenza e le letture
- * che non riescono: di un negozio, oppure di tutti quando eBay non risponde; ogni notifica ha un identificativo stabile per problema, così
+ * campanella. Oggi le fonti sono i collegamenti dei negozi scaduti o in scadenza, le letture
+ * che non riescono, di un negozio oppure di tutti quando eBay non risponde, e la pausa per
+ * inattività del Free; ogni notifica ha un identificativo stabile per problema, così
  * la lettura vale finché il problema resta lo stesso.
  */
 export async function listNotifications(
@@ -71,11 +72,28 @@ export async function listNotifications(
         href: `negozi/${encodeURIComponent(store.id)}`,
       })),
   ];
+  // La pausa per inattività del Free ferma tutti i negozi dello spazio: una sola notifica.
+  const inactiveSince = stores
+    .flatMap((store) => (store.inactiveSince ? [store.inactiveSince] : []))
+    .sort()[0];
+  const inactivity: NotificationView[] = inactiveSince
+    ? [
+        {
+          id: `inactivity:${inactiveSince}`,
+          tone: "warning",
+          title: t.inactivityTitle,
+          body: t.inactivityBody,
+          at: inactiveSince,
+          read: false,
+          href: "negozi",
+        },
+      ]
+    : [];
   // Come i promemoria, un problema delle letture compare soltanto negli ultimi trenta giorni:
   // oltre, la sua lettura non è più conservata e resta l'avviso di Ordini e Negozi.
   const items = [
     ...stores.flatMap(reminder),
-    ...reads.filter((item) => Date.parse(item.at) >= since),
+    ...[...reads, ...inactivity].filter((item) => Date.parse(item.at) >= since),
   ];
   if (items.length === 0) return [];
   const { results } = await db

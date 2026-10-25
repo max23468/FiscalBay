@@ -54,7 +54,12 @@ export function connectionStatus(
     return {
       tone: "neutral",
       icon: CirclePause,
-      label: store.pauseReason === "plan" ? t.stores.pausedByPlan : t.stores.state.paused,
+      label:
+        store.pauseReason === "plan"
+          ? t.stores.pausedByPlan
+          : store.pauseReason === "inactivity"
+            ? t.stores.pausedByInactivity
+            : t.stores.state.paused,
     };
   }
   if (store.connection === "reconnect_required") {

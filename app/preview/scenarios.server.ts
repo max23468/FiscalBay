@@ -32,6 +32,9 @@ export const scenarioIds = [
   "sblocco-non-riuscito",
   "quota-esaurita",
   "fine-promozione",
+  "free-inattivo",
+  "lista-d-attesa",
+  "acquisti-sospesi",
   "aggiornamento",
   "ebay-non-disponibile",
   "negozio-scaduto",
@@ -112,6 +115,42 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "Promotion ending",
       focus:
         "The promotion has ended: the current cycle keeps its 10 unlocks, the next one will have 5.",
+    },
+  },
+  "free-inattivo": {
+    it: {
+      name: "Free inattivo",
+      focus:
+        "Dopo 30 giorni senza accessi e 7 di preavviso le letture del Free sono in pausa. Gli ordini restano consultabili; «Riprendi le letture» le riattiva.",
+    },
+    en: {
+      name: "Inactive Free",
+      focus:
+        "After 30 days without sign-ins and 7 days' notice, Free reading is paused. Orders remain available; «Resume reading» restarts it.",
+    },
+  },
+  "lista-d-attesa": {
+    it: {
+      name: "Lista d’attesa",
+      focus:
+        "Account registrato con il Free al completo: la prima lettura del negozio è fatta, nessuna lettura successiva né sblocco del Free. Prova e Premium restano disponibili.",
+    },
+    en: {
+      name: "Waiting list",
+      focus:
+        "Account registered while the Free plan is full: the store's first read is done, with no further reads or Free unlocks. Trial and Premium remain available.",
+    },
+  },
+  "acquisti-sospesi": {
+    it: {
+      name: "Acquisti sospesi",
+      focus:
+        "Senza capacità per nuovi Premium prova e acquisti sono sospesi; il Free continua come prima.",
+    },
+    en: {
+      name: "Purchases paused",
+      focus:
+        "Without capacity for new Premium accounts, trial and purchases are paused; the Free plan continues as before.",
     },
   },
   aggiornamento: {
@@ -1059,6 +1098,8 @@ export interface Scenario {
   stripeDown: boolean;
   /** I venti posti lifetime sono tutti occupati. */
   lifetimeSoldOut: boolean;
+  /** Senza capacità per nuovi Premium: acquisti e prova sospesi. */
+  purchasesClosed: boolean;
   onboarding: Array<{
     label: "stepAccount" | "stepEmail" | "stepStore" | "stepSync";
     done: boolean;
@@ -1136,6 +1177,16 @@ const text = {
       body: appCopy.en.shell.storeNotifications.readFailedBody(stores.vintage.name),
     },
   },
+  inactivity: {
+    it: {
+      title: appCopy.it.shell.storeNotifications.inactivityTitle,
+      body: appCopy.it.shell.storeNotifications.inactivityBody,
+    },
+    en: {
+      title: appCopy.en.shell.storeNotifications.inactivityTitle,
+      body: appCopy.en.shell.storeNotifications.inactivityBody,
+    },
+  },
   expired: {
     it: {
       title: "Collegamento scaduto",
@@ -1199,8 +1250,11 @@ export function loadScenario(
   id: ScenarioId,
   language: Language,
   unlocked: ReadonlySet<string>,
-  /** `trialStarted`: la prova disponibile è stata attivata nell'anteprima. */
-  { trialStarted = false }: { trialStarted?: boolean } = {},
+  /**
+   * `trialStarted`: la prova disponibile è stata attivata nell'anteprima; `resumed`: le letture
+   * in pausa per inattività sono state riprese.
+   */
+  { trialStarted = false, resumed = false }: { trialStarted?: boolean; resumed?: boolean } = {},
 ): Scenario {
   const note = (
     key: keyof typeof text,
@@ -1228,6 +1282,7 @@ export function loadScenario(
     saveFailsOnce: false,
     stripeDown: false,
     lifetimeSoldOut: false,
+    purchasesClosed: false,
     onboarding: [
       { label: "stepAccount" as const, done: true },
       { label: "stepEmail" as const, done: true },
@@ -1290,6 +1345,63 @@ export function loadScenario(
         stores: freeStores,
         seeds: freeSeeds,
         premium: false,
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "free-inattivo": {
+      // Pausa dopo 37 giorni senza accessi; la ripresa simulata riporta il Free ordinario.
+      const pausedAt = minutesAgo(1_440);
+      scenario = {
+        ...common,
+        account: account(),
+        stores: resumed
+          ? freeStores
+          : [
+              storeView("vintage", {
+                connection: "paused",
+                pauseReason: "inactivity",
+                lastSyncAt: pausedAt,
+                recent: [{ at: pausedAt, ok: true, newOrders: 0 }],
+              }),
+              freeStores[1]!,
+            ],
+        seeds: freeSeeds,
+        premium: false,
+        notifications: resumed
+          ? common.notifications
+          : [
+              note("inactivity", {
+                id: `inactivity:${pausedAt}`,
+                tone: "warning",
+                at: pausedAt,
+                read: false,
+                href: "negozi",
+              }),
+              ...common.notifications,
+            ],
+        diagnostics: diagnostics(),
+      };
+      break;
+    }
+    case "lista-d-attesa":
+      scenario = {
+        ...common,
+        account: account({ waitlisted: true, quota: { used: 0, limit: 0, cycleEndsAt: null } }),
+        stores: [storeView("vintage", { importedOrders: 12 })],
+        seeds: freeSeeds,
+        premium: false,
+        notices: [{ kind: "waitlist", purchase: true }],
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "acquisti-sospesi":
+      scenario = {
+        ...common,
+        account: account({ trialAvailable: false }),
+        stores: freeStores,
+        seeds: freeSeeds,
+        premium: false,
+        purchasesClosed: true,
         diagnostics: diagnostics(),
       };
       break;
@@ -1982,31 +2094,35 @@ export function loadScenario(
         quota: { ...quota, used: Math.min(quota.used + unlockedCount, quota.limit) },
       }
     : rest.account;
-  const rights = currentAccount.quota
+  const rights = currentAccount.waitlisted
     ? language === "it"
-      ? `Free, ${currentAccount.quota.used} di ${currentAccount.quota.limit} ordini sbloccati`
-      : `Free, ${currentAccount.quota.used} of ${currentAccount.quota.limit} orders unlocked`
-    : currentAccount.plan === "free"
-      ? "Free"
-      : currentAccount.trial
-        ? language === "it"
-          ? "Prova Premium"
-          : "Premium trial"
-        : currentAccount.grant
+      ? "Free, in lista d’attesa"
+      : "Free, waiting list"
+    : currentAccount.quota
+      ? language === "it"
+        ? `Free, ${currentAccount.quota.used} di ${currentAccount.quota.limit} ordini sbloccati`
+        : `Free, ${currentAccount.quota.used} of ${currentAccount.quota.limit} orders unlocked`
+      : currentAccount.plan === "free"
+        ? "Free"
+        : currentAccount.trial
           ? language === "it"
-            ? "Premium concesso"
-            : "Premium, granted"
-          : currentAccount.premium?.period === "lifetime"
+            ? "Prova Premium"
+            : "Premium trial"
+          : currentAccount.grant
             ? language === "it"
-              ? "Premium a vita"
-              : "Premium, lifetime"
-            : currentAccount.premium?.period === "monthly"
+              ? "Premium concesso"
+              : "Premium, granted"
+            : currentAccount.premium?.period === "lifetime"
               ? language === "it"
-                ? "Premium mensile"
-                : "Premium, monthly"
-              : language === "it"
-                ? "Premium annuale"
-                : "Premium, annual";
+                ? "Premium a vita"
+                : "Premium, lifetime"
+              : currentAccount.premium?.period === "monthly"
+                ? language === "it"
+                  ? "Premium mensile"
+                  : "Premium, monthly"
+                : language === "it"
+                  ? "Premium annuale"
+                  : "Premium, annual";
   return {
     ...rest,
     account: currentAccount,
@@ -2044,7 +2160,13 @@ export function previewLifetime(scenario: Scenario): LifetimeOffer | null {
     );
   }
   return {
-    state: !synced ? "needs-sync" : scenario.lifetimeSoldOut ? "sold-out" : "available",
+    state: scenario.purchasesClosed
+      ? "closed"
+      : !synced
+        ? "needs-sync"
+        : scenario.lifetimeSoldOut
+          ? "sold-out"
+          : "available",
     credit,
     replaces: !!premium || !!payment,
   };

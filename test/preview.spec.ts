@@ -140,9 +140,10 @@ describe("stato sintetico dell'anteprima", () => {
         const option = scenarioOptions(language).find((entry) => entry.id === id)!;
         expect(option.focus).toContain(formatDate(scenario.now, language));
         expect(option.focus).toContain("Europe/Rome");
-        if (scenario.account.quota) {
+        // In lista d'attesa nessun ciclo del Free è erogato.
+        if (scenario.account.quota && !scenario.account.waitlisted) {
           const quota = scenario.account.quota;
-          expect(Date.parse(quota.cycleEndsAt)).toBeGreaterThan(Date.parse(scenario.now));
+          expect(Date.parse(quota.cycleEndsAt!)).toBeGreaterThan(Date.parse(scenario.now));
           expect(scenario.diagnostics.rights).toContain(
             language === "it"
               ? `${quota.used} di ${quota.limit}`
@@ -171,6 +172,22 @@ describe("stato sintetico dell'anteprima", () => {
       expect(loadScenario("ordinario", language, new Set()).account.quota).not.toHaveProperty(
         "nextLimit",
       );
+    });
+
+    it(`mostra Free inattivo, ripresa, lista d'attesa e acquisti sospesi, ${language}`, () => {
+      const inactive = loadScenario("free-inattivo", language, new Set());
+      expect(inactive.stores.map((store) => store.pauseReason)).toEqual(["inactivity", "plan"]);
+      expect(inactive.notifications[0]).toMatchObject({
+        title: appCopy[language].shell.storeNotifications.inactivityTitle,
+        href: "negozi",
+      });
+      const resumed = loadScenario("free-inattivo", language, new Set(), { resumed: true });
+      expect(resumed.stores.map((store) => store.pauseReason)).toEqual([undefined, "plan"]);
+      const waiting = loadScenario("lista-d-attesa", language, new Set());
+      expect(waiting.account).toMatchObject({ waitlisted: true, trialAvailable: true });
+      expect(waiting.notices).toEqual([{ kind: "waitlist", purchase: true }]);
+      const closed = loadScenario("acquisti-sospesi", language, new Set());
+      expect(closed).toMatchObject({ purchasesClosed: true, account: { trialAvailable: false } });
     });
 
     it(`mostra la prova attiva, in scadenza e già usata, ${language}`, () => {

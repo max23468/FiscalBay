@@ -79,7 +79,10 @@ export function registrationComplete(status: RegistrationStatus): boolean {
 
 /**
  * Salva in una transazione ciò che la registrazione ha raccolto: il profilo, e
- * l'accettazione dei Termini con la scelta marketing, tenute in tabelle distinte.
+ * l'accettazione dei Termini con la scelta marketing, tenute in tabelle distinte. Il primo
+ * profilo salvato con la lista d'attesa attiva mette l'account in attesa; le modifiche
+ * successive non lo cambiano. Il frammento della lista d'attesa è scritto qui perché gli script
+ * Node caricano questo modulo senza risolvere altri import.
  */
 export async function completeRegistration(
   db: D1Database,
@@ -99,8 +102,9 @@ export async function completeRegistration(
       db
         .prepare(
           `INSERT INTO user_profiles
-             (user_id, first_name, last_name, account_type, company_name, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?)
+             (user_id, first_name, last_name, account_type, company_name, updated_at, waitlisted_at)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN EXISTS (
+             SELECT 1 FROM admission_settings WHERE free_waitlist = 1) THEN ?6 END)
            ON CONFLICT (user_id) DO UPDATE SET
              first_name = excluded.first_name,
              last_name = excluded.last_name,

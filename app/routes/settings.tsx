@@ -21,6 +21,7 @@ import {
   openBillingPortal,
   subscriptionView,
 } from "../domain/billing.server";
+import { admission } from "../domain/admission.server";
 import { pendingEmailChange } from "../domain/email-change.server";
 import { lifetimeContext } from "../domain/lifetime.server";
 import { chooseFreeStore, freeStoreState } from "../domain/free-store.server";
@@ -139,6 +140,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       sessions,
       pendingEmail,
       telegram,
+      admissionState,
     ],
   ] = await Promise.all([
     shellData(area, undefined, now),
@@ -154,6 +156,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
         listActiveSessions(env.DB, userId, session.session.id, language, now),
         pendingEmailChange(env.DB, userId, session.user.email),
         telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
+        admission(env.DB, userId),
       ]),
     ),
   ]);
@@ -175,6 +178,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       profile,
       plan: allowance?.premium ? "premium" : "free",
       trialAvailable: allowance?.trialAvailable ?? false,
+      ...(admissionState.waiting && !allowance?.premium ? { waitlisted: true } : {}),
       ...accountCoverage(allowance),
       ...subscription,
       // Prima del primo collegamento nessun ciclo è avviato e non c'è una quota da mostrare.
@@ -189,7 +193,8 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
           : undefined,
     },
     purchase: {
-      state: purchase?.state ?? "needs-sync",
+      // Senza spazio nessun negozio è collegato: l'acquisto attende la prima lettura.
+      state: purchase?.state ?? (admissionState.purchasesOpen ? "needs-sync" : "closed"),
       offers: checkoutOffers,
       lifetime: lifetime?.offer ?? null,
       checkout: checkoutReturn(new URL(request.url).searchParams),
@@ -305,6 +310,7 @@ export async function action({ request }: Route.ActionArgs) {
       const notices = {
         covered: t.plan.checkoutCovered,
         "needs-sync": t.plan.purchaseNeedsSync,
+        closed: t.plan.purchaseClosed,
         "sold-out": t.plan.lifetimeUnavailable,
         renewing: t.plan.lifetimeRenewing,
         unavailable: t.plan.checkoutUnavailable,

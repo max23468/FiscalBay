@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { applyInactivity } from "./admission.server";
 import { reconcileBilling } from "./billing.server";
 import { applyFreePlans } from "./free-store.server";
 import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
@@ -41,6 +42,11 @@ const tasks = {
     period: 10 * minute,
     run: (environment: Env, fetcher: typeof fetch, now: Date) =>
       refreshExpiringTokens(environment, fetcher, now),
+  },
+  // Preavvisi e pause per inattività del Free, ammissione di chi era in lista d'attesa.
+  inactivity: {
+    period: 60 * minute,
+    run: (environment: Env, _fetcher: typeof fetch, now: Date) => applyInactivity(environment, now),
   },
   // Riconciliazione degli abbonamenti con Stripe, per i webhook mancati o tardivi.
   billing: {

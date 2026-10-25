@@ -25,6 +25,8 @@ export interface PreviewState {
   confirmUnlock?: boolean;
   /** Prova attivata per finta nello scenario corrente. */
   trialStarted?: boolean;
+  /** Letture in pausa per inattività riprese per finta nello scenario corrente. */
+  resumed?: boolean;
 }
 
 /** L'anteprima esiste solo negli ambienti non Production. */
@@ -48,6 +50,7 @@ export async function readPreviewState(request: Request): Promise<PreviewState> 
       saveFailed: "saveFailed" in value && value.saveFailed === true,
       confirmUnlock: !("confirmUnlock" in value && value.confirmUnlock === false),
       trialStarted: "trialStarted" in value && value.trialStarted === true,
+      resumed: "resumed" in value && value.resumed === true,
       retried:
         "retried" in value && Array.isArray(value.retried)
           ? value.retried.filter((id): id is string => typeof id === "string").slice(0, 50)
@@ -68,6 +71,7 @@ export async function currentScenario(request: Request) {
   const language = languageFromPath(new URL(request.url).pathname);
   const scenario = loadScenario(state.scenario, language, new Set(state.unlocked), {
     trialStarted: state.trialStarted,
+    resumed: state.resumed,
   });
   const retried = new Set(state.retried);
   for (const order of scenario.orders) {
@@ -146,6 +150,15 @@ export async function simulateAction(request: Request, form: FormData) {
       { headers: { "Set-Cookie": await writePreviewState({ ...state, trialStarted: true }) } },
     );
   }
+  // La ripresa di un negozio in pausa per inattività riprende tutti quelli dello spazio.
+  if (
+    intent === "store-resume" &&
+    scenario.stores.some((store) => store.pauseReason === "inactivity")
+  )
+    return data<ActionResult>(
+      { ok: true, notice: t.stores.done["store-resume"] },
+      { headers: { "Set-Cookie": await writePreviewState({ ...state, resumed: true }) } },
+    );
   if (intent === "save" && scenario.saveFailsOnce && !state.saveFailed) {
     return data<ActionResult>(
       { ok: false },

@@ -58,6 +58,9 @@ export const it = {
       readFailedTitle: "Aggiornamento non riuscito",
       readFailedBody: (store: string) =>
         `${store}: le ultime letture da eBay non sono riuscite. FiscalBay riprova automaticamente.`,
+      inactivityTitle: "Letture in pausa per inattività",
+      inactivityBody:
+        "Con il piano Free le letture si fermano dopo 30 giorni senza accessi. Riprendile da Negozi.",
     },
     account: "Account",
     profile: "Profilo",
@@ -239,6 +242,7 @@ export const it = {
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
     quotaAction: "Passa a Premium",
+    waitlistTitle: "Sei in lista d’attesa per il Free",
     trialOffer: "Prova Premium gratis per 14 giorni, senza carta.",
     trialStatus: (days: number) =>
       `Prova Premium: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}`,
@@ -324,6 +328,11 @@ export const it = {
     syncing: "In corso",
     never: "Mai",
     pausedByPlan: "In pausa per il piano Free",
+    pausedByInactivity: "In pausa per inattività",
+    inactivityTitle: "Letture in pausa per inattività",
+    inactivityBody:
+      "Non hai aperto FiscalBay per più di 30 giorni: con il piano Free le letture da eBay si sono fermate. Riprendile per recuperare gli ordini ancora nella finestra del piano.",
+    inactivityResume: "Riprendi le letture",
     notificationsOn: "Attive",
     notificationsOff: "Disattivate",
     notificationsHeld: "Sospese",
@@ -458,6 +467,9 @@ export const it = {
       free: "Free",
       premium: "Premium",
       freeSummary: "Un negozio attivo, ultimi 30 giorni di ordini, CSV.",
+      waitlisted:
+        "Il piano Free è al completo e il tuo account è in lista d’attesa: FiscalBay non legge i tuoi negozi e non offre gli sblocchi del Free finché non verrai ammesso.",
+      waitlistedPurchase: "Intanto puoi collegare un negozio e scegliere la prova o Premium.",
       unlocksCycle: "Ordini sbloccati in questo ciclo",
       unlocksUsed: (used: number, limit: number) => `${used} di ${limit}`,
       cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
@@ -512,6 +524,7 @@ export const it = {
       pricesNote:
         "Prezzi IVA esclusa. Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
       purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
+      purchaseClosed: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
       checkoutUnavailable: "Pagamento non disponibile ora. Riprova più tardi.",
       checkoutCovered: "Il tuo spazio ha già Premium attivo.",
       checkoutProcessingTitle: "Attivazione Premium in corso",
@@ -973,6 +986,8 @@ export const it = {
       accesso: "Conferma l’indirizzo email per collegare un negozio.",
       errore: "Collegamento non riuscito. Riprova.",
       "ebay-non-risponde": "eBay non risponde: ricollega il negozio quando le letture riprendono.",
+      "lista-attesa":
+        "Il piano Free è al completo e il tuo account è in lista d’attesa: per ora non puoi collegare un negozio.",
     } as Record<string, string>,
     signInNotices: {
       "metodo-collegato": "Metodo di accesso collegato al tuo account FiscalBay.",

@@ -68,7 +68,8 @@ const allScope: Scope = {
  * Istruzioni del riallineamento, in un solo batch. Nell'ordine: in Premium il negozio
  * predefinito si dimentica, perché al prossimo downgrade vale di nuovo il primo ancora
  * collegato; nel Free si registra il predefinito se manca o se i suoi dati sono stati eliminati;
- * la pausa `plan` lascia i negozi ammessi e raggiunge gli altri. Infine i termini: nel Free gli
+ * la pausa `plan` lascia i negozi ammessi e raggiunge gli altri; una copertura toglie la pausa
+ * per inattività e il suo preavviso. Infine i termini: nel Free gli
  * ordini tornano alla finestra di trenta giorni e quelli che la perdono restano conservati, non
  * consultabili, per trenta giorni dal downgrade; i negozi esclusi conservano i propri dati per
  * trenta giorni dalla pausa. Un termine non si allunga mai.
@@ -92,6 +93,14 @@ function planStatements(db: D1Database, scope: Scope, at: string) {
       SELECT s.id FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
        WHERE ${scope.workspaces} AND (${covered("w.id")} OR s.id = ${currentStoreSql("w.id")}
          OR s.ebay_environment <> 'production'))`),
+    // La sola inattività non ferma una copertura in corso, e il preavviso ricevuto prima non
+    // vale per il Free che seguirà: ne servirà uno nuovo.
+    statement(`DELETE FROM ebay_store_pauses WHERE reason = 'inactivity' AND store_id IN (
+      SELECT s.id FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
+       WHERE ${scope.workspaces} AND ${covered("w.id")})`),
+    statement(`UPDATE workspaces SET inactivity_notice_at = NULL WHERE id IN (
+      SELECT w.id FROM workspaces w WHERE ${scope.workspaces} AND w.inactivity_notice_at IS NOT NULL
+         AND ${covered("w.id")})`),
     statement(`INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at)
       SELECT s.id, 'plan', ?1 FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
        WHERE ${scope.workspaces} AND ${realStore("s")} AND NOT ${covered("w.id")}

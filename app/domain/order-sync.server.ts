@@ -7,6 +7,7 @@ import {
   type ActiveStore,
 } from "./order-acquisition.server";
 import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-context.server";
+import { servedSql } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
 import { activeStore, writableStore } from "./store-state.server";
 import { logFailure } from "../errors";
@@ -118,6 +119,7 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
          JOIN ebay_stores s ON s.id = c.store_id
          LEFT JOIN sync_state ss ON ss.store_id = c.store_id
         WHERE ${activeStore("c", "s")} AND c.access_expires_at > ?2
+          AND ${servedSql("s.workspace_id", "?1")}
           AND (ss.polled_at IS NULL OR ss.requested_at IS NOT NULL OR ss.polled_at <= ?3)
           AND (ss.dispatched_at IS NULL OR ss.dispatched_at <= ?5)
         ORDER BY ss.polled_at IS NOT NULL, ss.polled_at, c.store_id
@@ -208,7 +210,7 @@ export type SyncRequestResult =
   /** eBay chiede di attendere: la richiesta resta e parte alla scadenza dell'attesa. */
   | "limited"
   | "not_found"
-  /** Negozio scollegato, in pausa o da ricollegare. */
+  /** Negozio scollegato, in pausa, da ricollegare o di uno spazio in lista d'attesa. */
   | "invalid";
 
 const syncMessageSchema = z.object({ syncStore: z.string().min(1).max(64) });
@@ -231,7 +233,8 @@ export async function requestStoreSync(
 ): Promise<SyncRequestResult> {
   const at = now.toISOString();
   const store = await environment.DB.prepare(
-    `SELECT c.granted_at, s.ebay_environment, ss.store_id AS started, ss.history_done_at
+    `SELECT c.granted_at, s.ebay_environment, ss.store_id AS started, ss.history_done_at,
+            ${servedSql("s.workspace_id", "?3")} AS served
        FROM ebay_stores s
        JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
        LEFT JOIN ebay_store_credentials c
@@ -245,8 +248,11 @@ export async function requestStoreSync(
       ebay_environment: ActiveStore["ebay_environment"];
       started: string | null;
       history_done_at: string | null;
+      served: number;
     }>();
   if (!store) return "not_found";
+  // In lista d'attesa basta la prima lettura del collegamento.
+  if (!store.served) return "invalid";
 
   // Registrata soltanto con un consenso valido e senza pausa.
   const request = await environment.DB.prepare(
@@ -303,9 +309,10 @@ export async function consumeStoreSync(
        JOIN ebay_stores s ON s.id = c.store_id
        JOIN sync_state ss ON ss.store_id = c.store_id
       WHERE c.store_id = ?1 AND (ss.requested_at IS NOT NULL OR ss.dispatched_at IS NOT NULL)
-        AND ${activeStore("c", "s")} AND c.access_expires_at > ?2`,
+        AND ${activeStore("c", "s")} AND c.access_expires_at > ?2
+        AND ${servedSql("s.workspace_id", "?3")}`,
   )
-    .bind(syncStore, new Date(now.getTime() + tokenMarginMilliseconds).toISOString())
+    .bind(syncStore, new Date(now.getTime() + tokenMarginMilliseconds).toISOString(), at)
     .first<ActiveStore>();
   // Lavoro già servito o negozio non più attivo. Con il token in rinnovo la richiesta resta in
   // D1 e il cron la riaccoda.
