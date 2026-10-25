@@ -23,10 +23,10 @@ export function SiteFooter({ language, className }: { language: Language; classN
         </div>
         <nav aria-label={t.legal.navigation} className="flex flex-wrap gap-4">
           <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
-            {t.legal.termini}
+            {t.legal.termsLink}
           </a>
           <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
-            {t.legal.privacy}
+            {t.legal.privacyLink}
           </a>
           <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
             {t.site.support}

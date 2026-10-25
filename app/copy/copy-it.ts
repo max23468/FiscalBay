@@ -867,6 +867,9 @@ export const it = {
     navigation: "Documenti legali",
     termini: "Termini di servizio",
     privacy: "Informativa privacy",
+    /** Etichette brevi del footer, che resta su una riga anche su smartphone. */
+    termsLink: "Termini",
+    privacyLink: "Privacy",
     version: (version: string) =>
       version.startsWith("bozza-")
         ? `Bozza del ${legalDate("it-IT", version.slice(6))}`
@@ -889,7 +892,7 @@ export const it = {
     freeQuota: (base: number) => `Con il piano Free sblocchi ${base} ordini ogni 7 giorni.`,
     freePromotion: (quota: number, date: string, base: number) =>
       `Promozione Free: ${quota} ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il ${date}, poi ${base}.`,
-    independent: "FiscalBay è un servizio indipendente, non affiliato a eBay.",
+    independent: "Servizio indipendente, non affiliato a eBay.",
     support: "Assistenza",
   },
   /** Pagina minima di accesso e ordini, finché le route reali non usano la shell. */
