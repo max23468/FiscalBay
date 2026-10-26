@@ -104,7 +104,9 @@ export async function consumeTelegramUpdate(
     )
     .bind(update.chatId, now.toISOString())
     .all<Link>();
-  if (update.topic === "start" && (update.tokenHash || links.length === 0))
+  // Soltanto l'avvio porta un token. Senza, l'avvio è l'aiuto: chi non è collegato riceve dove
+  // collegarsi, come per i comandi.
+  if (update.tokenHash)
     return consumeTelegramStart(
       env,
       {
@@ -240,7 +242,8 @@ async function readState(db: D1Database, link: Link, now: Date) {
   return {
     preferences: preferences[0] as Preferences,
     stores: stores as StoreRow[],
-    coverage: coverage[0]?.source
+    // La lettura senza tabella restituisce sempre una riga, con valori nulli senza copertura.
+    coverage: coverage[0]!.source
       ? (coverage[0] as { source: string; endsAt: string | null })
       : undefined,
   };
@@ -496,7 +499,8 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
   if (page.length === 0) return { html: escape(text.latestEmpty) };
   const environment = page.every(({ environment }) => environment === "sandbox")
     ? "sandbox"
-    : "production";
+    : // Stryker disable next-line StringLiteral: l'indirizzo distingue soltanto «sandbox»; ogni altro valore dà lo stesso risultato.
+      "production";
   const notices = page.map(({ order, environment }) => orderNotice(order, environment));
   const html = splitBlocks([
     `${icons.change.new} <b>${escape(text.latest)}</b> · <i>${escape(text.latestRange(offset + 1, offset + page.length, listed.length))}</i>`,
@@ -527,14 +531,14 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
 }
 
 /** Scelta di un pulsante delle preferenze, nella forma delle Impostazioni. */
-function preferenceChange(action: string, args: string[]): TelegramChange | null {
+function preferenceChange(action: string | undefined, args: string[]): TelegramChange | null {
   if (action === "en" && (args[0] === "0" || args[0] === "1"))
     return { name: "enabled", value: args[0] === "1" };
   if (action === "fi" && (args[0] === "fiscal" || args[0] === "all"))
     return { name: "filter", value: args[0] };
   if (action === "mo" && (args[0] === "each" || args[0] === "digest"))
     return { name: "mode", value: args[0] };
-  const time = args[0] ? `${args[0].slice(0, 2)}:${args[0].slice(2)}` : "";
+  const time = `${args[0]?.slice(0, 2)}:${args[0]?.slice(2)}`;
   if (action === "tm" && (telegramDigestTimes as readonly string[]).includes(time))
     return { name: "digestTime", value: time };
   if (action === "sx" && (args[1] === "0" || args[1] === "1") && args[2])
@@ -555,13 +559,15 @@ async function consumeCallback(
   fetcher: typeof fetch,
   now: Date,
 ) {
-  const [generation, action = "", ...args] = update.command!.split(":");
+  const [generation, action, ...args] = update.command!.split(":");
   const link = links.find((candidate) => candidate.id.slice(0, 8) === generation);
-  const language = link?.language ?? "it";
-  await quiet(
-    answerCallback(env, update.callbackId!, link ? undefined : copy[language].expired, fetcher),
-  );
-  if (!link) return;
+  // Il pulsante scaduto risponde nella lingua della chat, se è ancora collegata.
+  if (!link)
+    return quiet(
+      answerCallback(env, update.callbackId!, copy[links[0]?.language ?? "it"].expired, fetcher),
+    );
+  const language = link.language;
+  await quiet(answerCallback(env, update.callbackId!, undefined, fetcher));
   const edit = (message: BotMessage) =>
     editMessage(env, link.chatId, update.messageId!, message, fetcher);
   if (action === "st" || link.premium !== 1) return edit(await statusMessage(env, link, now));
