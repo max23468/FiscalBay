@@ -14,36 +14,9 @@ import { action as signInAction, loader as signInLoader } from "../app/routes/si
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 import { pendingEmailChange } from "../app/domain/email-change.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { passkeyFailure } from "../app/account/passkey-error";
 import { hashPassword, verifyPassword } from "../app/password.server";
-import { securityReturnPath } from "../app/app-links";
-
-it("distingue le cause passkey riconoscibili e non indovina quelle ambigue", () => {
-  for (const [name, expected] of [
-    ["AbortError", "cancelled"],
-    ["TimeoutError", "timeout"],
-    ["NotSupportedError", "unsupported"],
-    ["NotAllowedError", "incomplete"],
-    ["Error", "technical"],
-  ]) {
-    expect(passkeyFailure(new DOMException("synthetic", name))).toBe(expected);
-  }
-  expect(passkeyFailure({ code: "AUTH_CANCELLED" })).toBe("incomplete");
-  expect(passkeyFailure({ code: "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" })).toBe("duplicate");
-  expect(passkeyFailure(null)).toBe("technical");
-  for (const value of [
-    "//example.invalid",
-    "https://example.invalid",
-    "/app/impostazioni/sicurezza?delete=1",
-    "/app/impostazioni/sicurezza#unknown",
-    "/en/app/impostazioni/sicurezza",
-  ]) {
-    expect(securityReturnPath("it", value)).toBeNull();
-  }
-  expect(securityReturnPath("en", "/en/app/impostazioni/sicurezza#security-methods")).toBe(
-    "/en/app/impostazioni/sicurezza#security-methods",
-  );
-});
+import { emailSender, mailEnv, sessionCookie } from "./fixtures/account-fixtures";
+import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 /** La registrazione non apre la sessione: la apre l'accesso con la password appena scelta. */
 async function passwordSession(environment: Env, email: string, password: string) {
@@ -54,13 +27,10 @@ async function passwordSession(environment: Env, email: string, password: string
       body: JSON.stringify({ email, password }),
     }),
   );
-  return response.headers
-    .getSetCookie()
-    .map((value) => value.split(";")[0])
-    .join("; ");
+  return sessionCookie(response);
 }
 
-it("salva le password con il costo ridotto e accetta quelle già salvate da Better Auth", async () => {
+it("salva le password con il costo ridotto e rifiuta il formato predefinito di Better Auth", async () => {
   const hash = await hashPassword("password-di-prova-lunga");
   expect(hash).toMatch(/^v2:[0-9a-f]{32}:[0-9a-f]{128}$/u);
   expect(await verifyPassword({ hash, password: "password-di-prova-lunga" })).toBe(true);
@@ -89,14 +59,13 @@ it("salva le password con il costo ridotto e accetta quelle già salvate da Bett
       .first<{ password: string }>();
   expect((await stored())?.password).toMatch(/^v2:/u);
 
-  // Un hash nel formato predefinito di Better Auth resta valido per l'accesso.
+  // Un hash nel formato predefinito di Better Auth, `sale:chiave` con r=16, non apre l'accesso.
   await env.DB.prepare(
     `UPDATE "account" SET "password" = ?
       WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ?)`,
   )
-    .bind(await originalHash("password-precedente-lunga"), email)
+    .bind(await originalHash("password-di-prova-lunga"), email)
     .run();
-  expect(await passwordSession(env, email, "password-precedente-lunga")).toContain("session_token");
   expect(await passwordSession(env, email, "password-di-prova-lunga")).not.toContain(
     "session_token",
   );
@@ -106,13 +75,9 @@ it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
   for (const base of ["", "/en"]) {
     const query = "?token=synthetic&redirectTo=https://example.invalid";
     // L'accesso mostra il modulo per la nuova password, senza seguire il redirect richiesto.
-    const access = await signInLoader({
-      request: new Request(`http://localhost:5173${base}/accesso${query}`),
-    } as never);
+    const access = await routeData(signInLoader, `${base}/accesso${query}`);
     expect(access).toMatchObject({ authenticated: false, resetToken: "synthetic" });
-    const response = (await storeLinkLoader({
-      request: new Request(`http://localhost:5173${base}/app/negozi/collega${query}`),
-    } as never)) as Response;
+    const response = await routeResponse(storeLinkLoader, `${base}/app/negozi/collega${query}`);
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(`${base}/accesso`);
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -122,24 +87,14 @@ it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
 
 it("conserva il rifiuto POST da origine estranea e del collegamento senza sessione in entrambe le lingue", async () => {
   for (const base of ["", "/en"]) {
-    for (const [path, action] of [
-      ["/accesso", signInAction],
-      ["/app/negozi/collega", storeLinkAction],
-    ] as const) {
-      const response = await action({
-        request: new Request(`http://localhost:5173${base}${path}`, {
-          method: "POST",
-          headers: { origin: "https://example.invalid" },
-        }),
-      } as never);
-      expect(response.status).toBe(403);
-    }
-    const response = await storeLinkAction({
-      request: new Request(`http://localhost:5173${base}/app/negozi/collega`, {
-        method: "POST",
-        headers: { origin: "http://localhost:5173" },
-      }),
-    } as never);
+    const foreign = { origin: "https://example.invalid", fields: {} };
+    expect((await routeResponse(signInAction, `${base}/accesso`, foreign)).status).toBe(403);
+    expect(
+      (await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, foreign)).status,
+    ).toBe(403);
+    const response = await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, {
+      fields: {},
+    });
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(`${base}/app/ordini?negozio=accesso`);
   }
@@ -160,13 +115,11 @@ it.each([undefined, "[]", "", "non-json", "{}", '["non-email"]', '["ok@example.i
   "rifiuta nuove registrazioni con elenco vuoto o non valido: %s",
   async (list) => {
     const email = `rifiuto-${crypto.randomUUID()}@example.invalid`;
-    const send = vi.fn(async () => ({}));
-    const environment = {
-      ...env,
+    const send = emailSender();
+    const environment = mailEnv(send, {
       REGISTRATION_MODE: "approval",
       REGISTRATION_ALLOWED_EMAILS: list,
-      AUTH_EMAIL: { send },
-    } as Env;
+    });
     const response = await createAuth(environment).handler(
       new Request("http://localhost:5173/api/auth/sign-up/email", {
         method: "POST",
@@ -189,12 +142,10 @@ it.each([undefined, "[]", "", "non-json", "{}", '["non-email"]', '["ok@example.i
 
 it("autorizza solo email esatte, conserva il login e non rivela gli account fuori elenco", async () => {
   const email = "approvato@example.invalid";
-  const environment = {
-    ...env,
+  const environment = mailEnv(emailSender(), {
     REGISTRATION_MODE: "approval",
     REGISTRATION_ALLOWED_EMAILS: '[" Approvato@Example.Invalid "]',
-    AUTH_EMAIL: { send: vi.fn(async () => ({})) },
-  } as Env;
+  });
   const signup = (target: Env, address: string) =>
     createAuth(target).handler(
       new Request("http://localhost:5173/api/auth/sign-up/email", {
@@ -252,8 +203,8 @@ describe("Better Auth su Workers e D1", () => {
   });
 
   it("usa mittente e Reply-To previsti per verifica e reset", async () => {
-    const send = vi.fn(async () => ({ messageId: "synthetic" }));
-    const options = createAuthOptions({ ...env, AUTH_EMAIL: { send } } as Env);
+    const send = emailSender();
+    const options = createAuthOptions(mailEnv(send));
     const user = { id: "auth-email-fixture", email: "auth@example.invalid" };
     const url = "https://test.fiscalbay.it/verifica";
 
@@ -420,13 +371,10 @@ describe("Better Auth su Workers e D1", () => {
         .run();
     }
     const remove = (passkeyId: string) =>
-      securityRouteAction({
-        request: new Request(`${origin}/app/impostazioni/sicurezza`, {
-          method: "POST",
-          headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ intent: "passkey-remove", id: passkeyId }),
-        }),
-      } as never);
+      routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", {
+        cookie,
+        fields: { intent: "passkey-remove", id: passkeyId },
+      });
     expect((await remove("first")).headers.get("location")).toContain("passkey-rimossa");
     expect((await remove("second")).headers.get("location")).toContain("ultimo-accesso");
     await env.DB.prepare(
@@ -492,17 +440,14 @@ describe("Better Auth su Workers e D1", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
     const reset = () =>
-      signInAction({
-        request: new Request(`${origin}/accesso`, {
-          method: "POST",
-          headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            intent: "reimposta-password",
-            token: "synthetic-recovery-token",
-            password: "password-recuperata-lunga",
-          }),
-        }),
-      } as never);
+      routeResponse(signInAction, "/accesso", {
+        cookie,
+        fields: {
+          intent: "reimposta-password",
+          token: "synthetic-recovery-token",
+          password: "password-recuperata-lunga",
+        },
+      });
     expect((await reset()).headers.get("location")).toContain("password-reimpostata");
     expect(await auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
     expect((await reset()).headers.get("location")).toContain("recupero-scaduto");
@@ -521,7 +466,7 @@ describe("Better Auth su Workers e D1", () => {
   it("limita le verifiche WebAuthn e rifiuta origini estranee senza creare identità", async () => {
     const before = await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first();
     const origin = "https://test.fiscalbay.it";
-    const deployed = { ...env, APP_ORIGIN: origin };
+    const deployed = { ...env, APP_ORIGIN: origin as typeof env.APP_ORIGIN };
     const attempt = (requestOrigin: string) =>
       handleAuthRequest(
         new Request(`${origin}/api/auth/passkey/verify-authentication`, {
@@ -621,10 +566,7 @@ describe("Better Auth su Workers e D1", () => {
         }),
       );
       const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
-      const cookie = start.headers
-        .getSetCookie()
-        .map((value) => value.split(";")[0])
-        .join("; ");
+      const cookie = sessionCookie(start);
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
         const url = input instanceof Request ? input.url : String(input);
         if (url.endsWith("/identity/v1/oauth2/token")) {
@@ -673,13 +615,11 @@ describe("Better Auth su Workers e D1", () => {
     async (allowed) => {
       const email = allowed ? "business@example.invalid" : "business-negato@example.invalid";
       const accountId = allowed ? "ebay-business-sintetico" : "ebay-business-negato";
-      const send = vi.fn(async () => ({ messageId: "synthetic" }));
-      const environment = {
-        ...env,
+      const send = emailSender();
+      const environment = mailEnv(send, {
         REGISTRATION_MODE: "approval",
         REGISTRATION_ALLOWED_EMAILS: allowed ? '["business@example.invalid"]' : "[]",
-        AUTH_EMAIL: { send },
-      } as Env;
+      });
       const start = await createAuth(environment).handler(
         new Request("http://localhost:5173/api/auth/sign-in/social", {
           method: "POST",
@@ -688,10 +628,7 @@ describe("Better Auth su Workers e D1", () => {
         }),
       );
       const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
-      const cookie = start.headers
-        .getSetCookie()
-        .map((value) => value.split(";")[0])
-        .join("; ");
+      const cookie = sessionCookie(start);
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
         const url = input instanceof Request ? input.url : String(input);
         if (url.endsWith("/identity/v1/oauth2/token")) {
@@ -758,10 +695,7 @@ describe("Better Auth su Workers e D1", () => {
           headers: {
             "content-type": "application/json",
             origin: "http://localhost:5173",
-            cookie: response.headers
-              .getSetCookie()
-              .map((value) => value.split(";")[0])
-              .join("; "),
+            cookie: sessionCookie(response),
           },
           body: JSON.stringify({ accountId: account!.id }),
         }),
@@ -789,10 +723,7 @@ describe("Better Auth su Workers e D1", () => {
         }),
       );
       const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
-      const cookie = start.headers
-        .getSetCookie()
-        .map((value) => value.split(";")[0])
-        .join("; ");
+      const cookie = sessionCookie(start);
       const log = vi.spyOn(console, "error").mockImplementation(() => {});
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
         const url = input instanceof Request ? input.url : String(input);
@@ -840,7 +771,7 @@ describe("Better Auth su Workers e D1", () => {
   ])(
     "collega eBay soltanto alla sessione verificata che ha iniziato il consenso: %s",
     async (scenario) => {
-      const environment = { ...env, AUTH_EMAIL: { send: vi.fn(async () => ({})) } } as Env;
+      const environment = mailEnv();
       const auth = createAuth(environment);
       const post = (path: string, body: Record<string, unknown>, cookie = "") =>
         auth.handler(
@@ -854,11 +785,6 @@ describe("Better Auth su Workers e D1", () => {
             body: JSON.stringify(body),
           }),
         );
-      const cookies = (response: Response) =>
-        response.headers
-          .getSetCookie()
-          .map((value) => value.split(";")[0])
-          .join("; ");
       const email = `collegamento-${scenario}@example.invalid`;
       const ebayId = `identita-ebay-${scenario}`;
       if (scenario === "occupato") {
@@ -874,7 +800,7 @@ describe("Better Auth su Workers e D1", () => {
         password: "Password-sintetica-123!",
       });
       const { user } = await signup.clone().json<{ user: { id: string } }>();
-      const sessionCookie = await passwordSession(env, email, "Password-sintetica-123!");
+      const signedUpCookie = await passwordSession(env, email, "Password-sintetica-123!");
       if (scenario !== "non-verificata") {
         await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
           .bind(user.id)
@@ -883,12 +809,12 @@ describe("Better Auth su Workers e D1", () => {
       const start = await post(
         "link-social",
         { provider: "ebay", callbackURL: "/?accesso=ebay-collegato" },
-        sessionCookie,
+        signedUpCookie,
       );
       expect(start.status).toBe(200);
       const url = new URL((await start.json<{ url: string }>()).url);
       expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-      let callbackSession = sessionCookie;
+      let callbackSession = signedUpCookie;
       if (scenario === "revocata")
         await env.DB.prepare('DELETE FROM "session" WHERE "userId" = ?').bind(user.id).run();
       if (scenario === "assente") callbackSession = "";
@@ -930,7 +856,7 @@ describe("Better Auth su Workers e D1", () => {
           handleAuthRequest(
             new Request(
               `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${url.searchParams.get("state")}`,
-              { headers: { cookie: `${callbackSession}; ${cookies(start)}` } },
+              { headers: { cookie: `${callbackSession}; ${sessionCookie(start)}` } },
             ),
             environment,
           );
@@ -981,18 +907,18 @@ describe("Better Auth su Workers e D1", () => {
           .first();
         expect(localUser).toEqual({ email, emailVerified: 1 });
         expect((await callback()).headers.get("location")).toContain("error=");
-        await post("sign-out", {}, sessionCookie);
+        await post("sign-out", {}, signedUpCookie);
         const login = await post("sign-in/social", { provider: "ebay", callbackURL: "/" });
         const loginUrl = new URL((await login.json<{ url: string }>()).url);
         const signedIn = await handleAuthRequest(
           new Request(
             `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${loginUrl.searchParams.get("state")}`,
-            { headers: { cookie: cookies(login) } },
+            { headers: { cookie: sessionCookie(login) } },
           ),
           environment,
         );
         const current = await auth.api.getSession({
-          headers: new Headers({ cookie: cookies(signedIn) }),
+          headers: new Headers({ cookie: sessionCookie(signedIn) }),
         });
         expect(current?.user.id).toBe(user.id);
         expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_stores").first()).toEqual({
@@ -1003,7 +929,7 @@ describe("Better Auth su Workers e D1", () => {
           .run();
         const refreshed = await auth.api.getAccessToken({
           body: { accountId: account!.id },
-          headers: new Headers({ cookie: cookies(signedIn) }),
+          headers: new Headers({ cookie: sessionCookie(signedIn) }),
         });
         expect(refreshed.accessToken).toBe("access-token-sintetico");
         const renewed = await env.DB.prepare(
@@ -1012,14 +938,18 @@ describe("Better Auth su Workers e D1", () => {
           .bind(account!.id)
           .first<{ expiry: string }>();
         expect(new Date(renewed!.expiry).getTime()).toBeGreaterThan(Date.now());
-        const unlink = await post("unlink-account", { accountId: account!.id }, cookies(signedIn));
+        const unlink = await post(
+          "unlink-account",
+          { accountId: account!.id },
+          sessionCookie(signedIn),
+        );
         expect(unlink.status).toBe(200);
         expect(
           await env.DB.prepare('SELECT id FROM "account" WHERE id = ?').bind(account!.id).first(),
         ).toBeNull();
-        await post("revoke-sessions", {}, cookies(signedIn));
+        await post("revoke-sessions", {}, sessionCookie(signedIn));
         expect(
-          await auth.api.getSession({ headers: new Headers({ cookie: cookies(signedIn) }) }),
+          await auth.api.getSession({ headers: new Headers({ cookie: sessionCookie(signedIn) }) }),
         ).toBeNull();
       } finally {
         fetchMock.mockRestore();
@@ -1030,13 +960,7 @@ describe("Better Auth su Workers e D1", () => {
 
 describe("Collegamento e modifica dell'identità", () => {
   const origin = "http://localhost:5173";
-  const cookies = (response: Response) =>
-    response.headers
-      .getSetCookie()
-      .map((value) => value.split(";")[0])
-      .join("; ");
-  const withEmail = (send = vi.fn(async () => ({}))) =>
-    ({ ...env, AUTH_EMAIL: { send } }) as unknown as Env;
+  const withEmail = (send = emailSender()) => mailEnv(send);
   const post = (environment: Env, path: string, body: Record<string, unknown>, cookie = "") =>
     createAuth(environment).handler(
       new Request(`${origin}/api/auth/${path}`, {
@@ -1046,25 +970,10 @@ describe("Collegamento e modifica dell'identità", () => {
       }),
     );
   const appAction = (cookie: string, fields: Record<string, string>) =>
-    signInAction({
-      request: new Request(`${origin}/accesso`, {
-        method: "POST",
-        headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(fields),
-      }),
-    } as never);
+    routeResponse(signInAction, "/accesso", { cookie, fields });
   /** Azione della pagina Sicurezza; chi non può vederla riceve il redirect lanciato. */
   const securityAction = (cookie: string, fields: Record<string, string>) =>
-    securityRouteAction({
-      request: new Request(`${origin}/app/impostazioni/sicurezza`, {
-        method: "POST",
-        headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(fields),
-      }),
-    } as never).catch((thrown: unknown) => {
-      if (thrown instanceof Response) return thrown;
-      throw thrown;
-    });
+    routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", { cookie, fields });
   const signUp = async (environment: Env, email: string, verified: boolean) => {
     const response = await post(environment, "sign-up/email", {
       name: "Identità sintetica",
@@ -1122,7 +1031,7 @@ describe("Collegamento e modifica dell'identità", () => {
     try {
       return await handleAuthRequest(
         new Request(`${origin}/api/auth/callback/google?code=synthetic&state=${state}`, {
-          headers: { cookie: [cookie, cookies(start)].filter(Boolean).join("; ") },
+          headers: { cookie: [cookie, sessionCookie(start)].filter(Boolean).join("; ") },
         }),
         environment,
       );
@@ -1133,12 +1042,11 @@ describe("Collegamento e modifica dell'identità", () => {
 
   it.each([true, false])("applica l'autorizzazione al callback Google: %s", async (allowed) => {
     const email = `google-approvazione-${allowed}@gmail.com`;
-    const send = vi.fn(async () => ({}));
-    const environment = {
-      ...withEmail(send),
+    const send = emailSender();
+    const environment = mailEnv(send, {
       REGISTRATION_MODE: "approval",
       REGISTRATION_ALLOWED_EMAILS: allowed ? JSON.stringify([email.toUpperCase()]) : "[]",
-    };
+    });
     const result = await googleCallback(
       environment,
       await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
@@ -1262,7 +1170,7 @@ describe("Collegamento e modifica dell'identità", () => {
   );
 
   it("chiede la propria conferma a un nuovo utente Google non autorevole", async () => {
-    const send = vi.fn(async () => ({}));
+    const send = emailSender();
     const environment = withEmail(send);
     const email = "nuovo@dominio-personale.invalid";
     await googleCallback(
@@ -1283,7 +1191,7 @@ describe("Collegamento e modifica dell'identità", () => {
   });
 
   it("riconosce Google dal subject anche con email cambiata, senza fondere utenti", async () => {
-    const send = vi.fn(async () => ({}));
+    const send = emailSender();
     const environment = withEmail(send);
     const first = await signUp(environment, `prima.identita@${gmailDomain}`, true);
     const second = await signUp(environment, `seconda.identita@${gmailDomain}`, true);
@@ -1318,7 +1226,7 @@ describe("Collegamento e modifica dell'identità", () => {
       { sub: "google-stabile", email: `seconda.identita@${gmailDomain}`, email_verified: true },
     );
     const session = await createAuth(environment).api.getSession({
-      headers: new Headers({ cookie: cookies(signedIn) }),
+      headers: new Headers({ cookie: sessionCookie(signedIn) }),
     });
     expect(session?.user.id).toBe(first.id);
     expect(session?.user.email).toBe(`prima.identita@${gmailDomain}`);
@@ -1551,12 +1459,7 @@ describe("Sessioni, revoche e area admin", () => {
   });
 
   const origin = "http://localhost:5173";
-  const cookies = (response: Response) =>
-    response.headers
-      .getSetCookie()
-      .map((value) => value.split(";")[0])
-      .join("; ");
-  const jsonRequest = (path: string, cookie: string, body?: unknown) =>
+  const jsonRequest = async (path: string, cookie: string, body?: unknown) =>
     handleAuthRequest(
       new Request(`${origin}/api/auth/${path}`, {
         method: body === undefined ? "GET" : "POST",
@@ -1567,28 +1470,15 @@ describe("Sessioni, revoche e area admin", () => {
     );
   const userAgent =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15";
-  const form = (path: string, cookie: string, fields: Record<string, string>) =>
-    new Request(`${origin}${path}`, {
-      method: "POST",
-      headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(fields),
-    });
   const securityAction = (cookie: string, fields: Record<string, string>) =>
-    securityRouteAction({ request: form("/app/impostazioni/sicurezza", cookie, fields) } as never)
-      .catch((thrown: unknown) => {
-        if (thrown instanceof Response) return thrown;
-        throw thrown;
-      })
-      .then((response) => response.headers.get("location"));
-  const home = (cookie: string) =>
-    signInLoader({ request: new Request(`${origin}/accesso`, { headers: { cookie } }) } as never);
+    routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", { cookie, fields }).then(
+      (response) => response.headers.get("location"),
+    );
+  const home = (cookie: string) => routeData(signInLoader, "/accesso", { cookie });
   /** Pagina Sicurezza; chi non può vederla torna all'accesso con l'esito ricevuto. */
   const security = async (cookie: string, path = "/app/impostazioni/sicurezza") => {
     try {
-      return await securityLoader({
-        request: new Request(`${origin}${path}`, { headers: { cookie } }),
-        params: { sezione: "sicurezza" },
-      } as never);
+      return await routeData(securityLoader, path, { cookie, params: { sezione: "sicurezza" } });
     } catch (thrown) {
       if (thrown instanceof Response) return thrown.headers.get("location");
       throw thrown;
@@ -1668,19 +1558,15 @@ describe("Sessioni, revoche e area admin", () => {
     for (const prefix of ["", "/en"]) {
       const user = await createUser(`ritorno${prefix.replace("/", "-")}@example.invalid`);
       const target = `${prefix}/app/impostazioni/sicurezza#security-email`;
-      const area = await securityLoader({
-        request: new Request(`${origin}${prefix}/app/impostazioni/sicurezza`, {
-          headers: { cookie: user.cookie },
-        }),
+      const area = await routeData(securityLoader, `${prefix}/app/impostazioni/sicurezza`, {
+        cookie: user.cookie,
         params: { sezione: "sicurezza" },
-      } as never);
+      });
       expect(area.userId).toBe(user.id);
-      const out = await securityRouteAction({
-        request: form(`${prefix}/app/impostazioni/sicurezza`, user.cookie, {
-          intent: "riautentica",
-          returnTo: target,
-        }),
-      } as never);
+      const out = await routeResponse(securityRouteAction, `${prefix}/app/impostazioni/sicurezza`, {
+        cookie: user.cookie,
+        fields: { intent: "riautentica", returnTo: target },
+      });
       const destination = new URL(out.headers.get("location")!, origin);
       expect(destination.pathname).toBe(`${prefix}/accesso`);
       expect(destination.searchParams.get("returnTo")).toBe(target);
@@ -1690,13 +1576,9 @@ describe("Sessioni, revoche e area admin", () => {
         ["https://example.invalid", `${prefix}/app/ordini`],
         [`${prefix}/app/negozi`, `${prefix}/app/ordini`],
       ]) {
-        const signedIn = await signInAction({
-          request: form(`${prefix}/accesso`, "", {
-            email: user.email,
-            password: "Password-sintetica-123!",
-            returnTo,
-          }),
-        } as never);
+        const signedIn = await routeResponse(signInAction, `${prefix}/accesso`, {
+          fields: { email: user.email, password: "Password-sintetica-123!", returnTo },
+        });
         expect(signedIn.headers.get("location")).toBe(expected);
       }
     }
@@ -1705,16 +1587,16 @@ describe("Sessioni, revoche e area admin", () => {
   /** Esito del loader admin: 404 per chi non è admin, altrimenti il livello di accesso. */
   const admin = async (cookie: string) => {
     try {
-      const result = await adminLoader({
-        request: new Request(`${origin}/admin`, { headers: { cookie } }),
-      } as never);
+      const result = await routeData(adminLoader, "/admin", { cookie });
       return result.access;
     } catch (error) {
       return (error as { init?: { status?: number } }).init?.status;
     }
   };
   const signIn = async (email: string) =>
-    cookies(await jsonRequest("sign-in/email", "", { email, password: "Password-sintetica-123!" }));
+    sessionCookie(
+      await jsonRequest("sign-in/email", "", { email, password: "Password-sintetica-123!" }),
+    );
   const createUser = async (email: string) => {
     const response = await jsonRequest("sign-up/email", "", {
       name: "Sessioni sintetiche",
@@ -1766,9 +1648,10 @@ describe("Sessioni, revoche e area admin", () => {
       await securityAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),
     ).toBe("/accesso");
     expect(await securityAction(cookie, { intent: "esci-altri" })).toBe("/accesso");
-    const link = await storeLinkAction({
-      request: form("/app/negozi/collega", cookie, {}),
-    } as never);
+    const link = await routeResponse(storeLinkAction, "/app/negozi/collega", {
+      cookie,
+      fields: {},
+    });
     expect(link.headers.get("location")).toContain("negozio=accesso");
     expect((await jsonRequest("passkey/generate-register-options", cookie)).status).toBe(401);
     expect(await admin(cookie)).toBe(404);
@@ -1787,7 +1670,7 @@ describe("Sessioni, revoche e area admin", () => {
         },
       );
     const agentOf = async (response: Response) => {
-      const token = decodeURIComponent(cookies(response).split("=")[1]!).split(".")[0];
+      const token = decodeURIComponent(sessionCookie(response).split("=")[1]!).split(".")[0];
       return (
         await env.DB.prepare('SELECT "userAgent" FROM "session" WHERE "token" = ?')
           .bind(token)
@@ -1891,7 +1774,7 @@ describe("Sessioni, revoche e area admin", () => {
       { intent: "collega-metodo", metodo: "google" },
       { intent: "rimuovi-metodo", metodo: "password" },
       { intent: "passkey-remove", id: "qualsiasi" },
-    ]) {
+    ] as Record<string, string>[]) {
       expect(await securityAction(user.cookie, fields)).toContain("nuovo-accesso");
     }
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
@@ -2051,7 +1934,7 @@ describe("Sessioni, revoche e area admin", () => {
       const signature = new Uint8Array([0x30, body.length, ...body]);
       const response = await jsonRequest(
         "passkey/verify-authentication",
-        [cookie, cookies(options)].filter(Boolean).join("; "),
+        [cookie, sessionCookie(options)].filter(Boolean).join("; "),
         {
           response: {
             id: credentialId,
@@ -2067,7 +1950,7 @@ describe("Sessioni, revoche e area admin", () => {
         },
       );
       expect(response.ok).toBe(true);
-      return cookies(response);
+      return sessionCookie(response);
     };
   }
 
@@ -2092,9 +1975,7 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await passkeyVerified(presenceOnly)).toBe(0);
     expect(await admin(presenceOnly)).toBe("verify");
     // Dopo l'accesso la pagina spiega che manca la verifica, invece di ricaricarsi uguale.
-    const retried = await adminLoader({
-      request: new Request(`${origin}/admin?conferma`, { headers: { cookie: presenceOnly } }),
-    } as never);
+    const retried = await routeData(adminLoader, "/admin?conferma", { cookie: presenceOnly });
     expect(retried).toMatchObject({ access: "verify", unverified: true });
     expect(await admin(user.cookie)).toBe("verify");
 

@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
-import type { SearchResults } from "~/components/app-shell";
+import type { SearchResults } from "~/components/shell-search";
 import { buyerNameView } from "../contact";
 import { localizedPath } from "../i18n";
 import { searchQuery } from "../orders/order-search";

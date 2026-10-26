@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -86,15 +94,27 @@ describe("livello del gate dai file modificati", () => {
       full: "verify",
     });
     assert.match(scripts[levelScripts.tooling], /pnpm verify:documents\b/u);
+    // Il catalogo delle pagine è Node puro: lo prova chi modifica il suo script.
+    assert.match(scripts[levelScripts.tooling], /&& pnpm verify:pages &&/u);
     assert.match(scripts[levelScripts.unit], /pnpm verify:tooling\b/u);
     for (const level of ["build", "full"]) {
       assert.match(scripts[levelScripts[level]], /^pnpm verify:unit\b/u, level);
+      assert.doesNotMatch(scripts[levelScripts[level]], /verify:pages/u, level);
       // La build test resta l'ultima: è l'artefatto caricato e distribuito.
-      assert.match(scripts[levelScripts[level]], /&& pnpm verify:pages && .*pnpm build$/u, level);
+      assert.match(scripts[levelScripts[level]], /&& pnpm build$/u, level);
     }
     assert.equal(plan(["README.md"]).script, levelScripts.docs);
     assert.equal(plan(["AGENTS.md"]).script, levelScripts.tooling);
     assert.equal(plan([]).script, levelScripts.full);
+  });
+
+  it("classifica ogni script senza farlo ricadere nel livello completo", () => {
+    // Uno script nuovo fuori dagli elenchi provocherebbe build, browser e deploy a ogni modifica.
+    const scripts = readdirSync("scripts", { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".mjs") && !file.endsWith(".test.mjs"))
+      .map((file) => `scripts/${file.split(path.sep).join("/")}`);
+    assert.ok(scripts.length > 0);
+    for (const file of scripts) assert.notEqual(fileLevel(file), "full", file);
   });
 
   it("separa prove unitarie, prove browser e prodotto distribuito", () => {
@@ -175,7 +195,12 @@ describe("variabili del Worker test", () => {
     assert.equal(testVariablesOnly(config, config), false);
     const mixed = plan([configFile, "app/root.tsx"], [], false, configChange(testValue));
     assert.deepEqual([mixed.gate, mixed.e2e, mixed.deploy], ["full", true, true]);
-    const withTests = plan([configFile, "test/stripe.spec.ts"], [], false, configChange(testValue));
+    const withTests = plan(
+      [configFile, "test/stripe-billing.spec.ts"],
+      [],
+      false,
+      configChange(testValue),
+    );
     assert.deepEqual([withTests.gate, withTests.e2e, withTests.deploy], ["build", false, true]);
   });
 });
@@ -226,7 +251,7 @@ describe("spec browser modificate", () => {
   const sources = [{ path: "app/routes/stores.tsx", text: "export default function Page() {}" }];
 
   it("seleziona per nome le sole spec modificate, in entrambi i browser", () => {
-    const selected = plan(["e2e/settings.spec.ts", "test/stripe.spec.ts"], sources);
+    const selected = plan(["e2e/settings.spec.ts", "test/stripe-billing.spec.ts"], sources);
     assert.deepEqual(
       [selected.gate, selected.browserGrep, selected.browsers, selected.deploy],
       ["build", "settings.spec", "chromium,webkit", false],

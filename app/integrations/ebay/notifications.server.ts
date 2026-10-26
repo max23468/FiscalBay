@@ -1,7 +1,8 @@
 import { verify } from "node:crypto";
 import { z } from "zod";
 import { upstreamJson } from "../http.server";
-import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
+import type { EbayEnvironment } from "../../view-models";
+import { ebayConfiguration } from "./environment.server";
 
 const identifier = z.string().min(1).max(256);
 const encodedSignature = z.string().min(1).max(2048);
@@ -35,13 +36,13 @@ export class NotificationLimit extends Error {}
 export async function verifyOrderNotification(
   body: string,
   signature: string | null,
-  environment: Env,
+  env: Env,
   ebayEnvironment: EbayEnvironment,
   fetcher: typeof fetch,
   now: number,
 ) {
   const header = headerSchema.parse(JSON.parse(atob(encodedSignature.parse(signature))));
-  const configuration = ebayConfiguration(environment, ebayEnvironment);
+  const configuration = ebayConfiguration(env, ebayEnvironment);
   const cacheId = `${configuration.clientId}:${ebayEnvironment}:${header.kid}`;
   let publicKey = keys.get(cacheId);
   if (!publicKey || publicKey.until <= now) {

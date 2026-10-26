@@ -2,12 +2,8 @@ import type { AppCopy } from "../../app-copy";
 import { buyerNameView } from "../../contact";
 import type { Language } from "../../i18n";
 import { displayTaxValue } from "../../tax-quality";
-import {
-  addressRows,
-  type AccountView,
-  type OrderView,
-  type TaxIdentifierView,
-} from "../../view-models";
+import { type AccountView, type OrderView, type TaxIdentifierView } from "../../view-models";
+import { addressRows } from "../../format";
 
 /**
  * Solo valori già autorizzati dal server; suggerimenti e identificativi bloccati esclusi.

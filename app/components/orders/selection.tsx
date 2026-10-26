@@ -13,11 +13,10 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import type { AppCopy } from "../../app-copy";
+import { useCopy } from "~/components/copy-context";
 
 /** Barra della modalità Seleziona: conteggi, sblocco multiplo confermato ed esportazione. */
 export function SelectionBar({
-  t,
   selected,
   lockedSelected,
   remaining,
@@ -25,7 +24,6 @@ export function SelectionBar({
   onCancel,
   onExport,
 }: {
-  t: AppCopy;
   selected: string[];
   lockedSelected: string[];
   remaining: number | null;
@@ -34,6 +32,7 @@ export function SelectionBar({
   /** Apre l'esportazione degli ordini selezionati; assente se la sezione non esiste. */
   onExport?: () => void;
 }) {
+  const { t } = useCopy();
   const count = lockedSelected.length;
   const exceeds = remaining !== null && count > remaining;
   const bar = useRef<HTMLDivElement>(null);

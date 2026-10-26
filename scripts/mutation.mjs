@@ -65,52 +65,6 @@ export function evaluate(report) {
     );
 }
 
-const poolCrash = "An error occurred outside of a test run";
-
-/**
- * Righe dei mutanti interrotti da un errore del pool di test fuori da ogni prova, come intervalli
- * `mutate` di Stryker. Il worker di Cloudflare cade di rado sotto carico: il mutante non ha un esito
- * e si ripete una volta, mentre un errore durante una prova resta un fallimento.
- */
-export function crashedRanges(report) {
-  const ranges = Object.entries(report.files ?? {}).flatMap(([file, { mutants }]) =>
-    mutants
-      .filter(
-        ({ status, statusReason }) =>
-          status === "RuntimeError" && statusReason?.startsWith(poolCrash),
-      )
-      .map(({ location }) => `${file}:${location.start.line}-${location.end.line}`),
-  );
-  return [...new Set(ranges)];
-}
-
-/** Report con l'esito della ripetizione al posto di ogni mutante interrotto che vi compare. */
-export function mergeRetry(report, retry) {
-  const key = ({ location, mutatorName, replacement }) =>
-    JSON.stringify([location.start, location.end, mutatorName, replacement]);
-  const outcomes = new Map(
-    Object.values(retry.files ?? {})
-      .flatMap(({ mutants }) => mutants)
-      .map((mutant) => [key(mutant), mutant]),
-  );
-  return {
-    ...report,
-    files: Object.fromEntries(
-      Object.entries(report.files ?? {}).map(([file, entry]) => [
-        file,
-        {
-          ...entry,
-          mutants: entry.mutants.map((mutant) =>
-            mutant.status === "RuntimeError" && outcomes.has(key(mutant))
-              ? outcomes.get(key(mutant))
-              : mutant,
-          ),
-        },
-      ]),
-    ),
-  };
-}
-
 /**
  * Test della suite pertinente che importano il modulo, anche indirettamente. Senza consumatori
  * riconoscibili resta l'intera suite: un test mancante produce sopravvissuti, non un successo.
@@ -172,50 +126,32 @@ async function runTarget(target, files) {
   mkdirSync(directory, { recursive: true });
   const reportPath = `${directory}/mutation.json`;
   const settings = JSON.parse(readFileSync("stryker.config.json", "utf8"));
+  const configPath = `${directory}/stryker.json`;
+  writeFileSync(
+    configPath,
+    JSON.stringify({
+      ...settings,
+      concurrency: mutationConcurrency(settings.concurrency),
+      mutate: [target],
+      jsonReporter: { fileName: reportPath },
+      vitest: { configFile: "vitest.mutation.config.ts" },
+    }),
+  );
   const tests = consumerTests(target, files);
   const start = Date.now();
-  const stryker = (name, overrides) => {
-    const configPath = `${directory}/${name}`;
-    writeFileSync(
-      configPath,
-      JSON.stringify({
-        ...settings,
-        concurrency: mutationConcurrency(settings.concurrency),
-        mutate: [target],
-        jsonReporter: { fileName: reportPath },
-        vitest: { configFile: "vitest.mutation.config.ts" },
-        ...overrides,
-      }),
-    );
-    return new Promise((resolve, reject) => {
-      const child = spawn("pnpm", ["exec", "stryker", "run", configPath], {
-        stdio: "inherit",
-        env: {
-          ...process.env,
-          MUTATION_TARGET: target,
-          MUTATION_TEST_FILES: JSON.stringify(tests),
-        },
-      });
-      child.on("error", reject);
-      child.on("close", resolve);
+  const code = await new Promise((resolve, reject) => {
+    const child = spawn("pnpm", ["exec", "stryker", "run", configPath], {
+      stdio: "inherit",
+      env: {
+        ...process.env,
+        MUTATION_TARGET: target,
+        MUTATION_TEST_FILES: JSON.stringify(tests),
+      },
     });
-  };
-  let code = await stryker("stryker.json", {});
-  let report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, "utf8")) : undefined;
-  const ranges = report ? crashedRanges(report) : [];
-  if (ranges.length > 0) {
-    const retryPath = `${directory}/retry.json`;
-    const retryCode = await stryker("retry-stryker.json", {
-      concurrency: 1,
-      mutate: ranges,
-      jsonReporter: { fileName: retryPath },
-    });
-    if (retryCode !== 0) code = retryCode;
-    if (existsSync(retryPath)) {
-      report = mergeRetry(report, JSON.parse(readFileSync(retryPath, "utf8")));
-      writeFileSync(reportPath, JSON.stringify(report));
-    }
-  }
+    child.on("error", reject);
+    child.on("close", resolve);
+  });
+  const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, "utf8")) : undefined;
   const failures = report ? evaluate(report) : ["report mutation assente"];
   if (code !== 0) failures.push(`Stryker terminato con codice ${code}`);
   const counts = {};

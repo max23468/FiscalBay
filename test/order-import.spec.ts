@@ -12,7 +12,15 @@ import {
 import { orderSuggestions } from "../app/domain/order-suggestions.server";
 import { deleteStoreData, listStores } from "../app/domain/stores.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
-import { now, resetDatabase, resetOrderFixtures, seed } from "./fixtures/database-fixtures";
+import {
+  insertCredentials,
+  insertEntitlement,
+  insertStorePause,
+  now,
+  resetDatabase,
+  resetOrderFixtures,
+  seed,
+} from "./fixtures/database-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -71,16 +79,12 @@ describe("modello ordini", () => {
       .then((row) => row!.n);
 
   beforeEach(async () => {
-    await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
     await seed();
     await resetOrderFixtures();
-    await env.DB.prepare(
-      `INSERT INTO ebay_store_credentials
-         (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-       VALUES ('s-a', 'a', ?1, 'r', ?1, ?2), ('s-b', 'a', ?1, 'r', ?1, ?2)`,
-    )
-      .bind(now, grantedAt)
-      .run();
+    await env.DB.batch([
+      insertCredentials({ accessExpiresAt: now, grantedAt }),
+      insertCredentials({ storeId: "s-b", accessExpiresAt: now, grantedAt }),
+    ]);
   });
 
   describe("suggerimenti fiscali dai precedenti", () => {
@@ -118,8 +122,12 @@ describe("modello ordini", () => {
       return result.orderId;
     }
     async function premium() {
-      await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-        VALUES ('suggestions-premium', 'w-a', 'premium', '2026-09-01T00:00:00.000Z', '2026-10-01T00:00:00.000Z')`).run();
+      await insertEntitlement({
+        id: "suggestions-premium",
+        source: "premium",
+        startsAt: "2026-09-01T00:00:00.000Z",
+        endsAt: "2026-10-01T00:00:00.000Z",
+      }).run();
     }
     const read = (id: string, user = "u-a", at = new Date(now)) =>
       orderSuggestions(env.DB, user, [id], "production", at);
@@ -287,11 +295,7 @@ describe("modello ordini", () => {
         VALUES ('s-other', 'w-a', 'e-other', ?1, 'Negozio precedente')`)
         .bind(now)
         .run();
-      await env.DB.prepare(`INSERT INTO ebay_store_credentials
-        (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-        VALUES ('s-other', 'a', ?1, 'r', ?1, ?2)`)
-        .bind(now, grantedAt)
-        .run();
+      await insertCredentials({ storeId: "s-other", accessExpiresAt: now, grantedAt }).run();
       const source = await imported(
         "previous",
         "2026-09-11T00:00:00.000Z",
@@ -322,11 +326,7 @@ describe("modello ordini", () => {
       await env.DB.prepare(
         "UPDATE ebay_stores SET ebay_environment = 'production' WHERE id = 's-other'",
       ).run();
-      await env.DB.prepare(
-        "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-other', 'plan', ?)",
-      )
-        .bind(now)
-        .run();
+      await insertStorePause({ storeId: "s-other", reason: "plan" }).run();
       expect((await read(current)).get(current)!.suggestions).toEqual([]);
       await env.DB.prepare("DELETE FROM ebay_store_pauses WHERE store_id = 's-other'").run();
       await deleteStoreData(env.DB, "u-a", "s-other", "Negozio precedente", new Date(now));
@@ -710,9 +710,7 @@ describe("modello ordini", () => {
     // Il ricollegamento conserva il limite di cancellazione anche per ordini mai importati.
     await env.DB.batch([
       env.DB.prepare("UPDATE ebay_stores SET disconnected_at = NULL, data_deleted_at = NULL"),
-      env.DB.prepare(
-        "INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at) VALUES ('s-a', 'a', ?1, 'r', ?1, ?2)",
-      ).bind("2027-01-01T00:00:00.000Z", grantedAt),
+      insertCredentials({ accessExpiresAt: "2027-01-01T00:00:00.000Z", grantedAt }),
     ]);
     expect(
       await recordOrderObservation(
@@ -2566,11 +2564,7 @@ describe("modello ordini", () => {
         observation(),
       ),
     ).toEqual({ outcome: "not_writable" });
-    await env.DB.prepare(
-      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertStorePause().run();
     expect(await recordOrderObservation(env.DB, target(), observation())).toEqual({
       outcome: "not_writable",
     });
@@ -2578,11 +2572,7 @@ describe("modello ordini", () => {
     // Anche un ordine già salvato non cambia dopo la pausa.
     await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
     await recordOrderObservation(env.DB, target(), observation());
-    await env.DB.prepare(
-      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertStorePause().run();
     const later = observation({
       lastModifiedTime: "2026-09-10T12:00:00Z",
       paymentStatus: "PENDING",

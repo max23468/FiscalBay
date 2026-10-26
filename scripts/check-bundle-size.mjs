@@ -56,7 +56,11 @@ export function measure(directory) {
   const chain = (id) => (id ? [...chain(routes[id].parentId), routes[id]] : []);
 
   const pages = Object.values(routes)
-    .filter((route) => route.hasDefaultExport && route.id !== "root")
+    // Una layout senza percorso non è una pagina: pesa nelle pagine figlie.
+    .filter(
+      (route) =>
+        route.hasDefaultExport && route.id !== "root" && (route.path !== undefined || route.index),
+    )
     .map((route) => {
       const ancestors = chain(route.id);
       const urls = new Set([entry.module, ...entry.imports]);

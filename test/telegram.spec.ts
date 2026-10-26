@@ -6,7 +6,6 @@ import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { deliverTelegram, zonedInstant } from "../app/domain/telegram-deliveries.server";
 import type { VisibleOrder } from "../app/domain/orders.server";
 import {
-  appUrl,
   copyButtons,
   digestMessage,
   emptyFiscalKey,
@@ -41,8 +40,9 @@ import {
   telegramConfigured,
   linkToken as randomLinkToken,
   verifyTelegramUpdate,
+  type TelegramStart,
 } from "../app/integrations/telegram.server";
-import { consumeWebhooks, receiveWebhook } from "../app/integrations/webhooks.server";
+import { consumeWebhooks, receiveWebhook } from "../app/webhooks.server";
 import {
   configureBotCommands,
   consumeTelegramUpdate,
@@ -54,17 +54,22 @@ import { action as settingsAction, loader as settingsLoader } from "../app/route
 import { loader as storesLoader } from "../app/routes/stores";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import {
+  insertEntitlement,
   insertStore,
+  insertStorePause,
   insertTaxIdentifiers,
+  insertWorkspace,
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
-import { queueMessage } from "./fixtures/queue-fixture";
+import { appUrl } from "../app/app-links";
+import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
+import { callRoute, routePage } from "./fixtures/route-fixtures";
 
 const origin = "http://localhost:5173";
 const secret = env.TELEGRAM_WEBHOOK_SECRET!;
-const send = vi.fn<Queue["send"]>().mockResolvedValue(undefined);
-const environment = { ...env, WORK_QUEUE: { send } } as Env;
+const send = vi.fn<Queue["send"]>().mockResolvedValue(queued);
+const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) };
 const later = (minutes: number) => new Date(Date.parse(now) + minutes * 60_000);
 
 type BotCall = { method: string; params: Record<string, unknown> };
@@ -98,22 +103,17 @@ async function account(name: string, premium = true) {
   const { userId, cookie } = await verifiedSession(`${name}@example.invalid`);
   const workspace = `w-${name}`;
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)").bind(
-      workspace,
-      name,
-      now,
-    ),
-    env.DB.prepare("INSERT INTO workspace_members VALUES (?, ?, 'owner')").bind(workspace, userId),
+    ...insertWorkspace({ id: workspace, userId, name }),
     insertStore({ id: `s-${name}`, workspaceId: workspace }),
     ...(premium
       ? [
-          env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-            VALUES (?, ?, 'admin', ?, ?)`).bind(
-            `e-${name}`,
-            workspace,
-            new Date(Date.parse(now) - 86_400_000).toISOString(),
-            new Date(Date.parse(now) + 30 * 86_400_000).toISOString(),
-          ),
+          insertEntitlement({
+            id: `e-${name}`,
+            workspaceId: workspace,
+            source: "admin",
+            startsAt: new Date(Date.parse(now) - 86_400_000).toISOString(),
+            endsAt: new Date(Date.parse(now) + 30 * 86_400_000).toISOString(),
+          }),
         ]
       : []),
   ]);
@@ -121,13 +121,7 @@ async function account(name: string, premium = true) {
 }
 
 function settingsForm(cookie: string, fields: Record<string, string>) {
-  return settingsAction({
-    request: new Request(`${origin}/app/impostazioni/notifiche`, {
-      method: "POST",
-      headers: { cookie, origin },
-      body: new URLSearchParams(fields),
-    }),
-  } as Parameters<typeof settingsAction>[0]);
+  return callRoute(settingsAction, "/app/impostazioni/notifiche", { cookie, fields });
 }
 
 /** Deep link creato dalle Impostazioni; restituisce il token che Telegram rimanda al bot. */
@@ -180,10 +174,6 @@ const link = (workspace: string) =>
 
 beforeEach(async () => {
   await resetDatabase();
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM webhook_receipts"),
-    env.DB.prepare("DELETE FROM workspace_entitlements"),
-  ]);
   send.mockClear();
 });
 
@@ -684,7 +674,9 @@ describe("ingresso del bot", () => {
   it("senza il bot dell'ambiente l'ingresso non è disponibile", async () => {
     const off = { ...environment, TELEGRAM_BOT_TOKEN: undefined } as Env;
     expect(telegramConfigured(off)).toBe(false);
-    expect(telegramConfigured({ ...environment, TELEGRAM_BOT_USERNAME: "" } as Env)).toBe(false);
+    // Una configurazione incompleta non rispetta i tipi dell'ambiente per costruzione.
+    const blank = { ...environment, TELEGRAM_BOT_USERNAME: "" } as unknown as Env;
+    expect(telegramConfigured(blank)).toBe(false);
     for (const change of [
       { TELEGRAM_BOT_USERNAME: undefined },
       { TELEGRAM_WEBHOOK_SECRET: undefined },
@@ -728,7 +720,8 @@ describe("ingresso del bot", () => {
   });
 
   it("riconosce il comando con il nome del bot e ignora un token malformato", () => {
-    const start = (text: string) => verifyTelegramUpdate(JSON.stringify(update(text)), secret, env);
+    const start = (text: string) =>
+      verifyTelegramUpdate(JSON.stringify(update(text)), secret, env) as TelegramStart | null;
     expect(start(`/start@FiscalBayTestBot ${"b".repeat(43)}`)?.tokenHash).toHaveLength(64);
     expect(start("/start corto")).toMatchObject({ tokenHash: null, chatId: "501" });
     expect(start("/start")).toMatchObject({ tokenHash: null });
@@ -1445,11 +1438,7 @@ describe("casi limite del collegamento e delle preferenze", () => {
     // Collegata senza preferenze salvate: valgono i predefiniti. La pausa del piano si scrive
     // dopo, perché le Impostazioni di uno spazio Premium la tolgono.
     await deliver(`/start ${await linkToken(seller.cookie)}`, 2001);
-    await env.DB.prepare(
-      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES (?, 'plan', ?)",
-    )
-      .bind(seller.store, now)
-      .run();
+    await insertStorePause({ storeId: seller.store, reason: "plan" }).run();
     await env.DB.prepare("DELETE FROM telegram_preferences WHERE workspace_id = ?")
       .bind(seller.workspace)
       .run();
@@ -1476,12 +1465,10 @@ describe("pagine", () => {
   it("le Impostazioni mostrano chat, preferenze e negozi dello spazio", async () => {
     const seller = await account("pagina");
     const page = async () => {
-      const result = (await settingsLoader({
-        request: new Request(`${origin}/app/impostazioni/notifiche`, {
-          headers: { cookie: seller.cookie },
-        }),
+      const result = await routePage(settingsLoader, "/app/impostazioni/notifiche", {
+        cookie: seller.cookie,
         params: { sezione: "notifiche" },
-      } as unknown as Parameters<typeof settingsLoader>[0])) as { page: Record<string, unknown> };
+      });
       return result.page;
     };
     expect(await page()).toMatchObject({
@@ -2010,10 +1997,13 @@ describe("invii degli ordini", () => {
       .bind(later(12).toISOString(), seller.workspace)
       .run();
     await run(limited.fetcher, 15);
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('e-rinnovo-2', ?, 'admin', ?, ?)`)
-      .bind(seller.workspace, later(16).toISOString(), later(30 * 24 * 60).toISOString())
-      .run();
+    await insertEntitlement({
+      id: "e-rinnovo-2",
+      workspaceId: seller.workspace,
+      source: "admin",
+      startsAt: later(16).toISOString(),
+      endsAt: later(30 * 24 * 60).toISOString(),
+    }).run();
     const api = bot();
     await run(api.fetcher, 25);
     expect(api.texts()).toHaveLength(0);
@@ -2273,15 +2263,13 @@ describe("invii degli ordini", () => {
           .bind(later(12).toISOString(), seller.workspace)
           .run(),
       (seller) =>
-        env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-          VALUES (?, ?, 'admin', ?, ?)`)
-          .bind(
-            `e-${seller.workspace}-rinnovo`,
-            seller.workspace,
-            later(25).toISOString(),
-            later(30 * 24 * 60).toISOString(),
-          )
-          .run(),
+        insertEntitlement({
+          id: `e-${seller.workspace}-rinnovo`,
+          workspaceId: seller.workspace,
+          source: "admin",
+          startsAt: later(25).toISOString(),
+          endsAt: later(30 * 24 * 60).toISOString(),
+        }).run(),
     ));
 
   it("gli ordini in verifica oltre il limite di un'esecuzione non fermano quelli successivi", async () => {
@@ -2397,16 +2385,17 @@ describe("invii degli ordini", () => {
     const key = await stored();
     expect(key).toMatch(/^"[0-9a-f]{64}"$/u);
     expect(key).not.toContain("RSSMRA");
-    // Un'impronta registrata come testo dei valori vale come la sua forma cifrata: nessuna
-    // variazione, e la riga passa alla forma nuova.
+    // Un'impronta registrata come testo dei valori torna fra i candidati con la migration e
+    // vale come la sua forma cifrata: nessuna variazione, e la riga passa alla forma nuova.
     await env.DB.prepare(
       "UPDATE telegram_order_notices SET fiscal_key = ?, evaluated_at = ? WHERE order_id = 'o-impronta'",
     )
-      .bind(JSON.stringify([["CF", null, "RSSMRA80A01H501U"]]), later(5).toISOString())
+      .bind(JSON.stringify([["CF", null, "RSSMRA80A01H501U"]]), later(15).toISOString())
       .run();
-    await env.DB.prepare("UPDATE tax_identifiers SET observed_at = ? WHERE order_id = 'o-impronta'")
-      .bind(later(15).toISOString())
-      .run();
+    const migration = env.TEST_MIGRATIONS.find(
+      ({ name }) => name === "0046_telegram_notice_digest.sql",
+    )!;
+    await env.DB.batch(migration.queries.map((query) => env.DB.prepare(query)));
     await run(api.fetcher, 20);
     expect(api.texts()).toHaveLength(1);
     expect(await stored()).toBe(key);
@@ -3549,7 +3538,9 @@ describe("comandi e pulsanti del bot", () => {
     /** Ultimo messaggio inviato o modificato dal bot, con i pulsanti. */
     const reply = () => {
       const { method, params } = api.calls.at(-1)!;
-      const markup = params.reply_markup as { inline_keyboard: unknown } | undefined;
+      const markup = params.reply_markup as
+        | { inline_keyboard: Array<Array<Record<string, unknown>>> }
+        | undefined;
       return { method, text: params.text, buttons: markup?.inline_keyboard };
     };
     return {

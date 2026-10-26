@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { vi } from "vitest";
 
 import { completeRegistration } from "../../app/domain/registration.server";
 import { createAuth } from "../../app/auth.server";
@@ -56,4 +57,14 @@ export async function profileOf(userId: string) {
   )
     .bind(userId)
     .first();
+}
+
+/** Invio email sostitutivo con la risposta di Cloudflare Email Service. */
+export function emailSender() {
+  return vi.fn<SendEmail["send"]>(async () => ({ messageId: "synthetic" }));
+}
+
+/** Ambiente di prova con l'invio email sostitutivo e le variabili indicate. */
+export function mailEnv(send = emailSender(), overrides: Partial<Env> = {}): Env {
+  return { ...env, ...overrides, AUTH_EMAIL: { send } as SendEmail };
 }

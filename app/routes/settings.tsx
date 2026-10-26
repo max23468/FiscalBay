@@ -1,14 +1,13 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import { data, redirect } from "react-router";
 
-import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
 import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { accessNotice } from "../access-notice";
-import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
+import { unconfirmedOnFailure } from "../client-action";
+import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { appBase, type AppLinks } from "../app-links";
-import { checkoutReturn } from "../catalog";
+import { checkoutReturn, purchaseStateFrom } from "../catalog";
 import {
   checkoutConfigured,
   checkoutOffers,
@@ -16,11 +15,7 @@ import {
   purchaseState,
   startCheckout,
 } from "../domain/checkout.server";
-import {
-  changeSubscriptionPeriod,
-  openBillingPortal,
-  subscriptionView,
-} from "../domain/billing.server";
+import { changeSubscriptionPeriod, openBillingPortal } from "../domain/billing.server";
 import { admission } from "../domain/admission.server";
 import { pendingEmailChange } from "../domain/email-change.server";
 import { lifetimeContext } from "../domain/lifetime.server";
@@ -57,18 +52,16 @@ import {
 } from "../domain/telegram.server";
 import { stripeSecretKey } from "../integrations/stripe.server";
 import { telegramConfigured } from "../integrations/telegram.server";
+import { appUrl, planPath } from "../app-links";
 import { logFailure } from "../errors";
-import { languageFromPath, localizedPath } from "../i18n";
+import { languageFromPath } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction } from "../security-actions.server";
 import { effectiveTimeZone } from "../preferences";
-import {
-  formatDate,
-  settingsSections,
-  type ActionResult,
-  type SettingsSection,
-} from "../view-models";
+import { settingsSections, type ActionResult, type SettingsSection } from "../view-models";
+import { formatDate } from "../format";
 import type { Route } from "./+types/settings";
+import { subscriptionView } from "../domain/plan-view.server";
 
 /**
  * Categorie con un servizio reale. L'esportazione arriva con il file degli ordini; esportazione e
@@ -119,7 +112,6 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
         language,
         userId: session.user.id,
         account,
-        shell: await shellData(area),
       },
       { status: 404 },
     );
@@ -129,38 +121,32 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const auth = session as AuthSession;
   const timeZone = effectiveTimeZone(preferences.timeZone, area.detectedTimeZone);
   const [
-    shell,
-    [
-      allowance,
-      purchase,
-      lifetime,
-      freeStore,
-      confirmUnlock,
-      marketing,
-      methods,
-      sessions,
-      pendingEmail,
-      telegram,
-      admissionState,
-    ],
-  ] = await Promise.all([
-    shellData(area, undefined, now),
-    measure("d1", "settings", () =>
-      Promise.all([
-        orderAllowance(env.DB, userId, now),
-        purchaseState(env.DB, userId, now),
-        lifetimeContext(env.DB, env, userId, now),
-        freeStoreState(env.DB, userId, now),
-        unlockConfirmation(env.DB, userId),
-        marketingConsent(env.DB, userId),
-        listSignInMethods(env.DB, userId),
-        listActiveSessions(env.DB, userId, session.session.id, language, now),
-        pendingEmailChange(env.DB, userId, session.user.email),
-        telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
-        admission(env.DB, userId),
-      ]),
-    ),
-  ]);
+    allowance,
+    purchase,
+    lifetime,
+    freeStore,
+    confirmUnlock,
+    marketing,
+    methods,
+    sessions,
+    pendingEmail,
+    telegram,
+    admissionState,
+  ] = await measure("d1", "settings", () =>
+    Promise.all([
+      orderAllowance(env.DB, userId, now),
+      purchaseState(env.DB, userId, now),
+      lifetimeContext(env.DB, env, userId, now),
+      freeStoreState(env.DB, userId, now),
+      unlockConfirmation(env.DB, userId),
+      marketingConsent(env.DB, userId),
+      listSignInMethods(env.DB, userId),
+      listActiveSessions(env.DB, userId, session.session.id, language, now),
+      pendingEmailChange(env.DB, userId, session.user.email),
+      telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
+      admission(env.DB, userId),
+    ]),
+  );
   const cycle = allowance?.cycle;
   // Periodo dell'abbonamento, pagamento da confermare o rinnovo non riuscito.
   const subscription = allowance
@@ -173,7 +159,6 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     section: params.sezione ?? null,
     sections,
     services: services(),
-    preview: false,
     account: {
       ...account,
       profile,
@@ -195,7 +180,9 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     },
     purchase: {
       // Senza spazio nessun negozio è collegato: l'acquisto attende la prima lettura.
-      state: purchase?.state ?? (admissionState.purchasesOpen ? "needs-sync" : "closed"),
+      state:
+        purchase?.state ??
+        purchaseStateFrom({ covered: false, open: admissionState.purchasesOpen, synced: false }),
       offers: checkoutOffers,
       lifetime: lifetime?.offer ?? null,
       checkout: checkoutReturn(new URL(request.url).searchParams),
@@ -230,7 +217,6 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     userId,
     account,
     page,
-    shell,
   };
 }
 
@@ -319,7 +305,7 @@ export async function action({ request }: Route.ActionArgs) {
       return failed(checkout.reason === "unavailable" ? 503 : 409, notices[checkout.reason]);
     }
     if (intent === "manage-billing") {
-      const plan = `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, "/app/impostazioni/piano")}`;
+      const plan = appUrl(env, language, planPath);
       const url = await openBillingPortal(env, userId, plan, language);
       if (!url) return failed(409, t.plan.billingUnavailable);
       return redirect(url);
@@ -375,35 +361,14 @@ export async function action({ request }: Route.ActionArgs) {
   return securityAction(request, area, form);
 }
 
-/** Un'interruzione di rete non conferma l'esito remoto: la scelta torna com'era. */
-export async function clientAction({ request, serverAction }: Route.ClientActionArgs) {
-  try {
-    return await serverAction();
-  } catch (error) {
-    if (error instanceof Response || isRouteErrorResponse(error) || request.signal.aborted)
-      throw error;
-    const language = languageFromPath(new URL(request.url).pathname);
-    return { ok: false, notice: appCopy[language].errors.unconfirmed } satisfies ActionResult;
-  }
+export function clientAction(args: Route.ClientActionArgs) {
+  return unconfirmedOnFailure(args);
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { language, account, shell } = loaderData;
-  const t = appCopy[language];
-  const links: AppLinks = { language, base: appBase };
-  return (
-    <AccountShell
-      key={loaderData.userId}
-      language={language}
-      account={account}
-      shell={shell}
-      security
-    >
-      {loaderData.notFound ? (
-        <NotFoundState kind="page" t={t} links={links} />
-      ) : (
-        <SettingsPage data={loaderData.page} t={t} links={links} />
-      )}
-    </AccountShell>
+  return loaderData.notFound ? (
+    <NotFoundState kind="page" />
+  ) : (
+    <SettingsPage data={loaderData.page} />
   );
 }

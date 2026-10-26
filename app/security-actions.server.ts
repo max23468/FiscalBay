@@ -3,7 +3,7 @@ import { data, redirect } from "react-router";
 
 import { notifySecurityEvent } from "./account-email.server";
 import type { AccountArea } from "./account-area.server";
-import { accessPath, securityPath, securityReturnPath } from "./app-links";
+import { accessPath, appUrl, securityPath, securityReturnPath } from "./app-links";
 import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import { pendingEmailChange } from "./domain/email-change.server";
 import {
@@ -120,7 +120,7 @@ export async function securityAction(
   if (intent === "password") {
     const response = await forwardToAuth(env, request, "/request-password-reset", {
       email: session.user.email,
-      redirectTo: `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, accessPath)}`,
+      redirectTo: appUrl(env, language, accessPath),
     });
     if (response.status === 429) return notice("troppi-tentativi");
     return notice(response.ok ? "password-link" : "errore");

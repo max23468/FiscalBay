@@ -1,12 +1,10 @@
 import { z } from "zod";
 
-import { servedSql } from "../../domain/admission.server";
-import { unpausedStore } from "../../domain/store-state.server";
-import { logFailure } from "../../errors";
 import { seal, unseal } from "../../sealed.server";
 import { UpstreamError, upstreamJson } from "../http.server";
 
-import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
+import type { EbayEnvironment } from "../../view-models";
+import { ebayConfiguration } from "./environment.server";
 
 export type SellerTokens = {
   accessToken: string;
@@ -19,11 +17,6 @@ type TokenKind = "access" | "refresh";
 
 const sealedPrefix = "v1.";
 const keyInfo = "fiscalbay/ebay-seller-token/v1";
-// Il token di accesso vale due ore: il rinnovo parte quando ne restano meno di quaranta minuti,
-// così più esecuzioni del cron, una ogni dieci minuti, cadono prima della scadenza.
-const refreshMarginMilliseconds = 40 * 60 * 1000;
-const refreshBatch = 50;
-const refreshLimit = 300;
 
 const refreshSchema = z.looseObject({
   access_token: z.string().min(1),
@@ -77,13 +70,13 @@ export async function rejectCredentials(
 
 /** Registra un nuovo consenso: sostituisce i token precedenti e annulla un rifiuto registrato. */
 export async function saveStoreCredentials(
-  environment: Env,
+  env: Env,
   storeId: string,
   tokens: SellerTokens,
   grantedAt: string,
 ): Promise<void> {
-  const secret = environment.BETTER_AUTH_SECRET;
-  await environment.DB.prepare(
+  const secret = env.BETTER_AUTH_SECRET;
+  await env.DB.prepare(
     `INSERT INTO ebay_store_credentials
        (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
      VALUES (?, ?, ?, ?, ?, ?)
@@ -114,12 +107,12 @@ export type RefreshOutcome = "refreshed" | "rejected" | "superseded" | "missing"
  * letto: una risposta arrivata dopo un nuovo collegamento non ripristina token superati.
  */
 export async function refreshStoreToken(input: {
-  environment: Env;
+  env: Env;
   storeId: string;
   fetcher: typeof fetch;
   now?: Date;
 }): Promise<RefreshOutcome> {
-  const { environment, storeId } = input;
+  const { env: environment, storeId } = input;
   const now = input.now ?? new Date();
   const row = await environment.DB.prepare(
     `SELECT c.refresh_token, c.refresh_expires_at, c.granted_at, s.ebay_environment
@@ -186,51 +179,4 @@ export async function refreshStoreToken(input: {
     )
     .run();
   return result.meta.changes === 1 ? "refreshed" : "superseded";
-}
-
-type ExpiringRow = { store_id: string; access_expires_at: string };
-
-/**
- * Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. I negozi
- * in pausa e quelli di uno spazio in lista d'attesa non leggono eBay e restano esclusi; quelli
- * scollegati non hanno più token. Il rinnovo comprende i token già scaduti: alla ripresa o
- * all'ammissione l'esecuzione seguente li rinnova prima della lettura.
- *
- * Scorre i negozi a blocchi con un cursore, così un errore non fa rileggere lo stesso negozio,
- * fino a `refreshLimit` rinnovi: con un'esecuzione ogni dieci minuti e token di due ore regge
- * oltre mille negozi attivi restando entro le sottorichieste di una esecuzione.
- */
-export async function refreshExpiringTokens(
-  environment: Env,
-  fetcher: typeof fetch,
-  now = new Date(),
-): Promise<RefreshOutcome[]> {
-  const threshold = new Date(now.getTime() + refreshMarginMilliseconds).toISOString();
-  const outcomes: RefreshOutcome[] = [];
-  // Ultimo negozio letto: scadenza e identificativo, null prima del primo blocco.
-  let cursor: [string, string] | [null, null] = [null, null];
-  for (let read = 0; read < refreshLimit; read += refreshBatch) {
-    const { results }: D1Result<ExpiringRow> = await environment.DB.prepare(
-      `SELECT c.store_id, c.access_expires_at FROM ebay_store_credentials c
-        JOIN ebay_stores s ON s.id = c.store_id
-        WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?1
-          AND (?2 IS NULL OR (c.access_expires_at, c.store_id) > (?2, ?3))
-          AND ${unpausedStore("c.store_id")} AND ${servedSql("s.workspace_id", "?5")}
-        ORDER BY c.access_expires_at, c.store_id LIMIT ?4`,
-    )
-      .bind(threshold, ...cursor, refreshBatch, now.toISOString())
-      .all<ExpiringRow>();
-    // In sequenza: un errore di un negozio non ferma gli altri e non sovrappone retry.
-    for (const { store_id: storeId } of results) {
-      try {
-        outcomes.push(await refreshStoreToken({ environment, storeId, fetcher, now }));
-      } catch (error) {
-        logFailure({ error, operation: "token_refresh" });
-      }
-    }
-    if (results.length < refreshBatch) break;
-    const last: ExpiringRow = results.at(-1)!;
-    cursor = [last.access_expires_at, last.store_id];
-  }
-  return outcomes;
 }

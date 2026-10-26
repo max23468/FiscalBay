@@ -27,6 +27,16 @@ export function stripeSecretKey(env: Pick<Env, "APP_ORIGIN" | "STRIPE_SECRET_KEY
   return key && accepted.test(key) ? key : undefined;
 }
 
+/** Ambiente degli oggetti Stripe registrati: `live` in Production, `test` altrove. */
+export function stripeEnvironment(env: Pick<Env, "APP_ORIGIN">): "live" | "test" {
+  return isProduction(env) ? "live" : "test";
+}
+
+/** Identificativo di un riferimento Stripe, espanso o no. */
+export function stripeId(reference: string | { id: string }) {
+  return typeof reference === "string" ? reference : reference.id;
+}
+
 const integrationIdentifier = "fiscalbay_mp_qnwjrzta";
 
 // Lo SDK è la parte più pesante del bundle: si valuta solo quando serve, non a ogni avvio
@@ -42,10 +52,10 @@ const readTimeoutMs = 15_000;
 const readMaxBytes = 1_048_576;
 
 /**
- * Client delle letture da coda e cron: nessun retry dello SDK, perché riprova già la coda, e
- * gli stessi timeout e limite dei byte delle altre chiamate ai provider.
+ * Client di coda e cron, per letture e scritture: nessun retry dello SDK, perché riprova già la
+ * coda, e gli stessi timeout e limite dei byte delle altre chiamate ai provider.
  */
-export async function createStripeReader(
+export async function createBoundedStripeClient(
   secretKey: string,
   fetcher: typeof fetch = fetch,
 ): Promise<Stripe> {
@@ -96,12 +106,17 @@ export function stripeFailure(error: unknown): UpstreamError {
   return new UpstreamError("unavailable", status ? { status } : {});
 }
 
-export function isMissingObject(error: UpstreamError) {
-  return error.details.status === 404 && error.details.providerCode === "resource_missing";
+/** Oggetto che Stripe non restituisce più; ogni altro errore, anche non di Stripe, resta tale. */
+export function isMissingObject(error: unknown) {
+  return (
+    error instanceof UpstreamError &&
+    error.details.status === 404 &&
+    error.details.providerCode === "resource_missing"
+  );
 }
 
-/** Chiamata a Stripe con gli errori classificati come quelli degli altri provider. */
-export async function stripeRead<T>(call: () => Promise<T>): Promise<T> {
+/** Chiamata a Stripe, lettura o scrittura, con gli errori classificati come gli altri provider. */
+export async function stripeCall<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {

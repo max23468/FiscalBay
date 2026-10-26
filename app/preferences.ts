@@ -1,6 +1,7 @@
 import type { AppCopy } from "./app-copy";
 import type { Language } from "./i18n";
-import { displayTimeZone, type NotificationView } from "./view-models";
+import { type NotificationView } from "./view-models";
+import { displayTimeZone } from "./format";
 
 /** Preferenze dell'account con i valori ammessi, condivise fra Impostazioni e server. */
 

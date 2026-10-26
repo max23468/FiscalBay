@@ -3,8 +3,6 @@ import { noPageOverflow, open } from "./components";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 
-test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
-
 test.describe("miglioramenti account e negozi", () => {
   test.skip(
     Boolean(process.env.E2E_BASE_URL),

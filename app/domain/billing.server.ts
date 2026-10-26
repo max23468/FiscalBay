@@ -5,17 +5,17 @@ import { isProduction } from "../app-links";
 import { priceGeneration } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import type { Language } from "../i18n";
-import type { UpstreamError } from "../integrations/http.server";
 import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
+  createBoundedStripeClient,
   createStripeClient,
-  createStripeReader,
   isMissingObject,
-  stripeRead,
+  stripeCall,
+  stripeEnvironment,
+  stripeId,
   stripeSecretKey,
 } from "../integrations/stripe.server";
-import type { AccountView } from "../view-models";
-import { openSubscriptionStatuses } from "./grants.server";
+import { lifetimeInForceSql, openSubscriptionStatuses } from "./grants.server";
 import {
   isLifetimeSession,
   reconcileLifetime,
@@ -29,6 +29,9 @@ import {
   reversalStatements,
   type Reversal,
 } from "./refunds.server";
+import { inSequence } from "../sequence";
+import { sqlList } from "./sql.server";
+import { dayMilliseconds } from "../time";
 
 /**
  * Effetti commerciali di Stripe. Webhook e riconciliazione periodica arrivano qui con un solo
@@ -41,18 +44,9 @@ import {
  */
 
 /** Rinnovo rifiutato in modo autorevole: Free subito, prezzo protetto per sette giorni. */
-const lapsedStatuses = ["past_due", "unpaid"] as const;
+export const lapsedStatuses = ["past_due", "unpaid"] as const;
 
-const pricePromiseMs = 7 * 86_400_000;
-
-const sqlList = (values: readonly string[]) => values.map((value) => `'${value}'`).join(", ");
-
-/** Una chiamata a Stripe alla volta, nell'ordine dato: il turno resta entro i limiti. */
-const inSequence = <T, R>(items: readonly T[], step: (item: T) => Promise<R>) =>
-  items.reduce<Promise<R[]>>(
-    (previous, item) => previous.then((done) => step(item).then((result) => [...done, result])),
-    Promise.resolve([]),
-  );
+export const pricePromiseMs = 7 * dayMilliseconds;
 
 const ownerSchema = z.object({
   workspace_id: z.string().min(1).max(128),
@@ -60,13 +54,7 @@ const ownerSchema = z.object({
   price_generation: z.string().min(1).max(32),
 });
 
-const environmentOf = (env: Env) => (isProduction(env) ? "live" : "test");
-
 const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
-
-/** Identificativo di un riferimento Stripe, espanso o no. */
-const idOf = (reference: string | { id: string }) =>
-  typeof reference === "string" ? reference : reference.id;
 
 /** Periodicità del prezzo di un elemento dell'abbonamento; null per un prezzo non ricorrente. */
 function itemOffer(item: Stripe.SubscriptionItem): "monthly" | "annual" | null {
@@ -114,7 +102,7 @@ export function paidCoverage(invoice: Stripe.Invoice) {
   const payment = invoice.payments?.data.find((candidate) => candidate.status === "paid")?.payment;
   return {
     invoiceId: invoice.id,
-    paymentIntent: payment?.payment_intent ? idOf(payment.payment_intent) : null,
+    paymentIntent: payment?.payment_intent ? stripeId(payment.payment_intent) : null,
     startsAt: iso(start),
     endsAt: iso(end),
     amountPaid: invoice.amount_paid,
@@ -138,7 +126,7 @@ async function eventTarget(
   if (topic.startsWith("charge.")) {
     const intent = await reversalIntent(stripe, topic, objectId);
     if (!intent) return null;
-    const payments = await stripeRead(() =>
+    const payments = await stripeCall(() =>
       stripe.invoicePayments.list({
         payment: { type: "payment_intent", payment_intent: intent },
         limit: 1,
@@ -147,23 +135,25 @@ async function eventTarget(
     // Managed Payments emette una fattura anche per il lifetime: senza abbonamento il pagamento
     // si cerca nella sessione Checkout che l'ha incassato.
     const invoice = payments.data[0]?.invoice;
-    const subscription = invoice ? await eventTarget(stripe, "invoice.paid", idOf(invoice)) : null;
+    const subscription = invoice
+      ? await eventTarget(stripe, "invoice.paid", stripeId(invoice))
+      : null;
     if (subscription) return subscription;
-    const sessions = await stripeRead(() =>
+    const sessions = await stripeCall(() =>
       stripe.checkout.sessions.list({ payment_intent: intent, limit: 1 }),
     );
     const session = sessions.data[0];
     return session && isLifetimeSession(session) ? { lifetime: session.id } : null;
   }
   if (topic.startsWith("checkout.session.")) {
-    const session = await stripeRead(() => stripe.checkout.sessions.retrieve(objectId));
-    if (session.subscription) return { subscription: idOf(session.subscription) };
+    const session = await stripeCall(() => stripe.checkout.sessions.retrieve(objectId));
+    if (session.subscription) return { subscription: stripeId(session.subscription) };
     return isLifetimeSession(session) ? { lifetime: session.id } : null;
   }
   if (topic.startsWith("invoice.")) {
-    const invoice = await stripeRead(() => stripe.invoices.retrieve(objectId));
+    const invoice = await stripeCall(() => stripe.invoices.retrieve(objectId));
     const subscription = invoice.parent?.subscription_details?.subscription;
-    return subscription ? { subscription: idOf(subscription) } : null;
+    return subscription ? { subscription: stripeId(subscription) } : null;
   }
   return null;
 }
@@ -180,12 +170,12 @@ export async function applyStripeEvent(
 ) {
   const key = stripeSecretKey(env);
   if (!key) throw new ApplicationError("UPSTREAM_UNAVAILABLE");
-  const stripe = await createStripeReader(key, fetcher);
+  const stripe = await createBoundedStripeClient(key, fetcher);
   let target: Awaited<ReturnType<typeof eventTarget>>;
   try {
     target = await eventTarget(stripe, receipt.topic, receipt.objectId);
   } catch (error) {
-    if (!isMissingObject(error as UpstreamError)) throw error;
+    if (!isMissingObject(error)) throw error;
     logFailure({ error, operation: "billing" });
     return;
   }
@@ -215,9 +205,9 @@ export async function reconcileSubscription(
   const at = now.toISOString();
   let subscription: Stripe.Subscription;
   try {
-    subscription = await stripeRead(() => stripe.subscriptions.retrieve(subscriptionId));
+    subscription = await stripeCall(() => stripe.subscriptions.retrieve(subscriptionId));
   } catch (error) {
-    if (!isMissingObject(error as UpstreamError)) throw error;
+    if (!isMissingObject(error)) throw error;
     // Le coperture già pagate restano: l'assenza dell'oggetto non prova un rimborso.
     await env.DB.prepare(
       `UPDATE stripe_subscriptions SET unavailable_at = COALESCE(unavailable_at, ?1), checked_at = ?1
@@ -235,7 +225,7 @@ export async function reconcileSubscription(
     return;
   }
   subscription = await scheduleProtectionEnd(stripe, subscription, item, now);
-  const invoices = await stripeRead(() =>
+  const invoices = await stripeCall(() =>
     stripe.invoices.list({
       subscription: subscription.id,
       status: "paid",
@@ -244,7 +234,7 @@ export async function reconcileSubscription(
     }),
   );
   const coverages = invoices.data.flatMap((invoice) => paidCoverage(invoice) ?? []);
-  const charges = await customerCharges(env.DB, stripe, idOf(subscription.customer));
+  const charges = await customerCharges(env.DB, stripe, stripeId(subscription.customer));
   // Una richiesta alla volta, soltanto per gli addebiti con rimborsi o con una disputa. Senza
   // un addebito leggibile l'esito già registrato resta.
   const reversals = await inSequence(coverages, async (coverage): Promise<Reversal | null> => {
@@ -267,8 +257,8 @@ export async function reconcileSubscription(
       WHERE julianday(excluded.synced_at) >= julianday(stripe_subscriptions.synced_at)`).bind(
       subscription.id,
       owner.data.workspace_id,
-      environmentOf(env),
-      idOf(subscription.customer),
+      stripeEnvironment(env),
+      stripeId(subscription.customer),
       offers.offer,
       owner.data.price_generation,
       subscription.status,
@@ -304,7 +294,7 @@ export async function reconcileSubscription(
   ]);
   const lapsed = (lapsedStatuses as readonly string[]).includes(subscription.status);
   if (lapsed && now.getTime() >= protectionEnd(item) * 1000) {
-    const canceled = await stripeRead(() => stripe.subscriptions.cancel(subscription.id));
+    const canceled = await stripeCall(() => stripe.subscriptions.cancel(subscription.id));
     await env.DB.prepare(
       `UPDATE stripe_subscriptions SET status = ?1, synced_at = ?2 WHERE id = ?3
         AND julianday(synced_at) <= julianday(?2)`,
@@ -333,7 +323,7 @@ async function scheduleProtectionEnd(
   const end = protectionEnd(item);
   const lapsed = (lapsedStatuses as readonly string[]).includes(subscription.status);
   const update = (params: Stripe.SubscriptionUpdateParams) =>
-    stripeRead(() => stripe.subscriptions.update(subscription.id, params));
+    stripeCall(() => stripe.subscriptions.update(subscription.id, params));
   if (
     lapsed &&
     now.getTime() < end * 1000 &&
@@ -345,7 +335,7 @@ async function scheduleProtectionEnd(
   return subscription;
 }
 
-const sessionWindowMs = 2 * 86_400_000;
+const sessionWindowMs = 2 * dayMilliseconds;
 const batchSize = 25;
 /** Sessioni completate lette per turno: ben oltre il volume atteso di due giorni. */
 const sessionScanLimit = 1000;
@@ -364,7 +354,7 @@ const sessionScanLimit = 1000;
 export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, now = new Date()) {
   const key = stripeSecretKey(env);
   if (!key) return;
-  const stripe = await createStripeReader(key, fetcher);
+  const stripe = await createBoundedStripeClient(key, fetcher);
   const attempt = (subscription: string) =>
     reconcileSubscription(env, stripe, subscription, now).catch((error: unknown) =>
       logFailure({ error, operation: "billing" }),
@@ -372,7 +362,7 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
   // Un abbonamento alla volta: il turno resta entro i limiti di Stripe anche quando è lento.
   try {
     // Tutte le pagine dei due giorni: un volume alto di acquisti non lascia sessioni indietro.
-    const sessions = await stripeRead(() =>
+    const sessions = await stripeCall(() =>
       stripe.checkout.sessions
         .list({
           status: "complete",
@@ -383,7 +373,9 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
     );
     const ids = [
       ...new Set(
-        sessions.flatMap((session) => (session.subscription ? [idOf(session.subscription)] : [])),
+        sessions.flatMap((session) =>
+          session.subscription ? [stripeId(session.subscription)] : [],
+        ),
       ),
     ];
     const lifetimes = sessions.filter(isLifetimeSession).map((session) => session.id);
@@ -428,7 +420,7 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
       ORDER BY CASE WHEN ${dueSql} THEN 0 WHEN ${pendingSql} THEN 1 ELSE 2 END,
         julianday(s.checked_at) LIMIT ${batchSize})
     RETURNING id`)
-    .bind(at, environmentOf(env))
+    .bind(at, stripeEnvironment(env))
     .all<{ id: string }>();
   await inSequence(
     results.map(({ id }) => id),
@@ -452,143 +444,6 @@ const pendingSql = `NOT EXISTS (SELECT 1 FROM workspace_entitlements e
     AND (e.ends_at IS NULL OR julianday(?1) < julianday(e.ends_at)))`;
 
 /**
- * Stato del pagamento mostrato nel piano. Il lifetime prevale su tutto, senza rinnovi. Con una
- * copertura pagata, o concessa a un abbonamento che si rinnova: periodicità, rinnovo o fine
- * dopo la disdetta. Una concessione senza abbonamento indica la sua fine. Senza copertura, o con
- * la sola prova: pagamento in attesa di conferma, rinnovo non riuscito, con il prezzo protetto
- * fino a sette giorni dall'inizio del periodo non pagato, oppure pagamento rimborsato.
- */
-export async function subscriptionView(
-  db: D1Database,
-  env: Env,
-  workspaceId: string,
-  coverage: { source: string; endsAt: string | null } | null,
-  now = new Date(),
-): Promise<Pick<AccountView, "premium" | "payment" | "grant">> {
-  if (coverage?.source === "lifetime") {
-    const allocation = await db
-      .prepare("SELECT kind FROM lifetime_allocations WHERE workspace_id = ? AND status = 'active'")
-      .bind(workspaceId)
-      .first<{ kind: "sale" | "gift" }>();
-    // Il diritto lifetime richiede un posto attivo dello spazio.
-    return {
-      premium: {
-        period: "lifetime",
-        renewsAt: null,
-        ...(allocation!.kind === "gift" ? { granted: true as const } : {}),
-      },
-    };
-  }
-  const grant =
-    coverage?.source === "admin" && coverage.endsAt ? { grant: { endsAt: coverage.endsAt } } : {};
-  // Lifetime completato su Stripe con il pagamento ancora da confermare: senza copertura è
-  // l'attivazione in corso, con un abbonamento il passaggio a vita in conferma.
-  const pending = (await db
-    .prepare(`SELECT 1 FROM lifetime_allocations WHERE workspace_id = ? AND status = 'reserved'
-      AND completed_at IS NOT NULL`)
-    .bind(workspaceId)
-    .first())
-    ? { payment: { state: "pending" as const, lifetime: true as const } }
-    : {};
-  if (pending.payment && (!coverage || coverage.source === "trial")) return pending;
-  const row = await db
-    .prepare(`SELECT offer, renewal_offer, status, current_period_start, current_period_end,
-        cancel_at_period_end
-      FROM stripe_subscriptions WHERE workspace_id = ? AND environment = ?
-        AND unavailable_at IS NULL AND status IN (${sqlList(openSubscriptionStatuses)})
-      ORDER BY julianday(current_period_start) DESC LIMIT 1`)
-    .bind(workspaceId, environmentOf(env))
-    .first<{
-      offer: "monthly" | "annual";
-      renewal_offer: "monthly" | "annual" | null;
-      status: string;
-      current_period_start: string;
-      current_period_end: string;
-      cancel_at_period_end: number;
-    }>();
-  // Senza copertura, un pagamento rimborsato o con la disputa persa spiega il ritorno al Free:
-  // il lifetime, che non torna in vendita perché il posto resta occupato, oppure il periodo in
-  // corso, con il rinnovo se l'abbonamento continua. Un nuovo abbonamento da confermare o da
-  // regolarizzare prevale.
-  const refunded = coverage
-    ? null
-    : await db
-        .prepare(`SELECT source FROM workspace_entitlements WHERE workspace_id = ?1
-          AND revocation IS NOT NULL AND (source = 'lifetime'
-            OR julianday(starts_at) <= julianday(?2) AND julianday(?2) < julianday(ends_at))
-          ORDER BY source = 'lifetime' LIMIT 1`)
-        .bind(workspaceId, now.toISOString())
-        .first<{ source: string }>();
-  const renewing = !!row && ["active", "trialing"].includes(row.status);
-  if (refunded && (!row || (renewing && refunded.source !== "lifetime")))
-    return {
-      payment: {
-        state: "refunded",
-        ...(refunded.source === "lifetime"
-          ? { lifetime: true as const }
-          : row && !row.cancel_at_period_end
-            ? { renewsAt: row.current_period_end }
-            : {}),
-      },
-    };
-  if (!row) return { ...grant, ...pending };
-  // Una concessione a un abbonamento che si rinnova ne ha rinviato il rinnovo alla sua fine.
-  if (
-    coverage?.source === "premium" ||
-    (coverage?.source === "admin" && ["active", "trialing"].includes(row.status))
-  ) {
-    if (!row.cancel_at_period_end)
-      return {
-        ...pending,
-        premium: {
-          period: row.offer,
-          renewsAt: row.current_period_end,
-          // Cambio di periodicità programmato: vale dal rinnovo.
-          ...(row.renewal_offer && row.renewal_offer !== row.offer
-            ? { nextPeriod: row.renewal_offer }
-            : {}),
-        },
-      };
-    // Dopo la disdetta Premium dura fino all'ultima copertura, concessioni comprese.
-    const last = await db
-      .prepare(`SELECT MAX(ends_at) AS ends_at FROM workspace_entitlements WHERE workspace_id = ?1
-        AND revoked_at IS NULL AND julianday(ends_at) > julianday(?2)`)
-      .bind(workspaceId, now.toISOString())
-      .first<{ ends_at: string | null }>();
-    return {
-      ...pending,
-      // L'aggregato restituisce sempre una riga, anche senza coperture future.
-      premium: { period: row.offer, renewsAt: null, endsAt: last!.ends_at ?? coverage.endsAt },
-    };
-  }
-  // Durante la prova un acquisto ancora da confermare resta visibile; un'altra copertura,
-  // come una concessione, prevale.
-  if (coverage && coverage.source !== "trial") return { ...grant, ...pending };
-  // Scelto durante la prova: nessun incasso finché la prova non finisce; disdetto, nessuno.
-  if (coverage?.source === "trial" && row.status === "trialing")
-    return {
-      payment: {
-        state: "scheduled",
-        period: row.offer,
-        chargeAt: row.current_period_end,
-        ...(row.cancel_at_period_end ? { cancelled: true as const } : {}),
-      },
-    };
-  if ((lapsedStatuses as readonly string[]).includes(row.status)) {
-    const protectedUntil = Date.parse(row.current_period_start) + pricePromiseMs;
-    return protectedUntil > now.getTime()
-      ? {
-          payment: {
-            state: "renewal-failed",
-            protectedUntil: new Date(protectedUntil).toISOString(),
-          },
-        }
-      : {};
-  }
-  return row.status === "paused" ? {} : { payment: { state: "pending" } };
-}
-
-/**
  * Abbonamento rinnovabile dello spazio: periodo pagato in corso, o concessione che ne ha
  * rinviato il rinnovo, e nessuna disdetta.
  */
@@ -602,7 +457,7 @@ async function renewingSubscription(db: D1Database, env: Env, userId: string, no
           AND e.source IN ('premium', 'admin') AND e.revoked_at IS NULL
           AND julianday(e.starts_at) <= julianday(?3) AND julianday(?3) < julianday(e.ends_at))
       ORDER BY julianday(s.current_period_start) DESC LIMIT 1`)
-    .bind(userId, environmentOf(env), now.toISOString())
+    .bind(userId, stripeEnvironment(env), now.toISOString())
     .first<{ id: string; workspace_id: string; price_generation: string }>();
 }
 
@@ -617,7 +472,7 @@ export async function subscriptionRenews(db: D1Database, env: Env, userId: strin
       JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
       WHERE wm.user_id = ?1 AND s.environment = ?2 AND s.unavailable_at IS NULL
         AND s.status IN ('active', 'trialing') AND s.cancel_at_period_end = 0 LIMIT 1`)
-    .bind(userId, environmentOf(env))
+    .bind(userId, stripeEnvironment(env))
     .first();
   return !!row;
 }
@@ -633,7 +488,7 @@ async function generationPrice(
   generation: string,
   offer: "monthly" | "annual",
 ) {
-  const prices = await stripeRead(() =>
+  const prices = await stripeCall(() =>
     stripe.prices.list({ product, type: "recurring", limit: 100, expand: ["data.product"] }),
   );
   const price = prices.data.find(
@@ -674,7 +529,7 @@ export async function changeSubscriptionPeriod(
   if (!key) return "unavailable";
   try {
     const stripe = await createStripeClient(key);
-    const subscription = await stripeRead(() => stripe.subscriptions.retrieve(local.id));
+    const subscription = await stripeCall(() => stripe.subscriptions.retrieve(local.id));
     const owner = ownerSchema.safeParse(subscription.metadata);
     const item = subscription.items.data[0];
     if (
@@ -691,7 +546,7 @@ export async function changeSubscriptionPeriod(
     if (offers.renewal === target) return "unchanged";
     const price = await generationPrice(
       stripe,
-      idOf(item.price.product as string | { id: string }),
+      stripeId(item.price.product as string | { id: string }),
       owner.data.price_generation,
       target,
     );
@@ -699,7 +554,7 @@ export async function changeSubscriptionPeriod(
       logFailure({ error: new UnknownSubscription(), operation: "billing" });
       return "unavailable";
     }
-    await stripeRead(() =>
+    await stripeCall(() =>
       stripe.subscriptions.update(subscription.id, {
         items: [{ id: item.id, price: price.id }],
         trial_end: item.current_period_end,
@@ -732,12 +587,7 @@ export function workspaceCustomerSql(workspace: string, environment: string) {
     ORDER BY julianday(s.current_period_start) DESC LIMIT 1)`;
   const lifetime = (inForce: boolean) => `(SELECT a.customer_id FROM lifetime_allocations a
     WHERE a.workspace_id = ${workspace} AND a.status = 'active' AND a.customer_id IS NOT NULL
-      AND ${notErasedSql("a")}${
-        inForce
-          ? ` AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = a.workspace_id
-        AND e.source = 'lifetime' AND e.revoked_at IS NULL)`
-          : ""
-      })`;
+      AND ${notErasedSql("a")}${inForce ? ` AND ${lifetimeInForceSql("a.workspace_id")}` : ""})`;
   return `COALESCE(${subscription(true)}, ${lifetime(true)}, ${subscription(false)},
     ${lifetime(false)})`;
 }
@@ -756,12 +606,12 @@ export async function openBillingPortal(
   if (!key) return null;
   const row = await env.DB.prepare(`SELECT ${workspaceCustomerSql("wm.workspace_id", "?2")}
       AS customer_id FROM workspace_members wm WHERE wm.user_id = ?1`)
-    .bind(userId, environmentOf(env))
+    .bind(userId, stripeEnvironment(env))
     .first<{ customer_id: string | null }>();
   const customer = row?.customer_id;
   if (!customer) return null;
   const stripe = await createStripeClient(key);
-  const session = await stripeRead(() =>
+  const session = await stripeCall(() =>
     stripe.billingPortal.sessions.create({
       customer,
       return_url: returnUrl,
@@ -790,7 +640,7 @@ export async function stopRenewals(
         AND environment = ?2 AND unavailable_at IS NULL
         AND status NOT IN ('canceled', 'incomplete_expired')`).bind(
       workspaceId,
-      environmentOf(env),
+      stripeEnvironment(env),
     ),
     env.DB.prepare(`SELECT provider_reference AS id FROM lifetime_allocations
         WHERE workspace_id = ? AND status = 'reserved' AND provider_reference IS NOT NULL`).bind(
@@ -808,17 +658,17 @@ export async function stopRenewals(
   const key = stripeSecretKey(env);
   if (!key) return false;
   try {
-    const stripe = await createStripeReader(key, fetcher);
+    const stripe = await createBoundedStripeClient(key, fetcher);
     const stop = async (id: string) => {
       let status: string;
       try {
-        const current = await stripeRead(() => stripe.subscriptions.retrieve(id));
+        const current = await stripeCall(() => stripe.subscriptions.retrieve(id));
         status = ["canceled", "incomplete_expired"].includes(current.status)
           ? current.status
-          : (await stripeRead(() => stripe.subscriptions.cancel(id))).status;
+          : (await stripeCall(() => stripe.subscriptions.cancel(id))).status;
       } catch (error) {
         // Un abbonamento che Stripe non restituisce più non può addebitare.
-        if (!isMissingObject(error as UpstreamError)) throw error;
+        if (!isMissingObject(error)) throw error;
         await env.DB.prepare(
           "UPDATE stripe_subscriptions SET unavailable_at = COALESCE(unavailable_at, ?1) WHERE id = ?2",
         )
@@ -832,16 +682,16 @@ export async function stopRenewals(
         .run();
     };
     const close = async (id: string) => {
-      const session = await stripeRead(() => stripe.checkout.sessions.retrieve(id));
-      if (session.status === "open") await stripeRead(() => stripe.checkout.sessions.expire(id));
+      const session = await stripeCall(() => stripe.checkout.sessions.retrieve(id));
+      if (session.status === "open") await stripeCall(() => stripe.checkout.sessions.expire(id));
       // Scaduta: il posto si libera; pagata: il posto resta con i riferimenti all'acquisto.
       await reconcileLifetime(env, stripe, id, now);
     };
     // Una sessione aperta si chiude; una completata ha creato un abbonamento da fermare.
     const checkout = async (id: string) => {
-      const session = await stripeRead(() => stripe.checkout.sessions.retrieve(id));
-      if (session.status === "open") await stripeRead(() => stripe.checkout.sessions.expire(id));
-      else if (session.subscription) await stop(idOf(session.subscription));
+      const session = await stripeCall(() => stripe.checkout.sessions.retrieve(id));
+      if (session.status === "open") await stripeCall(() => stripe.checkout.sessions.expire(id));
+      else if (session.subscription) await stop(stripeId(session.subscription));
     };
     await inSequence(
       checkouts!.results.map(({ id }) => id),

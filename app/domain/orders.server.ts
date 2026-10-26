@@ -1,8 +1,8 @@
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
-import { buyerNameView, contactsView } from "../contact";
+import { buyerNameView } from "../contact";
 import { maxListedOrders } from "../orders/order-list";
 import { searchTokens } from "../orders/order-search";
-import { taxComparisonKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
+import { buyerTaxKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
 import {
   fiscalSituations,
   orderPeriods,
@@ -10,20 +10,17 @@ import {
   paymentStatuses,
   premiumOrderPeriods,
   shippingStatuses,
-  type FiscalNotice,
   type FiscalSituation,
-  type FiscalView,
-  type OrderView,
   type PaymentStatus,
   type ShippingStatus,
-  type SourceStatus,
   type SuggestionView,
   type TaxQuality,
+  type EbayEnvironment,
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
-import type { EbayEnvironment } from "../integrations/ebay/environment.server";
-import { consultableStore, storeNameSql } from "./store-state.server";
+import { consultableStore, storeLabelSql } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
+import { sqlList } from "./sql.server";
 
 export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
 export type ShippingState = "to_ship" | "in_progress" | "shipped" | "cancelled" | "unknown";
@@ -124,8 +121,6 @@ function isFulfillmentCf(tax: VisibleOrder["taxIdentifiers"][number]): boolean {
   // cfKey qualifica già il Paese prima del confronto fra le fonti.
   return tax.source === "ebay_fulfillment" && tax.type === "CODICE_FISCALE";
 }
-
-const sqlList = (names: readonly string[]) => names.map((name) => `'${name}'`).join(", ");
 
 /**
  * Tipo dell'identificativo come in `taxIdentifierType`, dagli stessi elenchi: CF e Partita IVA
@@ -245,8 +240,8 @@ const tokenMissingSql = `instr(COALESCE(o.search_text, ${unindexedSearchSql}), t
       AND instr(lower(t.value || ' ' || replace(t.value, ' ', '')), token.value) > 0))`;
 
 /**
- * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6, criteri da ?7,
- * acquisti non pagati ?13, istantanea da ?14 e posizione nell'elenco da ?16. Un ordine senza
+ * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?5, criteri da ?6,
+ * acquisti non pagati ?12, istantanea da ?13 e posizione nell'elenco da ?15. Un ordine senza
  * istante d'ingresso negli elenchi è stato letto prima che venisse registrato e vale come già
  * presente. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli stessi controlli
  * di negozio e conservazione. Un acquisto non pagato resta fuori, salvo con
@@ -260,17 +255,17 @@ const visibleOrdersSql = `FROM workspace_members wm
   WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
     AND o.retention_until > ?3
     AND +o.merged_into IS NULL
-    AND (o.is_provisional = 0 OR ?9 = 'unpaid' OR ?13 = 1)
-    AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
-    AND (?7 IS NULL OR o.store_id = ?7)
-    AND (?8 IS NULL OR o.creation_time >= ?8)
-    AND (?9 IS NULL OR ${paymentSql} = ?9)
-    AND (?10 IS NULL OR ${shippingSql} = ?10)
-    AND (?11 IS NULL OR ${fiscalSql(accessSql)} = ?11)
-    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?12, '[]')) token WHERE ${tokenMissingSql})
-    AND (?14 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?14)
-    AND (?15 IS NULL OR o.listed_at > ?15)
-    AND (?16 IS NULL OR o.creation_time < ?16 OR (o.creation_time = ?16 AND o.id < ?17))`;
+    AND (o.is_provisional = 0 OR ?8 = 'unpaid' OR ?12 = 1)
+    AND (?5 IS NULL OR o.id IN (SELECT value FROM json_each(?5)))
+    AND (?6 IS NULL OR o.store_id = ?6)
+    AND (?7 IS NULL OR o.creation_time >= ?7)
+    AND (?8 IS NULL OR ${paymentSql} = ?8)
+    AND (?9 IS NULL OR ${shippingSql} = ?9)
+    AND (?10 IS NULL OR ${fiscalSql(accessSql)} = ?10)
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?11, '[]')) token WHERE ${tokenMissingSql})
+    AND (?13 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?13)
+    AND (?14 IS NULL OR o.listed_at > ?14)
+    AND (?15 IS NULL OR o.creation_time < ?15 OR (o.creation_time = ?15 AND o.id < ?16))`;
 
 function visibleOrdersParams(
   userId: string,
@@ -286,7 +281,6 @@ function visibleOrdersParams(
     ebayEnvironment,
     now.toISOString(),
     limit,
-    now.toISOString(),
     ids ? JSON.stringify(ids) : null,
     criteria.storeId ?? null,
     criteria.since ?? null,
@@ -426,7 +420,7 @@ export async function listVisibleOrders(
   filter: { ids?: string[]; criteria?: OrderCriteria; provisional?: boolean } = {},
 ): Promise<VisibleOrder[]> {
   const limit = Math.max(1, Math.min(maxListedOrders, Math.trunc(requestedLimit)));
-  const listedAccessSql = orderAccessSql("o.id", "vo.workspace_id", "?5");
+  const listedAccessSql = orderAccessSql("o.id", "vo.workspace_id", "?3");
   const result = await db
     .prepare(
       `WITH visible_orders AS (
@@ -453,8 +447,7 @@ export async function listVisibleOrders(
                         'currency', currency, 'imageUrl', image_url,
                         'stableKey', stable_key))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
-              ${storeNameSql("s")} ||
-                CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
+              ${storeLabelSql("s")} AS store_name,
               NOT EXISTS (SELECT 1 FROM tax_identifiers t WHERE t.order_id = o.id
                 AND t.removed_at IS NULL AND ${taxKind("t")} <> 'PIVA') AS vat_only,
               ti.identifier_type,
@@ -566,7 +559,7 @@ export async function listVisibleOrders(
     const cfKey = (tax: VisibleOrder["taxIdentifiers"][number]) =>
       taxIdentifierType(tax.type, tax.issuingCountry) === "CF" &&
       (tax.source === "ebay_trading_get_orders" || isFulfillmentCf(tax))
-        ? taxComparisonKey({ ...tax, issuingCountry: "IT" })
+        ? buyerTaxKey(tax)
         : null;
     for (const tax of order.taxIdentifiers) {
       const key = cfKey(tax);
@@ -606,169 +599,6 @@ export async function listVisibleOrders(
     new Date(Math.max(now.getTime(), Date.now())),
   );
   return visible.map((order) => ({ ...order, ...suggestions.get(order.id) }));
-}
-
-/** Dato fiscale nella forma della pagina Ordini: valori presenti soltanto se autorizzati. */
-function fiscalView(order: VisibleOrder): FiscalView {
-  if (order.fiscalState === "available") {
-    const notice: FiscalNotice | null =
-      order.taxVerification === "error"
-        ? "lastKnown"
-        : order.taxVerification === "checking"
-          ? "checking"
-          : order.taxAvailability === "masked"
-            ? "masked"
-            : order.taxAvailability === "absent" || order.taxAvailability === "not_included"
-              ? "notReturned"
-              : null;
-    return {
-      state: "available",
-      identifiers: order.taxIdentifiers.map((identifier) => {
-        const type = taxIdentifierType(identifier.type, identifier.issuingCountry);
-        return {
-          type,
-          ...(type === "OTHER" ? { typeLabel: identifier.type } : {}),
-          value: identifier.value,
-          quality: identifier.quality,
-          updated: identifier.updated,
-        };
-      }),
-      ...(notice ? { notice } : {}),
-    };
-  }
-  if (order.fiscalState === "locked") {
-    // Lo sblocco resta sospeso finché l'acquisto non è pagato (D174) o durante una nuova verifica.
-    const hold = order.provisional
-      ? ("unpaid" as const)
-      : order.taxVerification === "checking"
-        ? ("checking" as const)
-        : null;
-    return { state: "locked", shownAs: order.lockedShownAs, ...(hold ? { hold } : {}) };
-  }
-  // La situazione estera nasce soltanto da un paese di fatturazione presente e diverso dall'Italia.
-  if (order.fiscalState === "foreign")
-    return {
-      state: "missing",
-      reason: "foreign",
-      country: order.summary.buyer!.billingAddress!.countryCode!,
-    };
-  if (order.fiscalState === "missing") {
-    const reason = order.taxAvailability;
-    return reason === "masked" || reason === "removed"
-      ? { state: "missing", reason }
-      : { state: "missing" };
-  }
-  return { state: order.fiscalState };
-}
-
-function sourceStatus<Status extends string>(
-  status: Status | "unknown" | null,
-  code: string | null,
-): SourceStatus<Status> {
-  return status === null || status === "unknown"
-    ? // Senza stato normalizzato manca anche il codice originale.
-      { status: null, code }
-    : { status };
-}
-
-/** Luogo di consegna sintetico: città, provincia tra parentesi. */
-function locality(address: NonNullable<BuyerSnapshot["shipTo"]>["address"]) {
-  if (!address?.city) return null;
-  return address.stateOrProvince ? `${address.city} (${address.stateOrProvince})` : address.city;
-}
-
-/**
- * Ordine persistito nella vista condivisa con l'anteprima. Prima riga d'indirizzo e località
- * compongono l'indirizzo di fatturazione; un dato non fornito da eBay resta null.
- */
-/** ID dell'inserzione eBay in testa all'identità stabile della riga (`<inserzione>-<riga>`). */
-function listingId(stableKey: string | null): string | null {
-  return stableKey?.match(/^(\d{6,19})-/u)?.[1] ?? null;
-}
-
-export function orderView(order: VisibleOrder): OrderView {
-  const buyer = order.summary.buyer;
-  const billing = buyer?.billingAddress;
-  const shipTo = buyer?.shipTo;
-  const line = [billing?.addressLine1, billing?.addressLine2].filter(Boolean).join(", ");
-  // La miniatura è la prima immagine d'inserzione disponibile fra gli articoli.
-  const thumbnail = order.summary.lineItems.find((item) => item.imageUrl)?.imageUrl;
-  const view: Omit<OrderView, "contacts"> = {
-    id: order.id,
-    ebayOrderId: order.ebayOrderId,
-    createdAt: order.creationTime,
-    storeId: order.storeId,
-    storeName: order.storeName,
-    marketplace: order.marketplaceId,
-    buyerName: buyer?.name ?? null,
-    buyerUsername: buyer?.username ?? null,
-    shipTo: shipTo
-      ? {
-          name: shipTo.name,
-          locality: locality(shipTo.address),
-          country: shipTo.address?.countryCode ?? null,
-        }
-      : null,
-    items: order.summary.lineItems.map((item) => ({
-      id: item.lineItemId,
-      title: item.title,
-      sku: item.sku,
-      quantity: item.quantity,
-      // Un importo in un'altra valuta non si mostra come se fosse nella valuta dell'ordine.
-      totalMinor: item.currency === order.currency ? item.totalMinor : null,
-      currency: order.currency,
-      listingId: listingId(item.stableKey),
-    })),
-    totalMinor: order.totalMinor,
-    currency: order.currency,
-    payment: sourceStatus<PaymentStatus>(order.summary.payment, order.summary.orderPaymentStatus),
-    shipping: sourceStatus<ShippingStatus>(
-      order.summary.shipping,
-      order.summary.orderFulfillmentStatus,
-    ),
-    billingAddress:
-      billing &&
-      [line, billing.city, billing.postalCode, billing.stateOrProvince, billing.countryCode].some(
-        (value) => value?.trim(),
-      )
-        ? {
-            line,
-            postalCode: billing.postalCode ?? "",
-            city: billing.city ?? "",
-            province: billing.stateOrProvince,
-            countryCode: billing.countryCode ?? "",
-          }
-        : null,
-    phone: buyer?.phone ?? shipTo?.phone ?? null,
-    email: buyer?.email ?? null,
-    ...(buyer?.masked?.length
-      ? {
-          maskedContacts: [
-            ...(!buyer.name && buyer.masked.includes("name") ? ["name" as const] : []),
-            ...(!buyer.email && buyer.masked.includes("email") ? ["email" as const] : []),
-            ...(!buyer.phone &&
-            !shipTo?.phone &&
-            (buyer.masked.includes("phone") || buyer.masked.includes("shipTo.phone"))
-              ? ["phone" as const]
-              : []),
-            ...(!billing?.addressLine1 && buyer.masked.includes("billingAddress.addressLine1")
-              ? ["billingAddress" as const]
-              : []),
-            ...(!shipTo?.name && buyer.masked.includes("shipTo.name")
-              ? ["recipient" as const]
-              : []),
-          ],
-        }
-      : {}),
-    fiscal: fiscalView(order),
-    suggestions: order.suggestions ?? [],
-    ...(order.suggestionStatus ? { suggestionStatus: order.suggestionStatus } : {}),
-    ...(order.reconciliationIssue ? { reconciliationIssue: true } : {}),
-    ...(thumbnail ? { thumbnail } : {}),
-    lastSyncedAt: order.taxCheckedAt,
-    updatedAt: order.lastModifiedTime,
-  };
-  return { ...view, contacts: contactsView(view) };
 }
 
 /**

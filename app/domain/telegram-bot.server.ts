@@ -1,14 +1,14 @@
-import { activeEntitlementSql } from "./grants.server";
+import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
 import { listVisibleOrders } from "./orders.server";
-import { storeNameSql } from "./store-state.server";
+import { planPausedStore, reconnectStore, storeNameSql } from "./store-state.server";
 import {
   consumeTelegramStart,
   saveTelegramChange,
-  unknownChatReply,
   type TelegramChange,
+  telegramPreferencesSql,
+  unknownChatReply,
 } from "./telegram.server";
 import {
-  appUrl,
   copyButtons,
   date,
   escape,
@@ -20,7 +20,7 @@ import {
   when,
   zoneName,
 } from "./telegram-messages.server";
-import { ordersPath, settingsPath } from "../app-links";
+import { appUrl, ordersPath, planPath } from "../app-links";
 import type { Language } from "../i18n";
 import { UpstreamError } from "../integrations/http.server";
 import {
@@ -35,6 +35,8 @@ import {
 } from "../integrations/telegram.server";
 import { telegramDigestTimes } from "../preferences";
 import type { EbayEnvironment } from "../view-models";
+import { inSequence } from "../sequence";
+import { telegramBotCopy as copy } from "../copy/telegram";
 
 /**
  * Comandi e pulsanti del bot per i venditori (D199). Ogni risposta rilegge collegamento,
@@ -42,160 +44,10 @@ import type { EbayEnvironment } from "../view-models";
  * stesse regole. Ricerca, sblocco, esportazione e gestione dei negozi restano sul sito.
  */
 
-/** Testi del bot nella lingua della chat, composti a ogni risposta. */
-const copy = (language: Language) =>
-  (
-    {
-      it: {
-        commands: {
-          status: "Piano, notifiche e negozi",
-          latest: "Ultimi ordini",
-          preferences: "Notifiche e negozi",
-          help: "Come funziona il bot",
-        } satisfies Record<BotCommand, string>,
-        plans: {
-          premium: (until: string) => `Premium fino al ${until}`,
-          trial: (until: string) => `Prova Premium fino al ${until}`,
-          lifetime: "Premium a vita",
-          free: "Free",
-        },
-        freeNote: "Con il piano Free le notifiche sono ferme.",
-        enabled: "Notifiche attive",
-        paused: "Notifiche in pausa",
-        filters: { fiscal: "solo con dato fiscale", all: "tutti gli ordini" },
-        filterTitles: { fiscal: "Solo ordini con dato fiscale", all: "Tutti gli ordini" },
-        modes: {
-          each: "Un messaggio per ordine",
-          digest: (time: string, zone: string) => `Riepilogo alle ${time} · ${zone}`,
-        },
-        stores: "Negozi",
-        excluded: "escluso",
-        reconnect: "da ricollegare",
-        suspended: "sospeso",
-        lastDelivery: (at: string) => `Ultimo invio ${at}`,
-        noDelivery: "Nessun invio finora",
-        unreachable: "Alcuni messaggi non sono arrivati dopo diversi tentativi.",
-        preferences: "Preferenze",
-        openSettings: "Impostazioni",
-        choosePlan: "Scegli il piano",
-        premiumRequired:
-          "Notifiche e ultimi ordini nel bot sono compresi in Premium, nella prova e nel lifetime.",
-        zoneNote: "Il fuso si cambia dal sito.",
-        pause: "Metti in pausa",
-        resume: "Riprendi le notifiche",
-        fiscalOnly: "Solo con dato fiscale",
-        allOrders: "Tutti gli ordini",
-        each: "Uno per ordine",
-        digest: "Riepilogo",
-        time: (time: string) => `Orario: ${time}`,
-        timeTitle: "Orario del riepilogo",
-        storeCount: (included: number, total: number) => `Negozi: ${included} di ${total}`,
-        storesTitle: "Negozi nelle notifiche",
-        back: "Indietro",
-        unlink: "Scollega la chat",
-        unlinkQuestion:
-          "Scollegare questa chat? Le notifiche in attesa si annullano e la chat non riceve più nulla finché non la colleghi di nuovo dal sito.",
-        unlinkConfirm: "Sì, scollega",
-        cancel: "Annulla",
-        unlinked:
-          "Chat scollegata. Puoi collegarla di nuovo da FiscalBay, in Impostazioni › Notifiche.",
-        expired: "Questo pulsante non è più valido.",
-        latest: "Ultimi ordini",
-        latestRange: (from: number, to: number, total: number) => `${from}–${to} di ${total}`,
-        latestEmpty: "Nessun ordine da mostrare nei negozi inclusi.",
-        more: "Altri 5",
-        previous: "Precedenti",
-        orders: "Apri gli ordini",
-        help: {
-          title: "FiscalBay",
-          intro:
-            "Qui arrivano le notifiche degli ordini, secondo le preferenze delle Impostazioni.",
-          commands: [
-            ["⭐", "/stato", "piano, notifiche e negozi"],
-            ["🛒", "/ultimi", "gli ultimi ordini"],
-            ["⚙️", "/preferenze", "pausa, filtro, frequenza e negozi"],
-          ],
-          site: "Ricerca, sblocco ed esportazione restano sul sito.",
-        },
-      },
-      en: {
-        commands: {
-          status: "Plan, notifications and stores",
-          latest: "Latest orders",
-          preferences: "Notifications and stores",
-          help: "How the bot works",
-        } satisfies Record<BotCommand, string>,
-        plans: {
-          premium: (until: string) => `Premium until ${until}`,
-          trial: (until: string) => `Premium trial until ${until}`,
-          lifetime: "Lifetime Premium",
-          free: "Free",
-        },
-        freeNote: "Notifications are stopped on the Free plan.",
-        enabled: "Notifications on",
-        paused: "Notifications paused",
-        filters: { fiscal: "only with a tax ID", all: "all orders" },
-        filterTitles: { fiscal: "Only orders with a tax ID", all: "All orders" },
-        modes: {
-          each: "One message per order",
-          digest: (time: string, zone: string) => `Summary at ${time} · ${zone}`,
-        },
-        stores: "Stores",
-        excluded: "excluded",
-        reconnect: "to reconnect",
-        suspended: "suspended",
-        lastDelivery: (at: string) => `Last delivery ${at}`,
-        noDelivery: "Nothing delivered yet",
-        unreachable: "Some messages did not arrive after several attempts.",
-        preferences: "Preferences",
-        openSettings: "Settings",
-        choosePlan: "Choose a plan",
-        premiumRequired:
-          "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
-        zoneNote: "The time zone is changed on the website.",
-        pause: "Pause",
-        resume: "Resume notifications",
-        fiscalOnly: "Only with a tax ID",
-        allOrders: "All orders",
-        each: "One per order",
-        digest: "Summary",
-        time: (time: string) => `Time: ${time}`,
-        timeTitle: "Summary time",
-        storeCount: (included: number, total: number) => `Stores: ${included} of ${total}`,
-        storesTitle: "Stores in notifications",
-        back: "Back",
-        unlink: "Unlink this chat",
-        unlinkQuestion:
-          "Unlink this chat? Pending notifications are cancelled and the chat receives nothing until you link it again on the website.",
-        unlinkConfirm: "Yes, unlink",
-        cancel: "Cancel",
-        unlinked:
-          "Chat unlinked. You can link it again in FiscalBay, under Settings › Notifications.",
-        expired: "This button is no longer valid.",
-        latest: "Latest orders",
-        latestRange: (from: number, to: number, total: number) => `${from}–${to} of ${total}`,
-        latestEmpty: "No orders to show in the included stores.",
-        more: "5 more",
-        previous: "Previous",
-        orders: "Open orders",
-        help: {
-          title: "FiscalBay",
-          intro: "Order notifications arrive here according to your Settings.",
-          commands: [
-            ["⭐", "/status", "plan, notifications and stores"],
-            ["🛒", "/latest", "the latest orders"],
-            ["⚙️", "/preferences", "pause, filter, frequency and stores"],
-          ],
-          site: "Search, unlocking and export stay on the website.",
-        },
-      },
-    } satisfies Record<Language, unknown>
-  )[language];
-
 /** Il menu dei comandi del bot dell'ambiente, nelle due lingue. */
 export async function configureBotCommands(env: Env, fetcher: typeof fetch = fetch) {
   if (!telegramConfigured(env)) return;
-  await setBotCommands(env, { it: copy("it").commands, en: copy("en").commands }, fetcher);
+  await setBotCommands(env, { it: copy.it.commands, en: copy.en.commands }, fetcher);
 }
 
 /** Ultimi ordini consultabili dal bot e ordini per pagina. */
@@ -213,8 +65,7 @@ type Link = {
 };
 
 const linkColumns = `l.id, l.workspace_id AS workspaceId, l.chat_id AS chatId, l.language,
-  (SELECT wm.user_id FROM workspace_members wm WHERE wm.workspace_id = l.workspace_id
-    ORDER BY wm.role = 'owner' DESC, wm.user_id LIMIT 1) AS userId,
+  (SELECT wm.user_id FROM workspace_members wm WHERE wm.workspace_id = l.workspace_id) AS userId,
   ${activeEntitlementSql("l.workspace_id", "?2")} AS premium`;
 
 export type TelegramReceipt = {
@@ -284,10 +135,8 @@ function sendInOrder(
   replies: Array<{ link: Pick<Link, "chatId">; message: BotMessage }>,
   fetcher: typeof fetch,
 ) {
-  return replies.reduce<Promise<void>>(
-    (previous, { link, message }) =>
-      previous.then(() => quiet(sendMessage(env, link.chatId, message, fetcher))),
-    Promise.resolve(),
+  return inSequence(replies, ({ link, message }) =>
+    quiet(sendMessage(env, link.chatId, message, fetcher)),
   );
 }
 
@@ -315,7 +164,7 @@ async function commandMessages(
 }
 
 function helpMessage(env: Env, language: Language): BotMessage {
-  const help = copy(language).help;
+  const help = copy[language].help;
   return {
     html: [
       `👋 <b>${escape(help.title)}</b>\n${escape(help.intro)}`,
@@ -325,19 +174,19 @@ function helpMessage(env: Env, language: Language): BotMessage {
       `<i>${escape(help.site)}</i>`,
     ].join("\n\n"),
     buttons: [
-      [{ text: `${icons.link} ${copy(language).openSettings}`, url: settingsUrl(env, language) }],
+      [{ text: `${icons.link} ${copy[language].openSettings}`, url: settingsUrl(env, language) }],
     ],
   };
 }
 
 function premiumMessage(env: Env, language: Language): BotMessage {
   return {
-    html: `⭐ ${escape(copy(language).premiumRequired)}`,
+    html: `⭐ ${escape(copy[language].premiumRequired)}`,
     buttons: [
       [
         {
-          text: `⭐ ${copy(language).choosePlan}`,
-          url: appUrl(env, language, `${settingsPath}/piano`),
+          text: `⭐ ${copy[language].choosePlan}`,
+          url: appUrl(env, language, planPath),
         },
       ],
     ],
@@ -372,36 +221,30 @@ async function readState(db: D1Database, link: Link, now: Date) {
     Record<string, unknown>
   >([
     db
-      .prepare(`SELECT COALESCE(p.enabled, 1) AS enabled, COALESCE(p.filter, 'fiscal') AS filter,
-          COALESCE(p.mode, 'each') AS mode, COALESCE(p.digest_time, '18:00') AS digestTime,
-          COALESCE(p.time_zone, 'Europe/Rome') AS timeZone, l.last_delivery_at AS lastDelivery,
+      .prepare(`SELECT ${telegramPreferencesSql("p")}, l.last_delivery_at AS lastDelivery,
           l.delivery_failure AS failure
         FROM telegram_links l LEFT JOIN telegram_preferences p ON p.workspace_id = l.workspace_id
         WHERE l.id = ?`)
       .bind(link.id),
     db
       .prepare(`SELECT s.id, ${storeNameSql("s")} AS name, s.ebay_environment AS environment,
-          COALESCE(sp.enabled, 1) AS enabled,
-          EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan')
-            AS paused,
-          (s.disconnected_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM ebay_store_credentials c
-            WHERE c.store_id = s.id AND c.rejected_at IS NULL AND c.refresh_expires_at > ?2))
-            AS reconnect
+          COALESCE(sp.enabled, 1) AS enabled, ${planPausedStore("s.id")} AS paused,
+          ${reconnectStore("s", "?2")} AS reconnect
         FROM ebay_stores s LEFT JOIN telegram_store_preferences sp ON sp.store_id = s.id
         WHERE s.workspace_id = ?1 AND s.data_deleted_at IS NULL ORDER BY s.linked_at, s.id`)
       .bind(link.workspaceId, now.toISOString()),
-    // La copertura mostrata è la stessa delle Impostazioni: prima un diritto diverso dalla prova.
+    // La copertura mostrata è la stessa delle Impostazioni.
     db
-      .prepare(`SELECT e.source, e.ends_at AS endsAt FROM workspace_entitlements e
-        WHERE e.workspace_id = ?1 AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(?2)
-          AND (e.ends_at IS NULL OR julianday(?2) < julianday(e.ends_at))
-        ORDER BY e.source = 'trial', e.ends_at IS NOT NULL, julianday(e.ends_at) DESC LIMIT 1`)
+      .prepare(`SELECT ${activeCoverageSql("source", "?1", "?2")} AS source,
+          ${activeCoverageSql("ends_at", "?1", "?2")} AS endsAt`)
       .bind(link.workspaceId, now.toISOString()),
   ]);
   return {
     preferences: preferences[0] as Preferences,
     stores: stores as StoreRow[],
-    coverage: coverage[0] as { source: string; endsAt: string | null } | undefined,
+    coverage: coverage[0]?.source
+      ? (coverage[0] as { source: string; endsAt: string | null })
+      : undefined,
   };
 }
 
@@ -423,14 +266,14 @@ const marks = {
 
 /** Frequenza del riepilogo con orario e fuso, come nelle Impostazioni. */
 function modeLine(language: Language, preferences: Preferences) {
-  const text = copy(language);
+  const text = copy[language];
   return preferences.mode === "each"
     ? `${marks.each} ${escape(text.modes.each)}`
     : `${marks.digest} ${escape(text.modes.digest(preferences.digestTime, zoneName(language, preferences.timeZone)))}`;
 }
 
 async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
-  const text = copy(link.language);
+  const text = copy[link.language];
   const state = await readState(env.DB, link, now);
   const { coverage, preferences } = state;
   const until = (iso: string) => date(link.language, preferences.timeZone, iso, now);
@@ -488,7 +331,7 @@ async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessag
           ? { text: `${marks.settings} ${text.preferences}`, callback_data: data(link, "pr") }
           : {
               text: `${marks.plan} ${text.choosePlan}`,
-              url: appUrl(env, link.language, `${settingsPath}/piano`),
+              url: appUrl(env, link.language, planPath),
             },
         { text: `${icons.link} ${text.openSettings}`, url: settingsUrl(env, link.language) },
       ],
@@ -502,7 +345,7 @@ const choice = (on: boolean, label: string) => `${on ? "●" : "○"} ${label}`;
 const check = (on: boolean, label: string) => `${on ? "☑" : "☐"} ${label}`;
 
 async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
-  const text = copy(link.language);
+  const text = copy[link.language];
   const state = await readState(env.DB, link, now);
   const { preferences } = state;
   const active = state.stores.filter((store) => !store.paused);
@@ -574,7 +417,7 @@ async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotM
 }
 
 async function timesMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
-  const text = copy(link.language);
+  const text = copy[link.language];
   const { preferences } = await readState(env.DB, link, now);
   return {
     html: `${marks.digest} <b>${escape(text.timeTitle)}</b>\n${escape(zoneName(link.language, preferences.timeZone))}\n<i>${escape(text.zoneNote)}</i>`,
@@ -589,7 +432,7 @@ async function timesMessage(env: Env, link: Link, now: Date): Promise<BotMessage
 }
 
 async function storesMessage(env: Env, link: Link, page: number, now: Date): Promise<BotMessage> {
-  const text = copy(link.language);
+  const text = copy[link.language];
   const { stores } = await readState(env.DB, link, now);
   const pages = Math.max(1, Math.ceil(stores.length / storesPerPage));
   const current = Math.min(Math.max(page, 0), pages - 1);
@@ -629,7 +472,7 @@ async function storesMessage(env: Env, link: Link, page: number, now: Date): Pro
  * e le pagine aggiornano lo stesso messaggio.
  */
 async function latestMessage(env: Env, link: Link, offset: number, now: Date): Promise<BotMessage> {
-  const text = copy(link.language);
+  const text = copy[link.language];
   const state = await readState(env.DB, link, now);
   // Ogni negozio incluso con i propri ultimi ordini: quelli dei negozi esclusi non tolgono posto.
   const perStore = await Promise.all(
@@ -720,7 +563,7 @@ async function consumeCallback(
   // Il pulsante scaduto risponde nella lingua della chat, se è ancora collegata.
   if (!link)
     return quiet(
-      answerCallback(env, update.callbackId!, copy(links[0]?.language ?? "it").expired, fetcher),
+      answerCallback(env, update.callbackId!, copy[links[0]?.language ?? "it"].expired, fetcher),
     );
   const language = link.language;
   await quiet(answerCallback(env, update.callbackId!, undefined, fetcher));
@@ -738,7 +581,7 @@ async function consumeCallback(
   if (action === "tm") return edit(await timesMessage(env, link, now));
   if (action === "ss") return edit(await storesMessage(env, link, Number(args[0]) || 0, now));
   if (action === "ul" && args[0] !== "ok") {
-    const text = copy(language);
+    const text = copy[language];
     return edit({
       html: escape(text.unlinkQuestion),
       buttons: [
@@ -761,8 +604,8 @@ async function consumeCallback(
       ),
     ]);
     return edit({
-      html: escape(copy(language).unlinked),
-      buttons: [[{ text: copy(language).openSettings, url: settingsUrl(env, language) }]],
+      html: escape(copy[language].unlinked),
+      buttons: [[{ text: copy[language].openSettings, url: settingsUrl(env, language) }]],
     });
   }
   if (action === "la") {

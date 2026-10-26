@@ -3,10 +3,8 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import {
   consumerTests,
-  crashedRanges,
   criticalModule,
   evaluate,
-  mergeRetry,
   mutationConcurrency,
   mutationMatrix,
 } from "./mutation.mjs";
@@ -77,36 +75,6 @@ describe("esito dei mutation test", () => {
       "app/grants.server.ts:3:5: ConditionalExpression Timeout",
     ]);
     assert.deepEqual(evaluate({ files: {} }), ["nessun mutante generato"]);
-  });
-
-  it("ripete una volta soltanto i mutanti interrotti dal pool fuori da ogni prova", () => {
-    const crash = "An error occurred outside of a test run: Error: [vitest-pool]";
-    const at = (line, status, statusReason, replacement = "false") => ({
-      mutatorName: "ConditionalExpression",
-      replacement,
-      status,
-      statusReason,
-      location: { start: { line, column: 4 }, end: { line: line + 1, column: 2 } },
-    });
-    const first = report(
-      at(3, "RuntimeError", crash),
-      at(3, "RuntimeError", crash, "true"),
-      at(7, "RuntimeError", "TypeError durante la prova"),
-      at(9, "Killed"),
-    );
-    assert.deepEqual(crashedRanges(first), ["app/grants.server.ts:3-4"]);
-    const merged = mergeRetry(
-      first,
-      report(at(3, "Killed"), at(3, "Survived", undefined, "true"), at(9, "Survived")),
-    );
-    assert.deepEqual(
-      merged.files["app/grants.server.ts"].mutants.map(({ status }) => status),
-      ["Killed", "Survived", "RuntimeError", "Killed"],
-    );
-    assert.deepEqual(evaluate(merged), [
-      "app/grants.server.ts:3:5: ConditionalExpression Survived",
-      "app/grants.server.ts:7:5: ConditionalExpression RuntimeError",
-    ]);
   });
 
   it("prova ogni modulo con i test che lo importano, anche indirettamente", () => {

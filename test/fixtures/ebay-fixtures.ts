@@ -118,3 +118,14 @@ export function syntheticEbay(
     };
   }
 }
+
+/** Ambiente con la Sandbox eBay accesa: la configurazione distribuita la tipizza spenta. */
+export function withSandbox(base: Env): Env {
+  return {
+    ...base,
+    EBAY_SANDBOX_ENABLED: "true",
+    EBAY_SANDBOX_CLIENT_ID: "sandbox-client",
+    EBAY_SANDBOX_CLIENT_SECRET: "sandbox-secret",
+    EBAY_SANDBOX_RUNAME: "sandbox-runame",
+  } as unknown as Env;
+}

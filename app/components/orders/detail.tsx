@@ -13,26 +13,15 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import type { AppCopy } from "../../app-copy";
-import { appHref, type AppLinks } from "../../app-links";
+import { appHref } from "../../app-links";
 import { formatAmount, type Language } from "../../i18n";
 import { buyerNameView, contactText } from "../../contact";
 import { exportHref, exportSection } from "../../orders/export-scope";
-import {
-  countryName,
-  formatDate,
-  itemPrice,
-  marketplaceLabel,
-  type OrderView,
-} from "../../view-models";
+import { itemPrice, marketplaceLabel, type OrderView } from "../../view-models";
+import { countryName, formatDate } from "../../format";
 import { BuyerAddress, EmailLink, ItemThumbnail, PhoneNumber, type SecondaryActions } from "./card";
-import {
-  FiscalCodes,
-  FiscalNotes,
-  MissingOrderHelp,
-  type FiscalProps,
-  type OrdersAccount,
-} from "./fiscal";
+import { FiscalCodes, FiscalNotes, MissingOrderHelp, type FiscalProps } from "./fiscal";
+import type { OrdersAccount } from "./labels";
 import {
   billingCopyText,
   contactCopyLabels,
@@ -44,6 +33,7 @@ import {
 } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
 import { useTimeZone } from "~/components/time-zone";
+import { useCopy, useLinks } from "~/components/copy-context";
 
 /**
  * Spiegazioni complete del dato, suggerimento e richiesta all'acquirente,
@@ -51,33 +41,19 @@ import { useTimeZone } from "~/components/time-zone";
  */
 function FiscalDetail({
   order,
-  t,
-  language,
   account,
   ebayDown,
   templates,
-}: Pick<FiscalProps, "order" | "t" | "language" | "account" | "ebayDown"> & {
+}: Pick<FiscalProps, "order" | "account" | "ebayDown"> & {
   templates: Record<Language, string>;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      <FiscalNotes
-        order={order}
-        t={t}
-        language={language}
-        account={account}
-        ebayDown={ebayDown}
-        compact={false}
-      />
+      <FiscalNotes order={order} account={account} ebayDown={ebayDown} compact={false} />
       {order.fiscal.state === "missing" ? (
-        <MissingOrderHelp
-          key={order.id}
-          order={order}
-          t={t}
-          language={language}
-          templates={templates}
-        />
+        <MissingOrderHelp key={order.id} order={order} templates={templates} />
       ) : null}
       {order.lastSyncedAt ? (
         <p className="text-xs text-muted-foreground">
@@ -88,15 +64,8 @@ function FiscalDetail({
   );
 }
 
-function ItemPrice({
-  item,
-  t,
-  language,
-}: {
-  item: OrderView["items"][number];
-  t: AppCopy;
-  language: Language;
-}) {
+function ItemPrice({ item }: { item: OrderView["items"][number] }) {
+  const { t, language } = useCopy();
   const price = itemPrice(item);
   return (
     <span>
@@ -110,7 +79,8 @@ function ItemPrice({
   );
 }
 
-function Recipient({ order, t, language }: { order: OrderView; t: AppCopy; language: Language }) {
+function Recipient({ order }: { order: OrderView }) {
+  const { t, language } = useCopy();
   const recipient = order.shipTo;
   if (!recipient)
     return <span className="text-muted-foreground">{missingContact(order, "recipient", t)}</span>;
@@ -130,7 +100,8 @@ function Recipient({ order, t, language }: { order: OrderView; t: AppCopy; langu
   );
 }
 
-function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; language: Language }) {
+function OrderDetail({ order }: { order: OrderView }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const row = "grid min-w-0 gap-0.5 [overflow-wrap:anywhere]";
   const missing = <span className="text-muted-foreground">{t.orders.notProvided}</span>;
@@ -222,8 +193,6 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
               <dd className="text-pretty">
                 <BuyerAddress
                   order={order}
-                  t={t}
-                  language={language}
                   copy={contactCopyLabels(t.orders.billingAddress, order.ebayOrderId, t)}
                 />
               </dd>
@@ -259,7 +228,7 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.recipient}</dt>
               <dd className="text-pretty break-words">
-                <Recipient order={order} t={t} language={language} />
+                <Recipient order={order} />
               </dd>
             </div>
           </dl>
@@ -304,7 +273,7 @@ function OrderDetail({ order, t, language }: { order: OrderView; t: AppCopy; lan
                 <span>
                   {t.orders.quantity}: <span className="font-code">{item.quantity}</span>
                 </span>
-                <ItemPrice item={item} t={t} language={language} />
+                <ItemPrice item={item} />
                 {item.listingId ? (
                   <a
                     href={ebayListingHref(item.listingId)}
@@ -340,8 +309,6 @@ export function OrderSheet({
   ebayDown,
   templates,
   confirmUnlock,
-  t,
-  links,
   unlock,
   actions,
 }: {
@@ -350,8 +317,6 @@ export function OrderSheet({
   ebayDown: boolean;
   templates: Record<Language, string>;
   confirmUnlock?: boolean;
-  t: AppCopy;
-  links: AppLinks;
   unlock: {
     submit: (ids: string[], skipConfirmation?: boolean) => void;
     pending: ReadonlySet<string>;
@@ -359,6 +324,8 @@ export function OrderSheet({
   };
   actions: SecondaryActions;
 }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const zone = useTimeZone();
   const { language } = links;
   const location = useLocation();
@@ -430,8 +397,6 @@ export function OrderSheet({
           <div className="mx-4 mb-5 grid gap-3 rounded-xl border bg-muted/30 p-3">
             <FiscalCodes
               order={shown}
-              t={t}
-              language={language}
               account={account}
               ebayDown={ebayDown}
               revealed={unlock.revealed.has(shown.id)}
@@ -441,14 +406,12 @@ export function OrderSheet({
             />
             <FiscalDetail
               order={shown}
-              t={t}
-              language={language}
               account={account}
               ebayDown={ebayDown}
               templates={templates}
             />
           </div>
-          <OrderDetail order={shown} t={t} language={language} />
+          <OrderDetail order={shown} />
         </SheetContent>
       ) : null}
     </Sheet>

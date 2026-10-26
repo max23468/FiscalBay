@@ -10,8 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
-import type { AppCopy } from "../../app-copy";
-import { appHref, type AppLinks } from "../../app-links";
+import { useCopy, useLinks } from "~/components/copy-context";
+import { appHref } from "../../app-links";
 import type { StoreView } from "../../view-models";
 import { LastSync, StoreSubtitle, StoreTile } from "./store";
 import { connectionStatus, marketplaceText, notificationsLabel } from "./state";
@@ -20,13 +20,12 @@ type ListProps = {
   stores: StoreView[];
   premium: boolean;
   now: string;
-  t: AppCopy;
-  links: AppLinks;
 };
 
 /** Tabella da desktop: tutta la riga apre il pannello del negozio. */
-export function StoreTable({ stores, premium, now, t, links }: ListProps) {
-  const { language } = links;
+export function StoreTable({ stores, premium, now }: ListProps) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const storesHref = appHref(links, "negozi");
   return (
     <div className="hidden overflow-hidden rounded-xl border bg-card lg:block">
@@ -78,7 +77,7 @@ export function StoreTable({ stores, premium, now, t, links }: ListProps) {
                 </TableCell>
                 <TableCell>
                   <span className="flex items-center">
-                    <LastSync store={store} t={t} now={now} language={language} />
+                    <LastSync store={store} now={now} />
                   </span>
                 </TableCell>
                 {premium ? (
@@ -100,8 +99,9 @@ export function StoreTable({ stores, premium, now, t, links }: ListProps) {
 }
 
 /** Elenco da mobile e tablet, con gli stessi dati della tabella. */
-export function StoreList({ stores, premium, now, t, links }: ListProps) {
-  const { language } = links;
+export function StoreList({ stores, premium, now }: ListProps) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const storesHref = appHref(links, "negozi");
   return (
     <ul aria-label={t.stores.list} className="grid divide-y border-y lg:hidden">
@@ -130,7 +130,7 @@ export function StoreList({ stores, premium, now, t, links }: ListProps) {
                 <StatusBadge tone={status.tone} icon={status.icon} filled>
                   {status.label}
                 </StatusBadge>
-                <LastSync store={store} t={t} now={now} language={language} slot={false} />
+                <LastSync store={store} now={now} slot={false} />
                 {premium ? (
                   <span className="text-muted-foreground">
                     {t.stores.notifications}: {notificationsLabel(store, t)}

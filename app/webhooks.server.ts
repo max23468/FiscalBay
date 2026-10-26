@@ -1,23 +1,28 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { verifyStripeEvent } from "./stripe.server";
+import { stripeEnvironment, verifyStripeEvent } from "./integrations/stripe.server";
 import {
   answerCallback,
   telegramConfigured,
   TelegramSecretMismatch,
   verifyTelegramUpdate,
-} from "./telegram.server";
-import { NotificationLimit, verifyOrderNotification } from "./ebay/notifications.server";
-import { readBounded, UpstreamError } from "./http.server";
-import { ebayConfiguration } from "./ebay/environment.server";
-import { applyStripeEvent } from "../domain/billing.server";
-import { consumeOrderConfirmation } from "../domain/order-acquisition.server";
-import { consumeTelegramUpdate } from "../domain/telegram-bot.server";
-import { isProduction } from "../app-links";
-import { logFailure } from "../errors";
+} from "./integrations/telegram.server";
+import {
+  NotificationLimit,
+  verifyOrderNotification,
+} from "./integrations/ebay/notifications.server";
+import { readBounded, UpstreamError } from "./integrations/http.server";
+import { ebayConfiguration } from "./integrations/ebay/environment.server";
+import { applyStripeEvent } from "./domain/billing.server";
+import { consumeOrderConfirmation } from "./domain/order-acquisition.server";
+import { consumeTelegramUpdate } from "./domain/telegram-bot.server";
+import { isProduction } from "./app-links";
+import { logFailure } from "./errors";
+import { inSequence } from "./sequence";
+import { dayMilliseconds } from "./time";
 
 const maxBytes = 262_144;
-const retention = 7 * 86_400_000;
+const retention = 7 * dayMilliseconds;
 const referenceSchema = z.object({ receiptId: z.string().uuid() });
 const webhookPaths = [
   "/webhooks/ebay",
@@ -73,6 +78,108 @@ async function rawBody(request: Request): Promise<string> {
   }
 }
 
+type ReceiptEvent = Omit<Receipt, "id" | "queued_at" | "completed_at">;
+
+/** Campi di un solo provider, vuoti per gli altri. */
+const noProviderFields = {
+  store_id: null,
+  consent_granted_at: null,
+  link_token_hash: null,
+  command: null,
+  callback_id: null,
+  message_id: null,
+} satisfies Partial<ReceiptEvent>;
+
+/** Ambiente eBay del percorso: l'endpoint di prova finisce con `/sandbox`. */
+const ebayEnvironmentOf = (path: string) =>
+  path.endsWith("/sandbox")
+    ? "sandbox"
+    : // Stryker disable next-line StringLiteral: ogni valore diverso da sandbox seleziona Production.
+      "production";
+
+/** Evento Stripe firmato, dello stesso ambiente del Worker. */
+async function stripeEvent(request: Request, body: string, env: Env): Promise<ReceiptEvent> {
+  const secret = env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) throw new InvalidWebhook(503);
+  const signature = request.headers.get("stripe-signature");
+  const stripe = await verifyStripeEvent(
+    body,
+    // Stryker disable next-line StringLiteral: qualsiasi stringa di fallback non firmata viene rifiutata dallo SDK.
+    signature ?? "",
+    secret,
+  );
+  if (stripe.livemode !== isProduction(env)) throw new InvalidWebhook(400);
+  const object = z.object({ id: z.string().min(1).max(256) }).parse(stripe.data.object);
+  return {
+    ...noProviderFields,
+    provider: "stripe",
+    environment: stripe.livemode ? "live" : "test",
+    provider_id: stripe.id,
+    topic: stripe.type,
+    object_id: object.id,
+    event_at: new Date(stripe.created * 1000).toISOString(),
+  };
+}
+
+/** Aggiornamento del bot con il segreto del webhook; null per uno senza effetti. */
+function telegramEvent(request: Request, body: string, env: Env, now: Date): ReceiptEvent | null {
+  if (!telegramConfigured(env)) throw new InvalidWebhook(503);
+  const update = verifyTelegramUpdate(
+    body,
+    request.headers.get("x-telegram-bot-api-secret-token"),
+    env,
+    now,
+  );
+  // Ogni altro aggiornamento, anche di una chat non privata, non ha effetti.
+  if (!update) return null;
+  return {
+    ...noProviderFields,
+    provider: "telegram",
+    environment: stripeEnvironment(env),
+    provider_id: String(update.updateId),
+    topic: update.kind,
+    object_id: update.chatId,
+    link_token_hash: update.kind === "start" ? update.tokenHash : null,
+    command:
+      update.kind === "command" ? update.command : update.kind === "callback" ? update.data : null,
+    callback_id: update.kind === "callback" ? update.callbackId : null,
+    message_id: update.kind === "callback" ? update.messageId : null,
+    event_at: update.eventAt,
+  };
+}
+
+/** Notifica d'ordine eBay firmata; null se autentica ma non attribuibile a un venditore. */
+async function ebayEvent(
+  request: Request,
+  body: string,
+  env: Env,
+  path: string,
+  fetcher: typeof fetch,
+  now: Date,
+): Promise<ReceiptEvent | null> {
+  const ebayEnvironment = ebayEnvironmentOf(path);
+  const notification = await verifyOrderNotification(
+    body,
+    request.headers.get("x-ebay-signature"),
+    env,
+    ebayEnvironment,
+    fetcher,
+    now.getTime(),
+  );
+  // L'acquisizione periodica resta la fonte.
+  if (!notification.data.user) return null;
+  return {
+    ...noProviderFields,
+    provider: "ebay",
+    environment: ebayEnvironment,
+    provider_id: notification.notificationId,
+    topic: "ORDER_CONFIRMATION",
+    object_id: notification.data.order.orderId,
+    store_id: notification.data.user.userId,
+    event_at: new Date(notification.eventDate).toISOString(),
+  };
+}
+
 /** null lascia la richiesta al router; le callback OAuth non sono webhook. */
 export async function receiveWebhook(
   request: Request,
@@ -90,11 +197,7 @@ export async function receiveWebhook(
     if (!token || !/^[a-zA-Z0-9_-]{32,80}$/u.test(token))
       return new Response(null, { status: 503 });
     try {
-      const ebayEnvironment = path.endsWith("/sandbox")
-        ? "sandbox"
-        : // Stryker disable next-line StringLiteral: nella sola verifica di disponibilità ogni valore diverso da sandbox seleziona Production.
-          "production";
-      ebayConfiguration(env, ebayEnvironment);
+      ebayConfiguration(env, ebayEnvironmentOf(path));
     } catch {
       return new Response(null, { status: 503 });
     }
@@ -112,91 +215,14 @@ export async function receiveWebhook(
     });
   try {
     const body = await rawBody(request);
-    let event: Omit<Receipt, "id" | "queued_at" | "completed_at">;
+    let event: ReceiptEvent | null;
     try {
-      if (path === "/webhooks/stripe") {
-        const secret = env.STRIPE_WEBHOOK_SECRET;
-        if (!secret) throw new InvalidWebhook(503);
-        const signature = request.headers.get("stripe-signature");
-        const stripe = await verifyStripeEvent(
-          body,
-          // Stryker disable next-line StringLiteral: qualsiasi stringa di fallback non firmata viene rifiutata dallo SDK.
-          signature ?? "",
-          secret,
-        );
-        if (stripe.livemode !== isProduction(env)) throw new InvalidWebhook(400);
-        const object = z.object({ id: z.string().min(1).max(256) }).parse(stripe.data.object);
-        event = {
-          provider: "stripe",
-          environment: stripe.livemode ? "live" : "test",
-          provider_id: stripe.id,
-          topic: stripe.type,
-          object_id: object.id,
-          store_id: null,
-          consent_granted_at: null,
-          link_token_hash: null,
-          command: null,
-          callback_id: null,
-          message_id: null,
-          event_at: new Date(stripe.created * 1000).toISOString(),
-        };
-      } else if (path === "/webhooks/telegram") {
-        if (!telegramConfigured(env)) throw new InvalidWebhook(503);
-        const update = verifyTelegramUpdate(
-          body,
-          request.headers.get("x-telegram-bot-api-secret-token"),
-          env,
-          now,
-        );
-        // Ogni altro aggiornamento, anche di una chat non privata, non ha effetti.
-        if (!update) return new Response(null, { status: 204 });
-        event = {
-          provider: "telegram",
-          environment: isProduction(env) ? "live" : "test",
-          provider_id: String(update.updateId),
-          topic: update.kind,
-          object_id: update.chatId,
-          store_id: null,
-          consent_granted_at: null,
-          link_token_hash: update.kind === "start" ? update.tokenHash : null,
-          command:
-            update.kind === "command"
-              ? update.command
-              : update.kind === "callback"
-                ? update.data
-                : null,
-          callback_id: update.kind === "callback" ? update.callbackId : null,
-          message_id: update.kind === "callback" ? update.messageId : null,
-          event_at: update.eventAt,
-        };
-      } else {
-        const ebayEnvironment = path.endsWith("/sandbox") ? "sandbox" : "production";
-        const signature = request.headers.get("x-ebay-signature");
-        const notification = await verifyOrderNotification(
-          body,
-          signature,
-          env,
-          ebayEnvironment,
-          fetcher,
-          now.getTime(),
-        );
-        // Autentica ma non attribuibile: nessun effetto, l'acquisizione periodica resta la fonte.
-        if (!notification.data.user) return new Response(null, { status: 204 });
-        event = {
-          provider: "ebay",
-          environment: ebayEnvironment,
-          provider_id: notification.notificationId,
-          topic: "ORDER_CONFIRMATION",
-          object_id: notification.data.order.orderId,
-          store_id: notification.data.user.userId,
-          consent_granted_at: null,
-          link_token_hash: null,
-          command: null,
-          callback_id: null,
-          message_id: null,
-          event_at: new Date(notification.eventDate).toISOString(),
-        };
-      }
+      event =
+        path === "/webhooks/stripe"
+          ? await stripeEvent(request, body, env)
+          : path === "/webhooks/telegram"
+            ? telegramEvent(request, body, env, now)
+            : await ebayEvent(request, body, env, path, fetcher, now);
     } catch (error) {
       if (
         error instanceof InvalidWebhook ||
@@ -207,6 +233,7 @@ export async function receiveWebhook(
       if (error instanceof TelegramSecretMismatch) throw new InvalidWebhook(401);
       throw new InvalidWebhook(412);
     }
+    if (!event) return new Response(null, { status: 204 });
     if (event.provider === "ebay") {
       const store =
         await env.DB.prepare(`SELECT s.id, c.granted_at FROM ebay_stores s JOIN ebay_store_credentials c ON c.store_id = s.id
@@ -328,7 +355,7 @@ async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
 
 // Una ricevuta accodata da oltre un giorno e non completata ha perso il messaggio: retry e
 // attese del provider si esauriscono prima, e resta la DLQ o la scadenza della coda.
-const lostMilliseconds = 86_400_000;
+const lostMilliseconds = dayMilliseconds;
 
 /**
  * Riprende la finestra fra claim D1 e accettazione Queue, anche senza retry provider, e le
@@ -343,10 +370,7 @@ export async function recoverWebhookIngress(env: Env, now = new Date()) {
     .bind(now.toISOString(), new Date(now.getTime() - lostMilliseconds).toISOString())
     .all<{ id: string }>();
   // In sequenza: se Queue non accetta, il recupero si ferma senza altri invii destinati a fallire.
-  await results.reduce<Promise<void>>(
-    (previous, receipt) => previous.then(() => enqueueReceipt(env, receipt.id, now)),
-    Promise.resolve(),
-  );
+  await inSequence(results, (receipt) => enqueueReceipt(env, receipt.id, now));
 }
 
 export async function consumeWebhooks(

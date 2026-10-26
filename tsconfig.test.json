@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.cloudflare.json",
+  "include": [
+    ".react-router/types/**/*",
+    "app/**/*",
+    "workers/**/*",
+    ".cloudflare/types/index.d.ts",
+    "test/**/*",
+    "benchmarks/**/*",
+    "vitest*.config.ts"
+  ],
+  "compilerOptions": {
+    "lib": ["DOM", "DOM.Iterable", "ES2024", "ES2023.Intl"],
+    "types": ["vite/client", "node", "@cloudflare/vitest-plugin/types"]
+  }
+}

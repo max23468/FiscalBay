@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   displayTaxValue,
   taxQuality,
+  buyerTaxKey,
   taxComparisonKey,
   taxIdentifierType,
 } from "../app/tax-quality";
@@ -152,6 +153,17 @@ describe("qualità formale degli identificativi", () => {
         value: " rssmra 80a01h501u ",
       }),
     ).toBe(JSON.stringify(["CF", null, "RSSMRA80A01H501U"]));
+  });
+  it("riconosce lo stesso dato del buyer con Paese assente o IT, non quello estero", () => {
+    expect(
+      buyerTaxKey({ type: "CODICE_FISCALE", issuingCountry: null, value: "rssmra80a01h501u" }),
+    ).toBe(buyerTaxKey({ type: "CodiceFiscale", issuingCountry: "IT", value: "RSSMRA80A01H501U" }));
+    expect(buyerTaxKey({ type: "PartitaIVA", issuingCountry: null, value: "12345678901" })).toBe(
+      buyerTaxKey({ type: "VAT_ID", issuingCountry: "IT", value: "12345678901" }),
+    );
+    expect(buyerTaxKey({ type: "NIF", issuingCountry: "ES", value: "abc" })).toBe(
+      JSON.stringify(["NIF", "ES", "abc"]),
+    );
   });
   it.each([
     ["CODICE_FISCALE", "IT", "CF"],

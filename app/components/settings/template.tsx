@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Textarea } from "~/components/ui/textarea";
-import type { AppCopy } from "../../app-copy";
+import { useCopy } from "~/components/copy-context";
 import { languageNames, languages, type Language } from "../../i18n";
 import { maxTemplateLength } from "../../preferences";
 import type { Draft } from "./unsaved";
@@ -15,13 +15,8 @@ import type { Draft } from "./unsaved";
  * e lo dice; uno riuscito diventa il nuovo riferimento delle modifiche. La bozza appartiene
  * alla pagina, che ne tiene l'avviso d'uscita.
  */
-export function TemplateSection({
-  form,
-  t,
-}: {
-  form: Draft<Record<Language, string>>;
-  t: AppCopy;
-}) {
+export function TemplateSection({ form }: { form: Draft<Record<Language, string>> }) {
+  const { t } = useCopy();
   const { draft, setDraft, dirty, state, submit, action } = form;
   const empty = languages.some((code) => !draft[code].trim());
   const ready = useHydrated();

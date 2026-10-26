@@ -21,11 +21,11 @@ const buttons: Record<Language, { continue: string; security: string; stores: st
 };
 
 async function sendAccountEmail(
-  environment: Env,
+  env: Env,
   input: { to: string; subject: string; message: string; url: string; button: string },
 ): Promise<void> {
   const safeUrl = escapeHtml(input.url);
-  await environment.AUTH_EMAIL.send({
+  await env.AUTH_EMAIL.send({
     from: { email: authEmailFrom, name: "FiscalBay" },
     replyTo: supportEmail,
     to: input.to,
@@ -76,7 +76,7 @@ export type AuthEmailKind = keyof typeof authTexts | "change-email";
 
 /** Email dei link di Better Auth, nella lingua della pagina da cui è partita la richiesta. */
 export function sendAuthEmail(
-  environment: Env,
+  env: Env,
   kind: AuthEmailKind,
   input: { to: string; url: string; newEmail?: string },
 ): void {
@@ -94,7 +94,7 @@ export function sendAuthEmail(
           }
       : authTexts[kind][language];
   waitUntil(
-    sendAccountEmail(environment, {
+    sendAccountEmail(env, {
       to: input.to,
       url: input.url,
       button: buttons[language].continue,
@@ -108,7 +108,7 @@ export function sendAuthEmail(
  * il titolare riceve questa email, nella lingua della pagina di registrazione.
  */
 export async function sendExistingAccountEmail(
-  environment: Env,
+  env: Env,
   to: string,
   request?: Request,
 ): Promise<void> {
@@ -117,7 +117,7 @@ export async function sendExistingAccountEmail(
     typeof body === "object" && body !== null && "callbackURL" in body ? body.callbackURL : null;
   const language =
     typeof callback === "string"
-      ? linkLanguage(`${environment.APP_ORIGIN}/?callbackURL=${encodeURIComponent(callback)}`)
+      ? linkLanguage(`${env.APP_ORIGIN}/?callbackURL=${encodeURIComponent(callback)}`)
       : "it";
   const text =
     language === "en"
@@ -131,9 +131,9 @@ export async function sendExistingAccountEmail(
           message:
             "Qualcuno ha provato a creare un account FiscalBay con questo indirizzo, che è già registrato. Se eri tu, accedi o reimposta la password dalla pagina di accesso. Altrimenti ignora questa email.",
         };
-  await sendAccountEmail(environment, {
+  await sendAccountEmail(env, {
     to,
-    url: new URL(localizedPath(language, accessPath), environment.APP_ORIGIN).toString(),
+    url: new URL(localizedPath(language, accessPath), env.APP_ORIGIN).toString(),
     button: buttons[language].continue,
     ...text,
   }).catch((error: unknown) => logFailure({ error, operation: "account_email" }));
@@ -204,10 +204,10 @@ function securityText(event: SecurityEvent, language: Language) {
  * con cui ha accettato i Termini. Fuori dal percorso della risposta: un invio fallito si registra
  * nei log senza annullare la modifica.
  */
-export function notifySecurityEvent(environment: Env, userId: string, event: SecurityEvent): void {
+export function notifySecurityEvent(env: Env, userId: string, event: SecurityEvent): void {
   waitUntil(
     (async () => {
-      const user = await environment.DB.prepare(
+      const user = await env.DB.prepare(
         `SELECT u."email",
                 (SELECT t.language FROM terms_acceptances t WHERE t.user_id = u."id"
                   ORDER BY t.accepted_at DESC LIMIT 1) AS language
@@ -217,9 +217,9 @@ export function notifySecurityEvent(environment: Env, userId: string, event: Sec
         .first<{ email: string; language: Language | null }>();
       if (!user) return;
       const language = user.language === "en" ? "en" : "it";
-      await sendAccountEmail(environment, {
+      await sendAccountEmail(env, {
         to: user.email,
-        url: new URL(localizedPath(language, securityPath), environment.APP_ORIGIN).toString(),
+        url: new URL(localizedPath(language, securityPath), env.APP_ORIGIN).toString(),
         button: buttons[language].security,
         ...securityText(event, language),
       });
@@ -232,13 +232,13 @@ export function notifySecurityEvent(environment: Env, userId: string, event: Sec
  * fermano. Il compito che lo invia registra il preavviso soltanto se l'invio riesce.
  */
 export async function sendInactivityNotice(
-  environment: Env,
+  env: Env,
   input: { to: string; language: Language; deadline: string },
 ): Promise<void> {
   const { language, deadline } = input;
-  await sendAccountEmail(environment, {
+  await sendAccountEmail(env, {
     to: input.to,
-    url: new URL(localizedPath(language, storesPath), environment.APP_ORIGIN).toString(),
+    url: new URL(localizedPath(language, storesPath), env.APP_ORIGIN).toString(),
     button: buttons[language].stores,
     ...(language === "en"
       ? {
