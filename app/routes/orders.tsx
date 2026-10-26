@@ -26,7 +26,7 @@ import {
   unlockOrders,
 } from "../domain/grants.server";
 import { checkoutConfigured } from "../domain/checkout.server";
-import { historyDays } from "../domain/order-acquisition.server";
+import { historyWindowDays } from "../domain/history-window.server";
 import { requestOrderRead } from "../domain/order-sync.server";
 import { messageTemplates } from "../domain/preferences.server";
 import {
@@ -301,7 +301,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
       storeId: latest?.id ?? null,
       storeName: latest?.name ?? null,
       // Periodo letto dal primo avvio; prima vale quello che la lettura userà.
-      historyDays: latest?.history?.days ?? historyDays,
+      historyDays: latest?.history?.days ?? historyWindowDays(premium, now),
     },
     onboarding: [
       { label: "stepAccount", done: true },

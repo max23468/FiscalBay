@@ -1,4 +1,5 @@
 import { activeEntitlementSql } from "./grants.server";
+import { coveredMonthsSql, freeHistoryDays, historyEndSql } from "./history-window.server";
 import { storeNameSql } from "./store-state.server";
 
 /**
@@ -20,7 +21,8 @@ export const freeStoreChangeDays = 90;
 const graceSql = (from: string) => `strftime('%Y-%m-%dT%H:%M:%fZ', ${from}, '+30 days')`;
 
 /** Termine del Free per l'ordine: trenta giorni dalla sua data. */
-const freeWindowSql = `strftime('%Y-%m-%dT%H:%M:%fZ', orders.creation_time, '+30 days')`;
+const freeWindowSql = `strftime('%Y-%m-%dT%H:%M:%fZ', orders.creation_time,
+  '+${freeHistoryDays} days')`;
 
 /**
  * Negozio eBay reale con i dati ancora presenti. La Sandbox, disponibile soltanto sul test per
@@ -52,15 +54,25 @@ const userScope = (userId: string): Scope => {
   return { workspaces, orders: workspaces, binds: [userId] };
 };
 
+/** L'istante della colonna cade nell'ultima settimana. */
+const lastWeek = (column: string) =>
+  `julianday(${column}) BETWEEN julianday(?1, '-7 days') AND julianday(?1)`;
+
 /**
  * Il cron rivede i negozi di ogni spazio, i termini degli ordini soltanto per gli spazi la cui
- * copertura è finita nell'ultima settimana: le visite dell'utente coprono il resto.
+ * copertura è finita o la cui estensione dello storico è cambiata nell'ultima settimana, e per
+ * quelli che perderebbero entro un giorno un ordine ancora dentro la loro finestra, come dopo
+ * una copertura concessa senza visite: le visite dell'utente coprono il resto.
  */
 const allScope: Scope = {
   workspaces: "1 = 1",
-  orders: `EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = w.id
-    AND julianday(COALESCE(MIN(e.ends_at, e.revoked_at), e.ends_at, e.revoked_at))
-      BETWEEN julianday(?1, '-7 days') AND julianday(?1))`,
+  orders: `(EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = w.id
+      AND ${lastWeek("COALESCE(MIN(e.ends_at, e.revoked_at), e.ends_at, e.revoked_at)")})
+    OR EXISTS (SELECT 1 FROM history_extensions x WHERE x.workspace_id = w.id
+      AND (${lastWeek("x.granted_at")} OR ${lastWeek("x.revoked_at")}))
+    OR w.id IN (SELECT s.workspace_id FROM orders o JOIN ebay_stores s ON s.id = o.store_id
+      WHERE o.purge_after > ?1 AND o.purge_after <= strftime('%Y-%m-%dT%H:%M:%fZ', ?1, '+1 day')
+        AND o.purge_after < ${historyEndSql("o.creation_time", "s.workspace_id", "?1")}))`,
   binds: [],
 };
 
@@ -69,14 +81,22 @@ const allScope: Scope = {
  * predefinito si dimentica, perché al prossimo downgrade vale di nuovo il primo ancora
  * collegato; nel Free si registra il predefinito se manca o se i suoi dati sono stati eliminati;
  * la pausa `plan` lascia i negozi ammessi e raggiunge gli altri; una copertura toglie la pausa
- * per inattività e il suo preavviso. Infine i termini: nel Free gli
- * ordini tornano alla finestra di trenta giorni e quelli che la perdono restano conservati, non
- * consultabili, per trenta giorni dal downgrade; i negozi esclusi conservano i propri dati per
- * trenta giorni dalla pausa. Un termine non si allunga mai.
+ * per inattività e il suo preavviso. Infine i termini, secondo la finestra dello spazio: gli
+ * ordini che la superano, nel Free o dopo la revoca di un'estensione, tornano alla finestra e
+ * restano conservati, non consultabili, per trenta giorni; i negozi esclusi dal Free conservano i
+ * propri dati per trenta giorni dalla pausa. Con una copertura gli ordini ancora conservati
+ * riprendono la finestra intera, anche durante quei trenta giorni; gli altri termini non si
+ * allungano mai.
  */
 function planStatements(db: D1Database, scope: Scope, at: string) {
   const covered = (workspace: string) => activeEntitlementSql(workspace, "?1");
   const statement = (sql: string) => db.prepare(sql).bind(at, ...scope.binds);
+  // Negozi degli spazi coperti con i mesi della loro finestra; l'alias `c` serve ai termini.
+  const coveredStores = `(SELECT s.id AS store_id, ${coveredMonthsSql("w.id", "?1")} AS months
+      FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
+     WHERE ${scope.orders} AND s.data_deleted_at IS NULL AND ${covered("w.id")}) c`;
+  const coveredEnd = `strftime('%Y-%m-%dT%H:%M:%fZ', orders.creation_time,
+    '+' || c.months || ' months')`;
   return [
     statement(`DELETE FROM free_store_changes WHERE kind = 'default' AND workspace_id IN (
       SELECT w.id FROM workspaces w WHERE ${scope.workspaces} AND ${covered("w.id")})`),
@@ -110,6 +130,15 @@ function planStatements(db: D1Database, scope: Scope, at: string) {
       WHERE retention_until > ${freeWindowSql} AND store_id IN (
         SELECT s.id FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
          WHERE ${scope.orders} AND NOT ${covered("w.id")})`),
+    statement(`UPDATE orders SET retention_until = ${coveredEnd},
+        purge_after = MAX(${coveredEnd}, MIN(purge_after, ${graceSql("?1")}))
+      FROM ${coveredStores}
+      WHERE orders.store_id = c.store_id AND orders.retention_until > ${coveredEnd}`),
+    statement(`UPDATE orders SET retention_until = ${coveredEnd},
+        purge_after = MAX(purge_after, ${coveredEnd})
+      FROM ${coveredStores}
+      WHERE orders.store_id = c.store_id AND orders.retention_until < ${coveredEnd}
+        AND orders.purge_after > ?1`),
     statement(`UPDATE orders SET retention_until = MIN(retention_until, ${graceSql("p.paused_at")}),
         purge_after = ${graceSql("p.paused_at")}
       FROM ebay_store_pauses p

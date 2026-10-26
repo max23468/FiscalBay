@@ -10,6 +10,7 @@ import {
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appHref } from "../app-links";
+import { historyWindowDays } from "../domain/history-window.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { defaultTemplate } from "../preferences";
@@ -77,7 +78,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       lastAt: vintage?.lastSyncAt ?? null,
       storeId: vintage?.id ?? null,
       storeName: vintage?.name ?? null,
-      historyDays: vintage?.historyDays ?? 30,
+      // Come nell'area reale: prima del primo avvio vale la finestra del piano.
+      historyDays:
+        vintage?.historyDays ??
+        historyWindowDays(scenario.account.plan === "premium", new Date(scenario.now)),
     },
     onboarding: scenario.onboarding,
     messageTemplates: { it: defaultTemplate("it"), en: defaultTemplate("en") },

@@ -1,4 +1,5 @@
 import { DuplicateLineIdentity } from "./order-import.server";
+import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
 import { activeStore, writableStore } from "./store-state.server";
 import {
   limitKey,
@@ -37,7 +38,8 @@ import { readTradingOrders } from "../integrations/ebay/trading.server";
  * 2. Trading: acquisti modificati, compresi quelli prima del checkout che Fulfillment non
  *    espone, con pagina e limite propri, al massimo ogni due ore salvo collegamento e richieste
  *    manuali; un suo errore, anche il limite della sua quota, non ferma i passi successivi;
- * 3. storico: ordini creati nella finestra fissata al primo avvio, dal più recente;
+ * 3. storico: ordini creati nella finestra dello spazio fissata al primo avvio, dal più recente,
+ *    estesa al periodo più vecchio quando la finestra si allarga;
  * 4. dettaglio: dati fiscali e immagini di ogni versione Fulfillment non ancora letta,
  *    in `order-acquisition-details.server.ts`.
  *
@@ -53,13 +55,8 @@ import { readTradingOrders } from "../integrations/ebay/trading.server";
 
 const pageSize = 25;
 const overlapMilliseconds = 15 * 60_000;
-/** Finestra dello storico del piano Free. */
-export const historyDays = 30;
-
-/** Inizio della finestra dello storico per un'importazione che parte all'istante indicato. */
-export function historyStart(now: Date): string {
-  return new Date(now.getTime() - historyDays * dayMilliseconds).toISOString();
-}
+/** Intervallo massimo di modifica di una lettura Trading `GetOrders`. */
+const tradingWindowDays = 30;
 /**
  * Durata massima di una lettura: le sue scritture portano l'istante d'inizio, quindi arrivano in
  * D1 fino a questo tempo dopo l'istante registrato.
@@ -140,6 +137,7 @@ type SyncRow = {
   recent_total: number | null;
   history_from: string;
   history_until: string;
+  history_through: string | null;
   history_next: string | null;
   history_total: number | null;
   history_done_at: string | null;
@@ -170,7 +168,7 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   // Trading accetta al massimo trenta giorni per intervallo di modifica.
   const from = new Date(
     Math.max(
-      Date.parse(until) - historyDays * dayMilliseconds,
+      Date.parse(until) - tradingWindowDays * dayMilliseconds,
       Date.parse(state.trading_cursor ?? state.history_from) - overlapMilliseconds,
     ),
   ).toISOString();
@@ -253,9 +251,14 @@ function historyPass(ctx: Context, state: SyncRow): Pass {
   return {
     next: state.history_next,
     total: state.history_total,
-    begin: () => buildCreationDateFilter(state.history_from, state.history_until),
+    begin: () =>
+      buildCreationDateFilter(state.history_from, state.history_through ?? state.history_until),
     progress: (next, total) => saveState(ctx, "history_next = ?4, history_total = ?5", next, total),
-    finish: () => saveState(ctx, "history_done_at = ?3, history_next = NULL, history_total = NULL"),
+    finish: () =>
+      saveState(
+        ctx,
+        "history_done_at = ?3, history_through = NULL, history_next = NULL, history_total = NULL",
+      ),
   };
 }
 
@@ -293,8 +296,9 @@ async function recordPoll(ctx: Context, ok: boolean, served: boolean) {
 /**
  * Esegue l'acquisizione di un negozio entro il budget. Le esecuzioni dello stesso negozio non
  * si sovrappongono: chi trova il negozio occupato rinuncia. Al primo avvio fissa il limite dei
- * recenti all'istante corrente e lo storico ai `historyDays` giorni precedenti. Lo storico
- * attende i recenti; il dettaglio usa anche le chiamate rimaste quando le pagine finiscono.
+ * recenti all'istante corrente e lo storico alla finestra dello spazio: trenta giorni nel Free,
+ * un anno o l'estensione concessa con una copertura. Lo storico attende i recenti; il dettaglio
+ * usa anche le chiamate rimaste quando le pagine finiscono.
  *
  * Mentre eBay chiede di attendere non parte nessuna chiamata, e un nuovo limite vale per tutti
  * i negozi della stessa origine API. Una lettura dei recenti (tutto tranne un evento) segna il
@@ -317,24 +321,42 @@ export async function acquireOrders(input: {
   if (wait > 0) throw new UpstreamError("rate_limited", { retryAfter: wait });
   const poll = !input.confirmedOrderId;
   const lock = new Date(now.getTime() + lockMilliseconds).toISOString();
+  // Con una finestra più ampia, come all'attivazione di una copertura, lo storico concluso
+  // riprende dal periodo più vecchio non ancora importato; una passata ormai tutta fuori dalla
+  // finestra, come dopo il ritorno al Free, si chiude dove era arrivato lo storico completo.
+  const extend = `sync_state.history_done_at IS NOT NULL
+    AND sync_state.history_from > excluded.history_from`;
+  const stop = `sync_state.history_done_at IS NULL
+    AND COALESCE(sync_state.history_through, sync_state.history_until) <= excluded.history_from`;
   const state = await db
     .prepare(
       `INSERT INTO sync_state
          (store_id, cursor, history_from, history_until, locked_until, polled_at, updated_at)
-       SELECT ?1, ?3, ?4, ?3, ?5, ?6, ?3 WHERE ${writableStore}
+       SELECT ?1, ?3, ${historyStartSql(storeWorkspaceSql("?1"), "?3")}, ?3, ?4, ?5, ?3
+        WHERE ${writableStore}
        ON CONFLICT(store_id) DO UPDATE SET
          cursor = COALESCE(sync_state.cursor, excluded.cursor),
-         history_from = COALESCE(sync_state.history_from, excluded.history_from),
+         history_from = CASE WHEN sync_state.history_from IS NULL OR ${extend}
+             THEN excluded.history_from
+           WHEN ${stop} THEN COALESCE(sync_state.history_through, sync_state.history_until)
+           ELSE sync_state.history_from END,
          history_until = COALESCE(sync_state.history_until, excluded.history_until),
+         history_through = CASE WHEN ${extend} THEN sync_state.history_from
+           WHEN ${stop} THEN NULL ELSE sync_state.history_through END,
+         history_done_at = CASE WHEN ${extend} THEN NULL WHEN ${stop} THEN excluded.updated_at
+           ELSE sync_state.history_done_at END,
+         history_next = CASE WHEN ${extend} OR ${stop} THEN NULL ELSE sync_state.history_next END,
+         history_total = CASE WHEN ${extend} OR ${stop} THEN NULL
+           ELSE sync_state.history_total END,
          locked_until = excluded.locked_until,
          polled_at = COALESCE(excluded.polled_at, sync_state.polled_at),
          updated_at = excluded.updated_at
        WHERE sync_state.locked_until IS NULL OR sync_state.locked_until <= ?3
        RETURNING cursor, recent_end, recent_next, recent_total, history_from, history_until,
-                 history_next, history_total, history_done_at,
+                 history_through, history_next, history_total, history_done_at,
                  trading_cursor, trading_end, trading_page, trading_total, requested_at`,
     )
-    .bind(storeId, grantedAt, at, historyStart(now), lock, poll ? at : null)
+    .bind(storeId, grantedAt, at, lock, poll ? at : null)
     .first<SyncRow>();
   if (!state) {
     const writable = await db
