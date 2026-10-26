@@ -49,7 +49,8 @@ jobs:
     name: ${{ matrix.target }}
     needs: select
     runs-on: ubuntu-26.04
-    timeout-minutes: 60
+    # I moduli del bot Telegram superano l'ora con la loro suite; i minuti non hanno costo.
+    timeout-minutes: 120
     strategy:
       # Ogni modulo conclude la propria prova: un fallimento non nasconde gli altri esiti.
       fail-fast: false
