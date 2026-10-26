@@ -401,6 +401,10 @@ describe("Stripe Managed Payments", () => {
         "GET /v1/prices/price_test_annual",
         "POST /v1/checkout/sessions",
       ]);
+      // Il prodotto espanso porta il codice fiscale da verificare.
+      expect(new URL(String(api.mock.calls[0]![0])).searchParams.getAll("expand[0]")).toEqual([
+        "product",
+      ]);
       const body = new URLSearchParams(String(api.mock.calls[1]![1]?.body));
       expect(body.get("client_reference_id")).toBe("w-a");
       expect(body.get("metadata[price_generation]")).toBe(priceGeneration.id);
@@ -1299,6 +1303,7 @@ describe("Webhook e riconciliazione Stripe", () => {
       [env, "rk_live_fiscalbay"],
       [env, "rk_test_"],
       [env, "pk_test_fiscalbay"],
+      [env, "sk_live_sk_test_fiscalbay"],
       [env, ""],
       [production, "pk_live_fiscalbay"],
       [production, "rk_test_fiscalbay"],
@@ -2308,7 +2313,8 @@ describe("Webhook e riconciliazione Stripe", () => {
       failure: "rate_limited",
       details: { status: 429, retryAfter: undefined },
     });
-    for (const status of [500, 503]) {
+    // Fuori dagli errori del cliente la richiesta resta da riprovare, anche con un rinvio.
+    for (const status of [302, 500, 503]) {
       failure(status, { error: { type: "api_error" } });
       await expect(read()).rejects.toMatchObject({ failure: "unavailable", details: { status } });
     }
@@ -2337,7 +2343,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     reply.mockRejectedValueOnce(new TypeError("network"));
     await expect(read()).rejects.toMatchObject({ failure: "unavailable", details: {} });
     // Ogni errore è stato una sola richiesta: nessun retry dello SDK.
-    expect(reply).toHaveBeenCalledTimes(10);
+    expect(reply).toHaveBeenCalledTimes(11);
   });
 });
 
@@ -2972,6 +2978,7 @@ describe("Lifetime e concessioni", () => {
         "applies_to[products][0]": "prod_lifetime",
         name: "Periodo pagato non usato",
         "metadata[workspace_id]": "w-a",
+        "metadata[role]": "lifetime_credit",
       }),
     ]);
     const body = stripe.writes.find((write) => write.path === "/v1/checkout/sessions")!.body;
