@@ -122,10 +122,7 @@ export async function fiscalKey(notice: Pick<OrderNotice, "values">): Promise<st
   return fiscalDigest(`[${entries.join(",")}]`);
 }
 
-/**
- * Impronta di un testo dei valori. Le impronte registrate prima come testo, che iniziano con
- * `[`, passano di qui all'inizio del turno, così il cambio di forma non produce variazioni.
- */
+/** Impronta di un testo dei valori. */
 export async function fiscalDigest(values: string) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(values));
   // Una stringa JSON, come richiede la colonna.
