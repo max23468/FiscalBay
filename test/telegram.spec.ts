@@ -3847,7 +3847,7 @@ describe("comandi e pulsanti del bot", () => {
       "en:2",
       "en:all",
       "fi:x",
-      "fi:each",
+      "fi:digest",
       "mo:x",
       "mo:all",
       "xx:0800",
