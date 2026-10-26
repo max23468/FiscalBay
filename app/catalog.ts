@@ -1,5 +1,4 @@
 import type { Language } from "./i18n";
-import { dayMilliseconds } from "./time";
 
 /** Modalità commerciali dell'unico livello Premium. */
 export const premiumOffers = ["monthly", "annual", "lifetime"] as const;
@@ -64,8 +63,11 @@ export function annualPaidMonths() {
   return priceGeneration.net.annual / priceGeneration.net.monthly;
 }
 
-/** Il Checkout di Stripe accetta una prova che finisce almeno due giorni dopo l'apertura. */
-const minimumCheckoutTrial = 2 * dayMilliseconds + 10 * 60 * 1000;
+/**
+ * Il Checkout di Stripe accetta una prova che finisce almeno due giorni dopo l'apertura. Durata
+ * in linea: `scripts/stripe-account.mjs` carica questo modulo con Node, senza bundler.
+ */
+const minimumCheckoutTrial = 2 * 24 * 60 * 60 * 1000 + 10 * 60 * 1000;
 
 /**
  * Primo addebito di un acquisto durante la prova: alla fine della prova, al secondo intero

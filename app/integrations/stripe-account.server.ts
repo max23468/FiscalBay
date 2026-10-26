@@ -1,7 +1,6 @@
 import type Stripe from "stripe";
 
 import type { PremiumOffer } from "../catalog";
-import { planPath } from "../app-links";
 
 /**
  * Configurazione attesa dell'account Stripe di ogni ambiente: la usano il checkout, che verifica
@@ -50,7 +49,8 @@ export function stripePortalConfiguration(origin: string) {
       privacy_policy_url: `${origin}/privacy`,
       terms_of_service_url: `${origin}/termini`,
     },
-    default_return_url: `${origin}${planPath}`,
+    // Percorso letterale: `scripts/stripe-account.mjs` carica questo modulo con Node, senza bundler.
+    default_return_url: `${origin}/app/impostazioni/piano`,
     features: {
       customer_update: { enabled: true, allowed_updates: ["name", "email", "address"] },
       invoice_history: { enabled: true },

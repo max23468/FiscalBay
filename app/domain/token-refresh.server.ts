@@ -1,6 +1,7 @@
 import { servedSql } from "./admission.server";
 import { unpausedStore } from "./store-state.server";
 import { logFailure } from "../errors";
+import { inSequence } from "../sequence";
 import {
   refreshStoreToken,
   type RefreshOutcome,
@@ -45,13 +46,13 @@ export async function refreshExpiringTokens(
       .bind(threshold, ...cursor, refreshBatch, now.toISOString())
       .all<ExpiringRow>();
     // In sequenza: un errore di un negozio non ferma gli altri e non sovrappone retry.
-    for (const { store_id: storeId } of results) {
-      try {
-        outcomes.push(await refreshStoreToken({ environment, storeId, fetcher, now }));
-      } catch (error) {
+    const refreshed = await inSequence(results, ({ store_id: storeId }) =>
+      refreshStoreToken({ environment, storeId, fetcher, now }).catch((error: unknown) => {
         logFailure({ error, operation: "token_refresh" });
-      }
-    }
+        return null;
+      }),
+    );
+    outcomes.push(...refreshed.filter((outcome) => outcome !== null));
     if (results.length < refreshBatch) break;
     const last: ExpiringRow = results.at(-1)!;
     cursor = [last.access_expires_at, last.store_id];
