@@ -35,6 +35,7 @@ import type { Language } from "../../i18n";
 import {
   formatDate,
   formatRelative,
+  orderPeriods,
   trialDaysLeft,
   trialEnding,
   type OrdersNotice,
@@ -466,7 +467,7 @@ function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
             ? t.orders.listLimit
             : importingNotice(data)
               ? t.orders.importMore
-              : ["7", "30", "90"].includes(params.get("periodo") ?? "")
+              : (orderPeriods as readonly string[]).includes(params.get("periodo") ?? "")
                 ? t.orders.allShown
                 : t.orders.allShownAll}
         </p>

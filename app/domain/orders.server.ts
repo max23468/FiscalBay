@@ -5,7 +5,10 @@ import { searchTokens } from "../orders/order-search";
 import { taxComparisonKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
 import {
   fiscalSituations,
+  orderPeriods,
+  orderPeriodStart,
   paymentStatuses,
+  premiumOrderPeriods,
   shippingStatuses,
   type FiscalNotice,
   type FiscalSituation,
@@ -782,7 +785,10 @@ export function orderCriteria(
     const value = search.get(name);
     return values.find((candidate) => candidate === value);
   };
-  const days = known("periodo", plan === "premium" ? ["7", "30", "90"] : ["7", "30"]);
+  const period = known(
+    "periodo",
+    orderPeriods.filter((value) => plan === "premium" || !premiumOrderPeriods.has(value)),
+  );
   const tokens = searchTokens(query);
   const value = (name: string) => {
     const raw = search.get(name);
@@ -790,7 +796,7 @@ export function orderCriteria(
   };
   return {
     storeId: value("negozio"),
-    since: days ? new Date(now.getTime() - Number(days) * 86_400_000).toISOString() : undefined,
+    since: period ? orderPeriodStart(period, now).toISOString() : undefined,
     payment: known("pagamento", paymentStatuses),
     shipping: known("spedizione", shippingStatuses),
     fiscal: known("fiscale", fiscalSituations),

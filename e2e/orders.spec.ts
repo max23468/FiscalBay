@@ -624,9 +624,10 @@ for (const language of ["it", "en"] as const) {
       const period = page.getByRole("combobox", { name: t("Periodo", "Period"), exact: true });
       await period.click();
       const menu = page.locator('[data-slot="select-content"]');
+      // Nel Free i periodi oltre i 30 giorni sono Premium: 90 giorni, 6 e 12 mesi.
       await expect(
         menu.getByText(t("Disponibile con Premium", "Available with Premium")),
-      ).toBeVisible();
+      ).toHaveCount(3);
       // Il menu è largo quanto la voce più lunga, mai meno del campo, e resta entro il
       // margine laterale di 16 px.
       await expect

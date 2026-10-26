@@ -7,6 +7,7 @@ import { Button } from "~/components/ui/button";
 import { FieldGroup, FieldLegend, FieldSet } from "~/components/ui/field";
 import { RadioGroup } from "~/components/ui/radio-group";
 import type { AppCopy } from "../../app-copy";
+import { orderPeriods, premiumOrderPeriods } from "../../view-models";
 import { CheckboxOption, Group, RadioOption, SimpleSelect } from "./controls";
 
 /** Selezione, singolo ordine o elenco filtrato degli Ordini, da esportare così com'è. */
@@ -69,11 +70,11 @@ export function ExportSection({
           {context ? null : (
             <SimpleSelect
               label={t.settings.export.exportPeriod}
-              items={[
-                { value: "7", label: t.orders.last7 },
-                { value: "30", label: t.orders.last30 },
-                { value: "90", label: t.orders.last90, premium: !premium },
-              ]}
+              items={orderPeriods.map((period) => ({
+                value: period,
+                label: t.orders.periods[period],
+                premium: !premium && premiumOrderPeriods.has(period),
+              }))}
               value={period}
               premiumLabel={t.orders.premiumOption}
               onChange={setPeriod}

@@ -433,6 +433,7 @@ describe("criteri dell'elenco dell'anteprima", () => {
     ...scenario.orders,
     { ...first!, id: "ord-60-giorni", createdAt: daysAgo(60) },
     { ...second!, id: "ord-120-giorni", createdAt: daysAgo(120) },
+    { ...first!, id: "ord-300-giorni", createdAt: daysAgo(300) },
   ];
   const listed = (query: string, plan: "free" | "premium") =>
     previewListing(orders, [], new URLSearchParams(query), null, scenario.now, plan)
@@ -465,6 +466,8 @@ describe("criteri dell'elenco dell'anteprima", () => {
         "periodo=30",
         "periodo=90",
         "periodo=365",
+        "periodo=6m",
+        "periodo=12m",
         "pagamento=paid",
         "pagamento=sconosciuto",
       ])
@@ -476,5 +479,9 @@ describe("criteri dell'elenco dell'anteprima", () => {
     expect(listed("periodo=90", "premium")).not.toContain("ord-120-giorni");
     expect(listed("periodo=90", "free")).toEqual(all);
     expect(listed("periodo=30", "free")).not.toContain("ord-60-giorni");
+    expect(listed("periodo=6m", "premium")).toContain("ord-120-giorni");
+    expect(listed("periodo=6m", "premium")).not.toContain("ord-300-giorni");
+    expect(listed("periodo=12m", "premium")).toContain("ord-300-giorni");
+    expect(listed("periodo=12m", "free")).toEqual(all);
   });
 });
