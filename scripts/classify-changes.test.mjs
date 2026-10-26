@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, mkdirSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import {
+  cpSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -86,15 +94,27 @@ describe("livello del gate dai file modificati", () => {
       full: "verify",
     });
     assert.match(scripts[levelScripts.tooling], /pnpm verify:documents\b/u);
+    // Il catalogo delle pagine è Node puro: lo prova chi modifica il suo script.
+    assert.match(scripts[levelScripts.tooling], /&& pnpm verify:pages &&/u);
     assert.match(scripts[levelScripts.unit], /pnpm verify:tooling\b/u);
     for (const level of ["build", "full"]) {
       assert.match(scripts[levelScripts[level]], /^pnpm verify:unit\b/u, level);
+      assert.doesNotMatch(scripts[levelScripts[level]], /verify:pages/u, level);
       // La build test resta l'ultima: è l'artefatto caricato e distribuito.
-      assert.match(scripts[levelScripts[level]], /&& pnpm verify:pages && .*pnpm build$/u, level);
+      assert.match(scripts[levelScripts[level]], /&& pnpm build$/u, level);
     }
     assert.equal(plan(["README.md"]).script, levelScripts.docs);
     assert.equal(plan(["AGENTS.md"]).script, levelScripts.tooling);
     assert.equal(plan([]).script, levelScripts.full);
+  });
+
+  it("classifica ogni script senza farlo ricadere nel livello completo", () => {
+    // Uno script nuovo fuori dagli elenchi provocherebbe build, browser e deploy a ogni modifica.
+    const scripts = readdirSync("scripts", { recursive: true, encoding: "utf8" })
+      .filter((file) => file.endsWith(".mjs") && !file.endsWith(".test.mjs"))
+      .map((file) => `scripts/${file.split(path.sep).join("/")}`);
+    assert.ok(scripts.length > 0);
+    for (const file of scripts) assert.notEqual(fileLevel(file), "full", file);
   });
 
   it("separa prove unitarie, prove browser e prodotto distribuito", () => {
