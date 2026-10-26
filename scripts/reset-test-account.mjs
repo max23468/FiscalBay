@@ -11,7 +11,7 @@
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { hashPassword } from "better-auth/crypto";
+import { hashPassword } from "../app/password.server.ts";
 
 import { legalVersions } from "../app/domain/registration.server.ts";
 import { databases } from "../cloudflare.config.ts";

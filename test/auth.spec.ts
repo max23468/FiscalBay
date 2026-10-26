@@ -30,7 +30,7 @@ async function passwordSession(environment: Env, email: string, password: string
   return sessionCookie(response);
 }
 
-it("salva le password con il costo ridotto e accetta quelle già salvate da Better Auth", async () => {
+it("salva le password con il costo ridotto e rifiuta il formato predefinito di Better Auth", async () => {
   const hash = await hashPassword("password-di-prova-lunga");
   expect(hash).toMatch(/^v2:[0-9a-f]{32}:[0-9a-f]{128}$/u);
   expect(await verifyPassword({ hash, password: "password-di-prova-lunga" })).toBe(true);
@@ -59,14 +59,13 @@ it("salva le password con il costo ridotto e accetta quelle già salvate da Bett
       .first<{ password: string }>();
   expect((await stored())?.password).toMatch(/^v2:/u);
 
-  // Un hash nel formato predefinito di Better Auth resta valido per l'accesso.
+  // Un hash nel formato predefinito di Better Auth, `sale:chiave` con r=16, non apre l'accesso.
   await env.DB.prepare(
     `UPDATE "account" SET "password" = ?
       WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ?)`,
   )
-    .bind(await originalHash("password-precedente-lunga"), email)
+    .bind(await originalHash("password-di-prova-lunga"), email)
     .run();
-  expect(await passwordSession(env, email, "password-precedente-lunga")).toContain("session_token");
   expect(await passwordSession(env, email, "password-di-prova-lunga")).not.toContain(
     "session_token",
   );
