@@ -231,6 +231,10 @@ describe("Stripe Managed Payments", () => {
       catalogMismatch(catalogPrice({ type: "one_time", recurring: null }), "lifetime", net),
     ).toBeNull();
     expect(catalogMismatch(catalogPrice({}, { tax_code: null }), "monthly", net)).toBe("tax_code");
+    // Un prezzo una tantum non vale come mensile o annuale.
+    expect(
+      catalogMismatch(catalogPrice({ type: "one_time", recurring: null }), "monthly", net),
+    ).toBe("billing_period");
   });
 
   it("descrive dalla configurazione l'account Stripe atteso di ogni ambiente", () => {
@@ -254,12 +258,22 @@ describe("Stripe Managed Payments", () => {
       `${origin}${localizedPath("it", "/app/impostazioni/piano")}`,
     );
     // Disdetta a fine periodo senza conguaglio; la periodicità cambia dalla pagina del piano.
-    expect(portal.features.subscription_cancel).toMatchObject({
-      enabled: true,
-      mode: "at_period_end",
-      proration_behavior: "none",
+    // Il cliente aggiorna i propri dati e il metodo di pagamento e consulta i documenti.
+    expect(portal.features).toEqual({
+      customer_update: { enabled: true, allowed_updates: ["name", "email", "address"] },
+      invoice_history: { enabled: true },
+      payment_method_update: { enabled: true },
+      subscription_cancel: {
+        enabled: true,
+        mode: "at_period_end",
+        proration_behavior: "none",
+        cancellation_reason: {
+          enabled: true,
+          options: ["too_expensive", "switched_service", "unused", "other"],
+        },
+      },
+      subscription_update: { enabled: false },
     });
-    expect(portal.features.subscription_update).toEqual({ enabled: false });
     expect(new Set(stripeWebhookEvents).size).toBe(stripeWebhookEvents.length);
   });
 
