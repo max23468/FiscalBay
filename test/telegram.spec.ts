@@ -3408,6 +3408,7 @@ describe("comandi e pulsanti del bot", () => {
       enabled: "Notifiche attive",
       paused: "Notifiche in pausa",
       fiscal: "solo con dato fiscale",
+      all: "tutti gli ordini",
       fiscalTitle: "Solo ordini con dato fiscale",
       allTitle: "Tutti gli ordini",
       each: "Un messaggio per ordine",
@@ -3443,6 +3444,7 @@ describe("comandi e pulsanti del bot", () => {
       unlinked:
         "Chat scollegata. Puoi collegarla di nuovo da FiscalBay, in Impostazioni › Notifiche.",
       latestEmpty: "Nessun ordine da mostrare nei negozi inclusi.",
+      expired: "Questo pulsante non è più valido.",
       help: [
         "👋 <b>FiscalBay</b>\nQui arrivano le notifiche degli ordini, secondo le preferenze delle Impostazioni.",
         "⭐ /stato · piano, notifiche e negozi\n🛒 /ultimi · gli ultimi ordini\n⚙️ /preferenze · pausa, filtro, frequenza e negozi",
@@ -3458,6 +3460,7 @@ describe("comandi e pulsanti del bot", () => {
       enabled: "Notifications on",
       paused: "Notifications paused",
       fiscal: "only with a tax ID",
+      all: "all orders",
       fiscalTitle: "Only orders with a tax ID",
       allTitle: "All orders",
       each: "One message per order",
@@ -3493,6 +3496,7 @@ describe("comandi e pulsanti del bot", () => {
       unlinked:
         "Chat unlinked. You can link it again in FiscalBay, under Settings › Notifications.",
       latestEmpty: "No orders to show in the included stores.",
+      expired: "This button is no longer valid.",
       help: [
         "👋 <b>FiscalBay</b>\nOrder notifications arrive here according to your Settings.",
         "⭐ /status · plan, notifications and stores\n🛒 /latest · the latest orders\n⚙️ /preferences · pause, filter, frequency and stores",
@@ -3567,7 +3571,7 @@ describe("comandi e pulsanti del bot", () => {
     "ogni risposta di comandi e pulsanti nella lingua della chat (%s)",
     async (language) => {
       const t = replies[language];
-      const { seller, gen, say, press } = await storefront(language);
+      const { seller, gen, api, say, press } = await storefront(language);
       const settings = {
         text: `🔗 ${t.settings}`,
         url: `${origin}${t.path}/app/impostazioni/notifiche`,
@@ -3690,6 +3694,12 @@ describe("comandi e pulsanti del bot", () => {
           ...fiscalEach.buttons.slice(2),
         ],
       });
+      expect((await say("/stato")).text).toEqual(
+        status(
+          [`⭐ <b>${t.premium}</b>`, `🔔 ${t.enabled} · ${t.all}`, `📨 ${t.each}`],
+          [`📨 <i>${t.noDelivery}</i>`],
+        ),
+      );
       const digestText = `📦 ${t.allTitle}\n🕘 ${t.digest}\n<i>${t.zoneNote}</i>`;
       expect(await press("mo:digest")).toEqual({
         method: "editMessageText",
@@ -3791,6 +3801,12 @@ describe("comandi e pulsanti del bot", () => {
           VALUES (?, ?, 'admin', ?, ?)`)
         .bind(`admin-${language}`, seller.workspace, now, later(60).toISOString())
         .run();
+      // Un pulsante di una generazione precedente scade, nella lingua della chat.
+      await tap("zzzzzzzz:pr", seller.chat, api.fetcher, later(50));
+      expect(api.calls.at(-1)).toEqual({
+        method: "answerCallbackQuery",
+        params: expect.objectContaining({ text: t.expired }),
+      });
       expect(await press("ul:ok")).toEqual({
         method: "editMessageText",
         text: t.unlinked,
@@ -3826,13 +3842,35 @@ describe("comandi e pulsanti del bot", () => {
 
     const menu = await press("pr");
     const before = await settings();
-    for (const data of ["en:2", "fi:x", "mo:x", "sx:0:2:s-m-1", "sx:0:1", "xx"])
+    // Ogni valore vale soltanto per la propria azione.
+    for (const data of [
+      "en:2",
+      "en:all",
+      "fi:x",
+      "fi:each",
+      "mo:x",
+      "mo:all",
+      "xx:0800",
+      "sx:0:2:s-m-1",
+      "sx:0:1",
+      "xx:0:0:s-m-1",
+      "xx",
+    ])
       expect(await press(data)).toEqual(menu);
     await tap(gen, seller.chat, api.fetcher, later(30));
     expect(api.calls.at(-1)!.params.text).toEqual(menu.text);
     const times = await press("tm");
     expect(await press("tm:0805")).toEqual(times);
     expect(await settings()).toEqual(before);
+    for (const [data, change] of [
+      ["fi:all", { filter: "all" }],
+      ["fi:fiscal", { filter: "fiscal" }],
+      ["mo:digest", { mode: "digest" }],
+      ["mo:each", { mode: "each" }],
+    ] as const) {
+      await press(data);
+      expect(await settings()).toMatchObject(change);
+    }
     // Il pulsante dello stato mostra lo stesso messaggio del comando.
     const tapped = await press("st");
     await deliver("/stato", seller.chat, api.fetcher, later(31));
@@ -3849,6 +3887,10 @@ describe("comandi e pulsanti del bot", () => {
       await press(data);
       expect(api.calls.slice(calls).map((call) => call.method)).toEqual(["answerCallbackQuery"]);
     }
+    expect(await press("la:0")).toMatchObject({
+      method: "editMessageText",
+      text: "Nessun ordine da mostrare nei negozi inclusi.",
+    });
     expect(await press("la:19")).toMatchObject({
       method: "editMessageText",
       text: "Nessun ordine da mostrare nei negozi inclusi.",
@@ -3960,5 +4002,101 @@ describe("comandi e pulsanti del bot", () => {
     ).rejects.toMatchObject({
       failure: "unavailable",
     });
+  });
+
+  it("stato, preferenze e negozi senza negozi, con una sola pagina e con dieci negozi", async () => {
+    const seller = await linked("pochi-negozi");
+    const gen = await generation(seller.workspace);
+    const api = bot();
+    let minute = 0;
+    const last = () => api.calls.at(-1)!;
+    await env.DB.prepare("UPDATE ebay_stores SET data_deleted_at = ? WHERE id = ?")
+      .bind(now, seller.store)
+      .run();
+    await deliver("/stato", seller.chat, api.fetcher, later(++minute));
+    expect(last().params.text).toBe(
+      "⭐ <b>Premium fino al 13 ott</b>\n🔔 Notifiche attive · solo con dato fiscale\n📨 Un messaggio per ordine\n\n📨 <i>Nessun invio finora</i>",
+    );
+    // Senza negozi e con un messaggio per ordine la riga di orario e negozi non c'è.
+    await deliver("/preferenze", seller.chat, api.fetcher, later(++minute));
+    expect(keyboard(last()).map((row) => row.map((button) => button.callback_data))).toEqual([
+      [`${gen}:en:0`],
+      [`${gen}:fi:fiscal`, `${gen}:fi:all`],
+      [`${gen}:mo:each`, `${gen}:mo:digest`],
+      [`${gen}:ul`, undefined],
+    ]);
+
+    // Sei negozi stanno in una pagina; il nome del negozio sospeso si accorcia come gli altri.
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE ebay_stores SET data_deleted_at = NULL, store_name = ? WHERE id = ?",
+      ).bind("S".repeat(45), seller.store),
+      env.DB.prepare(
+        "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES (?, 'plan', ?)",
+      ).bind(seller.store, now),
+      ...[1, 2, 3, 4, 5].map((index) =>
+        insertStore({
+          id: `s-pochi-${index}`,
+          workspaceId: seller.workspace,
+          linkedAt: later(index).toISOString(),
+        }),
+      ),
+    ]);
+    await tap(`${gen}:ss:0`, seller.chat, api.fetcher, later(++minute));
+    expect(keyboard(last())).toEqual([
+      [{ text: `⏸ ${"S".repeat(40)} · sospeso`, callback_data: `${gen}:ss:0` }],
+      ...[1, 2, 3, 4, 5].map((index) => [
+        { text: `☑ s-pochi-${index}`, callback_data: `${gen}:sx:0:0:s-pochi-${index}` },
+      ]),
+      [{ text: "‹ Indietro", callback_data: `${gen}:pr` }],
+    ]);
+
+    // Dieci negozi si elencano tutti, senza il conteggio di quelli in più.
+    await env.DB.batch(
+      [6, 7, 8, 9].map((index) =>
+        insertStore({
+          id: `s-pochi-${index}`,
+          workspaceId: seller.workspace,
+          linkedAt: later(index).toISOString(),
+        }),
+      ),
+    );
+    await deliver("/stato", seller.chat, api.fetcher, later(++minute));
+    const listed = String(last().params.text).split("\n\n")[1]!.split("\n");
+    expect(listed).toHaveLength(11);
+    expect(listed.at(-1)).toBe("🔴 s-pochi-9 · <i>da ricollegare</i>");
+  });
+
+  it("in inglese gli ultimi ordini sono al massimo venti, a pagine nella lingua della chat", async () => {
+    const seller = await linked("ultimi-inglese");
+    await env.DB.batch([
+      env.DB.prepare("UPDATE telegram_links SET language = 'en' WHERE workspace_id = ?").bind(
+        seller.workspace,
+      ),
+      insertStore({ id: "s-ultimi-secondo", workspaceId: seller.workspace }),
+      env.DB.prepare(
+        "INSERT INTO sync_state (store_id, history_from, history_until, updated_at) VALUES (?, ?, ?, ?)",
+      ).bind("s-ultimi-secondo", later(-30 * 24 * 60).toISOString(), now, now),
+    ]);
+    for (let index = 0; index < 11; index++) {
+      await order(seller.store, `o-primo-${index}`, { created: index - 40, listed: 1 });
+      await order("s-ultimi-secondo", `o-secondo-${index}`, { created: index - 20, listed: 1 });
+    }
+    const gen = await generation(seller.workspace);
+    const api = bot();
+    await deliver("/latest", seller.chat, api.fetcher, later(5));
+    const first = api.texts()[0]!;
+    expect(String(first.params.text)).toContain("🛒 <b>Latest orders</b> · <i>1–5 of 20</i>");
+    expect(keyboard(first)).toEqual([
+      [{ text: "5 more ›", callback_data: `${gen}:la:5` }],
+      [{ text: "🔗 Open orders", url: `${origin}/en/app/ordini` }],
+    ]);
+    await tap(`${gen}:la:15`, seller.chat, api.fetcher, later(6));
+    const lastPage = api.calls.at(-1)!;
+    expect(String(lastPage.params.text)).toContain("<i>16–20 of 20</i>");
+    // Il più vecchio dei ventidue resta fuori.
+    expect(String(lastPage.params.text)).toContain("ebay-o-primo-2<");
+    expect(String(lastPage.params.text)).not.toContain("ebay-o-primo-1<");
+    expect(keyboard(lastPage)[0]).toEqual([{ text: "‹ Previous", callback_data: `${gen}:la:10` }]);
   });
 });

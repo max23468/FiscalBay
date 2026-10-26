@@ -253,8 +253,9 @@ export async function consumeTelegramUpdate(
     )
     .bind(update.chatId, now.toISOString())
     .all<Link>();
-  // Senza token l'avvio è l'aiuto: chi non è collegato riceve dove collegarsi, come per i comandi.
-  if (update.topic === "start" && update.tokenHash)
+  // Soltanto l'avvio porta un token. Senza, l'avvio è l'aiuto: chi non è collegato riceve dove
+  // collegarsi, come per i comandi.
+  if (update.tokenHash)
     return consumeTelegramStart(
       env,
       {
@@ -716,11 +717,13 @@ async function consumeCallback(
 ) {
   const [generation, action, ...args] = update.command!.split(":");
   const link = links.find((candidate) => candidate.id.slice(0, 8) === generation);
-  const language = link?.language ?? "it";
-  await quiet(
-    answerCallback(env, update.callbackId!, link ? undefined : copy(language).expired, fetcher),
-  );
-  if (!link) return;
+  // Il pulsante scaduto risponde nella lingua della chat, se è ancora collegata.
+  if (!link)
+    return quiet(
+      answerCallback(env, update.callbackId!, copy(links[0]?.language ?? "it").expired, fetcher),
+    );
+  const language = link.language;
+  await quiet(answerCallback(env, update.callbackId!, undefined, fetcher));
   const edit = (message: BotMessage) =>
     editMessage(env, link.chatId, update.messageId!, message, fetcher);
   if (action === "st" || link.premium !== 1) return edit(await statusMessage(env, link, now));
