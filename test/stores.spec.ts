@@ -48,6 +48,16 @@ import { syntheticEbay, syntheticOrderId } from "./fixtures/ebay-fixtures";
 import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";
 import { homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
+import { loader as loadArea } from "../app/routes/account";
+
+/** Shell dell'area reale, dal loader della layout route di Ordini, Negozi e Impostazioni. */
+async function areaShell(cookie: string, path = "/app/impostazioni") {
+  const loaded = await loadArea({
+    params: {},
+    request: new Request(`http://localhost:5173${path}`, { headers: { cookie } }),
+  } as Parameters<typeof loadArea>[0]);
+  return loaded.shell;
+}
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -820,7 +830,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       marketing: true,
     });
     // Tema e fuso valgono in tutta l'area, con le date nel fuso scelto.
-    expect(loaded.shell.display).toEqual({ theme: "dark", timeZone: "America/New_York" });
+    expect((await areaShell(seller.cookie)).display).toEqual({
+      theme: "dark",
+      timeZone: "America/New_York",
+    });
     expect(await save("theme", "system")).toEqual({ ok: true });
     expect(await save("marketing", "false")).toEqual({ ok: true });
     expect(
@@ -915,27 +928,29 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       timeZone: "auto",
       detectedTimeZone: "Asia/Tokyo",
     });
-    expect(detected.shell.display.timeZone).toBe("Asia/Tokyo");
+    expect(
+      (await areaShell(`${seller.cookie}; fiscalbay_fuso=Asia%2FTokyo`)).display.timeZone,
+    ).toBe("Asia/Tokyo");
     // Un valore non riconosciuto vale Roma, senza rompere le date.
     for (const cookie of ["fiscalbay_fuso=Mars%2FOlympus", "fiscalbay_fuso=..%2Fx"]) {
-      expect((await withZone(cookie)).shell.display.timeZone).toBe("Europe/Rome");
+      expect((await areaShell(`${seller.cookie}; ${cookie}`)).display.timeZone).toBe("Europe/Rome");
     }
     // Un fuso scelto vale più di quello del dispositivo; «auto» torna al rilevamento.
     const save = (value: string) =>
       saveSetting(seller.cookie, { intent: "save", name: "time-zone", value });
     expect(await save("Europe/London")).toEqual({ ok: true });
-    expect((await withZone("fiscalbay_fuso=Asia%2FTokyo")).shell.display.timeZone).toBe(
-      "Europe/London",
-    );
+    expect(
+      (await areaShell(`${seller.cookie}; fiscalbay_fuso=Asia%2FTokyo`)).display.timeZone,
+    ).toBe("Europe/London");
     expect(await save("auto")).toEqual({ ok: true });
     expect(
       await env.DB.prepare("SELECT time_zone FROM user_preferences WHERE user_id = ?")
         .bind(seller.userId)
         .first(),
     ).toEqual({ time_zone: null });
-    expect((await withZone("fiscalbay_fuso=Asia%2FTokyo")).shell.display.timeZone).toBe(
-      "Asia/Tokyo",
-    );
+    expect(
+      (await areaShell(`${seller.cookie}; fiscalbay_fuso=Asia%2FTokyo`)).display.timeZone,
+    ).toBe("Asia/Tokyo");
   });
 
   it("chiude dopo una passkey soltanto la sessione precedente dello stesso utente", async () => {
@@ -1005,7 +1020,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     const seller = await linkedSeller("campanella@example.invalid");
     const expired = new Date(Date.now() - 2 * day).toISOString();
     await env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ?").bind(expired).run();
-    const bell = async () => (await settingsPage(seller.cookie)).shell.notifications!;
+    const bell = async () => (await areaShell(seller.cookie)).notifications!;
     const [notification] = await bell();
     expect(await bell()).toEqual([
       {
@@ -1529,7 +1544,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       // La pagina aperta registra l'attività ma non riprende le letture senza conferma.
       const page = await storesPage("/app/negozi", seller.cookie);
       expect(page.data.page.stores[0]).toMatchObject({ pauseReason: "inactivity" });
-      expect(page.data.shell.notifications).toContainEqual(
+      expect((await areaShell(seller.cookie, "/app/negozi")).notifications).toContainEqual(
         expect.objectContaining({ id: `inactivity:${at(37.2).toISOString()}`, href: "negozi" }),
       );
       expect(await pauses(seller.userId)).toEqual([["inactivity"]]);

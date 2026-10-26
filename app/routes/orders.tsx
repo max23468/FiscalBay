@@ -2,7 +2,6 @@ import { env } from "cloudflare:workers";
 import { data, redirect, useNavigate, type ShouldRevalidateFunctionArgs } from "react-router";
 
 import { AccessNotice, VerifyEmail } from "~/components/access-notice";
-import { AccountShell } from "~/components/account-shell";
 import { useCopy } from "~/components/copy-context";
 import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
@@ -14,7 +13,6 @@ import {
   assertSameOrigin,
   requestedEbayEnvironment,
   requireAccountArea,
-  shellData,
 } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { ordersPath, storeLinkPath } from "../app-links";
@@ -188,7 +186,6 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
         notice,
         verified,
         ebayEnvironment,
-        shell: await shellData(area, stores, now),
       },
       { status: 404 },
     );
@@ -291,7 +288,6 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     ebayEnvironment,
     sandbox: sandboxAvailable(env),
     page: pageData,
-    shell: await shellData(area, stores, now),
     confirmation:
       pending.length > 0
         ? settle(
@@ -407,28 +403,19 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
       <VerifyEmail email={account.email} verified={loaderData.verified} />
     </>
   );
-  return (
-    <AccountShell
-      account={account}
-      shell={loaderData.shell}
-      security={loaderData.verified}
-      searchQuery={loaderData.notFound ? "" : (loaderData.page.search ?? "")}
-    >
-      {loaderData.notFound ? (
-        <NotFoundState kind="order" />
-      ) : (
-        <OrdersPage
-          data={loaderData.page}
-          unlockAction={`${localizedPath(language, ordersPath)}?environment=${loaderData.ebayEnvironment}`}
-          confirmation={loaderData.confirmation}
-          notice={
-            <>
-              {alerts}
-              {loaderData.sandbox ? <EnvironmentSelect value={loaderData.ebayEnvironment} /> : null}
-            </>
-          }
-        />
-      )}
-    </AccountShell>
+  return loaderData.notFound ? (
+    <NotFoundState kind="order" />
+  ) : (
+    <OrdersPage
+      data={loaderData.page}
+      unlockAction={`${localizedPath(language, ordersPath)}?environment=${loaderData.ebayEnvironment}`}
+      confirmation={loaderData.confirmation}
+      notice={
+        <>
+          {alerts}
+          {loaderData.sandbox ? <EnvironmentSelect value={loaderData.ebayEnvironment} /> : null}
+        </>
+      }
+    />
   );
 }

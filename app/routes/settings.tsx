@@ -1,12 +1,11 @@
 import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
 
-import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
 import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { accessNotice } from "../access-notice";
 import { unconfirmedOnFailure } from "../client-action";
-import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
+import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { checkoutReturn, purchaseStateFrom } from "../catalog";
 import {
@@ -115,7 +114,6 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
         language,
         userId: session.user.id,
         account,
-        shell: await shellData(area),
       },
       { status: 404 },
     );
@@ -125,38 +123,32 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const auth = session as AuthSession;
   const timeZone = effectiveTimeZone(preferences.timeZone, area.detectedTimeZone);
   const [
-    shell,
-    [
-      allowance,
-      purchase,
-      lifetime,
-      freeStore,
-      confirmUnlock,
-      marketing,
-      methods,
-      sessions,
-      pendingEmail,
-      telegram,
-      admissionState,
-    ],
-  ] = await Promise.all([
-    shellData(area, undefined, now),
-    measure("d1", "settings", () =>
-      Promise.all([
-        orderAllowance(env.DB, userId, now),
-        purchaseState(env.DB, userId, now),
-        lifetimeContext(env.DB, env, userId, now),
-        freeStoreState(env.DB, userId, now),
-        unlockConfirmation(env.DB, userId),
-        marketingConsent(env.DB, userId),
-        listSignInMethods(env.DB, userId),
-        listActiveSessions(env.DB, userId, session.session.id, language, now),
-        pendingEmailChange(env.DB, userId, session.user.email),
-        telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
-        admission(env.DB, userId),
-      ]),
-    ),
-  ]);
+    allowance,
+    purchase,
+    lifetime,
+    freeStore,
+    confirmUnlock,
+    marketing,
+    methods,
+    sessions,
+    pendingEmail,
+    telegram,
+    admissionState,
+  ] = await measure("d1", "settings", () =>
+    Promise.all([
+      orderAllowance(env.DB, userId, now),
+      purchaseState(env.DB, userId, now),
+      lifetimeContext(env.DB, env, userId, now),
+      freeStoreState(env.DB, userId, now),
+      unlockConfirmation(env.DB, userId),
+      marketingConsent(env.DB, userId),
+      listSignInMethods(env.DB, userId),
+      listActiveSessions(env.DB, userId, session.session.id, language, now),
+      pendingEmailChange(env.DB, userId, session.user.email),
+      telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
+      admission(env.DB, userId),
+    ]),
+  );
   const cycle = allowance?.cycle;
   // Periodo dell'abbonamento, pagamento da confermare o rinnovo non riuscito.
   const subscription = allowance
@@ -227,7 +219,6 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     userId,
     account,
     page,
-    shell,
   };
 }
 
@@ -377,14 +368,9 @@ export function clientAction(args: Route.ClientActionArgs) {
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { account, shell } = loaderData;
-  return (
-    <AccountShell key={loaderData.userId} account={account} shell={shell} security>
-      {loaderData.notFound ? (
-        <NotFoundState kind="page" />
-      ) : (
-        <SettingsPage data={loaderData.page} />
-      )}
-    </AccountShell>
+  return loaderData.notFound ? (
+    <NotFoundState kind="page" />
+  ) : (
+    <SettingsPage data={loaderData.page} />
   );
 }

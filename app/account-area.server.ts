@@ -47,7 +47,19 @@ export async function currentSession(request: Request) {
  * database non rispondono la pagina non promette dati che non ha letto: risponde 503 con la
  * sola indicazione di riprovare.
  */
-async function readAccount(request: Request) {
+function readAccount(request: Request) {
+  // La shell dell'area e la pagina leggono l'account nella stessa richiesta: una sola lettura.
+  let read = accountReads.get(request);
+  if (!read) {
+    read = loadAccount(request);
+    accountReads.set(request, read);
+  }
+  return read;
+}
+
+const accountReads = new WeakMap<Request, ReturnType<typeof loadAccount>>();
+
+async function loadAccount(request: Request) {
   try {
     const session = await currentSession(request);
     const [status, preferences] = session

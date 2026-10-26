@@ -2,12 +2,11 @@ import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
 
 import { AccessNotice } from "~/components/access-notice";
-import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores/page";
 import { accessNotice } from "../access-notice";
 import { unconfirmedOnFailure } from "../client-action";
-import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
+import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { appBase, storeLinkPath } from "../app-links";
 import {
@@ -111,7 +110,6 @@ async function readStores({ request, params }: Route.LoaderArgs) {
     notFound: Boolean(params.negozio) && !detail,
     language,
     account,
-    shell: await shellData(area, statuses, now),
     // Il collegamento eBay partito da Negozi torna qui con il suo esito.
     notice: accessNotice(new URL(request.url).searchParams, language),
     page: {
@@ -232,18 +230,14 @@ export function clientAction(args: Route.ClientActionArgs) {
 }
 
 export default function Stores({ loaderData }: Route.ComponentProps) {
-  const { account, page, notice, shell } = loaderData;
-  return (
-    <AccountShell account={account} shell={shell} security>
-      {loaderData.notFound ? (
-        <NotFoundState kind="store" />
-      ) : (
-        <StoresPage
-          data={page}
-          confirmation={loaderData.confirmation}
-          notice={<AccessNotice notice={notice} />}
-        />
-      )}
-    </AccountShell>
+  const { page, notice } = loaderData;
+  return loaderData.notFound ? (
+    <NotFoundState kind="store" />
+  ) : (
+    <StoresPage
+      data={page}
+      confirmation={loaderData.confirmation}
+      notice={<AccessNotice notice={notice} />}
+    />
   );
 }

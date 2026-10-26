@@ -59,6 +59,16 @@ import { appCopy } from "../app/app-copy";
 import { settle } from "../app/settle.server";
 import { requestOrderRead } from "../app/domain/order-sync.server";
 import { exportHref, exportReturnHref, exportScope } from "../app/orders/export-scope";
+import { loader as loadArea } from "../app/routes/account";
+
+/** Shell dell'area reale, dal loader della layout route di Ordini, Negozi e Impostazioni. */
+async function areaShell(cookie: string, path = "/app/impostazioni") {
+  const loaded = await loadArea({
+    params: {},
+    request: new Request(`http://localhost:5173${path}`, { headers: { cookie } }),
+  } as Parameters<typeof loadArea>[0]);
+  return loaded.shell;
+}
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -2144,7 +2154,7 @@ describe("pagina Ordini reale", () => {
         (notice) => notice.kind === "ebay-down" || notice.kind === "store-read-failed",
       );
     const bell = async () =>
-      ((await ordersPage(cookie)).shell.notifications ?? []).map((item) => item.id);
+      ((await areaShell(cookie, "/app/ordini")).notifications ?? []).map((item) => item.id);
     const storesDown = async () =>
       (
         await loadStores({
