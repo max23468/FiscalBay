@@ -1,6 +1,7 @@
 import { purchasesOpenSql, waitingSql } from "./admission-state.server";
 import { consultableStore } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
+import { dayMilliseconds } from "../time";
 
 /** Predicato condiviso: nessun valore fiscale entra nel risultato prima dell'autorizzazione. */
 export function orderAccessSql(order: string, workspace: string, at: string) {
@@ -62,7 +63,7 @@ function activeCoverageSql(column: "source" | "ends_at", workspace: string, at: 
 /** Durata della prova Premium, in giorni di 24 ore sull'istante UTC come i cicli del Free. */
 export const trialDays = 14;
 
-const trialLength = trialDays * 24 * 60 * 60 * 1000;
+const trialLength = trialDays * dayMilliseconds;
 
 /**
  * Prima lettura riuscita di un negozio dello spazio, anche senza ordini: abilita prova e
@@ -182,7 +183,7 @@ export async function setUnlockConfirmation(db: D1Database, userId: string, conf
 /** Sblocchi di un ciclo Free fuori dalle promozioni. */
 export const baseFreeQuota = 5;
 
-const cycleLength = 7 * 24 * 60 * 60 * 1000;
+const cycleLength = 7 * dayMilliseconds;
 
 /**
  * Quota di un ciclo che inizia all'istante `at`, espressione SQL: la promozione in corso a

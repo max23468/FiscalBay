@@ -4,11 +4,17 @@ import { z } from "zod";
 import { isProduction } from "../app-links";
 import { priceGeneration, type LifetimeOffer, type PremiumOffer } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
-import { isMissingObject, stripeRead } from "../integrations/stripe.server";
-import type { UpstreamError } from "../integrations/http.server";
+import {
+  isMissingObject,
+  stripeCall,
+  stripeEnvironment,
+  stripeId,
+} from "../integrations/stripe.server";
 import { purchasesOpenSql } from "./admission-state.server";
 import { openSubscriptionStatuses, storeReadSql } from "./grants.server";
 import { paymentReversal, reversalStatements } from "./refunds.server";
+import { inSequence } from "../sequence";
+import { sqlList } from "./sql.server";
 
 /**
  * Venti posti lifetime fra vendite e omaggi (D031). Il numero del posto è il vincolo atomico
@@ -29,14 +35,6 @@ const reservationMs = 60 * 60 * 1000;
  * periodo che il credito calcolato oggi non conta.
  */
 const renewalMarginMs = 10 * 60 * 1000;
-
-const sqlList = (values: readonly string[]) => values.map((value) => `'${value}'`).join(", ");
-
-const environmentOf = (env: Env) => (isProduction(env) ? "live" : "test");
-
-/** Una chiamata a Stripe alla volta, nell'ordine dato: il turno resta entro i limiti. */
-const inSequence = (steps: Array<() => Promise<unknown>>) =>
-  steps.reduce<Promise<unknown>>((previous, step) => previous.then(step), Promise.resolve());
 
 /** Primo posto libero, espressione per `INSERT ... SELECT`. */
 const freeSlotSql = `WITH RECURSIVE n(slot) AS (SELECT 1 UNION ALL SELECT slot + 1 FROM n
@@ -130,7 +128,7 @@ export async function lifetimeContext(
         FROM stripe_subscriptions WHERE workspace_id = ?1 AND environment = ?2
           AND unavailable_at IS NULL
         ORDER BY julianday(current_period_start) DESC LIMIT 1`)
-      .bind(workspace.id, environmentOf(env)),
+      .bind(workspace.id, stripeEnvironment(env)),
     db
       .prepare(`SELECT starts_at, ends_at, amount_paid, amount_refunded FROM workspace_entitlements
         WHERE workspace_id = ?1 AND source = 'premium' AND stripe_invoice_id IS NOT NULL
@@ -312,12 +310,12 @@ export async function reconcileLifetime(
   const at = now.toISOString();
   let session: Stripe.Checkout.Session;
   try {
-    session = await stripeRead(() =>
+    session = await stripeCall(() =>
       stripe.checkout.sessions.retrieve(sessionId, { expand: ["payment_intent.latest_charge"] }),
     );
   } catch (error) {
     // Una sessione sparita non prova né un incasso né la sua assenza: il posto resta.
-    if (!isMissingObject(error as UpstreamError)) throw error;
+    if (!isMissingObject(error)) throw error;
     logFailure({ error, operation: "billing" });
     return;
   }
@@ -346,7 +344,7 @@ export async function reconcileLifetime(
       .bind(session.id)
       .first<{ expires_at: string }>();
     if (local && Date.parse(local.expires_at) <= now.getTime()) {
-      await stripeRead(() => stripe.checkout.sessions.expire(session.id));
+      await stripeCall(() => stripe.checkout.sessions.expire(session.id));
       await release();
     }
     return;
@@ -364,11 +362,7 @@ export async function reconcileLifetime(
     intent?.latest_charge && typeof intent.latest_charge !== "string" ? intent.latest_charge : null;
   const reversal = charge ? await paymentReversal(stripe, charge) : null;
   const paidAt = new Date((charge?.created ?? session.created) * 1000).toISOString();
-  const customer = session.customer
-    ? typeof session.customer === "string"
-      ? session.customer
-      : session.customer.id
-    : null;
+  const customer = session.customer ? stripeId(session.customer) : null;
   await env.DB.batch([
     env.DB.prepare(`UPDATE lifetime_allocations SET status = 'active', activated_at = ?2,
         customer_id = ?3, completed_at = COALESCE(completed_at, ?2), expires_at = NULL
@@ -427,26 +421,21 @@ export async function endReplacedSubscriptions(
   const { results } = await env.DB.prepare(`SELECT id FROM stripe_subscriptions
       WHERE workspace_id = ?1 AND environment = ?2 AND unavailable_at IS NULL
         AND status IN (${sqlList(openSubscriptionStatuses)})`)
-    .bind(workspaceId, environmentOf(env))
+    .bind(workspaceId, stripeEnvironment(env))
     .all<{ id: string }>();
   const end = async (id: string) => {
     // Un abbonamento già chiuso su Stripe non si chiude una seconda volta.
-    const current = await stripeRead(() => stripe.subscriptions.retrieve(id));
+    const current = await stripeCall(() => stripe.subscriptions.retrieve(id));
     const canceled = ["canceled", "incomplete_expired"].includes(current.status)
       ? current
-      : await stripeRead(() => stripe.subscriptions.cancel(id));
+      : await stripeCall(() => stripe.subscriptions.cancel(id));
     await env.DB.prepare(`UPDATE stripe_subscriptions SET status = ?1, synced_at = ?2
         WHERE id = ?3 AND julianday(synced_at) <= julianday(?2)`)
       .bind(canceled.status, now.toISOString(), id)
       .run();
   };
-  await inSequence(
-    results.map(
-      ({ id }) =>
-        () =>
-          end(id),
-    ),
-  );
+  // Una chiamata a Stripe alla volta: il turno resta entro i limiti.
+  await inSequence(results, ({ id }) => end(id));
 }
 
 /** Lifetime venduti riletti per turno, ognuno una volta al giorno. */
@@ -472,7 +461,7 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
         FROM lifetime_allocations a JOIN stripe_subscriptions s ON s.workspace_id = a.workspace_id
         WHERE a.status = 'active' AND s.environment = ?1 AND s.unavailable_at IS NULL
           AND s.status IN (${sqlList(openSubscriptionStatuses)})
-          AND ${lifetimeInForceSql("a.workspace_id")}`).bind(environmentOf(env)),
+          AND ${lifetimeInForceSql("a.workspace_id")}`).bind(stripeEnvironment(env)),
     env.DB.prepare(`UPDATE lifetime_allocations SET checked_at = ?1 WHERE slot IN (
         SELECT a.slot FROM lifetime_allocations a
         WHERE a.status = 'active' AND a.kind = 'sale'
@@ -485,17 +474,20 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
   ]);
   const logged = (step: () => Promise<unknown>) => () =>
     step().catch((error: unknown) => logFailure({ error, operation: "billing" }));
-  await inSequence([
-    ...due!.results.map(({ provider_reference }) =>
-      logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
-    ),
-    ...replaced!.results.map(({ workspace_id }) =>
-      logged(() => endReplacedSubscriptions(env, stripe, workspace_id!, now)),
-    ),
-    ...sold!.results.map(({ provider_reference }) =>
-      logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
-    ),
-  ]);
+  await inSequence(
+    [
+      ...due!.results.map(({ provider_reference }) =>
+        logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
+      ),
+      ...replaced!.results.map(({ workspace_id }) =>
+        logged(() => endReplacedSubscriptions(env, stripe, workspace_id!, now)),
+      ),
+      ...sold!.results.map(({ provider_reference }) =>
+        logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
+      ),
+    ],
+    (step) => step(),
+  );
 }
 
 export type LifetimeGrant = "done" | "owned" | "pending" | "sold-out" | "not_found";

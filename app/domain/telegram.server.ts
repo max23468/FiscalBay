@@ -13,10 +13,11 @@ import { isProduction } from "../app-links";
 import { languages, localizedPath, type Language } from "../i18n";
 import { telegramDigestTimes, telegramLinkMinutes } from "../preferences";
 import type { TelegramView } from "../view-models";
+import { dayMilliseconds } from "../time";
 
 // Le richieste consumate restano un giorno oltre la scadenza: un nuovo tentativo della stessa
 // ricevuta riconosce ancora il proprio collegamento.
-const consumedRetention = 86_400_000;
+const consumedRetention = dayMilliseconds;
 
 type TelegramFilter = TelegramView["filter"];
 type TelegramMode = TelegramView["mode"];

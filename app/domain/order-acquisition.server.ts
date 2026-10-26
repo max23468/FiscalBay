@@ -31,6 +31,7 @@ import {
 } from "../integrations/ebay/fulfillment.server";
 import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
 import { readTradingOrders } from "../integrations/ebay/trading.server";
+import { inSequence } from "../sequence";
 
 /**
  * Acquisizione degli ordini di un negozio, condivisa da collegamento e lavoro periodico:
@@ -113,10 +114,7 @@ async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
       next ? { next } : { limit: pageSize, filter: pass.begin() },
     );
     // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio.
-    await page.orders.reduce<Promise<unknown>>(
-      (previous, order) => previous.then(() => record(ctx, fulfillmentObservation(order, ctx.at))),
-      Promise.resolve(),
-    );
+    await inSequence(page.orders, (order) => record(ctx, fulfillmentObservation(order, ctx.at)));
     if (next !== null && page.total !== total) {
       next = null;
     } else if (page.next) {
@@ -178,16 +176,12 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   while (spend(ctx.budget, 1, 1)) {
     const result = await readTradingOrders(ctx.access, { from, until, page });
     let skipped = result.skipped;
-    await result.orders.reduce<Promise<unknown>>(
-      (previous, observation) =>
-        previous.then(() =>
-          record(ctx, observation).catch((error: unknown) => {
-            // Righe ripetute nello stesso acquisto: si salta l'ordine, non la pagina.
-            if (!(error instanceof DuplicateLineIdentity)) throw error;
-            skipped += 1;
-          }),
-        ),
-      Promise.resolve(),
+    await inSequence(result.orders, (observation) =>
+      record(ctx, observation).catch((error: unknown) => {
+        // Righe ripetute nello stesso acquisto: si salta l'ordine, non la pagina.
+        if (!(error instanceof DuplicateLineIdentity)) throw error;
+        skipped += 1;
+      }),
     );
     if (skipped > 0)
       logFailure({ error: new UpstreamError("invalid_response"), operation: "order_acquisition" });

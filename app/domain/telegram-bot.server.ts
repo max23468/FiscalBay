@@ -35,6 +35,7 @@ import {
 } from "../integrations/telegram.server";
 import { telegramDigestTimes } from "../preferences";
 import type { EbayEnvironment } from "../view-models";
+import { inSequence } from "../sequence";
 
 /**
  * Comandi e pulsanti del bot per i venditori (D199). Ogni risposta rilegge collegamento,
@@ -276,10 +277,8 @@ function sendInOrder(
   replies: Array<{ link: Pick<Link, "chatId">; message: BotMessage }>,
   fetcher: typeof fetch,
 ) {
-  return replies.reduce<Promise<void>>(
-    (previous, { link, message }) =>
-      previous.then(() => quiet(sendMessage(env, link.chatId, message, fetcher))),
-    Promise.resolve(),
+  return inSequence(replies, ({ link, message }) =>
+    quiet(sendMessage(env, link.chatId, message, fetcher)),
   );
 }
 

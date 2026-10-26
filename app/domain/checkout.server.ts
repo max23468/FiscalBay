@@ -11,10 +11,11 @@ import {
   createStripeClient,
   expireCheckout,
   retrieveCatalogPrice,
-  stripeRead,
+  stripeCall,
+  stripeEnvironment,
+  stripeId,
   stripeSecretKey,
 } from "../integrations/stripe.server";
-import { isProduction } from "../app-links";
 import { purchasesOpenSql } from "./admission-state.server";
 import { reconcileSubscription, workspaceCustomerSql } from "./billing.server";
 import { openSubscriptionSql, storeReadSql } from "./grants.server";
@@ -26,6 +27,7 @@ import {
   renewsDuringCheckout,
   reserveLifetime,
 } from "./lifetime.server";
+import { dayMilliseconds } from "../time";
 
 /** Offerte in vendita: il lifetime con la prenotazione atomica di uno dei venti posti. */
 export const checkoutOffers = [
@@ -165,7 +167,7 @@ export async function startCheckout(
     const customer = await env.DB.prepare(
       `SELECT ${workspaceCustomerSql("?1", "?2")} AS customer_id`,
     )
-      .bind(workspaceId, isProduction(env) ? "live" : "test")
+      .bind(workspaceId, stripeEnvironment(env))
       .first<{ customer_id: string | null }>();
     const plan = `${new URL(env.APP_ORIGIN).origin}${localizedPath(input.language, "/app/impostazioni/piano")}`;
     const session = await createManagedCheckout(stripe, {
@@ -217,7 +219,7 @@ const subscriptionCheckoutMs = 60 * 60 * 1000;
 const staleClaimMs = 5 * 60 * 1000;
 
 /** Sessioni più vecchie sono già state rilette dal compito `billing`. */
-const recentCheckoutMs = 2 * 86_400_000;
+const recentCheckoutMs = 2 * dayMilliseconds;
 
 /**
  * Chiude le sessioni ancora aperte dello spazio prima di aprirne una nuova, così una sola può
@@ -245,7 +247,7 @@ export async function closeOpenCheckouts(
   if (row?.session_id && now.getTime() - Date.parse(row.created_at) < recentCheckoutMs) {
     const session = await closeSession(stripe, row.session_id);
     if (session.status === "complete" && session.subscription) {
-      await reconcileSubscription(env, stripe, idOf(session.subscription), now);
+      await reconcileSubscription(env, stripe, stripeId(session.subscription), now);
       // L'abbonamento ora è registrato: la sessione conclusa non si rilegge più.
       const done = await env.DB.prepare(
         "DELETE FROM subscription_checkouts WHERE workspace_id = ?1 AND claim = ?2",
@@ -274,13 +276,13 @@ export async function closeOpenCheckouts(
 
 /** Chiude una sessione ancora aperta e la restituisce come è ora su Stripe. */
 async function closeSession(stripe: Stripe, sessionId: string) {
-  const session = await stripeRead(() => stripe.checkout.sessions.retrieve(sessionId));
+  const session = await stripeCall(() => stripe.checkout.sessions.retrieve(sessionId));
   if (session.status !== "open") return session;
   try {
     await expireCheckout(stripe, sessionId);
   } catch (error) {
     // Completata un istante prima della chiusura: vale il suo esito.
-    const latest = await stripeRead(() => stripe.checkout.sessions.retrieve(sessionId));
+    const latest = await stripeCall(() => stripe.checkout.sessions.retrieve(sessionId));
     if (latest.status === "open") throw error;
     return latest;
   }
@@ -330,10 +332,6 @@ async function releaseClaim(db: D1Database, workspaceId: string, claim: string) 
     .run();
 }
 
-/** Identificativo di un riferimento Stripe, espanso o no. */
-const idOf = (reference: string | { id: string }) =>
-  typeof reference === "string" ? reference : reference.id;
-
 /**
  * Lifetime: il posto si prenota prima della sessione, che scade con la prenotazione, e la
  * sessione si lega al posto prima che il cliente ne riceva l'indirizzo. Una sessione
@@ -373,7 +371,7 @@ async function startLifetimeCheckout(
       return { ok: false, reason: "unavailable" };
     const previous = context.reservation?.reference;
     if (previous) {
-      const session = await stripeRead(() => stripe.checkout.sessions.retrieve(previous));
+      const session = await stripeCall(() => stripe.checkout.sessions.retrieve(previous));
       if (session.status === "complete") {
         await reconcileLifetime(env, stripe, previous, now);
         return { ok: false, reason: "covered" };
@@ -391,7 +389,7 @@ async function startLifetimeCheckout(
             ? "unavailable"
             : "sold-out",
       };
-    const product = typeof price.product === "string" ? price.product : price.product.id;
+    const product = stripeId(price.product);
     const coupon = context.offer.credit
       ? await createLifetimeCredit(stripe, {
           amount: context.offer.credit,

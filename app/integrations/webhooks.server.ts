@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { createHash } from "node:crypto";
-import { verifyStripeEvent } from "./stripe.server";
+import { stripeEnvironment, verifyStripeEvent } from "./stripe.server";
 import {
   answerCallback,
   telegramConfigured,
@@ -15,9 +15,11 @@ import { consumeOrderConfirmation } from "../domain/order-acquisition.server";
 import { consumeTelegramUpdate } from "../domain/telegram-bot.server";
 import { isProduction } from "../app-links";
 import { logFailure } from "../errors";
+import { inSequence } from "../sequence";
+import { dayMilliseconds } from "../time";
 
 const maxBytes = 262_144;
-const retention = 7 * 86_400_000;
+const retention = 7 * dayMilliseconds;
 const referenceSchema = z.object({ receiptId: z.string().uuid() });
 const webhookPaths = [
   "/webhooks/ebay",
@@ -152,7 +154,7 @@ export async function receiveWebhook(
         if (!update) return new Response(null, { status: 204 });
         event = {
           provider: "telegram",
-          environment: isProduction(env) ? "live" : "test",
+          environment: stripeEnvironment(env),
           provider_id: String(update.updateId),
           topic: update.kind,
           object_id: update.chatId,
@@ -330,7 +332,7 @@ async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
 
 // Una ricevuta accodata da oltre un giorno e non completata ha perso il messaggio: retry e
 // attese del provider si esauriscono prima, e resta la DLQ o la scadenza della coda.
-const lostMilliseconds = 86_400_000;
+const lostMilliseconds = dayMilliseconds;
 
 /**
  * Riprende la finestra fra claim D1 e accettazione Queue, anche senza retry provider, e le
@@ -345,10 +347,7 @@ export async function recoverWebhookIngress(env: Env, now = new Date()) {
     .bind(now.toISOString(), new Date(now.getTime() - lostMilliseconds).toISOString())
     .all<{ id: string }>();
   // In sequenza: se Queue non accetta, il recupero si ferma senza altri invii destinati a fallire.
-  await results.reduce<Promise<void>>(
-    (previous, receipt) => previous.then(() => enqueueReceipt(env, receipt.id, now)),
-    Promise.resolve(),
-  );
+  await inSequence(results, (receipt) => enqueueReceipt(env, receipt.id, now));
 }
 
 export async function consumeWebhooks(

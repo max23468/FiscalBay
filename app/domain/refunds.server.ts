@@ -1,9 +1,12 @@
 import type Stripe from "stripe";
 
-import { isProduction } from "../app-links";
 import { ApplicationError, logFailure } from "../errors";
-import type { UpstreamError } from "../integrations/http.server";
-import { isMissingObject, stripeRead } from "../integrations/stripe.server";
+import {
+  isMissingObject,
+  stripeCall,
+  stripeEnvironment,
+  stripeId,
+} from "../integrations/stripe.server";
 
 /**
  * Rimborsi, dispute e cancellazioni finanziarie (§6.4, §6.6). Con Managed Payments li decide
@@ -35,14 +38,14 @@ const signal = (failure: string) =>
 export async function paymentReversal(stripe: Stripe, charge: Stripe.Charge): Promise<Reversal> {
   let refunded = 0;
   if (charge.amount_refunded > 0) {
-    const refunds = await stripeRead(() => stripe.refunds.list({ charge: charge.id, limit: 100 }));
+    const refunds = await stripeCall(() => stripe.refunds.list({ charge: charge.id, limit: 100 }));
     refunded = refunds.data
       .filter((refund) => refund.status === "succeeded")
       .reduce((sum, refund) => sum + refund.amount, 0);
   }
   if (refunded >= charge.amount) return { refunded, revocation: "refund" };
   if (charge.disputed) {
-    const disputes = await stripeRead(() => stripe.disputes.list({ charge: charge.id, limit: 10 }));
+    const disputes = await stripeCall(() => stripe.disputes.list({ charge: charge.id, limit: 10 }));
     // Stryker disable next-line MethodExpression: Stripe apre al più una disputa per addebito.
     if (disputes.data.some((dispute) => dispute.status === "lost"))
       return { refunded, revocation: "dispute" };
@@ -91,26 +94,23 @@ export async function isErasedCustomer(db: D1Database, customerId: string) {
 export async function customerCharges(db: D1Database, stripe: Stripe, customerId: string) {
   if (await isErasedCustomer(db, customerId)) return new Map<string, Stripe.Charge>();
   try {
-    const charges = await stripeRead(() =>
+    const charges = await stripeCall(() =>
       stripe.charges.list({ customer: customerId, limit: 100 }),
     );
     // Un tentativo fallito condivide il payment intent con quello riuscito: conta il secondo.
     return new Map(
       charges.data.flatMap((charge) =>
         charge.payment_intent && charge.status === "succeeded"
-          ? [[idOf(charge.payment_intent), charge] as const]
+          ? [[stripeId(charge.payment_intent), charge] as const]
           : [],
       ),
     );
   } catch (error) {
-    if (!isMissingObject(error as UpstreamError)) throw error;
+    if (!isMissingObject(error)) throw error;
     logFailure({ error, operation: "billing" });
     return new Map<string, Stripe.Charge>();
   }
 }
-
-const idOf = (reference: string | { id: string }) =>
-  typeof reference === "string" ? reference : reference.id;
 
 /**
  * Payment intent dell'evento di rimborso o di disputa, con la segnalazione all'assistenza di
@@ -118,19 +118,19 @@ const idOf = (reference: string | { id: string }) =>
  */
 export async function reversalIntent(stripe: Stripe, topic: string, objectId: string) {
   if (topic.startsWith("charge.dispute.")) {
-    const dispute = await stripeRead(() => stripe.disputes.retrieve(objectId));
+    const dispute = await stripeCall(() => stripe.disputes.retrieve(objectId));
     if (topic === "charge.dispute.created") signal("dispute_opened");
     if (dispute.status === "lost") signal("dispute_lost");
-    return dispute.payment_intent ? idOf(dispute.payment_intent) : null;
+    return dispute.payment_intent ? stripeId(dispute.payment_intent) : null;
   }
   if (topic === "charge.refund.updated") {
-    const refund = await stripeRead(() => stripe.refunds.retrieve(objectId));
-    return refund.payment_intent ? idOf(refund.payment_intent) : null;
+    const refund = await stripeCall(() => stripe.refunds.retrieve(objectId));
+    return refund.payment_intent ? stripeId(refund.payment_intent) : null;
   }
-  const charge = await stripeRead(() => stripe.charges.retrieve(objectId));
+  const charge = await stripeCall(() => stripe.charges.retrieve(objectId));
   if (charge.amount_refunded > 0 && charge.amount_refunded < charge.amount)
     signal("partial_refund");
-  return charge.payment_intent ? idOf(charge.payment_intent) : null;
+  return charge.payment_intent ? stripeId(charge.payment_intent) : null;
 }
 
 /**
@@ -143,13 +143,13 @@ export async function reversalIntent(stripe: Stripe, topic: string, objectId: st
 export async function recordErasure(env: Env, stripe: Stripe, customerId: string, now: Date) {
   let customer: Stripe.Customer | Stripe.DeletedCustomer | null = null;
   try {
-    customer = await stripeRead(() => stripe.customers.retrieve(customerId));
+    customer = await stripeCall(() => stripe.customers.retrieve(customerId));
   } catch (error) {
     // Un cliente sparito del tutto non si usa comunque più.
-    if (!isMissingObject(error as UpstreamError)) throw error;
+    if (!isMissingObject(error)) throw error;
   }
   if (customer && !customer.deleted) return [];
-  const environment = isProduction(env) ? "live" : "test";
+  const environment = stripeEnvironment(env);
   const recorded = await env.DB.prepare(`INSERT INTO stripe_customer_erasures (customer_id,
       environment, source, received_at)
     SELECT ?1, ?2, 'webhook', ?3

@@ -29,9 +29,9 @@ import {
   buildManagedCheckoutParams,
   createManagedCheckout,
   createStripeClient,
-  createStripeReader,
+  createBoundedStripeClient,
   isMissingObject,
-  stripeRead,
+  stripeCall,
   stripeSecretKey,
   verifyStripeEvent,
 } from "../app/integrations/stripe.server";
@@ -2235,8 +2235,8 @@ describe("Webhook e riconciliazione Stripe", () => {
 
   it("legge Stripe senza retry propri, entro il limite dei byte e con errori classificati", async () => {
     const reply = vi.fn<typeof fetch>();
-    const stripe = await createStripeReader("rk_test_fiscalbay", reply);
-    const read = () => stripeRead(() => stripe.subscriptions.retrieve("sub_test"));
+    const stripe = await createBoundedStripeClient("rk_test_fiscalbay", reply);
+    const read = () => stripeCall(() => stripe.subscriptions.retrieve("sub_test"));
     const failure = (status: number, body: unknown, headers: Record<string, string> = {}) =>
       reply.mockResolvedValueOnce(Response.json(body, { status, headers }));
 

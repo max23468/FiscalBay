@@ -1,6 +1,7 @@
 import { activeEntitlementSql } from "./grants.server";
 import { coveredMonthsSql, freeHistoryDays, historyEndSql } from "./history-window.server";
 import { storeNameSql } from "./store-state.server";
+import { dayMilliseconds } from "../time";
 
 /**
  * Negozio attivo del Free e downgrade (§6.4, §18, D155). Con una copertura in corso tutti i
@@ -167,7 +168,7 @@ export type FreeStoreState = {
   changeFrom: string | null;
 };
 
-const changeMilliseconds = freeStoreChangeDays * 24 * 60 * 60 * 1000;
+const changeMilliseconds = freeStoreChangeDays * dayMilliseconds;
 
 /** Negozi tra cui scegliere e negozio attivo; null in Premium, dove la scelta non compare. */
 export async function freeStoreState(

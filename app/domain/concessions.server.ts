@@ -1,10 +1,15 @@
 import { z } from "zod";
 
-import { isProduction } from "../app-links";
 import { logFailure } from "../errors";
-import { createStripeClient, stripeRead, stripeSecretKey } from "../integrations/stripe.server";
+import {
+  createStripeClient,
+  stripeCall,
+  stripeEnvironment,
+  stripeSecretKey,
+} from "../integrations/stripe.server";
 import { reconcileSubscription } from "./billing.server";
 import { grantLifetime, type LifetimeGrant } from "./lifetime.server";
+import { dayMilliseconds } from "../time";
 
 /**
  * Concessioni della console amministrativa (§6.3): Premium temporaneo, estensione gratuita di
@@ -20,8 +25,6 @@ const concession = z.object({
 
 /** Giorni concessi in una volta: oltre l'anno serve una valutazione separata. */
 const maxGrantDays = 366;
-
-const day = 86_400_000;
 
 export type PremiumGrant =
   | { result: "done"; startsAt: string; endsAt: string }
@@ -63,7 +66,7 @@ export async function grantPremium(
         AND s.cancel_at_period_end = 0
         ORDER BY julianday(s.current_period_start) DESC LIMIT 1) AS renews_at
     FROM workspaces w WHERE w.id = ?1`)
-    .bind(parsed.data.workspaceId, at, isProduction(env) ? "live" : "test")
+    .bind(parsed.data.workspaceId, at, stripeEnvironment(env))
     .first<{
       lifetime: number;
       covered_until: string | null;
@@ -76,7 +79,7 @@ export async function grantPremium(
     now.getTime(),
     workspace.covered_until ? Date.parse(workspace.covered_until) : 0,
   );
-  const end = start + input.days * day;
+  const end = start + input.days * dayMilliseconds;
   const startsAt = new Date(start).toISOString();
   const endsAt = new Date(end).toISOString();
   const postpone =
@@ -89,7 +92,7 @@ export async function grantPremium(
     if (!key) return { result: "unavailable" };
     try {
       stripe = await createStripeClient(key);
-      await stripeRead(() =>
+      await stripeCall(() =>
         stripe!.subscriptions.update(postpone, {
           trial_end: Math.floor(end / 1000),
           proration_behavior: "none",

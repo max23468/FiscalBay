@@ -8,6 +8,7 @@ import { zoneLabel } from "../preferences";
 import { displayTaxValue, taxIdentifierType } from "../tax-quality";
 import type { EbayEnvironment, FiscalSituation } from "../view-models";
 import type { VisibleOrder } from "./orders.server";
+import { dayMilliseconds } from "../time";
 
 /**
  * Testi del bot e loro composizione in HTML. Ogni valore che arriva da eBay o dall'utente passa
@@ -275,7 +276,7 @@ export function date(language: Language, timeZone: string, iso: string, now = ne
 export function when(language: Language, timeZone: string, iso: string, now: Date): string {
   const at = localClock(timeZone, new Date(iso));
   const today = localClock(timeZone, now).day;
-  const yesterday = localClock(timeZone, new Date(now.getTime() - 86_400_000)).day;
+  const yesterday = localClock(timeZone, new Date(now.getTime() - dayMilliseconds)).day;
   const day =
     at.day === today
       ? text[language].today
