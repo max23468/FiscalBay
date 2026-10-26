@@ -6,8 +6,7 @@
         "cloudflare.config.ts",
         "vitest.mutation.config.ts",
         "vitest.benchmark.config.ts",
-        "benchmarks/**/*.bench.ts",
-        "app/components/ui/*.tsx"
+        "benchmarks/**/*.bench.ts"
       ],
       "ignoreDependencies": ["cloudflare"],
       "ignoreBinaries": ["stripe"]

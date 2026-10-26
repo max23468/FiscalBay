@@ -1,6 +1,6 @@
 import { appCopy } from "../app-copy";
 import { appUrl, notificationSettingsPath, ordersPath } from "../app-links";
-import { ebayOrderHref } from "../components/orders/labels";
+import { ebayOrderHref } from "../orders/ebay-links";
 import { buyerNameView } from "../contact";
 import { formatAmount, type Language, locales } from "../i18n";
 import type { BotButton, BotMessage } from "../integrations/telegram.server";
