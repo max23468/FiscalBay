@@ -421,25 +421,25 @@ export type ActiveStore = {
  * periodico non lo ritenta a ogni turno.
  */
 export async function storeAccess(
-  environment: Env,
+  env: Env,
   store: ActiveStore,
   fetcher: typeof fetch,
   now: Date,
 ): Promise<EbayAccess> {
-  const configuration = ebayConfiguration(environment, store.ebay_environment);
+  const configuration = ebayConfiguration(env, store.ebay_environment);
   try {
     return {
       fetcher,
       configuration,
       accessToken: await openToken(
-        environment.BETTER_AUTH_SECRET,
+        env.BETTER_AUTH_SECRET,
         store.store_id,
         "access",
         store.access_token,
       ),
     };
   } catch {
-    await rejectCredentials(environment.DB, store.store_id, store.granted_at, now);
+    await rejectCredentials(env.DB, store.store_id, store.granted_at, now);
     throw new UpstreamError("credentials");
   }
 }
@@ -450,7 +450,7 @@ export async function storeAccess(
  * in lista d'attesa non legge eBay dopo la prima lettura: l'evento si chiude senza chiamate.
  */
 export async function consumeOrderConfirmation(
-  environment: Env,
+  env: Env,
   event: {
     storeId: string;
     grantedAt: string;
@@ -462,7 +462,7 @@ export async function consumeOrderConfirmation(
   now: Date,
 ) {
   const store =
-    await environment.DB.prepare(`SELECT c.store_id, c.access_token, c.granted_at, c.access_expires_at, s.ebay_environment
+    await env.DB.prepare(`SELECT c.store_id, c.access_token, c.granted_at, c.access_expires_at, s.ebay_environment
     FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id
     WHERE s.id = ?1 AND c.granted_at = ?2 AND s.ebay_environment = ?3 AND ${activeStore("c", "s")}
       AND ${servedSql("s.workspace_id", "?6")}
@@ -485,10 +485,10 @@ export async function consumeOrderConfirmation(
   if (!store) return;
   if (store.access_expires_at <= now.toISOString()) throw new UpstreamError("credentials");
   const result = await acquireOrders({
-    db: environment.DB,
+    db: env.DB,
     storeId: store.store_id,
     grantedAt: store.granted_at,
-    access: await storeAccess(environment, store, fetcher, now),
+    access: await storeAccess(env, store, fetcher, now),
     now,
     // Stryker disable next-line ObjectLiteral: questo percorso usa al massimo 11 chiamate e nessuna pagina; rimuovere il budget non cambia l'esito di un singolo ordine.
     budget: { calls: 12, pages: 0 },

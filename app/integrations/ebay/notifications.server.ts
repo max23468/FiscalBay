@@ -36,13 +36,13 @@ export class NotificationLimit extends Error {}
 export async function verifyOrderNotification(
   body: string,
   signature: string | null,
-  environment: Env,
+  env: Env,
   ebayEnvironment: EbayEnvironment,
   fetcher: typeof fetch,
   now: number,
 ) {
   const header = headerSchema.parse(JSON.parse(atob(encodedSignature.parse(signature))));
-  const configuration = ebayConfiguration(environment, ebayEnvironment);
+  const configuration = ebayConfiguration(env, ebayEnvironment);
   const cacheId = `${configuration.clientId}:${ebayEnvironment}:${header.kid}`;
   let publicKey = keys.get(cacheId);
   if (!publicKey || publicKey.until <= now) {

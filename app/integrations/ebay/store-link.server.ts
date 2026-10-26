@@ -56,7 +56,7 @@ function randomToken(): string {
 }
 
 export async function startStoreLink(
-  environment: Env,
+  env: Env,
   userId: string,
   now = new Date(),
   language: Language = "it",
@@ -64,18 +64,18 @@ export async function startStoreLink(
   expectedStoreId: string | null = null,
   fromStores = false,
 ): Promise<string> {
-  const configuration = ebayConfiguration(environment, ebayEnvironment);
+  const configuration = ebayConfiguration(env, ebayEnvironment);
   // Lingua e pagina di ritorno viaggiano nello state: il callback le legge senza altre tabelle.
   const state = `${language}${fromStores ? "-negozi" : ""}_${randomToken()}`;
   const codeVerifier = randomToken();
   const challenge = base64Url(
     new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(codeVerifier))),
   );
-  await environment.DB.batch([
-    environment.DB.prepare("DELETE FROM ebay_store_link_sessions WHERE expires_at <= ?").bind(
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM ebay_store_link_sessions WHERE expires_at <= ?").bind(
       now.toISOString(),
     ),
-    environment.DB.prepare(
+    env.DB.prepare(
       `INSERT INTO ebay_store_link_sessions (state, user_id, code_verifier, expires_at, ebay_environment, expected_store_id)
        VALUES (?, ?, ?, ?, ?, ?)`,
     ).bind(
@@ -177,13 +177,13 @@ export type StoreConsent = {
 
 /** Scambia il codice del callback con i token del negozio e legge l'identità eBay del venditore. */
 export async function exchangeStoreConsent(
-  environment: Env,
+  env: Env,
   link: { ebayEnvironment: EbayEnvironment; codeVerifier: string },
   code: string,
   fetcher: typeof fetch,
   issued: Date,
 ): Promise<StoreConsent> {
-  const configuration = ebayConfiguration(environment, link.ebayEnvironment);
+  const configuration = ebayConfiguration(env, link.ebayEnvironment);
   const token = await upstreamJson(fetcher, configuration.tokenUrl, tokenSchema, {
     method: "POST",
     headers: {

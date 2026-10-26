@@ -602,7 +602,7 @@ describe("callback eBay", () => {
     const response = await handleAuthRequest(input, environment, fetcher);
     expect(services.session).toHaveBeenLastCalledWith({ headers: input.headers });
     expect(services.complete).toHaveBeenCalledWith({
-      environment,
+      env: environment,
       link,
       sessionUserId: "member",
       search: new URLSearchParams("state=s&code=c"),

@@ -134,14 +134,14 @@ describe("rinnovo dei token del negozio", () => {
       Response.json({ error: "invalid_client" }, { status: 401 }),
     );
     await expect(
-      refreshStoreToken({ environment: env, storeId, fetcher: misconfigured, now: issued }),
+      refreshStoreToken({ env, storeId, fetcher: misconfigured, now: issued }),
     ).rejects.toMatchObject({ failure: "credentials" });
     expect((await credentials())!.rejected_at).toBeNull();
 
     const revoked = tokenEndpoint(() => Response.json({ error: "invalid_grant" }, { status: 400 }));
-    expect(
-      await refreshStoreToken({ environment: env, storeId, fetcher: revoked, now: issued }),
-    ).toBe("rejected");
+    expect(await refreshStoreToken({ env, storeId, fetcher: revoked, now: issued })).toBe(
+      "rejected",
+    );
     expect((await credentials())!.rejected_at).toBe(issued.toISOString());
     // Un consenso rifiutato non viene più ritentato dal lavoro in background.
     expect(await refreshExpiringTokens(env, revoked, issued)).toEqual([]);
@@ -153,9 +153,7 @@ describe("rinnovo dei token del negozio", () => {
       "UPDATE ebay_store_credentials SET refresh_token = 'v1.illeggibile'",
     ).run();
     const fetcher = tokenEndpoint(() => Response.json({ access_token: "x", expires_in: 7200 }));
-    expect(await refreshStoreToken({ environment: env, storeId, fetcher, now: issued })).toBe(
-      "rejected",
-    );
+    expect(await refreshStoreToken({ env, storeId, fetcher, now: issued })).toBe("rejected");
     expect(fetcher).not.toHaveBeenCalled();
     expect((await credentials())!.rejected_at).toBe(issued.toISOString());
     expect(await refreshExpiringTokens(env, fetcher, issued)).toEqual([]);
@@ -174,9 +172,7 @@ describe("rinnovo dei token del negozio", () => {
         .run();
       return Response.json({ access_token: "vecchio", expires_in: 7200 });
     });
-    expect(await refreshStoreToken({ environment: env, storeId, fetcher, now: issued })).toBe(
-      "superseded",
-    );
+    expect(await refreshStoreToken({ env, storeId, fetcher, now: issued })).toBe("superseded");
     expect((await credentials())!.access_token).toBe(before!.access_token);
   });
 
@@ -185,7 +181,7 @@ describe("rinnovo dei token del negozio", () => {
     const fetcher = vi.fn<typeof fetch>();
     expect(
       await refreshStoreToken({
-        environment: env,
+        env,
         storeId,
         fetcher,
         now: new Date("2028-04-01T10:00:00.000Z"),
@@ -243,7 +239,7 @@ describe("rinnovo dei token del negozio", () => {
   it("non rinnova senza credenziali né con una risposta senza token", async () => {
     expect(
       await refreshStoreToken({
-        environment: env,
+        env,
         storeId: "inesistente",
         fetcher: vi.fn<typeof fetch>(),
         now: issued,
@@ -255,7 +251,7 @@ describe("rinnovo dei token del negozio", () => {
     const before = await credentials();
     await expect(
       refreshStoreToken({
-        environment: env,
+        env,
         storeId,
         fetcher: tokenEndpoint(() => Response.json({ expires_in: 7200 })),
         now: issued,

@@ -71,7 +71,7 @@ describe("collegamento negozio eBay", () => {
       links.map((link, index) => {
         if (link?.kind !== "new") throw new Error("missing_link");
         return completeStoreLink({
-          environment: { ...env, DB: db },
+          env: { ...env, DB: db },
           link,
           sessionUserId: owner.userId,
           search: new URLSearchParams({ state: states[index]!, code: "sintetico" }),
@@ -218,7 +218,7 @@ describe("collegamento negozio eBay", () => {
       .run();
     await expect(
       completeStoreLink({
-        environment: env,
+        env,
         link: claim,
         sessionUserId: owner.userId,
         search: new URLSearchParams({ state: direct.searchParams.get("state")!, code: "diretto" }),
@@ -293,9 +293,9 @@ describe("collegamento negozio eBay", () => {
       Response.json({ access_token: "rinnovato", expires_in: 7200 }),
     );
     for (const store of stores) {
-      expect(
-        await refreshStoreToken({ environment: sandbox, storeId: store.id, fetcher: refresh }),
-      ).toBe("refreshed");
+      expect(await refreshStoreToken({ env: sandbox, storeId: store.id, fetcher: refresh })).toBe(
+        "refreshed",
+      );
       const [url, init] = refresh.mock.calls.at(-1)!;
       expect(String(url)).toBe(
         store.ebay_environment === "sandbox"

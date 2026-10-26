@@ -70,13 +70,13 @@ export async function rejectCredentials(
 
 /** Registra un nuovo consenso: sostituisce i token precedenti e annulla un rifiuto registrato. */
 export async function saveStoreCredentials(
-  environment: Env,
+  env: Env,
   storeId: string,
   tokens: SellerTokens,
   grantedAt: string,
 ): Promise<void> {
-  const secret = environment.BETTER_AUTH_SECRET;
-  await environment.DB.prepare(
+  const secret = env.BETTER_AUTH_SECRET;
+  await env.DB.prepare(
     `INSERT INTO ebay_store_credentials
        (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
      VALUES (?, ?, ?, ?, ?, ?)
@@ -107,12 +107,12 @@ export type RefreshOutcome = "refreshed" | "rejected" | "superseded" | "missing"
  * letto: una risposta arrivata dopo un nuovo collegamento non ripristina token superati.
  */
 export async function refreshStoreToken(input: {
-  environment: Env;
+  env: Env;
   storeId: string;
   fetcher: typeof fetch;
   now?: Date;
 }): Promise<RefreshOutcome> {
-  const { environment, storeId } = input;
+  const { env: environment, storeId } = input;
   const now = input.now ?? new Date();
   const row = await environment.DB.prepare(
     `SELECT c.refresh_token, c.refresh_expires_at, c.granted_at, s.ebay_environment

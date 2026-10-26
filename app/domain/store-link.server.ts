@@ -44,7 +44,7 @@ async function workspaceFor(
 }
 
 export async function completeStoreLink(input: {
-  environment: Env;
+  env: Env;
   link: Extract<StoreLinkClaim, { kind: "new" }>;
   sessionUserId: string | null;
   search: URLSearchParams;
@@ -52,7 +52,7 @@ export async function completeStoreLink(input: {
   request?: Request;
   now?: Date;
 }): Promise<StoreLinkOutcome> {
-  const { environment, link, search, fetcher } = input;
+  const { env: environment, link, search, fetcher } = input;
   if (link.expired || input.sessionUserId !== link.userId) return "errore";
   if (search.has("error")) return "negato";
 

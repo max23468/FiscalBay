@@ -94,13 +94,13 @@ type CandidateRow = ActiveStore & {
  * mentre un turno accodato e mai servito si ripropone dopo `dispatchStaleMilliseconds`. I
  * negozi di un'origine API in attesa per un limite di eBay non si accodano.
  */
-export async function dispatchStoreSyncs(environment: Env, now = new Date()): Promise<string[]> {
+export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<string[]> {
   const at = now.toISOString();
   const stale = new Date(now.getTime() - dispatchStaleMilliseconds).toISOString();
-  const [{ results: rows }, { results: limits }] = await environment.DB.batch<
+  const [{ results: rows }, { results: limits }] = await env.DB.batch<
     CandidateRow | { api_origin: string }
   >([
-    environment.DB.prepare(
+    env.DB.prepare(
       `SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment,
               ss.polled_at, ss.requested_at,
               -- Dopo una lettura non riuscita l'arretrato attende la cadenza del piano.
@@ -133,7 +133,7 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
       stale,
     ),
     // Solo le attese dell'origine API: una quota Trading esaurita non ferma le letture.
-    environment.DB.prepare(
+    env.DB.prepare(
       "SELECT api_origin FROM ebay_rate_limits WHERE until > ? AND instr(api_origin, '#') = 0",
     ).bind(at),
   ]);
@@ -146,7 +146,7 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
     (rows as CandidateRow[]).map((row) => ({
       storeId: row.store_id,
       grantedAt: row.granted_at,
-      apiOrigin: apiOriginOf(environment, row.ebay_environment),
+      apiOrigin: apiOriginOf(env, row.ebay_environment),
       // Una copertura in corso, anche la prova, legge con la cadenza Premium.
       plan: (row.premium === 1 ? "premium" : "free") as SyncPlan,
       polledAt: row.polled_at,
@@ -157,9 +157,9 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
   ).filter((store) => !limited.has(store.apiOrigin));
   if (selected.length === 0) return [];
 
-  const claims = await environment.DB.batch<{ store_id: string }>(
+  const claims = await env.DB.batch<{ store_id: string }>(
     selected.map((store) =>
-      environment.DB.prepare(
+      env.DB.prepare(
         `INSERT INTO sync_state (store_id, dispatched_at, updated_at)
          SELECT ?1, ?3, ?3 WHERE ${writableStore}
          ON CONFLICT(store_id) DO UPDATE SET dispatched_at = excluded.dispatched_at,
@@ -173,12 +173,10 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
   const claimed = claims.flatMap(({ results }) => results.map((row) => row.store_id));
   if (claimed.length === 0) return [];
   try {
-    await environment.WORK_QUEUE.sendBatch(
-      claimed.map((storeId) => ({ body: { syncStore: storeId } })),
-    );
+    await env.WORK_QUEUE.sendBatch(claimed.map((storeId) => ({ body: { syncStore: storeId } })));
   } catch (error) {
     // Il turno torna libero e il prossimo trigger lo riprova.
-    await environment.DB.prepare(
+    await env.DB.prepare(
       `UPDATE sync_state SET dispatched_at = NULL
         WHERE store_id IN (SELECT value FROM json_each(?1)) AND dispatched_at = ?2`,
     )
@@ -190,10 +188,10 @@ export async function dispatchStoreSyncs(environment: Env, now = new Date()): Pr
 }
 
 /** Origine API dell'ambiente del negozio; undefined se l'ambiente non è configurato. */
-function apiOriginOf(environment: Env, ebayEnvironment: ActiveStore["ebay_environment"]) {
+function apiOriginOf(env: Env, ebayEnvironment: ActiveStore["ebay_environment"]) {
   let origin: string | undefined;
   try {
-    origin = ebayConfiguration(environment, ebayEnvironment).apiOrigin;
+    origin = ebayConfiguration(env, ebayEnvironment).apiOrigin;
   } catch {}
   return origin;
 }
@@ -223,14 +221,14 @@ export function isSyncMessage(body: unknown): body is z.infer<typeof syncMessage
  * l'importazione precedente è conclusa; poi entrambe chiedono una lettura del negozio.
  */
 export async function requestStoreSync(
-  environment: Env,
+  env: Env,
   userId: string,
   storeId: string,
   options: { reimport?: boolean } = {},
   now = new Date(),
 ): Promise<SyncRequestResult> {
   const at = now.toISOString();
-  const store = await environment.DB.prepare(
+  const store = await env.DB.prepare(
     `SELECT c.granted_at, s.ebay_environment, ss.store_id AS started, ss.history_done_at,
             ${servedSql("s.workspace_id", "?3")} AS served
        FROM ebay_stores s
@@ -253,7 +251,7 @@ export async function requestStoreSync(
   if (!store.served) return "invalid";
 
   // Registrata soltanto con un consenso valido e senza pausa.
-  const request = await environment.DB.prepare(
+  const request = await env.DB.prepare(
     `INSERT INTO sync_state (store_id, requested_at, updated_at)
      SELECT ?1, ?3, ?3 WHERE ${writableStore}
      ON CONFLICT(store_id) DO UPDATE SET
@@ -267,7 +265,7 @@ export async function requestStoreSync(
   if (options.reimport) {
     // La lettura richiesta prosegue l'importazione in corso.
     if (store.started && !store.history_done_at) return "importing";
-    await environment.DB.prepare(
+    await env.DB.prepare(
       `UPDATE sync_state SET history_from = ${historyStartSql(storeWorkspaceSql("?1"), "?3")},
               history_until = ?3, history_through = NULL, history_done_at = NULL,
               history_next = NULL, history_total = NULL, updated_at = ?3
@@ -276,11 +274,11 @@ export async function requestStoreSync(
       .bind(storeId, store.granted_at, at)
       .run();
   }
-  const apiOrigin = ebayConfiguration(environment, store.ebay_environment).apiOrigin;
-  if ((await rateLimitWait(environment.DB, apiOrigin, now)) > 0) return "limited";
+  const apiOrigin = ebayConfiguration(env, store.ebay_environment).apiOrigin;
+  if ((await rateLimitWait(env.DB, apiOrigin, now)) > 0) return "limited";
   if (request.requested_at !== at) return "merged";
   try {
-    await environment.WORK_QUEUE.send({ syncStore: storeId });
+    await env.WORK_QUEUE.send({ syncStore: storeId });
   } catch (error) {
     // La richiesta è già registrata: il cron la riprende alla prossima esecuzione.
     logFailure({ error, operation: "order_acquisition" });
@@ -296,13 +294,13 @@ export async function requestStoreSync(
  */
 export async function consumeStoreSync(
   message: Message<unknown>,
-  environment: Env,
+  env: Env,
   fetcher: typeof fetch = fetch,
   now = new Date(),
 ): Promise<void> {
   const { syncStore } = syncMessageSchema.parse(message.body);
   const at = now.toISOString();
-  const store = await environment.DB.prepare(
+  const store = await env.DB.prepare(
     `SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment
        FROM ebay_store_credentials c
        JOIN ebay_stores s ON s.id = c.store_id
@@ -318,8 +316,8 @@ export async function consumeStoreSync(
   if (store) {
     try {
       const wait = await rateLimitWait(
-        environment.DB,
-        ebayConfiguration(environment, store.ebay_environment).apiOrigin,
+        env.DB,
+        ebayConfiguration(env, store.ebay_environment).apiOrigin,
         now,
       );
       // Attesa già nota: nessuna chiamata e nessun errore da registrare.
@@ -328,10 +326,10 @@ export async function consumeStoreSync(
         return;
       }
       const result = await acquireOrders({
-        db: environment.DB,
+        db: env.DB,
         storeId: store.store_id,
         grantedAt: store.granted_at,
-        access: await storeAccess(environment, store, fetcher, now),
+        access: await storeAccess(env, store, fetcher, now),
         now,
         budget: { ...storeBudget },
       });
@@ -341,7 +339,7 @@ export async function consumeStoreSync(
       }
       // Le notifiche dello spazio partono appena la lettura ha scritto gli ordini; il compito
       // periodico riprende quelle rimaste.
-      await deliverTelegram(environment, fetcher, now, { storeId: store.store_id }).catch(
+      await deliverTelegram(env, fetcher, now, { storeId: store.store_id }).catch(
         (error: unknown) => logFailure({ error, operation: "telegram" }),
       );
     } catch (error) {
@@ -358,7 +356,7 @@ export async function consumeStoreSync(
       // Anche un tentativo fallito prima di iniziare, per esempio con un token che non si
       // apre, passa il turno e serve la richiesta: altrimenti il negozio resterebbe sempre il
       // primo della coda.
-      await environment.DB.prepare(
+      await env.DB.prepare(
         `UPDATE sync_state SET polled_at = ?3, updated_at = ?3,
                 requested_at = CASE WHEN requested_at <= ?3 THEN NULL ELSE requested_at END
           WHERE store_id = ?1 AND ${writableStore}`,
@@ -368,7 +366,7 @@ export async function consumeStoreSync(
     }
   }
   // Il turno accodato è chiuso: il cron può accodarne un altro quando il negozio è dovuto.
-  await environment.DB.prepare(
+  await env.DB.prepare(
     "UPDATE sync_state SET dispatched_at = NULL WHERE store_id = ? AND dispatched_at <= ?",
   )
     .bind(syncStore, at)
@@ -383,25 +381,25 @@ export async function consumeStoreSync(
  * passata Trading del negozio.
  */
 export async function requestOrderRead(
-  environment: Env,
+  env: Env,
   userId: string,
   orderId: string,
   ebayEnvironment: EbayEnvironment,
   now = new Date(),
 ): Promise<SyncRequestResult> {
-  const state = await visibleOrderState(environment.DB, userId, ebayEnvironment, orderId, now);
+  const state = await visibleOrderState(env.DB, userId, ebayEnvironment, orderId, now);
   if (!state) return "not_found";
   if (state.fiscalState !== "error") return "invalid";
   const order = { id: orderId, storeId: state.storeId };
-  const requested = await requestStoreSync(environment, userId, order.storeId, {}, now);
+  const requested = await requestStoreSync(env, userId, order.storeId, {}, now);
   if (requested === "not_found" || requested === "invalid") return requested;
-  await environment.DB.batch([
-    environment.DB.prepare(
+  await env.DB.batch([
+    env.DB.prepare(
       `UPDATE order_source_refs SET detail_for = NULL, detail_attempts = 0,
               detail_retry_at = NULL, detail_error = NULL
         WHERE order_id = ?1 AND store_id = ?2 AND source = 'fulfillment'`,
     ).bind(order.id, order.storeId),
-    environment.DB.prepare(
+    env.DB.prepare(
       `UPDATE sync_state SET trading_cursor = NULL, trading_end = NULL, trading_page = NULL,
               trading_total = NULL
         WHERE store_id = ?2 AND history_from IS NOT NULL

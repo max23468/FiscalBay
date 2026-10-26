@@ -436,9 +436,9 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       await disconnectStore(env.DB, seller.userId, seller.storeId);
       return Response.json({ access_token: "tardivo", expires_in: 7200 });
     });
-    expect(
-      await refreshStoreToken({ environment: env, storeId: seller.storeId, fetcher: refreshed }),
-    ).toBe("superseded");
+    expect(await refreshStoreToken({ env, storeId: seller.storeId, fetcher: refreshed })).toBe(
+      "superseded",
+    );
     expect(await count("ebay_store_credentials")).toBe(0);
 
     // Un rifiuto arrivato dopo il ricollegamento non segna come scaduto il nuovo consenso.
@@ -447,9 +447,9 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       await linkThroughEbay(seller.cookie);
       return Response.json({ error: "invalid_grant" }, { status: 400 });
     });
-    expect(
-      await refreshStoreToken({ environment: env, storeId: seller.storeId, fetcher: rejected }),
-    ).toBe("superseded");
+    expect(await refreshStoreToken({ env, storeId: seller.storeId, fetcher: rejected })).toBe(
+      "superseded",
+    );
     expect((await listStores(env.DB, seller.userId))[0]!.connection).toBe("active");
 
     // L'eliminazione dei dati durante la lettura del primo ordine vince sull'import.

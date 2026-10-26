@@ -13,8 +13,8 @@ export interface AuthSession {
  * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il
  * browser con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.
  */
-export async function readSession(environment: Env, request: Request) {
-  const { headers, response } = await createAuth(environment).api.getSession({
+export async function readSession(env: Env, request: Request) {
+  const { headers, response } = await createAuth(env).api.getSession({
     headers: request.headers,
     returnHeaders: true,
   });

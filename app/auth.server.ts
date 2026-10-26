@@ -48,14 +48,12 @@ export const sessionPolicy = {
 // finché è in corso.
 const userVerifiedRequests = new WeakSet<Request>();
 
-function requireRegistrationApproval(environment: Env, email: string) {
-  if (environment.REGISTRATION_MODE === "open") return;
+function requireRegistrationApproval(env: Env, email: string) {
+  if (env.REGISTRATION_MODE === "open") return;
   // Un elenco assente, vuoto o non valido chiude le nuove registrazioni.
   let emails: string[] | undefined;
   try {
-    emails = z
-      .array(z.string().trim().email())
-      .parse(JSON.parse(environment.REGISTRATION_ALLOWED_EMAILS));
+    emails = z.array(z.string().trim().email()).parse(JSON.parse(env.REGISTRATION_ALLOWED_EMAILS));
   } catch {
     // Non registrare il contenuto della configurazione privata.
   }
@@ -67,14 +65,14 @@ function requireRegistrationApproval(environment: Env, email: string) {
   }
 }
 
-export function createAuthOptions(environment: Env): BetterAuthOptions {
-  const appOrigin = new URL(environment.APP_ORIGIN);
+export function createAuthOptions(env: Env): BetterAuthOptions {
+  const appOrigin = new URL(env.APP_ORIGIN);
 
   return {
     appName: "FiscalBay",
     baseURL: appOrigin.origin,
-    database: environment.DB,
-    secret: environment.BETTER_AUTH_SECRET,
+    database: env.DB,
+    secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: [appOrigin.origin],
     advanced: {
       database: {
@@ -98,7 +96,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
         // Anche il tentativo su un account esistente riceve lo stesso rifiuto: il filtro
         // non deve rivelare se un indirizzo fuori elenco è già registrato.
         if (context.path === "/sign-up/email" && typeof context.body?.email === "string") {
-          requireRegistrationApproval(environment, context.body.email);
+          requireRegistrationApproval(env, context.body.email);
         }
       }),
     },
@@ -115,7 +113,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
         create: {
           before: async (user) => {
             // Include i callback OAuth; non modifica accessi e collegamenti esistenti.
-            requireRegistrationApproval(environment, user.email);
+            requireRegistrationApproval(env, user.email);
           },
         },
       },
@@ -125,14 +123,14 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
           // avviso. La password impostata con il link ha l'avviso del reset.
           after: async (account) => {
             if (account.providerId !== "google" && account.providerId !== "ebay") return;
-            const other = await environment.DB.prepare(
+            const other = await env.DB.prepare(
               `SELECT 1 FROM "account" WHERE "userId" = ?1 AND "id" <> ?2
                UNION ALL SELECT 1 FROM "passkey" WHERE "userId" = ?1 LIMIT 1`,
             )
               .bind(account.userId, account.id)
               .first();
             if (other) {
-              notifySecurityEvent(environment, account.userId, {
+              notifySecurityEvent(env, account.userId, {
                 kind: "method-linked",
                 method: account.providerId,
               });
@@ -170,7 +168,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       changeEmail: {
         enabled: true,
         sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-          sendAuthEmail(environment, "change-email", { to: user.email, url, newEmail });
+          sendAuthEmail(env, "change-email", { to: user.email, url, newEmail });
         },
       },
       validateUserInfo: async ({ user, source }, context) => {
@@ -207,13 +205,13 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       requireEmailVerification: false,
       autoSignIn: false,
       onExistingUserSignUp: async ({ user }, request) => {
-        await sendExistingAccountEmail(environment, user.email, request);
+        await sendExistingAccountEmail(env, user.email, request);
       },
       sendResetPassword: async ({ user, url }) => {
-        sendAuthEmail(environment, "reset", { to: user.email, url });
+        sendAuthEmail(env, "reset", { to: user.email, url });
       },
       onPasswordReset: async ({ user }) => {
-        notifySecurityEvent(environment, user.id, { kind: "password-reset" });
+        notifySecurityEvent(env, user.id, { kind: "password-reset" });
       },
     },
     emailVerification: {
@@ -222,7 +220,7 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
         // Il secondo link arriva al nuovo indirizzo; l'accesso resta sul precedente fino alla conferma.
-        await environment.DB.prepare(
+        await env.DB.prepare(
           "UPDATE account_email_changes SET stage = 'new', expires_at = ? WHERE user_id = ? AND new_email = ?",
         )
           .bind(
@@ -231,18 +229,18 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
             user.email,
           )
           .run();
-        sendAuthEmail(environment, "verify", { to: user.email, url });
+        sendAuthEmail(env, "verify", { to: user.email, url });
       },
       afterEmailVerification: async (user) => {
-        await environment.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?")
+        await env.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?")
           .bind(user.id)
           .run();
       },
     },
     socialProviders: {
       google: {
-        clientId: environment.GOOGLE_CLIENT_ID,
-        clientSecret: environment.GOOGLE_CLIENT_SECRET,
+        clientId: env.GOOGLE_CLIENT_ID,
+        clientSecret: env.GOOGLE_CLIENT_SECRET,
         // Google è autorevole solo per Gmail e per i domini Workspace (`hd`): per gli altri
         // indirizzi chiediamo la nostra conferma e non colleghiamo per email.
         mapProfileToUser: (profile) => ({
@@ -274,9 +272,9 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
             name: "eBay",
             authorizationUrl: "https://auth.ebay.com/oauth2/authorize",
             tokenUrl: "https://api.ebay.com/identity/v1/oauth2/token",
-            clientId: environment.EBAY_CLIENT_ID,
-            clientSecret: environment.EBAY_CLIENT_SECRET,
-            redirectURI: environment.EBAY_RUNAME,
+            clientId: env.EBAY_CLIENT_ID,
+            clientSecret: env.EBAY_CLIENT_SECRET,
+            redirectURI: env.EBAY_RUNAME,
             authentication: "basic",
             pkce: true,
             allowIdpInitiated: false,
@@ -320,8 +318,8 @@ export function createAuthOptions(environment: Env): BetterAuthOptions {
 // Costruire Better Auth costa più CPU del resto della richiesta: una istanza per ambiente e isolate.
 const instances = new WeakMap<Env, Auth>();
 
-export function createAuth(environment: Env): Auth {
-  let auth = instances.get(environment);
-  if (!auth) instances.set(environment, (auth = betterAuth(createAuthOptions(environment))));
+export function createAuth(env: Env): Auth {
+  let auth = instances.get(env);
+  if (!auth) instances.set(env, (auth = betterAuth(createAuthOptions(env))));
   return auth;
 }

@@ -34,43 +34,40 @@ const tasks = {
   // cercabile degli ordini che non l'hanno ancora.
   maintenance: {
     period: 24 * 60 * minute,
-    run: async (environment: Env, _fetcher: typeof fetch, now: Date) => {
-      await purgeExpiredRecords(environment.DB, now);
-      await indexOrderSearch(environment.DB);
+    run: async (env: Env, _fetcher: typeof fetch, now: Date) => {
+      await purgeExpiredRecords(env.DB, now);
+      await indexOrderSearch(env.DB);
     },
   },
   // Rinnovo anticipato dei token di accesso dei negozi, prima che servano a una lettura.
   token_refresh: {
     period: 10 * minute,
-    run: (environment: Env, fetcher: typeof fetch, now: Date) =>
-      refreshExpiringTokens(environment, fetcher, now),
+    run: (env: Env, fetcher: typeof fetch, now: Date) => refreshExpiringTokens(env, fetcher, now),
   },
   // Preavvisi e pause per inattività del Free, ammissione di chi era in lista d'attesa.
   inactivity: {
     period: 60 * minute,
-    run: (environment: Env, _fetcher: typeof fetch, now: Date) => applyInactivity(environment, now),
+    run: (env: Env, _fetcher: typeof fetch, now: Date) => applyInactivity(env, now),
   },
   // Riconciliazione degli abbonamenti con Stripe, per i webhook mancati o tardivi.
   billing: {
     period: 60 * minute,
-    run: (environment: Env, fetcher: typeof fetch, now: Date) =>
-      reconcileBilling(environment, fetcher, now),
+    run: (env: Env, fetcher: typeof fetch, now: Date) => reconcileBilling(env, fetcher, now),
   },
   // Notifiche Telegram: valutazione degli ordini, riepiloghi dovuti, importazioni completate e
   // invii in attesa o da ritentare. La lettura di un negozio le anticipa per il suo spazio.
   telegram: {
     period: 10 * minute,
-    run: (environment: Env, fetcher: typeof fetch, now: Date) =>
-      deliverTelegram(environment, fetcher, now),
+    run: (env: Env, fetcher: typeof fetch, now: Date) => deliverTelegram(env, fetcher, now),
   },
   // Menu dei comandi del bot, riallineato ogni giorno: ripeterlo non cambia nulla.
   telegram_commands: {
     period: 24 * 60 * minute,
-    run: (environment: Env, fetcher: typeof fetch) => configureBotCommands(environment, fetcher),
+    run: (env: Env, fetcher: typeof fetch) => configureBotCommands(env, fetcher),
   },
 } satisfies Record<
   string,
-  { period: number; run: (environment: Env, fetcher: typeof fetch, now: Date) => Promise<unknown> }
+  { period: number; run: (env: Env, fetcher: typeof fetch, now: Date) => Promise<unknown> }
 >;
 
 export type ScheduledTask = keyof typeof tasks;
@@ -91,13 +88,13 @@ export function taskSlot(task: ScheduledTask, at: Date): string {
 }
 
 /** Registra e accoda i compiti il cui turno è libero; restituisce quelli accodati. */
-export async function dispatchTasks(environment: Env, now: Date): Promise<ScheduledTask[]> {
+export async function dispatchTasks(env: Env, now: Date): Promise<ScheduledTask[]> {
   const at = now.toISOString();
   const stale = new Date(now.getTime() - staleMilliseconds).toISOString();
   const names = Object.keys(tasks) as ScheduledTask[];
-  const claims = await environment.DB.batch<{ task: ScheduledTask; slot: string }>(
+  const claims = await env.DB.batch<{ task: ScheduledTask; slot: string }>(
     names.map((task) =>
-      environment.DB.prepare(
+      env.DB.prepare(
         `INSERT INTO scheduled_tasks (task, slot, queued_at) VALUES (?1, ?2, ?3)
          ON CONFLICT(task) DO UPDATE SET slot = excluded.slot, queued_at = excluded.queued_at,
                                          done_at = NULL, lease = NULL, locked_until = NULL
@@ -112,12 +109,12 @@ export async function dispatchTasks(environment: Env, now: Date): Promise<Schedu
   const claimed = claims.flatMap(({ results }) => results);
   if (claimed.length === 0) return [];
   try {
-    await environment.WORK_QUEUE.sendBatch(claimed.map((body) => ({ body })));
+    await env.WORK_QUEUE.sendBatch(claimed.map((body) => ({ body })));
   } catch (error) {
     // Il turno resta da accodare: lo riprende il prossimo trigger dello stesso periodo.
-    await environment.DB.batch(
+    await env.DB.batch(
       claimed.map(({ task, slot }) =>
-        environment.DB.prepare(
+        env.DB.prepare(
           "UPDATE scheduled_tasks SET queued_at = NULL WHERE task = ? AND slot = ? AND queued_at = ?",
         ).bind(task, slot, at),
       ),
@@ -133,14 +130,14 @@ export async function dispatchTasks(environment: Env, now: Date): Promise<Schedu
  */
 export async function consumeTask(
   message: Message<unknown>,
-  environment: Env,
+  env: Env,
   fetcher: typeof fetch = fetch,
   now = new Date(),
 ): Promise<void> {
   const { task, slot } = taskMessageSchema.parse(message.body);
   const at = now.toISOString();
   const lease = crypto.randomUUID();
-  const pending = await environment.DB.prepare(
+  const pending = await env.DB.prepare(
     `UPDATE scheduled_tasks SET lease = ?3, locked_until = ?4
       WHERE task = ?1 AND slot = ?2 AND done_at IS NULL
         AND (locked_until IS NULL OR locked_until <= ?5) RETURNING task`,
@@ -148,7 +145,7 @@ export async function consumeTask(
     .bind(task, slot, lease, new Date(now.getTime() + leaseMilliseconds).toISOString(), at)
     .first();
   if (!pending) {
-    const busy = await environment.DB.prepare(
+    const busy = await env.DB.prepare(
       "SELECT 1 FROM scheduled_tasks WHERE task = ? AND slot = ? AND done_at IS NULL",
     )
       .bind(task, slot)
@@ -158,8 +155,8 @@ export async function consumeTask(
     return;
   }
   try {
-    await tasks[task].run(environment, fetcher, now);
-    await environment.DB.prepare(
+    await tasks[task].run(env, fetcher, now);
+    await env.DB.prepare(
       `UPDATE scheduled_tasks SET done_at = ?, lease = NULL, locked_until = NULL
         WHERE task = ? AND slot = ? AND lease = ? AND done_at IS NULL`,
     )
@@ -167,7 +164,7 @@ export async function consumeTask(
       .run();
     message.ack();
   } catch (error) {
-    await environment.DB.prepare(
+    await env.DB.prepare(
       "UPDATE scheduled_tasks SET lease = NULL, locked_until = NULL WHERE task = ? AND slot = ? AND lease = ?",
     )
       .bind(task, slot, lease)
@@ -182,17 +179,17 @@ export async function consumeTask(
  * resta su D1 e precede le letture: un negozio uscito dal piano non viene più smistato. Un
  * passo fallito non ferma i successivi e il suo lavoro resta al trigger seguente.
  */
-export async function dispatchScheduledWork(environment: Env, now: Date): Promise<void> {
-  await dispatchTasks(environment, now).catch((error: unknown) =>
+export async function dispatchScheduledWork(env: Env, now: Date): Promise<void> {
+  await dispatchTasks(env, now).catch((error: unknown) =>
     logFailure({ error, operation: "scheduling" }),
   );
-  await recoverWebhookIngress(environment, now).catch((error: unknown) =>
+  await recoverWebhookIngress(env, now).catch((error: unknown) =>
     logFailure({ error, operation: "webhook_ingress" }),
   );
-  await applyFreePlans(environment.DB, now).catch((error: unknown) =>
+  await applyFreePlans(env.DB, now).catch((error: unknown) =>
     logFailure({ error, operation: "scheduling" }),
   );
-  await dispatchStoreSyncs(environment, now).catch((error: unknown) =>
+  await dispatchStoreSyncs(env, now).catch((error: unknown) =>
     logFailure({ error, operation: "scheduling" }),
   );
 }

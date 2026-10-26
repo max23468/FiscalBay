@@ -26,7 +26,7 @@ type ExpiringRow = { store_id: string; access_expires_at: string };
  * oltre mille negozi attivi restando entro le sottorichieste di una esecuzione.
  */
 export async function refreshExpiringTokens(
-  environment: Env,
+  env: Env,
   fetcher: typeof fetch,
   now = new Date(),
 ): Promise<RefreshOutcome[]> {
@@ -35,7 +35,7 @@ export async function refreshExpiringTokens(
   // Ultimo negozio letto: scadenza e identificativo, null prima del primo blocco.
   let cursor: [string, string] | [null, null] = [null, null];
   for (let read = 0; read < refreshLimit; read += refreshBatch) {
-    const { results }: D1Result<ExpiringRow> = await environment.DB.prepare(
+    const { results }: D1Result<ExpiringRow> = await env.DB.prepare(
       `SELECT c.store_id, c.access_expires_at FROM ebay_store_credentials c
         JOIN ebay_stores s ON s.id = c.store_id
         WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?1
@@ -47,7 +47,7 @@ export async function refreshExpiringTokens(
       .all<ExpiringRow>();
     // In sequenza: un errore di un negozio non ferma gli altri e non sovrappone retry.
     const refreshed = await inSequence(results, ({ store_id: storeId }) =>
-      refreshStoreToken({ environment, storeId, fetcher, now }).catch((error: unknown) => {
+      refreshStoreToken({ env, storeId, fetcher, now }).catch((error: unknown) => {
         logFailure({ error, operation: "token_refresh" });
         return null;
       }),
