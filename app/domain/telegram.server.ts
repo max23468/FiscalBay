@@ -15,6 +15,7 @@ import { telegramDigestTimes, telegramLinkMinutes } from "../preferences";
 import type { TelegramView } from "../view-models";
 import { dayMilliseconds } from "../time";
 import { settingsUrl } from "./telegram-messages.server";
+import { telegramReplyCopy as replies } from "../copy/telegram";
 
 // Le richieste consumate restano un giorno oltre la scadenza: un nuovo tentativo della stessa
 // ricevuta riconosce ancora il proprio collegamento.
@@ -82,26 +83,6 @@ export async function startTelegramLink(
   ]);
   return { url: deepLink(env, token) };
 }
-
-/** Risposte del bot, in testo semplice. Senza una richiesta riconosciuta, in entrambe le lingue. */
-const replies = {
-  it: {
-    linked:
-      "Chat collegata a FiscalBay. Qui riceverai le notifiche degli ordini secondo le preferenze delle Impostazioni.",
-    invalid: (url: string) =>
-      `Questo link non è più valido. Creane uno nuovo da FiscalBay, in Impostazioni › Notifiche:\n${url}`,
-    help: (url: string) =>
-      `Per ricevere qui le notifiche degli ordini, collega questa chat da FiscalBay, in Impostazioni › Notifiche:\n${url}`,
-  },
-  en: {
-    linked:
-      "Chat linked to FiscalBay. Order notifications will arrive here according to your Settings.",
-    invalid: (url: string) =>
-      `This link is no longer valid. Create a new one in FiscalBay, under Settings › Notifications:\n${url}`,
-    help: (url: string) =>
-      `To receive order notifications here, link this chat in FiscalBay, under Settings › Notifications:\n${url}`,
-  },
-} satisfies Record<Language, unknown>;
 
 /**
  * Risposta a una chat senza collegamento, in entrambe le lingue: in Production il rimando alle

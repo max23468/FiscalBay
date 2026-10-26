@@ -9,6 +9,7 @@ import { displayTaxValue, taxIdentifierType } from "../tax-quality";
 import type { EbayEnvironment, FiscalSituation } from "../view-models";
 import type { VisibleOrder } from "./orders.server";
 import { dayMilliseconds } from "../time";
+import { telegramMessageCopy as text } from "../copy/telegram";
 
 /**
  * Testi del bot e loro composizione in HTML. Ogni valore che arriva da eBay o dall'utente passa
@@ -163,81 +164,6 @@ export const icons = {
   ebay: "🛍",
   copy: "📋",
 } as const;
-
-const text = {
-  it: {
-    change: {
-      new: "Nuovo ordine",
-      available: "Dato fiscale disponibile",
-      changed: "Dato fiscale aggiornato",
-      removed: "Dato fiscale rimosso",
-    },
-    today: "oggi",
-    yesterday: "ieri",
-    more: (count: number) => (count === 1 ? "e un altro articolo" : `e altri ${count} articoli`),
-    kinds: { CF: null, PIVA: "P.IVA" },
-    removedNote: "Il dato notificato in precedenza non è più nell'ordine.",
-    fiscal: {
-      checking: "Dato fiscale in verifica",
-      missing: "Nessun dato fiscale",
-      foreign: (country: string) => `Fatturazione estera (${country})`,
-      error: "Dato fiscale non letto: riprova da FiscalBay",
-      locked: "Da sbloccare in FiscalBay",
-      available: "",
-    } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
-    checkingNote: "Se arriva, ricevi un nuovo messaggio.",
-    open: "Apri in FiscalBay",
-    ebay: "Apri su eBay",
-    copy: "Copia Codice Fiscale",
-    orders: "Apri gli ordini",
-    digest: (date: string) => `Riepilogo del ${date}`,
-    digestCount: (count: number) =>
-      `${count === 1 ? "Un ordine" : `${count} ordini`} dall'ultimo riepilogo`,
-    import: {
-      title: "Importazione completata",
-      orders: (count: number) => (count === 1 ? "Un ordine" : `${count} ordini`),
-      fiscal: "con dato fiscale",
-      period: (from: string, until: string) => `dal ${from} al ${until}`,
-      note: "Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.",
-    },
-  },
-  en: {
-    change: {
-      new: "New order",
-      available: "Tax ID available",
-      changed: "Tax ID updated",
-      removed: "Tax ID removed",
-    },
-    today: "today",
-    yesterday: "yesterday",
-    more: (count: number) => (count === 1 ? "and one more item" : `and ${count} more items`),
-    kinds: { CF: null, PIVA: "VAT" },
-    removedNote: "The tax ID notified earlier is no longer in the order.",
-    fiscal: {
-      checking: "Tax ID being checked",
-      missing: "No tax ID",
-      foreign: (country: string) => `Billing abroad (${country})`,
-      error: "Tax ID not read: try again from FiscalBay",
-      locked: "To unlock in FiscalBay",
-      available: "",
-    } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
-    checkingNote: "If it arrives, you get a new message.",
-    open: "Open in FiscalBay",
-    ebay: "Open on eBay",
-    copy: "Copy tax code",
-    orders: "Open orders",
-    digest: (date: string) => `Summary of ${date}`,
-    digestCount: (count: number) =>
-      `${count === 1 ? "One order" : `${count} orders`} since the last summary`,
-    import: {
-      title: "Import completed",
-      orders: (count: number) => (count === 1 ? "One order" : `${count} orders`),
-      fiscal: "with a tax ID",
-      period: (from: string, until: string) => `from ${from} to ${until}`,
-      note: "Imported orders get no individual messages: new orders arrive from now on.",
-    },
-  },
-} satisfies Record<Language, unknown>;
 
 /** Data e ora locali nel fuso indicato. */
 export function localClock(timeZone: string, now: Date): { day: string; time: string } {
