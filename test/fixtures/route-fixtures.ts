@@ -1,3 +1,5 @@
+import { loader as loadArea } from "../../app/routes/account";
+
 export const testOrigin = "http://localhost:5173";
 
 type RouteOptions = {
@@ -86,4 +88,9 @@ export async function routePage<A extends { request: Request }, R>(
   const result = await routeData(handler, path, options);
   if ((result as { notFound?: boolean }).notFound) throw new Error(`Pagina non trovata: ${path}`);
   return result as Extract<typeof result, { notFound: false }>;
+}
+
+/** Shell dell'area reale, dal loader della layout route di Ordini, Negozi e Impostazioni. */
+export async function areaShell(cookie: string, path = "/app/impostazioni") {
+  return (await routeData(loadArea, path, { cookie })).shell;
 }

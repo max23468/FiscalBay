@@ -1,4 +1,4 @@
-import { data, isRouteErrorResponse, useOutletContext } from "react-router";
+import { data, isRouteErrorResponse } from "react-router";
 
 import { StoresPage } from "~/components/stores/page";
 import type { StoresPageData } from "~/components/stores/state";
@@ -7,7 +7,6 @@ import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import type { AccountView } from "../view-models";
 import { pageScenario, simulateAction } from "../preview/state.server";
-import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -50,14 +49,12 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function PreviewStores({ loaderData }: Route.ComponentProps) {
-  const { t, links } = useOutletContext<PreviewContext>();
-  return <StoresPage data={loaderData} t={t} links={links} />;
+  return <StoresPage data={loaderData} />;
 }
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const { t, links } = useOutletContext<PreviewContext>();
-  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState t={t} />;
+  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState />;
   if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
-  return <NotFoundState kind="store" t={t} links={links} />;
+  return <NotFoundState kind="store" />;
 }

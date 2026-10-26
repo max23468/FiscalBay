@@ -5,9 +5,10 @@ import { LedgerIndicator } from "~/components/brand";
 import { IconTile, InitialsTile } from "~/components/icon-tile";
 import { StatusBadge, StatusIcon } from "~/components/status";
 import { useTimeZone } from "~/components/time-zone";
-import type { AppCopy } from "../../app-copy";
+import { useCopy } from "~/components/copy-context";
 import { locales, type Language } from "../../i18n";
-import { formatDate, formatRelative, type StoreView } from "../../view-models";
+import { type StoreView } from "../../view-models";
+import { formatDate, formatRelative } from "../../format";
 import { marketplaceText } from "./state";
 
 /** Logo del negozio eBay; senza logo, o se non si carica, le iniziali del nome. */
@@ -55,21 +56,18 @@ export function StoreSubtitle({ store }: { store: StoreView }) {
 
 export function LastSync({
   store,
-  t,
   now,
-  language,
   slot = true,
   wrap = false,
 }: {
   store: StoreView;
-  t: AppCopy;
   now: string;
-  language: Language;
   /** In tabella lo slot vuoto allinea il testo alle righe con l'indicatore. */
   slot?: boolean;
   /** Nei riquadri stretti della scheda il testo va a capo. */
   wrap?: boolean;
 }) {
+  const { t, language } = useCopy();
   // Le righe della tessera indicano una sincronizzazione che procede: un negozio
   // sospeso o mai sincronizzato mostra solo il testo.
   const live = store.connection === "active" && store.lastSyncAt !== null;
@@ -94,18 +92,11 @@ export function LastSync({
   );
 }
 
-export type SectionProps = { store: StoreView; t: AppCopy; language: Language };
+export type SectionProps = { store: StoreView };
 
 /** Punteggio e percentuale positiva del feedback, con il badge Top Rated. */
-export function FeedbackSummary({
-  feedback,
-  t,
-  language,
-}: {
-  feedback: NonNullable<StoreView["feedback"]>;
-  t: AppCopy;
-  language: Language;
-}) {
+export function FeedbackSummary({ feedback }: { feedback: NonNullable<StoreView["feedback"]> }) {
+  const { t, language } = useCopy();
   return (
     <>
       <span>
@@ -154,7 +145,8 @@ export function StoreSection({
 }
 
 /** Ultime letture del negozio, dalla più recente. */
-export function RecentList({ store, t, language }: SectionProps) {
+export function RecentList({ store }: SectionProps) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   return (
     <ul className="grid gap-2 text-sm">

@@ -124,7 +124,7 @@ for (const width of [390, 768, 1440]) {
     for (const locale of ["en", "it"] as const) {
       const it = locale === "it";
       const prefix = it ? "" : "/en";
-      await page.getByRole("link", { name: it ? "Italiano" : "English", exact: true }).click();
+      await page.getByRole("button", { name: it ? "Italiano" : "English", exact: true }).click();
       await expect(page).toHaveURL(
         `${testInfo.project.use.baseURL}${prefix}/anteprima/impostazioni/aspetto`,
       );
@@ -476,11 +476,8 @@ for (const area of areas)
   }) => {
     await enter(page.context(), baseURL!, area);
     await open(page, `/en${area.base}/impostazioni/aspetto`);
-    // Nell'area reale la scelta si salva con un pulsante; nell'anteprima cambia soltanto pagina.
-    const language =
-      area.base === "/app"
-        ? page.getByRole("region", { name: "Language" }).getByRole("button")
-        : page.getByRole("navigation", { name: "Language" }).getByRole("link");
+    // In entrambe le aree la scelta passa da un pulsante; nell'anteprima cambia soltanto pagina.
+    const language = page.getByRole("region", { name: "Language" }).getByRole("button");
     await expect(language.filter({ hasText: /^Italiano$/u })).toHaveAttribute("lang", "it");
     await open(page, `/en${area.base}/impostazioni/messaggio`);
     await expect(page.getByRole("tab", { name: "Italiano", exact: true })).toHaveAttribute(

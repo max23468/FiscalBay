@@ -2,7 +2,7 @@ import { Play, Plus, Store } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { useConfirmed } from "~/components/confirmation";
 import { EmptyState } from "~/components/empty-state";
 import { PageTitle } from "~/components/icon-tile";
@@ -10,8 +10,8 @@ import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
-import { supportEmail, type AppCopy } from "../../app-copy";
-import type { AppLinks } from "../../app-links";
+import { useCopy } from "~/components/copy-context";
+import { supportEmail } from "../../app-copy";
 import { usePageTiming } from "../../page-timing";
 import type { StoreView } from "../../view-models";
 import { StoreSheet } from "./detail";
@@ -27,14 +27,10 @@ function connectFromStores(connectHref: string) {
 /** Negozi eBay: lista leggera, dettaglio e azioni nel pannello con URL proprio. */
 export function StoresPage({
   data: saved,
-  t,
-  links,
   notice,
   confirmation,
 }: {
   data: StoresPageData;
-  t: AppCopy;
-  links: AppLinks;
   /** Esito del collegamento eBay appena concluso, sotto il titolo. */
   notice?: React.ReactNode;
   /**
@@ -43,6 +39,7 @@ export function StoresPage({
    */
   confirmation?: Promise<StoreView[]>;
 }) {
+  const { t } = useCopy();
   const stores = useConfirmed(saved.stores, confirmation);
   const [detail] = useConfirmed(saved.detail ? [saved.detail] : [], confirmation);
   const data = { ...saved, stores, detail: detail ?? null };
@@ -50,7 +47,7 @@ export function StoresPage({
   // «Già collegato a un altro account» è l'esito di un tentativo, non uno stato della pagina.
   const [attempted, setAttempted] = useState(false);
   const premium = data.account.plan === "premium";
-  const connect = <ConnectButton data={data} t={t} onElsewhere={() => setAttempted(true)} />;
+  const connect = <ConnectButton data={data} onElsewhere={() => setAttempted(true)} />;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -77,37 +74,26 @@ export function StoresPage({
         />
       ) : (
         <>
-          {premium ? null : <FreeNotes stores={data.stores} t={t} />}
-          <InactivityNotice stores={data.stores} t={t} />
+          {premium ? null : <FreeNotes stores={data.stores} />}
+          <InactivityNotice stores={data.stores} />
           {data.stores.length === 1 ? (
-            <StoreOverview store={data.stores[0]!} data={data} t={t} links={links} />
+            <StoreOverview store={data.stores[0]!} data={data} />
           ) : (
             <>
-              <StoreTable
-                stores={data.stores}
-                premium={premium}
-                now={data.now}
-                t={t}
-                links={links}
-              />
-              <StoreList
-                stores={data.stores}
-                premium={premium}
-                now={data.now}
-                t={t}
-                links={links}
-              />
+              <StoreTable stores={data.stores} premium={premium} now={data.now} />
+              <StoreList stores={data.stores} premium={premium} now={data.now} />
             </>
           )}
         </>
       )}
-      <StoreSheet data={data} t={t} links={links} />
+      <StoreSheet data={data} />
     </div>
   );
 }
 
 /** Limiti del Free validi per tutto lo spazio, sopra l'elenco. */
-function FreeNotes({ stores, t }: { stores: StoreView[]; t: AppCopy }) {
+function FreeNotes({ stores }: { stores: StoreView[] }) {
+  const { t } = useCopy();
   if (!stores.some((store) => store.pauseReason === "plan")) return null;
   return (
     <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
@@ -120,7 +106,8 @@ function FreeNotes({ stores, t }: { stores: StoreView[]; t: AppCopy }) {
  * Letture del Free in pausa per inattività: la ripresa di un negozio è la conferma dell'utente
  * e riprende tutti quelli dello spazio.
  */
-function InactivityNotice({ stores, t }: { stores: StoreView[]; t: AppCopy }) {
+function InactivityNotice({ stores }: { stores: StoreView[] }) {
+  const { t } = useCopy();
   const action = useAction();
   const store = stores.find((candidate) => candidate.pauseReason === "inactivity");
   if (!store) return null;
@@ -142,15 +129,8 @@ function InactivityNotice({ stores, t }: { stores: StoreView[]; t: AppCopy }) {
 }
 
 /** Collega: nell'area reale apre la schermata preparatoria, nell'anteprima simula l'esito. */
-function ConnectButton({
-  data,
-  t,
-  onElsewhere,
-}: {
-  data: StoresPageData;
-  t: AppCopy;
-  onElsewhere: () => void;
-}) {
+function ConnectButton({ data, onElsewhere }: { data: StoresPageData; onElsewhere: () => void }) {
+  const { t } = useCopy();
   const action = useAction();
   if (data.connectHref && !data.ebayDown.includes("production")) {
     return (

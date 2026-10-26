@@ -5,7 +5,7 @@ import { errorResponse } from "../app/error-response";
 import { appCopy } from "../app/app-copy";
 import { formatAmount, languageFromPath, localizedPath } from "../app/i18n";
 import { minorToDecimal, parseMinor } from "../app/money";
-import { formatDate } from "../app/view-models";
+import { formatDate } from "../app/format";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as pageTiming } from "../app/routes/page-timing";
 import { describeRequest, measure, withPhaseTimings } from "../app/observability.server";

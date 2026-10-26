@@ -4,7 +4,7 @@ import { headers as siteHeaders, loader as loadSite } from "../app/routes/site";
 import { loader as loadRobots } from "../app/routes/robots";
 import { indexable, isProductionOrigin } from "../app/app-links";
 import { appCopy } from "../app/app-copy";
-import { formatDate } from "../app/view-models";
+import { formatDate } from "../app/format";
 import { resetDatabase } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";

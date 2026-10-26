@@ -1,21 +1,21 @@
 import { env } from "cloudflare:workers";
 import { data, redirect, useNavigate, type ShouldRevalidateFunctionArgs } from "react-router";
 
-import { AccessNotice, VerifyEmail } from "~/components/account";
-import { AccountShell } from "~/components/account-shell";
-import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
+import { AccessNotice, VerifyEmail } from "~/components/access-notice";
+import { useCopy } from "~/components/copy-context";
+import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
-import { accessNotice } from "../access-notice";
+import { accessNotice, isStoreNotice } from "../access-notice";
+import { unconfirmedOnFailure } from "../client-action";
 import {
   areaPage,
   assertSameOrigin,
   requestedEbayEnvironment,
   requireAccountArea,
-  shellData,
 } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { appBase, ordersPath, storeLinkPath, type AppLinks } from "../app-links";
+import { ordersPath, storeLinkPath } from "../app-links";
 import {
   accountCoverage,
   orderAllowance,
@@ -36,9 +36,9 @@ import {
   orderCriteria,
   visibleOrderFacets,
 } from "../domain/orders.server";
-import { ebayOutage, listStores, readsFailing } from "../domain/stores.server";
+import { ebayOutage, listStores } from "../domain/stores.server";
 import { logFailure } from "../errors";
-import { languageFromPath, localizedPath, type Language } from "../i18n";
+import { languageFromPath, localizedPath } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
 import {
@@ -46,14 +46,15 @@ import {
   ordersPageSize,
   pagesParam,
   rememberedStore,
+  revalidateUnlessSnapshot,
   snapshotCursor,
   snapshotInstant,
-  snapshotOnlyAdded,
   snapshotParam,
 } from "../orders/order-list";
+import { ordersNotices } from "../orders/notices.server";
 import { accountSearchScope, openSearch } from "../orders/order-search.server";
 import { settle } from "../settle.server";
-import type { ActionResult, OrderView, OrdersNotice } from "../view-models";
+import type { ActionResult, EbayEnvironment, OrderView } from "../view-models";
 import type { Route } from "./+types/orders";
 import { orderView } from "../domain/order-view.server";
 
@@ -119,8 +120,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     );
   // `negozio` porta anche l'esito del collegamento di un negozio, che non è un filtro.
   const query = new URLSearchParams(search);
-  if (Object.hasOwn(appCopy[language].access.storeNotices, query.get("negozio") ?? ""))
-    query.delete("negozio");
+  if (isStoreNotice(query.get("negozio"))) query.delete("negozio");
   // La ricerca arriva cifrata e legata alla sessione: fuori da essa si dimentica.
   const searchText = await openSearch(env.BETTER_AUTH_SECRET, accountSearchScope(session), query);
   // L'istantanea dell'elenco aperto: un ordine arrivato dopo non entra fra quelli già letti.
@@ -186,7 +186,6 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
         notice,
         verified,
         ebayEnvironment,
-        shell: await shellData(area, stores, now),
       },
       { status: 404 },
     );
@@ -212,57 +211,13 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     incomingAtTop,
   };
   const cycle = allowance?.cycle ?? null;
-  const outage = ebayOutage(environmentStores);
-  const notices: OrdersNotice[] = [
-    ...(outage ? [{ kind: "ebay-down" as const, at: outage.lastSyncAt }] : []),
-    // Prima i collegamenti già scaduti, poi quelli in scadenza.
-    ...environmentStores
-      .flatMap((store) =>
-        store.reminder ? [{ id: store.id, name: store.name, ...store.reminder }] : [],
-      )
-      .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1))
-      .map((store): OrdersNotice =>
-        store.kind === "expired"
-          ? { kind: "store-issue", storeId: store.id, storeName: store.name }
-          : {
-              kind: "consent-expiring",
-              storeId: store.id,
-              storeName: store.name,
-              at: store.at,
-              ebayEnvironment,
-            },
-      ),
-    // Senza un'indisponibilità generale, un negozio con le letture ferme lo dice se i suoi
-    // ordini sono nella vista; altrimenti restano Negozi e campanella.
-    ...(outage
-      ? []
-      : environmentStores
-          .filter(
-            (store) =>
-              readsFailing(store) &&
-              store.lastSyncAt !== null &&
-              (!filters.storeId || filters.storeId === store.id),
-          )
-          .map((store): OrdersNotice => ({
-            kind: "store-read-failed",
-            storeId: store.id,
-            storeName: store.name,
-            at: store.lastSyncAt!,
-          }))),
-    ...(allowance?.waiting
-      ? [{ kind: "waitlist" as const, purchase: allowance.purchasesOpen }]
-      : !premium && cycle && allowance?.remaining === 0 && facets.locked
-        ? [{ kind: "quota" as const, until: cycle.ends_at }]
-        : []),
-    ...(environmentStores.some((store) => store.history?.done === false)
-      ? [
-          {
-            kind: "importing" as const,
-            count: environmentStores.reduce((total, store) => total + store.importedOrders, 0),
-          },
-        ]
-      : []),
-  ];
+  const notices = ordersNotices({
+    stores: environmentStores,
+    ebayEnvironment,
+    storeId: filters.storeId,
+    allowance,
+    locked: facets.locked,
+  });
   // Ultima lettura riuscita fra i negozi collegati: un negozio scollegato non conta per i
   // primi passi, e lo stato vuoto nomina il negozio letto per ultimo con il suo orario.
   const latest =
@@ -333,7 +288,6 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     ebayEnvironment,
     sandbox: sandboxAvailable(env),
     page: pageData,
-    shell: await shellData(area, stores, now),
     confirmation:
       pending.length > 0
         ? settle(
@@ -348,14 +302,8 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
  * Anche un conflitto di quota rilegge lo stato corrente per aggiornare i controlli; l'istantanea
  * aggiunta all'indirizzo è quella della risposta già mostrata.
  */
-export function shouldRevalidate({
-  formMethod,
-  currentUrl,
-  nextUrl,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  if (formMethod) return true;
-  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return args.formMethod ? true : revalidateUnlessSnapshot(args);
 }
 
 /**
@@ -422,12 +370,22 @@ export async function action({ request }: Route.ActionArgs) {
   }
 }
 
+/** Lo sblocco non confermato dalla rete non mostra ordini sbloccati; le altre azioni lo dicono. */
+export async function clientAction(args: Route.ClientActionArgs) {
+  const intent = (await args.request.clone().formData()).get("intent");
+  return unconfirmedOnFailure(args, (notice) =>
+    intent === "unlock"
+      ? ({ unlocked: [], remaining: null, error: true } satisfies UnlockResult)
+      : ({ ok: false, notice } satisfies ActionResult),
+  );
+}
+
 /** Ambiente eBay degli ordini mostrati, sul solo dominio di test: lo stesso campo dei filtri. */
-function EnvironmentSelect({ language, value }: { language: Language; value: EbayEnvironment }) {
+function EnvironmentSelect({ value }: { value: EbayEnvironment }) {
   const navigate = useNavigate();
+  const { language } = useCopy();
   return (
     <EbayEnvironmentField
-      language={language}
       className="sm:max-w-sm"
       value={value}
       onValueChange={(next) =>
@@ -439,41 +397,25 @@ function EnvironmentSelect({ language, value }: { language: Language; value: Eba
 
 export default function Orders({ loaderData }: Route.ComponentProps) {
   const { language, account, notice } = loaderData;
-  const links: AppLinks = { language, base: appBase };
-  const t = appCopy[language];
   const alerts = (
     <>
-      <AccessNotice language={language} notice={notice} />
-      <VerifyEmail language={language} email={account.email} verified={loaderData.verified} />
+      <AccessNotice notice={notice} />
+      <VerifyEmail email={account.email} verified={loaderData.verified} />
     </>
   );
-  return (
-    <AccountShell
-      language={language}
-      account={account}
-      shell={loaderData.shell}
-      security={loaderData.verified}
-      searchQuery={loaderData.notFound ? "" : (loaderData.page.search ?? "")}
-    >
-      {loaderData.notFound ? (
-        <NotFoundState kind="order" t={t} links={links} />
-      ) : (
-        <OrdersPage
-          data={loaderData.page}
-          t={t}
-          links={links}
-          unlockAction={`${localizedPath(language, ordersPath)}?environment=${loaderData.ebayEnvironment}`}
-          confirmation={loaderData.confirmation}
-          notice={
-            <>
-              {alerts}
-              {loaderData.sandbox ? (
-                <EnvironmentSelect language={language} value={loaderData.ebayEnvironment} />
-              ) : null}
-            </>
-          }
-        />
-      )}
-    </AccountShell>
+  return loaderData.notFound ? (
+    <NotFoundState kind="order" />
+  ) : (
+    <OrdersPage
+      data={loaderData.page}
+      unlockAction={`${localizedPath(language, ordersPath)}?environment=${loaderData.ebayEnvironment}`}
+      confirmation={loaderData.confirmation}
+      notice={
+        <>
+          {alerts}
+          {loaderData.sandbox ? <EnvironmentSelect value={loaderData.ebayEnvironment} /> : null}
+        </>
+      }
+    />
   );
 }

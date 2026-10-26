@@ -11,7 +11,7 @@ import {
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { useHydrated } from "~/components/hydrated";
 import {
   AlertDialog,
@@ -27,6 +27,7 @@ import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
+import { useCopy, useLinks } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
 import type { StoreView } from "../../view-models";
@@ -45,23 +46,21 @@ export function StoreActions({
   ebayDown,
   connectHref,
   renewsAlone = false,
-  t,
-  links,
 }: {
   store: StoreView;
   ebayDown: boolean;
   connectHref?: string;
   /** Ultimo negozio collegato con un abbonamento che si rinnova: lo scollegamento lo dice. */
   renewsAlone?: boolean;
-  t: AppCopy;
-  links: AppLinks;
 }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const disconnected = store.connection === "disconnected";
   return (
     <StoreSection id="store-actions" icon={SlidersHorizontal} title={t.stores.sectionActions}>
       {disconnected ? (
         <div className="grid gap-2">
-          <ReconnectButton store={store} ebayDown={ebayDown} connectHref={connectHref} t={t} />
+          <ReconnectButton store={store} ebayDown={ebayDown} connectHref={connectHref} />
         </div>
       ) : store.pauseReason === "plan" ? (
         // La causa della pausa è già spiegata in Sincronizzazione.
@@ -74,18 +73,19 @@ export function StoreActions({
           </Link>
         </div>
       ) : (
-        <ReadActions store={store} ebayDown={ebayDown} t={t} />
+        <ReadActions store={store} ebayDown={ebayDown} />
       )}
       {store.connection === "active" ? (
         <p className="text-sm text-muted-foreground">{t.stores.pauseHint}</p>
       ) : null}
-      <DisconnectActions store={store} renewsAlone={renewsAlone} t={t} links={links} />
+      <DisconnectActions store={store} renewsAlone={renewsAlone} />
     </StoreSection>
   );
 }
 
 /** Letture a richiesta e pausa, nella stessa forma: pulsanti larghi con icona. */
-function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boolean; t: AppCopy }) {
+function ReadActions({ store, ebayDown }: { store: StoreView; ebayDown: boolean }) {
+  const { t } = useCopy();
   const action = useAction();
   const ready = useHydrated();
   const look = { variant: "outline" as const, className: "justify-start" };
@@ -111,7 +111,7 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
         <History aria-hidden="true" data-icon="inline-start" />
         {t.stores.reimport}
       </Button>
-      <PauseButton store={store} t={t} className={look.className} />
+      <PauseButton store={store} className={look.className} />
     </div>
   );
 }
@@ -122,15 +122,14 @@ function ReadActions({ store, ebayDown, t }: { store: StoreView; ebayDown: boole
  */
 export function PauseButton({
   store,
-  t,
   size,
   className,
 }: {
   store: StoreView;
-  t: AppCopy;
   size?: "sm";
   className?: string;
 }) {
+  const { t } = useCopy();
   const action = useAction();
   const ready = useHydrated();
   const paused = store.pauseReason !== undefined;
@@ -177,17 +176,9 @@ function useDisconnectDialog(store: StoreView, t: AppCopy, links: AppLinks) {
   return { action, open, failure, changeOpen, run, confirmName, setConfirmName };
 }
 
-function DisconnectActions({
-  store,
-  renewsAlone,
-  t,
-  links,
-}: {
-  store: StoreView;
-  renewsAlone: boolean;
-  t: AppCopy;
-  links: AppLinks;
-}) {
+function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlone: boolean }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const { action, open, failure, changeOpen, run, confirmName, setConfirmName } =
     useDisconnectDialog(store, t, links);
   const deleteLabel =
@@ -305,16 +296,15 @@ export function ReconnectButton({
   store,
   ebayDown,
   connectHref,
-  t,
   prominent = false,
 }: {
   store: StoreView;
   ebayDown: boolean;
   connectHref?: string;
-  t: AppCopy;
   /** Pulsante principale piccolo, negli avvisi e nella scheda del negozio. */
   prominent?: boolean;
 }) {
+  const { t } = useCopy();
   const action = useAction();
   const look = prominent
     ? { size: "sm" as const }

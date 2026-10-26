@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { useState } from "react";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { PremiumNote, StatusAlert } from "~/components/status";
 import { useTimeZone } from "~/components/time-zone";
 import {
@@ -16,6 +16,7 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
+import { useCopy } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import {
   annualPaidMonths,
@@ -27,7 +28,9 @@ import {
   type PurchaseState,
 } from "../../catalog";
 import type { Language } from "../../i18n";
-import { formatDate, trialDaysLeft, trialEnding, type AccountView } from "../../view-models";
+import { dayMilliseconds } from "../../time";
+import { trialDaysLeft, trialEnding, type AccountView } from "../../view-models";
+import { formatDate } from "../../format";
 import { AutoSwitch, Group, SimpleSelect } from "./controls";
 
 /**
@@ -42,8 +45,6 @@ function TrialPlan({
   billingPortal,
   purchase,
   now,
-  t,
-  language,
 }: {
   trial: NonNullable<AccountView["trial"]>;
   payment: AccountView["payment"];
@@ -51,21 +52,14 @@ function TrialPlan({
   billingPortal: boolean;
   purchase: PurchaseView;
   now: string;
-  t: AppCopy;
-  language: Language;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const ending = trialEnding(trial.endsAt, now);
   return (
     <>
       {/* Dopo la scelta la prova resta fino alla sua fine, quando arriva il primo addebito. */}
-      <CheckoutReturn
-        checkout={purchase.checkout}
-        payment={payment}
-        trial
-        t={t}
-        language={language}
-      />
+      <CheckoutReturn checkout={purchase.checkout} payment={payment} trial />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.trialPlan}</p>
@@ -85,14 +79,12 @@ function TrialPlan({
           </p>
         </div>
         {/* L'abbonamento scelto si disdice dal portale prima del primo addebito e lì si riattiva. */}
-        {billingPortal && payment?.state === "scheduled" ? <ManageBilling t={t} /> : null}
+        {billingPortal && payment?.state === "scheduled" ? <ManageBilling /> : null}
       </Group>
       <PurchaseOptions
         billing={billing}
         purchase={purchase}
         trial={{ endsAt: trial.endsAt, now }}
-        t={t}
-        language={language}
       />
     </>
   );
@@ -109,16 +101,13 @@ function PremiumPlan({
   billing,
   billingPortal,
   purchase,
-  t,
-  language,
 }: {
   account: AccountView;
   billing: boolean;
   billingPortal: boolean;
   purchase: PurchaseView;
-  t: AppCopy;
-  language: Language;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const lifetime = account.premium?.period === "lifetime";
   return (
@@ -127,8 +116,6 @@ function PremiumPlan({
       <CheckoutReturn
         checkout={purchase.checkout === "processing" ? null : purchase.checkout}
         payment={account.payment}
-        t={t}
-        language={language}
       />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
@@ -137,28 +124,20 @@ function PremiumPlan({
               ? t.settings.plan.premiumPeriod[account.premium.period]
               : t.settings.plan.premium}
           </p>
-          <PremiumStatus
-            premium={account.premium}
-            grant={account.grant}
-            t={t}
-            language={language}
-          />
+          <PremiumStatus premium={account.premium} grant={account.grant} />
         </div>
         {billingPortal && account.premium?.renewsAt && account.premium.period !== "lifetime" ? (
           <RenewalPeriod
             period={account.premium.period}
             next={account.premium.nextPeriod}
             renewsAt={formatDate(account.premium.renewsAt, language, "date", zone)}
-            t={t}
           />
         ) : null}
         {billingPortal && account.premium && !account.premium.granted ? (
-          <ManageBilling lifetime={lifetime} t={t} />
+          <ManageBilling lifetime={lifetime} />
         ) : null}
       </Group>
-      {lifetime ? null : (
-        <PurchaseOptions billing={billing} purchase={purchase} upgrade t={t} language={language} />
-      )}
+      {lifetime ? null : <PurchaseOptions billing={billing} purchase={purchase} upgrade />}
     </>
   );
 }
@@ -170,14 +149,11 @@ function PremiumPlan({
 function PremiumStatus({
   premium,
   grant,
-  t,
-  language,
 }: {
   premium: AccountView["premium"];
   grant: AccountView["grant"];
-  t: AppCopy;
-  language: Language;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const copy = t.settings.plan;
   let text: string | null = null;
@@ -202,13 +178,12 @@ function RenewalPeriod({
   period,
   next,
   renewsAt,
-  t,
 }: {
   period: "monthly" | "annual";
   next: "monthly" | "annual" | undefined;
   renewsAt: string;
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   const action = useAction();
   const copy = t.settings.plan;
   const other = period === "monthly" ? "annual" : "monthly";
@@ -229,7 +204,8 @@ function RenewalPeriod({
 }
 
 /** Portale di Stripe: disdetta, metodo di pagamento e documenti; per il lifetime i soli documenti. */
-function ManageBilling({ lifetime = false, t }: { lifetime?: boolean; t: AppCopy }) {
+function ManageBilling({ lifetime = false }: { lifetime?: boolean }) {
+  const { t } = useCopy();
   const action = useAction();
   return (
     <>
@@ -246,7 +222,8 @@ function ManageBilling({ lifetime = false, t }: { lifetime?: boolean; t: AppCopy
 }
 
 /** La prova è interna a FiscalBay: non crea abbonamenti né pagamenti. */
-function TrialOffer({ t }: { t: AppCopy }) {
+function TrialOffer() {
+  const { t } = useCopy();
   const action = useAction();
   return (
     <Group title={t.settings.plan.trialTitle}>
@@ -286,17 +263,8 @@ const freeStoreChangeDays = 90;
  * Scelta del negozio attivo, soltanto nel Free (D155). La sostituzione chiede conferma: il
  * negozio lasciato va in pausa e la prossima resta possibile solo dopo 90 giorni.
  */
-function FreeStoreChoice({
-  freeStore,
-  now,
-  t,
-  language,
-}: {
-  freeStore: FreeStoreView;
-  now: string;
-  t: AppCopy;
-  language: Language;
-}) {
+function FreeStoreChoice({ freeStore, now }: { freeStore: FreeStoreView; now: string }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const copy = t.settings.plan;
   const [active, setActive] = useState(freeStore.activeId ?? "");
@@ -306,7 +274,7 @@ function FreeStoreChoice({
     if (!result.ok) setActive(freeStore.activeId ?? "");
   });
   const name = (id: string | null) => freeStore.stores.find((store) => store.id === id)?.name;
-  const next = new Date(Date.parse(now) + freeStoreChangeDays * 86_400_000).toISOString();
+  const next = new Date(Date.parse(now) + freeStoreChangeDays * dayMilliseconds).toISOString();
   return (
     <Group>
       <SimpleSelect
@@ -361,16 +329,13 @@ function CheckoutReturn({
   checkout,
   payment,
   trial = false,
-  t,
-  language,
 }: {
   checkout: PurchaseView["checkout"];
   payment: AccountView["payment"];
   /** Durante la prova la scelta non comporta un pagamento immediato. */
   trial?: boolean;
-  t: AppCopy;
-  language: Language;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const copy = t.settings.plan;
   // Il lifetime si paga subito, anche durante la prova o con un abbonamento.
@@ -424,15 +389,8 @@ function CheckoutReturn({
  * Pagamento rimborsato, o con la disputa persa: spiega il ritorno al Free, con il rinnovo che
  * riporta Premium se l'abbonamento continua.
  */
-function RefundNotice({
-  payment,
-  t,
-  language,
-}: {
-  payment: AccountView["payment"];
-  t: AppCopy;
-  language: Language;
-}) {
+function RefundNotice({ payment }: { payment: AccountView["payment"] }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   if (payment?.state !== "refunded") return null;
   const copy = t.settings.plan;
@@ -454,14 +412,11 @@ function RefundNotice({
 function FreeUnlocks({
   quota,
   confirmUnlock,
-  t,
-  language,
 }: {
   quota: AccountView["quota"];
   confirmUnlock: boolean;
-  t: AppCopy;
-  language: Language;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   return (
     <>
@@ -497,7 +452,6 @@ function FreeUnlocks({
         label={t.settings.plan.unlockConfirmation}
         description={t.settings.plan.unlockConfirmationHint}
         initial={confirmUnlock}
-        t={t}
       />
     </>
   );
@@ -511,8 +465,6 @@ export function PlanSection({
   purchase,
   confirmUnlock,
   now,
-  t,
-  language,
 }: {
   account: AccountView;
   /** Negozio attivo del Free; null senza negozi da scegliere. */
@@ -523,9 +475,8 @@ export function PlanSection({
   purchase: PurchaseView;
   confirmUnlock: boolean;
   now: string;
-  t: AppCopy;
-  language: Language;
 }) {
+  const { t } = useCopy();
   // La scelta del negozio attivo compare solo nel Free: in Premium non anticipa il downgrade.
   if (account.plan === "premium") {
     return account.trial ? (
@@ -536,8 +487,6 @@ export function PlanSection({
         billingPortal={billingPortal}
         purchase={purchase}
         now={now}
-        t={t}
-        language={language}
       />
     ) : (
       <PremiumPlan
@@ -545,20 +494,13 @@ export function PlanSection({
         billing={billing}
         billingPortal={billingPortal}
         purchase={purchase}
-        t={t}
-        language={language}
       />
     );
   }
   return (
     <>
-      <RefundNotice payment={account.payment} t={t} language={language} />
-      <CheckoutReturn
-        checkout={purchase.checkout}
-        payment={account.payment}
-        t={t}
-        language={language}
-      />
+      <RefundNotice payment={account.payment} />
+      <CheckoutReturn checkout={purchase.checkout} payment={account.payment} />
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.free}</p>
@@ -573,19 +515,14 @@ export function PlanSection({
         </div>
         {/* In lista d'attesa il Free non è ancora erogato: niente quota né conferma. */}
         {account.waitlisted ? null : (
-          <FreeUnlocks
-            quota={account.quota}
-            confirmUnlock={confirmUnlock}
-            t={t}
-            language={language}
-          />
+          <FreeUnlocks quota={account.quota} confirmUnlock={confirmUnlock} />
         )}
       </Group>
       {freeStore && freeStore.stores.length > 1 ? (
-        <FreeStoreChoice freeStore={freeStore} now={now} t={t} language={language} />
+        <FreeStoreChoice freeStore={freeStore} now={now} />
       ) : null}
-      {account.trialAvailable ? <TrialOffer t={t} /> : null}
-      <PurchaseOptions billing={billing} purchase={purchase} t={t} language={language} />
+      {account.trialAvailable ? <TrialOffer /> : null}
+      <PurchaseOptions billing={billing} purchase={purchase} />
     </>
   );
 }
@@ -600,8 +537,6 @@ function PurchaseOptions({
   purchase,
   trial,
   upgrade = false,
-  t,
-  language,
 }: {
   billing: boolean;
   purchase: PurchaseView;
@@ -609,9 +544,8 @@ function PurchaseOptions({
   trial?: { endsAt: string; now: string };
   /** Premium già attivo: resta soltanto il passaggio a vita. */
   upgrade?: boolean;
-  t: AppCopy;
-  language: Language;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   // Un solo acquisto alla volta: la richiesta in corso ferma tutte le offerte.
   const action = useAction();
@@ -656,7 +590,7 @@ function PurchaseOptions({
               <span className="font-code text-base font-semibold">{prices[plan].price}</span>
               <span className="text-sm text-muted-foreground">{prices[plan].note}</span>
             </span>
-            <OfferAction plan={plan} purchase={purchase} action={action} t={t} />
+            <OfferAction plan={plan} purchase={purchase} action={action} />
           </li>
         ))}
       </ul>
@@ -710,13 +644,12 @@ function OfferAction({
   plan,
   purchase,
   action,
-  t,
 }: {
   plan: PremiumOffer;
   purchase: PurchaseView;
   action: ReturnType<typeof useAction>;
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   const state = plan === "lifetime" ? purchase.lifetime?.state : purchase.state;
   if (state === "sold-out")
     return <span className="text-sm font-medium">{t.settings.plan.lifetimeSoldOut}</span>;

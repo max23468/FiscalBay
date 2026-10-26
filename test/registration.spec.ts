@@ -52,6 +52,8 @@ it("mostra l'autorizzazione preventiva in entrambe le lingue senza creare profil
       expect(response.headers.get("location")).toBe(`${prefix}/accesso?accesso=autorizzazione`);
       expect(response.headers.getSetCookie()).toEqual([]);
       expect(accessNotice(new URLSearchParams("accesso=autorizzazione"), language)).toEqual({
+        source: "accesso",
+        key: "autorizzazione",
         tone: "warning",
         text:
           language === "it"

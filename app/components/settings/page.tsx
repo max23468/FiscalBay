@@ -13,12 +13,12 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
+import { useCopy, useLinks } from "~/components/copy-context";
 import { IconTile, PageTitle } from "~/components/icon-tile";
-import type { AppCopy } from "../../app-copy";
-import { appHref, type AppLinks } from "../../app-links";
+import { appHref } from "../../app-links";
 import type { Language } from "../../i18n";
 import type { Theme, TimeZoneChoice } from "../../preferences";
 import {
@@ -46,8 +46,6 @@ export interface SettingsPageData {
   sections: readonly SettingsSection[];
   /** Servizi che eseguono le azioni; nell'anteprima sono tutti simulati. */
   services: SettingsServices;
-  /** Scenario dell'anteprima: le azioni sono simulate e le scelte non restano. */
-  preview: boolean;
   account: AccountView;
   purchase: PurchaseView;
   /** Negozio attivo del Free; null in Premium o senza negozi. */
@@ -86,15 +84,6 @@ export interface SettingsServices {
   support: boolean;
 }
 
-/** La descrizione della categoria nomina soltanto i servizi disponibili. */
-function sectionDescription(t: AppCopy, id: SettingsSection, services: SettingsServices) {
-  const limited = t.settings.limitedDescriptions;
-  if (id === "piano" && !services.billing) return limited.piano;
-  if (id === "notifiche" && !services.telegram) return limited.notifiche;
-  if (id === "privacy" && !services.accountData) return limited.privacy;
-  return t.settings.sections[id].description;
-}
-
 /** Icone neutre: le Impostazioni restano sobrie, il colore sta in Ordini e Negozi. */
 const sectionIcons: Record<SettingsSection, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
   profilo: User,
@@ -129,20 +118,80 @@ const wideQuery = "(min-width: 48rem)";
 const spyOffset = 140;
 
 /**
+ * Sezione attiva su desktop, dove le categorie formano una sola pagina che scorre: l'indicatore
+ * segue la sezione visibile e, durante lo scorrimento avviato dal menu, resta sulla voce scelta.
+ * All'apertura, al cambio lingua e al ritorno dal pagamento la pagina torna sulla categoria
+ * dell'indirizzo; i clic fra categorie scorrono dal menu con `goTo`.
+ */
+function useScrollSpy(
+  ids: readonly SettingsSection[],
+  opened: SettingsSection | null,
+  align: string,
+) {
+  const sections = useRef<Partial<Record<SettingsSection, HTMLElement | null>>>({});
+  const [active, setActive] = useState<SettingsSection>(opened ?? ids[0]!);
+  const following = useRef(false);
+  const release = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  const spy = () => {
+    if (following.current || !window.matchMedia(wideQuery).matches) return;
+    let next: SettingsSection = ids[0]!;
+    for (const id of ids) {
+      const top = sections.current[id]?.getBoundingClientRect().top ?? Infinity;
+      if (top <= Math.max(spyOffset, window.innerHeight * 0.35)) next = id;
+    }
+    const atBottom =
+      window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
+    setActive(atBottom ? ids[ids.length - 1]! : next);
+  };
+
+  const finishFollowing = () => {
+    following.current = false;
+    clearTimeout(release.current);
+    spy();
+  };
+
+  const goTo = (id: SettingsSection, behavior: ScrollBehavior) => {
+    if (!window.matchMedia(wideQuery).matches) return;
+    clearTimeout(release.current);
+    setActive(id);
+    following.current = behavior === "smooth";
+    if (following.current) release.current = setTimeout(finishFollowing, 1000);
+    sections.current[id]?.scrollIntoView({ behavior, block: "start" });
+  };
+
+  const onOpen = useEffectEvent(() => (opened ? goTo(opened, "instant") : spy()));
+  const onScroll = useEffectEvent(spy);
+  const onScrollEnd = useEffectEvent(finishFollowing);
+  useLayoutEffect(() => {
+    // Dopo il ripristino dello scroll della route.
+    const frame = requestAnimationFrame(onOpen);
+    const scrolled = () => onScroll();
+    const ended = () => onScrollEnd();
+    window.addEventListener("scroll", scrolled, { passive: true });
+    window.addEventListener("resize", scrolled);
+    window.addEventListener("scrollend", ended);
+    return () => {
+      window.removeEventListener("scroll", scrolled);
+      window.removeEventListener("resize", scrolled);
+      window.removeEventListener("scrollend", ended);
+      cancelAnimationFrame(frame);
+      clearTimeout(release.current);
+      following.current = false;
+    };
+  }, [align]);
+
+  return { sections, active, goTo };
+}
+
+/**
  * Impostazioni. Su desktop le categorie formano una sola pagina che scorre:
  * il menu resta fisso e l'indicatore segue la sezione visibile. Su mobile
  * restano elenco e poi pagina della singola categoria.
  */
-export function SettingsPage({
-  data,
-  t,
-  links,
-}: {
-  data: SettingsPageData;
-  t: AppCopy;
-  links: AppLinks;
-}) {
-  const { language } = links;
+export function SettingsPage({ data }: { data: SettingsPageData }) {
+  const { t, language } = useCopy();
+  const { links } = useLinks();
   const sectionIds = data.sections;
   const current = data.section ?? sectionIds[0]!;
   // Gruppi con le sole categorie presenti, nell'ordine delle Impostazioni.
@@ -166,7 +215,7 @@ export function SettingsPage({
         ? t.profile.unsaved
         : t.settings.template.unsaved;
   const content = {
-    profilo: <ProfileSection account={data.account} form={profileDraft} t={t} />,
+    profilo: <ProfileSection account={data.account} form={profileDraft} />,
     piano: (
       <PlanSection
         account={data.account}
@@ -176,18 +225,13 @@ export function SettingsPage({
         purchase={data.purchase}
         confirmUnlock={data.confirmUnlock}
         now={data.now}
-        t={t}
-        language={language}
       />
     ),
     notifiche: (
       <NotificationsSection
         telegram={data.services.telegram ? data.telegram : null}
         premium={premium}
-        preview={data.preview}
         marketing={data.preferences.marketing}
-        t={t}
-        links={links}
       />
     ),
     esportazione: (
@@ -195,95 +239,35 @@ export function SettingsPage({
         premium={premium}
         context={data.exportContext}
         estimate={data.exportEstimate}
-        t={t}
       />
     ),
     sicurezza: (
-      <SecuritySection
-        security={data.security}
-        email={data.account.email}
-        now={data.now}
-        preview={data.preview}
-        language={language}
-      />
+      <SecuritySection security={data.security} email={data.account.email} now={data.now} />
     ),
     aspetto: (
       <AppearanceSection
         theme={data.preferences.theme}
         timeZone={data.preferences.timeZone}
         detectedTimeZone={data.preferences.detectedTimeZone}
-        preview={data.preview}
-        t={t}
-        links={links}
       />
     ),
-    messaggio: <TemplateSection form={templateDraft} t={t} />,
-    privacy: <PrivacySection accountData={data.services.accountData} t={t} links={links} />,
+    messaggio: <TemplateSection form={templateDraft} />,
+    privacy: <PrivacySection accountData={data.services.accountData} />,
     supporto: (
       <SupportSection
         support={data.services.support}
         diagnostics={data.diagnostics}
         email={data.account.email}
-        t={t}
       />
     ),
   } satisfies Record<SettingsSection, React.ReactNode>;
-  const sections = useRef<Partial<Record<SettingsSection, HTMLElement | null>>>({});
+  const { sections, active, goTo } = useScrollSpy(
+    sectionIds,
+    data.section,
+    `${language}:${data.purchase.checkout ?? ""}`,
+  );
   const items = useRef<Partial<Record<SettingsSection, HTMLElement | null>>>({});
-  const [active, setActive] = useState<SettingsSection>(current);
   const [indicator, setIndicator] = useState<{ top: number; height: number } | null>(null);
-  // Durante lo scorrimento avviato dal menu l'indicatore resta sulla voce scelta.
-  const following = useRef(false);
-  const release = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  // Usa solo riferimenti e setter stabili: vale anche nell'effetto di apertura.
-  const goTo = (id: SettingsSection, behavior: ScrollBehavior) => {
-    if (!window.matchMedia(wideQuery).matches) return;
-    clearTimeout(release.current);
-    setActive(id);
-    following.current = behavior === "smooth";
-    if (following.current) release.current = setTimeout(finishFollowing, 1000);
-    sections.current[id]?.scrollIntoView({ behavior, block: "start" });
-  };
-
-  const spy = () => {
-    if (following.current || !window.matchMedia(wideQuery).matches) return;
-    let next: SettingsSection = sectionIds[0]!;
-    for (const id of sectionIds) {
-      const top = sections.current[id]?.getBoundingClientRect().top ?? Infinity;
-      if (top <= Math.max(spyOffset, window.innerHeight * 0.35)) next = id;
-    }
-    const atBottom =
-      window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2;
-    setActive(atBottom ? sectionIds[sectionIds.length - 1]! : next);
-  };
-
-  const finishFollowing = () => {
-    following.current = false;
-    clearTimeout(release.current);
-    spy();
-  };
-
-  useLayoutEffect(() => {
-    // Dopo il ripristino dello scroll della route, riallinea anche il cambio lingua.
-    const frame = requestAnimationFrame(() => {
-      if (data.section) goTo(data.section, "instant");
-      else spy();
-    });
-    window.addEventListener("scroll", spy, { passive: true });
-    window.addEventListener("resize", spy);
-    window.addEventListener("scrollend", finishFollowing);
-    return () => {
-      window.removeEventListener("scroll", spy);
-      window.removeEventListener("resize", spy);
-      window.removeEventListener("scrollend", finishFollowing);
-      cancelAnimationFrame(frame);
-      clearTimeout(release.current);
-      following.current = false;
-    };
-    // Apertura, cambio lingua e ritorno dal pagamento; i clic fra categorie scorrono dal menu.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [language, data.purchase.checkout]);
 
   useLayoutEffect(() => {
     const item = items.current[active];
@@ -343,13 +327,8 @@ export function SettingsPage({
                           )}
                         >
                           <IconTile icon={icon} tone="neutral" size="sm" />
-                          <span className="grid min-w-0 flex-1 gap-0.5">
-                            <span className="font-medium md:font-[inherit]">
-                              {t.settings.sections[id].title}
-                            </span>
-                            <span className="text-sm text-muted-foreground md:hidden">
-                              {sectionDescription(t, id, data.services)}
-                            </span>
+                          <span className="min-w-0 flex-1 font-medium md:font-[inherit]">
+                            {t.settings.sections[id].title}
                           </span>
                           <ChevronRight
                             aria-hidden="true"

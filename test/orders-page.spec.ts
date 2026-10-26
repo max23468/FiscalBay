@@ -25,7 +25,13 @@ import { fiscalSituation, itemPrice } from "../app/view-models";
 import { appCopy } from "../app/app-copy";
 import { settle } from "../app/settle.server";
 import { requestOrderRead } from "../app/domain/order-sync.server";
-import { callRoute, routeData, routePage, routeResponse } from "./fixtures/route-fixtures";
+import {
+  areaShell,
+  callRoute,
+  routeData,
+  routePage,
+  routeResponse,
+} from "./fixtures/route-fixtures";
 import { queued } from "./fixtures/queue-fixture";
 
 import { searchOrders, searchRequest } from "./fixtures/order-search-fixtures";
@@ -513,7 +519,7 @@ describe("pagina Ordini reale", () => {
         (notice) => notice.kind === "ebay-down" || notice.kind === "store-read-failed",
       );
     const bell = async () =>
-      ((await ordersPage(cookie)).shell.notifications ?? []).map((item) => item.id);
+      ((await areaShell(cookie, "/app/ordini")).notifications ?? []).map((item) => item.id);
     const storesDown = async () =>
       (await routeData(loadStores, "/app/negozi", { cookie })).page.ebayDown;
 

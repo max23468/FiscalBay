@@ -1,4 +1,4 @@
-import type { SearchResults } from "../../app/components/app-shell";
+import type { SearchResults } from "../../app/components/shell-search";
 import { action as orderSearch } from "../../app/routes/order-search";
 import { callRoute } from "./route-fixtures";
 

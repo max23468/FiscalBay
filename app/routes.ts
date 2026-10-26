@@ -1,4 +1,4 @@
-import { type RouteConfig, index, route } from "@react-router/dev/routes";
+import { type RouteConfig, index, layout, route } from "@react-router/dev/routes";
 
 export default [
   index("routes/site.tsx"),
@@ -12,16 +12,21 @@ export default [
   route("en/termini", "routes/legal.tsx", { id: "terms-en" }),
   route("privacy", "routes/legal.tsx", { id: "privacy" }),
   route("en/privacy", "routes/legal.tsx", { id: "privacy-en" }),
-  route("app/ordini/:ordine?", "routes/orders.tsx"),
-  route("en/app/ordini/:ordine?", "routes/orders.tsx", { id: "orders-en" }),
+  // La shell dell'area resta montata fra Ordini, Negozi e Impostazioni.
+  layout("routes/account.tsx", [
+    route("app/ordini/:ordine?", "routes/orders.tsx"),
+    route("app/negozi/:negozio?", "routes/stores.tsx"),
+    route("app/impostazioni/:sezione?", "routes/settings.tsx"),
+  ]),
+  layout("routes/account.tsx", { id: "account-en" }, [
+    route("en/app/ordini/:ordine?", "routes/orders.tsx", { id: "orders-en" }),
+    route("en/app/negozi/:negozio?", "routes/stores.tsx", { id: "stores-en" }),
+    route("en/app/impostazioni/:sezione?", "routes/settings.tsx", { id: "settings-en" }),
+  ]),
   route("app/negozi/collega", "routes/store-link.tsx"),
   route("en/app/negozi/collega", "routes/store-link.tsx", { id: "store-link-en" }),
-  route("app/negozi/:negozio?", "routes/stores.tsx"),
-  route("en/app/negozi/:negozio?", "routes/stores.tsx", { id: "stores-en" }),
   route("app/profilo", "routes/profile.tsx"),
   route("en/app/profilo", "routes/profile.tsx", { id: "profile-en" }),
-  route("app/impostazioni/:sezione?", "routes/settings.tsx"),
-  route("en/app/impostazioni/:sezione?", "routes/settings.tsx", { id: "settings-en" }),
   route("app/lingua", "routes/language.ts"),
   route("admin", "routes/admin.tsx"),
   route("en/admin", "routes/admin.tsx", { id: "admin-en" }),

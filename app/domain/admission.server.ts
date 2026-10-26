@@ -1,6 +1,6 @@
 import { logFailure } from "../errors";
 import type { Language } from "../i18n";
-import { displayTimeZone, formatDate } from "../view-models";
+import { displayTimeZone, formatDate } from "../format";
 import { purchasesOpenSql, waitingSql, waitlistOnSql } from "./admission-state.server";
 import { activeEntitlementSql } from "./grants.server";
 import { unpausedStore } from "./store-state.server";

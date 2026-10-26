@@ -29,7 +29,7 @@ import {
   seed,
 } from "./fixtures/database-fixtures";
 import { syntheticProfile } from "./fixtures/account-fixtures";
-import { formatDate } from "../app/view-models";
+import { formatDate } from "../app/format";
 import {
   callRoute,
   routeData,

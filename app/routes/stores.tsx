@@ -1,14 +1,14 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import { data, redirect } from "react-router";
 
-import { AccessNotice } from "~/components/account";
-import { AccountShell } from "~/components/account-shell";
+import { AccessNotice } from "~/components/access-notice";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores/page";
 import { accessNotice } from "../access-notice";
-import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
+import { unconfirmedOnFailure } from "../client-action";
+import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { appBase, storeLinkPath, type AppLinks } from "../app-links";
+import { appBase, storeLinkPath } from "../app-links";
 import {
   deleteStoreData,
   disconnectStore,
@@ -110,7 +110,6 @@ async function readStores({ request, params }: Route.LoaderArgs) {
     notFound: Boolean(params.negozio) && !detail,
     language,
     account,
-    shell: await shellData(area, statuses, now),
     // Il collegamento eBay partito da Negozi torna qui con il suo esito.
     notice: accessNotice(new URL(request.url).searchParams, language),
     page: {
@@ -226,35 +225,19 @@ export async function action({ request }: Route.ActionArgs) {
   return { ok: true, notice: t.done[intent] } satisfies ActionResult;
 }
 
-/** Mantiene la conferma aperta quando il browser non riceve un esito affidabile. */
-export async function clientAction({ request, serverAction }: Route.ClientActionArgs) {
-  try {
-    return await serverAction();
-  } catch (error) {
-    if (error instanceof Response || isRouteErrorResponse(error) || request.signal.aborted)
-      throw error;
-    const language = languageFromPath(new URL(request.url).pathname);
-    return { ok: false, notice: appCopy[language].errors.unconfirmed } satisfies ActionResult;
-  }
+export function clientAction(args: Route.ClientActionArgs) {
+  return unconfirmedOnFailure(args);
 }
 
 export default function Stores({ loaderData }: Route.ComponentProps) {
-  const { language, account, page, notice, shell } = loaderData;
-  const links: AppLinks = { language, base: appBase };
-  const t = appCopy[language];
-  return (
-    <AccountShell language={language} account={account} shell={shell} security>
-      {loaderData.notFound ? (
-        <NotFoundState kind="store" t={t} links={links} />
-      ) : (
-        <StoresPage
-          data={page}
-          confirmation={loaderData.confirmation}
-          t={t}
-          links={links}
-          notice={<AccessNotice language={language} notice={notice} />}
-        />
-      )}
-    </AccountShell>
+  const { page, notice } = loaderData;
+  return loaderData.notFound ? (
+    <NotFoundState kind="store" />
+  ) : (
+    <StoresPage
+      data={page}
+      confirmation={loaderData.confirmation}
+      notice={<AccessNotice notice={notice} />}
+    />
   );
 }

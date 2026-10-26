@@ -56,7 +56,13 @@ import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account
 import { homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
 import { queued } from "./fixtures/queue-fixture";
-import { callRoute, routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
+import {
+  areaShell,
+  callRoute,
+  routeData,
+  routeResponse,
+  testOrigin,
+} from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -575,7 +581,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect((removed as Response).headers.get("location")).toBe("/app/negozi?negozio=eliminato");
     const after = await storesPage("/app/negozi?negozio=eliminato", seller.cookie);
     expect(after.data.page.stores).toEqual([]);
-    expect(after.data.notice).toEqual({ text: "Negozio eliminato da FiscalBay.", tone: "success" });
+    expect(after.data.notice).toMatchObject({
+      text: "Negozio eliminato da FiscalBay.",
+      tone: "success",
+    });
     const removedDetail = await storesPage(`/app/negozi/${seller.storeId}`, seller.cookie);
     expect(removedDetail.init?.status).toBe(404);
 
@@ -725,7 +734,6 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         accountData: false,
         support: false,
       },
-      preview: false,
       account: { plan: "free", trialAvailable: false, quota: undefined },
       preferences: { theme: "system", timeZone: "auto", detectedTimeZone: null, marketing: false },
       diagnostics: null,
@@ -799,7 +807,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       marketing: true,
     });
     // Tema e fuso valgono in tutta l'area, con le date nel fuso scelto.
-    expect(loaded.shell.display).toEqual({ theme: "dark", timeZone: "America/New_York" });
+    expect((await areaShell(seller.cookie)).display).toEqual({
+      theme: "dark",
+      timeZone: "America/New_York",
+    });
     expect(await save("theme", "system")).toEqual({ ok: true });
     expect(await save("marketing", "false")).toEqual({ ok: true });
     expect(
@@ -896,27 +907,29 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       timeZone: "auto",
       detectedTimeZone: "Asia/Tokyo",
     });
-    expect(detected.shell.display.timeZone).toBe("Asia/Tokyo");
+    expect(
+      (await areaShell(`${seller.cookie}; fiscalbay_fuso=Asia%2FTokyo`)).display.timeZone,
+    ).toBe("Asia/Tokyo");
     // Un valore non riconosciuto vale Roma, senza rompere le date.
     for (const cookie of ["fiscalbay_fuso=Mars%2FOlympus", "fiscalbay_fuso=..%2Fx"]) {
-      expect((await withZone(cookie)).shell.display.timeZone).toBe("Europe/Rome");
+      expect((await areaShell(`${seller.cookie}; ${cookie}`)).display.timeZone).toBe("Europe/Rome");
     }
     // Un fuso scelto vale più di quello del dispositivo; «auto» torna al rilevamento.
     const save = (value: string) =>
       saveSetting(seller.cookie, { intent: "save", name: "time-zone", value });
     expect(await save("Europe/London")).toEqual({ ok: true });
-    expect((await withZone("fiscalbay_fuso=Asia%2FTokyo")).shell.display.timeZone).toBe(
-      "Europe/London",
-    );
+    expect(
+      (await areaShell(`${seller.cookie}; fiscalbay_fuso=Asia%2FTokyo`)).display.timeZone,
+    ).toBe("Europe/London");
     expect(await save("auto")).toEqual({ ok: true });
     expect(
       await env.DB.prepare("SELECT time_zone FROM user_preferences WHERE user_id = ?")
         .bind(seller.userId)
         .first(),
     ).toEqual({ time_zone: null });
-    expect((await withZone("fiscalbay_fuso=Asia%2FTokyo")).shell.display.timeZone).toBe(
-      "Asia/Tokyo",
-    );
+    expect(
+      (await areaShell(`${seller.cookie}; fiscalbay_fuso=Asia%2FTokyo`)).display.timeZone,
+    ).toBe("Asia/Tokyo");
   });
 
   it("chiude dopo una passkey soltanto la sessione precedente dello stesso utente", async () => {
@@ -981,7 +994,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     const seller = await linkedSeller("campanella@example.invalid");
     const expired = new Date(Date.now() - 2 * day).toISOString();
     await env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ?").bind(expired).run();
-    const bell = async () => (await settingsPage(seller.cookie)).shell.notifications!;
+    const bell = async () => (await areaShell(seller.cookie)).notifications!;
     const [notification] = await bell();
     expect(await bell()).toEqual([
       {
@@ -1510,7 +1523,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       // La pagina aperta registra l'attività ma non riprende le letture senza conferma.
       const page = await storesPage("/app/negozi", seller.cookie);
       expect(page.data.page.stores[0]).toMatchObject({ pauseReason: "inactivity" });
-      expect(page.data.shell.notifications).toContainEqual(
+      expect((await areaShell(seller.cookie, "/app/negozi")).notifications).toContainEqual(
         expect.objectContaining({ id: `inactivity:${at(37.2).toISOString()}`, href: "negozi" }),
       );
       expect(await pauses(seller.userId)).toEqual([["inactivity"]]);

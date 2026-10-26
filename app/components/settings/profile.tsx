@@ -1,7 +1,7 @@
 import { useFieldErrors } from "~/components/form-validation";
 import { ProfileInput } from "~/components/profile-fields";
 import { Button } from "~/components/ui/button";
-import type { AppCopy } from "../../app-copy";
+import { useCopy } from "~/components/copy-context";
 import type { AccountView } from "../../view-models";
 import type { Draft } from "./unsaved";
 
@@ -12,12 +12,11 @@ import type { Draft } from "./unsaved";
 export function ProfileSection({
   account,
   form,
-  t,
 }: {
   account: Pick<AccountView, "profile">;
   form: Draft<Record<string, string>>;
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   const v = useFieldErrors(t.access.validation);
   const business = account.profile.accountType === "business";
   const { draft, setDraft, dirty, submit, action } = form;
@@ -26,7 +25,6 @@ export function ProfileSection({
     <ProfileInput
       name={name}
       id={id}
-      t={t.access}
       v={v}
       marked={false}
       className={className}

@@ -186,7 +186,7 @@ describe("collegamento negozio eBay", () => {
     const stores = await routeData(loadStores, "/app/negozi?negozio=collegato", {
       cookie: owner.cookie,
     });
-    expect(stores.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
+    expect(stores.notice).toMatchObject({ text: "Negozio eBay collegato.", tone: "success" });
     expect(await listStores(env.DB, owner.userId)).toMatchObject([
       { id: store!.id, name: "nome-aggiornato" },
     ]);
@@ -452,7 +452,7 @@ describe("collegamento negozio eBay", () => {
     ]);
 
     const home = await homeFor(cookie, "/app/ordini?negozio=collegato");
-    expect(home.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
+    expect(home.notice).toMatchObject({ text: "Negozio eBay collegato.", tone: "success" });
     // La pagina reale riceve la vista condivisa con l'anteprima, senza il valore da sbloccare.
     expect(home.page.orders).toMatchObject([
       {

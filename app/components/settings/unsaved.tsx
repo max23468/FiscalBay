@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useBeforeUnload, useBlocker } from "react-router";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import {
   AlertDialog,
   AlertDialogCancel,

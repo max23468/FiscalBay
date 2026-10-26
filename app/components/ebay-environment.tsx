@@ -6,28 +6,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { useCopy } from "~/components/copy-context";
 import { appCopy } from "../app-copy";
-import type { Language } from "../i18n";
 import type { EbayEnvironment } from "../view-models";
-
-export type { EbayEnvironment };
 
 const environments: readonly EbayEnvironment[] = ["production", "sandbox"];
 
 /** Scelta dell'ambiente eBay, sul solo dominio di test: nome dell'ambiente e tipo di account. */
 export function EbayEnvironmentField({
-  language,
   className,
   onValueChange,
   ...select
 }: {
-  language: Language;
   className?: string;
   name?: string;
   defaultValue?: EbayEnvironment;
   value?: EbayEnvironment;
   onValueChange?: (value: EbayEnvironment) => void;
 }) {
+  const { language } = useCopy();
   const t = appCopy[language].storeLink;
   const items = environments.map((environment) => ({
     value: environment,

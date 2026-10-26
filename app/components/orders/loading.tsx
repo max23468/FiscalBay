@@ -2,10 +2,11 @@ import { ClipboardList } from "lucide-react";
 
 import { PageTitle } from "~/components/icon-tile";
 import { Skeleton } from "~/components/ui/skeleton";
-import type { AppCopy } from "../../app-copy";
+import { useCopy } from "~/components/copy-context";
 
 /** Schede segnaposto con il layout dell'elenco: filtri e due colonne di ordini. */
-export function LoadingGrid({ t }: { t: AppCopy }) {
+export function LoadingGrid() {
+  const { t } = useCopy();
   return (
     <div
       aria-busy="true"
@@ -71,7 +72,8 @@ export function LoadingGrid({ t }: { t: AppCopy }) {
 }
 
 /** Intestazione degli Ordini prima dei dati: titolo, conteggio segnaposto e nessuno stato. */
-export function LoadingHeader({ t }: { t: AppCopy }) {
+export function LoadingHeader() {
+  const { t } = useCopy();
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
       <PageTitle
@@ -89,11 +91,11 @@ export function LoadingHeader({ t }: { t: AppCopy }) {
  * Pagina Ordini durante il caricamento da un'altra sezione: intestazione e schede segnaposto,
  * senza dati né stati inventati. Modulo separato, così la shell non carica l'intera pagina.
  */
-export function OrdersLoading({ t }: { t: AppCopy }) {
+export function OrdersLoading() {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <LoadingHeader t={t} />
-      <LoadingGrid t={t} />
+      <LoadingHeader />
+      <LoadingGrid />
     </div>
   );
 }

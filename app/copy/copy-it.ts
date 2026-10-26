@@ -441,27 +441,15 @@ export const it = {
     categories: "Categorie",
     groups: { ordini: "Ordini", account: "Account", generale: "Generale" },
     sections: {
-      profilo: { title: "Profilo", description: "Nome e tipo di account" },
-      piano: { title: "Piano e pagamenti", description: "Piano, sblocchi e pagamenti" },
-      notifiche: { title: "Notifiche", description: "Telegram e comunicazioni" },
-      esportazione: { title: "Esportazione", description: "File CSV e XLSX degli ordini" },
-      sicurezza: { title: "Sicurezza", description: "Metodi di accesso e sessioni" },
-      aspetto: { title: "Aspetto e lingua", description: "Tema, lingua e fuso orario" },
-      messaggio: {
-        title: "Modello di messaggio",
-        description: "Richiesta del Codice Fiscale all’acquirente",
-      },
-      privacy: {
-        title: "Dati e privacy",
-        description: "Termini, informativa, esportazione e cancellazione",
-      },
-      supporto: { title: "Supporto", description: "Domande frequenti e assistenza" },
-    },
-    // Descrizioni delle categorie finché pagamenti, Telegram ed esportazione dei dati mancano.
-    limitedDescriptions: {
-      piano: "Piano e sblocchi",
-      notifiche: "Comunicazioni via email",
-      privacy: "Termini e informativa sulla privacy",
+      profilo: { title: "Profilo" },
+      piano: { title: "Piano e pagamenti" },
+      notifiche: { title: "Notifiche" },
+      esportazione: { title: "Esportazione" },
+      sicurezza: { title: "Sicurezza" },
+      aspetto: { title: "Aspetto e lingua" },
+      messaggio: { title: "Modello di messaggio" },
+      privacy: { title: "Dati e privacy" },
+      supporto: { title: "Supporto" },
     },
     premiumBadge: "Premium",
     saved: "Salvato",
@@ -670,7 +658,6 @@ export const it = {
         "Questo è il tuo unico metodo di accesso. Aggiungi una passkey o collega un altro metodo qui sotto prima di rimuoverlo.",
       sessionOpened: (date: string) => `Sessione aperta il ${date}`,
       passkeyItem: (device: string, date: string) => `${device}, aggiunta il ${date}`,
-      lastMethod: "Serve almeno un metodo di accesso.",
       sessions: "Sessioni attive",
       thisDevice: "Questo dispositivo",
       lastActive: (time: string) => `Ultima attività ${time}`,
@@ -1006,7 +993,7 @@ export const it = {
       "ebay-non-risponde": "eBay non risponde: ricollega il negozio quando le letture riprendono.",
       "lista-attesa":
         "Il piano Free è al completo e il tuo account è in lista d’attesa: per ora non puoi collegare un negozio.",
-    } as Record<string, string>,
+    },
     signInNotices: {
       "metodo-collegato": "Metodo di accesso collegato al tuo account FiscalBay.",
       "metodo-rimosso": "Metodo di accesso rimosso.",
@@ -1043,7 +1030,7 @@ export const it = {
         "Controlla la posta: se l’indirizzo è registrato, trovi il link per scegliere una nuova password.",
       "password-reimpostata": "Password aggiornata. Accedi con la nuova password.",
       "recupero-scaduto": "Link non valido o scaduto. Richiedine uno nuovo.",
-    } as Record<string, string>,
+    },
   },
 };
 

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { orderCriteria, type VisibleOrder } from "../app/domain/orders.server";
 import { orderView } from "../app/domain/order-view.server";
 import { now } from "./fixtures/database-fixtures";
-import { addressRows } from "../app/view-models";
+import { addressRows } from "../app/format";
 import {
   addressCase,
   buyerNameView,
