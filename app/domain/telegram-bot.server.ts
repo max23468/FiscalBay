@@ -9,7 +9,6 @@ import {
   unknownChatReply,
 } from "./telegram.server";
 import {
-  appUrl,
   copyButtons,
   date,
   escape,
@@ -21,7 +20,7 @@ import {
   when,
   zoneName,
 } from "./telegram-messages.server";
-import { ordersPath, settingsPath } from "../app-links";
+import { appUrl, ordersPath, planPath } from "../app-links";
 import type { Language } from "../i18n";
 import { UpstreamError } from "../integrations/http.server";
 import {
@@ -328,7 +327,7 @@ function premiumMessage(env: Env, language: Language): BotMessage {
       [
         {
           text: `⭐ ${copy[language].choosePlan}`,
-          url: appUrl(env, language, `${settingsPath}/piano`),
+          url: appUrl(env, language, planPath),
         },
       ],
     ],
@@ -473,7 +472,7 @@ async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessag
           ? { text: `${marks.settings} ${text.preferences}`, callback_data: data(link, "pr") }
           : {
               text: `${marks.plan} ${text.choosePlan}`,
-              url: appUrl(env, link.language, `${settingsPath}/piano`),
+              url: appUrl(env, link.language, planPath),
             },
         { text: `${icons.link} ${text.openSettings}`, url: settingsUrl(env, link.language) },
       ],

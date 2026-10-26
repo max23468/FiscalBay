@@ -1,8 +1,8 @@
 import { appCopy } from "../app-copy";
-import { ordersPath, settingsPath } from "../app-links";
+import { appUrl, notificationSettingsPath, ordersPath } from "../app-links";
 import { ebayOrderHref } from "../components/orders/labels";
 import { buyerNameView } from "../contact";
-import { formatAmount, locales, localizedPath, type Language } from "../i18n";
+import { formatAmount, type Language, locales } from "../i18n";
 import type { BotButton, BotMessage } from "../integrations/telegram.server";
 import { zoneLabel } from "../preferences";
 import { displayTaxValue, taxIdentifierType } from "../tax-quality";
@@ -286,22 +286,8 @@ export function when(language: Language, timeZone: string, iso: string, now: Dat
   return `${day} ${at.time}`;
 }
 
-/** Indirizzo assoluto di una pagina dell'app, con l'ambiente eBay se non è Production. */
-export function appUrl(
-  env: Pick<Env, "APP_ORIGIN">,
-  language: Language,
-  path: string,
-  environment: EbayEnvironment = "production",
-  filters: Record<string, string> = {},
-) {
-  const query = new URLSearchParams(filters);
-  if (environment === "sandbox") query.set("environment", "sandbox");
-  const search = query.size ? `?${query}` : "";
-  return `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, path)}${search}`;
-}
-
 export const settingsUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language) =>
-  appUrl(env, language, `${settingsPath}/notifiche`);
+  appUrl(env, language, notificationSettingsPath);
 
 const orderUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language, notice: OrderNotice) =>
   appUrl(env, language, `${ordersPath}/${encodeURIComponent(notice.id)}`, notice.environment);

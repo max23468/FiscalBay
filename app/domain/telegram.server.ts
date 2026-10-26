@@ -10,10 +10,11 @@ import {
 } from "../integrations/telegram.server";
 import { UpstreamError } from "../integrations/http.server";
 import { isProduction } from "../app-links";
-import { languages, localizedPath, type Language } from "../i18n";
+import { type Language, languages } from "../i18n";
 import { telegramDigestTimes, telegramLinkMinutes } from "../preferences";
 import type { TelegramView } from "../view-models";
 import { dayMilliseconds } from "../time";
+import { settingsUrl } from "./telegram-messages.server";
 
 // Le richieste consumate restano un giorno oltre la scadenza: un nuovo tentativo della stessa
 // ricevuta riconosce ancora il proprio collegamento.
@@ -82,8 +83,6 @@ export async function startTelegramLink(
   return { url: deepLink(env, token) };
 }
 
-const settingsPath = "/app/impostazioni/notifiche";
-
 /** Risposte del bot, in testo semplice. Senza una richiesta riconosciuta, in entrambe le lingue. */
 const replies = {
   it: {
@@ -103,10 +102,6 @@ const replies = {
       `To receive order notifications here, link this chat in FiscalBay, under Settings › Notifications:\n${url}`,
   },
 } satisfies Record<Language, unknown>;
-
-function settingsUrl(env: Env, language: Language) {
-  return `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, settingsPath)}`;
-}
 
 /**
  * Risposta a una chat senza collegamento, in entrambe le lingue: in Production il rimando alle

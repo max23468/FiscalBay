@@ -3,7 +3,7 @@ import { redirect } from "react-router";
 
 import { accessNotice } from "./access-notice";
 import { currentSession } from "./account-area.server";
-import { accessPath, ordersPath, securityReturnPath, visitCookie } from "./app-links";
+import { accessPath, ordersPath, originUrl, securityReturnPath, visitCookie } from "./app-links";
 import { readSession } from "./domain/sessions.server";
 import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import {
@@ -116,7 +116,7 @@ export async function accessAction(request: Request) {
   if (intent === "recupera-password") {
     const response = await forward("/request-password-reset", {
       email: field("email"),
-      redirectTo: `${new URL(env.APP_ORIGIN).origin}${accessReturn}`,
+      redirectTo: originUrl(env, accessReturn),
     });
     return notice(
       response.status === 429 ? "troppi-tentativi" : response.ok ? "recupero-inviato" : "errore",

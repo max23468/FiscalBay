@@ -3,7 +3,7 @@ import type Stripe from "stripe";
 import { appCopy } from "../app-copy";
 import { firstChargeAt, priceGeneration, type PremiumOffer, type PurchaseState } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
-import { localizedPath, type Language } from "../i18n";
+import type { Language } from "../i18n";
 import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
   createLifetimeCredit,
@@ -28,6 +28,7 @@ import {
   reserveLifetime,
 } from "./lifetime.server";
 import { dayMilliseconds } from "../time";
+import { appUrl, planPath } from "../app-links";
 
 /** Offerte in vendita: il lifetime con la prenotazione atomica di uno dei venti posti. */
 export const checkoutOffers = [
@@ -169,7 +170,7 @@ export async function startCheckout(
     )
       .bind(workspaceId, stripeEnvironment(env))
       .first<{ customer_id: string | null }>();
-    const plan = `${new URL(env.APP_ORIGIN).origin}${localizedPath(input.language, "/app/impostazioni/piano")}`;
+    const plan = appUrl(env, input.language, planPath);
     const session = await createManagedCheckout(stripe, {
       offer: input.offer,
       priceId,
@@ -399,7 +400,7 @@ async function startLifetimeCheckout(
           name: appCopy[input.language].settings.plan.lifetimeCreditName,
         })
       : null;
-    const plan = `${new URL(env.APP_ORIGIN).origin}${localizedPath(input.language, "/app/impostazioni/piano")}`;
+    const plan = appUrl(env, input.language, planPath);
     const session = await createManagedCheckout(stripe, {
       offer: "lifetime",
       priceId: input.priceId,
