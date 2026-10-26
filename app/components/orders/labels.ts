@@ -4,6 +4,7 @@ import type { Language } from "../../i18n";
 import { displayTaxValue } from "../../tax-quality";
 import { type AccountView, type OrderView, type TaxIdentifierView } from "../../view-models";
 import { addressRows } from "../../format";
+import type { OrdersPageData } from "./page";
 
 /**
  * Solo valori già autorizzati dal server; suggerimenti e identificativi bloccati esclusi.
@@ -69,20 +70,20 @@ export function remainingUnlocks(account: OrdersAccount) {
   return account.quota ? Math.max(account.quota.limit - account.quota.used, 0) : null;
 }
 
-/** Pagina dell'ordine nel Seller Hub di eBay. */
-export function ebayOrderHref(ebayOrderId: string) {
-  return `https://www.ebay.it/sh/ord/details?orderid=${encodeURIComponent(ebayOrderId)}`;
-}
-
-/** Pagina dell'inserzione su eBay. */
-export function ebayListingHref(listingId: string) {
-  return `https://www.ebay.it/itm/${encodeURIComponent(listingId)}`;
-}
-
 /** Stato della navigazione dall'elenco al dettaglio: chiudere il pannello torna indietro. */
 export const fromListState = { fromList: true } as const;
 
 /** Collegamento al dettaglio nella scheda, che riceve il focus quando il pannello si chiude. */
 export function orderLinkSelector(id: string) {
   return `[data-order-link="${CSS.escape(id)}"]`;
+}
+
+/** eBay non risponde: le azioni verso eBay restano sospese. */
+export function isEbayDown(data: Pick<OrdersPageData, "notices">) {
+  return data.notices.some((notice) => notice.kind === "ebay-down");
+}
+
+/** Importazione dello storico in corso, se c'è. */
+export function importingNotice(data: Pick<OrdersPageData, "notices">) {
+  return data.notices.find((notice) => notice.kind === "importing");
 }

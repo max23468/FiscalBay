@@ -32,6 +32,7 @@ import {
   pullRequestView,
   pullRequestAction,
   checksOutcome,
+  pullRequestFiles,
 } from "./release-cycle.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
@@ -295,6 +296,24 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+
+  it("legge soltanto i nomi dei file della PR, su tutte le pagine", () => {
+    const calls = [];
+    const files = pullRequestFiles("example/project", 462, (...args) => {
+      calls.push(args);
+      return "app/root.tsx\ndocs/README.md\n";
+    });
+    assert.deepEqual(files, ["app/root.tsx", "docs/README.md"]);
+    assert.deepEqual(calls, [
+      [
+        "api",
+        "--paginate",
+        "--jq",
+        ".[].filename",
+        "repos/example/project/pulls/462/files?per_page=100",
+      ],
+    ]);
   });
 
   it("ammette develop soltanto per la qualifica senza deploy", () => {

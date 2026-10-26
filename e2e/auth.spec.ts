@@ -86,6 +86,24 @@ test.describe("area reale", () => {
         await confirm.getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true }).click();
         await expect(confirm).toHaveCount(0);
         await expect(page).toHaveURL(new RegExp(`${prefix}/app/impostazioni/sicurezza$`));
+        // Con la password giusta la conferma apre una sessione nuova e la modifica riparte da sola.
+        await page
+          .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
+          .click();
+        await expect(confirm).toBeVisible();
+        await confirm.getByLabel("Password", { exact: true }).fill(localPassword);
+        await confirm
+          .getByRole("button", { name: it ? "Conferma" : "Confirm", exact: true })
+          .click();
+        // L'esito arriva con l'indirizzo, che la pagina ripulisce subito dopo averlo mostrato.
+        await expect(confirm).toHaveCount(0);
+        await expect(
+          page.getByText(
+            it
+              ? "Controlla la posta e apri il link per confermare il nuovo indirizzo."
+              : "Check your inbox and open the link to confirm the new address.",
+          ),
+        ).toBeVisible();
       });
     }
 

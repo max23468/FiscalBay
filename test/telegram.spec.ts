@@ -44,7 +44,7 @@ import {
 } from "../app/integrations/telegram.server";
 import { consumeWebhooks, receiveWebhook } from "../app/webhooks.server";
 import { configureBotCommands } from "../app/domain/telegram-bot.server";
-import { ebayOrderHref } from "../app/components/orders/labels";
+import { ebayOrderHref } from "../app/orders/ebay-links";
 import { formatAmount } from "../app/i18n";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { loader as storesLoader } from "../app/routes/stores";
@@ -2413,18 +2413,28 @@ describe("invii degli ordini", () => {
     const key = await stored();
     expect(key).toMatch(/^"[0-9a-f]{64}"$/u);
     expect(key).not.toContain("RSSMRA");
-    // Un'impronta registrata come testo dei valori torna fra i candidati con la migration e
-    // vale come la sua forma cifrata: nessuna variazione, e la riga passa alla forma nuova.
-    await env.DB.prepare(
-      "UPDATE telegram_order_notices SET fiscal_key = ?, evaluated_at = ? WHERE order_id = 'o-impronta'",
+    // Un'impronta registrata come testo dei valori prende la forma cifrata all'inizio del turno,
+    // anche con le notifiche spente, e vale come quella: nessuna variazione.
+    const legacy = () =>
+      env.DB.prepare(
+        "UPDATE telegram_order_notices SET fiscal_key = ? WHERE order_id = 'o-impronta'",
+      )
+        .bind(JSON.stringify([["CF", null, "RSSMRA80A01H501U"]]))
+        .run();
+    await legacy();
+    const off = await env.DB.prepare(
+      "UPDATE telegram_preferences SET enabled = 0 WHERE workspace_id = ?",
     )
-      .bind(JSON.stringify([["CF", null, "RSSMRA80A01H501U"]]), later(15).toISOString())
+      .bind(seller.workspace)
       .run();
-    const migration = env.TEST_MIGRATIONS.find(
-      ({ name }) => name === "0046_telegram_notice_digest.sql",
-    )!;
-    await env.DB.batch(migration.queries.map((query) => env.DB.prepare(query)));
+    expect(off.meta.changes).toBe(1);
     await run(api.fetcher, 20);
+    expect(await stored()).toBe(key);
+    await legacy();
+    await env.DB.prepare("UPDATE telegram_preferences SET enabled = 1 WHERE workspace_id = ?")
+      .bind(seller.workspace)
+      .run();
+    await run(api.fetcher, 30);
     expect(api.texts()).toHaveLength(1);
     expect(await stored()).toBe(key);
   });
