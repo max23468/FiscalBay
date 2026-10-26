@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { servedSql } from "../../domain/admission.server";
 import { unpausedStore } from "../../domain/store-state.server";
 import { logFailure } from "../../errors";
 import { seal, unseal } from "../../sealed.server";
@@ -191,7 +192,9 @@ type ExpiringRow = { store_id: string; access_expires_at: string };
 
 /**
  * Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. I negozi
- * in pausa non leggono eBay e restano esclusi; quelli scollegati non hanno più token.
+ * in pausa e quelli di uno spazio in lista d'attesa non leggono eBay e restano esclusi; quelli
+ * scollegati non hanno più token. Il rinnovo comprende i token già scaduti: alla ripresa o
+ * all'ammissione l'esecuzione seguente li rinnova prima della lettura.
  *
  * Scorre i negozi a blocchi con un cursore, così un errore non fa rileggere lo stesso negozio,
  * fino a `refreshLimit` rinnovi: con un'esecuzione ogni dieci minuti e token di due ore regge
@@ -209,12 +212,13 @@ export async function refreshExpiringTokens(
   for (let read = 0; read < refreshLimit; read += refreshBatch) {
     const { results }: D1Result<ExpiringRow> = await environment.DB.prepare(
       `SELECT c.store_id, c.access_expires_at FROM ebay_store_credentials c
+        JOIN ebay_stores s ON s.id = c.store_id
         WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?1
           AND (?2 IS NULL OR (c.access_expires_at, c.store_id) > (?2, ?3))
-          AND ${unpausedStore("c.store_id")}
+          AND ${unpausedStore("c.store_id")} AND ${servedSql("s.workspace_id", "?5")}
         ORDER BY c.access_expires_at, c.store_id LIMIT ?4`,
     )
-      .bind(threshold, ...cursor, refreshBatch)
+      .bind(threshold, ...cursor, refreshBatch, now.toISOString())
       .all<ExpiringRow>();
     // In sequenza: un errore di un negozio non ferma gli altri e non sovrappone retry.
     for (const { store_id: storeId } of results) {

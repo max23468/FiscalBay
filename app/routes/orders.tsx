@@ -300,7 +300,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
       lastAt: lastSync ?? null,
       storeId: latest?.id ?? null,
       storeName: latest?.name ?? null,
-      // Periodo letto dal primo avvio; prima vale quello che la lettura userà.
+      // Giorni consultabili del negozio letto per ultimo; prima vale la finestra del piano.
       historyDays: latest?.history?.days ?? historyWindowDays(premium, now),
     },
     onboarding: [

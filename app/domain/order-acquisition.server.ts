@@ -1,3 +1,4 @@
+import { servedSql } from "./admission.server";
 import { DuplicateLineIdentity } from "./order-import.server";
 import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
 import { activeStore, writableStore } from "./store-state.server";
@@ -453,8 +454,9 @@ export async function storeAccess(
 }
 
 /**
- * Rilegge consenso, pausa e token prima di eseguire un evento già accettato. L'evento non
- * dipende dal piano e non aspetta la cadenza della lettura periodica.
+ * Rilegge consenso, pausa, ammissione e token prima di eseguire un evento già accettato.
+ * L'evento non dipende dal piano e non aspetta la cadenza della lettura periodica, ma uno spazio
+ * in lista d'attesa non legge eBay dopo la prima lettura: l'evento si chiude senza chiamate.
  */
 export async function consumeOrderConfirmation(
   environment: Env,
@@ -471,14 +473,15 @@ export async function consumeOrderConfirmation(
   const store =
     await environment.DB.prepare(`SELECT c.store_id, c.access_token, c.granted_at, c.access_expires_at, s.ebay_environment
     FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id
-    WHERE s.id = ? AND c.granted_at = ? AND s.ebay_environment = ? AND ${activeStore("c", "s")}
-      AND (s.data_deleted_at IS NULL OR s.data_deleted_at < ?)
+    WHERE s.id = ?1 AND c.granted_at = ?2 AND s.ebay_environment = ?3 AND ${activeStore("c", "s")}
+      AND ${servedSql("s.workspace_id", "?6")}
+      AND (s.data_deleted_at IS NULL OR s.data_deleted_at < ?4)
       AND NOT EXISTS (SELECT 1 FROM deleted_order_keys d
-        WHERE d.store_id = s.id AND d.kind = 'order' AND d.external_key = ?)
+        WHERE d.store_id = s.id AND d.kind = 'order' AND d.external_key = ?5)
       AND NOT EXISTS (SELECT 1 FROM orders o JOIN orders current ON current.id = COALESCE(o.merged_into, o.id)
-        WHERE o.store_id = s.id AND current.retention_until <= ?
-        AND (o.ebay_order_id = ? OR o.id IN (SELECT order_id FROM order_source_refs
-          WHERE store_id = s.id AND external_order_id = ?)))`)
+        WHERE o.store_id = s.id AND current.retention_until <= ?6
+        AND (o.ebay_order_id = ?5 OR o.id IN (SELECT order_id FROM order_source_refs
+          WHERE store_id = s.id AND external_order_id = ?5)))`)
       .bind(
         event.storeId,
         event.grantedAt,
@@ -486,8 +489,6 @@ export async function consumeOrderConfirmation(
         event.eventAt,
         event.orderId,
         now.toISOString(),
-        event.orderId,
-        event.orderId,
       )
       .first<ActiveStore & { access_expires_at: string }>();
   if (!store) return;

@@ -5,6 +5,7 @@ import { admission, applyInactivity, recordActivity } from "../app/domain/admiss
 import { purchaseState } from "../app/domain/checkout.server";
 import { lifetimeContext } from "../app/domain/lifetime.server";
 import { dispatchStoreSyncs, requestStoreSync } from "../app/domain/order-sync.server";
+import { consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
 import { action as storeLinkAction } from "../app/routes/store-link";
 import { listVisibleOrders } from "../app/domain/orders.server";
 import { revokeSession } from "../app/domain/sessions.server";
@@ -43,7 +44,7 @@ import {
   refreshStoreToken,
 } from "../app/integrations/ebay/seller-credentials.server";
 import { insertStore, now, resetDatabase, resetOrderFixtures } from "./fixtures/database-fixtures";
-import { syntheticEbay } from "./fixtures/ebay-fixtures";
+import { syntheticEbay, syntheticOrderId } from "./fixtures/ebay-fixtures";
 import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";
 import { homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
@@ -1657,6 +1658,79 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       expect(await startTrial(env.DB, seller.userId)).toEqual(expect.any(String));
       expect(await dispatchStoreSyncs(cron, at(0.01))).toEqual([seller.storeId]);
       expect((await settingsPage(seller.cookie)).page.account.waitlisted).toBeUndefined();
+    });
+
+    it("in lista d'attesa la prima lettura non si ripete con eventi, rinnovi o ricollegamenti", async () => {
+      await admissionSettings(1, 1);
+      // Una prima lettura non riuscita non conta: il ricollegamento la ritenta.
+      const unavailable = syntheticEbay();
+      const failing = vi.fn<typeof fetch>((input, init) =>
+        String(input).includes("/sell/fulfillment/")
+          ? Promise.resolve(new Response(null, { status: 503 }))
+          : unavailable(input, init),
+      );
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const session = await verifiedSession("attesa-letture@example.invalid");
+      await linkThroughEbay(session.cookie, failing);
+      errors.mockRestore();
+      expect(await count("orders")).toBe(0);
+      await linkThroughEbay(session.cookie);
+      const { id: storeId } = (await env.DB.prepare("SELECT id FROM ebay_stores").first<{
+        id: string;
+      }>())!;
+      expect((await listStores(env.DB, session.userId))[0]).toMatchObject({ importedOrders: 1 });
+      const paths = (ebay: ReturnType<typeof syntheticEbay>) =>
+        ebay.mock.calls.map(([input]) => new URL(String(input)).pathname);
+
+      // Un evento di eBay si chiude senza chiamate.
+      const { granted_at: grantedAt } = (await env.DB.prepare(
+        "SELECT granted_at FROM ebay_store_credentials",
+      ).first<{ granted_at: string }>())!;
+      const event = syntheticEbay({ lastModifiedDate: new Date().toISOString() });
+      await consumeOrderConfirmation(
+        env,
+        {
+          storeId,
+          grantedAt,
+          environment: "production",
+          orderId: syntheticOrderId,
+          eventAt: new Date().toISOString(),
+        },
+        event,
+        new Date(),
+      );
+      expect(event).not.toHaveBeenCalled();
+
+      // Ricollegare dopo lo scollegamento, o dopo l'eliminazione dei dati, rinnova soltanto il
+      // consenso.
+      for (const remove of [
+        () => disconnectStore(env.DB, session.userId, storeId),
+        () => deleteStoreData(env.DB, session.userId, storeId, "venditore"),
+      ]) {
+        await remove();
+        const relinked = syntheticEbay();
+        await linkThroughEbay(session.cookie, relinked);
+        expect(paths(relinked)).toEqual([
+          "/identity/v1/oauth2/token",
+          "/commerce/identity/v1/user/",
+        ]);
+      }
+      expect(await count("orders")).toBe(0);
+
+      // Nessun rinnovo del token in attesa; con una copertura riprende anche se è scaduto.
+      await env.DB.prepare("UPDATE ebay_store_credentials SET access_expires_at = ?")
+        .bind(new Date(Date.now() - day).toISOString())
+        .run();
+      const refresh = syntheticEbay();
+      expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
+      expect(refresh).not.toHaveBeenCalled();
+      await env.DB.prepare(
+        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+         SELECT 'concessione', workspace_id, 'admin', ?1, ?2 FROM ebay_stores`,
+      )
+        .bind(new Date(Date.now() - 60_000).toISOString(), new Date(Date.now() + day).toISOString())
+        .run();
+      expect(await refreshExpiringTokens(env, refresh)).toEqual(["refreshed"]);
     });
 
     it("senza capacità per nuovi Premium ferma acquisti, prova e collegamenti in attesa", async () => {

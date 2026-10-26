@@ -186,11 +186,18 @@ const cycleLength = 7 * 24 * 60 * 60 * 1000;
 
 /**
  * Quota di un ciclo che inizia all'istante `at`, espressione SQL: la promozione in corso a
- * quell'istante, altrimenti la base. La fine della promozione non tocca i cicli già iniziati.
+ * quell'istante, altrimenti la base. Vale la promozione come era configurata a quell'istante,
+ * cioè la versione precedente alla prima modifica successiva: una fine anticipata non toglie la
+ * quota a un ciclo già iniziato, anche se la sua riga si crea dopo la modifica.
  */
 function cycleQuotaSql(at: string) {
-  return `COALESCE((SELECT p.quota FROM free_promotions p
-    WHERE julianday(p.starts_at) <= julianday(${at}) AND julianday(${at}) < julianday(p.ends_at)),
+  const previous = (column: string) => `(SELECT c.previous_${column} FROM free_promotion_changes c
+    WHERE c.promotion_id = p.id AND julianday(c.changed_at) > julianday(${at})
+    ORDER BY julianday(c.changed_at) LIMIT 1)`;
+  return `COALESCE((SELECT v.quota FROM (SELECT COALESCE(${previous("starts_at")}, p.starts_at)
+      AS starts_at, COALESCE(${previous("ends_at")}, p.ends_at) AS ends_at,
+      COALESCE(${previous("quota")}, p.quota) AS quota FROM free_promotions p) v
+    WHERE julianday(v.starts_at) <= julianday(${at}) AND julianday(${at}) < julianday(v.ends_at)),
     ${baseFreeQuota})`;
 }
 

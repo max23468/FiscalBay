@@ -317,15 +317,17 @@ export async function answerCallback(
 
 /**
  * Menu dei comandi nelle sole chat private: in italiano per chi usa Telegram in italiano, in
- * inglese per gli altri. Ripeterlo con le stesse voci non cambia nulla.
+ * inglese per gli altri. I comandi dell'ambito predefinito, come quelli impostati da BotFather,
+ * si eliminano: da BotFather resta soltanto la descrizione. Ripeterlo non cambia nulla.
  */
 export async function setBotCommands(
   env: Env,
   descriptions: Record<"it" | "en", Record<BotCommand, string>>,
   fetcher: typeof fetch = fetch,
 ): Promise<void> {
-  await Promise.all(
-    (["it", "en"] as const).map((language) =>
+  await Promise.all([
+    botApi(env, "deleteMyCommands", { scope: { type: "default" } }, z.literal(true), fetcher),
+    ...(["it", "en"] as const).map((language) =>
       botApi(
         env,
         "setMyCommands",
@@ -341,7 +343,7 @@ export async function setBotCommands(
         fetcher,
       ),
     ),
-  );
+  ]);
 }
 
 /** Messaggio di testo semplice, senza formattazione da sottoporre a escape. */

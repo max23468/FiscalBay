@@ -2,6 +2,7 @@ import { z } from "zod";
 import { logFailure } from "../../errors";
 import type { Language } from "../../i18n";
 import { upstreamJson } from "../http.server";
+import { linkReadAdmitted } from "../../domain/admission.server";
 import { applyFreePlan } from "../../domain/free-store.server";
 import { acquireOrders } from "../../domain/order-acquisition.server";
 import { base64Url } from "../../sealed.server";
@@ -265,7 +266,9 @@ export async function completeStoreLink(input: {
 
   // Il collegamento è già riuscito: un errore nella prima acquisizione non lo annulla. Qui si
   // leggono soltanto i recenti e la prima pagina dello storico; il resto prosegue in background.
-  // Un negozio in pausa non legge eBay neppure al ricollegamento: riprende alla ripresa.
+  // Un negozio in pausa non legge eBay neppure al ricollegamento: riprende alla ripresa. In
+  // lista d'attesa ricollegare un negozio già letto non ripete la prima lettura.
+  if (!(await linkReadAdmitted(environment.DB, storeId, issued))) return "collegato";
   await acquireOrders({
     db: environment.DB,
     storeId,

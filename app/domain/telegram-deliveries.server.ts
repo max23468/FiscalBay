@@ -6,6 +6,7 @@ import { telegramRecipient, telegramRecipientSql } from "./telegram.server";
 import {
   digestMessage,
   emptyFiscalKey,
+  fiscalDigest,
   fiscalKey,
   importMessage,
   localClock,
@@ -127,7 +128,7 @@ type Candidate = {
   noticeLink: string | null;
   fiscalKey: string | null;
   notified: number | null;
-  /** Il destinatario riceve ora un evento di questo negozio. */
+  /** Il destinatario riceve ora un evento di questo negozio e l'avrebbe ricevuto quando è avvenuto. */
   live: number;
 };
 
@@ -144,6 +145,15 @@ const changedSinceSql = `(EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders or
         AND (${writtenSince("t.observed_at")} OR ${writtenSince("t.removed_at")}))
     OR EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
       WHERE (original.id = o.id OR original.merged_into = o.id) AND ${writtenSince("tc.observed_at")}))`;
+
+/**
+ * Istante dell'ultima variazione dei valori fiscali dell'ordine, anche dei suoi acquisti
+ * confluiti: l'arrivo o la rimozione di un identificativo. Le verifiche ripetute senza
+ * variazioni non lo spostano.
+ */
+const changedAtSql = `(SELECT MAX(max(t.observed_at, COALESCE(t.removed_at, t.observed_at)))
+      FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
+      WHERE original.id = o.id OR original.merged_into = o.id)`;
 
 /** Ordini consultabili dello spazio con le loro viste, letti come nel sito dall'utente dello spazio. */
 async function noticesOf(
@@ -165,16 +175,25 @@ async function noticesOf(
  * Primo passo: per ogni ordine nuovo o con una variazione fiscale dopo l'ultima valutazione,
  * l'evento da notificare. Nuovo ordine soltanto se definitivo, entrato negli elenchi dopo il
  * collegamento e le riattivazioni, creato dopo l'inizio dell'importazione del negozio: lo
- * storico ha un solo riepilogo. Con «solo fiscali» un ordine senza dato non si notifica, ma
- * resta valutato e si notifica quando il dato arriva; le correzioni e le rimozioni di un ordine
- * già notificato arrivano con qualunque filtro.
+ * storico ha un solo riepilogo. Con «solo fiscali» un ordine senza dato, anche in verifica,
+ * non si notifica, ma resta valutato e si notifica quando il dato arriva; le correzioni e le
+ * rimozioni di un ordine già notificato arrivano con qualunque filtro.
+ *
+ * Una variazione si notifica se il destinatario l'avrebbe ricevuta all'istante in cui è
+ * avvenuta: quelle del periodo con le notifiche spente, il negozio escluso, la chat bloccata o
+ * senza Premium aggiornano soltanto lo stato, così la ripresa non porta l'arretrato. Quelle
+ * rimaste indietro per un'interruzione del compito arrivano.
+ *
+ * Prima gli ordini mai valutati per il collegamento, poi quelli valutati da più tempo: gli
+ * ordini rivalutati in un'esecuzione passano in fondo e non tolgono il turno agli altri.
  */
 async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Date) {
   const at = now.toISOString();
+  const eventAt = `CASE WHEN n.link_id IS l.id THEN COALESCE(${changedAtSql}, ?2) ELSE ?2 END`;
   const { results: candidates } = await db
     .prepare(`SELECT o.id, s.ebay_environment AS environment, o.listed_at AS listedAt,
         n.link_id AS noticeLink, n.fiscal_key AS fiscalKey, n.notified,
-        (${telegramRecipientSql("?2", "?2")}) AS live
+        (${telegramRecipientSql(eventAt, "?2")}) AS live
       FROM ebay_stores s
       JOIN telegram_links l ON l.workspace_id = s.workspace_id
       LEFT JOIN telegram_preferences p ON p.workspace_id = s.workspace_id
@@ -187,7 +206,7 @@ async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Dat
         AND CASE WHEN n.link_id IS l.id THEN ${changedSinceSql}
           ELSE o.listed_at IS NOT NULL AND o.creation_time >= ss.history_until
             AND ${telegramRecipientSql("o.listed_at", "?2")} END
-      ORDER BY o.listed_at, o.id LIMIT ?4`)
+      ORDER BY n.link_id IS l.id, n.evaluated_at, o.listed_at, o.id LIMIT ?4`)
     .bind(workspace.workspaceId, at, workspace.linkId, ordersPerRun)
     .all<Candidate>();
   if (candidates.length === 0) return;
@@ -196,7 +215,10 @@ async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Dat
   for (const candidate of candidates) {
     const notice = notices.get(candidate.id);
     if (!notice) continue;
-    const key = fiscalKey(notice);
+    const key = await fiscalKey(notice);
+    const stored = candidate.fiscalKey?.startsWith("[")
+      ? await fiscalDigest(candidate.fiscalKey)
+      : candidate.fiscalKey;
     const withValues = notice.values.length > 0;
     const first = candidate.noticeLink !== workspace.linkId;
     let change: OrderChange | null = null;
@@ -204,12 +226,10 @@ async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Dat
     if (first || candidate.notified === 0) {
       if (candidate.live === 1 && (withValues || (first && workspace.filter === "all")))
         change = "new";
-      // Una verifica in corso con «solo fiscali» si rivaluta alla prossima esecuzione.
-      else if (first && notice.fiscal === "checking") continue;
+      // Anche una verifica in corso resta valutata: il dato in arrivo è una variazione.
       else notified = 0;
-    } else if (key !== candidate.fiscalKey && candidate.live === 1) {
-      change =
-        candidate.fiscalKey === emptyFiscalKey ? "available" : withValues ? "changed" : "removed";
+    } else if (key !== stored && candidate.live === 1) {
+      change = stored === emptyFiscalKey ? "available" : withValues ? "changed" : "removed";
     }
     // Lo stato registrato è ancora quello letto: altrimenti un'altra valutazione l'ha già fatta.
     const unchanged =

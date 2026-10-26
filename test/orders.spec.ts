@@ -828,7 +828,8 @@ describe("percorso ordini", () => {
       });
       // Una promozione accorciata non cambia la quota dei cicli già iniziati.
       await env.DB.prepare(
-        "UPDATE free_promotions SET ends_at = '2026-09-27T00:00:00.000Z' WHERE id = 'lancio'",
+        `UPDATE free_promotions SET ends_at = '2026-09-27T00:00:00.000Z',
+          updated_at = '2026-09-28T00:00:00.000Z' WHERE id = 'lancio'`,
       ).run();
       expect(await allowance("2026-09-29T12:00:00.000Z")).toMatchObject({
         cycle: { quota: 10, next_quota: 5 },
@@ -839,6 +840,32 @@ describe("percorso ordini", () => {
         endsAt: "2026-09-27T00:00:00.000Z",
       });
       expect(await currentFreePromotion(env.DB, new Date("2026-09-27T00:00:00.000Z"))).toBeNull();
+    });
+
+    it("dà la quota della promozione come era al suo inizio a un ciclo creato dopo la modifica", async () => {
+      await seed();
+      await env.DB.prepare("DELETE FROM free_cycles").run();
+      await promotion("lancio", "2026-09-15T00:00:00.000Z", "2026-09-29T00:00:00.000Z").run();
+      // Accorciata il 28, dopo l'inizio del ciclo del 27, prima che la sua riga esista.
+      await env.DB.prepare(
+        `UPDATE free_promotions SET ends_at = '2026-09-27T00:00:00.000Z',
+          updated_at = '2026-09-28T00:00:00.000Z' WHERE id = 'lancio'`,
+      ).run();
+      const allowance = (at: string) => orderAllowance(env.DB, "u-a", new Date(at));
+      expect(await allowance("2026-09-28T12:00:00.000Z")).toMatchObject({
+        remaining: 10,
+        cycle: { quota: 10, next_quota: 5 },
+      });
+      expect(await allowance("2026-10-05T00:00:00.000Z")).toMatchObject({ cycle: { quota: 5 } });
+      // Una modifica senza istante successivo all'ultima non si registra.
+      await expect(
+        env.DB.prepare(
+          "UPDATE free_promotions SET quota = 20, updated_at = '2026-09-27T00:00:00.000Z' WHERE id = 'lancio'",
+        ).run(),
+      ).rejects.toThrow("undated_promotion_change");
+      await expect(
+        env.DB.prepare("UPDATE free_promotions SET quota = 20 WHERE id = 'lancio'").run(),
+      ).rejects.toThrow("undated_promotion_change");
     });
 
     it("crea un solo ciclo con richieste concorrenti e non lo azzera né lo sposta", async () => {
@@ -889,7 +916,8 @@ describe("percorso ordini", () => {
       ).rejects.toThrow("overlapping_promotion");
       await expect(
         env.DB.prepare(
-          "UPDATE free_promotions SET ends_at = '2026-09-30T00:00:00.000Z' WHERE id = 'prima'",
+          `UPDATE free_promotions SET ends_at = '2026-09-30T00:00:00.000Z',
+            updated_at = '2026-09-20T00:00:00.000Z' WHERE id = 'prima'`,
         ).run(),
       ).rejects.toThrow("overlapping_promotion");
       for (const [startsAt, endsAt, quota] of [
@@ -1086,8 +1114,10 @@ describe("percorso ordini", () => {
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, activated_at, created_at)
         VALUES (1, 'w-a', 'active', ?1, ?1)`).bind(now),
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-        VALUES ('live', 'w-a', 'lifetime', ?, NULL)`).bind(now),
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
+          stripe_checkout_session_id) VALUES ('live', 'w-a', 'lifetime', ?, NULL, 'cs_live')`).bind(
+        now,
+      ),
     ]);
     await insertTaxIdentifiers({
       id: "during",
@@ -1354,9 +1384,16 @@ describe("percorso ordini", () => {
       env.DB.prepare(`INSERT INTO lifetime_allocations
         (slot, workspace_id, status, expires_at, activated_at, created_at)
         VALUES (1, 'w-a', ?, ?, ?, ?)`).bind(status, expires, activated, now);
-    const lifetime = (id: string) =>
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at)
-        VALUES (?, 'w-a', 'lifetime', ?)`).bind(id, now);
+    const lifetime = (
+      id: string,
+      proof: [string | null, string | null, string | null] = [`cs_${id}`, null, null],
+    ) =>
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+          stripe_checkout_session_id, granted_by, grant_reason) VALUES (?, 'w-a', 'lifetime', ?, ?, ?, ?)`).bind(
+        id,
+        now,
+        ...proof,
+      );
     // Una prenotazione scade con la sua sessione; un posto attivo ha l'istante di attivazione.
     await expect(allocation("reserved", null, null).run()).rejects.toThrow(
       "invalid_lifetime_allocation",
@@ -1372,6 +1409,15 @@ describe("percorso ordini", () => {
     )
       .bind(now)
       .run();
+    // Senza sessione pagata, oppure autore e motivo dell'omaggio, il diritto non nasce.
+    for (const proof of [
+      [null, null, null],
+      [null, "owner", null],
+      [null, " ", "Omaggio"],
+    ] as const)
+      await expect(lifetime("senza-prova", [...proof]).run()).rejects.toThrow(
+        "lifetime_without_proof",
+      );
     await lifetime("attivo").run();
     await expect(lifetime("secondo").run()).rejects.toThrow();
     // Un posto attivo non si libera né cambia, anche dopo un rimborso.

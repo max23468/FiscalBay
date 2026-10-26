@@ -133,8 +133,14 @@ export function buildManagedCheckoutParams(input: {
    * coupon del periodo pagato non usato e cliente Stripe di un abbonamento da sostituire.
    */
   lifetime?: { expiresAt: string; coupon?: string; customerId?: string };
+  /**
+   * Mensile e annuale: scadenza della sessione, una sola aperta per spazio, e cliente Stripe
+   * già usato dallo spazio, così il portale mostra abbonamenti e documenti di un solo cliente.
+   */
+  subscription?: { expiresAt: string; customerId?: string };
 }): Stripe.Checkout.SessionCreateParams {
-  const { trial, lifetime } = input;
+  const { trial, lifetime, subscription } = input;
+  const customerId = lifetime?.customerId ?? subscription?.customerId;
   const metadata = {
     workspace_id: input.workspaceId,
     offer: input.offer,
@@ -147,10 +153,10 @@ export function buildManagedCheckoutParams(input: {
     managed_payments: { enabled: true },
     integration_identifier: integrationIdentifier,
     client_reference_id: input.workspaceId,
-    // Chi passa dall'abbonamento resta lo stesso cliente; un acquisto una tantum ne crea uno,
-    // così ricevute e fatture restano consultabili dal portale.
-    ...(lifetime?.customerId
-      ? { customer: lifetime.customerId }
+    // Lo spazio resta lo stesso cliente; un primo acquisto una tantum ne crea uno, così
+    // ricevute e fatture restano consultabili dal portale.
+    ...(customerId
+      ? { customer: customerId }
       : { customer_email: input.email, ...(lifetime ? { customer_creation: "always" } : {}) }),
     locale: input.language,
     metadata,
@@ -166,6 +172,9 @@ export function buildManagedCheckoutParams(input: {
             metadata,
             ...(trial ? { trial_end: Date.parse(trial.chargeAt) / 1000 } : {}),
           },
+          ...(subscription
+            ? { expires_at: Math.floor(Date.parse(subscription.expiresAt) / 1000) }
+            : {}),
         }),
     success_url: `${input.successUrl}?checkout=${input.offer === "lifetime" ? "lifetime" : "processing"}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${input.cancelUrl}?checkout=cancelled`,

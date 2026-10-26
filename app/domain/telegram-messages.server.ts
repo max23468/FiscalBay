@@ -107,22 +107,39 @@ export function orderNotice(order: VisibleOrder, environment: EbayEnvironment): 
 }
 
 /**
- * Impronta del dato fiscale notificato: i valori correnti in un ordine fisso. Cambia con un
- * nuovo valore, una correzione o una rimozione, non con la forma in cui eBay li riporta.
+ * Impronta del dato fiscale notificato: SHA-256 dei valori correnti in un ordine fisso, così lo
+ * stato delle notifiche non conserva una seconda copia dei Codici Fiscali. Cambia con un nuovo
+ * valore, una correzione o una rimozione, non con la forma in cui eBay li riporta.
  */
-export function fiscalKey(notice: Pick<OrderNotice, "values">): string {
+export async function fiscalKey(notice: Pick<OrderNotice, "values">): Promise<string> {
+  return fiscalDigest(
+    JSON.stringify(
+      notice.values
+        .map((value) => [value.kind, value.label, value.value])
+        .sort((a, b) =>
+          // Le chiavi sono testi: l'ordine non dipende dalla lingua.
+          JSON.stringify(a) < JSON.stringify(b) ? -1 : 1,
+        ),
+    ),
+  );
+}
+
+/**
+ * Impronta di un testo dei valori. Le impronte registrate prima come testo, che iniziano con
+ * `[`, passano di qui al confronto, così il cambio di forma non produce variazioni.
+ */
+export async function fiscalDigest(values: string) {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(values));
+  // Una stringa JSON, come richiede la colonna.
   return JSON.stringify(
-    notice.values
-      .map((value) => [value.kind, value.label, value.value])
-      .sort((a, b) =>
-        // Le chiavi sono testi: l'ordine non dipende dalla lingua.
-        JSON.stringify(a) < JSON.stringify(b) ? -1 : 1,
-      ),
+    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
   );
 }
 
 /** Impronta di un ordine senza dato fiscale. */
-export const emptyFiscalKey = fiscalKey({ values: [] });
+export const emptyFiscalKey = JSON.stringify(
+  "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+);
 
 /** Icone a inizio riga: sostituiscono le etichette e danno a ogni dato un posto fisso. */
 export const icons = {

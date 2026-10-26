@@ -60,7 +60,7 @@ function bot(reply?: (call: BotCall) => Response | undefined) {
     if (custom) return custom;
     if (call.method === "getChat")
       return Response.json({ ok: true, result: { id: 1, type: "private", username: "venditore" } });
-    if (call.method === "answerCallbackQuery" || call.method === "setMyCommands")
+    if (["answerCallbackQuery", "setMyCommands", "deleteMyCommands"].includes(call.method))
       return Response.json({ ok: true, result: true });
     return Response.json({ ok: true, result: { message_id: calls.length } });
   });
@@ -348,6 +348,74 @@ describe("collegamento della chat", () => {
     expect(second.ack).toHaveBeenCalledOnce();
     expect(await link(seller.workspace)).toEqual(linked);
     expect(api.texts()[0]?.params.text).toContain("Chat collegata");
+  });
+
+  it("un vecchio /start riprovato dopo un cambio di chat non ripristina la chat precedente", async () => {
+    const seller = await account("riprova-vecchia");
+    const token = await linkToken(seller.cookie);
+    send.mockClear();
+    const limited = bot((call) =>
+      call.method === "sendMessage"
+        ? Response.json(
+            { ok: false, error_code: 429, parameters: { retry_after: 7 } },
+            { status: 429 },
+          )
+        : undefined,
+    );
+    await receiveWebhook(
+      webhook(update(`/start ${token}`, 611)),
+      environment,
+      limited.fetcher,
+      new Date(now),
+    );
+    const body = send.mock.calls[0]![0];
+    expect((await link(seller.workspace))?.chat_id).toBe("611");
+    // Un'altra chat si collega prima che la conferma della prima venga riprovata.
+    await deliver(`/start ${await linkToken(seller.cookie)}`, 612, bot().fetcher, later(5));
+    const current = await link(seller.workspace);
+    expect(current?.chat_id).toBe("612");
+    const api = bot();
+    const retried = queueMessage(body, 2);
+    await consumeWebhooks({ messages: [retried] }, environment, api.fetcher, later(10));
+    expect(retried.ack).toHaveBeenCalledOnce();
+    expect(await link(seller.workspace)).toEqual(current);
+    expect(api.calls.some((call) => call.method === "getChat")).toBe(false);
+    expect(api.texts()).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({
+          chat_id: "611",
+          text: expect.stringContaining("Questo link non è più valido"),
+        }),
+      }),
+    ]);
+  });
+
+  it("il collegamento e il cambio di chat fissano il fuso dell'account anche con preferenze salvate", async () => {
+    const seller = await account("fuso-collegamento");
+    await saveTelegramChange(env.DB, seller.userId, { name: "mode", value: "digest" }, "UTC");
+    const token = async (zone: string) => {
+      const response = (await settingsAction({
+        request: new Request(`${origin}/app/impostazioni/notifiche`, {
+          method: "POST",
+          headers: {
+            cookie: `${seller.cookie}; fiscalbay_fuso=${encodeURIComponent(zone)}`,
+            origin,
+          },
+          body: new URLSearchParams({ intent: "telegram-link" }),
+        }),
+      } as Parameters<typeof settingsAction>[0])) as Response;
+      return new URL(response.headers.get("location")!).searchParams.get("start")!;
+    };
+    await deliver(`/start ${await token("America/New_York")}`, 2001);
+    expect(await telegramSettings(env.DB, seller.userId, "Europe/Berlin")).toMatchObject({
+      mode: "digest",
+      timeZone: "America/New_York",
+    });
+    await deliver(`/start ${await token("Asia/Tokyo")}`, 2002, bot().fetcher, later(5));
+    expect((await link(seller.workspace))?.chat_id).toBe("2002");
+    expect((await telegramSettings(env.DB, seller.userId, "Europe/Berlin")).timeZone).toBe(
+      "Asia/Tokyo",
+    );
   });
 
   it("rifiuta il link scaduto, sostituito, di una sessione chiusa o di chi ha lasciato lo spazio", async () => {
@@ -1421,6 +1489,279 @@ describe("invii degli ordini", () => {
     expect(api.calls).toHaveLength(0);
   });
 
+  type Seller = Awaited<ReturnType<typeof linked>>;
+
+  /**
+   * Ordine notificato e dato fiscale rimosso durante una pausa: alla ripresa la rimozione non
+   * arriva, il dato arrivato dopo la ripresa sì.
+   */
+  async function withoutBacklog(
+    name: string,
+    pause: (seller: Seller) => Promise<unknown>,
+    resume: (seller: Seller) => Promise<unknown>,
+  ) {
+    const seller = await linked(name);
+    await order(seller.store, `o-${name}`, { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    await run(api.fetcher, 10);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("Nuovo ordine")]);
+    await pause(seller);
+    await env.DB.prepare("UPDATE tax_identifiers SET removed_at = ? WHERE id = ?")
+      .bind(later(15).toISOString(), `t-o-${name}`)
+      .run();
+    await run(api.fetcher, 20);
+    await resume(seller);
+    await run(api.fetcher, 30);
+    await run(api.fetcher, 40);
+    expect(api.texts()).toHaveLength(1);
+    await insertTaxIdentifiers({
+      id: `t-${name}-dopo`,
+      orderId: `o-${name}`,
+      type: "CODICE_FISCALE",
+      value: "BNCLGU80A01H501Z",
+      source: "ebay_trading_get_orders",
+      observedAt: later(45).toISOString(),
+    }).run();
+    await run(api.fetcher, 50);
+    expect(sentTexts(api).slice(1)).toEqual([
+      expect.stringContaining("<code>BNCLGU80A01H501Z</code>"),
+    ]);
+    expect(sentTexts(api)[1]).toContain("Dato fiscale disponibile");
+  }
+
+  it("alla riattivazione delle notifiche non arriva la variazione del periodo spento", () =>
+    withoutBacklog(
+      "pausa-spente",
+      (seller) =>
+        saveTelegramChange(
+          env.DB,
+          seller.userId,
+          { name: "enabled", value: false },
+          "UTC",
+          later(12),
+        ),
+      (seller) =>
+        saveTelegramChange(
+          env.DB,
+          seller.userId,
+          { name: "enabled", value: true },
+          "UTC",
+          later(25),
+        ),
+    ));
+
+  it("dopo il blocco del bot non arriva la variazione del periodo bloccato", () =>
+    withoutBacklog(
+      "pausa-blocco",
+      async (seller) => {
+        await order(seller.store, "o-pausa-blocco-403", {
+          cf: "VRDGPP80A01H501X",
+          created: 11,
+          listed: 11,
+        });
+        const blocked = bot((call) =>
+          call.method === "sendMessage" ? failure(403, { ok: false, error_code: 403 }) : undefined,
+        );
+        await run(blocked.fetcher, 12);
+        expect((await telegramSettings(env.DB, seller.userId, "UTC")).chat?.failure).toBe(
+          "blocked",
+        );
+      },
+      (seller) => deliver("/stato", seller.chat, bot().fetcher, later(25)),
+    ));
+
+  it("al rinnovo di Premium non arriva la variazione del periodo senza Premium", () =>
+    withoutBacklog(
+      "pausa-premium",
+      (seller) =>
+        env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
+          .bind(later(12).toISOString(), seller.workspace)
+          .run(),
+      (seller) =>
+        env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+          VALUES (?, ?, 'admin', ?, ?)`)
+          .bind(
+            `e-${seller.workspace}-rinnovo`,
+            seller.workspace,
+            later(25).toISOString(),
+            later(30 * 24 * 60).toISOString(),
+          )
+          .run(),
+    ));
+
+  it("gli ordini in verifica oltre il limite di un'esecuzione non fermano quelli successivi", async () => {
+    const seller = await linked("coda");
+    for (let index = 0; index < 101; index++)
+      await order(seller.store, `o-coda-${String(index).padStart(3, "0")}`, { checking: true });
+    await order(seller.store, "o-coda-fiscale", { cf: "RSSMRA80A01H501U", created: 2, listed: 3 });
+    const api = bot();
+    await run(api.fetcher, 10);
+    expect(api.texts()).toHaveLength(0);
+    await run(api.fetcher, 20);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-coda-fiscale")]);
+  });
+
+  it("CF, P.IVA e identificativi esteri nella forma derivata, anche nei riepiloghi suddivisi", async () => {
+    const others = (orderId: string) =>
+      insertTaxIdentifiers(
+        {
+          id: `piva-${orderId}`,
+          orderId,
+          type: "PartitaIVA",
+          value: "0074 3110 157",
+          observedAt: later(2).toISOString(),
+        },
+        {
+          id: `estero-${orderId}`,
+          orderId,
+          type: "VAT_ID",
+          country: "DE",
+          value: "de 123 456 789",
+          observedAt: later(2).toISOString(),
+        },
+      ).run();
+    const derived = [
+      "🧾 <code>RSSMRA80A01H501U</code>",
+      "🧾 P.IVA <code>00743110157</code>",
+      "🧾 VAT_ID · DE <code>de 123 456 789</code>",
+    ];
+    const single = await linked("forma");
+    await order(single.store, "o-forma", { cf: "rss mra80a01h501u" });
+    await others("o-forma");
+    const api = bot();
+    await run(api.fetcher, 10);
+    for (const value of derived) expect(sentTexts(api)[0]).toContain(value);
+    expect(keyboard(api.texts()[0]!).flat()).toContainEqual({
+      text: "📋 Copia Codice Fiscale",
+      copy_text: { text: "RSSMRA80A01H501U" },
+    });
+
+    const digest = await linked("forma-riepilogo", 602);
+    await saveTelegramChange(env.DB, digest.userId, { name: "mode", value: "digest" }, "UTC");
+    await saveTelegramChange(env.DB, digest.userId, { name: "digestTime", value: "21:00" }, "UTC");
+    for (let index = 0; index < 25; index++) {
+      const id = `o-forma-${String(index).padStart(2, "0")}`;
+      await order(digest.store, id, {
+        cf: "rss mra80a01h501u",
+        created: 30 + index / 10,
+        listed: 31 + index / 10,
+      });
+      await others(id);
+    }
+    const summary = bot();
+    await run(summary.fetcher, 70);
+    const parts = sentTexts(summary);
+    expect(parts.length).toBeGreaterThan(1);
+    for (const part of parts) {
+      for (const value of derived) expect(part).toContain(value);
+      for (const original of ["rss mra80a01h501u", "0074 3110 157"])
+        expect(part).not.toContain(original);
+    }
+    for (const call of summary.texts())
+      expect(keyboard(call)[0]).toEqual([
+        { text: "📋 RSSMRA80A01H501U", copy_text: { text: "RSSMRA80A01H501U" } },
+      ]);
+  });
+
+  it("una correzione del dato notifica «Dato fiscale aggiornato» con il solo valore nuovo", async () => {
+    const seller = await linked("corretto");
+    await order(seller.store, "o-corretto", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    await run(api.fetcher, 10);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE tax_identifiers SET removed_at = ? WHERE id = 't-o-corretto'").bind(
+        later(15).toISOString(),
+      ),
+      insertTaxIdentifiers({
+        id: "t-corretto-nuovo",
+        orderId: "o-corretto",
+        type: "CODICE_FISCALE",
+        value: "bnc lgu80a01h501z",
+        source: "ebay_trading_get_orders",
+        observedAt: later(15).toISOString(),
+      }),
+    ]);
+    await run(api.fetcher, 20);
+    await run(api.fetcher, 30);
+    expect(api.texts()).toHaveLength(2);
+    const changed = sentTexts(api)[1]!;
+    expect(changed).toMatch(/^✏️ <b>Dato fiscale aggiornato<\/b>/u);
+    expect(changed).toContain("<code>BNCLGU80A01H501Z</code>");
+    expect(changed).not.toContain("RSSMRA80A01H501U");
+  });
+
+  it("lo stato delle notifiche conserva l'impronta del dato, mai il Codice Fiscale", async () => {
+    const seller = await linked("impronta");
+    await order(seller.store, "o-impronta", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    await run(api.fetcher, 10);
+    const stored = async () =>
+      (await env.DB.prepare(
+        "SELECT fiscal_key FROM telegram_order_notices WHERE order_id = 'o-impronta'",
+      ).first<{ fiscal_key: string }>())!.fiscal_key;
+    const key = await stored();
+    expect(key).toMatch(/^"[0-9a-f]{64}"$/u);
+    expect(key).not.toContain("RSSMRA");
+    // Un'impronta registrata come testo dei valori vale come la sua forma cifrata: nessuna
+    // variazione, e la riga passa alla forma nuova.
+    await env.DB.prepare(
+      "UPDATE telegram_order_notices SET fiscal_key = ?, evaluated_at = ? WHERE order_id = 'o-impronta'",
+    )
+      .bind(JSON.stringify([["CF", null, "RSSMRA80A01H501U"]]), later(5).toISOString())
+      .run();
+    await env.DB.prepare("UPDATE tax_identifiers SET observed_at = ? WHERE order_id = 'o-impronta'")
+      .bind(later(15).toISOString())
+      .run();
+    await run(api.fetcher, 20);
+    expect(api.texts()).toHaveLength(1);
+    expect(await stored()).toBe(key);
+  });
+
+  it("due valutazioni contemporanee preparano un solo evento", async () => {
+    const seller = await linked("contemporanee");
+    await order(seller.store, "o-contemporanee", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    await Promise.all([run(api.fetcher, 10), run(api.fetcher, 10.5)]);
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS n FROM telegram_deliveries WHERE order_id = 'o-contemporanee'",
+      ).first(),
+    ).toEqual({ n: 1 });
+    expect(api.texts()).toHaveLength(1);
+  });
+
+  it("senza autorizzazione il Codice Fiscale non compare: conservazione scaduta, copertura revocata, piano Free", async () => {
+    const seller = await linked("autorizzato");
+    await order(seller.store, "o-scaduto", { cf: "RSSMRA80A01H501U" });
+    const limited = bot((call) =>
+      call.method === "sendMessage"
+        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
+        : undefined,
+    );
+    await run(limited.fetcher, 10);
+    await env.DB.prepare("UPDATE orders SET retention_until = ? WHERE id = 'o-scaduto'")
+      .bind(later(12).toISOString())
+      .run();
+    const api = bot();
+    await run(api.fetcher, 25);
+    expect(api.texts()).toHaveLength(0);
+    await order(seller.store, "o-revocato", { cf: "BNCLGU80A01H501Z", created: 30, listed: 31 });
+    await run(limited.fetcher, 35);
+    await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
+      .bind(later(37).toISOString(), seller.workspace)
+      .run();
+    await run(api.fetcher, 50);
+    expect(api.texts()).toHaveLength(0);
+    // Senza Premium i comandi non mostrano ordini né dati fiscali.
+    await deliver("/ultimi", seller.chat, api.fetcher, later(51));
+    await deliver("/stato", seller.chat, api.fetcher, later(52));
+    expect(sentTexts(api)).toEqual([
+      expect.stringContaining("compresi in Premium"),
+      expect.stringContaining("<b>Free</b>"),
+    ]);
+    for (const text of sentTexts(api)) expect(text).not.toMatch(/RSSMRA|BNCLGU/u);
+  });
+
   it("suddivide i testi lunghi senza spezzare un blocco e fa l'escape dell'HTML", () => {
     expect(escape("<a & b>")).toBe("&lt;a &amp; b&gt;");
     expect(splitBlocks(["uno", "due"], 20)).toEqual(["uno\n\ndue"]);
@@ -1659,6 +2000,59 @@ describe("comandi e pulsanti del bot", () => {
     ]);
   });
 
+  it("lo stato avvisa della chat irraggiungibile, che un comando non chiude", async () => {
+    const seller = await linked("stato-irraggiungibile");
+    await env.DB.prepare(`UPDATE telegram_links SET delivery_failure = 'unreachable',
+        delivery_failed_at = ? WHERE workspace_id = ?`)
+      .bind(now, seller.workspace)
+      .run();
+    const api = bot();
+    await deliver("/stato", seller.chat, api.fetcher, later(1));
+    expect(sentTexts(api)[0]).toContain(
+      "⚠️ Alcuni messaggi non sono arrivati dopo diversi tentativi.",
+    );
+    expect((await telegramSettings(env.DB, seller.userId, "UTC")).chat?.failure).toBe(
+      "unreachable",
+    );
+  });
+
+  it("un pulsante con il negozio di un altro spazio non ha effetto", async () => {
+    const seller = await linked("pulsante-negozio");
+    const other = await account("pulsante-altro");
+    const api = bot();
+    await tap(
+      `${await generation(seller.workspace)}:sx:0:0:${other.store}`,
+      seller.chat,
+      api.fetcher,
+    );
+    expect(
+      await env.DB.prepare("SELECT count(*) AS n FROM telegram_store_preferences").first(),
+    ).toEqual({ n: 0 });
+    expect((await telegramSettings(env.DB, other.userId, "UTC")).stores).toEqual([
+      expect.objectContaining({ id: other.store, enabled: true }),
+    ]);
+    const edited = api.calls.find((call) => call.method === "editMessageText")!;
+    expect(JSON.stringify(edited.params)).not.toContain(other.store);
+  });
+
+  it("il limite per chat regge agli aggiornamenti simultanei e chiude l'attesa del tocco ignorato", async () => {
+    const api = bot();
+    await Promise.all(
+      Array.from({ length: 25 }, () =>
+        receiveWebhook(webhook(update("/aiuto", 778)), environment, api.fetcher, new Date(now)),
+      ),
+    );
+    const receipts = () =>
+      env.DB.prepare("SELECT count(*) AS n FROM webhook_receipts WHERE object_id = '778'").first();
+    expect(await receipts()).toEqual({ n: 20 });
+    await tap("abcdefgh:pr", 778, api.fetcher);
+    expect(send).not.toHaveBeenCalled();
+    expect(await receipts()).toEqual({ n: 20 });
+    expect(api.calls).toEqual([
+      { method: "answerCallbackQuery", params: { callback_query_id: `cb-${callbackId}` } },
+    ]);
+  });
+
   it("riconosce i comandi del menu, limita gli aggiornamenti per chat e configura il menu", async () => {
     const parse = (text: string) => verifyTelegramUpdate(JSON.stringify(update(text)), secret, env);
     expect(parse("/stato")).toMatchObject({ kind: "command", command: "status" });
@@ -1669,11 +2063,16 @@ describe("comandi e pulsanti del bot", () => {
     send.mockClear();
     expect((await receiveWebhook(webhook(update("/aiuto", 777)), environment))?.status).toBe(204);
     expect(send).not.toHaveBeenCalled();
-    const api = bot((call) =>
-      call.method === "setMyCommands" ? Response.json({ ok: true, result: true }) : undefined,
-    );
+    const api = bot();
     await configureBotCommands(environment, api.fetcher);
+    // I comandi lasciati da BotFather nell'ambito predefinito si eliminano a ogni riallineamento.
+    expect(api.calls.map((call) => call.method)).toEqual([
+      "deleteMyCommands",
+      "setMyCommands",
+      "setMyCommands",
+    ]);
     expect(api.calls.map((call) => call.params)).toEqual([
+      { scope: { type: "default" } },
       expect.objectContaining({
         language_code: "it",
         scope: { type: "all_private_chats" },

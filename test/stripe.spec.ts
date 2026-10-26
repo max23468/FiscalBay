@@ -18,7 +18,7 @@ import {
 import { checkoutConfigured, purchaseState, startCheckout } from "../app/domain/checkout.server";
 import { grantLifetimeConcession, grantPremium } from "../app/domain/concessions.server";
 import { accountCoverage, orderAllowance, startTrial } from "../app/domain/grants.server";
-import { lifetimeContext, unusedCredit } from "../app/domain/lifetime.server";
+import { lifetimeContext, refundedShare, unusedCredit } from "../app/domain/lifetime.server";
 import {
   catalogMismatch,
   stripeAccountProfile,
@@ -421,8 +421,10 @@ describe("Stripe Managed Payments", () => {
     });
     try {
       expect(await startCheckout(env, input)).toEqual({ ok: false, reason: "unavailable" });
+      // La sessione precedente dello spazio si rilegge prima di aprirne un'altra.
       expect(paths(api)).toEqual([
         "GET /v1/prices/price_test_annual",
+        "GET /v1/checkout/sessions/cs_test_checkout",
         "POST /v1/checkout/sessions",
         "POST /v1/checkout/sessions/cs_test_standard/expire",
       ]);
@@ -870,8 +872,15 @@ function stripeAccount() {
           interval: price.recurring!.interval as "month" | "year",
         };
       const trialEnd = body.get("trial_end");
-      if (trialEnd) state.subscription.end = new Date(Number(trialEnd) * 1000).toISOString();
-      state.subscription.status = "trialing";
+      if (trialEnd) {
+        state.subscription.end = new Date(Number(trialEnd) * 1000).toISOString();
+        state.subscription.status = "trialing";
+      }
+      // Chiusura programmata alla fine della tutela del prezzo, o tolta con un valore vuoto.
+      if (body.has("cancel_at"))
+        state.subscription.cancelAt = body.get("cancel_at")
+          ? new Date(Number(body.get("cancel_at")) * 1000).toISOString()
+          : undefined;
       if (body.get("metadata[offer]"))
         state.subscription.metadata = {
           ...(state.subscription.metadata ?? {
@@ -965,6 +974,7 @@ function stripeAccount() {
           : { id, object: "customer" },
       );
     }
+    if (url.pathname === "/v1/prices/price_test_monthly") return Response.json(catalogPrice());
     if (url.pathname === "/v1/prices/price_test_lifetime")
       return Response.json(
         catalogPrice(
@@ -1529,6 +1539,25 @@ describe("Webhook e riconciliazione Stripe", () => {
       payment: { state: "renewal-failed", protectedUntil: "2026-10-20T20:00:00.000Z" },
     });
     expect(page.account).not.toHaveProperty("premium");
+    // Stripe chiude l'abbonamento all'istante esatto in cui finisce la tutela, senza conguaglio:
+    // nessun tentativo può incassare dopo.
+    const schedule = stripe.writes.filter((write) => write.path === "/v1/subscriptions/sub_test");
+    expect(schedule.map((write) => Object.fromEntries(write.body))).toEqual([
+      {
+        cancel_at: String(Date.parse("2026-10-20T20:00:00.000Z") / 1000),
+        proration_behavior: "none",
+      },
+    ]);
+    // Riletto di nuovo, non la riprogramma.
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.updated", objectId: "sub_test" },
+      stripe.fetcher,
+      at(failedAt),
+    );
+    expect(
+      stripe.writes.filter((write) => write.path === "/v1/subscriptions/sub_test"),
+    ).toHaveLength(1);
 
     // Regolarizzato entro sette giorni: copertura contigua al periodo precedente.
     stripe.state.subscription.status = "active";
@@ -1554,6 +1583,12 @@ describe("Webhook e riconciliazione Stripe", () => {
     ]);
     expect(await premium("2026-10-16T08:00:00.000Z")).toBe(true);
     expect(stripe.requests).not.toContain("DELETE /v1/subscriptions/sub_test");
+    // Il pagamento toglie la chiusura programmata: l'abbonamento si rinnova come prima.
+    expect(Object.fromEntries(stripe.writes.at(-1)!.body)).toEqual({ cancel_at: "" });
+    expect(stripe.state.subscription.cancelAt).toBeUndefined();
+    expect(await view("2026-10-16T08:00:00.000Z")).toMatchObject({
+      premium: { renewsAt: nextEnd },
+    });
   });
 
   it("finita la tutela del prezzo chiude il rinnovo non pagato su Stripe", async () => {
@@ -1643,6 +1678,58 @@ describe("Webhook e riconciliazione Stripe", () => {
     } finally {
       errors.mockRestore();
     }
+  });
+
+  it("il cron rilegge prima i rinnovi dovuti, poi i pagamenti da confermare, poi gli altri", async () => {
+    const turn = "2026-10-01T12:00:00.000Z";
+    const hours = (count: number) => new Date(Date.parse(turn) - count * 3_600_000).toISOString();
+    // Lo spazio w-c ha una copertura pagata in corso; w-a nessuna, quindi aspetta un pagamento.
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w-c', 'C', ?)").bind(
+        now,
+      ),
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+          ends_at) VALUES ('pagato', 'w-c', 'premium', ?1, ?2)`).bind(hours(240), hours(-240)),
+    ]);
+    const subscription = (id: string, workspace: string, checked: string, periodEnd: string) =>
+      env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id,
+          offer, price_generation, status, current_period_start, current_period_end,
+          cancel_at_period_end, synced_at, checked_at, renewal_offer)
+        VALUES (?1, ?2, 'test', 'cus_test', 'monthly', '2026-09', 'active', ?3, ?4, 0, ?3, ?3,
+          'monthly')`).bind(id, workspace, checked, periodEnd);
+    await env.DB.batch([
+      ...Array.from({ length: 3 }, (_, index) =>
+        subscription(`dovuto-${index}`, "w-c", hours(80), hours(1)),
+      ),
+      ...Array.from({ length: 24 }, (_, index) =>
+        subscription(`giornaliero-${index}`, "w-c", hours(72 + index), hours(-240)),
+      ),
+      ...Array.from({ length: 5 }, (_, index) =>
+        subscription(`in-attesa-${index}`, "w-a", hours(2), hours(-240)),
+      ),
+    ]);
+    await env.DB.prepare(`INSERT INTO subscription_checkouts (workspace_id, claim, session_id,
+        expires_at, created_at) VALUES ('w-a', 'turno', 'cs_vecchia', ?1, ?1)`)
+      .bind(hours(49))
+      .run();
+    const stripe = stripeAccount();
+    stripe.state.down = true;
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await reconcileBilling(env, stripe.fetcher, at(turn));
+    const { results } = await env.DB.prepare(
+      "SELECT id FROM stripe_subscriptions WHERE checked_at = ? ORDER BY id",
+    )
+      .bind(turn)
+      .all<{ id: string }>();
+    const kinds = results.map(({ id }) => id.replace(/-\d+$/u, ""));
+    expect(kinds.filter((kind) => kind === "dovuto")).toHaveLength(3);
+    // Il riferimento a una sessione scaduta da oltre due giorni si elimina.
+    expect(await env.DB.prepare("SELECT 1 FROM subscription_checkouts").first()).toBeNull();
+    expect(kinds.filter((kind) => kind === "in-attesa")).toHaveLength(5);
+    // Delle riletture giornaliere restano i posti del turno, prima le più vecchie.
+    expect(results.filter(({ id }) => id.startsWith("giornaliero")).map(({ id }) => id)).toEqual(
+      Array.from({ length: 17 }, (_, index) => `giornaliero-${index + 7}`).sort(),
+    );
   });
 
   it("il cron riconcilia un pagamento senza webhook, anche con il browser chiuso", async () => {
@@ -2273,6 +2360,11 @@ describe("Lifetime e concessioni", () => {
     expect(unusedCredit(490, month, at("2028-03-01T00:00:00.000Z"))).toBe(0);
     const year = { startsAt: "2026-12-31T23:30:00.000Z", endsAt: "2027-12-31T23:30:00.000Z" };
     expect(unusedCredit(4900, year, at("2027-07-02T11:30:00.000Z"))).toBe(2450);
+    // Un rimborso parziale del periodo riduce il credito in proporzione al pagamento.
+    expect(refundedShare(2450, 5978, null)).toBe(2450);
+    expect(refundedShare(2450, 5978, 2989)).toBe(1225);
+    expect(refundedShare(2450, 5978, 5978)).toBe(0);
+    expect(refundedShare(2450, 5978, 9000)).toBe(0);
   });
 
   it("vende l'ultimo posto una volta sola con acquisti concorrenti", async () => {
@@ -2321,6 +2413,134 @@ describe("Lifetime e concessioni", () => {
       replaces: false,
     });
     expect(await allocations()).toHaveLength(20);
+  });
+
+  it("tiene aperta una sola sessione per spazio fra mensile, annuale e lifetime", async () => {
+    const stripe = stripeAccount();
+    const buy = (offer: "monthly" | "annual" | "lifetime", time = now) => {
+      vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+      return startCheckout(
+        env,
+        { request, userId, email: "lifetime@example.invalid", offer, language: "it" },
+        at(time),
+      );
+    };
+    const statuses = () => stripe.state.sessions.map((session) => [session.id, session.status]);
+    expect(await buy("monthly")).toMatchObject({ ok: true });
+    // Scade dopo un'ora, come il lifetime.
+    const first = stripe.writes.find((write) => write.path === "/v1/checkout/sessions")!.body;
+    expect(first.get("mode")).toBe("subscription");
+    expect(first.get("expires_at")).toBe(String(second(reservationEnd)));
+    expect(first.get("customer")).toBeNull();
+    expect(first.get("customer_email")).toBe("lifetime@example.invalid");
+    // Una seconda scheda chiude la sessione precedente prima di aprirne un'altra.
+    expect(await buy("monthly")).toMatchObject({ ok: true });
+    expect(statuses()).toEqual([
+      ["cs_lifetime_1", "expired"],
+      ["cs_lifetime_2", "open"],
+    ]);
+    // Il lifetime chiude la sessione dell'abbonamento, e viceversa liberando il posto.
+    expect(await buy("lifetime")).toMatchObject({ ok: true });
+    expect(statuses().at(1)).toEqual(["cs_lifetime_2", "expired"]);
+    expect(await allocations()).toEqual([
+      expect.objectContaining({ status: "reserved", provider_reference: "cs_lifetime_3" }),
+    ]);
+    expect(await buy("monthly")).toMatchObject({ ok: true });
+    expect(statuses().slice(2)).toEqual([
+      ["cs_lifetime_3", "expired"],
+      ["cs_lifetime_4", "open"],
+    ]);
+    expect(await allocations()).toEqual([]);
+    // Pagata in un'altra scheda prima del webhook: il nuovo acquisto si ferma senza sessioni.
+    Object.assign(stripe.state.sessions[3]!, { status: "complete", subscription: "sub_test" });
+    expect(await buy("monthly")).toEqual({ ok: false, reason: "covered" });
+    expect(stripe.state.sessions).toHaveLength(4);
+    expect(await env.DB.prepare("SELECT id, status FROM stripe_subscriptions").all()).toMatchObject(
+      { results: [{ id: "sub_test", status: "active" }] },
+    );
+    // La sessione pagata è registrata: il passaggio a vita dell'abbonato si apre.
+    expect(await env.DB.prepare("SELECT 1 FROM subscription_checkouts").first()).toBeNull();
+    expect(await buy("lifetime")).toMatchObject({ ok: true });
+    expect(stripe.state.sessions).toHaveLength(5);
+  });
+
+  it("fra richieste concorrenti dello stesso spazio apre una sola sessione", async () => {
+    const stripe = stripeAccount();
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    const buy = () =>
+      startCheckout(
+        env,
+        { request, userId, email: "lifetime@example.invalid", offer: "monthly", language: "it" },
+        at(now),
+      );
+    const results = await Promise.all([buy(), buy(), buy()]);
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    expect(results.filter((result) => !result.ok)).toEqual([
+      { ok: false, reason: "unavailable" },
+      { ok: false, reason: "unavailable" },
+    ]);
+    expect(stripe.state.sessions.filter((session) => session.status === "open")).toHaveLength(1);
+    // Una richiesta interrotta prima di legare la sessione non blocca lo spazio oltre cinque minuti.
+    await env.DB.prepare("UPDATE subscription_checkouts SET session_id = NULL").run();
+    expect(await buy()).toEqual({ ok: false, reason: "unavailable" });
+    expect(
+      await startCheckout(
+        env,
+        { request, userId, email: "lifetime@example.invalid", offer: "monthly", language: "it" },
+        at(new Date(Date.parse(now) + 5 * 60_000).toISOString()),
+      ),
+    ).toMatchObject({ ok: true });
+    // Un lifetime concorrente dello stesso spazio non legge «Posti esauriti».
+    await env.DB.prepare("DELETE FROM subscription_checkouts").run();
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    const lifetime = await Promise.all([buyLifetime(stripe), buyLifetime(stripe)]);
+    expect(lifetime.filter((result) => !result.ok)).toEqual([{ ok: false, reason: "unavailable" }]);
+  });
+
+  it("riusa il cliente dello spazio e apre il portale su quello che può ancora addebitare", async () => {
+    const stripe = stripeAccount();
+    const portalCustomer = async () => {
+      vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+      await openBillingPortal(env, userId, "http://localhost:5173/app/impostazioni/piano", "it");
+      return stripe.writes
+        .filter((write) => write.path === "/v1/billing_portal/sessions")
+        .at(-1)!
+        .body.get("customer");
+    };
+    // Lifetime rimborsato: il posto resta con il suo cliente.
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
+          provider_reference, customer_id, activated_at, created_at)
+        VALUES (1, 'w-a', 'active', 'sale', 'cs_paid', 'cus_lifetime', ?1, ?1)`).bind(now),
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+          stripe_checkout_session_id, amount_paid, currency, paid_at, revoked_at, revocation)
+        VALUES ('lifetime', 'w-a', 'lifetime', ?1, 'cs_paid', 18178, 'eur', ?1, ?1, 'refund')`).bind(
+        now,
+      ),
+    ]);
+    expect(await portalCustomer()).toBe("cus_lifetime");
+    // Il nuovo abbonamento usa lo stesso cliente.
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    expect(
+      await startCheckout(
+        env,
+        { request, userId, email: "lifetime@example.invalid", offer: "monthly", language: "it" },
+        at(now),
+      ),
+    ).toMatchObject({ ok: true });
+    const body = stripe.writes.find((write) => write.path === "/v1/checkout/sessions")!.body;
+    expect(body.get("customer")).toBe("cus_lifetime");
+    expect(body.get("customer_email")).toBeNull();
+    // Con un cliente diverso, l'abbonamento che può ancora addebitare prevale sul lifetime
+    // rimborsato.
+    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+        customer_id, offer, price_generation, status, current_period_start, current_period_end,
+        cancel_at_period_end, synced_at, checked_at, renewal_offer)
+      VALUES ('sub_new', 'w-a', 'test', 'cus_new', 'monthly', '2026-09', 'active', ?1, ?2, 0, ?1,
+        ?1, 'monthly')`)
+      .bind(now, periodEnd)
+      .run();
+    expect(await portalCustomer()).toBe("cus_new");
   });
 
   it("dalla pagina del piano porta al checkout lifetime o dice che i posti sono finiti", async () => {
@@ -2507,6 +2727,27 @@ describe("Lifetime e concessioni", () => {
     expect(await allocations()).toEqual([
       expect.objectContaining({ provider_reference: "cs_lifetime_2", status: "reserved" }),
     ]);
+  });
+
+  it("alla cancellazione dell'account chiude il checkout dell'abbonamento o ferma quello pagato", async () => {
+    const stripe = stripeAccount();
+    const buyMonthly = () => {
+      vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+      return startCheckout(
+        env,
+        { request, userId, email: "lifetime@example.invalid", offer: "monthly", language: "it" },
+        at(now),
+      );
+    };
+    await buyMonthly();
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toContain("POST /v1/checkout/sessions/cs_lifetime_1/expire");
+    // Completata prima che il webhook registri l'abbonamento: l'abbonamento si chiude.
+    await buyMonthly();
+    Object.assign(stripe.state.sessions[1]!, { status: "complete", subscription: "sub_test" });
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toContain("DELETE /v1/subscriptions/sub_test");
+    expect(stripe.state.subscription.status).toBe("canceled");
   });
 
   it("il cron rilegge una volta al giorno i lifetime venduti, per i rimborsi senza webhook", async () => {
@@ -3164,6 +3405,45 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
     expect((await env.DB.prepare("SELECT * FROM stripe_customer_erasures").all()).results).toEqual(
       [],
     );
+  });
+
+  it("conserva il motivo della revoca e le cancellazioni registrate", async () => {
+    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+        ends_at) VALUES ('pagato', 'w-a', 'premium', ?1, ?2)`)
+      .bind(now, "2026-10-20T20:00:00.000Z")
+      .run();
+    // La revoca richiede l'istante e, una volta registrata, non cambia motivo né si annulla.
+    await expect(
+      env.DB.prepare("UPDATE workspace_entitlements SET revocation = 'refund'").run(),
+    ).rejects.toThrow();
+    await env.DB.prepare("UPDATE workspace_entitlements SET revocation = 'refund', revoked_at = ?")
+      .bind(now)
+      .run();
+    for (const change of ["revocation = 'dispute'", "revocation = NULL"])
+      await expect(
+        env.DB.prepare(`UPDATE workspace_entitlements SET ${change}`).run(),
+      ).rejects.toThrow();
+    await expect(
+      env.DB.prepare("UPDATE workspace_entitlements SET revocation = 'altro'").run(),
+    ).rejects.toThrow();
+    // Una cancellazione segnalata all'assistenza registra autore e motivo e resta com'è.
+    const erasure = (source: string, by: string | null, reason: string | null) =>
+      env.DB.prepare(`INSERT INTO stripe_customer_erasures (customer_id, environment, source,
+          received_at, recorded_by, reason) VALUES (?, 'test', ?, ?, ?, ?)`).bind(
+        `cus_${source}_${by}`,
+        source,
+        now,
+        by,
+        reason,
+      );
+    await expect(erasure("support", null, null).run()).rejects.toThrow("CHECK constraint failed");
+    await expect(erasure("webhook", "owner", "Richiesta").run()).rejects.toThrow(
+      "CHECK constraint failed",
+    );
+    await erasure("support", "owner", "Richiesta tramite Link").run();
+    await expect(
+      env.DB.prepare("UPDATE stripe_customer_erasures SET reason = 'altro'").run(),
+    ).rejects.toThrow("immutable_erasure");
   });
 
   it("senza l'elenco degli addebiti la rilettura continua e non revoca", async () => {

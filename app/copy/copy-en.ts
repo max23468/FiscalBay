@@ -57,7 +57,7 @@ export const en: AppCopy = {
         `${store}: the latest reads from eBay failed. FiscalBay retries automatically.`,
       inactivityTitle: "Reading paused for inactivity",
       inactivityBody:
-        "On the Free plan reading stops after 30 days without sign-ins. Resume it from Stores.",
+        "On the Free plan reading stops after 30 days without sign-ins and 7 days' notice. Resume it from Stores.",
     },
     account: "Account",
     profile: "Profile",
@@ -328,7 +328,7 @@ export const en: AppCopy = {
     pausedByInactivity: "Paused for inactivity",
     inactivityTitle: "Reading paused for inactivity",
     inactivityBody:
-      "You have not opened FiscalBay for more than 30 days, so on the Free plan reading from eBay stopped. Resume it to recover the orders still within your plan window.",
+      "You did not open FiscalBay for 30 days or during the 7 days' notice, so on the Free plan reading from eBay stopped. Resume it to recover the orders still within your plan window.",
     inactivityResume: "Resume reading",
     notificationsOn: "On",
     notificationsOff: "Off",
@@ -377,7 +377,7 @@ export const en: AppCopy = {
     pauseHint:
       "A manual pause stops new reads. Imported orders remain available according to your plan.",
     inactivityPauseHint:
-      "Paused for inactivity: no new reads after 30 days without sign-ins on the Free plan. Orders remain available; Resume restarts every store.",
+      "Paused for inactivity: on the Free plan no new reads after 30 days without sign-ins and 7 days' notice. Orders remain available; Resume restarts every store.",
     planPauseHint:
       "Paused by the Free plan: no new reads and orders are unavailable. The plan includes one active store.",
     chooseFreeStore: "Choose the active store",

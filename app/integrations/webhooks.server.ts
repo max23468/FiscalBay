@@ -2,6 +2,7 @@ import { z } from "zod";
 import { createHash } from "node:crypto";
 import { verifyStripeEvent } from "./stripe.server";
 import {
+  answerCallback,
   telegramConfigured,
   TelegramSecretMismatch,
   verifyTelegramUpdate,
@@ -219,13 +220,16 @@ export async function receiveWebhook(
     }
     const age = now.getTime() - Date.parse(event.event_at);
     if (age >= retention || age < -300_000) throw new InvalidWebhook(400);
-    // Una chat che scrive troppo in fretta non accoda altro lavoro: il resto si ignora.
-    if (event.provider === "telegram" && (await chatFlood(env, event, now)))
-      return new Response(null, { status: 204 });
-    const receipt = (await env.DB.prepare(`INSERT INTO webhook_receipts
+    // Una chat che scrive troppo in fretta non accoda altro lavoro: il resto si ignora. Il
+    // conteggio e la ricevuta sono la stessa istruzione, così aggiornamenti simultanei non
+    // superano il limite.
+    const receipt = await env.DB.prepare(`INSERT INTO webhook_receipts
       (id, provider, environment, provider_id, topic, object_id, store_id, consent_granted_at,
         link_token_hash, command, callback_id, message_id, event_at, expires_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(provider, environment, provider_id) DO UPDATE SET id = webhook_receipts.id
+      SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
+      WHERE ?2 <> 'telegram' OR (SELECT count(*) FROM webhook_receipts
+        WHERE provider = 'telegram' AND environment = ?3 AND object_id = ?6 AND event_at > ?15) < ?16
+      ON CONFLICT(provider, environment, provider_id) DO UPDATE SET id = webhook_receipts.id
       RETURNING *`)
       .bind(
         crypto.randomUUID(),
@@ -242,8 +246,16 @@ export async function receiveWebhook(
         event.message_id,
         event.event_at,
         new Date(Date.parse(event.event_at) + retention).toISOString(),
+        new Date(now.getTime() - 60_000).toISOString(),
+        chatUpdatesPerMinute,
       )
-      .first<Receipt>())!;
+      .first<Receipt>();
+    if (!receipt) {
+      // Il tocco ignorato chiude comunque l'attesa del pulsante, senza avviso.
+      if (event.callback_id)
+        await answerCallback(env, event.callback_id, undefined, fetcher).catch(() => undefined);
+      return new Response(null, { status: 204 });
+    }
     // Un ID riusato con altro contenuto non modifica il lavoro già verificato.
     if (
       receipt.topic !== event.topic ||
@@ -308,14 +320,6 @@ async function consumeNow(env: Env, receiptId: string, fetcher: typeof fetch, no
 
 /** Aggiornamenti accettati per chat in un minuto: oltre, il bot non risponde. */
 const chatUpdatesPerMinute = 20;
-
-async function chatFlood(env: Env, event: Pick<Receipt, "environment" | "object_id">, now: Date) {
-  const row = await env.DB.prepare(`SELECT count(*) AS total FROM webhook_receipts
-    WHERE provider = 'telegram' AND environment = ? AND object_id = ? AND event_at > ?`)
-    .bind(event.environment, event.object_id, new Date(now.getTime() - 60_000).toISOString())
-    .first<{ total: number }>();
-  return row!.total >= chatUpdatesPerMinute;
-}
 
 async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
   await env.WORK_QUEUE.send({ receiptId });

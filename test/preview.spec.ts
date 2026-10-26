@@ -15,6 +15,7 @@ import { readPreviewState, writePreviewState } from "../app/preview/state.server
 import { action as previewSearch } from "../app/routes/preview-search";
 import { action as previewSettingsAction } from "../app/routes/preview-settings";
 import { loader as previewOrders } from "../app/routes/preview-orders";
+import { loader as previewStores } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/domain/orders.server";
 import type { SearchResults } from "../app/components/app-shell";
@@ -483,5 +484,24 @@ describe("criteri dell'elenco dell'anteprima", () => {
     expect(listed("periodo=6m", "premium")).not.toContain("ord-300-giorni");
     expect(listed("periodo=12m", "premium")).toContain("ord-300-giorni");
     expect(listed("periodo=12m", "free")).toEqual(all);
+  });
+});
+
+describe("negozi dell'anteprima", () => {
+  it("avvisa allo scollegamento negli stessi stati dell'abbonamento dell'area reale", async () => {
+    const renews = async (scenario: string) => {
+      const cookie = (await writePreviewState({ scenario, unlocked: [] } as never)).split(";")[0]!;
+      const page = (await previewStores({
+        request: new Request("http://localhost:5173/anteprima/negozi", { headers: { cookie } }),
+        params: {},
+      } as Parameters<typeof previewStores>[0])) as { subscriptionRenews: boolean };
+      return page.subscriptionRenews;
+    };
+    // Un abbonamento che addebiterà ancora, anche in attivazione o dopo un periodo rimborsato.
+    expect(await renews("pagamento-in-attivazione")).toBe(true);
+    expect(await renews("pagamento-rimborsato")).toBe(true);
+    // Il lifetime rimborsato e il rinnovo disdetto non addebitano più.
+    expect(await renews("lifetime-rimborsato")).toBe(false);
+    expect(await renews("rinnovo-disdetto")).toBe(false);
   });
 });
