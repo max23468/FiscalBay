@@ -271,10 +271,9 @@ export async function receiveWebhook(
     )
       throw new InvalidWebhook(409);
     if (!receipt.queued_at && !receipt.completed_at) {
+      // Soltanto il bot ha aggiornamenti interattivi: gli argomenti di eBay e Stripe non sono qui.
       const answered =
-        receipt.provider === "telegram" &&
-        interactiveTopics.has(receipt.topic) &&
-        (await consumeNow(env, receipt.id, fetcher, now));
+        interactiveTopics.has(receipt.topic) && (await consumeNow(env, receipt.id, fetcher, now));
       if (!answered) await enqueueReceipt(env, receipt.id, now);
     }
     return new Response(null, { status: 204 });
@@ -310,9 +309,8 @@ async function consumeNow(env: Env, receiptId: string, fetcher: typeof fetch, no
     ack: () => {
       done = true;
     },
-    retry: () => {
-      done = false;
-    },
+    // Un nuovo tentativo lascia `done` falso: la ricevuta passa alla coda.
+    retry: () => {},
   } satisfies Message<unknown>;
   await consumeWebhooks({ messages: [message] }, env, fetcher, now);
   return done;

@@ -163,7 +163,9 @@ async function noticesOf(
   now: Date,
 ): Promise<Map<string, OrderNotice>> {
   const read = (["production", "sandbox"] as const).map(async (environment) => {
+    // Stryker disable next-line MethodExpression,ConditionalExpression: la lettura filtra già per ambiente gli identificativi indicati; il filtro evita soltanto di passarle quelli dell'altro.
     const ids = orders.filter((order) => order.environment === environment).map(({ id }) => id);
+    // Stryker disable next-line ConditionalExpression: senza identificativi la lettura non restituisce ordini; il ritorno anticipato evita soltanto la query.
     if (ids.length === 0) return [];
     const visible = await listVisibleOrders(db, userId, ids.length, environment, now, { ids });
     return visible.map((order) => [order.id, orderNotice(order, environment)] as const);
@@ -209,6 +211,7 @@ async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Dat
       ORDER BY n.link_id IS l.id, n.evaluated_at, o.listed_at, o.id LIMIT ?4`)
     .bind(workspace.workspaceId, at, workspace.linkId, ordersPerRun)
     .all<Candidate>();
+  // Stryker disable next-line ConditionalExpression: senza candidati non si prepara alcuna istruzione; il ritorno anticipato evita soltanto le letture.
   if (candidates.length === 0) return;
   const notices = await noticesOf(db, workspace.userId, candidates, now);
   // Impronte correnti e registrate di tutti i candidati, calcolate insieme prima del confronto.
@@ -394,7 +397,10 @@ async function sendPending(
     sendOne(env, workspace, delivery, fetcher, now),
   );
   // L'attesa di una chat non ferma gli altri spazi.
-  return next === "stop" ? "stop" : "continue";
+  return next === "stop"
+    ? // Stryker disable next-line StringLiteral: ogni esito diverso da «continue» ferma allo stesso modo gli spazi successivi.
+      "stop"
+    : "continue";
 }
 
 /** Prende la consegna con un lease e la invia; `wait` ferma le successive della chat. */
@@ -474,6 +480,7 @@ async function recordFailure(
   if (upstream?.failure === "rate_limited") {
     const seconds = upstream.details.retryAfter ?? 30;
     await release("retry_at = ?3", new Date(now.getTime() + seconds * 1000).toISOString()).run();
+    // Stryker disable next-line StringLiteral: ogni esito diverso da «continue», «skip» e «stop» ferma allo stesso modo la sola chat.
     return "wait";
   }
   if (upstream?.failure === "rejected" && upstream.details.status === 403) {
@@ -490,6 +497,7 @@ async function recordFailure(
           WHERE link_id = ?1 AND sent_at IS NULL AND failed_at IS NULL`)
         .bind(delivery.link_id, at),
     ]);
+    // Stryker disable next-line StringLiteral: ogni esito diverso da «continue», «skip» e «stop» ferma allo stesso modo la sola chat.
     return "wait";
   }
   if (upstream?.failure === "rejected") {
@@ -521,6 +529,7 @@ async function recordFailure(
           WHERE id = ?1 AND delivery_failure IS NULL`)
         .bind(delivery.link_id, at),
     ]);
+    // Stryker disable next-line StringLiteral: ogni esito diverso da «continue», «skip» e «stop» ferma allo stesso modo la sola chat.
     return "wait";
   }
   const delay = Math.min(3_600_000, 60_000 * 2 ** (attempts - 1));
@@ -531,6 +540,7 @@ async function recordFailure(
     uncertain ? 1 : 0,
     at,
   ).run();
+  // Stryker disable next-line StringLiteral: ogni esito diverso da «continue», «skip» e «stop» ferma allo stesso modo la sola chat.
   return "wait";
 }
 
@@ -564,6 +574,7 @@ async function deliver(
         ),
     Promise.resolve(),
   );
+  // Stryker disable next-line StringLiteral: l'invio riuscito è l'esito predefinito, diverso da «waiting» e «dropped».
   return "sent";
 }
 
@@ -579,6 +590,7 @@ async function compose(
 ): Promise<BotMessage[] | Exclude<Outcome, "sent">> {
   const db = env.DB;
   if (delivery.kind === "digest") {
+    // Stryker disable next-line ConditionalExpression,LogicalOperator: con un altro collegamento o le notifiche spente nessun evento resta nel riepilogo, che si scarta comunque più sotto; il controllo evita soltanto le letture.
     if (delivery.link_id !== workspace.linkId || workspace.enabled !== 1) return "dropped";
     // Restano gli eventi che il destinatario riceverebbe ancora, come per un ordine singolo.
     const { results: kept } = await db

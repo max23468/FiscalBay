@@ -16,6 +16,8 @@ import {
 } from "../app/domain/telegram.server";
 import {
   chatLabel,
+  editMessage,
+  sendMessage,
   sendText,
   telegramConfigured,
   linkToken as randomLinkToken,
@@ -262,6 +264,132 @@ describe("ingresso del bot", () => {
     const token = randomLinkToken();
     expect(token).toMatch(/^[A-Za-z0-9_-]{43}$/u);
     expect(randomLinkToken()).not.toBe(token);
+  });
+
+  it("riconosce ogni nome dei comandi e i tocchi con dati validi in chat privata", () => {
+    const command = (text: string) =>
+      verifyTelegramUpdate(JSON.stringify(update(text)), secret, env);
+    for (const [name, expected] of [
+      ["stato", "status"],
+      ["status", "status"],
+      ["ultimi", "latest"],
+      ["latest", "latest"],
+      ["preferenze", "preferences"],
+      ["preferences", "preferences"],
+      ["aiuto", "help"],
+      ["help", "help"],
+    ])
+      expect(command(`/${name}`)).toMatchObject({ kind: "command", command: expected });
+    // Il nome del bot e gli spazi in coda non cambiano il comando; un testo in più sì.
+    expect(command("/stato@FiscalBayTestBot  ")).toMatchObject({ command: "status" });
+    expect(command("/aiuto  ")).toMatchObject({ command: "help" });
+    for (const text of ["x/stato", "ciao /stato", "/stato extra", "/sconosciuto"])
+      expect(command(text)).toBeNull();
+    const message = { message_id: 42, chat: { id: 501, type: "private" } };
+    const tapped = (callback: Record<string, unknown>) =>
+      verifyTelegramUpdate(
+        JSON.stringify({ update_id: 1, callback_query: { id: "cb", ...callback } }),
+        secret,
+        env,
+        new Date(now),
+      );
+    expect(tapped({ data: "st:a_b-1", message })).toEqual({
+      kind: "callback",
+      updateId: 1,
+      chatId: "501",
+      eventAt: now,
+      callbackId: "cb",
+      messageId: 42,
+      data: "st:a_b-1",
+    });
+    expect(tapped({ data: "x".repeat(64), message })).toMatchObject({ kind: "callback" });
+    // Dati assenti, troppo lunghi o con caratteri non ammessi, anche solo in testa o in coda.
+    for (const data of ["x".repeat(65), "ok!", "!ok", "ok ok", "", undefined])
+      expect(tapped({ data, message })).toBeNull();
+    expect(tapped({ data: "st", message: { ...message, chat: { id: 501, type: "group" } } })).toBe(
+      null,
+    );
+    expect(tapped({ data: "st" })).toBeNull();
+  });
+
+  it("in Production la ricevuta del bot appartiene all'ambiente live", async () => {
+    const production = { ...environment, APP_ORIGIN: "https://fiscalbay.it" } as Env;
+    const api = bot();
+    expect((await receiveWebhook(webhook(update("/aiuto")), production, api.fetcher))?.status).toBe(
+      204,
+    );
+    expect(await env.DB.prepare("SELECT environment FROM webhook_receipts").first()).toEqual({
+      environment: "live",
+    });
+  });
+
+  it("avvio, comandi e tocchi si eseguono subito, senza passare dalla coda", async () => {
+    const api = bot();
+    for (const body of [
+      update(`/start ${"h".repeat(43)}`),
+      update("/stato"),
+      {
+        update_id: ++updateId,
+        callback_query: {
+          id: "cb-subito",
+          data: "st:x",
+          message: { message_id: 42, chat: { id: 501, type: "private" } },
+        },
+      },
+    ])
+      expect((await receiveWebhook(webhook(body), environment, api.fetcher))?.status).toBe(204);
+    expect(send).not.toHaveBeenCalled();
+    const { results } = await env.DB.prepare(
+      "SELECT topic, queued_at, completed_at FROM webhook_receipts ORDER BY topic",
+    ).all();
+    expect(results).toEqual(
+      ["callback", "command", "start"].map((topic) => ({
+        topic,
+        queued_at: null,
+        completed_at: expect.any(String),
+      })),
+    );
+  });
+
+  it("lo stesso aggiornamento con altro contenuto è un conflitto; un tocco riprovato più tardi no", async () => {
+    const api = bot();
+    const status = async (body: unknown, at = new Date(now)) =>
+      (await receiveWebhook(webhook(body), environment, api.fetcher, at))?.status;
+    const message = (text: string, date = Date.parse(now) / 1000) => ({
+      update_id: ++updateId,
+      message: { date, chat: { id: 501, type: "private" }, text },
+    });
+    const pairs: Array<[unknown, unknown]> = [];
+    const start = message(`/start ${"f".repeat(43)}`);
+    pairs.push([
+      start,
+      { ...start, message: { ...start.message, text: `/start ${"g".repeat(43)}` } },
+    ]);
+    const command = message("/stato");
+    pairs.push([command, { ...command, message: { ...command.message, text: "/aiuto" } }]);
+    const late = message("/aiuto");
+    pairs.push([late, { ...late, message: { ...late.message, date: late.message.date - 60 } }]);
+    const callback = (id: string, messageId: number) => ({
+      id,
+      data: "st:x",
+      message: { message_id: messageId, chat: { id: 501, type: "private" } },
+    });
+    const tap = (callbackQuery: ReturnType<typeof callback>, update_id = ++updateId) => ({
+      update_id,
+      callback_query: callbackQuery,
+    });
+    const other = tap(callback("cb-uno", 42));
+    pairs.push([other, tap(callback("cb-due", 42), other.update_id)]);
+    const moved = tap(callback("cb-tre", 42));
+    pairs.push([moved, tap(callback("cb-tre", 43), moved.update_id)]);
+    for (const [first, second] of pairs) {
+      expect(await status(first)).toBe(204);
+      expect(await status(second)).toBe(409);
+    }
+    // Il tocco prende la data dalla ricezione: un nuovo tentativo più tardi è lo stesso.
+    const retried = tap(callback("cb-quattro", 42));
+    expect(await status(retried)).toBe(204);
+    expect(await status(retried, later(1))).toBe(204);
   });
 });
 
@@ -994,6 +1122,36 @@ describe("Bot API e conservazione", () => {
     expect(JSON.parse(String(asked.mock.calls[0]![1]?.body))).toEqual({ chat_id: "88" });
   });
 
+  it("invia e modifica i messaggi con anteprima e pulsanti soltanto se presenti", async () => {
+    const api = bot();
+    expect(await sendMessage(env, "77", { html: "<b>uno</b>" }, api.fetcher)).toBe(1);
+    expect(await sendMessage(env, "77", { html: "due", buttons: [] }, api.fetcher)).toBe(2);
+    expect(api.calls.map((call) => call.params)).toEqual(
+      ["<b>uno</b>", "due"].map((text) => ({
+        chat_id: "77",
+        text,
+        parse_mode: "HTML",
+        link_preview_options: { is_disabled: true },
+      })),
+    );
+    // Un rifiuto lascia il messaggio com'è; gli altri errori restano errori.
+    const edit = (status: number, body: Record<string, unknown> = { ok: false }) =>
+      editMessage(
+        env,
+        "77",
+        5,
+        { html: "tre" },
+        bot(() => Response.json(body, { status })).fetcher,
+      );
+    await expect(edit(400)).resolves.toBeUndefined();
+    await expect(edit(500)).rejects.toMatchObject({ failure: "unavailable" });
+    await expect(edit(429, { ok: false, parameters: { retry_after: 2 } })).rejects.toMatchObject({
+      failure: "rate_limited",
+      details: { retryAfter: 2 },
+    });
+    await expect(edit(401)).rejects.toMatchObject({ failure: "credentials" });
+  });
+
   it("elimina le richieste un giorno dopo la scadenza", async () => {
     const seller = await account("pulizia");
     await linkToken(seller.cookie);
@@ -1098,6 +1256,32 @@ const keyboard = (call: BotCall) =>
 
 const failure = (status: number, body: Record<string, unknown> = { ok: false }) =>
   Response.json(body, { status });
+
+/** Bot API che a ogni invio chiede di riprovare dopo `seconds`. */
+const rateLimited = (seconds: number) =>
+  bot((call) =>
+    call.method === "sendMessage"
+      ? failure(429, { ok: false, parameters: { retry_after: seconds } })
+      : undefined,
+  );
+
+/** Stato della consegna dell'ordine. */
+const deliveryOf = (orderId: string) =>
+  env.DB.prepare(`SELECT attempts, retry_at, uncertain_at, lease, locked_until, sent_at, failed_at
+    FROM telegram_deliveries WHERE order_id = ?`)
+    .bind(orderId)
+    .first();
+
+/** Errori registrati durante `action`, letti dalle righe JSON del log. */
+async function logged(action: () => Promise<unknown>) {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await action();
+    return errors.mock.calls.map(([line]) => JSON.parse(String(line)) as Record<string, unknown>);
+  } finally {
+    errors.mockRestore();
+  }
+}
 
 describe("invii degli ordini", () => {
   it("invia il nuovo ordine con il CF normalizzato, senza contatti dell'acquirente, una volta sola", async () => {
@@ -1281,7 +1465,7 @@ describe("invii degli ordini", () => {
     await saveTelegramChange(env.DB, seller.userId, { name: "mode", value: "digest" }, "UTC");
     await saveTelegramChange(env.DB, seller.userId, { name: "digestTime", value: "21:00" }, "UTC");
     const ids = Array.from(
-      { length: 40 },
+      { length: 70 },
       (_, index) => `o-parti-${String(index).padStart(2, "0")}`,
     );
     for (const [index, id] of ids.entries())
@@ -1292,7 +1476,7 @@ describe("invii degli ordini", () => {
       });
     let sends = 0;
     const broken = bot((call) => {
-      if (call.method === "sendMessage" && ++sends === 2) throw new TypeError("rete");
+      if (call.method === "sendMessage" && ++sends === 3) throw new TypeError("rete");
       return undefined;
     });
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -1305,7 +1489,7 @@ describe("invii degli ordini", () => {
       await env.DB.prepare(
         "SELECT parts_sent, attempts FROM telegram_deliveries WHERE kind = 'digest'",
       ).first(),
-    ).toEqual({ parts_sent: 1, attempts: 1 });
+    ).toEqual({ parts_sent: 2, attempts: 1 });
     // Un altro esecutore ha preso la consegna e si è fermato: fino alla scadenza del lease non parte.
     await env.DB.prepare(
       "UPDATE telegram_deliveries SET lease = 'fermo', locked_until = ? WHERE kind = 'digest'",
@@ -1318,8 +1502,8 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 85);
     await run(api.fetcher, 95);
     // Ogni ordine compare una volta sola fra la parte consegnata e quelle riprese.
-    const parts = [sentTexts(broken)[0]!, ...sentTexts(api)];
-    expect(parts.length).toBeGreaterThan(1);
+    const parts = [...sentTexts(broken).slice(0, 2), ...sentTexts(api)];
+    expect(parts.length).toBeGreaterThan(2);
     for (const id of ids)
       expect(parts.filter((part) => part.includes(`>ebay-${id}</a>`))).toHaveLength(1);
     expect(keyboard(api.texts().at(-1)!)).toEqual([
@@ -1419,14 +1603,19 @@ describe("invii degli ordini", () => {
       if (attempt === 1) throw new TypeError("rete");
       return failure(502);
     });
+    const retries: unknown[] = [];
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
-      for (const minutes of [10, 10.5, 11, 13, 17, 25, 41]) await run(flaky.fetcher, minutes);
+      for (const minutes of [10, 10.5, 11, 13, 17, 25, 41]) {
+        await run(flaky.fetcher, minutes);
+        retries.push((await deliveryOf("o-ritenta"))?.retry_at);
+      }
     } finally {
       errors.mockRestore();
     }
     // Attese di 1, 2, 4 e 8 minuti: il secondo turno a 10,5 è ancora in attesa.
     expect(attempt).toBe(5);
+    expect(retries).toEqual([11, 11, 13, 17, 25, 25, 25].map((at) => later(at).toISOString()));
     expect(
       await env.DB.prepare(
         "SELECT attempts, failed_at, uncertain_at FROM telegram_deliveries WHERE order_id = 'o-ritenta'",
@@ -1766,6 +1955,11 @@ describe("invii degli ordini", () => {
     const api = bot();
     await run(api.fetcher, 25);
     expect(api.texts()).toHaveLength(0);
+    // La consegna dell'ordine non più consultabile si chiude senza tentativi.
+    expect(await deliveryOf("o-scaduto")).toMatchObject({
+      attempts: 0,
+      failed_at: later(25).toISOString(),
+    });
     await order(seller.store, "o-revocato", { cf: "BNCLGU80A01H501Z", created: 30, listed: 31 });
     await run(limited.fetcher, 35);
     await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
@@ -1818,6 +2012,590 @@ describe("invii degli ordini", () => {
       ["UTC", "2026-10-25", "21:00", "2026-10-25T21:00:00.000Z"],
     ] as const)
       expect(zonedInstant(zone, day, time).toISOString()).toBe(instant);
+  });
+});
+
+describe("esiti delle consegne", () => {
+  type Seller = Awaited<ReturnType<typeof linked>>;
+
+  /** Lo spazio viene servito per primo: il suo collegamento è il più vecchio. */
+  const servedFirst = (seller: Seller) =>
+    env.DB.prepare("UPDATE telegram_links SET linked_at = ? WHERE workspace_id = ?")
+      .bind(later(-1).toISOString(), seller.workspace)
+      .run();
+
+  const digestMode = async (seller: Seller) => {
+    await saveTelegramChange(env.DB, seller.userId, { name: "mode", value: "digest" }, "UTC");
+    await saveTelegramChange(env.DB, seller.userId, { name: "digestTime", value: "21:00" }, "UTC");
+  };
+
+  const digestOf = (seller: Seller) =>
+    env.DB.prepare(
+      "SELECT attempts, sent_at, failed_at FROM telegram_deliveries WHERE kind = 'digest' AND workspace_id = ?",
+    )
+      .bind(seller.workspace)
+      .first();
+
+  const evaluatedAt = async (orderId: string) =>
+    (
+      await env.DB.prepare("SELECT evaluated_at FROM telegram_order_notices WHERE order_id = ?")
+        .bind(orderId)
+        .first<{ evaluated_at: string }>()
+    )?.evaluated_at;
+
+  /**
+   * Ambiente in cui la prima istruzione che contiene `marker` riceve i parametri modificati da
+   * `values`: simula una scrittura concorrente fra due letture della stessa esecuzione.
+   */
+  function racing(marker: string, values: (bound: unknown[]) => unknown[]) {
+    let pending = true;
+    const DB = new Proxy(env.DB, {
+      get(target, key) {
+        if (key !== "prepare") {
+          const value: unknown = Reflect.get(target, key);
+          return typeof value === "function" ? value.bind(target) : value;
+        }
+        return (sql: string) => {
+          const statement = target.prepare(sql);
+          if (!pending || !sql.includes(marker)) return statement;
+          pending = false;
+          return { bind: (...bound: unknown[]) => statement.bind(...values(bound)) };
+        };
+      },
+    });
+    return { ...environment, DB } as Env;
+  }
+
+  it("senza il bot dell'ambiente non prepara né invia consegne", async () => {
+    const seller = await linked("senza-bot");
+    await order(seller.store, "o-senza-bot", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    const off = { ...environment, TELEGRAM_BOT_TOKEN: undefined } as Env;
+    await deliverTelegram(off, api.fetcher, later(10));
+    expect(api.calls).toHaveLength(0);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM telegram_deliveries").first()).toEqual({
+      n: 0,
+    });
+    await run(api.fetcher, 20);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-senza-bot")]);
+  });
+
+  it("l'esecuzione per un negozio non chiude le consegne degli altri spazi", async () => {
+    const served = await linked("ambito", 611);
+    const expired = await linked("ambito-scaduto", 612);
+    await order(expired.store, "o-ambito-scaduto", { cf: "RSSMRA80A01H501U" });
+    await run(rateLimited(600).fetcher, 10);
+    await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
+      .bind(later(12).toISOString(), expired.workspace)
+      .run();
+    await order(served.store, "o-ambito", { cf: "BNCLGU80A01H501Z", created: 12, listed: 13 });
+    const api = bot();
+    await deliverTelegram(environment, api.fetcher, later(15), { storeId: served.store });
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-ambito")]);
+    expect(await deliveryOf("o-ambito-scaduto")).toMatchObject({ failed_at: null });
+    // L'esecuzione completa chiude la consegna dello spazio senza Premium.
+    await run(api.fetcher, 16);
+    expect(await deliveryOf("o-ambito-scaduto")).toMatchObject({
+      failed_at: later(16).toISOString(),
+    });
+  });
+
+  it("l'errore di uno spazio si registra e non ferma gli altri", async () => {
+    const broken = await linked("fuso-errato", 621);
+    const other = await linked("fuso-valido", 622);
+    await servedFirst(broken);
+    await digestMode(broken);
+    await env.DB.prepare("UPDATE telegram_preferences SET time_zone = ? WHERE workspace_id = ?")
+      .bind("Fuso/Inesistente", broken.workspace)
+      .run();
+    await order(other.store, "o-fuso-valido", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    const logs = await logged(() => run(api.fetcher, 10));
+    expect(logs).toEqual([expect.objectContaining({ operation: "telegram" })]);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-fuso-valido")]);
+  });
+
+  it("l'attesa di Telegram ferma le consegne successive della chat, non gli altri spazi", async () => {
+    const waiting = await linked("attesa-chat", 631);
+    const other = await linked("attesa-altro", 632);
+    await servedFirst(waiting);
+    const api = bot((call) =>
+      call.method === "sendMessage" && call.params.chat_id === "631"
+        ? failure(429, { ok: false, parameters: { retry_after: 1 } })
+        : undefined,
+    );
+    await order(waiting.store, "o-attesa-prima", { cf: "RSSMRA80A01H501U" });
+    await run(api.fetcher, 10);
+    await order(waiting.store, "o-attesa-dopo", {
+      cf: "BNCLGU80A01H501Z",
+      created: 11,
+      listed: 12,
+    });
+    await order(other.store, "o-attesa-altro", { cf: "VRDGPP80A01H501X", created: 11, listed: 12 });
+    await run(api.fetcher, 13);
+    expect(sentTexts(api)).toEqual([
+      expect.stringContaining("ebay-o-attesa-prima"),
+      expect.stringContaining("ebay-o-attesa-prima"),
+      expect.stringContaining("ebay-o-attesa-altro"),
+    ]);
+    expect(await deliveryOf("o-attesa-prima")).toMatchObject({
+      attempts: 0,
+      retry_at: new Date(later(13).getTime() + 1000).toISOString(),
+      lease: null,
+    });
+  });
+
+  it("un messaggio rifiutato si chiude, si registra e lascia partire i successivi", async () => {
+    const seller = await linked("rifiutato");
+    await order(seller.store, "o-respinto", { cf: "RSSMRA80A01H501U" });
+    await run(rateLimited(1).fetcher, 10);
+    await order(seller.store, "o-accolto-1", { cf: "BNCLGU80A01H501Z", created: 11, listed: 12 });
+    await order(seller.store, "o-accolto-2", { cf: "VRDGPP80A01H501X", created: 11, listed: 12 });
+    const api = bot((call) =>
+      call.method === "sendMessage" && String(call.params.text).includes("ebay-o-respinto")
+        ? failure(400, { ok: false, error_code: 400 })
+        : undefined,
+    );
+    const logs = await logged(() => run(api.fetcher, 13));
+    expect(api.texts()).toHaveLength(3);
+    expect(logs).toEqual([expect.objectContaining({ operation: "telegram", failure: "rejected" })]);
+    expect(await deliveryOf("o-respinto")).toMatchObject({
+      attempts: 0,
+      lease: null,
+      sent_at: null,
+      failed_at: later(13).toISOString(),
+    });
+    for (const id of ["o-accolto-1", "o-accolto-2"])
+      expect(await deliveryOf(id)).toMatchObject({ sent_at: later(13).toISOString() });
+    expect((await telegramSettings(env.DB, seller.userId, "UTC")).chat?.failure).toBeUndefined();
+  });
+
+  it("un token del bot non più valido ferma l'esecuzione e rilascia la consegna", async () => {
+    const first = await linked("token-primo", 641);
+    const second = await linked("token-secondo", 642);
+    await servedFirst(first);
+    await order(first.store, "o-token-primo", { cf: "RSSMRA80A01H501U" });
+    await order(second.store, "o-token-secondo", { cf: "BNCLGU80A01H501Z" });
+    const revoked = bot((call) => (call.method === "sendMessage" ? failure(401) : undefined));
+    const logs = await logged(() => run(revoked.fetcher, 10));
+    expect(revoked.texts()).toHaveLength(1);
+    expect(logs).toEqual([
+      expect.objectContaining({ operation: "telegram", failure: "credentials" }),
+    ]);
+    expect(await deliveryOf("o-token-primo")).toEqual({
+      attempts: 0,
+      retry_at: null,
+      uncertain_at: null,
+      lease: null,
+      locked_until: null,
+      sent_at: null,
+      failed_at: null,
+    });
+    // L'altro spazio non è stato valutato.
+    expect(await deliveryOf("o-token-secondo")).toBeNull();
+    const api = bot();
+    await run(api.fetcher, 15);
+    expect(api.texts().map((call) => call.params.chat_id)).toEqual(["641", "642"]);
+  });
+
+  it("il bot bloccato chiude anche le altre consegne in attesa della chat", async () => {
+    const seller = await linked("bloccata");
+    await order(seller.store, "o-bloccata-1", { cf: "RSSMRA80A01H501U" });
+    await run(rateLimited(1).fetcher, 10);
+    await order(seller.store, "o-bloccata-2", { cf: "BNCLGU80A01H501Z", created: 11, listed: 12 });
+    const blocked = bot((call) =>
+      call.method === "sendMessage" ? failure(403, { ok: false, error_code: 403 }) : undefined,
+    );
+    await run(blocked.fetcher, 13);
+    expect(blocked.texts()).toHaveLength(1);
+    for (const id of ["o-bloccata-1", "o-bloccata-2"])
+      expect(await deliveryOf(id)).toMatchObject({
+        attempts: 0,
+        lease: null,
+        failed_at: later(13).toISOString(),
+      });
+  });
+
+  it("un errore nel comporre il testo si ritenta come un errore certo", async () => {
+    const seller = await linked("fuso-invio");
+    await saveTelegramChange(env.DB, seller.userId, { name: "filter", value: "fiscal" }, "UTC");
+    await env.DB.prepare("UPDATE telegram_preferences SET time_zone = ? WHERE workspace_id = ?")
+      .bind("Fuso/Inesistente", seller.workspace)
+      .run();
+    await order(seller.store, "o-fuso-invio", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    const logs = await logged(() => run(api.fetcher, 10));
+    expect(api.calls).toHaveLength(0);
+    expect(logs).toEqual([expect.objectContaining({ operation: "telegram" })]);
+    expect(await deliveryOf("o-fuso-invio")).toEqual({
+      attempts: 1,
+      retry_at: later(11).toISOString(),
+      uncertain_at: null,
+      lease: null,
+      locked_until: null,
+      sent_at: null,
+      failed_at: null,
+    });
+  });
+
+  it("una consegna presa da un altro esecutore non ferma le successive", async () => {
+    const seller = await linked("occupata");
+    await order(seller.store, "o-occupata", { cf: "RSSMRA80A01H501U" });
+    await run(rateLimited(1).fetcher, 10);
+    await env.DB.prepare(
+      "UPDATE telegram_deliveries SET lease = 'altro', locked_until = ? WHERE order_id = 'o-occupata'",
+    )
+      .bind(later(30).toISOString())
+      .run();
+    await order(seller.store, "o-libera", { cf: "BNCLGU80A01H501Z", created: 11, listed: 12 });
+    const api = bot();
+    const logs = await logged(() => run(api.fetcher, 13));
+    expect(logs).toEqual([]);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-libera")]);
+    expect(await deliveryOf("o-occupata")).toMatchObject({ lease: "altro", sent_at: null });
+  });
+
+  it("un ordine in attesa passa al riepilogo scelto dopo la sua preparazione", async () => {
+    const seller = await linked("passa-riepilogo");
+    await order(seller.store, "o-passa", { cf: "RSSMRA80A01H501U" });
+    await run(rateLimited(60).fetcher, 10);
+    await digestMode(seller);
+    const api = bot();
+    await run(api.fetcher, 15);
+    expect(api.calls).toHaveLength(0);
+    expect(await deliveryOf("o-passa")).toMatchObject({
+      attempts: 0,
+      retry_at: null,
+      lease: null,
+      sent_at: null,
+      failed_at: null,
+    });
+    await run(api.fetcher, 60);
+    expect(sentTexts(api)).toEqual([expect.stringMatching(/Riepilogo del[\s\S]*ebay-o-passa/u)]);
+    expect(await deliveryOf("o-passa")).toMatchObject({ sent_at: later(60).toISOString() });
+  });
+
+  it("il riepilogo riunisce gli eventi di un ordine e omette quelli non più consultabili", async () => {
+    const seller = await linked("voci");
+    await order(seller.store, "o-voci-notificato", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    await run(api.fetcher, 5);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-voci-notificato")]);
+    await digestMode(seller);
+    await order(seller.store, "o-voci-nuovo", { cf: "BNCLGU80A01H501Z", created: 6, listed: 7 });
+    await order(seller.store, "o-voci-scaduto", { cf: "VRDGPP80A01H501X", created: 6, listed: 7 });
+    await run(api.fetcher, 10);
+    const correct = (id: string, value: string, minutes: number) =>
+      env.DB.batch([
+        env.DB.prepare(
+          "UPDATE tax_identifiers SET removed_at = ? WHERE order_id = 'o-voci-nuovo' AND removed_at IS NULL",
+        ).bind(later(minutes).toISOString()),
+        insertTaxIdentifiers({
+          id,
+          orderId: "o-voci-nuovo",
+          type: "CODICE_FISCALE",
+          value,
+          source: "ebay_trading_get_orders",
+          observedAt: later(minutes).toISOString(),
+        }),
+      ]);
+    // Il nuovo ordine si corregge due volte prima del riepilogo; il dato dell'altro si rimuove.
+    await correct("t-voci-1", "MRARSS80A01H501U", 15);
+    await env.DB.prepare(
+      "UPDATE tax_identifiers SET removed_at = ? WHERE order_id = 'o-voci-notificato'",
+    )
+      .bind(later(15).toISOString())
+      .run();
+    await run(api.fetcher, 20);
+    await correct("t-voci-2", "LGUBNC80A01H501Z", 25);
+    await run(api.fetcher, 30);
+    await env.DB.prepare("UPDATE orders SET retention_until = ? WHERE id = 'o-voci-scaduto'")
+      .bind(later(50).toISOString())
+      .run();
+    await run(api.fetcher, 60);
+    expect(api.texts()).toHaveLength(2);
+    const digest = sentTexts(api)[1]!;
+    expect(digest).toContain("2 ordini");
+    // Più eventi dello stesso ordine sono una voce «nuovo», con il dato corrente.
+    expect(digest).toContain(">ebay-o-voci-nuovo</a>");
+    expect(digest).toContain("<code>LGUBNC80A01H501Z</code>");
+    expect(digest).not.toContain("Dato fiscale aggiornato");
+    expect(digest).toContain("Dato fiscale rimosso");
+    expect(digest).not.toContain("ebay-o-voci-scaduto");
+    // Gli eventi raccolti, anche quello omesso, risultano consegnati con il riepilogo.
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS n FROM telegram_deliveries WHERE digest_id IS NOT NULL AND sent_at = ?",
+      )
+        .bind(later(60).toISOString())
+        .first(),
+    ).toEqual({ n: 5 });
+  });
+
+  it("un riepilogo che non parte chiude i suoi eventi", async () => {
+    const empty = await linked("riepilogo-vuoto", 651);
+    const disabled = await linked("riepilogo-spento", 652);
+    for (const seller of [empty, disabled]) await digestMode(seller);
+    await order(empty.store, "o-riepilogo-vuoto", { cf: "RSSMRA80A01H501U" });
+    await order(disabled.store, "o-riepilogo-spento", { cf: "BNCLGU80A01H501Z" });
+    const api = bot((call) =>
+      call.method === "sendMessage" && call.params.chat_id === "652"
+        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
+        : undefined,
+    );
+    await run(api.fetcher, 10);
+    // Nessun ordine del riepilogo è ancora consultabile: non parte.
+    await env.DB.prepare("UPDATE orders SET retention_until = ? WHERE id = 'o-riepilogo-vuoto'")
+      .bind(later(50).toISOString())
+      .run();
+    await run(api.fetcher, 60);
+    expect(api.texts().map((call) => call.params.chat_id)).toEqual(["652"]);
+    expect(await digestOf(empty)).toEqual({
+      attempts: 0,
+      sent_at: null,
+      failed_at: later(60).toISOString(),
+    });
+    expect(await deliveryOf("o-riepilogo-vuoto")).toMatchObject({
+      failed_at: later(60).toISOString(),
+    });
+    // Le notifiche spente prima dell'invio scartano il riepilogo in attesa.
+    await saveTelegramChange(
+      env.DB,
+      disabled.userId,
+      { name: "enabled", value: false },
+      "UTC",
+      later(62),
+    );
+    const after = bot();
+    await run(after.fetcher, 75);
+    expect(after.calls).toHaveLength(0);
+    expect(await digestOf(disabled)).toEqual({
+      attempts: 0,
+      sent_at: null,
+      failed_at: later(75).toISOString(),
+    });
+    expect(await deliveryOf("o-riepilogo-spento")).toMatchObject({
+      failed_at: later(75).toISOString(),
+    });
+  });
+
+  it("una consegna senza destinatario o senza importazione si chiude senza tentativi", async () => {
+    const seller = await linked("chiusa");
+    await order(seller.store, "o-chiusa", { cf: "RSSMRA80A01H501U" });
+    await run(rateLimited(600).fetcher, 10);
+    await saveTelegramChange(
+      env.DB,
+      seller.userId,
+      { name: "enabled", value: false },
+      "UTC",
+      later(12),
+    );
+    const api = bot();
+    await run(api.fetcher, 25);
+    expect(await deliveryOf("o-chiusa")).toMatchObject({
+      attempts: 0,
+      lease: null,
+      failed_at: later(25).toISOString(),
+    });
+    await saveTelegramChange(
+      env.DB,
+      seller.userId,
+      { name: "enabled", value: true },
+      "UTC",
+      later(26),
+    );
+    await env.DB.prepare("UPDATE sync_state SET history_done_at = ? WHERE store_id = ?")
+      .bind(later(27).toISOString(), seller.store)
+      .run();
+    await run(rateLimited(600).fetcher, 30);
+    // Una nuova importazione richiesta prima dell'invio toglie il riepilogo della precedente.
+    await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL WHERE store_id = ?")
+      .bind(seller.store)
+      .run();
+    await run(api.fetcher, 45);
+    expect(api.calls).toHaveLength(0);
+    expect(
+      await env.DB.prepare(
+        "SELECT attempts, sent_at, failed_at FROM telegram_deliveries WHERE kind = 'import'",
+      ).first(),
+    ).toEqual({ attempts: 0, sent_at: null, failed_at: later(45).toISOString() });
+  });
+
+  it("una chat sostituita durante l'invio scarta la consegna senza errori", async () => {
+    const seller = await linked("corsa-chat");
+    await order(seller.store, "o-corsa-chat", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    const replaced = racing("SELECT chat_id FROM telegram_links", () => ["sostituito"]);
+    const logs = await logged(() => deliverTelegram(replaced, api.fetcher, later(10)));
+    expect(logs).toEqual([]);
+    expect(api.calls).toHaveLength(0);
+    expect(await deliveryOf("o-corsa-chat")).toMatchObject({
+      attempts: 0,
+      failed_at: later(10).toISOString(),
+    });
+  });
+
+  it("un ordine non più consultabile durante la valutazione resta da valutare", async () => {
+    const seller = await linked("corsa-ordine");
+    await order(seller.store, "o-corsa-ordine", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    const hidden = racing("WITH visible_orders", ([, ...rest]) => ["uscito", ...rest]);
+    const logs = await logged(() => deliverTelegram(hidden, api.fetcher, later(10)));
+    expect(logs).toEqual([]);
+    expect(await evaluatedAt("o-corsa-ordine")).toBeUndefined();
+    await run(api.fetcher, 20);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-corsa-ordine")]);
+  });
+
+  it("uno spazio senza membri non prepara eventi", async () => {
+    const seller = await linked("senza-membri");
+    await env.DB.prepare("DELETE FROM workspace_members WHERE workspace_id = ?")
+      .bind(seller.workspace)
+      .run();
+    await env.DB.prepare("UPDATE sync_state SET history_done_at = ? WHERE store_id = ?")
+      .bind(later(5).toISOString(), seller.store)
+      .run();
+    await order(seller.store, "o-senza-membri", { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    await run(api.fetcher, 10);
+    expect(api.calls).toHaveLength(0);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM telegram_deliveries").first()).toEqual({
+      n: 0,
+    });
+  });
+
+  it("con «solo fiscali» il dato arrivato a notifiche spente non arriva alla riattivazione", async () => {
+    const seller = await linked("arrivo-spente");
+    await order(seller.store, "o-arrivo-spente");
+    const api = bot();
+    await run(api.fetcher, 10);
+    await saveTelegramChange(
+      env.DB,
+      seller.userId,
+      { name: "enabled", value: false },
+      "UTC",
+      later(12),
+    );
+    await insertTaxIdentifiers({
+      id: "t-arrivo-spente",
+      orderId: "o-arrivo-spente",
+      type: "CODICE_FISCALE",
+      value: "RSSMRA80A01H501U",
+      source: "ebay_trading_get_orders",
+      observedAt: later(15).toISOString(),
+    }).run();
+    // Con le notifiche spente lo spazio non si valuta: lo stato resta quello registrato.
+    await run(api.fetcher, 16);
+    expect(await evaluatedAt("o-arrivo-spente")).toBe(later(10).toISOString());
+    await saveTelegramChange(
+      env.DB,
+      seller.userId,
+      { name: "enabled", value: true },
+      "UTC",
+      later(18),
+    );
+    await run(api.fetcher, 20);
+    expect(api.calls).toHaveLength(0);
+    // Il dato che cambia dopo la riattivazione arriva come nuovo ordine.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE tax_identifiers SET removed_at = ? WHERE id = 't-arrivo-spente'").bind(
+        later(25).toISOString(),
+      ),
+      insertTaxIdentifiers({
+        id: "t-arrivo-dopo",
+        orderId: "o-arrivo-spente",
+        type: "CODICE_FISCALE",
+        value: "BNCLGU80A01H501Z",
+        source: "ebay_trading_get_orders",
+        observedAt: later(25).toISOString(),
+      }),
+    ]);
+    await run(api.fetcher, 30);
+    expect(sentTexts(api)).toEqual([
+      expect.stringMatching(/Nuovo ordine[\s\S]*<code>BNCLGU80A01H501Z<\/code>/u),
+    ]);
+  });
+
+  it("una variazione conta se scritta dopo l'inizio della finestra di lettura", async () => {
+    const seller = await linked("finestra");
+    await order(seller.store, "o-finestra");
+    const api = bot();
+    await run(api.fetcher, 30);
+    expect(await evaluatedAt("o-finestra")).toBe(later(30).toISOString());
+    // La finestra comincia 15 minuti prima della valutazione: un dato precedente non è una
+    // variazione e l'ordine non si rivaluta.
+    const start = later(15).getTime();
+    await insertTaxIdentifiers({
+      id: "t-finestra",
+      orderId: "o-finestra",
+      type: "CODICE_FISCALE",
+      value: "RSSMRA80A01H501U",
+      source: "ebay_trading_get_orders",
+      observedAt: new Date(start - 1000).toISOString(),
+    }).run();
+    await run(api.fetcher, 40);
+    expect(await evaluatedAt("o-finestra")).toBe(later(30).toISOString());
+    expect(api.calls).toHaveLength(0);
+    await env.DB.prepare("UPDATE tax_identifiers SET observed_at = ? WHERE id = 't-finestra'")
+      .bind(new Date(start + 1000).toISOString())
+      .run();
+    await run(api.fetcher, 50);
+    expect(await evaluatedAt("o-finestra")).toBe(later(50).toISOString());
+    expect(sentTexts(api)).toEqual([expect.stringContaining("<code>RSSMRA80A01H501U</code>")]);
+  });
+
+  it("il riepilogo parte all'orario esatto; con un messaggio per ordine non c'è riepilogo", async () => {
+    const digest = await linked("orario-esatto", 661);
+    const each = await linked("per-ordine", 662);
+    await digestMode(digest);
+    await saveTelegramChange(env.DB, each.userId, { name: "digestTime", value: "21:00" }, "UTC");
+    await order(digest.store, "o-orario-esatto", { cf: "RSSMRA80A01H501U" });
+    await order(each.store, "o-per-ordine", { cf: "BNCLGU80A01H501Z" });
+    const api = bot();
+    await run(api.fetcher, 60);
+    const texts = Object.fromEntries(
+      api.texts().map((call) => [call.params.chat_id, String(call.params.text)]),
+    );
+    expect(Object.keys(texts).sort()).toEqual(["661", "662"]);
+    expect(texts["661"]).toMatch(/Riepilogo del[\s\S]*ebay-o-orario-esatto/u);
+    expect(texts["662"]).toMatch(/^🛒 <b>Nuovo ordine<\/b>[\s\S]*ebay-o-per-ordine/u);
+    expect(await digestOf(each)).toBeNull();
+  });
+
+  it("elimina le consegne chiuse dopo sette giorni e le altre dopo trenta", async () => {
+    const seller = await account("conservazione");
+    const day = 86_400_000;
+    const at = Date.parse(now);
+    const rows: Array<[string, number, "sent_at" | "failed_at" | null]> = [
+      ["inviata-7", at - 7 * day, "sent_at"],
+      ["fallita-7", at - 7 * day, "failed_at"],
+      ["inviata-recente", at - 7 * day + 1, "sent_at"],
+      ["aperta-30", at - 30 * day, null],
+      ["aperta-recente", at - 30 * day + 1, null],
+      ["aperta-8", at - 8 * day, null],
+    ];
+    await env.DB.batch(
+      rows.map(([id, created, closed]) => {
+        const iso = new Date(created).toISOString();
+        return env.DB.prepare(`INSERT INTO telegram_deliveries
+          (id, workspace_id, link_id, kind, store_id, event_key, event_at, created_at, sent_at, failed_at)
+          VALUES (?, ?, 'collegamento', 'import', ?, ?, ?, ?, ?, ?)`).bind(
+          id,
+          seller.workspace,
+          seller.store,
+          `import:${id}`,
+          iso,
+          iso,
+          closed === "sent_at" ? iso : null,
+          closed === "failed_at" ? iso : null,
+        );
+      }),
+    );
+    await purgeExpiredRecords(env.DB, new Date(now));
+    const { results } = await env.DB.prepare("SELECT id FROM telegram_deliveries ORDER BY id").all<{
+      id: string;
+    }>();
+    expect(results.map(({ id }) => id)).toEqual(["aperta-8", "aperta-recente", "inviata-recente"]);
   });
 });
 
