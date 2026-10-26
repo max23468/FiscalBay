@@ -1166,6 +1166,8 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(await premium(now)).toBe(true);
     expect((await purchaseState(env.DB, userId, at(now)))?.state).toBe("covered");
     expect(await view(now)).toEqual({ premium: { period: "monthly", renewsAt: periodEnd } });
+    // Un abbonamento che si rinnova non riceve scritture da FiscalBay.
+    expect(stripe.writes).toEqual([]);
     // Il piano reale mostra periodicità e rinnovo; con la chiave Stripe il portale è disponibile.
     const page = await planAccount(now);
     expect(page.account).toMatchObject({
@@ -1548,7 +1550,14 @@ describe("Webhook e riconciliazione Stripe", () => {
         proration_behavior: "none",
       },
     ]);
-    // Riletto di nuovo, non la riprogramma.
+    // Riletto di nuovo, non la riprogramma; una disdetta del cliente che arriva prima resta.
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.updated", objectId: "sub_test" },
+      stripe.fetcher,
+      at(failedAt),
+    );
+    stripe.state.subscription.cancelAt = "2026-10-15T00:00:00.000Z";
     await applyStripeEvent(
       env,
       { topic: "customer.subscription.updated", objectId: "sub_test" },
@@ -1558,6 +1567,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(
       stripe.writes.filter((write) => write.path === "/v1/subscriptions/sub_test"),
     ).toHaveLength(1);
+    stripe.state.subscription.cancelAt = "2026-10-20T20:00:00.000Z";
 
     // Regolarizzato entro sette giorni: copertura contigua al periodo precedente.
     stripe.state.subscription.status = "active";
@@ -1604,8 +1614,12 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(stripe.requests).not.toContain("DELETE /v1/subscriptions/sub_test");
     // Allo scadere esatto la tutela è finita, anche per il piano mostrato.
     expect(await view("2026-10-20T20:00:00.000Z")).toEqual({});
-    // Il cron rilegge l'abbonamento alla fine della tutela, anche senza webhook.
+    // Il cron rilegge l'abbonamento alla fine della tutela, anche senza webhook, e lo chiude
+    // senza programmare una chiusura ormai passata, anche se quella di prima è sparita.
+    stripe.state.subscription.cancelAt = undefined;
+    const scheduled = stripe.writes.length;
     await reconcileBilling(env, stripe.fetcher, at("2026-10-20T20:00:00.000Z"));
+    expect(stripe.writes.slice(scheduled).map((write) => write.path)).toEqual([]);
     expect(stripe.requests).toContain("DELETE /v1/subscriptions/sub_test");
     expect(await view("2026-10-20T20:10:00.000Z")).toEqual({});
     expect((await purchaseState(env.DB, userId, at("2026-10-20T20:10:00.000Z")))?.state).toBe(
@@ -1725,6 +1739,34 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(kinds.filter((kind) => kind === "dovuto")).toHaveLength(3);
     // Il riferimento a una sessione scaduta da oltre due giorni si elimina.
     expect(await env.DB.prepare("SELECT 1 FROM subscription_checkouts").first()).toBeNull();
+    // Se la pulizia non riesce, l'errore si registra e il turno rilegge gli abbonamenti.
+    const failing = new Proxy(env.DB, {
+      get(target, property) {
+        if (property === "prepare")
+          return (sql: string) => {
+            // D1 rifiuta l'esecuzione, non la preparazione.
+            if (sql.includes("DELETE FROM subscription_checkouts"))
+              return { bind: () => ({ run: () => Promise.reject(new Error("cleanup")) }) };
+            return target.prepare(sql);
+          };
+        const value = Reflect.get(target, property) as unknown;
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const later = new Date(Date.parse(turn) + 86_400_000 + 3_600_000).toISOString();
+    await reconcileBilling({ ...env, DB: failing } as Env, stripe.fetcher, at(later));
+    // Stripe è fuori servizio: l'unico errore senza il motivo del provider è la pulizia.
+    expect(
+      errors.mock.calls
+        .map(([line]) => JSON.parse(String(line)) as Record<string, unknown>)
+        .filter((entry) => !entry.failure),
+    ).toEqual([expect.objectContaining({ operation: "billing" })]);
+    expect(
+      await env.DB.prepare("SELECT count(*) AS n FROM stripe_subscriptions WHERE checked_at = ?")
+        .bind(later)
+        .first(),
+    ).toEqual({ n: 25 });
     expect(kinds.filter((kind) => kind === "in-attesa")).toHaveLength(5);
     // Delle riletture giornaliere restano i posti del turno, prima le più vecchie.
     expect(results.filter(({ id }) => id.startsWith("giornaliero")).map(({ id }) => id)).toEqual(
@@ -2541,6 +2583,36 @@ describe("Lifetime e concessioni", () => {
       .bind(now, periodEnd)
       .run();
     expect(await portalCustomer()).toBe("cus_new");
+    // Chiuso, l'abbonamento più recente prevale comunque sul lifetime rimborsato.
+    await env.DB.prepare(
+      "UPDATE stripe_subscriptions SET status = 'canceled' WHERE id = 'sub_new'",
+    ).run();
+    expect(await portalCustomer()).toBe("cus_new");
+  });
+
+  it("apre il portale sul cliente del lifetime in vigore, non su un abbonamento chiuso", async () => {
+    const stripe = stripeAccount();
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+          customer_id, offer, price_generation, status, current_period_start, current_period_end,
+          cancel_at_period_end, synced_at, checked_at, renewal_offer)
+        VALUES ('sub_old', 'w-a', 'test', 'cus_old', 'monthly', '2026-09', 'canceled', ?1, ?2, 0,
+          ?1, ?1, 'monthly')`).bind(now, periodEnd),
+      env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
+          provider_reference, customer_id, activated_at, created_at)
+        VALUES (1, 'w-a', 'active', 'sale', 'cs_paid', 'cus_lifetime', ?1, ?1)`).bind(now),
+      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+          stripe_checkout_session_id) VALUES ('lifetime', 'w-a', 'lifetime', ?1, 'cs_paid')`).bind(
+        now,
+      ),
+    ]);
+    await openBillingPortal(env, userId, "http://localhost:5173/app/impostazioni/piano", "it");
+    expect(
+      stripe.writes
+        .find((write) => write.path === "/v1/billing_portal/sessions")!
+        .body.get("customer"),
+    ).toBe("cus_lifetime");
   });
 
   it("dalla pagina del piano porta al checkout lifetime o dice che i posti sono finiti", async () => {
@@ -2748,6 +2820,13 @@ describe("Lifetime e concessioni", () => {
     expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
     expect(stripe.requests).toContain("DELETE /v1/subscriptions/sub_test");
     expect(stripe.state.subscription.status).toBe("canceled");
+    // Una sessione già scaduta non ha nulla da fermare.
+    await env.DB.prepare("DELETE FROM stripe_subscriptions").run();
+    await buyMonthly();
+    stripe.state.sessions[2]!.status = "expired";
+    stripe.requests.length = 0;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toEqual(["GET /v1/checkout/sessions/cs_lifetime_3"]);
   });
 
   it("il cron rilegge una volta al giorno i lifetime venduti, per i rimborsi senza webhook", async () => {
