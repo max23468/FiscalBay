@@ -19,10 +19,29 @@ export const activeStore = (credentials: string, store: string) =>
   `${credentials}.rejected_at IS NULL AND ${store}.disconnected_at IS NULL
    AND ${unpausedStore(`${credentials}.store_id`)}`;
 
+/** Il negozio è in pausa per il piano: il Free ne serve uno solo. */
+export const planPausedStore = (storeId: string) =>
+  `EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = ${storeId} AND p.reason = 'plan')`;
+
 /** Dati del negozio consultabili: non eliminati; la pausa del piano li esclude, quella manuale no. */
 export const consultableStore = (store: string) =>
-  `${store}.data_deleted_at IS NULL AND NOT EXISTS (
-     SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = ${store}.id AND p.reason = 'plan')`;
+  `${store}.data_deleted_at IS NULL AND NOT ${planPausedStore(`${store}.id`)}`;
+
+/** Consenso non rifiutato e ancora rinnovabile all'istante `at`. Argomento: alias delle credenziali. */
+export const renewableConsent = (credentials: string, at: string) =>
+  `${credentials}.rejected_at IS NULL AND ${credentials}.refresh_expires_at > ${at}`;
+
+/** Negozio da ricollegare: scollegato o senza un consenso ancora rinnovabile all'istante `at`. */
+export const reconnectStore = (store: string, at: string) =>
+  `(${store}.disconnected_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM ebay_store_credentials c
+     WHERE c.store_id = ${store}.id AND ${renewableConsent("c", at)}))`;
+
+/**
+ * Ordine che compare negli elenchi all'istante `at`: non unito a un altro, ancora conservato e
+ * pagato. Argomento: alias dell'ordine.
+ */
+export const listedOrder = (order: string, at: string) =>
+  `${order}.merged_into IS NULL AND ${order}.retention_until > ${at} AND ${order}.is_provisional = 0`;
 
 /**
  * Le scritture di un'importazione valgono solo per il consenso con cui è partita: dopo uno

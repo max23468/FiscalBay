@@ -1,7 +1,7 @@
 import { activeEntitlementSql } from "./grants.server";
 import { lockMilliseconds } from "./order-acquisition.server";
 import { listVisibleOrders } from "./orders.server";
-import { consultableStore, storeNameSql } from "./store-state.server";
+import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
 import { telegramRecipient, telegramRecipientSql } from "./telegram.server";
 import {
   digestMessage,
@@ -626,11 +626,9 @@ async function compose(
       .prepare(`SELECT s.id AS storeId, ${storeNameSql("s")} ||
           CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS storeName,
           s.ebay_environment AS environment, ss.history_from AS "from", ss.history_until AS until,
-          (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
-            AND o.is_provisional = 0 AND o.retention_until > ?2
+          (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND ${listedOrder("o", "?2")}
             AND o.creation_time >= ss.history_from AND o.creation_time < ss.history_until) AS orders,
-          (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
-            AND o.is_provisional = 0 AND o.retention_until > ?2
+          (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND ${listedOrder("o", "?2")}
             AND o.creation_time >= ss.history_from AND o.creation_time < ss.history_until
             AND EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
               WHERE (original.id = o.id OR original.merged_into = o.id) AND t.removed_at IS NULL)) AS fiscal

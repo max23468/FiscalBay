@@ -1,5 +1,5 @@
 import { activeEntitlementSql } from "./grants.server";
-import { storeNameSql } from "./store-state.server";
+import { planPausedStore, storeNameSql } from "./store-state.server";
 import {
   chatLabel,
   deepLink,
@@ -243,8 +243,7 @@ export async function telegramSettings(
       .bind(userId),
     db
       .prepare(`SELECT s.id, ${storeNameSql("s")} AS name, COALESCE(sp.enabled, 1) AS enabled,
-        EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan')
-          AS paused
+        ${planPausedStore("s.id")} AS paused
       FROM workspace_members wm JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
       LEFT JOIN telegram_store_preferences sp ON sp.store_id = s.id
       WHERE wm.user_id = ? AND s.data_deleted_at IS NULL ORDER BY s.linked_at, s.id`)

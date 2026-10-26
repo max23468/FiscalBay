@@ -5,7 +5,7 @@ import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-cont
 import { servedSql } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
 import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
-import { activeStore, writableStore } from "./store-state.server";
+import { activeStore, renewableConsent, writableStore } from "./store-state.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
@@ -235,7 +235,7 @@ export async function requestStoreSync(
        FROM ebay_stores s
        JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
        LEFT JOIN ebay_store_credentials c
-         ON c.store_id = s.id AND c.rejected_at IS NULL AND c.refresh_expires_at > ?3
+         ON c.store_id = s.id AND ${renewableConsent("c", "?3")}
        LEFT JOIN sync_state ss ON ss.store_id = s.id
       WHERE wm.user_id = ?1 AND s.id = ?2 AND s.data_deleted_at IS NULL`,
   )

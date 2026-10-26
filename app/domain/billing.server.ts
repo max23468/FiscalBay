@@ -16,7 +16,7 @@ import {
   stripeSecretKey,
 } from "../integrations/stripe.server";
 import type { AccountView } from "../view-models";
-import { openSubscriptionStatuses } from "./grants.server";
+import { lifetimeInForceSql, openSubscriptionStatuses } from "./grants.server";
 import {
   isLifetimeSession,
   reconcileLifetime,
@@ -725,12 +725,7 @@ export function workspaceCustomerSql(workspace: string, environment: string) {
     ORDER BY julianday(s.current_period_start) DESC LIMIT 1)`;
   const lifetime = (inForce: boolean) => `(SELECT a.customer_id FROM lifetime_allocations a
     WHERE a.workspace_id = ${workspace} AND a.status = 'active' AND a.customer_id IS NOT NULL
-      AND ${notErasedSql("a")}${
-        inForce
-          ? ` AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = a.workspace_id
-        AND e.source = 'lifetime' AND e.revoked_at IS NULL)`
-          : ""
-      })`;
+      AND ${notErasedSql("a")}${inForce ? ` AND ${lifetimeInForceSql("a.workspace_id")}` : ""})`;
   return `COALESCE(${subscription(true)}, ${lifetime(true)}, ${subscription(false)},
     ${lifetime(false)})`;
 }

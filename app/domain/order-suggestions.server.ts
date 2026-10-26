@@ -1,5 +1,5 @@
 import { activeEntitlementSql, orderAccessSql } from "./grants.server";
-import { consultableStore, storeNameSql } from "./store-state.server";
+import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { SuggestionView } from "../view-models";
@@ -34,8 +34,7 @@ export async function orderSuggestions(
     FROM targets target
     LEFT JOIN orders o ON o.buyer_eias_token = target.buyer_eias_token
       AND o.id <> target.id AND o.creation_time < target.creation_time
-      AND o.merged_into IS NULL AND o.retention_until > ?4
-      AND o.is_provisional = 0
+      AND ${listedOrder("o", "?4")}
       AND EXISTS (SELECT 1 FROM ebay_stores allowed WHERE allowed.id = o.store_id
         AND allowed.workspace_id = target.workspace_id AND allowed.ebay_environment = ?2
         AND ${consultableStore("allowed")})

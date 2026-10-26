@@ -1,6 +1,6 @@
-import { activeEntitlementSql } from "./grants.server";
+import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
 import { listVisibleOrders } from "./orders.server";
-import { storeNameSql } from "./store-state.server";
+import { planPausedStore, reconnectStore, storeNameSql } from "./store-state.server";
 import {
   consumeTelegramStart,
   saveTelegramChange,
@@ -372,27 +372,23 @@ async function readState(db: D1Database, link: Link, now: Date) {
       .bind(link.id),
     db
       .prepare(`SELECT s.id, ${storeNameSql("s")} AS name, s.ebay_environment AS environment,
-          COALESCE(sp.enabled, 1) AS enabled,
-          EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan')
-            AS paused,
-          (s.disconnected_at IS NOT NULL OR NOT EXISTS (SELECT 1 FROM ebay_store_credentials c
-            WHERE c.store_id = s.id AND c.rejected_at IS NULL AND c.refresh_expires_at > ?2))
-            AS reconnect
+          COALESCE(sp.enabled, 1) AS enabled, ${planPausedStore("s.id")} AS paused,
+          ${reconnectStore("s", "?2")} AS reconnect
         FROM ebay_stores s LEFT JOIN telegram_store_preferences sp ON sp.store_id = s.id
         WHERE s.workspace_id = ?1 AND s.data_deleted_at IS NULL ORDER BY s.linked_at, s.id`)
       .bind(link.workspaceId, now.toISOString()),
-    // La copertura mostrata è la stessa delle Impostazioni: prima un diritto diverso dalla prova.
+    // La copertura mostrata è la stessa delle Impostazioni.
     db
-      .prepare(`SELECT e.source, e.ends_at AS endsAt FROM workspace_entitlements e
-        WHERE e.workspace_id = ?1 AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(?2)
-          AND (e.ends_at IS NULL OR julianday(?2) < julianday(e.ends_at))
-        ORDER BY e.source = 'trial', e.ends_at IS NOT NULL, julianday(e.ends_at) DESC LIMIT 1`)
+      .prepare(`SELECT ${activeCoverageSql("source", "?1", "?2")} AS source,
+          ${activeCoverageSql("ends_at", "?1", "?2")} AS endsAt`)
       .bind(link.workspaceId, now.toISOString()),
   ]);
   return {
     preferences: preferences[0] as Preferences,
     stores: stores as StoreRow[],
-    coverage: coverage[0] as { source: string; endsAt: string | null } | undefined,
+    coverage: coverage[0]?.source
+      ? (coverage[0] as { source: string; endsAt: string | null })
+      : undefined,
   };
 }
 

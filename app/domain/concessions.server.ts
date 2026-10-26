@@ -10,6 +10,7 @@ import {
 import { reconcileSubscription } from "./billing.server";
 import { grantLifetime, type LifetimeGrant } from "./lifetime.server";
 import { dayMilliseconds } from "../time";
+import { lifetimeInForceSql } from "./grants.server";
 
 /**
  * Concessioni della console amministrativa (§6.3): Premium temporaneo, estensione gratuita di
@@ -53,8 +54,7 @@ export async function grantPremium(
     return { result: "invalid" };
   const at = now.toISOString();
   const workspace = await env.DB.prepare(`SELECT
-      EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = w.id
-        AND e.source = 'lifetime' AND e.revoked_at IS NULL) AS lifetime,
+      ${lifetimeInForceSql("w.id")} AS lifetime,
       (SELECT MAX(e.ends_at) FROM workspace_entitlements e WHERE e.workspace_id = w.id
         AND e.revoked_at IS NULL AND julianday(e.ends_at) > julianday(?2)) AS covered_until,
       (SELECT s.id FROM stripe_subscriptions s WHERE s.workspace_id = w.id AND s.environment = ?3

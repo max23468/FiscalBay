@@ -11,7 +11,7 @@ import {
   stripeId,
 } from "../integrations/stripe.server";
 import { purchasesOpenSql } from "./admission-state.server";
-import { openSubscriptionStatuses, storeReadSql } from "./grants.server";
+import { lifetimeInForceSql, openSubscriptionStatuses, storeReadSql } from "./grants.server";
 import { paymentReversal, reversalStatements } from "./refunds.server";
 import { inSequence } from "../sequence";
 import { sqlList } from "./sql.server";
@@ -40,10 +40,6 @@ const renewalMarginMs = 10 * 60 * 1000;
 const freeSlotSql = `WITH RECURSIVE n(slot) AS (SELECT 1 UNION ALL SELECT slot + 1 FROM n
     WHERE slot < ${lifetimeSlots})`;
 const freeSlotWhere = "slot NOT IN (SELECT slot FROM lifetime_allocations)";
-
-/** Lifetime in vigore: un rimborso o una disputa persa lo revocano e il posto resta occupato. */
-const lifetimeInForceSql = (workspace: string) => `EXISTS (SELECT 1 FROM workspace_entitlements e
-  WHERE e.workspace_id = ${workspace} AND e.source = 'lifetime' AND e.revoked_at IS NULL)`;
 
 /**
  * Netto del listino per una periodicità della generazione dell'abbonamento. Null per una

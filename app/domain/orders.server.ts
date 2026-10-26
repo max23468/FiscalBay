@@ -24,6 +24,7 @@ import { orderAccessSql } from "./grants.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 import { consultableStore, storeNameSql } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
+import { sqlList } from "./sql.server";
 
 export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
 export type ShippingState = "to_ship" | "in_progress" | "shipped" | "cancelled" | "unknown";
@@ -124,8 +125,6 @@ function isFulfillmentCf(tax: VisibleOrder["taxIdentifiers"][number]): boolean {
   // cfKey qualifica già il Paese prima del confronto fra le fonti.
   return tax.source === "ebay_fulfillment" && tax.type === "CODICE_FISCALE";
 }
-
-const sqlList = (names: readonly string[]) => names.map((name) => `'${name}'`).join(", ");
 
 /**
  * Tipo dell'identificativo come in `taxIdentifierType`, dagli stessi elenchi: CF e Partita IVA

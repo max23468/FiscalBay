@@ -3,7 +3,7 @@ import { dayMilliseconds } from "../time";
 import { resumeAfterInactivity } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
 import { historyStartSql } from "./history-window.server";
-import { storeNameSql } from "./store-state.server";
+import { listedOrder, storeNameSql } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 
 /**
@@ -183,12 +183,10 @@ export async function listStores(
               (SELECT paused_at FROM ebay_store_pauses p WHERE p.store_id = s.id
                 AND p.reason = 'inactivity') AS inactive_since,
               ${activeEntitlementSql("s.workspace_id", "?2")} AS premium,
-              (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
-                AND o.retention_until > ?2
-                AND o.is_provisional = 0) AS orders,
+              (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id
+                AND ${listedOrder("o", "?2")}) AS orders,
               (SELECT o.marketplace_id FROM orders o WHERE o.store_id = s.id
-                AND o.marketplace_id IS NOT NULL AND o.merged_into IS NULL
-                AND o.retention_until > ?2 AND o.is_provisional = 0
+                AND o.marketplace_id IS NOT NULL AND ${listedOrder("o", "?2")}
                 GROUP BY o.marketplace_id ORDER BY COUNT(*) DESC, o.marketplace_id LIMIT 1)
                 AS marketplace
          FROM workspace_members wm
