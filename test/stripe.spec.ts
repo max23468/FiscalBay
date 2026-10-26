@@ -41,7 +41,7 @@ import { action as settingsAction, loader as settingsLoader } from "../app/route
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
-import { routePage } from "./fixtures/route-fixtures";
+import { callRoute, routePage } from "./fixtures/route-fixtures";
 const event = {
   id: "evt_checkout_completed",
   object: "event",
@@ -146,13 +146,7 @@ async function workspace(userId: string, { synced = true } = {}) {
 }
 
 function buy(cookie: string, plan: string, path = "/app/impostazioni/piano") {
-  return settingsAction({
-    request: new Request(`http://localhost:5173${path}`, {
-      method: "POST",
-      headers: { cookie, origin: "http://localhost:5173" },
-      body: new URLSearchParams({ intent: "buy", plan }),
-    }),
-  } as Parameters<typeof settingsAction>[0]);
+  return callRoute(settingsAction, path, { cookie, fields: { intent: "buy", plan } });
 }
 
 describe("Stripe Managed Payments", () => {

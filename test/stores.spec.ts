@@ -49,6 +49,7 @@ import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account
 import { homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
 import { queued } from "./fixtures/queue-fixture";
+import { callRoute, routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -452,24 +453,11 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
   });
 
   function storesPage(path: string, cookie: string) {
-    return loadStores({
-      request: new Request(`http://localhost:5173${path}`, { headers: { cookie } }),
-      params: { negozio: path.split("/negozi/")[1] },
-    } as Parameters<typeof loadStores>[0]);
+    return callRoute(loadStores, path, { cookie, params: { negozio: path.split("/negozi/")[1] } });
   }
 
-  function storeForm(
-    cookie: string,
-    fields: Record<string, string>,
-    origin = "http://localhost:5173",
-  ) {
-    return storesAction({
-      request: new Request("http://localhost:5173/app/negozi", {
-        method: "POST",
-        headers: { cookie, origin },
-        body: new URLSearchParams(fields),
-      }),
-    } as Parameters<typeof storesAction>[0]);
+  function storeForm(cookie: string, fields: Record<string, string>, origin = testOrigin) {
+    return callRoute(storesAction, "/app/negozi", { cookie, origin, fields });
   }
 
   it("mostra elenco e pannello del negozio con i soli dati posseduti e il piano dello spazio", async () => {
@@ -521,12 +509,9 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(foreign.data).toMatchObject({ notFound: true, page: { stores: [], detail: null } });
 
     // Senza sessione si torna all'accesso.
-    const anonymous = await loadStores({
-      request: new Request("http://localhost:5173/app/negozi"),
-      params: {},
-    } as Parameters<typeof loadStores>[0]).catch((response: Response) => response);
-    expect((anonymous as Response).status).toBe(302);
-    expect((anonymous as Response).headers.get("location")).toBe("/accesso");
+    const anonymous = await routeResponse(loadStores, "/app/negozi");
+    expect(anonymous.status).toBe(302);
+    expect(anonymous.headers.get("location")).toBe("/accesso");
   });
 
   it("esegue pausa, ripresa, scollegamento ed eliminazione dalla schermata con origine e sessione", async () => {
@@ -641,18 +626,14 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       ["/app/profilo", "/app/impostazioni/profilo"],
       ["/en/app/profilo", "/en/app/impostazioni/profilo"],
     ]) {
-      const moved = (await loadProfile({
-        request: new Request(`http://localhost:5173${path}`),
-      } as Parameters<typeof loadProfile>[0])) as Response;
+      const moved = await routeResponse(loadProfile, path);
       expect(moved.status).toBe(302);
       expect(moved.headers.get("location")).toBe(target);
     }
-    const loaded = await loadSettings({
-      request: new Request("http://localhost:5173/en/app/impostazioni/profilo", {
-        headers: { cookie: seller.cookie },
-      }),
+    const loaded = await routeData(loadSettings, "/en/app/impostazioni/profilo", {
+      cookie: seller.cookie,
       params: { sezione: "profilo" },
-    } as never);
+    });
     expect(loaded).toMatchObject({
       language: "en",
       page: {
@@ -665,14 +646,12 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       },
     });
 
-    const save = (fields: Record<string, string>, origin = "http://localhost:5173") =>
-      settingsAction({
-        request: new Request("http://localhost:5173/app/impostazioni/profilo", {
-          method: "POST",
-          headers: { cookie: seller.cookie, origin },
-          body: new URLSearchParams({ intent: "profile", ...fields }),
-        }),
-      } as never);
+    const save = (fields: Record<string, string>, origin = testOrigin) =>
+      callRoute(settingsAction, "/app/impostazioni/profilo", {
+        cookie: seller.cookie,
+        origin,
+        fields: { intent: "profile", ...fields },
+      });
 
     const foreign = await save({ nome: "Altro", cognome: "Nome" }, "https://esempio.invalid").catch(
       (response: Response) => response,
@@ -697,17 +676,8 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
   });
 
   const origin = "http://localhost:5173";
-  const post = (path: string, cookie: string, fields: Record<string, string>, from = origin) =>
-    new Request(`${origin}${path}`, {
-      method: "POST",
-      headers: { cookie, origin: from },
-      body: new URLSearchParams(fields),
-    });
   const settings = (cookie: string, path = "/app/impostazioni", sezione?: string) =>
-    loadSettings({
-      request: new Request(`${origin}${path}`, { headers: { cookie } }),
-      params: { sezione },
-    } as never).catch((thrown: unknown) => {
+    callRoute(loadSettings, path, { cookie, params: { sezione } }).catch((thrown: unknown) => {
       if (thrown instanceof Response) return thrown;
       throw thrown;
     });
@@ -717,7 +687,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     return loaded;
   };
   const saveSetting = (cookie: string, fields: Record<string, string>, from = origin) =>
-    settingsAction({ request: post("/app/impostazioni", cookie, fields, from) } as never).catch(
+    callRoute(settingsAction, "/app/impostazioni", { cookie, origin: from, fields }).catch(
       (thrown: unknown) => thrown,
     );
 
@@ -878,9 +848,11 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
   it("ricorda la lingua scelta e riapre l'area in quella lingua anche al nuovo accesso", async () => {
     const seller = await verifiedSession("lingua@example.invalid");
     const choose = (language: string, returnTo: string, from = origin) =>
-      languageAction({
-        request: post("/app/lingua", seller.cookie, { language, returnTo }, from),
-      } as never).catch((thrown: unknown) => thrown as Response);
+      routeResponse(languageAction, "/app/lingua", {
+        cookie: seller.cookie,
+        origin: from,
+        fields: { language, returnTo },
+      });
     const moved = await choose("en", "/app/impostazioni/aspetto?x=1");
     expect(moved.status).toBe(303);
     expect(moved.headers.get("location")).toBe("/en/app/impostazioni/aspetto?x=1");
@@ -951,13 +923,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(await revokeSession(env.DB, seller.userId, "inesistente")).toBe(false);
     expect(await ids(other.userId)).toEqual([foreign]);
     const confirm = (precedente: string) =>
-      settingsAction({
-        request: post("/app/impostazioni/sicurezza", seller.cookie, {
-          intent: "conferma-accesso",
-          metodo: "passkey",
-          precedente,
-        }),
-      } as never) as Promise<{ data: { ok: boolean } }>;
+      callRoute(settingsAction, "/app/impostazioni/sicurezza", {
+        cookie: seller.cookie,
+        fields: { intent: "conferma-accesso", metodo: "passkey", precedente },
+      }) as Promise<{ data: { ok: boolean } }>;
     // La sessione di un altro utente non conferma nulla e resta aperta.
     expect((await confirm(foreign!)).data.ok).toBe(false);
     expect(await ids(other.userId)).toEqual([foreign]);
@@ -973,12 +942,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       .bind(seller.userId)
       .all<{ id: string }>();
     const confirm = (fields: Record<string, string>) =>
-      settingsAction({
-        request: post("/app/impostazioni/sicurezza", seller.cookie, {
-          intent: "conferma-accesso",
-          ...fields,
-        }),
-      } as never) as Promise<{ data: { ok: boolean; notice?: string }; init: ResponseInit }>;
+      callRoute(settingsAction, "/app/impostazioni/sicurezza", {
+        cookie: seller.cookie,
+        fields: { intent: "conferma-accesso", ...fields },
+      }) as Promise<{ data: { ok: boolean; notice?: string }; init: ResponseInit }>;
     const wrong = await confirm({ metodo: "password", password: "non-questa" });
     expect(wrong.data).toEqual({
       ok: false,
@@ -1018,9 +985,11 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       },
     ]);
     const read = (ids: string, from = origin) =>
-      notificationsAction({
-        request: post("/api/v1/notifications", seller.cookie, { ids }, from),
-      } as never).catch((thrown: unknown) => thrown as Response);
+      routeResponse(notificationsAction, "/api/v1/notifications", {
+        cookie: seller.cookie,
+        origin: from,
+        fields: { ids },
+      });
     expect((await read(notification!.id)).status).toBe(200);
     expect((await read(notification!.id)).status).toBe(200);
     expect(await bell()).toEqual([{ ...notification, read: true }]);
@@ -1749,12 +1718,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       expect(await dispatchStoreSyncs(cron, at(0.03))).toEqual([admitted.storeId]);
 
       const waiting = await verifiedSession("bloccato@example.invalid");
-      const refused = (await storeLinkAction({
-        request: new Request("http://localhost:5173/app/negozi/collega", {
-          method: "POST",
-          headers: { cookie: waiting.cookie, origin: "http://localhost:5173" },
-        }),
-      } as Parameters<typeof storeLinkAction>[0])) as Response;
+      const refused = await routeResponse(storeLinkAction, "/app/negozi/collega", {
+        cookie: waiting.cookie,
+        fields: {},
+      });
       expect(refused.headers.get("location")).toBe("/app/ordini?negozio=lista-attesa");
       expect((await settingsPage(waiting.cookie)).page).toMatchObject({
         account: { waitlisted: true },

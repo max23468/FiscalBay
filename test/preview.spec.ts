@@ -23,7 +23,7 @@ import { loader as previewStores } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/domain/orders.server";
 import type { SearchResults } from "../app/components/app-shell";
-import { routeData } from "./fixtures/route-fixtures";
+import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 describe("stato sintetico dell'anteprima", () => {
   it("conserva lo stato sui cookie HTTP locali e mantiene Secure sul dominio HTTPS", async () => {
@@ -327,44 +327,38 @@ describe("stato sintetico dell'anteprima", () => {
 
 describe("prova simulata dell'anteprima", () => {
   const start = (cookie: string) =>
-    previewSettingsAction({
-      request: new Request("http://localhost:5173/anteprima/impostazioni/piano", {
-        method: "POST",
-        headers: { cookie },
-        body: new URLSearchParams({ intent: "start-trial" }),
-      }),
-    } as Parameters<typeof previewSettingsAction>[0]) as unknown as Promise<{
-      data: { ok: boolean; notice: string };
-      init: { status?: number; headers?: Record<string, string> } | null;
-    }>;
+    routeResponse(previewSettingsAction, "/anteprima/impostazioni/piano", {
+      cookie,
+      fields: { intent: "start-trial" },
+    });
 
   it("attiva la prova disponibile una sola volta nello scenario", async () => {
     const cookie = (
       await writePreviewState({ scenario: "ordinario", unlocked: [], saveFailed: false })
     ).split(";")[0]!;
     const first = await start(cookie);
-    expect(first.data).toEqual({ ok: true, notice: appCopy.it.settings.plan.trialStarted });
-    const started = new Headers(first.init?.headers).get("Set-Cookie")!.split(";")[0]!;
+    expect(await first.json()).toEqual({ ok: true, notice: appCopy.it.settings.plan.trialStarted });
+    const started = first.headers.get("Set-Cookie")!.split(";")[0]!;
     expect(
       await readPreviewState(
         new Request("http://localhost:5173", { headers: { cookie: started } }),
       ),
     ).toMatchObject({ scenario: "ordinario", trialStarted: true });
     const again = await start(started);
-    expect(again.init?.status).toBe(409);
-    expect(again.data).toEqual({ ok: false, notice: appCopy.it.settings.plan.trialUnavailable });
+    expect(again.status).toBe(409);
+    expect(await again.json()).toEqual({
+      ok: false,
+      notice: appCopy.it.settings.plan.trialUnavailable,
+    });
   });
 });
 
 describe("ricerca dell'anteprima", () => {
   const search = (query: string, json = true, path = "/anteprima/ricerca") =>
-    previewSearch({
-      request: new Request(`http://localhost:5173${path}`, {
-        method: "POST",
-        headers: json ? { accept: "application/json" } : {},
-        body: new URLSearchParams({ q: query }),
-      }),
-    } as Parameters<typeof previewSearch>[0]);
+    routeResponse(previewSearch, path, {
+      headers: json ? { accept: "application/json" } : {},
+      fields: { q: query },
+    });
 
   it("suggerisce dagli scenari con le regole dell'area reale e cifra la ricerca", async () => {
     // «SOCIETA» trova «Società»: maiuscole e accenti non contano.
@@ -382,10 +376,7 @@ describe("ricerca dell'anteprima", () => {
     expect(english.href).toMatch(/^\/en\/anteprima\/ordini\?ricerca=/u);
     const submitted = await search("rossi", false);
     expect(submitted.status).toBe(303);
-    const listed = await previewOrders({
-      request: new Request(`http://localhost:5173${submitted.headers.get("location")}`),
-      params: {},
-    } as Parameters<typeof previewOrders>[0]);
+    const listed = await routeData(previewOrders, submitted.headers.get("location")!);
     expect(listed).toMatchObject({ search: "rossi", total: found.total });
   });
 });

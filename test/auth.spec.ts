@@ -17,7 +17,7 @@ import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { passkeyFailure } from "../app/account/passkey-error";
 import { hashPassword, verifyPassword } from "../app/password.server";
 import { securityReturnPath } from "../app/app-links";
-import { emailSender, mailEnv } from "./fixtures/account-fixtures";
+import { emailSender, mailEnv, sessionCookie } from "./fixtures/account-fixtures";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 it("distingue le cause passkey riconoscibili e non indovina quelle ambigue", () => {
@@ -56,10 +56,7 @@ async function passwordSession(environment: Env, email: string, password: string
       body: JSON.stringify({ email, password }),
     }),
   );
-  return response.headers
-    .getSetCookie()
-    .map((value) => value.split(";")[0])
-    .join("; ");
+  return sessionCookie(response);
 }
 
 it("salva le password con il costo ridotto e accetta quelle già salvate da Better Auth", async () => {
@@ -108,13 +105,9 @@ it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
   for (const base of ["", "/en"]) {
     const query = "?token=synthetic&redirectTo=https://example.invalid";
     // L'accesso mostra il modulo per la nuova password, senza seguire il redirect richiesto.
-    const access = await signInLoader({
-      request: new Request(`http://localhost:5173${base}/accesso${query}`),
-    } as never);
+    const access = await routeData(signInLoader, `${base}/accesso${query}`);
     expect(access).toMatchObject({ authenticated: false, resetToken: "synthetic" });
-    const response = (await storeLinkLoader({
-      request: new Request(`http://localhost:5173${base}/app/negozi/collega${query}`),
-    } as never)) as Response;
+    const response = await routeResponse(storeLinkLoader, `${base}/app/negozi/collega${query}`);
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(`${base}/accesso`);
     expect(response.headers.get("cache-control")).toBe("no-store");
@@ -124,24 +117,14 @@ it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
 
 it("conserva il rifiuto POST da origine estranea e del collegamento senza sessione in entrambe le lingue", async () => {
   for (const base of ["", "/en"]) {
-    for (const [path, action] of [
-      ["/accesso", signInAction],
-      ["/app/negozi/collega", storeLinkAction],
-    ] as const) {
-      const response = await action({
-        request: new Request(`http://localhost:5173${base}${path}`, {
-          method: "POST",
-          headers: { origin: "https://example.invalid" },
-        }),
-      } as never);
-      expect(response.status).toBe(403);
-    }
-    const response = await storeLinkAction({
-      request: new Request(`http://localhost:5173${base}/app/negozi/collega`, {
-        method: "POST",
-        headers: { origin: "http://localhost:5173" },
-      }),
-    } as never);
+    const foreign = { origin: "https://example.invalid", fields: {} };
+    expect((await routeResponse(signInAction, `${base}/accesso`, foreign)).status).toBe(403);
+    expect(
+      (await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, foreign)).status,
+    ).toBe(403);
+    const response = await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, {
+      fields: {},
+    });
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(`${base}/app/ordini?negozio=accesso`);
   }
@@ -487,17 +470,14 @@ describe("Better Auth su Workers e D1", () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
     const reset = () =>
-      signInAction({
-        request: new Request(`${origin}/accesso`, {
-          method: "POST",
-          headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({
-            intent: "reimposta-password",
-            token: "synthetic-recovery-token",
-            password: "password-recuperata-lunga",
-          }),
-        }),
-      } as never);
+      routeResponse(signInAction, "/accesso", {
+        cookie,
+        fields: {
+          intent: "reimposta-password",
+          token: "synthetic-recovery-token",
+          password: "password-recuperata-lunga",
+        },
+      });
     expect((await reset()).headers.get("location")).toContain("password-reimpostata");
     expect(await auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
     expect((await reset()).headers.get("location")).toContain("recupero-scaduto");
@@ -616,10 +596,7 @@ describe("Better Auth su Workers e D1", () => {
         }),
       );
       const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
-      const cookie = start.headers
-        .getSetCookie()
-        .map((value) => value.split(";")[0])
-        .join("; ");
+      const cookie = sessionCookie(start);
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
         const url = input instanceof Request ? input.url : String(input);
         if (url.endsWith("/identity/v1/oauth2/token")) {
@@ -681,10 +658,7 @@ describe("Better Auth su Workers e D1", () => {
         }),
       );
       const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
-      const cookie = start.headers
-        .getSetCookie()
-        .map((value) => value.split(";")[0])
-        .join("; ");
+      const cookie = sessionCookie(start);
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
         const url = input instanceof Request ? input.url : String(input);
         if (url.endsWith("/identity/v1/oauth2/token")) {
@@ -751,10 +725,7 @@ describe("Better Auth su Workers e D1", () => {
           headers: {
             "content-type": "application/json",
             origin: "http://localhost:5173",
-            cookie: response.headers
-              .getSetCookie()
-              .map((value) => value.split(";")[0])
-              .join("; "),
+            cookie: sessionCookie(response),
           },
           body: JSON.stringify({ accountId: account!.id }),
         }),
@@ -782,10 +753,7 @@ describe("Better Auth su Workers e D1", () => {
         }),
       );
       const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
-      const cookie = start.headers
-        .getSetCookie()
-        .map((value) => value.split(";")[0])
-        .join("; ");
+      const cookie = sessionCookie(start);
       const log = vi.spyOn(console, "error").mockImplementation(() => {});
       const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
         const url = input instanceof Request ? input.url : String(input);
@@ -847,11 +815,6 @@ describe("Better Auth su Workers e D1", () => {
             body: JSON.stringify(body),
           }),
         );
-      const cookies = (response: Response) =>
-        response.headers
-          .getSetCookie()
-          .map((value) => value.split(";")[0])
-          .join("; ");
       const email = `collegamento-${scenario}@example.invalid`;
       const ebayId = `identita-ebay-${scenario}`;
       if (scenario === "occupato") {
@@ -867,7 +830,7 @@ describe("Better Auth su Workers e D1", () => {
         password: "Password-sintetica-123!",
       });
       const { user } = await signup.clone().json<{ user: { id: string } }>();
-      const sessionCookie = await passwordSession(env, email, "Password-sintetica-123!");
+      const signedUpCookie = await passwordSession(env, email, "Password-sintetica-123!");
       if (scenario !== "non-verificata") {
         await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
           .bind(user.id)
@@ -876,12 +839,12 @@ describe("Better Auth su Workers e D1", () => {
       const start = await post(
         "link-social",
         { provider: "ebay", callbackURL: "/?accesso=ebay-collegato" },
-        sessionCookie,
+        signedUpCookie,
       );
       expect(start.status).toBe(200);
       const url = new URL((await start.json<{ url: string }>()).url);
       expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-      let callbackSession = sessionCookie;
+      let callbackSession = signedUpCookie;
       if (scenario === "revocata")
         await env.DB.prepare('DELETE FROM "session" WHERE "userId" = ?').bind(user.id).run();
       if (scenario === "assente") callbackSession = "";
@@ -923,7 +886,7 @@ describe("Better Auth su Workers e D1", () => {
           handleAuthRequest(
             new Request(
               `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${url.searchParams.get("state")}`,
-              { headers: { cookie: `${callbackSession}; ${cookies(start)}` } },
+              { headers: { cookie: `${callbackSession}; ${sessionCookie(start)}` } },
             ),
             environment,
           );
@@ -974,18 +937,18 @@ describe("Better Auth su Workers e D1", () => {
           .first();
         expect(localUser).toEqual({ email, emailVerified: 1 });
         expect((await callback()).headers.get("location")).toContain("error=");
-        await post("sign-out", {}, sessionCookie);
+        await post("sign-out", {}, signedUpCookie);
         const login = await post("sign-in/social", { provider: "ebay", callbackURL: "/" });
         const loginUrl = new URL((await login.json<{ url: string }>()).url);
         const signedIn = await handleAuthRequest(
           new Request(
             `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${loginUrl.searchParams.get("state")}`,
-            { headers: { cookie: cookies(login) } },
+            { headers: { cookie: sessionCookie(login) } },
           ),
           environment,
         );
         const current = await auth.api.getSession({
-          headers: new Headers({ cookie: cookies(signedIn) }),
+          headers: new Headers({ cookie: sessionCookie(signedIn) }),
         });
         expect(current?.user.id).toBe(user.id);
         expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_stores").first()).toEqual({
@@ -996,7 +959,7 @@ describe("Better Auth su Workers e D1", () => {
           .run();
         const refreshed = await auth.api.getAccessToken({
           body: { accountId: account!.id },
-          headers: new Headers({ cookie: cookies(signedIn) }),
+          headers: new Headers({ cookie: sessionCookie(signedIn) }),
         });
         expect(refreshed.accessToken).toBe("access-token-sintetico");
         const renewed = await env.DB.prepare(
@@ -1005,14 +968,18 @@ describe("Better Auth su Workers e D1", () => {
           .bind(account!.id)
           .first<{ expiry: string }>();
         expect(new Date(renewed!.expiry).getTime()).toBeGreaterThan(Date.now());
-        const unlink = await post("unlink-account", { accountId: account!.id }, cookies(signedIn));
+        const unlink = await post(
+          "unlink-account",
+          { accountId: account!.id },
+          sessionCookie(signedIn),
+        );
         expect(unlink.status).toBe(200);
         expect(
           await env.DB.prepare('SELECT id FROM "account" WHERE id = ?').bind(account!.id).first(),
         ).toBeNull();
-        await post("revoke-sessions", {}, cookies(signedIn));
+        await post("revoke-sessions", {}, sessionCookie(signedIn));
         expect(
-          await auth.api.getSession({ headers: new Headers({ cookie: cookies(signedIn) }) }),
+          await auth.api.getSession({ headers: new Headers({ cookie: sessionCookie(signedIn) }) }),
         ).toBeNull();
       } finally {
         fetchMock.mockRestore();
@@ -1023,11 +990,6 @@ describe("Better Auth su Workers e D1", () => {
 
 describe("Collegamento e modifica dell'identità", () => {
   const origin = "http://localhost:5173";
-  const cookies = (response: Response) =>
-    response.headers
-      .getSetCookie()
-      .map((value) => value.split(";")[0])
-      .join("; ");
   const withEmail = (send = emailSender()) => mailEnv(send);
   const post = (environment: Env, path: string, body: Record<string, unknown>, cookie = "") =>
     createAuth(environment).handler(
@@ -1099,7 +1061,7 @@ describe("Collegamento e modifica dell'identità", () => {
     try {
       return await handleAuthRequest(
         new Request(`${origin}/api/auth/callback/google?code=synthetic&state=${state}`, {
-          headers: { cookie: [cookie, cookies(start)].filter(Boolean).join("; ") },
+          headers: { cookie: [cookie, sessionCookie(start)].filter(Boolean).join("; ") },
         }),
         environment,
       );
@@ -1294,7 +1256,7 @@ describe("Collegamento e modifica dell'identità", () => {
       { sub: "google-stabile", email: `seconda.identita@${gmailDomain}`, email_verified: true },
     );
     const session = await createAuth(environment).api.getSession({
-      headers: new Headers({ cookie: cookies(signedIn) }),
+      headers: new Headers({ cookie: sessionCookie(signedIn) }),
     });
     expect(session?.user.id).toBe(first.id);
     expect(session?.user.email).toBe(`prima.identita@${gmailDomain}`);
@@ -1527,11 +1489,6 @@ describe("Sessioni, revoche e area admin", () => {
   });
 
   const origin = "http://localhost:5173";
-  const cookies = (response: Response) =>
-    response.headers
-      .getSetCookie()
-      .map((value) => value.split(";")[0])
-      .join("; ");
   const jsonRequest = async (path: string, cookie: string, body?: unknown) =>
     handleAuthRequest(
       new Request(`${origin}/api/auth/${path}`, {
@@ -1667,7 +1624,9 @@ describe("Sessioni, revoche e area admin", () => {
     }
   };
   const signIn = async (email: string) =>
-    cookies(await jsonRequest("sign-in/email", "", { email, password: "Password-sintetica-123!" }));
+    sessionCookie(
+      await jsonRequest("sign-in/email", "", { email, password: "Password-sintetica-123!" }),
+    );
   const createUser = async (email: string) => {
     const response = await jsonRequest("sign-up/email", "", {
       name: "Sessioni sintetiche",
@@ -1741,7 +1700,7 @@ describe("Sessioni, revoche e area admin", () => {
         },
       );
     const agentOf = async (response: Response) => {
-      const token = decodeURIComponent(cookies(response).split("=")[1]!).split(".")[0];
+      const token = decodeURIComponent(sessionCookie(response).split("=")[1]!).split(".")[0];
       return (
         await env.DB.prepare('SELECT "userAgent" FROM "session" WHERE "token" = ?')
           .bind(token)
@@ -2005,7 +1964,7 @@ describe("Sessioni, revoche e area admin", () => {
       const signature = new Uint8Array([0x30, body.length, ...body]);
       const response = await jsonRequest(
         "passkey/verify-authentication",
-        [cookie, cookies(options)].filter(Boolean).join("; "),
+        [cookie, sessionCookie(options)].filter(Boolean).join("; "),
         {
           response: {
             id: credentialId,
@@ -2021,7 +1980,7 @@ describe("Sessioni, revoche e area admin", () => {
         },
       );
       expect(response.ok).toBe(true);
-      return cookies(response);
+      return sessionCookie(response);
     };
   }
 

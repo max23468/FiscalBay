@@ -35,7 +35,7 @@ import {
   resetDatabase,
 } from "./fixtures/database-fixtures";
 import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
-import { routePage } from "./fixtures/route-fixtures";
+import { callRoute, routePage } from "./fixtures/route-fixtures";
 
 const origin = "http://localhost:5173";
 const secret = env.TELEGRAM_WEBHOOK_SECRET!;
@@ -97,13 +97,7 @@ async function account(name: string, premium = true) {
 }
 
 function settingsForm(cookie: string, fields: Record<string, string>) {
-  return settingsAction({
-    request: new Request(`${origin}/app/impostazioni/notifiche`, {
-      method: "POST",
-      headers: { cookie, origin },
-      body: new URLSearchParams(fields),
-    }),
-  } as Parameters<typeof settingsAction>[0]);
+  return callRoute(settingsAction, "/app/impostazioni/notifiche", { cookie, fields });
 }
 
 /** Deep link creato dalle Impostazioni; restituisce il token che Telegram rimanda al bot. */

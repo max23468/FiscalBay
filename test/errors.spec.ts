@@ -9,6 +9,7 @@ import { formatDate } from "../app/view-models";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as pageTiming } from "../app/routes/page-timing";
 import { describeRequest, measure, withPhaseTimings } from "../app/observability.server";
+import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 describe("errors, locale and redacted logs", () => {
   it("adds correlation to redirects with immutable headers", () => {
@@ -30,9 +31,7 @@ describe("errors, locale and redacted logs", () => {
   });
 
   it("localizes notices from the actual access loader", async () => {
-    const result = await loadAccess({
-      request: new Request("http://localhost:5173/en/accesso?accesso=errore"),
-    } as Parameters<typeof loadAccess>[0]);
+    const result = await routeData(loadAccess, "/en/accesso?accesso=errore");
     expect(result).toMatchObject({
       language: "en",
       notice: {
@@ -240,17 +239,10 @@ describe("misure delle fasi e del browser", () => {
   });
 
   const timing = (body: string, headers: Record<string, string> = {}) =>
-    pageTiming({
-      request: new Request("http://localhost:5173/api/v1/page-timing", {
-        method: "POST",
-        headers: {
-          origin: "http://localhost:5173",
-          "content-type": "application/json",
-          ...headers,
-        },
-        body,
-      }),
-    } as Parameters<typeof pageTiming>[0]);
+    routeResponse(pageTiming, "/api/v1/page-timing", {
+      body,
+      headers: { "content-type": "application/json", ...headers },
+    });
 
   it("registra le misure del browser soltanto con i campi ammessi", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});

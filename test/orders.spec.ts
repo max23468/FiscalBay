@@ -58,7 +58,13 @@ import { appCopy } from "../app/app-copy";
 import { settle } from "../app/settle.server";
 import { requestOrderRead } from "../app/domain/order-sync.server";
 import { exportHref, exportReturnHref, exportScope } from "../app/orders/export-scope";
-import { routeData, routePage, routeResponse } from "./fixtures/route-fixtures";
+import {
+  callRoute,
+  routeData,
+  routePage,
+  routeResponse,
+  testOrigin,
+} from "./fixtures/route-fixtures";
 import { queued } from "./fixtures/queue-fixture";
 
 beforeEach(resetDatabase);
@@ -70,20 +76,13 @@ function searchRequest(
   query: string,
   options: { origin?: string; json?: boolean; environment?: string } = {},
 ) {
-  return orderSearch({
-    request: new Request(
-      `http://localhost:5173/api/v1/orders/search${options.environment ? `?environment=${options.environment}` : ""}`,
-      {
-        method: "POST",
-        headers: {
-          ...(cookie ? { cookie } : {}),
-          origin: options.origin ?? "http://localhost:5173",
-          ...(options.json === false ? {} : { accept: "application/json" }),
-        },
-        body: new URLSearchParams({ q: query, language: "it" }),
-      },
-    ),
-  } as Parameters<typeof orderSearch>[0]);
+  const environment = options.environment ? `?environment=${options.environment}` : "";
+  return callRoute(orderSearch, `/api/v1/orders/search${environment}`, {
+    cookie,
+    origin: options.origin,
+    headers: options.json === false ? {} : { accept: "application/json" },
+    fields: { q: query, language: "it" },
+  });
 }
 
 async function searchOrders(cookie: string, query: string): Promise<SearchResults> {
@@ -97,11 +96,7 @@ describe("percorso ordini", () => {
     // Senza sessione gli Ordini rimandano all'accesso, che mostra i moduli.
     const anonymous = await routeResponse(loadHome, "/app/ordini?accesso=errore");
     expect(anonymous.headers.get("location")).toBe("/accesso?accesso=errore");
-    expect(
-      await loadAccess({
-        request: new Request("http://localhost:5173/accesso"),
-      } as Parameters<typeof loadAccess>[0]),
-    ).toEqual({
+    expect(await routeData(loadAccess, "/accesso")).toEqual({
       authenticated: false,
       registrationRestricted: false,
       language: "it",
@@ -164,15 +159,13 @@ describe("percorso ordini", () => {
     expect(guess.href).not.toContain("RSSMRA80A01H501U");
     const guessed = await routePage(loadHome, guess.href, { cookie: cookie! });
     expect(guessed.page).toMatchObject({ search: "RSSMRA80A01H501U", orders: [], total: 0 });
-    const unlockRequest = (ids: string, origin = "http://localhost:5173") =>
-      ({
-        request: new Request("http://localhost:5173/app/ordini", {
-          method: "POST",
-          headers: { cookie: cookie!, origin },
-          body: new URLSearchParams({ intent: "unlock", ids, skipConfirmation: "true" }),
-        }),
-      }) as Parameters<typeof unlockAction>[0];
-    const denied = await unlockAction(unlockRequest("o-b"));
+    const unlock = (ids: string, origin = testOrigin) =>
+      callRoute(unlockAction, "/app/ordini", {
+        cookie,
+        origin,
+        fields: { intent: "unlock", ids, skipConfirmation: "true" },
+      });
+    const denied = await unlock("o-b");
     expect(denied).toMatchObject({ init: { status: 409 }, data: { error: true, unlocked: [] } });
     // Un guasto che non è un rifiuto dello sblocco resta un errore della pagina (500). I primi
     // batch della richiesta riallineano il piano e registrano l'attività, il terzo è lo sblocco.
@@ -182,23 +175,18 @@ describe("percorso ordini", () => {
       .mockImplementationOnce(batch)
       .mockImplementationOnce(batch)
       .mockRejectedValueOnce(new Error("D1_ERROR: guasto"));
-    await expect(unlockAction(unlockRequest("o-a"))).rejects.toThrow("D1_ERROR: guasto");
+    await expect(unlock("o-a")).rejects.toThrow("D1_ERROR: guasto");
     outage.mockRestore();
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
-    await expect(
-      unlockAction(unlockRequest("o-a", "https://estraneo.invalid")),
-    ).rejects.toMatchObject({ status: 403 });
-    expect(await unlockAction(unlockRequest("o-a"))).toEqual({ unlocked: ["o-a"], remaining: 0 });
+    await expect(unlock("o-a", "https://estraneo.invalid")).rejects.toMatchObject({ status: 403 });
+    expect(await unlock("o-a")).toEqual({ unlocked: ["o-a"], remaining: 0 });
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
     // In Piano e pagamenti la conferma si riattiva e si disattiva dallo stesso interruttore.
     const toggle = (value: string) =>
-      securityAction({
-        request: new Request("http://localhost:5173/app/impostazioni/piano", {
-          method: "POST",
-          headers: { cookie: cookie!, origin: "http://localhost:5173" },
-          body: new URLSearchParams({ intent: "save", name: "unlock-confirmation", value }),
-        }),
-      } as Parameters<typeof securityAction>[0]);
+      callRoute(securityAction, "/app/impostazioni/piano", {
+        cookie,
+        fields: { intent: "save", name: "unlock-confirmation", value },
+      });
     expect(await toggle("true")).toEqual({ ok: true });
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(true);
     expect(await toggle("false")).toEqual({ ok: true });
@@ -1428,7 +1416,6 @@ describe("percorso ordini", () => {
 });
 
 describe("prova Premium", () => {
-  const origin = "http://localhost:5173";
   const day = 24 * 60 * 60 * 1000;
   const at = (offset: number) => new Date(Date.parse(now) + offset);
   /** Prima lettura riuscita di un negozio dello spazio, anche senza ordini. */
@@ -1574,20 +1561,19 @@ describe("prova Premium", () => {
         .run();
       return session;
     }
-    const post = (path: string, cookie: string) =>
-      new Request(`${origin}${path}`, {
-        method: "POST",
-        headers: { cookie, origin },
-        body: new URLSearchParams({ intent: "start-trial" }),
-      });
-    const planPage = async (cookie: string) => {
-      const loaded = await loadSettings({
-        request: new Request(`${origin}/app/impostazioni/piano`, { headers: { cookie } }),
-        params: { sezione: "piano" },
-      } as never);
-      if (!("page" in loaded)) throw new Error("pagina attesa");
-      return loaded.page;
-    };
+    const startTrial = <A extends { request: Request }, R>(
+      handler: (args: A) => R,
+      path: string,
+      cookie: string,
+      origin?: string,
+    ) => callRoute(handler, path, { cookie, origin, fields: { intent: "start-trial" } });
+    const planPage = async (cookie: string) =>
+      (
+        await routePage(loadSettings, "/app/impostazioni/piano", {
+          cookie,
+          params: { sezione: "piano" },
+        })
+      ).page;
     const ordersPage = async (cookie: string) =>
       (await routePage(loadHome, "/app/ordini", { cookie })).page;
 
@@ -1597,9 +1583,10 @@ describe("prova Premium", () => {
         plan: "free",
         trialAvailable: false,
       });
-      expect(
-        await securityAction({ request: post("/app/impostazioni/piano", cookie) } as never),
-      ).toMatchObject({ init: { status: 409 }, data: { ok: false } });
+      expect(await startTrial(securityAction, "/app/impostazioni/piano", cookie)).toMatchObject({
+        init: { status: 409 },
+        data: { ok: false },
+      });
       await synced();
       expect((await ordersPage(cookie)).account).toMatchObject({ trialAvailable: true });
       expect((await planPage(cookie)).account).toMatchObject({
@@ -1608,19 +1595,12 @@ describe("prova Premium", () => {
       });
       // Una richiesta da un'altra origine non attiva nulla.
       await expect(
-        unlockAction({
-          request: new Request(`${origin}/app/ordini`, {
-            method: "POST",
-            headers: { cookie, origin: "https://estraneo.invalid" },
-            body: new URLSearchParams({ intent: "start-trial" }),
-          }),
-        } as Parameters<typeof unlockAction>[0]),
+        startTrial(unlockAction, "/app/ordini", cookie, "https://estraneo.invalid"),
       ).rejects.toMatchObject({ status: 403 });
-      expect(
-        await unlockAction({ request: post("/app/ordini", cookie) } as Parameters<
-          typeof unlockAction
-        >[0]),
-      ).toEqual({ ok: true, notice: appCopy.it.settings.plan.trialStarted });
+      expect(await startTrial(unlockAction, "/app/ordini", cookie)).toEqual({
+        ok: true,
+        notice: appCopy.it.settings.plan.trialStarted,
+      });
       const ends = at(trialDays * day).toISOString();
       const orders = await ordersPage(cookie);
       expect(orders.account).toEqual({
@@ -1637,9 +1617,7 @@ describe("prova Premium", () => {
         quota: undefined,
       });
       // Dalla seconda scheda la prova già attiva non riparte.
-      expect(
-        await securityAction({ request: post("/app/impostazioni/piano", cookie) } as never),
-      ).toMatchObject({
+      expect(await startTrial(securityAction, "/app/impostazioni/piano", cookie)).toMatchObject({
         init: { status: 409 },
         data: { ok: false, notice: appCopy.it.settings.plan.trialUnavailable },
       });
@@ -1649,8 +1627,6 @@ describe("prova Premium", () => {
 });
 
 describe("pagina Ordini reale", () => {
-  const origin = "http://localhost:5173";
-
   /** Proprietario dello spazio A, con la sessione aperta. */
   async function owner() {
     await seed();
@@ -1689,13 +1665,7 @@ describe("pagina Ordini reale", () => {
   }
 
   function ordersAction(cookie: string, fields: Record<string, string>) {
-    return unlockAction({
-      request: new Request(`${origin}/app/ordini`, {
-        method: "POST",
-        headers: { cookie, origin },
-        body: new URLSearchParams(fields),
-      }),
-    } as Parameters<typeof unlockAction>[0]);
+    return callRoute(unlockAction, "/app/ordini", { cookie, fields });
   }
 
   async function withCredentials() {
@@ -2168,24 +2138,15 @@ describe("pagina Ordini reale", () => {
     // Anche Sincronizza, Reimporta e Ricollega restano sospese sul server.
     for (const intent of ["store-sync", "store-reimport"])
       expect(
-        await storesAction({
-          request: new Request(`${origin}/app/negozi`, {
-            method: "POST",
-            headers: { cookie, origin },
-            body: new URLSearchParams({ intent, store: "s-a" }),
-          }),
-        } as Parameters<typeof storesAction>[0]),
+        await callRoute(storesAction, "/app/negozi", { cookie, fields: { intent, store: "s-a" } }),
       ).toMatchObject({
         data: { ok: false, notice: appCopy.it.stores.ebayDown },
         init: { status: 409 },
       });
-    const reconnect = (await startStoreLink({
-      request: new Request(`${origin}/app/negozi/collega`, {
-        method: "POST",
-        headers: { cookie, origin },
-        body: new URLSearchParams({ negozio: "s-a", da: "negozi" }),
-      }),
-    } as Parameters<typeof startStoreLink>[0])) as Response;
+    const reconnect = await routeResponse(startStoreLink, "/app/negozi/collega", {
+      cookie,
+      fields: { negozio: "s-a", da: "negozi" },
+    });
     expect(reconnect.status).toBe(303);
     expect(reconnect.headers.get("location")).toBe("/app/negozi?negozio=ebay-non-risponde");
     expect(send).not.toHaveBeenCalled();

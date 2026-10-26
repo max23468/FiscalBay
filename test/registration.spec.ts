@@ -23,6 +23,7 @@ import {
 } from "./fixtures/account-fixtures";
 import { accessFor, accessForm, securityForm, homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
+import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -38,9 +39,7 @@ it("mostra l'autorizzazione preventiva in entrambe le lingue senza creare profil
     env.REGISTRATION_ALLOWED_EMAILS = "[]";
     for (const language of ["it", "en"] as const) {
       const prefix = language === "it" ? "" : "/en";
-      const page = await loadAccess({
-        request: new Request(`http://localhost:5173${prefix}/accesso`),
-      } as Parameters<typeof loadAccess>[0]);
+      const page = await routeData(loadAccess, `${prefix}/accesso`);
       expect(page).toMatchObject({ registrationRestricted: true });
       const response = await accessForm(`${prefix}/accesso`, {
         intent: "registrati",
@@ -251,12 +250,7 @@ describe("registrazione e verifica del contatto", () => {
       verified: false,
       page: { view: "no-store", orders: [], connectHref: null },
     });
-    const link = (await startStoreLink({
-      request: new Request("http://localhost:5173/app/negozi/collega", {
-        method: "POST",
-        headers: { cookie, origin: "http://localhost:5173" },
-      }),
-    } as Parameters<typeof startStoreLink>[0])) as Response;
+    const link = await routeResponse(startStoreLink, "/app/negozi/collega", { cookie, fields: {} });
     expect(link.headers.get("location")).toBe("/app/ordini?negozio=accesso");
     expect(await storeLinkSessions()).toBe(0);
 
@@ -350,12 +344,10 @@ describe("registrazione e verifica del contatto", () => {
       needsProfile: true,
       suggestedName: { firstName: "", lastName: "" },
     });
-    const blocked = (await startStoreLink({
-      request: new Request("http://localhost:5173/app/negozi/collega", {
-        method: "POST",
-        headers: { cookie, origin: "http://localhost:5173" },
-      }),
-    } as Parameters<typeof startStoreLink>[0])) as Response;
+    const blocked = await routeResponse(startStoreLink, "/app/negozi/collega", {
+      cookie,
+      fields: {},
+    });
     expect(blocked.headers.get("location")).toBe("/accesso");
     expect(await storeLinkSessions()).toBe(0);
 
@@ -505,26 +497,23 @@ describe("registrazione e verifica del contatto", () => {
   });
 
   it("pubblica la versione dei Termini e dell'informativa accettate", async () => {
-    expect(
-      await loadLegal({
-        request: new Request("http://localhost:5173/en/privacy"),
-      } as Parameters<typeof loadLegal>[0]),
-    ).toEqual({ language: "en", document: "privacy", version: legalVersions.privacy });
-    expect(
-      await loadLegal({
-        request: new Request("http://localhost:5173/termini"),
-      } as Parameters<typeof loadLegal>[0]),
-    ).toEqual({ language: "it", document: "termini", version: legalVersions.terms });
+    expect(await routeData(loadLegal, "/en/privacy")).toEqual({
+      language: "en",
+      document: "privacy",
+      version: legalVersions.privacy,
+    });
+    expect(await routeData(loadLegal, "/termini")).toEqual({
+      language: "it",
+      document: "termini",
+      version: legalVersions.terms,
+    });
   });
 
   it("conserva provider e lingua nel ritorno di un accesso OAuth rifiutato", async () => {
     for (const provider of ["google", "ebay"]) {
       const start = await accessForm("/en/accesso", { intent: provider });
       const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
-      const cookie = start.headers
-        .getSetCookie()
-        .map((value) => value.split(";")[0])
-        .join("; ");
+      const cookie = sessionCookie(start);
       const result = await handleAuthRequest(
         new Request(
           `http://localhost:5173/api/auth/callback/${provider}?error=access_denied&state=${encodeURIComponent(state)}`,

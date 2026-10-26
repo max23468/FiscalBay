@@ -8,15 +8,14 @@ import { formatDate } from "../app/view-models";
 import { resetDatabase } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
+import { callRoute } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
 
 describe("radice pubblica e area riservata", () => {
   const root = (path: string, cookie?: string) =>
-    loadSite({
-      request: new Request(`http://localhost:5173${path}`, { headers: cookie ? { cookie } : {} }),
-    } as Parameters<typeof loadSite>[0]).catch((thrown: Response) => thrown);
+    callRoute(loadSite, path, { cookie }).catch((thrown: Response) => thrown);
 
   it("porta agli Ordini ogni utente con la sessione e mostra il sito all'anonimo, senza cache", async () => {
     const first = await verifiedSession("radice-uno@example.invalid");
