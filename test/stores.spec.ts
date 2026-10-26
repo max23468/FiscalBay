@@ -101,6 +101,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     },
   );
   const day = 24 * 60 * 60 * 1000;
+  const hour = 60 * 60 * 1000;
 
   async function linkThroughEbay(cookie: string, ebay = syntheticEbay()) {
     const state = (await beginStoreLink(cookie)).searchParams.get("state");
@@ -1749,16 +1750,19 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       const refresh = syntheticEbay();
       expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
       expect(refresh).not.toHaveBeenCalled();
+      // Una copertura che inizia fra un'ora vale soltanto da allora. Il database dei test usa lo
+      // stesso orologio simulato: le letture si provano a un istante successivo, passato come
+      // parametro, così conta l'istante dato e non quello del database.
       await env.DB.prepare(
         `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
          SELECT 'concessione', workspace_id, 'admin', ?1, ?2 FROM ebay_stores`,
       )
-        .bind(new Date(Date.now() - 60_000).toISOString(), new Date(Date.now() + day).toISOString())
+        .bind(new Date(Date.now() + hour).toISOString(), new Date(Date.now() + day).toISOString())
         .run();
-      expect(await refreshExpiringTokens(env, refresh)).toEqual(["refreshed"]);
-      // Con la copertura in corso all'istante dato, anche lontano dall'orologio del database,
-      // tornano le letture da evento, a richiesta e periodiche.
-      const covered = syntheticEbay({ lastModifiedDate: new Date().toISOString() });
+      expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
+      const ahead = new Date(Date.now() + 2 * hour);
+      expect(await refreshExpiringTokens(env, refresh, ahead)).toEqual(["refreshed"]);
+      const covered = syntheticEbay({ lastModifiedDate: ahead.toISOString() });
       const relinked = (await env.DB.prepare(
         "SELECT granted_at FROM ebay_store_credentials",
       ).first<{ granted_at: string }>())!.granted_at;
@@ -1771,16 +1775,16 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
           // L'ordine già letto è stato eliminato con i dati del negozio: un ordine nuovo,
           // arrivato dopo l'eliminazione.
           orderId: "27-99999-99999",
-          eventAt: new Date(Date.now() + 60_000).toISOString(),
+          eventAt: ahead.toISOString(),
         },
         covered,
-        new Date(),
+        ahead,
       ).catch(() => {
         // eBay simulato non conosce l'ordine: conta soltanto che la lettura parta.
       });
       expect(covered).toHaveBeenCalled();
-      expect(await requestStoreSync(cron, session.userId, storeId)).not.toBe("invalid");
-      expect(await dispatchStoreSyncs(cron, new Date())).toEqual([storeId]);
+      expect(await requestStoreSync(cron, session.userId, storeId, {}, ahead)).not.toBe("invalid");
+      expect(await dispatchStoreSyncs(cron, ahead)).toEqual([storeId]);
     });
 
     it("senza capacità per nuovi Premium ferma acquisti, prova e collegamenti in attesa", async () => {
