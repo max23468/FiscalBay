@@ -242,7 +242,8 @@ async function readState(db: D1Database, link: Link, now: Date) {
   return {
     preferences: preferences[0] as Preferences,
     stores: stores as StoreRow[],
-    coverage: coverage[0]?.source
+    // La lettura senza tabella restituisce sempre una riga, con valori nulli senza copertura.
+    coverage: coverage[0]!.source
       ? (coverage[0] as { source: string; endsAt: string | null })
       : undefined,
   };
