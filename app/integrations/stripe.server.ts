@@ -17,14 +17,13 @@ declare global {
 }
 
 /**
- * Chiave Stripe utilizzabile nell'ambiente: una chiave di test fuori da Production, soltanto
- * una chiave live con limitazioni in Production. La chiave dell'altro ambiente o la chiave
- * segreta standard live valgono come chiave assente: acquisti, portale e letture restano fermi
- * invece di agire sugli oggetti sbagliati.
+ * Chiave Stripe utilizzabile nell'ambiente, standard o con limitazioni: di test fuori da
+ * Production, live in Production. La chiave dell'altro ambiente vale come chiave assente:
+ * acquisti, portale e letture restano fermi invece di agire sugli oggetti sbagliati.
  */
 export function stripeSecretKey(env: Pick<Env, "APP_ORIGIN" | "STRIPE_SECRET_KEY">) {
   const key = env.STRIPE_SECRET_KEY;
-  const accepted = isProduction(env) ? /^rk_live_./u : /^[rs]k_test_./u;
+  const accepted = isProduction(env) ? /^[rs]k_live_./u : /^[rs]k_test_./u;
   return key && accepted.test(key) ? key : undefined;
 }
 
