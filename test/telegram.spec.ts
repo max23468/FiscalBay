@@ -4,7 +4,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { deliverTelegram, zonedInstant } from "../app/domain/telegram-deliveries.server";
-import { escape, localClock, splitBlocks, when } from "../app/domain/telegram-messages.server";
+import type { VisibleOrder } from "../app/domain/orders.server";
+import {
+  appUrl,
+  copyButtons,
+  digestMessage,
+  emptyFiscalKey,
+  escape,
+  fiscalDigest,
+  fiscalKey,
+  importMessage,
+  localClock,
+  orderEntry,
+  orderMessage,
+  orderNotice,
+  settingsUrl,
+  splitBlocks,
+  when,
+  zoneName,
+  type OrderNotice,
+} from "../app/domain/telegram-messages.server";
 import {
   consumeTelegramStart,
   parseTelegramChange,
@@ -26,6 +45,7 @@ import {
 import { consumeWebhooks, receiveWebhook } from "../app/integrations/webhooks.server";
 import { configureBotCommands } from "../app/domain/telegram-bot.server";
 import { ebayOrderHref } from "../app/components/orders/labels";
+import { formatAmount } from "../app/i18n";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { loader as storesLoader } from "../app/routes/stores";
 import { verifiedSession } from "./fixtures/account-fixtures";
@@ -161,6 +181,467 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM workspace_entitlements"),
   ]);
   send.mockClear();
+});
+
+describe("testi dei messaggi", () => {
+  const site = { APP_ORIGIN: "https://fiscalbay.invalid/percorso" };
+  // Importo nella forma condivisa con l'app, spazi tipografici compresi.
+  const amountIt = formatAmount(124950, "EUR", "it");
+  const amountEn = formatAmount(124950, "EUR", "en");
+  const at = new Date("2026-10-25T21:30:00Z");
+  const cf = { kind: "CF" as const, label: null, value: "RSSMRA80A01H501U" };
+  const vat = { kind: "PIVA" as const, label: null, value: "IT01234567890" };
+  const notice = (fields: Partial<OrderNotice> = {}): OrderNotice => ({
+    id: "o-1",
+    ebayOrderId: "12-34567-89012",
+    environment: "production",
+    storeName: "Negozio <A&B>",
+    createdAt: "2026-10-25T13:03:00Z",
+    buyer: "Mario Rossi",
+    items: [{ title: "Lampada", quantity: 2 }],
+    imageUrl: null,
+    totalMinor: 124950,
+    currency: "EUR",
+    fiscal: "available",
+    country: null,
+    values: [cf],
+    ...fields,
+  });
+  const items = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({ title: `Articolo ${index + 1}`, quantity: 1 }));
+  const orderLink = "https://fiscalbay.invalid/app/ordini/o-1";
+  const ebay = { text: "🛍 Apri su eBay", url: ebayOrderHref("12-34567-89012") };
+  const copyCf = { text: "📋 Copia Codice Fiscale", copy_text: { text: cf.value } };
+
+  it("riempie ogni messaggio fino al limite esatto e spezza per righe soltanto i blocchi troppo lunghi", () => {
+    expect(splitBlocks([])).toEqual([]);
+    expect(splitBlocks(["ab", "cd"], 6)).toEqual(["ab\n\ncd"]);
+    expect(splitBlocks(["abc", "cd"], 6)).toEqual(["abc", "cd"]);
+    // Un blocco che sta in un messaggio, anche al limite esatto, non si divide fra due.
+    expect(splitBlocks(["aaaa", "b\nc"], 8)).toEqual(["aaaa", "b\nc"]);
+    expect(splitBlocks(["a", "bb\nccc"], 6)).toEqual(["a", "bb\nccc"]);
+    // Le righe di un blocco lungo restano separate dal blocco precedente come i blocchi.
+    expect(splitBlocks(["x", `yy\nww\n${"z".repeat(10)}`], 10)).toEqual([
+      "x\n\nyy\nww",
+      "z".repeat(10),
+    ]);
+  });
+
+  it("compone il nuovo ordine con dato fiscale, dettagli in citazione e pulsanti", () => {
+    expect(orderMessage(site, "it", "Europe/Rome", notice(), "new", at)).toEqual([
+      {
+        html:
+          "🛒 <b>Nuovo ordine</b> · Negozio &lt;A&amp;B&gt;\n🧾 <code>RSSMRA80A01H501U</code>\n\n" +
+          `<blockquote>👤 Mario Rossi\n💶 <b>${amountIt}</b>\n📦 2 × Lampada\n` +
+          "🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
+        buttons: [[{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay], [copyCf]],
+      },
+    ]);
+  });
+
+  it("in verifica avvisa del prossimo messaggio; oltre tre articoli li conta", () => {
+    expect(
+      orderMessage(
+        site,
+        "it",
+        "Europe/Rome",
+        notice({
+          environment: "sandbox",
+          buyer: null,
+          items: items(4),
+          imageUrl: "https://i.ebayimg.com/a.jpg",
+          fiscal: "checking",
+          values: [],
+        }),
+        "new",
+        at,
+      ),
+    ).toEqual([
+      {
+        html:
+          "🛒 <b>Nuovo ordine</b> · Negozio &lt;A&amp;B&gt;\n⏳ Dato fiscale in verifica\n" +
+          `Se arriva, ricevi un nuovo messaggio.\n\n<blockquote>💶 <b>${amountIt}</b>\n` +
+          "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\ne un altro articolo\n" +
+          "🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
+        buttons: [[{ text: "🔗 Apri in FiscalBay", url: `${orderLink}?environment=sandbox` }]],
+        preview: "https://i.ebayimg.com/a.jpg",
+      },
+    ]);
+    // Soltanto il nuovo ordine in verifica annuncia il messaggio successivo.
+    const [changed] = orderMessage(
+      site,
+      "it",
+      "Europe/Rome",
+      notice({ fiscal: "checking", items: items(3), values: [vat, cf] }),
+      "changed",
+      at,
+    );
+    expect(changed).toEqual({
+      html:
+        "✏️ <b>Dato fiscale aggiornato</b> · Negozio &lt;A&amp;B&gt;\n" +
+        "🧾 P.IVA <code>IT01234567890</code>\n🧾 <code>RSSMRA80A01H501U</code>\n\n" +
+        `<blockquote>👤 Mario Rossi\n💶 <b>${amountIt}</b>\n📦 1 × Articolo 1\n` +
+        "📦 1 × Articolo 2\n📦 1 × Articolo 3\n🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
+      buttons: [[{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay], [copyCf]],
+    });
+    expect(
+      orderMessage(site, "it", "Europe/Rome", notice({ items: items(5) }), "new", at)[0]!.html,
+    ).toContain("📦 1 × Articolo 3\ne altri 2 articoli\n🕑");
+    expect(
+      orderMessage(site, "it", "Europe/Rome", notice({ values: [] }), "removed", at)[0]!.html,
+    ).toMatch(
+      /^⚠️ <b>Dato fiscale rimosso<\/b> · Negozio &lt;A&amp;B&gt;\nIl dato notificato in precedenza non è più nell'ordine\.\n\n/u,
+    );
+    // Senza Codice Fiscale non c'è il pulsante di copia, anche con una Partita IVA.
+    expect(
+      orderMessage(site, "it", "Europe/Rome", notice({ values: [vat] }), "new", at)[0]!.buttons,
+    ).toEqual([[{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay]]);
+  });
+
+  it("in inglese la rimozione spiega il dato precedente e conta gli articoli in più", () => {
+    expect(
+      orderMessage(
+        site,
+        "en",
+        "Europe/Rome",
+        notice({ items: items(5), fiscal: "missing", values: [] }),
+        "removed",
+        at,
+      ),
+    ).toEqual([
+      {
+        html:
+          "⚠️ <b>Tax ID removed</b> · Negozio &lt;A&amp;B&gt;\n" +
+          "The tax ID notified earlier is no longer in the order.\n➖ No tax ID\n\n" +
+          `<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n📦 1 × Articolo 1\n` +
+          "📦 1 × Articolo 2\n📦 1 × Articolo 3\nand 2 more items\n" +
+          "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
+        buttons: [
+          [
+            { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/ordini/o-1" },
+            { text: "🛍 Open on eBay", url: ebayOrderHref("12-34567-89012") },
+          ],
+        ],
+      },
+    ]);
+    const english = (fields: Partial<OrderNotice>, change: "new" | "available" | "changed") =>
+      orderMessage(site, "en", "Europe/Rome", notice(fields), change, at)[0]!;
+    expect(english({ items: items(4), values: [vat, cf] }, "available")).toEqual({
+      html:
+        "✅ <b>Tax ID available</b> · Negozio &lt;A&amp;B&gt;\n🧾 VAT <code>IT01234567890</code>\n" +
+        `🧾 <code>RSSMRA80A01H501U</code>\n\n<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n` +
+        "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\nand one more item\n" +
+        "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
+      buttons: [
+        [
+          { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/ordini/o-1" },
+          { text: "🛍 Open on eBay", url: ebayOrderHref("12-34567-89012") },
+        ],
+        [{ text: "📋 Copy tax code", copy_text: { text: cf.value } }],
+      ],
+    });
+    expect(english({ values: [] }, "changed").html).toMatch(
+      /^✏️ <b>Tax ID updated<\/b> · Negozio &lt;A&amp;B&gt;\n\n<blockquote>/u,
+    );
+    expect(english({ fiscal: "checking", values: [] }, "new").html).toMatch(
+      /^🛒 <b>New order<\/b> · Negozio &lt;A&amp;B&gt;\n⏳ Tax ID being checked\nIf it arrives, you get a new message\.\n\n/u,
+    );
+  });
+
+  it("ogni stato fiscale senza valori ha la sua riga, nelle due lingue", () => {
+    const line = (language: "it" | "en", fields: Partial<OrderNotice>) =>
+      orderEntry(site, language, "Europe/Rome", notice({ values: [], ...fields }), null, at)
+        .split("\n")
+        .slice(2)
+        .join("\n");
+    const states = [
+      [{ fiscal: "checking" }, "⏳ Dato fiscale in verifica", "⏳ Tax ID being checked"],
+      [{ fiscal: "missing" }, "➖ Nessun dato fiscale", "➖ No tax ID"],
+      [
+        { fiscal: "foreign", country: "DE" },
+        "🌍 Fatturazione estera (DE)",
+        "🌍 Billing abroad (DE)",
+      ],
+      [{ fiscal: "foreign" }, "🌍 Fatturazione estera ()", "🌍 Billing abroad ()"],
+      [
+        { fiscal: "error" },
+        "⚠️ Dato fiscale non letto: riprova da FiscalBay",
+        "⚠️ Tax ID not read: try again from FiscalBay",
+      ],
+      [{ fiscal: "locked" }, "🔒 Da sbloccare in FiscalBay", "🔒 To unlock in FiscalBay"],
+      [{ fiscal: "available" }, "", ""],
+    ] as const;
+    for (const [fields, italian, english] of states) {
+      expect(line("it", fields)).toBe(italian);
+      expect(line("en", fields)).toBe(english);
+    }
+    // Gli identificativi esteri portano il proprio tipo e Paese, con l'escape dell'HTML.
+    expect(
+      line("en", { values: [{ kind: "OTHER", label: "VAT <DE>", value: "DE 123 & 4" }] }),
+    ).toBe("🧾 VAT &lt;DE&gt; <code>DE 123 &amp; 4</code>");
+  });
+
+  it("accorcia articolo e acquirente oltre la lunghezza massima, con i puntini", () => {
+    const html = (title: string, buyer: string) =>
+      orderMessage(
+        site,
+        "it",
+        "Europe/Rome",
+        notice({ items: [{ title, quantity: 1 }], buyer }),
+        "new",
+        at,
+      )[0]!.html;
+    expect(html("t".repeat(80), "b".repeat(64))).toContain(
+      `👤 ${"b".repeat(64)}\n💶 <b>${amountIt}</b>\n📦 1 × ${"t".repeat(80)}\n`,
+    );
+    expect(html("t".repeat(81), "b".repeat(65))).toContain(
+      `👤 ${"b".repeat(63)}…\n💶 <b>${amountIt}</b>\n📦 1 × ${"t".repeat(79)}…\n`,
+    );
+  });
+
+  it("un ordine troppo lungo per un messaggio porta pulsanti e anteprima soltanto nell'ultimo", () => {
+    const messages = orderMessage(
+      site,
+      "it",
+      "Europe/Rome",
+      notice({ storeName: "N".repeat(5000), imageUrl: "https://i.ebayimg.com/a.jpg" }),
+      "new",
+      at,
+    );
+    expect(messages.map((message) => Object.keys(message))).toEqual([
+      ["html"],
+      ["html", "buttons", "preview"],
+    ]);
+    expect(messages.map(({ html }) => html).join("")).toContain("N".repeat(5000));
+  });
+
+  it("negli elenchi l'ordine apre il dettaglio e mostra la variazione se non è nuovo", () => {
+    expect(orderEntry(site, "it", "Europe/Rome", notice(), "changed", at)).toBe(
+      `<a href="${orderLink}">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n` +
+        "✏️ <i>Dato fiscale aggiornato</i>\n" +
+        `👤 Mario Rossi · 💶 <b>${amountIt}</b> · <i>oggi 14:03</i>\n` +
+        "🧾 <code>RSSMRA80A01H501U</code>",
+    );
+    const plain =
+      `<a href="${orderLink}?environment=sandbox">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n` +
+      `💶 <b>${amountIt}</b> · <i>oggi 14:03</i>\n🧾 <code>RSSMRA80A01H501U</code>`;
+    for (const change of ["new", null] as const)
+      expect(
+        orderEntry(
+          site,
+          "it",
+          "Europe/Rome",
+          notice({ environment: "sandbox", buyer: null }),
+          change,
+          at,
+        ),
+      ).toBe(plain);
+    expect(orderEntry(site, "en", "Europe/Rome", notice({ values: [] }), "removed", at)).toBe(
+      '<a href="https://fiscalbay.invalid/en/app/ordini/o-1">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n' +
+        `⚠️ <i>Tax ID removed</i>\n👤 Mario Rossi · 💶 <b>${amountEn}</b> · <i>today 14:03</i>`,
+    );
+  });
+
+  it("un pulsante di copia per Codice Fiscale presente nel testo, senza ripetizioni", () => {
+    const other = "BNCLGU80A01H501Z";
+    const notices = [
+      notice({ values: [cf, vat] }),
+      notice({ values: [cf, { kind: "CF", label: null, value: other }] }),
+    ];
+    expect(
+      copyButtons(notices, `<code>${cf.value}</code> <code>${vat.value}</code> ${other}`),
+    ).toEqual([[{ text: `📋 ${cf.value}`, copy_text: { text: cf.value } }]]);
+  });
+
+  it("il riepilogo conta gli ordini e apre i sette giorni nell'ambiente comune", () => {
+    const day = "2026-10-25T20:00:00Z";
+    const sandbox = notice({ environment: "sandbox" });
+    expect(
+      digestMessage(site, "it", "Europe/Rome", day, [{ notice: sandbox, change: "new" }], at),
+    ).toEqual([
+      {
+        html:
+          "🗓 <b>Riepilogo del 25 ott</b>\n<i>Un ordine dall'ultimo riepilogo</i>\n\n" +
+          orderEntry(site, "it", "Europe/Rome", sandbox, "new", at),
+        buttons: [
+          [{ text: `📋 ${cf.value}`, copy_text: { text: cf.value } }],
+          [
+            {
+              text: "🔗 Apri gli ordini",
+              url: "https://fiscalbay.invalid/app/ordini?periodo=7&environment=sandbox",
+            },
+          ],
+        ],
+      },
+    ]);
+    const mixed = [
+      { notice: sandbox, change: "new" as const },
+      { notice: notice({ values: [] }), change: "removed" as const },
+    ];
+    const [english] = digestMessage(site, "en", "Europe/Rome", day, mixed, at);
+    expect(english!.html).toMatch(
+      /^🗓 <b>Summary of 25 Oct<\/b>\n<i>2 orders since the last summary<\/i>\n\n/u,
+    );
+    expect(english!.buttons!.at(-1)).toEqual([
+      { text: "🔗 Open orders", url: "https://fiscalbay.invalid/en/app/ordini?periodo=7" },
+    ]);
+    expect(
+      digestMessage(site, "it", "Europe/Rome", day, [...mixed, ...mixed], at)[0]!.html,
+    ).toContain("<i>4 ordini dall'ultimo riepilogo</i>");
+    expect(digestMessage(site, "en", "Europe/Rome", day, [mixed[0]!], at)[0]!.html).toContain(
+      "<i>One order since the last summary</i>",
+    );
+  });
+
+  it("nel riepilogo suddiviso l'accesso agli ordini sta soltanto nell'ultimo messaggio", () => {
+    const parts = digestMessage(
+      site,
+      "it",
+      "Europe/Rome",
+      "2026-10-25T20:00:00Z",
+      [
+        { notice: notice({ storeName: "A".repeat(3000), values: [] }), change: "new" },
+        { notice: notice({ storeName: "B".repeat(3000) }), change: "new" },
+      ],
+      at,
+    );
+    expect(parts.map((part) => Object.keys(part))).toEqual([["html"], ["html", "buttons"]]);
+    expect(parts[1]!.buttons).toEqual([
+      [{ text: `📋 ${cf.value}`, copy_text: { text: cf.value } }],
+      [{ text: "🔗 Apri gli ordini", url: "https://fiscalbay.invalid/app/ordini?periodo=7" }],
+    ]);
+  });
+
+  it("l'importazione riassume ordini, dati fiscali e periodo nelle due lingue", () => {
+    const summary = {
+      storeId: "s-1",
+      storeName: "Negozio <A&B>",
+      environment: "production" as const,
+      from: "2025-11-01T10:00:00Z",
+      until: "2026-10-25T10:00:00Z",
+      orders: 1,
+      fiscal: 0,
+    };
+    expect(importMessage(site, "it", "Europe/Rome", summary, at)).toEqual({
+      html:
+        "📥 <b>Importazione completata</b> · Negozio &lt;A&amp;B&gt;\n" +
+        "📦 Un ordine · 🧾 <b>0</b> con dato fiscale\n🗓 dal 1 nov 2025 al 25 ott\n" +
+        "<i>Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.</i>",
+      buttons: [
+        [{ text: "🔗 Apri gli ordini", url: "https://fiscalbay.invalid/app/ordini?negozio=s-1" }],
+      ],
+    });
+    expect(
+      importMessage(
+        site,
+        "en",
+        "Europe/Rome",
+        { ...summary, environment: "sandbox", orders: 3, fiscal: 2 },
+        at,
+      ),
+    ).toEqual({
+      html:
+        "📥 <b>Import completed</b> · Negozio &lt;A&amp;B&gt;\n" +
+        "📦 3 orders · 🧾 <b>2</b> with a tax ID\n🗓 from 1 Nov 2025 to 25 Oct\n" +
+        "<i>Imported orders get no individual messages: new orders arrive from now on.</i>",
+      buttons: [
+        [
+          {
+            text: "🔗 Open orders",
+            url: "https://fiscalbay.invalid/en/app/ordini?negozio=s-1&environment=sandbox",
+          },
+        ],
+      ],
+    });
+    expect(importMessage(site, "it", "UTC", { ...summary, orders: 3 }, at).html).toContain(
+      "📦 3 ordini · 🧾",
+    );
+    expect(importMessage(site, "en", "UTC", summary, at).html).toContain("📦 One order · 🧾");
+  });
+
+  it("indirizzi dell'app con ambiente e filtri, nomi dei fusi", () => {
+    expect(appUrl(site, "it", "/app/ordini")).toBe("https://fiscalbay.invalid/app/ordini");
+    expect(appUrl(site, "en", "/app/ordini", "sandbox")).toBe(
+      "https://fiscalbay.invalid/en/app/ordini?environment=sandbox",
+    );
+    expect(settingsUrl(site, "it")).toBe("https://fiscalbay.invalid/app/impostazioni/notifiche");
+    expect(settingsUrl(site, "en")).toBe("https://fiscalbay.invalid/en/app/impostazioni/notifiche");
+    expect(zoneName("it", "Europe/Rome")).toBe("Roma (Italia)");
+    expect(zoneName("en", "Europe/Rome")).toBe("Rome (Italy)");
+    expect(zoneName("it", "")).toBe("");
+  });
+
+  it("riduce l'ordine ai dati del messaggio e ne calcola l'impronta fiscale", async () => {
+    const order = (buyer: unknown, taxIdentifiers: unknown[] = []) =>
+      orderNotice(
+        {
+          id: "o-1",
+          ebayOrderId: "12-34567-89012",
+          storeName: "Negozio",
+          creationTime: "2026-10-25T13:03:00Z",
+          totalMinor: 100,
+          currency: "EUR",
+          fiscalState: "foreign",
+          summary: {
+            buyer,
+            lineItems: [
+              { title: "Uno", quantity: 1, imageUrl: null },
+              { title: "Due", quantity: 2, imageUrl: "https://i.ebayimg.com/b.jpg" },
+            ],
+          },
+          taxIdentifiers,
+        } as unknown as VisibleOrder,
+        "sandbox",
+      );
+    expect(
+      order({ name: "MARIO ROSSI", username: "mrossi", billingAddress: { countryCode: "DE" } }, [
+        { type: "CODICE_FISCALE", issuingCountry: "IT", value: "rssmra 80a01h501u" },
+        { type: "PartitaIVA", issuingCountry: "IT", value: "it 01234567890" },
+        { type: "VAT_ID", issuingCountry: null, value: "de 123" },
+        { type: "VAT_ID", issuingCountry: "DE", value: "de 123" },
+      ]),
+    ).toEqual({
+      id: "o-1",
+      ebayOrderId: "12-34567-89012",
+      environment: "sandbox",
+      storeName: "Negozio",
+      createdAt: "2026-10-25T13:03:00Z",
+      buyer: "Mario Rossi",
+      items: [
+        { title: "Uno", quantity: 1 },
+        { title: "Due", quantity: 2 },
+      ],
+      imageUrl: "https://i.ebayimg.com/b.jpg",
+      totalMinor: 100,
+      currency: "EUR",
+      fiscal: "foreign",
+      country: "DE",
+      values: [
+        { kind: "CF", label: null, value: "RSSMRA80A01H501U" },
+        { kind: "PIVA", label: null, value: "IT01234567890" },
+        { kind: "OTHER", label: "VAT_ID", value: "de 123" },
+        { kind: "OTHER", label: "VAT_ID · DE", value: "de 123" },
+      ],
+    });
+    // Senza nome resta lo username; senza acquirente o indirizzo nessun Paese.
+    expect(order({ name: null, username: "mrossi", billingAddress: null })).toMatchObject({
+      buyer: "mrossi",
+      country: null,
+    });
+    expect(order(null)).toMatchObject({ buyer: null, country: null });
+
+    // L'impronta non dipende dall'ordine dei valori.
+    const expected = await fiscalDigest(
+      JSON.stringify([
+        ["CF", null, cf.value],
+        ["PIVA", null, vat.value],
+      ]),
+    );
+    expect(await fiscalKey({ values: [cf, vat] })).toBe(expected);
+    expect(await fiscalKey({ values: [vat, cf] })).toBe(expected);
+    expect(await fiscalKey({ values: [] })).toBe(emptyFiscalKey);
+    expect(expected).toMatch(/^"[\da-f]{64}"$/u);
+  });
 });
 
 describe("ingresso del bot", () => {
