@@ -3,7 +3,8 @@ import { z } from "zod";
 import { seal, unseal } from "../../sealed.server";
 import { UpstreamError, upstreamJson } from "../http.server";
 
-import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
+import type { EbayEnvironment } from "../../view-models";
+import { ebayConfiguration } from "./environment.server";
 
 export type SellerTokens = {
   accessToken: string;

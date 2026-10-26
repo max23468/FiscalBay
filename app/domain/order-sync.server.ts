@@ -9,7 +9,8 @@ import { activeStore, renewableConsent, writableStore } from "./store-state.serv
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
-import { ebayConfiguration, type EbayEnvironment } from "../integrations/ebay/environment.server";
+import type { EbayEnvironment } from "../view-models";
+import { ebayConfiguration } from "../integrations/ebay/environment.server";
 import { visibleOrderState } from "./orders.server";
 
 /**

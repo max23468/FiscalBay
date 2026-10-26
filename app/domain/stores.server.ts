@@ -4,7 +4,7 @@ import { resumeAfterInactivity } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
 import { historyStartSql } from "./history-window.server";
 import { listedOrder, storeNameSql } from "./store-state.server";
-import type { EbayEnvironment } from "../integrations/ebay/environment.server";
+import type { EbayEnvironment } from "../view-models";
 
 /**
  * Collegamento dei negozi: stato derivato da scollegamento, consenso e pause, separato

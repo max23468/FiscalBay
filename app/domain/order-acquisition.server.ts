@@ -17,11 +17,8 @@ import { refreshStoreProfile } from "./store-profile.server";
 import { logFailure } from "../errors";
 import { dayMilliseconds } from "../time";
 import { UpstreamError } from "../integrations/http.server";
-import {
-  ebayConfiguration,
-  type EbayAccess,
-  type EbayEnvironment,
-} from "../integrations/ebay/environment.server";
+import { ebayConfiguration, type EbayAccess } from "../integrations/ebay/environment.server";
+import type { EbayEnvironment } from "../view-models";
 import {
   buildCreationDateFilter,
   buildLastModifiedFilter,

@@ -1,8 +1,7 @@
 import { activeEntitlementSql, orderAccessSql } from "./grants.server";
 import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
-import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 import { buyerTaxKey, taxIdentifierType, taxQuality } from "../tax-quality";
-import type { SuggestionView } from "../view-models";
+import type { SuggestionView, EbayEnvironment } from "../view-models";
 
 type Suggestions = {
   suggestions: SuggestionView[];

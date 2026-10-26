@@ -1,7 +1,8 @@
 import { verify } from "node:crypto";
 import { z } from "zod";
 import { upstreamJson } from "../http.server";
-import { ebayConfiguration, type EbayEnvironment } from "./environment.server";
+import type { EbayEnvironment } from "../../view-models";
+import { ebayConfiguration } from "./environment.server";
 
 const identifier = z.string().min(1).max(256);
 const encodedSignature = z.string().min(1).max(2048);

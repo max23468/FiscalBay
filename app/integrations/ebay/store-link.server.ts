@@ -3,7 +3,8 @@ import type { Language } from "../../i18n";
 import { upstreamJson } from "../http.server";
 import { base64Url } from "../../sealed.server";
 import type { SellerTokens } from "./seller-credentials.server";
-import { ebayConfiguration, type EbayAccess, type EbayEnvironment } from "./environment.server";
+import type { EbayEnvironment } from "../../view-models";
+import { ebayConfiguration, type EbayAccess } from "./environment.server";
 
 // Il collegamento del negozio non chiede l'email: resta separato dal login eBay.
 export const ebayStoreScopes = [

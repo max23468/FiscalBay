@@ -1,6 +1,6 @@
 import { purchasesOpenSql, waitingSql } from "./admission-state.server";
 import { consultableStore } from "./store-state.server";
-import type { EbayEnvironment } from "../integrations/ebay/environment.server";
+import type { EbayEnvironment } from "../view-models";
 import { dayMilliseconds } from "../time";
 import { sqlList } from "./sql.server";
 

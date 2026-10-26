@@ -15,9 +15,9 @@ import {
   type ShippingStatus,
   type SuggestionView,
   type TaxQuality,
+  type EbayEnvironment,
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
-import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 import { consultableStore, storeLabelSql } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 import { sqlList } from "./sql.server";

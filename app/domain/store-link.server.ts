@@ -3,7 +3,7 @@ import type { Language } from "../i18n";
 import { linkReadAdmitted } from "./admission.server";
 import { applyFreePlan } from "./free-store.server";
 import { acquireOrders } from "./order-acquisition.server";
-import type { EbayEnvironment } from "../integrations/ebay/environment.server";
+import type { EbayEnvironment } from "../view-models";
 import { saveStoreCredentials } from "../integrations/ebay/seller-credentials.server";
 import {
   exchangeStoreConsent,
