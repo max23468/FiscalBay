@@ -31,13 +31,22 @@ export type PremiumGrant =
   | { result: "done"; startsAt: string; endsAt: string }
   | { result: "invalid" | "not_found" | "lifetime" | "unavailable" };
 
+/** Fine dell'ultima copertura in corso dello spazio, pagata, di prova o concessa. */
+const coveredUntilSql = `(SELECT MAX(e.ends_at) FROM workspace_entitlements e
+  WHERE e.workspace_id = ?1 AND e.revoked_at IS NULL AND julianday(e.ends_at) > julianday(?2))`;
+
+/** Concessioni concorrenti dello stesso spazio: ciascuna rilegge la copertura e riparte. */
+const grantAttempts = 3;
+
 /**
  * Premium concesso per un numero di giorni. Parte dalla fine dell'ultima copertura in corso,
  * pagata, di prova o concessa, così non consuma il periodo già pagato; con un abbonamento che
  * si rinnova ne rinvia il rinnovo, o il primo addebito scelto durante la prova, alla fine della
  * concessione, senza conguaglio. Un rinnovo già disdetto non si riattiva: la concessione
  * prolunga soltanto il diritto. Stripe si aggiorna prima della copertura: ripetuta dopo un
- * errore, la concessione calcola gli stessi istanti.
+ * errore, la concessione calcola gli stessi istanti. La copertura si registra soltanto se
+ * l'ultima copertura è ancora quella letta: due concessioni contemporanee si sommano, perché la
+ * seconda rilegge la fine della prima e riparte da lì, rinvio su Stripe compreso.
  */
 export async function grantPremium(
   env: Env,
@@ -53,73 +62,80 @@ export async function grantPremium(
   )
     return { result: "invalid" };
   const at = now.toISOString();
-  const workspace = await env.DB.prepare(`SELECT
-      ${lifetimeInForceSql("w.id")} AS lifetime,
-      (SELECT MAX(e.ends_at) FROM workspace_entitlements e WHERE e.workspace_id = w.id
-        AND e.revoked_at IS NULL AND julianday(e.ends_at) > julianday(?2)) AS covered_until,
-      (SELECT s.id FROM stripe_subscriptions s WHERE s.workspace_id = w.id AND s.environment = ?3
-        AND s.unavailable_at IS NULL AND s.status IN ('active', 'trialing')
-        AND s.cancel_at_period_end = 0
-        ORDER BY julianday(s.current_period_start) DESC LIMIT 1) AS subscription,
-      (SELECT s.current_period_end FROM stripe_subscriptions s WHERE s.workspace_id = w.id
-        AND s.environment = ?3 AND s.unavailable_at IS NULL AND s.status IN ('active', 'trialing')
-        AND s.cancel_at_period_end = 0
-        ORDER BY julianday(s.current_period_start) DESC LIMIT 1) AS renews_at
-    FROM workspaces w WHERE w.id = ?1`)
-    .bind(parsed.data.workspaceId, at, stripeEnvironment(env))
-    .first<{
-      lifetime: number;
-      covered_until: string | null;
-      subscription: string | null;
-      renews_at: string | null;
-    }>();
-  if (!workspace) return { result: "not_found" };
-  if (workspace.lifetime) return { result: "lifetime" };
-  const start = Math.max(
-    now.getTime(),
-    workspace.covered_until ? Date.parse(workspace.covered_until) : 0,
-  );
-  const end = start + input.days * dayMilliseconds;
-  const startsAt = new Date(start).toISOString();
-  const endsAt = new Date(end).toISOString();
-  const postpone =
-    workspace.subscription && workspace.renews_at && Date.parse(workspace.renews_at) < end
-      ? workspace.subscription
-      : null;
-  let stripe = null;
-  if (postpone) {
-    const key = stripeSecretKey(env);
-    if (!key) return { result: "unavailable" };
-    try {
-      stripe = await createStripeClient(key);
-      await stripeCall(() =>
-        stripe!.subscriptions.update(postpone, {
-          trial_end: Math.floor(end / 1000),
-          proration_behavior: "none",
-        }),
-      );
-    } catch (error) {
-      logFailure({ error, operation: "billing" });
-      return { result: "unavailable" };
-    }
-  }
-  await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-      ends_at, granted_by, grant_reason) VALUES (?1, ?2, 'admin', ?3, ?4, ?5, ?6)`)
-    .bind(
-      crypto.randomUUID(),
-      parsed.data.workspaceId,
-      startsAt,
-      endsAt,
-      parsed.data.author,
-      parsed.data.reason,
-    )
-    .run();
-  if (stripe && postpone)
-    // Il webhook e il cron rileggono comunque l'abbonamento: un errore qui non annulla nulla.
-    await reconcileSubscription(env, stripe, postpone, now).catch((error: unknown) =>
-      logFailure({ error, operation: "billing" }),
+  for (let attempt = 0; attempt < grantAttempts; attempt++) {
+    const workspace = await env.DB.prepare(`SELECT ${lifetimeInForceSql("w.id")} AS lifetime,
+        ${coveredUntilSql} AS covered_until,
+        (SELECT s.id FROM stripe_subscriptions s WHERE s.workspace_id = w.id AND s.environment = ?3
+          AND s.unavailable_at IS NULL AND s.status IN ('active', 'trialing')
+          AND s.cancel_at_period_end = 0
+          ORDER BY julianday(s.current_period_start) DESC LIMIT 1) AS subscription,
+        (SELECT s.current_period_end FROM stripe_subscriptions s WHERE s.workspace_id = w.id
+          AND s.environment = ?3 AND s.unavailable_at IS NULL AND s.status IN ('active', 'trialing')
+          AND s.cancel_at_period_end = 0
+          ORDER BY julianday(s.current_period_start) DESC LIMIT 1) AS renews_at
+      FROM workspaces w WHERE w.id = ?1`)
+      .bind(parsed.data.workspaceId, at, stripeEnvironment(env))
+      .first<{
+        lifetime: number;
+        covered_until: string | null;
+        subscription: string | null;
+        renews_at: string | null;
+      }>();
+    if (!workspace) return { result: "not_found" };
+    if (workspace.lifetime) return { result: "lifetime" };
+    const start = Math.max(
+      now.getTime(),
+      workspace.covered_until ? Date.parse(workspace.covered_until) : 0,
     );
-  return { result: "done", startsAt, endsAt };
+    const end = start + input.days * dayMilliseconds;
+    const startsAt = new Date(start).toISOString();
+    const endsAt = new Date(end).toISOString();
+    const postpone =
+      workspace.subscription && workspace.renews_at && Date.parse(workspace.renews_at) < end
+        ? workspace.subscription
+        : null;
+    let stripe = null;
+    if (postpone) {
+      const key = stripeSecretKey(env);
+      if (!key) return { result: "unavailable" };
+      try {
+        stripe = await createStripeClient(key);
+        await stripeCall(() =>
+          stripe!.subscriptions.update(postpone, {
+            trial_end: Math.floor(end / 1000),
+            proration_behavior: "none",
+          }),
+        );
+      } catch (error) {
+        logFailure({ error, operation: "billing" });
+        return { result: "unavailable" };
+      }
+    }
+    const granted = await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id,
+        source, starts_at, ends_at, granted_by, grant_reason)
+      SELECT ?3, ?1, 'admin', ?4, ?5, ?6, ?7
+      WHERE NOT ${lifetimeInForceSql("?1")} AND ${coveredUntilSql} IS ?8`)
+      .bind(
+        parsed.data.workspaceId,
+        at,
+        crypto.randomUUID(),
+        startsAt,
+        endsAt,
+        parsed.data.author,
+        parsed.data.reason,
+        workspace.covered_until,
+      )
+      .run();
+    // Un'altra concessione o un lifetime sono arrivati dopo la lettura: si ricalcola.
+    if (!granted.meta.changes) continue;
+    if (stripe && postpone)
+      // Il webhook e il cron rileggono comunque l'abbonamento: un errore qui non annulla nulla.
+      await reconcileSubscription(env, stripe, postpone, now).catch((error: unknown) =>
+        logFailure({ error, operation: "billing" }),
+      );
+    return { result: "done", startsAt, endsAt };
+  }
+  return { result: "unavailable" };
 }
 
 /** Lifetime in omaggio: occupa uno dei venti posti e chiude l'abbonamento dello spazio. */

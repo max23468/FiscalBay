@@ -83,6 +83,123 @@ describe("Lifetime e concessioni", () => {
     vi.restoreAllMocks();
   });
 
+  /**
+   * Stripe simulato che ferma la creazione della sessione lifetime finché `resume` non la
+   * lascia proseguire, oppure la fa fallire.
+   */
+  function heldLifetime(stripe: ReturnType<typeof stripeAccount>, outcome: "held" | "failed") {
+    let entered!: () => void;
+    let resume!: () => void;
+    const reached = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const held = new Promise<void>((resolve) => {
+      resume = resolve;
+    });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      if (
+        new URL(String(input)).pathname === "/v1/checkout/sessions" &&
+        init?.method === "POST" &&
+        new URLSearchParams(String(init.body)).get("mode") === "payment"
+      ) {
+        entered();
+        await held;
+        if (outcome === "failed")
+          return Response.json({ error: { type: "api_error" } }, { status: 503 });
+      }
+      return stripe.fetcher(input, init);
+    });
+    return { reached, resume };
+  }
+  const purchase = (offer: "monthly" | "annual" | "lifetime") =>
+    startCheckout(
+      env,
+      { request, userId, email: "turno@example.invalid", offer, language: "it" },
+      at(now),
+    );
+  const open = (stripe: ReturnType<typeof stripeAccount>) =>
+    stripe.state.sessions.filter((session) => session.status === "open");
+
+  it("un lifetime in creazione ferma mensile, annuale e un altro lifetime dello stesso spazio", async () => {
+    const stripe = stripeAccount();
+    const { reached, resume } = heldLifetime(stripe, "held");
+    const lifetime = purchase("lifetime");
+    await reached;
+    expect(await purchase("monthly")).toEqual({ ok: false, reason: "unavailable" });
+    expect(await purchase("annual")).toEqual({ ok: false, reason: "unavailable" });
+    expect(await purchase("lifetime")).toEqual({ ok: false, reason: "unavailable" });
+    resume();
+    expect(await lifetime).toMatchObject({ ok: true });
+    expect(open(stripe)).toEqual([expect.objectContaining({ mode: "payment" })]);
+    // Legata la sessione il turno è libero: il mensile chiude il lifetime e il posto si libera.
+    expect(await purchase("monthly")).toMatchObject({ ok: true });
+    expect(open(stripe)).toEqual([expect.objectContaining({ mode: "subscription" })]);
+    expect(await allocations()).toEqual([]);
+  });
+
+  it("un lifetime non creato libera subito il turno dello spazio", async () => {
+    const stripe = stripeAccount();
+    const { reached, resume } = heldLifetime(stripe, "failed");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const lifetime = purchase("lifetime");
+    await reached;
+    resume();
+    expect(await lifetime).toEqual({ ok: false, reason: "unavailable" });
+    expect(await allocations()).toEqual([]);
+    expect(await purchase("monthly")).toMatchObject({ ok: true });
+  });
+
+  it("due concessioni contemporanee si sommano senza sovrapporsi", async () => {
+    const input = { workspaceId: "w-a", author: "owner", days: 3 };
+    const results = await Promise.all([
+      grantPremium(env, { ...input, reason: "Prima concessione" }, at(now)),
+      grantPremium(env, { ...input, reason: "Seconda concessione" }, at(now)),
+    ]);
+    const day = 86_400_000;
+    const after = (days: number) => new Date(Date.parse(now) + days * day).toISOString();
+    expect(
+      results.toSorted((a, b) =>
+        "startsAt" in a && "startsAt" in b ? a.startsAt.localeCompare(b.startsAt) : 0,
+      ),
+    ).toEqual([
+      { result: "done", startsAt: now, endsAt: after(3) },
+      { result: "done", startsAt: after(3), endsAt: after(6) },
+    ]);
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT starts_at, ends_at FROM workspace_entitlements WHERE source = 'admin' ORDER BY starts_at",
+        ).all()
+      ).results,
+    ).toEqual([
+      { starts_at: now, ends_at: after(3) },
+      { starts_at: after(3), ends_at: after(6) },
+    ]);
+  });
+
+  it("il lifetime in omaggio chiude la sessione di mensile o annuale ancora aperta", async () => {
+    const stripe = stripeAccount();
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    expect(await purchase("monthly")).toMatchObject({ ok: true });
+    // La chiusura all'attivazione non riesce: la ripete il cron.
+    stripe.state.failing.push("/v1/checkout/sessions/cs_lifetime_1");
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(
+      await grantLifetimeConcession(
+        env,
+        { workspaceId: "w-a", author: "admin-1", reason: "Omaggio" },
+        at(now),
+      ),
+    ).toBe("done");
+    expect(open(stripe)).toHaveLength(1);
+    stripe.state.failing.length = 0;
+    await reconcileBilling(env, stripe.fetcher, at(now));
+    expect(open(stripe)).toEqual([]);
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM subscription_checkouts").first(),
+    ).toEqual({ n: 0 });
+  });
+
   it("detrae soltanto il periodo pagato non usato, sull'istante UTC", () => {
     const month = { startsAt: "2028-02-01T00:00:00.000Z", endsAt: "2028-03-01T00:00:00.000Z" };
     // Febbraio bisestile: 29 giorni, 15 ancora da usare.

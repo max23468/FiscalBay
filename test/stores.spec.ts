@@ -1567,6 +1567,37 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       errors.mockRestore();
     });
 
+    it("indirizzi che rifiutano sempre l'email non fermano il preavviso degli altri", async () => {
+      const seller = await linkedSeller("ultimo@example.invalid");
+      const { send: email, mail } = mailer();
+      // Cinquanta spazi inattivi da prima, con un indirizzo che rifiuta ogni email.
+      const earlier = at(-1).toISOString();
+      await env.DB.batch(
+        Array.from({ length: 50 }, (_, index) => `rifiuta-${index}`).flatMap((id) => [
+          env.DB.prepare(`INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+            VALUES (?1, ?1, ?2, 1, ?3, ?3)`).bind(id, `${id}@example.invalid`, earlier),
+          env.DB.prepare(
+            "INSERT INTO workspaces (id, name, created_at, active_at) VALUES (?1, ?1, ?2, ?2)",
+          ).bind(id, earlier),
+          env.DB.prepare("INSERT INTO workspace_members VALUES (?1, ?1, 'owner')").bind(id),
+          insertStore({ id: `s-${id}`, workspaceId: id }),
+        ]),
+      );
+      email.mockImplementation(async (message) => {
+        if (String((message as { to: string }).to).startsWith("rifiuta-"))
+          throw new Error("synthetic");
+        return { messageId: "synthetic" };
+      });
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      await applyInactivity(mail, at(31));
+      expect((await workspace(seller.workspaceId))!.inactivity_notice_at).toBeNull();
+      await applyInactivity(mail, at(31.1));
+      expect((await workspace(seller.workspaceId))!.inactivity_notice_at).toBe(
+        at(31.1).toISOString(),
+      );
+      errors.mockRestore();
+    });
+
     it("una copertura non va mai in pausa per inattività e toglie pausa e preavviso", async () => {
       const seller = await linkedSeller("coperto@example.invalid");
       const { send: email, mail } = mailer();

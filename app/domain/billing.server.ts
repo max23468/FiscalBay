@@ -13,6 +13,7 @@ import {
   stripeCall,
   stripeEnvironment,
   stripeId,
+  stripeListLimit,
   stripeSecretKey,
 } from "../integrations/stripe.server";
 import { lifetimeInForceSql, openSubscriptionStatuses } from "./grants.server";
@@ -225,15 +226,18 @@ export async function reconcileSubscription(
     return;
   }
   subscription = await scheduleProtectionEnd(stripe, subscription, item, now);
+  // Tutte le pagine: il rimborso di una fattura vecchia conta anche dopo molti rinnovi.
   const invoices = await stripeCall(() =>
-    stripe.invoices.list({
-      subscription: subscription.id,
-      status: "paid",
-      limit: 24,
-      expand: ["data.payments"],
-    }),
+    stripe.invoices
+      .list({
+        subscription: subscription.id,
+        status: "paid",
+        limit: 100,
+        expand: ["data.payments"],
+      })
+      .autoPagingToArray({ limit: stripeListLimit }),
   );
-  const coverages = invoices.data.flatMap((invoice) => paidCoverage(invoice) ?? []);
+  const coverages = invoices.flatMap((invoice) => paidCoverage(invoice) ?? []);
   const charges = await customerCharges(env.DB, stripe, stripeId(subscription.customer));
   // Una richiesta alla volta, soltanto per gli addebiti con rimborsi o con una disputa. Senza
   // un addebito leggibile l'esito già registrato resta.
@@ -345,11 +349,14 @@ const sessionScanLimit = 1000;
  * Prima le sessioni completate degli ultimi due giorni senza abbonamento locale o senza posto
  * lifetime attivo, poi le prenotazioni dei posti, poi gli abbonamenti dovuti: rinnovo scaduto
  * o tutela del prezzo finita e non ancora riletti, poi attivazioni in attesa da oltre un'ora,
- * infine una rilettura al giorno. Ogni tentativo, riuscito o no, aggiorna `checked_at`: un
- * abbonamento che fallisce non torna in testa a ogni turno. Con 25 abbonamenti e due richieste
- * ciascuno, più al massimo venti posti, per turno orario il carico resta molto sotto i limiti
- * di Stripe. Ogni passo registra il proprio errore senza fermare gli altri e il turno si
- * conclude: quanto non riuscito torna al turno seguente.
+ * infine una rilettura al giorno. Un abbonamento cancellato non si rinnova più ma resta nella
+ * rilettura giornaliera finché il suo ultimo periodo non è finito: fino ad allora un rimborso
+ * o una disputa persa arrivati senza webhook revocano una copertura ancora in corso. Ogni
+ * tentativo, riuscito o no, aggiorna `checked_at`: un abbonamento che fallisce non torna in
+ * testa a ogni turno. Con 25 abbonamenti e due richieste ciascuno, più al massimo venti posti,
+ * per turno orario il carico resta molto sotto i limiti di Stripe. Ogni passo registra il
+ * proprio errore senza fermare gli altri e il turno si conclude: quanto non riuscito torna al
+ * turno seguente.
  */
 export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, now = new Date()) {
   const key = stripeSecretKey(env);
@@ -414,7 +421,8 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
   const { results } = await env.DB.prepare(`UPDATE stripe_subscriptions SET checked_at = ?1
     WHERE id IN (SELECT s.id FROM stripe_subscriptions s
       WHERE s.environment = ?2 AND s.unavailable_at IS NULL
-        AND s.status IN (${sqlList(openSubscriptionStatuses)})
+        AND (s.status IN (${sqlList(openSubscriptionStatuses)})
+          OR s.status = 'canceled' AND julianday(?1) < julianday(s.current_period_end))
         AND (${dueSql} OR julianday(s.checked_at) <= julianday(?1, '-1 hour') AND ${pendingSql}
           OR julianday(s.checked_at) <= julianday(?1, '-1 day'))
       ORDER BY CASE WHEN ${dueSql} THEN 0 WHEN ${pendingSql} THEN 1 ELSE 2 END,
