@@ -92,6 +92,7 @@ export function appUrl(
   env: { APP_ORIGIN: string },
   language: Language,
   path: string,
+  // Stryker disable next-line StringLiteral: l'indirizzo distingue soltanto «sandbox»; ogni altro predefinito dà lo stesso risultato.
   environment: EbayEnvironment = "production",
   filters: Record<string, string> = {},
 ) {

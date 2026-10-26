@@ -39,6 +39,7 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           UPDATE_TYPE: ${{ steps.dependabot-metadata.outputs.update-type }}
+          DEPENDENCY_NAMES: ${{ steps.dependabot-metadata.outputs.dependency-names }}
           DEPENDENCY_TYPE: ${{ steps.dependabot-metadata.outputs.dependency-type }}
           PACKAGE_ECOSYSTEM: ${{ steps.dependabot-metadata.outputs.package-ecosystem }}
           GH_REPO: ${{ github.repository }}
@@ -61,6 +62,15 @@ jobs:
             && [ "${UPDATE_TYPE}" = "version-update:semver-major" ]; then
             gh pr edit "${PR_URL}" --remove-label dependabot-automerge || true
             echo "Major runtime production dependency: manual review required."
+            exit 0
+          fi
+
+          # Runner dei test e della mutation: la CI delle PR non esegue la mutation, quindi
+          # il merge aspetta una campagna manuale riuscita su un modulo Cloudflare.
+          if grep -qE '(^|, )(vitest|@vitest/[^,]+|@stryker-mutator/[^,]+|@cloudflare/vitest-plugin)(,|$)' \
+            <<< "${DEPENDENCY_NAMES}"; then
+            gh pr edit "${PR_URL}" --remove-label dependabot-automerge || true
+            echo "Test runner update: mutation qualification required before merge."
             exit 0
           fi
 

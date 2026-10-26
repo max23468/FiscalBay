@@ -330,7 +330,7 @@ async function scheduleProtectionEnd(
     !(subscription.cancel_at && subscription.cancel_at <= end)
   )
     return update({ cancel_at: end, proration_behavior: "none" });
-  if (!lapsed && subscription.status === "active" && subscription.cancel_at === end)
+  if (subscription.status === "active" && subscription.cancel_at === end)
     return update({ cancel_at: "" });
   return subscription;
 }

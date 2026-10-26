@@ -88,6 +88,7 @@ export function catalogMismatch(
   offer: PremiumOffer,
   netCents: number,
 ): CatalogMismatch | null {
+  // Stryker disable next-line LogicalOperator,ConditionalExpression,StringLiteral: un prodotto non espanso o eliminato non ha `active` e risulta comunque non attivo.
   const product = typeof price.product === "string" || price.product.deleted ? null : price.product;
   if (!price.active || !product?.active) return "inactive";
   if (price.currency !== "eur") return "currency";

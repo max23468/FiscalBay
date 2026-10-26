@@ -45,6 +45,7 @@ export function splitBlocks(blocks: string[], limit = messageLimit): string[] {
     }
     let first = true;
     for (const line of block.split("\n")) {
+      // Stryker disable next-line EqualityOperator,AssignmentOperator: con «<=» una riga lunga un multiplo del limite aggiunge un pezzo vuoto, che chiude il messaggio già pieno e non cambia le parti; con «-=» il ciclo non termina: Stryker lo interrompe per limite di iterazioni e lo conta come Timeout prima che una prova possa fallire.
       for (let start = 0; start < Math.max(line.length, 1); start += limit) {
         push(line.slice(start, start + limit), first ? "\n\n" : "\n");
         first = false;
@@ -114,16 +115,11 @@ export function orderNotice(order: VisibleOrder, environment: EbayEnvironment): 
  * valore, una correzione o una rimozione, non con la forma in cui eBay li riporta.
  */
 export async function fiscalKey(notice: Pick<OrderNotice, "values">): Promise<string> {
-  return fiscalDigest(
-    JSON.stringify(
-      notice.values
-        .map((value) => [value.kind, value.label, value.value])
-        .sort((a, b) =>
-          // Le chiavi sono testi: l'ordine non dipende dalla lingua.
-          JSON.stringify(a) < JSON.stringify(b) ? -1 : 1,
-        ),
-    ),
-  );
+  // Il JSON dell'elenco delle terne in ordine di testo: l'ordine non dipende dalla lingua.
+  const entries = notice.values
+    .map((value) => JSON.stringify([value.kind, value.label, value.value]))
+    .sort();
+  return fiscalDigest(`[${entries.join(",")}]`);
 }
 
 /**
@@ -313,7 +309,7 @@ export function orderEntry(
 ): string {
   const copy = text[language];
   return [
-    `<a href="${escape(orderUrl(env, language, notice)).replaceAll('"', "&quot;")}">${escape(notice.ebayOrderId)}</a> · ${escape(notice.storeName)}`,
+    `<a href="${escape(orderUrl(env, language, notice))}">${escape(notice.ebayOrderId)}</a> · ${escape(notice.storeName)}`,
     ...(change && change !== "new"
       ? [`${icons.change[change]} <i>${escape(copy.change[change])}</i>`]
       : []),
@@ -361,7 +357,8 @@ export function digestMessage(
   ]);
   const environment = entries.every(({ notice }) => notice.environment === "sandbox")
     ? "sandbox"
-    : "production";
+    : // Stryker disable next-line StringLiteral: l'indirizzo distingue soltanto «sandbox»; ogni altro valore dà lo stesso risultato.
+      "production";
   const notices = entries.map(({ notice }) => notice);
   return parts.map((html, index) => {
     const buttons = [

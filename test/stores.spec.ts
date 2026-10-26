@@ -99,6 +99,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     },
   );
   const day = 24 * 60 * 60 * 1000;
+  const hour = 60 * 60 * 1000;
 
   async function linkThroughEbay(cookie: string, ebay = syntheticEbay()) {
     const state = (await beginStoreLink(cookie)).searchParams.get("state");
@@ -298,6 +299,12 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     });
     expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
     expect(refresh).not.toHaveBeenCalled();
+    // Escluso dal piano resta in pausa anche con il consenso scaduto: ricollegarlo non lo
+    // farebbe leggere.
+    await env.DB.prepare("UPDATE ebay_store_credentials SET refresh_expires_at = ?")
+      .bind(new Date(Date.parse(now) - 1000).toISOString())
+      .run();
+    expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({ connection: "paused" });
   });
 
   it("scollega senza toccare quota, diritti e piano e ritrova lo stesso negozio al ricollegamento", async () => {
@@ -1593,6 +1600,20 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       expect(await pauses(seller.userId)).toEqual([[]]);
     });
 
+    it("riprendere a mano un negozio non riprende quelli in pausa per inattività", async () => {
+      const seller = await linkedSeller("ripresa-manuale@example.invalid");
+      // Il negozio in pausa manuale non leggeva: la pausa per inattività ha fermato l'altro.
+      await env.DB.batch([
+        insertStore({ id: "secondo", workspaceId: seller.workspaceId }),
+        env.DB.prepare(`INSERT INTO ebay_store_pauses (store_id, reason, paused_at)
+          VALUES (?1, 'manual', ?3), (?2, 'inactivity', ?3)`).bind(seller.storeId, "secondo", now),
+      ]);
+      expect(await resumeStore(env.DB, seller.userId, seller.storeId)).toBe("done");
+      expect(
+        (await env.DB.prepare("SELECT store_id, reason FROM ebay_store_pauses").all()).results,
+      ).toEqual([{ store_id: "secondo", reason: "inactivity" }]);
+    });
+
     it("uno spazio senza attività registrata inizia il conteggio dal compito", async () => {
       const seller = await linkedSeller("senza-attivita@example.invalid");
       await env.DB.prepare("UPDATE workspaces SET active_at = NULL").run();
@@ -1644,7 +1665,12 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       expect(await orderAllowance(env.DB, seller.userId)).toMatchObject({
         waiting: true,
         remaining: 0,
+        purchasesOpen: true,
       });
+      // Ordini propone prova e Premium soltanto con gli acquisti aperti.
+      await admissionSettings(1, 0);
+      expect((await orderAllowance(env.DB, seller.userId))!.purchasesOpen).toBe(false);
+      await admissionSettings(1, 1);
       const [order] = await listVisibleOrders(env.DB, seller.userId);
       await expect(unlockOrders(env.DB, seller.userId, [order!.id])).rejects.toMatchObject({
         code: "free_quota_exhausted",
@@ -1722,13 +1748,41 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       const refresh = syntheticEbay();
       expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
       expect(refresh).not.toHaveBeenCalled();
+      // Una copertura che inizia fra un'ora vale soltanto da allora. Il database dei test usa lo
+      // stesso orologio simulato: le letture si provano a un istante successivo, passato come
+      // parametro, così conta l'istante dato e non quello del database.
       await env.DB.prepare(
         `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
          SELECT 'concessione', workspace_id, 'admin', ?1, ?2 FROM ebay_stores`,
       )
-        .bind(new Date(Date.now() - 60_000).toISOString(), new Date(Date.now() + day).toISOString())
+        .bind(new Date(Date.now() + hour).toISOString(), new Date(Date.now() + day).toISOString())
         .run();
-      expect(await refreshExpiringTokens(env, refresh)).toEqual(["refreshed"]);
+      expect(await refreshExpiringTokens(env, refresh)).toEqual([]);
+      const ahead = new Date(Date.now() + 2 * hour);
+      expect(await refreshExpiringTokens(env, refresh, ahead)).toEqual(["refreshed"]);
+      const covered = syntheticEbay({ lastModifiedDate: ahead.toISOString() });
+      const relinked = (await env.DB.prepare(
+        "SELECT granted_at FROM ebay_store_credentials",
+      ).first<{ granted_at: string }>())!.granted_at;
+      await consumeOrderConfirmation(
+        env,
+        {
+          storeId,
+          grantedAt: relinked,
+          environment: "production",
+          // L'ordine già letto è stato eliminato con i dati del negozio: un ordine nuovo,
+          // arrivato dopo l'eliminazione.
+          orderId: "27-99999-99999",
+          eventAt: ahead.toISOString(),
+        },
+        covered,
+        ahead,
+      ).catch(() => {
+        // eBay simulato non conosce l'ordine: conta soltanto che la lettura parta.
+      });
+      expect(covered).toHaveBeenCalled();
+      expect(await requestStoreSync(cron, session.userId, storeId, {}, ahead)).not.toBe("invalid");
+      expect(await dispatchStoreSyncs(cron, ahead)).toEqual([storeId]);
     });
 
     it("senza capacità per nuovi Premium ferma acquisti, prova e collegamenti in attesa", async () => {
