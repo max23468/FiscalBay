@@ -56,8 +56,8 @@ beforeEach(async () => {
   await env.DB.prepare("DELETE FROM webhook_receipts").run();
 });
 
-/** Chiave live con limitazioni, l'unica che Production accetta. */
-const liveKey = "rk_live_fiscalbay";
+/** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
+const liveKey = "sk_live_fiscalbay";
 
 const checkoutInput = {
   priceId: "price_test_monthly",
@@ -1258,20 +1258,23 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(stripe.fetcher).not.toHaveBeenCalled();
   });
 
-  it("usa soltanto la chiave dell'ambiente e in Production soltanto quella con limitazioni", async () => {
+  it("usa soltanto la chiave dell'ambiente, standard o con limitazioni", async () => {
     const production = { ...env, APP_ORIGIN: "https://fiscalbay.it" } as Env;
     expect(stripeSecretKey(env)).toBe("rk_test_fiscalbay");
     expect(stripeSecretKey({ ...env, STRIPE_SECRET_KEY: "sk_test_fiscalbay" })).toBe(
       "sk_test_fiscalbay",
     );
     expect(stripeSecretKey({ ...production, STRIPE_SECRET_KEY: liveKey })).toBe(liveKey);
+    expect(stripeSecretKey({ ...production, STRIPE_SECRET_KEY: "rk_live_fiscalbay" })).toBe(
+      "rk_live_fiscalbay",
+    );
     for (const [target, key] of [
       [env, liveKey],
-      [env, "sk_live_fiscalbay"],
+      [env, "rk_live_fiscalbay"],
       [env, "rk_test_"],
       [env, "pk_test_fiscalbay"],
       [env, ""],
-      [production, "sk_live_fiscalbay"],
+      [production, "pk_live_fiscalbay"],
       [production, "rk_test_fiscalbay"],
       [production, "sk_test_fiscalbay"],
       [production, `x${liveKey}`],
@@ -1283,7 +1286,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     const stripe = stripeAccount();
     for (const target of [
       { ...env, STRIPE_SECRET_KEY: liveKey },
-      { ...production, STRIPE_SECRET_KEY: "sk_live_fiscalbay" },
+      { ...production, STRIPE_SECRET_KEY: "sk_test_fiscalbay" },
     ] as Env[]) {
       expect(checkoutConfigured(target)).toBe(false);
       await expect(
