@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { UnlockIcon } from "~/components/icons";
 import {
@@ -14,6 +14,42 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { useCopy } from "~/components/copy-context";
+import { forgetExportedSelection } from "../../orders/export-scope";
+
+/**
+ * Modalità di selezione dell'elenco: la chiusura dimentica la selezione esportata e riporta il
+ * focus su «Seleziona».
+ */
+export function useOrderSelection() {
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const selectRef = useRef<HTMLButtonElement>(null);
+  const stopSelecting = () => {
+    forgetExportedSelection();
+    setSelecting(false);
+    setSelected(new Set());
+    selectRef.current?.focus();
+  };
+  const toggleSelected = (id: string, value: boolean) =>
+    setSelected((current) => {
+      const next = new Set(current);
+      if (value) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  return {
+    selecting,
+    selected,
+    selectRef,
+    /** Riapre la selezione, per esempio quella esportata da ripristinare. */
+    startSelecting: (ids: Iterable<string> = []) => {
+      setSelecting(true);
+      setSelected(new Set(ids));
+    },
+    stopSelecting,
+    toggleSelected,
+  };
+}
 
 /** Barra della modalità Seleziona: conteggi, sblocco multiplo confermato ed esportazione. */
 export function SelectionBar({
