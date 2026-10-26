@@ -1756,6 +1756,38 @@ async function logged(action: () => Promise<unknown>) {
 }
 
 describe("invii degli ordini", () => {
+  it("oltre i duecento spazi per esecuzione il turno passa a chi aspetta da più tempo", async () => {
+    const seller = await linked("audit-ultimo");
+    await order(seller.store, "o-audit", { cf: "RSSMRA80A01H501U" });
+    const earlier = later(-60).toISOString();
+    for (let index = 0; index < 200; index++) {
+      const id = `audit-${index}`;
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+          VALUES (?1, ?1, ?2, 1, ?3, ?3)`).bind(id, `${id}@example.invalid`, earlier),
+        env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES (?1, ?1, ?2)").bind(
+          id,
+          earlier,
+        ),
+        env.DB.prepare("INSERT INTO workspace_members VALUES (?1, ?1, 'owner')").bind(id),
+        env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+          VALUES (?1, ?1, 'admin', ?2, ?3)`).bind(id, earlier, later(30 * 24 * 60).toISOString()),
+        env.DB.prepare(`INSERT INTO telegram_links (workspace_id, id, chat_id, language, linked_at)
+          VALUES (?1, ?1, ?2, 'it', ?3)`).bind(id, String(index + 1000), earlier),
+      ]);
+    }
+    const api = bot();
+    await run(api.fetcher, 10);
+    // I duecento collegati per primi hanno avuto il turno; il successivo arriva subito dopo.
+    expect(api.texts().filter((call) => String(call.params.chat_id) === "601")).toHaveLength(0);
+    await run(api.fetcher, 20);
+    expect(api.texts().filter((call) => String(call.params.chat_id) === "601")).toHaveLength(1);
+    const turns = await env.DB.prepare(
+      "SELECT COUNT(*) AS waiting FROM telegram_links WHERE served_at IS NULL",
+    ).first();
+    expect(turns).toEqual({ waiting: 0 });
+  }, 60000);
+
   it("invia il nuovo ordine con il CF normalizzato, senza contatti dell'acquirente, una volta sola", async () => {
     const seller = await linked("invio");
     await order(seller.store, "o-invio", { cf: "rss mra80a01h501u" });
@@ -2677,9 +2709,10 @@ describe("esiti delle consegne", () => {
     });
     // L'altro spazio non è stato valutato.
     expect(await deliveryOf("o-token-secondo")).toBeNull();
+    // Alla ripresa passa prima lo spazio rimasto senza turno.
     const api = bot();
     await run(api.fetcher, 15);
-    expect(api.texts().map((call) => call.params.chat_id)).toEqual(["641", "642"]);
+    expect(api.texts().map((call) => call.params.chat_id)).toEqual(["642", "641"]);
   });
 
   it("il bot bloccato chiude anche le altre consegne in attesa della chat", async () => {

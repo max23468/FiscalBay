@@ -115,6 +115,9 @@ export function isMissingObject(error: unknown) {
   );
 }
 
+/** Elementi letti al massimo seguendo tutte le pagine di un elenco Stripe: il limite dello SDK. */
+export const stripeListLimit = 10_000;
+
 /** Chiamata a Stripe, lettura o scrittura, con gli errori classificati come gli altri provider. */
 export async function stripeCall<T>(call: () => Promise<T>): Promise<T> {
   try {

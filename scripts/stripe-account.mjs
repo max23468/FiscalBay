@@ -128,7 +128,9 @@ function endpointsOf(endpoints, origin) {
 
 /**
  * Controlli dell'account rispetto al target: ciascuno con esito ed eventuali campi diversi.
- * Se la chiave della CLI appartiene all'altro ambiente gli altri controlli non partono.
+ * Se la chiave della CLI appartiene all'altro ambiente, o il profilo legge un account senza
+ * nessuno dei prezzi del listino, gli altri controlli non partono: elencherebbero soltanto
+ * scostamenti apparenti.
  */
 export function checkAccount(request, target) {
   const results = [];
@@ -150,6 +152,26 @@ export function checkAccount(request, target) {
   }
   if (tax.livemode !== target.live) {
     record("ambiente", [target.live ? "chiave_di_test" : "chiave_live"]);
+    return results;
+  }
+  // I prezzi del listino esistono soltanto nell'account dell'ambiente.
+  const exists = (id) => {
+    try {
+      request("get", `/v1/prices/${id}`);
+      return true;
+    } catch (error) {
+      if (errorCode(error) === "resource_missing") return false;
+      throw error;
+    }
+  };
+  try {
+    const configured = offers.map((offer) => target.prices[offer]).filter(Boolean);
+    if (configured.length && !configured.some(exists)) {
+      record("ambiente", ["account_diverso"]);
+      return results;
+    }
+  } catch (error) {
+    record("ambiente", [errorCode(error)]);
     return results;
   }
   record("ambiente", []);

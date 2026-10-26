@@ -129,6 +129,20 @@ describe("account Stripe dell'ambiente", () => {
     assert.equal(checkAccount(failing, target)[0].ok, false);
   });
 
+  it("si ferma a un account senza nessuno dei prezzi del listino", () => {
+    const { request, calls } = account((state) => ({ ...state, prices: {} }));
+    assert.deepEqual(failures(checkAccount(request, target)), { ambiente: ["account_diverso"] });
+    assert.equal(calls.includes("get /v1/account"), false);
+    // Un solo prezzo mancante è uno scostamento del listino, non un altro account.
+    const partial = account((state) => ({
+      ...state,
+      prices: { ...state.prices, price_annual: undefined },
+    }));
+    assert.deepEqual(failures(checkAccount(partial.request, target)), {
+      "prezzo annual": ["resource_missing"],
+    });
+  });
+
   it("segnala profilo, prezzi, imposte, webhook e portale non allineati", () => {
     const { request } = account((state) => ({
       tax: { ...state.tax, defaults: { tax_behavior: "inclusive", tax_code: null } },
@@ -194,7 +208,7 @@ describe("account Stripe dell'ambiente", () => {
   it("riconosce un prezzo assente, endpoint mancanti o duplicati e il portale da salvare", () => {
     const { request } = account((state) => ({
       ...state,
-      prices: {},
+      prices: { price_lifetime: state.prices.price_lifetime },
       endpoints: [state.endpoints[0], state.endpoints[0]],
       portals: [],
     }));
@@ -202,8 +216,6 @@ describe("account Stripe dell'ambiente", () => {
     assert.deepEqual(found["prezzo monthly"], ["resource_missing"]);
     assert.deepEqual(found.webhook, ["endpoint_duplicati"]);
     assert.deepEqual(found.portale, ["configurazione_assente"]);
-    // Senza i prodotti del listino il codice fiscale predefinito non è verificabile.
-    assert.deepEqual(found["impostazioni fiscali"], ["defaults.tax_code"]);
     const empty = account((state) => ({ ...state, endpoints: [] }));
     assert.deepEqual(failures(checkAccount(empty.request, target)).webhook, ["endpoint_assente"]);
   });

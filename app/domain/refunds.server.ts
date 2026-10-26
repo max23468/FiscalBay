@@ -6,6 +6,7 @@ import {
   stripeCall,
   stripeEnvironment,
   stripeId,
+  stripeListLimit,
 } from "../integrations/stripe.server";
 
 /**
@@ -38,8 +39,12 @@ const signal = (failure: string) =>
 export async function paymentReversal(stripe: Stripe, charge: Stripe.Charge): Promise<Reversal> {
   let refunded = 0;
   if (charge.amount_refunded > 0) {
-    const refunds = await stripeCall(() => stripe.refunds.list({ charge: charge.id, limit: 100 }));
-    refunded = refunds.data
+    const refunds = await stripeCall(() =>
+      stripe.refunds
+        .list({ charge: charge.id, limit: 100 })
+        .autoPagingToArray({ limit: stripeListLimit }),
+    );
+    refunded = refunds
       .filter((refund) => refund.status === "succeeded")
       .reduce((sum, refund) => sum + refund.amount, 0);
   }
@@ -88,18 +93,21 @@ export async function isErasedCustomer(db: D1Database, customerId: string) {
 }
 
 /**
- * Addebiti di un cliente per payment intent, per le fatture di un abbonamento. Vuoto per un
- * cliente cancellato o non più disponibile: senza addebito leggibile nessuna revoca.
+ * Addebiti di un cliente per payment intent, per le fatture di un abbonamento, da tutte le
+ * pagine. Vuoto per un cliente cancellato o non più disponibile: senza addebito leggibile
+ * nessuna revoca.
  */
 export async function customerCharges(db: D1Database, stripe: Stripe, customerId: string) {
   if (await isErasedCustomer(db, customerId)) return new Map<string, Stripe.Charge>();
   try {
     const charges = await stripeCall(() =>
-      stripe.charges.list({ customer: customerId, limit: 100 }),
+      stripe.charges
+        .list({ customer: customerId, limit: 100 })
+        .autoPagingToArray({ limit: stripeListLimit }),
     );
     // Un tentativo fallito condivide il payment intent con quello riuscito: conta il secondo.
     return new Map(
-      charges.data.flatMap((charge) =>
+      charges.flatMap((charge) =>
         charge.payment_intent && charge.status === "succeeded"
           ? [[stripeId(charge.payment_intent), charge] as const]
           : [],
