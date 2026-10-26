@@ -406,7 +406,9 @@ export async function reconcileLifetime(
 /**
  * Con il lifetime l'abbonamento dello spazio non si rinnova più: si chiude subito, senza
  * conguagli né rimborsi automatici, perché il periodo pagato non usato è già stato detratto. Le
- * coperture già pagate restano fino alla loro fine.
+ * coperture già pagate restano fino alla loro fine. Anche la sessione di mensile o annuale
+ * ancora aperta scade, così non può più incassare; se è stata completata nel frattempo, il suo
+ * abbonamento si chiude con gli altri.
  */
 export async function endReplacedSubscriptions(
   env: Env,
@@ -414,11 +416,27 @@ export async function endReplacedSubscriptions(
   workspaceId: string,
   now = new Date(),
 ) {
-  const { results } = await env.DB.prepare(`SELECT id FROM stripe_subscriptions
+  const [{ results }, { results: checkouts }] = await env.DB.batch<{ id: string }>([
+    env.DB.prepare(`SELECT id FROM stripe_subscriptions
       WHERE workspace_id = ?1 AND environment = ?2 AND unavailable_at IS NULL
-        AND status IN (${sqlList(openSubscriptionStatuses)})`)
-    .bind(workspaceId, stripeEnvironment(env))
-    .all<{ id: string }>();
+        AND status IN (${sqlList(openSubscriptionStatuses)})`).bind(
+      workspaceId,
+      stripeEnvironment(env),
+    ),
+    env.DB.prepare(`SELECT session_id AS id FROM subscription_checkouts WHERE workspace_id = ?1
+        AND session_id IS NOT NULL AND julianday(expires_at) > julianday(?2)`).bind(
+      workspaceId,
+      now.toISOString(),
+    ),
+  ]);
+  const late = await inSequence(checkouts!, async ({ id }) => {
+    const session = await stripeCall(() => stripe.checkout.sessions.retrieve(id));
+    if (session.status === "open") await stripeCall(() => stripe.checkout.sessions.expire(id));
+    await env.DB.prepare("DELETE FROM subscription_checkouts WHERE session_id = ?").bind(id).run();
+    return session.status === "complete" && session.subscription
+      ? [stripeId(session.subscription)]
+      : [];
+  });
   const end = async (id: string) => {
     // Un abbonamento già chiuso su Stripe non si chiude una seconda volta.
     const current = await stripeCall(() => stripe.subscriptions.retrieve(id));
@@ -431,7 +449,7 @@ export async function endReplacedSubscriptions(
       .run();
   };
   // Una chiamata a Stripe alla volta: il turno resta entro i limiti.
-  await inSequence(results, ({ id }) => end(id));
+  await inSequence([...new Set([...results!.map(({ id }) => id), ...late.flat()])], end);
 }
 
 /** Lifetime venduti riletti per turno, ognuno una volta al giorno. */
@@ -453,11 +471,18 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
         WHERE status = 'reserved' AND provider_reference IS NOT NULL
           AND (julianday(expires_at) <= julianday(?) OR completed_at IS NOT NULL)
         ORDER BY slot`).bind(at),
-    env.DB.prepare(`SELECT DISTINCT a.workspace_id
-        FROM lifetime_allocations a JOIN stripe_subscriptions s ON s.workspace_id = a.workspace_id
-        WHERE a.status = 'active' AND s.environment = ?1 AND s.unavailable_at IS NULL
-          AND s.status IN (${sqlList(openSubscriptionStatuses)})
-          AND ${lifetimeInForceSql("a.workspace_id")}`).bind(stripeEnvironment(env)),
+    // Anche una sessione di mensile o annuale rimasta aperta dopo il lifetime, se la chiusura
+    // all'attivazione non è riuscita.
+    env.DB.prepare(`SELECT a.workspace_id FROM lifetime_allocations a
+        WHERE a.status = 'active' AND ${lifetimeInForceSql("a.workspace_id")}
+          AND (EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.workspace_id = a.workspace_id
+              AND s.environment = ?1 AND s.unavailable_at IS NULL
+              AND s.status IN (${sqlList(openSubscriptionStatuses)}))
+            OR EXISTS (SELECT 1 FROM subscription_checkouts c WHERE c.workspace_id = a.workspace_id
+              AND c.session_id IS NOT NULL AND julianday(c.expires_at) > julianday(?2)))`).bind(
+      stripeEnvironment(env),
+      at,
+    ),
     env.DB.prepare(`UPDATE lifetime_allocations SET checked_at = ?1 WHERE slot IN (
         SELECT a.slot FROM lifetime_allocations a
         WHERE a.status = 'active' AND a.kind = 'sale'

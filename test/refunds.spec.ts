@@ -77,6 +77,42 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
     vi.restoreAllMocks();
   });
 
+  it("il cron recupera il rimborso senza webhook di un abbonamento cancellato finché il suo periodo dura", async () => {
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    stripe.state.charges = [paid("in_first")];
+    await event(stripe, "invoice.paid", "in_first");
+    stripe.state.subscription.status = "canceled";
+    await event(stripe, "customer.subscription.deleted", "sub_test");
+    stripe.state.charges[0]!.refunds.push({ amount: 598, status: "succeeded" });
+    await reconcileBilling(env, stripe.fetcher, at("2026-09-20T10:00:00.000Z"));
+    expect(await entitlements()).toEqual([
+      expect.objectContaining({ revocation: "refund", amount_refunded: 598 }),
+    ]);
+    // Finito l'ultimo periodo l'abbonamento cancellato non si rilegge più.
+    stripe.requests.length = 0;
+    await reconcileBilling(env, stripe.fetcher, at(periodEnd));
+    expect(stripe.requests.filter((request) => request.includes("/v1/subscriptions/"))).toEqual([]);
+  });
+
+  it("legge tutte le pagine di fatture, addebiti e rimborsi prima di revocare", async () => {
+    const stripe = stripeAccount();
+    // Il pagamento rimborsato è sempre nell'ultima pagina, con due rimborsi parziali.
+    stripe.state.pageSize = 1;
+    stripe.state.invoices = [renewal, firstInvoice];
+    stripe.state.charges = [paid("in_renewal"), paid("in_first")];
+    await event(stripe, "invoice.paid", "in_first");
+    stripe.state.charges[1]!.refunds.push(
+      { amount: 299, status: "succeeded" },
+      { amount: 299, status: "succeeded" },
+    );
+    await event(stripe, "charge.refunded", "ch_in_first");
+    expect(await entitlements()).toEqual([
+      expect.objectContaining({ stripe_invoice_id: "in_first", revocation: "refund" }),
+      expect.objectContaining({ stripe_invoice_id: "in_renewal", revocation: null }),
+    ]);
+  });
+
   it("un rimborso totale revoca soltanto la copertura che ha pagato", async () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const stripe = stripeAccount();

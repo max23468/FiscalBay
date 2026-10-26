@@ -46,7 +46,7 @@ export const maxDeliveryAttempts = 5;
 const deliveriesPerRun = 20;
 /** Ordini valutati per spazio in un'esecuzione: il resto alla successiva. */
 const ordersPerRun = 100;
-/** Spazi serviti in un'esecuzione. */
+/** Spazi serviti in un'esecuzione: prima quelli che aspettano il turno da più tempo. */
 const workspacesPerRun = 200;
 const leaseMilliseconds = 5 * 60_000;
 
@@ -64,7 +64,9 @@ type Workspace = {
 
 /**
  * Valuta e consegna le notifiche degli spazi con una chat collegata e Premium in corso, o del
- * solo spazio del negozio indicato. Un errore di uno spazio non ferma gli altri.
+ * solo spazio del negozio indicato. Un errore di uno spazio non ferma gli altri. Ogni spazio
+ * servito, anche senza esito, registra il proprio turno e passa in fondo: un'esecuzione
+ * interrotta da un'attesa di Telegram lascia in testa gli spazi non ancora serviti.
  */
 export async function deliverTelegram(
   env: Env,
@@ -82,12 +84,14 @@ export async function deliverTelegram(
     FROM telegram_links l LEFT JOIN telegram_preferences p ON p.workspace_id = l.workspace_id
     WHERE (?1 IS NULL OR l.workspace_id = (SELECT workspace_id FROM ebay_stores WHERE id = ?1))
       AND l.delivery_failure IS NOT 'blocked' AND ${activeEntitlementSql("l.workspace_id", "?2")}
-    ORDER BY l.linked_at LIMIT ?3`)
+    ORDER BY l.served_at IS NOT NULL, julianday(l.served_at), l.linked_at LIMIT ?3`)
     .bind(scope.storeId ?? null, now.toISOString(), workspacesPerRun)
     .all<Workspace>();
+  const served: string[] = [];
   // Uno spazio alla volta. Il bot non più valido ferma l'esecuzione: nessun altro spazio può
   // ricevere messaggi.
   await untilStopped(results, async (workspace) => {
+    served.push(workspace.linkId);
     try {
       if (workspace.enabled === 1 && workspace.userId) {
         await prepareOrderEvents(env.DB, workspace, now);
@@ -100,6 +104,12 @@ export async function deliverTelegram(
       return "continue";
     }
   });
+  if (served.length)
+    await env.DB.prepare(
+      "UPDATE telegram_links SET served_at = ?1 WHERE id IN (SELECT value FROM json_each(?2))",
+    )
+      .bind(now.toISOString(), JSON.stringify(served))
+      .run();
 }
 
 type Next = "continue" | "wait" | "stop";

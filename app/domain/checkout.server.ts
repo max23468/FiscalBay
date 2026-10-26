@@ -215,7 +215,8 @@ const recentCheckoutMs = 2 * dayMilliseconds;
  * incassare: quella di mensile o annuale e, per un abbonamento, quella del lifetime, che libera
  * il posto. Una sessione già conclusa si riconcilia subito (`settled`), così il nuovo acquisto
  * si decide sullo stato aggiornato; `claim` è il turno letto. "busy" quando un'altra richiesta
- * dello stesso spazio sta creando la sua sessione.
+ * dello stesso spazio sta creando la sua sessione, di qualunque offerta: il turno in
+ * `subscription_checkouts` è unico per lo spazio e lo prende anche il lifetime.
  */
 export async function closeOpenCheckouts(
   env: Env,
@@ -340,6 +341,7 @@ async function startLifetimeCheckout(
   if (renewsDuringCheckout(context.subscription?.renewsAt ?? null, now))
     return { ok: false, reason: "renewing" };
   let reservation: Awaited<ReturnType<typeof reserveLifetime>> = null;
+  let claim: string | null = null;
   try {
     const stripe = await createStripeClient(input.secretKey);
     const price = await listedPrice(stripe, input.priceId, "lifetime", input.request);
@@ -354,6 +356,17 @@ async function startLifetimeCheckout(
     );
     if (subscriptionCheckout === "busy" || subscriptionCheckout.settled)
       return { ok: false, reason: "unavailable" };
+    // Il turno dello spazio ferma mensile, annuale e lifetime concorrenti finché questa
+    // richiesta non ha legato la sua sessione al posto; poi si libera in ogni caso, e la
+    // sessione legata si chiude come le altre alla richiesta successiva.
+    claim = await claimCheckout(
+      env.DB,
+      context.workspaceId,
+      subscriptionCheckout.claim,
+      new Date(now.getTime() + subscriptionCheckoutMs).toISOString(),
+      now,
+    );
+    if (!claim) return { ok: false, reason: "unavailable" };
     const previous = context.reservation?.reference;
     if (previous) {
       const session = await stripeCall(() => stripe.checkout.sessions.retrieve(previous));
@@ -416,6 +429,8 @@ async function startLifetimeCheckout(
       await releaseUnboundReservation(env.DB, context.workspaceId, reservation).catch(() => {});
     logFailure({ request: input.request, error, code: "CHECKOUT_PENDING", operation: "checkout" });
     return { ok: false, reason: "unavailable" };
+  } finally {
+    if (claim) await releaseClaim(env.DB, context.workspaceId, claim).catch(() => {});
   }
 }
 

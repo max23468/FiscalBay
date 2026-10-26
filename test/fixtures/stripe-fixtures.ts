@@ -180,6 +180,8 @@ export function stripeAccount() {
     failing: [] as string[],
     down: false,
     missing: false,
+    /** Elementi per pagina degli elenchi, come il `limit` massimo di Stripe. */
+    pageSize: 100,
   };
   const subscription = () => ({
     id: "sub_test",
@@ -296,7 +298,17 @@ export function stripeAccount() {
         { error: { type: "invalid_request_error", code: "resource_missing" } },
         { status: 404 },
       );
-    const list = (data: unknown[]) => Response.json({ object: "list", data, has_more: false });
+    // Elenchi a pagine come su Stripe: dopo `starting_after`, `pageSize` elementi alla volta.
+    const list = (data: unknown[]) => {
+      const after = url.searchParams.get("starting_after");
+      const from = after ? data.findIndex((item) => (item as { id?: string }).id === after) + 1 : 0;
+      const page = data.slice(from, from + state.pageSize);
+      return Response.json({
+        object: "list",
+        data: page,
+        has_more: from + page.length < data.length,
+      });
+    };
     if (url.pathname === "/v1/subscriptions/sub_test" && init?.method === "DELETE") {
       state.subscription.status = "canceled";
       return Response.json(subscription());
