@@ -6,10 +6,10 @@ import { Link } from "react-router";
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "~/components/ui/popover";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { appHref } from "../app-links";
 import { formatRelative } from "../format";
 import { maxReadNotifications, type NotificationView } from "../view-models";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 export function NotificationsMenu({
   notifications,

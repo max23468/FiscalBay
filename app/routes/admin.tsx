@@ -7,6 +7,7 @@ import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
+import { useCopy } from "~/components/copy-context";
 import { loadPasskeyClient } from "../account/passkey";
 import { appCopy, pageTitle } from "../app-copy";
 import { adminAccess, readSession, type AuthSession } from "../domain/sessions.server";
@@ -14,7 +15,6 @@ import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { formatDate } from "../format";
 import type { Route } from "./+types/admin";
-import { useCopy } from "~/components/copy-context";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);

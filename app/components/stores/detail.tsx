@@ -12,6 +12,7 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet";
 import { buttonLink } from "~/components/ui/button-variants";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { appHref } from "../../app-links";
 import { type StoreView } from "../../view-models";
 import { formatDate } from "../../format";
@@ -34,7 +35,6 @@ import {
   syncDescription,
   type StoresPageData,
 } from "./state";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 /** Pannello del negozio con URL proprio; resta visibile mentre si chiude. */
 export function StoreSheet({ data }: { data: StoresPageData }) {

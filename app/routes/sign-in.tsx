@@ -21,6 +21,7 @@ import {
 } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { useCopy } from "~/components/copy-context";
 import { accessPath, ordersPath, securityReturnPath } from "../app-links";
 import { accessAction, accessLoader } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
@@ -28,7 +29,6 @@ import { loadPasskeyClient } from "../account/passkey";
 import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import type { Route } from "./+types/sign-in";
-import { useCopy } from "~/components/copy-context";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);

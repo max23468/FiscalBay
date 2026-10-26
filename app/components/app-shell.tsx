@@ -23,12 +23,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
+import { useCopy, useLinks } from "~/components/copy-context";
 import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
 import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
 import { appHref } from "../app-links";
 import { localizedPath } from "../i18n";
 import type { AccountView, NotificationView } from "../view-models";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 /**
  * Shell dell'app. Navigazione, ricerca e campanella compaiono quando le loro

@@ -1,9 +1,9 @@
 import { useFieldErrors } from "~/components/form-validation";
 import { ProfileInput } from "~/components/profile-fields";
 import { Button } from "~/components/ui/button";
+import { useCopy } from "~/components/copy-context";
 import type { AccountView } from "../../view-models";
 import type { Draft } from "./unsaved";
-import { useCopy } from "~/components/copy-context";
 
 /**
  * Profilo: soltanto le informazioni personali minime raccolte alla registrazione. La bozza

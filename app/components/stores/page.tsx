@@ -10,6 +10,7 @@ import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
+import { useCopy } from "~/components/copy-context";
 import { supportEmail } from "../../app-copy";
 import { usePageTiming } from "../../page-timing";
 import type { StoreView } from "../../view-models";
@@ -17,7 +18,6 @@ import { StoreSheet } from "./detail";
 import { StoreList, StoreTable } from "./list";
 import { StoreOverview } from "./overview";
 import { type StoresPageData } from "./state";
-import { useCopy } from "~/components/copy-context";
 
 /** La schermata preparatoria riporta ai negozi con «Annulla». */
 function connectFromStores(connectHref: string) {

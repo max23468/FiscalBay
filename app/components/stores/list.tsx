@@ -10,11 +10,11 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { appHref } from "../../app-links";
 import type { StoreView } from "../../view-models";
 import { LastSync, StoreSubtitle, StoreTile } from "./store";
 import { connectionStatus, marketplaceText, notificationsLabel } from "./state";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 type ListProps = {
   stores: StoreView[];

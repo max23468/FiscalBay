@@ -5,6 +5,7 @@ import { AppShell } from "~/components/app-shell";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import { OrdersLoading } from "~/components/orders/loading";
 import { accountMenu, shellDestinations } from "~/components/shell-links";
+import { useCopy } from "~/components/copy-context";
 import { appCopy } from "../app-copy";
 import {
   accessPath,
@@ -17,7 +18,6 @@ import {
 } from "../app-links";
 import { languageNames, localizedPath, type Language } from "../i18n";
 import type { ShellData } from "../preferences";
-import { useCopy } from "~/components/copy-context";
 
 /**
  * Shell dell'area reale: le stesse barra e menu dell'anteprima, con le sole destinazioni che

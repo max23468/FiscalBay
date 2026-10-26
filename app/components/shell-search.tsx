@@ -6,9 +6,9 @@ import { Link, useLocation, useNavigate } from "react-router";
 import { useHydrated } from "~/components/hydrated";
 import { Button } from "~/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "~/components/ui/sheet";
+import { useCopy, useLinks } from "~/components/copy-context";
 import type { Language } from "../i18n";
 import { maxSearchLength, minSuggestionLength } from "../orders/order-search";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 export interface SearchSuggestion {
   id: string;

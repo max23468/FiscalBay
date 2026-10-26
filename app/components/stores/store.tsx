@@ -5,11 +5,11 @@ import { LedgerIndicator } from "~/components/brand";
 import { IconTile, InitialsTile } from "~/components/icon-tile";
 import { StatusBadge, StatusIcon } from "~/components/status";
 import { useTimeZone } from "~/components/time-zone";
+import { useCopy } from "~/components/copy-context";
 import { locales, type Language } from "../../i18n";
 import { type StoreView } from "../../view-models";
 import { formatDate, formatRelative } from "../../format";
 import { marketplaceText } from "./state";
-import { useCopy } from "~/components/copy-context";
 
 /** Logo del negozio eBay; senza logo, o se non si carica, le iniziali del nome. */
 const logoSizes = {

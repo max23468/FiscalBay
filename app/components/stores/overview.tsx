@@ -7,6 +7,7 @@ import { StatusBadge } from "~/components/status";
 import { useTimeZone } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
+import { useCopy, useLinks } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
 import { type StoreView } from "../../view-models";
@@ -28,7 +29,6 @@ import {
   syncDescription,
   type StoresPageData,
 } from "./state";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 /** Valore di un riquadro della scheda: etichetta sopra, valore sotto. */
 function OverviewStat({ label, children }: { label: string; children: React.ReactNode }) {

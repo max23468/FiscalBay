@@ -14,8 +14,8 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import { localizedPath } from "../../i18n";
 import { useCopy, useLinks } from "~/components/copy-context";
+import { localizedPath } from "../../i18n";
 
 export function PrivacySection({
   accountData,

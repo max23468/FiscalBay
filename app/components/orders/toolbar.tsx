@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { useCopy } from "~/components/copy-context";
 import { rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
 import {
@@ -25,7 +26,6 @@ import {
   shippingStatuses,
   type Plan,
 } from "../../view-models";
-import { useCopy } from "~/components/copy-context";
 
 interface FilterOption {
   value: string;

@@ -5,10 +5,10 @@ import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Textarea } from "~/components/ui/textarea";
+import { useCopy } from "~/components/copy-context";
 import { languageNames, languages, type Language } from "../../i18n";
 import { maxTemplateLength } from "../../preferences";
 import type { Draft } from "./unsaved";
-import { useCopy } from "~/components/copy-context";
 
 /**
  * Modello di messaggio: si salva con Salva. Un salvataggio non riuscito lascia il testo scritto

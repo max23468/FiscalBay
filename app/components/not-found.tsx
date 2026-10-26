@@ -2,8 +2,8 @@ import { Link, useLocation } from "react-router";
 
 import { EmptyState } from "~/components/empty-state";
 import { buttonLink } from "~/components/ui/button-variants";
-import { appHref } from "../app-links";
 import { useCopy, useLinks } from "~/components/copy-context";
+import { appHref } from "../app-links";
 
 /**
  * Auth o database non rispondono: nessun dato letto e nessuna promessa, soltanto Riprova.

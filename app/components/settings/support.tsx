@@ -14,10 +14,10 @@ import {
   FieldSet,
 } from "~/components/ui/field";
 import { Textarea } from "~/components/ui/textarea";
+import { useCopy } from "~/components/copy-context";
 import { supportEmail } from "../../app-copy";
 import type { DiagnosticsView } from "../../view-models";
 import { CheckboxOption, Group, SimpleSelect } from "./controls";
-import { useCopy } from "~/components/copy-context";
 
 export function SupportSection({
   support,

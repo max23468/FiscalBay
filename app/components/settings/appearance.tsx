@@ -4,11 +4,11 @@ import { Form, useLocation } from "react-router";
 
 import { useHydrated } from "~/components/hydrated";
 import { RadioGroup } from "~/components/ui/radio-group";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { appHref, languagePath } from "../../app-links";
 import { languageNames, languages } from "../../i18n";
 import { timeZones, zoneLabel, type Theme, type TimeZoneChoice } from "../../preferences";
 import { Group, RadioOption, SaveStatus, SimpleSelect, useAutoSave } from "./controls";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 /** Tema sul documento: `data-theme` impone chiaro o scuro, senza attributo segue il sistema. */
 function applyTheme(theme: Theme) {

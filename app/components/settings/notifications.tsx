@@ -8,6 +8,7 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { RadioGroup } from "~/components/ui/radio-group";
 import { Switch } from "~/components/ui/switch";
+import { useCopy, useLinks } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
 import { telegramDigestTimes, telegramLinkMinutes, zoneLabel } from "../../preferences";
@@ -21,7 +22,6 @@ import {
   SimpleSelect,
   useAutoSave,
 } from "./controls";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 export function NotificationsSection({
   telegram,

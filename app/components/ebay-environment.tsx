@@ -6,9 +6,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { useCopy } from "~/components/copy-context";
 import { appCopy } from "../app-copy";
 import type { EbayEnvironment } from "../view-models";
-import { useCopy } from "~/components/copy-context";
 
 const environments: readonly EbayEnvironment[] = ["production", "sandbox"];
 

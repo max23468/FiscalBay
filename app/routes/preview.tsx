@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
+import { useCopy } from "~/components/copy-context";
 import { appCopy } from "../app-copy";
 import { localizedPath } from "../i18n";
 import { revalidateUnlessSnapshot } from "../orders/order-list";
@@ -27,7 +28,6 @@ import {
   writePreviewState,
 } from "../preview/state.server";
 import type { Route } from "./+types/preview";
-import { useCopy } from "~/components/copy-context";
 
 /** Radice dell'anteprima: la stessa shell dell'app, alimentata da scenari sintetici. */
 const base = "/anteprima";

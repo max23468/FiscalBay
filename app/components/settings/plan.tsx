@@ -16,6 +16,7 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Spinner } from "~/components/ui/spinner";
+import { useCopy } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import {
   annualPaidMonths,
@@ -31,7 +32,6 @@ import { dayMilliseconds } from "../../time";
 import { trialDaysLeft, trialEnding, type AccountView } from "../../view-models";
 import { formatDate } from "../../format";
 import { AutoSwitch, Group, SimpleSelect } from "./controls";
-import { useCopy } from "~/components/copy-context";
 
 /**
  * La prova dice quando finisce e cosa resta dopo, in evidenza negli ultimi giorni. L'acquisto

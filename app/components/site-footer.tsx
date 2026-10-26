@@ -1,8 +1,8 @@
 import { cn } from "cn";
 
+import { useCopy } from "~/components/copy-context";
 import { appCopy, supportEmail } from "../app-copy";
 import { localizedPath } from "../i18n";
-import { useCopy } from "~/components/copy-context";
 
 /**
  * Footer unico delle pagine pubbliche: home, accesso, Termini e Privacy (D202). L'area

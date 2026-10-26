@@ -9,6 +9,7 @@ import {
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { remainingUnlocks } from "~/components/orders/labels";
+import { useLinks } from "~/components/copy-context";
 import { appHref } from "../app-links";
 import { historyWindowDays } from "../domain/history-window.server";
 import { appCopy, pageTitle } from "../app-copy";
@@ -24,7 +25,6 @@ import {
   writePreviewState,
 } from "../preview/state.server";
 import type { Route } from "./+types/preview-orders";
-import { useLinks } from "~/components/copy-context";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];

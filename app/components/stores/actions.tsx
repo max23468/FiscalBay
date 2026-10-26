@@ -27,12 +27,12 @@ import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
+import { useCopy, useLinks } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import { appHref, type AppLinks } from "../../app-links";
 import type { StoreView } from "../../view-models";
 import { StoreSection } from "./store";
 import { needsReconnect } from "./state";
-import { useCopy, useLinks } from "~/components/copy-context";
 
 /** Ricollegamento dalla schermata preparatoria, nello stesso ambiente eBay del negozio. */
 function reconnectHref(connectHref: string, store: StoreView) {
