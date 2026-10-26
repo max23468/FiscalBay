@@ -1894,7 +1894,12 @@ export function loadScenario(
             : trialAccount(
                 id === "prova-premium" ? "2026-10-06T10:00:00Z" : "2026-09-29T09:00:00Z",
               ),
-        stores: [freeStores[0]!, storeView("outlet")],
+        // La prova comprende le notifiche Telegram, spente senza una chat collegata, legge con
+        // la cadenza Premium e ha importato l'anno di storico.
+        stores: [
+          storeView("vintage", { notifications: false, historyDays: 365, targetMinutes: 10 }),
+          storeView("outlet", { notifications: false, historyDays: 365, targetMinutes: 10 }),
+        ],
         seeds: seeds.filter((seed) => seed.store !== "retro"),
         premium: true,
         diagnostics: diagnostics(),
@@ -2109,15 +2114,45 @@ export function loadScenario(
       break;
   }
 
-  // La prova attivata per finta porta lo scenario in Premium, senza avvisi degli sblocchi.
-  if (trialStarted && scenario.account.trialAvailable)
+  // La prova attivata per finta porta lo scenario in Premium, senza avvisi degli sblocchi. Come
+  // nell'area reale la copertura toglie le pause del piano e dell'inattività, comprende le
+  // notifiche Telegram, legge con la cadenza Premium e la lettura successiva importa il resto
+  // dell'anno di storico.
+  if (trialStarted && scenario.account.trialAvailable) {
+    const trialStores = scenario.stores.map((store): StoreView => {
+      const resumedStore =
+        store.pauseReason === "plan" || store.pauseReason === "inactivity"
+          ? { ...store, connection: "active" as const, pauseReason: undefined }
+          : store;
+      return {
+        ...resumedStore,
+        notifications: resumedStore.notifications ?? false,
+        targetMinutes: 10,
+        ...(resumedStore.connection === "active" && resumedStore.historyDays !== null
+          ? { historyDays: 365, importing: true }
+          : {}),
+      };
+    });
+    const notices = scenario.notices.filter((notice) => notice.kind !== "quota");
     scenario = {
       ...scenario,
       account: trialAccount(startedTrialEnd),
       premium: true,
-      notices: scenario.notices.filter((notice) => notice.kind !== "quota"),
+      stores: trialStores,
+      notices:
+        trialStores.some((store) => store.importing) &&
+        !notices.some((notice) => notice.kind === "importing")
+          ? [
+              ...notices,
+              {
+                kind: "importing",
+                count: trialStores.reduce((total, store) => total + store.importedOrders, 0),
+              },
+            ]
+          : notices,
       notifications: scenario.notifications.filter((item) => item.id !== "n-quota"),
     };
+  }
   const { seeds: scenarioSeeds, premium, ...rest } = scenario;
   const lockedValues: Record<string, TaxIdentifierView[]> = {};
   let unlockedCount = 0;

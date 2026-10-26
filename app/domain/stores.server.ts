@@ -2,6 +2,7 @@ import { syncMinutes } from "./order-sync.server";
 import { dayMilliseconds } from "../time";
 import { resumeAfterInactivity } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
+import { freeHistoryDays } from "./history-window.server";
 import { storeNameSql } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 
@@ -256,11 +257,15 @@ export async function listStores(
       importedOrders: row.orders,
       marketplace: row.marketplace,
       history:
-        // Le due date dello storico si fissano insieme al primo avvio.
+        // Le due date dello storico si fissano insieme al primo avvio. Dopo il ritorno al Free
+        // l'importazione più ampia resta, ma si consultano soltanto i giorni del Free.
         row.history_from
           ? {
-              days: Math.round(
-                (Date.parse(row.history_until!) - Date.parse(row.history_from)) / dayMilliseconds,
+              days: Math.min(
+                Math.round(
+                  (Date.parse(row.history_until!) - Date.parse(row.history_from)) / dayMilliseconds,
+                ),
+                row.premium ? Infinity : freeHistoryDays,
               ),
               done: row.history_done_at !== null,
             }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { orderSearchText } from "../orders/order-search";
 import { taxComparisonKey, taxIdentifierType } from "../tax-quality";
+import { historyEndSql, storeWorkspaceSql } from "./history-window.server";
 import { writableStore } from "./store-state.server";
 
 function staleObservation(): OrderObservationResult {
@@ -341,9 +342,17 @@ const literal = (value: string | null) =>
   value === null ? "NULL" : `'${value.replaceAll("'", "''")}'`;
 
 /**
+ * Termine di un ordine nuovo: la finestra dello spazio del negozio ?1 all'istante del controllo
+ * delle scadenze, un anno con una copertura in corso e trenta giorni nel Free.
+ */
+const newOrderEndSql = (creationTime: string, at: string) =>
+  historyEndSql(literal(creationTime), storeWorkspaceSql("?1"), literal(at));
+
+/**
  * Condizione di ogni scrittura: consenso, retention e dati eliminati, e assenza di una lettura
  * più recente della stessa fonte o degli stessi dati fiscali. Si ripete nel batch, così vale
- * anche se una risposta più recente arriva dopo le letture preparatorie.
+ * anche se una risposta più recente arriva dopo le letture preparatorie. `at` è l'istante del
+ * controllo delle scadenze.
  */
 function writeGuard(input: {
   observation: Observation;
@@ -352,8 +361,9 @@ function writeGuard(input: {
   overlappingIds: string[];
   taxModified: string | null;
   observedAt: string;
+  at: string;
 }): string {
-  const { observation, orderId, taxModified, observedAt } = input;
+  const { observation, orderId, taxModified, observedAt, at } = input;
   const tax = observation.taxIdentifiers;
   const keys = observation.items.map((item) => item.stableKey);
   const fresh = `NOT EXISTS (SELECT 1 FROM order_source_refs WHERE store_id = ?1
@@ -370,7 +380,6 @@ function writeGuard(input: {
          AND source = ${literal(tax.source === "ebay_fulfillment" ? "fulfillment" : "trading")}
          AND ${literal(taxModified)} IS NOT NULL AND last_modified_time > ${literal(taxModified)})`
     : "";
-  const at = deadlineCheckAt(observedAt);
   const retained = `EXISTS (SELECT 1 FROM ebay_stores s WHERE s.id = ?1
       AND (s.orders_deleted_through IS NULL OR s.orders_deleted_through < ${literal(observation.creationTime)}))
     AND NOT EXISTS (SELECT 1 FROM deleted_order_keys d WHERE d.store_id = ?1
@@ -380,7 +389,7 @@ function writeGuard(input: {
       AND retention_until <= ${literal(at)})
     AND CASE WHEN EXISTS (SELECT 1 FROM orders WHERE id = ${literal(orderId)})
       THEN EXISTS (SELECT 1 FROM orders WHERE id = ${literal(orderId)} AND retention_until > ${literal(at)})
-      ELSE strftime('%Y-%m-%dT%H:%M:%fZ', ${literal(observation.creationTime)}, '+30 days') > ${literal(at)} END`;
+      ELSE ${newOrderEndSql(observation.creationTime, at)} > ${literal(at)} END`;
   return `${writableStore} AND ${retained} AND ${fresh} ${freshTax}`;
 }
 
@@ -594,6 +603,7 @@ export async function recordOrderObservation(
       : { results: [] as StoredItem[] };
   const tax = observation.taxIdentifiers;
   const taxModified = taxVersion(observation);
+  const checkAt = deadlineCheckAt(observedAt);
   const guarded = writeGuard({
     observation,
     orderId,
@@ -601,6 +611,7 @@ export async function recordOrderObservation(
     overlappingIds,
     taxModified,
     observedAt,
+    at: checkAt,
   });
   const orderExists = `${guarded} AND EXISTS (SELECT 1 FROM orders WHERE id = ?4)`;
   const guards = { guarded, orderExists };
@@ -637,8 +648,10 @@ export async function recordOrderObservation(
           `INSERT INTO orders
              (id, store_id, ebay_order_id, creation_time, last_modified_time, currency,
               total_minor, is_provisional, marketplace_id, payment_status, fulfillment_status,
-              cancel_status, buyer_json, listed_at)
-           SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15 WHERE ${guarded}`,
+              cancel_status, buyer_json, listed_at, retention_until, purge_after)
+           SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, term, term
+             FROM (SELECT ${newOrderEndSql(observation.creationTime, checkAt)} AS term)
+            WHERE ${guarded}`,
         )
         .bind(...scope, orderId, ...orderValues, listedAt),
     );

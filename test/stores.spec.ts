@@ -1272,16 +1272,32 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       });
     });
 
-    it("al downgrade l'eccedenza non è più consultabile, resta 30 giorni e torna con Premium prima della pulizia", async () => {
-      const seller = await twoStores("downgrade@example.invalid");
+    /** Spazio con due negozi e ordini acquisiti con un anno di storico, poi tornato al Free. */
+    async function downgraded(email: string) {
+      const seller = await twoStores(email);
       await resetOrderFixtures();
       const end = Date.parse("2026-10-01T12:00:00.000Z");
-      const year = 365 * day;
       // Termini di un anno, come per gli ordini acquisiti con Premium.
-      await addOrder("attivo-vecchio", seller.storeId, end - 60 * day, end - 60 * day + year);
-      await addOrder("attivo-recente", seller.storeId, end - 5 * day, end - 5 * day + year);
-      await addOrder("eccedente", "secondo", end - 5 * day, end - 5 * day + year);
+      await addOrder("attivo-vecchio", seller.storeId, end - 60 * day, yearAfter(end - 60 * day));
+      await addOrder("attivo-recente", seller.storeId, end - 5 * day, yearAfter(end - 5 * day));
+      await addOrder("eccedente", "secondo", end - 5 * day, yearAfter(end - 5 * day));
       await coverage(seller.workspaceId, "trial", end - 14 * day, end);
+      return { seller, end, applied: end + 60_000 };
+    }
+    const yearAfter = (at: number) => {
+      const date = new Date(at);
+      date.setUTCFullYear(date.getUTCFullYear() + 1);
+      return date.getTime();
+    };
+    const terms = async () =>
+      (
+        await env.DB.prepare(
+          "SELECT id, retention_until, purge_after FROM orders ORDER BY id",
+        ).all<{ id: string; retention_until: string; purge_after: string }>()
+      ).results;
+
+    it("al downgrade l'eccedenza non è più consultabile, resta 30 giorni e poi non torna con Premium", async () => {
+      const { seller, end, applied } = await downgraded("downgrade@example.invalid");
       await applyFreePlans(env.DB, new Date(end - 60_000));
       expect(await visible(seller.userId, end - 60_000)).toEqual([
         "attivo-recente",
@@ -1290,13 +1306,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       ]);
 
       // Il cron applica il downgrade; anche prima del suo passaggio la visita lo applica.
-      const applied = end + 60_000;
       await applyFreePlan(env.DB, seller.userId, new Date(applied));
       expect(await visible(seller.userId, applied)).toEqual(["attivo-recente"]);
-      const terms = await env.DB.prepare(
-        "SELECT id, retention_until, purge_after FROM orders ORDER BY id",
-      ).all<{ id: string; retention_until: string; purge_after: string }>();
-      expect(terms.results).toEqual([
+      const downgradeTerms = await terms();
+      expect(downgradeTerms).toEqual([
         {
           id: "attivo-recente",
           retention_until: iso(end + 25 * day),
@@ -1316,21 +1329,12 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       // Ripetere il riallineamento non allunga né accorcia i termini.
       await applyFreePlans(env.DB, new Date(applied + day));
       await applyFreePlan(env.DB, seller.userId, new Date(applied + day));
-      expect(
-        (
-          await env.DB.prepare(
-            "SELECT id, retention_until, purge_after FROM orders ORDER BY id",
-          ).all()
-        ).results,
-      ).toEqual(terms.results);
+      expect(await terms()).toEqual(downgradeTerms);
 
       // Con la pulizia sospesa nessun accesso; prima del termine fisico i dati restano.
       await purgeExpiredRecords(env.DB, new Date(applied + 29 * day));
       expect(await count("orders")).toBe(3);
-      const back = applied + 10 * day;
-      await coverage(seller.workspaceId, "premium", back, back + 30 * day);
-      await applyFreePlan(env.DB, seller.userId, new Date(back));
-      expect(await visible(seller.userId, back)).toEqual(["attivo-recente", "eccedente"]);
+      expect(await visible(seller.userId, applied + 29 * day)).toEqual([]);
 
       // Dopo la pulizia il ritorno a Premium non ripristina i dati eliminati.
       await purgeExpiredRecords(env.DB, new Date(applied + 30 * day));
@@ -1340,6 +1344,38 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       await coverage(seller.workspaceId, "admin", again, again + day);
       await applyFreePlan(env.DB, seller.userId, new Date(again));
       expect(await visible(seller.userId, again)).toEqual([]);
+    });
+
+    it("il ritorno a Premium prima della pulizia riporta l'anno di storico agli ordini conservati", async () => {
+      const { seller, end, applied } = await downgraded("ritorno@example.invalid");
+      await applyFreePlan(env.DB, seller.userId, new Date(applied));
+      const back = applied + 10 * day;
+      await coverage(seller.workspaceId, "premium", back, back + 30 * day);
+      await applyFreePlan(env.DB, seller.userId, new Date(back));
+      expect(await visible(seller.userId, back)).toEqual([
+        "attivo-recente",
+        "attivo-vecchio",
+        "eccedente",
+      ]);
+      expect(await terms()).toEqual(
+        [
+          ["attivo-recente", end - 5 * day],
+          ["attivo-vecchio", end - 60 * day],
+          ["eccedente", end - 5 * day],
+        ].map(([id, created]) => ({
+          id,
+          retention_until: iso(yearAfter(created as number)),
+          purge_after: iso(yearAfter(created as number)),
+        })),
+      );
+      // Alla nuova fine della copertura torna la finestra del Free con altri trenta giorni.
+      await applyFreePlans(env.DB, new Date(back + 30 * day));
+      expect(await visible(seller.userId, back + 30 * day)).toEqual([]);
+      expect(await terms()).toMatchObject([
+        { id: "attivo-recente", purge_after: iso(back + 60 * day) },
+        { id: "attivo-vecchio", purge_after: iso(back + 60 * day) },
+        { id: "eccedente", purge_after: iso(back + 60 * day) },
+      ]);
     });
 
     it("il cron rivede i termini soltanto dopo un downgrade recente, la visita sempre", async () => {
@@ -1356,6 +1392,33 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       expect(await term()).toBe(iso(end + 300 * day));
       await applyFreePlan(env.DB, seller.userId, new Date(end + 8 * day));
       expect(await term()).toBe(iso(end - 30 * day));
+    });
+
+    it("il cron porta l'anno agli ordini di una copertura senza visite prima che scadano", async () => {
+      const covered = await linkedSeller("concessa@example.invalid");
+      await env.DB.prepare(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-libero', 'Libero', ?)",
+      )
+        .bind(new Date().toISOString())
+        .run();
+      await insertStore({ id: "negozio-libero", workspaceId: "w-libero" }).run();
+      const free = { storeId: "negozio-libero" };
+      await resetOrderFixtures();
+      const at = Date.parse("2026-10-01T12:00:00.000Z");
+      // Termini del Free, assegnati all'import prima della copertura.
+      await addOrder("coperto", covered.storeId, at - 29.5 * day);
+      await addOrder("libero", free.storeId, at - 29.5 * day);
+      await coverage(covered.workspaceId, "admin", at - 20 * day, at + 30 * day);
+      const term = async (id: string) =>
+        (await env.DB.prepare("SELECT retention_until FROM orders WHERE id = ?")
+          .bind(id)
+          .first<{ retention_until: string }>())!.retention_until;
+      // Il cron non rivede ogni giorno tutti gli ordini: soltanto quelli che scadono entro un giorno.
+      await applyFreePlans(env.DB, new Date(at - 2 * day));
+      expect(await term("coperto")).toBe(iso(at + 0.5 * day));
+      await applyFreePlans(env.DB, new Date(at));
+      expect(await term("coperto")).toBe("2027-09-02T00:00:00.000Z");
+      expect(await term("libero")).toBe(iso(at + 0.5 * day));
     });
 
     it("il piano mostra e registra la scelta del negozio attivo soltanto nel Free", async () => {

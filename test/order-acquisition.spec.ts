@@ -12,9 +12,16 @@ import {
   dispatchScheduledWork,
   dispatchTasks,
 } from "../app/domain/scheduled-work.server";
-import { listVisibleOrders } from "../app/domain/orders.server";
+import {
+  listVisibleOrders,
+  searchVisibleOrders,
+  visibleOrderState,
+} from "../app/domain/orders.server";
+import { searchTokens } from "../app/orders/order-search";
 import { recordOrderObservation } from "../app/domain/order-import.server";
 import { listStores } from "../app/domain/stores.server";
+import { applyFreePlans } from "../app/domain/free-store.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { now, resetDatabase, seed } from "./fixtures/database-fixtures";
 import { queueMessage } from "./fixtures/queue-fixture";
@@ -852,6 +859,245 @@ describe("acquisizione con il client", () => {
     expect(
       (await listStores(env.DB, "u-a", new Date("2026-09-02T01:00:00.000Z")))[0],
     ).toMatchObject({ history: { days: 30, done: true } });
+  });
+
+  describe("finestra dello storico secondo la copertura", () => {
+    const day = 86_400_000;
+    const linked = Date.parse("2026-09-02T00:00:00.000Z");
+    const iso = (at: number) => new Date(at).toISOString();
+    /** Stesso istante dodici mesi di calendario prima o dopo. */
+    const months = (at: number, value: number) => {
+      const date = new Date(at);
+      date.setUTCMonth(date.getUTCMonth() + value);
+      return date.getTime();
+    };
+    const dated = (orderId: string, created: number) =>
+      order({
+        orderId,
+        creationDate: iso(created),
+        lastModifiedDate: iso(created + 60_000),
+        lineItems: [],
+      });
+    const coverage = (from: number, until: number, source = "trial") =>
+      env.DB.prepare(
+        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+         VALUES (?, 'w-a', ?, ?, ?)`,
+      )
+        .bind(crypto.randomUUID(), source, iso(from), iso(until))
+        .run();
+    const terms = async () =>
+      Object.fromEntries(
+        (
+          await env.DB.prepare(
+            "SELECT ebay_order_id, retention_until FROM orders WHERE store_id = 's-a'",
+          ).all<{ ebay_order_id: string; retention_until: string }>()
+        ).results.map((row) => [row.ebay_order_id, row.retention_until]),
+      );
+    const historyFilters = (fetcher: ReturnType<typeof ebay>) =>
+      fetcher.mock.calls
+        .map(([input]) => new URL(String(input)).searchParams)
+        .filter((params) => params.get("filter")?.startsWith("creationdate:"))
+        .map((params) => `${params.get("filter")}@${params.get("offset") ?? 0}`);
+    const history = () =>
+      env.DB.prepare(
+        `SELECT history_from, history_until, history_through, history_next, history_done_at
+           FROM sync_state WHERE store_id = 's-a'`,
+      ).first<Record<string, string | null>>();
+
+    beforeEach(() => env.DB.prepare("DELETE FROM orders").run());
+
+    it("all'attivazione importa il resto dell'anno, interrotto e ripreso, senza rileggere il Free", async () => {
+      const older = series("12-esteso", 60, iso(linked - 30 * day));
+      const orders = [
+        dated("12-recente", linked - 10 * day),
+        ...older,
+        dated("12-oltre-anno", months(linked, -13)),
+      ];
+      await acquire(ebay({ orders }), iso(linked));
+      expect(await terms()).toEqual({ "12-recente": iso(linked - 10 * day + 30 * day) });
+
+      // Prova attiva: l'esecuzione successiva legge soltanto il periodo più vecchio.
+      const active = linked + 60 * 60_000;
+      await coverage(active, active + 14 * day);
+      let interrupted = false;
+      const failing = ebay({
+        orders,
+        fail: (url) => {
+          if (url.searchParams.get("offset") !== "25" || interrupted) return undefined;
+          interrupted = true;
+          return new Response(null, { status: 503 });
+        },
+      });
+      await expect(acquire(failing, iso(active))).rejects.toMatchObject({
+        failure: "unavailable",
+      });
+      const range = `creationdate:[${iso(months(active, -12))}..${iso(linked - 30 * day)}]`;
+      expect(historyFilters(failing)).toEqual([`${range}@0`, `${range}@25`]);
+      expect(await history()).toMatchObject({
+        history_from: iso(months(active, -12)),
+        history_until: iso(linked),
+        history_through: iso(linked - 30 * day),
+        history_next: expect.stringContaining("offset=25"),
+        history_done_at: null,
+      });
+      expect((await listStores(env.DB, "u-a", new Date(active)))[0]).toMatchObject({
+        history: { days: 365, done: false },
+      });
+
+      const resumed = ebay({ orders });
+      expect(await acquire(resumed, iso(active + 30 * 60_000))).toBe("complete");
+      expect(historyFilters(resumed)).toEqual([`${range}@25`, `${range}@50`]);
+      const acquired = await terms();
+      expect(Object.keys(acquired)).toHaveLength(61);
+      expect(acquired["12-oltre-anno"]).toBeUndefined();
+      // Gli ordini arrivati con la copertura hanno il termine di un anno dalla loro data.
+      expect(acquired["12-esteso-00000"]).toBe(iso(months(Date.parse(older[0]!.creationDate), 12)));
+      expect(await history()).toMatchObject({
+        history_from: iso(months(active, -12)),
+        history_through: null,
+        history_done_at: iso(active + 30 * 60_000),
+      });
+      expect((await listStores(env.DB, "u-a", new Date(active + day)))[0]).toMatchObject({
+        history: { days: 365, done: true },
+      });
+
+      // La finestra che avanza non riapre lo storico.
+      const later = ebay({ orders });
+      await acquire(later, iso(active + day));
+      expect(historyFilters(later)).toEqual([]);
+    });
+
+    it("elenco, dettaglio, ricerca e pulizia rispettano lo stesso termine di un anno", async () => {
+      await coverage(linked - day, linked + 400 * day, "admin");
+      const created = months(linked, -11);
+      await acquire(ebay({ orders: [dated("12-confine", created)] }), iso(linked));
+      const end = months(created, 12);
+      expect(await terms()).toEqual({ "12-confine": iso(end) });
+      const id = (await env.DB.prepare("SELECT id FROM orders").first<{ id: string }>())!.id;
+      const seen = async (at: number) => ({
+        list: (await listVisibleOrders(env.DB, "u-a", 50, "production", new Date(at))).length,
+        detail: (await visibleOrderState(env.DB, "u-a", "production", id, new Date(at))) !== null,
+        search: (
+          await searchVisibleOrders(
+            env.DB,
+            "u-a",
+            "production",
+            new Date(at),
+            searchTokens("12-confine"),
+          )
+        ).total,
+      });
+      expect(await seen(end - 1)).toEqual({ list: 1, detail: true, search: 1 });
+      // Con la pulizia sospesa l'ordine c'è ancora ma non si consulta.
+      await purgeExpiredRecords(env.DB, new Date(end - 1));
+      expect(await seen(end)).toEqual({ list: 0, detail: false, search: 0 });
+      await purgeExpiredRecords(env.DB, new Date(end));
+      expect(await terms()).toEqual({});
+    });
+
+    it("il ritorno al Free chiude l'estensione dove era arrivata e una nuova copertura la riprende", async () => {
+      const orders = series("12-esteso", 60, iso(linked - 30 * day));
+      await acquire(ebay({ orders }), iso(linked));
+      const active = linked + 60 * 60_000;
+      await coverage(active, active + day);
+      expect(await acquire(ebay({ orders }), iso(active), { calls: 30, pages: 2 })).toBe("budget");
+      expect(await history()).toMatchObject({
+        history_through: iso(linked - 30 * day),
+        history_next: expect.stringContaining("offset=25"),
+      });
+      expect(Object.keys(await terms())).toHaveLength(25);
+
+      // Senza copertura il periodo rimasto è fuori dalla finestra: nessuna pagina dello storico.
+      const free = active + 2 * day;
+      const stopped = ebay({ orders });
+      expect(await acquire(stopped, iso(free))).toBe("complete");
+      expect(historyFilters(stopped)).toEqual([]);
+      expect(await history()).toEqual({
+        history_from: iso(linked - 30 * day),
+        history_until: iso(linked),
+        history_through: null,
+        history_next: null,
+        history_done_at: iso(free),
+      });
+      expect((await listStores(env.DB, "u-a", new Date(free)))[0]).toMatchObject({
+        history: { days: 30, done: true },
+      });
+
+      const again = free + day;
+      await coverage(again, again + 30 * day, "premium");
+      const resumed = ebay({ orders });
+      expect(await acquire(resumed, iso(again))).toBe("complete");
+      const range = `creationdate:[${iso(months(again, -12))}..${iso(linked - 30 * day)}]`;
+      expect(historyFilters(resumed)).toEqual([`${range}@0`, `${range}@25`, `${range}@50`]);
+      expect(Object.keys(await terms())).toHaveLength(60);
+    });
+
+    it("un ordine eliminato alla scadenza del Free non torna con la copertura", async () => {
+      const kept = dated("12-eliminato", linked - 20 * day);
+      await acquire(ebay({ orders: [kept] }), iso(linked));
+      expect(Object.keys(await terms())).toEqual(["12-eliminato"]);
+      const expired = linked + 11 * day;
+      await purgeExpiredRecords(env.DB, new Date(expired));
+      expect(await terms()).toEqual({});
+
+      // Con la prova eBay lo restituisce fra i modificati: il marker ne impedisce il reimport.
+      await coverage(expired, expired + 14 * day);
+      const replay = ebay({
+        orders: [{ ...kept, lastModifiedDate: iso(expired + 60_000) }],
+      });
+      expect(await acquire(replay, iso(expired + 30 * 60_000))).toBe("complete");
+      expect(await terms()).toEqual({});
+    });
+
+    it("l'estensione concessa vale con la copertura, fino a due anni, e la revoca riporta l'anno", async () => {
+      await env.DB.prepare(
+        `INSERT INTO history_extensions (id, workspace_id, months, reason, actor, granted_at)
+         VALUES ('x-a', 'w-a', 24, 'Periodo recuperabile verificato', 'assistenza', ?)`,
+      )
+        .bind(iso(linked - day))
+        .run();
+      const orders = [
+        dated("12-diciotto-mesi", months(linked, -18)),
+        dated("12-dieci-mesi", months(linked, -10)),
+      ];
+      // Senza copertura l'estensione non vale: trenta giorni.
+      const free = ebay({ orders });
+      await acquire(free, iso(linked));
+      expect(historyFilters(free)).toEqual([
+        `creationdate:[${iso(linked - 30 * day)}..${iso(linked)}]@0`,
+      ]);
+
+      const active = linked + 60 * 60_000;
+      await coverage(active, active + 30 * day);
+      await acquire(ebay({ orders }), iso(active));
+      const created = Date.parse(orders[0]!.creationDate);
+      expect(await terms()).toEqual({
+        "12-diciotto-mesi": iso(months(created, 24)),
+        "12-dieci-mesi": iso(months(Date.parse(orders[1]!.creationDate), 24)),
+      });
+      expect(await history()).toMatchObject({ history_from: iso(months(active, -24)) });
+
+      // La revoca riporta la finestra a un anno: l'ordine più vecchio non è più consultabile e
+      // resta trenta giorni, come dopo un downgrade; il cron lo rivede senza visite.
+      const revoked = active + day;
+      await env.DB.prepare("UPDATE history_extensions SET revoked_at = ? WHERE id = 'x-a'")
+        .bind(iso(revoked))
+        .run();
+      await applyFreePlans(env.DB, new Date(revoked + 60_000));
+      expect(
+        await env.DB.prepare(
+          "SELECT retention_until, purge_after FROM orders WHERE ebay_order_id = '12-diciotto-mesi'",
+        ).first(),
+      ).toEqual({
+        retention_until: iso(months(created, 12)),
+        purge_after: iso(revoked + 60_000 + 30 * day),
+      });
+      expect(
+        (await listVisibleOrders(env.DB, "u-a", 50, "production", new Date(revoked + 60_000))).map(
+          (row) => row.ebayOrderId,
+        ),
+      ).toEqual(["12-dieci-mesi"]);
+    });
   });
 
   it("rimanda il dettaglio dopo un errore dell'ordine e lo chiude dopo l'ultimo tentativo", async () => {
@@ -1882,6 +2128,23 @@ describe("acquisizione con il client", () => {
       expect(pages(fetcher, "creationdate")).toEqual([0]);
       expect(await state()).toMatchObject({
         history_done_at: minutes(60 * 24 + 2).toISOString(),
+      });
+    });
+
+    it("con una copertura la reimportazione riparte da un anno di storico", async () => {
+      expect(await request(minutes(0), { reimport: true })).toBe("queued");
+      await consumeStoreSync(message(), queued, ebay(), minutes(1));
+      await env.DB.prepare(
+        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+         VALUES ('e-reimport', 'w-a', 'premium', ?, ?)`,
+      )
+        .bind(minutes(2).toISOString(), minutes(60 * 24 * 30).toISOString())
+        .run();
+      expect(await request(minutes(60), { reimport: true })).toBe("queued");
+      expect(await state()).toMatchObject({
+        history_from: "2025-09-02T01:00:00.000Z",
+        history_until: minutes(60).toISOString(),
+        history_done_at: null,
       });
     });
 
