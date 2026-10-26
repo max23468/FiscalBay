@@ -60,6 +60,15 @@ export function ExportSection({
   const [format, setFormat] = useState("csv");
   const [rows, setRows] = useState("order");
   const columns = Object.entries(t.settings.export.columns);
+  // Colonne del file, tutte all'inizio: la scelta viaggia con la richiesta dell'esportazione.
+  const [chosen, setChosen] = useState(() => new Set(columns.map(([key]) => key)));
+  const choose = (key: string, checked: boolean) =>
+    setChosen((current) => {
+      const next = new Set(current);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
   const { orders, locked } = estimate;
   return (
     <>
@@ -112,7 +121,11 @@ export function ExportSection({
             {premium ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {columns.map(([key, label]) => (
-                  <CheckboxOption key={key} defaultChecked>
+                  <CheckboxOption
+                    key={key}
+                    checked={chosen.has(key)}
+                    onCheckedChange={(checked) => choose(key, checked)}
+                  >
                     {label}
                   </CheckboxOption>
                 ))}
@@ -132,10 +145,12 @@ export function ExportSection({
           <Button
             disabled={context !== null && orders === 0}
             onClick={() =>
-              action.run(
-                "export-create",
-                context ? { scope: context.query, format, rows } : { period, format, rows },
-              )
+              action.run("export-create", {
+                ...(context ? { scope: context.query } : { period }),
+                format,
+                rows,
+                ...(premium ? { columns: [...chosen].join(",") } : {}),
+              })
             }
           >
             {t.settings.export.exportCreate}

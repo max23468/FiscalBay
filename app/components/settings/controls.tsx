@@ -173,16 +173,26 @@ export function RadioOption({
 export function CheckboxOption({
   name,
   defaultChecked,
+  checked,
+  onCheckedChange,
   children,
 }: {
   name?: string;
   defaultChecked?: boolean;
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
   children: React.ReactNode;
 }) {
   const id = useId();
   return (
     <FieldLabel id={id} className="font-normal">
-      <Checkbox name={name} defaultChecked={defaultChecked} aria-labelledby={id} />
+      <Checkbox
+        name={name}
+        defaultChecked={defaultChecked}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        aria-labelledby={id}
+      />
       {children}
     </FieldLabel>
   );

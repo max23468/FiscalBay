@@ -1,10 +1,11 @@
-import { appCopy } from "../app-copy";
+import { appCopy, type AppCopy } from "../app-copy";
 import { priceGeneration, type LifetimeOffer } from "../catalog";
 import { contactsView } from "../contact";
 import { unusedCredit } from "../domain/lifetime.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { Language } from "../i18n";
 import { formatDate } from "../format";
+import { dayMilliseconds } from "../time";
 import type {
   OrdersNotice,
   AccountView,
@@ -1163,6 +1164,14 @@ const premiumAccount = (): AccountView =>
 const trialAccount = (endsAt: string): AccountView =>
   account({ plan: "premium", trialAvailable: false, quota: undefined, trial: { endsAt } });
 
+/** Notifica di un negozio con i testi della campanella reale, nelle due lingue. */
+const storeNote = (
+  make: (t: AppCopy["shell"]["storeNotifications"]) => { title: string; body: string },
+) => ({
+  it: make(appCopy.it.shell.storeNotifications),
+  en: make(appCopy.en.shell.storeNotifications),
+});
+
 const text = {
   maintenance: {
     it: {
@@ -1185,46 +1194,13 @@ const text = {
     },
   },
   // Gli stessi testi della campanella reale.
-  ebayDown: {
-    it: {
-      title: appCopy.it.shell.storeNotifications.ebayDownTitle,
-      body: appCopy.it.shell.storeNotifications.ebayDownBody,
-    },
-    en: {
-      title: appCopy.en.shell.storeNotifications.ebayDownTitle,
-      body: appCopy.en.shell.storeNotifications.ebayDownBody,
-    },
-  },
-  readFailed: {
-    it: {
-      title: appCopy.it.shell.storeNotifications.readFailedTitle,
-      body: appCopy.it.shell.storeNotifications.readFailedBody(stores.vintage.name),
-    },
-    en: {
-      title: appCopy.en.shell.storeNotifications.readFailedTitle,
-      body: appCopy.en.shell.storeNotifications.readFailedBody(stores.vintage.name),
-    },
-  },
-  inactivity: {
-    it: {
-      title: appCopy.it.shell.storeNotifications.inactivityTitle,
-      body: appCopy.it.shell.storeNotifications.inactivityBody,
-    },
-    en: {
-      title: appCopy.en.shell.storeNotifications.inactivityTitle,
-      body: appCopy.en.shell.storeNotifications.inactivityBody,
-    },
-  },
-  expired: {
-    it: {
-      title: "Collegamento scaduto",
-      body: `${stores.outlet.name}: la sincronizzazione è sospesa. Ricollega il negozio.`,
-    },
-    en: {
-      title: "Connection expired",
-      body: `${stores.outlet.name}: syncing is paused. Reconnect the store.`,
-    },
-  },
+  ebayDown: storeNote((t) => ({ title: t.ebayDownTitle, body: t.ebayDownBody })),
+  readFailed: storeNote((t) => ({
+    title: t.readFailedTitle,
+    body: t.readFailedBody(stores.vintage.name),
+  })),
+  inactivity: storeNote((t) => ({ title: t.inactivityTitle, body: t.inactivityBody })),
+  expired: storeNote((t) => ({ title: t.expiredTitle, body: t.expiredBody(stores.outlet.name) })),
   permissions: {
     it: {
       title: "Autorizzazione incompleta",
@@ -1272,7 +1248,7 @@ const sessions = (language: Language): SessionView[] => [
 ];
 
 /** Fine della prova attivata per finta all'istante dell'anteprima: 14 giorni dopo. */
-const startedTrialEnd = new Date(Date.parse(previewNow) + 14 * 24 * 60 * 60_000).toISOString();
+const startedTrialEnd = new Date(Date.parse(previewNow) + 14 * dayMilliseconds).toISOString();
 
 export function loadScenario(
   id: ScenarioId,
