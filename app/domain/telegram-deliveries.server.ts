@@ -211,14 +211,23 @@ async function prepareOrderEvents(db: D1Database, workspace: Workspace, now: Dat
     .all<Candidate>();
   if (candidates.length === 0) return;
   const notices = await noticesOf(db, workspace.userId, candidates, now);
+  // Impronte correnti e registrate di tutti i candidati, calcolate insieme prima del confronto.
+  const keys = await Promise.all(
+    candidates.map(async (candidate) => {
+      const notice = notices.get(candidate.id);
+      return {
+        key: notice ? await fiscalKey(notice) : null,
+        stored: candidate.fiscalKey?.startsWith("[")
+          ? await fiscalDigest(candidate.fiscalKey)
+          : candidate.fiscalKey,
+      };
+    }),
+  );
   const statements: D1PreparedStatement[] = [];
-  for (const candidate of candidates) {
+  for (const [index, candidate] of candidates.entries()) {
     const notice = notices.get(candidate.id);
     if (!notice) continue;
-    const key = await fiscalKey(notice);
-    const stored = candidate.fiscalKey?.startsWith("[")
-      ? await fiscalDigest(candidate.fiscalKey)
-      : candidate.fiscalKey;
+    const { key, stored } = keys[index]!;
     const withValues = notice.values.length > 0;
     const first = candidate.noticeLink !== workspace.linkId;
     let change: OrderChange | null = null;
