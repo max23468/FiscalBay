@@ -128,6 +128,22 @@ export const paymentStatuses: PaymentStatus[] = [
   "refunded",
 ];
 
+/**
+ * Periodi del filtro Ordini, dal più breve: giorni, oppure mesi di calendario con il suffisso
+ * `m`. Oltre i 30 giorni del Free sono soltanto Premium.
+ */
+export const orderPeriods = ["7", "30", "90", "6m", "12m"] as const;
+export type OrderPeriod = (typeof orderPeriods)[number];
+export const premiumOrderPeriods: ReadonlySet<OrderPeriod> = new Set(["90", "6m", "12m"]);
+
+/** Inizio del periodo che termina all'istante indicato. */
+export function orderPeriodStart(period: OrderPeriod, now: Date): Date {
+  const start = new Date(now);
+  if (period.endsWith("m")) start.setUTCMonth(start.getUTCMonth() - Number(period.slice(0, -1)));
+  else start.setTime(now.getTime() - Number(period) * 86_400_000);
+  return start;
+}
+
 /** Stato di evasione; `in_progress` indica una parte degli articoli spedita. */
 export type ShippingStatus = "to_ship" | "in_progress" | "shipped" | "cancelled";
 

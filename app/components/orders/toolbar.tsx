@@ -18,7 +18,14 @@ import {
 import type { AppCopy } from "../../app-copy";
 import { rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
-import { fiscalSituations, paymentStatuses, shippingStatuses, type Plan } from "../../view-models";
+import {
+  fiscalSituations,
+  orderPeriods,
+  paymentStatuses,
+  premiumOrderPeriods,
+  shippingStatuses,
+  type Plan,
+} from "../../view-models";
 
 interface FilterOption {
   value: string;
@@ -254,11 +261,11 @@ export function OrdersToolbar({
           label={t.orders.period}
           name="periodo"
           value={params.get("periodo") ?? ""}
-          options={[
-            { value: "7", label: t.orders.last7 },
-            { value: "30", label: t.orders.last30 },
-            { value: "90", label: t.orders.last90, premium: plan !== "premium" },
-          ]}
+          options={orderPeriods.map((period) => ({
+            value: period,
+            label: t.orders.periods[period],
+            premium: plan !== "premium" && premiumOrderPeriods.has(period),
+          }))}
           allLabel={t.orders.all}
           premiumLabel={t.orders.premiumOption}
           onChange={change}

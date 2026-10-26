@@ -705,10 +705,11 @@ test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async 
   await expect(page.getByRole("button", { name: "Seleziona" })).toBeDisabled();
 
   await page.getByRole("combobox", { name: "Periodo" }).click();
-  await expect(page.getByRole("option", { name: /Ultimi 90 giorni/u })).toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
+  for (const period of ["Ultimi 90 giorni", "Ultimi 6 mesi", "Ultimi 12 mesi"])
+    await expect(page.getByRole("option", { name: new RegExp(period, "u") })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   await page.keyboard.press("Escape");
 
   await chooseScenario(page, "Nessun ordine");

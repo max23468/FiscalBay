@@ -3263,8 +3263,9 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(criteria("periodo=30").since).toBe(
       new Date(at.getTime() - 30 * 86_400_000).toISOString(),
     );
-    // Il periodo di 90 giorni è un'opzione Premium; un valore sconosciuto vale come «Tutti».
-    expect(criteria("periodo=90").since).toBeUndefined();
+    // Oltre i 30 giorni i periodi sono Premium; un valore sconosciuto vale come «Tutti».
+    for (const period of ["90", "6m", "12m"])
+      expect(criteria(`periodo=${period}`).since).toBeUndefined();
     for (const days of [7, 30])
       expect(criteria(`periodo=${days}`, "premium").since).toBe(
         new Date(at.getTime() - days * 86_400_000).toISOString(),
@@ -3272,6 +3273,10 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(criteria("periodo=90", "premium").since).toBe(
       new Date(at.getTime() - 90 * 86_400_000).toISOString(),
     );
+    // I mesi sono di calendario, come l'anno dello storico Premium.
+    expect(criteria("periodo=6m", "premium").since).toBe("2026-03-13T20:00:00.000Z");
+    expect(criteria("periodo=12m", "premium").since).toBe("2025-09-13T20:00:00.000Z");
+    expect(criteria("periodo=12", "premium").since).toBeUndefined();
     expect(criteria("periodo=1&pagamento=delivered&spedizione=x&fiscale=x")).toMatchObject({
       since: undefined,
       payment: undefined,
