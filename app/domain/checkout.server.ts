@@ -148,15 +148,8 @@ export async function startCheckout(
   let claim: string | null = null;
   try {
     const stripe = await createStripeClient(secretKey);
-    const mismatch = catalogMismatch(
-      await retrieveCatalogPrice(stripe, priceId),
-      input.offer,
-      priceGeneration.net[input.offer],
-    );
-    if (mismatch) {
-      logCheckoutFailure(input.request, `catalog_${mismatch}`);
+    if (!(await listedPrice(stripe, priceId, input.offer, input.request)))
       return { ok: false, reason: "unavailable" };
-    }
     const previous = await closeOpenCheckouts(env, stripe, workspaceId, now, true);
     if (previous === "busy") return { ok: false, reason: "unavailable" };
     // Una sessione precedente pagata nel frattempo ha appena attribuito il suo diritto.
@@ -170,38 +163,29 @@ export async function startCheckout(
     )
       .bind(workspaceId, stripeEnvironment(env))
       .first<{ customer_id: string | null }>();
-    const plan = appUrl(env, input.language, planPath);
-    const session = await createManagedCheckout(stripe, {
-      offer: input.offer,
-      priceId,
-      generation: priceGeneration.id,
-      workspaceId,
-      email: input.email,
-      language: input.language,
-      successUrl: plan,
-      cancelUrl: plan,
-      ...trialCheckout(current.trialEndsAt, now),
-      subscription: {
-        expiresAt,
-        ...(customer?.customer_id ? { customerId: customer.customer_id } : {}),
+    const turn = claim;
+    return await openManagedSession(
+      env,
+      stripe,
+      input.request,
+      {
+        offer: input.offer,
+        priceId,
+        generation: priceGeneration.id,
+        workspaceId,
+        email: input.email,
+        language: input.language,
+        ...trialCheckout(current.trialEndsAt, now),
+        subscription: {
+          expiresAt,
+          ...(customer?.customer_id ? { customerId: customer.customer_id } : {}),
+        },
       },
-    });
-    if (session.managed_payments?.enabled !== true) {
-      await expireCheckout(stripe, session.id);
-      logCheckoutFailure(input.request, "not_managed");
-      await releaseClaim(env.DB, workspaceId, claim);
-      return { ok: false, reason: "unavailable" };
-    }
-    if (!session.url) {
-      await releaseClaim(env.DB, workspaceId, claim);
-      return { ok: false, reason: "unavailable" };
-    }
-    // Un'altra richiesta dello stesso spazio ha preso il suo turno: questa sessione si chiude.
-    if (!(await bindCheckout(env.DB, workspaceId, claim, session.id))) {
-      await expireCheckout(stripe, session.id);
-      return { ok: false, reason: "unavailable" };
-    }
-    return { ok: true, url: session.url };
+      {
+        release: () => releaseClaim(env.DB, workspaceId, turn),
+        bind: (sessionId) => bindCheckout(env.DB, workspaceId, turn, sessionId),
+      },
+    );
   } catch (error) {
     // Nessun indirizzo è arrivato al cliente: il turno senza sessione si libera.
     if (claim) await releaseClaim(env.DB, workspaceId, claim).catch(() => {});
@@ -354,12 +338,8 @@ async function startLifetimeCheckout(
   let reservation: Awaited<ReturnType<typeof reserveLifetime>> = null;
   try {
     const stripe = await createStripeClient(input.secretKey);
-    const price = await retrieveCatalogPrice(stripe, input.priceId);
-    const mismatch = catalogMismatch(price, "lifetime", priceGeneration.net.lifetime);
-    if (mismatch) {
-      logCheckoutFailure(input.request, `catalog_${mismatch}`);
-      return { ok: false, reason: "unavailable" };
-    }
+    const price = await listedPrice(stripe, input.priceId, "lifetime", input.request);
+    if (!price) return { ok: false, reason: "unavailable" };
     // Una sessione di mensile o annuale ancora aperta si chiude: una sola sessione incassa.
     const subscriptionCheckout = await closeOpenCheckouts(
       env,
@@ -400,40 +380,32 @@ async function startLifetimeCheckout(
           name: appCopy[input.language].settings.plan.lifetimeCreditName,
         })
       : null;
-    const plan = appUrl(env, input.language, planPath);
-    const session = await createManagedCheckout(stripe, {
-      offer: "lifetime",
-      priceId: input.priceId,
-      generation: priceGeneration.id,
-      workspaceId: context.workspaceId,
-      email: input.email,
-      language: input.language,
-      successUrl: plan,
-      cancelUrl: plan,
-      lifetime: {
-        expiresAt: reservation.expiresAt,
-        ...(coupon ? { coupon: coupon.id } : {}),
-        ...(context.subscription?.customerId
-          ? { customerId: context.subscription.customerId }
-          : {}),
+    const slot = reservation;
+    return await openManagedSession(
+      env,
+      stripe,
+      input.request,
+      {
+        offer: "lifetime",
+        priceId: input.priceId,
+        generation: priceGeneration.id,
+        workspaceId: context.workspaceId,
+        email: input.email,
+        language: input.language,
+        lifetime: {
+          expiresAt: slot.expiresAt,
+          ...(coupon ? { coupon: coupon.id } : {}),
+          ...(context.subscription?.customerId
+            ? { customerId: context.subscription.customerId }
+            : {}),
+        },
       },
-    });
-    if (session.managed_payments?.enabled !== true) {
-      await expireCheckout(stripe, session.id);
-      logCheckoutFailure(input.request, "not_managed");
-      await releaseUnboundReservation(env.DB, context.workspaceId, reservation);
-      return { ok: false, reason: "unavailable" };
-    }
-    if (!session.url) {
-      await releaseUnboundReservation(env.DB, context.workspaceId, reservation);
-      return { ok: false, reason: "unavailable" };
-    }
-    // Un'altra richiesta dello stesso spazio ha già ripreso il posto: questa sessione si chiude.
-    if (!(await bindLifetimeSession(env.DB, context.workspaceId, reservation, session.id))) {
-      await expireCheckout(stripe, session.id);
-      return { ok: false, reason: "unavailable" };
-    }
-    return { ok: true, url: session.url };
+      {
+        release: () => releaseUnboundReservation(env.DB, context.workspaceId, slot),
+        // Un'altra richiesta dello stesso spazio può aver già ripreso il posto.
+        bind: (sessionId) => bindLifetimeSession(env.DB, context.workspaceId, slot, sessionId),
+      },
+    );
   } catch (error) {
     // Nessun indirizzo è arrivato al cliente: la prenotazione senza sessione si libera.
     if (reservation)
@@ -441,6 +413,55 @@ async function startLifetimeCheckout(
     logFailure({ request: input.request, error, code: "CHECKOUT_PENDING", operation: "checkout" });
     return { ok: false, reason: "unavailable" };
   }
+}
+
+/** Prezzo del catalogo conforme al listino dell'offerta; null, con il motivo nel log, se non lo è. */
+async function listedPrice(
+  stripe: Stripe,
+  priceId: string,
+  offer: CheckoutOffer,
+  request: Request,
+): Promise<Stripe.Price | null> {
+  const price = await retrieveCatalogPrice(stripe, priceId);
+  const mismatch = catalogMismatch(price, offer, priceGeneration.net[offer]);
+  if (!mismatch) return price;
+  logCheckoutFailure(request, `catalog_${mismatch}`);
+  return null;
+}
+
+/**
+ * Apre la sessione e ne consegna l'indirizzo soltanto se Stripe l'ha aperta in Managed Payments
+ * e la richiesta tiene ancora il proprio turno: altrimenti la chiude, oppure libera il turno
+ * rimasto senza sessione. Ritorno e annullamento portano alla pagina del piano.
+ */
+async function openManagedSession(
+  env: Env,
+  stripe: Stripe,
+  request: Request,
+  params: Omit<Parameters<typeof createManagedCheckout>[1], "successUrl" | "cancelUrl">,
+  turn: { release: () => Promise<unknown>; bind: (sessionId: string) => Promise<boolean> },
+): Promise<CheckoutResult> {
+  const plan = appUrl(env, params.language, planPath);
+  const session = await createManagedCheckout(stripe, {
+    ...params,
+    successUrl: plan,
+    cancelUrl: plan,
+  });
+  if (session.managed_payments?.enabled !== true) {
+    await expireCheckout(stripe, session.id);
+    logCheckoutFailure(request, "not_managed");
+    await turn.release();
+    return { ok: false, reason: "unavailable" };
+  }
+  if (!session.url) {
+    await turn.release();
+    return { ok: false, reason: "unavailable" };
+  }
+  if (!(await turn.bind(session.id))) {
+    await expireCheckout(stripe, session.id);
+    return { ok: false, reason: "unavailable" };
+  }
+  return { ok: true, url: session.url };
 }
 
 async function hasAllocation(db: D1Database, workspaceId: string) {
