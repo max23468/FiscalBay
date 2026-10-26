@@ -1623,13 +1623,21 @@ describe("Webhook e riconciliazione Stripe", () => {
   it("finita la tutela del prezzo chiude il rinnovo non pagato su Stripe", async () => {
     const stripe = stripeAccount();
     stripe.state.invoices = [firstInvoice];
-    stripe.state.subscription = { status: "past_due", start: periodEnd, end: nextEnd };
+    // Una disdetta a fine periodo, successiva alla tutela, non la sostituisce: la chiusura
+    // si anticipa alla fine della tutela.
+    stripe.state.subscription = {
+      status: "past_due",
+      start: periodEnd,
+      end: nextEnd,
+      cancelAt: nextEnd,
+    };
     await applyStripeEvent(
       env,
       { topic: "customer.subscription.updated", objectId: "sub_test" },
       stripe.fetcher,
       at("2026-10-20T19:59:00.000Z"),
     );
+    expect(stripe.state.subscription.cancelAt).toBe("2026-10-20T20:00:00.000Z");
     expect(stripe.requests).not.toContain("DELETE /v1/subscriptions/sub_test");
     // Allo scadere esatto la tutela è finita, anche per il piano mostrato.
     expect(await view("2026-10-20T20:00:00.000Z")).toEqual({});
