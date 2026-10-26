@@ -19,9 +19,6 @@ export const event = {
   type: "checkout.session.completed",
 } satisfies Stripe.Event;
 
-/** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
-export const liveKey = "sk_live_fiscalbay";
-
 export const checkoutInput = {
   priceId: "price_test_monthly",
   generation: "2026-09",

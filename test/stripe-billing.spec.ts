@@ -24,7 +24,6 @@ import { subscriptionView } from "../app/domain/plan-view.server";
 import { insertEntitlement, now, resetDatabase } from "./fixtures/database-fixtures";
 import { routePage } from "./fixtures/route-fixtures";
 import {
-  liveKey,
   catalogPrice,
   workspace,
   second,
@@ -35,6 +34,9 @@ import {
   stripeAccount,
   firstInvoice,
 } from "./fixtures/stripe-fixtures";
+
+/** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
+const liveKey = "sk_live_fiscalbay";
 
 describe("Webhook e riconciliazione Stripe", () => {
   let userId: string;
