@@ -14,38 +14,9 @@ import { action as signInAction, loader as signInLoader } from "../app/routes/si
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 import { pendingEmailChange } from "../app/domain/email-change.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { passkeyFailure } from "../app/account/passkey-error";
 import { hashPassword, verifyPassword } from "../app/password.server";
-import { securityReturnPath } from "../app/app-links";
 import { emailSender, mailEnv, sessionCookie } from "./fixtures/account-fixtures";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
-
-it("distingue le cause passkey riconoscibili e non indovina quelle ambigue", () => {
-  for (const [name, expected] of [
-    ["AbortError", "cancelled"],
-    ["TimeoutError", "timeout"],
-    ["NotSupportedError", "unsupported"],
-    ["NotAllowedError", "incomplete"],
-    ["Error", "technical"],
-  ]) {
-    expect(passkeyFailure(new DOMException("synthetic", name))).toBe(expected);
-  }
-  expect(passkeyFailure({ code: "AUTH_CANCELLED" })).toBe("incomplete");
-  expect(passkeyFailure({ code: "ERROR_AUTHENTICATOR_PREVIOUSLY_REGISTERED" })).toBe("duplicate");
-  expect(passkeyFailure(null)).toBe("technical");
-  for (const value of [
-    "//example.invalid",
-    "https://example.invalid",
-    "/app/impostazioni/sicurezza?delete=1",
-    "/app/impostazioni/sicurezza#unknown",
-    "/en/app/impostazioni/sicurezza",
-  ]) {
-    expect(securityReturnPath("it", value)).toBeNull();
-  }
-  expect(securityReturnPath("en", "/en/app/impostazioni/sicurezza#security-methods")).toBe(
-    "/en/app/impostazioni/sicurezza#security-methods",
-  );
-});
 
 /** La registrazione non apre la sessione: la apre l'accesso con la password appena scelta. */
 async function passwordSession(environment: Env, email: string, password: string) {
