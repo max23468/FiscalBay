@@ -221,6 +221,34 @@ describe("stato sintetico dell'anteprima", () => {
       const started = loadScenario("quota-esaurita", language, new Set(), { trialStarted: true });
       expect(started.account.trial).toEqual({ endsAt: "2026-10-11T13:00:00.000Z" });
       expect(started.notices.some((notice) => notice.kind === "quota")).toBe(false);
+      // Come nell'area reale la prova toglie la pausa del piano, legge ogni 10 minuti, comprende
+      // le notifiche e la lettura successiva importa il resto dell'anno.
+      const storeState = (scenario: ReturnType<typeof loadScenario>) =>
+        scenario.stores.map(
+          ({ pauseReason, targetMinutes, historyDays, importing, notifications }) => ({
+            pauseReason,
+            targetMinutes,
+            historyDays,
+            importing,
+            notifications,
+          }),
+        );
+      const importingYear = {
+        pauseReason: undefined,
+        targetMinutes: 10,
+        historyDays: 365,
+        importing: true,
+        notifications: false,
+      };
+      expect(storeState(started)).toEqual([importingYear, importingYear]);
+      expect(started.notices).toContainEqual({ kind: "importing", count: 174 });
+      expect(storeState(active)).toEqual(Array(2).fill({ ...importingYear, importing: false }));
+      expect(
+        storeState(ended).map(({ historyDays, targetMinutes }) => [historyDays, targetMinutes]),
+      ).toEqual([
+        [30, 30],
+        [30, 30],
+      ]);
       // Una prova già usata non riparte neppure nell'anteprima.
       expect(
         loadScenario("prova-terminata", language, new Set(), { trialStarted: true }).account.plan,

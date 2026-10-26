@@ -1,14 +1,10 @@
 import { z } from "zod";
 
-import {
-  acquireOrders,
-  historyStart,
-  storeAccess,
-  type ActiveStore,
-} from "./order-acquisition.server";
+import { acquireOrders, storeAccess, type ActiveStore } from "./order-acquisition.server";
 import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-context.server";
 import { servedSql } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
+import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
 import { activeStore, writableStore } from "./store-state.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
@@ -271,11 +267,12 @@ export async function requestStoreSync(
     // La lettura richiesta prosegue l'importazione in corso.
     if (store.started && !store.history_done_at) return "importing";
     await environment.DB.prepare(
-      `UPDATE sync_state SET history_from = ?4, history_until = ?3, history_done_at = NULL,
+      `UPDATE sync_state SET history_from = ${historyStartSql(storeWorkspaceSql("?1"), "?3")},
+              history_until = ?3, history_through = NULL, history_done_at = NULL,
               history_next = NULL, history_total = NULL, updated_at = ?3
         WHERE store_id = ?1 AND history_done_at IS NOT NULL AND ${writableStore}`,
     )
-      .bind(storeId, store.granted_at, at, historyStart(now))
+      .bind(storeId, store.granted_at, at)
       .run();
   }
   const apiOrigin = ebayConfiguration(environment, store.ebay_environment).apiOrigin;
