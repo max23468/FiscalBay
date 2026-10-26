@@ -39,7 +39,7 @@ import {
   orderView,
   visibleOrderFacets,
 } from "../domain/orders.server";
-import { ebayOutage, listStores, readsFailing } from "../domain/stores.server";
+import { ebayOutage, listStores } from "../domain/stores.server";
 import { logFailure } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
@@ -54,9 +54,10 @@ import {
   snapshotInstant,
   snapshotParam,
 } from "../orders/order-list";
+import { ordersNotices } from "../orders/notices.server";
 import { accountSearchScope, openSearch } from "../orders/order-search.server";
 import { settle } from "../settle.server";
-import type { ActionResult, EbayEnvironment, OrderView, OrdersNotice } from "../view-models";
+import type { ActionResult, EbayEnvironment, OrderView } from "../view-models";
 import type { Route } from "./+types/orders";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -213,57 +214,13 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     incomingAtTop,
   };
   const cycle = allowance?.cycle ?? null;
-  const outage = ebayOutage(environmentStores);
-  const notices: OrdersNotice[] = [
-    ...(outage ? [{ kind: "ebay-down" as const, at: outage.lastSyncAt }] : []),
-    // Prima i collegamenti già scaduti, poi quelli in scadenza.
-    ...environmentStores
-      .flatMap((store) =>
-        store.reminder ? [{ id: store.id, name: store.name, ...store.reminder }] : [],
-      )
-      .sort((a, b) => (a.kind === b.kind ? 0 : a.kind === "expired" ? -1 : 1))
-      .map((store): OrdersNotice =>
-        store.kind === "expired"
-          ? { kind: "store-issue", storeId: store.id, storeName: store.name }
-          : {
-              kind: "consent-expiring",
-              storeId: store.id,
-              storeName: store.name,
-              at: store.at,
-              ebayEnvironment,
-            },
-      ),
-    // Senza un'indisponibilità generale, un negozio con le letture ferme lo dice se i suoi
-    // ordini sono nella vista; altrimenti restano Negozi e campanella.
-    ...(outage
-      ? []
-      : environmentStores
-          .filter(
-            (store) =>
-              readsFailing(store) &&
-              store.lastSyncAt !== null &&
-              (!filters.storeId || filters.storeId === store.id),
-          )
-          .map((store): OrdersNotice => ({
-            kind: "store-read-failed",
-            storeId: store.id,
-            storeName: store.name,
-            at: store.lastSyncAt!,
-          }))),
-    ...(allowance?.waiting
-      ? [{ kind: "waitlist" as const, purchase: allowance.purchasesOpen }]
-      : !premium && cycle && allowance?.remaining === 0 && facets.locked
-        ? [{ kind: "quota" as const, until: cycle.ends_at }]
-        : []),
-    ...(environmentStores.some((store) => store.history?.done === false)
-      ? [
-          {
-            kind: "importing" as const,
-            count: environmentStores.reduce((total, store) => total + store.importedOrders, 0),
-          },
-        ]
-      : []),
-  ];
+  const notices = ordersNotices({
+    stores: environmentStores,
+    ebayEnvironment,
+    storeId: filters.storeId,
+    allowance,
+    locked: facets.locked,
+  });
   // Ultima lettura riuscita fra i negozi collegati: un negozio scollegato non conta per i
   // primi passi, e lo stato vuoto nomina il negozio letto per ultimo con il suo orario.
   const latest =

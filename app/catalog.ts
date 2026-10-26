@@ -14,6 +14,22 @@ export type PremiumOffer = (typeof premiumOffers)[number];
 export type PurchaseState = "available" | "needs-sync" | "covered" | "closed";
 
 /**
+ * Acquisto possibile dopo la prima lettura riuscita di un negozio, se nessuna copertura lo
+ * ferma e gli acquisti non sono sospesi. Regola comune all'area reale e all'anteprima.
+ */
+export function purchaseStateFrom({
+  covered,
+  open,
+  synced,
+}: {
+  covered: boolean;
+  open: boolean;
+  synced: boolean;
+}): PurchaseState {
+  return covered ? "covered" : !open ? "closed" : synced ? "available" : "needs-sync";
+}
+
+/**
  * Offerta lifetime per la pagina del piano: in vendita, esaurita, in attesa della prima
  * lettura o sospesa come gli altri acquisti. `credit` è il periodo pagato non usato, in centesimi, che si detrae dal prezzo;
  * `replaces` indica un abbonamento che con il lifetime si chiude.

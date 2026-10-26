@@ -8,6 +8,7 @@ import {
 
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
+import { remainingUnlocks } from "~/components/orders/labels";
 import { appHref } from "../app-links";
 import { historyWindowDays } from "../domain/history-window.server";
 import { appCopy, pageTitle } from "../app-copy";
@@ -113,8 +114,7 @@ export async function action({ request }: Route.ActionArgs) {
         .filter(Boolean),
     ),
   ];
-  const quota = scenario.account.quota;
-  const remaining = quota ? quota.limit - quota.used : null;
+  const remaining = remainingUnlocks(scenario.account);
   if (ids.length === 0 || ids.some((id) => !scenario.lockedValues[id])) {
     return data<UnlockResult>({ unlocked: [], remaining, error: true }, { status: 400 });
   }

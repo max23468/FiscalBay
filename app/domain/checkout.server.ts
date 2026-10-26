@@ -1,7 +1,13 @@
 import type Stripe from "stripe";
 
 import { appCopy } from "../app-copy";
-import { firstChargeAt, priceGeneration, type PremiumOffer, type PurchaseState } from "../catalog";
+import {
+  firstChargeAt,
+  priceGeneration,
+  purchaseStateFrom,
+  type PremiumOffer,
+  type PurchaseState,
+} from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import { localizedPath, type Language } from "../i18n";
 import { catalogMismatch } from "../integrations/stripe-account.server";
@@ -85,13 +91,11 @@ export async function purchaseState(db: D1Database, userId: string, now = new Da
       open: number;
     }>();
   if (!row) return null;
-  const state: PurchaseState = row.covered
-    ? "covered"
-    : !row.open
-      ? "closed"
-      : row.synced
-        ? "available"
-        : "needs-sync";
+  const state = purchaseStateFrom({
+    covered: !!row.covered,
+    open: !!row.open,
+    synced: !!row.synced,
+  });
   return {
     workspaceId: row.id,
     state,

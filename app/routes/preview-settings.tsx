@@ -6,7 +6,7 @@ import { SettingsPage, type SettingsPageData } from "~/components/settings/page"
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { accessNotice } from "../access-notice";
 import { appCopy, pageTitle } from "../app-copy";
-import { checkoutReturn, premiumOffers } from "../catalog";
+import { checkoutReturn, premiumOffers, purchaseStateFrom } from "../catalog";
 import { languageFromPath, localizedPath } from "../i18n";
 import {
   defaultDisplay,
@@ -88,20 +88,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       support: true,
     },
     account: scenario.account,
-    // Come nell'area reale: l'acquisto aspetta la prima lettura riuscita di un negozio, durante
-    // la prova resta possibile e resta fermo con un abbonamento che può ancora incassare; un
-    // lifetime rimborsato non lo ferma.
+    // Durante la prova l'acquisto resta possibile; lo ferma un abbonamento che può ancora
+    // incassare, non un lifetime rimborsato.
     purchase: {
-      state:
-        (scenario.account.plan === "premium" && !scenario.account.trial) ||
-        (scenario.account.payment &&
-          !(scenario.account.payment.state === "refunded" && scenario.account.payment.lifetime))
-          ? "covered"
-          : scenario.purchasesClosed
-            ? "closed"
-            : scenario.onboarding.some((step) => step.label === "stepSync" && step.done)
-              ? "available"
-              : "needs-sync",
+      state: purchaseStateFrom({
+        covered:
+          (scenario.account.plan === "premium" && !scenario.account.trial) ||
+          (!!scenario.account.payment &&
+            !(scenario.account.payment.state === "refunded" && scenario.account.payment.lifetime)),
+        open: !scenario.purchasesClosed,
+        synced: scenario.onboarding.some((step) => step.label === "stepSync" && step.done),
+      }),
       offers: premiumOffers,
       lifetime: previewLifetime(scenario),
       checkout: checkoutReturn(query),

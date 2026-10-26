@@ -8,7 +8,7 @@ import { accessNotice } from "../access-notice";
 import { unconfirmedOnFailure } from "../client-action";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { checkoutReturn } from "../catalog";
+import { checkoutReturn, purchaseStateFrom } from "../catalog";
 import {
   checkoutConfigured,
   checkoutOffers,
@@ -190,7 +190,9 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     },
     purchase: {
       // Senza spazio nessun negozio è collegato: l'acquisto attende la prima lettura.
-      state: purchase?.state ?? (admissionState.purchasesOpen ? "needs-sync" : "closed"),
+      state:
+        purchase?.state ??
+        purchaseStateFrom({ covered: false, open: admissionState.purchasesOpen, synced: false }),
       offers: checkoutOffers,
       lifetime: lifetime?.offer ?? null,
       checkout: checkoutReturn(new URL(request.url).searchParams),
