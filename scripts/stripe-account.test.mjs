@@ -173,6 +173,22 @@ describe("account Stripe dell'ambiente", () => {
         portale: ["default_return_url", "features.subscription_update.enabled"],
       },
     );
+    // Nella sandbox l'indirizzo di assistenza di prova di Stripe non conta.
+    const sandbox = account((state) => ({
+      ...state,
+      tax: { ...state.tax, livemode: false },
+      profile: {
+        ...state.profile,
+        name: "FiscalBay Sandbox",
+        support_url: "https://accessible.stripe.com/support",
+      },
+    }));
+    assert.deepEqual(
+      checkAccount(sandbox.request, { ...target, live: false }).find(
+        ({ item }) => item === "profilo pubblico",
+      ),
+      { item: "profilo pubblico", ok: true, problems: [] },
+    );
   });
 
   it("riconosce un prezzo assente, endpoint mancanti o duplicati e il portale da salvare", () => {
