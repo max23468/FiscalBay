@@ -1102,7 +1102,9 @@ test.describe("impostazioni", () => {
         const prefix = it ? "" : "/en";
         // Spazio con il negozio già letto e ordini da sbloccare, proprio di lingua e browser.
         await useLocalAccount(context, "member", baseURL!, `trial-${language}-${browserName}`);
-        await page.goto(`${prefix}/app/ordini`);
+        watchNetwork(context);
+        // «Attiva la prova» risponde solo dopo l'idratazione: un clic anticipato va perso.
+        await open(page, `${prefix}/app/ordini`);
         const secret = `VALORE-SINTETICO-${language}`;
         expect(await page.content()).not.toContain(secret);
         await expect(
