@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -14,20 +14,17 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import type { AppCopy } from "../../app-copy";
-import type { AppLinks } from "../../app-links";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { localizedPath } from "../../i18n";
 
 export function PrivacySection({
   accountData,
-  t,
-  links,
 }: {
   /** Esportazione e cancellazione dell'account disponibili. */
   accountData: boolean;
-  t: AppCopy;
-  links: AppLinks;
 }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const action = useAction();
   // Senza footer nell'area autenticata, i documenti legali si raggiungono da qui (D202).
   const legal = [
@@ -83,13 +80,14 @@ export function PrivacySection({
             </Button>
           </li>
         ))}
-        {accountData ? <DeleteAccount t={t} /> : null}
+        {accountData ? <DeleteAccount /> : null}
       </ul>
     </div>
   );
 }
 
-function DeleteAccount({ t }: { t: AppCopy }) {
+function DeleteAccount() {
+  const { t } = useCopy();
   const action = useAction();
   return (
     <li className="flex flex-wrap items-center justify-between gap-3 py-4">

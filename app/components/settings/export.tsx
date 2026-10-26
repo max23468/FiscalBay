@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { PremiumNote, StatusBadge } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { FieldGroup, FieldLegend, FieldSet } from "~/components/ui/field";
 import { RadioGroup } from "~/components/ui/radio-group";
-import type { AppCopy } from "../../app-copy";
+import { useCopy } from "~/components/copy-context";
 import { orderPeriods, premiumOrderPeriods } from "../../view-models";
 import { CheckboxOption, Group, RadioOption, SimpleSelect } from "./controls";
 
@@ -24,7 +24,8 @@ export interface ExportContext {
 }
 
 /** Ambito ricevuto dagli Ordini, sempre esplicito, con il ritorno all'elenco di partenza. */
-function ExportContextNote({ context, t }: { context: ExportContext; t: AppCopy }) {
+function ExportContextNote({ context }: { context: ExportContext }) {
+  const { t } = useCopy();
   return (
     <div className="grid justify-items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
       <p>
@@ -47,24 +48,32 @@ export function ExportSection({
   premium,
   context,
   estimate,
-  t,
 }: {
   premium: boolean;
   context: ExportContext | null;
   /** Ordini dell'esportazione e quanti fra loro hanno un dato ancora da sbloccare. */
   estimate: { orders: number; locked: number };
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   const action = useAction();
   const [period, setPeriod] = useState("30");
   const [format, setFormat] = useState("csv");
   const [rows, setRows] = useState("order");
   const columns = Object.entries(t.settings.export.columns);
+  // Colonne del file, tutte all'inizio: la scelta viaggia con la richiesta dell'esportazione.
+  const [chosen, setChosen] = useState(() => new Set(columns.map(([key]) => key)));
+  const choose = (key: string, checked: boolean) =>
+    setChosen((current) => {
+      const next = new Set(current);
+      if (checked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
   const { orders, locked } = estimate;
   return (
     <>
       <Group title={t.settings.export.exportScope}>
-        {context ? <ExportContextNote context={context} t={t} /> : null}
+        {context ? <ExportContextNote context={context} /> : null}
         <FieldGroup>
           {/* Con l'ambito degli Ordini il periodo è già nei loro filtri. */}
           {context ? null : (
@@ -112,7 +121,11 @@ export function ExportSection({
             {premium ? (
               <div className="grid gap-3 sm:grid-cols-2">
                 {columns.map(([key, label]) => (
-                  <CheckboxOption key={key} defaultChecked>
+                  <CheckboxOption
+                    key={key}
+                    checked={chosen.has(key)}
+                    onCheckedChange={(checked) => choose(key, checked)}
+                  >
                     {label}
                   </CheckboxOption>
                 ))}
@@ -132,10 +145,12 @@ export function ExportSection({
           <Button
             disabled={context !== null && orders === 0}
             onClick={() =>
-              action.run(
-                "export-create",
-                context ? { scope: context.query, format, rows } : { period, format, rows },
-              )
+              action.run("export-create", {
+                ...(context ? { scope: context.query } : { period }),
+                format,
+                rows,
+                ...(premium ? { columns: [...chosen].join(",") } : {}),
+              })
             }
           >
             {t.settings.export.exportCreate}

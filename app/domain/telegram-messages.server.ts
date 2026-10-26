@@ -1,13 +1,15 @@
 import { appCopy } from "../app-copy";
-import { ordersPath, settingsPath } from "../app-links";
+import { appUrl, notificationSettingsPath, ordersPath } from "../app-links";
 import { ebayOrderHref } from "../components/orders/labels";
 import { buyerNameView } from "../contact";
-import { formatAmount, locales, localizedPath, type Language } from "../i18n";
+import { formatAmount, type Language, locales } from "../i18n";
 import type { BotButton, BotMessage } from "../integrations/telegram.server";
 import { zoneLabel } from "../preferences";
 import { displayTaxValue, taxIdentifierType } from "../tax-quality";
 import type { EbayEnvironment, FiscalSituation } from "../view-models";
 import type { VisibleOrder } from "./orders.server";
+import { dayMilliseconds } from "../time";
+import { telegramMessageCopy as text } from "../copy/telegram";
 
 /**
  * Testi del bot e loro composizione in HTML. Ogni valore che arriva da eBay o dall'utente passa
@@ -159,81 +161,6 @@ export const icons = {
   copy: "📋",
 } as const;
 
-const text = {
-  it: {
-    change: {
-      new: "Nuovo ordine",
-      available: "Dato fiscale disponibile",
-      changed: "Dato fiscale aggiornato",
-      removed: "Dato fiscale rimosso",
-    },
-    today: "oggi",
-    yesterday: "ieri",
-    more: (count: number) => (count === 1 ? "e un altro articolo" : `e altri ${count} articoli`),
-    kinds: { CF: null, PIVA: "P.IVA" },
-    removedNote: "Il dato notificato in precedenza non è più nell'ordine.",
-    fiscal: {
-      checking: "Dato fiscale in verifica",
-      missing: "Nessun dato fiscale",
-      foreign: (country: string) => `Fatturazione estera (${country})`,
-      error: "Dato fiscale non letto: riprova da FiscalBay",
-      locked: "Da sbloccare in FiscalBay",
-      available: "",
-    } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
-    checkingNote: "Se arriva, ricevi un nuovo messaggio.",
-    open: "Apri in FiscalBay",
-    ebay: "Apri su eBay",
-    copy: "Copia Codice Fiscale",
-    orders: "Apri gli ordini",
-    digest: (date: string) => `Riepilogo del ${date}`,
-    digestCount: (count: number) =>
-      `${count === 1 ? "Un ordine" : `${count} ordini`} dall'ultimo riepilogo`,
-    import: {
-      title: "Importazione completata",
-      orders: (count: number) => (count === 1 ? "Un ordine" : `${count} ordini`),
-      fiscal: "con dato fiscale",
-      period: (from: string, until: string) => `dal ${from} al ${until}`,
-      note: "Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.",
-    },
-  },
-  en: {
-    change: {
-      new: "New order",
-      available: "Tax ID available",
-      changed: "Tax ID updated",
-      removed: "Tax ID removed",
-    },
-    today: "today",
-    yesterday: "yesterday",
-    more: (count: number) => (count === 1 ? "and one more item" : `and ${count} more items`),
-    kinds: { CF: null, PIVA: "VAT" },
-    removedNote: "The tax ID notified earlier is no longer in the order.",
-    fiscal: {
-      checking: "Tax ID being checked",
-      missing: "No tax ID",
-      foreign: (country: string) => `Billing abroad (${country})`,
-      error: "Tax ID not read: try again from FiscalBay",
-      locked: "To unlock in FiscalBay",
-      available: "",
-    } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
-    checkingNote: "If it arrives, you get a new message.",
-    open: "Open in FiscalBay",
-    ebay: "Open on eBay",
-    copy: "Copy tax code",
-    orders: "Open orders",
-    digest: (date: string) => `Summary of ${date}`,
-    digestCount: (count: number) =>
-      `${count === 1 ? "One order" : `${count} orders`} since the last summary`,
-    import: {
-      title: "Import completed",
-      orders: (count: number) => (count === 1 ? "One order" : `${count} orders`),
-      fiscal: "with a tax ID",
-      period: (from: string, until: string) => `from ${from} to ${until}`,
-      note: "Imported orders get no individual messages: new orders arrive from now on.",
-    },
-  },
-} satisfies Record<Language, unknown>;
-
 /** Data e ora locali nel fuso indicato. */
 export function localClock(timeZone: string, now: Date): { day: string; time: string } {
   const parts = Object.fromEntries(
@@ -271,7 +198,7 @@ export function date(language: Language, timeZone: string, iso: string, now = ne
 export function when(language: Language, timeZone: string, iso: string, now: Date): string {
   const at = localClock(timeZone, new Date(iso));
   const today = localClock(timeZone, now).day;
-  const yesterday = localClock(timeZone, new Date(now.getTime() - 86_400_000)).day;
+  const yesterday = localClock(timeZone, new Date(now.getTime() - dayMilliseconds)).day;
   const day =
     at.day === today
       ? text[language].today
@@ -281,25 +208,10 @@ export function when(language: Language, timeZone: string, iso: string, now: Dat
   return `${day} ${at.time}`;
 }
 
-/** Indirizzo assoluto di una pagina dell'app, con l'ambiente eBay se non è Production. */
-export function appUrl(
-  env: Pick<Env, "APP_ORIGIN">,
-  language: Language,
-  path: string,
-  // Stryker disable next-line StringLiteral: l'indirizzo distingue soltanto «sandbox»; ogni altro predefinito dà lo stesso risultato.
-  environment: EbayEnvironment = "production",
-  filters: Record<string, string> = {},
-) {
-  const query = new URLSearchParams(filters);
-  if (environment === "sandbox") query.set("environment", "sandbox");
-  const search = query.size ? `?${query}` : "";
-  return `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, path)}${search}`;
-}
+export const settingsUrl = (env: { APP_ORIGIN: string }, language: Language) =>
+  appUrl(env, language, notificationSettingsPath);
 
-export const settingsUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language) =>
-  appUrl(env, language, `${settingsPath}/notifiche`);
-
-const orderUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language, notice: OrderNotice) =>
+const orderUrl = (env: { APP_ORIGIN: string }, language: Language, notice: OrderNotice) =>
   appUrl(env, language, `${ordersPath}/${encodeURIComponent(notice.id)}`, notice.environment);
 
 const maxItems = 3;
@@ -325,7 +237,7 @@ const amount = (language: Language, notice: OrderNotice) =>
 
 /** Pulsanti di un ordine: dettaglio, eBay per i negozi reali e copia del CF autorizzato. */
 export function orderButtons(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   notice: OrderNotice,
 ): BotButton[][] {
@@ -347,7 +259,7 @@ export function orderButtons(
  * acquirente, totale, articoli, numero e data.
  */
 export function orderMessage(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   timeZone: string,
   notice: OrderNotice,
@@ -388,7 +300,7 @@ export function orderMessage(
  * dettaglio in FiscalBay, poi acquirente, totale, data e dato fiscale.
  */
 export function orderEntry(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   timeZone: string,
   notice: OrderNotice,
@@ -429,7 +341,7 @@ export function copyButtons(notices: OrderNotice[], html: string): BotButton[][]
 
 /** Riepilogo giornaliero: un blocco per ordine, nei messaggi necessari, e l'accesso agli ordini. */
 export function digestMessage(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   timeZone: string,
   at: string,
@@ -469,7 +381,7 @@ export function digestMessage(
 
 /** Completamento di un'importazione: un solo messaggio con conteggi e periodo acquisito. */
 export function importMessage(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   timeZone: string,
   summary: {

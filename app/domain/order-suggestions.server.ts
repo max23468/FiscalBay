@@ -1,8 +1,7 @@
 import { activeEntitlementSql, orderAccessSql } from "./grants.server";
-import { consultableStore, storeNameSql } from "./store-state.server";
-import type { EbayEnvironment } from "../integrations/ebay/environment.server";
-import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
-import type { SuggestionView } from "../view-models";
+import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
+import { buyerTaxKey, taxIdentifierType, taxQuality } from "../tax-quality";
+import type { SuggestionView, EbayEnvironment } from "../view-models";
 
 type Suggestions = {
   suggestions: SuggestionView[];
@@ -34,8 +33,7 @@ export async function orderSuggestions(
     FROM targets target
     LEFT JOIN orders o ON o.buyer_eias_token = target.buyer_eias_token
       AND o.id <> target.id AND o.creation_time < target.creation_time
-      AND o.merged_into IS NULL AND o.retention_until > ?4
-      AND o.is_provisional = 0
+      AND ${listedOrder("o", "?4")}
       AND EXISTS (SELECT 1 FROM ebay_stores allowed WHERE allowed.id = o.store_id
         AND allowed.workspace_id = target.workspace_id AND allowed.ebay_environment = ?2
         AND ${consultableStore("allowed")})
@@ -82,12 +80,9 @@ export async function orderSuggestions(
     for (const rows of kinds.values()) {
       const latest = rows.filter((row) => row.creation_time === rows[0]!.creation_time);
       const normalized = (row: (typeof rows)[number]) =>
-        taxComparisonKey({
+        buyerTaxKey({
           type: row.identifier_type!,
-          issuingCountry:
-            taxIdentifierType(row.identifier_type!, row.issuing_country) === "OTHER"
-              ? row.issuing_country
-              : "IT",
+          issuingCountry: row.issuing_country,
           value: row.value,
         });
       if (

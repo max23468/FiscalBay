@@ -14,22 +14,21 @@ import {
   DropdownMenuLinkItem,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import type { AppCopy } from "../../app-copy";
 import { mailtoHref } from "../../contact";
-import { formatAmount, type Language } from "../../i18n";
+import { formatAmount } from "../../i18n";
 import {
-  addressRows,
-  formatDate,
   marketplaceLabel,
   type AddressView,
   type ContactsView,
   type OrderView,
 } from "../../view-models";
+import { addressRows, formatDate } from "../../format";
 import { CopyButton } from "~/components/tax-code";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
 import { ebayOrderHref, fromListState, missingContact } from "./labels";
 import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status";
 import { useTimeZone } from "~/components/time-zone";
+import { useCopy } from "~/components/copy-context";
 
 /** Azioni secondarie disponibili nella pagina: eBay ed esportazione del singolo ordine. */
 export interface SecondaryActions {
@@ -54,14 +53,13 @@ const maxEnterSteps = 6;
 
 function AddressLines({
   address,
-  language,
   copy,
 }: {
   address: AddressView;
-  language: Language;
   /** Etichette del pulsante Copia; senza, l'indirizzo è soltanto mostrato. */
   copy?: CopyLabels;
 }) {
+  const { language } = useCopy();
   const rows = addressRows(address, language);
   const [first, second, third] = rows;
   return (
@@ -79,17 +77,8 @@ function AddressLines({
 export type CopyLabels = { copy: string; copied: string; copyFailed: string };
 
 /** Indirizzo anche parziale; l'assenza della via mascherata resta esplicita. */
-export function BuyerAddress({
-  order,
-  t,
-  language,
-  copy,
-}: {
-  order: OrderView;
-  t: AppCopy;
-  language: Language;
-  copy?: CopyLabels;
-}) {
+export function BuyerAddress({ order, copy }: { order: OrderView; copy?: CopyLabels }) {
+  const { t } = useCopy();
   const address = order.contacts.billingAddress;
   const masked = order.maskedContacts?.includes("billingAddress");
   if (!address)
@@ -98,7 +87,7 @@ export function BuyerAddress({
     );
   return (
     <>
-      <AddressLines address={address} language={language} copy={masked ? undefined : copy} />
+      <AddressLines address={address} copy={masked ? undefined : copy} />
       {masked ? (
         <span className="block text-muted-foreground">{t.orders.maskedContact}</span>
       ) : null}
@@ -211,21 +200,14 @@ export function ItemThumbnail({ src }: { src?: string }) {
  * Indirizzo di fatturazione e contatti dell'acquirente: dati non fiscali, visibili
  * anche con il Codice Fiscale da sbloccare. Un dato assente resta indicato.
  */
-function BuyerContacts({
-  order,
-  t,
-  language,
-}: {
-  order: OrderView;
-  t: AppCopy;
-  language: Language;
-}) {
+function BuyerContacts({ order }: { order: OrderView }) {
+  const { t } = useCopy();
   return (
     <dl className="grid gap-x-4 gap-y-2 text-sm leading-snug sm:col-span-2 sm:grid-cols-subgrid">
       <div className="grid content-start gap-0.5">
         <dt className="text-xs font-medium text-muted-foreground">{t.orders.billingAddress}</dt>
         <dd className="min-w-0 text-pretty [overflow-wrap:anywhere]">
-          <BuyerAddress order={order} t={t} language={language} />
+          <BuyerAddress order={order} />
         </dd>
       </div>
       <div className="grid content-start gap-0.5">
@@ -255,15 +237,14 @@ function BuyerContacts({
 /** Menu delle azioni secondarie; assente se la pagina non ne offre. */
 function OrderMenu({
   order,
-  t,
   actions,
   exportHref,
 }: {
   order: OrderView;
-  t: AppCopy;
   actions: SecondaryActions;
   exportHref: string | null;
 }) {
+  const { t } = useCopy();
   if (!actions.openOnEbay && !exportHref) return null;
   return (
     <DropdownMenu>
@@ -300,8 +281,6 @@ function OrderMenu({
 
 export function OrderCard({
   order,
-  t,
-  language,
   account,
   detailHref,
   selecting,
@@ -328,6 +307,7 @@ export function OrderCard({
   enterIndex?: number;
   actions: SecondaryActions;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const titleId = useId();
   const [first, second, ...rest] = order.items;
@@ -384,7 +364,7 @@ export function OrderCard({
                 className="mx-1.5"
               />
             ) : (
-              <OrderMenu order={order} t={t} actions={actions} exportHref={exportHref} />
+              <OrderMenu order={order} actions={actions} exportHref={exportHref} />
             )}
           </div>
         </div>
@@ -448,8 +428,6 @@ export function OrderCard({
         </p>
         <FiscalCodes
           order={order}
-          t={t}
-          language={language}
           account={account}
           ebayDown={ebayDown}
           revealed={revealed}
@@ -457,15 +435,8 @@ export function OrderCard({
           onUnlock={onUnlock}
           confirmUnlock={confirmUnlock}
         />
-        <FiscalNotes
-          order={order}
-          t={t}
-          language={language}
-          account={account}
-          ebayDown={ebayDown}
-          compact
-        />
-        <BuyerContacts order={order} t={t} language={language} />
+        <FiscalNotes order={order} account={account} ebayDown={ebayDown} compact />
+        <BuyerContacts order={order} />
       </div>
       {/* In fondo alla scheda, lontano dal menu delle azioni accanto all'importo. */}
       <footer className="flex justify-end">

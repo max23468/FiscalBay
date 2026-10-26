@@ -1,6 +1,6 @@
 import { logFailure } from "../errors";
 import type { Language } from "../i18n";
-import { displayTimeZone, formatDate } from "../view-models";
+import { displayTimeZone, formatDate } from "../format";
 import { purchasesOpenSql, waitingSql, waitlistOnSql } from "./admission-state.server";
 import { activeEntitlementSql } from "./grants.server";
 import { unpausedStore } from "./store-state.server";
@@ -153,14 +153,14 @@ type NoticeRow = {
  * seguente. Il modulo email porta con sé i testi dell'interfaccia: si carica soltanto qui,
  * fuori dall'avvio di cron, coda e webhook.
  */
-async function sendNotices(environment: Env, rows: NoticeRow[], now: Date) {
+async function sendNotices(env: Env, rows: NoticeRow[], now: Date) {
   const { sendInactivityNotice } = await import("../account-email.server");
   const at = now.toISOString();
   const deadline = new Date(now.getTime() + inactivityNoticeDays * 24 * 60 * 60_000).toISOString();
   const sent = await Promise.allSettled(
     rows.map((row) => {
       const language = row.language === "en" ? "en" : "it";
-      return sendInactivityNotice(environment, {
+      return sendInactivityNotice(env, {
         to: row.email,
         language,
         deadline: formatDate(deadline, language, "date", row.time_zone ?? displayTimeZone),
@@ -175,9 +175,9 @@ async function sendNotices(environment: Env, rows: NoticeRow[], now: Date) {
   });
   if (noticed.length === 0) return;
   // Un accesso arrivato nel frattempo ha già spostato l'attività: il preavviso non vale.
-  await environment.DB.batch(
+  await env.DB.batch(
     noticed.map((row) =>
-      environment.DB.prepare(
+      env.DB.prepare(
         "UPDATE workspaces SET inactivity_notice_at = ?1 WHERE id = ?2 AND active_at = ?3",
       ).bind(at, row.id, row.active_at),
     ),
@@ -191,8 +191,8 @@ async function sendNotices(environment: Env, rows: NoticeRow[], now: Date) {
  * dal preavviso senza nuova attività le letture dei negozi entrano in pausa. Con la lista
  * d'attesa spenta chi era in attesa viene ammesso.
  */
-export async function applyInactivity(environment: Env, now = new Date()) {
-  const db = environment.DB;
+export async function applyInactivity(env: Env, now = new Date()) {
+  const db = env.DB;
   const at = now.toISOString();
   await db.batch([
     db.prepare("UPDATE workspaces SET active_at = ?1 WHERE active_at IS NULL").bind(at),
@@ -215,7 +215,7 @@ export async function applyInactivity(environment: Env, now = new Date()) {
       ORDER BY w.active_at, w.id LIMIT ?2`)
     .bind(at, noticeBatch)
     .all<NoticeRow>();
-  if (results.length > 0) await sendNotices(environment, results, now);
+  if (results.length > 0) await sendNotices(env, results, now);
   await db
     .prepare(`INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at)
       SELECT s.id, 'inactivity', ?1 FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id

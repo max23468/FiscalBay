@@ -1,18 +1,18 @@
-import { appCopy } from "./app-copy";
+import { appCopy, type AppCopy } from "./app-copy";
 import type { Language } from "./i18n";
 
+type Tone = "success" | "info" | "warning" | "danger";
+export type SignInNotice = keyof AppCopy["access"]["signInNotices"];
+type StoreNotice = keyof AppCopy["access"]["storeNotices"];
+
 /** Tono degli avvisi: gli errori chiedono un'azione, le conferme no. */
-const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
+const signInTones: Record<SignInNotice, Tone> = {
   errore: "danger",
   registrazione: "danger",
   autorizzazione: "warning",
   termini: "warning",
   dati: "warning",
   "troppi-tentativi": "warning",
-  accesso: "warning",
-  "altro-spazio": "warning",
-  "lista-attesa": "warning",
-  "negozio-diverso": "warning",
   registrato: "success",
   "verifica-inviata": "success",
   "passkey-rimossa": "success",
@@ -22,8 +22,6 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "recupero-inviato": "info",
   "password-reimpostata": "success",
   "recupero-scaduto": "warning",
-  collegato: "success",
-  eliminato: "success",
   "metodo-collegato": "success",
   "metodo-rimosso": "success",
   "ebay-rimosso": "success",
@@ -39,18 +37,59 @@ const noticeTones: Record<string, "success" | "info" | "warning" | "danger"> = {
   "accesso-non-verificato": "warning",
 };
 
-export type AccessNoticeView = { text: string; tone: (typeof noticeTones)[string] };
+const storeTones: Record<StoreNotice, Tone> = {
+  collegato: "success",
+  eliminato: "success",
+  negato: "warning",
+  "negozio-diverso": "warning",
+  "altro-spazio": "warning",
+  accesso: "warning",
+  errore: "danger",
+  "ebay-non-risponde": "warning",
+  "lista-attesa": "warning",
+};
 
-/** Esito arrivato nell'indirizzo (`accesso`, `negozio`, `error`), con il suo tono. */
+export type AccessNoticeView = { text: string; tone: Tone } & (
+  | { source: "accesso"; key: SignInNotice }
+  | { source: "negozio"; key: StoreNotice }
+);
+
+/** Esito di un accesso nell'indirizzo, se è uno di quelli previsti. */
+export function isSignInNotice(value: string | null): value is SignInNotice {
+  return value !== null && Object.hasOwn(signInTones, value);
+}
+
+/** Esito del collegamento di un negozio nell'indirizzo, se è uno di quelli previsti. */
+export function isStoreNotice(value: string | null): value is StoreNotice {
+  return value !== null && Object.hasOwn(storeTones, value);
+}
+
+/** Avviso di un esito d'accesso, con il suo tono. */
+export function signInNotice(key: SignInNotice, language: Language): AccessNoticeView {
+  return {
+    source: "accesso",
+    key,
+    text: appCopy[language].access.signInNotices[key],
+    tone: signInTones[key],
+  };
+}
+
+/**
+ * Esito arrivato nell'indirizzo (`accesso`, `negozio`, `error`), con il suo tono. Un link di
+ * recupero con un errore vale come link scaduto.
+ */
 export function accessNotice(search: URLSearchParams, language: Language): AccessNoticeView | null {
   const { access } = appCopy[language];
-  const key = search.get("accesso") ?? search.get("negozio") ?? "";
-  const text =
-    access.signInNotices[search.get("accesso") ?? ""] ??
-    access.storeNotices[search.get("negozio") ?? ""] ??
-    (search.has("error") ? access.signInNotices["recupero-scaduto"] : null) ??
-    null;
-  return text
-    ? { text, tone: noticeTones[search.has("error") ? "recupero-scaduto" : key] ?? "info" }
-    : null;
+  const signIn = search.get("accesso");
+  const store = search.get("negozio");
+  const key = isSignInNotice(signIn) ? signIn : search.has("error") ? "recupero-scaduto" : null;
+  if (key) return signInNotice(key, language);
+  if (isStoreNotice(store))
+    return {
+      source: "negozio",
+      key: store,
+      text: access.storeNotices[store],
+      tone: storeTones[store],
+    };
+  return null;
 }

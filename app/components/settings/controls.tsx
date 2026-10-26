@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { useEffect, useId, useState } from "react";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { useHydrated } from "~/components/hydrated";
 import { StatusIcon } from "~/components/status";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
-import type { AppCopy } from "../../app-copy";
+import { useCopy } from "~/components/copy-context";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -54,7 +54,8 @@ export function useAutoSave<T extends string | boolean>(name: string, initial: T
  * Esito del salvataggio automatico in una riga sempre riservata: comparire e sparire non
  * sposta il testo intorno.
  */
-export function SaveStatus({ state, t }: { state: SaveState; t: AppCopy }) {
+export function SaveStatus({ state }: { state: SaveState }) {
+  const { t } = useCopy();
   return (
     <span
       role="status"
@@ -79,14 +80,12 @@ export function AutoSwitch({
   label,
   description,
   initial,
-  t,
   disabled,
 }: {
   name: string;
   label: string;
   description?: string;
   initial: boolean;
-  t: AppCopy;
   disabled?: boolean;
 }) {
   const id = useId();
@@ -109,7 +108,7 @@ export function AutoSwitch({
         {description ? (
           <FieldDescription id={`${id}-description`}>{description}</FieldDescription>
         ) : null}
-        <SaveStatus state={state} t={t} />
+        <SaveStatus state={state} />
       </div>
     </Field>
   );
@@ -120,14 +119,12 @@ export function AutoRadio({
   legend,
   options,
   initial,
-  t,
   disabled,
 }: {
   name: string;
   legend: string;
   options: Array<{ value: string; label: string }>;
   initial: string;
-  t: AppCopy;
   disabled?: boolean;
 }) {
   const [value, setValue, state] = useAutoSave(name, initial);
@@ -146,7 +143,7 @@ export function AutoRadio({
           </RadioOption>
         ))}
       </RadioGroup>
-      <SaveStatus state={state} t={t} />
+      <SaveStatus state={state} />
     </FieldSet>
   );
 }
@@ -176,16 +173,26 @@ export function RadioOption({
 export function CheckboxOption({
   name,
   defaultChecked,
+  checked,
+  onCheckedChange,
   children,
 }: {
   name?: string;
   defaultChecked?: boolean;
+  checked?: boolean;
+  onCheckedChange?: (checked: boolean) => void;
   children: React.ReactNode;
 }) {
   const id = useId();
   return (
     <FieldLabel id={id} className="font-normal">
-      <Checkbox name={name} defaultChecked={defaultChecked} aria-labelledby={id} />
+      <Checkbox
+        name={name}
+        defaultChecked={defaultChecked}
+        checked={checked}
+        onCheckedChange={onCheckedChange}
+        aria-labelledby={id}
+      />
       {children}
     </FieldLabel>
   );

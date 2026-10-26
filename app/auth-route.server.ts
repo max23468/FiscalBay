@@ -10,9 +10,9 @@ import {
   recentSignIn,
   type AuthSession,
 } from "./domain/sessions.server";
+import { completeStoreLink } from "./domain/store-link.server";
 import {
   claimStoreLinkSession,
-  completeStoreLink,
   recordStoreLinkOutcome,
   type StoreLinkOutcome,
 } from "./integrations/ebay/store-link.server";
@@ -106,13 +106,13 @@ const addressLimits = [
  * restituisce i secondi di attesa oltre il limite.
  */
 async function countAttempt(
-  environment: Env,
+  env: Env,
   key: string,
   rule: { window: number; max: number },
   now: number,
 ): Promise<number | null> {
   const windowMs = rule.window * 1000;
-  const row = await environment.DB.prepare(
+  const row = await env.DB.prepare(
     `INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest") VALUES (?1, ?2, 1, ?3)
      ON CONFLICT ("key") DO UPDATE SET
        "count" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN 1 ELSE "count" + 1 END,
@@ -148,8 +148,8 @@ async function addressKey(request: Request): Promise<string | null> {
  * limite. Attivo sui domini HTTPS, dove Cloudflare fornisce l'IP del client; il limite interno
  * di Better Auth resta spento (vedi auth.server.ts).
  */
-async function attemptWait(request: Request, environment: Env): Promise<number | null> {
-  if (request.method !== "POST" || !environment.APP_ORIGIN.startsWith("https:")) return null;
+async function attemptWait(request: Request, env: Env): Promise<number | null> {
+  if (request.method !== "POST" || !env.APP_ORIGIN.startsWith("https:")) return null;
   const path = new URL(request.url).pathname.replace(/^\/api\/auth/u, "");
   const rule = attemptLimits.find(({ paths }) => paths.test(path));
   const ip = request.headers.get("cf-connecting-ip");
@@ -159,27 +159,27 @@ async function attemptWait(request: Request, environment: Env): Promise<number |
   // Pulizia occasionale delle finestre chiuse da oltre un'ora, fuori dal percorso della risposta.
   if (Math.random() < 0.02) {
     waitUntil(
-      environment.DB.prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?')
+      env.DB.prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?')
         .bind(now - 3_600_000)
         .run(),
     );
   }
-  const wait = await countAttempt(environment, `${clientKey(ip)}|${path}`, rule, now);
+  const wait = await countAttempt(env, `${clientKey(ip)}|${path}`, rule, now);
   if (wait !== null) return wait;
   const addressRule = addressLimits.find(({ paths }) => paths.test(path));
   const address = addressRule ? await addressKey(request) : null;
   return address && addressRule
-    ? countAttempt(environment, `${address}|${path.replace(/\/$/u, "")}`, addressRule, now)
+    ? countAttempt(env, `${address}|${path.replace(/\/$/u, "")}`, addressRule, now)
     : null;
 }
 
-async function authResponse(request: Request, environment: Env): Promise<Response> {
+async function authResponse(request: Request, env: Env): Promise<Response> {
   const pathname = new URL(request.url).pathname;
   let emailChange: { userId: string; email: string; newEmail: string } | null = null;
   if (pathname === linkSocialPath) {
     // Un nuovo metodo si collega solo da una sessione verificata e sempre con il consenso del
     // provider: il ramo `idToken` di Better Auth creerebbe l'account senza validateUserInfo.
-    const session = await readSession(environment, request);
+    const session = await readSession(env, request);
     if (!session) return new Response(null, { status: 401 });
     // Come le altre modifiche critiche, anche chiamata direttamente: serve un accesso recente.
     if (!session.user.emailVerified || !recentSignIn(session as AuthSession)) {
@@ -194,7 +194,7 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     }
   }
   if (pathname === changeEmailPath) {
-    const session = await readSession(environment, request);
+    const session = await readSession(env, request);
     if (session && !recentSignIn(session as AuthSession)) {
       return new Response(null, { status: 403 });
     }
@@ -217,9 +217,9 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
   // Utente che registra una passkey, per avvisarlo quando la registrazione riesce.
   let enrollingUserId: string | null = null;
   if (passkeyEnrollmentPaths.has(pathname)) {
-    const session = await readSession(environment, request);
+    const session = await readSession(env, request);
     if (!session) return new Response(null, { status: 401 });
-    const status = await registrationStatus(environment.DB, session.user.id);
+    const status = await registrationStatus(env.DB, session.user.id);
     if (!session.user.emailVerified || !status.profile || !status.termsAccepted) {
       return new Response(null, { status: 403 });
     }
@@ -243,44 +243,39 @@ async function authResponse(request: Request, environment: Env): Promise<Respons
     }
     enrollingUserId = session.user.id;
   }
-  const wait = await attemptWait(request, environment);
+  const wait = await attemptWait(request, env);
   if (wait !== null) {
     return Response.json(
       { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." },
       { status: 429, headers: { "retry-after": String(wait), "cache-control": "no-store" } },
     );
   }
-  const response = await createAuth(environment).handler(request);
+  const response = await createAuth(env).handler(request);
   if (response.ok && emailChange) {
-    await recordEmailChange(
-      environment.DB,
-      emailChange.userId,
-      emailChange.email,
-      emailChange.newEmail,
-    );
+    await recordEmailChange(env.DB, emailChange.userId, emailChange.email, emailChange.newEmail);
   }
   if (response.status >= 500) logFailure({ request, code: "INTERNAL_ERROR", operation: "route" });
   if (pathname === passkeyRegistrationPath && response.ok && enrollingUserId) {
-    notifySecurityEvent(environment, enrollingUserId, { kind: "passkey-added" });
+    notifySecurityEvent(env, enrollingUserId, { kind: "passkey-added" });
   }
   return response;
 }
 
 async function handleEbayCallback(
   request: Request,
-  environment: Env,
+  env: Env,
   fetcher: typeof fetch,
 ): Promise<Response> {
   if (!validEbayCallback(request)) {
-    return noStore(Response.redirect(new URL("/auth/error", environment.APP_ORIGIN), 303));
+    return noStore(Response.redirect(new URL("/auth/error", env.APP_ORIGIN), 303));
   }
   // Il RuName ha un solo callback: lo state distingue il collegamento negozio dal login eBay.
   const search = new URL(request.url).searchParams;
   const state = search.get("state")!;
-  const link = await claimStoreLinkSession(environment.DB, state);
-  if (!link) return noStore(await authResponse(request, environment));
+  const link = await claimStoreLinkSession(env.DB, state);
+  if (!link) return noStore(await authResponse(request, env));
 
-  const session = await readSession(environment, request);
+  const session = await readSession(env, request);
   const sessionUserId = session?.user.id ?? null;
   let outcome: StoreLinkOutcome | null;
   if (link.kind === "duplicate") {
@@ -289,7 +284,7 @@ async function handleEbayCallback(
     outcome = sessionUserId === link.userId ? link.outcome : "errore";
   } else {
     outcome = await completeStoreLink({
-      environment,
+      env,
       link,
       sessionUserId,
       search,
@@ -299,7 +294,7 @@ async function handleEbayCallback(
       logFailure({ request, error, operation: "store_link" });
       return "errore" as const;
     });
-    await recordStoreLinkOutcome(environment.DB, state, outcome);
+    await recordStoreLinkOutcome(env.DB, state, outcome);
   }
   // Lo state comincia con la lingua e, se il collegamento parte da Negozi, con «-negozi».
   const [language, place] = state.split("_", 1)[0]!.split("-");
@@ -310,18 +305,18 @@ async function handleEbayCallback(
   // Negozi elenca tutti gli ambienti; gli Ordini mostrano quello del negozio collegato.
   if (link.ebayEnvironment === "sandbox" && place !== "negozi") query.set("environment", "sandbox");
   const destination = query.size > 0 ? `${home}?${query}` : home;
-  return noStore(Response.redirect(new URL(destination, environment.APP_ORIGIN), 303));
+  return noStore(Response.redirect(new URL(destination, env.APP_ORIGIN), 303));
 }
 
 export function handleAuthRequest(
   request: Request,
-  environment: Env,
+  env: Env,
   fetcher: typeof fetch = fetch,
 ): Promise<Response> | Response {
   const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
   if (closedAuthPaths.has(pathname)) return new Response(null, { status: 404 });
-  if (pathname !== ebayCallbackPath) return authResponse(request, environment);
-  return handleEbayCallback(request, environment, fetcher);
+  if (pathname !== ebayCallbackPath) return authResponse(request, env);
+  return handleEbayCallback(request, env, fetcher);
 }
 
 const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "cf-connecting-ip"];
@@ -331,7 +326,7 @@ const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "
  * tentativi delle chiamate dirette alle route Auth.
  */
 export async function forwardToAuth(
-  environment: Env,
+  env: Env,
   request: Request,
   path: string,
   body: Record<string, unknown> = {},
@@ -343,12 +338,12 @@ export async function forwardToAuth(
   }
   tracePhase(request, "auth-forward");
   const response = await authResponse(
-    new Request(new URL(`/api/auth${path}`, environment.APP_ORIGIN), {
+    new Request(new URL(`/api/auth${path}`, env.APP_ORIGIN), {
       method: "POST",
       headers,
       body: JSON.stringify(body),
     }),
-    environment,
+    env,
   );
   tracePhase(request, "auth-response");
   return response;

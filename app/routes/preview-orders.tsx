@@ -3,18 +3,19 @@ import {
   data,
   isRouteErrorResponse,
   redirect,
-  useOutletContext,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
+import { remainingUnlocks } from "~/components/orders/labels";
+import { useLinks } from "~/components/copy-context";
 import { appHref } from "../app-links";
 import { historyWindowDays } from "../domain/history-window.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { defaultTemplate } from "../preferences";
-import { rememberedStore, snapshotOnlyAdded } from "../orders/order-list";
+import { rememberedStore, revalidateUnlessSnapshot } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
 import {
@@ -23,7 +24,6 @@ import {
   simulateAction,
   writePreviewState,
 } from "../preview/state.server";
-import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-orders";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -95,12 +95,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 /** L'istantanea aggiunta all'indirizzo è quella della risposta già mostrata. */
-export function shouldRevalidate({
-  currentUrl,
-  nextUrl,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessSnapshot(args);
 }
 
 /**
@@ -118,8 +114,7 @@ export async function action({ request }: Route.ActionArgs) {
         .filter(Boolean),
     ),
   ];
-  const quota = scenario.account.quota;
-  const remaining = quota ? quota.limit - quota.used : null;
+  const remaining = remainingUnlocks(scenario.account);
   if (ids.length === 0 || ids.some((id) => !scenario.lockedValues[id])) {
     return data<UnlockResult>({ unlocked: [], remaining, error: true }, { status: 400 });
   }
@@ -152,16 +147,13 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function PreviewOrders({ loaderData }: Route.ComponentProps) {
-  const { t, links } = useOutletContext<PreviewContext>();
-  return (
-    <OrdersPage data={loaderData} t={t} links={links} unlockAction={appHref(links, "ordini")} />
-  );
+  const { links } = useLinks();
+  return <OrdersPage data={loaderData} unlockAction={appHref(links, "ordini")} />;
 }
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const { t, links } = useOutletContext<PreviewContext>();
-  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState t={t} />;
+  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState />;
   if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
-  return <NotFoundState kind="order" t={t} links={links} />;
+  return <NotFoundState kind="order" />;
 }

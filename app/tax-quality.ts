@@ -42,6 +42,19 @@ export function taxComparisonKey(tax: {
   return JSON.stringify([kind === "OTHER" ? tax.type : kind, tax.issuingCountry, value]);
 }
 
+/**
+ * Identità del dato fiscale del buyer fra fonti e osservazioni: CF e Partita IVA italiani con
+ * Paese assente o IT sono lo stesso dato, perché le fonti adottate forniscono soltanto
+ * identificativi del buyer, mai del seller o di eBay.
+ */
+export function buyerTaxKey(tax: { type: string; issuingCountry: string | null; value: string }) {
+  return taxComparisonKey(
+    taxIdentifierType(tax.type, tax.issuingCountry) === "OTHER"
+      ? tax
+      : { ...tax, issuingCountry: "IT" },
+  );
+}
+
 const oddValues = [
   1, 0, 5, 7, 9, 13, 15, 17, 19, 21, 2, 4, 18, 20, 11, 3, 6, 8, 12, 14, 16, 10, 22, 25, 24, 23,
 ];

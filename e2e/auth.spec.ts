@@ -3,8 +3,6 @@ import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { useLocalAccount, localPassword } from "./local-account";
 import { testAccount } from "./test-account";
 
-test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
-
 test.describe("area reale", () => {
   test.skip(
     Boolean(process.env.E2E_BASE_URL),
@@ -221,8 +219,17 @@ test.describe("area reale", () => {
           page.getByRole("alert").filter({ hasText: "non supporta le passkey" }),
         ).toBeVisible();
         const form = page.getByRole("tabpanel", { name: "Accedi", exact: true });
-        await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
-        await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
+        const email = form.getByRole("textbox", { name: "Email", exact: true });
+        const password = form.getByRole("textbox", { name: "Password", exact: true });
+        // Una password errata resta sul modulo con l'email già scritta e la password vuota.
+        await email.fill(testAccount.email);
+        await password.fill(`${localPassword}-errata`);
+        await form.getByRole("button", { name: "Accedi", exact: true }).click();
+        await expect(page.getByText("Controlla email e password.")).toBeVisible();
+        await expect(page).toHaveURL(/\/accesso$/);
+        await expect(email).toHaveValue(testAccount.email);
+        await expect(password).toHaveValue("");
+        await password.fill(localPassword);
         await form.getByRole("button", { name: "Accedi", exact: true }).click();
         await expect(page).toHaveURL(/\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
         await page.goto("/app/impostazioni/sicurezza");
@@ -439,7 +446,8 @@ test.describe("impostazioni", () => {
       await expect(
         page.getByRole("button", { name: "Cambia password", exact: true }),
       ).toBeVisible();
-      await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/);
+      // Come nell'area reale l'esito torna nell'indirizzo della Sicurezza.
+      await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza\?accesso=password-link$/);
     } finally {
       await context.close();
     }
@@ -468,10 +476,23 @@ test.describe("impostazioni", () => {
       const cancelText = it ? "Annulla" : "Cancel";
       const methods = page.locator('section[aria-labelledby="security-methods"]');
       await expect(methods.getByRole("button", { name: removeText, exact: true })).toHaveCount(3);
-      for (const [label, intent, field, value] of [
-        [it ? "Email e password" : "Email and password", "rimuovi-metodo", "metodo", "password"],
-        ["Google", "rimuovi-metodo", "metodo", "google"],
-        ["Passkey", "passkey-remove", "id", "preview-passkey"],
+      const removed = it ? "Metodo di accesso rimosso." : "Sign-in method removed.";
+      for (const [label, intent, field, value, notice] of [
+        [
+          it ? "Email e password" : "Email and password",
+          "rimuovi-metodo",
+          "metodo",
+          "password",
+          removed,
+        ],
+        ["Google", "rimuovi-metodo", "metodo", "google", removed],
+        [
+          "Passkey",
+          "passkey-remove",
+          "id",
+          "preview-passkey",
+          it ? "Passkey rimossa." : "Passkey removed.",
+        ],
       ]) {
         const row = methods.getByRole("group", { name: new RegExp(`^${label}`) });
         const trigger = row.getByRole("button", { name: removeText, exact: true });
@@ -487,16 +508,13 @@ test.describe("impostazioni", () => {
         await trigger.click();
         await dialog.getByRole("button", { name: removeText, exact: true }).click();
         await expect.poll(() => posts.length).toBe(before + 1);
-        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/sicurezza.data`);
+        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/sicurezza`);
         expect(posts.at(-1)!.fields.get("intent")).toBe(intent);
         expect(posts.at(-1)!.fields.get(field)).toBe(value);
         await expect(dialog).toHaveCount(0);
-        await expect(
-          page.getByText(
-            it ? "Anteprima: l’azione è simulata." : "Preview: this action is simulated.",
-            { exact: true },
-          ),
-        ).toBeVisible();
+        await expect(page.getByText(notice!, { exact: true })).toBeVisible();
+        // Dopo l'idratazione l'esito esce dall'indirizzo e i pulsanti rispondono di nuovo.
+        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/sicurezza$`));
       }
       const before = posts.length;
       await page

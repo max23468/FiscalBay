@@ -33,7 +33,7 @@ export default function Legal({ loaderData }: Route.ComponentProps) {
       tone="neutral"
       title={t[document]}
       homeHref={localizedPath(language)}
-      footer={<SiteFooter language={language} />}
+      footer={<SiteFooter />}
     >
       <p className="text-sm text-muted-foreground">{t.version(version)}</p>
       <p className="leading-relaxed text-pretty text-muted-foreground">{t.draft}</p>

@@ -1,9 +1,9 @@
 import { cn } from "cn";
 import { ClipboardList, Copy, KeyRound, LogOut, Store } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "react-router";
 
-import { AccessNotice, VerifyEmail } from "~/components/account";
+import { AccessNotice, VerifyEmail } from "~/components/access-notice";
 import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
@@ -21,6 +21,7 @@ import {
 } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
+import { useCopy } from "~/components/copy-context";
 import { accessPath, ordersPath, securityReturnPath } from "../app-links";
 import { accessAction, accessLoader } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
@@ -50,55 +51,24 @@ export function action({ request }: Route.ActionArgs) {
 
 type AccessCopy = (typeof appCopy)[Language]["access"];
 
-/** Campi da ricompilare dopo un errore; la password non viene mai conservata. */
+/** Campi inviati da ricompilare dopo un errore, senza la password. */
 type Remembered = { tab: string; values: Record<string, string> };
 
-const rememberKey = "fiscalbay:accesso";
-
-/** Salva i campi del form inviato, per ricompilarli se il server segnala un errore. */
-function remember(tab: string) {
-  return (event: React.FormEvent<HTMLFormElement>) => {
-    const values: Record<string, string> = {};
-    for (const [name, value] of new FormData(event.currentTarget)) {
-      if (name !== "password" && typeof value === "string") values[name] = value;
-    }
-    try {
-      sessionStorage.setItem(rememberKey, JSON.stringify({ tab, values }));
-    } catch {
-      // Senza memoria di sessione il form resta vuoto dopo l'errore.
-    }
-  };
-}
-
-/** Dopo un avviso di errore ripropone i valori inviati; in ogni caso li dimentica. */
-function useRemembered(error: boolean) {
-  const [remembered, setRemembered] = useState<Remembered | null>(null);
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem(rememberKey);
-      sessionStorage.removeItem(rememberKey);
-      if (error && saved) setRemembered(JSON.parse(saved) as Remembered);
-    } catch {
-      // Valori non leggibili: il form resta vuoto.
-    }
-  }, [error]);
-  return remembered;
+/** Indirizzo dei moduli: conserva il ritorno alla Sicurezza anche quando l'errore resta qui. */
+function useAccessAction() {
+  const { language } = useCopy();
+  const { search } = useLocation();
+  const returnTo = securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
+  const path = localizedPath(language, "/accesso");
+  return returnTo ? `${path}?${new URLSearchParams({ returnTo })}` : path;
 }
 
 const rise = "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]";
 
 /** Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. */
-function AgreementFields({
-  t,
-  v,
-  language,
-  values,
-}: {
-  t: AccessCopy;
-  v: FieldErrors;
-  language: Language;
-  values?: Record<string, string>;
-}) {
+function AgreementFields({ v, values }: { v: FieldErrors; values?: Record<string, string> }) {
+  const { t: copy, language } = useCopy();
+  const t = copy.access;
   return (
     <div className="grid gap-4 rounded-lg bg-muted/50 p-3">
       <FieldLabel className="font-normal" required>
@@ -155,16 +125,20 @@ function EbayMark() {
   );
 }
 
-function ReturnToField({ language }: { language: Language }) {
+function ReturnToField() {
+  const { language } = useCopy();
   const { search } = useLocation();
   const target = securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
   return target ? <input type="hidden" name="returnTo" value={target} /> : null;
 }
 
-function SocialForms({ t, language }: { t: AccessCopy; language: Language }) {
+function SocialForms() {
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
+  const t = copy.access;
   return (
-    <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-2">
-      <ReturnToField language={language} />
+    <form method="post" action={formAction} className="grid gap-2">
+      <ReturnToField />
       <Button type="submit" variant="outline" name="intent" value="google" className="w-full">
         <GoogleMark />
         {t.google}
@@ -177,7 +151,9 @@ function SocialForms({ t, language }: { t: AccessCopy; language: Language }) {
   );
 }
 
-function PasskeyButton({ t, language }: { t: AccessCopy; language: Language }) {
+function PasskeyButton() {
+  const { t: copy, language } = useCopy();
+  const t = copy.access;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<PasskeyFailure | null>(null);
   const { search } = useLocation();
@@ -240,7 +216,8 @@ function GoogleMark() {
   );
 }
 
-function OrSeparator({ t }: { t: AccessCopy }) {
+function OrSeparator() {
+  const t = useCopy().t.access;
   return (
     <FieldSeparator className="*:data-[slot=field-separator-content]:bg-card">
       {t.or}
@@ -248,22 +225,14 @@ function OrSeparator({ t }: { t: AccessCopy }) {
   );
 }
 
-function SignInAlternatives({
-  t,
-  language,
-  recovering,
-}: {
-  t: AccessCopy;
-  language: Language;
-  recovering: boolean;
-}) {
+function SignInAlternatives({ recovering }: { recovering: boolean }) {
   if (recovering) return null;
   return (
     <>
-      <OrSeparator t={t} />
+      <OrSeparator />
       <div className="grid gap-2">
-        <SocialForms t={t} language={language} />
-        <PasskeyButton t={t} language={language} />
+        <SocialForms />
+        <PasskeyButton />
       </div>
     </>
   );
@@ -271,26 +240,20 @@ function SignInAlternatives({
 
 /** Un solo form visibile evita che il browser compili i campi dell'altra scheda. */
 function AccessForms({
-  t,
-  language,
   remembered,
   initialTab,
   signUpBody,
 }: {
-  t: AccessCopy;
-  language: Language;
   remembered: Remembered | null;
   initialTab: string;
   signUpBody: string;
 }) {
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
+  const t = copy.access;
   const [tab, setTab] = useState(initialTab);
   const [recovering, setRecovering] = useState(false);
-  const [restored, setRestored] = useState<Remembered | null>(null);
-  if (remembered && remembered !== restored) {
-    setRestored(remembered);
-    setTab(remembered.tab);
-  }
-  const values = restored?.values;
+  const values = remembered?.values;
   const signIn = useFieldErrors(t.validation);
   const signUp = useFieldErrors(t.validation);
   return (
@@ -309,16 +272,13 @@ function AccessForms({
       <TabsContent value="accedi" keepMounted className={cn("grid gap-3", rise)}>
         {recovering ? <p className="text-muted-foreground">{t.passwordRecoveryBody}</p> : null}
         <form
-          key={restored ? "restored" : "empty"}
           method="post"
-          action={localizedPath(language, "/accesso")}
+          action={formAction}
           {...signIn.form}
-          onSubmit={(event) => {
-            if (signIn.check(event)) remember("accedi")(event);
-          }}
+          onSubmit={(event) => void signIn.check(event)}
         >
           <FieldGroup className="gap-3">
-            <ReturnToField language={language} />
+            <ReturnToField />
             <Field>
               <FieldLabel htmlFor="email" required>
                 {t.email}
@@ -328,7 +288,7 @@ function AccessForms({
                 name="email"
                 type="email"
                 autoComplete="username"
-                defaultValue={restored?.tab === "accedi" ? values?.email : undefined}
+                defaultValue={remembered?.tab === "accedi" ? values?.email : undefined}
                 required
                 {...signIn.control("email")}
               />
@@ -368,24 +328,20 @@ function AccessForms({
         >
           {recovering ? t.backToSignIn : t.passwordRecovery}
         </Button>
-        <SignInAlternatives t={t} language={language} recovering={recovering} />
+        <SignInAlternatives recovering={recovering} />
       </TabsContent>
       <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
         <p className="text-muted-foreground">{signUpBody}</p>
         <form
-          key={restored ? "restored" : "empty"}
           method="post"
-          action={localizedPath(language, "/accesso")}
+          action={formAction}
           {...signUp.form}
-          onSubmit={(event) => {
-            if (signUp.check(event)) remember("registrati")(event);
-          }}
+          onSubmit={(event) => void signUp.check(event)}
         >
           <FieldGroup>
             <ProfileFields
-              t={t}
               v={signUp}
-              values={restored?.tab === "registrati" ? values : undefined}
+              values={remembered?.tab === "registrati" ? values : undefined}
             />
             <Field>
               <FieldLabel htmlFor="signup-email" required>
@@ -396,7 +352,7 @@ function AccessForms({
                 name="email"
                 type="email"
                 autoComplete="email"
-                defaultValue={restored?.tab === "registrati" ? values?.email : undefined}
+                defaultValue={remembered?.tab === "registrati" ? values?.email : undefined}
                 required
                 {...signUp.control("email")}
               />
@@ -419,44 +375,37 @@ function AccessForms({
               {signUp.error("password")}
             </Field>
             <AgreementFields
-              t={t}
               v={signUp}
-              language={language}
-              values={restored?.tab === "registrati" ? values : undefined}
+              values={remembered?.tab === "registrati" ? values : undefined}
             />
             <Button type="submit" name="intent" value="registrati" className="w-full">
               {t.signUp}
             </Button>
           </FieldGroup>
         </form>
-        <OrSeparator t={t} />
-        <SocialForms t={t} language={language} />
+        <OrSeparator />
+        <SocialForms />
       </TabsContent>
     </Tabs>
   );
 }
 
-function ResetPassword({
-  t,
-  language,
-  token,
-}: {
-  t: AccessCopy;
-  language: Language;
-  token: string;
-}) {
+function ResetPassword({ token }: { token: string }) {
+  const { t: copy, language } = useCopy();
+  const formAction = useAccessAction();
+  const t = copy.access;
   const v = useFieldErrors(t.validation);
   return (
     <form
       method="post"
-      action={localizedPath(language, "/accesso")}
+      action={formAction}
       className="grid gap-4"
       {...v.form}
       onSubmit={(event) => void v.check(event)}
     >
       <h2 className="text-xl font-semibold">{t.passwordResetTitle}</h2>
       <input type="hidden" name="token" value={token} />
-      <ReturnToField language={language} />
+      <ReturnToField />
       <Field>
         <FieldLabel htmlFor="reset-password" required>
           {t.newPassword}
@@ -488,20 +437,19 @@ function ResetPassword({
 
 /** Passaggio per chi ha una sessione ma non ha ancora profilo o Termini correnti. */
 function CompleteRegistration({
-  t,
-  language,
   needsProfile,
   needsAgreement,
   suggestedName,
   remembered,
 }: {
-  t: AccessCopy;
-  language: Language;
   needsProfile: boolean;
   needsAgreement: boolean;
   suggestedName: { firstName: string; lastName: string };
   remembered: Remembered | null;
 }) {
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
+  const t = copy.access;
   const values = remembered?.tab === "completa" ? remembered.values : undefined;
   const v = useFieldErrors(t.validation);
   return (
@@ -510,22 +458,10 @@ function CompleteRegistration({
         <h2 className="text-xl font-semibold">{t.agreementTitle}</h2>
         <p className="text-sm text-muted-foreground">{t.agreementBody}</p>
       </div>
-      <form
-        key={values ? "restored" : "empty"}
-        method="post"
-        action={localizedPath(language, "/accesso")}
-        {...v.form}
-        onSubmit={(event) => {
-          if (v.check(event)) remember("completa")(event);
-        }}
-      >
+      <form method="post" action={formAction} {...v.form} onSubmit={(event) => void v.check(event)}>
         <FieldGroup>
-          {needsProfile ? (
-            <ProfileFields t={t} v={v} values={values} suggested={suggestedName} />
-          ) : null}
-          {needsAgreement ? (
-            <AgreementFields t={t} v={v} language={language} values={values} />
-          ) : null}
+          {needsProfile ? <ProfileFields v={v} values={values} suggested={suggestedName} /> : null}
+          {needsAgreement ? <AgreementFields v={v} values={values} /> : null}
           <Button type="submit" name="intent" value="completa" className="w-full">
             {t.agreementSubmit}
           </Button>
@@ -535,9 +471,12 @@ function CompleteRegistration({
   );
 }
 
-function SignOutForm({ t, language }: { t: AccessCopy; language: Language }) {
+function SignOutForm() {
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
+  const t = copy.access;
   return (
-    <form method="post" action={localizedPath(language, "/accesso")}>
+    <form method="post" action={formAction}>
       <Button type="submit" variant="outline" name="intent" value="esci">
         <LogOut aria-hidden="true" data-icon="inline-start" />
         {t.signOut}
@@ -553,7 +492,8 @@ const featureIcons = [
 ];
 
 /** Colonna del marchio: cosa fa FiscalBay, con i colori del logo. */
-function BrandPanel({ t }: { t: AccessCopy }) {
+function BrandPanel() {
+  const t = useCopy().t.access;
   return (
     <aside className="relative hidden overflow-hidden bg-brand-navy text-white lg:flex lg:flex-col lg:gap-12 lg:p-12 xl:p-16">
       {/* Righe della tessera del logo, grandi e sfumate, come fondo. */}
@@ -594,24 +534,18 @@ function BrandPanel({ t }: { t: AccessCopy }) {
   );
 }
 
-const errorTones = new Set(["danger", "warning"]);
-
 function AccessPanel({
   loaderData,
-  t,
-  language,
   remembered,
 }: {
   loaderData: Awaited<ReturnType<typeof loader>>;
-  t: AccessCopy;
-  language: Language;
   remembered: Remembered | null;
 }) {
+  const { t: copy } = useCopy();
+  const t = copy.access;
   if (loaderData.authenticated) {
     return (
       <CompleteRegistration
-        t={t}
-        language={language}
         needsProfile={loaderData.needsProfile}
         needsAgreement={loaderData.needsAgreement}
         suggestedName={loaderData.suggestedName}
@@ -620,14 +554,12 @@ function AccessPanel({
     );
   }
   if (loaderData.resetToken) {
-    return <ResetPassword t={t} language={language} token={loaderData.resetToken} />;
+    return <ResetPassword token={loaderData.resetToken} />;
   }
   return (
     <AccessForms
-      t={t}
-      language={language}
       remembered={remembered}
-      initialTab={loaderData.tab}
+      initialTab={remembered && remembered.tab !== "completa" ? remembered.tab : loaderData.tab}
       signUpBody={loaderData.registrationRestricted ? t.registrationRestricted : t.signUpBody}
     />
   );
@@ -639,13 +571,14 @@ function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: Access
 }
 
 /** Accesso, registrazione e completamento: marchio a sinistra, form a destra. */
-export default function SignIn({ loaderData }: Route.ComponentProps) {
-  const { language, notice } = loaderData;
+export default function SignIn({ loaderData, actionData }: Route.ComponentProps) {
+  const { language } = loaderData;
+  const notice = actionData?.notice ?? loaderData.notice;
+  const remembered = actionData?.remembered ?? null;
   const t = appCopy[language].access;
-  const remembered = useRemembered(notice !== null && errorTones.has(notice.tone));
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <BrandPanel t={t} />
+      <BrandPanel />
       <main className="flex flex-col px-4 py-4 sm:px-8 lg:px-12">
         <header className="flex items-center justify-between gap-4">
           <Logo className="h-7 w-auto lg:invisible" />
@@ -668,26 +601,17 @@ export default function SignIn({ loaderData }: Route.ComponentProps) {
             <p className="text-2xl font-semibold text-balance">{t.headline}</p>
           </div>
           <h1 className="sr-only">{accessHeading(loaderData, t)}</h1>
-          <AccessNotice language={language} notice={notice} />
+          <AccessNotice notice={notice} />
           {loaderData.authenticated ? (
-            <VerifyEmail
-              language={language}
-              email={loaderData.email}
-              verified={loaderData.emailVerified}
-            />
+            <VerifyEmail email={loaderData.email} verified={loaderData.emailVerified} />
           ) : null}
           <div className={cn("rounded-2xl border bg-card p-4 shadow-sm sm:p-5", rise)}>
             <p className="mb-3 text-sm text-muted-foreground">{t.requiredFields}</p>
-            <AccessPanel
-              loaderData={loaderData}
-              t={t}
-              language={language}
-              remembered={remembered}
-            />
+            <AccessPanel loaderData={loaderData} remembered={remembered} />
           </div>
-          {loaderData.authenticated ? <SignOutForm t={t} language={language} /> : null}
+          {loaderData.authenticated ? <SignOutForm /> : null}
         </div>
-        <SiteFooter language={language} className="w-full pb-2 sm:max-w-md" />
+        <SiteFooter className="w-full pb-2 sm:max-w-md" />
       </main>
     </div>
   );

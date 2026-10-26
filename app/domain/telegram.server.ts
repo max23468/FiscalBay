@@ -1,5 +1,5 @@
 import { activeEntitlementSql } from "./grants.server";
-import { storeNameSql } from "./store-state.server";
+import { planPausedStore, storeNameSql } from "./store-state.server";
 import {
   chatLabel,
   deepLink,
@@ -10,13 +10,16 @@ import {
 } from "../integrations/telegram.server";
 import { UpstreamError } from "../integrations/http.server";
 import { isProduction } from "../app-links";
-import { languages, localizedPath, type Language } from "../i18n";
+import { type Language, languages } from "../i18n";
 import { telegramDigestTimes, telegramLinkMinutes } from "../preferences";
 import type { TelegramView } from "../view-models";
+import { dayMilliseconds } from "../time";
+import { settingsUrl } from "./telegram-messages.server";
+import { telegramReplyCopy as replies } from "../copy/telegram";
 
 // Le richieste consumate restano un giorno oltre la scadenza: un nuovo tentativo della stessa
 // ricevuta riconosce ancora il proprio collegamento.
-const consumedRetention = 86_400_000;
+const consumedRetention = dayMilliseconds;
 
 type TelegramFilter = TelegramView["filter"];
 type TelegramMode = TelegramView["mode"];
@@ -27,6 +30,18 @@ const defaults = {
   mode: "each" as TelegramMode,
   digestTime: "18:00",
 };
+
+/**
+ * Preferenze della chat con i predefiniti dello schema per uno spazio senza riga, come
+ * `enabled`, `filter`, `mode`, `digestTime` e `timeZone`. Argomento: alias di
+ * `telegram_preferences`.
+ */
+export const telegramPreferencesSql = (preferences: string) =>
+  `COALESCE(${preferences}.enabled, 1) AS enabled,
+   COALESCE(${preferences}.filter, '${defaults.filter}') AS filter,
+   COALESCE(${preferences}.mode, '${defaults.mode}') AS mode,
+   COALESCE(${preferences}.digest_time, '${defaults.digestTime}') AS digestTime,
+   COALESCE(${preferences}.time_zone, 'Europe/Rome') AS timeZone`;
 
 /**
  * Nuovo deep link per lo spazio dell'utente, legato alla sessione che lo chiede. Sostituisce
@@ -67,32 +82,6 @@ export async function startTelegramLink(
       ),
   ]);
   return { url: deepLink(env, token) };
-}
-
-const settingsPath = "/app/impostazioni/notifiche";
-
-/** Risposte del bot, in testo semplice. Senza una richiesta riconosciuta, in entrambe le lingue. */
-const replies = {
-  it: {
-    linked:
-      "Chat collegata a FiscalBay. Qui riceverai le notifiche degli ordini secondo le preferenze delle Impostazioni.",
-    invalid: (url: string) =>
-      `Questo link non è più valido. Creane uno nuovo da FiscalBay, in Impostazioni › Notifiche:\n${url}`,
-    help: (url: string) =>
-      `Per ricevere qui le notifiche degli ordini, collega questa chat da FiscalBay, in Impostazioni › Notifiche:\n${url}`,
-  },
-  en: {
-    linked:
-      "Chat linked to FiscalBay. Order notifications will arrive here according to your Settings.",
-    invalid: (url: string) =>
-      `This link is no longer valid. Create a new one in FiscalBay, under Settings › Notifications:\n${url}`,
-    help: (url: string) =>
-      `To receive order notifications here, link this chat in FiscalBay, under Settings › Notifications:\n${url}`,
-  },
-} satisfies Record<Language, unknown>;
-
-function settingsUrl(env: Env, language: Language) {
-  return `${new URL(env.APP_ORIGIN).origin}${localizedPath(language, settingsPath)}`;
 }
 
 /**
@@ -242,8 +231,7 @@ export async function telegramSettings(
       .bind(userId),
     db
       .prepare(`SELECT s.id, ${storeNameSql("s")} AS name, COALESCE(sp.enabled, 1) AS enabled,
-        EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id AND p.reason = 'plan')
-          AS paused
+        ${planPausedStore("s.id")} AS paused
       FROM workspace_members wm JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
       LEFT JOIN telegram_store_preferences sp ON sp.store_id = s.id
       WHERE wm.user_id = ? AND s.data_deleted_at IS NULL ORDER BY s.linked_at, s.id`)
@@ -423,10 +411,7 @@ export async function telegramRecipient(
   now = new Date(),
 ): Promise<TelegramRecipient | null> {
   const row = await db
-    .prepare(`SELECT l.id AS linkId, l.chat_id AS chatId, l.language,
-      COALESCE(p.filter, 'fiscal') AS filter, COALESCE(p.mode, 'each') AS mode,
-      COALESCE(p.digest_time, '18:00') AS digestTime,
-      COALESCE(p.time_zone, 'Europe/Rome') AS timeZone
+    .prepare(`SELECT l.id AS linkId, l.chat_id AS chatId, l.language, ${telegramPreferencesSql("p")}
     FROM ebay_stores s
     JOIN telegram_links l ON l.workspace_id = s.workspace_id
     LEFT JOIN telegram_preferences p ON p.workspace_id = s.workspace_id

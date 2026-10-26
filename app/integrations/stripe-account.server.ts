@@ -49,6 +49,7 @@ export function stripePortalConfiguration(origin: string) {
       privacy_policy_url: `${origin}/privacy`,
       terms_of_service_url: `${origin}/termini`,
     },
+    // Percorso letterale: `scripts/stripe-account.mjs` carica questo modulo con Node, senza bundler.
     default_return_url: `${origin}/app/impostazioni/piano`,
     features: {
       customer_update: { enabled: true, allowed_updates: ["name", "email", "address"] },

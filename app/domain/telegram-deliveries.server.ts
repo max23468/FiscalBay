@@ -1,8 +1,8 @@
 import { activeEntitlementSql } from "./grants.server";
 import { lockMilliseconds } from "./order-acquisition.server";
 import { listVisibleOrders } from "./orders.server";
-import { consultableStore, storeNameSql } from "./store-state.server";
-import { telegramRecipient, telegramRecipientSql } from "./telegram.server";
+import { consultableStore, listedOrder, storeLabelSql } from "./store-state.server";
+import { telegramPreferencesSql, telegramRecipient, telegramRecipientSql } from "./telegram.server";
 import {
   digestMessage,
   emptyFiscalKey,
@@ -20,6 +20,8 @@ import { UpstreamError } from "../integrations/http.server";
 import { sendMessage, telegramConfigured, type BotMessage } from "../integrations/telegram.server";
 import type { Language } from "../i18n";
 import type { EbayEnvironment } from "../view-models";
+import { inSequence } from "../sequence";
+import { dayMilliseconds } from "../time";
 
 /**
  * Consegne Telegram degli ordini, in tre passi che si possono interrompere e riprendere:
@@ -74,11 +76,9 @@ export async function deliverTelegram(
   // Senza Premium le consegne in attesa si chiudono: un rinnovo non porta l'arretrato.
   if (!scope.storeId) await closeUncovered(env.DB, now);
   const { results } = await env.DB.prepare(`SELECT l.workspace_id AS workspaceId, l.id AS linkId,
-      l.language, COALESCE(p.enabled, 1) AS enabled, COALESCE(p.filter, 'fiscal') AS filter,
-      COALESCE(p.mode, 'each') AS mode, COALESCE(p.digest_time, '18:00') AS digestTime,
-      COALESCE(p.time_zone, 'Europe/Rome') AS timeZone,
-      (SELECT wm.user_id FROM workspace_members wm WHERE wm.workspace_id = l.workspace_id
-        ORDER BY wm.role = 'owner' DESC, wm.user_id LIMIT 1) AS userId
+      l.language, ${telegramPreferencesSql("p")},
+      (SELECT wm.user_id FROM workspace_members wm WHERE wm.workspace_id = l.workspace_id)
+        AS userId
     FROM telegram_links l LEFT JOIN telegram_preferences p ON p.workspace_id = l.workspace_id
     WHERE (?1 IS NULL OR l.workspace_id = (SELECT workspace_id FROM ebay_stores WHERE id = ?1))
       AND l.delivery_failure IS NOT 'blocked' AND ${activeEntitlementSql("l.workspace_id", "?2")}
@@ -87,7 +87,7 @@ export async function deliverTelegram(
     .all<Workspace>();
   // Uno spazio alla volta. Il bot non più valido ferma l'esecuzione: nessun altro spazio può
   // ricevere messaggi.
-  await inSequence(results, async (workspace) => {
+  await untilStopped(results, async (workspace) => {
     try {
       if (workspace.enabled === 1 && workspace.userId) {
         await prepareOrderEvents(env.DB, workspace, now);
@@ -105,7 +105,7 @@ export async function deliverTelegram(
 type Next = "continue" | "wait" | "stop";
 
 /** Un passo alla volta, nell'ordine dato, finché un passo non chiede di fermarsi. */
-function inSequence<T>(items: readonly T[], step: (item: T) => Promise<Next>): Promise<Next> {
+function untilStopped<T>(items: readonly T[], step: (item: T) => Promise<Next>): Promise<Next> {
   return items.reduce<Promise<Next>>(
     (previous, item) => previous.then((next) => (next === "continue" ? step(item) : next)),
     Promise.resolve("continue"),
@@ -139,7 +139,7 @@ type Candidate = {
  * ordine senza variazioni non prepara eventi, perché l'impronta resta la stessa.
  */
 const writtenSince = (column: string) =>
-  `julianday(${column}) > julianday(n.evaluated_at) - ${lockMilliseconds / 86_400_000}`;
+  `julianday(${column}) > julianday(n.evaluated_at) - ${lockMilliseconds / dayMilliseconds}`;
 const changedSinceSql = `(EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
       WHERE (original.id = o.id OR original.merged_into = o.id)
         AND (${writtenSince("t.observed_at")} OR ${writtenSince("t.removed_at")}))
@@ -393,7 +393,7 @@ async function sendPending(
       ORDER BY created_at, id LIMIT ?3`)
     .bind(workspace.workspaceId, at, deliveriesPerRun)
     .all<Delivery>();
-  const next = await inSequence(results, (delivery) =>
+  const next = await untilStopped(results, (delivery) =>
     sendOne(env, workspace, delivery, fetcher, now),
   );
   // L'attesa di una chat non ferma gli altri spazi.
@@ -421,11 +421,7 @@ async function sendOne(
     .bind(delivery.id, lease, new Date(now.getTime() + leaseMilliseconds).toISOString(), at)
     .first<{ parts_sent: number }>();
   if (!claimed) return "continue";
-  const release = (assignments: string, ...values: unknown[]) =>
-    db
-      .prepare(`UPDATE telegram_deliveries SET ${assignments}, lease = NULL, locked_until = NULL
-        WHERE id = ?1 AND lease = ?2`)
-      .bind(delivery.id, lease, ...values);
+  const release = releaser(db, delivery.id, lease);
   try {
     const outcome = await deliver(
       env,
@@ -459,6 +455,15 @@ async function sendOne(
   return "continue";
 }
 
+/** Fine del turno di una consegna, soltanto se il lease è ancora quello preso. */
+function releaser(db: D1Database, id: string, lease: string) {
+  return (assignments: string, ...values: unknown[]) =>
+    db
+      .prepare(`UPDATE telegram_deliveries SET ${assignments}, lease = NULL, locked_until = NULL
+        WHERE id = ?1 AND lease = ?2`)
+      .bind(id, lease, ...values);
+}
+
 /**
  * Esito di un errore della Bot API: `skip` passa alla consegna successiva, `wait` ferma la chat
  * fino al prossimo turno, `stop` ferma l'esecuzione.
@@ -471,11 +476,7 @@ async function recordFailure(
   now: Date,
 ): Promise<"skip" | "wait" | "stop"> {
   const at = now.toISOString();
-  const release = (assignments: string, ...values: unknown[]) =>
-    db
-      .prepare(`UPDATE telegram_deliveries SET ${assignments}, lease = NULL, locked_until = NULL
-        WHERE id = ?1 AND lease = ?2`)
-      .bind(delivery.id, lease, ...values);
+  const release = releaser(db, delivery.id, lease);
   const upstream = error instanceof UpstreamError ? error : null;
   if (upstream?.failure === "rate_limited") {
     const seconds = upstream.details.retryAfter ?? 30;
@@ -561,19 +562,14 @@ async function deliver(
     .first<{ chat_id: string }>();
   if (!recipient) return "dropped";
   // Le parti nell'ordine del testo, una alla volta.
-  await messages.slice(from).reduce<Promise<unknown>>(
-    (previous, message, index) =>
-      previous
-        .then(() => sendMessage(env, recipient.chat_id, message, fetcher))
-        .then(() =>
-          env.DB.prepare(
-            "UPDATE telegram_deliveries SET parts_sent = ?3 WHERE id = ?1 AND lease = ?2",
-          )
-            .bind(delivery.id, lease, from + index + 1)
-            .run(),
-        ),
-    Promise.resolve(),
-  );
+  await inSequence(messages.slice(from), async (message, index) => {
+    await sendMessage(env, recipient.chat_id, message, fetcher);
+    await env.DB.prepare(
+      "UPDATE telegram_deliveries SET parts_sent = ?3 WHERE id = ?1 AND lease = ?2",
+    )
+      .bind(delivery.id, lease, from + index + 1)
+      .run();
+  });
   // Stryker disable next-line StringLiteral: l'invio riuscito è l'esito predefinito, diverso da «waiting» e «dropped».
   return "sent";
 }
@@ -638,14 +634,11 @@ async function compose(
   if (!recipient) return "dropped";
   if (delivery.kind === "import") {
     const summary = await db
-      .prepare(`SELECT s.id AS storeId, ${storeNameSql("s")} ||
-          CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS storeName,
+      .prepare(`SELECT s.id AS storeId, ${storeLabelSql("s")} AS storeName,
           s.ebay_environment AS environment, ss.history_from AS "from", ss.history_until AS until,
-          (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
-            AND o.is_provisional = 0 AND o.retention_until > ?2
+          (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND ${listedOrder("o", "?2")}
             AND o.creation_time >= ss.history_from AND o.creation_time < ss.history_until) AS orders,
-          (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND o.merged_into IS NULL
-            AND o.is_provisional = 0 AND o.retention_until > ?2
+          (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND ${listedOrder("o", "?2")}
             AND o.creation_time >= ss.history_from AND o.creation_time < ss.history_until
             AND EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
               WHERE (original.id = o.id OR original.merged_into = o.id) AND t.removed_at IS NULL)) AS fiscal
@@ -679,7 +672,7 @@ export function purgeTelegramDeliveries(db: D1Database, now: Date) {
     .prepare(`DELETE FROM telegram_deliveries WHERE created_at <= ?1
       AND (sent_at IS NOT NULL OR failed_at IS NOT NULL OR created_at <= ?2)`)
     .bind(
-      new Date(now.getTime() - 7 * 86_400_000).toISOString(),
-      new Date(now.getTime() - 30 * 86_400_000).toISOString(),
+      new Date(now.getTime() - 7 * dayMilliseconds).toISOString(),
+      new Date(now.getTime() - 30 * dayMilliseconds).toISOString(),
     );
 }

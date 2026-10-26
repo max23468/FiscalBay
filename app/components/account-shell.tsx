@@ -5,6 +5,7 @@ import { AppShell } from "~/components/app-shell";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import { OrdersLoading } from "~/components/orders/loading";
 import { accountMenu, shellDestinations } from "~/components/shell-links";
+import { useCopy } from "~/components/copy-context";
 import { appCopy } from "../app-copy";
 import {
   accessPath,
@@ -24,14 +25,12 @@ import type { ShellData } from "../preferences";
  * resta nel menu.
  */
 export function AccountShell({
-  language,
   account,
   security,
   shell,
   searchQuery = null,
   children,
 }: {
-  language: Language;
   account: { name: string; email: string };
   /** Dopo la conferma dell'email: navigazione, ricerca ordini, campanella e Impostazioni. */
   security: boolean;
@@ -40,6 +39,7 @@ export function AccountShell({
   searchQuery?: string | null;
   children: React.ReactNode;
 }) {
+  const { language } = useCopy();
   const t = appCopy[language];
   const submit = useSubmit();
   const { pathname, search } = useLocation();
@@ -69,8 +69,6 @@ export function AccountShell({
   };
   return (
     <AppShell
-      links={links}
-      t={t}
       account={account}
       notifications={security ? (shell?.notifications ?? undefined) : undefined}
       notificationsAction={notificationsPath}
@@ -104,7 +102,7 @@ export function AccountShell({
         )
       }
     >
-      {loadingOrders ? <OrdersLoading t={t} /> : children}
+      {loadingOrders ? <OrdersLoading /> : children}
     </AppShell>
   );
 }

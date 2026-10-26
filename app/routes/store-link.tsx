@@ -4,7 +4,7 @@ import { redirect } from "react-router";
 
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
-import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
+import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { buttonLink } from "~/components/ui/button-variants";
 import { accessPath, appBase, ordersPath, storeLinkPath } from "../app-links";
 import { appCopy, pageTitle } from "../app-copy";
@@ -17,6 +17,7 @@ import { languageFromPath, localizedPath } from "../i18n";
 import { storeLinkAdmitted } from "../domain/admission.server";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
+import type { EbayEnvironment } from "../view-models";
 import type { Route } from "./+types/store-link";
 import { readPreferences } from "../domain/preferences.server";
 import { detectedTimeZone, effectiveTimeZone, type ShellData } from "../preferences";
@@ -196,7 +197,6 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
         ) : (
           sandbox && (
             <EbayEnvironmentField
-              language={language}
               className="w-full"
               name="environment"
               defaultValue={ebayEnvironment}

@@ -4,9 +4,7 @@ import type { FieldErrors } from "~/components/form-validation";
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
-import type { AppCopy } from "../app-copy";
-
-type AccessCopy = AppCopy["access"];
+import { useCopy } from "~/components/copy-context";
 
 /** Campi del profilo con i limiti che il server applica. */
 const profileInputs = {
@@ -22,7 +20,6 @@ const profileInputs = {
 export function ProfileInput({
   name,
   id,
-  t,
   v,
   className,
   marked = true,
@@ -30,11 +27,11 @@ export function ProfileInput({
 }: {
   name: keyof typeof profileInputs;
   id: string;
-  t: AccessCopy;
   v: FieldErrors;
   className?: string;
   marked?: boolean;
 } & Pick<React.ComponentProps<"input">, "defaultValue" | "value" | "onChange" | "disabled">) {
+  const t = useCopy().t.access;
   const { label, autoComplete, maxLength } = profileInputs[name];
   return (
     <Field className={className}>
@@ -57,16 +54,15 @@ export function ProfileInput({
 
 /** Persona sempre obbligatoria; l'azienda aggiunge la ragione sociale, senza CF né Partita IVA. */
 export function ProfileFields({
-  t,
   v,
   values,
   suggested,
 }: {
-  t: AccessCopy;
   v: FieldErrors;
   values?: Record<string, string>;
   suggested?: { firstName: string; lastName: string };
 }) {
+  const t = useCopy().t.access;
   const [type, setType] = useState(values?.tipo === "azienda" ? "azienda" : "privato");
   return (
     <>
@@ -100,7 +96,6 @@ export function ProfileFields({
         <ProfileInput
           name="ragione_sociale"
           id="company-name"
-          t={t}
           v={v}
           className="animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]"
           defaultValue={values?.ragione_sociale}
@@ -110,14 +105,12 @@ export function ProfileFields({
         <ProfileInput
           name="nome"
           id="first-name"
-          t={t}
           v={v}
           defaultValue={values?.nome ?? suggested?.firstName}
         />
         <ProfileInput
           name="cognome"
           id="last-name"
-          t={t}
           v={v}
           defaultValue={values?.cognome ?? suggested?.lastName}
         />

@@ -1,3 +1,5 @@
+import type { ShouldRevalidateFunctionArgs } from "react-router";
+
 /** Ordini mostrati per ogni «Carica altri», nell'area reale e nell'anteprima. */
 export const ordersPageSize = 6;
 
@@ -38,12 +40,21 @@ export function withoutListPosition(params: URLSearchParams): URLSearchParams {
  * L'unico cambio è l'istantanea aggiunta all'indirizzo che ne era privo: la pagina la riceve
  * già dalla risposta che sta mostrando e non serve una nuova lettura.
  */
-export function snapshotOnlyAdded(current: URL, next: URL): boolean {
+function snapshotOnlyAdded(current: URL, next: URL): boolean {
   if (current.pathname !== next.pathname || current.searchParams.has(snapshotParam)) return false;
   if (!next.searchParams.has(snapshotParam)) return false;
   const rest = new URLSearchParams(next.searchParams);
   rest.delete(snapshotParam);
   return rest.toString() === current.searchParams.toString();
+}
+
+/** Regola di nuova lettura delle pagine che mostrano l'elenco Ordini o lo contengono. */
+export function revalidateUnlessSnapshot({
+  currentUrl,
+  nextUrl,
+  defaultShouldRevalidate,
+}: Pick<ShouldRevalidateFunctionArgs, "currentUrl" | "nextUrl" | "defaultShouldRevalidate">) {
+  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
 }
 
 /**

@@ -1,6 +1,8 @@
 import { purchasesOpenSql, waitingSql } from "./admission-state.server";
 import { consultableStore } from "./store-state.server";
-import type { EbayEnvironment } from "../integrations/ebay/environment.server";
+import type { EbayEnvironment } from "../view-models";
+import { dayMilliseconds } from "../time";
+import { sqlList } from "./sql.server";
 
 /** Predicato condiviso: nessun valore fiscale entra nel risultato prima dell'autorizzazione. */
 export function orderAccessSql(order: string, workspace: string, at: string) {
@@ -45,24 +47,30 @@ export const openSubscriptionStatuses = [
 export function openSubscriptionSql(workspace: string) {
   return `EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.workspace_id = ${workspace}
     AND s.unavailable_at IS NULL
-    AND s.status IN (${openSubscriptionStatuses.map((status) => `'${status}'`).join(", ")}))`;
+    AND s.status IN (${sqlList(openSubscriptionStatuses)}))`;
 }
 
 /**
  * Copertura attiva mostrata all'utente: prima un diritto diverso dalla prova, poi quello che
  * dura di più. Argomenti come in `activeEntitlementSql`.
  */
-function activeCoverageSql(column: "source" | "ends_at", workspace: string, at: string) {
+export function activeCoverageSql(column: "source" | "ends_at", workspace: string, at: string) {
   return `(SELECT e.${column} FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
     AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(${at})
     AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at))
     ORDER BY e.source = 'trial', e.ends_at IS NOT NULL, julianday(e.ends_at) DESC LIMIT 1)`;
 }
 
+/** Lifetime in vigore: un rimborso o una disputa persa lo revocano e il posto resta occupato. */
+export const lifetimeInForceSql = (
+  workspace: string,
+) => `EXISTS (SELECT 1 FROM workspace_entitlements e
+  WHERE e.workspace_id = ${workspace} AND e.source = 'lifetime' AND e.revoked_at IS NULL)`;
+
 /** Durata della prova Premium, in giorni di 24 ore sull'istante UTC come i cicli del Free. */
 export const trialDays = 14;
 
-const trialLength = trialDays * 24 * 60 * 60 * 1000;
+const trialLength = trialDays * dayMilliseconds;
 
 /**
  * Prima lettura riuscita di un negozio dello spazio, anche senza ordini: abilita prova e
@@ -183,7 +191,7 @@ export async function setUnlockConfirmation(db: D1Database, userId: string, conf
 /** Sblocchi di un ciclo Free fuori dalle promozioni. */
 export const baseFreeQuota = 5;
 
-const cycleLength = 7 * 24 * 60 * 60 * 1000;
+const cycleLength = 7 * dayMilliseconds;
 
 /**
  * Quota di un ciclo che inizia all'istante `at`, espressione SQL: la promozione in corso a

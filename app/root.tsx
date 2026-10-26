@@ -16,13 +16,15 @@ import { useEffect } from "react";
 import { CircleAlert, CloudOff, FileQuestion } from "lucide-react";
 
 import type { Route } from "./+types/root";
+import { LinksProvider } from "./components/copy-context";
 import { StandalonePage } from "./components/standalone-page";
 import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
 import { appCopy, loadCopy, pageTitle } from "./app-copy";
+import { appBase } from "./app-links";
 import { languageFromPath, localizedPath } from "./i18n";
-import { snapshotOnlyAdded } from "./orders/order-list";
+import { revalidateUnlessSnapshot } from "./orders/order-list";
 import { defaultDisplay, matchedShell } from "./preferences";
 import "./app.css";
 
@@ -46,12 +48,8 @@ export const clientMiddleware: Route.ClientMiddlewareFunction[] = [
 ];
 
 /** L'istantanea aggiunta all'elenco Ordini non cambia lingua né pagina: nessuna nuova lettura. */
-export function shouldRevalidate({
-  currentUrl,
-  nextUrl,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessSnapshot(args);
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -77,8 +75,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function App() {
+/** Radice dell'anteprima: le sue pagine usano gli stessi componenti dell'area reale. */
+const previewBase = "/anteprima";
+
+export default function App({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
+  const preview = new RegExp(`^(/en)?${previewBase}(/|$)`, "u").test(pathname);
   const revalidator = useRevalidator();
   useEffect(() => {
     if (!/^\/(en\/)?(app(?:\/|$)|accesso$)/u.test(pathname)) return;
@@ -97,7 +99,11 @@ export default function App() {
       document.removeEventListener("visibilitychange", refresh);
     };
   }, [pathname, revalidator]);
-  return <Outlet />;
+  return (
+    <LinksProvider value={{ language: loaderData.language, base: preview ? previewBase : appBase }}>
+      <Outlet />
+    </LinksProvider>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

@@ -1,9 +1,9 @@
 import { env } from "cloudflare:workers";
-import { redirect } from "react-router";
+import { data, redirect } from "react-router";
 
-import { accessNotice } from "./access-notice";
+import { accessNotice, signInNotice, type SignInNotice } from "./access-notice";
 import { currentSession } from "./account-area.server";
-import { accessPath, ordersPath, securityReturnPath, visitCookie } from "./app-links";
+import { accessPath, ordersPath, originUrl, securityReturnPath, visitCookie } from "./app-links";
 import { readSession } from "./domain/sessions.server";
 import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import {
@@ -68,8 +68,9 @@ export async function accessLoader(request: Request) {
 
 /**
  * Invii della pagina di accesso: uscita, accesso con email o Google/eBay, recupero della
- * password, registrazione, verifica dell'email e completamento del profilo. Ogni esito torna
- * alla pagina con un avviso nell'indirizzo, oppure entra nell'app.
+ * password, registrazione, verifica dell'email e completamento del profilo. Gli errori dei moduli
+ * compilati rispondono sulla pagina stessa; gli altri esiti tornano con un avviso
+ * nell'indirizzo, oppure entrano nell'app.
  */
 export async function accessAction(request: Request) {
   const language = languageFromPath(new URL(request.url).pathname);
@@ -87,10 +88,23 @@ export async function accessAction(request: Request) {
   const returnTo = securityReturnPath(language, field("returnTo"));
   const destination = returnTo ?? base;
   const accessReturn = returnTo ? `${access}?${new URLSearchParams({ returnTo })}` : access;
-  const notice = (value: string, page = access) => {
+  const notice = (value: SignInNotice, page = access) => {
     const query = new URLSearchParams({ accesso: value });
     if (returnTo) query.set("returnTo", returnTo);
     return redirect(`${page}?${query}`, 303);
+  };
+  // Un errore di un modulo compilato resta sulla pagina con i valori inviati da ricompilare,
+  // senza conservarli nel browser; la password non torna mai indietro.
+  const failed = (value: SignInNotice, tab: "accedi" | "registrati" | "completa") => {
+    const values: Record<string, string> = {};
+    for (const [name, entry] of form) {
+      if (name !== "password" && typeof entry === "string") values[name] = entry;
+    }
+    const status = value === "troppi-tentativi" ? 429 : value === "autorizzazione" ? 403 : 400;
+    return data(
+      { notice: signInNotice(value, language), remembered: { tab, values } },
+      { status, headers: noStore },
+    );
   };
   const forward = (path: string, body?: Record<string, unknown>) =>
     forwardToAuth(env, request, path, body);
@@ -116,7 +130,7 @@ export async function accessAction(request: Request) {
   if (intent === "recupera-password") {
     const response = await forward("/request-password-reset", {
       email: field("email"),
-      redirectTo: `${new URL(env.APP_ORIGIN).origin}${accessReturn}`,
+      redirectTo: originUrl(env, accessReturn),
     });
     return notice(
       response.status === 429 ? "troppi-tentativi" : response.ok ? "recupero-inviato" : "errore",
@@ -136,8 +150,8 @@ export async function accessAction(request: Request) {
   if (intent === "registrati") {
     // Profilo e Termini obbligatori, marketing facoltativo: nessuna scelta vale se non inviata.
     const profile = parseProfile(form);
-    if (!profile) return notice("dati");
-    if (field("termini") !== "on") return notice("termini");
+    if (!profile) return failed("dati", "registrati");
+    if (field("termini") !== "on") return failed("termini", "registrati");
     const response = await forward("/sign-up/email", {
       email: field("email"),
       password: field("password"),
@@ -147,9 +161,10 @@ export async function accessAction(request: Request) {
     if (!response.ok) {
       if (response.status === 403) {
         const error = await response.clone().json<{ code?: string }>();
-        if (error.code === "registration_approval_required") return notice("autorizzazione");
+        if (error.code === "registration_approval_required")
+          return failed("autorizzazione", "registrati");
       }
-      return notice(response.status === 429 ? "troppi-tentativi" : "registrazione");
+      return failed(response.status === 429 ? "troppi-tentativi" : "registrazione", "registrati");
     }
     // Per un indirizzo già registrato Better Auth risponde con un utente fittizio, senza
     // sessione: profilo e Termini si salvano solo per l'account appena creato. La sessione
@@ -186,8 +201,8 @@ export async function accessAction(request: Request) {
     const status = await registrationStatus(env.DB, session.user.id);
     const profile = status.profile ? undefined : parseProfile(form);
     // Gli errori del completamento restano sull'accesso, dove il passaggio si ripete.
-    if (profile === null) return notice("dati");
-    if (!status.termsAccepted && field("termini") !== "on") return notice("termini");
+    if (profile === null) return failed("dati", "completa");
+    if (!status.termsAccepted && field("termini") !== "on") return failed("termini", "completa");
     await completeRegistration(env.DB, {
       userId: session.user.id,
       language,
@@ -203,5 +218,5 @@ export async function accessAction(request: Request) {
     password: field("password"),
   });
   if (response.ok) return redirectWithCookies(destination, response);
-  return notice(response.status === 429 ? "troppi-tentativi" : "errore");
+  return failed(response.status === 429 ? "troppi-tentativi" : "errore", "accedi");
 }

@@ -1,7 +1,7 @@
 import { Mail, MessageSquareText } from "lucide-react";
 import { useId, useRef, useState } from "react";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { UnlockIcon } from "~/components/icons";
 import { StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
@@ -36,19 +36,17 @@ import { languages, languageNames, type Language } from "../../i18n";
 import { defaultTemplate, requestEmailSubject } from "../../preferences";
 import { displayTaxValue } from "../../tax-quality";
 import {
-  countryName,
-  formatDate,
   type FiscalNotice,
   type FiscalView,
   type OrderView,
   type SuggestionView,
   type TaxIdentifierView,
 } from "../../view-models";
+import { countryName, formatDate } from "../../format";
 
 import { identifierLabel, remainingUnlocks, taxCodeLabels, type OrdersAccount } from "./labels";
 import { useTimeZone } from "~/components/time-zone";
-
-export type { OrdersAccount } from "./labels";
+import { useCopy } from "~/components/copy-context";
 
 const cardRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
 
@@ -77,19 +75,18 @@ export function CardNote({
 
 function UnlockButton({
   order,
-  t,
   unlocking,
   onUnlock,
   remaining,
   confirmUnlock = true,
 }: {
   order: Pick<OrderView, "id" | "ebayOrderId">;
-  t: AppCopy;
   unlocking: boolean;
   onUnlock: (ids: string[], skipConfirmation?: boolean) => void;
   remaining: number | null;
   confirmUnlock?: boolean;
 }) {
+  const { t } = useCopy();
   const [dontAsk, setDontAsk] = useState(false);
   const cancel = useRef<HTMLButtonElement>(null);
   if (!confirmUnlock)
@@ -172,15 +169,8 @@ function FiscalSlot({ tone, children }: { tone: "neutral" | "info" | "danger"; c
   );
 }
 
-function IdentifierNote({
-  identifier,
-  t,
-  prefix,
-}: {
-  identifier: TaxIdentifierView;
-  t: AppCopy;
-  prefix: string;
-}) {
+function IdentifierNote({ identifier, prefix }: { identifier: TaxIdentifierView; prefix: string }) {
+  const { t } = useCopy();
   const { quality } = identifier;
   if (quality !== "valid" && quality !== "unchecked") {
     return (
@@ -211,7 +201,8 @@ function IdentifierNote({
 }
 
 /** Condizione dell'ultima lettura accanto a un valore letto in precedenza. */
-function FiscalNoticeNote({ notice, t }: { notice: FiscalNotice; t: AppCopy }) {
+function FiscalNoticeNote({ notice }: { notice: FiscalNotice }) {
+  const { t } = useCopy();
   return (
     <CardNote tone={notice === "lastKnown" ? "warning" : "info"}>
       {t.orders.fiscalNotice[notice]}
@@ -220,13 +211,8 @@ function FiscalNoticeNote({ notice, t }: { notice: FiscalNotice; t: AppCopy }) {
 }
 
 /** Note di un dato disponibile: anomalie e modifiche per identificativo, poi l'ultima lettura. */
-function AvailableNotes({
-  fiscal,
-  t,
-}: {
-  fiscal: Extract<FiscalView, { state: "available" }>;
-  t: AppCopy;
-}) {
+function AvailableNotes({ fiscal }: { fiscal: Extract<FiscalView, { state: "available" }> }) {
+  const { t } = useCopy();
   const several = fiscal.identifiers.length > 1;
   return (
     <>
@@ -234,11 +220,10 @@ function AvailableNotes({
         <IdentifierNote
           key={`note:${identifier.type}:${identifier.value}`}
           identifier={identifier}
-          t={t}
           prefix={several ? `${identifierLabel(identifier, t)}: ` : ""}
         />
       ))}
-      {fiscal.notice ? <FiscalNoticeNote notice={fiscal.notice} t={t} /> : null}
+      {fiscal.notice ? <FiscalNoticeNote notice={fiscal.notice} /> : null}
     </>
   );
 }
@@ -246,8 +231,6 @@ function AvailableNotes({
 /** Contesto comune al dato fiscale di una scheda o del dettaglio. */
 export interface FiscalProps {
   order: OrderView;
-  t: AppCopy;
-  language: Language;
   account: OrdersAccount;
   /** eBay non risponde: le azioni che lo richiedono restano sospese. */
   ebayDown: boolean;
@@ -268,7 +251,6 @@ function unavailableTone(state: "missing" | "checking" | "error") {
  */
 export function FiscalCodes({
   order,
-  t,
   account,
   ebayDown,
   revealed,
@@ -276,6 +258,7 @@ export function FiscalCodes({
   onUnlock,
   confirmUnlock,
 }: FiscalProps) {
+  const { t } = useCopy();
   const action = useAction();
   const { fiscal } = order;
   if (fiscal.state === "available") {
@@ -313,7 +296,6 @@ export function FiscalCodes({
             {unlockable ? (
               <UnlockButton
                 order={order}
-                t={t}
                 unlocking={unlocking}
                 onUnlock={onUnlock}
                 remaining={remaining}
@@ -363,14 +345,13 @@ function unavailableHint(
 /** Ordini rimasti prima dello sblocco; a sblocchi esauriti, quando riprendono. */
 function LockedNote({
   fiscal,
-  t,
-  language,
   account,
   compact,
-}: Pick<FiscalProps, "t" | "language" | "account"> & {
+}: Pick<FiscalProps, "account"> & {
   fiscal: Extract<FiscalView, { state: "locked" }>;
   compact: boolean;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   if (fiscal.hold) return <CardNote tone="info">{t.orders.lockedHold[fiscal.hold]}</CardNote>;
   const remaining = remainingUnlocks(account);
@@ -386,7 +367,8 @@ function LockedNote({
   );
 }
 
-function SuggestionSummary({ suggestions, t }: { suggestions: SuggestionView[]; t: AppCopy }) {
+function SuggestionSummary({ suggestions }: { suggestions: SuggestionView[] }) {
+  const { t } = useCopy();
   return (
     <>
       {suggestions.map((suggestion) => (
@@ -423,20 +405,17 @@ function suggestionValue(suggestion: SuggestionView) {
  */
 export function FiscalNotes({
   order,
-  t,
-  language,
   account,
   ebayDown,
   compact,
-}: Pick<FiscalProps, "order" | "t" | "language" | "account" | "ebayDown"> & {
+}: Pick<FiscalProps, "order" | "account" | "ebayDown"> & {
   compact: boolean;
 }) {
+  const { t, language } = useCopy();
   const { fiscal } = order;
-  if (fiscal.state === "available") return <AvailableNotes fiscal={fiscal} t={t} />;
+  if (fiscal.state === "available") return <AvailableNotes fiscal={fiscal} />;
   if (fiscal.state === "locked") {
-    return (
-      <LockedNote fiscal={fiscal} t={t} language={language} account={account} compact={compact} />
-    );
+    return <LockedNote fiscal={fiscal} account={account} compact={compact} />;
   }
   // Lo stato è già nel riquadro: nella scheda aggiungi solo cause o attese specifiche.
   const showHint =
@@ -447,7 +426,7 @@ export function FiscalNotes({
     <>
       {showHint ? <CardNote>{unavailableHint(fiscal, ebayDown, t, language)}</CardNote> : null}
       {compact && fiscal.state === "missing" && order.suggestions.length > 0 ? (
-        <SuggestionSummary suggestions={order.suggestions} t={t} />
+        <SuggestionSummary suggestions={order.suggestions} />
       ) : null}
     </>
   );
@@ -458,16 +437,13 @@ const messageLanguages = languages.map((value) => ({ value, label: languageNames
 /** Solo testo locale e copia esplicita: nessuna modifica all'ordine o messaggistica integrata. */
 export function MissingOrderHelp({
   order,
-  t,
-  language,
   templates,
 }: {
   order: Pick<OrderView, "ebayOrderId" | "contacts" | "suggestions" | "suggestionStatus">;
-  t: AppCopy;
-  language: Language;
   /** Modello di messaggio per lingua; senza, i testi predefiniti. */
   templates?: Record<Language, string>;
 }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   // La lingua della pagina inizializza il messaggio; poi decide il merchant.
   const [messageLanguage, setMessageLanguage] = useState<Language>(() => language);

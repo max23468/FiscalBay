@@ -107,6 +107,36 @@ const notices: Record<string, (t: AppCopy) => string | undefined> = {
   "change-period": (t) => t.settings.plan.periodChanged,
 };
 
+/** Esito della Sicurezza per ogni azione, lo stesso dell'area reale quando riesce. */
+const securityNotices: Record<string, string | null> = {
+  "collega-metodo": "metodo-collegato",
+  "rimuovi-metodo": "metodo-rimosso",
+  "passkey-add": "metodo-collegato",
+  "passkey-remove": "passkey-rimossa",
+  "passkey-rename": "passkey-rinominata",
+  password: "password-link",
+  "cambia-email": "email-richiesta",
+  "reinvia-email": "email-richiesta",
+  "esci-sessione": "sessione-chiusa",
+  "esci-altri": "sessioni-chiuse",
+  riautentica: null,
+};
+
+/**
+ * Azioni della Sicurezza con le stesse risposte dell'area reale: l'esito torna nell'indirizzo
+ * della categoria e la conferma dell'identità riesce sempre. Null per le altre azioni.
+ */
+export function simulateSecurity(request: Request, form: FormData) {
+  assertPreviewAvailable();
+  const intent = String(form.get("intent") ?? "");
+  if (intent === "conferma-accesso") return data<ActionResult>({ ok: true });
+  if (!Object.hasOwn(securityNotices, intent)) return null;
+  const language = languageFromPath(new URL(request.url).pathname);
+  const security = localizedPath(language, "/anteprima/impostazioni/sicurezza");
+  const notice = securityNotices[intent];
+  return redirect(notice ? `${security}?accesso=${notice}` : security, 303);
+}
+
 /**
  * Risposta simulata a un'azione dei componenti. Il primo salvataggio dello
  * scenario che lo prevede fallisce, per mostrare il ripristino del valore.

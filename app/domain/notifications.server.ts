@@ -1,6 +1,7 @@
 import { appCopy } from "../app-copy";
 import type { Language } from "../i18n";
-import { formatDate, type NotificationView } from "../view-models";
+import { type NotificationView } from "../view-models";
+import { formatDate } from "../format";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
 import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
 

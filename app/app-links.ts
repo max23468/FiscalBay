@@ -1,4 +1,5 @@
 import { localizedPath, type Language } from "./i18n";
+import type { EbayEnvironment } from "./view-models";
 
 export interface AppLinks {
   language: Language;
@@ -23,6 +24,12 @@ export const ordersPath = `${appBase}/ordini`;
 export const orderSearchPath = "/api/v1/orders/search";
 
 export const settingsPath = `${appBase}/impostazioni`;
+
+/** Piano, fra le categorie delle Impostazioni: anche ritorno di checkout e portale Stripe. */
+export const planPath = `${settingsPath}/piano`;
+
+/** Notifiche, fra le categorie delle Impostazioni: collegamento e preferenze di Telegram. */
+export const notificationSettingsPath = `${settingsPath}/notifiche`;
 
 /** Sicurezza, fra le categorie delle Impostazioni: riceve anche le sue azioni. */
 export const securityPath = `${settingsPath}/sicurezza`;
@@ -70,6 +77,29 @@ export function isProductionOrigin(origin: string): boolean {
 /** L'ambiente servito è Production: l'unico indicizzabile, senza anteprima né eventi di test. */
 export function isProduction(environment: { APP_ORIGIN: string }): boolean {
   return isProductionOrigin(environment.APP_ORIGIN);
+}
+
+/** Indirizzo assoluto di un percorso già completo, sull'origine dell'ambiente servito. */
+export function originUrl(env: { APP_ORIGIN: string }, path: string) {
+  return `${new URL(env.APP_ORIGIN).origin}${path}`;
+}
+
+/**
+ * Indirizzo assoluto di una pagina dell'app nella lingua data, per email, Stripe e Telegram,
+ * con l'ambiente eBay se non è Production e gli eventuali filtri.
+ */
+export function appUrl(
+  env: { APP_ORIGIN: string },
+  language: Language,
+  path: string,
+  // Stryker disable next-line StringLiteral: l'indirizzo distingue soltanto «sandbox»; ogni altro predefinito dà lo stesso risultato.
+  environment: EbayEnvironment = "production",
+  filters: Record<string, string> = {},
+) {
+  const query = new URLSearchParams(filters);
+  if (environment === "sandbox") query.set("environment", "sandbox");
+  const search = query.size ? `?${query}` : "";
+  return originUrl(env, `${localizedPath(language, path)}${search}`);
 }
 
 /** Pagine del sito pubblico, senza prefisso di lingua. */
