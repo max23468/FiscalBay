@@ -35,7 +35,7 @@ import {
   stripeSecretKey,
   verifyStripeEvent,
 } from "../app/integrations/stripe.server";
-import { receiveWebhook } from "../app/integrations/webhooks.server";
+import { receiveWebhook } from "../app/webhooks.server";
 import { localizedPath } from "../app/i18n";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";

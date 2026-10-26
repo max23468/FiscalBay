@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleAuthRequest } from "../app/auth-route.server";
 import {
   openToken,
-  refreshExpiringTokens,
   refreshStoreToken,
   sealToken,
 } from "../app/integrations/ebay/seller-credentials.server";
+import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
 import { UpstreamError } from "../app/integrations/http.server";
 import { resetDatabase } from "./fixtures/database-fixtures";
 import { syntheticEbay } from "./fixtures/ebay-fixtures";

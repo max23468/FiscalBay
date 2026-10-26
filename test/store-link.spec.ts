@@ -15,8 +15,8 @@ import { UpstreamError } from "../app/integrations/http.server";
 import {
   startStoreLink as beginLink,
   claimStoreLinkSession,
-  completeStoreLink,
 } from "../app/integrations/ebay/store-link.server";
+import { completeStoreLink } from "../app/domain/store-link.server";
 import { ebayConfiguration, sandboxAvailable } from "../app/integrations/ebay/environment.server";
 import { now, resetDatabase } from "./fixtures/database-fixtures";
 import {

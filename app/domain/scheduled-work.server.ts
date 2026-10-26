@@ -8,8 +8,8 @@ import { dispatchStoreSyncs } from "./order-sync.server";
 import { configureBotCommands } from "./telegram-bot.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
-import { refreshExpiringTokens } from "../integrations/ebay/seller-credentials.server";
-import { recoverWebhookIngress } from "../integrations/webhooks.server";
+import { refreshExpiringTokens } from "./token-refresh.server";
+import { recoverWebhookIngress } from "../webhooks.server";
 
 /**
  * Smistamento del lavoro pianificato. Un solo Cron Trigger per ambiente parte ogni dieci minuti

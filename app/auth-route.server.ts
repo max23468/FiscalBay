@@ -10,9 +10,9 @@ import {
   recentSignIn,
   type AuthSession,
 } from "./domain/sessions.server";
+import { completeStoreLink } from "./domain/store-link.server";
 import {
   claimStoreLinkSession,
-  completeStoreLink,
   recordStoreLinkOutcome,
   type StoreLinkOutcome,
 } from "./integrations/ebay/store-link.server";

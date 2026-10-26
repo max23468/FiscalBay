@@ -1,9 +1,5 @@
 import type { createRequestHandler } from "react-router";
-import {
-  consumeWebhooks,
-  isWebhookMessage,
-  receiveWebhook,
-} from "../app/integrations/webhooks.server";
+import { consumeWebhooks, isWebhookMessage, receiveWebhook } from "../app/webhooks.server";
 import { indexable } from "../app/app-links";
 import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
 import { withPhaseTimings } from "../app/observability.server";

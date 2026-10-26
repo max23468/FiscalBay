@@ -39,10 +39,8 @@ import {
 } from "../app/domain/free-store.server";
 import type { ActionResult } from "../app/view-models";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import {
-  refreshExpiringTokens,
-  refreshStoreToken,
-} from "../app/integrations/ebay/seller-credentials.server";
+import { refreshStoreToken } from "../app/integrations/ebay/seller-credentials.server";
+import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
 import { insertStore, now, resetDatabase, resetOrderFixtures } from "./fixtures/database-fixtures";
 import { syntheticEbay, syntheticOrderId } from "./fixtures/ebay-fixtures";
 import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";

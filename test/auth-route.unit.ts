@@ -30,9 +30,9 @@ vi.mock("../app/auth.server", () => ({
 vi.mock("../app/domain/registration.server", () => ({ registrationStatus: services.registration }));
 vi.mock("../app/integrations/ebay/store-link.server", () => ({
   claimStoreLinkSession: services.claim,
-  completeStoreLink: services.complete,
   recordStoreLinkOutcome: services.record,
 }));
+vi.mock("../app/domain/store-link.server", () => ({ completeStoreLink: services.complete }));
 vi.mock("../app/errors", () => ({ logFailure: services.failure, tracePhase: services.trace }));
 vi.mock("cloudflare:workers", () => ({ waitUntil: services.background }));
 vi.mock("../app/account-email.server", () => ({ notifySecurityEvent: services.notify }));

@@ -21,7 +21,7 @@ import {
   linkToken as randomLinkToken,
   verifyTelegramUpdate,
 } from "../app/integrations/telegram.server";
-import { consumeWebhooks, receiveWebhook } from "../app/integrations/webhooks.server";
+import { consumeWebhooks, receiveWebhook } from "../app/webhooks.server";
 import { configureBotCommands } from "../app/domain/telegram-bot.server";
 import { ebayOrderHref } from "../app/components/orders/labels";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";

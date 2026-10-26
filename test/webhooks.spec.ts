@@ -2,11 +2,7 @@ import { env } from "cloudflare:workers";
 import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import Stripe from "stripe";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import {
-  receiveWebhook,
-  consumeWebhooks,
-  recoverWebhookIngress,
-} from "../app/integrations/webhooks.server";
+import { receiveWebhook, consumeWebhooks, recoverWebhookIngress } from "../app/webhooks.server";
 import { verifyOrderNotification } from "../app/integrations/ebay/notifications.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
