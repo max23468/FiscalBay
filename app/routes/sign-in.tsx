@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { ClipboardList, Copy, KeyRound, LogOut, Store } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "react-router";
 
 import { AccessNotice, VerifyEmail } from "~/components/access-notice";
@@ -51,39 +51,16 @@ export function action({ request }: Route.ActionArgs) {
 
 type AccessCopy = (typeof appCopy)[Language]["access"];
 
-/** Campi da ricompilare dopo un errore; la password non viene mai conservata. */
+/** Campi inviati da ricompilare dopo un errore, senza la password. */
 type Remembered = { tab: string; values: Record<string, string> };
 
-const rememberKey = "fiscalbay:accesso";
-
-/** Salva i campi del form inviato, per ricompilarli se il server segnala un errore. */
-function remember(tab: string) {
-  return (event: React.FormEvent<HTMLFormElement>) => {
-    const values: Record<string, string> = {};
-    for (const [name, value] of new FormData(event.currentTarget)) {
-      if (name !== "password" && typeof value === "string") values[name] = value;
-    }
-    try {
-      sessionStorage.setItem(rememberKey, JSON.stringify({ tab, values }));
-    } catch {
-      // Senza memoria di sessione il form resta vuoto dopo l'errore.
-    }
-  };
-}
-
-/** Dopo un avviso di errore ripropone i valori inviati; in ogni caso li dimentica. */
-function useRemembered(error: boolean) {
-  const [remembered, setRemembered] = useState<Remembered | null>(null);
-  useEffect(() => {
-    try {
-      const saved = sessionStorage.getItem(rememberKey);
-      sessionStorage.removeItem(rememberKey);
-      if (error && saved) setRemembered(JSON.parse(saved) as Remembered);
-    } catch {
-      // Valori non leggibili: il form resta vuoto.
-    }
-  }, [error]);
-  return remembered;
+/** Indirizzo dei moduli: conserva il ritorno alla Sicurezza anche quando l'errore resta qui. */
+function useAccessAction() {
+  const { language } = useCopy();
+  const { search } = useLocation();
+  const returnTo = securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
+  const path = localizedPath(language, "/accesso");
+  return returnTo ? `${path}?${new URLSearchParams({ returnTo })}` : path;
 }
 
 const rise = "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]";
@@ -156,10 +133,11 @@ function ReturnToField() {
 }
 
 function SocialForms() {
-  const { t: copy, language } = useCopy();
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
   const t = copy.access;
   return (
-    <form method="post" action={localizedPath(language, "/accesso")} className="grid gap-2">
+    <form method="post" action={formAction} className="grid gap-2">
       <ReturnToField />
       <Button type="submit" variant="outline" name="intent" value="google" className="w-full">
         <GoogleMark />
@@ -270,16 +248,12 @@ function AccessForms({
   initialTab: string;
   signUpBody: string;
 }) {
-  const { t: copy, language } = useCopy();
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
   const t = copy.access;
   const [tab, setTab] = useState(initialTab);
   const [recovering, setRecovering] = useState(false);
-  const [restored, setRestored] = useState<Remembered | null>(null);
-  if (remembered && remembered !== restored) {
-    setRestored(remembered);
-    setTab(remembered.tab);
-  }
-  const values = restored?.values;
+  const values = remembered?.values;
   const signIn = useFieldErrors(t.validation);
   const signUp = useFieldErrors(t.validation);
   return (
@@ -298,13 +272,10 @@ function AccessForms({
       <TabsContent value="accedi" keepMounted className={cn("grid gap-3", rise)}>
         {recovering ? <p className="text-muted-foreground">{t.passwordRecoveryBody}</p> : null}
         <form
-          key={restored ? "restored" : "empty"}
           method="post"
-          action={localizedPath(language, "/accesso")}
+          action={formAction}
           {...signIn.form}
-          onSubmit={(event) => {
-            if (signIn.check(event)) remember("accedi")(event);
-          }}
+          onSubmit={(event) => void signIn.check(event)}
         >
           <FieldGroup className="gap-3">
             <ReturnToField />
@@ -317,7 +288,7 @@ function AccessForms({
                 name="email"
                 type="email"
                 autoComplete="username"
-                defaultValue={restored?.tab === "accedi" ? values?.email : undefined}
+                defaultValue={remembered?.tab === "accedi" ? values?.email : undefined}
                 required
                 {...signIn.control("email")}
               />
@@ -362,18 +333,15 @@ function AccessForms({
       <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
         <p className="text-muted-foreground">{signUpBody}</p>
         <form
-          key={restored ? "restored" : "empty"}
           method="post"
-          action={localizedPath(language, "/accesso")}
+          action={formAction}
           {...signUp.form}
-          onSubmit={(event) => {
-            if (signUp.check(event)) remember("registrati")(event);
-          }}
+          onSubmit={(event) => void signUp.check(event)}
         >
           <FieldGroup>
             <ProfileFields
               v={signUp}
-              values={restored?.tab === "registrati" ? values : undefined}
+              values={remembered?.tab === "registrati" ? values : undefined}
             />
             <Field>
               <FieldLabel htmlFor="signup-email" required>
@@ -384,7 +352,7 @@ function AccessForms({
                 name="email"
                 type="email"
                 autoComplete="email"
-                defaultValue={restored?.tab === "registrati" ? values?.email : undefined}
+                defaultValue={remembered?.tab === "registrati" ? values?.email : undefined}
                 required
                 {...signUp.control("email")}
               />
@@ -408,7 +376,7 @@ function AccessForms({
             </Field>
             <AgreementFields
               v={signUp}
-              values={restored?.tab === "registrati" ? values : undefined}
+              values={remembered?.tab === "registrati" ? values : undefined}
             />
             <Button type="submit" name="intent" value="registrati" className="w-full">
               {t.signUp}
@@ -424,12 +392,13 @@ function AccessForms({
 
 function ResetPassword({ token }: { token: string }) {
   const { t: copy, language } = useCopy();
+  const formAction = useAccessAction();
   const t = copy.access;
   const v = useFieldErrors(t.validation);
   return (
     <form
       method="post"
-      action={localizedPath(language, "/accesso")}
+      action={formAction}
       className="grid gap-4"
       {...v.form}
       onSubmit={(event) => void v.check(event)}
@@ -478,7 +447,8 @@ function CompleteRegistration({
   suggestedName: { firstName: string; lastName: string };
   remembered: Remembered | null;
 }) {
-  const { t: copy, language } = useCopy();
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
   const t = copy.access;
   const values = remembered?.tab === "completa" ? remembered.values : undefined;
   const v = useFieldErrors(t.validation);
@@ -488,15 +458,7 @@ function CompleteRegistration({
         <h2 className="text-xl font-semibold">{t.agreementTitle}</h2>
         <p className="text-sm text-muted-foreground">{t.agreementBody}</p>
       </div>
-      <form
-        key={values ? "restored" : "empty"}
-        method="post"
-        action={localizedPath(language, "/accesso")}
-        {...v.form}
-        onSubmit={(event) => {
-          if (v.check(event)) remember("completa")(event);
-        }}
-      >
+      <form method="post" action={formAction} {...v.form} onSubmit={(event) => void v.check(event)}>
         <FieldGroup>
           {needsProfile ? <ProfileFields v={v} values={values} suggested={suggestedName} /> : null}
           {needsAgreement ? <AgreementFields v={v} values={values} /> : null}
@@ -510,10 +472,11 @@ function CompleteRegistration({
 }
 
 function SignOutForm() {
-  const { t: copy, language } = useCopy();
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
   const t = copy.access;
   return (
-    <form method="post" action={localizedPath(language, "/accesso")}>
+    <form method="post" action={formAction}>
       <Button type="submit" variant="outline" name="intent" value="esci">
         <LogOut aria-hidden="true" data-icon="inline-start" />
         {t.signOut}
@@ -571,8 +534,6 @@ function BrandPanel() {
   );
 }
 
-const errorTones = new Set(["danger", "warning"]);
-
 function AccessPanel({
   loaderData,
   remembered,
@@ -598,7 +559,7 @@ function AccessPanel({
   return (
     <AccessForms
       remembered={remembered}
-      initialTab={loaderData.tab}
+      initialTab={remembered && remembered.tab !== "completa" ? remembered.tab : loaderData.tab}
       signUpBody={loaderData.registrationRestricted ? t.registrationRestricted : t.signUpBody}
     />
   );
@@ -610,10 +571,11 @@ function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: Access
 }
 
 /** Accesso, registrazione e completamento: marchio a sinistra, form a destra. */
-export default function SignIn({ loaderData }: Route.ComponentProps) {
-  const { language, notice } = loaderData;
+export default function SignIn({ loaderData, actionData }: Route.ComponentProps) {
+  const { language } = loaderData;
+  const notice = actionData?.notice ?? loaderData.notice;
+  const remembered = actionData?.remembered ?? null;
   const t = appCopy[language].access;
-  const remembered = useRemembered(notice !== null && errorTones.has(notice.tone));
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
       <BrandPanel />

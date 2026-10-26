@@ -21,7 +21,13 @@ import {
   sessionCookie,
   profileOf,
 } from "./fixtures/account-fixtures";
-import { accessFor, accessForm, securityForm, homeFor } from "./fixtures/account-route-fixtures";
+import {
+  accessError,
+  accessFor,
+  accessForm,
+  securityForm,
+  homeFor,
+} from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
@@ -48,8 +54,11 @@ it("mostra l'autorizzazione preventiva in entrambe le lingue senza creare profil
         password,
         termini: "on",
       });
-      expect(response.status).toBe(303);
-      expect(response.headers.get("location")).toBe(`${prefix}/accesso?accesso=autorizzazione`);
+      expect(await accessError(response)).toMatchObject({
+        status: 403,
+        key: "autorizzazione",
+        tab: "registrati",
+      });
       expect(response.headers.getSetCookie()).toEqual([]);
       expect(accessNotice(new URLSearchParams("accesso=autorizzazione"), language)).toEqual({
         source: "accesso",
@@ -176,8 +185,16 @@ describe("registrazione e verifica del contatto", () => {
     ] as const;
     for (const [fields, outcome] of rejected) {
       const response = await accessForm("/accesso", fields);
-      expect(response.headers.get("location")).toBe(`/accesso?accesso=${outcome}`);
       expect(response.headers.getSetCookie()).toEqual([]);
+      // I valori tornano per ricompilare il modulo, la password mai.
+      const error = await accessError(response);
+      expect(error).toMatchObject({
+        status: 400,
+        key: outcome,
+        tab: "registrati",
+        values: { email },
+      });
+      expect(error.values).not.toHaveProperty("password");
     }
     expect(
       await env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first(),
@@ -274,7 +291,7 @@ describe("registrazione e verifica del contatto", () => {
     const email = "azienda@example.invalid";
     const business = { intent: "registrati", tipo: "azienda", nome: "Anna", cognome: "Bianchi" };
     const missing = await accessForm("/accesso", { ...business, email, password, termini: "on" });
-    expect(missing.headers.get("location")).toBe("/accesso?accesso=dati");
+    expect(await accessError(missing)).toMatchObject({ key: "dati", tab: "registrati" });
 
     const created = await accessForm("/accesso", {
       ...business,
@@ -353,12 +370,12 @@ describe("registrazione e verifica del contatto", () => {
     expect(blocked.headers.get("location")).toBe("/accesso");
     expect(await storeLinkSessions()).toBe(0);
 
-    const complete = (fields: Record<string, string>) =>
-      accessForm("/accesso", { intent: "completa", ...fields }, cookie).then((response) =>
-        response.headers.get("location"),
-      );
-    expect(await complete({ termini: "on" })).toBe("/accesso?accesso=dati");
-    expect(await complete({ ...person, marketing: "on" })).toBe("/accesso?accesso=termini");
+    const complete = async (fields: Record<string, string>) => {
+      const response = await accessForm("/accesso", { intent: "completa", ...fields }, cookie);
+      return response.headers.get("location") ?? (await accessError(response)).key;
+    };
+    expect(await complete({ termini: "on" })).toBe("dati");
+    expect(await complete({ ...person, marketing: "on" })).toBe("termini");
     expect(await agreements(user!.id)).toEqual({ terms: [], marketing: [] });
     expect(await complete({ ...person, termini: "on", marketing: "on" })).toBe("/app/ordini");
     expect(await profileOf(user!.id)).toMatchObject({ first_name: "Mario", last_name: "Rossi" });

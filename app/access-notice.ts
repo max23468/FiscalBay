@@ -2,7 +2,7 @@ import { appCopy, type AppCopy } from "./app-copy";
 import type { Language } from "./i18n";
 
 type Tone = "success" | "info" | "warning" | "danger";
-type SignInNotice = keyof AppCopy["access"]["signInNotices"];
+export type SignInNotice = keyof AppCopy["access"]["signInNotices"];
 type StoreNotice = keyof AppCopy["access"]["storeNotices"];
 
 /** Tono degli avvisi: gli errori chiedono un'azione, le conferme no. */
@@ -64,6 +64,16 @@ export function isStoreNotice(value: string | null): value is StoreNotice {
   return value !== null && Object.hasOwn(storeTones, value);
 }
 
+/** Avviso di un esito d'accesso, con il suo tono. */
+export function signInNotice(key: SignInNotice, language: Language): AccessNoticeView {
+  return {
+    source: "accesso",
+    key,
+    text: appCopy[language].access.signInNotices[key],
+    tone: signInTones[key],
+  };
+}
+
 /**
  * Esito arrivato nell'indirizzo (`accesso`, `negozio`, `error`), con il suo tono. Un link di
  * recupero con un errore vale come link scaduto.
@@ -73,8 +83,7 @@ export function accessNotice(search: URLSearchParams, language: Language): Acces
   const signIn = search.get("accesso");
   const store = search.get("negozio");
   const key = isSignInNotice(signIn) ? signIn : search.has("error") ? "recupero-scaduto" : null;
-  if (key)
-    return { source: "accesso", key, text: access.signInNotices[key], tone: signInTones[key] };
+  if (key) return signInNotice(key, language);
   if (isStoreNotice(store))
     return {
       source: "negozio",

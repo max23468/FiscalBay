@@ -219,8 +219,17 @@ test.describe("area reale", () => {
           page.getByRole("alert").filter({ hasText: "non supporta le passkey" }),
         ).toBeVisible();
         const form = page.getByRole("tabpanel", { name: "Accedi", exact: true });
-        await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
-        await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
+        const email = form.getByRole("textbox", { name: "Email", exact: true });
+        const password = form.getByRole("textbox", { name: "Password", exact: true });
+        // Una password errata resta sul modulo con l'email già scritta e la password vuota.
+        await email.fill(testAccount.email);
+        await password.fill(`${localPassword}-errata`);
+        await form.getByRole("button", { name: "Accedi", exact: true }).click();
+        await expect(page.getByText("Controlla email e password.")).toBeVisible();
+        await expect(page).toHaveURL(/\/accesso$/);
+        await expect(email).toHaveValue(testAccount.email);
+        await expect(password).toHaveValue("");
+        await password.fill(localPassword);
         await form.getByRole("button", { name: "Accedi", exact: true }).click();
         await expect(page).toHaveURL(/\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
         await page.goto("/app/impostazioni/sicurezza");

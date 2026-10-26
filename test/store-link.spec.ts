@@ -30,7 +30,7 @@ import {
   withSandbox,
 } from "./fixtures/ebay-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
-import { homeFor } from "./fixtures/account-route-fixtures";
+import { accessError, homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { orderView } from "../app/domain/order-view.server";
 import { routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
@@ -341,7 +341,13 @@ describe("collegamento negozio eBay", () => {
     expect(accepted.headers.getSetCookie().join(";")).toContain("session_token");
 
     const rejected = await submit("password-sbagliata-ma-lunga");
-    expect(rejected.headers.get("location")).toBe("/accesso?accesso=errore");
+    // Una password errata resta sul modulo con l'email, senza sessione.
+    expect(await accessError(rejected.clone())).toMatchObject({
+      status: 400,
+      key: "errore",
+      tab: "accedi",
+      values: { email: "accesso@example.invalid" },
+    });
     expect(rejected.headers.getSetCookie()).toEqual([]);
 
     expect(
