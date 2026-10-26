@@ -390,6 +390,27 @@ describe("collegamento della chat", () => {
     ]);
   });
 
+  it("un link già usato non vale per un altro /start, anche dalla chat collegata", async () => {
+    const seller = await account("link-usato");
+    const token = await linkToken(seller.cookie);
+    await deliver(`/start ${token}`, 621, bot().fetcher, later(1));
+    const linked = await link(seller.workspace);
+    expect(linked?.chat_id).toBe("621");
+    // Un nuovo aggiornamento con lo stesso token è un'altra ricevuta: il link è già consumato.
+    const api = bot();
+    await deliver(`/start ${token}`, 621, api.fetcher, later(2));
+    expect(await link(seller.workspace)).toEqual(linked);
+    expect(api.texts()).toEqual([
+      expect.objectContaining({
+        params: expect.objectContaining({
+          chat_id: "621",
+          text: expect.stringContaining("http://localhost:5173/app/impostazioni/notifiche"),
+        }),
+      }),
+    ]);
+    expect(api.texts()[0]!.params.text).toContain("Questo link non è più valido");
+  });
+
   it("il collegamento e il cambio di chat fissano il fuso dell'account anche con preferenze salvate", async () => {
     const seller = await account("fuso-collegamento");
     await saveTelegramChange(env.DB, seller.userId, { name: "mode", value: "digest" }, "UTC");
