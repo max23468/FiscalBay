@@ -22,7 +22,7 @@ import {
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
-import { consultableStore, storeNameSql } from "./store-state.server";
+import { consultableStore, storeLabelSql } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 import { sqlList } from "./sql.server";
 
@@ -244,8 +244,8 @@ const tokenMissingSql = `instr(COALESCE(o.search_text, ${unindexedSearchSql}), t
       AND instr(lower(t.value || ' ' || replace(t.value, ' ', '')), token.value) > 0))`;
 
 /**
- * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?6, criteri da ?7,
- * acquisti non pagati ?13, istantanea da ?14 e posizione nell'elenco da ?16. Un ordine senza
+ * Ordini consultabili dello spazio: utente ?1, ambiente ?2, istante ?3, ID ?5, criteri da ?6,
+ * acquisti non pagati ?12, istantanea da ?13 e posizione nell'elenco da ?15. Un ordine senza
  * istante d'ingresso negli elenchi è stato letto prima che venisse registrato e vale come già
  * presente. Ogni percorso (elenco, conteggio, facet, suggerimenti) applica gli stessi controlli
  * di negozio e conservazione. Un acquisto non pagato resta fuori, salvo con
@@ -259,17 +259,17 @@ const visibleOrdersSql = `FROM workspace_members wm
   WHERE wm.user_id = ?1 AND s.ebay_environment = ?2 AND ${consultableStore("s")}
     AND o.retention_until > ?3
     AND +o.merged_into IS NULL
-    AND (o.is_provisional = 0 OR ?9 = 'unpaid' OR ?13 = 1)
-    AND (?6 IS NULL OR o.id IN (SELECT value FROM json_each(?6)))
-    AND (?7 IS NULL OR o.store_id = ?7)
-    AND (?8 IS NULL OR o.creation_time >= ?8)
-    AND (?9 IS NULL OR ${paymentSql} = ?9)
-    AND (?10 IS NULL OR ${shippingSql} = ?10)
-    AND (?11 IS NULL OR ${fiscalSql(accessSql)} = ?11)
-    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?12, '[]')) token WHERE ${tokenMissingSql})
-    AND (?14 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?14)
-    AND (?15 IS NULL OR o.listed_at > ?15)
-    AND (?16 IS NULL OR o.creation_time < ?16 OR (o.creation_time = ?16 AND o.id < ?17))`;
+    AND (o.is_provisional = 0 OR ?8 = 'unpaid' OR ?12 = 1)
+    AND (?5 IS NULL OR o.id IN (SELECT value FROM json_each(?5)))
+    AND (?6 IS NULL OR o.store_id = ?6)
+    AND (?7 IS NULL OR o.creation_time >= ?7)
+    AND (?8 IS NULL OR ${paymentSql} = ?8)
+    AND (?9 IS NULL OR ${shippingSql} = ?9)
+    AND (?10 IS NULL OR ${fiscalSql(accessSql)} = ?10)
+    AND NOT EXISTS (SELECT 1 FROM json_each(COALESCE(?11, '[]')) token WHERE ${tokenMissingSql})
+    AND (?13 IS NULL OR o.listed_at IS NULL OR o.listed_at <= ?13)
+    AND (?14 IS NULL OR o.listed_at > ?14)
+    AND (?15 IS NULL OR o.creation_time < ?15 OR (o.creation_time = ?15 AND o.id < ?16))`;
 
 function visibleOrdersParams(
   userId: string,
@@ -285,7 +285,6 @@ function visibleOrdersParams(
     ebayEnvironment,
     now.toISOString(),
     limit,
-    now.toISOString(),
     ids ? JSON.stringify(ids) : null,
     criteria.storeId ?? null,
     criteria.since ?? null,
@@ -425,7 +424,7 @@ export async function listVisibleOrders(
   filter: { ids?: string[]; criteria?: OrderCriteria; provisional?: boolean } = {},
 ): Promise<VisibleOrder[]> {
   const limit = Math.max(1, Math.min(maxListedOrders, Math.trunc(requestedLimit)));
-  const listedAccessSql = orderAccessSql("o.id", "vo.workspace_id", "?5");
+  const listedAccessSql = orderAccessSql("o.id", "vo.workspace_id", "?3");
   const result = await db
     .prepare(
       `WITH visible_orders AS (
@@ -452,8 +451,7 @@ export async function listVisibleOrders(
                         'currency', currency, 'imageUrl', image_url,
                         'stableKey', stable_key))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
-              ${storeNameSql("s")} ||
-                CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS store_name,
+              ${storeLabelSql("s")} AS store_name,
               NOT EXISTS (SELECT 1 FROM tax_identifiers t WHERE t.order_id = o.id
                 AND t.removed_at IS NULL AND ${taxKind("t")} <> 'PIVA') AS vat_only,
               ti.identifier_type,

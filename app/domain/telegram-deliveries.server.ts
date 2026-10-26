@@ -1,8 +1,8 @@
 import { activeEntitlementSql } from "./grants.server";
 import { lockMilliseconds } from "./order-acquisition.server";
 import { listVisibleOrders } from "./orders.server";
-import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
-import { telegramRecipient, telegramRecipientSql } from "./telegram.server";
+import { consultableStore, listedOrder, storeLabelSql } from "./store-state.server";
+import { telegramPreferencesSql, telegramRecipient, telegramRecipientSql } from "./telegram.server";
 import {
   digestMessage,
   emptyFiscalKey,
@@ -76,11 +76,9 @@ export async function deliverTelegram(
   // Senza Premium le consegne in attesa si chiudono: un rinnovo non porta l'arretrato.
   if (!scope.storeId) await closeUncovered(env.DB, now);
   const { results } = await env.DB.prepare(`SELECT l.workspace_id AS workspaceId, l.id AS linkId,
-      l.language, COALESCE(p.enabled, 1) AS enabled, COALESCE(p.filter, 'fiscal') AS filter,
-      COALESCE(p.mode, 'each') AS mode, COALESCE(p.digest_time, '18:00') AS digestTime,
-      COALESCE(p.time_zone, 'Europe/Rome') AS timeZone,
-      (SELECT wm.user_id FROM workspace_members wm WHERE wm.workspace_id = l.workspace_id
-        ORDER BY wm.role = 'owner' DESC, wm.user_id LIMIT 1) AS userId
+      l.language, ${telegramPreferencesSql("p")},
+      (SELECT wm.user_id FROM workspace_members wm WHERE wm.workspace_id = l.workspace_id)
+        AS userId
     FROM telegram_links l LEFT JOIN telegram_preferences p ON p.workspace_id = l.workspace_id
     WHERE (?1 IS NULL OR l.workspace_id = (SELECT workspace_id FROM ebay_stores WHERE id = ?1))
       AND l.delivery_failure IS NOT 'blocked' AND ${activeEntitlementSql("l.workspace_id", "?2")}
@@ -417,11 +415,7 @@ async function sendOne(
     .bind(delivery.id, lease, new Date(now.getTime() + leaseMilliseconds).toISOString(), at)
     .first<{ parts_sent: number }>();
   if (!claimed) return "continue";
-  const release = (assignments: string, ...values: unknown[]) =>
-    db
-      .prepare(`UPDATE telegram_deliveries SET ${assignments}, lease = NULL, locked_until = NULL
-        WHERE id = ?1 AND lease = ?2`)
-      .bind(delivery.id, lease, ...values);
+  const release = releaser(db, delivery.id, lease);
   try {
     const outcome = await deliver(
       env,
@@ -455,6 +449,15 @@ async function sendOne(
   return "continue";
 }
 
+/** Fine del turno di una consegna, soltanto se il lease è ancora quello preso. */
+function releaser(db: D1Database, id: string, lease: string) {
+  return (assignments: string, ...values: unknown[]) =>
+    db
+      .prepare(`UPDATE telegram_deliveries SET ${assignments}, lease = NULL, locked_until = NULL
+        WHERE id = ?1 AND lease = ?2`)
+      .bind(id, lease, ...values);
+}
+
 /**
  * Esito di un errore della Bot API: `skip` passa alla consegna successiva, `wait` ferma la chat
  * fino al prossimo turno, `stop` ferma l'esecuzione.
@@ -467,11 +470,7 @@ async function recordFailure(
   now: Date,
 ): Promise<"skip" | "wait" | "stop"> {
   const at = now.toISOString();
-  const release = (assignments: string, ...values: unknown[]) =>
-    db
-      .prepare(`UPDATE telegram_deliveries SET ${assignments}, lease = NULL, locked_until = NULL
-        WHERE id = ?1 AND lease = ?2`)
-      .bind(delivery.id, lease, ...values);
+  const release = releaser(db, delivery.id, lease);
   const upstream = error instanceof UpstreamError ? error : null;
   if (upstream?.failure === "rate_limited") {
     const seconds = upstream.details.retryAfter ?? 30;
@@ -623,8 +622,7 @@ async function compose(
   if (!recipient) return "dropped";
   if (delivery.kind === "import") {
     const summary = await db
-      .prepare(`SELECT s.id AS storeId, ${storeNameSql("s")} ||
-          CASE WHEN s.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END AS storeName,
+      .prepare(`SELECT s.id AS storeId, ${storeLabelSql("s")} AS storeName,
           s.ebay_environment AS environment, ss.history_from AS "from", ss.history_until AS until,
           (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND ${listedOrder("o", "?2")}
             AND o.creation_time >= ss.history_from AND o.creation_time < ss.history_until) AS orders,

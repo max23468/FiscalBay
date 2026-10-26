@@ -4,8 +4,9 @@ import { planPausedStore, reconnectStore, storeNameSql } from "./store-state.ser
 import {
   consumeTelegramStart,
   saveTelegramChange,
-  unknownChatReply,
   type TelegramChange,
+  telegramPreferencesSql,
+  unknownChatReply,
 } from "./telegram.server";
 import {
   appUrl,
@@ -208,8 +209,7 @@ type Link = {
 };
 
 const linkColumns = `l.id, l.workspace_id AS workspaceId, l.chat_id AS chatId, l.language,
-  (SELECT wm.user_id FROM workspace_members wm WHERE wm.workspace_id = l.workspace_id
-    ORDER BY wm.role = 'owner' DESC, wm.user_id LIMIT 1) AS userId,
+  (SELECT wm.user_id FROM workspace_members wm WHERE wm.workspace_id = l.workspace_id) AS userId,
   ${activeEntitlementSql("l.workspace_id", "?2")} AS premium`;
 
 export type TelegramReceipt = {
@@ -363,9 +363,7 @@ async function readState(db: D1Database, link: Link, now: Date) {
     Record<string, unknown>
   >([
     db
-      .prepare(`SELECT COALESCE(p.enabled, 1) AS enabled, COALESCE(p.filter, 'fiscal') AS filter,
-          COALESCE(p.mode, 'each') AS mode, COALESCE(p.digest_time, '18:00') AS digestTime,
-          COALESCE(p.time_zone, 'Europe/Rome') AS timeZone, l.last_delivery_at AS lastDelivery,
+      .prepare(`SELECT ${telegramPreferencesSql("p")}, l.last_delivery_at AS lastDelivery,
           l.delivery_failure AS failure
         FROM telegram_links l LEFT JOIN telegram_preferences p ON p.workspace_id = l.workspace_id
         WHERE l.id = ?`)

@@ -30,6 +30,18 @@ const defaults = {
 };
 
 /**
+ * Preferenze della chat con i predefiniti dello schema per uno spazio senza riga, come
+ * `enabled`, `filter`, `mode`, `digestTime` e `timeZone`. Argomento: alias di
+ * `telegram_preferences`.
+ */
+export const telegramPreferencesSql = (preferences: string) =>
+  `COALESCE(${preferences}.enabled, 1) AS enabled,
+   COALESCE(${preferences}.filter, '${defaults.filter}') AS filter,
+   COALESCE(${preferences}.mode, '${defaults.mode}') AS mode,
+   COALESCE(${preferences}.digest_time, '${defaults.digestTime}') AS digestTime,
+   COALESCE(${preferences}.time_zone, 'Europe/Rome') AS timeZone`;
+
+/**
  * Nuovo deep link per lo spazio dell'utente, legato alla sessione che lo chiede. Sostituisce
  * quelli non ancora usati: vale soltanto l'ultimo. Le notifiche sono di Premium, prova e
  * lifetime: senza copertura nessun link.
@@ -423,10 +435,7 @@ export async function telegramRecipient(
   now = new Date(),
 ): Promise<TelegramRecipient | null> {
   const row = await db
-    .prepare(`SELECT l.id AS linkId, l.chat_id AS chatId, l.language,
-      COALESCE(p.filter, 'fiscal') AS filter, COALESCE(p.mode, 'each') AS mode,
-      COALESCE(p.digest_time, '18:00') AS digestTime,
-      COALESCE(p.time_zone, 'Europe/Rome') AS timeZone
+    .prepare(`SELECT l.id AS linkId, l.chat_id AS chatId, l.language, ${telegramPreferencesSql("p")}
     FROM ebay_stores s
     JOIN telegram_links l ON l.workspace_id = s.workspace_id
     LEFT JOIN telegram_preferences p ON p.workspace_id = s.workspace_id

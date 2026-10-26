@@ -7,6 +7,11 @@
 export const storeNameSql = (store: string) =>
   `COALESCE(${store}.store_name, ${store}.display_name, ${store}.ebay_account_id, ${store}.ebay_user_id)`;
 
+/** Nome mostrato con «(Sandbox)» per un negozio dell'ambiente di prova eBay. */
+export const storeLabelSql = (store: string) =>
+  `${storeNameSql(store)} ||
+    CASE WHEN ${store}.ebay_environment = 'sandbox' THEN ' (Sandbox)' ELSE '' END`;
+
 /** Il negozio non ha pause di alcun tipo. */
 export const unpausedStore = (storeId: string) =>
   `NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = ${storeId})`;
