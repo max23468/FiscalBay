@@ -195,7 +195,12 @@ describe("variabili del Worker test", () => {
     assert.equal(testVariablesOnly(config, config), false);
     const mixed = plan([configFile, "app/root.tsx"], [], false, configChange(testValue));
     assert.deepEqual([mixed.gate, mixed.e2e, mixed.deploy], ["full", true, true]);
-    const withTests = plan([configFile, "test/stripe.spec.ts"], [], false, configChange(testValue));
+    const withTests = plan(
+      [configFile, "test/stripe-billing.spec.ts"],
+      [],
+      false,
+      configChange(testValue),
+    );
     assert.deepEqual([withTests.gate, withTests.e2e, withTests.deploy], ["build", false, true]);
   });
 });
@@ -246,7 +251,7 @@ describe("spec browser modificate", () => {
   const sources = [{ path: "app/routes/stores.tsx", text: "export default function Page() {}" }];
 
   it("seleziona per nome le sole spec modificate, in entrambi i browser", () => {
-    const selected = plan(["e2e/settings.spec.ts", "test/stripe.spec.ts"], sources);
+    const selected = plan(["e2e/settings.spec.ts", "test/stripe-billing.spec.ts"], sources);
     assert.deepEqual(
       [selected.gate, selected.browserGrep, selected.browsers, selected.deploy],
       ["build", "settings.spec", "chromium,webkit", false],
