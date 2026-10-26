@@ -173,22 +173,30 @@ async function sendNotices(env: Env, rows: NoticeRow[], now: Date) {
       logFailure({ error: outcome.reason, operation: "inactivity" });
     return outcome.status === "fulfilled";
   });
-  if (noticed.length === 0) return;
-  // Un accesso arrivato nel frattempo ha già spostato l'attività: il preavviso non vale.
-  await env.DB.batch(
-    noticed.map((row) =>
-      env.DB.prepare(
-        "UPDATE workspaces SET inactivity_notice_at = ?1 WHERE id = ?2 AND active_at = ?3",
-      ).bind(at, row.id, row.active_at),
+  const failed = rows.filter((_, index) => sent[index]!.status === "rejected");
+  // Un accesso arrivato nel frattempo ha già spostato l'attività: il preavviso non vale. Un
+  // invio non riuscito passa dopo gli spazi ancora da tentare.
+  await env.DB.batch([
+    ...noticed.map((row) =>
+      env.DB.prepare(`UPDATE workspaces SET inactivity_notice_at = ?1, inactivity_attempt_at = NULL
+          WHERE id = ?2 AND active_at = ?3`).bind(at, row.id, row.active_at),
     ),
-  );
+    ...(failed.length
+      ? [
+          env.DB.prepare(
+            "UPDATE workspaces SET inactivity_attempt_at = ?1 WHERE id IN (SELECT value FROM json_each(?2))",
+          ).bind(at, JSON.stringify(failed.map((row) => row.id))),
+        ]
+      : []),
+  ]);
 }
 
 /**
  * Compito orario dell'inattività. Nell'ordine: uno spazio senza attività registrata la riceve
  * adesso; gli spazi Free ammessi senza attività da 30 giorni e senza un preavviso per questo
- * periodo ricevono l'email e il preavviso si registra soltanto se l'invio riesce; dopo 7 giorni
- * dal preavviso senza nuova attività le letture dei negozi entrano in pausa. Con la lista
+ * periodo ricevono l'email e il preavviso si registra soltanto se l'invio riesce, a lotti in cui
+ * gli invii non riusciti passano dopo quelli ancora da tentare; dopo 7 giorni dal preavviso
+ * senza nuova attività le letture dei negozi entrano in pausa. Con la lista
  * d'attesa spenta chi era in attesa viene ammesso.
  */
 export async function applyInactivity(env: Env, now = new Date()) {
@@ -212,7 +220,8 @@ export async function applyInactivity(env: Env, now = new Date()) {
         AND (w.inactivity_notice_at IS NULL
           OR julianday(w.inactivity_notice_at) <= julianday(w.active_at))
         AND ${readingFreeSql("w.id")}
-      ORDER BY w.active_at, w.id LIMIT ?2`)
+      ORDER BY w.inactivity_attempt_at IS NOT NULL, julianday(w.inactivity_attempt_at),
+        w.active_at, w.id LIMIT ?2`)
     .bind(at, noticeBatch)
     .all<NoticeRow>();
   if (results.length > 0) await sendNotices(env, results, now);
