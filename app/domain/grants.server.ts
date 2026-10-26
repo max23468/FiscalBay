@@ -131,6 +131,7 @@ const unlockTriggerCodes: UnlockErrorCode[] = [
   "invalid_grant_cycle",
   "order_already_granted_or_merged",
 ];
+// Stryker disable next-line StringLiteral: i codici sono ASCII e il flag non cambia il confronto.
 const unlockTriggerPattern = new RegExp(unlockTriggerCodes.join("|"), "u");
 
 /**

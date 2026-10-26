@@ -1839,6 +1839,49 @@ describe("acquisizione con il client", () => {
       expect(await state()).toMatchObject({ requested_at: minutes(4).toISOString() });
     });
 
+    it("dopo la lettura anticipa le notifiche Telegram del solo spazio del negozio", async () => {
+      // Bot configurato e una consegna in attesa di un altro spazio senza Premium: la chiude
+      // soltanto il compito periodico, non la lettura di questo negozio.
+      const telegram = {
+        ...queued,
+        TELEGRAM_BOT_USERNAME: "FiscalBayCollaudoBot",
+        TELEGRAM_BOT_TOKEN: "000000:telegram-local-synthetic",
+        TELEGRAM_WEBHOOK_SECRET: "telegram-local-synthetic-webhook-secret",
+      } as Env;
+      await env.DB.prepare(`INSERT INTO telegram_deliveries (id, workspace_id, link_id, kind,
+          event_key, event_at, created_at) VALUES ('altro', 'w-b', 'l-b', 'digest', 'turno', ?1, ?1)`)
+        .bind(minutes(0).toISOString())
+        .run();
+      const pending = () =>
+        env.DB.prepare("SELECT failed_at FROM telegram_deliveries WHERE id = 'altro'").first();
+      expect(await request(minutes(0))).toBe("queued");
+      await consumeStoreSync(message(), telegram, ebay(), minutes(1));
+      expect(await pending()).toEqual({ failed_at: null });
+
+      // Un errore delle notifiche si registra e non annulla la lettura già scritta.
+      const unavailable = new Proxy(env.DB, {
+        get(target, property) {
+          if (property === "prepare")
+            return (sql: string) => {
+              if (sql.includes("FROM telegram_links l")) throw new Error("telegram_unavailable");
+              return target.prepare(sql);
+            };
+          const value = Reflect.get(target, property) as unknown;
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(await request(minutes(10))).toBe("queued");
+      const read = message();
+      await consumeStoreSync(read, { ...telegram, DB: unavailable } as Env, ebay(), minutes(11));
+      expect(read.ack).toHaveBeenCalledOnce();
+      expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)).operation)).toEqual([
+        "telegram",
+      ]);
+      errors.mockRestore();
+      expect((await runs()).at(-1)).toMatchObject({ started_at: minutes(11).toISOString(), ok: 1 });
+    });
+
     it("riprende una richiesta dopo una coda non disponibile o un'esecuzione interrotta", async () => {
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       try {

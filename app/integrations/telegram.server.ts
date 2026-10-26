@@ -82,11 +82,12 @@ export const botCommands = {
 
 export type BotCommand = keyof typeof botCommands;
 
-const commandNames = new Map<string, BotCommand>(
-  Object.entries(botCommands).flatMap(([command, names]) =>
-    Object.values(names).map((name) => [name, command as BotCommand] as const),
-  ),
-);
+/** Comando del menu con quel nome, in una delle due lingue. */
+function commandNamed(name: string) {
+  return (Object.keys(botCommands) as BotCommand[]).find(
+    (command) => botCommands[command].it === name || botCommands[command].en === name,
+  );
+}
 
 /** Dati di un pulsante del bot: soltanto identificativi brevi, entro il limite di Telegram. */
 export const callbackDataPattern = /^[A-Za-z0-9:_-]{1,64}$/u;
@@ -119,8 +120,9 @@ export function verifyTelegramUpdate(
   const callback = update.callback_query;
   if (callback) {
     const message = callback.message;
-    if (message?.chat.type !== "private" || !callbackDataPattern.test(callback.data ?? ""))
-      return null;
+    // Stryker disable next-line StringLiteral: il valore sostitutivo serve solo a non ammettere un dato assente; ogni testo fuori dal formato è rifiutato allo stesso modo.
+    const data = callback.data ?? "";
+    if (message?.chat.type !== "private" || !callbackDataPattern.test(data)) return null;
     return {
       kind: "callback",
       updateId: update.update_id,
@@ -128,7 +130,7 @@ export function verifyTelegramUpdate(
       eventAt: now.toISOString(),
       callbackId: callback.id,
       messageId: message.message_id,
-      data: callback.data!,
+      data,
     };
   }
   const message = update.message;
@@ -149,7 +151,7 @@ export function verifyTelegramUpdate(
     };
   }
   const name = /^\/([a-z]+)(?:@\w+)?\s*$/u.exec(message.text)?.[1];
-  const command = name ? commandNames.get(name) : undefined;
+  const command = name ? commandNamed(name) : undefined;
   return command ? { kind: "command", ...base, command } : null;
 }
 
