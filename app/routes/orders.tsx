@@ -1,12 +1,14 @@
 import { env } from "cloudflare:workers";
 import { data, redirect, useNavigate, type ShouldRevalidateFunctionArgs } from "react-router";
 
-import { AccessNotice, VerifyEmail } from "~/components/account";
+import { AccessNotice, VerifyEmail } from "~/components/access-notice";
 import { AccountShell } from "~/components/account-shell";
-import { EbayEnvironmentField, type EbayEnvironment } from "~/components/ebay-environment";
+import { useCopy } from "~/components/copy-context";
+import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
-import { accessNotice } from "../access-notice";
+import { accessNotice, isStoreNotice } from "../access-notice";
+import { unconfirmedOnFailure } from "../client-action";
 import {
   areaPage,
   assertSameOrigin,
@@ -15,7 +17,7 @@ import {
   shellData,
 } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { appBase, ordersPath, storeLinkPath, type AppLinks } from "../app-links";
+import { ordersPath, storeLinkPath } from "../app-links";
 import {
   accountCoverage,
   orderAllowance,
@@ -39,7 +41,7 @@ import {
 } from "../domain/orders.server";
 import { ebayOutage, listStores, readsFailing } from "../domain/stores.server";
 import { logFailure } from "../errors";
-import { languageFromPath, localizedPath, type Language } from "../i18n";
+import { languageFromPath, localizedPath } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
 import {
@@ -47,14 +49,14 @@ import {
   ordersPageSize,
   pagesParam,
   rememberedStore,
+  revalidateUnlessSnapshot,
   snapshotCursor,
   snapshotInstant,
-  snapshotOnlyAdded,
   snapshotParam,
 } from "../orders/order-list";
 import { accountSearchScope, openSearch } from "../orders/order-search.server";
 import { settle } from "../settle.server";
-import type { ActionResult, OrderView, OrdersNotice } from "../view-models";
+import type { ActionResult, EbayEnvironment, OrderView, OrdersNotice } from "../view-models";
 import type { Route } from "./+types/orders";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -119,8 +121,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     );
   // `negozio` porta anche l'esito del collegamento di un negozio, che non è un filtro.
   const query = new URLSearchParams(search);
-  if (Object.hasOwn(appCopy[language].access.storeNotices, query.get("negozio") ?? ""))
-    query.delete("negozio");
+  if (isStoreNotice(query.get("negozio"))) query.delete("negozio");
   // La ricerca arriva cifrata e legata alla sessione: fuori da essa si dimentica.
   const searchText = await openSearch(env.BETTER_AUTH_SECRET, accountSearchScope(session), query);
   // L'istantanea dell'elenco aperto: un ordine arrivato dopo non entra fra quelli già letti.
@@ -348,14 +349,8 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
  * Anche un conflitto di quota rilegge lo stato corrente per aggiornare i controlli; l'istantanea
  * aggiunta all'indirizzo è quella della risposta già mostrata.
  */
-export function shouldRevalidate({
-  formMethod,
-  currentUrl,
-  nextUrl,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  if (formMethod) return true;
-  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return args.formMethod ? true : revalidateUnlessSnapshot(args);
 }
 
 /**
@@ -422,12 +417,22 @@ export async function action({ request }: Route.ActionArgs) {
   }
 }
 
+/** Lo sblocco non confermato dalla rete non mostra ordini sbloccati; le altre azioni lo dicono. */
+export async function clientAction(args: Route.ClientActionArgs) {
+  const intent = (await args.request.clone().formData()).get("intent");
+  return unconfirmedOnFailure(args, (notice) =>
+    intent === "unlock"
+      ? ({ unlocked: [], remaining: null, error: true } satisfies UnlockResult)
+      : ({ ok: false, notice } satisfies ActionResult),
+  );
+}
+
 /** Ambiente eBay degli ordini mostrati, sul solo dominio di test: lo stesso campo dei filtri. */
-function EnvironmentSelect({ language, value }: { language: Language; value: EbayEnvironment }) {
+function EnvironmentSelect({ value }: { value: EbayEnvironment }) {
   const navigate = useNavigate();
+  const { language } = useCopy();
   return (
     <EbayEnvironmentField
-      language={language}
       className="sm:max-w-sm"
       value={value}
       onValueChange={(next) =>
@@ -439,37 +444,30 @@ function EnvironmentSelect({ language, value }: { language: Language; value: Eba
 
 export default function Orders({ loaderData }: Route.ComponentProps) {
   const { language, account, notice } = loaderData;
-  const links: AppLinks = { language, base: appBase };
-  const t = appCopy[language];
   const alerts = (
     <>
-      <AccessNotice language={language} notice={notice} />
-      <VerifyEmail language={language} email={account.email} verified={loaderData.verified} />
+      <AccessNotice notice={notice} />
+      <VerifyEmail email={account.email} verified={loaderData.verified} />
     </>
   );
   return (
     <AccountShell
-      language={language}
       account={account}
       shell={loaderData.shell}
       security={loaderData.verified}
       searchQuery={loaderData.notFound ? "" : (loaderData.page.search ?? "")}
     >
       {loaderData.notFound ? (
-        <NotFoundState kind="order" t={t} links={links} />
+        <NotFoundState kind="order" />
       ) : (
         <OrdersPage
           data={loaderData.page}
-          t={t}
-          links={links}
           unlockAction={`${localizedPath(language, ordersPath)}?environment=${loaderData.ebayEnvironment}`}
           confirmation={loaderData.confirmation}
           notice={
             <>
               {alerts}
-              {loaderData.sandbox ? (
-                <EnvironmentSelect language={language} value={loaderData.ebayEnvironment} />
-              ) : null}
+              {loaderData.sandbox ? <EnvironmentSelect value={loaderData.ebayEnvironment} /> : null}
             </>
           }
         />

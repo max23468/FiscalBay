@@ -4,7 +4,7 @@ import { contactsView } from "../contact";
 import { unusedCredit } from "../domain/lifetime.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { Language } from "../i18n";
-import { formatDate } from "../view-models";
+import { formatDate } from "../format";
 import type {
   OrdersNotice,
   AccountView,

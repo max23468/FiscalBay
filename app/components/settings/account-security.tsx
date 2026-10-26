@@ -1,39 +1,39 @@
 import { KeyRound } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFetcher, useLocation } from "react-router";
+import { useFetcher, useSubmit } from "react-router";
 
-import { useFetcherResult } from "~/components/app-shell";
+import { useFetcherResult } from "~/components/action";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { useFieldErrors } from "~/components/form-validation";
-import { StatusAlert } from "~/components/status";
+import { useHydrated } from "~/components/hydrated";
+import { useTimeZone } from "~/components/time-zone";
 import {
   AlertDialog,
-  AlertDialogTrigger,
+  AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogHeader,
-  AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogFooter,
-  AlertDialogCancel,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { Spinner } from "~/components/ui/spinner";
-import { useHydrated } from "~/components/hydrated";
-import type { ActiveSession } from "../domain/sessions.server";
-import type { ConfirmResult } from "../security-actions.server";
-import type { SignInMethods } from "../domain/sign-in-methods.server";
-import type { PendingEmailChange } from "../domain/email-change.server";
-import { loadPasskeyClient } from "../account/passkey";
-import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
-import type { AccessNoticeView } from "../access-notice";
-import { appCopy, supportEmail } from "../app-copy";
-import { deviceName } from "../account/device-name";
-import { accessPath, securityPath } from "../app-links";
-import { localizedPath, type Language } from "../i18n";
-import { formatDate, formatRelative } from "../view-models";
-import { useTimeZone } from "~/components/time-zone";
+import type { PendingEmailChange } from "../../domain/email-change.server";
+import type { ActiveSession } from "../../domain/sessions.server";
+import type { SignInMethods } from "../../domain/sign-in-methods.server";
+import type { ConfirmResult } from "../../security-actions.server";
+import { deviceName } from "../../account/device-name";
+import { loadPasskeyClient } from "../../account/passkey";
+import { passkeyFailure, type PasskeyFailure } from "../../account/passkey-error";
+import { appHref } from "../../app-links";
+import { formatDate, formatRelative } from "../../format";
+
+/** Categoria Sicurezza delle Impostazioni, che riceve anche le sue azioni. */
+const securitySection = "impostazioni/sicurezza";
 
 /** Riga di un metodo di accesso: nome, stato e azioni, come nelle Impostazioni. */
 function MethodRow({
@@ -75,35 +75,27 @@ function MethodRow({
 
 /** Pulsante che invia un'azione di Sicurezza, con il metodo interessato. */
 function MethodAction({
-  language,
   intent,
   method,
   id,
   label,
-  simulated = false,
   actionPath,
   disabled = false,
   children,
 }: {
-  language: Language;
   intent: string;
   method?: string;
   id?: string;
   label?: string;
-  simulated?: boolean;
-  actionPath?: string;
+  actionPath: string;
   disabled?: boolean;
   children: React.ReactNode;
 }) {
   const destructive = intent === "rimuovi-metodo" || intent === "passkey-remove";
   const [open, setOpen] = useState(false);
-  const t = appCopy[language];
+  const { t } = useCopy();
   const form = (
-    <form
-      method="post"
-      action={actionPath ?? localizedPath(language, accessPath)}
-      onSubmit={simulated ? () => setOpen(false) : undefined}
-    >
+    <form method="post" action={actionPath}>
       {method ? <input type="hidden" name="metodo" value={method} /> : null}
       {id ? <input type="hidden" name="id" value={id} /> : null}
       <Button
@@ -165,16 +157,14 @@ function SecurityGroup({
 /** Nome della passkey modificato sul posto; annullando, il focus torna a «Rinomina». */
 function PasskeyRename({
   passkey,
-  language,
   actionPath,
 }: {
   passkey: SignInMethods["passkeys"][number];
-  language: Language;
   actionPath: string;
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
-  const { settings, common } = appCopy[language];
+  const { settings, common } = useCopy().t;
   const trigger = useRef<HTMLButtonElement>(null);
   const ready = useHydrated();
   return open ? (
@@ -222,17 +212,15 @@ function PasskeyRename({
 
 /** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
 function EmailChange({
-  language,
   email,
   actionPath,
   pendingEmail,
 }: {
-  language: Language;
   email: string;
   actionPath: string;
   pendingEmail?: PendingEmailChange | null;
 }) {
-  const { access: t, profile, common } = appCopy[language];
+  const { access: t, profile, common } = useCopy().t;
   const [open, setOpen] = useState(false);
   const opener = useRef<HTMLButtonElement>(null);
   const v = useFieldErrors(t.validation);
@@ -277,9 +265,7 @@ function EmailChange({
           onSubmit={(event) => void v.check(event)}
         >
           <Field>
-            <FieldLabel htmlFor="new-email" required>
-              {t.newEmail}
-            </FieldLabel>
+            <FieldLabel htmlFor="new-email">{t.newEmail}</FieldLabel>
             <Input
               id="new-email"
               name="email"
@@ -292,7 +278,6 @@ function EmailChange({
             {v.error("email")}
             <FieldDescription id="new-email-hint">{profile.emailHint}</FieldDescription>
           </Field>
-          <p className="text-sm text-muted-foreground">{t.requiredFields}</p>
           <div className="flex flex-wrap gap-2">
             <Button type="submit" size="sm" name="intent" value="cambia-email">
               {t.sendEmailLink}
@@ -322,18 +307,19 @@ function EmailChange({
 
 /** Sessioni aperte: si chiudono una alla volta o tutte tranne quella in uso, che esce dal menu. */
 function SessionList({
-  language,
   sessions,
   now,
   actionPath,
 }: {
-  language: Language;
   sessions: ActiveSession[];
   now: string;
   actionPath: string;
 }) {
   const zone = useTimeZone();
-  const { settings } = appCopy[language];
+  const {
+    t: { settings },
+    language,
+  } = useCopy();
   return (
     <SecurityGroup id="security-sessions" title={settings.security.sessions}>
       <ul className="grid divide-y border-t">
@@ -383,25 +369,29 @@ function SessionList({
 }
 
 function AddPasskey({
-  language,
   block,
   guard,
-  onAction,
+  actionPath,
 }: {
-  language: Language;
   block: string;
   /** Chiede prima la conferma dell'identità, quando serve. */
   guard: (intent: string, run: () => void) => void;
-  onAction?: (intent: string, fields: Record<string, string>) => void;
+  actionPath: string;
 }) {
-  const { access: t, settings } = appCopy[language];
+  const {
+    t: { access: t, settings, common },
+    language,
+  } = useCopy();
+  const { preview } = useLinks();
+  const submit = useSubmit();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<PasskeyFailure | null>(null);
   const [name, setName] = useState("");
   const id = useId();
   const add = async () => {
-    if (onAction) {
-      onAction("passkey-add", {});
+    // L'anteprima non registra passkey: la sua route risponde all'azione come l'area reale.
+    if (preview) {
+      void submit({ intent: "passkey-add" }, { method: "post", action: actionPath });
       return;
     }
     setPending(true);
@@ -415,8 +405,7 @@ function AddPasskey({
       const result = await authClient.passkey.addPasskey({
         name: name.trim() || deviceName(navigator.userAgent, language),
       });
-      if (result.error?.status === 403)
-        window.location.assign(`${localizedPath(language, securityPath)}?accesso=${block}`);
+      if (result.error?.status === 403) window.location.assign(`${actionPath}?accesso=${block}`);
       else if (result.error) setError(passkeyFailure(result.error));
       else window.location.reload();
     } catch (failure) {
@@ -505,7 +494,7 @@ function AddPasskey({
             opener.current?.focus();
           }}
         >
-          {appCopy[language].common.cancel}
+          {common.cancel}
         </Button>
       </div>
       {failure}
@@ -529,25 +518,22 @@ const passkeyIntents = new Set(["passkey-remove", "passkey-rename", "passkey-add
  * passkey.
  */
 function ConfirmIdentity({
-  language,
   methods,
   passkeyOnly,
   actionPath,
   currentSession,
-  simulated,
   onConfirmed,
   onCancel,
 }: {
-  language: Language;
   methods: SignInMethods;
   passkeyOnly: boolean;
   actionPath: string;
   currentSession: string | null;
-  simulated: boolean;
   onConfirmed: () => void;
   onCancel: () => void;
 }) {
-  const t = appCopy[language].access;
+  const { access: t, common } = useCopy().t;
+  const { preview } = useLinks();
   const fetcher = useFetcher<ConfirmResult>();
   const [passkeyError, setPasskeyError] = useState<PasskeyFailure | null>(null);
   const [pending, setPending] = useState(false);
@@ -561,10 +547,17 @@ function ConfirmIdentity({
   const password = methods.accounts.password && !passkeyOnly;
   const passkey = methods.passkeys.length > 0;
   const confirmWithPasskey = async () => {
-    if (simulated) return onConfirmed();
     setPasskeyError(null);
     setPending(true);
     try {
+      // Nell'anteprima la passkey non si apre: la conferma va subito alla route simulata.
+      if (preview) {
+        void fetcher.submit(
+          { intent: "conferma-accesso", metodo: "passkey" },
+          { method: "post", action: actionPath },
+        );
+        return;
+      }
       const authClient = await loadPasskeyClient();
       if (!authClient) return setPasskeyError("unsupported");
       const signed = await authClient.signIn.passkey();
@@ -599,7 +592,6 @@ function ConfirmIdentity({
             onSubmit={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              if (simulated) return onConfirmed();
               const value = String(new FormData(event.currentTarget).get("password") ?? "");
               void fetcher.submit(
                 { intent: "conferma-accesso", metodo: "password", password: value },
@@ -658,11 +650,7 @@ function ConfirmIdentity({
           <div className="grid justify-items-start gap-2 text-sm text-muted-foreground">
             <p>{t.confirmOther}</p>
             <form method="post" action={actionPath}>
-              <input
-                type="hidden"
-                name="returnTo"
-                value={`${localizedPath(language, securityPath)}#security-methods`}
-              />
+              <input type="hidden" name="returnTo" value={`${actionPath}#security-methods`} />
               <Button type="submit" variant="outline" size="sm" name="intent" value="riautentica">
                 {t.signOutSignIn}
               </Button>
@@ -670,7 +658,7 @@ function ConfirmIdentity({
           </div>
         )}
         <AlertDialogFooter>
-          <AlertDialogCancel>{appCopy[language].common.cancel}</AlertDialogCancel>
+          <AlertDialogCancel>{common.cancel}</AlertDialogCancel>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -678,7 +666,6 @@ function ConfirmIdentity({
 }
 
 export function AccountSecurity({
-  language,
   email,
   methods,
   sessions,
@@ -687,10 +674,7 @@ export function AccountSecurity({
   recent = true,
   passkeyRestriction = null,
   pendingEmail = null,
-  onAction,
-  className = "grid gap-4 rounded-xl border bg-card p-5 md:p-6",
 }: {
-  language: Language;
   email: string;
   methods: SignInMethods;
   sessions: ActiveSession[];
@@ -699,15 +683,14 @@ export function AccountSecurity({
   recent?: boolean;
   passkeyRestriction?: "conferma-passkey" | "nuovo-accesso" | null;
   pendingEmail?: PendingEmailChange | null;
-  /** L'anteprima risponde con la propria azione simulata, senza chiamare Auth. */
-  onAction?: (intent: string, fields: Record<string, string>) => void;
-  className?: string;
 }) {
   const zone = useTimeZone();
-  const { access: t, settings } = appCopy[language];
-  const { pathname } = useLocation();
-  // Anche senza JavaScript i form dell'anteprima restano nella route simulata.
-  const actionPath = onAction ? pathname : localizedPath(language, securityPath);
+  const {
+    t: { access: t, settings },
+    language,
+  } = useCopy();
+  // Nell'anteprima le stesse azioni vanno alla sua route, che le simula.
+  const actionPath = appHref(useLinks().links, securitySection);
   // Conferma già data in questa pagina e modifica in attesa della conferma.
   const [confirmed, setConfirmed] = useState(false);
   const [waiting, setWaiting] = useState<{ run: () => void; passkeyOnly: boolean } | null>(null);
@@ -729,33 +712,24 @@ export function AccountSecurity({
   const oauth = (method: "google" | "ebay") =>
     methods.accounts[method] ? (
       <MethodAction
-        language={language}
         intent="rimuovi-metodo"
         method={method}
         label={method === "google" ? settings.security.methodGoogle : settings.security.methodEbay}
-        simulated={!!onAction}
         actionPath={actionPath}
         disabled={lastMethod}
       >
         {settings.security.remove}
       </MethodAction>
     ) : (
-      <MethodAction
-        language={language}
-        intent="collega-metodo"
-        method={method}
-        actionPath={actionPath}
-      >
+      <MethodAction intent="collega-metodo" method={method} actionPath={actionPath}>
         {settings.security.connect}
       </MethodAction>
     );
-  const addPasskey = (
-    <AddPasskey language={language} block={passkeyBlock} guard={guard} onAction={onAction} />
-  );
+  const addPasskey = <AddPasskey block={passkeyBlock} guard={guard} actionPath={actionPath} />;
   const passkeys = methods.passkeys;
   return (
     <div
-      className={className}
+      className="grid gap-4"
       // Le modifiche protette passano prima dalla conferma dell'identità, poi ripartono.
       onSubmitCapture={(event) => {
         const form = event.target as HTMLFormElement;
@@ -766,28 +740,13 @@ export function AccountSecurity({
         event.stopPropagation();
         guard(intent, () => form.requestSubmit(submitter));
       }}
-      onSubmit={
-        onAction
-          ? (event) => {
-              if (event.defaultPrevented) return;
-              event.preventDefault();
-              const form = event.target as HTMLFormElement;
-              const fields = new FormData(form, (event.nativeEvent as SubmitEvent).submitter);
-              const values: Record<string, string> = {};
-              for (const [key, value] of fields) if (typeof value === "string") values[key] = value;
-              onAction(values.intent ?? "", values);
-            }
-          : undefined
-      }
     >
       {waiting ? (
         <ConfirmIdentity
-          language={language}
           methods={methods}
           passkeyOnly={waiting.passkeyOnly}
           actionPath={actionPath}
           currentSession={sessions.find((session) => session.current)?.id ?? null}
-          simulated={!!onAction}
           onConfirmed={() => {
             const { run } = waiting;
             flushSync(() => {
@@ -799,12 +758,7 @@ export function AccountSecurity({
           onCancel={() => setWaiting(null)}
         />
       ) : null}
-      <EmailChange
-        language={language}
-        email={email}
-        actionPath={actionPath}
-        pendingEmail={pendingEmail}
-      />
+      <EmailChange email={email} actionPath={actionPath} pendingEmail={pendingEmail} />
       <SecurityGroup id="security-methods" title={settings.security.methods}>
         {lastMethod ? (
           <p role="status" className="text-sm text-warning">
@@ -816,16 +770,14 @@ export function AccountSecurity({
             label={settings.security.methodPassword}
             status={status(methods.accounts.password)}
           >
-            <MethodAction language={language} intent="password" actionPath={actionPath}>
+            <MethodAction intent="password" actionPath={actionPath}>
               {methods.accounts.password ? settings.security.changePassword : t.setPassword}
             </MethodAction>
             {methods.accounts.password ? (
               <MethodAction
-                language={language}
                 intent="rimuovi-metodo"
                 method="password"
                 label={settings.security.methodPassword}
-                simulated={!!onAction}
                 actionPath={actionPath}
                 disabled={lastMethod}
               >
@@ -870,123 +822,22 @@ export function AccountSecurity({
                 }
               >
                 <MethodAction
-                  language={language}
                   intent="passkey-remove"
                   id={passkey.id}
                   label={passkey.name || settings.security.methodPasskey}
-                  simulated={!!onAction}
                   actionPath={actionPath}
                   disabled={lastMethod}
                 >
                   {settings.security.remove}
                 </MethodAction>
-                <PasskeyRename passkey={passkey} language={language} actionPath={actionPath} />
+                <PasskeyRename passkey={passkey} actionPath={actionPath} />
               </MethodRow>
             ))
           )}
         </ul>
         {passkeys.length > 0 ? <div className="max-w-xl">{addPasskey}</div> : null}
-        <p className="text-sm text-muted-foreground">{settings.security.lastMethod}</p>
       </SecurityGroup>
-      <SessionList language={language} sessions={sessions} now={now} actionPath={actionPath} />
+      <SessionList sessions={sessions} now={now} actionPath={actionPath} />
     </div>
   );
-}
-
-function SignInAgain({ language, inSecurity }: { language: Language; inSecurity: boolean }) {
-  return (
-    <form method="post" action={localizedPath(language, inSecurity ? securityPath : accessPath)}>
-      {inSecurity ? (
-        <input
-          type="hidden"
-          name="returnTo"
-          value={`${localizedPath(language, securityPath)}#security-methods`}
-        />
-      ) : null}
-      <Button
-        type="submit"
-        variant="outline"
-        size="sm"
-        name="intent"
-        value={inSecurity ? "riautentica" : "esci"}
-      >
-        {appCopy[language].access.signOutSignIn}
-      </Button>
-    </form>
-  );
-}
-
-/** Avviso di verifica dell'email, finché l'indirizzo non è confermato. */
-export function VerifyEmail({
-  language,
-  email,
-  verified,
-}: {
-  language: Language;
-  email: string;
-  verified: boolean;
-}) {
-  const t = appCopy[language].access;
-  return verified ? null : (
-    <StatusAlert tone="warning" title={t.verifyTitle}>
-      <p>{t.verifyBody(email)}</p>
-      <form method="post" action={localizedPath(language, accessPath)} className="mt-2">
-        <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
-          {t.verifyResend}
-        </Button>
-      </form>
-    </StatusAlert>
-  );
-}
-
-export function AccessNotice({
-  language,
-  notice,
-  showSignInAgain = true,
-}: {
-  language: Language;
-  notice: AccessNoticeView | null;
-  showSignInAgain?: boolean;
-}) {
-  const t = appCopy[language].access;
-  const { pathname } = useLocation();
-  const inSecurity = pathname === localizedPath(language, securityPath);
-  const banner = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (notice) banner.current?.focus();
-  }, [notice]);
-  // L'esito resta visibile ma esce dall'indirizzo, così una ricarica non lo ripropone.
-  // Un link di recupero conserva il token e il proprio errore.
-  useEffect(() => {
-    const url = new URL(window.location.href);
-    const before = url.search;
-    url.searchParams.delete("accesso");
-    url.searchParams.delete("negozio");
-    if (!url.searchParams.has("token")) url.searchParams.delete("error");
-    if (url.search !== before) window.history.replaceState(window.history.state, "", url);
-  }, []);
-  const elsewhere = notice?.text === t.storeNotices["altro-spazio"];
-  return notice ? (
-    <div ref={banner} tabIndex={-1} className="outline-none">
-      <StatusAlert
-        tone={notice.tone}
-        // Il testo dell'esito ripete la spiegazione: qui serve solo il titolo breve.
-        title={elsewhere ? appCopy[language].stores.elsewhereTitle : notice.text}
-      >
-        {showSignInAgain &&
-        (notice.text === t.signInNotices["nuovo-accesso"] ||
-          notice.text === t.signInNotices["conferma-passkey"]) ? (
-          <SignInAgain language={language} inSecurity={inSecurity} />
-        ) : null}
-        {elsewhere ? (
-          <span className="grid gap-2">
-            <span>{appCopy[language].stores.elsewhereBody}</span>
-            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
-              {appCopy[language].common.contactSupport}: {supportEmail}
-            </a>
-          </span>
-        ) : null}
-      </StatusAlert>
-    </div>
-  ) : null;
 }

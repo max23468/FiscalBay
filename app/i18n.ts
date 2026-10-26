@@ -3,10 +3,10 @@ import { currencyExponent } from "./money";
 export const languages = ["it", "en"] as const;
 export type Language = (typeof languages)[number];
 
-/** Ogni lingua con il proprio nome, in qualunque lingua sia l'interfaccia. */
 /** Formati di date, numeri e Paesi: l'inglese è britannico, come il copy. */
 export const locales: Record<Language, string> = { it: "it-IT", en: "en-GB" };
 
+/** Ogni lingua con il proprio nome, in qualunque lingua sia l'interfaccia. */
 export const languageNames: Record<Language, string> = { it: "Italiano", en: "English" };
 
 export function languageFromPath(path: string): Language {

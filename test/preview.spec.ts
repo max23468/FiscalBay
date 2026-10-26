@@ -9,7 +9,8 @@ import {
   scenarioIds,
   scenarioOptions,
 } from "../app/preview/scenarios.server";
-import { formatDate, formatRelative, trialDaysLeft, trialEnding } from "../app/view-models";
+import { trialDaysLeft, trialEnding } from "../app/view-models";
+import { formatDate, formatRelative } from "../app/format";
 import { taxQuality } from "../app/tax-quality";
 import { readPreviewState, writePreviewState } from "../app/preview/state.server";
 import { action as previewSearch } from "../app/routes/preview-search";
@@ -18,7 +19,7 @@ import { loader as previewOrders } from "../app/routes/preview-orders";
 import { loader as previewStores } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/domain/orders.server";
-import type { SearchResults } from "../app/components/app-shell";
+import type { SearchResults } from "../app/components/shell-search";
 
 describe("stato sintetico dell'anteprima", () => {
   it("conserva lo stato sui cookie HTTP locali e mantiene Secure sul dominio HTTPS", async () => {

@@ -2,15 +2,16 @@ import { Link, useLocation } from "react-router";
 
 import { EmptyState } from "~/components/empty-state";
 import { buttonLink } from "~/components/ui/button-variants";
-import type { AppCopy } from "../app-copy";
-import { appHref, type AppLinks } from "../app-links";
+import { appHref } from "../app-links";
+import { useCopy, useLinks } from "~/components/copy-context";
 
 /**
  * Auth o database non rispondono: nessun dato letto e nessuna promessa, soltanto Riprova.
  * Nell'area reale la pagina d'errore non ha la shell, perché la sessione non è leggibile;
  * l'anteprima mostra lo stesso stato dentro la shell, per poter cambiare scenario.
  */
-export function UnavailableState({ t }: { t: AppCopy }) {
+export function UnavailableState() {
+  const { t } = useCopy();
   const { pathname, search } = useLocation();
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -34,15 +35,9 @@ export function UnavailableState({ t }: { t: AppCopy }) {
  * Indirizzo dell'app che non corrisponde a un ordine, a un negozio o a una
  * pagina: resta dentro la shell, con la strada per tornare all'elenco.
  */
-export function NotFoundState({
-  kind,
-  t,
-  links,
-}: {
-  kind: "order" | "store" | "page";
-  t: AppCopy;
-  links: AppLinks;
-}) {
+export function NotFoundState({ kind }: { kind: "order" | "store" | "page" }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const copy = t.shell.notFound[kind];
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">

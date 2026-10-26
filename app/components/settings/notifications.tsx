@@ -1,7 +1,7 @@
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 
-import { useAction, useNotice } from "~/components/app-shell";
+import { useAction, useNotice } from "~/components/action";
 import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
@@ -9,7 +9,7 @@ import { Field, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/componen
 import { RadioGroup } from "~/components/ui/radio-group";
 import { Switch } from "~/components/ui/switch";
 import type { AppCopy } from "../../app-copy";
-import { appHref, type AppLinks } from "../../app-links";
+import { appHref } from "../../app-links";
 import { telegramDigestTimes, telegramLinkMinutes, zoneLabel } from "../../preferences";
 import type { TelegramView } from "../../view-models";
 import {
@@ -21,35 +21,28 @@ import {
   SimpleSelect,
   useAutoSave,
 } from "./controls";
+import { useCopy, useLinks } from "~/components/copy-context";
 
 export function NotificationsSection({
   telegram,
   premium,
-  preview,
   marketing,
-  t,
-  links,
 }: {
   /** Notifiche Telegram dello spazio; null senza il servizio. */
   telegram: TelegramView | null;
   premium: boolean;
-  preview: boolean;
   marketing: boolean;
-  t: AppCopy;
-  links: AppLinks;
 }) {
+  const { t } = useCopy();
   return (
     <>
-      {telegram ? (
-        <TelegramGroup premium={premium} view={telegram} preview={preview} t={t} links={links} />
-      ) : null}
+      {telegram ? <TelegramGroup premium={premium} view={telegram} /> : null}
       <Group title={t.settings.notifications.marketingTitle}>
         <AutoSwitch
           name="marketing"
           label={t.settings.notifications.marketingConsent}
           description={t.settings.notifications.marketingHint}
           initial={marketing}
-          t={t}
         />
       </Group>
     </>
@@ -101,15 +94,14 @@ function useLinkWait(linkedAt: string | null, t: AppCopy) {
 function ConnectButton({
   label,
   variant,
-  preview,
   onStart,
 }: {
   label: string;
   variant: "default" | "outline";
-  preview: boolean;
   onStart: () => void;
 }) {
   const action = useAction();
+  const { preview } = useLinks();
   if (preview)
     return (
       <Button variant={variant} size="sm" onClick={() => action.run("telegram-link")}>
@@ -126,19 +118,9 @@ function ConnectButton({
   );
 }
 
-function TelegramGroup({
-  premium,
-  view,
-  preview,
-  t,
-  links,
-}: {
-  premium: boolean;
-  view: TelegramView;
-  preview: boolean;
-  t: AppCopy;
-  links: AppLinks;
-}) {
+function TelegramGroup({ premium, view }: { premium: boolean; view: TelegramView }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const copy = t.settings.notifications;
   const wait = useLinkWait(view.chat?.linkedAt ?? null, t);
   return (
@@ -154,12 +136,7 @@ function TelegramGroup({
         </StatusAlert>
       ) : !view.chat ? (
         <div className="grid justify-items-start gap-2">
-          <ConnectButton
-            label={copy.telegramConnect}
-            variant="default"
-            preview={preview}
-            onStart={wait.begin}
-          />
+          <ConnectButton label={copy.telegramConnect} variant="default" onStart={wait.begin} />
           <p role="status" className="text-sm text-muted-foreground empty:hidden">
             {wait.pending ? copy.telegramPending : ""}
           </p>
@@ -168,10 +145,8 @@ function TelegramGroup({
         <TelegramPreferences
           key={view.chat.linkedAt}
           view={view}
-          preview={preview}
           pending={wait.pending}
           onStart={wait.begin}
-          t={t}
         />
       )}
     </Group>
@@ -180,17 +155,14 @@ function TelegramGroup({
 
 function TelegramPreferences({
   view,
-  preview,
   pending,
   onStart,
-  t,
 }: {
   view: TelegramView;
-  preview: boolean;
   pending: boolean;
   onStart: () => void;
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   const copy = t.settings.notifications;
   const [mode, setMode, modeState] = useAutoSave<string>("telegram-mode", view.mode);
   const [digestTime, setDigestTime, timeState] = useAutoSave<string>(
@@ -215,12 +187,7 @@ function TelegramPreferences({
             <span className="text-muted-foreground">{copy.telegramChat}</span>
             <span className="font-medium">{view.chat?.label ?? copy.telegramChatUnnamed}</span>
           </span>
-          <ConnectButton
-            label={copy.telegramChange}
-            variant="outline"
-            preview={preview}
-            onStart={onStart}
-          />
+          <ConnectButton label={copy.telegramChange} variant="outline" onStart={onStart} />
         </div>
         <p role="status" className="text-sm text-muted-foreground empty:hidden">
           {pending ? copy.telegramChangePending : ""}
@@ -242,7 +209,7 @@ function TelegramPreferences({
           >
             {copy.telegramEnabled}
           </FieldLabel>
-          <SaveStatus state={enabledState} t={t} />
+          <SaveStatus state={enabledState} />
         </div>
       </Field>
       <fieldset disabled={!enabled} className="grid gap-5 disabled:opacity-60">
@@ -251,7 +218,6 @@ function TelegramPreferences({
           legend={copy.telegramFilter}
           disabled={!enabled}
           initial={view.filter}
-          t={t}
           options={[
             { value: "fiscal", label: copy.telegramFilterFiscal },
             { value: "all", label: copy.telegramFilterAll },
@@ -268,7 +234,7 @@ function TelegramPreferences({
             <RadioOption value="each">{copy.telegramModeEach}</RadioOption>
             <RadioOption value="digest">{copy.telegramModeDigest}</RadioOption>
           </RadioGroup>
-          <SaveStatus state={modeState} t={t} />
+          <SaveStatus state={modeState} />
         </FieldSet>
         {mode === "digest" ? (
           <div className="grid gap-2">
@@ -280,7 +246,7 @@ function TelegramPreferences({
               value={digestTime}
               onChange={setDigestTime}
             />
-            <SaveStatus state={timeState} t={t} />
+            <SaveStatus state={timeState} />
           </div>
         ) : null}
         {view.stores.length > 0 ? (
@@ -292,7 +258,6 @@ function TelegramPreferences({
                 name={`store-notifications:${store.id}`}
                 label={store.name}
                 initial={store.enabled}
-                t={t}
                 disabled={!enabled || store.paused}
               />
             ))}

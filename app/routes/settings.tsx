@@ -1,13 +1,13 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, redirect } from "react-router";
+import { data, redirect } from "react-router";
 
 import { AccountShell } from "~/components/account-shell";
 import { NotFoundState } from "~/components/not-found";
 import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { accessNotice } from "../access-notice";
+import { unconfirmedOnFailure } from "../client-action";
 import { areaPage, assertSameOrigin, requireAccountArea, shellData } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { appBase, type AppLinks } from "../app-links";
 import { checkoutReturn } from "../catalog";
 import {
   checkoutConfigured,
@@ -62,12 +62,8 @@ import { languageFromPath, localizedPath } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction } from "../security-actions.server";
 import { effectiveTimeZone } from "../preferences";
-import {
-  formatDate,
-  settingsSections,
-  type ActionResult,
-  type SettingsSection,
-} from "../view-models";
+import { settingsSections, type ActionResult, type SettingsSection } from "../view-models";
+import { formatDate } from "../format";
 import type { Route } from "./+types/settings";
 
 /**
@@ -173,7 +169,6 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     section: params.sezione ?? null,
     sections,
     services: services(),
-    preview: false,
     account: {
       ...account,
       profile,
@@ -375,34 +370,18 @@ export async function action({ request }: Route.ActionArgs) {
   return securityAction(request, area, form);
 }
 
-/** Un'interruzione di rete non conferma l'esito remoto: la scelta torna com'era. */
-export async function clientAction({ request, serverAction }: Route.ClientActionArgs) {
-  try {
-    return await serverAction();
-  } catch (error) {
-    if (error instanceof Response || isRouteErrorResponse(error) || request.signal.aborted)
-      throw error;
-    const language = languageFromPath(new URL(request.url).pathname);
-    return { ok: false, notice: appCopy[language].errors.unconfirmed } satisfies ActionResult;
-  }
+export function clientAction(args: Route.ClientActionArgs) {
+  return unconfirmedOnFailure(args);
 }
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { language, account, shell } = loaderData;
-  const t = appCopy[language];
-  const links: AppLinks = { language, base: appBase };
+  const { account, shell } = loaderData;
   return (
-    <AccountShell
-      key={loaderData.userId}
-      language={language}
-      account={account}
-      shell={shell}
-      security
-    >
+    <AccountShell key={loaderData.userId} account={account} shell={shell} security>
       {loaderData.notFound ? (
-        <NotFoundState kind="page" t={t} links={links} />
+        <NotFoundState kind="page" />
       ) : (
-        <SettingsPage data={loaderData.page} t={t} links={links} />
+        <SettingsPage data={loaderData.page} />
       )}
     </AccountShell>
   );

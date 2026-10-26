@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { PremiumNote, StatusBadge } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { FieldGroup, FieldLegend, FieldSet } from "~/components/ui/field";
 import { RadioGroup } from "~/components/ui/radio-group";
-import type { AppCopy } from "../../app-copy";
 import { orderPeriods, premiumOrderPeriods } from "../../view-models";
 import { CheckboxOption, Group, RadioOption, SimpleSelect } from "./controls";
+import { useCopy } from "~/components/copy-context";
 
 /** Selezione, singolo ordine o elenco filtrato degli Ordini, da esportare così com'è. */
 export interface ExportContext {
@@ -24,7 +24,8 @@ export interface ExportContext {
 }
 
 /** Ambito ricevuto dagli Ordini, sempre esplicito, con il ritorno all'elenco di partenza. */
-function ExportContextNote({ context, t }: { context: ExportContext; t: AppCopy }) {
+function ExportContextNote({ context }: { context: ExportContext }) {
+  const { t } = useCopy();
   return (
     <div className="grid justify-items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
       <p>
@@ -47,14 +48,13 @@ export function ExportSection({
   premium,
   context,
   estimate,
-  t,
 }: {
   premium: boolean;
   context: ExportContext | null;
   /** Ordini dell'esportazione e quanti fra loro hanno un dato ancora da sbloccare. */
   estimate: { orders: number; locked: number };
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   const action = useAction();
   const [period, setPeriod] = useState("30");
   const [format, setFormat] = useState("csv");
@@ -64,7 +64,7 @@ export function ExportSection({
   return (
     <>
       <Group title={t.settings.export.exportScope}>
-        {context ? <ExportContextNote context={context} t={t} /> : null}
+        {context ? <ExportContextNote context={context} /> : null}
         <FieldGroup>
           {/* Con l'ambito degli Ordini il periodo è già nei loro filtri. */}
           {context ? null : (

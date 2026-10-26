@@ -1,16 +1,16 @@
 import { ChevronRight, ExternalLink, RefreshCw } from "lucide-react";
 import { Link } from "react-router";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { useHydrated } from "~/components/hydrated";
 import { StatusBadge } from "~/components/status";
 import { useTimeZone } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import type { AppCopy } from "../../app-copy";
-import { appHref, type AppLinks } from "../../app-links";
-import type { Language } from "../../i18n";
-import { formatDate, type StoreView } from "../../view-models";
+import { appHref } from "../../app-links";
+import { type StoreView } from "../../view-models";
+import { formatDate } from "../../format";
 import { PauseButton, ReconnectButton } from "./actions";
 import {
   FeedbackSummary,
@@ -28,6 +28,7 @@ import {
   syncDescription,
   type StoresPageData,
 } from "./state";
+import { useCopy, useLinks } from "~/components/copy-context";
 
 /** Valore di un riquadro della scheda: etichetta sopra, valore sotto. */
 function OverviewStat({ label, children }: { label: string; children: React.ReactNode }) {
@@ -40,15 +41,8 @@ function OverviewStat({ label, children }: { label: string; children: React.Reac
 }
 
 /** Intestazione della scheda: logo, nome, account, feedback, stato e pagina eBay. */
-function OverviewIdentity({
-  store,
-  t,
-  language,
-}: {
-  store: StoreView;
-  t: AppCopy;
-  language: Language;
-}) {
+function OverviewIdentity({ store }: { store: StoreView }) {
+  const { t } = useCopy();
   const status = connectionStatus(store, t);
   return (
     <div className="flex items-start gap-4">
@@ -65,7 +59,7 @@ function OverviewIdentity({
         {store.feedback ? (
           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
             <span className="text-muted-foreground">{t.stores.feedback}:</span>
-            <FeedbackSummary feedback={store.feedback} t={t} language={language} />
+            <FeedbackSummary feedback={store.feedback} />
           </p>
         ) : null}
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
@@ -97,7 +91,8 @@ function historyText(store: StoreView, t: AppCopy) {
 }
 
 /** Riquadri della scheda: ordini, ultima lettura, storico e scadenza dell'autorizzazione. */
-function OverviewStats({ store, now, t, language }: SectionProps & { now: string }) {
+function OverviewStats({ store, now }: SectionProps & { now: string }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const history = historyText(store, t);
   const expired =
@@ -109,7 +104,7 @@ function OverviewStats({ store, now, t, language }: SectionProps & { now: string
         <span className="font-code">{store.importedOrders}</span>
       </OverviewStat>
       <OverviewStat label={t.stores.lastRead}>
-        <LastSync store={store} t={t} now={now} language={language} slot={false} wrap />
+        <LastSync store={store} now={now} slot={false} wrap />
       </OverviewStat>
       {history ? <OverviewStat label={t.stores.historyLabel}>{history}</OverviewStat> : null}
       {store.consentExpiresAt ? (
@@ -126,11 +121,12 @@ function OverviewStats({ store, now, t, language }: SectionProps & { now: string
 }
 
 /** Ultime letture dei recenti, dalla più recente. */
-function OverviewRecent({ store, t, language }: SectionProps) {
+function OverviewRecent({ store }: SectionProps) {
+  const { t } = useCopy();
   return (
     <div className="grid content-start gap-2">
       <h3 className="text-sm font-semibold">{t.stores.sectionRecent}</h3>
-      <RecentList store={store} t={t} language={language} />
+      <RecentList store={store} />
     </div>
   );
 }
@@ -140,17 +136,9 @@ function OverviewRecent({ store, t, language }: SectionProps) {
  * scollegamento ed eliminazione restano nel pannello. Sotto `sm` i pulsanti stanno in colonna
  * a tutta larghezza, da `sm` in riga.
  */
-function OverviewActions({
-  store,
-  data,
-  t,
-  links,
-}: {
-  store: StoreView;
-  data: StoresPageData;
-  t: AppCopy;
-  links: AppLinks;
-}) {
+function OverviewActions({ store, data }: { store: StoreView; data: StoresPageData }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const action = useAction();
   const ready = useHydrated();
   const disconnected = store.connection === "disconnected";
@@ -162,7 +150,6 @@ function OverviewActions({
           store={store}
           ebayDown={ebayDownFor(data, store)}
           connectHref={data.connectHref}
-          t={t}
           prominent
         />
       ) : store.connection === "active" ? (
@@ -177,7 +164,7 @@ function OverviewActions({
         </Button>
       ) : null}
       {disconnected || store.pauseReason === "plan" ? null : (
-        <PauseButton store={store} t={t} size="sm" className={button} />
+        <PauseButton store={store} size="sm" className={button} />
       )}
       <Link
         to={`${appHref(links, "negozi")}/${store.id}`}
@@ -196,36 +183,26 @@ function OverviewActions({
  * storico e autorizzazione si leggono senza aprire il pannello, che resta completo. Da desktop
  * gli aggiornamenti stanno nella colonna destra; su mobile precedono le azioni.
  */
-export function StoreOverview({
-  store,
-  data,
-  t,
-  links,
-}: {
-  store: StoreView;
-  data: StoresPageData;
-  t: AppCopy;
-  links: AppLinks;
-}) {
-  const { language } = links;
+export function StoreOverview({ store, data }: { store: StoreView; data: StoresPageData }) {
+  const { t } = useCopy();
   return (
     <section
       aria-labelledby="store-overview"
       className="grid gap-5 rounded-xl border bg-card p-4 sm:p-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] lg:gap-x-6"
     >
       <div className="grid content-start gap-5 lg:col-start-1">
-        <OverviewIdentity store={store} t={t} language={language} />
-        <OverviewStats store={store} now={data.now} t={t} language={language} />
+        <OverviewIdentity store={store} />
+        <OverviewStats store={store} now={data.now} />
         <p className="text-sm text-muted-foreground">
           {syncDescription(store, ebayDownFor(data, store), t)}
         </p>
       </div>
       {store.recent.length > 0 ? (
         <div className="border-t pt-5 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6">
-          <OverviewRecent store={store} t={t} language={language} />
+          <OverviewRecent store={store} />
         </div>
       ) : null}
-      <OverviewActions store={store} data={data} t={t} links={links} />
+      <OverviewActions store={store} data={data} />
     </section>
   );
 }

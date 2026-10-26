@@ -11,9 +11,10 @@ import { loadPasskeyClient } from "../account/passkey";
 import { appCopy, pageTitle } from "../app-copy";
 import { adminAccess, readSession, type AuthSession } from "../domain/sessions.server";
 import { tracePhase } from "../errors";
-import { languageFromPath, localizedPath, type Language } from "../i18n";
-import { formatDate } from "../view-models";
+import { languageFromPath, localizedPath } from "../i18n";
+import { formatDate } from "../format";
 import type { Route } from "./+types/admin";
+import { useCopy } from "~/components/copy-context";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
@@ -48,7 +49,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 /** Accesso con passkey: Better Auth propone solo le passkey dell'utente della sessione. */
-function PasskeyConfirm({ language, unverified }: { language: Language; unverified: boolean }) {
+function PasskeyConfirm({ unverified }: { unverified: boolean }) {
+  const { language } = useCopy();
   const t = appCopy[language].admin;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
@@ -109,7 +111,7 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
           {t.granted(formatDate(confirmedAt, language))}
         </p>
       ) : (
-        <PasskeyConfirm language={language} unverified={unverified} />
+        <PasskeyConfirm unverified={unverified} />
       )}
       <a href={localizedPath(language)} {...buttonLink({ variant: "outline", className: "w-fit" })}>
         {t.back}

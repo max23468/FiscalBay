@@ -3,7 +3,7 @@ import { FileSpreadsheet, ListChecks, SlidersHorizontal, X } from "lucide-react"
 import { useId, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
@@ -15,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import type { AppCopy } from "../../app-copy";
 import { rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
 import {
@@ -26,6 +25,7 @@ import {
   shippingStatuses,
   type Plan,
 } from "../../view-models";
+import { useCopy } from "~/components/copy-context";
 
 interface FilterOption {
   value: string;
@@ -128,12 +128,11 @@ function FilterSelect({
 function ExportListButton({
   href,
   selecting,
-  t,
 }: {
   href: string | null | undefined;
   selecting: boolean;
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   if (href === undefined || selecting) return null;
   const content = (
     <>
@@ -164,7 +163,6 @@ export function OrdersToolbar({
   stores,
   plan,
   confirmUnlock,
-  t,
   selecting,
   onToggleSelect,
   selectRef,
@@ -178,11 +176,11 @@ export function OrdersToolbar({
   stores: Array<{ id: string; name: string }>;
   plan: Plan;
   confirmUnlock?: boolean;
-  t: AppCopy;
   selecting: boolean;
   onToggleSelect: () => void;
   selectRef: React.RefObject<HTMLButtonElement | null>;
 }) {
+  const { t } = useCopy();
   const action = useAction();
   const [params, setParams] = useSearchParams();
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -231,7 +229,7 @@ export function OrdersToolbar({
           <ListChecks aria-hidden="true" data-icon="inline-start" />
           {t.orders.select}
         </Button>
-        <ExportListButton href={exportHref} selecting={selecting} t={t} />
+        <ExportListButton href={exportHref} selecting={selecting} />
       </div>
       <div
         id="orders-filters"
@@ -313,14 +311,13 @@ export function OrdersToolbar({
 
 /** Ricerca attiva, con la possibilità di toglierla quando non lascerebbe la pagina vuota. */
 export function SearchChip({
-  t,
   query,
   clearable = true,
 }: {
-  t: AppCopy;
   query: string | null;
   clearable?: boolean;
 }) {
+  const { t } = useCopy();
   const location = useLocation();
   const navigate = useNavigate();
   if (!query) return null;

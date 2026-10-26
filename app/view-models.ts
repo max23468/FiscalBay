@@ -1,4 +1,4 @@
-import { locales, type Language } from "./i18n";
+import { dayMilliseconds } from "./time";
 
 /**
  * Dati che le schermate dell'app ricevono dal server. Un Codice Fiscale da
@@ -140,7 +140,7 @@ export const premiumOrderPeriods: ReadonlySet<OrderPeriod> = new Set(["90", "6m"
 export function orderPeriodStart(period: OrderPeriod, now: Date): Date {
   const start = new Date(now);
   if (period.endsWith("m")) start.setUTCMonth(start.getUTCMonth() - Number(period.slice(0, -1)));
-  else start.setTime(now.getTime() - Number(period) * 86_400_000);
+  else start.setTime(now.getTime() - Number(period) * dayMilliseconds);
   return start;
 }
 
@@ -418,67 +418,17 @@ export const settingsSections: readonly SettingsSection[] = settingsGroups.flatM
   (group) => group.sections,
 );
 
-/** Fuso di visualizzazione predefinito, finché l'utente non ne sceglie un altro. */
-export const displayTimeZone = "Europe/Rome";
-
-export function formatDate(
-  value: string,
-  language: Language,
-  style: "date" | "dateTime" | "time" = "dateTime",
-  timeZone: string = displayTimeZone,
-): string {
-  // Il pattern combinato varia fra versioni ICU (virgola oppure "at" in inglese).
-  // Un separatore esplicito conserva lo stesso testo fra server e browser.
-  if (style === "dateTime") {
-    return `${formatDate(value, language, "date", timeZone)}, ${formatDate(value, language, "time", timeZone)}`;
-  }
-  const options: Intl.DateTimeFormatOptions =
-    style === "date" ? { dateStyle: "medium" } : { timeStyle: "short" };
-  // ICU recenti abbreviano settembre in «Sept», quelli precedenti in «Sep».
-  return new Intl.DateTimeFormat(locales[language], { ...options, timeZone })
-    .format(new Date(value))
-    .replace("Sept", "Sep");
-}
-
-/** Nome del Paese nella lingua dell'interfaccia, dal codice ISO. */
-export function countryName(code: string, language: Language): string {
-  return /^[A-Z]{2}$/u.test(code)
-    ? (new Intl.DisplayNames(locales[language], { type: "region" }).of(code) ?? code)
-    : code;
-}
-
-/** Stesse righe per la lettura e la copia, senza separatori per campi assenti. */
-export function addressRows(address: AddressView, language: Language): string[] {
-  const province = address.province ? `(${address.province})` : "";
-  return [
-    address.line,
-    [address.postalCode, address.city, province].filter(Boolean).join(" "),
-    countryName(address.countryCode, language),
-  ].filter(Boolean);
-}
-
-/** Tempo relativo rispetto a un istante fornito dal server, stabile fra server e browser. */
 /** Negli ultimi tre giorni la fine della prova si mostra in evidenza. */
-const trialEndingMilliseconds = 3 * 24 * 60 * 60 * 1000;
+const trialEndingMilliseconds = 3 * dayMilliseconds;
 
 /**
  * Giorni interi di prova rimasti, come li conta il Checkout di Stripe: zero nell'ultimo giorno,
  * che i testi indicano come «meno di un giorno».
  */
 export function trialDaysLeft(endsAt: string, now: string) {
-  return Math.max(Math.floor((Date.parse(endsAt) - Date.parse(now)) / 86_400_000), 0);
+  return Math.max(Math.floor((Date.parse(endsAt) - Date.parse(now)) / dayMilliseconds), 0);
 }
 
 export function trialEnding(endsAt: string, now: string) {
   return Date.parse(endsAt) - Date.parse(now) <= trialEndingMilliseconds;
-}
-
-export function formatRelative(value: string, now: string, language: Language): string {
-  const minutes = Math.round((new Date(value).getTime() - new Date(now).getTime()) / 60_000);
-  const format = new Intl.RelativeTimeFormat(locales[language], { numeric: "auto" });
-  if (Math.abs(minutes) < 60) return format.format(minutes, "minute");
-  const hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) return format.format(hours, "hour");
-  // ICU usa U+0027 in Safari e U+2019 in Workerd per «l’altro ieri».
-  return format.format(Math.round(hours / 24), "day").replaceAll("'", "’");
 }

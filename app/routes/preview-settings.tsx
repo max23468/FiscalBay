@@ -1,9 +1,10 @@
 import { env } from "cloudflare:workers";
-import { data, isRouteErrorResponse, useOutletContext } from "react-router";
+import { data, isRouteErrorResponse } from "react-router";
 
 import type { ExportContext } from "~/components/settings/export";
 import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
+import { accessNotice } from "../access-notice";
 import { appCopy, pageTitle } from "../app-copy";
 import { checkoutReturn, premiumOffers } from "../catalog";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -18,9 +19,8 @@ import { snapshotParam } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewListing, previewSearchScope } from "../preview/order-list.server";
 import { previewLifetime } from "../preview/scenarios.server";
-import { pageScenario, simulateAction } from "../preview/state.server";
+import { pageScenario, simulateAction, simulateSecurity } from "../preview/state.server";
 import { settingsSections, type SettingsSection } from "../view-models";
-import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-settings";
 
 function isSection(value: string | undefined): value is SettingsSection {
@@ -87,7 +87,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       accountData: true,
       support: true,
     },
-    preview: true,
     account: scenario.account,
     // Come nell'area reale: l'acquisto aspetta la prima lettura riuscita di un negozio, durante
     // la prova resta possibile e resta fermo con un abbonamento che può ancora incassare; un
@@ -120,7 +119,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       methods: scenario.signInMethods,
       sessions: scenario.sessions,
       passkeyBlock: "nuovo-accesso",
-      notice: null,
+      notice: accessNotice(query, language),
     },
     // Ogni scelta parte dal predefinito: l'anteprima non conserva preferenze. Il fuso
     // rilevato è quello del dispositivo, come nell'area reale.
@@ -165,18 +164,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 /** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */
 export async function action({ request }: Route.ActionArgs) {
-  return simulateAction(request, await request.formData());
+  const form = await request.formData();
+  return simulateSecurity(request, form) ?? simulateAction(request, form);
 }
 
 export default function PreviewSettings({ loaderData }: Route.ComponentProps) {
-  const { t, links } = useOutletContext<PreviewContext>();
-  return <SettingsPage data={loaderData} t={t} links={links} />;
+  return <SettingsPage data={loaderData} />;
 }
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const { t, links } = useOutletContext<PreviewContext>();
-  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState t={t} />;
+  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState />;
   if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
-  return <NotFoundState kind="page" t={t} links={links} />;
+  return <NotFoundState kind="page" />;
 }

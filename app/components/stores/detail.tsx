@@ -12,9 +12,9 @@ import {
   SheetTitle,
 } from "~/components/ui/sheet";
 import { buttonLink } from "~/components/ui/button-variants";
-import type { AppCopy } from "../../app-copy";
-import { appHref, type AppLinks } from "../../app-links";
-import { formatDate, type StoreView } from "../../view-models";
+import { appHref } from "../../app-links";
+import { type StoreView } from "../../view-models";
+import { formatDate } from "../../format";
 import { ReconnectButton, StoreActions } from "./actions";
 import {
   FeedbackSummary,
@@ -34,17 +34,12 @@ import {
   syncDescription,
   type StoresPageData,
 } from "./state";
+import { useCopy, useLinks } from "~/components/copy-context";
 
 /** Pannello del negozio con URL proprio; resta visibile mentre si chiude. */
-export function StoreSheet({
-  data,
-  t,
-  links,
-}: {
-  data: StoresPageData;
-  t: AppCopy;
-  links: AppLinks;
-}) {
+export function StoreSheet({ data }: { data: StoresPageData }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const navigate = useNavigate();
   const storesHref = appHref(links, "negozi");
   const [shownDetail, setShownDetail] = useState(data.detail);
@@ -71,7 +66,7 @@ export function StoreSheet({
               ) : null}
             </span>
           </SheetHeader>
-          <StoreDetail store={shownDetail} data={data} t={t} links={links} />
+          <StoreDetail store={shownDetail} data={data} />
         </SheetContent>
       ) : null}
     </Sheet>
@@ -84,14 +79,12 @@ function ReconnectNotice({
   title,
   store,
   data,
-  t,
   children,
 }: {
   tone: "warning" | "info";
   title: string;
   store: StoreView;
   data: StoresPageData;
-  t: AppCopy;
   children: React.ReactNode;
 }) {
   return (
@@ -102,7 +95,6 @@ function ReconnectNotice({
           store={store}
           ebayDown={ebayDownFor(data, store)}
           connectHref={data.connectHref}
-          t={t}
           prominent
         />
       </span>
@@ -110,17 +102,9 @@ function ReconnectNotice({
   );
 }
 
-function StoreDetail({
-  store,
-  data,
-  t,
-  links,
-}: {
-  store: StoreView;
-  data: StoresPageData;
-  t: AppCopy;
-  links: AppLinks;
-}) {
+function StoreDetail({ store, data }: { store: StoreView; data: StoresPageData }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const zone = useTimeZone();
   return (
     <div className="grid gap-7 px-4 pb-6">
@@ -130,7 +114,6 @@ function StoreDetail({
           title={t.stores.issue[store.issue].title}
           store={store}
           data={data}
-          t={t}
         >
           {t.stores.issue[store.issue].body}
           {store.issue === "unverifiable" && data.settings ? (
@@ -149,7 +132,6 @@ function StoreDetail({
           title={t.orders.consentExpiringTitle(store.name)}
           store={store}
           data={data}
-          t={t}
         >
           {(store.connection === "paused"
             ? t.stores.consentExpiringPaused
@@ -159,15 +141,10 @@ function StoreDetail({
         </ReconnectNotice>
       ) : null}
       {ebayDownFor(data, store) ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
-      <ConnectionSection store={store} now={data.now} t={t} language={links.language} />
-      <SyncSection store={store} data={data} t={t} language={links.language} />
-      <RecentSection store={store} t={t} language={links.language} />
-      <NotificationsSection
-        store={store}
-        settings={data.notificationSettings}
-        t={t}
-        links={links}
-      />
+      <ConnectionSection store={store} now={data.now} />
+      <SyncSection store={store} data={data} />
+      <RecentSection store={store} />
+      <NotificationsSection store={store} settings={data.notificationSettings} />
       <StoreActions
         store={store}
         ebayDown={ebayDownFor(data, store)}
@@ -176,14 +153,13 @@ function StoreDetail({
           !!data.subscriptionRenews &&
           data.stores.every((other) => other.id === store.id || other.connection === "disconnected")
         }
-        t={t}
-        links={links}
       />
     </div>
   );
 }
 
-function ConnectionSection({ store, now, t, language }: SectionProps & { now: string }) {
+function ConnectionSection({ store, now }: SectionProps & { now: string }) {
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   const status = connectionStatus(store, t);
   const expired =
@@ -215,7 +191,7 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
           <div className={row}>
             <dt className="text-muted-foreground">{t.stores.feedback}</dt>
             <dd className="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <FeedbackSummary feedback={store.feedback} t={t} language={language} />
+              <FeedbackSummary feedback={store.feedback} />
             </dd>
           </div>
         ) : null}
@@ -250,12 +226,13 @@ function ConnectionSection({ store, now, t, language }: SectionProps & { now: st
   );
 }
 
-function SyncSection({ store, data, t, language }: SectionProps & { data: StoresPageData }) {
+function SyncSection({ store, data }: SectionProps & { data: StoresPageData }) {
+  const { t } = useCopy();
   return (
     <StoreSection id="store-sync" icon={RefreshCw} title={t.stores.sectionSync}>
       <ul className="grid gap-2 text-sm">
         <li>
-          <LastSync store={store} t={t} now={data.now} language={language} slot={false} />
+          <LastSync store={store} now={data.now} slot={false} />
         </li>
         <li className="text-muted-foreground">
           {syncDescription(store, ebayDownFor(data, store), t)}
@@ -280,26 +257,19 @@ function SyncSection({ store, data, t, language }: SectionProps & { data: Stores
 }
 
 /** Un negozio mai sincronizzato non ha aggiornamenti: niente titolo vuoto. */
-function RecentSection({ store, t, language }: SectionProps) {
+function RecentSection({ store }: SectionProps) {
+  const { t } = useCopy();
   if (store.recent.length === 0) return null;
   return (
     <StoreSection id="store-recent" icon={History} title={t.stores.sectionRecent}>
-      <RecentList store={store} t={t} language={language} />
+      <RecentList store={store} />
     </StoreSection>
   );
 }
 
-function NotificationsSection({
-  store,
-  settings,
-  t,
-  links,
-}: {
-  store: StoreView;
-  settings: boolean;
-  t: AppCopy;
-  links: AppLinks;
-}) {
+function NotificationsSection({ store, settings }: { store: StoreView; settings: boolean }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   return (
     <StoreSection
       id="store-notifications"

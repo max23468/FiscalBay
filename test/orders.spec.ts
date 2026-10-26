@@ -28,7 +28,7 @@ import { indexOrderSearch } from "../app/domain/maintenance.server";
 import { createAuth } from "../app/auth.server";
 import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
 import { action as orderSearch } from "../app/routes/order-search";
-import type { SearchResults } from "../app/components/app-shell";
+import type { SearchResults } from "../app/components/shell-search";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as securityAction, loader as loadSettings } from "../app/routes/settings";
 import { action as storesAction, loader as loadStores } from "../app/routes/stores";
@@ -44,7 +44,8 @@ import {
 } from "./fixtures/database-fixtures";
 import { syntheticProfile, verifiedSession } from "./fixtures/account-fixtures";
 import { displayTaxValue } from "../app/tax-quality";
-import { addressRows, fiscalSituation, formatDate, itemPrice } from "../app/view-models";
+import { fiscalSituation, itemPrice } from "../app/view-models";
+import { addressRows, formatDate } from "../app/format";
 import {
   addressCase,
   buyerNameView,

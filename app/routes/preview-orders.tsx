@@ -3,7 +3,6 @@ import {
   data,
   isRouteErrorResponse,
   redirect,
-  useOutletContext,
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 
@@ -14,7 +13,7 @@ import { historyWindowDays } from "../domain/history-window.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { defaultTemplate } from "../preferences";
-import { rememberedStore, snapshotOnlyAdded } from "../orders/order-list";
+import { rememberedStore, revalidateUnlessSnapshot } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
 import {
@@ -23,8 +22,8 @@ import {
   simulateAction,
   writePreviewState,
 } from "../preview/state.server";
-import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-orders";
+import { useLinks } from "~/components/copy-context";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
@@ -95,12 +94,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 /** L'istantanea aggiunta all'indirizzo è quella della risposta già mostrata. */
-export function shouldRevalidate({
-  currentUrl,
-  nextUrl,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessSnapshot(args);
 }
 
 /**
@@ -152,16 +147,13 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function PreviewOrders({ loaderData }: Route.ComponentProps) {
-  const { t, links } = useOutletContext<PreviewContext>();
-  return (
-    <OrdersPage data={loaderData} t={t} links={links} unlockAction={appHref(links, "ordini")} />
-  );
+  const { links } = useLinks();
+  return <OrdersPage data={loaderData} unlockAction={appHref(links, "ordini")} />;
 }
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  const { t, links } = useOutletContext<PreviewContext>();
-  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState t={t} />;
+  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState />;
   if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
-  return <NotFoundState kind="order" t={t} links={links} />;
+  return <NotFoundState kind="order" />;
 }

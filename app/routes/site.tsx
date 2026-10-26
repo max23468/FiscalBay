@@ -14,7 +14,7 @@ import { baseFreeQuota, currentFreePromotion } from "../domain/grants.server";
 import { readSession } from "../domain/sessions.server";
 import { tracePhase } from "../errors";
 import { languageFromPath, languages, localizedPath } from "../i18n";
-import { formatDate } from "../view-models";
+import { formatDate } from "../format";
 import type { Route } from "./+types/site";
 
 const noStore = { "cache-control": "no-store" };
@@ -186,7 +186,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
           <p className="text-pretty text-muted-foreground">{t.trust}</p>
         </section>
       </main>
-      <SiteFooter language={language} />
+      <SiteFooter />
     </div>
   );
 }

@@ -1,13 +1,15 @@
 import { cn } from "cn";
 
 import { appCopy, supportEmail } from "../app-copy";
-import { type Language, localizedPath } from "../i18n";
+import { localizedPath } from "../i18n";
+import { useCopy } from "~/components/copy-context";
 
 /**
  * Footer unico delle pagine pubbliche: home, accesso, Termini e Privacy (D202). L'area
  * autenticata non ne ha uno. `className` adatta la larghezza alla colonna che lo contiene.
  */
-export function SiteFooter({ language, className }: { language: Language; className?: string }) {
+export function SiteFooter({ className }: { className?: string }) {
+  const { language } = useCopy();
   const t = appCopy[language];
   return (
     <footer className="border-t">

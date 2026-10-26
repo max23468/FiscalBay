@@ -17,10 +17,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { appCopy, type AppCopy } from "../app-copy";
-import type { AppLinks } from "../app-links";
-import { localizedPath, type Language } from "../i18n";
-import { snapshotOnlyAdded } from "../orders/order-list";
+import { appCopy } from "../app-copy";
+import { localizedPath } from "../i18n";
+import { revalidateUnlessSnapshot } from "../orders/order-list";
 import { isScenarioId, scenarioOptions } from "../preview/scenarios.server";
 import {
   currentScenario,
@@ -28,14 +27,10 @@ import {
   writePreviewState,
 } from "../preview/state.server";
 import type { Route } from "./+types/preview";
+import { useCopy } from "~/components/copy-context";
 
 /** Radice dell'anteprima: la stessa shell dell'app, alimentata da scenari sintetici. */
 const base = "/anteprima";
-
-export interface PreviewContext {
-  t: AppCopy;
-  links: AppLinks;
-}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { state, language, scenario } = await currentScenario(request);
@@ -54,17 +49,25 @@ export async function loader({ request }: Route.LoaderArgs) {
 }
 
 /** L'istantanea aggiunta all'elenco Ordini non cambia scenario né notifiche. */
-export function shouldRevalidate({
-  currentUrl,
-  nextUrl,
-  defaultShouldRevalidate,
-}: ShouldRevalidateFunctionArgs) {
-  return snapshotOnlyAdded(currentUrl, nextUrl) ? false : defaultShouldRevalidate;
+export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
+  return revalidateUnlessSnapshot(args);
 }
 
+/**
+ * Cambio di scenario e, come nell'area reale, scelta della lingua: qui cambia soltanto
+ * l'indirizzo, perché l'anteprima non conserva preferenze.
+ */
 export async function action({ request }: Route.ActionArgs) {
   assertPreviewAvailable();
   const form = await request.formData();
+  const chosen = form.get("language");
+  if (chosen === "it" || chosen === "en") {
+    const bare = String(form.get("returnTo") ?? "").replace(/^\/en(?=\/|$)/u, "");
+    throw redirect(
+      localizedPath(chosen, bare.startsWith(`${base}/`) ? bare : `${base}/impostazioni`),
+      303,
+    );
+  }
   const scenario = form.get("scenario");
   const target = String(form.get("redirectTo") ?? "");
   const language = target.startsWith("/en/") ? "en" : "it";
@@ -84,16 +87,13 @@ export function meta(): Route.MetaDescriptors {
 }
 
 function ScenarioBar({
-  t,
-  language,
   scenario,
   options,
 }: {
-  t: AppCopy;
-  language: Language;
   scenario: string;
   options: Array<{ id: string; name: string; focus: string }>;
 }) {
+  const { t, language } = useCopy();
   const submit = useSubmit();
   const location = useLocation();
   // Il pannello di dettaglio aperto non sopravvive al cambio di scenario.
@@ -142,14 +142,11 @@ function ScenarioBar({
 export default function Preview({ loaderData }: Route.ComponentProps) {
   const { language } = loaderData;
   const t = appCopy[language];
-  const links: AppLinks = { language, base };
   useDeviceTimeZone();
   // Su Ordini il campo mostra la ricerca attiva, decifrata dal loader della pagina.
   const orders = useMatches().find((match) => match.id.startsWith("preview-orders"));
   return (
     <AppShell
-      links={links}
-      t={t}
       account={loaderData.account}
       notifications={loaderData.notifications}
       now={loaderData.now}
@@ -158,16 +155,9 @@ export default function Preview({ loaderData }: Route.ComponentProps) {
         query: orders ? ((orders.loaderData as OrdersPageData | undefined)?.search ?? "") : null,
       }}
       onSignOut={(notify) => notify(t.preview.signOut)}
-      before={
-        <ScenarioBar
-          t={t}
-          language={language}
-          scenario={loaderData.scenario}
-          options={loaderData.options}
-        />
-      }
+      before={<ScenarioBar scenario={loaderData.scenario} options={loaderData.options} />}
     >
-      <Outlet context={{ t, links } satisfies PreviewContext} />
+      <Outlet />
     </AppShell>
   );
 }

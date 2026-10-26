@@ -579,7 +579,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect((removed as Response).headers.get("location")).toBe("/app/negozi?negozio=eliminato");
     const after = await storesPage("/app/negozi?negozio=eliminato", seller.cookie);
     expect(after.data.page.stores).toEqual([]);
-    expect(after.data.notice).toEqual({ text: "Negozio eliminato da FiscalBay.", tone: "success" });
+    expect(after.data.notice).toMatchObject({
+      text: "Negozio eliminato da FiscalBay.",
+      tone: "success",
+    });
     const removedDetail = await storesPage(`/app/negozi/${seller.storeId}`, seller.cookie);
     expect(removedDetail.init.status).toBe(404);
 
@@ -744,7 +747,6 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         accountData: false,
         support: false,
       },
-      preview: false,
       account: { plan: "free", trialAvailable: false, quota: undefined },
       preferences: { theme: "system", timeZone: "auto", detectedTimeZone: null, marketing: false },
       diagnostics: null,

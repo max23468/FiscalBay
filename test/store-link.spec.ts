@@ -193,7 +193,7 @@ describe("collegamento negozio eBay", () => {
       }),
       params: {},
     } as Parameters<typeof loadStores>[0])) as unknown as { data: { notice: unknown } };
-    expect(stores.data.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
+    expect(stores.data.notice).toMatchObject({ text: "Negozio eBay collegato.", tone: "success" });
     expect(await listStores(env.DB, owner.userId)).toMatchObject([
       { id: store!.id, name: "nome-aggiornato" },
     ]);
@@ -481,7 +481,7 @@ describe("collegamento negozio eBay", () => {
         headers: { cookie },
       }),
     } as Parameters<typeof loadHome>[0]);
-    expect(home.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
+    expect(home.notice).toMatchObject({ text: "Negozio eBay collegato.", tone: "success" });
     // La pagina reale riceve la vista condivisa con l'anteprima, senza il valore da sbloccare.
     expect(home.page.orders).toMatchObject([
       {

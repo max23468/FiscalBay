@@ -1,7 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 
-import { useAction } from "~/components/app-shell";
+import { useAction } from "~/components/action";
 import { useFieldErrors } from "~/components/form-validation";
 import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
@@ -14,23 +14,23 @@ import {
   FieldSet,
 } from "~/components/ui/field";
 import { Textarea } from "~/components/ui/textarea";
-import { supportEmail, type AppCopy } from "../../app-copy";
+import { supportEmail } from "../../app-copy";
 import type { DiagnosticsView } from "../../view-models";
 import { CheckboxOption, Group, SimpleSelect } from "./controls";
+import { useCopy } from "~/components/copy-context";
 
 export function SupportSection({
   support,
   diagnostics,
   email,
-  t,
 }: {
   /** Modulo di assistenza disponibile. */
   support: boolean;
   /** Dati tecnici allegabili alla richiesta; null senza il modulo. */
   diagnostics: DiagnosticsView | null;
   email: string;
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   return (
     <>
       <Group title={t.settings.support.faq}>
@@ -51,7 +51,7 @@ export function SupportSection({
         </div>
       </Group>
       {support && diagnostics ? (
-        <SupportForm email={email} diagnostics={diagnostics} t={t} />
+        <SupportForm email={email} diagnostics={diagnostics} />
       ) : (
         <Group title={t.settings.support.contact} separated={false}>
           <p className="text-sm text-muted-foreground">
@@ -67,15 +67,8 @@ export function SupportSection({
   );
 }
 
-function SupportForm({
-  email,
-  diagnostics,
-  t,
-}: {
-  email: string;
-  diagnostics: DiagnosticsView;
-  t: AppCopy;
-}) {
+function SupportForm({ email, diagnostics }: { email: string; diagnostics: DiagnosticsView }) {
+  const { t } = useCopy();
   const action = useAction();
   const [topic, setTopic] = useState("orders");
   const [error, setError] = useState(false);

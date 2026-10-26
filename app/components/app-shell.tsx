@@ -1,27 +1,19 @@
 import { cn } from "cn";
-import { Bell, Globe, LogOut, Search } from "lucide-react";
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useEffectEvent,
-  useId,
-  useRef,
-  useState,
-} from "react";
-import { Link, NavLink, useFetcher, useLocation, useNavigate } from "react-router";
+import { Globe, LogOut } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Link, NavLink, useNavigate } from "react-router";
 
-import { useHydrated } from "~/components/hydrated";
+import { NoticeContext } from "~/components/action";
 import { InitialsTile } from "~/components/icon-tile";
+import { Button } from "~/components/ui/button";
+import { NotificationsMenu } from "~/components/notifications-menu";
 import {
   accountMenu,
   shellDestinations,
   type AccountMenuItem,
   type NavDestination,
 } from "~/components/shell-links";
-import { StatusIcon } from "~/components/status";
-import { Button } from "~/components/ui/button";
+import { GlobalSearch, MobileSearch, type ShellSearch } from "~/components/shell-search";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,123 +23,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "~/components/ui/popover";
-import { Sheet, SheetContent, SheetTitle } from "~/components/ui/sheet";
 import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
 import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
-import type { AppCopy } from "../app-copy";
-import { appHref, type AppLinks } from "../app-links";
-import { localizedPath, type Language } from "../i18n";
-import { maxSearchLength, minSuggestionLength } from "../orders/order-search";
-import {
-  formatRelative,
-  maxReadNotifications,
-  type AccountView,
-  type ActionResult,
-  type NotificationView,
-} from "../view-models";
-
-export interface SearchSuggestion {
-  id: string;
-  ebayOrderId: string;
-  buyerName: string;
-  detail: string;
-  /** Dettaglio dell'ordine con la ricerca attiva. */
-  href: string;
-}
-
-/** Risposta della ricerca: primi ordini, loro numero e indirizzo dell'elenco filtrato. */
-export interface SearchResults {
-  items: SearchSuggestion[];
-  total: number;
-  href: string;
-}
-
-/**
- * Ricerca ordini della shell: route che riceve la query nel corpo e ricerca attiva, con il
- * testo della pagina Ordini o null nelle altre pagine.
- */
-export interface ShellSearch {
-  action: string;
-  query: string | null;
-}
-
-/** La query viaggia nel corpo della richiesta, mai nell'indirizzo. */
-async function requestSearch(
-  action: string,
-  query: string,
-  language: Language,
-  signal?: AbortSignal,
-): Promise<SearchResults> {
-  const body = new FormData();
-  body.set("q", query);
-  body.set("language", language);
-  const response = await fetch(action, {
-    method: "POST",
-    body,
-    headers: { accept: "application/json" },
-    signal,
-  });
-  if (!response.ok) throw new Error("search_failed");
-  return (await response.json()) as SearchResults;
-}
-
-/** Attesa dopo l'ultima battuta prima di chiedere i suggerimenti. */
-const suggestionDelay = 150;
-
-const NoticeContext = createContext<(message: string) => void>(() => {});
-
-/** Conferma breve di un'azione, annunciata anche ai lettori di schermo. */
-export function useNotice() {
-  return useContext(NoticeContext);
-}
-
-/**
- * Reazione a un nuovo esito del fetcher, una sola volta e a richiesta conclusa: una
- * rilettura della pagina o un nuovo rendering non ripropongono l'esito già gestito.
- */
-export function useFetcherResult<T>(
-  fetcher: { state: string; data: T | undefined },
-  onResult: (result: T) => void,
-) {
-  const handled = useRef<T | undefined>(undefined);
-  const handle = useEffectEvent(onResult);
-  useEffect(() => {
-    const result = fetcher.data;
-    if (fetcher.state !== "idle" || result === undefined || handled.current === result) return;
-    handled.current = result;
-    handle(result);
-  }, [fetcher.state, fetcher.data]);
-}
-
-/**
- * Azione sulla route corrente, distinta da `intent`: esito e avviso li decide il
- * server. L'anteprima risponde con una simulazione, le route reali eseguono.
- * `onResult` riceve ogni nuovo esito, dopo l'avviso.
- */
-export function useAction(onResult?: (result: ActionResult) => void) {
-  const notify = useNotice();
-  const fetcher = useFetcher<ActionResult>();
-  useFetcherResult(fetcher, (result) => {
-    if (result.notice) notify(result.notice);
-    onResult?.(result);
-  });
-  return {
-    run: (intent: string, fields: Record<string, string> = {}) =>
-      void fetcher.submit({ ...fields, intent }, { method: "post" }),
-    pending: fetcher.state !== "idle",
-    /** Ultimo esito, disponibile a richiesta conclusa. */
-    result: fetcher.state === "idle" ? fetcher.data : undefined,
-  };
-}
+import { appHref } from "../app-links";
+import { localizedPath } from "../i18n";
+import type { AccountView, NotificationView } from "../view-models";
+import { useCopy, useLinks } from "~/components/copy-context";
 
 /**
  * Shell dell'app. Navigazione, ricerca e campanella compaiono quando le loro
  * destinazioni esistono: l'area reale le riceve insieme alle funzioni relative.
  */
 export function AppShell({
-  links,
-  t,
   account,
   notifications,
   notificationsAction,
@@ -155,13 +42,11 @@ export function AppShell({
   search,
   navigation,
   menu,
-  home = appHref(links, "ordini"),
+  home,
   onSignOut,
   before,
   children,
 }: {
-  links: AppLinks;
-  t: AppCopy;
   account: Pick<AccountView, "name" | "email">;
   notifications?: NotificationView[];
   /** Registra sul server le notifiche lette; senza, la lettura resta nella pagina. */
@@ -178,6 +63,9 @@ export function AppShell({
   before?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const { links } = useLinks();
+  const homeHref = home ?? appHref(links, "ordini");
+  const { t } = useCopy();
   const [notice, setNotice] = useState<{ id: number; message: string } | null>(null);
   useEffect(() => {
     if (!notice) return;
@@ -204,7 +92,7 @@ export function AppShell({
       <header className="sticky top-0 z-40 border-b bg-background">
         <div className="mx-auto flex h-14 w-[min(72rem,calc(100%-2rem))] items-center gap-2 md:gap-6">
           <Link
-            to={home}
+            to={homeHref}
             className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
           >
             <img
@@ -243,26 +131,18 @@ export function AppShell({
           <div className="ml-auto flex items-center gap-1">
             {search ? (
               <>
-                <GlobalSearch
-                  t={t}
-                  links={links}
-                  search={search}
-                  className="mr-2 hidden w-72 lg:block xl:w-80"
-                />
-                <MobileSearch t={t} links={links} search={search} />
+                <GlobalSearch search={search} className="mr-2 hidden w-72 lg:block xl:w-80" />
+                <MobileSearch search={search} />
               </>
             ) : null}
             {notifications && now ? (
               <NotificationsMenu
-                t={t}
-                links={links}
                 notifications={notifications}
                 readAction={notificationsAction}
                 now={now}
               />
             ) : null}
             <AccountMenu
-              t={t}
               account={account}
               menu={
                 menu ?? [
@@ -340,401 +220,16 @@ export function AppShell({
   );
 }
 
-type SearchAnswer = ({ query: string } & SearchResults) | { query: string; failed: true };
-
-/**
- * Suggerimenti per il testo scritto, chiesti dopo una breve pausa di battitura: una richiesta
- * superata da un nuovo testo si annulla.
- */
-function useSearchSuggestions(action: string, language: Language) {
-  const [answer, setAnswer] = useState<SearchAnswer | null>(null);
-  const pending = useRef<{
-    timer: ReturnType<typeof setTimeout>;
-    controller: AbortController;
-  } | null>(null);
-  const cancel = useCallback(() => {
-    if (!pending.current) return;
-    clearTimeout(pending.current.timer);
-    pending.current.controller.abort();
-    pending.current = null;
-  }, []);
-  useEffect(() => cancel, [cancel]);
-  const suggest = (text: string) => {
-    cancel();
-    const query = text.trim();
-    if (query.length < minSuggestionLength) return;
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      requestSearch(action, query, language, controller.signal).then(
-        (found) => setAnswer({ query, ...found }),
-        () => {
-          if (!controller.signal.aborted) setAnswer({ query, failed: true });
-        },
-      );
-    }, suggestionDelay);
-    pending.current = { timer, controller };
-  };
-  return { answer, suggest };
-}
-
-/** Suggerimenti e «Vedi tutti», oppure l'esito vuoto o non riuscito della ricerca. */
-function SearchPanel({
-  t,
-  found,
-  onSelect,
-}: {
-  t: AppCopy;
-  found: SearchResults | null;
-  onSelect: () => void;
-}) {
-  // Safari sfoca il campo prima del click senza focalizzare il link.
-  const keepFocus = (event: React.MouseEvent) => {
-    if (event.button === 0) event.preventDefault();
-  };
-  return (
-    <div className="z-50 mt-1 grid grid-cols-[minmax(0,1fr)] gap-1 rounded-lg bg-popover p-1 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 md:absolute md:inset-x-0">
-      {!found || found.items.length === 0 ? (
-        <p className="px-2 py-2 text-muted-foreground">
-          {found ? t.shell.searchEmpty : t.shell.searchFailed}
-        </p>
-      ) : (
-        <ul className="grid grid-cols-[minmax(0,1fr)]">
-          {found.items.map((item) => (
-            <li key={item.id}>
-              <Link
-                to={item.href}
-                onMouseDown={keepFocus}
-                onClick={onSelect}
-                className="grid grid-cols-[minmax(0,1fr)] gap-0.5 rounded-md px-2 py-1.5 outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring pointer-coarse:py-2.5"
-              >
-                <span className="truncate font-medium">{item.buyerName}</span>
-                <span className="flex gap-2 text-xs text-muted-foreground">
-                  <span className="font-code whitespace-nowrap">{item.ebayOrderId}</span>
-                  <span className="min-w-0 truncate">{item.detail}</span>
-                </span>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-      {found && found.total > 0 ? (
-        <Link
-          to={found.href}
-          onMouseDown={keepFocus}
-          onClick={onSelect}
-          className="rounded-md border-t px-2 py-2 font-medium text-primary outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {t.shell.searchSeeAll(found.total)}
-        </Link>
-      ) : null}
-    </div>
-  );
-}
-
-/**
- * Ricerca ordini della top bar: suggerimenti dallo stesso motore della pagina Ordini e
- * «Vedi tutti» per aprire l'elenco filtrato. La query resta nel corpo delle richieste;
- * l'elenco riceve dal server l'indirizzo con la ricerca cifrata.
- */
-function GlobalSearch({
-  t,
-  links,
-  search,
-  className,
-  autoFocus,
-  onNavigate,
-}: {
-  t: AppCopy;
-  links: AppLinks;
-  search: ShellSearch;
-  className?: string;
-  autoFocus?: boolean;
-  onNavigate?: () => void;
-}) {
-  const navigate = useNavigate();
-  const location = useLocation();
-  // Su Ordini il campo mostra la ricerca attiva, anche dopo Indietro o ricarica.
-  const [query, setQuery] = useState(search.query ?? "");
-  const [syncedQuery, setSyncedQuery] = useState(search.query);
-  if (search.query !== syncedQuery) {
-    setSyncedQuery(search.query);
-    if (search.query !== null) setQuery(search.query);
-  }
-  const [open, setOpen] = useState(false);
-  const { answer, suggest } = useSearchSuggestions(search.action, links.language);
-  const ready = useHydrated();
-  const id = useId();
-  const trimmed = query.trim();
-  // Soltanto la risposta per il testo attuale: una precedente non descrive ciò che è scritto.
-  const current =
-    trimmed.length >= minSuggestionLength && answer?.query === trimmed ? answer : null;
-  const found = current && !("failed" in current) ? current : null;
-
-  // Una nuova pagina chiude i suggerimenti rimasti aperti.
-  const lastPath = useRef(location.pathname);
-  useEffect(() => {
-    if (lastPath.current === location.pathname) return;
-    lastPath.current = location.pathname;
-    setOpen(false);
-  }, [location.pathname]);
-
-  const close = () => {
-    setOpen(false);
-    onNavigate?.();
-  };
-  /** Elenco della ricerca; senza risposta del server il modulo si invia in modo ordinario. */
-  const openResults = (form: HTMLFormElement) =>
-    (found ? Promise.resolve(found) : requestSearch(search.action, trimmed, links.language))
-      .then(({ href }) => {
-        close();
-        void navigate(href);
-      })
-      .catch(() => form.submit());
-  const showPanel = open && current !== null;
-  return (
-    <search
-      className={cn("relative", className)}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") setOpen(false);
-      }}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false);
-      }}
-    >
-      <form
-        // La lente resta nel campo anche quando i suggerimenti allungano il contenitore.
-        className="relative"
-        method="post"
-        action={search.action}
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (trimmed) void openResults(event.currentTarget);
-        }}
-      >
-        <input type="hidden" name="language" value={links.language} />
-        <label htmlFor={`${id}-input`} className="sr-only">
-          {t.shell.search}
-        </label>
-        <Search
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <input
-          id={`${id}-input`}
-          type="search"
-          name="q"
-          maxLength={maxSearchLength}
-          // Prima dell'idratazione un input controllato perderebbe il testo già inserito.
-          disabled={!ready}
-          autoComplete="off"
-          // oxlint-disable-next-line jsx-a11y/no-autofocus -- apertura esplicita della ricerca su mobile
-          autoFocus={autoFocus}
-          value={query}
-          placeholder={t.shell.searchPlaceholder}
-          aria-describedby={`${id}-summary`}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setOpen(true);
-            suggest(event.target.value);
-          }}
-          onFocus={() => {
-            setOpen(true);
-            // Un testo già presente (ricerca attiva, Indietro) riceve i suoi suggerimenti.
-            if (!current) suggest(query);
-          }}
-          className="h-9 w-full min-w-0 rounded-lg border border-input bg-card pr-3 pl-8 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 max-sm:text-base pointer-coarse:h-11"
-        />
-      </form>
-      <p id={`${id}-summary`} className="sr-only" aria-live="polite">
-        {showPanel
-          ? found
-            ? t.shell.searchSummary(found.items.length)
-            : t.shell.searchFailed
-          : ""}
-      </p>
-      {showPanel ? <SearchPanel t={t} found={found} onSelect={close} /> : null}
-    </search>
-  );
-}
-
-function MobileSearch({ t, links, search }: { t: AppCopy; links: AppLinks; search: ShellSearch }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button
-        variant="ghost"
-        size="icon"
-        className="lg:hidden"
-        aria-label={t.shell.search}
-        onClick={() => setOpen(true)}
-      >
-        <Search aria-hidden="true" />
-      </Button>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="top" closeLabel={t.shell.close} className="max-h-dvh">
-          {/* Un titolo lungo si tronca invece di allargare il foglio. */}
-          <div className="grid grid-cols-[minmax(0,1fr)] gap-3 p-4 pr-14">
-            <SheetTitle>{t.shell.search}</SheetTitle>
-            <GlobalSearch
-              t={t}
-              links={links}
-              search={search}
-              autoFocus
-              onNavigate={() => setOpen(false)}
-            />
-          </div>
-        </SheetContent>
-      </Sheet>
-    </>
-  );
-}
-
-function NotificationsMenu({
-  t,
-  links,
-  notifications,
-  readAction,
-  now,
-}: {
-  t: AppCopy;
-  links: AppLinks;
-  notifications: NotificationView[];
-  readAction?: string;
-  now: string;
-}) {
-  // Letture di questa pagina, in attesa che il server le riporti nelle notifiche.
-  const [readIds, setReadIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [open, setOpen] = useState(false);
-  const isRead = (item: NotificationView) => item.read || readIds.has(item.id);
-  const unread = notifications.filter((item) => !isRead(item)).length;
-  const markRead = (items: NotificationView[]) => {
-    const ids = items.filter((item) => !isRead(item)).map((item) => item.id);
-    if (ids.length === 0) return;
-    setReadIds((current) => new Set([...current, ...ids]));
-    if (!readAction) return;
-    // Nessuna nuova lettura della pagina; `keepalive` regge l'apertura della notifica. Una
-    // lettura che il server non registra torna da leggere, invece di sembrare riuscita.
-    for (let start = 0; start < ids.length; start += maxReadNotifications) {
-      const chunk = ids.slice(start, start + maxReadNotifications);
-      const body = new FormData();
-      body.set("ids", chunk.join(","));
-      void fetch(readAction, { method: "POST", body, keepalive: true })
-        .then((response) => response.ok)
-        .catch(() => false)
-        .then((saved) => {
-          if (saved) return;
-          setReadIds((current) => {
-            const next = new Set(current);
-            for (const id of chunk) next.delete(id);
-            return next;
-          });
-        });
-    }
-  };
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="relative"
-            aria-label={t.shell.notificationsUnread(unread)}
-          />
-        }
-      >
-        <Bell aria-hidden="true" />
-        {unread > 0 ? (
-          <span
-            aria-hidden="true"
-            className="absolute top-1.5 right-1.5 size-2 rounded-full bg-primary ring-2 ring-background"
-          />
-        ) : null}
-      </PopoverTrigger>
-      {/* Su schermi stretti resta dentro i margini della pagina, quindi centrato. */}
-      <PopoverContent align="end" collisionPadding={16} className="w-96 gap-0 p-0">
-        <div className="flex items-center justify-between gap-3 border-b px-3 py-2">
-          <div className="grid">
-            <PopoverTitle>{t.shell.notifications}</PopoverTitle>
-            <span className="text-xs text-muted-foreground">{t.shell.notificationsWindow}</span>
-          </div>
-          {/* Senza notifiche da leggere l'azione non c'è, invece di un pulsante inattivo. */}
-          {unread > 0 ? (
-            <Button variant="ghost" size="sm" onClick={() => markRead(notifications)}>
-              {t.shell.markAllRead}
-            </Button>
-          ) : null}
-        </div>
-        {notifications.length === 0 ? (
-          <p className="px-3 py-6 text-center text-muted-foreground">
-            {t.shell.notificationsEmpty}
-          </p>
-        ) : (
-          <ul className="grid divide-y">
-            {notifications.map((item) => {
-              const unreadItem = !isRead(item);
-              const body = (
-                <>
-                  <StatusIcon tone={item.tone} className="mt-0.5" />
-                  <span className="grid min-w-0 gap-0.5">
-                    <span className={cn("text-pretty", unreadItem && "font-medium")}>
-                      {item.title}
-                    </span>
-                    <span className="text-pretty text-muted-foreground">{item.body}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatRelative(item.at, now, links.language)}
-                    </span>
-                  </span>
-                  {unreadItem ? (
-                    <span
-                      aria-hidden="true"
-                      className="mt-1.5 size-2 shrink-0 rounded-full bg-primary"
-                    />
-                  ) : null}
-                </>
-              );
-              const itemClass =
-                "grid grid-cols-[1rem_minmax(0,1fr)_0.5rem] gap-3 px-3 py-3 leading-relaxed";
-              return (
-                <li key={item.id}>
-                  {item.href ? (
-                    <Link
-                      to={appHref(links, item.href)}
-                      onClick={() => {
-                        markRead([item]);
-                        setOpen(false);
-                      }}
-                      className={cn(
-                        itemClass,
-                        "outline-none hover:bg-muted focus-visible:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
-                      )}
-                    >
-                      {body}
-                    </Link>
-                  ) : (
-                    <div className={itemClass}>{body}</div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 function AccountMenu({
-  t,
   account,
   menu,
   onSignOut,
 }: {
-  t: AppCopy;
   account: Pick<AccountView, "name" | "email">;
   menu: AccountMenuItem[][];
   onSignOut: () => void;
 }) {
+  const { t } = useCopy();
   const navigate = useNavigate();
   return (
     <DropdownMenu>

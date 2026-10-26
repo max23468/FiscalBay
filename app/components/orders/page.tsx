@@ -11,7 +11,7 @@ import {
   useSearchParams,
 } from "react-router";
 
-import { useAction, useFetcherResult, useNotice } from "~/components/app-shell";
+import { useAction, useFetcherResult, useNotice } from "~/components/action";
 import { useConfirmed } from "~/components/confirmation";
 import { EmptyState } from "~/components/empty-state";
 import { PageTitle } from "~/components/icon-tile";
@@ -20,7 +20,7 @@ import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
-import { appHref, type AppLinks } from "../../app-links";
+import { appHref } from "../../app-links";
 import {
   exportHref,
   exportSection,
@@ -33,14 +33,13 @@ import { searchParam } from "../../orders/order-search";
 import { usePageTiming } from "../../page-timing";
 import type { Language } from "../../i18n";
 import {
-  formatDate,
-  formatRelative,
   orderPeriods,
   trialDaysLeft,
   trialEnding,
   type OrdersNotice,
   type OrderView,
 } from "../../view-models";
+import { formatDate, formatRelative } from "../../format";
 import { OrderCard, type SecondaryActions } from "./card";
 import { OrderSheet } from "./detail";
 import { LoadingGrid, LoadingHeader } from "./loading";
@@ -48,6 +47,7 @@ import { remainingUnlocks, type OrdersAccount } from "./labels";
 import { SelectionBar } from "./selection";
 import { OrdersToolbar, SearchChip } from "./toolbar";
 import { useTimeZone } from "~/components/time-zone";
+import { useCopy, useLinks } from "~/components/copy-context";
 
 /**
  * Dati della pagina Ordini, uguali per l'area reale (ordini persistiti e autorizzati) e per
@@ -122,17 +122,10 @@ function importingNotice(data: OrdersPageData) {
   return data.notices.find((notice) => notice.kind === "importing");
 }
 
-function OrdersHeader({
-  data,
-  t,
-  language,
-}: {
-  data: OrdersPageData;
-  t: AppCopy;
-  language: Language;
-}) {
+function OrdersHeader({ data }: { data: OrdersPageData }) {
+  const { t } = useCopy();
   // Durante il caricamento lo stato dell'aggiornamento non è ancora noto.
-  if (data.view === "loading") return <LoadingHeader t={t} />;
+  if (data.view === "loading") return <LoadingHeader />;
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
       <PageTitle
@@ -149,7 +142,7 @@ function OrdersHeader({
       >
         {t.orders.title}
       </PageTitle>
-      <SyncStatus data={data} t={t} language={language} />
+      <SyncStatus data={data} />
     </header>
   );
 }
@@ -165,15 +158,8 @@ function syncLabel(data: OrdersPageData, t: AppCopy, language: Language) {
 }
 
 /** Importazione, aggiornamento o ultimo aggiornamento: un solo indicatore per la pagina. */
-function SyncStatus({
-  data,
-  t,
-  language,
-}: {
-  data: OrdersPageData;
-  t: AppCopy;
-  language: Language;
-}) {
+function SyncStatus({ data }: { data: OrdersPageData }) {
+  const { t, language } = useCopy();
   const importing = importingNotice(data);
   const { running } = data.sync;
   const down = isEbayDown(data);
@@ -200,17 +186,9 @@ function SyncStatus({
 }
 
 /** Negozio da ricollegare: l'avviso porta al suo pannello, dove si ricollega. */
-function StoreIssueAlert({
-  storeId,
-  storeName,
-  t,
-  links,
-}: {
-  storeId: string;
-  storeName: string;
-  t: AppCopy;
-  links: AppLinks;
-}) {
+function StoreIssueAlert({ storeId, storeName }: { storeId: string; storeName: string }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   return (
     <StatusAlert tone="warning" title={t.orders.storeIssueTitle(storeName)}>
       <span className="grid justify-items-start gap-3">
@@ -226,17 +204,9 @@ function StoreIssueAlert({
   );
 }
 
-function OrdersNotices({
-  data,
-  t,
-  language,
-  links,
-}: {
-  data: OrdersPageData;
-  t: AppCopy;
-  language: Language;
-  links: AppLinks;
-}) {
+function OrdersNotices({ data }: { data: OrdersPageData }) {
+  const { links } = useLinks();
+  const { t, language } = useCopy();
   const zone = useTimeZone();
   if (data.notices.every((notice) => notice.kind === "importing")) return null;
   return (
@@ -310,8 +280,6 @@ function OrdersNotices({
                 key={`${notice.kind}:${notice.storeId}`}
                 storeId={notice.storeId}
                 storeName={notice.storeName}
-                t={t}
-                links={links}
               />
             );
           case "consent-expiring":
@@ -352,7 +320,8 @@ function OrdersNotices({
 }
 
 /** Collegamento del primo negozio: pagina reale, azione simulata o, finché non è possibile, nessuna. */
-function ConnectAction({ data, t }: { data: OrdersPageData; t: AppCopy }) {
+function ConnectAction({ data }: { data: OrdersPageData }) {
+  const { t } = useCopy();
   const action = useAction();
   const content = (
     <>
@@ -371,7 +340,8 @@ function ConnectAction({ data, t }: { data: OrdersPageData; t: AppCopy }) {
 }
 
 /** Primi passi: compaiono finché la prima sincronizzazione non è conclusa, dal punto raggiunto. */
-function OnboardingSteps({ data, t }: { data: OrdersPageData; t: AppCopy }) {
+function OnboardingSteps({ data }: { data: OrdersPageData }) {
+  const { t } = useCopy();
   const current = data.onboarding.findIndex((step) => !step.done);
   return (
     <section aria-labelledby="onboarding" className="grid gap-2 border-t pt-4">
@@ -410,14 +380,15 @@ function OnboardingSteps({ data, t }: { data: OrdersPageData; t: AppCopy }) {
   );
 }
 
-function FirstUse({ data, t }: { data: OrdersPageData; t: AppCopy }) {
+function FirstUse({ data }: { data: OrdersPageData }) {
+  const { t } = useCopy();
   return (
     <EmptyState
       title={t.orders.firstUseTitle}
       description={t.orders.firstUseBody}
-      action={<ConnectAction data={data} t={t} />}
+      action={<ConnectAction data={data} />}
     >
-      <OnboardingSteps data={data} t={t} />
+      <OnboardingSteps data={data} />
     </EmptyState>
   );
 }
@@ -453,7 +424,8 @@ function useUnlock(unlockAction: string, t: AppCopy) {
   };
 }
 
-function LoadMore({ data, t }: { data: OrdersPageData; t: AppCopy }) {
+function LoadMore({ data }: { data: OrdersPageData }) {
+  const { t } = useCopy();
   const [params] = useSearchParams();
   return (
     <div className="flex justify-center">
@@ -489,13 +461,12 @@ function NoResults({
   criteria,
   onlySearch,
   href,
-  t,
 }: {
   criteria: URLSearchParams;
   onlySearch: boolean;
   href: string;
-  t: AppCopy;
 }) {
+  const { t } = useCopy();
   return (
     <EmptyState
       variant="search"
@@ -590,20 +561,35 @@ function useNewOrders(orders: OrderView[], snapshot: string, criteria: string) {
   return added;
 }
 
+/**
+ * Ogni scheda non nuova riceve la sua posizione d'ingresso la prima volta che compare e la
+ * conserva: con «Carica altri» entrano soltanto le nuove, dalla prima in giù.
+ */
+function useEnterIndexes(orders: OrderView[], newIds: ReadonlySet<string>) {
+  const entering = (known: ReadonlyMap<string, number>) =>
+    orders.filter((order) => !known.has(order.id) && !newIds.has(order.id));
+  const [indexes, setIndexes] = useState(
+    () => new Map(entering(new Map()).map((order, index) => [order.id, index])),
+  );
+  const added = entering(indexes);
+  if (added.length === 0) return indexes;
+  const next = new Map(indexes);
+  added.forEach((order, index) => next.set(order.id, index));
+  setIndexes(next);
+  return next;
+}
+
 function OrdersList({
   data,
-  orders: listed,
-  t,
-  links,
+  orders,
   unlock,
 }: {
   data: OrdersPageData;
   orders: OrderView[];
-  t: AppCopy;
-  links: AppLinks;
   unlock: Unlock;
 }) {
-  const { language } = links;
+  const { links } = useLinks();
+  const { t } = useCopy();
   const location = useLocation();
   const navigate = useNavigate();
   const ebayDown = isEbayDown(data);
@@ -642,16 +628,11 @@ function OrdersList({
     unlock.submit(ids);
   };
   const ordersHref = appHref(links, "ordini");
-  const orders = listed;
   const criteria = new URLSearchParams(location.search);
   criteria.delete(pagesParam);
   criteria.delete(snapshotParam);
   const newIds = useNewOrders(orders, data.snapshot, criteria.toString());
-  // Ogni altra scheda riceve la sua posizione d'ingresso la prima volta che compare e la
-  // conserva: con «Carica altri» entrano soltanto le nuove, dalla prima in giù.
-  const enterIndexes = useRef(new Map<string, number>()).current;
-  const entering = orders.filter((order) => !enterIndexes.has(order.id) && !newIds.has(order.id));
-  entering.forEach((order, index) => enterIndexes.set(order.id, index));
+  const enterIndexes = useEnterIndexes(orders, newIds);
   // La selezione vale soltanto per gli ordini ancora presenti e consultabili nell'elenco.
   const visibleSelected = orders.filter((order) => selected.has(order.id));
   const lockedSelected = visibleSelected.filter(unlockable).map((order) => order.id);
@@ -667,12 +648,11 @@ function OrdersList({
         stores={data.stores}
         plan={data.account.plan}
         confirmUnlock={data.confirmUnlock}
-        t={t}
         selecting={selecting}
         selectRef={selectRef}
         onToggleSelect={() => (selecting ? stopSelecting() : setSelecting(true))}
       />
-      <SearchChip t={t} query={data.search} clearable={orders.length > 0 || !onlySearch} />
+      <SearchChip query={data.search} clearable={orders.length > 0 || !onlySearch} />
       {remaining !== null && remaining > 0 && orders.some(unlockable) ? (
         <p className="text-sm text-muted-foreground">{t.orders.unlockBalance(remaining)}</p>
       ) : null}
@@ -684,7 +664,7 @@ function OrdersList({
         </div>
       ) : null}
       {orders.length === 0 ? (
-        <NoResults criteria={criteria} onlySearch={onlySearch} href={ordersHref} t={t} />
+        <NoResults criteria={criteria} onlySearch={onlySearch} href={ordersHref} />
       ) : (
         <>
           <LazyMotion features={loadMotionFeatures} strict>
@@ -697,8 +677,6 @@ function OrdersList({
                   <OrderCard
                     key={order.id}
                     order={order}
-                    t={t}
-                    language={language}
                     account={data.account}
                     ebayDown={ebayDown}
                     detailHref={`${ordersHref}/${order.id}${location.search}`}
@@ -725,12 +703,11 @@ function OrdersList({
               </section>
             </MotionConfig>
           </LazyMotion>
-          <LoadMore data={data} t={t} />
+          <LoadMore data={data} />
         </>
       )}
       {selecting ? (
         <SelectionBar
-          t={t}
           selected={visibleSelected.map((order) => order.id)}
           lockedSelected={lockedSelected}
           remaining={remainingUnlocks(data.account)}
@@ -755,7 +732,9 @@ function OrdersList({
  * Prova Premium: un invito discreto dopo la prima lettura riuscita, anche senza ordini, poi il
  * tempo rimasto, in evidenza negli ultimi giorni con il rimando al piano.
  */
-function TrialNotice({ data, t, links }: { data: OrdersPageData; t: AppCopy; links: AppLinks }) {
+function TrialNotice({ data }: { data: OrdersPageData }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const zone = useTimeZone();
   const action = useAction();
   const { trial, trialAvailable } = data.account;
@@ -808,7 +787,9 @@ function TrialNotice({ data, t, links }: { data: OrdersPageData; t: AppCopy; lin
 }
 
 /** Negozio collegato senza ordini: in attesa della prima lettura o senza ordini nel periodo. */
-function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links: AppLinks }) {
+function NoOrders({ data }: { data: OrdersPageData }) {
+  const { links } = useLinks();
+  const { t } = useCopy();
   const zone = useTimeZone();
   const { language } = links;
   return (
@@ -836,7 +817,7 @@ function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links:
         ) : undefined
       }
     >
-      {data.sync.lastAt ? null : <OnboardingSteps data={data} t={t} />}
+      {data.sync.lastAt ? null : <OnboardingSteps data={data} />}
     </EmptyState>
   );
 }
@@ -849,39 +830,35 @@ function NoOrders({ data, t, links }: { data: OrdersPageData; t: AppCopy; links:
  */
 export function OrdersPage({
   data,
-  t,
-  links,
   unlockAction,
   confirmation,
   notice,
 }: {
   data: OrdersPageData;
-  t: AppCopy;
-  links: AppLinks;
   unlockAction: string;
   confirmation?: Promise<OrderView[]>;
   /** Avvisi propri dell'area che ospita la pagina, sotto l'intestazione. */
   notice?: React.ReactNode;
 }) {
-  const { language } = links;
+  const { t } = useCopy();
   const unlock = useUnlock(unlockAction, t);
   const orders = useConfirmed(data.orders, confirmation);
   const [detail] = useConfirmed(data.detail ? [data.detail] : [], confirmation);
   usePageTiming("orders");
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
-      <OrdersHeader data={data} t={t} language={language} />
+      <OrdersHeader data={data} />
       {notice}
-      <OrdersNotices data={data} t={t} language={language} links={links} />
-      {data.view === "loading" ? null : <TrialNotice data={data} t={t} links={links} />}
+      <OrdersNotices data={data} />
+      {data.view === "loading" ? null : <TrialNotice data={data} />}
       {data.view === "no-store" ? (
-        <FirstUse data={data} t={t} />
+        <FirstUse data={data} />
       ) : data.view === "loading" ? (
-        <LoadingGrid t={t} />
+        <LoadingGrid />
       ) : data.view === "empty" ? (
-        <NoOrders data={data} t={t} links={links} />
+        <NoOrders data={data} />
       ) : (
-        <OrdersList data={data} orders={orders} t={t} links={links} unlock={unlock} />
+        <OrdersList data={data} orders={orders} unlock={unlock} />
       )}
       <OrderSheet
         detail={detail ?? null}
@@ -889,8 +866,6 @@ export function OrdersPage({
         ebayDown={isEbayDown(data)}
         templates={data.messageTemplates}
         confirmUnlock={data.confirmUnlock}
-        t={t}
-        links={links}
         unlock={unlock}
         actions={data}
       />

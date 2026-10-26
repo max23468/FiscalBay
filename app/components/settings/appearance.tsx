@@ -3,13 +3,12 @@ import { useEffect } from "react";
 import { Form, useLocation } from "react-router";
 
 import { useHydrated } from "~/components/hydrated";
-import { LanguageSwitch } from "~/components/language-switch";
 import { RadioGroup } from "~/components/ui/radio-group";
-import type { AppCopy } from "../../app-copy";
-import { languagePath, type AppLinks } from "../../app-links";
-import { languageNames, languages, localizedPath } from "../../i18n";
+import { appHref, languagePath } from "../../app-links";
+import { languageNames, languages } from "../../i18n";
 import { timeZones, zoneLabel, type Theme, type TimeZoneChoice } from "../../preferences";
 import { Group, RadioOption, SaveStatus, SimpleSelect, useAutoSave } from "./controls";
+import { useCopy, useLinks } from "~/components/copy-context";
 
 /** Tema sul documento: `data-theme` impone chiaro o scuro, senza attributo segue il sistema. */
 function applyTheme(theme: Theme) {
@@ -20,22 +19,17 @@ function applyTheme(theme: Theme) {
 
 /**
  * Lingua dell'account: nell'area reale la scelta si salva e riapre la pagina nella nuova
- * lingua, nell'anteprima cambia soltanto l'indirizzo.
+ * lingua; l'anteprima risponde dalla sua radice cambiando soltanto l'indirizzo.
  */
-function LanguageChoice({ t, links, preview }: { t: AppCopy; links: AppLinks; preview: boolean }) {
+function LanguageChoice() {
+  const { links, preview } = useLinks();
   const location = useLocation();
-  const barePath = location.pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
-  if (preview) {
-    return (
-      <LanguageSwitch
-        label={t.settings.appearance.language}
-        current={links.language}
-        hrefFor={(code) => localizedPath(code, barePath)}
-      />
-    );
-  }
   return (
-    <Form method="post" action={languagePath} className="flex gap-1 text-sm">
+    <Form
+      method="post"
+      action={preview ? appHref(links) : languagePath}
+      className="flex gap-1 text-sm"
+    >
       <input type="hidden" name="returnTo" value={`${location.pathname}${location.search}`} />
       {languages.map((code) => (
         <button
@@ -58,18 +52,14 @@ export function AppearanceSection({
   theme: savedTheme,
   timeZone: savedTimeZone,
   detectedTimeZone,
-  preview,
-  t,
-  links,
 }: {
   theme: Theme;
   timeZone: TimeZoneChoice;
   /** Fuso del dispositivo, se il browser l'ha già comunicato. */
   detectedTimeZone: string | null;
-  preview: boolean;
-  t: AppCopy;
-  links: AppLinks;
 }) {
+  const { t } = useCopy();
+  const { preview } = useLinks();
   // L'anteprima non conserva il tema: la scelta resta sul documento fino alla ricarica.
   const [theme, setTheme, themeState] = useAutoSave<Theme>(
     "theme",
@@ -105,14 +95,14 @@ export function AppearanceSection({
               </RadioOption>
             ))}
           </RadioGroup>
-          <SaveStatus state={themeState} t={t} />
+          <SaveStatus state={themeState} />
         </div>
         {preview ? (
           <p className="text-sm text-muted-foreground">{t.settings.appearance.themeNote}</p>
         ) : null}
       </Group>
       <Group title={t.settings.appearance.language}>
-        <LanguageChoice t={t} links={links} preview={preview} />
+        <LanguageChoice />
       </Group>
       <Group>
         <div className="grid gap-2">
@@ -132,7 +122,7 @@ export function AppearanceSection({
             value={timeZone}
             onChange={setTimeZone}
           />
-          <SaveStatus state={zoneState} t={t} />
+          <SaveStatus state={zoneState} />
         </div>
       </Group>
     </>
