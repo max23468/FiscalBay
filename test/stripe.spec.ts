@@ -13,7 +13,6 @@ import {
   stopRenewals,
   subscriptionOffers,
   subscriptionRenews,
-  subscriptionView,
 } from "../app/domain/billing.server";
 import { checkoutConfigured, purchaseState, startCheckout } from "../app/domain/checkout.server";
 import { grantLifetimeConcession, grantPremium } from "../app/domain/concessions.server";
@@ -40,6 +39,7 @@ import { localizedPath } from "../app/i18n";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
+import { subscriptionView } from "../app/domain/plan-view.server";
 const event = {
   id: "evt_checkout_completed",
   object: "event",

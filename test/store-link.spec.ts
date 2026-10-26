@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readTradingTaxObservation } from "../app/integrations/ebay/trading.server";
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 import { storeProfileRefreshMilliseconds } from "../app/domain/store-profile.server";
-import { listVisibleOrders, orderView } from "../app/domain/orders.server";
+import { listVisibleOrders } from "../app/domain/orders.server";
 import { deleteStoreData, disconnectStore, listStores } from "../app/domain/stores.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadHome } from "../app/routes/orders";
@@ -31,6 +31,7 @@ import {
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
+import { orderView } from "../app/domain/order-view.server";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());

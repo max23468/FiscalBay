@@ -16,11 +16,7 @@ import {
   purchaseState,
   startCheckout,
 } from "../domain/checkout.server";
-import {
-  changeSubscriptionPeriod,
-  openBillingPortal,
-  subscriptionView,
-} from "../domain/billing.server";
+import { changeSubscriptionPeriod, openBillingPortal } from "../domain/billing.server";
 import { admission } from "../domain/admission.server";
 import { pendingEmailChange } from "../domain/email-change.server";
 import { lifetimeContext } from "../domain/lifetime.server";
@@ -69,6 +65,7 @@ import {
   type SettingsSection,
 } from "../view-models";
 import type { Route } from "./+types/settings";
+import { subscriptionView } from "../domain/plan-view.server";
 
 /**
  * Categorie con un servizio reale. L'esportazione arriva con il file degli ordini; esportazione e

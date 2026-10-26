@@ -32,9 +32,8 @@ import { messageTemplates } from "../domain/preferences.server";
 import {
   countVisibleOrders,
   listVisibleOrders,
-  orderCriteria,
   type OrderCriteria,
-  orderView,
+  orderCriteria,
   visibleOrderFacets,
 } from "../domain/orders.server";
 import { ebayOutage, listStores, readsFailing } from "../domain/stores.server";
@@ -56,6 +55,7 @@ import { accountSearchScope, openSearch } from "../orders/order-search.server";
 import { settle } from "../settle.server";
 import type { ActionResult, OrderView, OrdersNotice } from "../view-models";
 import type { Route } from "./+types/orders";
+import { orderView } from "../domain/order-view.server";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];

@@ -19,9 +19,8 @@ import {
 import {
   listVisibleOrders,
   orderCriteria,
-  orderView,
-  visibleOrderFacets,
   type VisibleOrder,
+  visibleOrderFacets,
 } from "../app/domain/orders.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { indexOrderSearch } from "../app/domain/maintenance.server";
@@ -58,6 +57,7 @@ import { appCopy } from "../app/app-copy";
 import { settle } from "../app/settle.server";
 import { requestOrderRead } from "../app/domain/order-sync.server";
 import { exportHref, exportReturnHref, exportScope } from "../app/orders/export-scope";
+import { orderView } from "../app/domain/order-view.server";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
