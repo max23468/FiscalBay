@@ -40,12 +40,16 @@ import { localizedPath } from "../app/i18n";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
+import { fakeQueue, queued } from "./fixtures/queue-fixture";
+import { routePage } from "./fixtures/route-fixtures";
 const event = {
   id: "evt_checkout_completed",
   object: "event",
   api_version: "2026-08-26.dahlia",
   created: 1_789_914_800,
-  data: { object: { id: "cs_test_checkout", object: "checkout.session" } },
+  data: {
+    object: { id: "cs_test_checkout", object: "checkout.session" } as Stripe.Checkout.Session,
+  },
   livemode: false,
   pending_webhooks: 1,
   request: null,
@@ -489,12 +493,10 @@ describe("Stripe Managed Payments", () => {
   it("mostra prezzi, stato dell'acquisto e ritorno da Stripe nella pagina del piano", async () => {
     const { userId, cookie } = await verifiedSession("acquisto-pagina@example.invalid");
     const page = async (query = "") => {
-      const result = (await settingsLoader({
-        request: new Request(`http://localhost:5173/app/impostazioni/piano${query}`, {
-          headers: { cookie },
-        }),
+      const result = await routePage(settingsLoader, `/app/impostazioni/piano${query}`, {
+        cookie,
         params: { sezione: "piano" },
-      } as unknown as Parameters<typeof settingsLoader>[0])) as { page: Record<string, unknown> };
+      });
       return result.page;
     };
     expect(await page()).toMatchObject({
@@ -528,7 +530,7 @@ describe("Stripe Managed Payments", () => {
       purchase: { state: "available" },
     });
     const previous = env.STRIPE_PRICE_ANNUAL;
-    env.STRIPE_PRICE_ANNUAL = "";
+    Reflect.set(env, "STRIPE_PRICE_ANNUAL", "");
     try {
       expect(await page()).toMatchObject({ services: { billing: false } });
     } finally {
@@ -632,8 +634,8 @@ describe("Stripe Managed Payments", () => {
     });
     const verified = await verifyStripeEvent(body, signature, secret);
     expect(verified).toEqual(event);
-    const send = vi.fn().mockResolvedValue(undefined);
-    const environment = { ...env, WORK_QUEUE: { send } } as Env;
+    const send = vi.fn().mockResolvedValue(queued);
+    const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) };
     const request = () =>
       new Request("https://test.fiscalbay.it/webhooks/stripe", {
         method: "POST",
@@ -1100,12 +1102,10 @@ describe("Webhook e riconciliazione Stripe", () => {
     await env.DB.prepare('UPDATE "session" SET "expiresAt" = ? WHERE "userId" = ?')
       .bind(new Date(at(time).getTime() + 86_400_000).toISOString(), userId)
       .run();
-    const result = (await settingsLoader({
-      request: new Request("http://localhost:5173/app/impostazioni/piano", { headers: { cookie } }),
+    const result = await routePage(settingsLoader, "/app/impostazioni/piano", {
+      cookie,
       params: { sezione: "piano" },
-    } as unknown as Parameters<typeof settingsLoader>[0])) as {
-      page: { account: Record<string, unknown>; services: Record<string, unknown> };
-    };
+    });
     return result.page;
   };
   const coverages = async () =>
@@ -1984,7 +1984,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     const base = { ...stripe.state.subscription };
     // Lo stato locale dice rinnovabile, Stripe no: nessuna modifica.
     for (const variant of [
-      { metadata: {} },
+      { metadata: {} as Record<string, string> },
       { metadata: { workspace_id: "w-b", offer: "monthly", price_generation: "2026-09" } },
       { noItems: true },
       { status: "past_due" },
@@ -2226,7 +2226,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(
       paidCoverage({
         ...invoice,
-        payments: { data: [invoice.payments.data[0]] },
+        payments: { data: [invoice.payments!.data[0]] },
       } as unknown as Stripe.Invoice),
     ).toMatchObject({ invoiceId: "in_mixed", paymentIntent: null });
     // Un periodo senza durata non copre nulla.
@@ -3242,12 +3242,10 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
       (await orderAllowance(env.DB, userId, at("2026-09-14T11:00:00.000Z")))?.trialAvailable,
     ).toBe(false);
     vi.setSystemTime(at("2026-09-14T11:00:00.000Z"));
-    const page = (await settingsLoader({
-      request: new Request("http://localhost:5173/app/impostazioni/piano", { headers: { cookie } }),
+    const page = await routePage(settingsLoader, "/app/impostazioni/piano", {
+      cookie,
       params: { sezione: "piano" },
-    } as unknown as Parameters<typeof settingsLoader>[0])) as {
-      page: { account: Record<string, unknown> };
-    };
+    });
     expect(page.page.account).toMatchObject({
       plan: "free",
       payment: { state: "refunded", renewsAt: periodEnd },

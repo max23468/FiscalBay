@@ -20,6 +20,7 @@ import {
   telegramConfigured,
   linkToken as randomLinkToken,
   verifyTelegramUpdate,
+  type TelegramStart,
 } from "../app/integrations/telegram.server";
 import { consumeWebhooks, receiveWebhook } from "../app/integrations/webhooks.server";
 import { configureBotCommands } from "../app/domain/telegram-bot.server";
@@ -33,12 +34,13 @@ import {
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
-import { queueMessage } from "./fixtures/queue-fixture";
+import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
+import { routePage } from "./fixtures/route-fixtures";
 
 const origin = "http://localhost:5173";
 const secret = env.TELEGRAM_WEBHOOK_SECRET!;
-const send = vi.fn<Queue["send"]>().mockResolvedValue(undefined);
-const environment = { ...env, WORK_QUEUE: { send } } as Env;
+const send = vi.fn<Queue["send"]>().mockResolvedValue(queued);
+const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) };
 const later = (minutes: number) => new Date(Date.parse(now) + minutes * 60_000);
 
 type BotCall = { method: string; params: Record<string, unknown> };
@@ -197,7 +199,9 @@ describe("ingresso del bot", () => {
   it("senza il bot dell'ambiente l'ingresso non è disponibile", async () => {
     const off = { ...environment, TELEGRAM_BOT_TOKEN: undefined } as Env;
     expect(telegramConfigured(off)).toBe(false);
-    expect(telegramConfigured({ ...environment, TELEGRAM_BOT_USERNAME: "" } as Env)).toBe(false);
+    // Una configurazione incompleta non rispetta i tipi dell'ambiente per costruzione.
+    const blank = { ...environment, TELEGRAM_BOT_USERNAME: "" } as unknown as Env;
+    expect(telegramConfigured(blank)).toBe(false);
     for (const change of [
       { TELEGRAM_BOT_USERNAME: undefined },
       { TELEGRAM_WEBHOOK_SECRET: undefined },
@@ -241,7 +245,8 @@ describe("ingresso del bot", () => {
   });
 
   it("riconosce il comando con il nome del bot e ignora un token malformato", () => {
-    const start = (text: string) => verifyTelegramUpdate(JSON.stringify(update(text)), secret, env);
+    const start = (text: string) =>
+      verifyTelegramUpdate(JSON.stringify(update(text)), secret, env) as TelegramStart | null;
     expect(start(`/start@FiscalBayTestBot ${"b".repeat(43)}`)?.tokenHash).toHaveLength(64);
     expect(start("/start corto")).toMatchObject({ tokenHash: null, chatId: "501" });
     expect(start("/start")).toMatchObject({ tokenHash: null });
@@ -842,12 +847,10 @@ describe("pagine", () => {
   it("le Impostazioni mostrano chat, preferenze e negozi dello spazio", async () => {
     const seller = await account("pagina");
     const page = async () => {
-      const result = (await settingsLoader({
-        request: new Request(`${origin}/app/impostazioni/notifiche`, {
-          headers: { cookie: seller.cookie },
-        }),
+      const result = await routePage(settingsLoader, "/app/impostazioni/notifiche", {
+        cookie: seller.cookie,
         params: { sezione: "notifiche" },
-      } as unknown as Parameters<typeof settingsLoader>[0])) as { page: Record<string, unknown> };
+      });
       return result.page;
     };
     expect(await page()).toMatchObject({

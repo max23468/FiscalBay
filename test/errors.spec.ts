@@ -62,7 +62,7 @@ describe("errors, locale and redacted logs", () => {
     );
     expect(italian.status).toBe(401);
     expect(italian.headers.has("retry-after")).toBe(false);
-    expect((await italian.json()).message).toBe("Accedi per continuare.");
+    expect(((await italian.json()) as { message: string }).message).toBe("Accedi per continuare.");
     expect(classifyFailure(new ApplicationError("STORE_RECONNECT_REQUIRED"))).toBe(
       "STORE_RECONNECT_REQUIRED",
     );

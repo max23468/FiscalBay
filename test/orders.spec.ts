@@ -58,6 +58,8 @@ import { appCopy } from "../app/app-copy";
 import { settle } from "../app/settle.server";
 import { requestOrderRead } from "../app/domain/order-sync.server";
 import { exportHref, exportReturnHref, exportScope } from "../app/orders/export-scope";
+import { routeData, routePage, routeResponse } from "./fixtures/route-fixtures";
+import { queued } from "./fixtures/queue-fixture";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -93,11 +95,8 @@ describe("percorso ordini", () => {
     await seed();
 
     // Senza sessione gli Ordini rimandano all'accesso, che mostra i moduli.
-    const anonymous = await loadHome({
-      params: {},
-      request: new Request("http://localhost:5173/app/ordini?accesso=errore"),
-    } as Parameters<typeof loadHome>[0]).catch((response: Response) => response);
-    expect((anonymous as Response).headers.get("location")).toBe("/accesso?accesso=errore");
+    const anonymous = await routeResponse(loadHome, "/app/ordini?accesso=errore");
+    expect(anonymous.headers.get("location")).toBe("/accesso?accesso=errore");
     expect(
       await loadAccess({
         request: new Request("http://localhost:5173/accesso"),
@@ -155,10 +154,7 @@ describe("percorso ordini", () => {
     const cookie = signIn.headers.get("set-cookie");
     expect(cookie).toBeTruthy();
 
-    const authenticated = await loadHome({
-      params: {},
-      request: new Request("http://localhost:5173/app/ordini", { headers: { cookie: cookie! } }),
-    } as Parameters<typeof loadHome>[0]);
+    const authenticated = await routePage(loadHome, "/app/ordini", { cookie: cookie! });
     expect(authenticated.verified).toBe(true);
     expect(authenticated.page?.orders.map(({ ebayOrderId }) => ebayOrderId)).toEqual(["ebay-a"]);
     // La ricerca considera solo i valori autorizzati: un codice da sbloccare non trova l'ordine,
@@ -166,12 +162,7 @@ describe("percorso ordini", () => {
     const guess = await searchOrders(cookie!, "RSSMRA80A01H501U");
     expect(guess).toMatchObject({ items: [], total: 0 });
     expect(guess.href).not.toContain("RSSMRA80A01H501U");
-    const guessed = await loadHome({
-      params: {},
-      request: new Request(`http://localhost:5173${guess.href}`, {
-        headers: { cookie: cookie! },
-      }),
-    } as Parameters<typeof loadHome>[0]);
+    const guessed = await routePage(loadHome, guess.href, { cookie: cookie! });
     expect(guessed.page).toMatchObject({ search: "RSSMRA80A01H501U", orders: [], total: 0 });
     const unlockRequest = (ids: string, origin = "http://localhost:5173") =>
       ({
@@ -1598,12 +1589,7 @@ describe("prova Premium", () => {
       return loaded.page;
     };
     const ordersPage = async (cookie: string) =>
-      (
-        await loadHome({
-          params: {},
-          request: new Request(`${origin}/app/ordini`, { headers: { cookie } }),
-        } as Parameters<typeof loadHome>[0])
-      ).page!;
+      (await routePage(loadHome, "/app/ordini", { cookie })).page;
 
     it("Ordini e Piano propongono la prova dopo la prima lettura e poi ne mostrano la fine", async () => {
       const { cookie } = await owner();
@@ -1684,10 +1670,16 @@ describe("pagina Ordini reale", () => {
   }
 
   function ordersPage(cookie: string, path = "/app/ordini", params: { ordine?: string } = {}) {
-    return loadHome({
-      params,
-      request: new Request(`${origin}${path}`, { headers: { cookie } }),
-    } as Parameters<typeof loadHome>[0]);
+    return routePage(loadHome, path, { cookie, params });
+  }
+
+  /** Dettaglio che non si apre: stessa risposta 404 per ogni ordine non consultabile. */
+  async function missingOrder(cookie: string, ordine: string) {
+    const response = await routeResponse(loadHome, `/app/ordini/${ordine}`, {
+      cookie,
+      params: { ordine },
+    });
+    return { status: response.status, body: await response.text() };
   }
 
   /** Elenco con la ricerca indicata, dall'indirizzo che restituisce la barra superiore. */
@@ -1827,14 +1819,15 @@ describe("pagina Ordini reale", () => {
     expect(opened.page?.detail).toMatchObject({ id: "o-a", ebayOrderId: "ebay-a" });
     // Un ordine di un altro spazio, inesistente o scaduto risponde allo stesso modo.
     for (const ordine of ["o-b", "inesistente", "x".repeat(65)]) {
-      const missing = await ordersPage(cookie, `/app/ordini/${ordine}`, { ordine });
-      expect(missing).toMatchObject({ data: { notFound: true }, init: { status: 404 } });
-      expect(JSON.stringify(missing)).not.toContain("ebay-b");
+      const missing = await missingOrder(cookie, ordine);
+      expect(missing.status).toBe(404);
+      expect(JSON.parse(missing.body)).toMatchObject({ notFound: true });
+      expect(missing.body).not.toContain("ebay-b");
     }
     await env.DB.prepare("UPDATE orders SET retention_until = ? WHERE id = 'o-a'").bind(now).run();
-    expect(await ordersPage(cookie, "/app/ordini/o-a", { ordine: "o-a" })).toMatchObject({
-      data: { notFound: true },
-    });
+    const expired = await missingOrder(cookie, "o-a");
+    expect(expired.status).toBe(404);
+    expect(JSON.parse(expired.body)).toMatchObject({ notFound: true });
   });
 
   it("filtra sul server con i soli valori autorizzati, anche nella forma normalizzata", async () => {
@@ -2145,12 +2138,7 @@ describe("pagina Ordini reale", () => {
     const bell = async () =>
       ((await ordersPage(cookie)).shell.notifications ?? []).map((item) => item.id);
     const storesDown = async () =>
-      (
-        await loadStores({
-          request: new Request(`${origin}/app/negozi`, { headers: { cookie } }),
-          params: {},
-        } as Parameters<typeof loadStores>[0])
-      ).data.page.ebayDown;
+      (await routeData(loadStores, "/app/negozi", { cookie })).page.ebayDown;
 
     // Un errore isolato non basta: la lettura successiva di solito riesce.
     await reads("s-a", [false, true]);
@@ -2172,7 +2160,7 @@ describe("pagina Ordini reale", () => {
          VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1, 'unavailable', 5)`,
       ).bind(now),
     ]);
-    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
     expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toMatchObject({
       data: { ok: false, notice: appCopy.it.stores.ebayDown },
       init: { status: 409 },
@@ -2388,13 +2376,11 @@ describe("pagina Ordini reale", () => {
       fiscal: { state: "locked", shownAs: "CF", hold: "unpaid" },
       suggestions: [],
     });
-    expect(await ordersPage(cookie, "/app/ordini/x-prov", { ordine: "x-prov" })).toMatchObject({
-      init: { status: 404 },
-    });
+    expect((await missingOrder(cookie, "x-prov")).status).toBe(404);
     // Una lettura non riuscita dell'acquisto si può riprovare dal filtro che lo mostra.
     await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'x-prov'").run();
     await withCredentials();
-    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
     try {
       expect(await ordersAction(cookie, { intent: "retry", order: "x-prov" })).toEqual({
         ok: true,
@@ -2469,7 +2455,7 @@ describe("pagina Ordini reale", () => {
 
   it("«Riprova» rilegge soltanto un ordine dello spazio con lettura non riuscita", async () => {
     const { cookie } = await owner();
-    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
     // Con dati da sbloccare la lettura non è da riprovare.
     expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toMatchObject({
       init: { status: 409 },
@@ -2513,7 +2499,7 @@ describe("pagina Ordini reale", () => {
 
   it("la nuova lettura di un ordine noto solo a Trading riparte dalla passata Trading", async () => {
     const { userId } = await owner();
-    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
     await withCredentials();
     // Un ordine con dati da sbloccare non si rilegge, anche con un consenso valido.
     expect(await requestOrderRead(env, userId, "o-a", "production")).toBe("invalid");
@@ -2578,7 +2564,7 @@ describe("pagina Ordini reale", () => {
 
   it("non riprende la lettura di un ordine il cui negozio esce dallo spazio durante la richiesta", async () => {
     const { userId } = await owner();
-    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
     await withCredentials();
     await env.DB.batch([
       env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'"),
@@ -2727,6 +2713,7 @@ describe("vista condivisa e criteri degli ordini", () => {
     storeId: "s",
     storeName: "Negozio",
     marketplaceId: null,
+    provisional: false,
     summary: {
       buyer: null,
       orderPaymentStatus: null,
@@ -2927,6 +2914,7 @@ describe("vista condivisa e criteri degli ordini", () => {
             totalMinor: 300,
             currency: "USD",
             imageUrl: null,
+            stableKey: null,
           },
           {
             lineItemId: "b",
@@ -2936,6 +2924,7 @@ describe("vista condivisa e criteri degli ordini", () => {
             totalMinor: 200,
             currency: "EUR",
             imageUrl: "https://i.ebayimg.com/b.jpg",
+            stableKey: null,
           },
         ],
       }),
@@ -3251,8 +3240,8 @@ describe("vista condivisa e criteri degli ordini", () => {
     };
     const prefix = "Mario Rossi\nVia Roma 1\n00100 Roma (RM)\nItalia";
     expect(billingCopyText(order, "it", appCopy.it)).toBe(prefix);
-    for (const state of ["checking", "error", "missing"] as const)
-      expect(billingCopyText({ ...order, fiscal: { state } }, "it", appCopy.it)).toBe(prefix);
+    for (const fiscal of [{ state: "checking" }, { state: "error" }, { state: "missing" }] as const)
+      expect(billingCopyText({ ...order, fiscal }, "it", appCopy.it)).toBe(prefix);
     const available = {
       ...order,
       fiscal: {

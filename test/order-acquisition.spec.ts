@@ -24,8 +24,8 @@ import { applyFreePlans } from "../app/domain/free-store.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { now, resetDatabase, seed } from "./fixtures/database-fixtures";
-import { queueMessage } from "./fixtures/queue-fixture";
-import { emptyTradingOrders } from "./fixtures/ebay-fixtures";
+import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
+import { emptyTradingOrders, withSandbox } from "./fixtures/ebay-fixtures";
 import { access, ack, order } from "./fixtures/ebay-client-fixtures";
 
 beforeEach(resetDatabase);
@@ -48,7 +48,7 @@ describe("acquisizione con il client", () => {
       getItem?: () => Response;
       trading?: () => Response;
       fail?: (url: URL, init?: RequestInit) => Response | undefined;
-      before?: (url: URL, init?: RequestInit) => void | Promise<void>;
+      before?: (url: URL, init?: RequestInit) => unknown;
     } = {},
   ) => {
     const orders = options.orders ?? [order()];
@@ -144,9 +144,9 @@ describe("acquisizione con il client", () => {
     (await env.DB.prepare(sql).first<{ total: number }>())!.total;
   /** Un turno del cron e poi il consumer della coda nello stesso istante, un messaggio alla volta. */
   const cronTurn = async (environment: Env, fetcher: typeof fetch, at: Date) => {
-    const sendBatch = vi.fn<Queue["sendBatch"]>(async () => {});
+    const sendBatch = vi.fn<Queue["sendBatch"]>(async () => queued);
     const stores = await dispatchStoreSyncs(
-      { ...environment, WORK_QUEUE: { sendBatch } } as unknown as Env,
+      { ...environment, WORK_QUEUE: fakeQueue({ sendBatch }) },
       at,
     );
     for (const storeId of stores)
@@ -1659,7 +1659,7 @@ describe("acquisizione con il client", () => {
     const start = Date.parse("2026-09-02T00:00:00.000Z");
     const minutes = (value: number) => new Date(start + value * 60_000);
     const send = vi.fn<Queue["send"]>();
-    const queued = { ...env, WORK_QUEUE: { send } } as Env;
+    const queueEnv = { ...env, WORK_QUEUE: fakeQueue({ send }) };
     const message = () => {
       const ack = vi.fn();
       const retry = vi.fn();
@@ -1680,11 +1680,11 @@ describe("acquisizione con il client", () => {
         ).all()
       ).results;
     const request = (at: Date, options: { reimport?: boolean } = {}, userId = "u-a") =>
-      requestStoreSync(queued, userId, "s-a", options, at);
+      requestStoreSync(queueEnv, userId, "s-a", options, at);
 
     beforeEach(async () => {
       send.mockReset();
-      send.mockResolvedValue(undefined);
+      send.mockResolvedValue(queued);
       await env.DB.prepare(
         "UPDATE ebay_store_credentials SET access_token = ? WHERE store_id = 's-a'",
       )
@@ -1801,7 +1801,7 @@ describe("acquisizione con il client", () => {
 
       const fetcher = ebay();
       const first = message();
-      await consumeStoreSync(first, queued, fetcher, minutes(2));
+      await consumeStoreSync(first, queueEnv, fetcher, minutes(2));
       expect(first.ack).toHaveBeenCalledOnce();
       expect(await state()).toMatchObject({
         requested_at: null,
@@ -1815,7 +1815,7 @@ describe("acquisizione con il client", () => {
       fetcher.mockClear();
       const repeated = message();
       const errors = vi.spyOn(console, "error");
-      await consumeStoreSync(repeated, queued, fetcher, minutes(3));
+      await consumeStoreSync(repeated, queueEnv, fetcher, minutes(3));
       expect(errors).not.toHaveBeenCalled();
       errors.mockRestore();
       expect(fetcher).not.toHaveBeenCalled();
@@ -1833,7 +1833,7 @@ describe("acquisizione con il client", () => {
         .run();
       expect(await request(minutes(5))).toBe("invalid");
       const paused = message();
-      await consumeStoreSync(paused, queued, fetcher, minutes(5));
+      await consumeStoreSync(paused, queueEnv, fetcher, minutes(5));
       expect(fetcher).not.toHaveBeenCalled();
       expect(paused.ack).toHaveBeenCalledOnce();
       expect(await state()).toMatchObject({ requested_at: minutes(4).toISOString() });
@@ -1860,12 +1860,12 @@ describe("acquisizione con il client", () => {
           .run();
         fetcher.mockClear();
         const held = message();
-        await consumeStoreSync(held, queued, fetcher, minutes(2));
+        await consumeStoreSync(held, queueEnv, fetcher, minutes(2));
         expect(fetcher).not.toHaveBeenCalled();
         expect(held.retry).toHaveBeenCalledWith({ delaySeconds: 60 });
         expect(held.ack).not.toHaveBeenCalled();
         const resumed = message();
-        await consumeStoreSync(resumed, queued, fetcher, minutes(16));
+        await consumeStoreSync(resumed, queueEnv, fetcher, minutes(16));
         expect(resumed.ack).toHaveBeenCalledOnce();
         expect(await state()).toMatchObject({ requested_at: null });
         // La rilettura non duplica l'ordine già acquisito.
@@ -1883,7 +1883,7 @@ describe("acquisizione con il client", () => {
           fail: () => new Response(null, { status: 429, headers: { "retry-after": "600" } }),
         });
         const first = message();
-        await consumeStoreSync(first, queued, limited, minutes(1));
+        await consumeStoreSync(first, queueEnv, limited, minutes(1));
         expect(first.retry).toHaveBeenCalledWith({ delaySeconds: 600 });
         expect(String(errors.mock.calls.at(-1)?.[0])).toContain('"operation":"order_acquisition"');
         // La richiesta resta per la ripresa; la lettura non riuscita compare fra le ultime.
@@ -1896,7 +1896,7 @@ describe("acquisizione con il client", () => {
         expect(await request(minutes(2))).toBe("limited");
         const fetcher = ebay();
         const early = message();
-        await consumeStoreSync(early, queued, fetcher, minutes(6));
+        await consumeStoreSync(early, queueEnv, fetcher, minutes(6));
         expect(early.retry).toHaveBeenCalledWith({ delaySeconds: 300 });
         // Il cron esclude il keyset in attesa senza tentare né registrare errori.
         errors.mockClear();
@@ -1950,13 +1950,7 @@ describe("acquisizione con il client", () => {
     });
 
     it("i negozi di un keyset in attesa non tolgono il turno a quelli dell'altro ambiente", async () => {
-      const sandbox = {
-        ...env,
-        EBAY_SANDBOX_ENABLED: "true",
-        EBAY_SANDBOX_CLIENT_ID: "sandbox-client",
-        EBAY_SANDBOX_CLIENT_SECRET: "sandbox-secret",
-        EBAY_SANDBOX_RUNAME: "sandbox-runame",
-      } as Env;
+      const sandbox = withSandbox(env);
       await env.DB.prepare(
         `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, ebay_environment)
          VALUES ('s-c', 'w-a', 'e-c', ?1, 'production'), ('s-d', 'w-a', 'e-d', ?1, 'production'),
@@ -2103,7 +2097,7 @@ describe("acquisizione con il client", () => {
           .run();
         const fetcher = ebay();
         const renewing = message();
-        await consumeStoreSync(renewing, queued, fetcher, minutes(0));
+        await consumeStoreSync(renewing, queueEnv, fetcher, minutes(0));
         expect(fetcher).not.toHaveBeenCalled();
         expect(renewing.ack).toHaveBeenCalledOnce();
         expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
@@ -2115,7 +2109,7 @@ describe("acquisizione con il client", () => {
         const rejected = message();
         await consumeStoreSync(
           rejected,
-          queued,
+          queueEnv,
           ebay({ fail: () => new Response(null, { status: 401 }) }),
           minutes(1),
         );
@@ -2149,7 +2143,7 @@ describe("acquisizione con il client", () => {
     it("reimporta lo storico solo a importazione conclusa", async () => {
       // Prima del primo avvio la richiesta avvia l'importazione.
       expect(await request(minutes(0), { reimport: true })).toBe("queued");
-      await consumeStoreSync(message(), queued, ebay(), minutes(1));
+      await consumeStoreSync(message(), queueEnv, ebay(), minutes(1));
       expect(await state()).toMatchObject({
         history_from: "2026-08-03T00:01:00.000Z",
         history_done_at: minutes(1).toISOString(),
@@ -2167,7 +2161,7 @@ describe("acquisizione con il client", () => {
       expect(send).toHaveBeenCalledTimes(2);
 
       const fetcher = ebay();
-      await consumeStoreSync(message(), queued, fetcher, minutes(60 * 24 + 2));
+      await consumeStoreSync(message(), queueEnv, fetcher, minutes(60 * 24 + 2));
       expect(pages(fetcher, "creationdate")).toEqual([0]);
       expect(await state()).toMatchObject({
         history_done_at: minutes(60 * 24 + 2).toISOString(),
@@ -2176,7 +2170,7 @@ describe("acquisizione con il client", () => {
 
     it("con una copertura la reimportazione riparte da un anno di storico", async () => {
       expect(await request(minutes(0), { reimport: true })).toBe("queued");
-      await consumeStoreSync(message(), queued, ebay(), minutes(1));
+      await consumeStoreSync(message(), queueEnv, ebay(), minutes(1));
       await env.DB.prepare(
         `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
          VALUES ('e-reimport', 'w-a', 'premium', ?, ?)`,
@@ -2224,7 +2218,7 @@ describe("acquisizione con il client", () => {
         },
       });
       const first = message();
-      await consumeStoreSync(first, queued, refreshed, minutes(1));
+      await consumeStoreSync(first, queueEnv, refreshed, minutes(1));
       expect(first.ack).toHaveBeenCalledOnce();
       expect(await count("SELECT count(*) AS total FROM orders WHERE store_id = 's-a'")).toBe(1);
 
@@ -2243,7 +2237,7 @@ describe("acquisizione con il client", () => {
         },
       });
       const second = message();
-      await consumeStoreSync(second, queued, reconnected, minutes(3));
+      await consumeStoreSync(second, queueEnv, reconnected, minutes(3));
       expect(second.ack).toHaveBeenCalledOnce();
       expect(
         await count("SELECT count(*) AS total FROM orders WHERE ebay_order_id = '12-dopo'"),
@@ -2258,7 +2252,7 @@ describe("acquisizione con il client", () => {
 
       beforeEach(async () => {
         sendBatch.mockReset();
-        sendBatch.mockResolvedValue(undefined);
+        sendBatch.mockResolvedValue(queued);
         await env.DB.prepare("DELETE FROM scheduled_tasks").run();
       });
 

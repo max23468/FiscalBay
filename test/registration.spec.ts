@@ -404,7 +404,7 @@ describe("registrazione e verifica del contatto", () => {
   });
 
   it("limita per IP i tentativi dei moduli su un ambiente distribuito, contando su D1", async () => {
-    const deployed = { ...env, APP_ORIGIN: "https://test.fiscalbay.it" };
+    const deployed = { ...env, APP_ORIGIN: "https://test.fiscalbay.it" as const };
     const attempt = (ip: string) =>
       forwardToAuth(
         deployed,

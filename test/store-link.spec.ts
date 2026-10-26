@@ -27,10 +27,12 @@ import {
   syntheticStoreXml,
   syntheticUserXml,
   syntheticTradingXml,
+  withSandbox,
 } from "./fixtures/ebay-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
+import { routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -128,26 +130,19 @@ describe("collegamento negozio eBay", () => {
     const original = await env.DB.prepare("SELECT * FROM ebay_store_credentials WHERE store_id = ?")
       .bind(store!.id)
       .first();
-    const page = await loadStoreLink({
-      request: new Request(
-        `http://localhost:5173/app/negozi/collega?ricollega=${store!.id}&da=negozi`,
-        { headers: { cookie: owner.cookie } },
-      ),
-    } as never);
+    const reconnectPath = `/app/negozi/collega?ricollega=${store!.id}&da=negozi`;
+    const page = await routeData(loadStoreLink, reconnectPath, { cookie: owner.cookie });
     expect(page).toMatchObject({
       expectedStoreId: store!.id,
       expectedStoreName: "venditore",
       reconnect: true,
       fromStores: true,
     });
-    const start = async (cookie: string) =>
-      (await startStoreLink({
-        request: new Request("http://localhost:5173/app/negozi/collega", {
-          method: "POST",
-          headers: { cookie, origin: "http://localhost:5173" },
-          body: new URLSearchParams({ negozio: store!.id, da: "negozi" }),
-        }),
-      } as never)) as Response;
+    const start = (cookie: string) =>
+      routeResponse(startStoreLink, "/app/negozi/collega", {
+        cookie,
+        fields: { negozio: store!.id, da: "negozi" },
+      });
     expect((await start(other.cookie)).status).toBe(400);
     const state = new URL((await start(owner.cookie)).headers.get("location")!).searchParams.get(
       "state",
@@ -187,25 +182,17 @@ describe("collegamento negozio eBay", () => {
     expect(correct.headers.get("location")).toBe(
       "http://localhost:5173/app/negozi?negozio=collegato",
     );
-    const stores = (await loadStores({
-      request: new Request(correct.headers.get("location")!, {
-        headers: { cookie: owner.cookie },
-      }),
-      params: {},
-    } as Parameters<typeof loadStores>[0])) as unknown as { data: { notice: unknown } };
-    expect(stores.data.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
+    const stores = await routeData(loadStores, "/app/negozi?negozio=collegato", {
+      cookie: owner.cookie,
+    });
+    expect(stores.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
     expect(await listStores(env.DB, owner.userId)).toMatchObject([
       { id: store!.id, name: "nome-aggiornato" },
     ]);
     // Dopo l'eliminazione il vecchio indirizzo di reconnect non è più disponibile.
     expect(await deleteStoreData(env.DB, owner.userId, store!.id, "nome-aggiornato")).toBe("done");
-    const deleted = await loadStoreLink({
-      request: new Request(
-        `http://localhost:5173/app/negozi/collega?ricollega=${store!.id}&da=negozi`,
-        { headers: { cookie: owner.cookie } },
-      ),
-    } as never).catch((response: Response) => response);
-    expect((deleted as Response).status).toBe(400);
+    const deleted = await routeResponse(loadStoreLink, reconnectPath, { cookie: owner.cookie });
+    expect(deleted.status).toBe(400);
   });
 
   it("non accetta il reconnect se il negozio cambia proprietario durante OAuth", async () => {
@@ -247,13 +234,7 @@ describe("collegamento negozio eBay", () => {
   });
   it("separa account e ordini con gli stessi ID nei due ambienti e rinnova con le chiavi corrette", async () => {
     const seller = await verifiedSession("ambienti@example.invalid");
-    const sandbox = {
-      ...env,
-      EBAY_SANDBOX_ENABLED: "true",
-      EBAY_SANDBOX_CLIENT_ID: "sandbox-client",
-      EBAY_SANDBOX_CLIENT_SECRET: "sandbox-secret",
-      EBAY_SANDBOX_RUNAME: "sandbox-runame",
-    } as unknown as Env;
+    const sandbox = withSandbox(env);
     const configuration = ebayConfiguration(sandbox, "sandbox");
     for (const ebayEnvironment of ["production", "sandbox"] as const) {
       const authorize = new URL(
@@ -347,14 +328,11 @@ describe("collegamento negozio eBay", () => {
   });
   it("registra e apre la sessione dal modulo di accesso solo dalla propria origine", async () => {
     await verifiedSession("accesso@example.invalid");
-    const submit = (password: string, origin = "http://localhost:5173") =>
-      signIn({
-        request: new Request("http://localhost:5173/accesso", {
-          method: "POST",
-          headers: { origin },
-          body: new URLSearchParams({ email: "accesso@example.invalid", password }),
-        }),
-      } as Parameters<typeof signIn>[0]) as Promise<Response>;
+    const submit = (password: string, origin = testOrigin) =>
+      routeResponse(signIn, "/accesso", {
+        origin,
+        fields: { email: "accesso@example.invalid", password },
+      });
 
     const accepted = await submit("Una-password-negozio-molto-lunga");
     expect(accepted.status).toBe(303);
@@ -404,13 +382,10 @@ describe("collegamento negozio eBay", () => {
       const { userId, cookie } = await verifiedSession(
         `spazio${prefix.replace("/", "-")}-${fromStores}@example.invalid`,
       );
-      const start = (await startStoreLink({
-        request: new Request(`http://localhost:5173${prefix}/app/negozi/collega`, {
-          method: "POST",
-          headers: { cookie, origin: "http://localhost:5173" },
-          body: new URLSearchParams(fromStores ? { da: "negozi" } : {}),
-        }),
-      } as Parameters<typeof startStoreLink>[0])) as Response;
+      const start = await routeResponse(startStoreLink, `${prefix}/app/negozi/collega`, {
+        cookie,
+        fields: fromStores ? { da: "negozi" } : {},
+      });
       const state = new URL(start.headers.get("location")!).searchParams.get("state");
       await handleAuthRequest(
         storeCallback(`state=${state}&code=codice`, cookie),
@@ -475,12 +450,7 @@ describe("collegamento negozio eBay", () => {
       },
     ]);
 
-    const home = await loadHome({
-      params: {},
-      request: new Request("http://localhost:5173/app/ordini?negozio=collegato", {
-        headers: { cookie },
-      }),
-    } as Parameters<typeof loadHome>[0]);
+    const home = await homeFor(cookie, "/app/ordini?negozio=collegato");
     expect(home.notice).toEqual({ text: "Negozio eBay collegato.", tone: "success" });
     // La pagina reale riceve la vista condivisa con l'anteprima, senza il valore da sbloccare.
     expect(home.page.orders).toMatchObject([
@@ -937,11 +907,7 @@ describe("collegamento negozio eBay", () => {
   it("mostra la schermata preparatoria solo a chi può collegare e parte per eBay dal suo invio", async () => {
     const { cookie } = await verifiedSession("preparatoria@example.invalid");
     for (const base of ["", "/en"]) {
-      const page = await loadStoreLink({
-        request: new Request(`http://localhost:5173${base}/app/negozi/collega`, {
-          headers: { cookie },
-        }),
-      } as Parameters<typeof loadStoreLink>[0]);
+      const page = await routeData(loadStoreLink, `${base}/app/negozi/collega`, { cookie });
       expect(page).toEqual({
         language: base ? "en" : "it",
         reconnect: false,
@@ -958,19 +924,16 @@ describe("collegamento negozio eBay", () => {
       });
     }
     // Da Negozi la schermata riporta lì con «Annulla».
-    const reconnect = await loadStoreLink({
-      request: new Request("http://localhost:5173/app/negozi/collega?ricollega&da=negozi", {
-        headers: { cookie },
-      }),
-    } as Parameters<typeof loadStoreLink>[0]).catch((response: Response) => response);
-    expect((reconnect as Response).status).toBe(400);
-    const blockedSandbox = (await startStoreLink({
-      request: new Request("http://localhost:5173/app/negozi/collega", {
-        method: "POST",
-        headers: { cookie, origin: "http://localhost:5173" },
-        body: new URLSearchParams({ environment: "sandbox" }),
-      }),
-    } as Parameters<typeof startStoreLink>[0])) as Response;
+    const reconnect = await routeResponse(
+      loadStoreLink,
+      "/app/negozi/collega?ricollega&da=negozi",
+      { cookie },
+    );
+    expect(reconnect.status).toBe(400);
+    const blockedSandbox = await routeResponse(startStoreLink, "/app/negozi/collega", {
+      cookie,
+      fields: { environment: "sandbox" },
+    });
     expect(blockedSandbox.status).toBe(403);
     expect((await homeFor(cookie)).page?.view).toBe("no-store");
     expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
@@ -1060,12 +1023,9 @@ describe("collegamento negozio eBay", () => {
     ).all();
     expect(stores.results).toEqual([{ user_id: owner.userId, display_name: "venditore" }]);
     // L'esito è un testo generico: nessun dato dell'altro account FiscalBay.
-    const home = await loadHome({
-      params: {},
-      request: new Request("http://localhost:5173/app/ordini?negozio=altro-spazio", {
-        headers: { cookie: other.cookie },
-      }),
-    } as Parameters<typeof loadHome>[0]);
+    const home = await routeData(loadHome, "/app/ordini?negozio=altro-spazio", {
+      cookie: other.cookie,
+    });
     expect(home.notice?.text).toBe(
       "Questo negozio eBay è già collegato a un altro account FiscalBay.",
     );
@@ -1191,14 +1151,9 @@ describe("collegamento negozio eBay", () => {
     expect(englishLink.searchParams.has("locale")).toBe(false);
     const begin = async (path: string) =>
       new URL(
-        (
-          (await startStoreLink({
-            request: new Request(`http://localhost:5173${path}`, {
-              method: "POST",
-              headers: { cookie, origin: "http://localhost:5173" },
-            }),
-          } as Parameters<typeof startStoreLink>[0])) as Response
-        ).headers.get("location")!,
+        (await routeResponse(startStoreLink, path, { cookie, fields: {} })).headers.get(
+          "location",
+        )!,
       ).searchParams.get("state")!;
     const english = await begin("/en/app/negozi/collega");
     const linked = await handleAuthRequest(

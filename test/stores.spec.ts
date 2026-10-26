@@ -48,6 +48,7 @@ import { syntheticEbay, syntheticOrderId } from "./fixtures/ebay-fixtures";
 import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";
 import { homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
+import { queued } from "./fixtures/queue-fixture";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -581,7 +582,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(after.data.page.stores).toEqual([]);
     expect(after.data.notice).toEqual({ text: "Negozio eliminato da FiscalBay.", tone: "success" });
     const removedDetail = await storesPage(`/app/negozi/${seller.storeId}`, seller.cookie);
-    expect(removedDetail.init.status).toBe(404);
+    expect(removedDetail.init?.status).toBe(404);
 
     const unknown = await storeForm(seller.cookie, {
       intent: "store-refresh",
@@ -592,7 +593,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
 
   it("chiede letture e reimportazione dalla schermata con l'esito della richiesta", async () => {
     const seller = await linkedSeller("letture-schermata@example.invalid");
-    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(undefined);
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
     try {
       expect(
         await storeForm(seller.cookie, { intent: "store-sync", store: seller.storeId }),
@@ -1489,7 +1490,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         .run();
     const cron = {
       ...env,
-      WORK_QUEUE: { send: vi.fn(), sendBatch: vi.fn().mockResolvedValue(undefined) },
+      WORK_QUEUE: { send: vi.fn(), sendBatch: vi.fn().mockResolvedValue(queued) },
     } as unknown as Env;
 
     it("dopo 30 giorni senza accessi avvisa una volta e dopo altri 7 mette in pausa le letture", async () => {

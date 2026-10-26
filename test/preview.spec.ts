@@ -11,7 +11,11 @@ import {
 } from "../app/preview/scenarios.server";
 import { formatDate, formatRelative, trialDaysLeft, trialEnding } from "../app/view-models";
 import { taxQuality } from "../app/tax-quality";
-import { readPreviewState, writePreviewState } from "../app/preview/state.server";
+import {
+  readPreviewState,
+  writePreviewState,
+  type PreviewState,
+} from "../app/preview/state.server";
 import { action as previewSearch } from "../app/routes/preview-search";
 import { action as previewSettingsAction } from "../app/routes/preview-settings";
 import { loader as previewOrders } from "../app/routes/preview-orders";
@@ -19,6 +23,7 @@ import { loader as previewStores } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/domain/orders.server";
 import type { SearchResults } from "../app/components/app-shell";
+import { routeData } from "./fixtures/route-fixtures";
 
 describe("stato sintetico dell'anteprima", () => {
   it("conserva lo stato sui cookie HTTP locali e mantiene Secure sul dominio HTTPS", async () => {
@@ -100,7 +105,7 @@ describe("stato sintetico dell'anteprima", () => {
     it(`i negozi sintetici conservano scadenza e ultima lettura coerenti, ${language}`, () => {
       const expired = loadScenario("negozio-scaduto", language, new Set());
       const store = expired.stores.find((entry) => entry.connection === "reconnect_required")!;
-      expect(Date.parse(store.consentExpiresAt)).toBeLessThan(Date.parse(expired.now));
+      expect(Date.parse(store.consentExpiresAt!)).toBeLessThan(Date.parse(expired.now));
       for (const scenario of scenarioIds.map((id) => loadScenario(id, language, new Set()))) {
         for (const paused of scenario.stores.filter((entry) => entry.connection === "paused")) {
           for (const update of paused.recent.filter((entry) => entry.ok)) {
@@ -334,9 +339,9 @@ describe("prova simulata dell'anteprima", () => {
     }>;
 
   it("attiva la prova disponibile una sola volta nello scenario", async () => {
-    const cookie = (await writePreviewState({ scenario: "ordinario", unlocked: [] })).split(
-      ";",
-    )[0]!;
+    const cookie = (
+      await writePreviewState({ scenario: "ordinario", unlocked: [], saveFailed: false })
+    ).split(";")[0]!;
     const first = await start(cookie);
     expect(first.data).toEqual({ ok: true, notice: appCopy.it.settings.plan.trialStarted });
     const started = new Headers(first.init?.headers).get("Set-Cookie")!.split(";")[0]!;
@@ -387,11 +392,10 @@ describe("ricerca dell'anteprima", () => {
 
 describe("elenco ordini dell'anteprima", () => {
   const list = async (path: string, scenario: "aggiornamento" | "ordinario") => {
-    const cookie = (await writePreviewState({ scenario, unlocked: [] })).split(";")[0]!;
-    return previewOrders({
-      request: new Request(`http://localhost:5173${path}`, { headers: { cookie } }),
-      params: {},
-    } as Parameters<typeof previewOrders>[0]) as Promise<{
+    const cookie = (await writePreviewState({ scenario, unlocked: [], saveFailed: false })).split(
+      ";",
+    )[0]!;
+    return routeData(previewOrders, path, { cookie }) as Promise<{
       orders: Array<{ id: string }>;
       total: number;
       incoming: number;
@@ -489,12 +493,13 @@ describe("criteri dell'elenco dell'anteprima", () => {
 
 describe("negozi dell'anteprima", () => {
   it("avvisa allo scollegamento negli stessi stati dell'abbonamento dell'area reale", async () => {
-    const renews = async (scenario: string) => {
-      const cookie = (await writePreviewState({ scenario, unlocked: [] } as never)).split(";")[0]!;
-      const page = (await previewStores({
-        request: new Request("http://localhost:5173/anteprima/negozi", { headers: { cookie } }),
-        params: {},
-      } as Parameters<typeof previewStores>[0])) as { subscriptionRenews: boolean };
+    const renews = async (scenario: PreviewState["scenario"]) => {
+      const cookie = (await writePreviewState({ scenario, unlocked: [], saveFailed: false })).split(
+        ";",
+      )[0]!;
+      const page = (await routeData(previewStores, "/anteprima/negozi", { cookie })) as {
+        subscriptionRenews: boolean;
+      };
       return page.subscriptionRenews;
     };
     // Un abbonamento che addebiterà ancora, anche in attivazione o dopo un periodo rimborsato.

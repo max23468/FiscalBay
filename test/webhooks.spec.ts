@@ -14,6 +14,7 @@ import worker from "../workers/app";
 import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 import delivery from "./fixtures/ebay-order-notification.json";
+import { fakeQueue, queued } from "./fixtures/queue-fixture";
 
 const router = vi.hoisted(() => ({ handle: vi.fn(), create: vi.fn() }));
 vi.mock("react-router", async (original) => ({
@@ -42,12 +43,15 @@ const order = {
   orderFulfillmentStatus: "NOT_STARTED",
   lineItems: [{ lineItemId: "line-synthetic", title: "Articolo sintetico", quantity: 1 }],
 };
-const send = vi.fn<Queue["send"]>().mockResolvedValue(undefined);
-const environment = {
+const send = vi.fn<Queue["send"]>().mockResolvedValue(queued);
+const environment: Env = {
   ...env,
   APP_ORIGIN: "https://test.fiscalbay.it",
-  WORK_QUEUE: { send },
-} as Env;
+  WORK_QUEUE: fakeQueue({ send }),
+};
+/** Richiesta al Worker come la consegna Cloudflare; il contesto serve solo alla build. */
+const workerFetch = (request: Request, target: Env) =>
+  worker.fetch(request as Parameters<typeof worker.fetch>[0], target, {} as ExecutionContext);
 const fetcher = vi.fn<typeof fetch>(async (input, init) => {
   const url = String(input);
   if (url.endsWith("/oauth2/token")) {
@@ -199,7 +203,7 @@ it("la conferma usa il marketplace italiano nella lettura fiscale", async () => 
 it("il challenge Production resta disponibile con sandbox disabilitata", async () => {
   const configured = {
     ...environment,
-    EBAY_SANDBOX_ENABLED: "false",
+    EBAY_SANDBOX_ENABLED: "false" as const,
     EBAY_NOTIFICATION_VERIFICATION_TOKEN: "verification-synthetic-token-32-bytes",
   };
   expect(
@@ -283,7 +287,7 @@ beforeEach(async () => {
   vi.setSystemTime(now);
   vi.clearAllMocks();
   router.create.mockReturnValue(router.handle);
-  send.mockResolvedValue(undefined);
+  send.mockResolvedValue(queued);
   await env.DB.batch([
     env.DB.prepare("DELETE FROM webhook_receipts"),
     env.DB.prepare("DELETE FROM ebay_rate_limits"),
@@ -322,7 +326,6 @@ it("la coda smista richieste di sincronizzazione, compiti e riferimenti dei webh
     await worker.queue(
       { messages: [sync, webhook, task, unknown] } as unknown as MessageBatch<unknown>,
       environment,
-      {} as ExecutionContext,
     );
     // Un messaggio sconosciuto non passa dai webhook: si riprova fino ai non consegnati.
     expect(unknown.retry).toHaveBeenCalledOnce();
@@ -360,7 +363,7 @@ it("lascia pagine e callback OAuth al router e rifiuta i metodi diversi", async 
 it("il Worker intercetta il webhook prima di caricare la build React Router", async () => {
   expect(
     (
-      await worker.fetch(
+      await workerFetch(
         new Request("https://test.fiscalbay.it/webhooks/stripe", { method: "PUT" }),
         environment,
       )
@@ -368,7 +371,7 @@ it("il Worker intercetta il webhook prima di caricare la build React Router", as
   ).toBe(405);
   expect(
     (
-      await worker.fetch(
+      await workerFetch(
         new Request("https://test.fiscalbay.it/webhooks/ebay", { method: "POST", body: "{}" }),
         environment,
       )
@@ -387,7 +390,7 @@ it.each([
   "il Worker inoltra la richiesta e applica gli header per %s%s",
   async (origin, path, robots, version) => {
     router.handle.mockResolvedValue(new Response("pagina sintetica", { status: 201 }));
-    const response = await worker.fetch(
+    const response = await workerFetch(
       new Request(`${origin}${path}`, {
         method: "POST",
         body: "campo=sintetico",
@@ -420,7 +423,7 @@ it.each([
 it("il Worker conserva cache e redirect dichiarati dal router anche con header immutabili", async () => {
   router.handle.mockResolvedValue(Response.redirect("https://test.fiscalbay.it/accesso", 303));
   const request = new Request("https://test.fiscalbay.it/app/ordini");
-  const redirect = await worker.fetch(request, environment);
+  const redirect = await workerFetch(request, environment);
   expect(redirect.status).toBe(303);
   expect(redirect.headers.get("location")).toBe("https://test.fiscalbay.it/accesso");
   expect(redirect.headers.get("cache-control")).toBe("no-store");
@@ -429,14 +432,14 @@ it("il Worker conserva cache e redirect dichiarati dal router anche con header i
       headers: { "cache-control": "public, max-age=60" },
     }),
   );
-  expect((await worker.fetch(request, environment)).headers.get("cache-control")).toBe(
+  expect((await workerFetch(request, environment)).headers.get("cache-control")).toBe(
     "public, max-age=60",
   );
 });
 
 it("il Worker risponde all'errore del router con 500 correlato e senza dettagli riservati", async () => {
   router.handle.mockRejectedValue(new Error("NON-ESPORRE"));
-  const response = await worker.fetch(
+  const response = await workerFetch(
     new Request("https://test.fiscalbay.it/app/ordini"),
     environment,
   );
@@ -449,29 +452,20 @@ it("il Worker risponde all'errore del router con 500 correlato e senza dettagli 
 
 it("la coda senza webhook chiude le sole sincronizzazioni senza riprovare messaggi inesistenti", async () => {
   const sync = { body: { syncStore: "webhook-store" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
-  await worker.queue(
-    { messages: [sync] } as unknown as MessageBatch<unknown>,
-    environment,
-    {} as ExecutionContext,
-  );
+  await worker.queue({ messages: [sync] } as unknown as MessageBatch<unknown>, environment);
   expect(sync.ack).toHaveBeenCalledOnce();
   expect(sync.retry).not.toHaveBeenCalled();
-  await worker.queue(
-    { messages: [] } as unknown as MessageBatch<unknown>,
-    environment,
-    {} as ExecutionContext,
-  );
+  await worker.queue({ messages: [] } as unknown as MessageBatch<unknown>, environment);
   expect(send).not.toHaveBeenCalled();
 });
 
 it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito in ritardo", async () => {
   await env.DB.prepare("DELETE FROM scheduled_tasks").run();
-  const sendBatch = vi.fn<Queue["sendBatch"]>().mockResolvedValue(undefined);
-  await worker.scheduled(
-    { scheduledTime: now.getTime() } as ScheduledController,
-    { ...environment, WORK_QUEUE: { send, sendBatch } } as Env,
-    {} as ExecutionContext,
-  );
+  const sendBatch = vi.fn<Queue["sendBatch"]>().mockResolvedValue(queued);
+  await worker.scheduled({ scheduledTime: now.getTime() } as ScheduledController, {
+    ...environment,
+    WORK_QUEUE: fakeQueue({ send, sendBatch }),
+  });
   expect(sendBatch).toHaveBeenNthCalledWith(1, [
     { body: { task: "maintenance", slot: "2026-10-11T00:00:00.000Z" } },
     { body: { task: "token_refresh", slot: now.toISOString() } },

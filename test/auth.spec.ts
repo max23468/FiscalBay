@@ -17,6 +17,8 @@ import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { passkeyFailure } from "../app/account/passkey-error";
 import { hashPassword, verifyPassword } from "../app/password.server";
 import { securityReturnPath } from "../app/app-links";
+import { emailSender, mailEnv } from "./fixtures/account-fixtures";
+import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 it("distingue le cause passkey riconoscibili e non indovina quelle ambigue", () => {
   for (const [name, expected] of [
@@ -160,13 +162,11 @@ it.each([undefined, "[]", "", "non-json", "{}", '["non-email"]', '["ok@example.i
   "rifiuta nuove registrazioni con elenco vuoto o non valido: %s",
   async (list) => {
     const email = `rifiuto-${crypto.randomUUID()}@example.invalid`;
-    const send = vi.fn(async () => ({}));
-    const environment = {
-      ...env,
+    const send = emailSender();
+    const environment = mailEnv(send, {
       REGISTRATION_MODE: "approval",
       REGISTRATION_ALLOWED_EMAILS: list,
-      AUTH_EMAIL: { send },
-    } as Env;
+    });
     const response = await createAuth(environment).handler(
       new Request("http://localhost:5173/api/auth/sign-up/email", {
         method: "POST",
@@ -189,12 +189,10 @@ it.each([undefined, "[]", "", "non-json", "{}", '["non-email"]', '["ok@example.i
 
 it("autorizza solo email esatte, conserva il login e non rivela gli account fuori elenco", async () => {
   const email = "approvato@example.invalid";
-  const environment = {
-    ...env,
+  const environment = mailEnv(emailSender(), {
     REGISTRATION_MODE: "approval",
     REGISTRATION_ALLOWED_EMAILS: '[" Approvato@Example.Invalid "]',
-    AUTH_EMAIL: { send: vi.fn(async () => ({})) },
-  } as Env;
+  });
   const signup = (target: Env, address: string) =>
     createAuth(target).handler(
       new Request("http://localhost:5173/api/auth/sign-up/email", {
@@ -252,8 +250,8 @@ describe("Better Auth su Workers e D1", () => {
   });
 
   it("usa mittente e Reply-To previsti per verifica e reset", async () => {
-    const send = vi.fn(async () => ({ messageId: "synthetic" }));
-    const options = createAuthOptions({ ...env, AUTH_EMAIL: { send } } as Env);
+    const send = emailSender();
+    const options = createAuthOptions(mailEnv(send));
     const user = { id: "auth-email-fixture", email: "auth@example.invalid" };
     const url = "https://test.fiscalbay.it/verifica";
 
@@ -420,13 +418,10 @@ describe("Better Auth su Workers e D1", () => {
         .run();
     }
     const remove = (passkeyId: string) =>
-      securityRouteAction({
-        request: new Request(`${origin}/app/impostazioni/sicurezza`, {
-          method: "POST",
-          headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ intent: "passkey-remove", id: passkeyId }),
-        }),
-      } as never);
+      routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", {
+        cookie,
+        fields: { intent: "passkey-remove", id: passkeyId },
+      });
     expect((await remove("first")).headers.get("location")).toContain("passkey-rimossa");
     expect((await remove("second")).headers.get("location")).toContain("ultimo-accesso");
     await env.DB.prepare(
@@ -521,7 +516,7 @@ describe("Better Auth su Workers e D1", () => {
   it("limita le verifiche WebAuthn e rifiuta origini estranee senza creare identità", async () => {
     const before = await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first();
     const origin = "https://test.fiscalbay.it";
-    const deployed = { ...env, APP_ORIGIN: origin };
+    const deployed = { ...env, APP_ORIGIN: origin as typeof env.APP_ORIGIN };
     const attempt = (requestOrigin: string) =>
       handleAuthRequest(
         new Request(`${origin}/api/auth/passkey/verify-authentication`, {
@@ -673,13 +668,11 @@ describe("Better Auth su Workers e D1", () => {
     async (allowed) => {
       const email = allowed ? "business@example.invalid" : "business-negato@example.invalid";
       const accountId = allowed ? "ebay-business-sintetico" : "ebay-business-negato";
-      const send = vi.fn(async () => ({ messageId: "synthetic" }));
-      const environment = {
-        ...env,
+      const send = emailSender();
+      const environment = mailEnv(send, {
         REGISTRATION_MODE: "approval",
         REGISTRATION_ALLOWED_EMAILS: allowed ? '["business@example.invalid"]' : "[]",
-        AUTH_EMAIL: { send },
-      } as Env;
+      });
       const start = await createAuth(environment).handler(
         new Request("http://localhost:5173/api/auth/sign-in/social", {
           method: "POST",
@@ -840,7 +833,7 @@ describe("Better Auth su Workers e D1", () => {
   ])(
     "collega eBay soltanto alla sessione verificata che ha iniziato il consenso: %s",
     async (scenario) => {
-      const environment = { ...env, AUTH_EMAIL: { send: vi.fn(async () => ({})) } } as Env;
+      const environment = mailEnv();
       const auth = createAuth(environment);
       const post = (path: string, body: Record<string, unknown>, cookie = "") =>
         auth.handler(
@@ -1035,8 +1028,7 @@ describe("Collegamento e modifica dell'identità", () => {
       .getSetCookie()
       .map((value) => value.split(";")[0])
       .join("; ");
-  const withEmail = (send = vi.fn(async () => ({}))) =>
-    ({ ...env, AUTH_EMAIL: { send } }) as unknown as Env;
+  const withEmail = (send = emailSender()) => mailEnv(send);
   const post = (environment: Env, path: string, body: Record<string, unknown>, cookie = "") =>
     createAuth(environment).handler(
       new Request(`${origin}/api/auth/${path}`, {
@@ -1046,25 +1038,10 @@ describe("Collegamento e modifica dell'identità", () => {
       }),
     );
   const appAction = (cookie: string, fields: Record<string, string>) =>
-    signInAction({
-      request: new Request(`${origin}/accesso`, {
-        method: "POST",
-        headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(fields),
-      }),
-    } as never);
+    routeResponse(signInAction, "/accesso", { cookie, fields });
   /** Azione della pagina Sicurezza; chi non può vederla riceve il redirect lanciato. */
   const securityAction = (cookie: string, fields: Record<string, string>) =>
-    securityRouteAction({
-      request: new Request(`${origin}/app/impostazioni/sicurezza`, {
-        method: "POST",
-        headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams(fields),
-      }),
-    } as never).catch((thrown: unknown) => {
-      if (thrown instanceof Response) return thrown;
-      throw thrown;
-    });
+    routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", { cookie, fields });
   const signUp = async (environment: Env, email: string, verified: boolean) => {
     const response = await post(environment, "sign-up/email", {
       name: "Identità sintetica",
@@ -1133,12 +1110,11 @@ describe("Collegamento e modifica dell'identità", () => {
 
   it.each([true, false])("applica l'autorizzazione al callback Google: %s", async (allowed) => {
     const email = `google-approvazione-${allowed}@gmail.com`;
-    const send = vi.fn(async () => ({}));
-    const environment = {
-      ...withEmail(send),
+    const send = emailSender();
+    const environment = mailEnv(send, {
       REGISTRATION_MODE: "approval",
       REGISTRATION_ALLOWED_EMAILS: allowed ? JSON.stringify([email.toUpperCase()]) : "[]",
-    };
+    });
     const result = await googleCallback(
       environment,
       await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
@@ -1262,7 +1238,7 @@ describe("Collegamento e modifica dell'identità", () => {
   );
 
   it("chiede la propria conferma a un nuovo utente Google non autorevole", async () => {
-    const send = vi.fn(async () => ({}));
+    const send = emailSender();
     const environment = withEmail(send);
     const email = "nuovo@dominio-personale.invalid";
     await googleCallback(
@@ -1283,7 +1259,7 @@ describe("Collegamento e modifica dell'identità", () => {
   });
 
   it("riconosce Google dal subject anche con email cambiata, senza fondere utenti", async () => {
-    const send = vi.fn(async () => ({}));
+    const send = emailSender();
     const environment = withEmail(send);
     const first = await signUp(environment, `prima.identita@${gmailDomain}`, true);
     const second = await signUp(environment, `seconda.identita@${gmailDomain}`, true);
@@ -1556,7 +1532,7 @@ describe("Sessioni, revoche e area admin", () => {
       .getSetCookie()
       .map((value) => value.split(";")[0])
       .join("; ");
-  const jsonRequest = (path: string, cookie: string, body?: unknown) =>
+  const jsonRequest = async (path: string, cookie: string, body?: unknown) =>
     handleAuthRequest(
       new Request(`${origin}/api/auth/${path}`, {
         method: body === undefined ? "GET" : "POST",
@@ -1567,28 +1543,15 @@ describe("Sessioni, revoche e area admin", () => {
     );
   const userAgent =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15";
-  const form = (path: string, cookie: string, fields: Record<string, string>) =>
-    new Request(`${origin}${path}`, {
-      method: "POST",
-      headers: { cookie, origin, "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(fields),
-    });
   const securityAction = (cookie: string, fields: Record<string, string>) =>
-    securityRouteAction({ request: form("/app/impostazioni/sicurezza", cookie, fields) } as never)
-      .catch((thrown: unknown) => {
-        if (thrown instanceof Response) return thrown;
-        throw thrown;
-      })
-      .then((response) => response.headers.get("location"));
-  const home = (cookie: string) =>
-    signInLoader({ request: new Request(`${origin}/accesso`, { headers: { cookie } }) } as never);
+    routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", { cookie, fields }).then(
+      (response) => response.headers.get("location"),
+    );
+  const home = (cookie: string) => routeData(signInLoader, "/accesso", { cookie });
   /** Pagina Sicurezza; chi non può vederla torna all'accesso con l'esito ricevuto. */
   const security = async (cookie: string, path = "/app/impostazioni/sicurezza") => {
     try {
-      return await securityLoader({
-        request: new Request(`${origin}${path}`, { headers: { cookie } }),
-        params: { sezione: "sicurezza" },
-      } as never);
+      return await routeData(securityLoader, path, { cookie, params: { sezione: "sicurezza" } });
     } catch (thrown) {
       if (thrown instanceof Response) return thrown.headers.get("location");
       throw thrown;
@@ -1668,19 +1631,15 @@ describe("Sessioni, revoche e area admin", () => {
     for (const prefix of ["", "/en"]) {
       const user = await createUser(`ritorno${prefix.replace("/", "-")}@example.invalid`);
       const target = `${prefix}/app/impostazioni/sicurezza#security-email`;
-      const area = await securityLoader({
-        request: new Request(`${origin}${prefix}/app/impostazioni/sicurezza`, {
-          headers: { cookie: user.cookie },
-        }),
+      const area = await routeData(securityLoader, `${prefix}/app/impostazioni/sicurezza`, {
+        cookie: user.cookie,
         params: { sezione: "sicurezza" },
-      } as never);
+      });
       expect(area.userId).toBe(user.id);
-      const out = await securityRouteAction({
-        request: form(`${prefix}/app/impostazioni/sicurezza`, user.cookie, {
-          intent: "riautentica",
-          returnTo: target,
-        }),
-      } as never);
+      const out = await routeResponse(securityRouteAction, `${prefix}/app/impostazioni/sicurezza`, {
+        cookie: user.cookie,
+        fields: { intent: "riautentica", returnTo: target },
+      });
       const destination = new URL(out.headers.get("location")!, origin);
       expect(destination.pathname).toBe(`${prefix}/accesso`);
       expect(destination.searchParams.get("returnTo")).toBe(target);
@@ -1690,13 +1649,9 @@ describe("Sessioni, revoche e area admin", () => {
         ["https://example.invalid", `${prefix}/app/ordini`],
         [`${prefix}/app/negozi`, `${prefix}/app/ordini`],
       ]) {
-        const signedIn = await signInAction({
-          request: form(`${prefix}/accesso`, "", {
-            email: user.email,
-            password: "Password-sintetica-123!",
-            returnTo,
-          }),
-        } as never);
+        const signedIn = await routeResponse(signInAction, `${prefix}/accesso`, {
+          fields: { email: user.email, password: "Password-sintetica-123!", returnTo },
+        });
         expect(signedIn.headers.get("location")).toBe(expected);
       }
     }
@@ -1705,9 +1660,7 @@ describe("Sessioni, revoche e area admin", () => {
   /** Esito del loader admin: 404 per chi non è admin, altrimenti il livello di accesso. */
   const admin = async (cookie: string) => {
     try {
-      const result = await adminLoader({
-        request: new Request(`${origin}/admin`, { headers: { cookie } }),
-      } as never);
+      const result = await routeData(adminLoader, "/admin", { cookie });
       return result.access;
     } catch (error) {
       return (error as { init?: { status?: number } }).init?.status;
@@ -1766,9 +1719,10 @@ describe("Sessioni, revoche e area admin", () => {
       await securityAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),
     ).toBe("/accesso");
     expect(await securityAction(cookie, { intent: "esci-altri" })).toBe("/accesso");
-    const link = await storeLinkAction({
-      request: form("/app/negozi/collega", cookie, {}),
-    } as never);
+    const link = await routeResponse(storeLinkAction, "/app/negozi/collega", {
+      cookie,
+      fields: {},
+    });
     expect(link.headers.get("location")).toContain("negozio=accesso");
     expect((await jsonRequest("passkey/generate-register-options", cookie)).status).toBe(401);
     expect(await admin(cookie)).toBe(404);
@@ -1891,7 +1845,7 @@ describe("Sessioni, revoche e area admin", () => {
       { intent: "collega-metodo", metodo: "google" },
       { intent: "rimuovi-metodo", metodo: "password" },
       { intent: "passkey-remove", id: "qualsiasi" },
-    ]) {
+    ] as Record<string, string>[]) {
       expect(await securityAction(user.cookie, fields)).toContain("nuovo-accesso");
     }
     expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
@@ -2092,9 +2046,7 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await passkeyVerified(presenceOnly)).toBe(0);
     expect(await admin(presenceOnly)).toBe("verify");
     // Dopo l'accesso la pagina spiega che manca la verifica, invece di ricaricarsi uguale.
-    const retried = await adminLoader({
-      request: new Request(`${origin}/admin?conferma`, { headers: { cookie: presenceOnly } }),
-    } as never);
+    const retried = await routeData(adminLoader, "/admin?conferma", { cookie: presenceOnly });
     expect(retried).toMatchObject({ access: "verify", unverified: true });
     expect(await admin(user.cookie)).toBe("verify");
 
