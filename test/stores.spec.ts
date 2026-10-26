@@ -1646,7 +1646,12 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       expect(await orderAllowance(env.DB, seller.userId)).toMatchObject({
         waiting: true,
         remaining: 0,
+        purchasesOpen: true,
       });
+      // Ordini propone prova e Premium soltanto con gli acquisti aperti.
+      await admissionSettings(1, 0);
+      expect((await orderAllowance(env.DB, seller.userId))!.purchasesOpen).toBe(false);
+      await admissionSettings(1, 1);
       const [order] = await listVisibleOrders(env.DB, seller.userId);
       await expect(unlockOrders(env.DB, seller.userId, [order!.id])).rejects.toMatchObject({
         code: "free_quota_exhausted",
