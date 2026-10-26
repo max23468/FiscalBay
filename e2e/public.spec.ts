@@ -1,7 +1,5 @@
 import { expect, test } from "./fixtures";
 
-test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
-
 test(
   "radice pubblica, accesso e area riservata senza sessione né cache",
   { tag: "@smoke" },

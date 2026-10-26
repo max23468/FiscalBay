@@ -4,8 +4,6 @@ import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { executeLocal } from "../scripts/local-d1.mjs";
 import { useLocalAccount } from "./local-account";
 
-test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
-
 test.describe("area reale", () => {
   test.skip(
     Boolean(process.env.E2E_BASE_URL),
@@ -462,7 +460,7 @@ for (const area of areas)
     page,
     baseURL,
   }) => {
-    await enter(page, baseURL!, area);
+    await enter(page.context(), baseURL!, area);
     await open(page, `${area.base}/impostazioni/supporto`);
     const summary = page.locator("details summary").first();
     expect(await summary.evaluate((node) => getComputedStyle(node).display)).toBe("flex");
@@ -476,7 +474,7 @@ for (const area of areas)
     page,
     baseURL,
   }) => {
-    await enter(page, baseURL!, area);
+    await enter(page.context(), baseURL!, area);
     await open(page, `/en${area.base}/impostazioni/aspetto`);
     // Nell'area reale la scelta si salva con un pulsante; nell'anteprima cambia soltanto pagina.
     const language =
