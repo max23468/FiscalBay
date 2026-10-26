@@ -25,7 +25,8 @@ import {
 import { addressRows, formatDate } from "../../format";
 import { CopyButton } from "~/components/tax-code";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
-import { ebayOrderHref, fromListState, missingContact } from "./labels";
+import { fromListState, missingContact } from "./labels";
+import { ebayOrderHref } from "../../orders/ebay-links";
 import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status";
 import { useTimeZone } from "~/components/time-zone";
 import { useCopy } from "~/components/copy-context";

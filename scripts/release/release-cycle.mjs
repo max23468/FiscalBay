@@ -13,8 +13,11 @@ import { plan } from "../classify-changes.mjs";
 import { addedMigrations, reviewAdded } from "./release.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
 
+// Le risposte di gh su PR e run grandi superano il MiB predefinito di execFileSync.
 const execute = (command, args, options = {}) =>
-  (execFileSync(command, args, { encoding: "utf8", ...options }) ?? "").trim();
+  (
+    execFileSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...options }) ?? ""
+  ).trim();
 const git = (...args) => execute("git", args);
 const gh = (...args) => execute("gh", args);
 const json = (...args) => JSON.parse(gh(...args));
@@ -107,6 +110,19 @@ function enableAutoMerge(repository, number, head) {
       `sha=${head}`,
     );
   }
+}
+
+/** File della PR, senza le patch: in una PR grande pesano più di un MiB. */
+export function pullRequestFiles(repository, number, run = gh) {
+  return run(
+    "api",
+    "--paginate",
+    "--jq",
+    ".[].filename",
+    `repos/${repository}/pulls/${number}/files?per_page=100`,
+  )
+    .split("\n")
+    .filter(Boolean);
 }
 
 const readPullRequest = (repository, number) =>
@@ -824,14 +840,7 @@ async function main() {
         throw new Error("Merge non confermato: ciclo riprendibile dalla stessa PR.");
       const run = await waitRun(repository, "ci.yml", pr.mergeCommit.oid, "develop");
       const jobs = json("api", `repos/${repository}/actions/runs/${run.id}/jobs?per_page=100`).jobs;
-      const files = json(
-        "api",
-        "--paginate",
-        "--slurp",
-        `repos/${repository}/pulls/${number}/files?per_page=100`,
-      )
-        .flat()
-        .map((file) => file.filename);
+      const files = pullRequestFiles(repository, number);
       if (checkCycleJobs(jobs, plan(files).deploy))
         console.log("Deploy test, collaudo remoto e readback provider confermati nella run.");
       localGit(() => {

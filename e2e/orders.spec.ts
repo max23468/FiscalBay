@@ -385,6 +385,7 @@ test.describe("area reale", () => {
       }) => {
         // Due lingue nello stesso test: su WebKit in CI supera i 30 secondi predefiniti.
         test.setTimeout(60_000);
+        watchNetwork(context);
         for (const language of ["it", "en"] as const) {
           const it = language === "it";
           const prefix = it ? "" : "/en";
@@ -396,7 +397,8 @@ test.describe("area reale", () => {
           await page.emulateMedia({
             reducedMotion: "reduce",
           });
-          await page.goto(`${prefix}/app/ordini`);
+          // Il dialogo dello sblocco si apre solo dopo l'idratazione: un clic anticipato va perso.
+          await open(page, `${prefix}/app/ordini`);
           const card = (suffix = "") =>
             page.getByRole("article", {
               name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,

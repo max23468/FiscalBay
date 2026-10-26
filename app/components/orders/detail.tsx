@@ -25,12 +25,11 @@ import type { OrdersAccount } from "./labels";
 import {
   billingCopyText,
   contactCopyLabels,
-  ebayListingHref,
-  ebayOrderHref,
   fromListState,
   missingContact,
   orderLinkSelector,
 } from "./labels";
+import { ebayListingHref, ebayOrderHref } from "../../orders/ebay-links";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
 import { useTimeZone } from "~/components/time-zone";
 import { useCopy, useLinks } from "~/components/copy-context";
