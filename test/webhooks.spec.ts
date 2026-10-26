@@ -15,6 +15,12 @@ import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acq
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 import delivery from "./fixtures/ebay-order-notification.json";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
+import {
+  insertCredentials,
+  insertStorePause,
+  insertWorkspace,
+  resetDatabase,
+} from "./fixtures/database-fixtures";
 
 const router = vi.hoisted(() => ({ handle: vi.fn(), create: vi.fn() }));
 vi.mock("react-router", async (original) => ({
@@ -284,29 +290,29 @@ async function receipt() {
 }
 
 beforeEach(async () => {
+  await resetDatabase();
   vi.setSystemTime(now);
   vi.clearAllMocks();
   router.create.mockReturnValue(router.handle);
   send.mockResolvedValue(queued);
   await env.DB.batch([
-    env.DB.prepare("DELETE FROM webhook_receipts"),
-    env.DB.prepare("DELETE FROM ebay_rate_limits"),
-    env.DB.prepare("DELETE FROM ebay_stores"),
-    env.DB.prepare("DELETE FROM workspaces WHERE id = 'webhook-workspace'"),
-    env.DB.prepare(
-      "INSERT INTO workspaces (id, name, created_at) VALUES ('webhook-workspace', 'Sintetico', ?)",
-    ).bind(grantedAt),
+    ...insertWorkspace({ id: "webhook-workspace", createdAt: grantedAt }),
     env.DB.prepare(
       "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, ebay_account_id, linked_at) VALUES ('webhook-store', 'webhook-workspace', 'seller-synthetic', 'seller-synthetic', ?)",
     ).bind(grantedAt),
   ]);
-  await env.DB.prepare(`INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-    VALUES ('webhook-store', ?, '2026-10-12T12:00:00.000Z', 'r', '2027-10-12T12:00:00.000Z', ?)`)
-    .bind(
-      await sealToken(env.BETTER_AUTH_SECRET, "webhook-store", "access", "access-synthetic"),
-      grantedAt,
-    )
-    .run();
+  await insertCredentials({
+    storeId: "webhook-store",
+    accessToken: await sealToken(
+      env.BETTER_AUTH_SECRET,
+      "webhook-store",
+      "access",
+      "access-synthetic",
+    ),
+    accessExpiresAt: "2026-10-12T12:00:00.000Z",
+    refreshExpiresAt: "2027-10-12T12:00:00.000Z",
+    grantedAt,
+  }).run();
 });
 
 afterEach(() => vi.useRealTimers());
@@ -460,7 +466,6 @@ it("la coda senza webhook chiude le sole sincronizzazioni senza riprovare messag
 });
 
 it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito in ritardo", async () => {
-  await env.DB.prepare("DELETE FROM scheduled_tasks").run();
   const sendBatch = vi.fn<Queue["sendBatch"]>().mockResolvedValue(queued);
   await worker.scheduled({ scheduledTime: now.getTime() } as ScheduledController, {
     ...environment,
@@ -664,9 +669,7 @@ it.each(["pause", "disconnect", "reconnect", "erase", "expired"])(
     await receive();
     const row = (await receipt())!;
     if (change === "pause")
-      await env.DB.prepare("INSERT INTO ebay_store_pauses VALUES ('webhook-store', 'manual', ?)")
-        .bind(now.toISOString())
-        .run();
+      await insertStorePause({ storeId: "webhook-store", pausedAt: now.toISOString() }).run();
     if (change === "disconnect") await env.DB.prepare("DELETE FROM ebay_store_credentials").run();
     if (change === "reconnect")
       await env.DB.prepare("UPDATE ebay_store_credentials SET granted_at = ?")

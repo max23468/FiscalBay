@@ -23,7 +23,15 @@ import { listStores } from "../app/domain/stores.server";
 import { applyFreePlans } from "../app/domain/free-store.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
-import { now, resetDatabase, seed } from "./fixtures/database-fixtures";
+import {
+  insertCredentials,
+  insertEntitlement,
+  insertStorePause,
+  now,
+  resetDatabase,
+  seed,
+  type EntitlementSource,
+} from "./fixtures/database-fixtures";
 import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
 import { emptyTradingOrders, withSandbox } from "./fixtures/ebay-fixtures";
 import { access, ack, order } from "./fixtures/ebay-client-fixtures";
@@ -166,17 +174,9 @@ describe("acquisizione con il client", () => {
     });
 
   beforeEach(async () => {
-    await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
-    await env.DB.prepare("DELETE FROM ebay_rate_limits").run();
     await seed();
     await env.DB.prepare("DELETE FROM orders").run();
-    await env.DB.prepare(
-      `INSERT INTO ebay_store_credentials
-         (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-       VALUES ('s-a', 'a', ?1, 'r', ?1, ?2)`,
-    )
-      .bind(now, grantedAt)
-      .run();
+    await insertCredentials({ accessExpiresAt: now, grantedAt }).run();
   });
 
   it("riprende le pagine Trading senza avanzare il limite e consolida gli acquisti prima del checkout", async () => {
@@ -878,13 +878,8 @@ describe("acquisizione con il client", () => {
         lastModifiedDate: iso(created + 60_000),
         lineItems: [],
       });
-    const coverage = (from: number, until: number, source = "trial") =>
-      env.DB.prepare(
-        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-         VALUES (?, 'w-a', ?, ?, ?)`,
-      )
-        .bind(crypto.randomUUID(), source, iso(from), iso(until))
-        .run();
+    const coverage = (from: number, until: number, source: EntitlementSource = "trial") =>
+      insertEntitlement({ source, startsAt: iso(from), endsAt: iso(until) }).run();
     const terms = async () =>
       Object.fromEntries(
         (
@@ -1270,11 +1265,7 @@ describe("acquisizione con il client", () => {
     expect(await acquire(fetcher, "2026-09-02T00:10:00.000Z")).toBe("complete");
     expect((await syncState())!.locked_until).toBeNull();
 
-    await env.DB.prepare(
-      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertStorePause().run();
     const paused = ebay();
     expect(await acquire(paused, "2026-09-03T00:00:00.000Z")).toBe("not_writable");
     expect(paused).not.toHaveBeenCalled();
@@ -1563,19 +1554,13 @@ describe("acquisizione con il client", () => {
       .run();
     await env.DB.prepare("DELETE FROM ebay_store_credentials").run();
     for (const storeId of ["s-a", "s-b", "s-c", "s-d"]) {
-      await env.DB.prepare(
-        `INSERT INTO ebay_store_credentials
-           (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-         VALUES (?1, ?2, ?3, 'r', ?3, ?4)`,
-      )
+      await insertCredentials({
+        storeId,
         // Il token di B non si apre, come dopo una rotazione del segreto.
-        .bind(
-          storeId,
-          storeId === "s-b" ? "v1.illeggibile" : await seal(storeId),
-          expires,
-          grantedAt,
-        )
-        .run();
+        accessToken: storeId === "s-b" ? "v1.illeggibile" : await seal(storeId),
+        accessExpiresAt: expires,
+        grantedAt,
+      }).run();
     }
     const tokenOf = (init?: RequestInit) => {
       const headers = new Headers(init?.headers);
@@ -1634,11 +1619,7 @@ describe("acquisizione con il client", () => {
       });
 
       // Al turno successivo; in pausa o con il token in scadenza un negozio non si legge.
-      await env.DB.prepare(
-        "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-c', 'manual', ?)",
-      )
-        .bind(now)
-        .run();
+      await insertStorePause({ storeId: "s-c" }).run();
       const later = ebay({ orders: [] });
       await cronTurn(env, later, new Date("2026-09-02T01:00:00.000Z"));
       expect(Object.keys(perStore(later)).sort()).toEqual(["token-s-a", "token-s-d"]);
@@ -1826,11 +1807,7 @@ describe("acquisizione con il client", () => {
       // un negozio in pausa non legge.
       expect(await request(minutes(4))).toBe("queued");
       expect(await request(minutes(4), {}, "u-b")).toBe("not_found");
-      await env.DB.prepare(
-        "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
-      )
-        .bind(minutes(5).toISOString())
-        .run();
+      await insertStorePause({ pausedAt: minutes(5).toISOString() }).run();
       expect(await request(minutes(5))).toBe("invalid");
       const paused = message();
       await consumeStoreSync(paused, queueEnv, fetcher, minutes(5));
@@ -1913,13 +1890,12 @@ describe("acquisizione con il client", () => {
     });
 
     it("dopo un limite il cron non tenta gli altri negozi dello stesso keyset", async () => {
-      await env.DB.prepare(
-        `INSERT INTO ebay_store_credentials
-           (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-         VALUES ('s-b', ?1, ?2, 'r', ?2, ?3)`,
-      )
-        .bind(await sealToken(env.BETTER_AUTH_SECRET, "s-b", "access", "token-s-b"), now, grantedAt)
-        .run();
+      await insertCredentials({
+        storeId: "s-b",
+        accessToken: await sealToken(env.BETTER_AUTH_SECRET, "s-b", "access", "token-s-b"),
+        accessExpiresAt: now,
+        grantedAt,
+      }).run();
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       const failing = (status: number) =>
         ebay({
@@ -1959,18 +1935,17 @@ describe("acquisizione con il client", () => {
         .bind(now)
         .run();
       for (const storeId of ["s-c", "s-d", "s-e"])
-        await env.DB.prepare(
-          `INSERT INTO ebay_store_credentials
-             (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-           VALUES (?1, ?2, ?3, 'r', ?3, ?4)`,
-        )
-          .bind(
+        await insertCredentials({
+          storeId,
+          accessToken: await sealToken(
+            env.BETTER_AUTH_SECRET,
             storeId,
-            await sealToken(env.BETTER_AUTH_SECRET, storeId, "access", `token-${storeId}`),
-            now,
-            grantedAt,
-          )
-          .run();
+            "access",
+            `token-${storeId}`,
+          ),
+          accessExpiresAt: now,
+          grantedAt,
+        }).run();
       // La quota esaurita di una sola chiamata Trading non ferma le letture dell'origine.
       await env.DB.prepare(
         `INSERT INTO ebay_rate_limits (api_origin, until)
@@ -2127,11 +2102,7 @@ describe("acquisizione con il client", () => {
     it("non registra richieste per un negozio in pausa o scollegato, neanche in importazione", async () => {
       await cronTurn(env, ebay(), minutes(0));
       await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
-      await env.DB.prepare(
-        "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
-      )
-        .bind(minutes(1).toISOString())
-        .run();
+      await insertStorePause({ pausedAt: minutes(1).toISOString() }).run();
       expect(await request(minutes(1), { reimport: true })).toBe("invalid");
       await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
       await env.DB.prepare("DELETE FROM ebay_store_credentials").run();
@@ -2171,12 +2142,12 @@ describe("acquisizione con il client", () => {
     it("con una copertura la reimportazione riparte da un anno di storico", async () => {
       expect(await request(minutes(0), { reimport: true })).toBe("queued");
       await consumeStoreSync(message(), queueEnv, ebay(), minutes(1));
-      await env.DB.prepare(
-        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-         VALUES ('e-reimport', 'w-a', 'premium', ?, ?)`,
-      )
-        .bind(minutes(2).toISOString(), minutes(60 * 24 * 30).toISOString())
-        .run();
+      await insertEntitlement({
+        id: "e-reimport",
+        source: "premium",
+        startsAt: minutes(2).toISOString(),
+        endsAt: minutes(60 * 24 * 30).toISOString(),
+      }).run();
       expect(await request(minutes(60), { reimport: true })).toBe("queued");
       expect(await state()).toMatchObject({
         history_from: "2025-09-02T01:00:00.000Z",
@@ -2253,7 +2224,6 @@ describe("acquisizione con il client", () => {
       beforeEach(async () => {
         sendBatch.mockReset();
         sendBatch.mockResolvedValue(queued);
-        await env.DB.prepare("DELETE FROM scheduled_tasks").run();
       });
 
       it("accoda un negozio una volta anche con trigger ripetuti e riaccoda un turno perso", async () => {
@@ -2292,10 +2262,12 @@ describe("acquisizione con il client", () => {
         expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual(["s-a"]);
         await consumeStoreSync(message(), env, ebay(), minutes(1));
         expect(await dispatchStoreSyncs(cron, minutes(11))).toEqual([]);
-        await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-          VALUES ('prova', 'w-a', 'trial', ?, ?)`)
-          .bind(minutes(5).toISOString(), minutes(20).toISOString())
-          .run();
+        await insertEntitlement({
+          id: "prova",
+          source: "trial",
+          startsAt: minutes(5).toISOString(),
+          endsAt: minutes(20).toISOString(),
+        }).run();
         expect(await dispatchStoreSyncs(cron, minutes(11))).toEqual(["s-a"]);
         await consumeStoreSync(message(), env, ebay(), minutes(12));
         // Alla fine della prova il turno segue di nuovo la cadenza Free.
@@ -2352,11 +2324,7 @@ describe("acquisizione con il client", () => {
           .run();
         expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual([]);
         await env.DB.prepare("DELETE FROM ebay_rate_limits").run();
-        await env.DB.prepare(
-          "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
-        )
-          .bind(minutes(1).toISOString())
-          .run();
+        await insertStorePause({ pausedAt: minutes(1).toISOString() }).run();
         expect(await dispatchStoreSyncs(cron, minutes(1))).toEqual([]);
         expect(sendBatch).not.toHaveBeenCalled();
       });

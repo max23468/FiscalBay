@@ -2,29 +2,49 @@ import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 
 export const now = "2026-09-13T20:00:00.000Z";
+/**
+ * Tabelle che vivono con l'utente Better Auth: le prove creano utenti con email proprie e il
+ * reset non li elimina, quindi conserva anche profilo, consensi e preferenze personali.
+ */
+const userTables = new Set([
+  "user",
+  "session",
+  "account",
+  "verification",
+  "passkey",
+  "rateLimit",
+  "user_profiles",
+  "user_preferences",
+  "terms_acceptances",
+  "marketing_consents",
+  "notification_reads",
+  "account_email_changes",
+]);
+
+/**
+ * Svuota ogni tabella applicativa ricavandola dallo schema, così una nuova migration è coperta
+ * senza modifiche qui. Le chiavi esterne si verificano a fine batch; le chiavi degli ordini
+ * eliminati, scritte dal trigger durante il reset, si svuotano per ultime.
+ */
 export async function resetDatabase() {
   vi.setSystemTime(new Date(now));
+  const { results } = await env.DB.prepare(
+    `SELECT name FROM sqlite_master WHERE type = 'table'
+       AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'
+       AND name NOT IN ('d1_migrations', 'deleted_order_keys')`,
+  ).all<{ name: string }>();
   // Un posto lifetime attivo non si elimina: il trigger si sospende soltanto per ripulire.
   const kept = await env.DB.prepare(
     "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND name = 'lifetime_allocation_is_kept'",
   ).first<{ sql: string }>();
   await env.DB.batch([
+    env.DB.prepare("PRAGMA defer_foreign_keys = ON"),
     env.DB.prepare("DROP TRIGGER lifetime_allocation_is_kept"),
-    env.DB.prepare("DELETE FROM lifetime_allocations"),
+    ...results
+      .filter(({ name }) => !userTables.has(name))
+      .map(({ name }) => env.DB.prepare(`DELETE FROM "${name}"`)),
+    env.DB.prepare("DELETE FROM deleted_order_keys"),
     env.DB.prepare(kept!.sql),
-    env.DB.prepare("DELETE FROM ebay_store_link_sessions"),
-    env.DB.prepare("DELETE FROM ebay_store_credentials"),
-    env.DB.prepare("DELETE FROM order_grants"),
-    env.DB.prepare("DELETE FROM free_cycles"),
-    env.DB.prepare("DELETE FROM free_promotions"),
-    env.DB.prepare("DELETE FROM admission_settings"),
-    env.DB.prepare("DELETE FROM tax_identifiers"),
-    env.DB.prepare("DELETE FROM order_items"),
-    env.DB.prepare("DELETE FROM orders"),
-    env.DB.prepare("DELETE FROM sync_state"),
-    env.DB.prepare("DELETE FROM ebay_stores"),
-    env.DB.prepare("DELETE FROM workspace_members"),
-    env.DB.prepare("DELETE FROM workspaces"),
   ]);
 }
 export async function resetOrderFixtures() {
@@ -53,6 +73,116 @@ export function insertStore({
   return env.DB.prepare(
     "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, ebay_environment, linked_at) VALUES (?, ?, ?, ?, ?)",
   ).bind(id, workspaceId, ebayUserId, environment, linkedAt);
+}
+
+export type EntitlementSource = "premium" | "trial" | "lifetime" | "admin";
+
+type EntitlementRow = {
+  id?: string;
+  workspaceId?: string;
+  source: EntitlementSource;
+  startsAt?: string;
+  /** Soltanto il lifetime non ha fine, come vuole lo schema. */
+  endsAt?: string | null;
+  stripeCheckoutSessionId?: string | null;
+  grantedBy?: string | null;
+  grantReason?: string | null;
+};
+
+/** Diritto d'accesso sintetico dello spazio, eseguibile con `run()` o dentro un `batch`. */
+export function insertEntitlement({
+  id = crypto.randomUUID(),
+  workspaceId = "w-a",
+  source,
+  startsAt = now,
+  endsAt = null,
+  stripeCheckoutSessionId,
+  grantedBy,
+  grantReason,
+}: EntitlementRow) {
+  return env.DB.prepare(
+    `INSERT INTO workspace_entitlements
+       (id, workspace_id, source, starts_at, ends_at, stripe_checkout_session_id, granted_by, grant_reason)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).bind(
+    id,
+    workspaceId,
+    source,
+    startsAt,
+    endsAt,
+    stripeCheckoutSessionId ?? null,
+    grantedBy ?? null,
+    grantReason ?? null,
+  );
+}
+
+type CredentialsRow = {
+  storeId?: string;
+  accessToken?: string;
+  accessExpiresAt: string;
+  refreshToken?: string;
+  /** Senza un valore proprio scade insieme al token di accesso. */
+  refreshExpiresAt?: string;
+  grantedAt?: string;
+};
+
+/** Credenziali eBay sintetiche di un negozio, eseguibili con `run()` o dentro un `batch`. */
+export function insertCredentials({
+  storeId = "s-a",
+  accessToken = "a",
+  accessExpiresAt,
+  refreshToken = "r",
+  refreshExpiresAt = accessExpiresAt,
+  grantedAt = now,
+}: CredentialsRow) {
+  return env.DB.prepare(
+    `INSERT INTO ebay_store_credentials
+       (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).bind(storeId, accessToken, accessExpiresAt, refreshToken, refreshExpiresAt, grantedAt);
+}
+
+/** Pausa sintetica di un negozio, eseguibile con `run()` o dentro un `batch`. */
+export function insertStorePause({
+  storeId = "s-a",
+  reason = "manual",
+  pausedAt = now,
+}: {
+  storeId?: string;
+  reason?: "manual" | "plan" | "inactivity" | "admin";
+  pausedAt?: string;
+} = {}) {
+  return env.DB.prepare(
+    "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES (?, ?, ?)",
+  ).bind(storeId, reason, pausedAt);
+}
+
+/** Spazio sintetico con il suo unico membro, da eseguire dentro un `batch`. */
+export function insertWorkspace({
+  id,
+  userId,
+  name = "Sintetico",
+  createdAt = now,
+}: {
+  id: string;
+  userId?: string;
+  name?: string;
+  createdAt?: string;
+}) {
+  return [
+    env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)").bind(
+      id,
+      name,
+      createdAt,
+    ),
+    ...(userId
+      ? [
+          env.DB.prepare(
+            "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES (?, ?, 'owner')",
+          ).bind(id, userId),
+        ]
+      : []),
+  ];
 }
 
 type TaxIdentifierRow = {

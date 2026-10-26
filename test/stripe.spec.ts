@@ -39,7 +39,7 @@ import { receiveWebhook } from "../app/integrations/webhooks.server";
 import { localizedPath } from "../app/i18n";
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
-import { insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
+import { insertEntitlement, insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
 import { callRoute, routePage } from "./fixtures/route-fixtures";
 const event = {
@@ -55,10 +55,6 @@ const event = {
   request: null,
   type: "checkout.session.completed",
 } satisfies Stripe.Event;
-
-beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM webhook_receipts").run();
-});
 
 /** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
 const liveKey = "sk_live_fiscalbay";
@@ -150,10 +146,7 @@ function buy(cookie: string, plan: string, path = "/app/impostazioni/piano") {
 }
 
 describe("Stripe Managed Payments", () => {
-  beforeEach(async () => {
-    await resetDatabase();
-    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
-  });
+  beforeEach(resetDatabase);
 
   it("crea soltanto parametri compatibili con Managed Payments", () => {
     const metadata = {
@@ -328,12 +321,11 @@ describe("Stripe Managed Payments", () => {
       trialEndsAt: null,
     });
     // Durante la prova l'acquisto resta possibile e ne conserva la fine.
-    await env.DB.prepare(
-      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-       VALUES ('trial', 'w-a', 'trial', ?, ?)`,
-    )
-      .bind(now, "2026-09-27T20:00:00.000Z")
-      .run();
+    await insertEntitlement({
+      id: "trial",
+      source: "trial",
+      endsAt: "2026-09-27T20:00:00.000Z",
+    }).run();
     expect(await purchaseState(env.DB, userId)).toEqual({
       workspaceId: "w-a",
       state: "available",
@@ -346,12 +338,11 @@ describe("Stripe Managed Payments", () => {
       trialEndsAt: null,
     });
     // Un altro diritto in corso ferma l'acquisto, anche insieme alla prova.
-    await env.DB.prepare(
-      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-       VALUES ('admin', 'w-a', 'admin', ?, ?)`,
-    )
-      .bind(now, "2026-09-25T20:00:00.000Z")
-      .run();
+    await insertEntitlement({
+      id: "admin",
+      source: "admin",
+      endsAt: "2026-09-25T20:00:00.000Z",
+    }).run();
     expect(await purchaseState(env.DB, userId)).toEqual({
       workspaceId: "w-a",
       state: "covered",
@@ -466,12 +457,11 @@ describe("Stripe Managed Payments", () => {
         "https://checkout.example.invalid/c/pay/cs_test_checkout",
       );
 
-      await env.DB.prepare(
-        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-         VALUES ('paid', 'w-a', 'premium', ?, ?)`,
-      )
-        .bind(now, "2026-10-13T20:00:00.000Z")
-        .run();
+      await insertEntitlement({
+        id: "paid",
+        source: "premium",
+        endsAt: "2026-10-13T20:00:00.000Z",
+      }).run();
       expect(await buy(cookie, "annual")).toMatchObject({
         data: { ok: false, notice: "Il tuo spazio ha già Premium attivo." },
       });
@@ -513,12 +503,11 @@ describe("Stripe Managed Payments", () => {
       },
     });
     expect(await page("?checkout=altro")).toMatchObject({ purchase: { checkout: null } });
-    await env.DB.prepare(
-      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-       VALUES ('trial', 'w-a', 'trial', ?, ?)`,
-    )
-      .bind(now, "2026-09-30T09:00:00.000Z")
-      .run();
+    await insertEntitlement({
+      id: "trial",
+      source: "trial",
+      endsAt: "2026-09-30T09:00:00.000Z",
+    }).run();
     expect(await page()).toMatchObject({
       account: { plan: "premium", trial: { endsAt: "2026-09-30T09:00:00.000Z" } },
       purchase: { state: "available" },
@@ -576,12 +565,7 @@ describe("Stripe Managed Payments", () => {
     const { userId } = await verifiedSession("acquisto-prova@example.invalid");
     await workspace(userId);
     const trialEndsAt = "2026-09-30T09:00:00.000Z";
-    await env.DB.prepare(
-      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-       VALUES ('trial', 'w-a', 'trial', ?, ?)`,
-    )
-      .bind(now, trialEndsAt)
-      .run();
+    await insertEntitlement({ id: "trial", source: "trial", endsAt: trialEndsAt }).run();
     const input = {
       request: new Request("http://localhost:5173/app/impostazioni/piano", { method: "POST" }),
       userId,
@@ -1121,10 +1105,6 @@ describe("Webhook e riconciliazione Stripe", () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    await env.DB.batch([
-      env.DB.prepare("DELETE FROM stripe_subscriptions"),
-      env.DB.prepare("DELETE FROM workspace_entitlements"),
-    ]);
     ({ userId, cookie } = await verifiedSession(
       `riconciliazione-${crypto.randomUUID()}@example.invalid`,
     ));
@@ -1411,12 +1391,7 @@ describe("Webhook e riconciliazione Stripe", () => {
       ["trial", { payment: { state: "pending" } }],
       ["admin", { grant: { endsAt: periodEnd } }],
     ] as const) {
-      await env.DB.prepare(
-        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-         VALUES (?1, 'w-a', ?1, ?2, ?3)`,
-      )
-        .bind(source, now, periodEnd)
-        .run();
+      await insertEntitlement({ id: source, source, endsAt: periodEnd }).run();
       expect(await view(now)).toEqual(expected);
       await env.DB.prepare("DELETE FROM workspace_entitlements").run();
     }
@@ -1435,12 +1410,12 @@ describe("Webhook e riconciliazione Stripe", () => {
     // Prova fino al 20 settembre: Stripe registra `trialing` fino alla stessa data, senza incasso.
     const trialEnd = "2026-09-20T20:00:00.000Z";
     const renewsAt = "2026-10-20T20:00:00.000Z";
-    await env.DB.prepare(
-      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-       VALUES ('trial', 'w-a', 'trial', ?, ?)`,
-    )
-      .bind("2026-09-06T20:00:00.000Z", trialEnd)
-      .run();
+    await insertEntitlement({
+      id: "trial",
+      source: "trial",
+      startsAt: "2026-09-06T20:00:00.000Z",
+      endsAt: trialEnd,
+    }).run();
     const stripe = stripeAccount();
     stripe.state.subscription = { status: "trialing", start: now, end: trialEnd };
     await applyStripeEvent(
@@ -1682,8 +1657,13 @@ describe("Webhook e riconciliazione Stripe", () => {
       env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w-c', 'C', ?)").bind(
         now,
       ),
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-          ends_at) VALUES ('pagato', 'w-c', 'premium', ?1, ?2)`).bind(hours(240), hours(-240)),
+      insertEntitlement({
+        id: "pagato",
+        workspaceId: "w-c",
+        source: "premium",
+        startsAt: hours(240),
+        endsAt: hours(-240),
+      }),
     ]);
     const subscription = (id: string, workspace: string, checked: string, periodEnd: string) =>
       env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id,
@@ -2060,10 +2040,13 @@ describe("Webhook e riconciliazione Stripe", () => {
         .bind(status, now, periodEnd)
         .run();
     const entitlement = (source: "premium" | "trial" | "admin") =>
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-          ends_at, granted_by, grant_reason) VALUES (?1, 'w-a', ?1, ?2, ?3, ?4, ?4)`)
-        .bind(source, now, periodEnd, source === "admin" ? "owner" : null)
-        .run();
+      insertEntitlement({
+        id: source,
+        source,
+        endsAt: periodEnd,
+        grantedBy: source === "admin" ? "owner" : null,
+        grantReason: source === "admin" ? "owner" : null,
+      }).run();
     // Senza copertura un abbonamento ancora da pagare resta in attivazione.
     for (const status of ["incomplete", "trialing", "active"]) {
       await subscription(status);
@@ -2331,10 +2314,6 @@ describe("Lifetime e concessioni", () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    await env.DB.batch([
-      env.DB.prepare("DELETE FROM stripe_subscriptions"),
-      env.DB.prepare("DELETE FROM workspace_entitlements"),
-    ]);
     ({ userId, cookie } = await verifiedSession(`lifetime-${crypto.randomUUID()}@example.invalid`));
     await workspace(userId);
   });
@@ -3067,11 +3046,6 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
 
   beforeEach(async () => {
     await resetDatabase();
-    await env.DB.batch([
-      env.DB.prepare("DELETE FROM stripe_subscriptions"),
-      env.DB.prepare("DELETE FROM workspace_entitlements"),
-      env.DB.prepare("DELETE FROM stripe_customer_erasures"),
-    ]);
     ({ userId, cookie } = await verifiedSession(`rimborsi-${crypto.randomUUID()}@example.invalid`));
     await workspace(userId);
   });
@@ -3095,13 +3069,20 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
     ];
     // Diritti indipendenti: la prova conclusa e Premium concesso dopo il rinnovo.
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-          ends_at) VALUES ('trial', 'w-a', 'trial', '2026-08-30T20:00:00.000Z', ?)`).bind(now),
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-          ends_at, granted_by, grant_reason)
-        VALUES ('admin', 'w-a', 'admin', ?, '2026-11-20T20:00:00.000Z', 'owner', 'Disservizio')`).bind(
-        nextEnd,
-      ),
+      insertEntitlement({
+        id: "trial",
+        source: "trial",
+        startsAt: "2026-08-30T20:00:00.000Z",
+        endsAt: now,
+      }),
+      insertEntitlement({
+        id: "admin",
+        source: "admin",
+        startsAt: nextEnd,
+        endsAt: "2026-11-20T20:00:00.000Z",
+        grantedBy: "owner",
+        grantReason: "Disservizio",
+      }),
     ]);
     await event(stripe, "invoice.paid", "in_renewal", "2026-10-13T21:00:00.000Z");
     expect(await premium("2026-10-20T10:00:00.000Z")).toBe(true);
@@ -3400,10 +3381,11 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
   });
 
   it("conserva il motivo della revoca e le cancellazioni registrate", async () => {
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-        ends_at) VALUES ('pagato', 'w-a', 'premium', ?1, ?2)`)
-      .bind(now, "2026-10-20T20:00:00.000Z")
-      .run();
+    await insertEntitlement({
+      id: "pagato",
+      source: "premium",
+      endsAt: "2026-10-20T20:00:00.000Z",
+    }).run();
     // La revoca richiede l'istante e, una volta registrata, non cambia motivo né si annulla.
     await expect(
       env.DB.prepare("UPDATE workspace_entitlements SET revocation = 'refund'").run(),

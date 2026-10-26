@@ -8,7 +8,7 @@ import {
   sealToken,
 } from "../app/integrations/ebay/seller-credentials.server";
 import { UpstreamError } from "../app/integrations/http.server";
-import { resetDatabase } from "./fixtures/database-fixtures";
+import { insertCredentials, resetDatabase } from "./fixtures/database-fixtures";
 import { syntheticEbay } from "./fixtures/ebay-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
@@ -93,15 +93,14 @@ describe("rinnovo dei token del negozio", () => {
           `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, ebay_account_id)
            VALUES (?1, ?2, ?1, ?3, ?1)`,
         ).bind(id, workspaceId, issued.toISOString()),
-        env.DB.prepare(
-          `INSERT INTO ebay_store_credentials
-             (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-           VALUES (?, 'scaduto', '2026-10-01T12:00:00.000Z', ?, '2028-04-01T10:00:00.000Z', ?)`,
-        ).bind(
-          id,
-          await sealToken(env.BETTER_AUTH_SECRET, id, "refresh", id),
-          issued.toISOString(),
-        ),
+        insertCredentials({
+          storeId: id,
+          accessToken: "scaduto",
+          accessExpiresAt: "2026-10-01T12:00:00.000Z",
+          refreshToken: await sealToken(env.BETTER_AUTH_SECRET, id, "refresh", id),
+          refreshExpiresAt: "2028-04-01T10:00:00.000Z",
+          grantedAt: issued.toISOString(),
+        }),
       ]);
     }
     // Due negozi in mezzo al primo blocco restano non disponibili: non vanno riletti.

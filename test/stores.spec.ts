@@ -43,7 +43,16 @@ import {
   refreshExpiringTokens,
   refreshStoreToken,
 } from "../app/integrations/ebay/seller-credentials.server";
-import { insertStore, now, resetDatabase, resetOrderFixtures } from "./fixtures/database-fixtures";
+import {
+  insertEntitlement,
+  insertStore,
+  insertWorkspace,
+  insertStorePause,
+  now,
+  resetDatabase,
+  resetOrderFixtures,
+  type EntitlementSource,
+} from "./fixtures/database-fixtures";
 import { syntheticEbay, syntheticOrderId } from "./fixtures/ebay-fixtures";
 import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account-fixtures";
 import { homeFor } from "./fixtures/account-route-fixtures";
@@ -287,11 +296,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     // La pausa del piano toglie la consultazione e lo sblocco; riprendere toglie solo la manuale.
     await resumeStore(env.DB, seller.userId, seller.storeId);
     await linkThroughEbay(seller.cookie);
-    await env.DB.prepare(
-      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES (?, 'plan', ?)",
-    )
-      .bind(seller.storeId, now)
-      .run();
+    await insertStorePause({ storeId: seller.storeId, reason: "plan" }).run();
     await pauseStore(env.DB, seller.userId, seller.storeId);
     expect(await listVisibleOrders(env.DB, seller.userId)).toEqual([]);
     await expect(grantImportedOrder(seller)).rejects.toThrow("order_not_available");
@@ -1052,13 +1057,18 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         .run();
     }
 
-    async function coverage(workspaceId: string, source: string, from: number, until: number) {
-      await env.DB.prepare(
-        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-         VALUES (?, ?, ?, ?, ?)`,
-      )
-        .bind(crypto.randomUUID(), workspaceId, source, iso(from), iso(until))
-        .run();
+    async function coverage(
+      workspaceId: string,
+      source: EntitlementSource,
+      from: number,
+      until: number,
+    ) {
+      await insertEntitlement({
+        workspaceId,
+        source,
+        startsAt: iso(from),
+        endsAt: iso(until),
+      }).run();
     }
 
     const pauses = async (userId: string, at?: Date) =>
@@ -1367,11 +1377,9 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
 
     it("il cron porta l'anno agli ordini di una copertura senza visite prima che scadano", async () => {
       const covered = await linkedSeller("concessa@example.invalid");
-      await env.DB.prepare(
-        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-libero', 'Libero', ?)",
-      )
-        .bind(new Date().toISOString())
-        .run();
+      await env.DB.batch(
+        insertWorkspace({ id: "w-libero", name: "Libero", createdAt: new Date().toISOString() }),
+      );
       await insertStore({ id: "negozio-libero", workspaceId: "w-libero" }).run();
       const free = { storeId: "negozio-libero" };
       await resetOrderFixtures();
@@ -1547,12 +1555,13 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       await applyInactivity(mail, at(31));
       await applyInactivity(mail, at(38));
       expect(await pauses(seller.userId)).toEqual([["inactivity"]]);
-      await env.DB.prepare(
-        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-         VALUES ('concessione', ?, 'admin', ?, ?)`,
-      )
-        .bind(seller.workspaceId, at(38).toISOString(), at(120).toISOString())
-        .run();
+      await insertEntitlement({
+        id: "concessione",
+        workspaceId: seller.workspaceId,
+        source: "admin",
+        startsAt: at(38).toISOString(),
+        endsAt: at(120).toISOString(),
+      }).run();
       await applyFreePlans(env.DB, at(38.1));
       expect(await pauses(seller.userId)).toEqual([[]]);
       expect((await workspace(seller.workspaceId))!.inactivity_notice_at).toBeNull();

@@ -36,7 +36,11 @@ import { action as startStoreLink } from "../app/routes/store-link";
 import { listNotifications } from "../app/domain/notifications.server";
 import { ebayOutage, listStores } from "../app/domain/stores.server";
 import {
+  insertCredentials,
+  insertEntitlement,
   insertStore,
+  insertWorkspace,
+  insertStorePause,
   insertTaxIdentifiers,
   now,
   resetDatabase,
@@ -716,14 +720,7 @@ describe("percorso ordini", () => {
       { cycle: null, remaining: 0 },
     );
     // Uno spazio senza negozi collegati non ha ancora un ciclo.
-    await env.DB.batch([
-      env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w-c', 'C', ?)").bind(
-        now,
-      ),
-      env.DB.prepare(
-        "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w-c', 'u-c', 'owner')",
-      ),
-    ]);
+    await env.DB.batch(insertWorkspace({ id: "w-c", userId: "u-c", name: "C" }));
     expect(await orderAllowance(env.DB, "u-c")).toMatchObject({ cycle: null, remaining: 0 });
     await env.DB.prepare("DELETE FROM free_cycles WHERE workspace_id = 'w-a'").run();
     expect(
@@ -913,10 +910,10 @@ describe("percorso ordini", () => {
   it("mantiene senza apertura i dati acquisiti in Premium, esclude quelli tardivi e rispetta le revoche indipendenti", async () => {
     await seed();
     const end = "2026-09-14T00:00:00.000Z";
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('paid', 'w-a', 'premium', ?1, ?2), ('gift', 'w-a', 'admin', ?1, ?2)`)
-      .bind(now, end)
-      .run();
+    await env.DB.batch([
+      insertEntitlement({ id: "paid", source: "premium", endsAt: end }),
+      insertEntitlement({ id: "gift", source: "admin", endsAt: end }),
+    ]);
     expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBeNull();
     const later = new Date("2026-09-14T00:01:00.000Z");
     expect((await listVisibleOrders(env.DB, "u-a", 50, "production", later))[0]?.fiscalState).toBe(
@@ -961,10 +958,7 @@ describe("percorso ordini", () => {
       VALUES ('late', 's-a', 'late', ?1, ?1, 'EUR', 100)`)
       .bind(now)
       .run();
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('trial', 'w-a', 'trial', ?1, ?2)`)
-      .bind(now, end)
-      .run();
+    await insertEntitlement({ id: "trial", source: "trial", endsAt: end }).run();
     await insertTaxIdentifiers({
       id: "late-tax",
       orderId: "late",
@@ -983,8 +977,12 @@ describe("percorso ordini", () => {
 
   it("non anticipa una copertura futura durante lo sblocco e consuma il credito Free corrente", async () => {
     await seed();
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('future', 'w-a', 'premium', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z')`).run();
+    await insertEntitlement({
+      id: "future",
+      source: "premium",
+      startsAt: "2026-09-14T00:00:00.000Z",
+      endsAt: "2026-09-15T00:00:00.000Z",
+    }).run();
     expect(await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", new Date(now))).toEqual({
       unlocked: ["o-a"],
       remaining: 0,
@@ -999,8 +997,12 @@ describe("percorso ordini", () => {
   it("valuta le coperture all'istante del grant Free, non all'ora corrente", async () => {
     await seed();
     // La copertura inizia dopo l'istante del grant ma prima dell'ora reale della prova.
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('later', 'w-a', 'premium', '2026-09-14T00:00:00.000Z', '2026-09-15T00:00:00.000Z')`).run();
+    await insertEntitlement({
+      id: "later",
+      source: "premium",
+      startsAt: "2026-09-14T00:00:00.000Z",
+      endsAt: "2026-09-15T00:00:00.000Z",
+    }).run();
     await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", new Date(now));
     expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
       used: 1,
@@ -1011,10 +1013,12 @@ describe("percorso ordini", () => {
     await seed();
     const starts = "2026-09-14T00:00:00.000Z";
     const ends = "2026-09-15T00:00:00.000Z";
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('scheduled', 'w-a', 'premium', ?, ?)`)
-      .bind(starts, ends)
-      .run();
+    await insertEntitlement({
+      id: "scheduled",
+      source: "premium",
+      startsAt: starts,
+      endsAt: ends,
+    }).run();
     expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("locked");
     await env.DB.prepare("UPDATE tax_identifiers SET removed_at = ? WHERE order_id = 'o-a'")
       .bind(now)
@@ -1071,10 +1075,11 @@ describe("percorso ordini", () => {
   it("la revoca di una copertura non elimina uno sblocco Free indipendente", async () => {
     await seed();
     await unlockOrders(env.DB, "u-a", ["o-a"]);
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('refunded', 'w-a', 'premium', ?, '2026-09-14T00:00:00.000Z')`)
-      .bind(now)
-      .run();
+    await insertEntitlement({
+      id: "refunded",
+      source: "premium",
+      endsAt: "2026-09-14T00:00:00.000Z",
+    }).run();
     await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE id = 'refunded'")
       .bind(now)
       .run();
@@ -1093,10 +1098,7 @@ describe("percorso ordini", () => {
     await env.DB.batch([
       env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, activated_at, created_at)
         VALUES (1, 'w-a', 'active', ?1, ?1)`).bind(now),
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
-          stripe_checkout_session_id) VALUES ('live', 'w-a', 'lifetime', ?, NULL, 'cs_live')`).bind(
-        now,
-      ),
+      insertEntitlement({ id: "live", source: "lifetime", stripeCheckoutSessionId: "cs_live" }),
     ]);
     await insertTaxIdentifiers({
       id: "during",
@@ -1365,14 +1367,19 @@ describe("percorso ordini", () => {
         VALUES (1, 'w-a', ?, ?, ?, ?)`).bind(status, expires, activated, now);
     const lifetime = (
       id: string,
-      proof: [string | null, string | null, string | null] = [`cs_${id}`, null, null],
+      [stripeCheckoutSessionId, grantedBy, grantReason]: Array<string | null> = [
+        `cs_${id}`,
+        null,
+        null,
+      ],
     ) =>
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-          stripe_checkout_session_id, granted_by, grant_reason) VALUES (?, 'w-a', 'lifetime', ?, ?, ?, ?)`).bind(
+      insertEntitlement({
         id,
-        now,
-        ...proof,
-      );
+        source: "lifetime",
+        stripeCheckoutSessionId,
+        grantedBy,
+        grantReason,
+      });
     // Una prenotazione scade con la sua sessione; un posto attivo ha l'istante di attivazione.
     await expect(allocation("reserved", null, null).run()).rejects.toThrow(
       "invalid_lifetime_allocation",
@@ -1499,10 +1506,10 @@ describe("prova Premium", () => {
   it("non si offre con un'altra copertura in corso, e dopo la sua fine sì", async () => {
     await seed();
     await synced();
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('pagato', 'w-a', 'premium', ?1, ?2), ('omaggio', 'w-a', 'admin', ?1, ?3)`)
-      .bind(now, at(3 * day).toISOString(), at(2 * day).toISOString())
-      .run();
+    await env.DB.batch([
+      insertEntitlement({ id: "pagato", source: "premium", endsAt: at(3 * day).toISOString() }),
+      insertEntitlement({ id: "omaggio", source: "admin", endsAt: at(2 * day).toISOString() }),
+    ]);
     // Fra più coperture conta quella diversa dalla prova che dura di più.
     expect((await orderAllowance(env.DB, "u-a"))?.coverage).toEqual({
       source: "premium",
@@ -1639,10 +1646,12 @@ describe("pagina Ordini reale", () => {
 
   /** Premium concesso allo spazio A: tutti i suoi negozi sono ammessi. */
   async function premiumCoverage() {
-    await env.DB.prepare(
-      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-       VALUES ('concessione', 'w-a', 'admin', '2026-01-01T00:00:00.000Z', '2027-12-31T00:00:00.000Z')`,
-    ).run();
+    await insertEntitlement({
+      id: "concessione",
+      source: "admin",
+      startsAt: "2026-01-01T00:00:00.000Z",
+      endsAt: "2027-12-31T00:00:00.000Z",
+    }).run();
   }
 
   function ordersPage(cookie: string, path = "/app/ordini", params: { ordine?: string } = {}) {
@@ -1669,12 +1678,10 @@ describe("pagina Ordini reale", () => {
   }
 
   async function withCredentials() {
-    await env.DB.prepare(
-      `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-       VALUES ('s-a', 'a', '2026-09-14T00:00:00.000Z', 'r', '2027-09-13T00:00:00.000Z', ?)`,
-    )
-      .bind(now)
-      .run();
+    await insertCredentials({
+      accessExpiresAt: "2026-09-14T00:00:00.000Z",
+      refreshExpiresAt: "2027-09-13T00:00:00.000Z",
+    }).run();
   }
 
   it("rende gli ordini persistiti nella vista dell'anteprima, con stati, prezzi e contatti", async () => {
@@ -2153,12 +2160,11 @@ describe("pagina Ordini reale", () => {
     send.mockRestore();
     // Un negozio Sandbox che legge non cambia l'indisponibilità di Production, e viceversa.
     await insertStore({ id: "s-sb", ebayUserId: "e-sb", environment: "sandbox" }).run();
-    await env.DB.prepare(
-      `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-       VALUES ('s-sb', 'a', '2026-09-14T00:00:00.000Z', 'r', '2027-09-13T00:00:00.000Z', ?)`,
-    )
-      .bind(now)
-      .run();
+    await insertCredentials({
+      storeId: "s-sb",
+      accessExpiresAt: "2026-09-14T00:00:00.000Z",
+      refreshExpiresAt: "2027-09-13T00:00:00.000Z",
+    }).run();
     await reads("s-sb", [true, true]);
     expect(await storesDown()).toEqual(["production"]);
     expect(await bell()).toEqual([`ebay-down:${synced}`]);
@@ -2168,12 +2174,11 @@ describe("pagina Ordini reale", () => {
     // Con Premium il secondo negozio è ammesso; nel Free resterebbe in pausa.
     await premiumCoverage();
     await insertStore({ id: "s-c", ebayUserId: "e-c" }).run();
-    await env.DB.prepare(
-      `INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
-       VALUES ('s-c', 'a', '2026-09-14T00:00:00.000Z', 'r', '2027-09-13T00:00:00.000Z', ?)`,
-    )
-      .bind(now)
-      .run();
+    await insertCredentials({
+      storeId: "s-c",
+      accessExpiresAt: "2026-09-14T00:00:00.000Z",
+      refreshExpiresAt: "2027-09-13T00:00:00.000Z",
+    }).run();
     await reads("s-c", [true, true]);
     const failed = { kind: "store-read-failed", storeId: "s-a", storeName: "e-a", at: synced };
     expect(await notices()).toEqual([failed]);
@@ -2183,11 +2188,7 @@ describe("pagina Ordini reale", () => {
     expect(await bell()).toEqual([`store-read-failed:s-a:${synced}`]);
 
     // Un negozio in pausa non legge eBay: non conta per l'indisponibilità né per gli avvisi.
-    await env.DB.prepare(
-      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-c', 'manual', ?)",
-    )
-      .bind(now)
-      .run();
+    await insertStorePause({ storeId: "s-c" }).run();
     expect(await notices()).toEqual([{ kind: "ebay-down", at: synced }]);
 
     // La prima lettura riuscita chiude il problema, anche nella campanella. Le letture fallite
@@ -2395,10 +2396,11 @@ describe("pagina Ordini reale", () => {
       "x-none": "missing",
     });
     // Con Premium anche l'acquirente estero riceve la ricerca dei suggerimenti.
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('foreign-premium', 'w-a', 'premium', ?, '2099-01-01T00:00:00.000Z')`)
-      .bind(now)
-      .run();
+    await insertEntitlement({
+      id: "foreign-premium",
+      source: "premium",
+      endsAt: "2099-01-01T00:00:00.000Z",
+    }).run();
     expect((await page("mostra=2")).orders.find(({ id }) => id === "x-es")).toMatchObject({
       fiscal: { state: "missing", reason: "foreign", country: "ES" },
       suggestionStatus: "identity_missing",

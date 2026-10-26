@@ -29,8 +29,11 @@ import { action as settingsAction, loader as settingsLoader } from "../app/route
 import { loader as storesLoader } from "../app/routes/stores";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import {
+  insertEntitlement,
   insertStore,
+  insertStorePause,
   insertTaxIdentifiers,
+  insertWorkspace,
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
@@ -74,22 +77,17 @@ async function account(name: string, premium = true) {
   const { userId, cookie } = await verifiedSession(`${name}@example.invalid`);
   const workspace = `w-${name}`;
   await env.DB.batch([
-    env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)").bind(
-      workspace,
-      name,
-      now,
-    ),
-    env.DB.prepare("INSERT INTO workspace_members VALUES (?, ?, 'owner')").bind(workspace, userId),
+    ...insertWorkspace({ id: workspace, userId, name }),
     insertStore({ id: `s-${name}`, workspaceId: workspace }),
     ...(premium
       ? [
-          env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-            VALUES (?, ?, 'admin', ?, ?)`).bind(
-            `e-${name}`,
-            workspace,
-            new Date(Date.parse(now) - 86_400_000).toISOString(),
-            new Date(Date.parse(now) + 30 * 86_400_000).toISOString(),
-          ),
+          insertEntitlement({
+            id: `e-${name}`,
+            workspaceId: workspace,
+            source: "admin",
+            startsAt: new Date(Date.parse(now) - 86_400_000).toISOString(),
+            endsAt: new Date(Date.parse(now) + 30 * 86_400_000).toISOString(),
+          }),
         ]
       : []),
   ]);
@@ -150,10 +148,6 @@ const link = (workspace: string) =>
 
 beforeEach(async () => {
   await resetDatabase();
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM webhook_receipts"),
-    env.DB.prepare("DELETE FROM workspace_entitlements"),
-  ]);
   send.mockClear();
 });
 
@@ -810,11 +804,7 @@ describe("casi limite del collegamento e delle preferenze", () => {
     // Collegata senza preferenze salvate: valgono i predefiniti. La pausa del piano si scrive
     // dopo, perché le Impostazioni di uno spazio Premium la tolgono.
     await deliver(`/start ${await linkToken(seller.cookie)}`, 2001);
-    await env.DB.prepare(
-      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES (?, 'plan', ?)",
-    )
-      .bind(seller.store, now)
-      .run();
+    await insertStorePause({ storeId: seller.store, reason: "plan" }).run();
     await env.DB.prepare("DELETE FROM telegram_preferences WHERE workspace_id = ?")
       .bind(seller.workspace)
       .run();
@@ -1317,10 +1307,13 @@ describe("invii degli ordini", () => {
       .bind(later(12).toISOString(), seller.workspace)
       .run();
     await run(limited.fetcher, 15);
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-      VALUES ('e-rinnovo-2', ?, 'admin', ?, ?)`)
-      .bind(seller.workspace, later(16).toISOString(), later(30 * 24 * 60).toISOString())
-      .run();
+    await insertEntitlement({
+      id: "e-rinnovo-2",
+      workspaceId: seller.workspace,
+      source: "admin",
+      startsAt: later(16).toISOString(),
+      endsAt: later(30 * 24 * 60).toISOString(),
+    }).run();
     const api = bot();
     await run(api.fetcher, 25);
     expect(api.texts()).toHaveLength(0);
@@ -1575,15 +1568,13 @@ describe("invii degli ordini", () => {
           .bind(later(12).toISOString(), seller.workspace)
           .run(),
       (seller) =>
-        env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
-          VALUES (?, ?, 'admin', ?, ?)`)
-          .bind(
-            `e-${seller.workspace}-rinnovo`,
-            seller.workspace,
-            later(25).toISOString(),
-            later(30 * 24 * 60).toISOString(),
-          )
-          .run(),
+        insertEntitlement({
+          id: `e-${seller.workspace}-rinnovo`,
+          workspaceId: seller.workspace,
+          source: "admin",
+          startsAt: later(25).toISOString(),
+          endsAt: later(30 * 24 * 60).toISOString(),
+        }).run(),
     ));
 
   it("gli ordini in verifica oltre il limite di un'esecuzione non fermano quelli successivi", async () => {
