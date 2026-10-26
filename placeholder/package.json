@@ -4,6 +4,6 @@
   "type": "module",
   "devDependencies": {
     "cf": "1.0.0-beta.18",
-    "wrangler": "4.151.1"
+    "wrangler": "4.152.0"
   }
 }
