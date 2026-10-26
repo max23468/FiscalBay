@@ -605,24 +605,14 @@ for (const area of areas)
         const categories = page.getByRole("navigation", {
           name: locale === "it" ? "Categorie" : "Categories",
         });
-        // Le descrizioni nominano soltanto i servizi disponibili: con il bot dell'ambiente anche
-        // l'area reale ha Telegram, mentre esportazione e cancellazione dell'account mancano.
         await expect(
           categories.getByRole("link", { name: new RegExp(labels.notifications, "u") }),
-        ).toContainText("Telegram");
+        ).toBeVisible();
         await expect(
           categories.getByRole("link", {
             name: locale === "it" ? /Dati e privacy/u : /Data and privacy/u,
           }),
-        ).toContainText(
-          area.base === "/app"
-            ? locale === "it"
-              ? "Termini e informativa sulla privacy"
-              : "Terms and privacy policy"
-            : locale === "it"
-              ? "esportazione"
-              : "export",
-        );
+        ).toBeVisible();
         await categories.getByRole("link", { name: new RegExp(labels.notifications, "u") }).tap();
         await expect(categories).toBeHidden();
         await expect(

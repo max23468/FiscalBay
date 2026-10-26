@@ -439,7 +439,8 @@ test.describe("impostazioni", () => {
       await expect(
         page.getByRole("button", { name: "Cambia password", exact: true }),
       ).toBeVisible();
-      await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/);
+      // Come nell'area reale l'esito torna nell'indirizzo della Sicurezza.
+      await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza\?accesso=password-link$/);
     } finally {
       await context.close();
     }
@@ -468,10 +469,23 @@ test.describe("impostazioni", () => {
       const cancelText = it ? "Annulla" : "Cancel";
       const methods = page.locator('section[aria-labelledby="security-methods"]');
       await expect(methods.getByRole("button", { name: removeText, exact: true })).toHaveCount(3);
-      for (const [label, intent, field, value] of [
-        [it ? "Email e password" : "Email and password", "rimuovi-metodo", "metodo", "password"],
-        ["Google", "rimuovi-metodo", "metodo", "google"],
-        ["Passkey", "passkey-remove", "id", "preview-passkey"],
+      const removed = it ? "Metodo di accesso rimosso." : "Sign-in method removed.";
+      for (const [label, intent, field, value, notice] of [
+        [
+          it ? "Email e password" : "Email and password",
+          "rimuovi-metodo",
+          "metodo",
+          "password",
+          removed,
+        ],
+        ["Google", "rimuovi-metodo", "metodo", "google", removed],
+        [
+          "Passkey",
+          "passkey-remove",
+          "id",
+          "preview-passkey",
+          it ? "Passkey rimossa." : "Passkey removed.",
+        ],
       ]) {
         const row = methods.getByRole("group", { name: new RegExp(`^${label}`) });
         const trigger = row.getByRole("button", { name: removeText, exact: true });
@@ -487,16 +501,13 @@ test.describe("impostazioni", () => {
         await trigger.click();
         await dialog.getByRole("button", { name: removeText, exact: true }).click();
         await expect.poll(() => posts.length).toBe(before + 1);
-        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/sicurezza.data`);
+        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/sicurezza`);
         expect(posts.at(-1)!.fields.get("intent")).toBe(intent);
         expect(posts.at(-1)!.fields.get(field)).toBe(value);
         await expect(dialog).toHaveCount(0);
-        await expect(
-          page.getByText(
-            it ? "Anteprima: l’azione è simulata." : "Preview: this action is simulated.",
-            { exact: true },
-          ),
-        ).toBeVisible();
+        await expect(page.getByText(notice!, { exact: true })).toBeVisible();
+        // Dopo l'idratazione l'esito esce dall'indirizzo e i pulsanti rispondono di nuovo.
+        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/sicurezza$`));
       }
       const before = posts.length;
       await page
