@@ -38,6 +38,7 @@ export default defineConfig({
     name: "cloudflare",
     include: ["test/**/*.spec.ts"],
     setupFiles: ["./test/apply-migrations.ts"],
+    diff: "./test/diff-options.ts",
     css: { include: [/app\.css/u] },
   },
 });
