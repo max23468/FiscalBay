@@ -84,8 +84,8 @@ export type BotCommand = keyof typeof botCommands;
 
 /** Comando del menu con quel nome, in una delle due lingue. */
 function commandNamed(name: string) {
-  return (Object.keys(botCommands) as BotCommand[]).find((command) =>
-    (Object.values(botCommands[command]) as string[]).includes(name),
+  return (Object.keys(botCommands) as BotCommand[]).find(
+    (command) => botCommands[command].it === name || botCommands[command].en === name,
   );
 }
 
