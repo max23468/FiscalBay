@@ -6,7 +6,6 @@ import { telegramPreferencesSql, telegramRecipient, telegramRecipientSql } from 
 import {
   digestMessage,
   emptyFiscalKey,
-  fiscalDigest,
   fiscalKey,
   importMessage,
   localClock,
@@ -75,7 +74,6 @@ export async function deliverTelegram(
   scope: { storeId?: string } = {},
 ): Promise<void> {
   if (!telegramConfigured(env)) return;
-  await digestStoredValues(env.DB);
   // Senza Premium le consegne in attesa si chiudono: un rinnovo non porta l'arretrato.
   if (!scope.storeId) await closeUncovered(env.DB, now);
   const { results } = await env.DB.prepare(`SELECT l.workspace_id AS workspaceId, l.id AS linkId,
@@ -111,30 +109,6 @@ export async function deliverTelegram(
     )
       .bind(now.toISOString(), JSON.stringify(served))
       .run();
-}
-
-/**
- * Le impronte registrate come testo dei valori, che iniziano con `[`, conservano ancora i Codici
- * Fiscali: prendono la forma cifrata prima di ogni valutazione, anche con le notifiche spente.
- */
-async function digestStoredValues(db: D1Database) {
-  const { results } = await db
-    .prepare(
-      "SELECT order_id AS orderId, fiscal_key AS fiscalKey FROM telegram_order_notices WHERE fiscal_key LIKE '[%' LIMIT 100",
-    )
-    .all<{ orderId: string; fiscalKey: string }>();
-  if (results.length === 0) return;
-  await db.batch(
-    await Promise.all(
-      results.map(async ({ orderId, fiscalKey: stored }) =>
-        db
-          .prepare(
-            "UPDATE telegram_order_notices SET fiscal_key = ?2 WHERE order_id = ?1 AND fiscal_key = ?3",
-          )
-          .bind(orderId, await fiscalDigest(stored), stored),
-      ),
-    ),
-  );
 }
 
 type Next = "continue" | "wait" | "stop";
