@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { orderSearchText } from "../orders/order-search";
-import { taxComparisonKey, taxIdentifierType } from "../tax-quality";
+import { buyerTaxKey, taxComparisonKey, taxIdentifierType } from "../tax-quality";
 import { historyEndSql, storeWorkspaceSql } from "./history-window.server";
 import { writableStore } from "./store-state.server";
 
@@ -817,12 +817,7 @@ export async function recordOrderObservation(
     new Set(
       results[index]!.results.map((row) => {
         const value = row as { type: string; issuingCountry: string | null; value: string };
-        // CF coincidenti con Paese assente/IT sono lo stesso dato anche se cambia la fonte.
-        return taxComparisonKey(
-          taxIdentifierType(value.type, value.issuingCountry) === "CF"
-            ? { ...value, issuingCountry: "IT" }
-            : value,
-        );
+        return buyerTaxKey(value);
       }),
     );
   const beforeTax = taxSnapshots ? taxKeys(taxSnapshots.before) : new Set<string>();

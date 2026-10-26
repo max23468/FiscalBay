@@ -2,7 +2,7 @@ import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
 import { buyerNameView, contactsView } from "../contact";
 import { maxListedOrders } from "../orders/order-list";
 import { searchTokens } from "../orders/order-search";
-import { taxComparisonKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
+import { buyerTaxKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
 import {
   fiscalSituations,
   orderPeriods,
@@ -565,7 +565,7 @@ export async function listVisibleOrders(
     const cfKey = (tax: VisibleOrder["taxIdentifiers"][number]) =>
       taxIdentifierType(tax.type, tax.issuingCountry) === "CF" &&
       (tax.source === "ebay_trading_get_orders" || isFulfillmentCf(tax))
-        ? taxComparisonKey({ ...tax, issuingCountry: "IT" })
+        ? buyerTaxKey(tax)
         : null;
     for (const tax of order.taxIdentifiers) {
       const key = cfKey(tax);

@@ -1,7 +1,7 @@
 import { activeEntitlementSql, orderAccessSql } from "./grants.server";
 import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
-import { taxComparisonKey, taxIdentifierType, taxQuality } from "../tax-quality";
+import { buyerTaxKey, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { SuggestionView } from "../view-models";
 
 type Suggestions = {
@@ -81,12 +81,9 @@ export async function orderSuggestions(
     for (const rows of kinds.values()) {
       const latest = rows.filter((row) => row.creation_time === rows[0]!.creation_time);
       const normalized = (row: (typeof rows)[number]) =>
-        taxComparisonKey({
+        buyerTaxKey({
           type: row.identifier_type!,
-          issuingCountry:
-            taxIdentifierType(row.identifier_type!, row.issuing_country) === "OTHER"
-              ? row.issuing_country
-              : "IT",
+          issuingCountry: row.issuing_country,
           value: row.value,
         });
       if (
