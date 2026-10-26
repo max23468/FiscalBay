@@ -5,6 +5,7 @@ import type { StoresPageData } from "~/components/stores/state";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
+import type { AccountView } from "../view-models";
 import { pageScenario, simulateAction } from "../preview/state.server";
 import type { PreviewContext } from "./preview";
 import type { Route } from "./+types/preview-stores";
@@ -29,12 +30,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     elsewhere: scenario.elsewhere,
     settings: true,
     notificationSettings: true,
-    // Come nell'area reale: un abbonamento che si rinnova non si disdice scollegando.
-    subscriptionRenews:
-      (!!scenario.account.premium?.renewsAt && scenario.account.premium.period !== "lifetime") ||
-      (scenario.account.payment?.state === "scheduled" && !scenario.account.payment.cancelled),
+    // Come nell'area reale: un abbonamento che addebiterà ancora, anche con il pagamento in
+    // attivazione o dopo un periodo rimborsato, non si disdice scollegando.
+    subscriptionRenews: renewsAfterUnlink(scenario.account),
   };
   return page;
+}
+
+function renewsAfterUnlink({ premium, payment }: Pick<AccountView, "premium" | "payment">) {
+  if (premium?.renewsAt && premium.period !== "lifetime") return true;
+  if (payment?.state === "scheduled") return !payment.cancelled;
+  if (payment?.state === "pending") return !payment.lifetime;
+  return payment?.state === "refunded" && !!payment.renewsAt;
 }
 
 /** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */

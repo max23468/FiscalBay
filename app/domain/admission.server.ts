@@ -23,11 +23,27 @@ import { unpausedStore } from "./store-state.server";
  */
 
 /**
- * Letture periodiche e a richiesta ammesse: una copertura in corso, oppure uno spazio fuori
- * dalla lista d'attesa. La prima lettura al collegamento non passa da qui.
+ * Letture periodiche, a richiesta e per evento ammesse: una copertura in corso, oppure uno
+ * spazio fuori dalla lista d'attesa. La prima lettura al collegamento segue `linkReadAdmitted`.
  */
 export function servedSql(workspace: string, at: string) {
   return `(${activeEntitlementSql(workspace, at)} OR NOT ${waitingSql(workspace)})`;
+}
+
+/**
+ * Lettura al collegamento: sempre per uno spazio servito; in lista d'attesa soltanto la prima,
+ * cioè finché il negozio non ha una lettura riuscita in questo spazio. Uno storico eliminato
+ * conta come già letto: scollegare, eliminare i dati e ricollegare non ripete la prima lettura.
+ */
+export async function linkReadAdmitted(db: D1Database, storeId: string, now: Date) {
+  const row = await db
+    .prepare(`SELECT ${servedSql("s.workspace_id", "?2")} OR (s.orders_deleted_through IS NULL
+        AND NOT EXISTS (SELECT 1 FROM sync_state ss WHERE ss.store_id = s.id
+          AND ss.last_success_at IS NOT NULL)) AS admitted
+      FROM ebay_stores s WHERE s.id = ?1`)
+    .bind(storeId, now.toISOString())
+    .first<{ admitted: number }>();
+  return row?.admitted === 1;
 }
 
 type Admission = {

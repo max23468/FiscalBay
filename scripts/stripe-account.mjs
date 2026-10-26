@@ -161,8 +161,11 @@ export function checkAccount(request, target) {
       ...(profile.name === expected.name ? [] : ["name"]),
       ...(profile.url === expected.url ? [] : ["url"]),
       ...(profile.support_email === expected.supportEmail ? [] : ["support_email"]),
-      // Un indirizzo di assistenza diverso dal sito porterebbe i clienti altrove.
-      ...(!profile.support_url || profile.support_url.startsWith(`${target.origin}/`)
+      // Un indirizzo di assistenza diverso dal sito porterebbe i clienti altrove. La sandbox
+      // conserva i valori di prova di Stripe, che nessun cliente vede.
+      ...(!target.live ||
+      !profile.support_url ||
+      profile.support_url.startsWith(`${target.origin}/`)
         ? []
         : ["support_url"]),
     ];

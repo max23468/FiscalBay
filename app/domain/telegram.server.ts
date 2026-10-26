@@ -125,8 +125,10 @@ type LinkRequest = {
  * Effetto del comando `/start` ricevuto dal webhook. Il token si consuma una volta sola, entro la
  * scadenza all'istante del messaggio, con la sessione che l'ha creato ancora aperta e l'utente
  * ancora nello spazio. La chat nuova sostituisce la precedente nello stesso commit: da allora la
- * precedente non è più il destinatario di nessuna consegna. Lo stesso aggiornamento riprovato
- * ritrova il collegamento già fatto e ripete soltanto la conferma.
+ * precedente non è più il destinatario di nessuna consegna. Il collegamento fissa il fuso del
+ * riepilogo a quello dell'account nella richiesta. Lo stesso aggiornamento riprovato non scrive
+ * nulla: ripete la conferma soltanto se lo spazio è ancora collegato a quella chat, con la
+ * stessa generazione.
  */
 export async function consumeTelegramStart(
   env: Env,
@@ -149,6 +151,17 @@ export async function consumeTelegramStart(
   const text = replies[request.language];
   if (request.consumed_by !== null && request.consumed_by !== start.receiptId)
     return reply(text.invalid(url(request.language)));
+  if (request.consumed_by !== null) {
+    // Un collegamento successivo, anche di nuovo con questa chat, ha una data più recente.
+    const current = await db
+      .prepare(`SELECT 1 FROM telegram_link_requests r
+        JOIN telegram_links l ON l.workspace_id = r.workspace_id
+        WHERE r.token_hash = ?1 AND l.chat_id = ?2
+          AND julianday(l.linked_at) <= julianday(r.consumed_at)`)
+      .bind(start.tokenHash, start.chatId)
+      .first();
+    return reply(current ? text.linked : text.invalid(url(request.language)));
+  }
   const label = await chatLabel(env, start.chatId, fetcher).catch((error: unknown) => {
     // Un rifiuto non impedisce il collegamento: la chat resta senza nome.
     if (error instanceof UpstreamError && error.failure === "rejected") return null;
@@ -184,7 +197,8 @@ export async function consumeTelegramStart(
     db
       .prepare(`INSERT INTO telegram_preferences (workspace_id, time_zone, updated_at)
       SELECT workspace_id, time_zone, ?3 FROM (${consumed}) WHERE true
-      ON CONFLICT(workspace_id) DO NOTHING`)
+      ON CONFLICT(workspace_id) DO UPDATE SET time_zone = excluded.time_zone,
+        updated_at = excluded.updated_at`)
       .bind(start.tokenHash, start.receiptId, at),
   ]);
   const linked = await db

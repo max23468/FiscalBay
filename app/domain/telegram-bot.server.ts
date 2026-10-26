@@ -224,8 +224,9 @@ export type TelegramReceipt = {
 
 /**
  * Effetto di un aggiornamento del bot ricevuto dal webhook. Qualunque messaggio della chat chiude
- * un problema di consegna: chi aveva bloccato il bot e gli scrive di nuovo riceve gli eventi da
- * quel momento, senza quelli del periodo bloccato. Una chat senza collegamento non vede nulla.
+ * il blocco: chi aveva bloccato il bot e gli scrive di nuovo riceve gli eventi da quel momento,
+ * senza quelli del periodo bloccato. La chat irraggiungibile resta tale fino al primo invio
+ * riuscito di una notifica. Una chat senza collegamento non vede nulla.
  */
 export async function consumeTelegramUpdate(
   env: Env,
@@ -235,10 +236,9 @@ export async function consumeTelegramUpdate(
 ): Promise<void> {
   const db = env.DB;
   await db
-    .prepare(`UPDATE telegram_links SET
-        resumed_at = CASE WHEN delivery_failure = 'blocked' THEN ?2 ELSE resumed_at END,
-        delivery_failure = NULL, delivery_failed_at = NULL
-      WHERE chat_id = ?1 AND delivery_failure IS NOT NULL`)
+    .prepare(`UPDATE telegram_links SET resumed_at = ?2, delivery_failure = NULL,
+        delivery_failed_at = NULL
+      WHERE chat_id = ?1 AND delivery_failure = 'blocked'`)
     .bind(update.chatId, update.eventAt)
     .run();
   const { results: links } = await db

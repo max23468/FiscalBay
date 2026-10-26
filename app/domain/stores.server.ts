@@ -2,7 +2,7 @@ import { syncMinutes } from "./order-sync.server";
 import { dayMilliseconds } from "../time";
 import { resumeAfterInactivity } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
-import { freeHistoryDays } from "./history-window.server";
+import { historyStartSql } from "./history-window.server";
 import { storeNameSql } from "./store-state.server";
 import type { EbayEnvironment } from "../integrations/ebay/environment.server";
 
@@ -135,8 +135,8 @@ type StoreRow = {
   rejected_at: string | null;
   last_success_at: string | null;
   history_from: string | null;
-  history_until: string | null;
   history_done_at: string | null;
+  window_from: string;
   syncing: number | null;
   pauses: string | null;
   inactive_since: string | null;
@@ -146,6 +146,22 @@ type StoreRow = {
 };
 
 type RunRow = { store_id: string; started_at: string; ok: number; new_orders: number };
+
+/**
+ * Storico di un negozio avviato: i giorni consultabili sono quelli della finestra attuale dello
+ * spazio, perché i recenti coprono il tempo dopo il primo avvio. Un'importazione estesa
+ * all'attivazione di una copertura conta quindi un anno pieno, e dopo il ritorno al Free valgono
+ * i trenta giorni del Free. L'importazione è conclusa soltanto se parte dall'inizio della
+ * finestra o prima: una finestra più ampia, come prima della lettura che segue l'attivazione,
+ * resta da importare.
+ */
+function history(row: StoreRow, at: number): NonNullable<StoreStatus["history"]> {
+  const windowFrom = Date.parse(row.window_from);
+  return {
+    days: Math.round((at - windowFrom) / dayMilliseconds),
+    done: row.history_done_at !== null && Date.parse(row.history_from!) <= windowFrom,
+  };
+}
 
 export async function listStores(
   db: D1Database,
@@ -159,8 +175,9 @@ export async function listStores(
               s.store_logo_url, s.store_url, s.feedback_score, s.feedback_positive_percent,
               s.top_rated_seller, s.disconnected_at,
               c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
-              c.rejected_at, ss.last_success_at, ss.history_from, ss.history_until,
-              ss.history_done_at, ss.locked_until > ?2 AS syncing,
+              c.rejected_at, ss.last_success_at, ss.history_from, ss.history_done_at,
+              ${historyStartSql("s.workspace_id", "?2")} AS window_from,
+              ss.locked_until > ?2 AS syncing,
               (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
                 AS pauses,
               (SELECT paused_at FROM ebay_store_pauses p WHERE p.store_id = s.id
@@ -256,20 +273,7 @@ export async function listStores(
       recent: recent.get(row.id) ?? [],
       importedOrders: row.orders,
       marketplace: row.marketplace,
-      history:
-        // Le due date dello storico si fissano insieme al primo avvio. Dopo il ritorno al Free
-        // l'importazione più ampia resta, ma si consultano soltanto i giorni del Free.
-        row.history_from
-          ? {
-              days: Math.min(
-                Math.round(
-                  (Date.parse(row.history_until!) - Date.parse(row.history_from)) / dayMilliseconds,
-                ),
-                row.premium ? Infinity : freeHistoryDays,
-              ),
-              done: row.history_done_at !== null,
-            }
-          : null,
+      history: row.history_from ? history(row, at) : null,
       reminder,
       // Un negozio scollegato non ha credenziali, quindi risulta già scaduto.
       consentExpiring: !expired && Date.parse(expiresAt!) - at <= expiringNoticeMilliseconds,

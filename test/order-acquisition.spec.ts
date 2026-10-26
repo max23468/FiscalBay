@@ -1079,10 +1079,19 @@ describe("acquisizione con il client", () => {
 
       // La revoca riporta la finestra a un anno: l'ordine più vecchio non è più consultabile e
       // resta trenta giorni, come dopo un downgrade; il cron lo rivede senza visite.
+      // Durata, motivo e autore non cambiano: un'estensione diversa è una nuova riga.
+      for (const change of ["months = 13", "reason = 'altro'", "actor = 'altri'"])
+        await expect(
+          env.DB.prepare(`UPDATE history_extensions SET ${change} WHERE id = 'x-a'`).run(),
+        ).rejects.toThrow("immutable_history_extension");
       const revoked = active + day;
       await env.DB.prepare("UPDATE history_extensions SET revoked_at = ? WHERE id = 'x-a'")
         .bind(iso(revoked))
         .run();
+      // La revoca si registra una volta.
+      await expect(
+        env.DB.prepare("UPDATE history_extensions SET revoked_at = NULL WHERE id = 'x-a'").run(),
+      ).rejects.toThrow("immutable_history_extension");
       await applyFreePlans(env.DB, new Date(revoked + 60_000));
       expect(
         await env.DB.prepare(
@@ -1097,6 +1106,40 @@ describe("acquisizione con il client", () => {
           (row) => row.ebayOrderId,
         ),
       ).toEqual(["12-dieci-mesi"]);
+    });
+
+    it("Negozi mostra i giorni della finestra anche con la copertura attivata mesi dopo", async () => {
+      const orders = [dated("12-recente", linked - 10 * day)];
+      await acquire(ebay({ orders }), iso(linked));
+      const store = async (at: number) =>
+        (await listStores(env.DB, "u-a", new Date(at)))[0]!.history;
+      expect(await store(linked + 59 * day)).toEqual({ days: 30, done: true });
+
+      // Prova attivata due mesi dopo: l'anno è da importare finché la lettura non lo legge.
+      const active = linked + 60 * day;
+      await coverage(active, active + 14 * day);
+      expect(await store(active)).toEqual({ days: 365, done: false });
+      expect(await acquire(ebay({ orders }), iso(active))).toBe("complete");
+      expect(await history()).toMatchObject({
+        history_from: iso(months(active, -12)),
+        history_until: iso(linked),
+      });
+      expect(await store(active + day)).toEqual({ days: 365, done: true });
+
+      // Un'estensione di due anni allarga la finestra: i giorni in più restano da importare.
+      await env.DB.prepare(
+        `INSERT INTO history_extensions (id, workspace_id, months, reason, actor, granted_at)
+         VALUES ('x-b', 'w-a', 24, 'Periodo recuperabile verificato', 'assistenza', ?)`,
+      )
+        .bind(iso(active + day))
+        .run();
+      const extended = active + 2 * day;
+      expect(await store(extended)).toEqual({ days: 730, done: false });
+      expect(await acquire(ebay({ orders }), iso(extended))).toBe("complete");
+      expect(await store(extended)).toEqual({ days: 730, done: true });
+
+      // Alla fine della prova si consultano i trenta giorni del Free.
+      expect(await store(active + 15 * day)).toEqual({ days: 30, done: true });
     });
   });
 

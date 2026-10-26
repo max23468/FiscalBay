@@ -234,6 +234,7 @@ export async function reconcileSubscription(
     logFailure({ error: new UnknownSubscription(), operation: "billing" });
     return;
   }
+  subscription = await scheduleProtectionEnd(stripe, subscription, item, now);
   const invoices = await stripeRead(() =>
     stripe.invoices.list({
       subscription: subscription.id,
@@ -302,7 +303,7 @@ export async function reconcileSubscription(
     }),
   ]);
   const lapsed = (lapsedStatuses as readonly string[]).includes(subscription.status);
-  if (lapsed && now.getTime() >= item.current_period_start * 1000 + pricePromiseMs) {
+  if (lapsed && now.getTime() >= protectionEnd(item) * 1000) {
     const canceled = await stripeRead(() => stripe.subscriptions.cancel(subscription.id));
     await env.DB.prepare(
       `UPDATE stripe_subscriptions SET status = ?1, synced_at = ?2 WHERE id = ?3
@@ -313,8 +314,41 @@ export async function reconcileSubscription(
   }
 }
 
+/** Fine della tutela del prezzo di un rinnovo non pagato, in secondi come in Stripe. */
+const protectionEnd = (item: Stripe.SubscriptionItem) =>
+  item.current_period_start + pricePromiseMs / 1000;
+
+/**
+ * Un rinnovo non pagato si chiude su Stripe all'istante esatto in cui finisce la tutela del
+ * prezzo: alla chiusura Stripe sospende i tentativi sulla fattura aperta, così nessun incasso
+ * arriva dopo e applica in silenzio il vecchio listino. Un pagamento riuscito entro la tutela
+ * toglie la chiusura programmata da FiscalBay; una disdetta che arriva prima resta.
+ */
+async function scheduleProtectionEnd(
+  stripe: Stripe,
+  subscription: Stripe.Subscription,
+  item: Stripe.SubscriptionItem,
+  now: Date,
+) {
+  const end = protectionEnd(item);
+  const lapsed = (lapsedStatuses as readonly string[]).includes(subscription.status);
+  const update = (params: Stripe.SubscriptionUpdateParams) =>
+    stripeRead(() => stripe.subscriptions.update(subscription.id, params));
+  if (
+    lapsed &&
+    now.getTime() < end * 1000 &&
+    !(subscription.cancel_at && subscription.cancel_at <= end)
+  )
+    return update({ cancel_at: end, proration_behavior: "none" });
+  if (!lapsed && subscription.status === "active" && subscription.cancel_at === end)
+    return update({ cancel_at: "" });
+  return subscription;
+}
+
 const sessionWindowMs = 2 * 86_400_000;
 const batchSize = 25;
+/** Sessioni completate lette per turno: ben oltre il volume atteso di due giorni. */
+const sessionScanLimit = 1000;
 
 /**
  * Rete di sicurezza del cron per i webhook mancati o tardivi, anche con il browser chiuso.
@@ -337,21 +371,22 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
     );
   // Un abbonamento alla volta: il turno resta entro i limiti di Stripe anche quando è lento.
   try {
+    // Tutte le pagine dei due giorni: un volume alto di acquisti non lascia sessioni indietro.
     const sessions = await stripeRead(() =>
-      stripe.checkout.sessions.list({
-        status: "complete",
-        created: { gte: Math.floor((now.getTime() - sessionWindowMs) / 1000) },
-        limit: 100,
-      }),
+      stripe.checkout.sessions
+        .list({
+          status: "complete",
+          created: { gte: Math.floor((now.getTime() - sessionWindowMs) / 1000) },
+          limit: 100,
+        })
+        .autoPagingToArray({ limit: sessionScanLimit }),
     );
     const ids = [
       ...new Set(
-        sessions.data.flatMap((session) =>
-          session.subscription ? [idOf(session.subscription)] : [],
-        ),
+        sessions.flatMap((session) => (session.subscription ? [idOf(session.subscription)] : [])),
       ),
     ];
-    const lifetimes = sessions.data.filter(isLifetimeSession).map((session) => session.id);
+    const lifetimes = sessions.filter(isLifetimeSession).map((session) => session.id);
     const { results: known } = await env.DB.prepare(
       `SELECT id FROM stripe_subscriptions WHERE id IN (${ids.map(() => "?").join(", ")})
       UNION SELECT provider_reference FROM lifetime_allocations WHERE status = 'active'
@@ -378,13 +413,20 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
     logFailure({ error, operation: "billing" }),
   );
   const at = now.toISOString();
+  // Le sessioni scadute da oltre due giorni sono già state rilette: il riferimento non serve.
+  await env.DB.prepare(`DELETE FROM subscription_checkouts
+      WHERE julianday(expires_at) < julianday(?1, '-2 days')`)
+    .bind(at)
+    .run()
+    .catch((error: unknown) => logFailure({ error, operation: "billing" }));
   const { results } = await env.DB.prepare(`UPDATE stripe_subscriptions SET checked_at = ?1
     WHERE id IN (SELECT s.id FROM stripe_subscriptions s
       WHERE s.environment = ?2 AND s.unavailable_at IS NULL
         AND s.status IN (${sqlList(openSubscriptionStatuses)})
         AND (${dueSql} OR julianday(s.checked_at) <= julianday(?1, '-1 hour') AND ${pendingSql}
           OR julianday(s.checked_at) <= julianday(?1, '-1 day'))
-      ORDER BY ${dueSql} DESC, julianday(s.checked_at) LIMIT ${batchSize})
+      ORDER BY CASE WHEN ${dueSql} THEN 0 WHEN ${pendingSql} THEN 1 ELSE 2 END,
+        julianday(s.checked_at) LIMIT ${batchSize})
     RETURNING id`)
     .bind(at, environmentOf(env))
     .all<{ id: string }>();
@@ -677,6 +719,30 @@ const notErasedSql = (alias: string) => `NOT EXISTS (SELECT 1 FROM stripe_custom
   WHERE r.customer_id = ${alias}.customer_id)`;
 
 /**
+ * Cliente Stripe dello spazio, espressione SQL: quello dell'abbonamento che può ancora
+ * incassare, poi del lifetime in vigore, poi dell'abbonamento più recente e infine del lifetime
+ * rimborsato. Il portale lo apre e un nuovo abbonamento lo riusa, così disdetta, metodo di
+ * pagamento e documenti restano su un solo cliente. Un cliente con i dati finanziari cancellati
+ * non si riapre.
+ */
+export function workspaceCustomerSql(workspace: string, environment: string) {
+  const subscription = (open: boolean) => `(SELECT s.customer_id FROM stripe_subscriptions s
+    WHERE s.workspace_id = ${workspace} AND s.environment = ${environment} AND ${notErasedSql("s")}
+      ${open ? `AND s.unavailable_at IS NULL AND s.status IN (${sqlList(openSubscriptionStatuses)})` : ""}
+    ORDER BY julianday(s.current_period_start) DESC LIMIT 1)`;
+  const lifetime = (inForce: boolean) => `(SELECT a.customer_id FROM lifetime_allocations a
+    WHERE a.workspace_id = ${workspace} AND a.status = 'active' AND a.customer_id IS NOT NULL
+      AND ${notErasedSql("a")}${
+        inForce
+          ? ` AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = a.workspace_id
+        AND e.source = 'lifetime' AND e.revoked_at IS NULL)`
+          : ""
+      })`;
+  return `COALESCE(${subscription(true)}, ${lifetime(true)}, ${subscription(false)},
+    ${lifetime(false)})`;
+}
+
+/**
  * Portale clienti di Stripe per disdetta, metodo di pagamento e documenti, con il ritorno al
  * piano. Null senza un cliente Stripe dello spazio nell'ambiente corrente.
  */
@@ -688,15 +754,8 @@ export async function openBillingPortal(
 ): Promise<string | null> {
   const key = stripeSecretKey(env);
   if (!key) return null;
-  // Il cliente del lifetime acquistato prevale su quello di un abbonamento precedente.
-  // Un cliente con i dati finanziari cancellati non si riapre.
-  const row = await env.DB.prepare(`SELECT COALESCE(
-      (SELECT a.customer_id FROM lifetime_allocations a WHERE a.workspace_id = wm.workspace_id
-        AND a.status = 'active' AND a.customer_id IS NOT NULL AND ${notErasedSql("a")}),
-      (SELECT s.customer_id FROM stripe_subscriptions s WHERE s.workspace_id = wm.workspace_id
-        AND s.environment = ?2 AND ${notErasedSql("s")}
-        ORDER BY julianday(s.current_period_start) DESC LIMIT 1)
-    ) AS customer_id FROM workspace_members wm WHERE wm.user_id = ?1`)
+  const row = await env.DB.prepare(`SELECT ${workspaceCustomerSql("wm.workspace_id", "?2")}
+      AS customer_id FROM workspace_members wm WHERE wm.user_id = ?1`)
     .bind(userId, environmentOf(env))
     .first<{ customer_id: string | null }>();
   const customer = row?.customer_id;
@@ -726,7 +785,7 @@ export async function stopRenewals(
   now = new Date(),
 ): Promise<boolean> {
   const at = now.toISOString();
-  const [subscriptions, sessions] = await env.DB.batch<{ id: string }>([
+  const [subscriptions, sessions, checkouts] = await env.DB.batch<{ id: string }>([
     env.DB.prepare(`SELECT id FROM stripe_subscriptions WHERE workspace_id = ?1
         AND environment = ?2 AND unavailable_at IS NULL
         AND status NOT IN ('canceled', 'incomplete_expired')`).bind(
@@ -737,8 +796,15 @@ export async function stopRenewals(
         WHERE workspace_id = ? AND status = 'reserved' AND provider_reference IS NOT NULL`).bind(
       workspaceId,
     ),
+    // Sessione di mensile o annuale ancora in grado di incassare.
+    env.DB.prepare(`SELECT session_id AS id FROM subscription_checkouts WHERE workspace_id = ?1
+        AND session_id IS NOT NULL AND julianday(expires_at) > julianday(?2)`).bind(
+      workspaceId,
+      at,
+    ),
   ]);
-  if (!subscriptions!.results.length && !sessions!.results.length) return true;
+  if (!subscriptions!.results.length && !sessions!.results.length && !checkouts!.results.length)
+    return true;
   const key = stripeSecretKey(env);
   if (!key) return false;
   try {
@@ -771,6 +837,16 @@ export async function stopRenewals(
       // Scaduta: il posto si libera; pagata: il posto resta con i riferimenti all'acquisto.
       await reconcileLifetime(env, stripe, id, now);
     };
+    // Una sessione aperta si chiude; una completata ha creato un abbonamento da fermare.
+    const checkout = async (id: string) => {
+      const session = await stripeRead(() => stripe.checkout.sessions.retrieve(id));
+      if (session.status === "open") await stripeRead(() => stripe.checkout.sessions.expire(id));
+      else if (session.subscription) await stop(idOf(session.subscription));
+    };
+    await inSequence(
+      checkouts!.results.map(({ id }) => id),
+      checkout,
+    );
     await inSequence(
       subscriptions!.results.map(({ id }) => id),
       stop,

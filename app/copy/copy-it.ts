@@ -60,7 +60,7 @@ export const it = {
         `${store}: le ultime letture da eBay non sono riuscite. FiscalBay riprova automaticamente.`,
       inactivityTitle: "Letture in pausa per inattività",
       inactivityBody:
-        "Con il piano Free le letture si fermano dopo 30 giorni senza accessi. Riprendile da Negozi.",
+        "Con il piano Free le letture si fermano dopo 30 giorni senza accessi e 7 di preavviso. Riprendile da Negozi.",
     },
     account: "Account",
     profile: "Profilo",
@@ -335,7 +335,7 @@ export const it = {
     pausedByInactivity: "In pausa per inattività",
     inactivityTitle: "Letture in pausa per inattività",
     inactivityBody:
-      "Non hai aperto FiscalBay per più di 30 giorni: con il piano Free le letture da eBay si sono fermate. Riprendile per recuperare gli ordini ancora nella finestra del piano.",
+      "Non hai aperto FiscalBay per 30 giorni né nei 7 giorni di preavviso: con il piano Free le letture da eBay si sono fermate. Riprendile per recuperare gli ordini ancora nella finestra del piano.",
     inactivityResume: "Riprendi le letture",
     notificationsOn: "Attive",
     notificationsOff: "Disattivate",
@@ -384,7 +384,7 @@ export const it = {
     pauseHint:
       "La pausa manuale ferma le nuove letture. Gli ordini già importati restano consultabili secondo il piano.",
     inactivityPauseHint:
-      "In pausa per inattività: nessuna nuova lettura dopo 30 giorni senza accessi al piano Free. Gli ordini restano consultabili; «Riprendi» riprende tutti i negozi.",
+      "In pausa per inattività: con il piano Free nessuna nuova lettura dopo 30 giorni senza accessi e 7 di preavviso. Gli ordini restano consultabili; «Riprendi» riprende tutti i negozi.",
     planPauseHint:
       "In pausa per il piano Free: nessuna nuova lettura e ordini non consultabili. Il piano include un solo negozio attivo.",
     chooseFreeStore: "Scegli il negozio attivo",

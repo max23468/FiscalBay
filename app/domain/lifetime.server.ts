@@ -68,6 +68,15 @@ export function unusedCredit(net: number, period: { startsAt: string; endsAt: st
   return Math.floor((net * (end - at)) / (end - start));
 }
 
+/**
+ * Credito ridotto alla parte del pagamento non rimborsata: un rimborso parziale del periodo
+ * non torna una seconda volta come detrazione.
+ */
+export function refundedShare(credit: number, paid: number | null, refunded: number | null) {
+  if (!refunded || !paid) return credit;
+  return Math.floor((credit * Math.max(paid - refunded, 0)) / paid);
+}
+
 type LifetimeContext = {
   workspaceId: string;
   offer: LifetimeOffer | null;
@@ -123,7 +132,7 @@ export async function lifetimeContext(
         ORDER BY julianday(current_period_start) DESC LIMIT 1`)
       .bind(workspace.id, environmentOf(env)),
     db
-      .prepare(`SELECT starts_at, ends_at FROM workspace_entitlements
+      .prepare(`SELECT starts_at, ends_at, amount_paid, amount_refunded FROM workspace_entitlements
         WHERE workspace_id = ?1 AND source = 'premium' AND stripe_invoice_id IS NOT NULL
           AND revoked_at IS NULL AND julianday(starts_at) <= julianday(?2)
           AND julianday(?2) < julianday(ends_at)
@@ -141,7 +150,14 @@ export async function lifetimeContext(
         open: number;
       }
     | undefined;
-  const period = paid!.results[0] as { starts_at: string; ends_at: string } | undefined;
+  const period = paid!.results[0] as
+    | {
+        starts_at: string;
+        ends_at: string;
+        amount_paid: number | null;
+        amount_refunded: number | null;
+      }
+    | undefined;
   const own = workspace.status ? workspace : null;
   const reservation =
     own?.status === "reserved" && !own.completed_at
@@ -167,7 +183,11 @@ export async function lifetimeContext(
   const net = row && period ? generationNet(row.price_generation, row.offer) : 0;
   if (net === null) return { ...context, offer: null };
   const credit = period
-    ? unusedCredit(net, { startsAt: period.starts_at, endsAt: period.ends_at }, now)
+    ? refundedShare(
+        unusedCredit(net, { startsAt: period.starts_at, endsAt: period.ends_at }, now),
+        period.amount_paid,
+        period.amount_refunded,
+      )
     : 0;
   // Senza capacità per nuovi Premium si ferma il lifetime di chi non è già abbonato; il
   // passaggio di un abbonato non aggiunge carico.
