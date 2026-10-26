@@ -42,154 +42,160 @@ import type { EbayEnvironment } from "../view-models";
  * stesse regole. Ricerca, sblocco, esportazione e gestione dei negozi restano sul sito.
  */
 
-const copy = {
-  it: {
-    commands: {
-      status: "Piano, notifiche e negozi",
-      latest: "Ultimi ordini",
-      preferences: "Notifiche e negozi",
-      help: "Come funziona il bot",
-    } satisfies Record<BotCommand, string>,
-    plans: {
-      premium: (until: string) => `Premium fino al ${until}`,
-      trial: (until: string) => `Prova Premium fino al ${until}`,
-      lifetime: "Premium a vita",
-      free: "Free",
-    },
-    freeNote: "Con il piano Free le notifiche sono ferme.",
-    enabled: "Notifiche attive",
-    paused: "Notifiche in pausa",
-    filters: { fiscal: "solo con dato fiscale", all: "tutti gli ordini" },
-    filterTitles: { fiscal: "Solo ordini con dato fiscale", all: "Tutti gli ordini" },
-    modes: {
-      each: "Un messaggio per ordine",
-      digest: (time: string, zone: string) => `Riepilogo alle ${time} · ${zone}`,
-    },
-    stores: "Negozi",
-    excluded: "escluso",
-    reconnect: "da ricollegare",
-    suspended: "sospeso",
-    lastDelivery: (at: string) => `Ultimo invio ${at}`,
-    noDelivery: "Nessun invio finora",
-    unreachable: "Alcuni messaggi non sono arrivati dopo diversi tentativi.",
-    preferences: "Preferenze",
-    openSettings: "Impostazioni",
-    choosePlan: "Scegli il piano",
-    premiumRequired:
-      "Notifiche e ultimi ordini nel bot sono compresi in Premium, nella prova e nel lifetime.",
-    zoneNote: "Il fuso si cambia dal sito.",
-    pause: "Metti in pausa",
-    resume: "Riprendi le notifiche",
-    fiscalOnly: "Solo con dato fiscale",
-    allOrders: "Tutti gli ordini",
-    each: "Uno per ordine",
-    digest: "Riepilogo",
-    time: (time: string) => `Orario: ${time}`,
-    timeTitle: "Orario del riepilogo",
-    storeCount: (included: number, total: number) => `Negozi: ${included} di ${total}`,
-    storesTitle: "Negozi nelle notifiche",
-    back: "Indietro",
-    unlink: "Scollega la chat",
-    unlinkQuestion:
-      "Scollegare questa chat? Le notifiche in attesa si annullano e la chat non riceve più nulla finché non la colleghi di nuovo dal sito.",
-    unlinkConfirm: "Sì, scollega",
-    cancel: "Annulla",
-    unlinked:
-      "Chat scollegata. Puoi collegarla di nuovo da FiscalBay, in Impostazioni › Notifiche.",
-    expired: "Questo pulsante non è più valido.",
-    latest: "Ultimi ordini",
-    latestRange: (from: number, to: number, total: number) => `${from}–${to} di ${total}`,
-    latestEmpty: "Nessun ordine da mostrare nei negozi inclusi.",
-    more: "Altri 5",
-    previous: "Precedenti",
-    orders: "Apri gli ordini",
-    help: {
-      title: "FiscalBay",
-      intro: "Qui arrivano le notifiche degli ordini, secondo le preferenze delle Impostazioni.",
-      commands: [
-        ["⭐", "/stato", "piano, notifiche e negozi"],
-        ["🛒", "/ultimi", "gli ultimi ordini"],
-        ["⚙️", "/preferenze", "pausa, filtro, frequenza e negozi"],
-      ],
-      site: "Ricerca, sblocco ed esportazione restano sul sito.",
-    },
-  },
-  en: {
-    commands: {
-      status: "Plan, notifications and stores",
-      latest: "Latest orders",
-      preferences: "Notifications and stores",
-      help: "How the bot works",
-    } satisfies Record<BotCommand, string>,
-    plans: {
-      premium: (until: string) => `Premium until ${until}`,
-      trial: (until: string) => `Premium trial until ${until}`,
-      lifetime: "Lifetime Premium",
-      free: "Free",
-    },
-    freeNote: "Notifications are stopped on the Free plan.",
-    enabled: "Notifications on",
-    paused: "Notifications paused",
-    filters: { fiscal: "only with a tax ID", all: "all orders" },
-    filterTitles: { fiscal: "Only orders with a tax ID", all: "All orders" },
-    modes: {
-      each: "One message per order",
-      digest: (time: string, zone: string) => `Summary at ${time} · ${zone}`,
-    },
-    stores: "Stores",
-    excluded: "excluded",
-    reconnect: "to reconnect",
-    suspended: "suspended",
-    lastDelivery: (at: string) => `Last delivery ${at}`,
-    noDelivery: "Nothing delivered yet",
-    unreachable: "Some messages did not arrive after several attempts.",
-    preferences: "Preferences",
-    openSettings: "Settings",
-    choosePlan: "Choose a plan",
-    premiumRequired:
-      "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
-    zoneNote: "The time zone is changed on the website.",
-    pause: "Pause",
-    resume: "Resume notifications",
-    fiscalOnly: "Only with a tax ID",
-    allOrders: "All orders",
-    each: "One per order",
-    digest: "Summary",
-    time: (time: string) => `Time: ${time}`,
-    timeTitle: "Summary time",
-    storeCount: (included: number, total: number) => `Stores: ${included} of ${total}`,
-    storesTitle: "Stores in notifications",
-    back: "Back",
-    unlink: "Unlink this chat",
-    unlinkQuestion:
-      "Unlink this chat? Pending notifications are cancelled and the chat receives nothing until you link it again on the website.",
-    unlinkConfirm: "Yes, unlink",
-    cancel: "Cancel",
-    unlinked: "Chat unlinked. You can link it again in FiscalBay, under Settings › Notifications.",
-    expired: "This button is no longer valid.",
-    latest: "Latest orders",
-    latestRange: (from: number, to: number, total: number) => `${from}–${to} of ${total}`,
-    latestEmpty: "No orders to show in the included stores.",
-    more: "5 more",
-    previous: "Previous",
-    orders: "Open orders",
-    help: {
-      title: "FiscalBay",
-      intro: "Order notifications arrive here according to your Settings.",
-      commands: [
-        ["⭐", "/status", "plan, notifications and stores"],
-        ["🛒", "/latest", "the latest orders"],
-        ["⚙️", "/preferences", "pause, filter, frequency and stores"],
-      ],
-      site: "Search, unlocking and export stay on the website.",
-    },
-  },
-} satisfies Record<Language, unknown>;
+/** Testi del bot nella lingua della chat, composti a ogni risposta. */
+const copy = (language: Language) =>
+  (
+    {
+      it: {
+        commands: {
+          status: "Piano, notifiche e negozi",
+          latest: "Ultimi ordini",
+          preferences: "Notifiche e negozi",
+          help: "Come funziona il bot",
+        } satisfies Record<BotCommand, string>,
+        plans: {
+          premium: (until: string) => `Premium fino al ${until}`,
+          trial: (until: string) => `Prova Premium fino al ${until}`,
+          lifetime: "Premium a vita",
+          free: "Free",
+        },
+        freeNote: "Con il piano Free le notifiche sono ferme.",
+        enabled: "Notifiche attive",
+        paused: "Notifiche in pausa",
+        filters: { fiscal: "solo con dato fiscale", all: "tutti gli ordini" },
+        filterTitles: { fiscal: "Solo ordini con dato fiscale", all: "Tutti gli ordini" },
+        modes: {
+          each: "Un messaggio per ordine",
+          digest: (time: string, zone: string) => `Riepilogo alle ${time} · ${zone}`,
+        },
+        stores: "Negozi",
+        excluded: "escluso",
+        reconnect: "da ricollegare",
+        suspended: "sospeso",
+        lastDelivery: (at: string) => `Ultimo invio ${at}`,
+        noDelivery: "Nessun invio finora",
+        unreachable: "Alcuni messaggi non sono arrivati dopo diversi tentativi.",
+        preferences: "Preferenze",
+        openSettings: "Impostazioni",
+        choosePlan: "Scegli il piano",
+        premiumRequired:
+          "Notifiche e ultimi ordini nel bot sono compresi in Premium, nella prova e nel lifetime.",
+        zoneNote: "Il fuso si cambia dal sito.",
+        pause: "Metti in pausa",
+        resume: "Riprendi le notifiche",
+        fiscalOnly: "Solo con dato fiscale",
+        allOrders: "Tutti gli ordini",
+        each: "Uno per ordine",
+        digest: "Riepilogo",
+        time: (time: string) => `Orario: ${time}`,
+        timeTitle: "Orario del riepilogo",
+        storeCount: (included: number, total: number) => `Negozi: ${included} di ${total}`,
+        storesTitle: "Negozi nelle notifiche",
+        back: "Indietro",
+        unlink: "Scollega la chat",
+        unlinkQuestion:
+          "Scollegare questa chat? Le notifiche in attesa si annullano e la chat non riceve più nulla finché non la colleghi di nuovo dal sito.",
+        unlinkConfirm: "Sì, scollega",
+        cancel: "Annulla",
+        unlinked:
+          "Chat scollegata. Puoi collegarla di nuovo da FiscalBay, in Impostazioni › Notifiche.",
+        expired: "Questo pulsante non è più valido.",
+        latest: "Ultimi ordini",
+        latestRange: (from: number, to: number, total: number) => `${from}–${to} di ${total}`,
+        latestEmpty: "Nessun ordine da mostrare nei negozi inclusi.",
+        more: "Altri 5",
+        previous: "Precedenti",
+        orders: "Apri gli ordini",
+        help: {
+          title: "FiscalBay",
+          intro:
+            "Qui arrivano le notifiche degli ordini, secondo le preferenze delle Impostazioni.",
+          commands: [
+            ["⭐", "/stato", "piano, notifiche e negozi"],
+            ["🛒", "/ultimi", "gli ultimi ordini"],
+            ["⚙️", "/preferenze", "pausa, filtro, frequenza e negozi"],
+          ],
+          site: "Ricerca, sblocco ed esportazione restano sul sito.",
+        },
+      },
+      en: {
+        commands: {
+          status: "Plan, notifications and stores",
+          latest: "Latest orders",
+          preferences: "Notifications and stores",
+          help: "How the bot works",
+        } satisfies Record<BotCommand, string>,
+        plans: {
+          premium: (until: string) => `Premium until ${until}`,
+          trial: (until: string) => `Premium trial until ${until}`,
+          lifetime: "Lifetime Premium",
+          free: "Free",
+        },
+        freeNote: "Notifications are stopped on the Free plan.",
+        enabled: "Notifications on",
+        paused: "Notifications paused",
+        filters: { fiscal: "only with a tax ID", all: "all orders" },
+        filterTitles: { fiscal: "Only orders with a tax ID", all: "All orders" },
+        modes: {
+          each: "One message per order",
+          digest: (time: string, zone: string) => `Summary at ${time} · ${zone}`,
+        },
+        stores: "Stores",
+        excluded: "excluded",
+        reconnect: "to reconnect",
+        suspended: "suspended",
+        lastDelivery: (at: string) => `Last delivery ${at}`,
+        noDelivery: "Nothing delivered yet",
+        unreachable: "Some messages did not arrive after several attempts.",
+        preferences: "Preferences",
+        openSettings: "Settings",
+        choosePlan: "Choose a plan",
+        premiumRequired:
+          "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
+        zoneNote: "The time zone is changed on the website.",
+        pause: "Pause",
+        resume: "Resume notifications",
+        fiscalOnly: "Only with a tax ID",
+        allOrders: "All orders",
+        each: "One per order",
+        digest: "Summary",
+        time: (time: string) => `Time: ${time}`,
+        timeTitle: "Summary time",
+        storeCount: (included: number, total: number) => `Stores: ${included} of ${total}`,
+        storesTitle: "Stores in notifications",
+        back: "Back",
+        unlink: "Unlink this chat",
+        unlinkQuestion:
+          "Unlink this chat? Pending notifications are cancelled and the chat receives nothing until you link it again on the website.",
+        unlinkConfirm: "Yes, unlink",
+        cancel: "Cancel",
+        unlinked:
+          "Chat unlinked. You can link it again in FiscalBay, under Settings › Notifications.",
+        expired: "This button is no longer valid.",
+        latest: "Latest orders",
+        latestRange: (from: number, to: number, total: number) => `${from}–${to} of ${total}`,
+        latestEmpty: "No orders to show in the included stores.",
+        more: "5 more",
+        previous: "Previous",
+        orders: "Open orders",
+        help: {
+          title: "FiscalBay",
+          intro: "Order notifications arrive here according to your Settings.",
+          commands: [
+            ["⭐", "/status", "plan, notifications and stores"],
+            ["🛒", "/latest", "the latest orders"],
+            ["⚙️", "/preferences", "pause, filter, frequency and stores"],
+          ],
+          site: "Search, unlocking and export stay on the website.",
+        },
+      },
+    } satisfies Record<Language, unknown>
+  )[language];
 
 /** Il menu dei comandi del bot dell'ambiente, nelle due lingue. */
 export async function configureBotCommands(env: Env, fetcher: typeof fetch = fetch) {
   if (!telegramConfigured(env)) return;
-  await setBotCommands(env, { it: copy.it.commands, en: copy.en.commands }, fetcher);
+  await setBotCommands(env, { it: copy("it").commands, en: copy("en").commands }, fetcher);
 }
 
 /** Ultimi ordini consultabili dal bot e ordini per pagina. */
@@ -247,7 +253,8 @@ export async function consumeTelegramUpdate(
     )
     .bind(update.chatId, now.toISOString())
     .all<Link>();
-  if (update.topic === "start" && (update.tokenHash || links.length === 0))
+  // Senza token l'avvio è l'aiuto: chi non è collegato riceve dove collegarsi, come per i comandi.
+  if (update.topic === "start" && update.tokenHash)
     return consumeTelegramStart(
       env,
       {
@@ -307,7 +314,7 @@ async function commandMessages(
 }
 
 function helpMessage(env: Env, language: Language): BotMessage {
-  const help = copy[language].help;
+  const help = copy(language).help;
   return {
     html: [
       `👋 <b>${escape(help.title)}</b>\n${escape(help.intro)}`,
@@ -317,18 +324,18 @@ function helpMessage(env: Env, language: Language): BotMessage {
       `<i>${escape(help.site)}</i>`,
     ].join("\n\n"),
     buttons: [
-      [{ text: `${icons.link} ${copy[language].openSettings}`, url: settingsUrl(env, language) }],
+      [{ text: `${icons.link} ${copy(language).openSettings}`, url: settingsUrl(env, language) }],
     ],
   };
 }
 
 function premiumMessage(env: Env, language: Language): BotMessage {
   return {
-    html: `⭐ ${escape(copy[language].premiumRequired)}`,
+    html: `⭐ ${escape(copy(language).premiumRequired)}`,
     buttons: [
       [
         {
-          text: `⭐ ${copy[language].choosePlan}`,
+          text: `⭐ ${copy(language).choosePlan}`,
           url: appUrl(env, language, `${settingsPath}/piano`),
         },
       ],
@@ -415,14 +422,14 @@ const marks = {
 
 /** Frequenza del riepilogo con orario e fuso, come nelle Impostazioni. */
 function modeLine(language: Language, preferences: Preferences) {
-  const text = copy[language];
+  const text = copy(language);
   return preferences.mode === "each"
     ? `${marks.each} ${escape(text.modes.each)}`
     : `${marks.digest} ${escape(text.modes.digest(preferences.digestTime, zoneName(language, preferences.timeZone)))}`;
 }
 
 async function statusMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
-  const text = copy[link.language];
+  const text = copy(link.language);
   const state = await readState(env.DB, link, now);
   const { coverage, preferences } = state;
   const until = (iso: string) => date(link.language, preferences.timeZone, iso, now);
@@ -494,7 +501,7 @@ const choice = (on: boolean, label: string) => `${on ? "●" : "○"} ${label}`;
 const check = (on: boolean, label: string) => `${on ? "☑" : "☐"} ${label}`;
 
 async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
-  const text = copy[link.language];
+  const text = copy(link.language);
   const state = await readState(env.DB, link, now);
   const { preferences } = state;
   const active = state.stores.filter((store) => !store.paused);
@@ -566,7 +573,7 @@ async function preferencesMessage(env: Env, link: Link, now: Date): Promise<BotM
 }
 
 async function timesMessage(env: Env, link: Link, now: Date): Promise<BotMessage> {
-  const text = copy[link.language];
+  const text = copy(link.language);
   const { preferences } = await readState(env.DB, link, now);
   return {
     html: `${marks.digest} <b>${escape(text.timeTitle)}</b>\n${escape(zoneName(link.language, preferences.timeZone))}\n<i>${escape(text.zoneNote)}</i>`,
@@ -581,7 +588,7 @@ async function timesMessage(env: Env, link: Link, now: Date): Promise<BotMessage
 }
 
 async function storesMessage(env: Env, link: Link, page: number, now: Date): Promise<BotMessage> {
-  const text = copy[link.language];
+  const text = copy(link.language);
   const { stores } = await readState(env.DB, link, now);
   const pages = Math.max(1, Math.ceil(stores.length / storesPerPage));
   const current = Math.min(Math.max(page, 0), pages - 1);
@@ -621,7 +628,7 @@ async function storesMessage(env: Env, link: Link, page: number, now: Date): Pro
  * e le pagine aggiornano lo stesso messaggio.
  */
 async function latestMessage(env: Env, link: Link, offset: number, now: Date): Promise<BotMessage> {
-  const text = copy[link.language];
+  const text = copy(link.language);
   const state = await readState(env.DB, link, now);
   // Ogni negozio incluso con i propri ultimi ordini: quelli dei negozi esclusi non tolgono posto.
   const perStore = await Promise.all(
@@ -647,7 +654,8 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
   if (page.length === 0) return { html: escape(text.latestEmpty) };
   const environment = page.every(({ environment }) => environment === "sandbox")
     ? "sandbox"
-    : "production";
+    : // Stryker disable next-line StringLiteral: l'indirizzo distingue soltanto «sandbox»; ogni altro valore dà lo stesso risultato.
+      "production";
   const notices = page.map(({ order, environment }) => orderNotice(order, environment));
   const html = splitBlocks([
     `${icons.change.new} <b>${escape(text.latest)}</b> · <i>${escape(text.latestRange(offset + 1, offset + page.length, listed.length))}</i>`,
@@ -678,14 +686,14 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
 }
 
 /** Scelta di un pulsante delle preferenze, nella forma delle Impostazioni. */
-function preferenceChange(action: string, args: string[]): TelegramChange | null {
+function preferenceChange(action: string | undefined, args: string[]): TelegramChange | null {
   if (action === "en" && (args[0] === "0" || args[0] === "1"))
     return { name: "enabled", value: args[0] === "1" };
   if (action === "fi" && (args[0] === "fiscal" || args[0] === "all"))
     return { name: "filter", value: args[0] };
   if (action === "mo" && (args[0] === "each" || args[0] === "digest"))
     return { name: "mode", value: args[0] };
-  const time = args[0] ? `${args[0].slice(0, 2)}:${args[0].slice(2)}` : "";
+  const time = `${args[0]?.slice(0, 2)}:${args[0]?.slice(2)}`;
   if (action === "tm" && (telegramDigestTimes as readonly string[]).includes(time))
     return { name: "digestTime", value: time };
   if (action === "sx" && (args[1] === "0" || args[1] === "1") && args[2])
@@ -706,11 +714,11 @@ async function consumeCallback(
   fetcher: typeof fetch,
   now: Date,
 ) {
-  const [generation, action = "", ...args] = update.command!.split(":");
+  const [generation, action, ...args] = update.command!.split(":");
   const link = links.find((candidate) => candidate.id.slice(0, 8) === generation);
   const language = link?.language ?? "it";
   await quiet(
-    answerCallback(env, update.callbackId!, link ? undefined : copy[language].expired, fetcher),
+    answerCallback(env, update.callbackId!, link ? undefined : copy(language).expired, fetcher),
   );
   if (!link) return;
   const edit = (message: BotMessage) =>
@@ -727,7 +735,7 @@ async function consumeCallback(
   if (action === "tm") return edit(await timesMessage(env, link, now));
   if (action === "ss") return edit(await storesMessage(env, link, Number(args[0]) || 0, now));
   if (action === "ul" && args[0] !== "ok") {
-    const text = copy[language];
+    const text = copy(language);
     return edit({
       html: escape(text.unlinkQuestion),
       buttons: [
@@ -750,8 +758,8 @@ async function consumeCallback(
       ),
     ]);
     return edit({
-      html: escape(copy[language].unlinked),
-      buttons: [[{ text: copy[language].openSettings, url: settingsUrl(env, language) }]],
+      html: escape(copy(language).unlinked),
+      buttons: [[{ text: copy(language).openSettings, url: settingsUrl(env, language) }]],
     });
   }
   if (action === "la") {

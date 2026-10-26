@@ -159,80 +159,85 @@ export const icons = {
   copy: "📋",
 } as const;
 
-const text = {
-  it: {
-    change: {
-      new: "Nuovo ordine",
-      available: "Dato fiscale disponibile",
-      changed: "Dato fiscale aggiornato",
-      removed: "Dato fiscale rimosso",
-    },
-    today: "oggi",
-    yesterday: "ieri",
-    more: (count: number) => (count === 1 ? "e un altro articolo" : `e altri ${count} articoli`),
-    kinds: { CF: null, PIVA: "P.IVA" },
-    removedNote: "Il dato notificato in precedenza non è più nell'ordine.",
-    fiscal: {
-      checking: "Dato fiscale in verifica",
-      missing: "Nessun dato fiscale",
-      foreign: (country: string) => `Fatturazione estera (${country})`,
-      error: "Dato fiscale non letto: riprova da FiscalBay",
-      locked: "Da sbloccare in FiscalBay",
-      available: "",
-    } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
-    checkingNote: "Se arriva, ricevi un nuovo messaggio.",
-    open: "Apri in FiscalBay",
-    ebay: "Apri su eBay",
-    copy: "Copia Codice Fiscale",
-    orders: "Apri gli ordini",
-    digest: (date: string) => `Riepilogo del ${date}`,
-    digestCount: (count: number) =>
-      `${count === 1 ? "Un ordine" : `${count} ordini`} dall'ultimo riepilogo`,
-    import: {
-      title: "Importazione completata",
-      orders: (count: number) => (count === 1 ? "Un ordine" : `${count} ordini`),
-      fiscal: "con dato fiscale",
-      period: (from: string, until: string) => `dal ${from} al ${until}`,
-      note: "Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.",
-    },
-  },
-  en: {
-    change: {
-      new: "New order",
-      available: "Tax ID available",
-      changed: "Tax ID updated",
-      removed: "Tax ID removed",
-    },
-    today: "today",
-    yesterday: "yesterday",
-    more: (count: number) => (count === 1 ? "and one more item" : `and ${count} more items`),
-    kinds: { CF: null, PIVA: "VAT" },
-    removedNote: "The tax ID notified earlier is no longer in the order.",
-    fiscal: {
-      checking: "Tax ID being checked",
-      missing: "No tax ID",
-      foreign: (country: string) => `Billing abroad (${country})`,
-      error: "Tax ID not read: try again from FiscalBay",
-      locked: "To unlock in FiscalBay",
-      available: "",
-    } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
-    checkingNote: "If it arrives, you get a new message.",
-    open: "Open in FiscalBay",
-    ebay: "Open on eBay",
-    copy: "Copy tax code",
-    orders: "Open orders",
-    digest: (date: string) => `Summary of ${date}`,
-    digestCount: (count: number) =>
-      `${count === 1 ? "One order" : `${count} orders`} since the last summary`,
-    import: {
-      title: "Import completed",
-      orders: (count: number) => (count === 1 ? "One order" : `${count} orders`),
-      fiscal: "with a tax ID",
-      period: (from: string, until: string) => `from ${from} to ${until}`,
-      note: "Imported orders get no individual messages: new orders arrive from now on.",
-    },
-  },
-} satisfies Record<Language, unknown>;
+/** Testi dei messaggi nella lingua della chat, composti a ogni messaggio. */
+const text = (language: Language) =>
+  (
+    {
+      it: {
+        change: {
+          new: "Nuovo ordine",
+          available: "Dato fiscale disponibile",
+          changed: "Dato fiscale aggiornato",
+          removed: "Dato fiscale rimosso",
+        },
+        today: "oggi",
+        yesterday: "ieri",
+        more: (count: number) =>
+          count === 1 ? "e un altro articolo" : `e altri ${count} articoli`,
+        kinds: { CF: null, PIVA: "P.IVA" },
+        removedNote: "Il dato notificato in precedenza non è più nell'ordine.",
+        fiscal: {
+          checking: "Dato fiscale in verifica",
+          missing: "Nessun dato fiscale",
+          foreign: (country: string) => `Fatturazione estera (${country})`,
+          error: "Dato fiscale non letto: riprova da FiscalBay",
+          locked: "Da sbloccare in FiscalBay",
+          available: "",
+        } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
+        checkingNote: "Se arriva, ricevi un nuovo messaggio.",
+        open: "Apri in FiscalBay",
+        ebay: "Apri su eBay",
+        copy: "Copia Codice Fiscale",
+        orders: "Apri gli ordini",
+        digest: (date: string) => `Riepilogo del ${date}`,
+        digestCount: (count: number) =>
+          `${count === 1 ? "Un ordine" : `${count} ordini`} dall'ultimo riepilogo`,
+        import: {
+          title: "Importazione completata",
+          orders: (count: number) => (count === 1 ? "Un ordine" : `${count} ordini`),
+          fiscal: "con dato fiscale",
+          period: (from: string, until: string) => `dal ${from} al ${until}`,
+          note: "Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.",
+        },
+      },
+      en: {
+        change: {
+          new: "New order",
+          available: "Tax ID available",
+          changed: "Tax ID updated",
+          removed: "Tax ID removed",
+        },
+        today: "today",
+        yesterday: "yesterday",
+        more: (count: number) => (count === 1 ? "and one more item" : `and ${count} more items`),
+        kinds: { CF: null, PIVA: "VAT" },
+        removedNote: "The tax ID notified earlier is no longer in the order.",
+        fiscal: {
+          checking: "Tax ID being checked",
+          missing: "No tax ID",
+          foreign: (country: string) => `Billing abroad (${country})`,
+          error: "Tax ID not read: try again from FiscalBay",
+          locked: "To unlock in FiscalBay",
+          available: "",
+        } satisfies Record<FiscalSituation, string | ((country: string) => string)>,
+        checkingNote: "If it arrives, you get a new message.",
+        open: "Open in FiscalBay",
+        ebay: "Open on eBay",
+        copy: "Copy tax code",
+        orders: "Open orders",
+        digest: (date: string) => `Summary of ${date}`,
+        digestCount: (count: number) =>
+          `${count === 1 ? "One order" : `${count} orders`} since the last summary`,
+        import: {
+          title: "Import completed",
+          orders: (count: number) => (count === 1 ? "One order" : `${count} orders`),
+          fiscal: "with a tax ID",
+          period: (from: string, until: string) => `from ${from} to ${until}`,
+          note: "Imported orders get no individual messages: new orders arrive from now on.",
+        },
+      },
+    } satisfies Record<Language, unknown>
+  )[language];
 
 /** Data e ora locali nel fuso indicato. */
 export function localClock(timeZone: string, now: Date): { day: string; time: string } {
@@ -274,9 +279,9 @@ export function when(language: Language, timeZone: string, iso: string, now: Dat
   const yesterday = localClock(timeZone, new Date(now.getTime() - 86_400_000)).day;
   const day =
     at.day === today
-      ? text[language].today
+      ? text(language).today
       : at.day === yesterday
-        ? text[language].yesterday
+        ? text(language).yesterday
         : date(language, timeZone, iso, now);
   return `${day} ${at.time}`;
 }
@@ -308,7 +313,7 @@ const clip = (value: string, length: number) =>
 
 /** Valori fiscali in monospazio, che Telegram copia con un tocco; senza valori, lo stato. */
 function fiscalLines(language: Language, notice: OrderNotice): string[] {
-  const copy = text[language];
+  const copy = text(language);
   if (notice.values.length === 0) {
     const state = copy.fiscal[notice.fiscal];
     const line = typeof state === "function" ? state(notice.country ?? "") : state;
@@ -329,7 +334,7 @@ export function orderButtons(
   language: Language,
   notice: OrderNotice,
 ): BotButton[][] {
-  const copy = text[language];
+  const copy = text(language);
   const cf = notice.values.find((value) => value.kind === "CF");
   return [
     [
@@ -354,7 +359,7 @@ export function orderMessage(
   change: OrderChange,
   now: Date,
 ): BotMessage[] {
-  const copy = text[language];
+  const copy = text(language);
   const items = notice.items
     .slice(0, maxItems)
     .map((item) => `${icons.items} ${item.quantity} × ${escape(clip(item.title, 80))}`);
@@ -395,7 +400,7 @@ export function orderEntry(
   change: OrderChange | null,
   now: Date,
 ): string {
-  const copy = text[language];
+  const copy = text(language);
   return [
     `<a href="${escape(orderUrl(env, language, notice))}">${escape(notice.ebayOrderId)}</a> · ${escape(notice.storeName)}`,
     ...(change && change !== "new"
@@ -436,7 +441,7 @@ export function digestMessage(
   entries: Array<{ notice: OrderNotice; change: OrderChange }>,
   now: Date,
 ): BotMessage[] {
-  const copy = text[language];
+  const copy = text(language);
   const parts = splitBlocks([
     `${icons.digest} <b>${escape(copy.digest(date(language, timeZone, at, now)))}</b>\n<i>${escape(copy.digestCount(entries.length))}</i>`,
     ...entries.map(({ notice, change }) =>
@@ -483,7 +488,7 @@ export function importMessage(
   },
   now: Date,
 ): BotMessage {
-  const copy = text[language].import;
+  const copy = text(language).import;
   return {
     html: [
       `${icons.import} <b>${escape(copy.title)}</b> · ${escape(summary.storeName)}`,
@@ -499,7 +504,7 @@ export function importMessage(
     buttons: [
       [
         {
-          text: `${icons.link} ${text[language].orders}`,
+          text: `${icons.link} ${text(language).orders}`,
           url: appUrl(env, language, ordersPath, summary.environment, {
             negozio: summary.storeId,
           }),
