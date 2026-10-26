@@ -1702,16 +1702,17 @@ describe("invii degli ordini", () => {
     const key = await stored();
     expect(key).toMatch(/^"[0-9a-f]{64}"$/u);
     expect(key).not.toContain("RSSMRA");
-    // Un'impronta registrata come testo dei valori vale come la sua forma cifrata: nessuna
-    // variazione, e la riga passa alla forma nuova.
+    // Un'impronta registrata come testo dei valori torna fra i candidati con la migration e
+    // vale come la sua forma cifrata: nessuna variazione, e la riga passa alla forma nuova.
     await env.DB.prepare(
       "UPDATE telegram_order_notices SET fiscal_key = ?, evaluated_at = ? WHERE order_id = 'o-impronta'",
     )
-      .bind(JSON.stringify([["CF", null, "RSSMRA80A01H501U"]]), later(5).toISOString())
+      .bind(JSON.stringify([["CF", null, "RSSMRA80A01H501U"]]), later(15).toISOString())
       .run();
-    await env.DB.prepare("UPDATE tax_identifiers SET observed_at = ? WHERE order_id = 'o-impronta'")
-      .bind(later(15).toISOString())
-      .run();
+    const migration = env.TEST_MIGRATIONS.find(
+      ({ name }) => name === "0046_telegram_notice_digest.sql",
+    )!;
+    await env.DB.batch(migration.queries.map((query) => env.DB.prepare(query)));
     await run(api.fetcher, 20);
     expect(api.texts()).toHaveLength(1);
     expect(await stored()).toBe(key);
