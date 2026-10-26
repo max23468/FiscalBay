@@ -208,10 +208,10 @@ export function when(language: Language, timeZone: string, iso: string, now: Dat
   return `${day} ${at.time}`;
 }
 
-export const settingsUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language) =>
+export const settingsUrl = (env: { APP_ORIGIN: string }, language: Language) =>
   appUrl(env, language, notificationSettingsPath);
 
-const orderUrl = (env: Pick<Env, "APP_ORIGIN">, language: Language, notice: OrderNotice) =>
+const orderUrl = (env: { APP_ORIGIN: string }, language: Language, notice: OrderNotice) =>
   appUrl(env, language, `${ordersPath}/${encodeURIComponent(notice.id)}`, notice.environment);
 
 const maxItems = 3;
@@ -237,7 +237,7 @@ const amount = (language: Language, notice: OrderNotice) =>
 
 /** Pulsanti di un ordine: dettaglio, eBay per i negozi reali e copia del CF autorizzato. */
 export function orderButtons(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   notice: OrderNotice,
 ): BotButton[][] {
@@ -259,7 +259,7 @@ export function orderButtons(
  * acquirente, totale, articoli, numero e data.
  */
 export function orderMessage(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   timeZone: string,
   notice: OrderNotice,
@@ -300,7 +300,7 @@ export function orderMessage(
  * dettaglio in FiscalBay, poi acquirente, totale, data e dato fiscale.
  */
 export function orderEntry(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   timeZone: string,
   notice: OrderNotice,
@@ -341,7 +341,7 @@ export function copyButtons(notices: OrderNotice[], html: string): BotButton[][]
 
 /** Riepilogo giornaliero: un blocco per ordine, nei messaggi necessari, e l'accesso agli ordini. */
 export function digestMessage(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   timeZone: string,
   at: string,
@@ -381,7 +381,7 @@ export function digestMessage(
 
 /** Completamento di un'importazione: un solo messaggio con conteggi e periodo acquisito. */
 export function importMessage(
-  env: Pick<Env, "APP_ORIGIN">,
+  env: { APP_ORIGIN: string },
   language: Language,
   timeZone: string,
   summary: {

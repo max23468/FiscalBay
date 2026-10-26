@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { BrowserContext, Page } from "@playwright/test";
 import { expect, networkIdle } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
@@ -9,7 +9,7 @@ import { testAccount } from "./test-account";
  * movimento ridotto. Qui gli aiuti condivisi dalle spec delle aree.
  */
 
-export async function open(page: Page, path: string, scenario?: string) {
+export async function open(page: Page, path = "/anteprima/ordini", scenario?: string) {
   await page.bringToFront();
   if (scenario) {
     await page.request.post("/anteprima", {
@@ -42,18 +42,36 @@ export const areas = [
     name: "anteprima",
     base: "/anteprima",
     detail: "ord-02",
+    locked: "02-44519-70831",
     copied: { id: "27-10293-84756", value: "RSSMRA80A41H501Y" },
   },
   {
     name: "area reale",
     base: "/app",
     detail: "collaudo-ordine-sbloccato",
+    locked: testAccount.orders.locked,
     copied: { id: testAccount.orders.unlocked, value: testAccount.taxCodes.unlocked },
   },
 ] as const;
 
-export async function enter(page: Page, baseURL: string, area: (typeof areas)[number]) {
-  if (area.base === "/app") await useLocalAccount(page.context(), "member", baseURL);
+/** Nell'area reale la sessione sintetica locale attraversa loader e azioni senza bypass. */
+export async function enter(
+  context: BrowserContext,
+  baseURL: string,
+  area: (typeof areas)[number],
+) {
+  if (area.base === "/app") await useLocalAccount(context, "member", baseURL);
+}
+
+/** Elenco con la ricerca: la query va nel corpo e l'indirizzo riceve la sua forma cifrata. */
+export async function searched(page: Page, query: string, base = "/anteprima") {
+  // L'area reale accetta la ricerca soltanto dalla propria origine.
+  const response = await page.request.post(
+    base === "/app" ? "/api/v1/orders/search" : `${base}/ricerca`,
+    { form: { q: query }, headers: { origin: new URL(page.url()).origin }, maxRedirects: 0 },
+  );
+  expect(response.status()).toBe(303);
+  return response.headers().location!;
 }
 
 export const noPageOverflow = (page: Page) =>

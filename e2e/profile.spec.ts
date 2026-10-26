@@ -3,8 +3,6 @@ import { expect, test } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
-test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
-
 test.describe("area reale", () => {
   test.skip(
     Boolean(process.env.E2E_BASE_URL),

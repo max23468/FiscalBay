@@ -1,5 +1,5 @@
 import { defineConfig } from "@playwright/test";
-import { localOrigin, localPort, localSecret } from "./e2e/local-account";
+import { localOrigin, localPort } from "./e2e/local-account";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -28,16 +28,7 @@ export default defineConfig({
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        // Le pagine pubbliche inizializzano Auth anche senza sessione: solo valori sintetici.
-        env: {
-          APP_ORIGIN: localOrigin,
-          BETTER_AUTH_SECRET: localSecret,
-          GOOGLE_CLIENT_ID: "google-test-client",
-          GOOGLE_CLIENT_SECRET: "google-test-secret",
-          EBAY_CLIENT_ID: "ebay-test-client",
-          EBAY_CLIENT_SECRET: "ebay-test-secret",
-          EBAY_RUNAME: "ebay-test-runame",
-        },
+        // Origine e segreti sintetici arrivano dalla copia locale scritta da `local-preview.mjs`.
         // In CI `pnpm verify` ha già prodotto la build che viene poi distribuita.
         command: `${process.env.E2E_PREBUILT ? "" : process.env.E2E_PRODUCTION === "1" ? "pnpm build:live && " : "pnpm build && "}node scripts/local-preview.mjs && node node_modules/vite/bin/vite.js preview .cloudflare/preview --config vite.config.ts --host localhost --port ${localPort} --strictPort`,
         gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },

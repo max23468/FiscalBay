@@ -98,9 +98,11 @@ export async function networkIdle(page: Page) {
  * `browserErrors` anche i messaggi `console.error`. I listener partono solo se la prova li usa.
  */
 export const test = base.extend<{ pageErrors: string[]; browserErrors: string[] }>({
+  // Le rotte simulate di una prova non sopravvivono alla chiusura del contesto.
   context: async ({ context }, use) => {
     watchNetwork(context);
     await use(context);
+    await context.unrouteAll({ behavior: "ignoreErrors" });
   },
   pageErrors: async ({ page }, use) => {
     const errors: string[] = [];

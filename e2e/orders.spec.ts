@@ -1,10 +1,7 @@
-import type { Page } from "@playwright/test";
-import { areas, enter, noPageOverflow, open } from "./components";
+import { areas, enter, noPageOverflow, open, searched } from "./components";
 import { expect, test, watchNetwork } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
-
-test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
 
 test.describe("area reale", () => {
   test.skip(
@@ -509,15 +506,6 @@ test.describe("area reale", () => {
 });
 
 /** Elenco con la ricerca: la query va nel corpo e l'indirizzo riceve la sua forma cifrata. */
-async function searched(page: Page, query: string, base = "/anteprima") {
-  const response = await page.request.post(`${base}/ricerca`, {
-    form: { q: query },
-    maxRedirects: 0,
-  });
-  expect(response.status()).toBe(303);
-  return response.headers().location!;
-}
-
 for (const language of ["it", "en"] as const) {
   for (const width of [390, 1280]) {
     test(`ordini: conferme, stati e dettaglio ${language} a ${width} px`, async ({
@@ -769,7 +757,7 @@ for (const area of areas)
     page,
     baseURL,
   }) => {
-    await enter(page, baseURL!, area);
+    await enter(page.context(), baseURL!, area);
     await open(page, `${area.base}/ordini`);
     await page.evaluate(() => {
       let attempts = 0;
@@ -832,7 +820,7 @@ for (const area of areas)
     page,
     baseURL,
   }) => {
-    await enter(page, baseURL!, area);
+    await enter(page.context(), baseURL!, area);
     await page.setViewportSize({ width: 667, height: 260 });
     await open(page, `${area.base}/ordini/${area.detail}`);
     const dialog = page.getByRole("dialog");
@@ -946,7 +934,7 @@ for (const area of areas)
     `superfici nei due temi, ${area.name}`,
     { tag: area.base === "/anteprima" ? "@smoke" : [] },
     async ({ page, baseURL }) => {
-      await enter(page, baseURL!, area);
+      await enter(page.context(), baseURL!, area);
       for (const [scheme, background, card, panel] of [
         ["light", "rgb(245, 247, 250)", "rgb(255, 255, 255)", "rgb(255, 255, 255)"],
         ["dark", "rgb(18, 20, 24)", "rgb(28, 31, 37)", "rgb(36, 40, 48)"],

@@ -1,5 +1,6 @@
-import type { BrowserContext, Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
+import { areas, enter, open, searched } from "./components";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -10,51 +11,87 @@ import { testAccount } from "./test-account";
  * sessione e gli ordini sintetici del database locale; l'anteprima resta per gli stati rari.
  */
 
-// Le richieste locali ancora intercettate a fine prova non sono errori del collaudo.
-test.afterEach(async ({ context }) => context.unrouteAll({ behavior: "ignoreErrors" }));
-
-const areas = [
-  {
-    name: "anteprima",
-    base: "/anteprima",
-    locked: "02-44519-70831",
-    unlocked: { id: "27-10293-84756", value: "RSSMRA80A41H501Y" },
-  },
-  {
-    name: "area reale",
-    base: "/app",
-    locked: testAccount.orders.locked,
-    unlocked: { id: testAccount.orders.unlocked, value: testAccount.taxCodes.unlocked },
-  },
-] as const;
-type Area = (typeof areas)[number];
-
-/** Nell'area reale la sessione sintetica locale attraversa loader e azioni senza bypass. */
-async function enter(context: BrowserContext, baseURL: string, area: Area) {
-  if (area.base === "/app") await useLocalAccount(context, "member", baseURL);
+/** Navigazione principale degli Ordini, uguale nell'anteprima e nell'area reale. */
+async function expectOrdersNavigation(page: Page) {
+  await expect(page).toHaveTitle("FiscalBay | Ordini");
+  const nav = page.getByRole("navigation", { name: "Navigazione principale" });
+  await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
+  await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
 }
 
-async function open(page: Page, path = "/anteprima/ordini") {
-  await page.goto(path);
-  if (path.includes("/anteprima"))
-    await expect(page.getByRole("combobox", { name: /Scenario/ })).toBeEnabled({
-      timeout: 20_000,
-    });
-  await expect(
-    page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
-  ).toBeEnabled();
-  await networkIdle(page);
+/** Dal menu account si arriva alla Sicurezza dell'area aperta. */
+async function openSecurityFromAccountMenu(page: Page, base: string) {
+  await page.getByRole("button", { name: "Account" }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Profilo",
+    "Sicurezza",
+    "Piano e pagamenti",
+    "Impostazioni",
+    "Visita fiscalbay.it",
+    "Esci",
+  ]);
+  await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
+  await expect(page).toHaveURL(new RegExp(`${base}/impostazioni/sicurezza$`, "u"));
+  await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
 }
 
-/** Elenco con la ricerca: la query va nel corpo e l'indirizzo riceve la sua forma cifrata. */
-async function searched(page: Page, query: string, base = "/anteprima") {
-  // L'area reale accetta la ricerca soltanto dalla propria origine.
-  const response = await page.request.post(
-    base === "/app" ? "/api/v1/orders/search" : `${base}/ricerca`,
-    { form: { q: query }, headers: { origin: new URL(page.url()).origin }, maxRedirects: 0 },
+/**
+ * Ricerca della top bar con un solo risultato: elenco filtrato con la query cifrata
+ * nell'indirizzo, poi il dettaglio dal suggerimento. Restituisce il pannello aperto.
+ */
+async function searchFromTopBar(page: Page, base: string, query: string, suggestion: RegExp) {
+  const search = page.getByRole("searchbox", { name: "Cerca ordini" });
+  await search.fill(query);
+  const link = page.getByRole("search").getByRole("link", { name: suggestion });
+  await expect(link).toBeVisible();
+  await page.getByRole("link", { name: "Vedi tutti i risultati (1)" }).click();
+  await expect(page).toHaveURL(
+    new RegExp(`${base}/ordini\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`, "u"),
   );
-  expect(response.status()).toBe(303);
-  return response.headers().location!;
+  expect(page.url()).not.toContain(query);
+  await expect(search).toHaveValue(query);
+  await expect(
+    page.getByRole("region", { name: "Elenco ordini" }).getByRole("article"),
+  ).toHaveCount(1);
+  await search.fill("");
+  await search.fill(query);
+  await link.click();
+  await expect(page).toHaveURL(
+    new RegExp(`${base}/ordini/[^/?]+\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+  );
+  return page.getByRole("dialog");
+}
+
+/** Indirizzo inesistente, filtro sconosciuto e ricerca senza risultati restano nell'app. */
+async function expectOrdersFallbacks(page: Page, base: string, missing: string, total: string) {
+  const response = await page.goto(`${base}/ordini/${missing}`);
+  expect(response?.status()).toBe(404);
+  await expect(page.getByRole("heading", { level: 1, name: "Ordine non trovato" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Navigazione principale" })).toBeVisible();
+  await page.getByRole("link", { name: "Torna agli ordini" }).click();
+  await expect(page).toHaveURL(new RegExp(`${base}/ordini(?:[?&]vista=[0-9a-z]+)?$`, "u"));
+
+  await open(page, `${base}/ordini?pagamento=sconosciuto`);
+  await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");
+  await expect(page.getByText(total)).toBeVisible();
+
+  await open(page, await searched(page, "zzzz", base));
+  await expect(page.getByRole("searchbox").first()).toHaveValue("zzzz");
+  await expect(page.getByText("Prova un’altra ricerca.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Cancella ricerca" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Seleziona" })).toBeDisabled();
+}
+
+/** La conferma forte abilita l'eliminazione soltanto con il nome esatto del negozio. */
+async function confirmStoreDeletion(page: Page, dialog: Locator, name: string) {
+  await dialog.getByRole("button", { name: "Scollega ed elimina negozio" }).click();
+  const confirm = page.getByRole("alertdialog");
+  const button = confirm.getByRole("button", { name: "Scollega ed elimina negozio" });
+  await expect(button).toBeDisabled();
+  await confirm.getByRole("textbox").fill(name);
+  await expect(button).toBeEnabled();
+  return { confirm, button };
 }
 
 async function chooseScenario(page: Page, name: string) {
@@ -69,28 +106,13 @@ test(
   async ({ page }) => {
     await open(page, "/anteprima");
     await expect(page).toHaveURL(/\/anteprima\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
-    await expect(page).toHaveTitle("FiscalBay | Ordini");
-    const nav = page.getByRole("navigation", { name: "Navigazione principale" });
-    await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
-    await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
+    await expectOrdersNavigation(page);
     await page.getByRole("button", { name: "Notifiche, 1 da leggere" }).click();
     await expect(page.getByText("Manutenzione programmata")).toBeVisible();
     await page.getByRole("button", { name: "Segna tutte come lette" }).click();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Account" }).click();
-    const menu = page.getByRole("menu");
-    await expect(menu.getByRole("menuitem")).toHaveText([
-      "Profilo",
-      "Sicurezza",
-      "Piano e pagamenti",
-      "Impostazioni",
-      "Visita fiscalbay.it",
-      "Esci",
-    ]);
-    await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
-    await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza$/u);
-    await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
+    await openSecurityFromAccountMenu(page, "/anteprima");
   },
 );
 
@@ -487,22 +509,9 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
     continueHydration();
   }
   await expect(search).toBeEnabled();
-  await search.fill("carburatore");
-  const suggestion = page.getByRole("search").getByRole("link", { name: /Maria Rossi/ });
-  await expect(suggestion).toBeVisible();
-  await page.getByRole("link", { name: "Vedi tutti i risultati (1)" }).click();
-  // L'indirizzo conserva la ricerca soltanto cifrata.
-  await expect(page).toHaveURL(/\/anteprima\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
-  expect(page.url()).not.toContain("carburatore");
-  await expect(search).toHaveValue("carburatore");
   await expect(
-    page.getByRole("region", { name: "Elenco ordini" }).getByRole("article"),
-  ).toHaveCount(1);
-  await search.fill("");
-  await search.fill("carburatore");
-  await suggestion.click();
-  await expect(page).toHaveURL(/\/ordini\/ord-\d+\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
-  await expect(page.getByRole("dialog")).toBeVisible();
+    await searchFromTopBar(page, "/anteprima", "carburatore", /Maria Rossi/),
+  ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
   await search.fill("Conti");
@@ -531,12 +540,7 @@ test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) 
   await page.getByRole("link", { name: /Retro Parts Europe/ }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Autorizzazione incompleta");
-  await dialog.getByRole("button", { name: "Scollega ed elimina negozio" }).click();
-  const confirm = page.getByRole("alertdialog");
-  const button = confirm.getByRole("button", { name: "Scollega ed elimina negozio" });
-  await expect(button).toBeDisabled();
-  await confirm.getByRole("textbox").fill("Retro Parts Europe");
-  await expect(button).toBeEnabled();
+  const { button } = await confirmStoreDeletion(page, dialog, "Retro Parts Europe");
   // Riuscita l'eliminazione, il pannello si chiude e l'avviso resta visibile sull'elenco.
   await button.click();
   await expect(
@@ -687,22 +691,7 @@ test("la prova si attiva volontariamente, poi la fine è in evidenza e non si ri
 });
 
 test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async ({ page }) => {
-  const response = await page.goto("/anteprima/ordini/ord-999");
-  expect(response?.status()).toBe(404);
-  await expect(page.getByRole("heading", { level: 1, name: "Ordine non trovato" })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Navigazione principale" })).toBeVisible();
-  await page.getByRole("link", { name: "Torna agli ordini" }).click();
-  await expect(page).toHaveURL(/\/anteprima\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
-
-  await open(page, "/anteprima/ordini?pagamento=sconosciuto");
-  await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");
-  await expect(page.getByText("12 ordini")).toBeVisible();
-
-  await open(page, await searched(page, "zzzz"));
-  await expect(page.getByRole("searchbox").first()).toHaveValue("zzzz");
-  await expect(page.getByText("Prova un’altra ricerca.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Cancella ricerca" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Seleziona" })).toBeDisabled();
+  await expectOrdersFallbacks(page, "/anteprima", "ord-999", "12 ordini");
 
   await page.getByRole("combobox", { name: "Periodo" }).click();
   for (const period of ["Ultimi 90 giorni", "Ultimi 6 mesi", "Ultimi 12 mesi"])
@@ -811,10 +800,7 @@ test.describe("area reale", () => {
 
   test("Ordini con navigazione, campanella e menu account", async ({ page }) => {
     await open(page, "/app/ordini");
-    await expect(page).toHaveTitle("FiscalBay | Ordini");
-    const nav = page.getByRole("navigation", { name: "Navigazione principale" });
-    await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
-    await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
+    await expectOrdersNavigation(page);
     // Nel Free i negozi oltre a quello attivo sono in pausa per il piano: il collegamento
     // scaduto non avvisa nella campanella.
     await page.getByRole("button", { name: /^Notifiche/u }).click();
@@ -823,59 +809,19 @@ test.describe("area reale", () => {
     await expect(bell.getByRole("link", { name: /collaudo-scaduto/u })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(bell).toBeHidden();
-    await page.getByRole("button", { name: "Account" }).click();
-    const menu = page.getByRole("menu");
-    await expect(menu.getByRole("menuitem")).toHaveText([
-      "Profilo",
-      "Sicurezza",
-      "Piano e pagamenti",
-      "Impostazioni",
-      "Visita fiscalbay.it",
-      "Esci",
-    ]);
-    await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
-    await expect(page).toHaveURL(/\/app\/impostazioni\/sicurezza$/u);
-    await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
+    await openSecurityFromAccountMenu(page, "/app");
   });
 
   test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({ page }) => {
     await open(page, "/app/ordini");
-    const search = page.getByRole("searchbox", { name: "Cerca ordini" });
-    await search.fill(testAccount.orders.unlocked);
-    const suggestion = page
-      .getByRole("search")
-      .getByRole("link", { name: new RegExp(testAccount.orders.unlocked, "u") });
-    await expect(suggestion).toBeVisible();
-    await page.getByRole("link", { name: "Vedi tutti i risultati (1)" }).click();
-    await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
-    await expect(search).toHaveValue(testAccount.orders.unlocked);
-    await expect(
-      page.getByRole("region", { name: "Elenco ordini" }).getByRole("article"),
-    ).toHaveCount(1);
-    await search.fill("");
-    await search.fill(testAccount.orders.unlocked);
-    await suggestion.click();
-    await expect(page).toHaveURL(/\/app\/ordini\/[^/?]+\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
-    await expect(page.getByRole("dialog")).toContainText(testAccount.taxCodes.unlocked);
+    const id = testAccount.orders.unlocked;
+    await expect(await searchFromTopBar(page, "/app", id, new RegExp(id, "u"))).toContainText(
+      testAccount.taxCodes.unlocked,
+    );
   });
 
   test("stati vuoti, ricerca e indirizzi inesistenti restano dentro l'app", async ({ page }) => {
-    const response = await page.goto("/app/ordini/non-esiste");
-    expect(response?.status()).toBe(404);
-    await expect(page.getByRole("heading", { level: 1, name: "Ordine non trovato" })).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Navigazione principale" })).toBeVisible();
-    await page.getByRole("link", { name: "Torna agli ordini" }).click();
-    await expect(page).toHaveURL(/\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
-
-    await open(page, "/app/ordini?pagamento=sconosciuto");
-    await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");
-    await expect(page.getByText("2 ordini")).toBeVisible();
-
-    await open(page, await searched(page, "zzzz", "/app"));
-    await expect(page.getByRole("searchbox").first()).toHaveValue("zzzz");
-    await expect(page.getByText("Prova un’altra ricerca.", { exact: true })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Cancella ricerca" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Seleziona" })).toBeDisabled();
+    await expectOrdersFallbacks(page, "/app", "non-esiste", "2 ordini");
   });
 
   test("negozio da ricollegare e conferma forte dell'eliminazione", async ({ page }) => {
@@ -884,12 +830,7 @@ test.describe("area reale", () => {
     await page.getByRole("table", { name: "Elenco negozi" }).getByRole("link", { name }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText(name);
-    await dialog.getByRole("button", { name: "Scollega ed elimina negozio" }).click();
-    const confirm = page.getByRole("alertdialog");
-    const button = confirm.getByRole("button", { name: "Scollega ed elimina negozio" });
-    await expect(button).toBeDisabled();
-    await confirm.getByRole("textbox").fill(name);
-    await expect(button).toBeEnabled();
+    const { confirm } = await confirmStoreDeletion(page, dialog, name);
     // Il negozio serve alle altre prove: l'eliminazione resta alla prova dell'errore.
     await confirm.getByRole("button", { name: "Annulla", exact: true }).click();
     await expect(confirm).toBeHidden();

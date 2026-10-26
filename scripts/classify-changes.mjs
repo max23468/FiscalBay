@@ -51,7 +51,7 @@ const tooling = [
   /^\.github\//u,
   /^\.claude\//u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:copy|docs|repo|pages)|classify-changes|benchmark|coverage-report|mutation(?:-vitest)?|find-(?:build|deployed)|reset-test-account|watch-invocations|release\/release(?:-notes|-cycle)?)\.mjs$/u,
+  /^scripts\/(?:verify-(?:copy|docs|repo|pages)|classify-changes|benchmark|coverage-report|mutation(?:-vitest)?|find-(?:build|deployed)|reset-test-account|stripe-account|watch-invocations|release\/release(?:-notes|-cycle)?)\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|mutation)\.config\.ts)$/u,
 ];
@@ -62,9 +62,10 @@ const unit = /^(?:test\/|vitest(?:\.(?:cloudflare|unit))?\.config\.ts$)/u;
 // Spec browser: una spec modificata seleziona se stessa; gli altri file di `e2e/` servono a tutte.
 const browserSpec = /^e2e\/([^/]+\.spec)\.ts$/u;
 
-// Prove browser e loro strumenti: provano la build ma non cambiano l'artefatto distribuito.
+// Prove browser e loro strumenti, compreso il D1 locale dell'account sintetico: provano la build
+// ma non cambiano l'artefatto distribuito.
 const browser =
-  /^(?:e2e\/|playwright\.config\.ts$|scripts\/(?:browser-tests|local-preview)\.mjs$)/u;
+  /^(?:e2e\/|playwright\.config\.ts$|scripts\/(?:browser-tests|local-preview|local-d1)\.mjs$)/u;
 
 /**
  * Vero se le due versioni della configurazione differiscono soltanto nei valori
