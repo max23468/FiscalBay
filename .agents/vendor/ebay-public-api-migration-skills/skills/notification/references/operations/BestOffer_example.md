@@ -1,5 +1,0 @@
-# BestOffer legacy SOAP body example
-
-```xml
-<soapenv:Body> < GetBestOffersResponse xmlns="urn:ebay:apis:eBLBaseComponents"> <Timestamp>2005-01-20T01:46:15.839Z</Timestamp> <Ack>Success</Ack> <CorrelationID>EXAMPLE_CORRELATION_ID</CorrelationID> <Version>361</Version> <Build>EXAMPLE_BUILD</Build> <NotificationEventName> BestOffer </NotificationEventName> <BestOfferArray> <BestOffer> <BestOfferID>EXAMPLE_BEST_OFFER_ID</BestOfferID> <ExpirationTime>2005-01-21T02:46:23.000Z</ExpirationTime> <Buyer> <Email>user@example.com</Email> <FeedbackScore>115</FeedbackScore> <RegistrationDate>1999-01-19T08:00:00.000Z</RegistrationDate> <UserID>example-user</UserID> </Buyer> <Currency>USD</Currency> <Price>0.5</Price> <Status>Pending</Status> <Quantity>1</Quantity> </BestOffer> </BestOfferArray> <Item> <BuyItNowPrice>1.0</BuyItNowPrice> <Currency>USD</Currency> <ListingDetails> <EndTime>2005-01-24T02:45:36.000Z</EndTime> </ListingDetails> <Location>Example Location</Location> <Title>Example listing title</Title> </Item> </GetBestOffersResponse> </soapenv:Body>
-```

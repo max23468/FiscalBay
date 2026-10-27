@@ -34,7 +34,7 @@ describe("livello del gate dai file modificati", () => {
       "README.md",
       "docs/DECISION_REGISTER.md",
       "docs/brand/README.md",
-      "docs/archive/2026-10-03-settings-profile/profile-it-1440-light.png",
+      "docs/archive/screenshot.png",
     ])
       assert.equal(fileLevel(file), "docs", file);
     for (const file of [
@@ -105,7 +105,7 @@ describe("livello del gate dai file modificati", () => {
     }
     assert.equal(plan(["README.md"]).script, levelScripts.docs);
     assert.equal(plan(["AGENTS.md"]).script, levelScripts.tooling);
-    for (const file of [".mcp.json", ".codex/config.toml", ".agents/vendor/package/.gitignore"])
+    for (const file of [".mcp.json", ".codex/config.toml", ".agents/skills/x.yaml"])
       assert.equal(plan([file]).script, levelScripts.tooling, file);
     assert.equal(plan([]).script, levelScripts.full);
   });

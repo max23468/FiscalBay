@@ -1,7 +1,0 @@
-# AuctionCheckoutComplete
-
-- Source URL: https://developer.ebay.com/api-docs/static/pn_auction-checkout-complete.html
-
-## Description
-
-An AuctionCheckoutComplete notification is sent when a buyer completes the checkout process for an auction or fixed-price item. Usually, an AuctionCheckoutComplete notification occurs only once per listing. However, if the payment for checkout fails, the checkout status will change from "complete" to "incomplete." If the buyer then successfully pays for the item via checkout, the checkout status will change back to "complete" again. When the checkout status changes back to "complete," another AuctionCheckoutComplete notification will be sent. For multiple line item orders, an AuctionCheckoutComplete notification is only generated for one of the line items in the order. In this case, the seller would look for the containing order number for the line item in the Transaction.ContainingOrder.OrderID field, and then make a GetOrders call (using the container order ID as an input filter) to retrieve complete information for the order. Data Fields Returned API Call that returns this notification: GetItemTransactions with default detail level The data fields returned by the AuctionCheckoutComplete notification are the same as those returned by the GetItemTransactions call with default details requested. Refer to the GetItemTransactions call reference documentation for additional information. Refer to SOAP Message Body for information about the standard elements returned for all notifications.
