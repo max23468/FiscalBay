@@ -3,6 +3,7 @@ import type { Language } from "../i18n";
 import { linkReadAdmitted } from "./admission.server";
 import { applyFreePlan } from "./free-store.server";
 import { acquireOrders } from "./order-acquisition.server";
+import { serviceSetting } from "./service-settings.server";
 import type { EbayEnvironment } from "../view-models";
 import { saveStoreCredentials } from "../integrations/ebay/seller-credentials.server";
 import {
@@ -55,6 +56,8 @@ export async function completeStoreLink(input: {
   const { env: environment, link, search, fetcher } = input;
   if (link.expired || input.sessionUserId !== link.userId) return "errore";
   if (search.has("error")) return "negato";
+  // Chiamate eBay spente dalla console dopo l'avvio: il consenso non si scambia.
+  if (!(await serviceSetting(environment.DB, "ebay_calls"))) return "errore";
 
   const issued = input.now ?? new Date();
   const now = issued.toISOString();

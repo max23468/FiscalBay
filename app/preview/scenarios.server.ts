@@ -40,6 +40,7 @@ export const scenarioIds = [
   "acquisti-sospesi",
   "aggiornamento",
   "ebay-non-disponibile",
+  "letture-sospese",
   "negozio-scaduto",
   "negozio-sospeso",
   "dati-discordanti",
@@ -191,6 +192,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
     en: {
       name: "eBay not responding",
       focus: "Last update time, eBay-dependent actions paused, everything else usable.",
+    },
+  },
+  "letture-sospese": {
+    it: {
+      name: "Letture eBay sospese",
+      focus:
+        "Manutenzione di FiscalBay: ordini consultabili, sincronizzazione e collegamento sospesi fino alla ripresa.",
+    },
+    en: {
+      name: "eBay reads paused",
+      focus:
+        "FiscalBay maintenance: orders available, syncing and connecting paused until reads resume.",
     },
   },
   "negozio-scaduto": {
@@ -1138,6 +1151,8 @@ export interface Scenario {
   notices: OrdersNotice[];
   syncRunning: boolean;
   ebayDown: boolean;
+  /** Letture sospese da FiscalBay per manutenzione: le azioni di eBay come con `ebayDown`. */
+  ebayMaintenance: boolean;
   /** Auth o database non rispondono: le pagine non mostrano dati. */
   unavailable: boolean;
   elsewhere: boolean;
@@ -1304,6 +1319,7 @@ export function loadScenario(
     notices: [] as OrdersNotice[],
     syncRunning: false,
     ebayDown: false,
+    ebayMaintenance: false,
     unavailable: false,
     elsewhere: false,
     sessions: sessions(language),
@@ -1550,6 +1566,30 @@ export function loadScenario(
           syncPhase: phases.failed(readAt(5)),
           errorCode: "UPSTREAM_UNAVAILABLE",
         }),
+      };
+      break;
+    case "letture-sospese":
+      scenario = {
+        ...common,
+        account: account(),
+        // Le letture si sono fermate alla sospensione: l'ultima riuscita resta quella di allora.
+        stores: [
+          storeView("vintage", {
+            lastSyncAt: minutesAgo(95),
+            recent: [
+              { at: minutesAgo(95), ok: true, newOrders: 1 },
+              { at: minutesAgo(125), ok: true, newOrders: 0 },
+              { at: minutesAgo(155), ok: true, newOrders: 2 },
+            ],
+          }),
+          freeStores[1]!,
+        ],
+        seeds: freeSeeds,
+        premium: false,
+        ebayDown: true,
+        ebayMaintenance: true,
+        notices: [{ kind: "ebay-down", at: minutesAgo(95), maintenance: true }],
+        diagnostics: diagnostics(),
       };
       break;
     case "negozio-sospeso": {

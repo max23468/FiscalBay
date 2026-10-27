@@ -8,6 +8,7 @@ import { AbuseView, AuditTable, NoticesView } from "~/components/admin/governanc
 import { JobsView, QuotasView } from "~/components/admin/operations";
 import { Overview } from "~/components/admin/overview";
 import { AdminShell, type AdminSectionKey } from "~/components/admin/shell";
+import { SwitchesView } from "~/components/admin/switches";
 import { WorkspaceView } from "~/components/admin/workspace";
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
@@ -53,6 +54,7 @@ function sectionTitle(page: SectionData, language: "it" | "en") {
     commerciale: nav.commerce,
     antiabuso: nav.abuse,
     comunicazioni: nav.notices,
+    interruttori: nav.switches,
     registro: nav.audit,
   } satisfies Record<SectionData["section"], string>;
   return `${titles[page.section]} | ${adminCopy[language].console}`;
@@ -175,6 +177,8 @@ function Section({ page, now }: { page: SectionData; now: string }) {
       return <AbuseView signals={page.signals} />;
     case "comunicazioni":
       return <NoticesView notices={page.notices} now={now} />;
+    case "interruttori":
+      return <SwitchesView data={page} />;
     case "registro":
       return <AuditTable entries={page.entries} />;
   }
@@ -191,6 +195,7 @@ const navKey = {
   commerciale: "commerce",
   antiabuso: "abuse",
   comunicazioni: "notices",
+  interruttori: "switches",
   registro: "audit",
 } as const satisfies Record<SectionData["section"], AdminSectionKey>;
 

@@ -15,6 +15,7 @@ import { errorResponse } from "../error-response";
 import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { storeLinkAdmitted } from "../domain/admission.server";
+import { serviceSetting } from "../domain/service-settings.server";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { EbayEnvironment } from "../view-models";
@@ -123,9 +124,13 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const expectedStoreId = String(form.get("negozio") ?? "");
   const fromStores = form.get("da") === "negozi";
+  const back = fromStores ? localizedPath(language, `${appBase}/negozi`) : base;
   if (!(await storeLinkAdmitted(env.DB, status.userId))) {
-    const back = fromStores ? localizedPath(language, `${appBase}/negozi`) : base;
     return redirect(`${back}?negozio=lista-attesa`, { status: 303, ...noStore });
+  }
+  // Chiamate eBay spente dalla console: il collegamento non parte.
+  if (!(await serviceSetting(env.DB, "ebay_calls"))) {
+    return redirect(`${back}?negozio=sospeso`, { status: 303, ...noStore });
   }
   if (expectedStoreId) {
     const stores = await listStores(env.DB, status.userId);
@@ -137,7 +142,6 @@ export async function action({ request }: Route.ActionArgs) {
       return errorResponse(request, "INVALID_REQUEST");
     // Come in Ordini e Negozi, con eBay che non risponde il ricollegamento resta sospeso.
     if (ebayOutages(stores).has(ebayEnvironment)) {
-      const back = fromStores ? localizedPath(language, `${appBase}/negozi`) : base;
       return redirect(`${back}?negozio=ebay-non-risponde`, { status: 303, ...noStore });
     }
   }

@@ -51,6 +51,13 @@ import {
 } from "./domain/sessions.server";
 
 export { adminSessionMaxAge };
+import {
+  admitWorkspace,
+  isSwitchName,
+  setQuotaAttention,
+  setSwitch,
+  switchboard,
+} from "./domain/service-settings.server";
 import { confirmStoreTransfer, prepareStoreTransfer } from "./domain/store-transfer.server";
 import { setAdminPause } from "./domain/stores.server";
 import { logFailure } from "./errors";
@@ -75,6 +82,7 @@ export const adminSections = [
   "commerciale",
   "antiabuso",
   "comunicazioni",
+  "interruttori",
   "registro",
 ] as const;
 
@@ -208,6 +216,8 @@ export async function loadSection(section: AdminSection, item: string | undefine
       return { section, signals: await listAbuseSignals(env.DB, now) } as const;
     case "comunicazioni":
       return { section, notices: await listServiceNotices(env.DB, now) } as const;
+    case "interruttori":
+      return { section, ...(await switchboard(env.DB)) } as const;
     case "registro":
       return { section, entries: await listAudit(env.DB, { limit: 200 }) } as const;
   }
@@ -316,6 +326,9 @@ export async function runAdminAction(
     "end-promotion",
     "schedule-quota",
     "review-abuse",
+    "set-switch",
+    "quota-attention",
+    "admit-waitlisted",
   ]);
   if (needsReason.has(intent) && !reason.success) return invalid();
   // Gli identificativi vengono dal modulo: oltre la lunghezza del registro non sono validi.
@@ -597,6 +610,35 @@ export async function runAdminAction(
           workspaceId ? `workspace:${workspaceId}` : `abuse:${field("segnalazione")}`,
           reviewed,
           reviewed === "not_found" ? t.common.notFound : t.results.abuse[reviewed],
+        );
+      }
+      case "set-switch": {
+        const name = field("interruttore");
+        const state = field("stato");
+        if (!isSwitchName(name) || (state !== "on" && state !== "off")) return invalid();
+        const changed = await setSwitch(env.DB, name, state === "on", now);
+        return result(
+          `switch:${name}:${state}`,
+          changed,
+          changed === "done" ? t.common.done : t.results.unchanged,
+        );
+      }
+      case "quota-attention": {
+        const saved = await setQuotaAttention(env.DB, Number(field("soglia")), now);
+        if (saved === "invalid") return invalid();
+        return result(
+          `setting:quota_attention:${field("soglia")}`,
+          saved,
+          saved === "done" ? t.common.done : t.results.unchanged,
+        );
+      }
+      case "admit-waitlisted": {
+        const workspaceId = field("spazio");
+        const admitted = await admitWorkspace(env.DB, workspaceId);
+        return result(
+          `workspace:${workspaceId}`,
+          admitted,
+          admitted === "done" ? t.results.admitted : t.results.notWaiting,
         );
       }
       default:

@@ -381,6 +381,16 @@ export function WorkspaceView({
               : []),
           ]}
         />
+        {workspace.profile?.waitlistedAt ? (
+          <Disclosure label={t.switches.admit}>
+            <ActionForm
+              intent="admit-waitlisted"
+              fields={{ spazio: workspace.id }}
+              submit={t.switches.admit}
+              reason
+            />
+          </Disclosure>
+        ) : null}
       </Panel>
 
       <Panel title={t.audit.title}>

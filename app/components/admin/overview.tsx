@@ -32,6 +32,8 @@ function subjectName(id: string, kind: Anomaly["kind"], t: AdminCopy) {
       .replace("production", "Production")
       .replace("sandbox", "Sandbox")
       .replaceAll(":", " · ");
+  if (kind === "service_off")
+    return t.switches.names[id as keyof AdminCopy["switches"]["names"]] ?? id;
   return id;
 }
 
@@ -67,6 +69,15 @@ function AnomalyAction({ anomaly }: { anomaly: Anomaly }) {
     return (
       <Link
         to={href("quote")}
+        className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+      >
+        {label}
+      </Link>
+    );
+  if (anomaly.kind === "service_off")
+    return (
+      <Link
+        to={href("interruttori")}
         className="text-sm font-medium text-primary underline-offset-4 hover:underline"
       >
         {label}

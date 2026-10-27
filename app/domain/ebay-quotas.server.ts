@@ -3,17 +3,16 @@ import { readApiQuotas, type ApiRate } from "../integrations/ebay/analytics.serv
 import type { EbayNotification } from "../integrations/ebay/notifications.server";
 import { ebayConfiguration, sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { EbayEnvironment } from "../view-models";
+import { serviceSetting } from "./service-settings.server";
 
 /**
  * Vista delle quote eBay della console (D177, D188). Per ambiente, API e chiamata mostra limite,
  * consumo, residuo e azzeramento, insieme alle chiamate che FiscalBay ha sospeso perché eBay ha
- * risposto con il limite superato. Oltre il 70% della quota giornaliera di una chiamata la
- * lettura apre un'anomalia, una sola per finestra giornaliera e per chiamata, che si chiude quando una lettura
+ * risposto con il limite superato. Oltre la soglia di attenzione della quota giornaliera di
+ * una chiamata, 70% salvo diversa scelta nella console, la lettura apre un'anomalia, una sola per finestra giornaliera e per chiamata, che si chiude quando una lettura
  * riuscita trova il consumo rientrato. Una lettura non riuscita non apre né chiude nulla.
  */
 
-/** Consumo giornaliero oltre il quale si completa l’Application Growth Check di eBay. */
-export const quotaAlertShare = 0.7;
 /** Consumo oltre il quale le letture sono a rischio nella stessa giornata. */
 const quotaUrgentShare = 0.9;
 
@@ -94,7 +93,13 @@ async function suspensions(db: D1Database, env: Env, environment: EbayEnvironmen
   }));
 }
 
-function quotaRow(api: string, resource: string, rates: ApiRate[]): QuotaRow | null {
+/** `alertShare`: consumo giornaliero oltre il quale si completa l’Application Growth Check. */
+function quotaRow(
+  api: string,
+  resource: string,
+  rates: ApiRate[],
+  alertShare: number,
+): QuotaRow | null {
   const rate = [...rates].sort((a, b) => b.windowSeconds - a.windowSeconds)[0];
   if (!rate) return null;
   const share = rate.limit > 0 ? rate.consumed / rate.limit : 0;
@@ -105,7 +110,7 @@ function quotaRow(api: string, resource: string, rates: ApiRate[]): QuotaRow | n
     rate,
     share,
     daily,
-    over: daily && share > quotaAlertShare,
+    over: daily && share > alertShare,
     used: callRank(api, resource) >= 0,
   };
 }
@@ -172,13 +177,14 @@ export async function readEbayQuotas(
   now = new Date(),
 ): Promise<EnvironmentQuotas[]> {
   const at = now.toISOString();
+  const alertShare = (await serviceSetting(env.DB, "quota_attention")) / 100;
   return Promise.all(
     environments(env).map(async (environment): Promise<EnvironmentQuotas> => {
       const suspended = await suspensions(env.DB, env, environment, at);
       let quotas: EnvironmentQuotas;
       try {
         const rows = (await readApiQuotas(env, environment, fetcher)).flatMap(
-          (quota) => quotaRow(quota.api, quota.resource, quota.rates) ?? [],
+          (quota) => quotaRow(quota.api, quota.resource, quota.rates, alertShare) ?? [],
         );
         quotas = {
           environment,

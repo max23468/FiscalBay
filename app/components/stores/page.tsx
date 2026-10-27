@@ -17,7 +17,7 @@ import type { StoreView } from "../../view-models";
 import { StoreSheet } from "./detail";
 import { StoreList, StoreTable } from "./list";
 import { StoreOverview } from "./overview";
-import { type StoresPageData } from "./state";
+import { ebayDownText, type StoresPageData } from "./state";
 
 /** La schermata preparatoria riporta ai negozi con «Annulla». */
 function connectFromStores(connectHref: string) {
@@ -65,7 +65,9 @@ export function StoresPage({
           </a>
         </StatusAlert>
       ) : null}
-      {data.ebayDown.length > 0 ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
+      {data.ebayDown.length > 0 ? (
+        <StatusAlert tone="warning" title={ebayDownText(data, t)} />
+      ) : null}
       {data.stores.length === 0 ? (
         <EmptyState
           title={t.orders.firstUseTitle}

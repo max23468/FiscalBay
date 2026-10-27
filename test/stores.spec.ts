@@ -12,6 +12,7 @@ import {
 } from "vitest";
 import { orderAllowance, startTrial, unlockOrders } from "../app/domain/grants.server";
 import { admission, applyInactivity, recordActivity } from "../app/domain/admission.server";
+import { setSwitch } from "../app/domain/service-settings.server";
 import { purchaseState } from "../app/domain/checkout.server";
 import { lifetimeContext } from "../app/domain/lifetime.server";
 import { dispatchStoreSyncs, requestStoreSync } from "../app/domain/order-sync.server";
@@ -2007,6 +2008,14 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         fields: {},
       });
       expect(refused.headers.get("location")).toBe("/app/ordini?negozio=lista-attesa");
+      // Con le chiamate eBay spente dalla console il collegamento non parte per nessuno.
+      await setSwitch(env.DB, "ebay_calls", false);
+      const suspended = await routeResponse(storeLinkAction, "/app/negozi/collega", {
+        cookie: admitted.cookie,
+        fields: { da: "negozi" },
+      });
+      expect(suspended.headers.get("location")).toBe("/app/negozi?negozio=sospeso");
+      await setSwitch(env.DB, "ebay_calls", true);
       expect((await settingsPage(waiting.cookie)).page).toMatchObject({
         account: { waitlisted: true },
         purchase: { state: "closed" },
