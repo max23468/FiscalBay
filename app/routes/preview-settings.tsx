@@ -1,7 +1,6 @@
 import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse } from "react-router";
 
-import type { ExportContext } from "~/components/settings/export";
 import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { accessNotice } from "../access-notice";
@@ -14,13 +13,23 @@ import {
   detectedTimeZone,
   effectiveTimeZone,
 } from "../preferences";
-import { exportReturnHref, exportScope } from "../orders/export-scope";
-import { snapshotParam } from "../orders/order-list";
+import {
+  exportContext as exportContextView,
+  exportScope,
+  type ExportContext,
+  type ExportTally,
+} from "../orders/export-scope";
 import { openSearch } from "../orders/order-search.server";
-import { previewListing, previewSearchScope } from "../preview/order-list.server";
+import { previewListing, previewSearchScope, previewTally } from "../preview/order-list.server";
 import { previewLifetime } from "../preview/scenarios.server";
 import { pageScenario, simulateAction, simulateSecurity } from "../preview/state.server";
-import { settingsSections, type SettingsSection } from "../view-models";
+import {
+  orderPeriods,
+  orderPeriodStart,
+  settingsSections,
+  type OrderPeriod,
+  type SettingsSection,
+} from "../view-models";
 import type { Route } from "./+types/preview-settings";
 
 function isSection(value: string | undefined): value is SettingsSection {
@@ -41,40 +50,41 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw data(null, { status: 404 });
   }
   // Ambito ricevuto dagli Ordini, contato con le regole del loro elenco: ordini presenti e,
-  // per i filtri, la stessa istantanea e la stessa ricerca.
+  // per i filtri, la stessa istantanea e la stessa ricerca. Senza ambito, ogni periodo.
   const query = new URL(request.url).searchParams;
   const scope = params.sezione === "esportazione" ? exportScope(query) : null;
-  let estimate = scenario.orders;
-  let exportContext: ExportContext | null = null;
-  if (scope) {
-    // La selezione conta soltanto gli ordini dell'elenco da cui è partita, alla sua istantanea.
-    const search = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, query);
-    const listed = previewListing(
+  const visible = (search: URLSearchParams, text: string | null) =>
+    previewListing(
       scenario.orders,
       scenario.incoming,
-      query,
       search,
+      text,
       scenario.now,
       scenario.account.plan,
     ).filtered;
-    if (scope.kind === "orders") {
-      const ids = new Set(scope.ids);
-      estimate = listed.filter((order) => ids.has(order.id));
-    } else {
-      estimate = listed;
-    }
-    exportContext = {
-      kind: scope.kind,
-      order:
-        scope.kind === "orders" && scope.ids.length === 1
-          ? (estimate[0]?.ebayOrderId ?? null)
-          : null,
-      filtered:
-        scope.kind === "filtered" &&
-        [...scope.criteria.keys()].some((key) => key !== snapshotParam),
-      returnHref: exportReturnHref(localizedPath(language, "/anteprima/ordini"), query),
-      query: query.toString(),
-    };
+  let exportContext: ExportContext | null = null;
+  let exportPeriods: Record<OrderPeriod, ExportTally> | null = null;
+  if (scope) {
+    // La selezione conta soltanto gli ordini dell'elenco da cui è partita, alla sua istantanea.
+    const search = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, query);
+    const listed = visible(query, search);
+    const ids = new Set(scope.kind === "orders" ? scope.ids : []);
+    const chosen = scope.kind === "orders" ? listed.filter((order) => ids.has(order.id)) : listed;
+    exportContext = exportContextView(
+      scope,
+      query,
+      localizedPath(language, "/anteprima/ordini"),
+      chosen[0]?.ebayOrderId ?? null,
+      previewTally(chosen),
+    );
+  } else {
+    const all = visible(new URLSearchParams(), null);
+    exportPeriods = Object.fromEntries(
+      orderPeriods.map((period) => {
+        const start = orderPeriodStart(period, new Date(scenario.now)).toISOString();
+        return [period, previewTally(all.filter((order) => order.createdAt >= start))];
+      }),
+    ) as Record<OrderPeriod, ExportTally>;
   }
   const page: SettingsPageData = {
     confirmUnlock: state.confirmUnlock !== false,
@@ -86,6 +96,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       telegram: true,
       accountData: true,
       support: true,
+      exportAdvanced: true,
     },
     account: scenario.account,
     // Durante la prova l'acquisto resta possibile; lo ferma un abbonamento che può ancora
@@ -151,10 +162,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         paused: store.pauseReason === "plan",
       })),
     },
-    exportEstimate: {
-      orders: estimate.length,
-      locked: estimate.filter((order) => order.fiscal.state === "locked").length,
-    },
+    exportPeriods,
     exportContext,
     now: scenario.now,
   };

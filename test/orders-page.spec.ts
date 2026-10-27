@@ -165,7 +165,7 @@ describe("pagina Ordini reale", () => {
     expect(JSON.stringify(result)).not.toContain("RSSMRA80A01H501U");
     expect(result.page).toMatchObject({
       view: "list",
-      exportable: false,
+      exportable: true,
       // Negozio eBay reale: l'ordine si apre nel Seller Hub.
       openOnEbay: true,
       // L'acquisto è configurato: gli sblocchi esauriti rimandano al piano.

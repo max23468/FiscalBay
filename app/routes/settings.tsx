@@ -8,6 +8,7 @@ import { unconfirmedOnFailure } from "../client-action";
 import {
   areaPage,
   assertSameOrigin,
+  requestedEbayEnvironment,
   requireAccountArea,
   type AccountArea,
 } from "../account-area.server";
@@ -67,39 +68,46 @@ import {
 } from "../domain/telegram.server";
 import { stripeSecretKey } from "../integrations/stripe.server";
 import { telegramConfigured } from "../integrations/telegram.server";
-import { appUrl, planPath } from "../app-links";
+import { appUrl, ordersPath, planPath } from "../app-links";
 import { correlationId, logFailure } from "../errors";
 import { whatsNew } from "../whats-new.server";
-import { languageFromPath } from "../i18n";
+import { languageFromPath, localizedPath } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction } from "../security-actions.server";
 import { effectiveTimeZone } from "../preferences";
 import {
+  orderPeriods,
+  orderPeriodStart,
   settingsSections,
   type ActionResult,
   type DiagnosticsView,
+  type OrderPeriod,
   type SettingsSection,
 } from "../view-models";
+import { listVisibleOrders, visibleOrderTallies, type OrderTally } from "../domain/orders.server";
+import { exportContext } from "../orders/export-scope";
+import { accountExportScope } from "../orders/export-scope.server";
 import { formatDate } from "../format";
 import type { Route } from "./+types/settings";
 import { subscriptionView } from "../domain/plan-view.server";
 
 /**
- * Categorie con un servizio reale. L'esportazione arriva con il file degli ordini; esportazione e
- * cancellazione dell'account compaiono in Dati e privacy insieme ai loro servizi. L'acquisto compare con la configurazione Stripe, la gestione dell'abbonamento
- * con il portale di Stripe, le notifiche Telegram con il bot dell'ambiente.
+ * Servizi reali delle categorie. Esportazione e cancellazione dell'account e opzioni Premium
+ * dell'esportazione compaiono insieme ai loro servizi. L'acquisto compare con la configurazione
+ * Stripe, la gestione dell'abbonamento con il portale di Stripe, le notifiche Telegram con il bot
+ * dell'ambiente.
  */
-const sections = settingsSections.filter((section) => section !== "esportazione");
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
   billingPortal: !!stripeSecretKey(env),
   telegram: telegramConfigured(env),
   accountData: false,
   support: true,
+  exportAdvanced: false,
 });
 
 function isSection(value: string | undefined): value is SettingsSection {
-  return (sections as readonly string[]).includes(value ?? "");
+  return (settingsSections as readonly string[]).includes(value ?? "");
 }
 
 export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptors {
@@ -167,7 +175,12 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       admission(env.DB, userId),
     ]),
   );
-  const subscription = await measure("d1", "settings", () => subscriptionState(allowance, now));
+  const [exportData, subscription] = await Promise.all([
+    measure("d1", "settings", () =>
+      exportSection(request, area, params.sezione === "esportazione", !!allowance?.premium, now),
+    ),
+    measure("d1", "settings", () => subscriptionState(allowance, now)),
+  ]);
   const accountView = {
     ...account,
     profile,
@@ -176,7 +189,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const page: SettingsPageData = {
     confirmUnlock,
     section: params.sezione ?? null,
-    sections,
+    sections: settingsSections,
     services: services(),
     account: accountView,
     purchase: {
@@ -209,8 +222,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     diagnostics: await readDiagnostics(request, area, accountView, now),
     whatsNew: whatsNew.length > 0,
     telegram,
-    exportEstimate: { orders: 0, locked: 0 },
-    exportContext: null,
+    ...exportData,
     now: now.toISOString(),
   };
   return {
@@ -338,6 +350,61 @@ async function sendSupport(request: Request, area: AccountArea, form: FormData) 
     return failed(503, t.sendFailed);
   }
   return { ok: true } satisfies ActionResult;
+}
+
+/**
+ * Ordini dell'esportazione con il conteggio dell'elenco: l'ambito ricevuto dagli Ordini, con le
+ * loro regole, oppure ogni periodo quando la sezione è aperta dalle Impostazioni.
+ */
+async function exportSection(
+  request: Request,
+  area: AccountArea,
+  section: boolean,
+  premium: boolean,
+  now: Date,
+): Promise<Pick<SettingsPageData, "exportContext" | "exportPeriods">> {
+  const userId = area.session.user.id;
+  const query = new URL(request.url).searchParams;
+  const environment = requestedEbayEnvironment(request);
+  // Soltanto la sezione Esportazione riceve l'ambito degli Ordini.
+  const fromOrders = section
+    ? await accountExportScope(area, query, environment, premium, now)
+    : null;
+  if (!fromOrders) {
+    const starts = orderPeriods.map((period) => orderPeriodStart(period, now).toISOString());
+    const tallies = await visibleOrderTallies(
+      env.DB,
+      userId,
+      environment,
+      now,
+      { criteria: { listedBefore: now.toISOString() } },
+      starts,
+    );
+    return {
+      exportContext: null,
+      exportPeriods: Object.fromEntries(
+        orderPeriods.map((period, index) => [period, tallies[index]!]),
+      ) as Record<OrderPeriod, OrderTally>,
+    };
+  }
+  const { scope, filter } = fromOrders;
+  const single = scope.kind === "orders" && scope.ids.length === 1;
+  const [[estimate], listed] = await Promise.all([
+    visibleOrderTallies(env.DB, userId, environment, now, filter),
+    single
+      ? listVisibleOrders(env.DB, userId, 1, environment, now, { ...filter, suggestions: false })
+      : [],
+  ]);
+  return {
+    exportContext: exportContext(
+      scope,
+      query,
+      localizedPath(area.language, ordersPath),
+      listed[0]?.ebayOrderId ?? null,
+      estimate!,
+    ),
+    exportPeriods: null,
+  };
 }
 
 /**

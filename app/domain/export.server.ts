@@ -2,6 +2,7 @@ import ExcelJS from "exceljs";
 import { strToU8, zipSync } from "fflate";
 
 import { minorToDecimal } from "../money";
+import { csvLine } from "./order-export.server";
 
 export type ExportOrder = {
   orderId: string;
@@ -29,14 +30,8 @@ function rows(orders: ExportOrder[]): string[][] {
   });
 }
 
-function csvCell(value: string): string {
-  const safeValue = /^[=+\-@\t\r]/u.test(value) ? `'${value}` : value;
-  return `"${safeValue.replaceAll('"', '""')}"`;
-}
-
 export function createCsv(orders: ExportOrder[]): Uint8Array {
-  const lines = [columns, ...rows(orders)].map((row) => row.map(csvCell).join(","));
-  return strToU8(`\uFEFF${lines.join("\r\n")}\r\n`);
+  return strToU8(`\uFEFF${[columns, ...rows(orders)].map(csvLine).join("")}`);
 }
 
 export async function createXlsx(orders: ExportOrder[]): Promise<Uint8Array> {

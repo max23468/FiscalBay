@@ -728,6 +728,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       section: null,
       sections: [
         "notifiche",
+        "esportazione",
         "messaggio",
         "profilo",
         "piano",
@@ -744,6 +745,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         telegram: true,
         accountData: false,
         support: true,
+        exportAdvanced: false,
       },
       account: { plan: "free", trialAvailable: false, quota: undefined },
       preferences: { theme: "system", timeZone: "auto", detectedTimeZone: null, marketing: false },
@@ -760,10 +762,8 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       whatsNew: false,
     });
     expect(loaded.page.preferences.templates.it).toContain("{ordine}");
-    for (const sezione of ["esportazione", "inesistente"]) {
-      const missing = await settings(seller.cookie, `/app/impostazioni/${sezione}`, sezione);
-      expect(missing).toMatchObject({ init: { status: 404 }, data: { notFound: true } });
-    }
+    const missing = await settings(seller.cookie, "/app/impostazioni/inesistente", "inesistente");
+    expect(missing).toMatchObject({ init: { status: 404 }, data: { notFound: true } });
     // Senza email confermata l'area rimanda agli Ordini, che spiegano come proseguire.
     await env.DB.prepare('UPDATE "user" SET "emailVerified" = 0 WHERE id = ?')
       .bind(seller.userId)
