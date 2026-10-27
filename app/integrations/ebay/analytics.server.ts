@@ -49,6 +49,11 @@ export type ApiRate = {
   limit: number;
   /** Chiamate fatte nella finestra corrente. */
   used: number;
+  /**
+   * Quota consumata nella finestra: con una quota condivisa fra più chiamate, come quella di
+   * Trading, il residuo è comune e il consumo supera le chiamate della singola voce.
+   */
+  consumed: number;
   remaining: number;
   /** Azzeramento della finestra; null se eBay non lo indica. */
   resetAt: string | null;
@@ -69,6 +74,7 @@ function rate(value: z.infer<typeof rateSchema>): ApiRate {
   return {
     limit: value.limit,
     used,
+    consumed: Math.max(used, value.limit - (value.remaining ?? value.limit)),
     remaining: value.remaining ?? Math.max(0, value.limit - used),
     resetAt: reset ? new Date(reset).toISOString() : null,
     windowSeconds: value.timeWindow,

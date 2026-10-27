@@ -63,6 +63,7 @@ export async function lifetimeSeats(db: D1Database): Promise<LifetimeSeats> {
 export type Payment = {
   id: string;
   workspaceId: string;
+  ownerEmail: string | null;
   source: "premium" | "lifetime";
   amountPaid: number;
   amountRefunded: number | null;
@@ -85,7 +86,11 @@ export type Revenue = {
 export async function revenue(env: Env, now = new Date()): Promise<Revenue> {
   const db = env.DB;
   const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
-  const select = `SELECT id, workspace_id AS workspaceId, source, amount_paid AS amountPaid,
+  const select = `SELECT id, workspace_id AS workspaceId,
+      (SELECT u.email FROM workspace_members wm JOIN "user" u ON u.id = wm.user_id
+        WHERE wm.workspace_id = workspace_entitlements.workspace_id
+        ORDER BY wm.role = 'owner' DESC LIMIT 1) AS ownerEmail,
+      source, amount_paid AS amountPaid,
       amount_refunded AS amountRefunded, currency, paid_at AS paidAt, revocation
     FROM workspace_entitlements WHERE amount_paid IS NOT NULL`;
   const [sums, payments, reversals, erasures] = await db.batch<Record<string, unknown>>([

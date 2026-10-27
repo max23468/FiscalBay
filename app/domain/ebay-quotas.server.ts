@@ -16,7 +16,8 @@ export const quotaAlertShare = 0.7;
 /** Consumo oltre il quale le letture sono a rischio nella stessa giornata. */
 const quotaUrgentShare = 0.9;
 
-const daySeconds = 86_400;
+/** Finestra giornaliera: eBay la indica anche con qualche secondo in meno. */
+const daySeconds = 86_340;
 
 /** Chiamate che FiscalBay usa per i negozi: nella vista precedono le altre. */
 const expectedCalls = [
@@ -24,7 +25,8 @@ const expectedCalls = [
   { api: "Trading", call: "GetItem" },
   { api: "Trading", call: "GetStore" },
   { api: "Trading", call: "GetUser" },
-  { api: "Fulfillment", call: null },
+  // Fulfillment legge soltanto gli ordini: le altre risorse dell'API non sono di FiscalBay.
+  { api: "Fulfillment", call: "order" },
 ] as const;
 
 export type QuotaRow = {
@@ -64,7 +66,10 @@ const callName = (resource: string) => resource.split(".").at(-1)!;
 function usedByFiscalBay(api: string, resource: string) {
   return expectedCalls.some(
     (expected) =>
-      expected.api === api && (expected.call === null || expected.call === callName(resource)),
+      expected.api === api &&
+      (api === "Fulfillment"
+        ? callName(resource).toLowerCase().includes(expected.call)
+        : expected.call === callName(resource)),
   );
 }
 
@@ -90,7 +95,7 @@ async function suspensions(db: D1Database, env: Env, environment: EbayEnvironmen
 function quotaRow(api: string, resource: string, rates: ApiRate[]): QuotaRow | null {
   const rate = [...rates].sort((a, b) => b.windowSeconds - a.windowSeconds)[0];
   if (!rate) return null;
-  const share = rate.limit > 0 ? rate.used / rate.limit : 0;
+  const share = rate.limit > 0 ? rate.consumed / rate.limit : 0;
   const daily = rate.windowSeconds >= daySeconds;
   return {
     api,
@@ -114,10 +119,19 @@ const subjectOf = (environment: EbayEnvironment, row: Pick<QuotaRow, "api" | "re
  */
 function anomalyStatements(db: D1Database, quotas: EnvironmentQuotas, now: Date) {
   const at = now.toISOString();
-  const over = quotas.rows
-    .filter((row) => row.over)
-    .map((row) => {
-      const subject = subjectOf(quotas.environment, row);
+  // Le chiamate con lo stesso limite, residuo e azzeramento condividono la quota: una sola
+  // anomalia per la quota, e soltanto se FiscalBay usa almeno una delle sue chiamate.
+  const pools = new Map<string, QuotaRow[]>();
+  for (const row of quotas.rows.filter((item) => item.over)) {
+    const pool = `${row.api}|${row.rate.limit}|${row.rate.remaining}|${row.rate.resetAt}`;
+    pools.set(pool, [...(pools.get(pool) ?? []), row]);
+  }
+  const over = [...pools.values()]
+    .filter((rows) => rows.some((row) => row.used))
+    .map((rows) => {
+      const row = rows.find((item) => item.used)!;
+      const subject =
+        rows.length > 1 ? `${quotas.environment}:${row.api}` : subjectOf(quotas.environment, row);
       return { row, subject, key: `ebay_quota:${subject}:${row.rate.resetAt ?? at.slice(0, 10)}` };
     });
   return [
@@ -140,7 +154,7 @@ function anomalyStatements(db: D1Database, quotas: EnvironmentQuotas, now: Date)
           JSON.stringify({
             share: row.share,
             limit: row.rate.limit,
-            used: row.rate.used,
+            used: row.rate.consumed,
             resetAt: row.rate.resetAt,
           }),
           at,

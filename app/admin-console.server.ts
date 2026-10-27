@@ -14,7 +14,12 @@ import {
   savePromotion,
   scheduleFreeQuota,
 } from "./domain/admin-commerce.server";
-import { listAccounts, listAllStores, workspaceDetail } from "./domain/admin-directory.server";
+import {
+  consoleSummary,
+  listAccounts,
+  listAllStores,
+  workspaceDetail,
+} from "./domain/admin-directory.server";
 import {
   listAnomalies,
   receiptStates,
@@ -38,7 +43,14 @@ import {
   serviceNoticeSchema,
   withdrawServiceNotice,
 } from "./domain/service-notices.server";
-import { adminAccess, readSession, type AuthSession } from "./domain/sessions.server";
+import {
+  adminAccess,
+  adminSessionMaxAge,
+  readSession,
+  type AuthSession,
+} from "./domain/sessions.server";
+
+export { adminSessionMaxAge };
 import { confirmStoreTransfer, prepareStoreTransfer } from "./domain/store-transfer.server";
 import { setAdminPause } from "./domain/stores.server";
 import { logFailure } from "./errors";
@@ -73,14 +85,57 @@ export function sectionFrom(value: string | undefined): AdminSection | null {
   return (adminSections as readonly string[]).includes(value) ? (value as AdminSection) : null;
 }
 
-/** Sessione admin confermata, oppure il livello di accesso che manca. */
+/** Prefisso dei token tecnici della console, riconoscibile in un'eventuale fuga. */
+const agentTokenPrefix = "fbat_";
+
+async function sha256(value: string) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Accesso tecnico (D213): un token `Bearer` il cui SHA-256 è registrato e non revocato apre la
+ * console all'agente che assiste l'owner, anche senza passkey, con le stesse operazioni della
+ * sessione admin. Restituisce l'etichetta del token, o null.
+ */
+async function agentAccess(request: Request, now: Date) {
+  const header = request.headers.get("authorization") ?? "";
+  const token = header.startsWith(`Bearer ${agentTokenPrefix}`) ? header.slice(7) : null;
+  if (!token || token.length > 128) return null;
+  const row = await env.DB.prepare(`UPDATE admin_agent_tokens SET used_at = ?2
+      WHERE token_hash = ?1 AND revoked_at IS NULL RETURNING label`)
+    .bind(await sha256(token), now.toISOString())
+    .first<{ label: string }>();
+  return row?.label ?? null;
+}
+
+/**
+ * Livello di accesso della richiesta: la sessione admin con passkey verificata, oppure il token
+ * tecnico quando la sessione non basta.
+ */
 export async function adminSession(request: Request) {
   const session = (await readSession(env, request)) as
     | (AuthSession & {
         user: { email: string };
       })
     | null;
-  return { session, access: adminAccess(session) };
+  const access = adminAccess(session);
+  if (access === "granted") return { session, access, agent: null };
+  const agent = await agentAccess(request, new Date());
+  return agent ? { session, access: "agent" as const, agent } : { session, access, agent: null };
+}
+
+/** Autore delle operazioni e delle letture con il token tecnico, nel registro. */
+export const agentActor = (agent: string) => `agent:${agent}`.slice(0, 128);
+
+/** Lettura con il token tecnico: resta nel registro con l'etichetta del token. */
+export async function recordAgentRead(agent: string, url: URL) {
+  await recordAudit(env.DB, {
+    actor: agentActor(agent),
+    operation: "agent-read",
+    target: `page:${url.pathname}`.slice(0, 256),
+    outcome: "done",
+  });
 }
 
 export async function loadSection(section: AdminSection, item: string | undefined, url: URL) {
@@ -88,8 +143,22 @@ export async function loadSection(section: AdminSection, item: string | undefine
   const query = url.searchParams.get("q") ?? undefined;
   const offset = Math.max(0, Number(url.searchParams.get("da")) || 0);
   switch (section) {
-    case "panoramica":
-      return { section, anomalies: await listAnomalies(env.DB, now) } as const;
+    case "panoramica": {
+      const [anomalies, summary, commerce, recent] = await Promise.all([
+        listAnomalies(env.DB, now),
+        consoleSummary(env.DB, now),
+        commerceOverview(env, now),
+        listAudit(env.DB, { limit: 5, changes: true }),
+      ]);
+      return {
+        section,
+        anomalies,
+        summary,
+        revenue: { last30: commerce.revenue.last30, total: commerce.revenue.total },
+        seats: { available: commerce.seats.available, total: commerce.seats.total },
+        recent,
+      } as const;
+    }
     case "account":
       return {
         section,
