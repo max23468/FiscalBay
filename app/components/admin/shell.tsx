@@ -17,11 +17,12 @@ import { useAdmin } from "./use-admin";
 
 const items = [
   ["", "overview"],
+  ["metriche", "metrics"],
   ["account", "accounts"],
   ["negozi", "stores"],
   ["lavori", "jobs"],
   ["quote", "quotas"],
-  ["prestazioni", "metrics"],
+  ["prestazioni", "performance"],
   ["commerciale", "commerce"],
   ["antiabuso", "abuse"],
   ["comunicazioni", "notices"],

@@ -342,19 +342,21 @@ export function OrdersPage({
   unlockAction,
   confirmation,
   notice,
+  timing,
 }: {
   data: OrdersPageData;
   unlockAction: string;
   confirmation?: Promise<OrderView[]>;
   /** Avvisi propri dell'area che ospita la pagina, sotto l'intestazione. */
   notice?: React.ReactNode;
+  /** Biglietto del report delle misure, soltanto nell'area reale. */
+  timing?: string;
 }) {
   const { t } = useCopy();
   const unlock = useUnlock(unlockAction, t);
   const orders = useConfirmed(data.orders, confirmation);
   const [detail] = useConfirmed(data.detail ? [data.detail] : [], confirmation);
-  const { preview } = useLinks();
-  usePageTiming(preview ? null : "orders");
+  usePageTiming("orders", timing);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <OrdersHeader data={data} />

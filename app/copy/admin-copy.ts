@@ -9,11 +9,12 @@ const it = {
   back: "Torna a FiscalBay",
   nav: {
     overview: "Panoramica",
+    metrics: "Metriche",
     accounts: "Account",
     stores: "Negozi",
     jobs: "Lavori",
     quotas: "Quote eBay",
-    metrics: "Prestazioni",
+    performance: "Prestazioni",
     commerce: "Commerciale",
     abuse: "Antiabuso",
     notices: "Comunicazioni",
@@ -415,7 +416,7 @@ const it = {
     resolved: (when: string) => `Rientrata il ${when}`,
     request: "Per una quota più alta completa l’Application Growth Check del Developer Program.",
   },
-  metrics: {
+  performance: {
     unconfigured: "Lettura non configurata: manca il token ANALYTICS_READ_TOKEN del Worker.",
     failed: "Lettura delle metriche non riuscita: i valori non sono disponibili, non sono zero.",
     estimate: (hours: number) =>
@@ -556,6 +557,88 @@ const it = {
       withdrawn: "Ritirata",
     },
   },
+  metrics: {
+    window: "Finestra",
+    days: (days: number) => `${days} giorni`,
+    range: (from: string, to: string) => `Dal ${from} al ${to}`,
+    funnel: "Primi passi",
+    funnelNote:
+      "Account registrati nella finestra, admin esclusi. Ogni passaggio conta soltanto chi ha raggiunto la sua base.",
+    step: "Passaggio",
+    reached: "Arrivati",
+    rate: "Quota",
+    base: "Base",
+    median: "Mediana dalla registrazione",
+    steps: {
+      registered: "Registrati",
+      verified: "Email verificata",
+      store_linked: "Negozio collegato",
+      first_sync: "Prima lettura riuscita",
+      first_order: "Primo ordine",
+      first_tax_id: "Primo codice fiscale",
+      first_unlock: "Primo sblocco",
+      trial: "Prova avviata",
+      purchase: "Primo acquisto",
+    },
+    of: (count: number, step: string) => `${count} · ${step}`,
+    syncWithoutOrders: (count: number) =>
+      count === 1
+        ? "1 spazio ha la prima lettura riuscita senza ordini."
+        : `${count} spazi hanno la prima lettura riuscita senza ordini.`,
+    hours: (hours: number) =>
+      hours < 1
+        ? "meno di un’ora"
+        : hours < 48
+          ? `${Math.round(hours)} h`
+          : `${Math.round(hours / 24)} giorni`,
+    commerce: "Commerciale",
+    paying: "Paganti",
+    payingNote: (monthly: number, annual: number, lifetime: number) =>
+      `Mensile ${monthly} · annuale ${annual} · lifetime ${lifetime}`,
+    mrr: "Ricavo ricorrente mensile",
+    mrrNote: "Netto da listino, annuale diviso per dodici, lifetime escluso",
+    unlisted: (count: number) => `${count} fuori listino esclusi`,
+    trialsOpen: "Prove in corso",
+    gifts: "Omaggi",
+    giftsNote: (lifetime: number, granted: number) =>
+      `Lifetime ${lifetime} · Premium concesso ${granted}`,
+    cancelling: "Disdette programmate",
+    trialConversion: "Prove concluse con un acquisto",
+    trialConversionNote: (converted: number, ended: number) =>
+      `${converted} su ${ended} concluse nella finestra`,
+    purchases: "Primi acquisti",
+    purchasesNote: (afterTrial: number, direct: number) =>
+      `${afterTrial} dopo la prova · ${direct} dal Free`,
+    cash: "Incassi registrati",
+    cashNote: (refunded: string) => `Rimborsati ${refunded}; imposte e commissioni su Stripe`,
+    activity: "Attività e letture",
+    operative: "Merchant operativi",
+    operativeNote: "Negozio collegato con una lettura riuscita negli ultimi 30 giorni",
+    active: "Spazi attivi",
+    activeNote: "Attività umana negli ultimi 30 giorni, letture escluse",
+    errorRate: "Letture non riuscite",
+    errorRateNote: (failures: number, attempts: number) =>
+      `${failures} su ${attempts} letture dei recenti`,
+    lag: "Ritardo delle letture",
+    lagNote: (late: number, stores: number, target: number) =>
+      `Mediana dall’ultima riuscita · ${late} su ${stores} oltre ${target} minuti`,
+    neverRead: (count: number) =>
+      count === 1 ? "1 negozio mai letto" : `${count} negozi mai letti`,
+    minutes: (minutes: number) => `${Math.round(minutes)} min`,
+    freeQuota: "Sblocchi Free usati",
+    freeQuotaNote: (used: number, quota: number, exhausted: number) =>
+      `${used} su ${quota} nei cicli in corso · ${exhausted} esauriti`,
+    capacity: "Capacità",
+    database: "Database D1",
+    databaseNote: (budget: string) => `Soglia di attenzione ${budget}`,
+    stores: "Negozi che leggono",
+    storesNote: (reference: number) => `Stima di carico su ${reference} negozi`,
+    readsPerDay: "Letture al giorno",
+    readsPerDayNote: (days: number) => `Media su ${days} giorni con letture`,
+    kept: "Righe delle metriche",
+    keptNote: (days: number, runs: number) => `${days} giorni aggregati · ${runs} ultime letture`,
+    none: "n.d.",
+  },
   audit: {
     title: "Registro",
     at: "Quando",
@@ -573,11 +656,12 @@ const en: AdminCopy = {
   back: "Back to FiscalBay",
   nav: {
     overview: "Overview",
+    metrics: "Metrics",
     accounts: "Accounts",
     stores: "Stores",
     jobs: "Jobs",
     quotas: "eBay quotas",
-    metrics: "Performance",
+    performance: "Performance",
     commerce: "Commercial",
     abuse: "Abuse",
     notices: "Announcements",
@@ -977,7 +1061,7 @@ const en: AdminCopy = {
     resolved: (when: string) => `Back to normal on ${when}`,
     request: "For a higher quota, complete the Developer Program’s Application Growth Check.",
   },
-  metrics: {
+  performance: {
     unconfigured: "Read not configured: the Worker has no ANALYTICS_READ_TOKEN.",
     failed: "Metrics read failed: values are unavailable, not zero.",
     estimate: (hours: number) =>
@@ -1112,6 +1196,88 @@ const en: AdminCopy = {
     withdraw: "Withdraw",
     edit: "Edit",
     state: { active: "Live", scheduled: "Scheduled", ended: "Ended", withdrawn: "Withdrawn" },
+  },
+  metrics: {
+    window: "Window",
+    days: (days: number) => `${days} days`,
+    range: (from: string, to: string) => `From ${from} to ${to}`,
+    funnel: "First steps",
+    funnelNote:
+      "Accounts registered in the window, admins excluded. Each step counts only those who reached its base.",
+    step: "Step",
+    reached: "Reached",
+    rate: "Share",
+    base: "Base",
+    median: "Median since registration",
+    steps: {
+      registered: "Registered",
+      verified: "Email verified",
+      store_linked: "Store connected",
+      first_sync: "First successful read",
+      first_order: "First order",
+      first_tax_id: "First tax code",
+      first_unlock: "First unlock",
+      trial: "Trial started",
+      purchase: "First purchase",
+    },
+    of: (count: number, step: string) => `${count} · ${step}`,
+    syncWithoutOrders: (count: number) =>
+      count === 1
+        ? "1 space has its first successful read with no orders."
+        : `${count} spaces have their first successful read with no orders.`,
+    hours: (hours: number) =>
+      hours < 1
+        ? "under an hour"
+        : hours < 48
+          ? `${Math.round(hours)} h`
+          : `${Math.round(hours / 24)} days`,
+    commerce: "Commercial",
+    paying: "Paying",
+    payingNote: (monthly: number, annual: number, lifetime: number) =>
+      `Monthly ${monthly} · annual ${annual} · lifetime ${lifetime}`,
+    mrr: "Monthly recurring revenue",
+    mrrNote: "Net list price, annual divided by twelve, lifetime excluded",
+    unlisted: (count: number) => `${count} off the price list excluded`,
+    trialsOpen: "Trials in progress",
+    gifts: "Gifts",
+    giftsNote: (lifetime: number, granted: number) =>
+      `Lifetime ${lifetime} · Premium granted ${granted}`,
+    cancelling: "Scheduled cancellations",
+    trialConversion: "Trials ended with a purchase",
+    trialConversionNote: (converted: number, ended: number) =>
+      `${converted} of ${ended} ended in the window`,
+    purchases: "First purchases",
+    purchasesNote: (afterTrial: number, direct: number) =>
+      `${afterTrial} after the trial · ${direct} from Free`,
+    cash: "Recorded payments",
+    cashNote: (refunded: string) => `Refunded ${refunded}; taxes and fees on Stripe`,
+    activity: "Activity and reads",
+    operative: "Operating merchants",
+    operativeNote: "Store connected with a successful read in the last 30 days",
+    active: "Active spaces",
+    activeNote: "Human activity in the last 30 days, reads excluded",
+    errorRate: "Failed reads",
+    errorRateNote: (failures: number, attempts: number) =>
+      `${failures} of ${attempts} recent-order reads`,
+    lag: "Read delay",
+    lagNote: (late: number, stores: number, target: number) =>
+      `Median since the last success · ${late} of ${stores} over ${target} minutes`,
+    neverRead: (count: number) =>
+      count === 1 ? "1 store never read" : `${count} stores never read`,
+    minutes: (minutes: number) => `${Math.round(minutes)} min`,
+    freeQuota: "Free unlocks used",
+    freeQuotaNote: (used: number, quota: number, exhausted: number) =>
+      `${used} of ${quota} in current cycles · ${exhausted} used up`,
+    capacity: "Capacity",
+    database: "D1 database",
+    databaseNote: (budget: string) => `Attention threshold ${budget}`,
+    stores: "Stores reading",
+    storesNote: (reference: number) => `Load estimate for ${reference} stores`,
+    readsPerDay: "Reads per day",
+    readsPerDayNote: (days: number) => `Average over ${days} days with reads`,
+    kept: "Metric rows",
+    keptNote: (days: number, runs: number) => `${days} aggregated days · ${runs} latest reads`,
+    none: "n/a",
   },
   audit: {
     title: "Log",

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 /** Pagine misurate e fasi del server lette da `Server-Timing`: elenchi chiusi. */
 export const timedPages = ["orders", "stores"] as const;
@@ -15,12 +15,15 @@ let reported = false;
 
 /**
  * Invia una volta, quando la pagina viene nascosta o lasciata o dopo dieci secondi, le misure del
- * caricamento in cui la pagina è stata resa. `null` per una pagina che non entra nei budget, come
- * quelle dell'anteprima, i cui dati simulati non rappresentano l'area reale.
+ * caricamento in cui la pagina è stata resa, con il biglietto del suo loader. Senza biglietto,
+ * come nell'anteprima, non parte nessun report.
  */
-export function usePageTiming(page: TimedPage | null) {
+export function usePageTiming(page: TimedPage, ticket: string | undefined) {
+  // Il biglietto conta soltanto al primo caricamento: le rivalidazioni non lo rinnovano.
+  const firstTicket = useRef(ticket);
   useEffect(() => {
-    if (reported || page === null) return;
+    const ticket = firstTicket.current;
+    if (reported || !ticket) return;
     reported = true;
     const ready = performance.now();
     const [navigation] = performance.getEntriesByType(
@@ -65,6 +68,7 @@ export function usePageTiming(page: TimedPage | null) {
               lcp: round(lcp),
               ready: round(ready) ?? maxTimingMs,
               server,
+              ticket,
             }),
           ],
           { type: "application/json" },

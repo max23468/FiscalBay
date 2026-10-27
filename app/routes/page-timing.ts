@@ -4,6 +4,7 @@ import { z } from "zod";
 import { readBounded } from "../integrations/http.server";
 import { pagePoint, writePoints } from "../metrics.server";
 import { maxTimingMs, serverPhases, timedPages } from "../page-timing";
+import { redeemTimingTicket } from "../page-timing.server";
 import type { Route } from "./+types/page-timing";
 
 const duration = z.number().int().min(0).max(maxTimingMs);
@@ -16,6 +17,7 @@ const pageTimingSchema = z.strictObject({
   lcp: duration.optional(),
   ready: duration,
   server: z.partialRecord(z.enum(serverPhases), duration),
+  ticket: z.string().max(200),
 });
 
 /** Un report valido occupa poche centinaia di byte. */
@@ -28,7 +30,8 @@ export function loader() {
 
 /**
  * Misure del caricamento delle pagine dell'app inviate dal browser: scritte su Analytics Engine
- * con i soli campi ammessi. Richieste di altre origini, vuote, troppo grandi o non valide non
+ * con i soli campi ammessi, una volta per il biglietto della pagina. Richieste di altre origini,
+ * vuote, troppo grandi, non valide, senza un biglietto valido o ripetute non
  * lasciano traccia.
  */
 export async function action({ request }: Route.ActionArgs) {
@@ -47,6 +50,9 @@ export async function action({ request }: Route.ActionArgs) {
     return new Response(null, { status: 400 });
   }
   if (!parsed.success) return new Response(null, { status: 400 });
-  writePoints(env.METRICS, [pagePoint({ ...parsed.data, version: env.VERSION_METADATA?.id })]);
+  const { ticket, ...timing } = parsed.data;
+  if (!(await redeemTimingTicket(env.DB, env.BETTER_AUTH_SECRET, ticket, timing.page)))
+    return new Response(null, { status: 204 });
+  writePoints(env.METRICS, [pagePoint({ ...timing, version: env.VERSION_METADATA?.id })]);
   return new Response(null, { status: 204 });
 }

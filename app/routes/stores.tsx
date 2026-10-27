@@ -28,6 +28,7 @@ import type { ActionResult, EbayEnvironment, StoreView } from "../view-models";
 import { serviceSetting } from "../domain/service-settings.server";
 import { logFailure } from "../errors";
 import { describeRequest, measure } from "../observability.server";
+import { issueTimingTicket } from "../page-timing.server";
 import { settle } from "../settle.server";
 import type { Route } from "./+types/stores";
 
@@ -141,6 +142,7 @@ async function readStores({ request, params }: Route.LoaderArgs) {
   return data(
     {
       ...payload,
+      timing: await issueTimingTicket(env.BETTER_AUTH_SECRET, "stores", now),
       // Lo stato dei negozi in lettura si conferma nella stessa risposta, entro l'attesa.
       confirmation:
         syncing > 0
@@ -248,6 +250,7 @@ export default function Stores({ loaderData }: Route.ComponentProps) {
     <StoresPage
       data={page}
       confirmation={loaderData.confirmation}
+      timing={loaderData.timing}
       notice={<AccessNotice notice={notice} />}
     />
   );

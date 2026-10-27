@@ -216,9 +216,9 @@ export function QuotasView({
 /** Nome da un elenco della console; un valore fuori elenco resta com'è scritto nel dataset. */
 const named = (names: Record<string, string>, value: string) => names[value] ?? value;
 
-export function MetricsView({ metrics }: { metrics: TechnicalMetrics }) {
+export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
   const { t, language } = useAdmin();
-  const m = t.metrics;
+  const m = t.performance;
   // Stime e durate in millisecondi, intere come le misure del browser.
   const whole = (value: number) => Math.round(value).toLocaleString(locales[language]);
   const count = (value: number) => <span className="font-code">{whole(value)}</span>;

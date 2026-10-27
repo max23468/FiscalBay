@@ -10,7 +10,7 @@ import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
-import { useCopy, useLinks } from "~/components/copy-context";
+import { useCopy } from "~/components/copy-context";
 import { supportEmail } from "../../app-copy";
 import { usePageTiming } from "../../page-timing";
 import type { StoreView } from "../../view-models";
@@ -29,8 +29,11 @@ export function StoresPage({
   data: saved,
   notice,
   confirmation,
+  timing,
 }: {
   data: StoresPageData;
+  /** Biglietto del report delle misure, soltanto nell'area reale. */
+  timing?: string;
   /** Esito del collegamento eBay appena concluso, sotto il titolo. */
   notice?: React.ReactNode;
   /**
@@ -43,8 +46,7 @@ export function StoresPage({
   const stores = useConfirmed(saved.stores, confirmation);
   const [detail] = useConfirmed(saved.detail ? [saved.detail] : [], confirmation);
   const data = { ...saved, stores, detail: detail ?? null };
-  const { preview } = useLinks();
-  usePageTiming(preview ? null : "stores");
+  usePageTiming("stores", timing);
   // «Già collegato a un altro account» è l'esito di un tentativo, non uno stato della pagina.
   const [attempted, setAttempted] = useState(false);
   const premium = data.account.plan === "premium";
