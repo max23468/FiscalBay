@@ -52,9 +52,14 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 - [Notification API](https://developer.ebay.com/develop/api/buy/notification_api)
 - [Notification API release notes](https://developer.ebay.com/api-docs/commerce/notification/static/release-notes.html)
 - [Authorization code grant e RuName](https://developer.ebay.com/develop/guides/sell/authorization)
+- [Modern APIs Migration Guide](https://developer.ebay.com/develop/guides/sell/modern-apis-migration-guide) ([Markdown](https://developer.ebay.com/develop/guides/modern-apis-migration-guide.md))
+- [API Deprecation Status](https://developer.ebay.com/develop/get-started/api-deprecation-status)
+- [API Call Limits](https://developer.ebay.com/develop/api/sell/api_call_limits)
+- [Notification Topics](https://developer.ebay.com/develop/api/sell/notification_events), con le specifiche AsyncAPI per topic (`/develop/api/spec/events/<TOPIC>.yaml`)
+- [App Insights API](https://developer.ebay.com/develop/api/sell/app_insights_api) e [schema GraphQL unificato](https://developer.ebay.com/develop/api/spec/listing.graphqls)
 - [D.M. 23 dicembre 1976: sistemi di codificazione per l'anagrafe tributaria](https://def.giustiziatributaria.gov.it/DocTribFrontend/getAttoNormativoDetail.do?ACTION=getSommario&id=%7B8D93A450-E5FE-47FC-A6F0-F938769051BF%7D)
 
-**Verifica pertinente:** G-EBAY; matrice campo/fonte/età/stato, scope e identità stabili, dati pagati/non pagati, mascheramenti, immagini ed eventi. La precedenza fiscale qualificata è definita in [§9 del piano](MASTER_PLAN.md#s09): Fulfillment per il CF italiano Production nelle condizioni provate, Trading `GetOrders` come fallback con `BuyerTaxIdentifier` condizionale e ripetibile. Gli eventi non sostituiscono il polling di riconciliazione e la consegna attribuita Production resta nel test merchant. Per OAuth eBay usa il RuName al posto della URL nel parametro `redirect_uri`, raccomanda `state` contro CSRF e limita il codice monouso a 1.024 caratteri. Il decreto governa i controlli locali di struttura e carattere di controllo, compresi omocodia e CF numerico; un esito formale non verifica l'Anagrafe tributaria.
+**Verifica pertinente:** G-EBAY; matrice campo/fonte/età/stato, scope e identità stabili, dati pagati/non pagati, mascheramenti, immagini ed eventi. La precedenza fiscale qualificata è definita in [§9 del piano](MASTER_PLAN.md#s09): Fulfillment per il CF italiano Production nelle condizioni provate, Trading `GetOrders` come fallback con `BuyerTaxIdentifier` condizionale e ripetibile. Gli eventi non sostituiscono il polling di riconciliazione e la consegna attribuita Production resta nel test merchant. Verifica del 2026-10-27: lo schema GraphQL non espone identificativi fiscali né indirizzo di fatturazione, nessuna data di dismissione riguarda le chiamate Trading usate e oltre le quote predefinite si passa dall'Application Growth Check. Per OAuth eBay usa il RuName al posto della URL nel parametro `redirect_uri`, raccomanda `state` contro CSRF e limita il codice monouso a 1.024 caratteri. Il decreto governa i controlli locali di struttura e carattere di controllo, compresi omocodia e CF numerico; un esito formale non verifica l'Anagrafe tributaria.
 
 <a id="s07"></a>
 ### S07 · Cloudflare · D1 Time Travel
@@ -288,7 +293,7 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 - [API License Agreement](https://www.developer.ebay.com/join/api-license-agreement)
 - [Policy del Developers Program](https://developer.ebay.com/join/policies)
 
-**Uso:** §29–30; M0-12, M1 e M7-07. La licenza corrente incorpora il DPA, limita copie e uso dei dati, vieta l'uso dei contenuti eBay per addestrare modelli e governa marchi/pubblicità. Rileggere la versione corrente al gate di pubblicazione e non interpretare l'accesso API come licenza generale sul brand.
+**Uso:** §29–30; M0-12, M1 e M7-07. La licenza corrente incorpora il DPA, limita copie e uso dei dati, vieta l'uso dei contenuti eBay per addestrare modelli e governa marchi/pubblicità. Dal 2026 definisce le Restricted APIs, i cui dati non entrano in AI non fornite da eBay, e il DPA include gli obblighi 28 CFR Part 202. Rileggere la versione corrente al gate di pubblicazione e non interpretare l'accesso API come licenza generale sul brand.
 
 <a id="s33"></a>
 ### S33 · Licenze runtime del candidato

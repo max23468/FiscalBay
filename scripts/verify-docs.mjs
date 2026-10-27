@@ -3,7 +3,8 @@
  * Controlli locali della documentazione. Nessuna dipendenza o richiesta di rete.
  * Non verifica semantica del prodotto, conformità o stato live dei provider.
  * Uso: node scripts/verify-docs.mjs [--assets] [--json] [--root DIRECTORY]
- * Audit e snapshot in docs/archive non partecipano ai controlli ordinari.
+ * Audit e snapshot in docs/archive e i pacchetti di terzi in .agents/vendor, importati senza
+ * modifiche, non partecipano ai controlli ordinari.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -49,7 +50,11 @@ const skipped = new Set([
 function walk(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((item) => {
     const p = path.join(dir, item.name);
-    if (skipped.has(item.name) || relative(p) === "docs/archive" || item.isSymbolicLink())
+    if (
+      skipped.has(item.name) ||
+      ["docs/archive", ".agents/vendor"].includes(relative(p)) ||
+      item.isSymbolicLink()
+    )
       return [];
     // Un checkout annidato conserva istruzioni e documenti propri.
     if (item.isDirectory() && fs.existsSync(path.join(p, ".git"))) return [];

@@ -12,11 +12,13 @@ const headerSchema = z.object({
   alg: z.enum(["ECDSA", "ecdsa"]),
   digest: z.enum(["SHA256", "sha256"]),
 });
-const notificationSchema = z.object({
-  metadata: z.object({ topic: z.literal("ORDER_CONFIRMATION"), schemaVersion: z.literal("1.0") }),
+const notificationFields = { notificationId: identifier, eventDate: z.iso.datetime() };
+const metadata = <Topic extends string>(topic: Topic) =>
+  z.object({ topic: z.literal(topic), schemaVersion: z.literal("1.0") });
+const orderConfirmationSchema = z.object({
+  metadata: metadata("ORDER_CONFIRMATION"),
   notification: z.object({
-    notificationId: identifier,
-    eventDate: z.iso.datetime(),
+    ...notificationFields,
     data: z.object({
       // Le consegne di prova eBay non indicano il venditore.
       user: z.object({ userId: identifier }).optional(),
@@ -24,6 +26,59 @@ const notificationSchema = z.object({
     }),
   }),
 });
+// Revoca del consenso, una sottoscrizione per l'applicazione: `userId` è lo stesso
+// identificativo immutabile di `ORDER_CONFIRMATION`. Username, motivo e token legacy non servono.
+const authorizationRevocationSchema = z.object({
+  metadata: metadata("AUTHORIZATION_REVOCATION"),
+  notification: z.object({
+    ...notificationFields,
+    data: z.object({
+      userId: identifier.optional(),
+      revocationDate: z.iso.datetime().optional(),
+    }),
+  }),
+});
+// Soglia della Bulk Data Transfer Policy raggiunta dall'applicazione: metriche aggregate per
+// categoria di dati, nessun dato di negozi o acquirenti.
+const bulkDataTransferThresholdSchema = z.object({
+  metadata: metadata("BULK_DATA_TRANSFER_THRESHOLD"),
+  notification: z.object({
+    ...notificationFields,
+    data: z.object({
+      policyFramework: z.string().min(1).max(64),
+      policyVersion: z.string().max(32).optional(),
+      region: z.string().min(1).max(16),
+      window: z.object({
+        aggregationWindowStart: z.iso.datetime(),
+        aggregationWindowEnd: z.iso.datetime(),
+      }),
+      metricData: z
+        .array(
+          z.object({
+            metricDataType: z.string().min(1).max(128),
+            thresholdStatus: z.enum(["WARNING", "REACHED"]),
+            thresholdPercentage: z.number().nonnegative(),
+            thresholdLimit: z.number().int().nonnegative(),
+            currentCount: z.number().int().nonnegative(),
+          }),
+        )
+        .min(1)
+        .max(50),
+    }),
+  }),
+});
+/** Topic e notifica, distinti per tipo: il chiamante riconosce i dati dal topic. */
+const byTopic = <Topic extends string, Notification>(value: {
+  metadata: { topic: Topic };
+  notification: Notification;
+}) => ({ topic: value.metadata.topic, notification: value.notification });
+const notificationSchema = z.union([
+  orderConfirmationSchema.transform(byTopic),
+  authorizationRevocationSchema.transform(byTopic),
+  bulkDataTransferThresholdSchema.transform(byTopic),
+]);
+
+export type EbayNotification = z.infer<typeof notificationSchema>;
 
 // Cache e budget limitati per isolate: un header non autenticato non può far crescere
 // la memoria o provocare recuperi illimitati di chiavi. Nessun URL arriva dal payload.
@@ -33,14 +88,15 @@ let lookups = 0;
 
 export class NotificationLimit extends Error {}
 
-export async function verifyOrderNotification(
+/** Notifica eBay con firma verificata, di uno dei topic gestiti. */
+export async function verifyEbayNotification(
   body: string,
   signature: string | null,
   env: Env,
   ebayEnvironment: EbayEnvironment,
   fetcher: typeof fetch,
   now: number,
-) {
+): Promise<EbayNotification> {
   const header = headerSchema.parse(JSON.parse(atob(encodedSignature.parse(signature))));
   const configuration = ebayConfiguration(env, ebayEnvironment);
   const cacheId = `${configuration.clientId}:${ebayEnvironment}:${header.kid}`;
@@ -87,5 +143,5 @@ export async function verifyOrderNotification(
   }
   if (!verify("sha256", Buffer.from(body), publicKey.key, Buffer.from(header.signature, "base64")))
     throw new Error();
-  return notificationSchema.parse(JSON.parse(body)).notification;
+  return notificationSchema.parse(JSON.parse(body));
 }

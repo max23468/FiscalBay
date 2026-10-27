@@ -1,0 +1,520 @@
+# GetItem — Example
+
+## Request Example
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <RequesterCredentials>
+    <eBayAuthToken>PLACEHOLDER_TOKEN</eBayAuthToken>
+  </RequesterCredentials>
+  <!-- Replace with a valid ItemID and VariationSpecifics from a search. -->
+  <ItemID>40</ItemID>
+  <IncludeItemSpecifics>true</IncludeItemSpecifics>
+  <VariationSpecifics>
+    <NameValueList>
+      <Name>Size</Name>
+      <Value>M</Value>
+    </NameValueList>
+  </VariationSpecifics>
+</GetItemRequest>
+```
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<GetItemRequest xmlns="urn:ebay:apis:eBLBaseComponents">
+  <DetailLevel>ReturnAll</DetailLevel>
+  <ItemID>12</ItemID>
+  <IncludeItemSpecifics>true</IncludeItemSpecifics>
+  <RequesterCredentials>
+    <eBayAuthToken>PLACEHOLDER_TOKEN</eBayAuthToken>
+  </RequesterCredentials>
+</GetItemRequest>
+```
+
+## Response Example
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<GetItemResponse xmlns="urn:ebay:apis:eBLBaseComponents">
+  <Timestamp>2022-04-15T20:08:56.068Z</Timestamp>
+  <Ack>Success</Ack>
+  <Version>1193</Version>
+  <Build>E1193_CORE_API_19146280_R1</Build>
+  <Item>
+    <AutoPay>true</AutoPay>
+    <BuyerProtection>ItemIneligible</BuyerProtection>
+    <BuyItNowPrice currencyID="USD">0.0</BuyItNowPrice>
+    <Country>US</Country>
+    <Currency>USD</Currency>
+    <GiftIcon>0</GiftIcon>
+    <HitCounter>NoHitCounter</HitCounter>
+    <ItemID>40</ItemID>
+    <ListingDetails>
+      <Adult>false</Adult>
+      <BindingAuction>false</BindingAuction>
+      <CheckoutEnabled>true</CheckoutEnabled>
+      <HasReservePrice>false</HasReservePrice>
+      <StartTime>2021-10-17T21:16:41.000Z</StartTime>
+      <EndTime>2022-04-17T21:16:41.000Z</EndTime>
+      <ViewItemURL>https://www.ebay.com/itm/POLO-RALPH-LAUREN-Mens-Classic-Fit-Big-Pony-Crewneck-T-Shirt-NEW-NWT-/40</ViewItemURL>
+      <HasUnansweredQuestions>true</HasUnansweredQuestions>
+      <HasPublicMessages>false</HasPublicMessages>
+      <ViewItemURLForNaturalSearch>https://www.ebay.com/itm/POLO-RALPH-LAUREN-Mens-Classic-Fit-Big-Pony-Crewneck-T-Shirt-NEW-NWT-/40</ViewItemURLForNaturalSearch>
+    </ListingDetails>
+    <ListingDuration>GTC</ListingDuration>
+    <ListingType>FixedPriceItem</ListingType>
+    <Location>Ak</Location>
+    <PrimaryCategory>
+      <CategoryID>15687</CategoryID>
+      <CategoryName>Clothing, Shoes & Accessories:Men:Men's Clothing:Shirts:T-Shirts</CategoryName>
+    </PrimaryCategory>
+    <PrivateListing>false</PrivateListing>
+    <Quantity>129</Quantity>
+    <ReviseStatus>
+      <ItemRevised>true</ItemRevised>
+    </ReviseStatus>
+    <Seller>
+      <AboutMePage>false</AboutMePage>
+      <Email>Invalid Request</Email>
+      <FeedbackScore>2518</FeedbackScore>
+      <PositiveFeedbackPercent>97.6</PositiveFeedbackPercent>
+      <eBayGoodStanding>true</eBayGoodStanding>
+      <NewUser>false</NewUser>
+      <RegistrationDate>2018-09-29T23:19:14.000Z</RegistrationDate>
+      <Site>US</Site>
+      <UserID>en</UserID>
+      <VATStatus>NoVATTax</VATStatus>
+      <SellerInfo>
+        <AllowPaymentEdit>true</AllowPaymentEdit>
+        <CheckoutEnabled>true</CheckoutEnabled>
+        <CIPBankAccountStored>false</CIPBankAccountStored>
+        <GoodStanding>true</GoodStanding>
+        <LiveAuctionAuthorized>false</LiveAuctionAuthorized>
+        <QualifiesForB2BVAT>false</QualifiesForB2BVAT>
+        <StoreOwner>true</StoreOwner>
+        <StoreURL>https://stores.ebay.com/en</StoreURL>
+        <TopRatedSeller>true</TopRatedSeller>
+      </SellerInfo>
+      <MotorsDealer>false</MotorsDealer>
+    </Seller>
+    <SellingStatus>
+      <BidCount>0</BidCount>
+      <BidIncrement currencyID="USD">0.0</BidIncrement>
+      <ConvertedCurrentPrice currencyID="USD">39.99</ConvertedCurrentPrice>
+      <CurrentPrice currencyID="USD">39.99</CurrentPrice>
+      <MinimumToBid currencyID="USD">39.99</MinimumToBid>
+      <QuantitySold>51</QuantitySold>
+      <ReserveMet>true</ReserveMet>
+      <SecondChanceEligible>false</SecondChanceEligible>
+      <ListingStatus>Active</ListingStatus>
+      <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+    </SellingStatus>
+    <ShippingDetails>
+      <ApplyShippingDiscount>false</ApplyShippingDiscount>
+      <GlobalShipping>true</GlobalShipping>
+      <CalculatedShippingRate>
+        <WeightMajor measurementSystem="English" unit="lbs">0</WeightMajor>
+        <WeightMinor measurementSystem="English" unit="oz">6</WeightMinor>
+      </CalculatedShippingRate>
+      <SalesTax>
+        <SalesTaxPercent>0.0</SalesTaxPercent>
+        <ShippingIncludedInTax>false</ShippingIncludedInTax>
+      </SalesTax>
+      <ShippingServiceOptions>
+        <ShippingService>USPSFirstClass</ShippingService>
+        <ShippingServiceCost currencyID="USD">4.99</ShippingServiceCost>
+        <ShippingServiceAdditionalCost currencyID="USD">2.99</ShippingServiceAdditionalCost>
+        <ShippingServicePriority>1</ShippingServicePriority>
+        <ExpeditedService>false</ExpeditedService>
+        <ShippingTimeMin>3</ShippingTimeMin>
+        <ShippingTimeMax>5</ShippingTimeMax>
+      </ShippingServiceOptions>
+      <ShippingType>Flat</ShippingType>
+      <ThirdPartyCheckout>false</ThirdPartyCheckout>
+      <ShippingDiscountProfileID>0</ShippingDiscountProfileID>
+      <InternationalShippingDiscountProfileID>0</InternationalShippingDiscountProfileID>
+      <SellerExcludeShipToLocationsPreference>true</SellerExcludeShipToLocationsPreference>
+    </ShippingDetails>
+    <ShipToLocations>US</ShipToLocations>
+    <ShipToLocations>CA</ShipToLocations>
+    <ShipToLocations>GB</ShipToLocations>
+    <ShipToLocations>CN</ShipToLocations>
+    <ShipToLocations>MX</ShipToLocations>
+    <ShipToLocations>DE</ShipToLocations>
+    <ShipToLocations>JP</ShipToLocations>
+    <ShipToLocations>BR</ShipToLocations>
+    <ShipToLocations>FR</ShipToLocations>
+    <ShipToLocations>AU</ShipToLocations>
+    <ShipToLocations>RU</ShipToLocations>
+    <ShipToLocations>DK</ShipToLocations>
+    <ShipToLocations>RO</ShipToLocations>
+    <ShipToLocations>SK</ShipToLocations>
+    <ShipToLocations>BG</ShipToLocations>
+    <ShipToLocations>CZ</ShipToLocations>
+    <ShipToLocations>FI</ShipToLocations>
+    <ShipToLocations>HU</ShipToLocations>
+    <ShipToLocations>LV</ShipToLocations>
+    <ShipToLocations>LT</ShipToLocations>
+    <ShipToLocations>MT</ShipToLocations>
+    <ShipToLocations>EE</ShipToLocations>
+    <ShipToLocations>GR</ShipToLocations>
+    <ShipToLocations>PT</ShipToLocations>
+    <ShipToLocations>CY</ShipToLocations>
+    <ShipToLocations>SI</ShipToLocations>
+    <ShipToLocations>SE</ShipToLocations>
+    <ShipToLocations>KR</ShipToLocations>
+    <ShipToLocations>ID</ShipToLocations>
+    <ShipToLocations>TW</ShipToLocations>
+    <ShipToLocations>ZA</ShipToLocations>
+    <ShipToLocations>TH</ShipToLocations>
+    <ShipToLocations>BE</ShipToLocations>
+    <ShipToLocations>HK</ShipToLocations>
+    <ShipToLocations>IE</ShipToLocations>
+    <ShipToLocations>NL</ShipToLocations>
+    <ShipToLocations>PL</ShipToLocations>
+    <ShipToLocations>ES</ShipToLocations>
+    <ShipToLocations>IT</ShipToLocations>
+    <ShipToLocations>AT</ShipToLocations>
+    <ShipToLocations>BS</ShipToLocations>
+    <ShipToLocations>IL</ShipToLocations>
+    <ShipToLocations>NZ</ShipToLocations>
+    <ShipToLocations>PH</ShipToLocations>
+    <ShipToLocations>SG</ShipToLocations>
+    <ShipToLocations>CH</ShipToLocations>
+    <ShipToLocations>NO</ShipToLocations>
+    <ShipToLocations>SA</ShipToLocations>
+    <ShipToLocations>AE</ShipToLocations>
+    <ShipToLocations>QA</ShipToLocations>
+    <ShipToLocations>KW</ShipToLocations>
+    <ShipToLocations>BH</ShipToLocations>
+    <ShipToLocations>HR</ShipToLocations>
+    <ShipToLocations>MY</ShipToLocations>
+    <ShipToLocations>CL</ShipToLocations>
+    <ShipToLocations>CO</ShipToLocations>
+    <ShipToLocations>CR</ShipToLocations>
+    <ShipToLocations>DO</ShipToLocations>
+    <ShipToLocations>PA</ShipToLocations>
+    <ShipToLocations>TT</ShipToLocations>
+    <ShipToLocations>GT</ShipToLocations>
+    <ShipToLocations>SV</ShipToLocations>
+    <ShipToLocations>HN</ShipToLocations>
+    <ShipToLocations>JM</ShipToLocations>
+    <ShipToLocations>AG</ShipToLocations>
+    <ShipToLocations>AW</ShipToLocations>
+    <ShipToLocations>BZ</ShipToLocations>
+    <ShipToLocations>DM</ShipToLocations>
+    <ShipToLocations>GD</ShipToLocations>
+    <ShipToLocations>KN</ShipToLocations>
+    <ShipToLocations>LC</ShipToLocations>
+    <ShipToLocations>MS</ShipToLocations>
+    <ShipToLocations>TC</ShipToLocations>
+    <ShipToLocations>BB</ShipToLocations>
+    <ShipToLocations>BD</ShipToLocations>
+    <ShipToLocations>BM</ShipToLocations>
+    <ShipToLocations>BN</ShipToLocations>
+    <ShipToLocations>BO</ShipToLocations>
+    <ShipToLocations>EC</ShipToLocations>
+    <ShipToLocations>EG</ShipToLocations>
+    <ShipToLocations>GF</ShipToLocations>
+    <ShipToLocations>GG</ShipToLocations>
+    <ShipToLocations>GI</ShipToLocations>
+    <ShipToLocations>GP</ShipToLocations>
+    <ShipToLocations>IS</ShipToLocations>
+    <ShipToLocations>JE</ShipToLocations>
+    <ShipToLocations>JO</ShipToLocations>
+    <ShipToLocations>KH</ShipToLocations>
+    <ShipToLocations>KY</ShipToLocations>
+    <ShipToLocations>LI</ShipToLocations>
+    <ShipToLocations>LK</ShipToLocations>
+    <ShipToLocations>LU</ShipToLocations>
+    <ShipToLocations>MC</ShipToLocations>
+    <ShipToLocations>MO</ShipToLocations>
+    <ShipToLocations>MQ</ShipToLocations>
+    <ShipToLocations>MV</ShipToLocations>
+    <ShipToLocations>NI</ShipToLocations>
+    <ShipToLocations>OM</ShipToLocations>
+    <ShipToLocations>PE</ShipToLocations>
+    <ShipToLocations>PK</ShipToLocations>
+    <ShipToLocations>PY</ShipToLocations>
+    <ShipToLocations>RE</ShipToLocations>
+    <ShipToLocations>VN</ShipToLocations>
+    <ShipToLocations>UY</ShipToLocations>
+    <Site>US</Site>
+    <StartPrice currencyID="USD">39.99</StartPrice>
+    <Storefront>
+      <StoreCategoryID>1</StoreCategoryID>
+      <StoreCategory2ID>0</StoreCategory2ID>
+      <StoreURL>https://stores.ebay.com/en</StoreURL>
+    </Storefront>
+    <TimeLeft>P2DT1H7M45S</TimeLeft>
+    <Title>POLO RALPH LAUREN Men's Classic Fit T-Shirt</Title>
+    <HitCount>18535</HitCount>
+    <LocationDefaulted>true</LocationDefaulted>
+    <GetItFast>false</GetItFast>
+    <BuyerResponsibleForShipping>false</BuyerResponsibleForShipping>
+    <PostalCode>122</PostalCode>
+    <PictureDetails>
+      <GalleryType>Gallery</GalleryType>
+      <PhotoDisplay>PicturePack</PhotoDisplay>
+      <PictureURL>https://i.ebayimg.com/00/s/Mw/z/tD/$_57.JPG?set_id=87</PictureURL>
+      <PictureURL>https://i.ebayimg.com/00/s/Mw/z/vj/$_57.JPG?set_id=87</PictureURL>
+      <PictureURL>https://i.ebayimg.com/00/s/Mw/z/IP/$_57.JPG?set_id=87</PictureURL>
+      <PictureURL>https://i.ebayimg.com/00/s/Mw/z/NS/$_57.JPG?set_id=87</PictureURL>
+      <PictureURL>https://i.ebayimg.com/00/s/Mw/z/3Y/$_57.JPG?set_id=87</PictureURL>
+    </PictureDetails>
+    <DispatchTimeMax>1</DispatchTimeMax>
+    <ProxyItem>false</ProxyItem>
+    <ItemSpecifics>
+      <NameValueList>
+        <Name>Department</Name>
+        <Value>Men</Value>
+        <Source>ItemSpecific</Source>
+      </NameValueList>
+      <NameValueList>
+        <Name>Fit</Name>
+        <Value>Classic</Value>
+        <Source>ItemSpecific</Source>
+      </NameValueList>
+      <NameValueList>
+        <Name>Type</Name>
+        <Value>T-Shirt</Value>
+        <Source>ItemSpecific</Source>
+      </NameValueList>
+      <NameValueList>
+        <Name>Neckline</Name>
+        <Value>Crew Neck</Value>
+        <Source>ItemSpecific</Source>
+      </NameValueList>
+      <NameValueList>
+        <Name>Brand</Name>
+        <Value>Polo Ralph Lauren</Value>
+        <Source>ItemSpecific</Source>
+      </NameValueList>
+    </ItemSpecifics>
+    <BuyerGuaranteePrice currencyID="USD">20000.0</BuyerGuaranteePrice>
+    <IntangibleItem>false</IntangibleItem>
+    <ReturnPolicy>
+      <ReturnsAcceptedOption>ReturnsNotAccepted</ReturnsAcceptedOption>
+      <ReturnsAccepted>No returns accepted</ReturnsAccepted>
+      <InternationalReturnsAcceptedOption>ReturnsNotAccepted</InternationalReturnsAcceptedOption>
+    </ReturnPolicy>
+    <Variations>
+      <Variation>
+        <StartPrice currencyID="USD">39.99</StartPrice>
+        <Quantity>28</Quantity>
+        <VariationSpecifics>
+          <NameValueList>
+            <Name>Color</Name>
+            <Value>Black</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size Type</Name>
+            <Value>Regular</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size</Name>
+            <Value>M</Value>
+          </NameValueList>
+        </VariationSpecifics>
+        <SellingStatus>
+          <QuantitySold>7</QuantitySold>
+          <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+        </SellingStatus>
+      </Variation>
+      <Variation>
+        <StartPrice currencyID="USD">39.99</StartPrice>
+        <Quantity>6</Quantity>
+        <VariationSpecifics>
+          <NameValueList>
+            <Name>Color</Name>
+            <Value>Blue</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size Type</Name>
+            <Value>Regular</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size</Name>
+            <Value>M</Value>
+          </NameValueList>
+        </VariationSpecifics>
+        <SellingStatus>
+          <QuantitySold>3</QuantitySold>
+          <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+        </SellingStatus>
+      </Variation>
+      <Variation>
+        <StartPrice currencyID="USD">39.99</StartPrice>
+        <Quantity>12</Quantity>
+        <VariationSpecifics>
+          <NameValueList>
+            <Name>Color</Name>
+            <Value>Navy</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size Type</Name>
+            <Value>Regular</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size</Name>
+            <Value>M</Value>
+          </NameValueList>
+        </VariationSpecifics>
+        <SellingStatus>
+          <QuantitySold>6</QuantitySold>
+          <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+        </SellingStatus>
+      </Variation>
+      <Variation>
+        <StartPrice currencyID="USD">39.99</StartPrice>
+        <Quantity>19</Quantity>
+        <VariationSpecifics>
+          <NameValueList>
+            <Name>Color</Name>
+            <Value>Yellow</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size Type</Name>
+            <Value>Regular</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size</Name>
+            <Value>M</Value>
+          </NameValueList>
+        </VariationSpecifics>
+        <SellingStatus>
+          <QuantitySold>15</QuantitySold>
+          <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+        </SellingStatus>
+      </Variation>
+      <Variation>
+        <StartPrice currencyID="USD">39.99</StartPrice>
+        <Quantity>14</Quantity>
+        <VariationSpecifics>
+          <NameValueList>
+            <Name>Color</Name>
+            <Value>Green</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size Type</Name>
+            <Value>Regular</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size</Name>
+            <Value>M</Value>
+          </NameValueList>
+        </VariationSpecifics>
+        <SellingStatus>
+          <QuantitySold>3</QuantitySold>
+          <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+        </SellingStatus>
+      </Variation>
+      <Variation>
+        <StartPrice currencyID="USD">39.99</StartPrice>
+        <Quantity>23</Quantity>
+        <VariationSpecifics>
+          <NameValueList>
+            <Name>Color</Name>
+            <Value>Gray</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size Type</Name>
+            <Value>Regular</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size</Name>
+            <Value>M</Value>
+          </NameValueList>
+        </VariationSpecifics>
+        <SellingStatus>
+          <QuantitySold>3</QuantitySold>
+          <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+        </SellingStatus>
+      </Variation>
+      <Variation>
+        <StartPrice currencyID="USD">39.99</StartPrice>
+        <Quantity>18</Quantity>
+        <VariationSpecifics>
+          <NameValueList>
+            <Name>Color</Name>
+            <Value>White</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size Type</Name>
+            <Value>Regular</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size</Name>
+            <Value>M</Value>
+          </NameValueList>
+        </VariationSpecifics>
+        <SellingStatus>
+          <QuantitySold>5</QuantitySold>
+          <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+        </SellingStatus>
+      </Variation>
+      <Variation>
+        <StartPrice currencyID="USD">39.99</StartPrice>
+        <Quantity>9</Quantity>
+        <VariationSpecifics>
+          <NameValueList>
+            <Name>Color</Name>
+            <Value>Red</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size Type</Name>
+            <Value>Regular</Value>
+          </NameValueList>
+          <NameValueList>
+            <Name>Size</Name>
+            <Value>M</Value>
+          </NameValueList>
+        </VariationSpecifics>
+        <SellingStatus>
+          <QuantitySold>9</QuantitySold>
+          <QuantitySoldByPickupInStore>0</QuantitySoldByPickupInStore>
+        </SellingStatus>
+      </Variation>
+      <Pictures>
+        <VariationSpecificName>Color</VariationSpecificName>
+        <VariationSpecificPictureSet>
+          <VariationSpecificValue>Black</VariationSpecificValue>
+          <PictureURL>https://i.ebayimg.com/00/s/Mw/z/i7gAAOSw59BhbJD5/$_57.JPG?set_id=87</PictureURL>
+        </VariationSpecificPictureSet>
+        <VariationSpecificPictureSet>
+          <VariationSpecificValue>Blue</VariationSpecificValue>
+          <PictureURL>https://i.ebayimg.com/00/s/Mw/z/v9sAAOSw1BthbJEJ/$_57.JPG?set_id=87</PictureURL>
+        </VariationSpecificPictureSet>
+        <VariationSpecificPictureSet>
+          <VariationSpecificValue>Navy</VariationSpecificValue>
+          <PictureURL>https://i.ebayimg.com/00/s/Mw/z/tt/$_57.JPG?set_id=87</PictureURL>
+        </VariationSpecificPictureSet>
+        <VariationSpecificPictureSet>
+          <VariationSpecificValue>Yellow</VariationSpecificValue>
+          <PictureURL>https://i.ebayimg.com/00/s/Mw/z/Tw/$_57.JPG?set_id=87</PictureURL>
+        </VariationSpecificPictureSet>
+        <VariationSpecificPictureSet>
+          <VariationSpecificValue>Green</VariationSpecificValue>
+          <PictureURL>https://i.ebayimg.com/00/s/Mw/z/40/$_57.JPG?set_id=87</PictureURL>
+        </VariationSpecificPictureSet>
+      </Pictures>
+    </Variations>
+    <ConditionID>1000</ConditionID>
+    <ConditionDisplayName>New with tags</ConditionDisplayName>
+    <QuantityAvailableHint>MoreThan</QuantityAvailableHint>
+    <QuantityThreshold>10</QuantityThreshold>
+    <PostCheckoutExperienceEnabled>false</PostCheckoutExperienceEnabled>
+    <ShippingPackageDetails>
+      <ShippingIrregular>false</ShippingIrregular>
+      <ShippingPackage>PackageThickEnvelope</ShippingPackage>
+      <WeightMajor measurementSystem="English" unit="lbs">0</WeightMajor>
+      <WeightMinor measurementSystem="English" unit="oz">6</WeightMinor>
+    </ShippingPackageDetails>
+    <HideFromSearch>false</HideFromSearch>
+    <eBayPlus>false</eBayPlus>
+    <eBayPlusEligible>false</eBayPlusEligible>
+    <IsSecureDescription>true</IsSecureDescription>
+  </Item>
+</GetItemResponse>
+```

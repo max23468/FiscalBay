@@ -3,7 +3,8 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import Stripe from "stripe";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { receiveWebhook, consumeWebhooks, recoverWebhookIngress } from "../app/webhooks.server";
-import { verifyOrderNotification } from "../app/integrations/ebay/notifications.server";
+import { verifyEbayNotification } from "../app/integrations/ebay/notifications.server";
+import { listAnomalies } from "../app/domain/admin-operations.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import worker from "../workers/app";
@@ -82,7 +83,7 @@ const fetcher = vi.fn<typeof fetch>(async (input, init) => {
     );
   throw new Error("unexpected_synthetic_request");
 });
-function ebayRequest(payload = notification, kid = "synthetic-key") {
+function ebayRequest(payload: object = notification, kid = "synthetic-key") {
   const body = JSON.stringify(payload);
   const signature = btoa(
     JSON.stringify({
@@ -131,7 +132,7 @@ it("verifica direttamente una firma valida e rifiuta header fuori limite", async
   const body = await request.text();
   const signature = request.headers.get("x-ebay-signature")!;
   expect(
-    await verifyOrderNotification(
+    await verifyEbayNotification(
       body,
       signature,
       environment,
@@ -139,11 +140,11 @@ it("verifica direttamente una firma valida e rifiuta header fuori limite", async
       fetcher,
       now.getTime(),
     ),
-  ).toEqual(notification.notification);
+  ).toEqual({ topic: "ORDER_CONFIRMATION", notification: notification.notification });
   expect(send).not.toHaveBeenCalled();
   for (const invalid of ["", "x".repeat(2049)]) {
     await expect(
-      verifyOrderNotification(body, invalid, environment, "production", fetcher, now.getTime()),
+      verifyEbayNotification(body, invalid, environment, "production", fetcher, now.getTime()),
     ).rejects.toThrow();
   }
 });
@@ -830,7 +831,7 @@ it("limita i recuperi delle chiavi pubbliche e non accetta una chiave non verifi
   ).toBe(429);
   const request = ebayRequest();
   await expect(
-    verifyOrderNotification(
+    verifyEbayNotification(
       (await request.text()) + " ",
       request.headers.get("x-ebay-signature")!,
       environment,
@@ -1233,19 +1234,21 @@ it("le chiavi scadono all'ora esatta e i recuperi usano credenziali e corpo OAut
   const body = await request.text();
   const signature = request.headers.get("x-ebay-signature")!;
   const at = now.getTime() + 5 * 3600000;
-  await verifyOrderNotification(body, signature, environment, "production", fetcher, at);
-  await verifyOrderNotification(body, signature, environment, "production", fetcher, at + 3599999);
+  await verifyEbayNotification(body, signature, environment, "production", fetcher, at);
+  await verifyEbayNotification(body, signature, environment, "production", fetcher, at + 3599999);
   expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/public_key/"))).toHaveLength(
     1,
   );
-  await verifyOrderNotification(body, signature, environment, "production", fetcher, at + 3600000);
+  await verifyEbayNotification(body, signature, environment, "production", fetcher, at + 3600000);
   expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/public_key/"))).toHaveLength(
     2,
   );
   const lower = btoa(JSON.stringify({ ...JSON.parse(atob(signature)), alg: "ecdsa" }));
   await expect(
-    verifyOrderNotification(body, lower, environment, "production", fetcher, at + 3600001),
-  ).resolves.toMatchObject({ notificationId: notification.notification.notificationId });
+    verifyEbayNotification(body, lower, environment, "production", fetcher, at + 3600001),
+  ).resolves.toMatchObject({
+    notification: { notificationId: notification.notification.notificationId },
+  });
 });
 
 it("il recupero delle chiavi limita anche i byte delle risposte del provider", async () => {
@@ -1258,7 +1261,7 @@ it("il recupero delle chiavi limita anche i byte delle risposte del provider", a
         : Response.json({ key: publicKey, extra: "x".repeat(8192) }),
     );
     await expect(
-      verifyOrderNotification(
+      verifyEbayNotification(
         await request.text(),
         request.headers.get("x-ebay-signature")!,
         environment,
@@ -1278,7 +1281,7 @@ it("la cache delle chiavi conserva cento elementi ed elimina il più vecchio", a
   for (let i = 0; i < 100; i++) {
     const request = ebayRequest(notification, `capacity-${i}`);
     headers.push(request.headers.get("x-ebay-signature")!);
-    await verifyOrderNotification(
+    await verifyEbayNotification(
       body,
       headers[i]!,
       environment,
@@ -1288,7 +1291,7 @@ it("la cache delle chiavi conserva cento elementi ed elimina il più vecchio", a
     );
   }
   fetcher.mockClear();
-  await verifyOrderNotification(
+  await verifyEbayNotification(
     body,
     headers[0]!,
     environment,
@@ -1298,7 +1301,7 @@ it("la cache delle chiavi conserva cento elementi ed elimina il più vecchio", a
   );
   expect(fetcher).not.toHaveBeenCalled();
   const extra = ebayRequest(notification, "capacity-extra");
-  await verifyOrderNotification(
+  await verifyEbayNotification(
     body,
     extra.headers.get("x-ebay-signature")!,
     environment,
@@ -1307,7 +1310,7 @@ it("la cache delle chiavi conserva cento elementi ed elimina il più vecchio", a
     at + 10 * 60000,
   );
   fetcher.mockClear();
-  await verifyOrderNotification(
+  await verifyEbayNotification(
     body,
     headers[0]!,
     environment,
@@ -1420,4 +1423,130 @@ it("verifica una consegna di prova eBay reale e la conferma senza effetti", asyn
   expect(send).not.toHaveBeenCalled();
   const { results } = await env.DB.prepare("SELECT id FROM webhook_receipts").all();
   expect(results).toEqual([]);
+});
+
+const revocation = {
+  metadata: { topic: "AUTHORIZATION_REVOCATION", schemaVersion: "1.0", deprecated: false },
+  notification: {
+    notificationId: "revocation-synthetic",
+    eventDate: now.toISOString(),
+    publishDate: now.toISOString(),
+    publishAttemptCount: 1,
+    data: {
+      username: "seller-name-synthetic",
+      userId: "seller-synthetic",
+      eiasToken: "eias-synthetic",
+      revokeReason: "REVOKED_BY_USER",
+      revocationDate: "2026-10-11T11:00:00.000Z",
+    },
+  },
+};
+const revokedBy = (data: Partial<typeof revocation.notification.data>) => ({
+  ...revocation,
+  notification: { ...revocation.notification, data: { ...revocation.notification.data, ...data } },
+});
+
+it("la revoca del consenso porta il negozio da ricollegare senza toccare i dati", async () => {
+  expect((await receive(ebayRequest(revocation)))?.status).toBe(204);
+  const row = await env.DB.prepare(
+    "SELECT id, topic, object_id, store_id, consent_granted_at, event_at FROM webhook_receipts",
+  ).first();
+  expect(row).toMatchObject({
+    topic: "AUTHORIZATION_REVOCATION",
+    object_id: "seller-synthetic",
+    store_id: "webhook-store",
+    consent_granted_at: grantedAt,
+    event_at: "2026-10-11T11:00:00.000Z",
+  });
+  expect(send).toHaveBeenCalledExactlyOnceWith({ receiptId: row?.id });
+  const { message, value } = batch({ receiptId: row?.id });
+  await consumeWebhooks(value, environment, fetcher, now);
+  expect(message.ack).toHaveBeenCalledOnce();
+  expect(
+    await env.DB.prepare(
+      "SELECT c.rejected_at, c.refresh_token IS NOT NULL AS kept, s.disconnected_at, s.data_deleted_at FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id",
+    ).first(),
+  ).toEqual({
+    rejected_at: now.toISOString(),
+    kept: 1,
+    disconnected_at: null,
+    data_deleted_at: null,
+  });
+  // Nessuna lettura eBay per conto del negozio: solo chiave pubblica e token dell'applicazione.
+  expect(fetcher.mock.calls.every(([url]) => !String(url).includes("/sell/"))).toBe(true);
+  expect((await receipt())?.completed_at).toBe(now.toISOString());
+});
+
+it("una revoca senza negozio attivo, anteriore al consenso o di prova non accoda nulla", async () => {
+  for (const payload of [
+    revokedBy({ userId: "other-seller" }),
+    revokedBy({ revocationDate: "2026-10-09T12:00:00.000Z" }),
+    revokedBy({ userId: undefined }),
+  ])
+    expect((await receive(ebayRequest(payload)))?.status).toBe(204);
+  await env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ?").bind(grantedAt).run();
+  expect((await receive(ebayRequest(revocation)))?.status).toBe(204);
+  expect(await receipt()).toBeNull();
+  expect(send).not.toHaveBeenCalled();
+});
+
+const threshold = (status: "WARNING" | "REACHED") => ({
+  metadata: { topic: "BULK_DATA_TRANSFER_THRESHOLD", schemaVersion: "1.0" },
+  notification: {
+    notificationId: `threshold-${status}`,
+    eventDate: now.toISOString(),
+    data: {
+      policyFramework: "BULK_DATA_TRANSFER_POLICY",
+      policyVersion: "1.0",
+      region: "US",
+      metricType: "USER",
+      window: {
+        aggregationWindowStart: "2026-10-01T00:00:00Z",
+        aggregationWindowEnd: "2026-10-31T00:00:00Z",
+      },
+      metricData: [
+        {
+          metricDataType: "PersonalFinancialData",
+          thresholdLimit: 1000,
+          currentCount: status === "REACHED" ? 1000 : 800,
+          thresholdStatus: status,
+          previousThresholdStatus: "NORMAL",
+          thresholdPercentage: status === "REACHED" ? 100 : 80,
+          apiElements: [{ apiContext: "Sell", apiName: "Finances", apiOperations: ["getPayout"] }],
+        },
+      ],
+    },
+  },
+});
+
+it("la soglia Bulk Data Transfer apre un'anomalia della console fino alla fine della finestra", async () => {
+  expect((await receive(ebayRequest(threshold("WARNING"))))?.status).toBe(204);
+  expect((await receive(ebayRequest(threshold("REACHED"))))?.status).toBe(204);
+  expect((await receive(ebayRequest(threshold("REACHED"))))?.status).toBe(204);
+  expect(await receipt()).toBeNull();
+  expect(send).not.toHaveBeenCalled();
+  const { results } = await env.DB.prepare(
+    "SELECT key, severity, json_extract(detail, '$.share') AS share, resolved_at FROM admin_anomalies",
+  ).all();
+  expect(results).toEqual([
+    {
+      key: "ebay_bulk_data:production:US:PersonalFinancialData:2026-10-01T00:00:00.000Z",
+      severity: "p1",
+      share: 1,
+      resolved_at: "2026-10-31T00:00:00.000Z",
+    },
+  ]);
+  expect(
+    (await listAnomalies(env.DB, now)).filter((anomaly) => anomaly.kind === "ebay_bulk_data"),
+  ).toMatchObject([
+    { severity: "p1", subjects: [{ id: "production:US:PersonalFinancialData", href: "quote" }] },
+  ]);
+  const closed = (await listAnomalies(env.DB, new Date("2026-10-31T00:00:00.000Z"))).filter(
+    (anomaly) => anomaly.kind === "ebay_bulk_data",
+  );
+  expect(closed).toEqual([]);
+  // Una soglia senza metriche non è un avviso valido.
+  const empty = threshold("WARNING");
+  empty.notification.data.metricData = [];
+  expect((await receive(ebayRequest(empty)))?.status).toBe(412);
 });

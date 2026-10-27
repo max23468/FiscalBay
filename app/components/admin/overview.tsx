@@ -60,6 +60,7 @@ function AnomalyAction({ anomaly }: { anomaly: Anomaly }) {
   }
   if (
     anomaly.kind === "ebay_quota" ||
+    anomaly.kind === "ebay_bulk_data" ||
     anomaly.kind === "ebay_down" ||
     anomaly.kind === "ebay_suspended"
   )
