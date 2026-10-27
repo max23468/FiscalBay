@@ -22,6 +22,8 @@ import {
   revokeHistoryExtension,
 } from "../app/domain/concessions.server";
 import { quotaAnomalies, readEbayQuotas } from "../app/domain/ebay-quotas.server";
+import { readTechnicalMetrics } from "../app/domain/technical-metrics.server";
+import { metricQueries, metricSql } from "../app/metrics-queries";
 import { assistFreeStore, chooseFreeStore } from "../app/domain/free-store.server";
 import { freeQuotaSettings, orderAllowance } from "../app/domain/grants.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
@@ -190,7 +192,15 @@ describe("accesso alla console", () => {
       requests.push(url.host + url.pathname);
       return new Response("", { status: 503 });
     });
-    const sections = ["account", "negozi", "lavori", "quote", "commerciale", "antiabuso"];
+    const sections = [
+      "account",
+      "negozi",
+      "lavori",
+      "quote",
+      "prestazioni",
+      "commerciale",
+      "antiabuso",
+    ];
     for (const sezione of [...sections, "comunicazioni", "interruttori", "registro"])
       expect(await page(cookie, `/admin/${sezione}`, { sezione })).toEqual({
         access: "granted",
@@ -879,6 +889,138 @@ describe("quote delle API eBay", () => {
         severity,
       })),
     ).toEqual([{ subject: "production:Trading", severity: "p2" }]);
+  });
+});
+
+describe("prestazioni da Analytics Engine", () => {
+  it("pesa ogni conteggio, somma, media e quantile con il campionamento", () => {
+    for (const query of metricQueries) {
+      const sql = metricSql(query, "fiscalbay_test_metrics", 24);
+      expect(sql).toContain("FROM fiscalbay_test_metrics");
+      expect(sql).toContain("timestamp > NOW() - INTERVAL '24' HOUR");
+      // Nessun conteggio di righe: con il campionamento una riga vale `_sample_interval` eventi.
+      expect(sql).not.toMatch(/count\(|avg\(/iu);
+      for (const aggregate of sql.match(/(SUM|quantileExactWeighted\([\d.]+\))\([^\n]*/gu)!)
+        expect(aggregate).toContain("_sample_interval");
+    }
+    expect(metricSql("pages", "fiscalbay_metrics", 2160)).toContain(
+      "quantileExactWeighted(0.95)(double3, if(double3 >= 0, _sample_interval, 0)) AS lcp_p95_ms",
+    );
+    // Dataset e finestra sono controllati: niente testo libero nella query.
+    expect(() => metricSql("phases", "dati; DROP", 24)).toThrow("INVALID_DATASET");
+    for (const hours of [0, 1.5, 2161])
+      expect(() => metricSql("phases", "fiscalbay_metrics", hours)).toThrow("INVALID_WINDOW");
+  });
+
+  it("legge le tre query con il token di sola lettura e distingue i valori assenti dagli zeri", async () => {
+    expect(await readTechnicalMetrics({ ...env, ANALYTICS_READ_TOKEN: undefined }, fetch)).toEqual({
+      read: "unconfigured",
+    });
+    const requests: { url: string; authorization: string | null; body: string }[] = [];
+    const rows = {
+      invocations: [
+        {
+          invocation: "http",
+          detail: "document",
+          method: "GET",
+          outcome: "2xx",
+          count: "40",
+          mean_ms: 85.5,
+          p50_ms: 70,
+          p95_ms: 190,
+          p99_ms: 240,
+        },
+      ],
+      phases: [
+        {
+          invocation: "queue",
+          phase: "ebay",
+          operation: "request",
+          outcome: "ok",
+          calls: "12",
+          invocations: "4",
+          mean_ms: 300,
+          p50_ms: 280,
+          p95_ms: 410,
+          p99_ms: 500,
+        },
+      ],
+      pages: [
+        {
+          page: "orders",
+          reports: "8",
+          ttfb_reports: "8",
+          ttfb_p75_ms: 120,
+          ttfb_p95_ms: 180,
+          lcp_reports: "0",
+          lcp_p75_ms: 0,
+          lcp_p95_ms: 0,
+        },
+      ],
+    };
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = String(init?.body);
+      requests.push({
+        url: String(input),
+        authorization: new Headers(init?.headers).get("authorization"),
+        body,
+      });
+      const query = body.includes("'phase'")
+        ? "phases"
+        : body.includes("'page'")
+          ? "pages"
+          : "invocations";
+      return Response.json({ meta: [], data: rows[query], rows: 1 });
+    }) as unknown as typeof fetch;
+    const metrics = await readTechnicalMetrics(
+      { ...env, ANALYTICS_READ_TOKEN: "token-di-lettura" },
+      fetcher,
+    );
+    expect(requests).toHaveLength(3);
+    for (const request of requests) {
+      expect(request.url).toBe(
+        `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/analytics_engine/sql`,
+      );
+      expect(request.authorization).toBe("Bearer token-di-lettura");
+      expect(request.body).toContain(`FROM ${env.METRICS_DATASET}`);
+    }
+    expect(metrics).toMatchObject({
+      read: "ok",
+      windowHours: 24,
+      invocations: [{ detail: "document", count: 40, p95Ms: 190 }],
+      phases: [{ phase: "ebay", calls: 12, invocations: 4, p95Ms: 410 }],
+      pages: [
+        {
+          page: "orders",
+          reports: 8,
+          // Nessun report con LCP o con la fase eBay: il valore manca, non è zero.
+          measures: {
+            ttfb: { p75: 120, p95: 180 },
+            lcp: { p75: null, p95: null },
+            server_ebay: { p75: null, p95: null },
+          },
+        },
+      ],
+    });
+    // Una risposta non riuscita resta una lettura non riuscita, mai zero.
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const failing of [
+        async () => new Response("{}", { status: 403 }),
+        async () => Response.json({ errors: [] }),
+        async () => {
+          throw new DOMException("timeout", "TimeoutError");
+        },
+      ])
+        expect(
+          await readTechnicalMetrics(
+            { ...env, ANALYTICS_READ_TOKEN: "token" },
+            vi.fn(failing) as unknown as typeof fetch,
+          ),
+        ).toEqual({ read: "failed" });
+    } finally {
+      logged.mockRestore();
+    }
   });
 });
 

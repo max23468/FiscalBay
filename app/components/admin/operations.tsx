@@ -4,6 +4,8 @@ import { Badge } from "~/components/ui/badge";
 import type { AdminCopy } from "../../copy/admin-copy";
 import type { ReceiptState, TaskState } from "../../domain/admin-operations.server";
 import type { EnvironmentQuotas, QuotaAnomaly, QuotaRow } from "../../domain/ebay-quotas.server";
+import type { TechnicalMetrics } from "../../domain/technical-metrics.server";
+import { locales } from "../../i18n";
 import { SeverityBadge } from "./overview";
 import { ActionForm, DataTable, Disclosure, Panel } from "./kit";
 import { useAdmin } from "./use-admin";
@@ -207,6 +209,124 @@ export function QuotasView({
           </Panel>
         );
       })}
+    </>
+  );
+}
+
+/** Nome da un elenco della console; un valore fuori elenco resta com'è scritto nel dataset. */
+const named = (names: Record<string, string>, value: string) => names[value] ?? value;
+
+export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
+  const { t, language } = useAdmin();
+  const m = t.performance;
+  // Stime e durate in millisecondi, intere come le misure del browser.
+  const whole = (value: number) => Math.round(value).toLocaleString(locales[language]);
+  const count = (value: number) => <span className="font-code">{whole(value)}</span>;
+  /** Quantili 75 e 95 di una misura del browser; un trattino quando nessun report la porta. */
+  const pair = (value: { p75: number | null; p95: number | null }) =>
+    value.p75 === null || value.p95 === null ? (
+      "–"
+    ) : (
+      <span className="font-code whitespace-nowrap">
+        {whole(value.p75)} / {whole(value.p95)}
+      </span>
+    );
+  if (metrics.read !== "ok")
+    return (
+      <Panel title={m.invocations}>
+        <p role="alert" className={cn("text-sm", metrics.read === "failed" && "text-danger")}>
+          {metrics.read === "failed" ? m.failed : m.unconfigured}
+        </p>
+      </Panel>
+    );
+  return (
+    <>
+      <p className="text-sm text-muted-foreground">{m.estimate(metrics.windowHours)}</p>
+      <Panel title={m.invocations}>
+        <DataTable
+          head={[m.kind, m.method, m.outcome, m.count, m.mean, "p50", "p95", "p99"]}
+          rows={metrics.invocations.map((row) => ({
+            key: `${row.invocation}:${row.detail}:${row.method}:${row.outcome}`,
+            cells: [
+              <span key="kind" className="grid gap-0.5">
+                <span className="font-medium">{named(m.detail, row.detail)}</span>
+                <span className="text-xs text-muted-foreground">
+                  {named(m.invocation, row.invocation)}
+                </span>
+              </span>,
+              row.method,
+              <span key="outcome" className="font-code">
+                {row.outcome}
+              </span>,
+              count(row.count),
+              count(row.meanMs),
+              count(row.p50Ms),
+              count(row.p95Ms),
+              count(row.p99Ms),
+            ],
+          }))}
+        />
+      </Panel>
+      <Panel title={m.phases}>
+        <DataTable
+          head={[m.phase, m.outcome, m.calls, m.perInvocation, m.mean, "p50", "p95", "p99"]}
+          rows={metrics.phases.map((row) => ({
+            key: `${row.invocation}:${row.phase}:${row.operation}:${row.outcome}`,
+            cells: [
+              <span key="phase" className="grid gap-0.5">
+                <span className="font-medium">
+                  {named(m.phaseName, row.phase)} · {row.operation}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {named(m.invocation, row.invocation)}
+                </span>
+              </span>,
+              <span key="outcome" className="font-code">
+                {row.outcome}
+              </span>,
+              count(row.calls),
+              count(row.invocations),
+              count(row.meanMs),
+              count(row.p50Ms),
+              count(row.p95Ms),
+              count(row.p99Ms),
+            ],
+          }))}
+        />
+      </Panel>
+      <Panel title={m.pages}>
+        <DataTable
+          head={[
+            m.page,
+            m.reports,
+            `TTFB ${m.quantiles}`,
+            `FCP ${m.quantiles}`,
+            `LCP ${m.quantiles}`,
+            `${m.ready} ${m.quantiles}`,
+            m.server,
+          ]}
+          rows={metrics.pages.map((row) => ({
+            key: row.page,
+            cells: [
+              <span key="page" className="font-medium">
+                {named(m.pageName, row.page)}
+              </span>,
+              count(row.reports),
+              pair(row.measures.ttfb),
+              pair(row.measures.fcp),
+              pair(row.measures.lcp),
+              pair(row.measures.ready),
+              <span key="server" className="grid gap-0.5">
+                {(["auth", "d1", "ebay", "render"] as const).map((phase) => (
+                  <span key={phase} className="whitespace-nowrap">
+                    {m.phaseName[phase]} {pair(row.measures[`server_${phase}`])}
+                  </span>
+                ))}
+              </span>,
+            ],
+          }))}
+        />
+      </Panel>
     </>
   );
 }

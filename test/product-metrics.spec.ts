@@ -473,17 +473,16 @@ describe("report del browser", () => {
     });
 
   it("registra un report soltanto con un biglietto valido e una volta sola", async () => {
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const written = vi.spyOn(env.METRICS, "writeDataPoint").mockImplementation(() => {});
     const ticket = await issueTimingTicket(secret, "orders");
     expect((await report(ticket)).status).toBe(204);
-    expect(JSON.parse(String(log.mock.calls.at(-1)![0]))).toEqual({
-      event: "page_timing",
-      page: "orders",
-      ttfb: 100,
-      ready: 400,
-      server: { d1: 5 },
-    });
-    log.mockClear();
+    expect(written).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        blobs: expect.arrayContaining(["page", "orders"]),
+        doubles: [100, -1, -1, 400, -1, 5, -1, -1],
+      }),
+    );
+    written.mockClear();
     // Lo stesso biglietto, quello di un'altra pagina, uno firmato altrove o scaduto non contano.
     expect((await report(ticket)).status).toBe(204);
     expect((await report(await issueTimingTicket(secret, "stores"))).status).toBe(204);
@@ -498,7 +497,8 @@ describe("report del browser", () => {
     const ahead = await issueTimingTicket(secret, "orders", new Date(Date.parse(clock) + 120_000));
     expect((await report(ahead)).status).toBe(204);
     expect((await report("orders.x.y.z")).status).toBe(204);
-    expect(log).not.toHaveBeenCalled();
+    expect(written).not.toHaveBeenCalled();
+    written.mockRestore();
     // Il biglietto di Negozi vale per Negozi.
     expect(
       await redeemTimingTicket(env.DB, secret, await issueTimingTicket(secret, "stores"), "stores"),

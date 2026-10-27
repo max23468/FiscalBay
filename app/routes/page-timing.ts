@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { readBounded } from "../integrations/http.server";
+import { pagePoint, writePoints } from "../metrics.server";
 import { maxTimingMs, serverPhases, timedPages } from "../page-timing";
 import { redeemTimingTicket } from "../page-timing.server";
 import type { Route } from "./+types/page-timing";
@@ -28,9 +29,9 @@ export function loader() {
 }
 
 /**
- * Misure del caricamento delle pagine dell'app inviate dal browser: registrate come evento
- * strutturato con i soli campi ammessi, una volta per il biglietto della pagina. Richieste di
- * altre origini, vuote, troppo grandi, non valide, senza un biglietto valido o ripetute non
+ * Misure del caricamento delle pagine dell'app inviate dal browser: scritte su Analytics Engine
+ * con i soli campi ammessi, una volta per il biglietto della pagina. Richieste di altre origini,
+ * vuote, troppo grandi, non valide, senza un biglietto valido o ripetute non
  * lasciano traccia.
  */
 export async function action({ request }: Route.ActionArgs) {
@@ -52,6 +53,6 @@ export async function action({ request }: Route.ActionArgs) {
   const { ticket, ...timing } = parsed.data;
   if (!(await redeemTimingTicket(env.DB, env.BETTER_AUTH_SECRET, ticket, timing.page)))
     return new Response(null, { status: 204 });
-  console.log(JSON.stringify({ event: "page_timing", ...timing }));
+  writePoints(env.METRICS, [pagePoint({ ...timing, version: env.VERSION_METADATA?.id })]);
   return new Response(null, { status: 204 });
 }

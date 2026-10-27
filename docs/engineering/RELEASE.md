@@ -184,6 +184,25 @@ La qualifica del 12 ottobre 2026 ha rilevato nel grafico CPU nativo il marcatore
 
 `avg.sampleInterval = 1` in entrambi i gruppi; entrambi hanno `status = success`. Il campione ridotto e il carico non controllato qualificano la lettura, non dimostrano una regressione. `settings.workersInvocationsAdaptive` ha confermato dataset abilitato, query fino a 32 giorni e dati non più vecchi di 90 giorni: sono limiti di questo dataset dell'account, non la retention Workers Logs o un'estensione degli analytics della zona.
 
+<a id="metriche-tecniche"></a>
+## Metriche tecniche su Analytics Engine
+
+Il Worker scrive nel dataset dell'ambiente, `fiscalbay_test_metrics` o `fiscalbay_metrics`, che nasce alla prima scrittura e conserva i punti tre mesi. La disposizione dei campi è in `app/metrics.server.ts`, le query in `app/metrics-queries.ts`. Ogni valore è una stima pesata con `_sample_interval`: si riporta con finestra e approssimazione e non decide quote, billing o accessi. I KPI deduplicati restano in D1.
+
+```bash
+node scripts/metrics-query.mjs phases --hours 24
+```
+
+Le query sono `invocations`, `phases` e `pages`; `--mode live` legge la Production, `--hours` va da 1 a 2.160. La CLI `cf` usa il proprio accesso: nessun token passa dallo script.
+
+```bash
+node scripts/metrics-query.mjs sample --count 40
+```
+
+Il campione controllato invia al solo test 40 richieste anonime `HEAD /api/v1/page-timing`, che rispondono 405 senza effetti e scrivono punti con classe `api`, metodo `HEAD` ed esito `4xx`, una combinazione che nessuna pagina usa. Dopo due minuti confronta il conteggio stimato e pesato con `_sample_interval` nella finestra di invio con quello atteso. Esito non zero se diverge; `sampled` indica che Analytics Engine ha campionato. I punti restano nel dataset test fino alla scadenza. I report del browser richiedono il biglietto della pagina, quindi il campione non li usa.
+
+La sezione Prestazioni della console legge le stesse query sulle ultime 24 ore con il segreto `ANALYTICS_READ_TOKEN` del Worker: un token API dell'account con il solo permesso Account Analytics Read, uno per ambiente. Si crea con `pnpm exec cf accounts tokens create --name "<nome>" --policies @<file>` e una policy limitata all'account e al gruppo Account Analytics Read; il valore passa dall'output JSON al Portachiavi e poi al segreto del Worker dell'ambiente, mai nella cronologia dei comandi o nei log. Il token del test è «FiscalBay metriche test», nel Portachiavi alla voce «FiscalBay analytics test». Senza il segreto la sezione resta non configurata e nessuna altra parte dell'app ne dipende.
+
 ## Promuovi e ripresa
 
 Il workflow `Promuovi` (`publish.yml`) accetta il commit completo su `main` e la versione presente in `CHANGELOG.md`. `scripts/release/release.mjs readiness` e i passi Production leggono dal Master Plan i [gate commerciale, ripristino e operativita](../MASTER_PLAN.md#pubblicazione-production): tutti devono essere `COMPLETATO`, ciascuno con prova, senza righe mancanti o duplicate. Restano richiesti i [checkpoint owner](../MASTER_PLAN.md#s00), la variabile `PRODUCTION_PUBLISH_ENABLED` e il via dell'environment Production. Nessuno di questi prerequisiti viene compilato o attivato dall'implementazione del workflow.

@@ -473,6 +473,42 @@ it("la coda senza webhook chiude le sole sincronizzazioni senza riprovare messag
   expect(send).not.toHaveBeenCalled();
 });
 
+it("coda, cron e ingresso dei webhook scrivono esito e durata su Analytics Engine", async () => {
+  const points: AnalyticsEngineDataPoint[] = [];
+  const dataset: AnalyticsEngineDataset = { writeDataPoint: (point) => void points.push(point!) };
+  const metrics = { ...environment, METRICS: dataset };
+  const sync = { body: { syncStore: "webhook-store" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
+  const unknown = { body: { altro: true }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await worker.queue({ messages: [sync, unknown] } as unknown as MessageBatch<unknown>, metrics);
+  } finally {
+    logged.mockRestore();
+  }
+  // Il consumer riceve i messaggi osservati: ack e retry arrivano a quelli originali.
+  expect(sync.ack).toHaveBeenCalledOnce();
+  expect(unknown.retry).toHaveBeenCalledOnce();
+  await worker.scheduled({ scheduledTime: now.getTime() } as ScheduledController, {
+    ...metrics,
+    WORK_QUEUE: fakeQueue({ send, sendBatch: vi.fn().mockResolvedValue(queued) }),
+  });
+  const response = await workerFetch(
+    new Request("https://test.fiscalbay.it/webhooks/stripe"),
+    metrics,
+  );
+  expect(response.status).toBe(405);
+  expect(
+    points
+      .filter((point) => point.blobs![0] === "invocation")
+      .map((point) => point.blobs!.slice(1, 5)),
+  ).toEqual([
+    ["queue", "unknown", "", "retry"],
+    ["queue", "sync", "", "ok"],
+    ["cron", "dispatch", "", "ok"],
+    ["http", "webhook", "GET", "4xx"],
+  ]);
+});
+
 it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito in ritardo", async () => {
   const sendBatch = vi.fn<Queue["sendBatch"]>().mockResolvedValue(queued);
   await worker.scheduled({ scheduledTime: now.getTime() } as ScheduledController, {

@@ -186,6 +186,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       "/negozi",
       "/lavori",
       "/quote",
+      "/prestazioni",
       "/commerciale",
       "/antiabuso",
       "/comunicazioni",
