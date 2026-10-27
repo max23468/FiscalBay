@@ -391,7 +391,8 @@ for (const language of ["it", "en"] as const) {
         ).toHaveAttribute("href", `${prefix}/accesso`);
         const main = page.locator("main");
         await expect(main).toContainText("Temisfera");
-        await expect(main.getByRole("link", { name: "info@fiscalbay.it" })).toBeVisible();
+        // Il contatto è `info@`, non l'assistenza clienti.
+        await expect(main.getByRole("link", { name: /^info@/u })).toBeVisible();
         await expect(main).not.toContainText("bozza-2026");
         await expect(main).toContainText(
           language === "it" ? "28 settembre 2026" : "28 September 2026",
