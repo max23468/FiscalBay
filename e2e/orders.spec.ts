@@ -1207,6 +1207,55 @@ test.describe("caricamento degli Ordini reali", () => {
     await expect(grid).toBeHidden();
     await expect(page.getByRole("article").first()).toBeVisible();
   });
+
+  test("le misure del caricamento partono dall'area reale, non dall'anteprima", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await useLocalAccount(context, "member", baseURL!);
+    // Il report parte con sendBeacon: lo si legge nella pagina, senza dipendere dalla rete.
+    await page.addInitScript(() => {
+      const sent: Blob[] = [];
+      (window as Window & { pageTimings?: Blob[] }).pageTimings = sent;
+      navigator.sendBeacon = (url, body) => {
+        if (String(url).endsWith("/api/v1/page-timing")) sent.push(body as Blob);
+        return true;
+      };
+    });
+    /** Nasconde la pagina, come al cambio di scheda, e restituisce i report inviati. */
+    const reports = async () => {
+      await page.evaluate(() => {
+        Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+      return page.evaluate(() =>
+        Promise.all(
+          (window as Window & { pageTimings?: Blob[] }).pageTimings!.map((blob) => blob.text()),
+        ),
+      );
+    };
+    /** La barra di ricerca si abilita con l'idratazione, quando il report è già in ascolto. */
+    const visit = async (path: string) => {
+      await page.goto(path);
+      await expect(
+        page.getByRole("searchbox", { name: "Cerca ordini", includeHidden: true }),
+      ).toBeEnabled();
+    };
+    for (const path of ["/anteprima/ordini", "/anteprima/negozi"]) {
+      await visit(path);
+      expect(await reports()).toEqual([]);
+    }
+    for (const [path, name] of [
+      ["/app/negozi", "stores"],
+      ["/app/ordini", "orders"],
+    ] as const) {
+      await visit(path);
+      const sent = await reports();
+      expect(sent).toHaveLength(1);
+      expect(JSON.parse(sent[0]!)).toMatchObject({ page: name });
+    }
+  });
 });
 
 // Queste prove proseguono nelle Impostazioni.

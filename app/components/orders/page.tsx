@@ -353,7 +353,8 @@ export function OrdersPage({
   const unlock = useUnlock(unlockAction, t);
   const orders = useConfirmed(data.orders, confirmation);
   const [detail] = useConfirmed(data.detail ? [data.detail] : [], confirmation);
-  usePageTiming("orders");
+  const { preview } = useLinks();
+  usePageTiming(preview ? null : "orders");
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <OrdersHeader data={data} />

@@ -15,11 +15,12 @@ let reported = false;
 
 /**
  * Invia una volta, quando la pagina viene nascosta o lasciata o dopo dieci secondi, le misure del
- * caricamento in cui la pagina è stata resa.
+ * caricamento in cui la pagina è stata resa. `null` per una pagina che non entra nei budget, come
+ * quelle dell'anteprima, i cui dati simulati non rappresentano l'area reale.
  */
-export function usePageTiming(page: TimedPage) {
+export function usePageTiming(page: TimedPage | null) {
   useEffect(() => {
-    if (reported) return;
+    if (reported || page === null) return;
     reported = true;
     const ready = performance.now();
     const [navigation] = performance.getEntriesByType(
