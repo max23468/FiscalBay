@@ -47,6 +47,28 @@ La tabella descrive i comandi presenti e le loro responsabilità; prove in PR/CI
 
 CLI e MCP dello stesso provider condividono le prove funzionali dell’integrazione. Verificare separatamente soltanto i rispettivi accessi e le differenze di capacità: non rifare tutta la qualifica eBay/Stripe due volte. Nessun obbligo di scrittura o cancellazione di prova in Production per certificare un tool. Applicare conferme imposte dal client senza scavalcarle; non assegnare accesso globale per evitare un singolo blocco.
 
+<a id="ebay-skills"></a>
+### Skill di migrazione delle API eBay
+
+Le Public API migration Agent Skills 1.0.0 di eBay (Apache 2.0, pacchetto `public-api-migration-skills-1.0.0.tgz` della pagina [AI Tools](https://developer.ebay.com/develop/tools/ai-tools), SHA-256 `446e407b83125d685d339bdee989f38335e0d1a06a70160fc186dabdfa519005`) sono importate intere in `.agents/vendor/ebay-public-api-migration-skills/`, con licenza e README di eBay. Contengono soltanto Markdown: nessuno script, permesso di tool o istruzione eseguibile, verificati il 2026-10-27 prima dell'importazione. Le nove skill sono collegamenti simbolici `ebay-<dominio>` in `.claude/skills/` per Claude Code e in `.agents/skills/` per Codex, senza copie. L'unica modifica locale sostituisce con spazi le tabulazioni del frontmatter di `authorization`, `listing-management` e `listing-metadata`, che Codex rifiuta come YAML non valido.
+
+Le skill guidano la pianificazione delle migrazioni dalle chiamate Trading alle API moderne; non autorizzano nuovi scope né modifiche al runtime senza la decisione dell'owner. Una nuova versione si importa sostituendo la cartella del pacchetto, ripetendo la verifica dei file e riapplicando la correzione del frontmatter se ancora necessaria. Come fonti gli agenti usano la versione «View as Markdown» delle guide (per esempio `https://developer.ebay.com/develop/guides/modern-apis-migration-guide.md`), lo schema GraphQL `https://developer.ebay.com/develop/api/spec/listing.graphqls` e le specifiche AsyncAPI dei topic in `/develop/api/spec/events/`, che si scaricano con `curl` anche quando le pagine HTML rispondono 403; il browser resta il ripiego. Prima di scrivere codice le chiamate si qualificano con API Explorer e GraphQL Explorer; le poche query GraphQL usano schemi zod scritti a mano, senza generatori di codice. L'assistente AI del portale eBay serve soltanto come primo filtro: documentazione, specifiche e letture controllate restano le fonti.
+
+<a id="ebay-mcp"></a>
+### Server MCP di eBay
+
+Il server ufficiale [`@ebay/npm-public-api-mcp`](https://github.com/eBay/npm-public-api-mcp) 1.1.0 (Apache 2.0, Node 22 o superiore) è registrato come `ebay` in `.mcp.json` per Claude Code e in `.codex/config.toml` per Codex. Entrambi avviano `scripts/ebay-mcp.mjs`, che:
+
+- usa soltanto la modalità applicazione del keyset Production `botCF`: specifiche, metadati e API pubbliche;
+- legge Client ID e Cert ID dalle voci «FiscalBay eBay Production Client ID» e «FiscalBay eBay Production Client Secret» del Portachiavi macOS, senza scriverli in file, argomenti o log;
+- esegue con `npx` la versione fissata senza script di installazione, fuori dal checkout, perché il server carica il `.env` della cartella di avvio, e non eredita variabili `EBAY_*`.
+
+Fuori dal Mac, comprese le sessioni cloud, il keyset non è disponibile e il server non parte.
+
+Il codice letto il 2026-10-27 accetta in Production soltanto richieste GET e invia il token solo ad `api.ebay.com`. `query_ebay_api` cerca nelle specifiche tramite un servizio di eBay; `call_ebay_api` esegue la chiamata e restituisce all'agente la risposta grezza. Prova dello stesso giorno: avvio, elenco dei due strumenti, ricerca nelle specifiche e lettura della Taxonomy API riuscite, POST rifiutata dal server. `getTopic` della Notification API con il token dell'applicazione risponde con l'errore interno 2003, mentre con il token di un venditore funziona.
+
+La modalità utente è esclusa per decisione dell'owner del 2026-10-27. Con il token di un negozio il server leggerebbe senza filtri nomi, indirizzi e CF degli acquirenti, mentre licenza e DPA di eBay limitano i dati degli altri utenti allo stretto necessario e ai fornitori vincolati alle stesse condizioni. Per revocare l'accesso degli agenti basta eliminare le due voci del Portachiavi; la rotazione del Cert ID dal portale eBay invalida anche i segreti del Worker e va coordinata con quelli.
+
 La riuscita di una chiamata dimostra quella chiamata, non l’intera funzionalità. Sandbox, simulazioni e prove reali sono distinti secondo [§36](../MASTER_PLAN.md#s36); ciò che non è osservabile va assegnato al gate reale competente. I tool di sviluppo non diventano dipendenze del runtime del prodotto.
 
 <a id="lettura"></a>

@@ -7,7 +7,9 @@ const files = new Set(
     encoding: "utf8",
   })
     .split("\0")
-    .filter(Boolean),
+    .filter(Boolean)
+    // Pacchetti di terzi importati senza modifiche, per esempio le skill di eBay.
+    .filter((file) => !file.startsWith(".agents/vendor/")),
 );
 const character = String.fromCodePoint(0x2014);
 const encoded = new RegExp(

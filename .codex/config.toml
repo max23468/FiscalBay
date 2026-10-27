@@ -1,0 +1,4 @@
+# Server MCP di eBay in modalità applicazione: specifiche e metadati, nessun dato dei negozi.
+[mcp_servers.ebay]
+command = "node"
+args = ["scripts/ebay-mcp.mjs"]

@@ -9,12 +9,14 @@ import {
 } from "./integrations/telegram.server";
 import {
   NotificationLimit,
-  verifyOrderNotification,
+  verifyEbayNotification,
 } from "./integrations/ebay/notifications.server";
+import { rejectCredentials } from "./integrations/ebay/seller-credentials.server";
 import { readBounded, UpstreamError } from "./integrations/http.server";
 import { ebayConfiguration } from "./integrations/ebay/environment.server";
 import { applyStripeEvent } from "./domain/billing.server";
 import { consumeOrderConfirmation } from "./domain/order-acquisition.server";
+import { recordBulkDataThreshold } from "./domain/ebay-quotas.server";
 import { consumeTelegramUpdate } from "./domain/telegram-bot.server";
 import { isProduction } from "./app-links";
 import { logFailure } from "./errors";
@@ -148,7 +150,10 @@ function telegramEvent(request: Request, body: string, env: Env, now: Date): Rec
   };
 }
 
-/** Notifica d'ordine eBay firmata; null se autentica ma non attribuibile a un venditore. */
+/**
+ * Notifica eBay firmata; null se autentica ma senza lavoro da accodare. La soglia della Bulk Data
+ * Transfer Policy riguarda l'applicazione: apre subito l'anomalia della console, senza ricevuta.
+ */
 async function ebayEvent(
   request: Request,
   body: string,
@@ -158,7 +163,7 @@ async function ebayEvent(
   now: Date,
 ): Promise<ReceiptEvent | null> {
   const ebayEnvironment = ebayEnvironmentOf(path);
-  const notification = await verifyOrderNotification(
+  const { topic, notification } = await verifyEbayNotification(
     body,
     request.headers.get("x-ebay-signature"),
     env,
@@ -166,14 +171,32 @@ async function ebayEvent(
     fetcher,
     now.getTime(),
   );
+  if (topic === "BULK_DATA_TRANSFER_THRESHOLD") {
+    await recordBulkDataThreshold(env.DB, ebayEnvironment, notification.data, now);
+    return null;
+  }
+  const event = {
+    ...noProviderFields,
+    provider: "ebay" as const,
+    environment: ebayEnvironment,
+    provider_id: notification.notificationId,
+    topic,
+  };
+  if (topic === "AUTHORIZATION_REVOCATION") {
+    const { userId, revocationDate } = notification.data;
+    // Una consegna di prova senza venditore non ha effetti.
+    if (!userId) return null;
+    return {
+      ...event,
+      object_id: userId,
+      store_id: userId,
+      event_at: new Date(revocationDate ?? notification.eventDate).toISOString(),
+    };
+  }
   // L'acquisizione periodica resta la fonte.
   if (!notification.data.user) return null;
   return {
-    ...noProviderFields,
-    provider: "ebay",
-    environment: ebayEnvironment,
-    provider_id: notification.notificationId,
-    topic: "ORDER_CONFIRMATION",
+    ...event,
     object_id: notification.data.order.orderId,
     store_id: notification.data.user.userId,
     event_at: new Date(notification.eventDate).toISOString(),
@@ -240,8 +263,11 @@ export async function receiveWebhook(
         WHERE s.ebay_account_id = ? AND s.ebay_environment = ? AND s.disconnected_at IS NULL AND c.rejected_at IS NULL`)
           .bind(event.store_id, event.environment)
           .first<{ id: string; granted_at: string }>();
-      if (!store || Date.parse(event.event_at) < Date.parse(store.granted_at))
+      if (!store || Date.parse(event.event_at) < Date.parse(store.granted_at)) {
+        // Una revoca senza negozio attivo, o precedente al consenso corrente, non ha effetti.
+        if (event.topic === "AUTHORIZATION_REVOCATION") return new Response(null, { status: 204 });
         throw new InvalidWebhook(409);
+      }
       event.store_id = store.id;
       event.consent_granted_at = store.granted_at;
     }
@@ -432,7 +458,10 @@ export async function consumeWebhooks(
         else message.ack();
         continue;
       }
-      if (receipt.provider === "ebay") {
+      if (receipt.provider === "ebay" && receipt.topic === "AUTHORIZATION_REVOCATION") {
+        // Come un rinnovo rifiutato: il negozio va ricollegato e i dati restano consultabili.
+        await rejectCredentials(env.DB, receipt.store_id!, receipt.consent_granted_at!, now);
+      } else if (receipt.provider === "ebay") {
         await consumeOrderConfirmation(
           env,
           {

@@ -1,0 +1,12 @@
+# Development files
+.agents
+.claude
+.DS_Store
+node_modules/
+*.tgz
+*.log
+
+# IDE
+.idea/
+.vscode/
+*.swp

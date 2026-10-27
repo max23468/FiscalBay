@@ -105,6 +105,8 @@ describe("livello del gate dai file modificati", () => {
     }
     assert.equal(plan(["README.md"]).script, levelScripts.docs);
     assert.equal(plan(["AGENTS.md"]).script, levelScripts.tooling);
+    for (const file of [".mcp.json", ".codex/config.toml", ".agents/vendor/package/.gitignore"])
+      assert.equal(plan([file]).script, levelScripts.tooling, file);
     assert.equal(plan([]).script, levelScripts.full);
   });
 

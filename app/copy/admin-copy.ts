@@ -142,7 +142,13 @@ const it = {
       ebay_quota: {
         title: "Quota eBay oltre il 70%",
         consequence: "Al limite eBay sospende la chiamata e le letture che la usano si fermano.",
-        action: "Chiedi a eBay l’aumento",
+        action: "Avvia l’Application Growth Check",
+      },
+      ebay_bulk_data: {
+        title: "Soglia eBay sul trasferimento di dati",
+        consequence:
+          "eBay segnala che l’applicazione si avvicina o ha raggiunto un limite della Bulk Data Transfer Policy.",
+        action: "Controlla le quote",
       },
       ebay_down: {
         title: "eBay non risponde",
@@ -393,7 +399,7 @@ const it = {
     noneSuspended: "Nessuna chiamata sospesa.",
     anomalies: "Anomalie delle quote",
     resolved: (when: string) => `Rientrata il ${when}`,
-    request: "Chiedi a eBay l’aumento della quota dal Developer Program.",
+    request: "Per una quota più alta completa l’Application Growth Check del Developer Program.",
   },
   commerce: {
     title: "Commerciale",
@@ -616,7 +622,13 @@ const en: AdminCopy = {
       ebay_quota: {
         title: "eBay quota over 70%",
         consequence: "At the limit eBay suspends the call and the reads that use it stop.",
-        action: "Ask eBay for an increase",
+        action: "Start the Application Growth Check",
+      },
+      ebay_bulk_data: {
+        title: "eBay data transfer threshold",
+        consequence:
+          "eBay reports that the application is near or at a Bulk Data Transfer Policy limit.",
+        action: "Check quotas",
       },
       ebay_down: {
         title: "eBay is not responding",
@@ -864,7 +876,7 @@ const en: AdminCopy = {
     noneSuspended: "No suspended calls.",
     anomalies: "Quota issues",
     resolved: (when: string) => `Back to normal on ${when}`,
-    request: "Ask eBay for a quota increase from the Developer Program.",
+    request: "For a higher quota, complete the Developer Program’s Application Growth Check.",
   },
   commerce: {
     title: "Commercial",

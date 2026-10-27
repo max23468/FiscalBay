@@ -19,6 +19,7 @@ import { insertTaxIdentifiers, now, resetDatabase, seed } from "./fixtures/datab
 import { callRoute, routePage, routeResponse } from "./fixtures/route-fixtures";
 import { searchOrders } from "./fixtures/order-search-fixtures";
 import { snapshotCursor } from "../app/orders/order-list";
+import { fulfillmentObservation } from "../app/integrations/ebay/fulfillment.server";
 
 const it_ = appCopy.it;
 
@@ -173,6 +174,31 @@ describe("righe e celle del file", () => {
     expect(column("Order total")).toEqual(["15.99", ""]);
     expect(column("Codice Fiscale")).toEqual(["RSSMRA80A01H501U", "RSSMRA80A01H501U"]);
     expect(column("Payment")).toEqual(["Paid", "Paid"]);
+  });
+
+  it("lascia fuori dal totale e dal file la protezione acquisti riscossa da eBay", () => {
+    // eBay addebita la tariffa all'acquirente in `ebayCollectedCharges`, separata dal totale.
+    const observation = fulfillmentObservation(
+      {
+        orderId: "01-00001",
+        creationDate: "2026-09-13T20:00:00.000Z",
+        lastModifiedDate: "2026-09-14T08:30:00.000Z",
+        pricingSummary: { total: { value: "15.99", currency: "EUR" } },
+        ebayCollectedCharges: {
+          charges: [{ chargeType: "BUYER_PROTECTION", amount: { value: "1.20", currency: "EUR" } }],
+        },
+      },
+      "2026-09-14T09:00:00.000Z",
+    );
+    expect(observation.total).toEqual({ minor: 1599, currency: "EUR" });
+    const header = exportHeader("order", appCopy.en);
+    const [row] = exportRows(
+      visible({ totalMinor: observation.total.minor, currency: observation.total.currency }),
+      "order",
+      appCopy.en,
+      "Europe/Rome",
+    );
+    expect(row![header.indexOf("Order total")]).toBe("15.99");
   });
 
   it("dichiara il motivo del dato vuoto e conserva il codice di uno stato non previsto", () => {

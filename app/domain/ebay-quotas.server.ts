@@ -1,5 +1,6 @@
 import { logFailure } from "../errors";
 import { readApiQuotas, type ApiRate } from "../integrations/ebay/analytics.server";
+import type { EbayNotification } from "../integrations/ebay/notifications.server";
 import { ebayConfiguration, sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { EbayEnvironment } from "../view-models";
 
@@ -11,7 +12,7 @@ import type { EbayEnvironment } from "../view-models";
  * riuscita trova il consumo rientrato. Una lettura non riuscita non apre né chiude nulla.
  */
 
-/** Consumo giornaliero oltre il quale si chiede a eBay un aumento. */
+/** Consumo giornaliero oltre il quale si completa l’Application Growth Check di eBay. */
 export const quotaAlertShare = 0.7;
 /** Consumo oltre il quale le letture sono a rischio nella stessa giornata. */
 const quotaUrgentShare = 0.9;
@@ -211,5 +212,62 @@ export async function quotaAnomalies(db: D1Database, now = new Date()): Promise<
       ORDER BY resolved_at IS NOT NULL, severity, opened_at DESC, subject`)
     .bind(now.toISOString())
     .all<QuotaAnomaly>();
+  return results;
+}
+
+type BulkDataThreshold = Extract<
+  EbayNotification,
+  { topic: "BULK_DATA_TRANSFER_THRESHOLD" }
+>["notification"]["data"];
+
+/**
+ * Soglia della Bulk Data Transfer Policy notificata da eBay: un'anomalia per ambiente, regione,
+ * categoria di dati e finestra di aggregazione, grave a soglia raggiunta. eBay non notifica il
+ * rientro: l'anomalia si chiude da sé alla fine della finestra. Una consegna ripetuta aggiorna la
+ * stessa anomalia.
+ */
+export async function recordBulkDataThreshold(
+  db: D1Database,
+  environment: EbayEnvironment,
+  data: BulkDataThreshold,
+  now = new Date(),
+) {
+  const windowStart = new Date(data.window.aggregationWindowStart).toISOString();
+  const windowEnd = new Date(data.window.aggregationWindowEnd).toISOString();
+  await db.batch(
+    data.metricData.map((metric) => {
+      const subject = `${environment}:${data.region}:${metric.metricDataType}`;
+      return db
+        .prepare(`INSERT INTO admin_anomalies (key, kind, severity, subject, detail, opened_at,
+            seen_at, resolved_at)
+          VALUES (?1, 'ebay_bulk_data', ?2, ?3, ?4, ?5, ?5, ?6)
+          ON CONFLICT(key) DO UPDATE SET severity = excluded.severity, detail = excluded.detail,
+            seen_at = excluded.seen_at`)
+        .bind(
+          `ebay_bulk_data:${subject}:${windowStart}`,
+          metric.thresholdStatus === "REACHED" ? "p1" : "p2",
+          subject,
+          JSON.stringify({
+            status: metric.thresholdStatus,
+            share: metric.thresholdPercentage / 100,
+            limit: metric.thresholdLimit,
+            count: metric.currentCount,
+            policy: [data.policyFramework, data.policyVersion].filter(Boolean).join(" "),
+            windowEnd,
+          }),
+          now.toISOString(),
+          windowEnd,
+        );
+    }),
+  );
+}
+
+/** Soglie Bulk Data Transfer con la finestra di aggregazione ancora aperta. */
+export async function bulkDataAnomalies(db: D1Database, now = new Date()) {
+  const { results } = await db
+    .prepare(`SELECT key, severity, subject, opened_at AS openedAt FROM admin_anomalies
+      WHERE kind = 'ebay_bulk_data' AND resolved_at > ?1 ORDER BY opened_at DESC`)
+    .bind(now.toISOString())
+    .all<{ key: string; severity: "p1" | "p2"; subject: string; openedAt: string }>();
   return results;
 }

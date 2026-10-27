@@ -1,4 +1,4 @@
-import { quotaAnomalies } from "./ebay-quotas.server";
+import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
 import { scheduledTasks, type ScheduledTask } from "./scheduled-work.server";
 import { storeLabelSql } from "./store-state.server";
 import { stalledReceiptMilliseconds } from "../webhooks.server";
@@ -14,6 +14,7 @@ export type Severity = "p1" | "p2" | "p3";
 
 export type AnomalyKind =
   | "ebay_quota"
+  | "ebay_bulk_data"
   | "ebay_down"
   | "store_reads"
   | "order_details"
@@ -184,6 +185,16 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         count: 1,
         subjects: [{ id: quota.subject, label: quota.subject, href: "quote" }],
       });
+
+  for (const bulk of await bulkDataAnomalies(db, now))
+    anomalies.push({
+      key: bulk.key,
+      kind: "ebay_bulk_data",
+      severity: bulk.severity,
+      since: bulk.openedAt,
+      count: 1,
+      subjects: [{ id: bulk.subject, label: bulk.subject, href: "quote" }],
+    });
 
   // Tutti i negozi attivi di un ambiente non si leggono: è eBay, un solo problema.
   for (const environment of ["production", "sandbox"]) {
