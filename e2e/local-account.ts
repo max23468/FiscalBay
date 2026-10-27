@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import type { BrowserContext } from "@playwright/test";
+import type { APIResponse, BrowserContext } from "@playwright/test";
 import { applyLocalMigrations } from "../scripts/local-d1.mjs";
 import type { PageRole } from "./page-cases";
 
@@ -56,26 +56,42 @@ export async function useLocalAccount(
     async (route) => {
       const request = route.request();
       // I cookie scritti dalla pagina, come il fuso del dispositivo, restano accanto alla sessione.
-      const cookies = new Map(
-        (await context.cookies(request.url()))
-          .filter(({ name }) => !managed.has(name))
-          .map(({ name, value }) => [name, value] as const),
-      );
-      for (const [name, value] of jar) cookies.set(name, value);
-      const response = await route.fetch({
-        headers: {
-          ...request.headers(),
-          cookie: [...cookies].map(([name, value]) => `${name}=${value}`).join("; "),
-        },
+      const cookie = async (url: string) => {
+        const cookies = new Map(
+          (await context.cookies(url))
+            .filter(({ name }) => !managed.has(name))
+            .map(({ name, value }) => [name, value] as const),
+        );
+        for (const [name, value] of jar) cookies.set(name, value);
+        return [...cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+      };
+      const remember = (response: APIResponse) => {
+        for (const { name, value } of response.headersArray()) {
+          if (name.toLowerCase() !== "set-cookie") continue;
+          const [pair = ""] = value.split(";");
+          const [key = "", ...rest] = pair.split("=");
+          managed.add(key.trim());
+          if (/max-age=0/iu.test(value)) jar.delete(key.trim());
+          else jar.set(key.trim(), rest.join("="));
+        }
+      };
+      let response = await route.fetch({
+        headers: { ...request.headers(), cookie: await cookie(request.url()) },
         maxRedirects: 0,
       });
-      for (const { name, value } of response.headersArray()) {
-        if (name.toLowerCase() !== "set-cookie") continue;
-        const [pair = ""] = value.split(";");
-        const [key = "", ...rest] = pair.split("=");
-        managed.add(key.trim());
-        if (/max-age=0/iu.test(value)) jar.delete(key.trim());
-        else jar.set(key.trim(), rest.join("="));
+      remember(response);
+      // WebKit non accetta un redirect per una richiesta della pagina, come il file creato che
+      // rimanda al download: il proxy lo segue con la stessa sessione, come farebbe il browser.
+      for (let hop = 0; hop < 5 && !request.isNavigationRequest(); hop++) {
+        const next = response.headers().location;
+        if (!next) break;
+        const url = new URL(next, request.url()).href;
+        const { "content-type": _type, "content-length": _length, ...headers } = request.headers();
+        response = await context.request.get(url, {
+          headers: { ...headers, cookie: await cookie(url) },
+          maxRedirects: 0,
+        });
+        remember(response);
       }
       const location = response.headers().location;
       if (!location || !request.isNavigationRequest()) return route.fulfill({ response });
