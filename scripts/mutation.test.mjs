@@ -137,6 +137,8 @@ describe("esito dei mutation test", () => {
     assert.equal(criticalModule("app/domain/refunds.server.ts"), true);
     assert.equal(criticalModule("app/domain/telegram.server.ts"), true);
     assert.equal(criticalModule("app/domain/order-export.server.ts"), true);
+    assert.equal(criticalModule("app/domain/xlsx.server.ts"), true);
+    assert.equal(criticalModule("app/domain/export-configurations.server.ts"), true);
     assert.equal(criticalModule("app/integrations/telegram.server.ts"), true);
     assert.deepEqual(mutationMatrix("", files), {
       target: [

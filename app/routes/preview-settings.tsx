@@ -96,7 +96,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       telegram: true,
       accountData: true,
       support: true,
-      exportAdvanced: true,
     },
     account: scenario.account,
     // Durante la prova l'acquisto resta possibile; lo ferma un abbonamento che può ancora
@@ -164,6 +163,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     },
     exportPeriods,
     exportContext,
+    // Una configurazione dimostrativa: salvarne o eliminarne una è simulato.
+    exportConfigurations: [
+      {
+        id: "esempio",
+        name: appCopy[language].settings.export.exportConfigSample,
+        format: "xlsx",
+        rows: "order",
+        columns: ["order", "date", "buyer", "taxCode", "vat", "total"],
+      },
+    ],
     now: scenario.now,
   };
   return page;

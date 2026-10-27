@@ -15,9 +15,7 @@ const appliedMigrationNames = new Set(["migrations/0001_m0_slice.sql"]);
 
 // Moduli server senza consumatore runtime, ciascuno con il motivo. Una voce che
 // acquista un consumatore va rimossa: il controllo la segnala come superata.
-export const pendingServerModules = new Map([
-  ["app/domain/export.server.ts", "export qualificato, consumato dall'export della pagina Ordini"],
-]);
+export const pendingServerModules = new Map();
 
 // Host ammessi nelle fixture oltre a `.invalid`: origini del sistema, endpoint
 // dei provider chiamati dal codice sotto test, deep link del bot e namespace XML.
@@ -35,6 +33,7 @@ const fixtureHosts = new Set([
   "api.telegram.org",
   "t.me",
   "www.w3.org",
+  "schemas.openxmlformats.org",
 ]);
 
 const isDocumentation = (file) => file.endsWith(".md") || file.startsWith("docs/");

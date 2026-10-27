@@ -4,76 +4,37 @@ import { taxIdentifierType } from "../tax-quality";
 import type { AppCopy } from "../copy/copy-it";
 import type { EbayEnvironment } from "../view-models";
 import { listVisibleOrders, type OrderCriteria, type VisibleOrder } from "./orders.server";
+import { xlsxStream, type XlsxCell } from "./xlsx.server";
+import {
+  exportHeader,
+  standardColumns,
+  type ExportColumn,
+  type ExportFormat,
+  type ExportRows,
+} from "../orders/export-columns";
 
 /**
- * File CSV standard degli ordini (§12): una riga per ordine o per articolo, con i soli valori
- * fiscali autorizzati all'istante della richiesta. Le colonne e il loro ordine non cambiano fra
- * un file e l'altro; i valori restano quelli della fonte.
+ * File degli ordini (§12), CSV o XLSX: una riga per ordine o per articolo, con i soli valori
+ * fiscali autorizzati all'istante della richiesta. Lo schema standard non cambia fra un file e
+ * l'altro; con Premium le colonne scelte cambiano presenza e ordine, non il significato. I
+ * valori restano quelli della fonte.
  */
-
-export type ExportRows = "order" | "item";
-
-type Column = keyof AppCopy["settings"]["export"]["file"]["columns"];
-
-/**
- * Colonne di una granularità, calcolate a ogni uso. Per articolo l'importo è della riga e il
- * totale dell'ordine compare una sola volta.
- */
-function columns(rows: ExportRows): Column[] {
-  const order: Column[] = [
-    "order",
-    "date",
-    "timeZone",
-    "store",
-    "marketplace",
-    "buyer",
-    "username",
-    "email",
-    "phone",
-    "address",
-    "postalCode",
-    "city",
-    "province",
-    "country",
-    "items",
-    "sku",
-    "quantity",
-    "currency",
-    "total",
-    "payment",
-    "shipping",
-    "taxCode",
-    "vat",
-    "otherTax",
-    "fiscal",
-    "checkedAt",
-    "updatedAt",
-  ];
-  return rows === "order"
-    ? order
-    : order.flatMap((column): Column[] =>
-        column === "items"
-          ? ["item"]
-          : column === "quantity"
-            ? ["quantity", "itemTotal"]
-            : [column],
-      );
-}
-
-export function exportHeader(rows: ExportRows, t: AppCopy): string[] {
-  const names = t.settings.export.file.columns;
-  return columns(rows).map((column) => names[column]);
-}
 
 /** Separatore dei valori multipli nella stessa cella, in un ordine deterministico. */
 const joined = (values: Array<string | null | undefined>) =>
   values.filter((value): value is string => !!value).join(" | ");
 
-/** Data e ora nel fuso indicato, nella forma `AAAA-MM-GG hh:mm:ss` riconosciuta dai fogli. */
-export function exportDateTime(iso: string | null, timeZone: string): string {
-  if (!iso) return "";
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
+/**
+ * Formattatore di un fuso, creato una volta: crearlo per ogni data occupa la maggior parte del
+ * tempo di un file grande.
+ */
+const formats = new Map<string, Intl.DateTimeFormat>();
+
+function dateTimeFormat(timeZone: string) {
+  let format = formats.get(timeZone);
+  // Stryker disable next-line ConditionalExpression: un formattatore nuovo a ogni data dà lo stesso testo, soltanto più lentamente.
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-GB", {
       timeZone,
       year: "numeric",
       month: "2-digit",
@@ -82,7 +43,18 @@ export function exportDateTime(iso: string | null, timeZone: string): string {
       minute: "2-digit",
       second: "2-digit",
       hourCycle: "h23",
-    })
+    });
+    // Stryker disable next-line CallExpression: senza memoria il testo resta lo stesso, soltanto più lento.
+    formats.set(timeZone, format);
+  }
+  return format;
+}
+
+/** Data e ora nel fuso indicato, nella forma `AAAA-MM-GG hh:mm:ss` riconosciuta dai fogli. */
+export function exportDateTime(iso: string | null, timeZone: string): string {
+  if (!iso) return "";
+  const parts = Object.fromEntries(
+    dateTimeFormat(timeZone)
       .formatToParts(new Date(iso))
       .map((part) => [part.type, part.value]),
   );
@@ -118,70 +90,88 @@ function statusCell<Status extends string>(
   return status === null || status === "unknown" ? (code ?? "") : labels[status];
 }
 
-/** Righe del file per un ordine: una sola, oppure una per articolo con il totale sulla prima. */
+/**
+ * Valori del file per un ordine, colonna per colonna: una sola riga, oppure una per articolo con
+ * il totale sulla prima.
+ */
+export function exportRecords(
+  order: VisibleOrder,
+  rows: ExportRows,
+  t: AppCopy,
+  timeZone: string,
+): Array<Record<ExportColumn, string>> {
+  const { buyer, lineItems } = order.summary;
+  const billing = buyer?.billingAddress;
+  const tax = taxCells(order);
+  const total = minorToDecimal(order.totalMinor, order.currency);
+  const common = {
+    order: order.ebayOrderId,
+    date: exportDateTime(order.creationTime, timeZone),
+    timeZone,
+    store: order.storeName,
+    marketplace: order.marketplaceId ?? "",
+    buyer: buyer?.name ?? "",
+    username: buyer?.username ?? "",
+    email: buyer?.email ?? "",
+    phone: buyer?.phone ?? buyer?.shipTo?.phone ?? "",
+    address: joined([billing?.addressLine1, billing?.addressLine2]),
+    postalCode: billing?.postalCode ?? "",
+    city: billing?.city ?? "",
+    province: billing?.stateOrProvince ?? "",
+    country: billing?.countryCode ?? "",
+    currency: order.currency,
+    payment: statusCell(order.summary.payment, order.summary.orderPaymentStatus, t.orders.payment),
+    shipping: statusCell(
+      order.summary.shipping,
+      order.summary.orderFulfillmentStatus,
+      t.orders.shipping,
+    ),
+    taxCode: tax.cf,
+    vat: tax.vat,
+    otherTax: tax.other,
+    fiscal: t.orders.fiscal[order.fiscalState],
+    checkedAt: exportDateTime(order.taxCheckedAt, timeZone),
+    updatedAt: exportDateTime(order.lastModifiedTime, timeZone),
+  };
+  if (rows === "order")
+    return [
+      {
+        ...common,
+        items: joined(lineItems.map((item) => `${item.quantity} × ${item.title}`)),
+        sku: joined(lineItems.map((item) => item.sku)),
+        quantity: String(lineItems.reduce((sum, item) => sum + item.quantity, 0)),
+        // Stryker disable next-line StringLiteral: per ordine la colonna non entra nel file.
+        itemTotal: "",
+        total,
+      },
+    ];
+  // Un ordine senza articoli letti resta comunque nel file, con il suo totale.
+  const items = lineItems.length ? lineItems : [null];
+  return items.map((item, index) => ({
+    ...common,
+    items: item?.title ?? "",
+    sku: item?.sku ?? "",
+    quantity: item ? String(item.quantity) : "",
+    // Un importo in un'altra valuta non si scrive come se fosse nella valuta dell'ordine.
+    itemTotal:
+      item?.totalMinor != null && item.currency === order.currency
+        ? minorToDecimal(item.totalMinor, order.currency)
+        : "",
+    total: index === 0 ? total : "",
+  }));
+}
+
+/** Righe del file per un ordine, con le colonne nell'ordine scelto. */
 export function exportRows(
   order: VisibleOrder,
   rows: ExportRows,
   t: AppCopy,
   timeZone: string,
+  columns: readonly ExportColumn[] = standardColumns(rows),
 ): string[][] {
-  const { buyer, lineItems } = order.summary;
-  const billing = buyer?.billingAddress;
-  const tax = taxCells(order);
-  const total = minorToDecimal(order.totalMinor, order.currency);
-  const head = [
-    order.ebayOrderId,
-    exportDateTime(order.creationTime, timeZone),
-    timeZone,
-    order.storeName,
-    order.marketplaceId ?? "",
-    buyer?.name ?? "",
-    buyer?.username ?? "",
-    buyer?.email ?? "",
-    buyer?.phone ?? buyer?.shipTo?.phone ?? "",
-    joined([billing?.addressLine1, billing?.addressLine2]),
-    billing?.postalCode ?? "",
-    billing?.city ?? "",
-    billing?.stateOrProvince ?? "",
-    billing?.countryCode ?? "",
-  ];
-  const tail = [
-    statusCell(order.summary.payment, order.summary.orderPaymentStatus, t.orders.payment),
-    statusCell(order.summary.shipping, order.summary.orderFulfillmentStatus, t.orders.shipping),
-    tax.cf,
-    tax.vat,
-    tax.other,
-    t.orders.fiscal[order.fiscalState],
-    exportDateTime(order.taxCheckedAt, timeZone),
-    exportDateTime(order.lastModifiedTime, timeZone),
-  ];
-  if (rows === "order")
-    return [
-      [
-        ...head,
-        joined(lineItems.map((item) => `${item.quantity} × ${item.title}`)),
-        joined(lineItems.map((item) => item.sku)),
-        String(lineItems.reduce((sum, item) => sum + item.quantity, 0)),
-        order.currency,
-        total,
-        ...tail,
-      ],
-    ];
-  // Un ordine senza articoli letti resta comunque nel file, con il suo totale.
-  const items = lineItems.length ? lineItems : [null];
-  return items.map((item, index) => [
-    ...head,
-    item?.title ?? "",
-    item?.sku ?? "",
-    item ? String(item.quantity) : "",
-    // Un importo in un'altra valuta non si scrive come se fosse nella valuta dell'ordine.
-    item?.totalMinor != null && item.currency === order.currency
-      ? minorToDecimal(item.totalMinor, order.currency)
-      : "",
-    order.currency,
-    index === 0 ? total : "",
-    ...tail,
-  ]);
+  return exportRecords(order, rows, t, timeZone).map((record) =>
+    columns.map((column) => record[column]),
+  );
 }
 
 /**
@@ -204,8 +194,13 @@ export function csvLine(cells: readonly string[]): string {
 }
 
 /** Nome del file senza dati personali: prodotto e data della richiesta nel fuso dell'utente. */
-export function exportFileName(t: AppCopy, now: Date, timeZone: string) {
-  return `${t.settings.export.file.name}-${exportDateTime(now.toISOString(), timeZone).slice(0, 10)}.csv`;
+export function exportFileName(
+  t: AppCopy,
+  now: Date,
+  timeZone: string,
+  format: ExportFormat = "csv",
+) {
+  return `${t.settings.export.file.name}-${exportDateTime(now.toISOString(), timeZone).slice(0, 10)}.${format}`;
 }
 
 /**
@@ -246,11 +241,12 @@ export function exportCsvStream(
   rows: ExportRows,
   t: AppCopy,
   timeZone: string,
+  columns: readonly ExportColumn[] = standardColumns(rows),
 ): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream({
     start(controller) {
-      controller.enqueue(encoder.encode(`﻿${csvLine(exportHeader(rows, t))}`));
+      controller.enqueue(encoder.encode(`\uFEFF${csvLine(exportHeader(rows, t, columns))}`));
     },
     async pull(controller) {
       const next = await pages.next();
@@ -261,7 +257,7 @@ export function exportCsvStream(
       controller.enqueue(
         encoder.encode(
           next.value
-            .flatMap((order) => exportRows(order, rows, t, timeZone))
+            .flatMap((order) => exportRows(order, rows, t, timeZone, columns))
             .map(csvLine)
             .join(""),
         ),
@@ -271,4 +267,54 @@ export function exportCsvStream(
       await pages.return(undefined);
     },
   });
+}
+
+/**
+ * Tipo della colonna nel file XLSX: importi e quantità sono numeri, date e ore valori di data,
+ * tutto il resto testo, compresi Codice Fiscale, Partita IVA, SKU, CAP e telefono.
+ */
+function cellType(column: ExportColumn): XlsxCell["type"] {
+  return column === "quantity" || column === "itemTotal" || column === "total"
+    ? "number"
+    : column === "date" || column === "checkedAt" || column === "updatedAt"
+      ? "date"
+      : // Stryker disable next-line StringLiteral: un tipo diverso da numero e data vale già come testo.
+        "text";
+}
+
+/** Larghezza della colonna nel foglio: il nome intero, più spazio per i testi lunghi. */
+function columnWidth(column: ExportColumn, name: string): number {
+  const wide = column === "items" || column === "address" || column === "otherTax";
+  return Math.max(wide ? 40 : 14, name.length + 4);
+}
+
+/**
+ * XLSX in streaming con le stesse righe del CSV: i valori restano quelli della fonte, senza
+ * apostrofi, perché una cella di testo non è mai una formula.
+ */
+export function exportXlsxStream(
+  pages: AsyncGenerator<VisibleOrder[]>,
+  rows: ExportRows,
+  t: AppCopy,
+  timeZone: string,
+  now: Date,
+  columns: readonly ExportColumn[] = standardColumns(rows),
+): ReadableStream<Uint8Array> {
+  const header = exportHeader(rows, t, columns);
+  const types = columns.map(cellType);
+  return xlsxStream(
+    {
+      name: t.settings.export.file.sheet,
+      header,
+      widths: columns.map((column, index) => columnWidth(column, header[index]!)),
+      modified: now,
+    },
+    pages,
+    (page) =>
+      page.flatMap((order) =>
+        exportRows(order, rows, t, timeZone, columns).map((values) =>
+          values.map((value, index) => ({ type: types[index]!, value })),
+        ),
+      ),
+  );
 }

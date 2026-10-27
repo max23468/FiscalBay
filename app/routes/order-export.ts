@@ -14,8 +14,9 @@ import {
   exportCsvStream,
   exportFileName,
   exportOrderPages,
-  type ExportRows,
+  exportXlsxStream,
 } from "../domain/order-export.server";
+import { parseColumns, standardColumns, type ExportRows } from "../orders/export-columns";
 import { visibleOrderTallies } from "../domain/orders.server";
 import { errorResponse } from "../error-response";
 import { logFailure } from "../errors";
@@ -45,10 +46,17 @@ export function loader() {
   return new Response(null, { status: 405, headers: { allow: "POST" } });
 }
 
+/** Tipo del contenuto di ogni formato. */
+const contentTypes = {
+  csv: "text/csv; charset=utf-8",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
 /**
- * File CSV degli ordini, creato soltanto dalla conferma «Crea file». L'ambito arriva
+ * File degli ordini, creato soltanto dalla conferma «Crea file». L'ambito arriva
  * nell'indirizzo, uguale a quello della sezione Esportazione (filtri, ricerca cifrata,
- * istantanea e selezione); le opzioni nel corpo. Sessione, negozi, conservazione e diritti si
+ * istantanea e selezione); le opzioni nel corpo. XLSX e colonne scelte valgono soltanto con
+ * Premium, riletto qui come gli altri diritti. Sessione, negozi, conservazione e diritti si
  * rileggono qui, all'istante della richiesta, e il file passa dal Worker senza URL bearer.
  * Con `Accept: application/json` un rifiuto risponde con l'avviso; un modulo inviato senza
  * JavaScript torna alla sezione.
@@ -77,11 +85,19 @@ export async function action({ request }: Route.ActionArgs) {
   const userId = area.session.user.id;
   const environment = requestedEbayEnvironment(request);
   const rows: ExportRows = form.get("rows") === "item" ? "item" : "order";
+  const format = form.get("format") === "xlsx" ? "xlsx" : "csv";
+  const chosen = form.get("columns");
   const now = new Date();
   const timeZone = effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone);
   try {
     const allowance = await measure("d1", "allowance", () => orderAllowance(env.DB, userId, now));
     const premium = !!allowance?.premium;
+    // Senza Premium, anche se scaduto mentre la pagina era aperta, il file standard non parte
+    // al posto di quello chiesto.
+    if (!premium && (format === "xlsx" || chosen !== null))
+      return refused(403, t.settings.export.exportPremium);
+    const columns = chosen === null ? standardColumns(rows) : parseColumns(String(chosen), rows);
+    if (!columns) return refused(400, t.settings.export.exportColumnsInvalid);
     const fromOrders = await measure("d1", "orders", () =>
       accountExportScope(area, query, environment, premium, now),
     );
@@ -96,10 +112,14 @@ export async function action({ request }: Route.ActionArgs) {
       : [];
     if (!filter || !tally?.orders) return refused(409, t.settings.export.exportEmpty);
     const pages = logged(request, exportOrderPages(env.DB, userId, environment, now, filter));
-    return new Response(exportCsvStream(pages, rows, t, timeZone), {
+    const file =
+      format === "xlsx"
+        ? exportXlsxStream(pages, rows, t, timeZone, now, columns)
+        : exportCsvStream(pages, rows, t, timeZone, columns);
+    return new Response(file, {
       headers: {
-        "content-type": "text/csv; charset=utf-8",
-        "content-disposition": `attachment; filename="${exportFileName(t, now, timeZone)}"`,
+        "content-type": contentTypes[format],
+        "content-disposition": `attachment; filename="${exportFileName(t, now, timeZone, format)}"`,
         "cache-control": "no-store",
         "x-content-type-options": "nosniff",
       },

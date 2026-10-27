@@ -30,6 +30,7 @@ import {
   type TelegramView,
 } from "../../view-models";
 import { AppearanceSection } from "./appearance";
+import type { ExportConfiguration } from "../../domain/export-configurations.server";
 import type { ExportContext, ExportTally } from "../../orders/export-scope";
 import { ExportSection } from "./export";
 import { NotificationsSection } from "./notifications";
@@ -72,6 +73,8 @@ export interface SettingsPageData {
   exportPeriods: Record<OrderPeriod, ExportTally> | null;
   /** Ambito ricevuto dagli Ordini, con i suoi ordini; null se l'esportazione è aperta dalle Impostazioni. */
   exportContext: ExportContext | null;
+  /** Configurazioni dell'esportazione salvate, mostrate soltanto con Premium. */
+  exportConfigurations: ExportConfiguration[];
   now: string;
 }
 
@@ -86,8 +89,6 @@ export interface SettingsServices {
   telegram: boolean;
   accountData: boolean;
   support: boolean;
-  /** XLSX, colonne scelte e configurazioni salvate dell'esportazione. */
-  exportAdvanced: boolean;
 }
 
 /** Icone neutre: le Impostazioni restano sobrie, il colore sta in Ordini e Negozi. */
@@ -243,7 +244,7 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
     esportazione: (
       <ExportSection
         premium={premium}
-        advanced={data.services.exportAdvanced}
+        configurations={data.exportConfigurations}
         context={data.exportContext}
         periods={data.exportPeriods}
       />

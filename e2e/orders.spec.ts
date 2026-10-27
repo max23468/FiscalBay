@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import ExcelJS from "exceljs";
 import { areas, enter, noPageOverflow, open, searched } from "./components";
 import { expect, test, watchNetwork } from "./fixtures";
 import { useLocalAccount } from "./local-account";
@@ -539,6 +540,89 @@ test.describe("area reale", () => {
         })
         .check();
       await expect(status).toHaveText(it ? "1 ordine." : "1 order.");
+      expect(errors).toEqual([]);
+    });
+    test(`ordini reali: con Premium l'XLSX segue le colonne scelte e la configurazione salvata ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+      browserErrors: errors,
+    }) => {
+      const id = `xlsx-${language}-${browserName}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      await open(page, `${prefix}/app/impostazioni/esportazione`);
+      const section = page.getByRole("region", {
+        name: it ? "Ordini da esportare" : "Orders to export",
+      });
+      await section.getByRole("radio", { name: "XLSX" }).check();
+      await section.getByRole("radio", { name: it ? "Articolo" : "Item", exact: true }).check();
+      const columns = section.getByRole("group", { name: it ? "Colonne" : "Columns" });
+      // Si tengono numero ordine e altri identificativi, con questi ultimi in testa.
+      for (const checkbox of await columns.getByRole("checkbox").all()) await checkbox.uncheck();
+      await columns.getByRole("checkbox", { name: it ? "Numero ordine" : "Order number" }).check();
+      const other = it ? "Altri identificativi fiscali" : "Other tax identifiers";
+      await columns.getByRole("checkbox", { name: other }).check();
+      const up = columns.getByRole("button", {
+        name: it ? `Sposta su: ${other}` : `Move up: ${other}`,
+      });
+      for (let moves = 0; moves < 24; moves++) await up.click();
+      await expect(
+        section.getByText(it ? `${other} in posizione 1 di 28.` : `${other} in position 1 of 28.`),
+      ).toBeAttached();
+      const downloaded = page.waitForEvent("download");
+      await section
+        .getByRole("button", { name: it ? "Crea file" : "Create file", exact: true })
+        .click();
+      const download = await downloaded;
+      expect(download.suggestedFilename()).toMatch(
+        new RegExp(`^fiscalbay-${it ? "ordini" : "orders"}-\\d{4}-\\d{2}-\\d{2}\\.xlsx$`, "u"),
+      );
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(await download.path());
+      const rows = (workbook.worksheets[0]!.getSheetValues().slice(1) as unknown[][]).map((row) =>
+        row.slice(1),
+      );
+      expect(rows[0]).toEqual([other, it ? "Numero ordine" : "Order number"]);
+      // Con Premium ogni ordine ha il suo dato, come testo.
+      expect(rows.slice(1).sort()).toEqual(
+        ["", "-2", "-3", "-4"].map((suffix) => [
+          `VAT_ID: VALORE-SINTETICO-${language}${suffix}`,
+          `${id}${suffix}`,
+        ]),
+      );
+      // La forma scelta si salva con un nome e torna dopo una nuova apertura.
+      await section
+        .getByRole("button", { name: it ? "Salva configurazione" : "Save configuration" })
+        .click();
+      await section
+        .getByRole("textbox", { name: it ? "Nome della configurazione" : "Configuration name" })
+        .fill("Commercialista");
+      await section.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
+      // L'esito arriva dopo il salvataggio e la rilettura della pagina.
+      await expect(
+        page.getByText(it ? "Configurazione salvata." : "Configuration saved."),
+      ).toBeVisible({
+        timeout: 20_000,
+      });
+      await open(page, `${prefix}/app/impostazioni/esportazione`);
+      const configuration = section.getByRole("combobox", {
+        name: it ? "Configurazione" : "Configuration",
+      });
+      await configuration.click();
+      await page.getByRole("option", { name: "Commercialista" }).click();
+      await expect(section.getByRole("radio", { name: "XLSX" })).toBeChecked();
+      await expect(columns.getByRole("checkbox", { checked: true })).toHaveCount(2);
+      await section
+        .getByRole("button", { name: it ? "Elimina configurazione" : "Delete configuration" })
+        .click();
+      // L'esito arriva dopo il salvataggio e la rilettura della pagina.
+      await expect(
+        page.getByText(it ? "Configurazione eliminata." : "Configuration deleted."),
+      ).toBeVisible({
+        timeout: 20_000,
+      });
+      await expect(configuration).toHaveCount(0);
       expect(errors).toEqual([]);
     });
     test(`ordini: sblocco non riuscito senza consumo o preferenza salvata ${language}`, async ({
