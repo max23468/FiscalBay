@@ -17,6 +17,7 @@ import { useAdmin } from "./use-admin";
 
 const items = [
   ["", "overview"],
+  ["metriche", "metrics"],
   ["account", "accounts"],
   ["negozi", "stores"],
   ["lavori", "jobs"],

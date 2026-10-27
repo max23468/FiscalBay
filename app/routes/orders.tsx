@@ -7,6 +7,7 @@ import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { accessNotice, isStoreNotice } from "../access-notice";
+import { issueTimingTicket } from "../page-timing.server";
 import { unconfirmedOnFailure } from "../client-action";
 import {
   areaPage,
@@ -296,6 +297,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     ebayEnvironment,
     sandbox: sandboxAvailable(env),
     page: pageData,
+    timing: await issueTimingTicket(env.BETTER_AUTH_SECRET, "orders", now),
     confirmation:
       pending.length > 0
         ? settle(
@@ -434,6 +436,7 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
       data={loaderData.page}
       unlockAction={`${localizedPath(language, ordersPath)}?environment=${loaderData.ebayEnvironment}`}
       confirmation={loaderData.confirmation}
+      timing={loaderData.timing}
       notice={
         <>
           {alerts}

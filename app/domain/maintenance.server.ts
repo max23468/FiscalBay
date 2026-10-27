@@ -1,6 +1,7 @@
 import { orderSearchText } from "../orders/order-search";
 import { auditRetentionDays } from "./admin-audit.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
+import { syncDailyRetentionDays } from "./product-metrics.server";
 import { purgeSupportRequests } from "./support-requests.server";
 import { purgeTelegramLinks } from "./telegram.server";
 import { purgeTelegramDeliveries } from "./telegram-deliveries.server";
@@ -40,6 +41,11 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
       .prepare(`DELETE FROM store_transfers WHERE (executed_at IS NULL AND expires_at <= ?1)
         OR julianday(executed_at) < julianday(?1) - ?2`)
       .bind(at, auditRetentionDays),
+    // Aggregati giornalieri delle letture e ricevute dei report del browser.
+    db
+      .prepare("DELETE FROM sync_daily WHERE julianday(day) < julianday(?) - ?")
+      .bind(at, syncDailyRetentionDays),
+    db.prepare("DELETE FROM page_timing_reports WHERE expires_at <= ?").bind(at),
     // Una notifica resta nella campanella al massimo 30 giorni dopo la sua lettura.
     db
       .prepare("DELETE FROM notification_reads WHERE read_at < ?")

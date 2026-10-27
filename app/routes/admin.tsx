@@ -6,6 +6,7 @@ import { AccountsView, StoresView } from "~/components/admin/directory";
 import { CommerceView } from "~/components/admin/commerce";
 import { AbuseView, AuditTable, NoticesView } from "~/components/admin/governance";
 import { JobsView, QuotasView } from "~/components/admin/operations";
+import { MetricsView } from "~/components/admin/metrics";
 import { Overview } from "~/components/admin/overview";
 import { AdminShell, type AdminSectionKey } from "~/components/admin/shell";
 import { SwitchesView } from "~/components/admin/switches";
@@ -46,6 +47,7 @@ function sectionTitle(page: SectionData, language: "it" | "en") {
   const nav = adminCopy[language].nav;
   const titles = {
     panoramica: nav.overview,
+    metriche: nav.metrics,
     account: nav.accounts,
     spazi: adminCopy[language].workspace.title,
     negozi: nav.stores,
@@ -161,6 +163,8 @@ function Section({ page, now }: { page: SectionData; now: string }) {
   switch (page.section) {
     case "panoramica":
       return <Overview data={page} />;
+    case "metriche":
+      return <MetricsView metrics={page.metrics} />;
     case "account":
       return <AccountsView {...page} />;
     case "spazi":
@@ -187,6 +191,7 @@ function Section({ page, now }: { page: SectionData; now: string }) {
 /** Voce della navigazione accesa per la sezione: la scheda di uno spazio sta sotto Account. */
 const navKey = {
   panoramica: "overview",
+  metriche: "metrics",
   account: "accounts",
   spazi: "accounts",
   negozi: "stores",

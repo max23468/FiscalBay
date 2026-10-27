@@ -813,6 +813,9 @@ describe("acquisizione con il client", () => {
   });
 
   it("acquisisce i nuovi ordini prima di completare lo storico e ne mostra l'avanzamento", async () => {
+    // Le letture riuscite non scrivono log: restano soltanto gli aggregati e l'ultimo stato.
+    const log = vi.spyOn(console, "log");
+    const info = vi.spyOn(console, "info");
     const orders = series("12-storico", 60, "2026-09-02T00:00:00.000Z");
     const small = { calls: 3, pages: 3 };
     // Prima del primo avvio lo storico non ha ancora una finestra.
@@ -861,6 +864,21 @@ describe("acquisizione con il client", () => {
     expect(
       (await listStores(env.DB, "u-a", new Date("2026-09-02T01:00:00.000Z")))[0],
     ).toMatchObject({ history: { days: 30, done: true } });
+    expect(log).not.toHaveBeenCalled();
+    expect(info).not.toHaveBeenCalled();
+    // Tre letture riuscite: un solo giorno aggregato e la prima lettura alla prima esecuzione.
+    expect(
+      await env.DB.prepare("SELECT day, attempts, failures FROM sync_daily").all(),
+    ).toMatchObject({ results: [{ day: "2026-09-02", attempts: 3, failures: 0 }] });
+    const { results: steps } = await env.DB.prepare(
+      "SELECT step, occurred_at AS at FROM workspace_funnel_steps WHERE workspace_id = 'w-a'",
+    ).all<{ step: string; at: string }>();
+    expect(steps).toEqual(
+      expect.arrayContaining([
+        { step: "first_sync", at: "2026-09-02T00:00:00.000Z" },
+        { step: "first_order", at: expect.any(String) },
+      ]),
+    );
   });
 
   describe("finestra dello storico secondo la copertura", () => {
