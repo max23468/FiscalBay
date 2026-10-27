@@ -22,6 +22,8 @@ import {
   candidateRef,
   runTimings,
   checkCycleJobs,
+  readbackSuperseded,
+  settleMergeRun,
   assertConfirmed,
   assertPublishedRelease,
   squashIntegrated,
@@ -597,6 +599,130 @@ describe("coordinamento e provenienza della pubblicazione", () => {
         ),
       /Readback/u,
     );
+  });
+
+  /** Job di una run di `develop`: gate, browser e deploy test con l'esito dei suoi passi. */
+  const developJobs = (readback, overrides = {}) => [
+    { name: "Node 26", conclusion: "success" },
+    { name: "Browser 1/8", conclusion: "success" },
+    {
+      name: "Deploy test",
+      conclusion: readback === "success" ? "success" : "failure",
+      steps: [
+        { name: "Deploy verified artifact", conclusion: "success" },
+        { name: "Check deployed browser interactions", conclusion: "success" },
+        { name: "Check deployed pages", conclusion: "success" },
+        { name: "Roll back test deploy", conclusion: "skipped" },
+        { name: "Confirm provider readback", conclusion: readback },
+        ...(overrides.steps ?? []),
+      ].map((step) => ({ ...step, ...overrides[step.name] })),
+    },
+  ];
+
+  it("riconosce un readback superato da un merge successivo e nessun altro fallimento", () => {
+    assert.equal(readbackSuperseded(developJobs("failure")), true);
+    assert.equal(readbackSuperseded(developJobs("success")), false);
+    for (const name of [
+      "Deploy verified artifact",
+      "Check deployed browser interactions",
+      "Check deployed pages",
+    ])
+      assert.equal(
+        readbackSuperseded(developJobs("failure", { [name]: { conclusion: "failure" } })),
+        false,
+        name,
+      );
+    // Un rollback eseguito o un altro job fallito non sono un readback superato.
+    assert.equal(
+      readbackSuperseded(
+        developJobs("failure", { "Roll back test deploy": { conclusion: "success" } }),
+      ),
+      false,
+    );
+    const [gate, ...rest] = developJobs("failure");
+    assert.equal(readbackSuperseded([{ ...gate, conclusion: "failure" }, ...rest]), false);
+    assert.equal(readbackSuperseded([gate]), false);
+  });
+
+  it("chiude il ciclo con la run della nuova testa che contiene il merge e ne conferma il deploy", async () => {
+    const merge = "a".repeat(40);
+    const later = "b".repeat(40);
+    const runs = {
+      [merge]: { id: 1, head_sha: merge, conclusion: "failure", jobs: developJobs("failure") },
+      [later]: { id: 2, head_sha: later, conclusion: "success", jobs: developJobs("success") },
+    };
+    const io = (overrides = {}) => ({
+      wait: async (sha) => runs[sha],
+      jobs: (run) => run.jobs,
+      head: () => later,
+      contains: (ancestor, head) => ancestor === merge && head === later,
+      ...overrides,
+    });
+    const log = console.log;
+    console.log = () => {};
+    try {
+      const settled = await settleMergeRun(merge, false, io());
+      assert.equal(settled.run.id, 2);
+      assert.equal(settled.deployRequired, true);
+      assert.equal(checkCycleJobs(settled.jobs, settled.deployRequired), true);
+      // La nuova testa deve contenere il merge, essere diversa e riuscita con il deploy.
+      await assert.rejects(settleMergeRun(merge, false, io({ contains: () => false })), /Run 1/u);
+      await assert.rejects(settleMergeRun(merge, false, io({ head: () => merge })), /Run 1/u);
+      runs[later] = {
+        ...runs[later],
+        conclusion: "failure",
+        jobs: developJobs("success", {
+          "Check deployed pages": { conclusion: "failure" },
+        }),
+      };
+      await assert.rejects(settleMergeRun(merge, false, io()), /Run 2/u);
+      // Un altro fallimento della run del merge non segue nessuna run successiva.
+      runs[merge] = {
+        ...runs[merge],
+        jobs: developJobs("failure", {
+          "Check deployed pages": { conclusion: "failure" },
+        }),
+      };
+      let followed = false;
+      await assert.rejects(
+        settleMergeRun(merge, false, io({ head: () => ((followed = true), later) })),
+        /Run 1/u,
+      );
+      assert.equal(followed, false);
+      // La run del merge riuscita chiude il ciclo con il deploy richiesto dal piano.
+      runs[merge] = { ...runs[merge], conclusion: "success", jobs: developJobs("success") };
+      assert.deepEqual(await settleMergeRun(merge, false, io()), {
+        run: runs[merge],
+        jobs: runs[merge].jobs,
+        deployRequired: false,
+      });
+    } finally {
+      console.log = log;
+    }
+  });
+
+  it("segue al più tre merge successivi", async () => {
+    const shas = ["1", "2", "3", "4", "5"].map((digit) => digit.repeat(40));
+    let current = 0;
+    const io = {
+      wait: async (sha) => ({
+        id: shas.indexOf(sha) + 1,
+        head_sha: sha,
+        conclusion: "failure",
+        jobs: developJobs("failure"),
+      }),
+      jobs: (run) => run.jobs,
+      head: () => shas[++current],
+      contains: () => true,
+    };
+    const log = console.log;
+    console.log = () => {};
+    try {
+      await assert.rejects(settleMergeRun(shas[0], true, io), /Run 4/u);
+      assert.equal(current, 3);
+    } finally {
+      console.log = log;
+    }
   });
 
   it("legge la conferma Production dal passo che precede il tag", () => {
