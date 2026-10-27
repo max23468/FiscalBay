@@ -194,7 +194,7 @@ describe("misure delle fasi e del browser", () => {
     );
     expect(provider.headers.has("server-timing")).toBe(false);
     // Fuori da una richiesta la misura non registra nulla e restituisce il risultato.
-    expect(await measure("render", "document", async () => 1)).toBe(1);
+    expect(await measure("d1", "settings", async () => 1)).toBe(1);
   });
 
   it("apre uno span per fase con i soli attributi ammessi e il codice dell'errore", async () => {
@@ -281,11 +281,11 @@ describe("misure delle fasi e del browser", () => {
       ticket: await issueTimingTicket(env.BETTER_AUTH_SECRET, "orders"),
     };
     expect((await timing(JSON.stringify(valid))).status).toBe(204);
-    // Il biglietto non entra nel punto; le misure assenti (LCP, eBay, rendering) valgono -1.
+    // Il biglietto non entra nel punto; le misure assenti (LCP, eBay) valgono -1.
     expect(written).toHaveBeenCalledExactlyOnceWith({
       indexes: ["page:browser"],
       blobs: ["page", "browser", "orders", "", "ok", env.VERSION_METADATA.id],
-      doubles: [120, 300, -1, 650, 12, 8, -1, -1],
+      doubles: [120, 300, -1, 650, 12, 8, -1],
     });
     written.mockClear();
     for (const body of [
@@ -295,6 +295,8 @@ describe("misure delle fasi e del browser", () => {
       JSON.stringify({ ...valid, ready: 120_001 }),
       JSON.stringify({ ...valid, fcp: 1.5 }),
       JSON.stringify({ ...valid, server: { stripe: 4 } }),
+      // Il rendering non è più una fase del server: lo misura la CPU dei Workers Logs.
+      JSON.stringify({ ...valid, server: { render: 3 } }),
       JSON.stringify(measures),
       "non è JSON",
     ])

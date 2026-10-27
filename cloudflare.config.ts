@@ -73,6 +73,8 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     // La console legge lo stesso dataset dalla SQL API dell'account, con il token facoltativo
     // `ANALYTICS_READ_TOKEN`.
     METRICS_DATASET: bindings.text(target.metrics),
+    // Con lo stesso token legge dai Workers Logs di questo Worker il tempo CPU delle pagine.
+    WORKER_NAME: bindings.text(target.name),
     CLOUDFLARE_ACCOUNT_ID: bindings.text(account),
     VERSION_METADATA: bindings.versionMetadata(),
   },
