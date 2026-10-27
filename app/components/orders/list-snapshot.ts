@@ -1,5 +1,11 @@
 import { useEffect, useEffectEvent, useState } from "react";
-import { useLocation, useNavigate, useNavigation, useSearchParams } from "react-router";
+import {
+  useFetchers,
+  useLocation,
+  useNavigate,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 
 import { snapshotParam } from "../../orders/order-list";
 import type { OrderView } from "../../view-models";
@@ -27,9 +33,12 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
   const { snapshot, freshHref, incomingAtTop } = data;
   const synced = params.get(snapshotParam) === snapshot;
   // Durante un'altra navigazione, per esempio Indietro, la sostituzione prenderebbe il posto
-  // della pagina di destinazione: si attende il router inattivo e l'indirizzo del browser
-  // ancora uguale all'elenco mostrato.
-  const idle = useNavigation().state === "idle";
+  // della pagina di destinazione, e durante uno sblocco ne interromperebbe la rilettura: si
+  // attende il router inattivo, senza azioni in corso, e l'indirizzo del browser ancora uguale
+  // all'elenco mostrato.
+  const fetchers = useFetchers();
+  const idle =
+    useNavigation().state === "idle" && fetchers.every((fetcher) => fetcher.state === "idle");
   const shown = `${location.pathname}${location.search}`;
   const current = () => `${window.location.pathname}${window.location.search}` === shown;
   // Lo scorrimento conta quando si ferma: un clic subito dopo avvia prima la sua navigazione,
