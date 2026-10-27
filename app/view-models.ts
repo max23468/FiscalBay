@@ -23,6 +23,8 @@ export type StatusTone =
 export interface ActionResult {
   ok: boolean;
   notice?: string;
+  /** File creato dall'azione, da scaricare dal suo percorso autenticato. */
+  download?: string;
 }
 
 export type OrdersNotice =

@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
+import { strFromU8, unzipSync } from "fflate";
 import { areas, enter, noPageOverflow, open } from "./components";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { executeLocal } from "../scripts/local-d1.mjs";
@@ -110,6 +112,41 @@ test.describe("area reale", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "it");
     expect(errors).toEqual([]);
   });
+
+  for (const language of ["it", "en"] as const)
+    test(`impostazioni reali: i dati dell'account si scaricano in uno ZIP ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+      pageErrors: errors,
+    }) => {
+      const it = language === "it";
+      await useLocalAccount(context, "member", baseURL!, `account-data-${language}-${browserName}`);
+      await page.goto(`${it ? "" : "/en"}/app/impostazioni/privacy`);
+      await networkIdle(page);
+      // La cancellazione dell'account non è ancora disponibile nell'area reale.
+      await expect(
+        page.getByRole("button", { name: it ? "Elimina account" : "Delete account" }),
+      ).toHaveCount(0);
+      const downloaded = page.waitForEvent("download");
+      await page
+        .getByRole("button", { name: it ? "Richiedi esportazione" : "Request export" })
+        .click();
+      const download = await downloaded;
+      expect(download.suggestedFilename()).toMatch(
+        new RegExp(
+          `^fiscalbay-${it ? "dati-account" : "account-data"}-\\d{4}-\\d{2}-\\d{2}\\.zip$`,
+          "u",
+        ),
+      );
+      const files = unzipSync(new Uint8Array(await readFile(await download.path())));
+      expect(Object.keys(files)).toContain(it ? "profilo.csv" : "profile.csv");
+      const data = JSON.parse(strFromU8(files["fiscalbay-account.json"]!));
+      expect(data.profile.email).toMatch(/@/u);
+      expect(data.stores).toEqual([expect.objectContaining({ ebayUser: expect.any(String) })]);
+      expect(errors).toEqual([]);
+    });
 });
 
 for (const width of [390, 768, 1440]) {

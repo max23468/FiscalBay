@@ -9,14 +9,15 @@ import {
 } from "../account-area.server";
 import { appCopy } from "../app-copy";
 import { exportFilePath, settingsPath } from "../app-links";
-import { exportRevision, publishExportFile } from "../domain/export-files.server";
-import { orderAllowance } from "../domain/grants.server";
+import { exportRevision } from "../domain/export-files.server";
 import {
-  exportCsvStream,
-  exportFileName,
-  exportOrderPages,
-  exportXlsxStream,
-} from "../domain/order-export.server";
+  exportJobOrders,
+  publishOrderFile,
+  queueOrderFile,
+  type OrderFileRequest,
+} from "../domain/export-jobs.server";
+import { orderAllowance } from "../domain/grants.server";
+import { exportFileName } from "../domain/order-export.server";
 import { parseColumns, standardColumns, type ExportRows } from "../orders/export-columns";
 import { visibleOrderTallies } from "../domain/orders.server";
 import { errorResponse } from "../error-response";
@@ -32,26 +33,10 @@ import { effectiveTimeZone } from "../preferences";
 import type { ActionResult } from "../view-models";
 import type { Route } from "./+types/order-export";
 
-/** Pagine del file con l'errore registrato: a risposta iniziata interrompe soltanto il flusso. */
-async function* logged<T>(request: Request, pages: AsyncGenerator<T>) {
-  try {
-    yield* pages;
-  } catch (error) {
-    logFailure({ request, error, operation: "route" });
-    throw error;
-  }
-}
-
 /** Il percorso crea soltanto file: una lettura non ha contenuto. */
 export function loader() {
   return new Response(null, { status: 405, headers: { allow: "POST" } });
 }
-
-/** Tipo del contenuto di ogni formato. */
-const contentTypes = {
-  csv: "text/csv; charset=utf-8",
-  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-};
 
 /**
  * File degli ordini, creato soltanto dalla conferma «Crea file». L'ambito arriva
@@ -59,9 +44,11 @@ const contentTypes = {
  * istantanea e selezione); le opzioni nel corpo. XLSX e colonne scelte valgono soltanto con
  * Premium, riletto qui come gli altri diritti. Sessione, negozi, conservazione e diritti si
  * rileggono qui, all'istante della richiesta. Il file si salva nel bucket privato e la risposta
- * rimanda al suo download, che passa dal Worker senza URL bearer; il file vale al più 24 ore e
- * non oltre la fine della copertura Premium con cui è nato. Con `Accept: application/json` un
- * rifiuto risponde con l'avviso; un modulo inviato senza JavaScript torna alla sezione.
+ * rimanda al suo download, che passa dal Worker senza URL bearer; il file vale al più 24 ore,
+ * non oltre la fine della copertura Premium con cui è nato né oltre il primo termine dei dati
+ * inclusi. Oltre `exportJobOrders` ordini il file si prepara dalla coda: la risposta 202 lo
+ * annuncia e la campanella avvisa quando è pronto. Con `Accept: application/json` un rifiuto
+ * risponde con l'avviso; un modulo inviato senza JavaScript torna alla sezione.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
@@ -116,19 +103,37 @@ export async function action({ request }: Route.ActionArgs) {
         )
       : [];
     if (!filter || !tally?.orders) return refused(409, t.settings.export.exportEmpty);
-    const pages = logged(request, exportOrderPages(env.DB, userId, environment, now, filter));
-    const file =
-      format === "xlsx"
-        ? exportXlsxStream(pages, rows, t, timeZone, now, columns)
-        : exportCsvStream(pages, rows, t, timeZone, columns);
-    const id = await publishExportFile(env, {
+    const fileRequest: OrderFileRequest = {
+      environment,
+      filter,
+      rows,
+      format,
+      columns: chosen === null ? null : columns,
+      language,
+      timeZone,
+    };
+    const fileName = exportFileName(t, now, timeZone, format);
+    if (tally.orders > exportJobOrders) {
+      await measure("d1", "exports", () =>
+        queueOrderFile(env, { userId, revision, request: fileRequest, fileName, now }),
+      );
+      return json
+        ? Response.json(
+            { ok: true, notice: t.settings.export.exportQueued } satisfies ActionResult,
+            {
+              status: 202,
+              headers: { "cache-control": "no-store" },
+            },
+          )
+        : redirect(`${localizedPath(language, `${settingsPath}/esportazione`)}?${query}`, 303);
+    }
+    const id = await publishOrderFile(env, {
       userId,
       revision,
-      fileName: exportFileName(t, now, timeZone, format),
-      contentType: contentTypes[format],
-      body: file,
+      request: fileRequest,
+      fileName,
       now,
-      expiresAt: premium ? allowance?.coverage?.endsAt : null,
+      coverageEndsAt: premium ? (allowance?.coverage?.endsAt ?? null) : null,
     });
     if (!id) return refused(409, t.settings.export.exportGone);
     // Il download segue il rimando anche dalla pagina, con le stesse intestazioni della richiesta.

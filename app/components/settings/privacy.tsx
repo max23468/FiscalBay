@@ -1,6 +1,7 @@
 import { Link } from "react-router";
 
-import { useAction } from "~/components/action";
+import { useAction, useNotice } from "~/components/action";
+import { downloadExport } from "./download";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -18,14 +19,26 @@ import { useCopy, useLinks } from "~/components/copy-context";
 import { localizedPath } from "../../i18n";
 
 export function PrivacySection({
-  accountData,
+  accountExport,
+  accountDeletion,
 }: {
-  /** Esportazione e cancellazione dell'account disponibili. */
-  accountData: boolean;
+  /** Esportazione dei dati dell'account disponibile. */
+  accountExport: boolean;
+  /** Cancellazione dell'account disponibile. */
+  accountDeletion: boolean;
 }) {
   const { links } = useLinks();
   const { t } = useCopy();
-  const action = useAction();
+  const notify = useNotice();
+  // Il file dell'account si scarica dal suo percorso, che ricontrolla sessione e validità.
+  const action = useAction((result) => {
+    if (!result.download) return;
+    downloadExport(result.download)
+      .then((notice) => {
+        if (notice !== null) notify(notice || t.settings.privacy.accountExportFailed);
+      })
+      .catch(() => notify(t.settings.privacy.accountExportFailed));
+  });
   // Senza footer nell'area autenticata, i documenti legali si raggiungono da qui (D202).
   const legal = [
     {
@@ -41,7 +54,7 @@ export function PrivacySection({
       action: t.settings.privacy.readPolicy,
     },
   ];
-  const rows = accountData
+  const rows = accountExport
     ? [
         {
           intent: "account-export",
@@ -75,12 +88,17 @@ export function PrivacySection({
               <span className="font-medium">{row.title}</span>
               <span className="text-sm text-muted-foreground">{row.body}</span>
             </span>
-            <Button variant="outline" size="sm" onClick={() => action.run(row.intent)}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={action.pending}
+              onClick={() => action.run(row.intent)}
+            >
               {row.action}
             </Button>
           </li>
         ))}
-        {accountData ? <DeleteAccount /> : null}
+        {accountDeletion ? <DeleteAccount /> : null}
       </ul>
     </div>
   );

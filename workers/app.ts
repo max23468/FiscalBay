@@ -5,6 +5,7 @@ import { correlateResponse, correlationHeader, logFailure, tracePhase } from "..
 import { withPhaseTimings } from "../app/observability.server";
 import { withResponseCookies } from "../app/response-cookies.server";
 import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
+import { consumeExportJob, isExportJobMessage } from "../app/domain/export-jobs.server";
 import {
   consumeTask,
   dispatchScheduledWork,
@@ -55,15 +56,16 @@ export default {
       return new Response(null, { status: 500, headers: { [correlationHeader]: id } });
     }
   },
-  // La coda porta i riferimenti dei webhook, le letture dei negozi e i compiti periodici: ogni
-  // tipo ha il proprio schema e nessuno raccoglie i messaggi degli altri.
+  // La coda porta i riferimenti dei webhook, le letture dei negozi, i compiti periodici e le
+  // esportazioni grandi: ogni tipo ha il proprio schema e nessuno raccoglie i messaggi degli altri.
   async queue(batch, env) {
     const syncs = batch.messages.filter((message) => isSyncMessage(message.body));
     const tasks = batch.messages.filter((message) => isTaskMessage(message.body));
     const webhooks = batch.messages.filter((message) => isWebhookMessage(message.body));
+    const exports = batch.messages.filter((message) => isExportJobMessage(message.body));
     // Un messaggio di forma sconosciuta non ha un consumer: si riprova fino alla coda dei
     // messaggi non consegnati, dove resta da esaminare.
-    const known = new Set([...syncs, ...tasks, ...webhooks]);
+    const known = new Set([...syncs, ...tasks, ...webhooks, ...exports]);
     for (const message of batch.messages.filter((message) => !known.has(message))) {
       logFailure({ code: "INVALID_REQUEST", operation: "queue" });
       message.retry();
@@ -72,6 +74,7 @@ export default {
     await Promise.all([
       ...syncs.map((message) => consumeStoreSync(message, env)),
       ...tasks.map((message) => consumeTask(message, env)),
+      ...exports.map((message) => consumeExportJob(message, env)),
     ]);
     if (webhooks.length > 0) await consumeWebhooks({ messages: webhooks }, env);
   },
