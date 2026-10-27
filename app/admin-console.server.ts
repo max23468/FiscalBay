@@ -35,6 +35,7 @@ import {
 } from "./domain/concessions.server";
 import { quotaAnomalies, readEbayQuotas } from "./domain/ebay-quotas.server";
 import { assistFreeStore } from "./domain/free-store.server";
+import { metricWindowFrom, productMetrics } from "./domain/product-metrics.server";
 import { requestStoreSync } from "./domain/order-sync.server";
 import { isScheduledTask, requeueTask } from "./domain/scheduled-work.server";
 import {
@@ -74,6 +75,7 @@ import { resumeStalledReceipts } from "./webhooks.server";
  */
 
 export const adminSections = [
+  "metriche",
   "account",
   "spazi",
   "negozi",
@@ -172,6 +174,11 @@ export async function loadSection(section: AdminSection, item: string | undefine
         recent,
       } as const;
     }
+    case "metriche":
+      return {
+        section,
+        metrics: await productMetrics(env, metricWindowFrom(url.searchParams.get("giorni")), now),
+      } as const;
     case "account":
       return {
         section,

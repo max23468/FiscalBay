@@ -7,6 +7,9 @@ import { formatAmount, languageFromPath, localizedPath } from "../app/i18n";
 import { minorToDecimal, parseMinor } from "../app/money";
 import { formatDate } from "../app/format";
 import { loader as loadAccess } from "../app/routes/sign-in";
+import { env } from "cloudflare:workers";
+
+import { issueTimingTicket } from "../app/page-timing.server";
 import { action as pageTiming } from "../app/routes/page-timing";
 import { describeRequest, measure, withPhaseTimings } from "../app/observability.server";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
@@ -246,11 +249,22 @@ describe("misure delle fasi e del browser", () => {
 
   it("registra le misure del browser soltanto con i campi ammessi", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    const valid = { page: "orders", ttfb: 120, fcp: 300, ready: 650, server: { auth: 12, d1: 8 } };
+    const measures = {
+      page: "orders",
+      ttfb: 120,
+      fcp: 300,
+      ready: 650,
+      server: { auth: 12, d1: 8 },
+    };
+    const valid = {
+      ...measures,
+      ticket: await issueTimingTicket(env.BETTER_AUTH_SECRET, "orders"),
+    };
     expect((await timing(JSON.stringify(valid))).status).toBe(204);
+    // Il biglietto non entra nel log.
     expect(JSON.parse(String(log.mock.calls.at(-1)![0]))).toEqual({
       event: "page_timing",
-      ...valid,
+      ...measures,
     });
     log.mockClear();
     for (const body of [
@@ -260,6 +274,7 @@ describe("misure delle fasi e del browser", () => {
       JSON.stringify({ ...valid, ready: 120_001 }),
       JSON.stringify({ ...valid, fcp: 1.5 }),
       JSON.stringify({ ...valid, server: { stripe: 4 } }),
+      JSON.stringify(measures),
       "non è JSON",
     ])
       expect((await timing(body)).status).toBe(400);

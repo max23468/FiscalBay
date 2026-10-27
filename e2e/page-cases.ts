@@ -166,6 +166,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     // collaudo e un indirizzo inesistente, che risponde come per chi non è admin.
     ...[
       "",
+      "/metriche",
       "/account",
       "/negozi",
       "/lavori",

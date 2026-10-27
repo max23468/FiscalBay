@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { readBounded } from "../integrations/http.server";
 import { maxTimingMs, serverPhases, timedPages } from "../page-timing";
+import { redeemTimingTicket } from "../page-timing.server";
 import type { Route } from "./+types/page-timing";
 
 const duration = z.number().int().min(0).max(maxTimingMs);
@@ -15,6 +16,7 @@ const pageTimingSchema = z.strictObject({
   lcp: duration.optional(),
   ready: duration,
   server: z.partialRecord(z.enum(serverPhases), duration),
+  ticket: z.string().max(200),
 });
 
 /** Un report valido occupa poche centinaia di byte. */
@@ -27,8 +29,9 @@ export function loader() {
 
 /**
  * Misure del caricamento delle pagine dell'app inviate dal browser: registrate come evento
- * strutturato con i soli campi ammessi. Richieste di altre origini, vuote, troppo grandi o non
- * valide non lasciano traccia.
+ * strutturato con i soli campi ammessi, una volta per il biglietto della pagina. Richieste di
+ * altre origini, vuote, troppo grandi, non valide, senza un biglietto valido o ripetute non
+ * lasciano traccia.
  */
 export async function action({ request }: Route.ActionArgs) {
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin)
@@ -46,6 +49,9 @@ export async function action({ request }: Route.ActionArgs) {
     return new Response(null, { status: 400 });
   }
   if (!parsed.success) return new Response(null, { status: 400 });
-  console.log(JSON.stringify({ event: "page_timing", ...parsed.data }));
+  const { ticket, ...timing } = parsed.data;
+  if (!(await redeemTimingTicket(env.DB, env.BETTER_AUTH_SECRET, ticket, timing.page)))
+    return new Response(null, { status: 204 });
+  console.log(JSON.stringify({ event: "page_timing", ...timing }));
   return new Response(null, { status: 204 });
 }
