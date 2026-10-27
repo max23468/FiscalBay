@@ -30,7 +30,7 @@ jobs:
   select:
     name: Select modules
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
     steps:
@@ -39,6 +39,8 @@ jobs:
         with:
           ref: ${{ github.event_name == 'schedule' && 'develop' || '' }}
           persist-credentials: false
+      # L'instrumenter di Stryker conta i mutanti di ogni modulo per dividerlo in parti.
+      - uses: ./.github/actions/setup
       - name: List critical modules
         id: targets
         env:
@@ -46,11 +48,11 @@ jobs:
         run: node scripts/mutation.mjs --matrix "${TARGETS}"
 
   mutation:
-    name: ${{ matrix.target }}
+    name: ${{ matrix.target }} ${{ matrix.shard }}
     needs: select
     runs-on: ubuntu-26.04
-    # I moduli del bot Telegram superano l'ora con la loro suite; i minuti non hanno costo.
-    timeout-minutes: 120
+    # Una parte prova al più circa 150 mutanti: un quarto d'ora, con ampio margine.
+    timeout-minutes: 60
     strategy:
       # Ogni modulo conclude la propria prova: un fallimento non nasconde gli altri esiti.
       fail-fast: false
@@ -58,6 +60,7 @@ jobs:
       matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
     env:
       MUTATION_TARGET: ${{ matrix.target }}
+      MUTATION_SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

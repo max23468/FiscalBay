@@ -134,12 +134,11 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       pattern: `${prefix}/app/impostazioni/:sezione?`,
       redirect: access,
     }),
-    // L'esportazione arriva con il file degli ordini: fino ad allora risponde 404 nella shell.
     ...["", ...settings.map((section) => `/${section}`), "/non-esiste"].map((suffix) =>
       make(`/app/impostazioni${suffix}`, "settings", {
         role: "member",
         pattern: `${prefix}/app/impostazioni/:sezione?`,
-        status: suffix === "/non-esiste" || suffix === "/esportazione" ? 404 : 200,
+        status: suffix === "/non-esiste" ? 404 : 200,
         remote: !prefix && (suffix === "" || suffix === "/sicurezza"),
       }),
     ),
@@ -208,6 +207,8 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
           // Riceve soltanto i report del browser: una lettura risponde senza contenuto.
           make("/api/v1/page-timing", "public", { endpoint: true, status: 405 }),
           make("/api/v1/orders/search", "orders", { endpoint: true, status: 405 }),
+          // Crea soltanto file con la conferma della sezione Esportazione.
+          make("/api/v1/orders/export", "settings", { endpoint: true, status: 405 }),
           // Ricevono soltanto la scelta della lingua e le letture della campanella.
           make("/app/lingua", "settings", { endpoint: true, status: 405 }),
           make("/api/v1/notifications", "settings", { endpoint: true, status: 405 }),

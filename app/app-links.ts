@@ -23,6 +23,9 @@ export const ordersPath = `${appBase}/ordini`;
 /** Ricerca ordini della barra superiore: riceve la query nel corpo, mai nell'indirizzo. */
 export const orderSearchPath = "/api/v1/orders/search";
 
+/** File degli ordini: ambito nell'indirizzo, come la sezione Esportazione, e opzioni nel corpo. */
+export const orderExportPath = "/api/v1/orders/export";
+
 export const settingsPath = `${appBase}/impostazioni`;
 
 /** Piano, fra le categorie delle Impostazioni: anche ritorno di checkout e portale Stripe. */

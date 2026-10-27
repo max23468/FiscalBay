@@ -31,9 +31,9 @@ import { requestOrderRead } from "../domain/order-sync.server";
 import { messageTemplates } from "../domain/preferences.server";
 import {
   countVisibleOrders,
+  listCriteria,
   listVisibleOrders,
   type OrderCriteria,
-  orderCriteria,
   visibleOrderFacets,
 } from "../domain/orders.server";
 import { ebayOutage, listStores } from "../domain/stores.server";
@@ -48,7 +48,6 @@ import {
   rememberedStore,
   revalidateUnlessSnapshot,
   snapshotCursor,
-  snapshotInstant,
   snapshotParam,
 } from "../orders/order-list";
 import { ordersNotices } from "../orders/notices.server";
@@ -125,14 +124,13 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
   const searchText = await openSearch(env.BETTER_AUTH_SECRET, accountSearchScope(session), query);
   // L'istantanea dell'elenco aperto: un ordine arrivato dopo non entra fra quelli già letti.
   // Senza istantanea l'elenco si apre adesso e non ha ancora nuovi ordini.
-  const opened = snapshotInstant(query.get(snapshotParam));
-  const snapshot = new Date(Math.min(opened?.getTime() ?? now.getTime(), now.getTime()));
-  const parsed = orderCriteria(query, now, premium ? "premium" : "free", searchText);
-  // Come gli altri filtri, un negozio che non è fra quelli filtrabili vale come «Tutti».
-  const filters = filterStores.some((store) => store.id === parsed.storeId)
-    ? parsed
-    : { ...parsed, storeId: undefined };
-  const criteria = { ...filters, listedBefore: snapshot.toISOString() };
+  const { opened, snapshot, filters, criteria } = listCriteria(
+    query,
+    now,
+    premium ? "premium" : "free",
+    filterStores.map((store) => store.id),
+    searchText,
+  );
   // Con «Non pagato» anche dettaglio e conferma leggono gli acquisti non pagati (D180).
   const provisional = criteria.payment === "unpaid";
   // «Carica altri» amplia la pagina letta dal server, entro il massimo di una richiesta.
@@ -269,7 +267,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     confirmUnlock,
     // Con l'acquisto disponibile gli sblocchi esauriti rimandano al piano.
     settings: checkoutConfigured(env),
-    exportable: false,
+    exportable: verified,
     openOnEbay: ebayEnvironment === "production",
     connectHref: verified
       ? `${localizedPath(language, storeLinkPath)}?environment=${ebayEnvironment}`

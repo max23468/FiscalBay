@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { areas, enter, noPageOverflow, open, searched } from "./components";
 import { expect, test, watchNetwork } from "./fixtures";
 import { useLocalAccount } from "./local-account";
@@ -429,6 +430,13 @@ test.describe("area reale", () => {
           await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
           await page.reload();
           await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
+          // Anche dopo la ricarica il clic attende l'idratazione: sotto carico andrebbe perso.
+          await expect(
+            page.getByRole("searchbox", {
+              name: it ? "Cerca ordini" : "Search orders",
+              includeHidden: true,
+            }),
+          ).toBeEnabled();
           await card("-2")
             .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
             .click();
@@ -452,8 +460,8 @@ test.describe("area reale", () => {
             name: it ? "Seleziona" : "Select",
             exact: true,
           });
-          // Lo sblocco chiude la selezione; senza altro da sbloccare né export non si riapre.
-          await expect(select).toBeDisabled();
+          // Lo sblocco chiude la selezione; resta disponibile per esportare.
+          await expect(select).toBeEnabled();
           await page.goto(`${prefix}/app/impostazioni/piano`);
           const confirmation = page.getByRole("switch", {
             name: it
@@ -474,6 +482,65 @@ test.describe("area reale", () => {
           expect(errors).toEqual([]);
         }
       });
+    test(`ordini reali: Esporta crea il CSV della selezione con i soli dati sbloccati ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+      browserErrors: errors,
+    }) => {
+      const id = `export-${language}-${browserName}`;
+      const secret = `VALORE-SINTETICO-${language}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      // La selezione e il clic su Esporta richiedono la pagina idratata.
+      await open(page, `${prefix}/app/ordini`);
+      await page.getByRole("button", { name: it ? "Seleziona" : "Select", exact: true }).click();
+      for (const suffix of ["", "-2"])
+        await page
+          .getByRole("article", { name: `${it ? "Ordine" : "Order"} ${id}${suffix}`, exact: true })
+          .getByRole("checkbox")
+          .check();
+      await page.getByRole("button", { name: it ? "Esporta" : "Export", exact: true }).click();
+      await expect(page).toHaveURL(/\/app\/impostazioni\/esportazione\?.*ordini=/u);
+      const status = page
+        .getByRole("region", { name: it ? "Ordini da esportare" : "Orders to export" })
+        .getByRole("status");
+      await expect(status).toHaveText(
+        it
+          ? "2 ordini. Per 1 ordine da sbloccare il Codice Fiscale resta vuoto."
+          : "2 orders. For 1 order to unlock, the tax code stays empty.",
+      );
+      // Nessun file prima della conferma: il download parte soltanto da «Crea file».
+      const create = page.getByRole("button", {
+        name: it ? "Crea file" : "Create file",
+        exact: true,
+      });
+      const downloaded = page.waitForEvent("download");
+      await create.click();
+      const download = await downloaded;
+      expect(download.suggestedFilename()).toMatch(
+        new RegExp(`^fiscalbay-${it ? "ordini" : "orders"}-\\d{4}-\\d{2}-\\d{2}\\.csv$`, "u"),
+      );
+      const csv = await readFile(await download.path(), "utf8");
+      const [header, ...rows] = csv
+        .replace(/^\uFEFF/u, "")
+        .trimEnd()
+        .split("\r\n");
+      expect(header).toMatch(it ? /^"Numero ordine","Data",/u : /^"Order number","Date",/u);
+      expect(rows).toHaveLength(2);
+      expect(rows.find((row) => row.startsWith(`"${id}",`))).toContain(secret);
+      expect(rows.find((row) => row.startsWith(`"${id}-2",`))).toContain(
+        it ? '"Da sbloccare"' : '"To unlock"',
+      );
+      expect(csv).not.toContain(`${secret}-2`);
+      await page
+        .getByRole("radio", {
+          name: it ? "Solo con dati fiscali disponibili" : "Only with tax data available",
+        })
+        .check();
+      await expect(status).toHaveText(it ? "1 ordine." : "1 order.");
+      expect(errors).toEqual([]);
+    });
     test(`ordini: sblocco non riuscito senza consumo o preferenza salvata ${language}`, async ({
       page,
     }) => {

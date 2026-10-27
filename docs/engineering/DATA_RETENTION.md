@@ -89,7 +89,7 @@ anche i dettagli e i retry pendenti.
 | Elenco, dettaglio e conteggi | Filtro server sulla scadenza, applicato prima di limite e risposta; i valori revocati non entrano nella risposta. |
 | Suggerimenti | Calcolati a ogni lettura dai valori correnti di ordini autorizzati e non scaduti, senza cache o copie persistenti; il piano Premium deve essere attivo. Identità stabile conservata soltanto sull'ordine. |
 | Ricerca | Stesso filtro dell'elenco sul termine della fonte e sul grant corrente all'istante della richiesta; il testo cercabile vive sull'ordine e si elimina con esso. |
-| Export | Generatori puri già presenti, senza file server o download autenticati: il percorso futuro deve rileggere autorizzazione e scadenza prima di generazione e download. |
+| Export | Il CSV degli ordini si crea a ogni richiesta autenticata e passa dal Worker senza copie salvate: stesso filtro dell'elenco su negozi, scadenza e grant all'istante della richiesta, per ogni pagina letta. File temporanei e loro scadenza arrivano con lo storage dei file. |
 | Console amministrativa | Il registro delle operazioni porta autore, operazione, oggetto, motivo ed esito, mai dati dei buyer o valori fiscali, non si modifica e si elimina un anno dopo l'operazione. Comunicazioni di servizio e anomalie chiuse si eliminano un anno dopo la fine; una preparazione di trasferimento mai confermata con la pulizia dopo la scadenza, una eseguita dopo un anno. Le revisioni antiabuso conservano un'impronta della chiave del segnale, non il valore condiviso. |
 
 Un restore deve riapplicare marker, limite di cancellazione e revoche successivi
