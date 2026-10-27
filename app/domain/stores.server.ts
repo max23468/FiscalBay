@@ -163,10 +163,26 @@ function history(row: StoreRow, at: number): NonNullable<StoreStatus["history"]>
   };
 }
 
-export async function listStores(
+export function listStores(db: D1Database, userId: string, now = new Date()) {
+  return readStores(
+    db,
+    "s.workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?1)",
+    userId,
+    now,
+  );
+}
+
+/** Negozi di uno spazio per la console amministrativa, con lo stesso stato mostrato al venditore. */
+export function listWorkspaceStores(db: D1Database, workspaceId: string, now = new Date()) {
+  return readStores(db, "s.workspace_id = ?1", workspaceId, now);
+}
+
+/** Negozi dello spazio scelto dal filtro SQL sull'alias `s`, con ?1 il suo argomento. */
+async function readStores(
   db: D1Database,
-  userId: string,
-  now = new Date(),
+  scope: string,
+  value: string,
+  now: Date,
 ): Promise<StoreStatus[]> {
   const [{ results }, { results: runs }] = await db.batch<StoreRow | RunRow>([
     db
@@ -189,25 +205,23 @@ export async function listStores(
                 AND o.marketplace_id IS NOT NULL AND ${listedOrder("o", "?2")}
                 GROUP BY o.marketplace_id ORDER BY COUNT(*) DESC, o.marketplace_id LIMIT 1)
                 AS marketplace
-         FROM workspace_members wm
-         JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
+         FROM ebay_stores s
          LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
          LEFT JOIN sync_state ss ON ss.store_id = s.id
-        WHERE wm.user_id = ?1 AND s.data_deleted_at IS NULL
+        WHERE ${scope} AND s.data_deleted_at IS NULL
         ORDER BY s.linked_at, s.id`,
       )
-      .bind(userId, now.toISOString()),
+      .bind(value, now.toISOString()),
     // Ultime letture dei negozi dello spazio, dalla più recente.
     db
       .prepare(
         `SELECT r.store_id, r.started_at, r.ok, r.new_orders
-           FROM workspace_members wm
-           JOIN ebay_stores s ON s.workspace_id = wm.workspace_id
+           FROM ebay_stores s
            JOIN sync_runs r ON r.store_id = s.id
-          WHERE wm.user_id = ? AND s.data_deleted_at IS NULL
+          WHERE ${scope} AND s.data_deleted_at IS NULL
           ORDER BY r.started_at DESC, r.id DESC`,
       )
-      .bind(userId),
+      .bind(value),
   ]);
   const recent = new Map<string, StoreStatus["recent"]>();
   for (const run of runs as RunRow[])
@@ -320,6 +334,34 @@ export async function resumeStore(
   ]);
   if (results.length > 0) await resumeAfterInactivity(db, userId, now);
   return "done";
+}
+
+/**
+ * Pausa operativa dell'assistenza (§15): ferma le letture del negozio finché la console non la
+ * toglie. Il venditore la vede e non può toglierla; piano, consenso e dati restano.
+ */
+export async function setAdminPause(
+  db: D1Database,
+  storeId: string,
+  paused: boolean,
+  now = new Date(),
+): Promise<StoreActionResult> {
+  const result = paused
+    ? await db
+        .prepare(`INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at)
+          SELECT id, 'admin', ? FROM ebay_stores WHERE id = ? AND data_deleted_at IS NULL`)
+        .bind(now.toISOString(), storeId)
+        .run()
+    : await db
+        .prepare("DELETE FROM ebay_store_pauses WHERE store_id = ? AND reason = 'admin'")
+        .bind(storeId)
+        .run();
+  if (result.meta.changes) return "done";
+  const store = await db
+    .prepare("SELECT 1 FROM ebay_stores WHERE id = ? AND data_deleted_at IS NULL")
+    .bind(storeId)
+    .first();
+  return store ? "invalid" : "not_found";
 }
 
 function disconnectStatements(db: D1Database, storeId: string, at: string) {

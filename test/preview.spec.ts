@@ -203,6 +203,15 @@ describe("stato sintetico dell'anteprima", () => {
       expect(closed).toMatchObject({ purchasesClosed: true, account: { trialAvailable: false } });
     });
 
+    it(`mostra il negozio in pausa dall'assistenza come l'area reale, ${language}`, () => {
+      const paused = loadScenario("negozio-sospeso", language, new Set());
+      // Stessa forma del negozio reale con la pausa `admin`: nessuna ripresa dal venditore.
+      expect(paused.stores).toEqual([
+        expect.objectContaining({ connection: "paused", pauseReason: "admin" }),
+      ]);
+      expect(paused.orders.length).toBeGreaterThan(0);
+    });
+
     it(`mostra la prova attiva, in scadenza e già usata, ${language}`, () => {
       const active = loadScenario("prova-premium", language, new Set());
       const ending = loadScenario("prova-in-scadenza", language, new Set());

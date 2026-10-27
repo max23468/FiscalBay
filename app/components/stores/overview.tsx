@@ -163,7 +163,7 @@ function OverviewActions({ store, data }: { store: StoreView; data: StoresPageDa
           {t.stores.syncNow}
         </Button>
       ) : null}
-      {disconnected || store.pauseReason === "plan" ? null : (
+      {disconnected || store.pauseReason === "plan" || store.pauseReason === "admin" ? null : (
         <PauseButton store={store} size="sm" className={button} />
       )}
       <Link

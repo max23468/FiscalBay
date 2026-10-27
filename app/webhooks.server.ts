@@ -373,6 +373,33 @@ export async function recoverWebhookIngress(env: Env, now = new Date()) {
   await inSequence(results, (receipt) => enqueueReceipt(env, receipt.id, now));
 }
 
+/** Ricevute ferme da più di un'ora, considerate in ritardo dalla console. */
+export const stalledReceiptMilliseconds = 60 * 60_000;
+
+/**
+ * Ripresa chiesta dalla console per le ricevute in ritardo di un provider, senza aspettare il
+ * giorno del recupero automatico. Come il cron non tocca quelle prese da un consumer e riaccoda
+ * al massimo 25 ricevute; restituisce quante ne ha riaccodate.
+ */
+export async function resumeStalledReceipts(
+  env: Env,
+  provider: "ebay" | "stripe" | "telegram",
+  now = new Date(),
+) {
+  const { results } = await env.DB.prepare(`SELECT id FROM webhook_receipts
+    WHERE provider = ?3 AND completed_at IS NULL AND expires_at > ?1
+      AND COALESCE(queued_at, event_at) <= ?2 AND (locked_until IS NULL OR locked_until <= ?1)
+    ORDER BY event_at LIMIT 25`)
+    .bind(
+      now.toISOString(),
+      new Date(now.getTime() - stalledReceiptMilliseconds).toISOString(),
+      provider,
+    )
+    .all<{ id: string }>();
+  await inSequence(results, (receipt) => enqueueReceipt(env, receipt.id, now));
+  return results.length;
+}
+
 export async function consumeWebhooks(
   batch: Pick<MessageBatch<unknown>, "messages">,
   env: Env,

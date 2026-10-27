@@ -72,7 +72,7 @@ export function StoreActions({
             {t.stores.chooseFreeStore}
           </Link>
         </div>
-      ) : (
+      ) : store.pauseReason === "admin" ? null : (
         <ReadActions store={store} ebayDown={ebayDown} />
       )}
       {store.connection === "active" ? (

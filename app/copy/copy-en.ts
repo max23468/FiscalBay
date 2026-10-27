@@ -336,6 +336,7 @@ export const en: AppCopy = {
     never: "Never",
     pausedByPlan: "Paused on the Free plan",
     pausedByInactivity: "Paused for inactivity",
+    pausedByAdmin: "Paused by support",
     inactivityTitle: "Reading paused for inactivity",
     inactivityBody:
       "You did not open FiscalBay for 30 days or during the 7 days' notice, so on the Free plan reading from eBay stopped. Resume it to recover the orders still within your plan window.",
@@ -388,6 +389,8 @@ export const en: AppCopy = {
       "A manual pause stops new reads. Imported orders remain available according to your plan.",
     inactivityPauseHint:
       "Paused for inactivity: on the Free plan no new reads after 30 days without sign-ins and 7 days' notice. Orders remain available; Resume restarts every store.",
+    adminPauseHint:
+      "Paused by support: no new reads until the check is complete. Orders already imported stay available under your plan; contact support for details.",
     planPauseHint:
       "Paused by the Free plan: no new reads and orders are unavailable. The plan includes one active store.",
     chooseFreeStore: "Choose the active store",

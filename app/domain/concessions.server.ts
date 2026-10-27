@@ -8,14 +8,15 @@ import {
   stripeSecretKey,
 } from "../integrations/stripe.server";
 import { reconcileSubscription } from "./billing.server";
+import { applyWorkspacePlan } from "./free-store.server";
 import { grantLifetime, type LifetimeGrant } from "./lifetime.server";
 import { dayMilliseconds } from "../time";
 import { lifetimeInForceSql } from "./grants.server";
 
 /**
  * Concessioni della console amministrativa (§6.3): Premium temporaneo, estensione gratuita di
- * un abbonamento e lifetime in omaggio. Ogni concessione registra autore e motivo, non figura
- * come incasso e non tocca quota, prova o ciclo.
+ * un abbonamento, lifetime in omaggio ed estensione dello storico. Ogni concessione registra
+ * autore e motivo, non figura come incasso e non tocca quota, prova o ciclo.
  */
 
 const concession = z.object({
@@ -149,4 +150,54 @@ export async function grantLifetimeConcession(
   const key = stripeSecretKey(env);
   const stripe = key ? await createStripeClient(key) : null;
   return grantLifetime(env, stripe, parsed.data, now);
+}
+
+export type HistoryExtensionResult = "done" | "invalid" | "not_found";
+
+/**
+ * Storico oltre l'anno (§11), concesso dopo la verifica del periodo recuperabile, il
+ * consenso e l'eventuale costo una tantum concordati con l'assistenza. Vale con una copertura
+ * in corso e al massimo per i due anni che eBay restituisce; i termini degli ordini dello spazio
+ * si riallineano subito.
+ */
+export async function grantHistoryExtension(
+  db: D1Database,
+  input: { workspaceId: string; months: number; author: string; reason: string },
+  now = new Date(),
+): Promise<HistoryExtensionResult> {
+  const parsed = concession.safeParse(input);
+  if (!parsed.success || !Number.isInteger(input.months) || input.months < 13 || input.months > 24)
+    return "invalid";
+  const at = now.toISOString();
+  const granted = await db
+    .prepare(`INSERT INTO history_extensions (id, workspace_id, months, reason, actor, granted_at)
+      SELECT ?1, id, ?2, ?3, ?4, ?5 FROM workspaces WHERE id = ?6`)
+    .bind(
+      crypto.randomUUID(),
+      input.months,
+      parsed.data.reason,
+      parsed.data.author,
+      at,
+      parsed.data.workspaceId,
+    )
+    .run();
+  if (!granted.meta.changes) return "not_found";
+  await applyWorkspacePlan(db, parsed.data.workspaceId, now);
+  return "done";
+}
+
+/** Revoca un'estensione dello storico: la finestra torna all'estensione più lunga rimasta. */
+export async function revokeHistoryExtension(
+  db: D1Database,
+  input: { workspaceId: string; extensionId: string },
+  now = new Date(),
+): Promise<"done" | "not_found"> {
+  const revoked = await db
+    .prepare(`UPDATE history_extensions SET revoked_at = ?1
+      WHERE id = ?2 AND workspace_id = ?3 AND revoked_at IS NULL`)
+    .bind(now.toISOString(), input.extensionId, input.workspaceId)
+    .run();
+  if (!revoked.meta.changes) return "not_found";
+  await applyWorkspacePlan(db, input.workspaceId, now);
+  return "done";
 }

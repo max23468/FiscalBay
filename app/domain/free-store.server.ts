@@ -32,10 +32,15 @@ const freeWindowSql = `strftime('%Y-%m-%dT%H:%M:%fZ', orders.creation_time,
 const realStore = (store: string) =>
   `${store}.data_deleted_at IS NULL AND ${store}.ebay_environment = 'production'`;
 
-/** Negozio attivo registrato per lo spazio: l'ultima riga. Argomento: espressione dello spazio. */
+/**
+ * Negozio attivo registrato per lo spazio: l'ultima riga di un negozio ancora suo. Un negozio
+ * trasferito a un altro spazio non resta il negozio attivo di quello precedente. Argomento:
+ * espressione dello spazio.
+ */
 function currentStoreSql(workspace: string) {
-  return `(SELECT c.store_id FROM free_store_changes c WHERE c.workspace_id = ${workspace}
-    ORDER BY c.changed_at DESC, c.rowid DESC LIMIT 1)`;
+  return `(SELECT c.store_id FROM free_store_changes c
+    JOIN ebay_stores cs ON cs.id = c.store_id AND cs.workspace_id = c.workspace_id
+    WHERE c.workspace_id = ${workspace} ORDER BY c.changed_at DESC, c.rowid DESC LIMIT 1)`;
 }
 
 /** Ultima sostituzione esplicita, dell'utente o dell'assistenza. */
@@ -54,6 +59,12 @@ const userScope = (userId: string): Scope => {
   const workspaces = "w.id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?2)";
   return { workspaces, orders: workspaces, binds: [userId] };
 };
+
+const workspaceScope = (workspaceId: string): Scope => ({
+  workspaces: "w.id = ?2",
+  orders: "w.id = ?2",
+  binds: [workspaceId],
+});
 
 /** L'istante della colonna cade nell'ultima settimana. */
 const lastWeek = (column: string) =>
@@ -155,6 +166,11 @@ export async function applyFreePlan(db: D1Database, userId: string, now = new Da
   await db.batch(planStatements(db, userScope(userId), now.toISOString()));
 }
 
+/** Riallinea uno spazio indicato, come dopo un'operazione della console. */
+export async function applyWorkspacePlan(db: D1Database, workspaceId: string, now = new Date()) {
+  await db.batch(planStatements(db, workspaceScope(workspaceId), now.toISOString()));
+}
+
 /** Riallinea tutti gli spazi: lavoro del cron, senza chiamate a eBay. */
 export async function applyFreePlans(db: D1Database, now = new Date()) {
   await db.batch(planStatements(db, allScope, now.toISOString()));
@@ -240,4 +256,42 @@ export async function chooseFreeStore(
   return state.changeFrom
     ? { result: "locked", changeFrom: state.changeFrom }
     : { result: "invalid" };
+}
+
+export type AssistedFreeStore = "done" | "not_found" | "covered" | "unchanged";
+
+/**
+ * Eccezione dell'assistenza al vincolo dei 90 giorni (§6.4): il negozio indicato diventa il
+ * negozio attivo del Free dello spazio, con motivo e autore. Come la scelta dell'utente apre una
+ * nuova attesa di 90 giorni e non tocca quota, prova o ciclo. Scelta e pause sono un commit.
+ */
+export async function assistFreeStore(
+  db: D1Database,
+  input: { storeId: string; actor: string; reason: string },
+  now = new Date(),
+): Promise<AssistedFreeStore> {
+  const at = now.toISOString();
+  const store = await db
+    .prepare(`SELECT s.workspace_id, ${activeEntitlementSql("s.workspace_id", "?2")} AS covered,
+        s.id IS ${currentStoreSql("s.workspace_id")} AS active
+      FROM ebay_stores s WHERE s.id = ?1 AND ${realStore("s")}`)
+    .bind(input.storeId, at)
+    .first<{ workspace_id: string; covered: number; active: number }>();
+  if (!store) return "not_found";
+  if (store.covered) return "covered";
+  if (store.active) return "unchanged";
+  const scope = workspaceScope(store.workspace_id);
+  const [{ results }] = await db.batch<{ id: string }>([
+    db
+      .prepare(`INSERT INTO free_store_changes (id, workspace_id, store_id, kind, changed_at,
+          reason, actor)
+        SELECT ?1, s.workspace_id, s.id, 'assisted', ?3, ?4, ?5 FROM ebay_stores s
+        WHERE s.id = ?2 AND ${realStore("s")}
+          AND NOT ${activeEntitlementSql("s.workspace_id", "?3")}
+          AND s.id IS NOT ${currentStoreSql("s.workspace_id")}
+        RETURNING id`)
+      .bind(crypto.randomUUID(), input.storeId, at, input.reason, input.actor),
+    ...planStatements(db, scope, at),
+  ]);
+  return results.length > 0 ? "done" : "unchanged";
 }
