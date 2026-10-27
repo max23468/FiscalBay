@@ -29,6 +29,7 @@ import {
 import {
   connectionStatus,
   ebayDownFor,
+  ebayDownText,
   hasSubtitle,
   marketplaceText,
   notificationsLabel,
@@ -140,7 +141,9 @@ function StoreDetail({ store, data }: { store: StoreView; data: StoresPageData }
           )}
         </ReconnectNotice>
       ) : null}
-      {ebayDownFor(data, store) ? <StatusAlert tone="warning" title={t.stores.ebayDown} /> : null}
+      {ebayDownFor(data, store) ? (
+        <StatusAlert tone="warning" title={ebayDownText(data, t)} />
+      ) : null}
       <ConnectionSection store={store} now={data.now} />
       <SyncSection store={store} data={data} />
       <RecentSection store={store} />
@@ -235,7 +238,7 @@ function SyncSection({ store, data }: SectionProps & { data: StoresPageData }) {
           <LastSync store={store} now={data.now} slot={false} />
         </li>
         <li className="text-muted-foreground">
-          {syncDescription(store, ebayDownFor(data, store), t)}
+          {syncDescription(store, ebayDownFor(data, store) ? ebayDownText(data, t) : null, t)}
         </li>
         {store.historyDays === null ? null : !store.importing && store.lastSyncAt ? (
           <li className="text-muted-foreground">{t.stores.importDone(store.historyDays)}</li>

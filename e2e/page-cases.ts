@@ -167,6 +167,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       "/commerciale",
       "/antiabuso",
       "/comunicazioni",
+      "/interruttori",
       "/registro",
       `/spazi/${testAccount.workspaceId}`,
       "/non-esiste",

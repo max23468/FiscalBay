@@ -24,6 +24,7 @@ import {
 import {
   connectionStatus,
   ebayDownFor,
+  ebayDownText,
   hasSubtitle,
   needsReconnect,
   syncDescription,
@@ -194,7 +195,7 @@ export function StoreOverview({ store, data }: { store: StoreView; data: StoresP
         <OverviewIdentity store={store} />
         <OverviewStats store={store} now={data.now} />
         <p className="text-sm text-muted-foreground">
-          {syncDescription(store, ebayDownFor(data, store), t)}
+          {syncDescription(store, ebayDownFor(data, store) ? ebayDownText(data, t) : null, t)}
         </p>
       </div>
       {store.recent.length > 0 ? (

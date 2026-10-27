@@ -13,6 +13,7 @@ import { recordMarketingConsent } from "../app/domain/preferences.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
 import { whatsNew, whatsNewProblems, type WhatsNewRelease } from "../app/whats-new.server";
 import { ebayOutage, listStores } from "../app/domain/stores.server";
+import { setSwitch } from "../app/domain/service-settings.server";
 import {
   insertCredentials,
   insertEntitlement,
@@ -624,6 +625,50 @@ describe("pagina Ordini reale", () => {
       [],
     );
     expect(ebayOutage(statuses)).not.toBeNull();
+  });
+
+  it("con le letture eBay sospese dalla console lo dice come manutenzione e sospende le azioni", async () => {
+    const { cookie } = await owner();
+    await withCredentials();
+    const synced = "2026-09-13T21:00:00.000Z";
+    await env.DB.prepare(
+      "INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES ('s-a', ?1, ?1)",
+    )
+      .bind(synced)
+      .run();
+    const notices = async () =>
+      (await ordersPage(cookie, "/app/ordini")).page!.notices.filter(
+        (notice) => notice.kind === "ebay-down",
+      );
+    const stores = async () => (await routeData(loadStores, "/app/negozi", { cookie })).page;
+    expect(await notices()).toEqual([]);
+
+    await setSwitch(env.DB, "ebay_calls", false);
+    expect(await notices()).toEqual([{ kind: "ebay-down", at: synced, maintenance: true }]);
+    expect(await stores()).toMatchObject({
+      ebayDown: ["production", "sandbox"],
+      ebayMaintenance: true,
+    });
+    // Non è un problema di eBay: la campanella resta com'è.
+    expect((await areaShell(cookie, "/app/ordini")).notifications ?? []).toEqual([]);
+    const paused = {
+      data: { ok: false, notice: appCopy.it.stores.ebayPaused },
+      init: { status: 409 },
+    };
+    expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toMatchObject(paused);
+    for (const intent of ["store-sync", "store-reimport"])
+      expect(
+        await callRoute(storesAction, "/app/negozi", { cookie, fields: { intent, store: "s-a" } }),
+      ).toMatchObject(paused);
+    const link = await routeResponse(startStoreLink, "/app/negozi/collega", {
+      cookie,
+      fields: { da: "negozi" },
+    });
+    expect(link.headers.get("location")).toBe("/app/negozi?negozio=sospeso");
+
+    await setSwitch(env.DB, "ebay_calls", true);
+    expect(await notices()).toEqual([]);
+    expect(await stores()).toMatchObject({ ebayDown: [], ebayMaintenance: false });
   });
 
   it("annuncia le Novità di ogni rilascio nella campanella e nel menu, solo se ci sono", async () => {

@@ -26,8 +26,11 @@ export interface ActionResult {
 }
 
 export type OrdersNotice =
-  /** `at`: ultimo aggiornamento riuscito, null se gli ordini non sono mai stati letti. */
-  | { kind: "ebay-down"; at: string | null }
+  /**
+   * `at`: ultimo aggiornamento riuscito, null se gli ordini non sono mai stati letti.
+   * `maintenance`: le chiamate a eBay sono sospese da FiscalBay, non è eBay a non rispondere.
+   */
+  | { kind: "ebay-down"; at: string | null; maintenance?: boolean }
   /** Letture di un solo negozio non riuscite: i suoi ordini sono fermi all'istante `at`. */
   | { kind: "store-read-failed"; storeId: string; storeName: string; at: string }
   | { kind: "quota"; until: string }

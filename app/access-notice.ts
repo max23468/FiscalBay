@@ -47,6 +47,7 @@ const storeTones: Record<StoreNotice, Tone> = {
   errore: "danger",
   "ebay-non-risponde": "warning",
   "lista-attesa": "warning",
+  sospeso: "warning",
 };
 
 export type AccessNoticeView = { text: string; tone: Tone } & (

@@ -4,7 +4,7 @@ import type { EbayEnvironment, OrdersNotice } from "../view-models";
 
 /**
  * Avvisi in cima agli Ordini, dai negozi dell'ambiente mostrato e dalla quota: eBay che non
- * risponde, collegamenti scaduti o in scadenza, letture ferme di un negozio nella vista, lista
+ * risponde o chiamate sospese per manutenzione, collegamenti scaduti o in scadenza, letture ferme di un negozio nella vista, lista
  * d'attesa o sblocchi esauriti e importazione dello storico in corso.
  */
 export function ordersNotices({
@@ -13,6 +13,7 @@ export function ordersNotices({
   storeId,
   allowance,
   locked,
+  ebayCalls,
 }: {
   stores: StoreStatus[];
   ebayEnvironment: EbayEnvironment;
@@ -21,11 +22,26 @@ export function ordersNotices({
   allowance: Awaited<ReturnType<typeof orderAllowance>> | null;
   /** Nella vista c'è almeno un ordine con il dato da sbloccare. */
   locked: boolean;
+  /** Chiamate eBay accese dalla console. */
+  ebayCalls: boolean;
 }): OrdersNotice[] {
-  const outage = ebayOutage(stores);
+  // Con le chiamate sospese per manutenzione vale come eBay che non risponde, con il suo nome.
+  const synced = stores.flatMap((store) => (store.lastSyncAt ? [store.lastSyncAt] : []));
+  const outage =
+    !ebayCalls && stores.some((store) => store.connection === "active")
+      ? { lastSyncAt: synced.sort().at(-1) ?? null, maintenance: true }
+      : ebayOutage(stores);
   const cycle = allowance?.cycle ?? null;
   return [
-    ...(outage ? [{ kind: "ebay-down" as const, at: outage.lastSyncAt }] : []),
+    ...(outage
+      ? [
+          {
+            kind: "ebay-down" as const,
+            at: outage.lastSyncAt,
+            ...("maintenance" in outage ? { maintenance: true } : {}),
+          },
+        ]
+      : []),
     // Prima i collegamenti già scaduti, poi quelli in scadenza.
     ...stores
       .flatMap((store) =>

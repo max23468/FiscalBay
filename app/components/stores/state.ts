@@ -17,6 +17,8 @@ export interface StoresPageData {
   now: string;
   /** Ambienti in cui eBay non risponde: le azioni che lo chiamano restano sospese. */
   ebayDown: EbayEnvironment[];
+  /** Le chiamate a eBay sono sospese da FiscalBay per manutenzione, in ogni ambiente. */
+  ebayMaintenance?: boolean;
   elsewhere: boolean;
   /**
    * Schermata preparatoria del collegamento. Nell'area reale collegare e ricollegare la aprono;
@@ -86,16 +88,22 @@ export function notificationsLabel(store: StoreView, t: AppCopy, detail = false)
   return detail ? t.stores.notificationsHeldHint : t.stores.notificationsHeld;
 }
 
-/** eBay non risponde nell'ambiente del negozio. */
+/** eBay non risponde, o le letture sono sospese, nell'ambiente del negozio. */
 export function ebayDownFor(data: StoresPageData, store: StoreView) {
   return data.ebayDown.includes(store.sandbox ? "sandbox" : "production");
 }
 
-export function syncDescription(store: StoreView, ebayDown: boolean, t: AppCopy) {
+/** Avviso delle azioni sospese: eBay che non risponde o la manutenzione di FiscalBay. */
+export function ebayDownText(data: Pick<StoresPageData, "ebayMaintenance">, t: AppCopy) {
+  return data.ebayMaintenance ? t.stores.ebayPaused : t.stores.ebayDown;
+}
+
+/** `ebayDown`: avviso delle azioni sospese nell'ambiente del negozio, se ci sono. */
+export function syncDescription(store: StoreView, ebayDown: string | null, t: AppCopy) {
   if (store.connection === "disconnected") {
     return t.stores.disconnectedHint;
   }
-  if (ebayDown) return t.stores.ebayDown;
+  if (ebayDown) return ebayDown;
   if (store.connection === "active") return t.stores.target(store.targetMinutes);
   if (store.pauseReason === "plan") return t.stores.planPauseHint;
   if (store.pauseReason === "inactivity") return t.stores.inactivityPauseHint;

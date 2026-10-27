@@ -13,6 +13,7 @@ import {
   type Context,
 } from "./order-acquisition-context.server";
 import { readDetail, readDetails, stopsReads } from "./order-acquisition-details.server";
+import { serviceSetting } from "./service-settings.server";
 import { refreshStoreProfile } from "./store-profile.server";
 import { logFailure } from "../errors";
 import { dayMilliseconds } from "../time";
@@ -448,6 +449,8 @@ export async function storeAccess(
  * Rilegge consenso, pausa, ammissione e token prima di eseguire un evento già accettato.
  * L'evento non dipende dal piano e non aspetta la cadenza della lettura periodica, ma uno spazio
  * in lista d'attesa non legge eBay dopo la prima lettura: l'evento si chiude senza chiamate.
+ * Con le chiamate eBay spente dalla console l'evento diventa una richiesta di lettura del
+ * negozio, servita alla riaccensione.
  */
 export async function consumeOrderConfirmation(
   env: Env,
@@ -483,6 +486,17 @@ export async function consumeOrderConfirmation(
       )
       .first<ActiveStore & { access_expires_at: string }>();
   if (!store) return;
+  if (!(await serviceSetting(env.DB, "ebay_calls"))) {
+    await env.DB.prepare(
+      `INSERT INTO sync_state (store_id, requested_at, updated_at)
+       SELECT ?1, ?3, ?3 WHERE ${writableStore}
+       ON CONFLICT(store_id) DO UPDATE SET
+         requested_at = COALESCE(sync_state.requested_at, excluded.requested_at)`,
+    )
+      .bind(store.store_id, store.granted_at, now.toISOString())
+      .run();
+    return;
+  }
   if (store.access_expires_at <= now.toISOString()) throw new UpstreamError("credentials");
   const result = await acquireOrders({
     db: env.DB,

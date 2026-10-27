@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { acquireOrders } from "../app/domain/order-acquisition.server";
+import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
+import { setSwitch } from "../app/domain/service-settings.server";
+import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
 import {
   consumeStoreSync,
   dispatchStoreSyncs,
@@ -1814,6 +1816,58 @@ describe("acquisizione con il client", () => {
       expect(fetcher).not.toHaveBeenCalled();
       expect(paused.ack).toHaveBeenCalledOnce();
       expect(await state()).toMatchObject({ requested_at: minutes(4).toISOString() });
+    });
+
+    it("con le chiamate eBay spente registra richieste ed eventi e li serve alla riaccensione", async () => {
+      const fetcher = ebay();
+      await setSwitch(env.DB, "ebay_calls", false, minutes(0));
+      expect(await request(minutes(0))).toBe("suspended");
+      expect(send).not.toHaveBeenCalled();
+      expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
+
+      // Né il cron né una consegna già in coda chiamano eBay; la richiesta resta.
+      expect(await cronTurn(queueEnv, fetcher, minutes(10))).toEqual([]);
+      const held = message();
+      await consumeStoreSync(held, queueEnv, fetcher, minutes(11));
+      expect(held.ack).toHaveBeenCalledOnce();
+      expect(await state()).toMatchObject({ requested_at: minutes(0).toISOString() });
+
+      // Un evento di eBay diventa una richiesta di lettura del negozio.
+      await env.DB.prepare("UPDATE sync_state SET requested_at = NULL").run();
+      await consumeOrderConfirmation(
+        queueEnv,
+        {
+          storeId: "s-a",
+          grantedAt,
+          environment: "production",
+          orderId: "12-34567-89012",
+          eventAt: minutes(12).toISOString(),
+        },
+        fetcher,
+        minutes(12),
+      );
+      expect(await state()).toMatchObject({ requested_at: minutes(12).toISOString() });
+
+      // Nessun rinnovo dei token, nemmeno di quelli in scadenza.
+      const { access_expires_at: expiresAt } = (await env.DB.prepare(
+        "SELECT access_expires_at FROM ebay_store_credentials WHERE store_id = 's-a'",
+      ).first<{ access_expires_at: string }>())!;
+      await env.DB.prepare("UPDATE ebay_store_credentials SET access_expires_at = ?")
+        .bind(minutes(20).toISOString())
+        .run();
+      expect(await refreshExpiringTokens(queueEnv, fetcher, minutes(13))).toEqual([]);
+      expect(fetcher).not.toHaveBeenCalled();
+      await env.DB.prepare("UPDATE ebay_store_credentials SET access_expires_at = ?")
+        .bind(expiresAt)
+        .run();
+
+      // Alla riaccensione il cron serve la richiesta rimasta.
+      await setSwitch(env.DB, "ebay_calls", true, minutes(14));
+      expect(await cronTurn(queueEnv, fetcher, minutes(20))).toEqual(["s-a"]);
+      expect(await state()).toMatchObject({
+        requested_at: null,
+        polled_at: minutes(20).toISOString(),
+      });
     });
 
     it("dopo la lettura anticipa le notifiche Telegram del solo spazio del negozio", async () => {

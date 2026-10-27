@@ -159,8 +159,12 @@ export async function simulateAction(request: Request, form: FormData) {
     const id = String(form.get("order") ?? "");
     if (!scenario.orders.some((order) => order.id === id && order.fiscal.state === "error"))
       return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
-    if (scenario.notices.some((notice) => notice.kind === "ebay-down"))
-      return data<ActionResult>({ ok: false, notice: t.stores.ebayDown }, { status: 409 });
+    const down = scenario.notices.find((notice) => notice.kind === "ebay-down");
+    if (down)
+      return data<ActionResult>(
+        { ok: false, notice: down.maintenance ? t.stores.ebayPaused : t.stores.ebayDown },
+        { status: 409 },
+      );
     return data<ActionResult>(
       { ok: true, notice: t.orders.retried },
       {

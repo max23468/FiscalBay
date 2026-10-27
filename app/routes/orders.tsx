@@ -55,6 +55,7 @@ import {
   snapshotParam,
 } from "../orders/order-list";
 import { ordersNotices } from "../orders/notices.server";
+import { serviceSetting } from "../domain/service-settings.server";
 import { accountSearchScope, openSearch } from "../orders/order-search.server";
 import { settle } from "../settle.server";
 import type { ActionResult, EbayEnvironment, OrderView } from "../view-models";
@@ -99,10 +100,11 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
   const verified = session.user.emailVerified;
   const now = new Date();
   const requested = params.ordine && params.ordine.length <= 64 ? params.ordine : null;
-  const [stores, allowance, confirmUnlock] = await Promise.all([
+  const [stores, allowance, confirmUnlock, ebayCalls] = await Promise.all([
     verified ? measure("d1", "stores", () => listStores(env.DB, userId)) : [],
     verified ? measure("d1", "allowance", () => orderAllowance(env.DB, userId, now)) : null,
     unlockConfirmation(env.DB, userId),
+    serviceSetting(env.DB, "ebay_calls"),
   ]);
   const premium = !!allowance?.premium;
   const environmentStores = stores.filter((store) => store.ebayEnvironment === ebayEnvironment);
@@ -219,6 +221,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     storeId: filters.storeId,
     allowance,
     locked: facets.locked,
+    ebayCalls,
   });
   // Ultima lettura riuscita fra i negozi collegati: un negozio scollegato non conta per i
   // primi passi, e lo stato vuoto nomina il negozio letto per ultimo con il suo orario.
@@ -352,7 +355,10 @@ export async function action({ request }: Route.ActionArgs) {
     const id = String(form.get("order") ?? "");
     if (!id || id.length > 64)
       return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
-    // Con eBay che non risponde la nuova lettura resta sospesa, come il pulsante.
+    // Con eBay che non risponde o le letture sospese la nuova lettura resta sospesa, come il
+    // pulsante.
+    if (!(await serviceSetting(env.DB, "ebay_calls")))
+      return data<ActionResult>({ ok: false, notice: t.stores.ebayPaused }, { status: 409 });
     const stores = await listStores(env.DB, session.user.id);
     if (ebayOutage(stores.filter((store) => store.ebayEnvironment === environment)))
       return data<ActionResult>({ ok: false, notice: t.stores.ebayDown }, { status: 409 });
