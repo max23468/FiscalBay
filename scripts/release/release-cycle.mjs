@@ -343,6 +343,55 @@ export function assertConfirmed(jobs, environment) {
     throw new Error(`Readback provider non confermato nella run: ${environment}.`);
 }
 
+/**
+ * Deploy test riuscito e collaudato, fallito soltanto alla conferma: la conferma richiede che
+ * `develop` sia ancora sul commit distribuito, quindi un merge successivo durante il deploy la
+ * rifiuta anche se distribuzione e prove remote sono riuscite. Ogni altro job deve essere
+ * riuscito o saltato.
+ */
+export function readbackSuperseded(jobs) {
+  const deploy = jobs.find((job) => job.name === "Deploy test");
+  if (deploy?.conclusion !== "failure") return false;
+  if (jobs.some((job) => job !== deploy && !["success", "skipped"].includes(job.conclusion)))
+    return false;
+  const step = (name) => deploy.steps?.find((item) => item.name === name)?.conclusion;
+  const failed = (deploy.steps ?? []).filter((item) => item.conclusion === "failure");
+  return (
+    failed.length === 1 &&
+    failed[0].name === "Confirm provider readback" &&
+    [
+      "Deploy verified artifact",
+      "Check deployed browser interactions",
+      "Check deployed pages",
+    ].every((name) => step(name) === "success") &&
+    step("Roll back test deploy") !== "success"
+  );
+}
+
+/**
+ * Run che chiude il ciclo del commit integrato. Se la sua conferma è stata superata da un merge
+ * successivo, segue la run della nuova testa di `develop`, che deve contenere il commit e avere
+ * deploy test e readback confermati; fino a tre merge successivi. Ogni altro esito si ferma.
+ */
+export async function settleMergeRun(merge, deployRequired, io) {
+  let run = await io.wait(merge);
+  let jobs = await io.jobs(run);
+  let required = deployRequired;
+  for (let hop = 0; run.conclusion !== "success"; hop++) {
+    if (hop === 3 || !readbackSuperseded(jobs))
+      throw new Error(`Run ${run.id} non riuscita: riconciliare prima della ripresa.`);
+    const head = await io.head();
+    if (head === run.head_sha || !(await io.contains(merge, head)))
+      throw new Error(`Run ${run.id} non riuscita: riconciliare prima della ripresa.`);
+    console.log("Readback superato da un merge successivo: si segue la run della nuova testa.");
+    run = await io.wait(head);
+    jobs = await io.jobs(run);
+    // La nuova testa distribuisce anche il commit integrato: il deploy confermato è richiesto.
+    required = true;
+  }
+  return { run, jobs, deployRequired: required };
+}
+
 const runJobs = (repository, id) =>
   json("api", `repos/${repository}/actions/runs/${id}/jobs?per_page=100`).jobs;
 
@@ -439,6 +488,7 @@ async function waitRun(
   branch,
   events = ["push", "workflow_dispatch"],
   since = 0,
+  accepted = ["success"],
 ) {
   const cancelled = new Set();
   for (let attempt = 0; attempt < 12; attempt++) {
@@ -484,7 +534,7 @@ async function waitRun(
         attempt = -1;
         continue;
       }
-      if (result.conclusion !== "success")
+      if (!accepted.includes(result.conclusion))
         throw new Error(`Run ${run.databaseId} non riuscita: riconciliare prima della ripresa.`);
       return result;
     }
@@ -838,10 +888,31 @@ async function main() {
       }
       if (pr.state !== "MERGED")
         throw new Error("Merge non confermato: ciclo riprendibile dalla stessa PR.");
-      const run = await waitRun(repository, "ci.yml", pr.mergeCommit.oid, "develop");
-      const jobs = json("api", `repos/${repository}/actions/runs/${run.id}/jobs?per_page=100`).jobs;
       const files = pullRequestFiles(repository, number);
-      if (checkCycleJobs(jobs, plan(files).deploy))
+      const { jobs, deployRequired } = await settleMergeRun(
+        pr.mergeCommit.oid,
+        plan(files).deploy,
+        {
+          wait: (sha) =>
+            waitRun(repository, "ci.yml", sha, "develop", undefined, undefined, [
+              "success",
+              "failure",
+            ]),
+          jobs: (run) => runJobs(repository, run.id),
+          head: () => gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha"),
+          contains: (ancestor, head) =>
+            localGit(() => {
+              git("fetch", "origin", "develop");
+              try {
+                git("merge-base", "--is-ancestor", ancestor, head);
+                return true;
+              } catch {
+                return false;
+              }
+            }),
+        },
+      );
+      if (checkCycleJobs(jobs, deployRequired))
         console.log("Deploy test, collaudo remoto e readback provider confermati nella run.");
       localGit(() => {
         git("fetch", "origin", "develop", `refs/pull/${number}/head`);
