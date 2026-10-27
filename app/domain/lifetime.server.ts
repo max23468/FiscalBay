@@ -25,6 +25,17 @@ import { sqlList } from "./sql.server";
 export const lifetimeSlots = 20;
 
 /**
+ * Posti ancora liberi per il sito pubblico: un posto prenotato da un Checkout aperto non è in
+ * vendita finché la sessione può incassare.
+ */
+export async function lifetimeSlotsLeft(db: D1Database) {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS taken FROM lifetime_allocations")
+    .first<{ taken: number }>();
+  return lifetimeSlots - (row?.taken ?? 0);
+}
+
+/**
  * Durata della sessione Checkout e della prenotazione: Stripe accetta da 30 minuti a 24 ore.
  * Un'ora lascia il tempo di pagare senza tenere fermo a lungo uno degli ultimi posti.
  */
@@ -193,7 +204,8 @@ export async function lifetimeContext(
         : !reservation && workspace.taken >= lifetimeSlots
           ? "sold-out"
           : "available";
-  return { ...context, offer: { state, credit, replaces: !!row?.open } };
+  const seats = { left: Math.max(lifetimeSlots - workspace.taken, 0), total: lifetimeSlots };
+  return { ...context, offer: { state, credit, replaces: !!row?.open, seats } };
 }
 
 /**

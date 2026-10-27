@@ -385,6 +385,11 @@ for (const width of [390, 768, 1440]) {
       await expect(
         page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }),
       ).toBeVisible();
+      // Come sul sito: netto con il totale IVA italiana accanto e posti lifetime rimasti.
+      await expect(main).toContainText(
+        it ? "59,78\u00a0€ con IVA italiana al 22%" : "€59.78 with 22% Italian VAT",
+      );
+      await expect(main).toContainText(it ? "Restano 14 posti su 20" : "14 of 20 places left");
       await page.screenshot({ path: testInfo.outputPath(`trial-purchase-${locale}.png`) });
       // Il ritorno da Stripe durante la prova non parla di pagamento: la prova continua.
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();

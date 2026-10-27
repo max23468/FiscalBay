@@ -262,6 +262,7 @@ describe("Lifetime e concessioni", () => {
       state: "sold-out",
       credit: 0,
       replaces: false,
+      seats: { left: 0, total: 20 },
     });
     expect(await allocations()).toHaveLength(20);
   });
@@ -748,6 +749,7 @@ describe("Lifetime e concessioni", () => {
       state: "available",
       credit: 245,
       replaces: true,
+      seats: { left: 20, total: 20 },
     });
     // Con il rinnovo prima della scadenza del checkout il credito non sarebbe esatto.
     expect(await buyLifetime(stripe, userId, "2026-10-13T19:30:00.000Z")).toEqual({
@@ -799,6 +801,7 @@ describe("Lifetime e concessioni", () => {
       state: "available",
       credit: 0,
       replaces: true,
+      seats: { left: 20, total: 20 },
     });
     await buyLifetime(stripe);
     expect(stripe.state.coupons).toEqual([]);

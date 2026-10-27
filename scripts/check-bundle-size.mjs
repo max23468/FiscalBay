@@ -15,8 +15,12 @@ import { fileURLToPath } from "node:url";
 import { runInNewContext } from "node:vm";
 import { gzipSync } from "node:zlib";
 
-/** Soglie in KiB gzip: sito, documenti legali ed errori; area riservata, accesso e anteprima. */
-export const budgetKiB = { public: 170, app: 280 };
+/**
+ * Soglie in KiB gzip: sito, documenti legali ed errori; area riservata, accesso e anteprima.
+ * Lasciano una ventina di KiB sopra la pagina più pesante: fermano un aumento accidentale, non
+ * la crescita ordinaria dei testi (D182).
+ */
+export const budgetKiB = { public: 170, app: 300 };
 
 const appPath = /^(?:en\/)?(?:app|admin|anteprima|accesso)(?:\/|$)/u;
 

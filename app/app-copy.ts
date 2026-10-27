@@ -36,5 +36,8 @@ export async function loadCopy(path: string): Promise<void> {
 /** Indirizzo dell'assistenza clienti, mostrato e usato come risposta delle email. */
 export const supportEmail = "supporto@fiscalbay.it";
 
+/** Indirizzo per privacy, sicurezza e ogni contatto che non è assistenza clienti. */
+export const infoEmail = "info@fiscalbay.it";
+
 /** Titolo della scheda del browser: marchio e pagina, separati da ` | `. */
 export const pageTitle = (title: string) => `FiscalBay | ${title}`;

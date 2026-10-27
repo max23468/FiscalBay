@@ -26,7 +26,7 @@ import {
 import { useCopy, useLinks } from "~/components/copy-context";
 import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
 import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
-import { appHref } from "../app-links";
+import { appHref, visitParam } from "../app-links";
 import { localizedPath } from "../i18n";
 import type { AccountView, NotificationView } from "../view-models";
 
@@ -148,10 +148,12 @@ export function AppShell({
                 menu ?? [
                   accountMenu(links, t),
                   [
+                    // Come nell'area reale: con una sessione la radice porterebbe agli Ordini.
                     {
-                      href: localizedPath(links.language, "/"),
+                      href: `${localizedPath(links.language)}?${visitParam}=1`,
                       label: t.shell.visitSite,
                       Icon: Globe,
+                      reloadDocument: true,
                     },
                   ],
                 ]

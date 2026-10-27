@@ -21,6 +21,16 @@ export const accessPath = "/accesso";
 /** Pagina pubblica dell'assistenza, con domande frequenti e contatti. */
 export const supportPath = "/supporto";
 
+/** Pagine del sito pubblico nella barra superiore, senza prefisso di lingua. */
+export const featuresPath = "/funzionalita";
+export const pricingPath = "/prezzi";
+export const siteSecurityPath = "/sicurezza";
+export const faqPath = "/faq";
+
+/** Documenti legali: pubblici ma `noindex` e fuori dalla sitemap (D204). */
+export const termsPath = "/termini";
+export const privacyPath = "/privacy";
+
 export const ordersPath = `${appBase}/ordini`;
 
 /** Ricerca ordini della barra superiore: riceve la query nel corpo, mai nell'indirizzo. */
@@ -114,12 +124,18 @@ export function appUrl(
   return originUrl(env, `${localizedPath(language, path)}${search}`);
 }
 
-/** Pagine del sito pubblico, senza prefisso di lingua. */
-const publicPages = new Set(["/", "/termini", "/privacy", "/supporto"]);
+/** Pagine canoniche del sito pubblico, senza prefisso di lingua: le sole nella sitemap. */
+export const sitemapPages = [
+  "/",
+  featuresPath,
+  pricingPath,
+  siteSecurityPath,
+  faqPath,
+  supportPath,
+] as const;
 
-/** Indicizzabile solo una pagina pubblica servita dal dominio di produzione. */
+/** Indicizzabile solo una pagina della sitemap servita dal dominio di produzione. */
 export function indexable(origin: string, pathname: string) {
-  return (
-    isProductionOrigin(origin) && publicPages.has(pathname.replace(/^\/en(?=\/|$)/u, "") || "/")
-  );
+  const page = pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
+  return isProductionOrigin(origin) && (sitemapPages as readonly string[]).includes(page);
 }

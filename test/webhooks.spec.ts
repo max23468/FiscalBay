@@ -386,7 +386,9 @@ it("il Worker intercetta il webhook prima di caricare la build React Router", as
 
 it.each([
   ["https://test.fiscalbay.it", "/", "noindex, nofollow", undefined],
-  ["https://fiscalbay.it", "/en/privacy", null, undefined],
+  ["https://fiscalbay.it", "/en/prezzi", null, undefined],
+  // Termini e Privacy restano raggiungibili ma fuori dagli indici (D204).
+  ["https://fiscalbay.it", "/en/privacy", "noindex, nofollow", undefined],
   ["https://fiscalbay.it", "/app/ordini", "noindex, nofollow", "synthetic-version"],
   ["https://fiscalbay.it", "/", null, "synthetic-version"],
 ])(
