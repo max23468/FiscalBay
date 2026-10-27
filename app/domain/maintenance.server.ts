@@ -1,5 +1,6 @@
 import { orderSearchText } from "../orders/order-search";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
+import { purgeSupportRequests } from "./support-requests.server";
 import { purgeTelegramLinks } from "./telegram.server";
 import { purgeTelegramDeliveries } from "./telegram-deliveries.server";
 
@@ -22,6 +23,7 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db.prepare("DELETE FROM account_email_changes WHERE expires_at <= ?").bind(at),
     purgeTelegramLinks(db, now),
     purgeTelegramDeliveries(db, now),
+    purgeSupportRequests(db, now),
     // Una notifica resta nella campanella al massimo 30 giorni dopo la sua lettura.
     db
       .prepare("DELETE FROM notification_reads WHERE read_at < ?")

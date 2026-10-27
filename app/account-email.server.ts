@@ -2,10 +2,10 @@ import { waitUntil } from "cloudflare:workers";
 
 import { supportEmail } from "./app-copy";
 import { accessPath, securityPath, storesPath } from "./app-links";
-import { logFailure } from "./errors";
+import { ApplicationError, logFailure } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 
-const authEmailFrom = "noreply@fiscalbay.it";
+const emailFrom = { email: "noreply@fiscalbay.it", name: "FiscalBay" };
 
 function escapeHtml(value: string): string {
   return value
@@ -15,23 +15,88 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
+/**
+ * Invio non riuscito. Il codice del provider (`E_RECIPIENT_SUPPRESSED`, `E_RATE_LIMIT_EXCEEDED`
+ * e simili) è un'etichetta fissa che i log possono riportare; il messaggio no. `undeliverable`
+ * distingue un indirizzo nella lista di soppressione, dopo un rimbalzo o un reclamo, da un
+ * errore che un nuovo tentativo può superare.
+ */
+export class EmailError extends ApplicationError {
+  readonly undeliverable: boolean;
+  constructor(readonly failure: string) {
+    super("UPSTREAM_UNAVAILABLE");
+    this.name = "EmailError";
+    this.undeliverable = failure === "E_RECIPIENT_SUPPRESSED";
+  }
+}
+
+/** Invia con il binding dell'ambiente; ogni rifiuto diventa un `EmailError`. */
+export async function sendEmail(
+  env: Env,
+  message: { to: string; replyTo: string; subject: string; text: string; html?: string },
+): Promise<void> {
+  try {
+    await env.AUTH_EMAIL.send({ ...message, from: emailFrom });
+  } catch (error) {
+    const code =
+      typeof error === "object" && error !== null && "code" in error ? String(error.code) : "";
+    throw new EmailError(/^E_[A-Z_]{1,60}$/u.test(code) ? code : "unknown");
+  }
+}
+
 const buttons: Record<Language, { continue: string; security: string; stores: string }> = {
   it: { continue: "Continua su FiscalBay", security: "Apri Sicurezza", stores: "Apri Negozi" },
   en: { continue: "Continue to FiscalBay", security: "Open Security", stores: "Open Stores" },
 };
 
+/**
+ * Chiusura comune delle email di servizio: arrivano a tutti i piani, anche senza il consenso
+ * alle comunicazioni promozionali, e una risposta raggiunge l'assistenza (Reply-To).
+ */
+const serviceFooter: Record<Language, string> = {
+  it: `Email di servizio del tuo account FiscalBay, inviata anche senza consenso alle comunicazioni promozionali. Per assistenza rispondi a questa email o scrivi a ${supportEmail}.`,
+  en: `Service email about your FiscalBay account, sent even without consent to promotional messages. For help, reply to this email or write to ${supportEmail}.`,
+};
+
+/** Testo e HTML dello stesso modello, nella lingua del destinatario. */
+export function accountEmailBody(input: {
+  language: Language;
+  message: string;
+  url: string;
+  button: string;
+}): { text: string; html: string } {
+  const { language, message, url, button } = input;
+  const footer = serviceFooter[language];
+  const muted = "color:#6b7280;font-size:13px;line-height:1.5";
+  return {
+    text: `${message}\n\n${button}: ${url}\n\n--\n${footer}`,
+    html: `<!doctype html><html lang="${language}"><body style="margin:0;padding:24px;background:#ffffff;color:#111827;font-family:system-ui,-apple-system,'Segoe UI',sans-serif">
+<div style="max-width:560px;margin:0 auto">
+<p style="margin:0 0 24px;font-size:18px;font-weight:600">FiscalBay</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:1.6">${escapeHtml(message)}</p>
+<p style="margin:0 0 32px"><a href="${escapeHtml(url)}" style="display:inline-block;padding:10px 18px;border-radius:8px;background:#111827;color:#ffffff;text-decoration:none;font-weight:600">${escapeHtml(button)}</a></p>
+<p style="margin:0 0 8px;${muted}">${escapeHtml(url)}</p>
+<p style="margin:0;${muted}">${escapeHtml(footer)}</p>
+</div></body></html>`,
+  };
+}
+
 async function sendAccountEmail(
   env: Env,
-  input: { to: string; subject: string; message: string; url: string; button: string },
+  input: {
+    to: string;
+    language: Language;
+    subject: string;
+    message: string;
+    url: string;
+    button: string;
+  },
 ): Promise<void> {
-  const safeUrl = escapeHtml(input.url);
-  await env.AUTH_EMAIL.send({
-    from: { email: authEmailFrom, name: "FiscalBay" },
+  await sendEmail(env, {
     replyTo: supportEmail,
     to: input.to,
     subject: input.subject,
-    text: `${input.message}\n\n${input.url}`,
-    html: `<p>${escapeHtml(input.message)}</p><p><a href="${safeUrl}">${escapeHtml(input.button)}</a></p>`,
+    ...accountEmailBody(input),
   });
 }
 
@@ -95,6 +160,7 @@ export function sendAuthEmail(
       : authTexts[kind][language];
   waitUntil(
     sendAccountEmail(env, {
+      language,
       to: input.to,
       url: input.url,
       button: buttons[language].continue,
@@ -132,6 +198,7 @@ export async function sendExistingAccountEmail(
             "Qualcuno ha provato a creare un account FiscalBay con questo indirizzo, che è già registrato. Se eri tu, accedi o reimposta la password dalla pagina di accesso. Altrimenti ignora questa email.",
         };
   await sendAccountEmail(env, {
+    language,
     to,
     url: new URL(localizedPath(language, accessPath), env.APP_ORIGIN).toString(),
     button: buttons[language].continue,
@@ -218,6 +285,7 @@ export function notifySecurityEvent(env: Env, userId: string, event: SecurityEve
       if (!user) return;
       const language = user.language === "en" ? "en" : "it";
       await sendAccountEmail(env, {
+        language,
         to: user.email,
         url: new URL(localizedPath(language, securityPath), env.APP_ORIGIN).toString(),
         button: buttons[language].security,
@@ -237,6 +305,7 @@ export async function sendInactivityNotice(
 ): Promise<void> {
   const { language, deadline } = input;
   await sendAccountEmail(env, {
+    language,
     to: input.to,
     url: new URL(localizedPath(language, storesPath), env.APP_ORIGIN).toString(),
     button: buttons[language].stores,

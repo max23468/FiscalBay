@@ -65,6 +65,7 @@ export function logFailure(input: {
     | "token_refresh"
     | "order_acquisition"
     | "account_email"
+    | "support"
     | "inactivity"
     | "maintenance"
     | "scheduling"

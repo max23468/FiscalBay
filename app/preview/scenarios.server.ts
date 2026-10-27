@@ -1,6 +1,7 @@
 import { appCopy, type AppCopy } from "../app-copy";
 import { priceGeneration, type LifetimeOffer } from "../catalog";
 import { contactsView } from "../contact";
+import { planDiagnostics } from "../support";
 import { unusedCredit } from "../domain/lifetime.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { Language } from "../i18n";
@@ -34,6 +35,7 @@ export const scenarioIds = [
   "quota-esaurita",
   "fine-promozione",
   "free-inattivo",
+  "proposta-consenso",
   "lista-d-attesa",
   "acquisti-sospesi",
   "aggiornamento",
@@ -106,6 +108,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "No unlocks left",
       focus:
         "Orders remain available. Codice Fiscale and Partita IVA of new orders wait for the next cycle.",
+    },
+  },
+  "proposta-consenso": {
+    it: {
+      name: "Proposta del consenso",
+      focus:
+        "Primi passi conclusi senza adesione in registrazione: gli Ordini propongono una volta novità e offerte via email.",
+    },
+    en: {
+      name: "Consent prompt",
+      focus:
+        "Getting started is complete without opting in at sign-up: Orders offers news and offers by email once.",
     },
   },
   "fine-promozione": {
@@ -1123,6 +1137,8 @@ export interface Scenario {
   /** Consegna ferma della chat collegata, come in Impostazioni › Notifiche dell'area reale. */
   telegramFailure: "blocked" | "unreachable" | null;
   saveFailsOnce: boolean;
+  /** Proposta del consenso marketing dopo i primi passi, come negli Ordini reali. */
+  marketingProposal?: boolean;
   /** Stripe non risponde: l'acquisto simulato fallisce. */
   stripeDown: boolean;
   /** I venti posti lifetime sono tutti occupati. */
@@ -1298,11 +1314,13 @@ export function loadScenario(
       note("maintenance", { id: "n-maint", tone: "info", at: minutesAgo(300), read: false }),
     ],
   };
+  // Fasi con le stesse parole e date assolute dell'area reale.
+  const phases = appCopy[language].settings.support.diag.phases;
+  const readAt = (minutes: number) => formatDate(minutesAgo(minutes), language);
   const diagnostics = (overrides: Partial<DiagnosticsView> = {}): DiagnosticsView => ({
     version: language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)",
     storeRef: "neg_7f3a91c2",
-    syncPhase:
-      language === "it" ? "Aggiornamento riuscito, 5 minuti fa" : "Update succeeded, 5 minutes ago",
+    syncPhase: phases.ok(readAt(5)),
     errorCode: null,
     rights: "",
     correlationId: "c0a8f3e1-5b2d-4e7a-9c11-7d2f0b6e4a90",
@@ -1338,6 +1356,17 @@ export function loadScenario(
         stores: freeStores,
         seeds: freeSeeds,
         premium: false,
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "proposta-consenso":
+      scenario = {
+        ...common,
+        account: account(),
+        stores: freeStores,
+        seeds: freeSeeds,
+        premium: false,
+        marketingProposal: true,
         diagnostics: diagnostics(),
       };
       break;
@@ -1466,7 +1495,7 @@ export function loadScenario(
         syncRunning: true,
         incoming: incomingSeeds.map((seed) => toOrder(seed, freeStores)),
         diagnostics: diagnostics({
-          syncPhase: language === "it" ? "Aggiornamento in corso" : "Update in progress",
+          syncPhase: phases.running,
         }),
       };
       break;
@@ -1505,10 +1534,7 @@ export function loadScenario(
           ...common.notifications,
         ],
         diagnostics: diagnostics({
-          syncPhase:
-            language === "it"
-              ? "Aggiornamento non riuscito, 5 minuti fa"
-              : "Update failed, 5 minutes ago",
+          syncPhase: phases.failed(readAt(5)),
           errorCode: "UPSTREAM_UNAVAILABLE",
         }),
       };
@@ -1626,10 +1652,7 @@ export function loadScenario(
         ],
         diagnostics: diagnostics({
           storeRef: "neg_2b81d0fa",
-          syncPhase:
-            language === "it"
-              ? "Collegamento scaduto, 1 giorno fa"
-              : "Connection expired, 1 day ago",
+          syncPhase: phases.reconnect,
           errorCode: "STORE_RECONNECT_REQUIRED",
         }),
       };
@@ -1754,7 +1777,7 @@ export function loadScenario(
         notifications: [],
         diagnostics: diagnostics({
           storeRef: null,
-          syncPhase: language === "it" ? "Nessun negozio" : "No store",
+          syncPhase: phases.none,
         }),
       };
       break;
@@ -1790,7 +1813,7 @@ export function loadScenario(
         ],
         notifications: [],
         diagnostics: diagnostics({
-          syncPhase: language === "it" ? "Prima sincronizzazione" : "First sync",
+          syncPhase: phases.importing,
         }),
       };
       break;
@@ -1812,7 +1835,7 @@ export function loadScenario(
         syncRunning: false,
         notices: [{ kind: "importing", count: 4 }],
         diagnostics: diagnostics({
-          syncPhase: language === "it" ? "Importazione dello storico" : "History import",
+          syncPhase: phases.importing,
         }),
       };
       break;
@@ -2159,35 +2182,7 @@ export function loadScenario(
         quota: { ...quota, used: Math.min(quota.used + unlockedCount, quota.limit) },
       }
     : rest.account;
-  const rights = currentAccount.waitlisted
-    ? language === "it"
-      ? "Free, in lista d’attesa"
-      : "Free, waiting list"
-    : currentAccount.quota
-      ? language === "it"
-        ? `Free, ${currentAccount.quota.used} di ${currentAccount.quota.limit} ordini sbloccati`
-        : `Free, ${currentAccount.quota.used} of ${currentAccount.quota.limit} orders unlocked`
-      : currentAccount.plan === "free"
-        ? "Free"
-        : currentAccount.trial
-          ? language === "it"
-            ? "Prova Premium"
-            : "Premium trial"
-          : currentAccount.grant
-            ? language === "it"
-              ? "Premium concesso"
-              : "Premium, granted"
-            : currentAccount.premium?.period === "lifetime"
-              ? language === "it"
-                ? "Premium a vita"
-                : "Premium, lifetime"
-              : currentAccount.premium?.period === "monthly"
-                ? language === "it"
-                  ? "Premium mensile"
-                  : "Premium, monthly"
-                : language === "it"
-                  ? "Premium annuale"
-                  : "Premium, annual";
+  const rights = planDiagnostics(currentAccount, appCopy[language]);
   return {
     ...rest,
     account: currentAccount,

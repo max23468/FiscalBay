@@ -1,5 +1,6 @@
-import { ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { useRef, useState } from "react";
+import { Link } from "react-router";
 
 import { useAction } from "~/components/action";
 import { useFieldErrors } from "~/components/form-validation";
@@ -16,6 +17,7 @@ import {
 import { Textarea } from "~/components/ui/textarea";
 import { useCopy } from "~/components/copy-context";
 import { supportEmail } from "../../app-copy";
+import { maxSupportMessage, supportTopics } from "../../support";
 import type { DiagnosticsView } from "../../view-models";
 import { CheckboxOption, Group, SimpleSelect } from "./controls";
 
@@ -23,16 +25,28 @@ export function SupportSection({
   support,
   diagnostics,
   email,
+  whatsNew,
 }: {
   /** Modulo di assistenza disponibile. */
   support: boolean;
-  /** Dati tecnici allegabili alla richiesta; null senza il modulo. */
+  /** Dati tecnici allegabili alla richiesta; null se non è stato possibile leggerli. */
   diagnostics: DiagnosticsView | null;
   email: string;
+  /** Pagina Novità, presente soltanto quando ha voci (D203). */
+  whatsNew?: string;
 }) {
   const { t } = useCopy();
   return (
     <>
+      {whatsNew ? (
+        <Link
+          to={whatsNew}
+          className="flex items-center justify-between gap-3 rounded-sm border-y py-3 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring"
+        >
+          {t.settings.support.whatsNew}
+          <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />
+        </Link>
+      ) : null}
       <Group title={t.settings.support.faq}>
         {/* Elenco chiuso da una linea anche in fondo, come in Dati e privacy. */}
         <div className="grid divide-y border-y">
@@ -50,7 +64,7 @@ export function SupportSection({
           ))}
         </div>
       </Group>
-      {support && diagnostics ? (
+      {support ? (
         <SupportForm email={email} diagnostics={diagnostics} />
       ) : (
         <Group title={t.settings.support.contact} separated={false}>
@@ -67,9 +81,19 @@ export function SupportSection({
   );
 }
 
-function SupportForm({ email, diagnostics }: { email: string; diagnostics: DiagnosticsView }) {
+function SupportForm({
+  email,
+  diagnostics,
+}: {
+  email: string;
+  diagnostics: DiagnosticsView | null;
+}) {
   const { t } = useCopy();
-  const action = useAction();
+  const form = useRef<HTMLFormElement>(null);
+  // Dopo l'invio riuscito il messaggio si svuota; un rifiuto lo conserva per riprovare.
+  const action = useAction((result) => {
+    if (result.ok) form.current?.reset();
+  });
   const [topic, setTopic] = useState("orders");
   const [error, setError] = useState(false);
   const sent = !error && action.result?.ok === true;
@@ -80,18 +104,21 @@ function SupportForm({ email, diagnostics }: { email: string; diagnostics: Diagn
   });
   const message = v.control("message");
   const diag = t.settings.support.diag;
-  const rows = [
-    [diag.version, diagnostics.version],
-    [diag.store, diagnostics.storeRef ?? diag.none],
-    [diag.sync, diagnostics.syncPhase],
-    [diag.error, diagnostics.errorCode ?? diag.none],
-    [diag.rights, diagnostics.rights],
-    [diag.reference, diagnostics.correlationId],
-  ] as const;
+  const rows = diagnostics
+    ? ([
+        [diag.version, diagnostics.version],
+        [diag.store, diagnostics.storeRef ?? diag.none],
+        [diag.sync, diagnostics.syncPhase],
+        [diag.error, diagnostics.errorCode ?? diag.none],
+        [diag.rights, diagnostics.rights],
+        [diag.reference, diagnostics.correlationId],
+      ] as const)
+    : null;
   return (
     <>
       <Group title={t.settings.support.contact} className="scroll-mt-20" separated={false}>
         <form
+          ref={form}
           className="grid gap-5"
           {...v.form}
           onSubmit={(event) => {
@@ -110,7 +137,7 @@ function SupportForm({ email, diagnostics }: { email: string; diagnostics: Diagn
             action.run("support", {
               topic,
               message: area.value.trim(),
-              diagnostics: String(form.get("diagnostics") === "on"),
+              diagnostics: String(!!rows && form.get("diagnostics") === "on"),
             });
           }}
         >
@@ -120,9 +147,9 @@ function SupportForm({ email, diagnostics }: { email: string; diagnostics: Diagn
           <FieldGroup>
             <SimpleSelect
               label={t.settings.support.topic}
-              items={Object.entries(t.settings.support.topics).map(([value, label]) => ({
+              items={supportTopics.map((value) => ({
                 value,
-                label,
+                label: t.settings.support.topics[value],
               }))}
               value={topic}
               onChange={setTopic}
@@ -136,6 +163,7 @@ function SupportForm({ email, diagnostics }: { email: string; diagnostics: Diagn
                 name="message"
                 required
                 rows={5}
+                maxLength={maxSupportMessage}
                 placeholder={t.settings.support.messagePlaceholder}
                 {...message}
               />
@@ -143,21 +171,27 @@ function SupportForm({ email, diagnostics }: { email: string; diagnostics: Diagn
             </Field>
             <FieldSet>
               <FieldLegend variant="label">{t.settings.support.diagnostics}</FieldLegend>
-              <FieldDescription>{t.settings.support.diagnosticsHint}</FieldDescription>
-              <dl className="grid gap-x-6 gap-y-2 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-[auto_1fr]">
-                {rows.map(([label, value]) => (
-                  <div key={label} className="contents">
-                    <dt className="text-muted-foreground">{label}</dt>
-                    <dd className="font-code min-w-0 break-words">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              <CheckboxOption name="diagnostics" defaultChecked>
-                {t.settings.support.includeDiagnostics}
-              </CheckboxOption>
+              {rows ? (
+                <>
+                  <FieldDescription>{t.settings.support.diagnosticsHint}</FieldDescription>
+                  <dl className="grid gap-x-6 gap-y-2 rounded-lg border bg-muted/40 p-3 text-sm sm:grid-cols-[auto_1fr]">
+                    {rows.map(([label, value]) => (
+                      <div key={label} className="contents">
+                        <dt className="text-muted-foreground">{label}</dt>
+                        <dd className="font-code min-w-0 break-words">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <CheckboxOption name="diagnostics" defaultChecked>
+                    {t.settings.support.includeDiagnostics}
+                  </CheckboxOption>
+                </>
+              ) : (
+                <FieldDescription>{diag.unavailable}</FieldDescription>
+              )}
             </FieldSet>
           </FieldGroup>
-          <Button type="submit" className="w-fit">
+          <Button type="submit" className="w-fit" disabled={action.pending}>
             {t.settings.support.send}
           </Button>
           <p className="text-sm text-muted-foreground">

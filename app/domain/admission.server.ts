@@ -149,12 +149,12 @@ type NoticeRow = {
 };
 
 /**
- * Invia i preavvisi e registra soltanto quelli riusciti; gli altri li riprova l'esecuzione
- * seguente. Il modulo email porta con sé i testi dell'interfaccia: si carica soltanto qui,
- * fuori dall'avvio di cron, coda e webhook.
+ * Invia i preavvisi e registra quelli riusciti o destinati a un indirizzo soppresso; gli altri
+ * li riprova l'esecuzione seguente. Il modulo email porta con sé i testi dell'interfaccia: si
+ * carica soltanto qui, fuori dall'avvio di cron, coda e webhook.
  */
 async function sendNotices(env: Env, rows: NoticeRow[], now: Date) {
-  const { sendInactivityNotice } = await import("../account-email.server");
+  const { EmailError, sendInactivityNotice } = await import("../account-email.server");
   const at = now.toISOString();
   const deadline = new Date(now.getTime() + inactivityNoticeDays * 24 * 60 * 60_000).toISOString();
   const sent = await Promise.allSettled(
@@ -167,13 +167,15 @@ async function sendNotices(env: Env, rows: NoticeRow[], now: Date) {
       });
     }),
   );
-  const noticed = rows.filter((_, index) => {
-    const outcome = sent[index]!;
-    if (outcome.status === "rejected")
-      logFailure({ error: outcome.reason, operation: "inactivity" });
-    return outcome.status === "fulfilled";
+  // Un indirizzo nella lista di soppressione non riceverà il preavviso nemmeno domani: vale
+  // come tentato, così la pausa segue i suoi tempi e la campanella la spiega al prossimo accesso.
+  const delivered = sent.map((outcome) => {
+    if (outcome.status === "fulfilled") return true;
+    logFailure({ error: outcome.reason, operation: "inactivity" });
+    return outcome.reason instanceof EmailError && outcome.reason.undeliverable;
   });
-  const failed = rows.filter((_, index) => sent[index]!.status === "rejected");
+  const noticed = rows.filter((_, index) => delivered[index]);
+  const failed = rows.filter((_, index) => !delivered[index]);
   // Un accesso arrivato nel frattempo ha già spostato l'attività: il preavviso non vale. Un
   // invio non riuscito passa dopo gli spazi ancora da tentare.
   await env.DB.batch([

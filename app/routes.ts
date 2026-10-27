@@ -12,16 +12,20 @@ export default [
   route("en/termini", "routes/legal.tsx", { id: "terms-en" }),
   route("privacy", "routes/legal.tsx", { id: "privacy" }),
   route("en/privacy", "routes/legal.tsx", { id: "privacy-en" }),
-  // La shell dell'area resta montata fra Ordini, Negozi e Impostazioni.
+  route("supporto", "routes/support.tsx"),
+  route("en/supporto", "routes/support.tsx", { id: "support-en" }),
+  // La shell dell'area resta montata fra Ordini, Negozi, Impostazioni e Novità.
   layout("routes/account.tsx", [
     route("app/ordini/:ordine?", "routes/orders.tsx"),
     route("app/negozi/:negozio?", "routes/stores.tsx"),
     route("app/impostazioni/:sezione?", "routes/settings.tsx"),
+    route("app/novita", "routes/whats-new.tsx"),
   ]),
   layout("routes/account.tsx", { id: "account-en" }, [
     route("en/app/ordini/:ordine?", "routes/orders.tsx", { id: "orders-en" }),
     route("en/app/negozi/:negozio?", "routes/stores.tsx", { id: "stores-en" }),
     route("en/app/impostazioni/:sezione?", "routes/settings.tsx", { id: "settings-en" }),
+    route("en/app/novita", "routes/whats-new.tsx", { id: "whats-new-en" }),
   ]),
   route("app/negozi/collega", "routes/store-link.tsx"),
   route("en/app/negozi/collega", "routes/store-link.tsx", { id: "store-link-en" }),

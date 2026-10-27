@@ -325,7 +325,7 @@ for (const language of ["it", "en"] as const) {
               ),
             ),
           );
-        expect(lines).toEqual([1, 1, 1]);
+        expect(lines).toEqual([1, 1, 1, 1]);
         await page.setViewportSize({ width, height: 666 });
       }
       if (width === 500) {
@@ -682,7 +682,14 @@ for (const language of ["it", "en"] as const) {
           contentType: "image/png",
         });
         await page.goto(`${prefix}/accesso?negozio=altro-spazio`);
-        await expect(page.getByRole("link", { name: new RegExp(supportAddress) })).toBeVisible();
+        // Anche il footer porta l'indirizzo: l'avviso è il collegamento con il suo invito.
+        await expect(
+          page.getByRole("link", {
+            name: new RegExp(
+              `${language === "it" ? "Contatta il supporto" : "Contact support"}: ${supportAddress}`,
+            ),
+          }),
+        ).toBeVisible();
         await page.goto(`${prefix}/accesso?token=synthetic-invalid-token`);
         await expect(page).toHaveTitle(`FiscalBay | ${title}`);
         await expect(page.getByRole("heading", { name: title, level: 2 })).toBeVisible();

@@ -15,7 +15,9 @@ import { action as storeLinkAction, loader as storeLinkLoader } from "../app/rou
 import { pendingEmailChange } from "../app/domain/email-change.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { hashPassword, verifyPassword } from "../app/password.server";
-import { emailSender, mailEnv, sessionCookie } from "./fixtures/account-fixtures";
+import { accountEmailBody } from "../app/account-email.server";
+import { supportEmail } from "../app/app-copy";
+import { emailLink, emailSender, mailEnv, sessionCookie } from "./fixtures/account-fixtures";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 /** La registrazione non apre la sessione: la apre l'accesso con la password appena scelta. */
@@ -1306,6 +1308,30 @@ describe("Collegamento e modifica dell'identità", () => {
     expect(direct.status).toBe(404);
   });
 
+  it("le email di servizio usano un solo modello in testo e HTML, con il contenuto protetto", () => {
+    const body = accountEmailBody({
+      language: "en",
+      message: 'Use <b>"this"</b> & go',
+      url: 'https://test.fiscalbay.it/?a=1&b="2"',
+      button: "Continue",
+    });
+    expect(body.text).toBe(
+      [
+        'Use <b>"this"</b> & go',
+        "",
+        'Continue: https://test.fiscalbay.it/?a=1&b="2"',
+        "",
+        "--",
+        `Service email about your FiscalBay account, sent even without consent to promotional messages. For help, reply to this email or write to ${supportEmail}.`,
+      ].join("\n"),
+    );
+    expect(emailLink(body.text)).toBe('https://test.fiscalbay.it/?a=1&b="2"');
+    expect(body.html).toContain('<html lang="en">');
+    expect(body.html).toContain("Use &lt;b&gt;&quot;this&quot;&lt;/b&gt; &amp; go");
+    expect(body.html).toContain('href="https://test.fiscalbay.it/?a=1&amp;b=&quot;2&quot;"');
+    expect(body.html).not.toContain("<b>");
+  });
+
   it("imposta di nuovo la password con un link al proprio indirizzo", async () => {
     const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
     try {
@@ -1327,16 +1353,19 @@ describe("Collegamento e modifica dell'identità", () => {
       // Il titolare riceve avviso della rimozione, con il collegamento a Sicurezza.
       await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
       expect(send.mock.calls[0]![0]).toMatchObject({
+        from: { email: expect.stringMatching(/^noreply@/u), name: "FiscalBay" },
+        replyTo: supportEmail,
         to: email,
         subject: "Metodo di accesso rimosso da FiscalBay",
         text: expect.stringContaining("/app/impostazioni/sicurezza"),
+        html: expect.stringContaining('<html lang="it">'),
       });
       send.mockClear();
       expect(await outcome({ intent: "password" }, securityAction)).toContain("password-link");
       await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
       const message = send.mock.calls[0]![0] as { to: string; text: string };
       expect(message.to).toBe(email);
-      const token = new URL(message.text.split("\n").at(-1)!).pathname.split("/").at(-1)!;
+      const token = new URL(emailLink(message.text)).pathname.split("/").at(-1)!;
       expect(
         await outcome({ intent: "reimposta-password", token, password: "Password-reimpostata-1" }),
       ).toContain("password-reimpostata");
@@ -1370,7 +1399,7 @@ describe("Collegamento e modifica dell'identità", () => {
         response.headers.get("location"),
       );
     const link = (index: number) =>
-      (send.mock.calls[index]![0] as { text: string }).text.split("\n").at(-1)!;
+      emailLink((send.mock.calls[index]![0] as { text: string }).text);
     const follow = (url: string) =>
       handleAuthRequest(new Request(url, { headers: { cookie: user.cookie } }), environment);
     const stored = () =>

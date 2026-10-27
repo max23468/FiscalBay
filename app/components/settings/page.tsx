@@ -60,8 +60,10 @@ export interface SettingsPageData {
     marketing: boolean;
     templates: Record<Language, string>;
   };
-  /** Dati tecnici allegabili alla richiesta di assistenza; null senza il modulo. */
+  /** Dati tecnici allegabili alla richiesta di assistenza; null se non si leggono. */
   diagnostics: DiagnosticsView | null;
+  /** Pagina Novità con voci (D203): Supporto la collega. */
+  whatsNew: boolean;
   /** Notifiche Telegram dello spazio; null senza il servizio o senza uno spazio. */
   telegram: TelegramView | null;
   /** Ordini dell'esportazione e quanti fra loro hanno un dato ancora da sbloccare. */
@@ -258,6 +260,7 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
         support={data.services.support}
         diagnostics={data.diagnostics}
         email={data.account.email}
+        whatsNew={data.whatsNew ? appHref(links, "novita") : undefined}
       />
     ),
   } satisfies Record<SettingsSection, React.ReactNode>;

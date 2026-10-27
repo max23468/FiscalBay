@@ -170,10 +170,10 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     // Ordini e accesso condividono la pagina; il sito pubblico è `site.tsx`.
     if (route.endsWith("/home.tsx")) areas.add("auth");
     if (/stores|store-link/u.test(route)) areas.add("stores");
-    if (/settings/u.test(route)) areas.add("settings");
+    if (/settings|whats-new/u.test(route)) areas.add("settings");
     if (/profile/u.test(route)) areas.add("profile");
     if (/security|admin|auth|sign-in/u.test(route)) areas.add("auth");
-    if (/legal|site|robots/u.test(route)) areas.add("public");
+    if (/legal|site|robots|support/u.test(route)) areas.add("public");
   }
   // Una selezione per area vale soltanto per moduli applicativi risolti fino alle route; senza
   // moduli applicativi bastano le spec modificate.

@@ -97,6 +97,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     ),
     make("/termini", "public", { remote: !prefix }),
     make("/privacy", "public"),
+    make("/supporto", "public", { remote: !prefix }),
     make("/app/negozi/collega", "stores", { redirect: access }),
     make("/app/negozi/collega", "stores", { role: "member" }),
     make(`/app/negozi/collega?ricollega=${testAccount.stores.expiring}`, "stores", {
@@ -142,6 +143,9 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
         remote: !prefix && (suffix === "" || suffix === "/sicurezza"),
       }),
     ),
+    make("/app/novita", "settings", { redirect: access }),
+    // Senza voci nell'elenco versionato la pagina Novità non esiste (D203).
+    make("/app/novita", "settings", { role: "member", status: 404 }),
     make("/admin", "auth", { status: 404 }),
     make("/admin", "auth", { role: "member", status: 404 }),
     make("/admin", "auth", { role: "admin-verify" }),

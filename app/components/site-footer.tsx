@@ -2,11 +2,13 @@ import { cn } from "cn";
 
 import { useCopy } from "~/components/copy-context";
 import { appCopy, supportEmail } from "../app-copy";
+import { supportPath } from "../app-links";
 import { localizedPath } from "../i18n";
 
 /**
- * Footer unico delle pagine pubbliche: home, accesso, Termini e Privacy (D202). L'area
- * autenticata non ne ha uno. `className` adatta la larghezza alla colonna che lo contiene.
+ * Footer unico delle pagine pubbliche: home, accesso, Supporto, Termini e Privacy (D202), con
+ * l'indirizzo di assistenza. L'area autenticata non ne ha uno. `className` adatta la larghezza
+ * alla colonna che lo contiene.
  */
 export function SiteFooter({ className }: { className?: string }) {
   const { language } = useCopy();
@@ -22,6 +24,11 @@ export function SiteFooter({ className }: { className?: string }) {
         <div className="grid gap-1">
           <p>© {new Date().getFullYear()} FiscalBay</p>
           <p>{t.site.independent}</p>
+          <p>
+            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+              {supportEmail}
+            </a>
+          </p>
         </div>
         <nav aria-label={t.legal.navigation} className="flex flex-wrap gap-4">
           <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
@@ -30,7 +37,7 @@ export function SiteFooter({ className }: { className?: string }) {
           <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
             {t.legal.privacyLink}
           </a>
-          <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+          <a href={localizedPath(language, supportPath)} className="underline underline-offset-4">
             {t.site.support}
           </a>
         </nav>

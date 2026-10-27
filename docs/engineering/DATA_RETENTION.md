@@ -73,6 +73,7 @@ scadenza nello stesso batch; il tempo finale impedisce a una risposta iniziata
 prima della scadenza di aggiornare i dati dopo. L'eliminazione delle fonti rimuove
 anche i dettagli e i retry pendenti.
 
+<a id="copie-derivate"></a>
 ## Copie derivate e lavori pendenti
 
 | Superficie attuale | Contenuto e cancellazione |
@@ -89,6 +90,7 @@ anche i dettagli e i retry pendenti.
 | Elenco, dettaglio e conteggi | Filtro server sulla scadenza, applicato prima di limite e risposta; i valori revocati non entrano nella risposta. |
 | Suggerimenti | Calcolati a ogni lettura dai valori correnti di ordini autorizzati e non scaduti, senza cache o copie persistenti; il piano Premium deve essere attivo. Identità stabile conservata soltanto sull'ordine. |
 | Ricerca | Stesso filtro dell'elenco sul termine della fonte e sul grant corrente all'istante della richiesta; il testo cercabile vive sull'ordine e si elimina con esso. |
+| Richieste di assistenza | Testo, argomento e riepilogo diagnostico allowlistato (versione, riferimento interno del negozio, fase ed esito della lettura, codice errore, diritti, correlation ID) vanno soltanto alla casella `supporto@` con Reply-To sull'utente; nessun CF, token, payload, nome eBay o dato di un altro spazio. D1 conserva l'istante di invio per il limite di cinque richieste per account, eliminato dopo 24 ore. La conservazione nella casella iCloud segue la matrice privacy di M7-07. |
 | Export | Generatori puri già presenti, senza file server o download autenticati: il percorso futuro deve rileggere autorizzazione e scadenza prima di generazione e download. |
 
 Un restore deve riapplicare marker, limite di cancellazione e revoche successivi

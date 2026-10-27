@@ -1,4 +1,12 @@
-import { ClipboardList, CreditCard, Settings, ShieldCheck, Store, User } from "lucide-react";
+import {
+  ClipboardList,
+  CreditCard,
+  Megaphone,
+  Settings,
+  ShieldCheck,
+  Store,
+  User,
+} from "lucide-react";
 
 import type { AppCopy } from "../app-copy";
 import { appHref, type AppLinks } from "../app-links";
@@ -34,12 +42,18 @@ export function shellDestinations(links: AppLinks, t: AppCopy): NavDestination[]
   ];
 }
 
-/** Voci dell'account nel menu dell'avatar: profilo e categorie più cercate delle Impostazioni. */
-export function accountMenu(links: AppLinks, t: AppCopy): AccountMenuItem[] {
+/**
+ * Voci dell'account nel menu dell'avatar: profilo, categorie più cercate delle Impostazioni e
+ * Novità, soltanto quando la pagina ha voci (D203).
+ */
+export function accountMenu(links: AppLinks, t: AppCopy, whatsNew = false): AccountMenuItem[] {
   return [
     { href: appHref(links, "impostazioni/profilo"), label: t.shell.profile, Icon: User },
     { href: appHref(links, "impostazioni/sicurezza"), label: t.shell.security, Icon: ShieldCheck },
     { href: appHref(links, "impostazioni/piano"), label: t.shell.planBilling, Icon: CreditCard },
     { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
+    ...(whatsNew
+      ? [{ href: appHref(links, "novita"), label: t.shell.whatsNew, Icon: Megaphone }]
+      : []),
   ];
 }

@@ -84,7 +84,7 @@ export function AccountShell({
           : undefined
       }
       menu={[
-        ...(security ? [accountMenu(links, t)] : []),
+        ...(security ? [accountMenu(links, t, shell?.whatsNew)] : []),
         [
           ...(security ? [] : [changeLanguage]),
           {

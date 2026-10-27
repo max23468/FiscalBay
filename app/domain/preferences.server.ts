@@ -139,6 +139,22 @@ export async function marketingConsent(db: D1Database, userId: string): Promise<
   return row?.granted === 1;
 }
 
+/**
+ * Proposta separata del consenso dopo i primi passi (§14): soltanto a chi in registrazione non
+ * ha aderito e da allora non ha fatto altre scelte. Una risposta alla proposta, o una scelta
+ * nelle Impostazioni, registra una nuova prova e la proposta non torna.
+ */
+export async function marketingProposal(db: D1Database, userId: string): Promise<boolean> {
+  const row = await db
+    .prepare(
+      `SELECT COUNT(*) AS choices, MAX(granted) AS granted FROM marketing_consents
+       WHERE user_id = ?`,
+    )
+    .bind(userId)
+    .first<{ choices: number; granted: number | null }>();
+  return row?.choices === 1 && row.granted === 0;
+}
+
 /** Ogni scelta resta come prova, con la versione del testo e la lingua in cui è stata resa. */
 export async function recordMarketingConsent(
   db: D1Database,

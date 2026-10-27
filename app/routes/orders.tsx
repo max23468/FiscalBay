@@ -28,7 +28,11 @@ import {
 import { checkoutConfigured } from "../domain/checkout.server";
 import { historyWindowDays } from "../domain/history-window.server";
 import { requestOrderRead } from "../domain/order-sync.server";
-import { messageTemplates } from "../domain/preferences.server";
+import {
+  marketingProposal,
+  messageTemplates,
+  recordMarketingConsent,
+} from "../domain/preferences.server";
 import {
   countVisibleOrders,
   listVisibleOrders,
@@ -226,6 +230,8 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
       .sort((a, b) => a.lastSyncAt!.localeCompare(b.lastSyncAt!))
       .at(-1) ?? linked[0];
   const lastSync = latest?.lastSyncAt ?? undefined;
+  // La proposta del consenso arriva a primi passi conclusi, cioè dopo la prima lettura.
+  const marketing = verified && lastSync !== undefined && (await marketingProposal(env.DB, userId));
   const pageData: OrdersPageData = {
     view: facets.total > 0 ? "list" : linked.length > 0 ? "empty" : "no-store",
     ...page,
@@ -265,6 +271,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
       { label: "stepSync", done: lastSync !== undefined },
     ],
     messageTemplates: messageTemplates(preferences),
+    marketingProposal: marketing,
     now: now.toISOString(),
     confirmUnlock,
     // Con l'acquisto disponibile gli sblocchi esauriti rimandano al piano.
@@ -319,6 +326,19 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "unlock-confirmation") {
     await restoreUnlockConfirmation(env.DB, session.user.id);
     return { ok: true } satisfies ActionResult;
+  }
+  if (intent === "marketing") {
+    const value = form.get("value");
+    if (value !== "true" && value !== "false")
+      return data<ActionResult>({ ok: false, notice: t.settings.saveFailed }, { status: 400 });
+    await recordMarketingConsent(env.DB, session.user.id, value === "true", language);
+    return {
+      ok: true,
+      notice:
+        value === "true"
+          ? t.orders.marketingProposal.accepted
+          : t.orders.marketingProposal.declined,
+    } satisfies ActionResult;
   }
   if (intent === "start-trial") {
     const started = await startTrial(env.DB, session.user.id);

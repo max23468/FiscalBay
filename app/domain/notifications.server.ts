@@ -2,6 +2,7 @@ import { appCopy } from "../app-copy";
 import type { Language } from "../i18n";
 import { type NotificationView } from "../view-models";
 import { formatDate } from "../format";
+import { whatsNewNotifications } from "../whats-new.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
 import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
 
@@ -10,7 +11,8 @@ import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
  * campanella. Oggi le fonti sono i collegamenti dei negozi scaduti o in scadenza, le letture
  * che non riescono, di un negozio oppure di tutti quando eBay non risponde, e la pausa per
  * inattività del Free; ogni notifica ha un identificativo stabile per problema, così
- * la lettura vale finché il problema resta lo stesso.
+ * la lettura vale finché il problema resta lo stesso. Si aggiunge una voce per ogni rilascio
+ * con Novità, identificata dalla sua versione.
  */
 export async function listNotifications(
   db: D1Database,
@@ -95,6 +97,7 @@ export async function listNotifications(
   const items = [
     ...stores.flatMap(reminder),
     ...[...reads, ...inactivity].filter((item) => Date.parse(item.at) >= since),
+    ...whatsNewNotifications(language, now),
   ];
   if (items.length === 0) return [];
   const { results } = await db

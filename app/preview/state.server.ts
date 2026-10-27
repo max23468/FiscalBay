@@ -27,6 +27,8 @@ export interface PreviewState {
   trialStarted?: boolean;
   /** Letture in pausa per inattività riprese per finta nello scenario corrente. */
   resumed?: boolean;
+  /** Risposta alla proposta del consenso: come nell'area reale, non torna. */
+  marketingAnswered?: boolean;
 }
 
 /** L'anteprima esiste solo negli ambienti non Production. */
@@ -51,6 +53,7 @@ export async function readPreviewState(request: Request): Promise<PreviewState> 
       confirmUnlock: !("confirmUnlock" in value && value.confirmUnlock === false),
       trialStarted: "trialStarted" in value && value.trialStarted === true,
       resumed: "resumed" in value && value.resumed === true,
+      marketingAnswered: "marketingAnswered" in value && value.marketingAnswered === true,
       retried:
         "retried" in value && Array.isArray(value.retried)
           ? value.retried.filter((id): id is string => typeof id === "string").slice(0, 50)
@@ -189,6 +192,26 @@ export async function simulateAction(request: Request, form: FormData) {
       { ok: true, notice: t.stores.done["store-resume"] },
       { headers: { "Set-Cookie": await writePreviewState({ ...state, resumed: true }) } },
     );
+  // Proposta del consenso: la risposta ha l'esito dell'area reale e la proposta non torna.
+  if (intent === "marketing") {
+    const value = form.get("value");
+    if (value !== "true" && value !== "false")
+      return data<ActionResult>({ ok: false, notice: t.settings.saveFailed }, { status: 400 });
+    return data<ActionResult>(
+      {
+        ok: true,
+        notice:
+          value === "true"
+            ? t.orders.marketingProposal.accepted
+            : t.orders.marketingProposal.declined,
+      },
+      {
+        headers: {
+          "Set-Cookie": await writePreviewState({ ...state, marketingAnswered: true }),
+        },
+      },
+    );
+  }
   if (intent === "save" && scenario.saveFailsOnce && !state.saveFailed) {
     return data<ActionResult>(
       { ok: false },
