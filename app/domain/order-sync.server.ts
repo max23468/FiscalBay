@@ -217,12 +217,13 @@ export function isSyncMessage(body: unknown): body is z.infer<typeof syncMessage
 
 /**
  * «Sincronizza» o «Reimporta» dalla schermata Negozi, solo su un negozio attivo dello spazio
- * dell'utente. La reimportazione riparte dalla finestra dello storico del piano soltanto quando
- * l'importazione precedente è conclusa; poi entrambe chiedono una lettura del negozio.
+ * dell'utente, oppure dalla console amministrativa con `userId` null. La reimportazione riparte
+ * dalla finestra dello storico del piano soltanto quando l'importazione precedente è conclusa;
+ * poi entrambe chiedono una lettura del negozio.
  */
 export async function requestStoreSync(
   env: Env,
-  userId: string,
+  userId: string | null,
   storeId: string,
   options: { reimport?: boolean } = {},
   now = new Date(),
@@ -232,11 +233,12 @@ export async function requestStoreSync(
     `SELECT c.granted_at, s.ebay_environment, ss.store_id AS started, ss.history_done_at,
             ${servedSql("s.workspace_id", "?3")} AS served
        FROM ebay_stores s
-       JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
        LEFT JOIN ebay_store_credentials c
          ON c.store_id = s.id AND ${renewableConsent("c", "?3")}
        LEFT JOIN sync_state ss ON ss.store_id = s.id
-      WHERE wm.user_id = ?1 AND s.id = ?2 AND s.data_deleted_at IS NULL`,
+      WHERE (?1 IS NULL OR s.workspace_id IN (
+          SELECT workspace_id FROM workspace_members WHERE user_id = ?1))
+        AND s.id = ?2 AND s.data_deleted_at IS NULL`,
   )
     .bind(userId, storeId, at)
     .first<{

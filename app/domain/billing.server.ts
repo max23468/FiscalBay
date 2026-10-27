@@ -723,3 +723,48 @@ export async function stopRenewals(
     return false;
   }
 }
+
+export type SupportErasure = "done" | "already" | "not_deleted" | "not_found" | "unavailable";
+
+/**
+ * Cancellazione tramite Link segnalata all'assistenza fuori dal webhook (§6.6): vale per un
+ * cliente dello spazio indicato e soltanto se Stripe lo conferma ancora cancellato. Si registra
+ * con autore e motivo, poi gli abbonamenti ancora aperti in locale si rileggono come dopo il
+ * webhook. Ripetuta trova la cancellazione già registrata.
+ */
+export async function recordSupportErasure(
+  env: Env,
+  input: { workspaceId: string; customerId: string; actor: string; reason: string },
+  fetcher: typeof fetch = fetch,
+  now = new Date(),
+): Promise<SupportErasure> {
+  const customer = await env.DB.prepare(`SELECT EXISTS (SELECT 1 FROM stripe_customer_erasures
+      WHERE customer_id = ?3) AS erased
+    WHERE EXISTS (SELECT 1 FROM stripe_subscriptions WHERE workspace_id = ?1
+        AND environment = ?2 AND customer_id = ?3)
+      OR EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1 AND customer_id = ?3)`)
+    .bind(input.workspaceId, stripeEnvironment(env), input.customerId)
+    .first<{ erased: number }>();
+  if (!customer) return "not_found";
+  if (customer.erased) return "already";
+  const key = stripeSecretKey(env);
+  if (!key) return "unavailable";
+  try {
+    const stripe = await createBoundedStripeClient(key, fetcher);
+    const open = await recordErasure(env, stripe, input.customerId, now, {
+      actor: input.actor,
+      reason: input.reason,
+    });
+    const recorded = await env.DB.prepare(
+      "SELECT 1 FROM stripe_customer_erasures WHERE customer_id = ?",
+    )
+      .bind(input.customerId)
+      .first();
+    if (!recorded) return "not_deleted";
+    await inSequence(open, (subscription) => reconcileSubscription(env, stripe, subscription, now));
+    return "done";
+  } catch (error) {
+    logFailure({ error, operation: "billing" });
+    return "unavailable";
+  }
+}

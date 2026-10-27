@@ -124,6 +124,40 @@ export async function dispatchTasks(env: Env, now: Date): Promise<ScheduledTask[
   return claimed.map(({ task }) => task);
 }
 
+/** Compiti periodici con il loro periodo, per la console. */
+export const scheduledTasks = Object.fromEntries(
+  Object.entries(tasks).map(([task, { period }]) => [task, period]),
+) as Record<ScheduledTask, number>;
+
+export function isScheduledTask(value: string): value is ScheduledTask {
+  return Object.hasOwn(tasks, value);
+}
+
+/**
+ * Riaccoda dalla console un compito non preso da un consumer, senza attendere l'ora di
+ * `staleMilliseconds`: il turno non concluso si riaccoda, quello concluso di un periodo passato
+ * cede il posto al turno corrente, come farebbe il cron. Il turno corrente già concluso o in
+ * esecuzione resta com'è.
+ */
+export async function requeueTask(env: Env, task: ScheduledTask, now = new Date()) {
+  const at = now.toISOString();
+  const claimed = await env.DB.prepare(
+    `INSERT INTO scheduled_tasks (task, slot, queued_at) VALUES (?1, ?2, ?3)
+     ON CONFLICT(task) DO UPDATE SET
+       slot = MAX(scheduled_tasks.slot, excluded.slot),
+       done_at = CASE WHEN scheduled_tasks.slot < excluded.slot THEN NULL ELSE scheduled_tasks.done_at END,
+       queued_at = excluded.queued_at, lease = NULL, locked_until = NULL
+     WHERE (scheduled_tasks.done_at IS NULL OR scheduled_tasks.slot < excluded.slot)
+       AND (scheduled_tasks.locked_until IS NULL OR scheduled_tasks.locked_until <= ?3)
+     RETURNING task, slot`,
+  )
+    .bind(task, taskSlot(task, now), at)
+    .first<{ task: ScheduledTask; slot: string }>();
+  if (!claimed) return "busy";
+  await env.WORK_QUEUE.send(claimed);
+  return "queued";
+}
+
 /**
  * Esegue un compito dalla coda. Una consegna ripetuta dopo la conclusione, o di un turno già
  * superato da un periodo successivo, non ripete il lavoro; un errore riprova con backoff.

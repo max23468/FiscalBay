@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyStripeEvent,
+  recordSupportErasure,
   openBillingPortal,
   reconcileBilling,
   stopRenewals,
@@ -342,6 +343,34 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
       "GET /v1/checkout/sessions",
     ]);
     expect(await entitlements()).toEqual([]);
+  });
+
+  it("registra dall'assistenza la cancellazione tramite Link soltanto se Stripe la conferma", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const stripe = stripeAccount();
+    stripe.state.invoices = [firstInvoice];
+    stripe.state.charges = [paid("in_first")];
+    await event(stripe, "invoice.paid", "in_first");
+    const record = (customerId = "cus_test", workspaceId = "w-a") =>
+      recordSupportErasure(
+        env,
+        { workspaceId, customerId, actor: "admin", reason: "Richiesta tramite Link" },
+        stripe.fetcher,
+        at(now),
+      );
+    // Soltanto un cliente dello spazio indicato, e soltanto se Stripe lo dà per cancellato.
+    expect(await record("cus_test", "w-altro")).toBe("not_found");
+    expect(await record("cus_altro")).toBe("not_found");
+    expect(await record()).toBe("not_deleted");
+    stripe.state.subscription.status = "canceled";
+    stripe.state.deletedCustomers = ["cus_test"];
+    expect(await record()).toBe("done");
+    expect(
+      await env.DB.prepare(
+        "SELECT source, recorded_by, reason FROM stripe_customer_erasures",
+      ).first(),
+    ).toEqual({ source: "support", recorded_by: "admin", reason: "Richiesta tramite Link" });
+    expect(await record()).toBe("already");
   });
 
   it("dopo la cancellazione su Link conserva coperture e spazio e non usa più il cliente", async () => {

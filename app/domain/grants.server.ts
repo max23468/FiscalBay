@@ -188,16 +188,42 @@ export async function setUnlockConfirmation(db: D1Database, userId: string, conf
   await skipConfirmationStatement(db, userId).run();
 }
 
-/** Sblocchi di un ciclo Free fuori dalle promozioni. */
+/** Sblocchi di un ciclo Free fuori dalle promozioni, finché la console non ne fissa un'altra. */
 export const baseFreeQuota = 5;
+
+/**
+ * Quota base all'istante `at`, espressione SQL: l'ultima modifica della console già in vigore,
+ * altrimenti quella del codice. Una modifica vale soltanto da istanti successivi alla sua
+ * registrazione, quindi non cambia un ciclo già iniziato.
+ */
+function baseQuotaSql(at: string) {
+  return `COALESCE((SELECT q.quota FROM free_quota_changes q
+    WHERE julianday(q.effective_at) <= julianday(${at})
+    ORDER BY julianday(q.effective_at) DESC, q.id DESC LIMIT 1), ${baseFreeQuota})`;
+}
+
+/** Quota base in vigore e prossima modifica programmata, per il sito e la console. */
+export async function freeQuotaSettings(db: D1Database, now = new Date()) {
+  const row = await db
+    .prepare(`SELECT ${baseQuotaSql("?1")} AS quota,
+      (SELECT json_object('quota', quota, 'effectiveAt', effective_at) FROM free_quota_changes
+        WHERE julianday(effective_at) > julianday(?1)
+        ORDER BY julianday(effective_at), id LIMIT 1) AS next`)
+    .bind(now.toISOString())
+    .first<{ quota: number; next: string | null }>();
+  return {
+    quota: row!.quota,
+    next: row!.next ? (JSON.parse(row!.next) as { quota: number; effectiveAt: string }) : null,
+  };
+}
 
 const cycleLength = 7 * dayMilliseconds;
 
 /**
  * Quota di un ciclo che inizia all'istante `at`, espressione SQL: la promozione in corso a
- * quell'istante, altrimenti la base. Vale la promozione come era configurata a quell'istante,
- * cioè la versione precedente alla prima modifica successiva: una fine anticipata non toglie la
- * quota a un ciclo già iniziato, anche se la sua riga si crea dopo la modifica.
+ * quell'istante, altrimenti la base in vigore allora. Vale la promozione come era configurata a
+ * quell'istante, cioè la versione precedente alla prima modifica successiva: una fine anticipata
+ * non toglie la quota a un ciclo già iniziato, anche se la sua riga si crea dopo la modifica.
  */
 function cycleQuotaSql(at: string) {
   const previous = (column: string) => `(SELECT c.previous_${column} FROM free_promotion_changes c
@@ -207,7 +233,7 @@ function cycleQuotaSql(at: string) {
       AS starts_at, COALESCE(${previous("ends_at")}, p.ends_at) AS ends_at,
       COALESCE(${previous("quota")}, p.quota) AS quota FROM free_promotions p) v
     WHERE julianday(v.starts_at) <= julianday(${at}) AND julianday(${at}) < julianday(v.ends_at)),
-    ${baseFreeQuota})`;
+    ${baseQuotaSql(at)})`;
 }
 
 /** Promozione globale del Free in corso, con la quota e la fine da annunciare. */

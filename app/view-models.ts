@@ -270,10 +270,10 @@ export interface StoreView {
   sandbox?: boolean;
   connection: ConnectionState;
   /**
-   * Pausa manuale, per piano o per inattività del Free: soltanto quella per piano non lascia
-   * consultare i dati.
+   * Pausa manuale, per piano, per inattività del Free o dell'assistenza: soltanto quella per
+   * piano non lascia consultare i dati, soltanto l'assistenza toglie la propria.
    */
-  pauseReason?: "manual" | "plan" | "inactivity";
+  pauseReason?: "manual" | "plan" | "inactivity" | "admin";
   issue?: "reconnect" | "permissions" | "unverifiable";
   syncing: boolean;
   lastSyncAt: string | null;

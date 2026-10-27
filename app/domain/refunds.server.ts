@@ -148,7 +148,13 @@ export async function reversalIntent(stripe: Stripe, topic: string, objectId: st
  * smette di usarlo, conserva le coperture attribuite e lo spazio e lo segnala all'assistenza.
  * Restituisce gli abbonamenti ancora aperti in locale da rileggere.
  */
-export async function recordErasure(env: Env, stripe: Stripe, customerId: string, now: Date) {
+export async function recordErasure(
+  env: Env,
+  stripe: Stripe,
+  customerId: string,
+  now: Date,
+  support?: { actor: string; reason: string },
+) {
   let customer: Stripe.Customer | Stripe.DeletedCustomer | null = null;
   try {
     customer = await stripeCall(() => stripe.customers.retrieve(customerId));
@@ -159,12 +165,19 @@ export async function recordErasure(env: Env, stripe: Stripe, customerId: string
   if (customer && !customer.deleted) return [];
   const environment = stripeEnvironment(env);
   const recorded = await env.DB.prepare(`INSERT INTO stripe_customer_erasures (customer_id,
-      environment, source, received_at)
-    SELECT ?1, ?2, 'webhook', ?3
+      environment, source, received_at, recorded_by, reason)
+    SELECT ?1, ?2, ?4, ?3, ?5, ?6
     WHERE EXISTS (SELECT 1 FROM stripe_subscriptions WHERE customer_id = ?1 AND environment = ?2)
       OR EXISTS (SELECT 1 FROM lifetime_allocations WHERE customer_id = ?1)
     ON CONFLICT DO NOTHING`)
-    .bind(customerId, environment, now.toISOString())
+    .bind(
+      customerId,
+      environment,
+      now.toISOString(),
+      support ? "support" : "webhook",
+      support?.actor ?? null,
+      support?.reason ?? null,
+    )
     .run();
   if (recorded.meta.changes) signal("financial_erasure");
   const { results } = await env.DB.prepare(`SELECT id FROM stripe_subscriptions

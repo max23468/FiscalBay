@@ -148,5 +148,13 @@ async function linkStore(
       identity.userId,
     )
     .first<{ id: string }>();
-  return store?.id ?? null;
+  if (!store) return null;
+  // Un negozio trasferito arriva da un altro spazio: il primo collegamento fissa qui i cicli.
+  await db
+    .prepare(
+      "UPDATE workspaces SET free_cycle_anchor_at = ? WHERE id = ? AND free_cycle_anchor_at IS NULL",
+    )
+    .bind(now, workspaceId)
+    .run();
+  return store.id;
 }

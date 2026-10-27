@@ -55,6 +55,7 @@ export function logFailure(input: {
   operation:
     | "route"
     | "render"
+    | "admin"
     | "sign_in"
     | "store_link"
     | "checkout"

@@ -39,6 +39,7 @@ export const scenarioIds = [
   "aggiornamento",
   "ebay-non-disponibile",
   "negozio-scaduto",
+  "negozio-sospeso",
   "dati-discordanti",
   "primo-accesso",
   "prima-sincronizzazione",
@@ -188,6 +189,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "Problem with one store",
       focus:
         "Premium with four stores: one whose update failed, one to reconnect, one with incomplete authorisation, one that cannot be verified.",
+    },
+  },
+  "negozio-sospeso": {
+    it: {
+      name: "Negozio in pausa dall’assistenza",
+      focus:
+        "L’assistenza ha messo in pausa le letture di un negozio: gli ordini restano consultabili e soltanto l’assistenza toglie la pausa.",
+    },
+    en: {
+      name: "Store paused by support",
+      focus:
+        "Support has paused a store's reads: orders remain available and only support can lift the pause.",
     },
   },
   "dati-discordanti": {
@@ -1513,6 +1526,26 @@ export function loadScenario(
         }),
       };
       break;
+    case "negozio-sospeso": {
+      // Pausa dell'assistenza, come dopo una revisione antiabuso: niente letture né ripresa.
+      const pausedAt = minutesAgo(2_880);
+      scenario = {
+        ...common,
+        account: account(),
+        stores: [
+          storeView("vintage", {
+            connection: "paused",
+            pauseReason: "admin",
+            lastSyncAt: pausedAt,
+            recent: [{ at: pausedAt, ok: true, newOrders: 0 }],
+          }),
+        ],
+        seeds: freeSeeds,
+        premium: false,
+        diagnostics: diagnostics(),
+      };
+      break;
+    }
     case "negozio-scaduto": {
       const troubled = [
         // Consenso ancora valido che scade fra dodici giorni: il pannello invita a ricollegare.

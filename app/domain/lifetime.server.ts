@@ -517,6 +517,9 @@ export type LifetimeGrant = "done" | "owned" | "pending" | "sold-out" | "not_fou
  * Lifetime in omaggio, dalla console amministrativa: consuma uno dei venti posti, registra
  * autore e motivo e chiude l'abbonamento dello spazio come un acquisto. Posto e diritto sono
  * un unico commit; uno spazio con una prenotazione aperta aspetta l'esito del suo checkout.
+ * Uno spazio che ha già un posto con il lifetime revocato, per rimborso o disputa persa, lo
+ * riceve di nuovo sullo stesso posto, senza consumarne un altro: il posto resta della vendita
+ * originale e il nuovo diritto porta autore e motivo dell'omaggio.
  */
 export async function grantLifetime(
   env: Env,
@@ -552,8 +555,13 @@ export async function grantLifetime(
       .bind(input.workspaceId)
       .first<{ id: string; status: string | null; taken: number }>();
     if (!row) return "not_found";
-    if (row.status) return row.status === "active" ? "owned" : "pending";
-    return "sold-out";
+    if (row.status !== "active") return row.status ? "pending" : "sold-out";
+    const regranted = await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id,
+        source, starts_at, granted_by, grant_reason)
+      SELECT ?1, ?2, 'lifetime', ?3, ?4, ?5 WHERE NOT ${lifetimeInForceSql("?2")}`)
+      .bind(crypto.randomUUID(), input.workspaceId, at, input.author, input.reason)
+      .run();
+    if (!regranted.meta.changes) return "owned";
   }
   if (stripe)
     await endReplacedSubscriptions(env, stripe, input.workspaceId, now).catch((error: unknown) =>
