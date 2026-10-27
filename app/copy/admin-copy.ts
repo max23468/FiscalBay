@@ -108,6 +108,9 @@ const it = {
     revenueNote: (total: string) => `${total} in totale`,
     seats: "Posti lifetime residui",
     seatsNote: (total: number) => `su ${total}`,
+    jobs: "Lavori periodici regolari",
+    jobsNote: (stalled: number) =>
+      stalled === 0 ? "Nessuno fermo" : stalled === 1 ? "1 fermo" : `${stalled} fermi`,
     recent: "Ultime operazioni",
     openAudit: "Apri il registro",
   },
@@ -579,6 +582,9 @@ const en: AdminCopy = {
     revenueNote: (total: string) => `${total} in total`,
     seats: "Lifetime seats left",
     seatsNote: (total: number) => `of ${total}`,
+    jobs: "Periodic jobs running",
+    jobsNote: (stalled: number) =>
+      stalled === 0 ? "None stalled" : stalled === 1 ? "1 stalled" : `${stalled} stalled`,
     recent: "Latest operations",
     openAudit: "Open the log",
   },

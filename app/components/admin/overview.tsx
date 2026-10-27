@@ -150,7 +150,7 @@ export function Overview({ data }: { data: OverviewData }) {
         </h2>
         {anomalies.length > 0 ? <AnomalyList anomalies={anomalies} /> : null}
       </section>
-      <StatGrid>
+      <StatGrid wide={3}>
         <Stat
           label={s.accounts}
           value={summary.users}
@@ -186,6 +186,13 @@ export function Overview({ data }: { data: OverviewData }) {
           value={data.seats.available}
           note={s.seatsNote(data.seats.total)}
           href={href("commerciale")}
+        />
+        <Stat
+          label={s.jobs}
+          value={`${data.tasks.regular}/${data.tasks.total}`}
+          note={s.jobsNote(data.tasks.total - data.tasks.regular)}
+          tone={data.tasks.regular < data.tasks.total ? "warning" : undefined}
+          href={href("lavori")}
         />
       </StatGrid>
       <Panel title={s.recent}>
