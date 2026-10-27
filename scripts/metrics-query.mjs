@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
  * Query riproducibili delle metriche tecniche su Workers Analytics Engine, con le stesse query
- * della console (`app/metrics-queries.ts`), e prova del campione controllato: invia al report
- * del browser un numero noto di misure sintetiche e confronta conteggio e quantili stimati con
- * quelli attesi. Le query passano dal profilo della CLI `cf`, quindi nessun token passa da qui.
+ * della console (`app/metrics-queries.ts`), e prova del campione controllato: invia al test un
+ * numero noto di richieste anonime riconoscibili e confronta il conteggio stimato, pesato con
+ * `_sample_interval`, con quello atteso. Le query passano dal profilo della CLI `cf`, quindi
+ * nessun token passa da qui.
  *
  * Uso: node scripts/metrics-query.mjs <invocations|phases|pages> [--mode live] [--hours 24]
  *      node scripts/metrics-query.mjs sample [--count 40] [--wait 120]
- * Il campione si invia soltanto al test: la Production non riceve misure sintetiche.
+ * Il campione si invia soltanto al test: la Production non riceve richieste sintetiche.
  */
 import { execFileSync } from "node:child_process";
 import path from "node:path";
@@ -18,8 +19,11 @@ import { parseArgs } from "node:util";
 import { maxWindowHours, metricQueries, metricSql } from "../app/metrics-queries.ts";
 import config from "../cloudflare.config.ts";
 
-/** Pronta delle misure sintetiche: oltre ogni caricamento reale, entro il massimo accettato. */
-export const sampleReadyBase = 119_000;
+/**
+ * Richiesta del campione: `HEAD` sul report del browser, che risponde 405 senza effetti. Classe
+ * `api`, metodo `HEAD` ed esito `4xx` non vengono da nessuna pagina o integrazione.
+ */
+export const samplePath = "/api/v1/page-timing";
 
 /** Dataset e origine dell'ambiente, letti da `cloudflare.config.ts` come nella build. */
 export function targetOf(mode) {
@@ -27,47 +31,35 @@ export function targetOf(mode) {
   return { dataset: env.METRICS_DATASET.value, origin: env.APP_ORIGIN.value };
 }
 
-/** Report sintetici: TTFB da 1 a `count` ms e pronta riconoscibile, pagina Negozi. */
-export function sampleReports(count) {
-  return Array.from({ length: count }, (_, index) => ({
-    page: "stores",
-    ttfb: index + 1,
-    ready: sampleReadyBase + index + 1,
-    server: {},
-  }));
-}
-
 /** Istante nel formato della SQL API, al secondo. */
 const sqlTime = (date) => date.toISOString().slice(0, 19).replace("T", " ");
 
 /**
- * Query del campione: soltanto i report della finestra di invio con la pronta sintetica, con
- * conteggio pesato, righe conservate e mediana pesata del TTFB.
+ * Query del campione: soltanto le invocazioni della finestra di invio con classe, metodo ed esito
+ * del campione, con conteggio pesato e righe conservate.
  */
 export function sampleSql(dataset, from, to) {
   if (!/^[a-z][a-z0-9_]{0,62}$/u.test(dataset)) throw new Error("INVALID_DATASET");
   return `SELECT
-  SUM(_sample_interval) AS reports,
-  count() AS rows,
-  quantileExactWeighted(0.5)(double1, _sample_interval) AS ttfb_p50_ms
+  SUM(_sample_interval * double1) AS requests,
+  count() AS rows
 FROM ${dataset}
-WHERE blob1 = 'page' AND blob3 = 'stores' AND double4 > ${sampleReadyBase}
+WHERE blob1 = 'invocation' AND blob2 = 'http' AND blob3 = 'api' AND blob4 = 'HEAD'
+  AND blob5 = '4xx'
   AND timestamp >= toDateTime('${sqlTime(from)}') AND timestamp <= toDateTime('${sqlTime(to)}')
 FORMAT JSON`;
 }
 
-/** Confronto con l'atteso: conteggio esatto quando nulla è campionato, mediana entro un report. */
+/** Confronto con l'atteso: il conteggio stimato coincide con le richieste inviate. */
 export function compareSample(count, row) {
-  const reports = Number(row?.reports ?? 0);
+  const requests = Number(row?.requests ?? 0);
   const rows = Number(row?.rows ?? 0);
-  const median = Number(row?.ttfb_p50_ms ?? Number.NaN);
-  const expectedMedian = Math.ceil(count / 2);
   return {
-    expected: { reports: count, ttfbP50: expectedMedian },
-    observed: { reports, rows, ttfbP50: median },
-    // Campionato se le righe conservate sono meno dei report stimati.
-    sampled: rows < reports,
-    ok: reports === count && Math.abs(median - expectedMedian) <= 1,
+    expected: { requests: count },
+    observed: { requests, rows },
+    // Campionato se le righe conservate sono meno delle richieste stimate.
+    sampled: rows < requests,
+    ok: requests === count,
   };
 }
 
@@ -84,13 +76,9 @@ function query(sql) {
 }
 
 async function sendSample(origin, count) {
-  for (const report of sampleReports(count)) {
-    const response = await fetch(`${origin}/api/v1/page-timing`, {
-      method: "POST",
-      headers: { origin, "content-type": "application/json" },
-      body: JSON.stringify(report),
-    });
-    if (response.status !== 204) throw new Error(`Report rifiutato: ${response.status}`);
+  for (let index = 0; index < count; index++) {
+    const response = await fetch(`${origin}${samplePath}`, { method: "HEAD" });
+    if (response.status !== 405) throw new Error(`Risposta inattesa: ${response.status}`);
   }
 }
 

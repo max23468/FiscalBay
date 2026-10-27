@@ -10,7 +10,7 @@ import { formatDate } from "../app/format";
 import { loader as loadAccess } from "../app/routes/sign-in";
 
 import { issueTimingTicket } from "../app/page-timing.server";
-import { action as pageTiming } from "../app/routes/page-timing";
+import { loader as pageTimingRead, action as pageTiming } from "../app/routes/page-timing";
 import { invocationPoint, writePoints } from "../app/metrics.server";
 import {
   describeRequest,
@@ -416,6 +416,19 @@ describe("metriche tecniche su Analytics Engine", () => {
       ["phase", "http", "auth", "session", "ok", ""],
     ]);
     expect(JSON.stringify(points)).not.toContain("NON-ESPORRE");
+
+    // La richiesta del campione controllato (`scripts/metrics-query.mjs sample`): HEAD sul
+    // report del browser, 405 senza effetti, con classe, metodo ed esito che nessuna pagina usa.
+    points.length = 0;
+    const sample = await withPhaseTimings(
+      new Request("https://test.fiscalbay.it/api/v1/page-timing", { method: "HEAD" }),
+      async () => pageTimingRead(),
+      { dataset },
+    );
+    expect(sample.status).toBe(405);
+    expect(points.map((point) => point.blobs)).toEqual([
+      ["invocation", "http", "api", "HEAD", "4xx", ""],
+    ]);
   });
 
   it("misura coda e cron con esito, numero di messaggi e fasi attraversate", async () => {
