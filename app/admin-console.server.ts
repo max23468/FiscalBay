@@ -144,11 +144,12 @@ export async function loadSection(section: AdminSection, item: string | undefine
   const offset = Math.max(0, Number(url.searchParams.get("da")) || 0);
   switch (section) {
     case "panoramica": {
-      const [anomalies, summary, commerce, recent] = await Promise.all([
+      const [anomalies, summary, commerce, recent, tasks] = await Promise.all([
         listAnomalies(env.DB, now),
         consoleSummary(env.DB, now),
         commerceOverview(env, now),
         listAudit(env.DB, { limit: 5, changes: true }),
+        taskStates(env.DB, now),
       ]);
       return {
         section,
@@ -156,6 +157,10 @@ export async function loadSection(section: AdminSection, item: string | undefine
         summary,
         revenue: { last30: commerce.revenue.last30, total: commerce.revenue.total },
         seats: { available: commerce.seats.available, total: commerce.seats.total },
+        tasks: {
+          regular: tasks.filter((task) => !task.stalled).length,
+          total: tasks.length,
+        },
         recent,
       } as const;
     }

@@ -286,7 +286,14 @@ export function Stat({
   );
 }
 
-/** Griglia dei riquadri numerici: due colonne su mobile, quattro su schermi ampi. */
-export function StatGrid({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{children}</div>;
+/**
+ * Griglia dei riquadri numerici: due colonne su mobile; su schermi ampi quattro, oppure tre per
+ * sei riquadri, così ogni riga resta piena.
+ */
+export function StatGrid({ children, wide = 4 }: { children: ReactNode; wide?: 3 | 4 }) {
+  return (
+    <div className={cn("grid grid-cols-2 gap-3", wide === 3 ? "lg:grid-cols-3" : "lg:grid-cols-4")}>
+      {children}
+    </div>
+  );
 }

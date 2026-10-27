@@ -197,6 +197,8 @@ describe("accesso alla console", () => {
     expect(await page(cookie, "/admin/spazi/w-a", { sezione: "spazi", voce: "w-a" })).toMatchObject(
       { section: "spazi" },
     );
+    const overview = await routeData(adminLoader, "/admin", { cookie, params: {} });
+    expect(overview.page).toMatchObject({ tasks: { total: 6 } });
     const quotas = await routeData(adminLoader, "/admin/quote", {
       cookie,
       params: { sezione: "quote" },
@@ -816,6 +818,13 @@ describe("quote delle API eBay", () => {
     // Il consumo è della quota condivisa, non delle sole chiamate della voce.
     expect(getOrders).toMatchObject({ share: 0.76, over: true, daily: true, used: true });
     expect(getOrders.rate).toMatchObject({ used: 3000, consumed: 3800 });
+    // Prima le chiamate di FiscalBay nell'ordine di importanza, poi le altre.
+    expect(production!.rows.map((row) => row.resource)).toEqual([
+      "GetOrders",
+      "GetItem",
+      "sell.fulfillment.refund",
+      "AddItem",
+    ]);
     expect(production!.rows.find((row) => row.resource === "AddItem")).toMatchObject({
       used: false,
     });
