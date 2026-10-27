@@ -891,8 +891,6 @@ export const it = {
       "L’area amministrativa richiede l’accesso con una passkey di questo account e la verifica sul dispositivo: impronta, volto o PIN. Password, Google ed eBay non bastano.",
     verifyFailed:
       "Conferma non riuscita. Usa una passkey di questo account con la verifica del dispositivo.",
-    granted: (when: string) =>
-      `Accesso confermato con passkey: ${when}. Dopo 12 ore serve una nuova conferma.`,
     back: "Torna a FiscalBay",
   },
   authError: {

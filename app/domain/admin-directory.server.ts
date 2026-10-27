@@ -245,6 +245,7 @@ export type StoreRow = {
   id: string;
   label: string;
   workspaceId: string;
+  ownerEmail: string | null;
   environment: string;
   linkedAt: string;
   disconnected: boolean;
@@ -269,6 +270,9 @@ export async function listAllStores(
   const { results } = await db
     .prepare(`SELECT * FROM (SELECT s.id, ${storeLabelSql("s")} AS label,
         s.workspace_id AS workspaceId, s.ebay_environment AS environment, s.linked_at AS linkedAt,
+        (SELECT u.email FROM workspace_members wm JOIN "user" u ON u.id = wm.user_id
+          WHERE wm.workspace_id = s.workspace_id ORDER BY wm.role = 'owner' DESC LIMIT 1)
+          AS ownerEmail,
         s.disconnected_at IS NOT NULL AS disconnected, s.data_deleted_at IS NOT NULL AS removed,
         CASE WHEN c.store_id IS NULL THEN 'none' WHEN c.rejected_at IS NOT NULL THEN 'rejected'
           WHEN c.refresh_expires_at <= ?1 THEN 'expired' ELSE 'valid' END AS consent,
@@ -312,5 +316,59 @@ export async function listAllStores(
       pauses: row.pauses?.split(",").sort() ?? [],
     })),
     more: results.length > pageSize,
+  };
+}
+
+export type ConsoleSummary = {
+  users: number;
+  waitlisted: number;
+  coverage: { premium: number; lifetime: number; trial: number; admin: number };
+  stores: { active: number; problems: number };
+};
+
+/**
+ * Numeri chiave della panoramica: account, spazi coperti per origine e negozi che leggono,
+ * con quelli che hanno un problema delle letture o del collegamento.
+ */
+export async function consoleSummary(db: D1Database, now = new Date()): Promise<ConsoleSummary> {
+  const at = now.toISOString();
+  const [accounts, coverage, stores] = await db.batch<Record<string, number | string | null>>([
+    db.prepare(`SELECT (SELECT COUNT(*) FROM "user") AS users,
+        (SELECT COUNT(*) FROM user_profiles WHERE waitlisted_at IS NOT NULL) AS waitlisted`),
+    db
+      .prepare(`SELECT coverage, COUNT(*) AS count FROM (
+          SELECT ${activeCoverageSql("source", "w.id", "?1")} AS coverage FROM workspaces w)
+        WHERE coverage IS NOT NULL GROUP BY coverage`)
+      .bind(at),
+    db
+      .prepare(`SELECT
+          SUM(s.disconnected_at IS NULL AND c.rejected_at IS NULL AND c.refresh_expires_at > ?1
+            AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id)) AS active,
+          SUM(s.disconnected_at IS NULL AND (c.store_id IS NULL OR c.rejected_at IS NOT NULL
+              OR c.refresh_expires_at <= ?1
+              OR 2 = (SELECT COUNT(*) FROM (SELECT ok FROM sync_runs r WHERE r.store_id = s.id
+                ORDER BY started_at DESC, id DESC LIMIT 2) WHERE ok = 0))) AS problems
+        FROM ebay_stores s LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
+        WHERE s.data_deleted_at IS NULL`)
+      .bind(at),
+  ]);
+  const totals = accounts!.results[0] as { users: number; waitlisted: number };
+  const byCoverage = new Map(
+    (coverage!.results as { coverage: string; count: number }[]).map((row) => [
+      row.coverage,
+      row.count,
+    ]),
+  );
+  const storeTotals = stores!.results[0] as { active: number | null; problems: number | null };
+  return {
+    users: totals.users,
+    waitlisted: totals.waitlisted,
+    coverage: {
+      premium: byCoverage.get("premium") ?? 0,
+      lifetime: byCoverage.get("lifetime") ?? 0,
+      trial: byCoverage.get("trial") ?? 0,
+      admin: byCoverage.get("admin") ?? 0,
+    },
+    stores: { active: storeTotals.active ?? 0, problems: storeTotals.problems ?? 0 },
   };
 }

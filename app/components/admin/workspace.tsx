@@ -3,7 +3,7 @@ import type { AuditRow } from "../../domain/admin-audit.server";
 import type { WorkspaceDetail } from "../../domain/admin-directory.server";
 import type { StoreStatus } from "../../domain/stores.server";
 import { AuditTable } from "./governance";
-import { ActionForm, DataTable, Disclosure, Facts, Panel, TextField } from "./kit";
+import { ActionForm, DataTable, Disclosure, Facts, Panel, Stat, StatGrid, TextField } from "./kit";
 import { useAdmin } from "./use-admin";
 
 function Stores({ workspace }: { workspace: WorkspaceDetail }) {
@@ -16,7 +16,7 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
     return (
       <li key={item.id} className="grid gap-3 rounded-lg border p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-medium">{item.name}</span>
+          <span className="font-medium break-words">{item.name}</span>
           <Badge
             variant={
               item.connection === "active"
@@ -30,7 +30,7 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
           </Badge>
           {item.pauseReasons.map((reason) => (
             <Badge key={reason} variant="outline">
-              {reason}
+              {t.labels.pause[reason]}
             </Badge>
           ))}
           {workspace.freeStore?.storeId === item.id && free ? (
@@ -39,9 +39,20 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
         </div>
         <Facts
           items={[
-            ["ID", item.id],
             [w.store.lastSync, item.lastSyncAt ? date(item.lastSyncAt) : w.store.never],
             [t.stores.orders, item.importedOrders],
+            ...(item.consentExpiresAt
+              ? ([[w.store.consentUntil, date(item.consentExpiresAt, "date")]] as [
+                  string,
+                  string,
+                ][])
+              : []),
+            [
+              "ID",
+              <span key="id" className="font-code text-xs break-all">
+                {item.id}
+              </span>,
+            ],
           ]}
         />
         <div className="flex flex-wrap gap-3">
@@ -136,56 +147,79 @@ function Transfer({ fields }: { fields: Record<string, string> }) {
 export function WorkspaceView({
   workspace,
   audit,
+  now,
 }: {
   workspace: WorkspaceDetail;
   audit: AuditRow[];
+  now: string;
 }) {
   const { t, date, money } = useAdmin();
   const w = t.workspace;
   const fields = { spazio: workspace.id };
+  const at = Date.parse(now);
+  // Copertura in corso dell'origine mostrata, per la sua fine.
+  const coverage = workspace.coverage
+    ? workspace.entitlements.find(
+        (item) =>
+          item.source === workspace.coverage &&
+          !item.revokedAt &&
+          Date.parse(item.startsAt) <= at &&
+          (!item.endsAt || Date.parse(item.endsAt) > at),
+      )
+    : undefined;
+  const activeStores = workspace.stores.filter((store) => store.connection === "active").length;
+  const openSubscription = workspace.subscriptions.find(
+    (item) => !item.unavailable && item.status !== "canceled",
+  );
   return (
     <>
-      <Panel title={w.profile}>
-        <Facts
-          items={[
-            ["ID", workspace.id],
-            [t.accounts.created, date(workspace.createdAt, "date")],
-            [t.accounts.plan, t.coverage[workspace.coverage ?? "free"]],
-            [
-              w.members,
-              workspace.members.map((member) => `${member.email} (${member.role})`).join(", "),
-            ],
-            ...(workspace.profile
-              ? ([
-                  [
-                    w.profile,
-                    `${workspace.profile.accountType === "business" ? w.business : w.private}${
-                      workspace.profile.company ? ` · ${workspace.profile.company}` : ""
-                    }`,
-                  ],
-                ] as [string, string][])
-              : []),
-            ...(workspace.profile?.waitlistedAt
-              ? ([[t.accounts.waitlisted, date(workspace.profile.waitlistedAt)]] as [
-                  string,
-                  string,
-                ][])
-              : []),
-            ...(workspace.cycle && !workspace.coverage
-              ? ([
-                  [
-                    w.cycle,
-                    w.cycleValue(
-                      workspace.cycle.used,
-                      workspace.cycle.quota,
-                      date(workspace.cycle.endsAt),
-                    ),
-                  ],
-                ] as [string, string][])
-              : []),
-          ]}
+      <StatGrid>
+        <Stat
+          label={t.accounts.plan}
+          value={t.coverage[workspace.coverage ?? "free"]}
+          note={
+            coverage?.endsAt
+              ? w.until(date(coverage.endsAt, "date"))
+              : workspace.coverage === "lifetime" && workspace.lifetime
+                ? w.lifetimeSeat(workspace.lifetime.slot, workspace.lifetime.kind)
+                : undefined
+          }
         />
-      </Panel>
+        <Stat
+          label={w.stores}
+          value={workspace.stores.length}
+          note={w.activeStores(activeStores)}
+          tone={activeStores < workspace.stores.length ? "warning" : undefined}
+        />
+        <Stat
+          label={w.unlocks}
+          value={
+            workspace.cycle && !workspace.coverage
+              ? `${workspace.cycle.used}/${workspace.cycle.quota}`
+              : "–"
+          }
+          note={
+            workspace.cycle && !workspace.coverage
+              ? w.cycleUntil(date(workspace.cycle.endsAt, "date"))
+              : w.unlimited
+          }
+        />
+        <Stat
+          label={w.subscriptions}
+          value={
+            openSubscription
+              ? (t.labels.subscription[openSubscription.status] ?? openSubscription.status)
+              : "–"
+          }
+          note={
+            openSubscription
+              ? `${t.commerce.offer[openSubscription.offer as "monthly" | "annual"] ?? openSubscription.offer} · ${w.renewsAt} ${date(openSubscription.periodEnd, "date")}`
+              : undefined
+          }
+        />
+      </StatGrid>
+
+      <Stores workspace={workspace} />
 
       <Panel title={w.entitlements}>
         <DataTable
@@ -225,14 +259,16 @@ export function WorkspaceView({
 
       <Panel title={w.subscriptions}>
         <DataTable
-          head={["ID", t.accounts.plan, t.stores.state, w.renewsAt]}
+          head={[t.accounts.plan, t.stores.state, w.renewsAt, "ID"]}
           rows={workspace.subscriptions.map((item) => ({
             key: item.id,
             cells: [
-              item.id,
-              item.offer,
-              `${item.status}${item.cancelAtPeriodEnd ? ` · ${w.cancelAtEnd}` : ""}`,
+              t.commerce.offer[item.offer as "monthly" | "annual"] ?? item.offer,
+              `${t.labels.subscription[item.status] ?? item.status}${item.cancelAtPeriodEnd ? ` · ${w.cancelAtEnd}` : ""}`,
               date(item.periodEnd),
+              <span key="id" className="font-code text-xs break-all">
+                {item.id}
+              </span>,
             ],
           }))}
         />
@@ -247,7 +283,7 @@ export function WorkspaceView({
             <ul className="grid gap-1 text-sm">
               {workspace.customers.map((customer) => (
                 <li key={customer.id}>
-                  {customer.id}
+                  <span className="font-code text-xs">{customer.id}</span>
                   {customer.erased
                     ? ` · ${w.erased(customer.erased.source, date(customer.erased.at))}`
                     : ""}
@@ -296,7 +332,47 @@ export function WorkspaceView({
         </Disclosure>
       </Panel>
 
-      <Stores workspace={workspace} />
+      <Panel title={w.profile}>
+        <Facts
+          items={[
+            ["ID", workspace.id],
+            [t.accounts.created, date(workspace.createdAt, "date")],
+            [t.accounts.plan, t.coverage[workspace.coverage ?? "free"]],
+            [
+              w.members,
+              workspace.members.map((member) => `${member.email} (${member.role})`).join(", "),
+            ],
+            ...(workspace.profile
+              ? ([
+                  [
+                    w.profile,
+                    `${workspace.profile.accountType === "business" ? w.business : w.private}${
+                      workspace.profile.company ? ` · ${workspace.profile.company}` : ""
+                    }`,
+                  ],
+                ] as [string, string][])
+              : []),
+            ...(workspace.profile?.waitlistedAt
+              ? ([[t.accounts.waitlisted, date(workspace.profile.waitlistedAt)]] as [
+                  string,
+                  string,
+                ][])
+              : []),
+            ...(workspace.cycle && !workspace.coverage
+              ? ([
+                  [
+                    w.cycle,
+                    w.cycleValue(
+                      workspace.cycle.used,
+                      workspace.cycle.quota,
+                      date(workspace.cycle.endsAt),
+                    ),
+                  ],
+                ] as [string, string][])
+              : []),
+          ]}
+        />
+      </Panel>
 
       <Panel title={t.audit.title}>
         <AuditTable entries={audit} />

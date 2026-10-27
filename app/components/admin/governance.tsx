@@ -9,27 +9,83 @@ import type { ServiceNotice } from "../../domain/service-notices.server";
 import { ActionForm, DataTable, Disclosure, Panel, TextField } from "./kit";
 import { localValue, useAdmin } from "./use-admin";
 
+/** Oggetto dell'operazione: lo spazio con l'email del titolare e il negozio, se ci sono. */
+function AuditTarget({ entry }: { entry: AuditRow }) {
+  const { href } = useAdmin();
+  if (!entry.workspace && !entry.store)
+    return (
+      <span className="font-code text-xs break-all text-muted-foreground">{entry.target}</span>
+    );
+  return (
+    <span className="grid gap-0.5">
+      {entry.workspace ? (
+        <Link
+          to={href(`spazi/${encodeURIComponent(entry.workspace.id)}`)}
+          className="text-primary underline-offset-4 hover:underline"
+        >
+          {entry.workspace.email ?? entry.workspace.id}
+        </Link>
+      ) : null}
+      {entry.store ? (
+        <span className="text-xs text-muted-foreground">{entry.store.label ?? entry.store.id}</span>
+      ) : null}
+    </span>
+  );
+}
+
+function Outcome({ outcome }: { outcome: string }) {
+  const { t } = useAdmin();
+  const ok = ["done", "prepared", "queued", "merged", "already"].includes(outcome);
+  return (
+    <Badge variant={ok ? "success" : outcome === "failed" ? "danger" : "neutral"}>
+      {t.labels.outcomes[outcome] ?? outcome}
+    </Badge>
+  );
+}
+
 export function AuditTable({ entries }: { entries: AuditRow[] }) {
   const { t, date } = useAdmin();
   const a = t.audit;
   return (
     <DataTable
       label={a.title}
-      head={[a.at, a.actor, a.operation, a.target, t.common.reason, a.outcome]}
+      head={[a.operation, a.at, a.actor, a.target, t.common.reason, a.outcome]}
       rows={entries.map((entry) => ({
         key: entry.id,
         cells: [
+          <span key="operation" className="font-medium">
+            {t.labels.operations[entry.operation] ?? entry.operation}
+          </span>,
           date(entry.at),
           entry.actorEmail ?? entry.actor,
-          entry.operation,
-          <span key="target" className="break-all">
-            {entry.target ?? ""}
-          </span>,
+          <AuditTarget key="target" entry={entry} />,
           entry.reason ?? "",
-          entry.outcome,
+          <Outcome key="outcome" outcome={entry.outcome} />,
         ],
       }))}
     />
+  );
+}
+
+/** Ultime operazioni in forma compatta, per la panoramica. */
+export function AuditList({ entries }: { entries: AuditRow[] }) {
+  const { t, date } = useAdmin();
+  if (entries.length === 0) return <p className="text-sm text-muted-foreground">{t.common.none}</p>;
+  return (
+    <ul className="grid divide-y text-sm">
+      {entries.map((entry) => (
+        <li key={entry.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+          <span className="font-medium">
+            {t.labels.operations[entry.operation] ?? entry.operation}
+          </span>
+          <Outcome outcome={entry.outcome} />
+          <span className="text-muted-foreground">{date(entry.at)}</span>
+          <span className="basis-full sm:basis-auto">
+            <AuditTarget entry={entry} />
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

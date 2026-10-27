@@ -7,6 +7,8 @@ import {
   normalizedName,
   reviewAbuseSignal,
 } from "../app/domain/abuse-review.server";
+import { listAudit } from "../app/domain/admin-audit.server";
+import { consoleSummary } from "../app/domain/admin-directory.server";
 import { listAnomalies, taskStates } from "../app/domain/admin-operations.server";
 import {
   endPromotion,
@@ -790,6 +792,44 @@ describe("quote delle API eBay", () => {
       (await quotaAnomalies(env.DB, at("2026-09-14T09:00:00.000Z"))).filter((a) => !a.resolvedAt),
     ).toHaveLength(2);
   });
+
+  it("tratta la quota Trading condivisa come una sola, sulle chiamate di FiscalBay", async () => {
+    // eBay riporta lo stesso residuo per ogni chiamata Trading: la quota è unica.
+    const pooled = (name: string, count: number) => ({
+      name,
+      rates: [
+        {
+          count,
+          limit: 5000,
+          remaining: 1200,
+          reset: "2026-09-14T07:00:00.000Z",
+          timeWindow: 86_399,
+        },
+      ],
+    });
+    const shared = analytics(
+      [pooled("GetOrders", 3000), pooled("GetItem", 800), pooled("AddItem", 0)],
+      [daily("sell.fulfillment.refund", 99_000, "2026-09-14T07:00:00.000Z", 100_000)],
+    );
+    const [production] = await readEbayQuotas(env, shared.fetcher, at(now));
+    const getOrders = production!.rows.find((row) => row.resource === "GetOrders")!;
+    // Il consumo è della quota condivisa, non delle sole chiamate della voce.
+    expect(getOrders).toMatchObject({ share: 0.76, over: true, daily: true, used: true });
+    expect(getOrders.rate).toMatchObject({ used: 3000, consumed: 3800 });
+    expect(production!.rows.find((row) => row.resource === "AddItem")).toMatchObject({
+      used: false,
+    });
+    // Fulfillment oltre soglia su una risorsa che FiscalBay non usa: nessuna anomalia.
+    expect(
+      production!.rows.find((row) => row.resource === "sell.fulfillment.refund"),
+    ).toMatchObject({ over: true, used: false });
+    expect(
+      (await quotaAnomalies(env.DB, at(now))).map(({ subject, severity }) => ({
+        subject,
+        severity,
+      })),
+    ).toEqual([{ subject: "production:Trading", severity: "p2" }]);
+  });
 });
 
 describe("anomalie e lavori", () => {
@@ -925,5 +965,54 @@ describe("revisione antiabuso", () => {
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM abuse_reviews").first()).toEqual({
       n: 0,
     });
+  });
+});
+
+describe("panoramica e registro", () => {
+  it("conta account, spazi coperti e negozi con problemi", async () => {
+    const owner = await verifiedSession("panoramica@example.invalid");
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-a", userId: owner.userId }),
+      ...insertWorkspace({ id: "w-b" }),
+      insertEntitlement({ workspaceId: "w-a", source: "premium", endsAt: later(240 * hour) }),
+      insertEntitlement({
+        workspaceId: "w-b",
+        source: "admin",
+        endsAt: later(240 * hour),
+        grantedBy: "a",
+        grantReason: "b",
+      }),
+      insertStore({ id: "s-ok" }),
+      insertCredentials({ storeId: "s-ok", accessExpiresAt: later(48 * hour) }),
+      insertStore({ id: "s-scaduto", workspaceId: "w-b" }),
+    ]);
+    expect(await consoleSummary(env.DB, at(now))).toMatchObject({
+      waitlisted: 0,
+      coverage: { premium: 1, admin: 1, lifetime: 0, trial: 0 },
+      stores: { active: 1, problems: 1 },
+    });
+  });
+
+  it("mostra nel registro il titolare dello spazio e il nome del negozio", async () => {
+    const owner = await verifiedSession("registro@example.invalid");
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-a", userId: owner.userId }),
+      insertStore({ id: "s-a" }),
+      env.DB.prepare(`INSERT INTO admin_audit (id, actor, operation, target, outcome, at)
+        VALUES ('a1', 'admin', 'store-pause', 'workspace:w-a:store:s-a', 'done', ?1),
+               ('a2', 'admin', 'save-notice', 'notice:n-1', 'done', ?1)`).bind(now),
+    ]);
+    const [pause, notice] = await listAudit(env.DB, {});
+    expect([pause, notice].map((entry) => entry!.id).sort()).toEqual(["a1", "a2"]);
+    const entries = await listAudit(env.DB, {});
+    expect(entries.find((entry) => entry.id === "a1")).toMatchObject({
+      workspace: { id: "w-a", email: "registro@example.invalid" },
+      store: { id: "s-a", label: "s-a" },
+    });
+    expect(entries.find((entry) => entry.id === "a2")).toMatchObject({
+      workspace: null,
+      store: null,
+    });
+    expect(await listAudit(env.DB, { target: "workspace:w-a" })).toHaveLength(1);
   });
 });

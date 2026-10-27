@@ -14,7 +14,12 @@ import {
   savePromotion,
   scheduleFreeQuota,
 } from "./domain/admin-commerce.server";
-import { listAccounts, listAllStores, workspaceDetail } from "./domain/admin-directory.server";
+import {
+  consoleSummary,
+  listAccounts,
+  listAllStores,
+  workspaceDetail,
+} from "./domain/admin-directory.server";
 import {
   listAnomalies,
   receiptStates,
@@ -38,7 +43,14 @@ import {
   serviceNoticeSchema,
   withdrawServiceNotice,
 } from "./domain/service-notices.server";
-import { adminAccess, readSession, type AuthSession } from "./domain/sessions.server";
+import {
+  adminAccess,
+  adminSessionMaxAge,
+  readSession,
+  type AuthSession,
+} from "./domain/sessions.server";
+
+export { adminSessionMaxAge };
 import { confirmStoreTransfer, prepareStoreTransfer } from "./domain/store-transfer.server";
 import { setAdminPause } from "./domain/stores.server";
 import { logFailure } from "./errors";
@@ -88,8 +100,22 @@ export async function loadSection(section: AdminSection, item: string | undefine
   const query = url.searchParams.get("q") ?? undefined;
   const offset = Math.max(0, Number(url.searchParams.get("da")) || 0);
   switch (section) {
-    case "panoramica":
-      return { section, anomalies: await listAnomalies(env.DB, now) } as const;
+    case "panoramica": {
+      const [anomalies, summary, commerce, recent] = await Promise.all([
+        listAnomalies(env.DB, now),
+        consoleSummary(env.DB, now),
+        commerceOverview(env, now),
+        listAudit(env.DB, { limit: 5 }),
+      ]);
+      return {
+        section,
+        anomalies,
+        summary,
+        revenue: { last30: commerce.revenue.last30, total: commerce.revenue.total },
+        seats: { available: commerce.seats.available, total: commerce.seats.total },
+        recent,
+      } as const;
+    }
     case "account":
       return {
         section,
