@@ -16,6 +16,7 @@ import { pendingEmailChange } from "../app/domain/email-change.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { hashPassword, verifyPassword } from "../app/password.server";
 import { accountEmailBody } from "../app/account-email.server";
+import { emailVerificationSeconds } from "../app/domain/email-change.server";
 import { supportEmail } from "../app/app-copy";
 import { emailLink, emailSender, mailEnv, sessionCookie } from "./fixtures/account-fixtures";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
@@ -1311,25 +1312,61 @@ describe("Collegamento e modifica dell'identità", () => {
   it("le email di servizio usano un solo modello in testo e HTML, con il contenuto protetto", () => {
     const body = accountEmailBody({
       language: "en",
-      message: 'Use <b>"this"</b> & go',
+      origin: "https://test.fiscalbay.it",
       url: 'https://test.fiscalbay.it/?a=1&b="2"',
-      button: "Continue",
+      email: {
+        subject: "Subject",
+        paragraphs: ['Use <b>"this"</b> & go', "Second paragraph."],
+        button: "Continue",
+        note: "Valid for one hour.",
+      },
     });
     expect(body.text).toBe(
       [
         'Use <b>"this"</b> & go',
         "",
+        "Second paragraph.",
+        "",
         'Continue: https://test.fiscalbay.it/?a=1&b="2"',
         "",
+        "Valid for one hour.",
+        "",
         "--",
-        `Service email about your FiscalBay account, sent even without consent to promotional messages. For help, reply to this email or write to ${supportEmail}.`,
+        `You are receiving this email because you have a FiscalBay account. For help, reply to this email or write to ${supportEmail}.`,
       ].join("\n"),
     );
     expect(emailLink(body.text)).toBe('https://test.fiscalbay.it/?a=1&b="2"');
     expect(body.html).toContain('<html lang="en">');
+    expect(body.html).toContain('<meta name="color-scheme" content="light dark">');
+    // Logo dall'origine dell'ambiente e anteprima nascosta dal primo paragrafo.
+    expect(body.html).toContain('<img src="https://test.fiscalbay.it/apple-touch-icon.png"');
+    expect(body.html).toMatch(/display:none[^>]*>Use &lt;b&gt;/u);
     expect(body.html).toContain("Use &lt;b&gt;&quot;this&quot;&lt;/b&gt; &amp; go");
+    expect(body.html).toContain("Valid for one hour.");
+    expect(body.html).toContain(
+      "If the button does not work, copy this address into your browser:",
+    );
     expect(body.html).toContain('href="https://test.fiscalbay.it/?a=1&amp;b=&quot;2&quot;"');
     expect(body.html).not.toContain("<b>");
+  });
+
+  it("i link di Auth dichiarano la durata che Better Auth applica", async () => {
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    try {
+      const email = "durata.link@example.invalid";
+      await signUp(env, email, true);
+      await vi.waitFor(() => expect(send).toHaveBeenCalled());
+      const verify = send.mock.calls[0]![0] as { subject: string; text: string };
+      expect(verify.subject).toBe("Conferma l’indirizzo email di FiscalBay");
+      expect(verify.text).toContain("Conferma email: ");
+      expect(verify.text).toContain("Il link vale un’ora.");
+      expect(emailVerificationSeconds).toBe(3600);
+      expect(createAuth(env).options.emailAndPassword?.resetPasswordTokenExpiresIn).toBe(
+        emailVerificationSeconds,
+      );
+    } finally {
+      send.mockRestore();
+    }
   });
 
   it("imposta di nuovo la password con un link al proprio indirizzo", async () => {

@@ -199,6 +199,8 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
       enabled: true,
       password: { hash: hashPassword, verify: verifyPassword },
       revokeSessionsOnPasswordReset: true,
+      // Lo stesso tempo dei link di conferma, che l'email dichiara.
+      resetPasswordTokenExpiresIn: emailVerificationSeconds,
       // La registrazione non apre la sessione e risponde allo stesso modo per un indirizzo già
       // registrato: la sessione nasce dal link di conferma. Chi accede con la password senza
       // aver confermato l'email esplora, ma non collega negozi.
