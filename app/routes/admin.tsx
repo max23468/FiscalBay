@@ -6,8 +6,8 @@ import { AccountsView, StoresView } from "~/components/admin/directory";
 import { CommerceView } from "~/components/admin/commerce";
 import { AbuseView, AuditTable, NoticesView } from "~/components/admin/governance";
 import { JobsView, QuotasView } from "~/components/admin/operations";
-import { AnomalyList } from "~/components/admin/overview";
-import { AdminShell } from "~/components/admin/shell";
+import { Overview } from "~/components/admin/overview";
+import { AdminShell, type AdminSectionKey } from "~/components/admin/shell";
 import { WorkspaceView } from "~/components/admin/workspace";
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
@@ -16,7 +16,10 @@ import { Spinner } from "~/components/ui/spinner";
 import { useCopy } from "~/components/copy-context";
 import { loadPasskeyClient } from "../account/passkey";
 import {
+  adminSessionMaxAge,
   adminSession,
+  agentActor,
+  recordAgentRead,
   loadSection,
   runAdminAction,
   sectionFrom,
@@ -65,30 +68,43 @@ const confirmedParam = "conferma";
 export async function loader({ request, params }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
-  const { session, access } = await adminSession(request);
+  const { session, access, agent } = await adminSession(request);
   tracePhase(request, "session");
   // Chi non è admin riceve la stessa risposta di un indirizzo inesistente.
   if (access === "none") throw data(null, { status: 404 });
   const section = sectionFrom(params.sezione);
   // Soltanto la scheda di uno spazio ha un elemento nell'indirizzo.
   if (!section || (section === "spazi") !== Boolean(params.voce)) throw data(null, { status: 404 });
+  if (agent) await recordAgentRead(agent, url);
   return {
     language,
     access,
     // La passkey ha aperto una sessione, ma il dispositivo non ha verificato l'utente.
     unverified: access === "verify" && url.searchParams.has(confirmedParam),
-    confirmedAt: access === "granted" ? new Date(session!.session.createdAt).toISOString() : null,
-    // Senza la conferma con passkey nessuna sezione si legge.
-    page: access === "granted" ? await loadSection(section, params.voce, url) : null,
+    // La conferma con passkey vale 12 ore dall'apertura della sessione.
+    passkeyUntil:
+      access === "granted"
+        ? new Date(
+            new Date(session!.session.createdAt).getTime() + adminSessionMaxAge,
+          ).toISOString()
+        : null,
+    // Senza la conferma con passkey nessuna sezione si legge, salvo con il token tecnico.
+    page:
+      access === "granted" || access === "agent"
+        ? await loadSection(section, params.voce, url)
+        : null,
+    technical: access === "agent",
     now: new Date().toISOString(),
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
-  const { session, access } = await adminSession(request);
-  if (access !== "granted") throw data(null, { status: 404 });
-  return runAdminAction(request, session!.user.id, language);
+  const { session, access, agent } = await adminSession(request);
+  if (access === "granted") return runAdminAction(request, session!.user.id, language);
+  // Il token tecnico esegue le stesse operazioni, con l'etichetta come autore (D213).
+  if (agent) return runAdminAction(request, agentActor(agent), language);
+  throw data(null, { status: 404 });
 }
 
 /** Accesso con passkey: Better Auth propone solo le passkey dell'utente della sessione. */
@@ -142,11 +158,11 @@ function PasskeyConfirm({ unverified }: { unverified: boolean }) {
 function Section({ page, now }: { page: SectionData; now: string }) {
   switch (page.section) {
     case "panoramica":
-      return <AnomalyList anomalies={page.anomalies} />;
+      return <Overview data={page} />;
     case "account":
       return <AccountsView {...page} />;
     case "spazi":
-      return <WorkspaceView workspace={page.workspace} audit={page.audit} />;
+      return <WorkspaceView workspace={page.workspace} audit={page.audit} now={now} />;
     case "negozi":
       return <StoresView {...page} />;
     case "lavori":
@@ -164,18 +180,45 @@ function Section({ page, now }: { page: SectionData; now: string }) {
   }
 }
 
+/** Voce della navigazione accesa per la sezione: la scheda di uno spazio sta sotto Account. */
+const navKey = {
+  panoramica: "overview",
+  account: "accounts",
+  spazi: "accounts",
+  negozi: "stores",
+  lavori: "jobs",
+  quote: "quotas",
+  commerciale: "commerce",
+  antiabuso: "abuse",
+  comunicazioni: "notices",
+  registro: "audit",
+} as const satisfies Record<SectionData["section"], AdminSectionKey>;
+
+/** Titolo della pagina: per uno spazio l'email del titolare, altrimenti il nome della sezione. */
+function pageHeading(page: SectionData, language: "it" | "en") {
+  if (page.section !== "spazi") return sectionTitle(page, language).split(" | ")[0]!;
+  const owner = page.workspace.members.find((member) => member.role === "owner");
+  return owner?.email ?? page.workspace.name;
+}
+
 export default function Admin({ loaderData }: Route.ComponentProps) {
-  const { language, unverified, confirmedAt, page, now } = loaderData;
+  const { language, unverified, passkeyUntil, page, now } = loaderData;
   const t = appCopy[language].admin;
-  if (page && confirmedAt)
+  if (page) {
+    const until = passkeyUntil;
+    const sameDay =
+      until && formatDate(until, language, "date") === formatDate(now, language, "date");
     return (
       <AdminShell
-        title={sectionTitle(page, language).split(" | ")[0]!}
-        note={t.granted(formatDate(confirmedAt, language))}
+        current={navKey[page.section]}
+        title={pageHeading(page, language)}
+        subtitle={page.section === "spazi" ? adminCopy[language].workspace.title : undefined}
+        passkeyUntil={until ? formatDate(until, language, sameDay ? "time" : "dateTime") : null}
       >
         <Section page={page} now={now} />
       </AdminShell>
     );
+  }
   return (
     <StandalonePage icon={KeyRound} tone="amber" title={t.title} homeHref={localizedPath(language)}>
       <PasskeyConfirm unverified={unverified} />

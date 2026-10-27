@@ -882,8 +882,6 @@ export const en: AppCopy = {
     verifyBody:
       "The admin area requires signing in with a passkey of this account and verification on the device: fingerprint, face or PIN. Password, Google and eBay are not enough.",
     verifyFailed: "Confirmation failed. Use a passkey of this account with device verification.",
-    granted: (when: string) =>
-      `Passkey sign-in confirmed: ${when}. A new confirmation is required after 12 hours.`,
     back: "Back to FiscalBay",
   },
   authError: {

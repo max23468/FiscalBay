@@ -2,7 +2,7 @@ import { Link } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
 import type { SectionData } from "../../admin-console.server";
-import { ActionForm, DataTable, Disclosure, Facts, Panel, TextField } from "./kit";
+import { ActionForm, DataTable, Disclosure, Panel, Stat, StatGrid, TextField } from "./kit";
 import { localValue, useAdmin } from "./use-admin";
 
 type CommerceData = Extract<SectionData, { section: "commerciale" }>;
@@ -97,7 +97,7 @@ export function CommerceView({ data, now }: { data: CommerceData; now: string })
         to={href(`spazi/${encodeURIComponent(item.workspaceId)}`)}
         className="text-primary underline-offset-4 hover:underline"
       >
-        {item.workspaceId.slice(0, 8)}
+        {item.ownerEmail ?? item.workspaceId}
       </Link>,
       t.coverage[item.source],
       money(item.amountPaid, item.currency),
@@ -115,23 +115,31 @@ export function CommerceView({ data, now }: { data: CommerceData; now: string })
   ];
   return (
     <>
-      <Panel title={c.seats}>
-        <Facts
-          items={(Object.keys(c.seatLabels) as (keyof typeof c.seatLabels)[]).map((key) => [
-            c.seatLabels[key],
-            seats[key],
-          ])}
+      <StatGrid>
+        <Stat
+          label={t.summary.seats}
+          value={seats.available}
+          note={t.summary.seatsNote(seats.total)}
         />
-      </Panel>
+        <Stat
+          label={c.seats}
+          value={seats.sold + seats.gifted}
+          note={c.seatsNote(seats.sold, seats.gifted, seats.reserved)}
+        />
+        <Stat
+          label={t.summary.revenue}
+          value={money(data.revenue.last30)}
+          note={t.summary.revenueNote(money(data.revenue.total))}
+        />
+        <Stat
+          label={c.refundedTotal}
+          value={money(data.revenue.refunded)}
+          note={c.refundedNote(seats.refunded, seats.regranted)}
+          tone={data.revenue.refunded > 0 ? "warning" : undefined}
+        />
+      </StatGrid>
 
       <Panel title={c.revenue}>
-        <Facts
-          items={[
-            [c.last30, money(data.revenue.last30)],
-            [c.total, money(data.revenue.total)],
-            [c.refundedTotal, money(data.revenue.refunded)],
-          ]}
-        />
         <h3 className="text-sm font-medium">{c.reversals}</h3>
         <DataTable head={paymentHead} rows={data.revenue.reversals.map(payment)} />
         <h3 className="text-sm font-medium">{c.erasures}</h3>

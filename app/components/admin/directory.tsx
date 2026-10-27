@@ -111,6 +111,35 @@ export function AccountsView({
   );
 }
 
+/**
+ * Stato del negozio in una sola etichetta: dati eliminati, scollegato, da ricollegare o in pausa
+ * con il motivo, altrimenti attivo; la lettura in corso si aggiunge accanto.
+ */
+function StoreState({ row }: { row: StoreRow }) {
+  const { t } = useAdmin();
+  const l = t.labels;
+  const [tone, label] = row.removed
+    ? (["neutral", l.storeState.removed] as const)
+    : row.disconnected
+      ? (["neutral", l.storeState.disconnected] as const)
+      : row.consent !== "valid"
+        ? (["warning", l.storeState.reconnect] as const)
+        : row.pauses.length > 0
+          ? ([
+              "neutral",
+              `${l.storeState.paused}: ${row.pauses
+                .map((pause) => l.pause[pause as keyof typeof l.pause] ?? pause)
+                .join(", ")}`,
+            ] as const)
+          : (["success", l.storeState.active] as const);
+  return (
+    <span className="flex flex-wrap gap-1">
+      <Badge variant={tone}>{label}</Badge>
+      {row.syncing ? <Badge variant="info">{t.stores.syncing}</Badge> : null}
+    </span>
+  );
+}
+
 export function StoresView({
   rows,
   query,
@@ -135,46 +164,34 @@ export function StoresView({
           s.workspace,
           s.state,
           t.workspace.store.lastSync,
-          s.failures,
-          s.details,
-          "",
+          s.problemsColumn,
+          t.workspace.actions,
         ]}
         rows={rows.map((row) => ({
           key: row.id,
           cells: [
-            <div key="store" className="grid gap-0.5">
-              <span className="font-medium">{row.label}</span>
-              <span className="text-xs text-muted-foreground">{row.id}</span>
-            </div>,
+            <span key="store" className="font-medium break-words">
+              {row.label}
+            </span>,
             <Link
               key="workspace"
               to={href(`spazi/${encodeURIComponent(row.workspaceId)}`)}
-              className="text-primary underline-offset-4 hover:underline"
+              className="break-all text-primary underline-offset-4 hover:underline"
             >
-              {row.workspaceId.slice(0, 8)}
+              {row.ownerEmail ?? row.workspaceId}
             </Link>,
-            <div key="state" className="flex flex-wrap gap-1">
-              {row.removed ? (
-                <Badge variant="neutral">{s.removed}</Badge>
-              ) : row.disconnected ? (
-                <Badge variant="neutral">{s.disconnected}</Badge>
-              ) : (
-                <Badge variant={row.consent === "valid" ? "success" : "warning"}>
-                  {s.consent[row.consent]}
-                </Badge>
-              )}
-              {row.pauses.map((pause) => (
-                <Badge key={pause} variant="outline">
-                  {pause}
-                </Badge>
-              ))}
-              {row.syncing ? <Badge variant="info">{s.syncing}</Badge> : null}
-            </div>,
+            <StoreState key="state" row={row} />,
             row.lastSuccessAt ? date(row.lastSuccessAt) : t.workspace.store.never,
-            row.failures,
-            row.detailErrors,
+            row.failures >= 2 || row.detailErrors > 0 ? (
+              <span key="problems" className="grid gap-0.5 text-warning">
+                {row.failures >= 2 ? <span>{s.failedReads}</span> : null}
+                {row.detailErrors > 0 ? <span>{s.failedDetails(row.detailErrors)}</span> : null}
+              </span>
+            ) : (
+              ""
+            ),
             row.removed || row.disconnected ? null : (
-              <div key="actions" className="grid gap-2">
+              <div key="actions" className="flex flex-wrap gap-2">
                 <ActionForm
                   intent="store-sync"
                   fields={{ negozio: row.id, spazio: row.workspaceId }}

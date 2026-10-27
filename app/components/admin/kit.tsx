@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { createContext, use, useId, type ReactNode } from "react";
-import { useFetcher } from "react-router";
+import { Link, useFetcher } from "react-router";
 
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -26,9 +26,9 @@ export function Panel({
   return (
     <section
       aria-labelledby={id}
-      className={cn("grid gap-3 rounded-xl border bg-card p-4", className)}
+      className={cn("grid min-w-0 gap-3 rounded-xl border bg-card p-4 sm:p-5", className)}
     >
-      <h2 id={id} className="text-base font-semibold">
+      <h2 id={id} className="text-lg font-semibold text-balance">
         {title}
       </h2>
       <PanelTitle value={title}>{children}</PanelTitle>
@@ -132,58 +132,102 @@ export function Disclosure({ label, children }: { label: string; children: React
   );
 }
 
-/** Tabella compatta con intestazioni; senza righe mostra che è vuota. */
+export type TableRow = { key: string; cells: ReactNode[] };
+
+/**
+ * Tabella leggera da 768 px; sotto, ogni riga diventa una scheda: la prima cella fa da titolo,
+ * le altre seguono con la loro etichetta e la colonna «Azioni» chiude la scheda. Le intestazioni
+ * sono distinte e fanno da chiave delle celle. Senza righe dice che è vuota.
+ */
 export function DataTable({
   head,
   rows,
   label,
 }: {
   head: string[];
-  rows: { key: string; cells: ReactNode[] }[];
+  rows: TableRow[];
   /** Nome dell'area scorrevole; senza, quello del riquadro che la contiene. */
   label?: string;
 }) {
   const { t } = useAdmin();
   const panel = use(PanelTitle);
+  // Colonna delle azioni: senza intestazione visibile, su mobile chiude la scheda.
+  const actions = t.workspace.actions;
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{t.common.none}</p>;
   return (
-    // Su schermi stretti la tabella scorre: l'area si raggiunge anche da tastiera.
-    <div
-      className="overflow-x-auto"
-      role="region"
-      aria-label={label ?? panel ?? undefined}
-      tabIndex={0}
-    >
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="border-b text-left">
-            {head.map((label) => (
-              <th key={label} scope="col" className="px-2 py-2 font-medium whitespace-nowrap">
-                {label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key} className="border-b align-top last:border-0">
-              {row.cells.map((cell, index) => (
-                <td key={head[index]} className="px-2 py-2">
-                  {cell}
-                </td>
+    <>
+      <ul className="grid gap-2 md:hidden">
+        {rows.map((row) => {
+          const cells = head.map((column, index) => ({ column, cell: row.cells[index] }));
+          return (
+            <li key={row.key} className="grid gap-2 rounded-lg border p-3 text-sm">
+              <div className="min-w-0 font-medium break-words">{cells[0]!.cell}</div>
+              <dl className="grid grid-cols-[minmax(6.5rem,auto)_1fr] gap-x-3 gap-y-1.5">
+                {cells.slice(1).map(({ column, cell }) =>
+                  column !== actions && cell !== null && cell !== "" ? (
+                    <div key={column} className="contents">
+                      <dt className="text-muted-foreground">{column}</dt>
+                      <dd className="min-w-0 break-words">{cell}</dd>
+                    </div>
+                  ) : null,
+                )}
+              </dl>
+              {cells
+                .filter(({ column, cell }) => column === actions && cell)
+                .map(({ column, cell }) => (
+                  <div key={column} className="pt-1">
+                    {cell}
+                  </div>
+                ))}
+            </li>
+          );
+        })}
+      </ul>
+      {/* Su schermi medi la tabella può ancora scorrere: l'area si raggiunge da tastiera. */}
+      <div
+        className="hidden overflow-x-auto md:block"
+        role="region"
+        aria-label={label ?? panel ?? undefined}
+        tabIndex={0}
+      >
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b text-left text-xs text-muted-foreground">
+              {head.map((column) => (
+                <th
+                  key={column}
+                  scope="col"
+                  className={cn(
+                    "px-2 py-2 font-medium whitespace-nowrap",
+                    column === actions && "sr-only",
+                  )}
+                >
+                  {column}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key} className="border-b align-top last:border-0">
+                {head.map((column, index) => (
+                  <td key={column} className="px-2 py-2.5">
+                    {row.cells[index]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
-/** Coppie etichetta e valore. */
+/** Coppie etichetta e valore, in due colonne anche su mobile. */
 export function Facts({ items }: { items: [string, ReactNode][] }) {
   return (
-    <dl className="grid gap-x-6 gap-y-2 text-sm sm:grid-cols-[max-content_1fr]">
+    <dl className="grid grid-cols-[minmax(6.5rem,auto)_1fr] gap-x-6 gap-y-2 text-sm">
       {items.map(([label, value]) => (
         <div key={label} className="contents">
           <dt className="text-muted-foreground">{label}</dt>
@@ -192,4 +236,57 @@ export function Facts({ items }: { items: [string, ReactNode][] }) {
       ))}
     </dl>
   );
+}
+
+/**
+ * Valore chiave con etichetta e una nota, come nei riquadri della panoramica. Con `href` tutto il
+ * riquadro porta alla sezione che lo approfondisce.
+ */
+export function Stat({
+  label,
+  value,
+  note,
+  tone,
+  href,
+}: {
+  label: string;
+  value: ReactNode;
+  note?: ReactNode;
+  tone?: "warning" | "danger";
+  href?: string;
+}) {
+  const body = (
+    <>
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span
+        className={cn(
+          "font-code text-2xl font-semibold tracking-tight",
+          tone === "warning" && "text-warning",
+          tone === "danger" && "text-danger",
+        )}
+      >
+        {value}
+      </span>
+      {note ? <span className="text-xs text-muted-foreground">{note}</span> : null}
+    </>
+  );
+  const className = "grid content-start gap-1 rounded-xl border bg-card p-4";
+  return href ? (
+    <Link
+      to={href}
+      className={cn(
+        className,
+        "outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring",
+      )}
+    >
+      {body}
+    </Link>
+  ) : (
+    <div className={className}>{body}</div>
+  );
+}
+
+/** Griglia dei riquadri numerici: due colonne su mobile, quattro su schermi ampi. */
+export function StatGrid({ children }: { children: ReactNode }) {
+  return <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{children}</div>;
 }
