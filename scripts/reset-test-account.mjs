@@ -189,11 +189,16 @@ async function main() {
     const xlsxAccounts = ["chromium", "webkit"].flatMap((browser) =>
       ["it", "en"].map((language) => `xlsx-${language}-${browser}`),
     );
+    // Dati dell'account in uno ZIP, dalla sezione Dati e privacy.
+    const accountDataAccounts = ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].map((language) => `account-data-${language}-${browser}`),
+    );
     for (const id of [
       ...unlockAccounts,
       ...trialAccounts,
       ...exportAccounts,
       ...xlsxAccounts,
+      ...accountDataAccounts,
       "suggestions-it",
       "suggestions-en",
       "stores-premium",

@@ -1,6 +1,6 @@
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useId, useRef, useState } from "react";
-import { Link } from "react-router";
+import { Link, useRevalidator } from "react-router";
 
 import { useAction, useNotice } from "~/components/action";
 import { PremiumNote, StatusBadge } from "~/components/status";
@@ -9,7 +9,12 @@ import { FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/f
 import { Input } from "~/components/ui/input";
 import { RadioGroup } from "~/components/ui/radio-group";
 import { useCopy, useLinks } from "~/components/copy-context";
-import { orderExportPath } from "../../app-links";
+import { useTimeZone } from "~/components/time-zone";
+import { exportFilePath, orderExportPath } from "../../app-links";
+import { formatDate } from "../../format";
+import { localizedPath } from "../../i18n";
+import type { ExportFileView } from "../../domain/export-jobs.server";
+import { downloadExport, saveFile } from "./download";
 import type { AppCopy } from "../../copy/copy-it";
 import type { ExportConfiguration } from "../../domain/export-configurations.server";
 import {
@@ -48,15 +53,11 @@ function ExportContextNote({ context }: { context: ExportContext }) {
   );
 }
 
-/** Nome del file proposto dal server, senza dati personali. */
-function fileName(response: Response) {
-  return /filename="([^"]+)"/u.exec(response.headers.get("content-disposition") ?? "")?.[1];
-}
-
 /**
  * Crea il file nell'area reale: il modulo invia ambito e opzioni e il browser salva la risposta.
- * Con JavaScript la richiesta resta nella pagina, così un rifiuto diventa un avviso; senza,
- * l'invio ordinario scarica il file o torna alla sezione.
+ * Con JavaScript la richiesta resta nella pagina, così un rifiuto diventa un avviso e un file
+ * preparato dalla coda compare fra i file creati; senza, l'invio ordinario scarica il file o
+ * torna alla sezione.
  */
 function CreateFileForm({
   context,
@@ -69,6 +70,7 @@ function CreateFileForm({
 }) {
   const { t } = useCopy();
   const notify = useNotice();
+  const revalidator = useRevalidator();
   const [pending, setPending] = useState(false);
   const download = async (form: HTMLFormElement) => {
     setPending(true);
@@ -81,19 +83,16 @@ function CreateFileForm({
             "text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json",
         },
       });
-      if (!response.ok) {
+      if (!response.ok || response.status === 202) {
         const result = (await response.json().catch(() => null)) as { notice?: string } | null;
         notify(result?.notice ?? t.settings.export.exportFailed);
+        // Il lavoro accodato compare fra i file creati, in preparazione.
+        if (response.status === 202) void revalidator.revalidate();
         return;
       }
-      // Il file arriva intero prima del salvataggio: un flusso interrotto non diventa un file.
-      const href = URL.createObjectURL(await response.blob());
-      const link = document.createElement("a");
-      link.href = href;
-      link.download = fileName(response) ?? "fiscalbay";
-      link.click();
-      // Safari legge l'oggetto dopo il clic: si libera più tardi.
-      setTimeout(() => URL.revokeObjectURL(href), 60_000);
+      await saveFile(response);
+      // Il file resta fra quelli creati, scaricabile di nuovo finché vale.
+      void revalidator.revalidate();
     } catch {
       notify(t.settings.export.exportFailed);
     } finally {
@@ -483,11 +482,72 @@ function ConfigurationCommands({
   );
 }
 
+/**
+ * File creati nelle ultime 24 ore e ancora validi, lavori in preparazione e non riusciti. Il
+ * download passa dal percorso autenticato, che ricontrolla sessione e validità.
+ */
+function ExportFiles({ files }: { files: ExportFileView[] }) {
+  const { t, language } = useCopy();
+  const { links, preview } = useLinks();
+  const zone = useTimeZone();
+  const action = useAction();
+  const notify = useNotice();
+  const revalidator = useRevalidator();
+  // Il file si salva soltanto quando è arrivato intero; un file non più disponibile diventa
+  // un avviso e l'elenco si rilegge.
+  const download = async (href: string) => {
+    try {
+      const notice = await downloadExport(href);
+      if (notice === null) return;
+      notify(notice || copy.exportGone);
+      void revalidator.revalidate();
+    } catch {
+      notify(copy.exportFailed);
+    }
+  };
+  const copy = t.settings.export;
+  if (files.length === 0) return null;
+  return (
+    <Group title={copy.exportFiles}>
+      <ul className="grid divide-y border-t">
+        {files.map((file) => (
+          <li key={file.id} className="flex flex-wrap items-center justify-between gap-3 py-3">
+            <span className="grid min-w-0 flex-1 gap-0.5">
+              <span className="font-medium break-all">{file.name}</span>
+              <span className="text-sm text-muted-foreground">
+                {file.state === "ready"
+                  ? copy.exportFileReady(formatDate(file.expiresAt!, language, "dateTime", zone))
+                  : file.state === "queued"
+                    ? copy.exportFileQueued
+                    : copy.exportFileFailed}
+              </span>
+            </span>
+            {file.state === "ready" ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  preview
+                    ? action.run("export-download")
+                    : void download(localizedPath(links.language, exportFilePath(file.id)))
+                }
+              >
+                {copy.exportDownload}
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </Group>
+  );
+}
+
 export function ExportSection({
   premium,
   configurations,
   context,
   periods,
+  files,
 }: {
   premium: boolean;
   /** Configurazioni salvate; valgono soltanto con Premium. */
@@ -495,6 +555,7 @@ export function ExportSection({
   context: ExportContext | null;
   /** Ordini di ogni periodo, quando l'esportazione non viene dagli Ordini. */
   periods: Record<OrderPeriod, ExportTally> | null;
+  files: ExportFileView[];
 }) {
   const { t, language } = useCopy();
   const copy = t.settings.export;
@@ -524,6 +585,8 @@ export function ExportSection({
   };
   return (
     <>
+      {/* In testa, dove arriva la notifica di un file pronto; la sezione chiude con il testo. */}
+      <ExportFiles files={files} />
       <Group title={copy.exportScope}>
         {context ? <ExportContextNote context={context} /> : null}
         <FieldGroup>

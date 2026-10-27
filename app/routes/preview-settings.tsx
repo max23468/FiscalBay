@@ -20,6 +20,8 @@ import {
   type ExportTally,
 } from "../orders/export-scope";
 import { openSearch } from "../orders/order-search.server";
+import { exportFileMilliseconds } from "../domain/export-files.server";
+import { exportFileName } from "../domain/order-export.server";
 import { previewListing, previewSearchScope, previewTally } from "../preview/order-list.server";
 import { previewLifetime } from "../preview/scenarios.server";
 import { pageScenario, simulateAction, simulateSecurity } from "../preview/state.server";
@@ -94,7 +96,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       billing: true,
       billingPortal: true,
       telegram: true,
-      accountData: true,
+      accountExport: true,
+      accountDeletion: true,
       support: true,
     },
     account: scenario.account,
@@ -171,6 +174,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         format: "xlsx",
         rows: "order",
         columns: ["order", "date", "buyer", "taxCode", "vat", "total"],
+      },
+    ],
+    // Un file dimostrativo creato poco fa: scaricarlo è simulato.
+    exportFiles: [
+      {
+        id: "esempio",
+        name: exportFileName(
+          appCopy[language],
+          new Date(scenario.now),
+          effectiveTimeZone("auto", detectedTimeZone(request.headers.get("cookie"))),
+        ),
+        state: "ready",
+        at: scenario.now,
+        expiresAt: new Date(Date.parse(scenario.now) + exportFileMilliseconds).toISOString(),
       },
     ],
     now: scenario.now,

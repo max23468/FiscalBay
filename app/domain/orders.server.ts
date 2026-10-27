@@ -357,6 +357,34 @@ export async function countVisibleOrders(
 }
 
 /**
+ * Primo termine dei dati consultabili all'istante `now` fra gli ordini indicati: la fine della
+ * conservazione di un ordine o di uno sblocco con scadenza propria. Oltre quel termine un file
+ * che li contiene mostrerebbe dati non più consultabili. null senza ordini.
+ */
+export async function visibleOrdersTerm(
+  db: D1Database,
+  userId: string,
+  ebayEnvironment: EbayEnvironment,
+  now: Date,
+  filter: { ids?: string[]; criteria: OrderCriteria },
+): Promise<string | null> {
+  const row = await db
+    .prepare(
+      `SELECT MIN(o.retention_until) AS retention,
+              MIN((SELECT MIN(g.expires_at) FROM order_grants g
+                     JOIN orders original ON original.id = g.order_id
+                    WHERE g.workspace_id = wm.workspace_id
+                      AND (original.id = o.id OR original.merged_into = o.id)
+                      AND g.revoked_at IS NULL AND julianday(g.expires_at) > julianday(?3))) AS unlock
+         ${visibleOrdersSql}`,
+    )
+    .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 0, filter.ids, filter.criteria))
+    .first<{ retention: string | null; unlock: string | null }>();
+  const terms = [row!.retention, row!.unlock].filter((term): term is string => term !== null);
+  return terms.sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
+}
+
+/**
  * Dati dell'intero elenco consultabile, indipendenti dai criteri: quanti ordini esistono e se
  * qualche ordine ha un dato da sbloccare.
  */

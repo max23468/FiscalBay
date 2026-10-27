@@ -314,7 +314,7 @@ beforeEach(async () => {
 
 afterEach(() => vi.useRealTimers());
 
-it("la coda smista richieste di sincronizzazione, compiti e riferimenti dei webhook", async () => {
+it("la coda smista richieste di sincronizzazione, compiti, esportazioni e riferimenti dei webhook", async () => {
   const sync = { body: { syncStore: "webhook-store" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
   const webhook = { body: { receiptId: "non-valido" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
   const task = {
@@ -323,11 +323,17 @@ it("la coda smista richieste di sincronizzazione, compiti e riferimenti dei webh
     retry: vi.fn(),
     attempts: 1,
   };
+  const exportJob = {
+    body: { exportJob: crypto.randomUUID() },
+    ack: vi.fn(),
+    retry: vi.fn(),
+    attempts: 1,
+  };
   const unknown = { body: { altro: true }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     await worker.queue(
-      { messages: [sync, webhook, task, unknown] } as unknown as MessageBatch<unknown>,
+      { messages: [sync, webhook, task, exportJob, unknown] } as unknown as MessageBatch<unknown>,
       environment,
     );
     // Un messaggio sconosciuto non passa dai webhook: si riprova fino ai non consegnati.
@@ -350,6 +356,9 @@ it("la coda smista richieste di sincronizzazione, compiti e riferimenti dei webh
   // Un compito senza turno aperto si chiude senza lavoro e senza passare dai webhook.
   expect(task.ack).toHaveBeenCalledOnce();
   expect(task.retry).not.toHaveBeenCalled();
+  // Un'esportazione senza lavoro registrato si chiude al suo consumer.
+  expect(exportJob.ack).toHaveBeenCalledOnce();
+  expect(exportJob.retry).not.toHaveBeenCalled();
 });
 
 it("lascia pagine e callback OAuth al router e rifiuta i metodi diversi", async () => {

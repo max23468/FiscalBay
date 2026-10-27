@@ -3,6 +3,7 @@ import type { Language } from "../i18n";
 import { type NotificationView } from "../view-models";
 import { formatDate } from "../format";
 import { whatsNewNotifications } from "../whats-new.server";
+import { finishedExportJobs } from "./export-jobs.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
 import { activeServiceNotices } from "./service-notices.server";
 import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
@@ -11,7 +12,8 @@ import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
  * Notifiche della campanella, derivate dallo stato corrente: un problema risolto esce dalla
  * campanella. Oggi le fonti sono i collegamenti dei negozi scaduti o in scadenza, le letture
  * che non riescono, di un negozio oppure di tutti quando eBay non risponde, e la pausa per
- * inattività del Free e le comunicazioni di servizio della console; ogni notifica ha un
+ * inattività del Free, le esportazioni preparate dalla coda, pronte finché il file resta
+ * scaricabile o non riuscite, e le comunicazioni di servizio della console; ogni notifica ha un
  * identificativo stabile per problema, così la lettura vale finché il problema resta lo stesso.
  * Si aggiunge una voce per ogni rilascio con Novità, identificata dalla sua versione.
  */
@@ -95,8 +97,18 @@ export async function listNotifications(
     : [];
   // Come i promemoria, un problema delle letture compare soltanto negli ultimi trenta giorni:
   // oltre, la sua lettura non è più conservata e resta l'avviso di Ordini e Negozi.
+  const exports = (await finishedExportJobs(db, userId, now)).map((job): NotificationView => ({
+    id: `export:${job.id}`,
+    tone: job.ready ? "success" : "warning",
+    title: job.ready ? t.exportReadyTitle : t.exportFailedTitle,
+    body: (job.ready ? t.exportReadyBody : t.exportFailedBody)(job.name),
+    at: job.at,
+    read: false,
+    href: "impostazioni/esportazione",
+  }));
   const items = [
     ...stores.flatMap(reminder),
+    ...exports,
     ...[...reads, ...inactivity].filter((item) => Date.parse(item.at) >= since),
     ...(await activeServiceNotices(db, language, now)),
     ...whatsNewNotifications(language, now),

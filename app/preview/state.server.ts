@@ -102,6 +102,7 @@ export async function pageScenario(request: Request) {
 /** Azioni senza effetto dell'anteprima: la risposta ha la forma di quelle reali. */
 const notices: Record<string, (t: AppCopy) => string | undefined> = {
   "export-create": (t) => t.settings.export.exportCreated,
+  "export-download": (t) => t.settings.export.exportCreated,
   "export-save": (t) => t.settings.export.exportConfigSimulated,
   "export-delete": (t) => t.settings.export.exportConfigSimulated,
   retry: (t) => t.orders.retried,

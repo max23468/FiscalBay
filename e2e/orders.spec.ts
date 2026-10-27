@@ -534,6 +534,14 @@ test.describe("area reale", () => {
         it ? '"Da sbloccare"' : '"To unlock"',
       );
       expect(csv).not.toContain(`${secret}-2`);
+      // Il file resta fra quelli creati e si scarica di nuovo dal suo percorso autenticato.
+      const files = page.getByRole("region", { name: it ? "File creati" : "Created files" });
+      // Il più recente in testa; un nuovo tentativo della prova trova anche il file precedente.
+      const latest = files.getByRole("listitem").first();
+      await expect(latest).toContainText(download.suggestedFilename());
+      const again = page.waitForEvent("download");
+      await latest.getByRole("button", { name: it ? "Scarica" : "Download", exact: true }).click();
+      expect(await readFile(await (await again).path(), "utf8")).toBe(csv);
       await page
         .getByRole("radio", {
           name: it ? "Solo con dati fiscali disponibili" : "Only with tax data available",

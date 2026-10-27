@@ -68,7 +68,7 @@ import {
 } from "../domain/telegram.server";
 import { stripeSecretKey } from "../integrations/stripe.server";
 import { telegramConfigured } from "../integrations/telegram.server";
-import { appUrl, ordersPath, planPath } from "../app-links";
+import { appUrl, exportFilePath, ordersPath, planPath } from "../app-links";
 import { correlationId, logFailure } from "../errors";
 import { whatsNew } from "../whats-new.server";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -94,21 +94,24 @@ import {
   saveExportConfiguration,
 } from "../domain/export-configurations.server";
 import { exportContext } from "../orders/export-scope";
+import { listExportFiles } from "../domain/export-jobs.server";
+import { exportRevision, publishExportFile } from "../domain/export-files.server";
+import { accountArchive, accountArchiveName, accountData } from "../domain/account-export.server";
 import { accountExportScope } from "../orders/export-scope.server";
 import { formatDate } from "../format";
 import type { Route } from "./+types/settings";
 import { subscriptionView } from "../domain/plan-view.server";
 
 /**
- * Servizi reali delle categorie. Esportazione e cancellazione dell'account compaiono insieme ai
- * loro servizi. L'acquisto compare con la configurazione Stripe, la gestione dell'abbonamento con
+ * Servizi reali delle categorie. La cancellazione dell'account compare insieme al suo servizio. L'acquisto compare con la configurazione Stripe, la gestione dell'abbonamento con
  * il portale di Stripe, le notifiche Telegram con il bot dell'ambiente.
  */
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
   billingPortal: !!stripeSecretKey(env),
   telegram: telegramConfigured(env),
-  accountData: false,
+  accountExport: true,
+  accountDeletion: false,
   support: true,
 });
 
@@ -167,6 +170,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     telegram,
     admissionState,
     exportConfigurations,
+    exportFiles,
   ] = await measure("d1", "settings", () =>
     Promise.all([
       orderAllowance(env.DB, userId, now),
@@ -181,6 +185,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
       admission(env.DB, userId),
       listExportConfigurations(env.DB, userId),
+      listExportFiles(env.DB, userId, now),
     ]),
   );
   const [exportData, subscription] = await Promise.all([
@@ -232,6 +237,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     telegram,
     ...exportData,
     exportConfigurations,
+    exportFiles,
     now: now.toISOString(),
   };
   return {
@@ -550,6 +556,31 @@ export async function action({ request }: Route.ActionArgs) {
       return failed(choice.result === "not_found" ? 404 : 409, t.plan.freeStoreUnavailable);
     }
     if (intent === "support") return await sendSupport(request, area, form);
+    if (intent === "account-export") {
+      // Il file nasce soltanto se nessuna revoca dello spazio arriva durante la lettura.
+      const now = new Date();
+      const zone = effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone);
+      const revision = await exportRevision(env.DB, userId);
+      const archive = accountArchive(await accountData(env.DB, userId), language, zone, now);
+      const id = await publishExportFile(env, {
+        userId,
+        revision,
+        fileName: accountArchiveName(language, now, zone),
+        contentType: "application/zip",
+        body: new ReadableStream({
+          start(controller) {
+            controller.enqueue(archive);
+            controller.close();
+          },
+        }),
+        now,
+      });
+      if (!id) return failed(409, t.privacy.accountExportFailed);
+      return {
+        ok: true,
+        download: localizedPath(language, exportFilePath(id)),
+      } satisfies ActionResult;
+    }
     if (intent === "profile") {
       // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.
       form.set("tipo", area.profile.accountType === "business" ? "azienda" : "privato");
@@ -570,7 +601,9 @@ export async function action({ request }: Route.ActionArgs) {
             ? t.plan.billingUnavailable
             : intent === "export-save"
               ? t.export.exportConfigFailed
-              : t.saveFailed,
+              : intent === "account-export"
+                ? t.privacy.accountExportFailed
+                : t.saveFailed,
     );
   }
   return securityAction(request, area, form);

@@ -58,6 +58,11 @@ export const it = {
       readFailedTitle: "Aggiornamento non riuscito",
       readFailedBody: (store: string) =>
         `${store}: le ultime letture da eBay non sono riuscite. FiscalBay riprova automaticamente.`,
+      exportReadyTitle: "File pronto",
+      exportReadyBody: (file: string) => `${file}: scaricalo da Impostazioni › Esportazione.`,
+      exportFailedTitle: "File non creato",
+      exportFailedBody: (file: string) =>
+        `${file}: crealo di nuovo da Impostazioni › Esportazione.`,
       inactivityTitle: "Letture in pausa per inattività",
       inactivityBody:
         "Con il piano Free le letture si fermano dopo 30 giorni senza accessi e 7 di preavviso. Riprendile da Negozi.",
@@ -657,6 +662,12 @@ export const it = {
       exportFailed: "File non creato. Riprova tra poco.",
       exportEmpty: "Nessun ordine da esportare con queste scelte.",
       exportGone: "File non più disponibile. Crealo di nuovo.",
+      exportQueued: "File in preparazione: ti avvisiamo nella campanella quando è pronto.",
+      exportFiles: "File creati",
+      exportFileReady: (until: string) => `Scaricabile fino a ${until}`,
+      exportFileQueued: "In preparazione",
+      exportFileFailed: "Non creato: crealo di nuovo",
+      exportDownload: "Scarica",
       exportPremium: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Premium.",
       exportColumnsInvalid: "Scegli almeno una colonna.",
       exportXlsxHint:
@@ -783,6 +794,7 @@ export const it = {
       accountExport: "Esporta i dati dell’account",
       accountExportBody: "Profilo, negozi e impostazioni in un file scaricabile.",
       accountExportAction: "Richiedi esportazione",
+      accountExportFailed: "Esportazione non riuscita. Riprova tra poco.",
       deleteAccount: "Elimina account",
       deleteAccountBody:
         "Elimina l’account, scollega i negozi e cancella gli ordini importati. Per confermare ti chiederemo di accedere di nuovo.",

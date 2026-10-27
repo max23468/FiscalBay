@@ -55,6 +55,10 @@ export const en: AppCopy = {
       readFailedTitle: "Update failed",
       readFailedBody: (store) =>
         `${store}: the latest reads from eBay failed. FiscalBay retries automatically.`,
+      exportReadyTitle: "File ready",
+      exportReadyBody: (file) => `${file}: download it from Settings › Export.`,
+      exportFailedTitle: "File not created",
+      exportFailedBody: (file) => `${file}: create it again from Settings › Export.`,
       inactivityTitle: "Reading paused for inactivity",
       inactivityBody:
         "On the Free plan reading stops after 30 days without sign-ins and 7 days' notice. Resume it from Stores.",
@@ -650,6 +654,12 @@ export const en: AppCopy = {
       exportFailed: "File not created. Try again shortly.",
       exportEmpty: "No orders to export with these choices.",
       exportGone: "File no longer available. Create it again.",
+      exportQueued: "File being prepared: the bell will tell you when it is ready.",
+      exportFiles: "Created files",
+      exportFileReady: (until) => `Available until ${until}`,
+      exportFileQueued: "Being prepared",
+      exportFileFailed: "Not created: create it again",
+      exportDownload: "Download",
       exportPremium: "XLSX, chosen columns and saved configurations are included in Premium.",
       exportColumnsInvalid: "Choose at least one column.",
       exportXlsxHint:
@@ -775,6 +785,7 @@ export const en: AppCopy = {
       accountExport: "Export account data",
       accountExportBody: "Profile, stores and settings in a downloadable file.",
       accountExportAction: "Request export",
+      accountExportFailed: "Export failed. Try again shortly.",
       deleteAccount: "Delete account",
       deleteAccountBody:
         "Deletes the account, disconnects your stores and erases imported orders. To confirm, we will ask you to sign in again.",

@@ -31,6 +31,7 @@ import {
 } from "../../view-models";
 import { AppearanceSection } from "./appearance";
 import type { ExportConfiguration } from "../../domain/export-configurations.server";
+import type { ExportFileView } from "../../domain/export-jobs.server";
 import type { ExportContext, ExportTally } from "../../orders/export-scope";
 import { ExportSection } from "./export";
 import { NotificationsSection } from "./notifications";
@@ -75,6 +76,8 @@ export interface SettingsPageData {
   exportContext: ExportContext | null;
   /** Configurazioni dell'esportazione salvate, mostrate soltanto con Premium. */
   exportConfigurations: ExportConfiguration[];
+  /** File creati e lavori delle ultime 24 ore ancora utili. */
+  exportFiles: ExportFileView[];
   now: string;
 }
 
@@ -87,7 +90,8 @@ export interface SettingsServices {
   billing: boolean;
   billingPortal: boolean;
   telegram: boolean;
-  accountData: boolean;
+  accountExport: boolean;
+  accountDeletion: boolean;
   support: boolean;
 }
 
@@ -247,6 +251,7 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
         configurations={data.exportConfigurations}
         context={data.exportContext}
         periods={data.exportPeriods}
+        files={data.exportFiles}
       />
     ),
     sicurezza: (
@@ -260,7 +265,12 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
       />
     ),
     messaggio: <TemplateSection form={templateDraft} />,
-    privacy: <PrivacySection accountData={data.services.accountData} />,
+    privacy: (
+      <PrivacySection
+        accountExport={data.services.accountExport}
+        accountDeletion={data.services.accountDeletion}
+      />
+    ),
     supporto: (
       <SupportSection
         support={data.services.support}

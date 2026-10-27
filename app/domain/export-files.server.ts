@@ -14,8 +14,11 @@ export const exportFileMilliseconds = 24 * 60 * 60_000;
  */
 export const exportPartBytes = 8 * 1024 * 1024;
 
-/** Revisione di accesso dello spazio dell'utente; 0 se lo spazio non esiste ancora. */
-const revisionSql = (user: string) =>
+/**
+ * Revisione di accesso dello spazio dell'utente; 0 se lo spazio non esiste ancora. Argomento:
+ * espressione SQL dell'utente.
+ */
+export const revisionSql = (user: string) =>
   `COALESCE((SELECT w.access_revision FROM workspace_members m
     JOIN workspaces w ON w.id = m.workspace_id WHERE m.user_id = ${user}), 0)`;
 
@@ -63,6 +66,7 @@ async function writeObject(
     parts.push(await upload.uploadPart(parts.length + 1, bytes));
   };
   try {
+    // Stryker disable BlockStatement,AssignmentOperator: un corpo vuoto o una dimensione che cresce lasciano i cicli senza uscita e Stryker li conta come Timeout; la prova con un file di più parti verifica ogni parte.
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -75,6 +79,7 @@ async function writeObject(
         size -= exportPartBytes;
       }
     }
+    // Stryker restore BlockStatement,AssignmentOperator
     if (!upload) {
       await bucket.put(key, concat(chunks, size), options);
       return;
@@ -109,8 +114,10 @@ export async function publishExportFile(
   const id = crypto.randomUUID();
   await writeObject(env.EXPORT_FILES, id, file.body, file.contentType);
   const latest = new Date(file.now.getTime() + exportFileMilliseconds).toISOString();
+  // Stryker disable EqualityOperator: a parità di istante i due termini coincidono.
   const expiresAt =
     file.expiresAt && Date.parse(file.expiresAt) < Date.parse(latest) ? file.expiresAt : latest;
+  // Stryker restore EqualityOperator
   let published = false;
   try {
     const row = await env.DB.prepare(
@@ -164,13 +171,15 @@ const purgeBatch = 500;
  * Pulizia applicativa: elimina oggetti e righe dei file scaduti o revocati. L'oggetto si
  * elimina prima della riga, così un errore di R2 lascia la riga al turno successivo. Gli
  * oggetti rimasti senza riga, per esempio dopo la cancellazione dell'account, li elimina la
- * regola di lifecycle del bucket. Restituisce quanti file ha eliminato.
+ * regola di lifecycle del bucket. Elimina poi i lavori di esportazione conclusi o mai partiti
+ * dopo 24 ore dalla richiesta. Restituisce quanti file ha eliminato.
  */
 export async function purgeExportFiles(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
   now: Date,
 ): Promise<number> {
   let purged = 0;
+  // Stryker disable BlockStatement,ConditionalExpression,EqualityOperator,ArrowFunction: un corpo vuoto, un'uscita mancata o identificativi persi lasciano il ciclo senza uscita e Stryker li conta come Timeout; le prove di pulizia verificano righe e oggetti eliminati.
   for (;;) {
     const { results } = await env.DB.prepare(
       `SELECT id FROM export_files
@@ -179,13 +188,18 @@ export async function purgeExportFiles(
     )
       .bind(now.toISOString(), purgeBatch)
       .run<{ id: string }>();
-    if (results.length === 0) return purged;
+    if (results.length === 0) break;
     const ids = results.map(({ id }) => id);
     await env.EXPORT_FILES.delete(ids);
     await env.DB.prepare(`DELETE FROM export_files WHERE id IN (SELECT value FROM json_each(?))`)
       .bind(JSON.stringify(ids))
       .run();
     purged += ids.length;
-    if (results.length < purgeBatch) return purged;
   }
+  // Stryker restore BlockStatement,ConditionalExpression,EqualityOperator,ArrowFunction
+  // I lavori valgono quanto un file: dopo 24 ore dalla richiesta non servono più.
+  await env.DB.prepare("DELETE FROM export_jobs WHERE julianday(requested_at) <= julianday(?)")
+    .bind(new Date(now.getTime() - exportFileMilliseconds).toISOString())
+    .run();
+  return purged;
 }
