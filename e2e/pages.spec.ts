@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext } from "@playwright/test";
 import { expect, networkIdle, test } from "./fixtures";
 import { useLocalAccount } from "./local-account";
-import { pageCases, knownPagePath, expectedPageError } from "./page-cases";
+import { abortedDataRequest, pageCases, knownPagePath, expectedPageError } from "./page-cases";
 import { testAccount } from "./test-account";
 
 const remote = Boolean(process.env.E2E_BASE_URL);
@@ -150,7 +150,9 @@ for (const scenario of scenarios) {
         const expectedStatus = production && scenario.preview ? 404 : scenario.status;
         const ownPage = new URL(scenario.path, baseURL!);
         const ownData = `${ownPage.pathname.replace(/\/$/u, "")}.data`;
-        page.on("pageerror", (error) => errors.push(error.message));
+        page.on("pageerror", (error) => {
+          if (!abortedDataRequest(error, ownPage.origin)) errors.push(error.message);
+        });
         page.on("console", (message) => {
           if (message.type() !== "error") return;
           if (!expectedPageError(message.text(), message.location().url, expectedStatus, ownPage))
