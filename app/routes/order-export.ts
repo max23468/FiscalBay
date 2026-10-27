@@ -8,7 +8,8 @@ import {
   type AccountArea,
 } from "../account-area.server";
 import { appCopy } from "../app-copy";
-import { settingsPath } from "../app-links";
+import { exportFilePath, settingsPath } from "../app-links";
+import { exportRevision, publishExportFile } from "../domain/export-files.server";
 import { orderAllowance } from "../domain/grants.server";
 import {
   exportCsvStream,
@@ -57,9 +58,10 @@ const contentTypes = {
  * nell'indirizzo, uguale a quello della sezione Esportazione (filtri, ricerca cifrata,
  * istantanea e selezione); le opzioni nel corpo. XLSX e colonne scelte valgono soltanto con
  * Premium, riletto qui come gli altri diritti. Sessione, negozi, conservazione e diritti si
- * rileggono qui, all'istante della richiesta, e il file passa dal Worker senza URL bearer.
- * Con `Accept: application/json` un rifiuto risponde con l'avviso; un modulo inviato senza
- * JavaScript torna alla sezione.
+ * rileggono qui, all'istante della richiesta. Il file si salva nel bucket privato e la risposta
+ * rimanda al suo download, che passa dal Worker senza URL bearer; il file vale al più 24 ore e
+ * non oltre la fine della copertura Premium con cui è nato. Con `Accept: application/json` un
+ * rifiuto risponde con l'avviso; un modulo inviato senza JavaScript torna alla sezione.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
@@ -90,6 +92,9 @@ export async function action({ request }: Route.ActionArgs) {
   const now = new Date();
   const timeZone = effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone);
   try {
+    // La revisione precede ogni lettura dei dati: una revoca arrivata durante la generazione
+    // impedisce al file di diventare scaricabile.
+    const revision = await measure("d1", "exports", () => exportRevision(env.DB, userId));
     const allowance = await measure("d1", "allowance", () => orderAllowance(env.DB, userId, now));
     const premium = !!allowance?.premium;
     // Senza Premium, anche se scaduto mentre la pagina era aperta, il file standard non parte
@@ -116,14 +121,18 @@ export async function action({ request }: Route.ActionArgs) {
       format === "xlsx"
         ? exportXlsxStream(pages, rows, t, timeZone, now, columns)
         : exportCsvStream(pages, rows, t, timeZone, columns);
-    return new Response(file, {
-      headers: {
-        "content-type": contentTypes[format],
-        "content-disposition": `attachment; filename="${exportFileName(t, now, timeZone, format)}"`,
-        "cache-control": "no-store",
-        "x-content-type-options": "nosniff",
-      },
+    const id = await publishExportFile(env, {
+      userId,
+      revision,
+      fileName: exportFileName(t, now, timeZone, format),
+      contentType: contentTypes[format],
+      body: file,
+      now,
+      expiresAt: premium ? allowance?.coverage?.endsAt : null,
     });
+    if (!id) return refused(409, t.settings.export.exportGone);
+    // Il download segue il rimando anche dalla pagina, con le stesse intestazioni della richiesta.
+    return redirect(localizedPath(language, exportFilePath(id)), 303);
   } catch (error) {
     if (error instanceof Response) throw error;
     logFailure({ request, error, operation: "route" });

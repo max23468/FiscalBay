@@ -38,6 +38,8 @@ export default [
   route("api/v1/page-timing", "routes/page-timing.ts"),
   route("api/v1/orders/search", "routes/order-search.ts"),
   route("api/v1/orders/export", "routes/order-export.ts"),
+  route("api/v1/exports/:file", "routes/export-file.ts"),
+  route("en/api/v1/exports/:file", "routes/export-file.ts", { id: "export-file-en" }),
   route("api/v1/notifications", "routes/notifications.ts"),
   ...preview("anteprima", ""),
   ...preview("en/anteprima", "-en"),

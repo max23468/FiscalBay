@@ -28,6 +28,7 @@ const it = {
     },
     tasks: {
       maintenance: "Pulizia giornaliera",
+      export_files: "Pulizia dei file esportati",
       token_refresh: "Rinnovo dei token eBay",
       inactivity: "Inattività del Free",
       billing: "Riconciliazione Stripe",
@@ -554,6 +555,7 @@ const en: AdminCopy = {
     },
     tasks: {
       maintenance: "Daily cleanup",
+      export_files: "Exported file cleanup",
       token_refresh: "eBay token renewal",
       inactivity: "Free inactivity",
       billing: "Stripe reconciliation",

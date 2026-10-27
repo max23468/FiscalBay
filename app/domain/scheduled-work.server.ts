@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { applyInactivity } from "./admission.server";
 import { reconcileBilling } from "./billing.server";
+import { purgeExportFiles } from "./export-files.server";
 import { applyFreePlans } from "./free-store.server";
 import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
 import { dispatchStoreSyncs } from "./order-sync.server";
@@ -38,6 +39,12 @@ const tasks = {
       await purgeExpiredRecords(env.DB, now);
       await indexOrderSearch(env.DB);
     },
+  },
+  // File delle esportazioni scaduti o revocati: il download li rifiuta già, la pulizia ne
+  // elimina i byte entro un'ora dalla scadenza.
+  export_files: {
+    period: 60 * minute,
+    run: (env: Env, _fetcher: typeof fetch, now: Date) => purgeExportFiles(env, now),
   },
   // Rinnovo anticipato dei token di accesso dei negozi, prima che servano a una lettura.
   token_refresh: {

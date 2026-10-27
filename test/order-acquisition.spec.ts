@@ -2440,6 +2440,7 @@ describe("acquisizione con il client", () => {
           await dispatchScheduledWork(cron, minutes(1));
           expect(sendBatch).toHaveBeenLastCalledWith([
             { body: { task: "maintenance", slot: "2026-09-02T00:00:00.000Z" } },
+            { body: { task: "export_files", slot: "2026-09-02T00:00:00.000Z" } },
             { body: { task: "token_refresh", slot: "2026-09-02T00:00:00.000Z" } },
             { body: { task: "inactivity", slot: "2026-09-02T00:00:00.000Z" } },
             { body: { task: "billing", slot: "2026-09-02T00:00:00.000Z" } },
@@ -2458,6 +2459,7 @@ describe("acquisizione con il client", () => {
         const slot = (minute: number) => ({ slot: minutes(minute).toISOString() });
         expect(await dispatchTasks(cron, minutes(0))).toEqual([
           "maintenance",
+          "export_files",
           "token_refresh",
           "inactivity",
           "billing",
@@ -2466,6 +2468,7 @@ describe("acquisizione con il client", () => {
         ]);
         expect(sendBatch).toHaveBeenCalledWith([
           { body: { task: "maintenance", ...slot(0) } },
+          { body: { task: "export_files", ...slot(0) } },
           { body: { task: "token_refresh", ...slot(0) } },
           { body: { task: "inactivity", ...slot(0) } },
           { body: { task: "billing", ...slot(0) } },
@@ -2486,6 +2489,7 @@ describe("acquisizione con il client", () => {
         ]);
         expect(await dispatchTasks(cron, minutes(24 * 60 + 3))).toEqual([
           "maintenance",
+          "export_files",
           "token_refresh",
           "inactivity",
           "billing",
@@ -2494,6 +2498,7 @@ describe("acquisizione con il client", () => {
         ]);
         expect(sendBatch).toHaveBeenLastCalledWith([
           { body: { task: "maintenance", ...slot(24 * 60) } },
+          { body: { task: "export_files", ...slot(24 * 60) } },
           { body: { task: "token_refresh", ...slot(24 * 60) } },
           { body: { task: "inactivity", ...slot(24 * 60) } },
           { body: { task: "billing", ...slot(24 * 60) } },
@@ -2522,6 +2527,7 @@ describe("acquisizione con il client", () => {
         expect(await dispatchTasks(cron, minutes(59))).toEqual(["token_refresh", "telegram"]);
         expect(await dispatchTasks(cron, minutes(60))).toEqual([
           "maintenance",
+          "export_files",
           "token_refresh",
           "inactivity",
           "billing",
@@ -2548,6 +2554,7 @@ describe("acquisizione con il client", () => {
         expect(await remaining()).toBe(1);
         // Un turno concluso non si riaccoda nello stesso giorno.
         expect(await dispatchTasks(cron, minutes(180))).toEqual([
+          "export_files",
           "token_refresh",
           "inactivity",
           "billing",
@@ -2610,6 +2617,7 @@ describe("acquisizione con il client", () => {
         ]);
         expect(turns.flat().sort()).toEqual([
           "billing",
+          "export_files",
           "inactivity",
           "maintenance",
           "telegram",

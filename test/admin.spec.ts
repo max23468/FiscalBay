@@ -200,7 +200,7 @@ describe("accesso alla console", () => {
       { section: "spazi" },
     );
     const overview = await routeData(adminLoader, "/admin", { cookie, params: {} });
-    expect(overview.page).toMatchObject({ tasks: { total: 6 } });
+    expect(overview.page).toMatchObject({ tasks: { total: 7 } });
     const quotas = await routeData(adminLoader, "/admin/quote", {
       cookie,
       params: { sezione: "quote" },

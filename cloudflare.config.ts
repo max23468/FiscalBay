@@ -27,6 +27,7 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   name: string;
   domain: string;
   queue: string;
+  exports: string;
   database: { name: string; id: string };
   vars: Vars;
 }) => ({
@@ -59,6 +60,9 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     // Una sola coda per webhook, letture dei negozi e compiti periodici; la risorsa conserva il
     // nome con cui è nata.
     WORK_QUEUE: bindings.queue({ name: target.queue }),
+    // File delle esportazioni: bucket UE raggiungibile soltanto da questo binding, senza dominio
+    // pubblico, `r2.dev` o URL prefirmati; il download passa sempre dal Worker.
+    EXPORT_FILES: bindings.r2({ name: target.exports, jurisdiction: "eu" }),
     VERSION_METADATA: bindings.versionMetadata(),
   },
 });
@@ -70,6 +74,7 @@ export default defineConfig((ctx) => ({
           name: "fiscalbay",
           domain: "fiscalbay.it",
           queue: "fiscalbay-webhooks",
+          exports: "fiscalbay-exports",
           database: databases.live,
           vars: {
             APP_ORIGIN: bindings.text("https://fiscalbay.it"),
@@ -86,6 +91,7 @@ export default defineConfig((ctx) => ({
           name: "fiscalbay-test",
           domain: "test.fiscalbay.it",
           queue: "fiscalbay-test-webhooks",
+          exports: "fiscalbay-test-exports",
           database: databases.test,
           vars: {
             APP_ORIGIN: bindings.text("https://test.fiscalbay.it"),
