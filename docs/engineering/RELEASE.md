@@ -201,7 +201,7 @@ node scripts/metrics-query.mjs sample --count 40
 
 Il campione controllato invia al solo test 40 report della pagina Negozi con TTFB da 1 a 40 ms e pronta oltre 119 s, poi dopo due minuti confronta numero stimato e mediana del TTFB con quelli attesi nella finestra di invio. Esito non zero se divergono; `sampled` indica che Analytics Engine ha campionato. I report restano nel dataset test fino alla scadenza.
 
-La sezione Prestazioni della console legge le stesse query sulle ultime 24 ore con il segreto `ANALYTICS_READ_TOKEN` del Worker: un token API dell'account del progetto con il solo permesso Account Analytics Read, creato dall'owner e custodito come segreto del Worker dell'ambiente, fuori dalla cronologia dei comandi e dai log. Senza il segreto la sezione resta non configurata e nessuna altra parte dell'app ne dipende.
+La sezione Prestazioni della console legge le stesse query sulle ultime 24 ore con il segreto `ANALYTICS_READ_TOKEN` del Worker: un token API dell'account con il solo permesso Account Analytics Read, uno per ambiente. Si crea con `pnpm exec cf accounts tokens create --name "<nome>" --policies @<file>` e una policy limitata all'account e al gruppo Account Analytics Read; il valore passa dall'output JSON al Portachiavi e poi al segreto del Worker dell'ambiente, mai nella cronologia dei comandi o nei log. Il token del test è «FiscalBay metriche test», nel Portachiavi alla voce «FiscalBay analytics test». Senza il segreto la sezione resta non configurata e nessuna altra parte dell'app ne dipende.
 
 ## Promuovi e ripresa
 
