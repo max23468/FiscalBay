@@ -983,7 +983,6 @@ export const en: AppCopy = {
       pricing: "Pricing",
       security: "Security",
       faq: "FAQ",
-      menu: "Menu",
     },
     independent: "Independent service, not affiliated with eBay.",
     support: "Support",

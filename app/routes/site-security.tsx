@@ -2,6 +2,7 @@ import { cn } from "cn";
 import { Ban, Eye, Fingerprint, MapPin, Wallet } from "lucide-react";
 
 import { IconTile } from "~/components/icon-tile";
+import { ProductShot } from "~/components/product-shot";
 import { PageIntro, SiteLayout, siteColumn } from "~/components/site-layout";
 import { infoEmail } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
@@ -12,7 +13,13 @@ import type { Route } from "./+types/site-security";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { language, origin, session } = await publicPage(request);
-  return { language, origin, signedIn: Boolean(session), copy: sitePages[language].security };
+  const pages = sitePages[language];
+  return {
+    language,
+    origin,
+    signedIn: Boolean(session),
+    copy: { ...pages.security, shot: pages.shots.sicurezza },
+  };
 }
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
@@ -35,7 +42,7 @@ const summaryIcons = [
 
 /** Sicurezza a due livelli (§23): in breve per tutti, nel dettaglio per chi vuole capire. */
 export default function SiteSecurity({ loaderData }: Route.ComponentProps) {
-  const { signedIn, copy: t } = loaderData;
+  const { language, signedIn, copy: t } = loaderData;
   return (
     <SiteLayout path={siteSecurityPath} signedIn={signedIn}>
       <PageIntro title={t.title} lead={t.lead} />
@@ -46,14 +53,16 @@ export default function SiteSecurity({ loaderData }: Route.ComponentProps) {
           </h2>
           <ul className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {t.summary.map((item, index) => (
-              <li key={item.title} className="grid content-start gap-3">
+              <li key={item.title} className="flex gap-4 lg:grid lg:content-start lg:gap-3">
                 <IconTile
                   icon={summaryIcons[index]!.icon}
                   tone={summaryIcons[index]!.tone}
                   size="lg"
                 />
-                <h3 className="font-semibold">{item.title}</h3>
-                <p className="leading-relaxed text-pretty text-muted-foreground">{item.body}</p>
+                <div className="grid content-start gap-1.5">
+                  <h3 className="font-semibold">{item.title}</h3>
+                  <p className="leading-relaxed text-pretty text-muted-foreground">{item.body}</p>
+                </div>
               </li>
             ))}
           </ul>
@@ -62,13 +71,16 @@ export default function SiteSecurity({ loaderData }: Route.ComponentProps) {
           <h2 id="nel-dettaglio" className="text-2xl font-semibold">
             {t.detailsTitle}
           </h2>
-          <div className="grid gap-8 md:grid-cols-2">
-            {t.details.map((item) => (
-              <div key={item.title} className="grid content-start gap-2">
-                <h3 className="font-semibold">{item.title}</h3>
-                <p className="leading-relaxed text-pretty text-muted-foreground">{item.body}</p>
-              </div>
-            ))}
+          <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-12">
+            <div className="grid gap-8">
+              {t.details.map((item) => (
+                <div key={item.title} className="grid content-start gap-2">
+                  <h3 className="font-semibold">{item.title}</h3>
+                  <p className="leading-relaxed text-pretty text-muted-foreground">{item.body}</p>
+                </div>
+              ))}
+            </div>
+            <ProductShot name="sicurezza" language={language} alt={t.shot} />
           </div>
         </section>
         <section aria-labelledby="cosa-non-facciamo" className="grid gap-4">

@@ -54,7 +54,7 @@ const tooling = [
   /^\.codex\//u,
   /^\.mcp\.json$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:copy|docs|repo|pages)|classify-changes|benchmark|coverage-report|mutation(?:-vitest)?|find-(?:build|deployed)|reset-test-account|stripe-account|watch-invocations|ebay-mcp|release\/release(?:-notes|-cycle)?)\.mjs$/u,
+  /^scripts\/(?:verify-(?:copy|docs|repo|pages)|classify-changes|benchmark|coverage-report|mutation(?:-vitest)?|find-(?:build|deployed)|reset-test-account|site-screenshots|stripe-account|watch-invocations|ebay-mcp|release\/release(?:-notes|-cycle)?)\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|mutation)\.config\.ts)$/u,
 ];
