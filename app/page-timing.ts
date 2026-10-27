@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 /** Pagine misurate e fasi del server lette da `Server-Timing`: elenchi chiusi. */
 export const timedPages = ["orders", "stores"] as const;
 export type TimedPage = (typeof timedPages)[number];
-export const serverPhases = ["auth", "d1", "ebay", "render"] as const;
+export const serverPhases = ["auth", "d1", "ebay"] as const;
 
 export const pageTimingPath = "/api/v1/page-timing";
 

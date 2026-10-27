@@ -294,6 +294,24 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
           }))}
         />
       </Panel>
+      <Panel title={m.cpu}>
+        <DataTable
+          head={[m.page, m.perInvocation, m.cpuP50, m.cpuP95, m.wallP50]}
+          rows={metrics.cpu.map((row) => ({
+            key: `${row.page}:${row.kind}`,
+            cells: [
+              <span key="page" className="grid gap-0.5">
+                <span className="font-medium">{m.pageName[row.page]}</span>
+                <span className="text-xs text-muted-foreground">{m.cpuKind[row.kind]}</span>
+              </span>,
+              count(row.invocations),
+              ...[row.cpuP50Ms, row.cpuP95Ms, row.wallP50Ms].map((value) =>
+                value === null ? "–" : count(value),
+              ),
+            ],
+          }))}
+        />
+      </Panel>
       <Panel title={m.pages}>
         <DataTable
           head={[
@@ -317,7 +335,7 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
               pair(row.measures.lcp),
               pair(row.measures.ready),
               <span key="server" className="grid gap-0.5">
-                {(["auth", "d1", "ebay", "render"] as const).map((phase) => (
+                {(["auth", "d1", "ebay"] as const).map((phase) => (
                   <span key={phase} className="whitespace-nowrap">
                     {m.phaseName[phase]} {pair(row.measures[`server_${phase}`])}
                   </span>

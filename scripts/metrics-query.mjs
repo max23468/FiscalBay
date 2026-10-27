@@ -3,10 +3,11 @@
  * Query riproducibili delle metriche tecniche su Workers Analytics Engine, con le stesse query
  * della console (`app/metrics-queries.ts`), e prova del campione controllato: invia al test un
  * numero noto di richieste anonime riconoscibili e confronta il conteggio stimato, pesato con
- * `_sample_interval`, con quello atteso. Le query passano dal profilo della CLI `cf`, quindi
- * nessun token passa da qui.
+ * `_sample_interval`, con quello atteso. `cpu` legge dai Workers Logs il tempo CPU delle pagine.
+ * Le query passano dal profilo della CLI `cf`, quindi nessun token passa da qui.
  *
  * Uso: node scripts/metrics-query.mjs <invocations|phases|pages> [--mode live] [--hours 24]
+ *      node scripts/metrics-query.mjs cpu [--mode live] [--hours 24]
  *      node scripts/metrics-query.mjs sample [--count 40] [--wait 120]
  * Il campione si invia soltanto al test: la Production non riceve richieste sintetiche.
  */
@@ -16,7 +17,16 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { maxWindowHours, metricQueries, metricSql } from "../app/metrics-queries.ts";
+import {
+  cpuKinds,
+  cpuPages,
+  cpuValues,
+  maxCpuWindowHours,
+  maxWindowHours,
+  metricQueries,
+  metricSql,
+  pageCpuQuery,
+} from "../app/metrics-queries.ts";
 import config from "../cloudflare.config.ts";
 
 /**
@@ -25,10 +35,14 @@ import config from "../cloudflare.config.ts";
  */
 export const samplePath = "/api/v1/page-timing";
 
-/** Dataset e origine dell'ambiente, letti da `cloudflare.config.ts` come nella build. */
+/** Dataset, Worker e origine dell'ambiente, letti da `cloudflare.config.ts` come nella build. */
 export function targetOf(mode) {
   const { env } = config({ mode: mode === "live" ? "live" : "development" }).worker;
-  return { dataset: env.METRICS_DATASET.value, origin: env.APP_ORIGIN.value };
+  return {
+    dataset: env.METRICS_DATASET.value,
+    service: env.WORKER_NAME.value,
+    origin: env.APP_ORIGIN.value,
+  };
 }
 
 /** Istante nel formato della SQL API, al secondo. */
@@ -63,16 +77,31 @@ export function compareSample(count, row) {
   };
 }
 
-function query(sql) {
-  const output = execFileSync(
-    "pnpm",
-    ["exec", "cf", "analytics-engine", "sql", "query", "--body", sql],
-    {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "inherit"],
-    },
-  );
+function cf(args) {
+  const output = execFileSync("pnpm", ["exec", "cf", ...args], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "inherit"],
+  });
   return JSON.parse(output.slice(output.indexOf("{")));
+}
+
+const query = (sql) => cf(["analytics-engine", "sql", "query", "--body", sql]);
+
+/** Tempo CPU delle pagine, documento e dati, dai Workers Logs del Worker dell'ambiente. */
+function readCpu(service, hours) {
+  return cpuPages.flatMap(({ page }) =>
+    cpuKinds.map((kind) => {
+      const result = cf([
+        "o11y",
+        "telemetry",
+        "query",
+        "--body",
+        JSON.stringify(pageCpuQuery(service, page, kind, hours)),
+      ]);
+      // La CLI restituisce il risultato della API, con o senza l'involucro `result`.
+      return { page, kind, ...cpuValues((result.result ?? result).calculations) };
+    }),
+  );
 }
 
 async function sendSample(origin, count) {
@@ -117,9 +146,21 @@ async function main() {
     process.exitCode = comparison.ok ? 0 : 1;
     return;
   }
-  if (!metricQueries.includes(name))
-    throw new Error(`Query: ${[...metricQueries, "sample"].join(", ")}`);
   const hours = Number(values.hours);
+  if (name === "cpu") {
+    if (!Number.isInteger(hours) || hours < 1 || hours > maxCpuWindowHours)
+      throw new Error(`--hours fra 1 e ${maxCpuWindowHours}`);
+    console.log(
+      JSON.stringify(
+        { service: target.service, hours, rows: readCpu(target.service, hours) },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+  if (!metricQueries.includes(name))
+    throw new Error(`Query: ${[...metricQueries, "cpu", "sample"].join(", ")}`);
   if (!Number.isInteger(hours) || hours < 1 || hours > maxWindowHours)
     throw new Error(`--hours fra 1 e ${maxWindowHours}`);
   const result = query(metricSql(name, target.dataset, hours));

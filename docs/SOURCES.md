@@ -338,6 +338,8 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 - [Logpush generale e tariffazione separata Workers Trace Events](https://developers.cloudflare.com/changelog/post/2026-09-30-logpush-usage-based-pricing/)
 - [Storico analytics della zona fino a 30 giorni](https://developers.cloudflare.com/changelog/post/2026-10-02-30-days-analytics-on-every-plan/)
 - [Prezzi Observability dal 1° dicembre 2026](https://developers.cloudflare.com/observability/pricing/)
+- [Query dei Workers Logs](https://developers.cloudflare.com/workers/observability/query-builder/)
+- [Orologio dei Worker durante il calcolo](https://developers.cloudflare.com/workers/reference/security-model/#step-1-disallow-timers-and-multi-threading)
 
 **Verifica del 2026-10-11:** Workers Logs conserva 3 giorni sul Free e 7 sul Paid e passa ai prezzi Observability dal 1° dicembre 2026; Logpush dei Workers richiede Paid. Cron Trigger: 5 per account sul Free, 250 sul Paid. Email Sending è in beta e l'invio a destinatari non verificati richiede Paid, con 3.000 email al mese incluse. Token Turnstile monouso, validi 300 secondi, da verificare con Siteverify.
 
@@ -346,6 +348,8 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazione. Quote pubblicate: Free 100.000 datapoint e 10.000 query al giorno; Paid 10 milioni di datapoint e un milione di query al mese, poi 0,25 USD e 1 USD per milione rispettivamente. La pagina prezzi dichiara che gli addebiti non sono ancora attivi: riconfermare prima dell'adozione. Nella sua SQL API conteggi, medie e quantili devono rispettare `_sample_interval`. Queste verifiche documentali non attestano binding attivi, capacità residua dell'account o nuovi costi autorizzati.
 
 **Verifica del 2026-10-27:** quote, prezzi e retention di Analytics Engine invariati, addebiti ancora non attivi (pagina prezzi aggiornata al 23 aprile 2026). Limiti per punto: 20 blob, 20 double, un indice fino a 96 byte, 16 KB di blob, 250 punti per invocazione. Il campionamento equo bilancia i valori dell'indice; conteggi, somme, medie e quantili della SQL API si pesano con `_sample_interval`, i quantili con `quantileExactWeighted(q)(valore, _sample_interval)`. Il binding Workers della nuova Analytics SQL API legge i dataset Analytics Engine senza token, ma applica da sé i pesi agli aggregati e non documenta `_sample_interval`: le query FiscalBay restano sulla SQL API di Analytics Engine, con pesi espliciti. L'account non aveva ancora dataset Analytics Engine.
+
+**Verifica del 2026-10-28:** l'API Telemetry dei Workers Logs legge con il solo permesso Workers Observability Read e riporta per ogni invocazione `$workers.cpuTimeMs` e `$workers.wallTimeMs`; query, dashboard e alert non hanno addebiti propri, dal 1° dicembre 2026 si pagano soltanto acquisizione e conservazione dei log già raccolti. Nel Worker l'orologio avanza soltanto con l'I/O, quindi una durata misurata nel codice non coglie il calcolo.
 
 **Uso:** §12, §14, §25, §29, §31; M3-12, M4-01, M6-03, M6-06, M6-10, M6-11, M7-03, M7-04, M7-09, M7-10, M7-11, M7-12; procedura in [RELEASE](engineering/RELEASE.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
 

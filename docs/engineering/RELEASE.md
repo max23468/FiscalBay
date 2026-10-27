@@ -201,7 +201,15 @@ node scripts/metrics-query.mjs sample --count 40
 
 Il campione controllato invia al solo test 40 richieste anonime `HEAD /api/v1/page-timing`, che rispondono 405 senza effetti e scrivono punti con classe `api`, metodo `HEAD` ed esito `4xx`, una combinazione che nessuna pagina usa. Dopo due minuti confronta il conteggio stimato e pesato con `_sample_interval` nella finestra di invio con quello atteso. Esito non zero se diverge; `sampled` indica che Analytics Engine ha campionato. I punti restano nel dataset test fino alla scadenza. I report del browser richiedono il biglietto della pagina, quindi il campione non li usa.
 
-La sezione Prestazioni della console legge le stesse query sulle ultime 24 ore con il segreto `ANALYTICS_READ_TOKEN` del Worker: un token API dell'account con il solo permesso Account Analytics Read, uno per ambiente. Si crea con `pnpm exec cf accounts tokens create --name "<nome>" --policies @<file>` e una policy limitata all'account e al gruppo Account Analytics Read; il valore passa dall'output JSON al Portachiavi e poi al segreto del Worker dell'ambiente, mai nella cronologia dei comandi o nei log. Il token del test è «FiscalBay metriche test», nel Portachiavi alla voce «FiscalBay analytics test». Senza il segreto la sezione resta non configurata e nessuna altra parte dell'app ne dipende.
+Il rendering non è una fase misurata nel Worker: l'orologio resta fermo durante il calcolo, quindi una durata misurata nel codice vale zero. Il suo costo si legge come tempo CPU delle pagine dai Workers Logs, conservati sette giorni e registrati per ogni invocazione.
+
+```bash
+node scripts/metrics-query.mjs cpu --hours 24
+```
+
+Per Ordini e Negozi, documento e dati (`.data`), la query conta le richieste GET e riporta CPU mediana e al 95° percentile e durata mediana; `--hours` va da 1 a 168. La CPU comprende rendering e resto del calcolo della richiesta, senza le attese di D1 ed eBay. L'indirizzo resta nel filtro della query, mai nel risultato.
+
+La sezione Prestazioni della console legge le stesse query sulle ultime 24 ore con il segreto `ANALYTICS_READ_TOKEN` del Worker: un token API dell'account con i soli permessi Account Analytics Read e Workers Observability Read, uno per ambiente. Si crea con `pnpm exec cf accounts tokens create --name "<nome>" --policies @<file>` e una policy limitata all'account e ai due gruppi; il valore passa dall'output JSON al Portachiavi e poi al segreto del Worker dell'ambiente, mai nella cronologia dei comandi o nei log. Il token del test è «FiscalBay metriche test», nel Portachiavi alla voce «FiscalBay analytics test». Senza il segreto la sezione resta non configurata e nessuna altra parte dell'app ne dipende.
 
 ## Promuovi e ripresa
 

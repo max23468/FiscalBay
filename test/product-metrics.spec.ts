@@ -479,7 +479,7 @@ describe("report del browser", () => {
     expect(written).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         blobs: expect.arrayContaining(["page", "orders"]),
-        doubles: [100, -1, -1, 400, -1, 5, -1, -1],
+        doubles: [100, -1, -1, 400, -1, 5, -1],
       }),
     );
     written.mockClear();

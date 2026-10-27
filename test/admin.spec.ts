@@ -23,7 +23,7 @@ import {
 } from "../app/domain/concessions.server";
 import { quotaAnomalies, readEbayQuotas } from "../app/domain/ebay-quotas.server";
 import { readTechnicalMetrics } from "../app/domain/technical-metrics.server";
-import { metricQueries, metricSql } from "../app/metrics-queries";
+import { cpuValues, metricQueries, metricSql, pageCpuQuery } from "../app/metrics-queries";
 import { assistFreeStore, chooseFreeStore } from "../app/domain/free-store.server";
 import { freeQuotaSettings, orderAllowance } from "../app/domain/grants.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
@@ -958,6 +958,7 @@ describe("prestazioni da Analytics Engine", () => {
         },
       ],
     };
+    const telemetry = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/workers/observability/telemetry/query`;
     const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const body = String(init?.body);
       requests.push({
@@ -965,6 +966,23 @@ describe("prestazioni da Analytics Engine", () => {
         authorization: new Headers(init?.headers).get("authorization"),
         body,
       });
+      if (String(input) === telemetry) {
+        // Soltanto Ordini documento ha invocazioni nella finestra.
+        const measured =
+          (JSON.parse(body) as { queryId: string }).queryId === "page-cpu-orders-document";
+        const aggregate = (value: number) => [{ value, count: measured ? 30 : 0 }];
+        return Response.json({
+          success: true,
+          result: {
+            calculations: [
+              { alias: "invocations", aggregates: aggregate(measured ? 30 : 0) },
+              { alias: "cpu_p50_ms", aggregates: aggregate(measured ? 42 : 0) },
+              { alias: "cpu_p95_ms", aggregates: aggregate(measured ? 170 : 0) },
+              { alias: "wall_p50_ms", aggregates: aggregate(measured ? 760 : 0) },
+            ],
+          },
+        });
+      }
       const query = body.includes("'phase'")
         ? "phases"
         : body.includes("'page'")
@@ -976,13 +994,16 @@ describe("prestazioni da Analytics Engine", () => {
       { ...env, ANALYTICS_READ_TOKEN: "token-di-lettura" },
       fetcher,
     );
-    expect(requests).toHaveLength(3);
+    expect(requests).toHaveLength(7);
     for (const request of requests) {
-      expect(request.url).toBe(
-        `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/analytics_engine/sql`,
-      );
       expect(request.authorization).toBe("Bearer token-di-lettura");
-      expect(request.body).toContain(`FROM ${env.METRICS_DATASET}`);
+      if (request.url === telemetry) expect(request.body).toContain(`"value":"${env.WORKER_NAME}"`);
+      else {
+        expect(request.url).toBe(
+          `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/analytics_engine/sql`,
+        );
+        expect(request.body).toContain(`FROM ${env.METRICS_DATASET}`);
+      }
     }
     expect(metrics).toMatchObject({
       read: "ok",
@@ -1001,13 +1022,45 @@ describe("prestazioni da Analytics Engine", () => {
           },
         },
       ],
+      cpu: [
+        {
+          page: "orders",
+          kind: "document",
+          invocations: 30,
+          cpuP50Ms: 42,
+          cpuP95Ms: 170,
+          wallP50Ms: 760,
+        },
+        // Nessuna invocazione nella finestra: i tempi mancano, non sono zero.
+        {
+          page: "orders",
+          kind: "data",
+          invocations: 0,
+          cpuP50Ms: null,
+          cpuP95Ms: null,
+          wallP50Ms: null,
+        },
+        { page: "stores", kind: "document", invocations: 0, cpuP50Ms: null },
+        { page: "stores", kind: "data", invocations: 0, cpuP50Ms: null },
+      ],
     });
+    expect(
+      await readTechnicalMetrics(
+        { ...env, ANALYTICS_READ_TOKEN: "token", WORKER_NAME: "" },
+        fetcher,
+      ),
+    ).toEqual({ read: "unconfigured" });
     // Una risposta non riuscita resta una lettura non riuscita, mai zero.
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       for (const failing of [
         async () => new Response("{}", { status: 403 }),
         async () => Response.json({ errors: [] }),
+        // Telemetry senza `result.calculations`, SQL corretta.
+        async (input: RequestInfo | URL) =>
+          String(input).endsWith("/telemetry/query")
+            ? Response.json({ success: true, result: {} })
+            : Response.json({ data: [] }),
         async () => {
           throw new DOMException("timeout", "TimeoutError");
         },
@@ -1021,6 +1074,71 @@ describe("prestazioni da Analytics Engine", () => {
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+describe("tempo CPU delle pagine dai Workers Logs", () => {
+  const filterOf = (page: "orders" | "stores", kind: "document" | "data") =>
+    new RegExp(
+      pageCpuQuery("fiscalbay-test", page, kind, 24, 0).parameters.filters.find(
+        (filter) => filter.key === "$workers.event.request.url",
+      )!.value,
+      "u",
+    );
+
+  it("separa documento e dati della pagina, in entrambe le lingue e con il dettaglio", () => {
+    const document = filterOf("orders", "document");
+    const data = filterOf("orders", "data");
+    for (const url of [
+      "https://test.fiscalbay.it/app/ordini",
+      "https://test.fiscalbay.it/en/app/ordini?negozio=collaudo",
+      "https://test.fiscalbay.it/app/ordini/12-00000-00001",
+    ]) {
+      expect(url).toMatch(document);
+      expect(url).not.toMatch(data);
+    }
+    for (const url of [
+      "https://test.fiscalbay.it/app/ordini.data",
+      "https://test.fiscalbay.it/app/ordini/12-00000-00001.data?_routes=routes%2Forders",
+    ]) {
+      expect(url).toMatch(data);
+      expect(url).not.toMatch(document);
+    }
+    // Altre pagine e percorsi più profondi non entrano nel conteggio.
+    for (const url of [
+      "https://test.fiscalbay.it/app/negozi",
+      "https://test.fiscalbay.it/app/ordini/esporta/file",
+      "https://test.fiscalbay.it/anteprima/ordini",
+    ])
+      expect(url).not.toMatch(document);
+    expect("https://test.fiscalbay.it/app/negozi/collaudo-attivo").toMatch(
+      filterOf("stores", "document"),
+    );
+  });
+
+  it("controlla Worker e finestra e legge i valori senza confondere assenze e zeri", () => {
+    const query = pageCpuQuery("fiscalbay", "stores", "data", 168, 1_000_000_000);
+    expect(query.timeframe).toEqual({ from: 1_000_000_000 - 168 * 3_600_000, to: 1_000_000_000 });
+    expect(query.parameters.calculations.map((calculation) => calculation.alias)).toEqual([
+      "invocations",
+      "cpu_p50_ms",
+      "cpu_p95_ms",
+      "wall_p50_ms",
+    ]);
+    expect(() => pageCpuQuery('fiscalbay" OR 1', "orders", "document", 24)).toThrow(
+      "INVALID_SERVICE",
+    );
+    for (const hours of [0, 2.5, 169])
+      expect(() => pageCpuQuery("fiscalbay", "orders", "document", hours)).toThrow(
+        "INVALID_WINDOW",
+      );
+    expect(cpuValues(undefined)).toBeNull();
+    expect(cpuValues([{ alias: "invocations", aggregates: [{ value: 0 }] }])).toEqual({
+      invocations: 0,
+      cpuP50Ms: null,
+      cpuP95Ms: null,
+      wallP50Ms: null,
+    });
   });
 });
 

@@ -7,10 +7,12 @@ describe("query delle metriche tecniche", () => {
   it("legge dataset e origine dell'ambiente dalla configurazione", () => {
     assert.deepEqual(targetOf(), {
       dataset: "fiscalbay_test_metrics",
+      service: "fiscalbay-test",
       origin: "https://test.fiscalbay.it",
     });
     assert.deepEqual(targetOf("live"), {
       dataset: "fiscalbay_metrics",
+      service: "fiscalbay",
       origin: "https://fiscalbay.it",
     });
   });

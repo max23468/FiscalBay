@@ -15,7 +15,7 @@ import {
  * Fasi misurate di una richiesta. I nomi, le operazioni e gli attributi sono un elenco chiuso:
  * mai valori dell'utente, dell'ordine o del provider.
  */
-export type Phase = "auth" | "d1" | "ebay" | "render";
+export type Phase = "auth" | "d1" | "ebay";
 
 export type PhaseOperation =
   | "session"
@@ -26,8 +26,7 @@ export type PhaseOperation =
   | "registration"
   | "notifications"
   | "settings"
-  | "request"
-  | "document";
+  | "request";
 
 /** Somma delle misure di una fase e operazione con lo stesso esito, nella stessa invocazione. */
 type PhaseTotal = {
