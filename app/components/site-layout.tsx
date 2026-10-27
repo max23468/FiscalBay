@@ -1,11 +1,10 @@
 import { cn } from "cn";
-import { MenuIcon } from "lucide-react";
 
 import { useCopy } from "~/components/copy-context";
 import { LanguageSwitch } from "~/components/language-switch";
 import { SiteFooter } from "~/components/site-footer";
 import { Logo } from "~/components/standalone-page";
-import { buttonLink, buttonVariants } from "~/components/ui/button-variants";
+import { buttonLink } from "~/components/ui/button-variants";
 import {
   accessPath,
   faqPath,
@@ -28,8 +27,8 @@ const navItems = [
 
 /**
  * Barra superiore delle pagine pubbliche (D202): logo, pagine, lingua e `Accedi`, oppure
- * `Apri l'app` con una sessione. Sotto i 768 px pagine, lingua e azione stanno in un menu
- * `details` nativo, che si apre anche prima dell'idratazione senza JavaScript dedicato.
+ * `Apri l'app` con una sessione. Sotto i 768 px le pagine passano in una seconda riga sempre
+ * visibile, senza menu da aprire, e la lingua mostra il solo codice.
  * `path` è la pagina corrente senza prefisso di lingua, per lingua e voce attiva.
  */
 function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
@@ -37,77 +36,64 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
   const action = signedIn
     ? { href: `${localizedPath(language)}?${visitParam}=0`, label: t.site.openApp }
     : { href: localizedPath(language, accessPath), label: t.site.signIn };
-  const links = (className: string) =>
-    navItems.map((item) => (
-      <a
-        key={item.key}
-        href={localizedPath(language, item.path)}
-        aria-current={path === item.path ? "page" : undefined}
-        className={cn(
-          "rounded-md text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground",
-          className,
-        )}
-      >
-        {t.site.nav[item.key]}
-      </a>
-    ));
-  const languageSwitch = (
+  const switchFor = (compact: boolean) => (
     <LanguageSwitch
       label={t.access.language}
       current={language}
       hrefFor={(code) => localizedPath(code, path)}
       reloadDocument
+      compact={compact}
     />
   );
   return (
-    <header className="relative border-b bg-background">
-      <div className={cn(siteColumn, "flex h-16 items-center gap-6")}>
+    <header className="border-b bg-background">
+      <div
+        className={cn(
+          siteColumn,
+          "flex h-14 items-center gap-2 min-[360px]:gap-3 md:h-16 md:gap-6",
+        )}
+      >
         <a
           href={localizedPath(language)}
-          className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
+          className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
         >
-          <Logo className="h-7 w-auto" />
+          <Logo className="h-5 w-auto min-[360px]:h-6 md:h-7" />
         </a>
-        <nav aria-label={t.site.nav.label} className="hidden gap-1 text-sm md:flex">
-          {links("px-2.5 py-1.5")}
+        <nav aria-label={t.site.nav.label} className="max-md:hidden">
+          <NavLinks path={path} className="gap-1 text-sm" />
         </nav>
-        <div className="ml-auto hidden items-center gap-2 md:flex">
-          {languageSwitch}
+        <div className="ml-auto flex items-center gap-1 min-[360px]:gap-2">
+          <div className="md:hidden">{switchFor(true)}</div>
+          <div className="max-md:hidden">{switchFor(false)}</div>
           <a href={action.href} {...buttonLink({ size: "sm" })}>
             {action.label}
           </a>
         </div>
-        <details
-          className="group ml-auto md:hidden"
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            event.currentTarget.open = false;
-            event.currentTarget.querySelector("summary")?.focus();
-          }}
-        >
-          <summary
-            aria-label={t.site.nav.menu}
-            className={cn(
-              buttonVariants({ variant: "ghost", size: "icon" }),
-              "list-none [&::-webkit-details-marker]:hidden",
-            )}
-          >
-            <MenuIcon aria-hidden="true" />
-          </summary>
-          <div className="absolute inset-x-0 top-full z-40 border-b bg-popover shadow-md">
-            <div className={cn(siteColumn, "grid gap-4 py-4")}>
-              <nav aria-label={t.site.nav.label} className="grid text-base">
-                {links("flex min-h-11 items-center px-2")}
-              </nav>
-              {languageSwitch}
-              <a href={action.href} {...buttonLink({ size: "lg" })}>
-                {action.label}
-              </a>
-            </div>
-          </div>
-        </details>
       </div>
+      <nav aria-label={t.site.nav.label} className="border-t md:hidden">
+        <NavLinks path={path} className={cn(siteColumn, "justify-between text-sm")} />
+      </nav>
     </header>
+  );
+}
+
+/** Pagine del sito; la voce attiva è sottolineata su smartphone e in grassetto ovunque. */
+function NavLinks({ path, className }: { path: string; className: string }) {
+  const { t, language } = useCopy();
+  return (
+    <ul className={cn("flex", className)}>
+      {navItems.map((item) => (
+        <li key={item.key}>
+          <a
+            href={localizedPath(language, item.path)}
+            aria-current={path === item.path ? "page" : undefined}
+            className="inline-flex min-h-11 items-center rounded-md px-2.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground max-md:rounded-none max-md:border-b-2 max-md:border-transparent max-md:px-1 max-md:aria-[current=page]:border-primary md:min-h-0 md:py-1.5"
+          >
+            {t.site.nav[item.key]}
+          </a>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -134,10 +120,10 @@ export function SiteLayout({
 export function PageIntro({ title, lead }: { title: string; lead?: string }) {
   return (
     <section className="border-b bg-muted/40">
-      <div className={cn(siteColumn, "grid gap-3 py-12 sm:py-16")}>
-        <h1 className="text-3xl leading-tight font-semibold text-balance sm:text-4xl">{title}</h1>
+      <div className={cn(siteColumn, "grid gap-2 py-8 sm:gap-3 sm:py-14")}>
+        <h1 className="text-2xl leading-tight font-semibold text-balance sm:text-4xl">{title}</h1>
         {lead ? (
-          <p className="max-w-2xl text-lg leading-relaxed text-pretty text-muted-foreground">
+          <p className="max-w-2xl leading-relaxed text-pretty text-muted-foreground sm:text-lg">
             {lead}
           </p>
         ) : null}

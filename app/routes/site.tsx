@@ -4,13 +4,17 @@ import { BadgeCheck, ClipboardCopy, Plug, RefreshCcw } from "lucide-react";
 import { redirect } from "react-router";
 
 import { useCopy } from "~/components/copy-context";
+import { FaqList } from "~/components/faq-list";
 import { IconTile } from "~/components/icon-tile";
+import { ProductShot, ShotRow, type ShotName } from "~/components/product-shot";
 import { SiteLayout, siteColumn } from "~/components/site-layout";
+import { Badge } from "~/components/ui/badge";
 import { buttonLink } from "~/components/ui/button-variants";
 import { supportEmail } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
 import {
   accessPath,
+  faqPath,
   featuresPath,
   ordersPath,
   pricingPath,
@@ -20,6 +24,7 @@ import {
 import { currentFreePromotion, freeQuotaSettings } from "../domain/grants.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { formatDate } from "../format";
+import { formatPrice, priceGeneration } from "../catalog";
 import { publicPage } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/site";
@@ -58,7 +63,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     freeQuotaSettings(env.DB),
     currentFreePromotion(env.DB),
   ]);
-  const { freeQuota, freePromotion: promotionLine, ...copy } = sitePages[language].home;
+  const pages = sitePages[language];
+  const { freeQuota, freePromotion: promotionLine, premiumPrice, ...copy } = pages.home;
   return {
     language,
     signedIn: Boolean(session),
@@ -67,6 +73,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     freePromotion,
     copy: {
       ...copy,
+      premiumPrice: premiumPrice(
+        formatPrice(priceGeneration.net.monthly, language),
+        formatPrice(priceGeneration.net.annual, language),
+      ),
+      faq: pages.faq.items.slice(0, 4),
+      shots: pages.shots,
       quota: freePromotion
         ? promotionLine(
             freePromotion.quota,
@@ -127,6 +139,8 @@ const stepIcons = [
 /** Id della sezione dei tre passaggi, meta di «Come funziona». */
 const stepsId = "come-funziona";
 
+const textLink = "font-medium text-primary underline-offset-4 hover:underline";
+
 export default function Site({ loaderData }: Route.ComponentProps) {
   const { language, signedIn, copy: t } = loaderData;
   const site = useCopy().t.site;
@@ -139,71 +153,124 @@ export default function Site({ loaderData }: Route.ComponentProps) {
         {/* Righe della tessera del logo, come nella pagina di accesso. */}
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-24 -bottom-16 grid rotate-[-8deg] gap-6 opacity-25"
+          className="pointer-events-none absolute -bottom-16 -left-24 grid rotate-[-8deg] gap-6 opacity-20"
         >
           <span className="h-8 w-[28rem] rounded-full bg-brand-sky" />
           <span className="h-8 w-80 rounded-full bg-brand-green" />
           <span className="h-8 w-40 rounded-full bg-brand-red" />
         </div>
-        <div className={cn(siteColumn, "relative grid gap-6 py-16 sm:py-24")}>
-          <h1 className="max-w-3xl text-4xl leading-tight font-semibold text-balance sm:text-5xl">
-            {t.hero}
-          </h1>
-          <p className="max-w-2xl text-lg leading-relaxed text-pretty text-white/80">{t.body}</p>
-          <div className="flex flex-wrap gap-3">
-            <a href={primary.href} {...buttonLink({ size: "lg", className: onBrand })}>
-              {primary.label}
-            </a>
-            <a
-              href={`#${stepsId}`}
-              {...buttonLink({ variant: "outline", size: "lg", className: outlineOnBrand })}
-            >
-              {t.howItWorks}
-            </a>
+        <div
+          className={cn(
+            siteColumn,
+            "relative grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:py-20",
+          )}
+        >
+          <div className="grid gap-6">
+            <h1 className="text-4xl leading-tight font-semibold text-balance sm:text-5xl">
+              {t.hero}
+            </h1>
+            <p className="text-lg leading-relaxed text-pretty text-white/80">{t.body}</p>
+            <div className="flex flex-wrap gap-3">
+              <a href={primary.href} {...buttonLink({ size: "lg", className: onBrand })}>
+                {primary.label}
+              </a>
+              <a
+                href={`#${stepsId}`}
+                {...buttonLink({ variant: "outline", size: "lg", className: outlineOnBrand })}
+              >
+                {t.howItWorks}
+              </a>
+            </div>
+            <ul className="grid gap-2 text-sm text-white/80 sm:flex sm:flex-wrap sm:gap-x-6">
+              {t.trust.map((item) => (
+                <li key={item} className="flex items-center gap-2">
+                  <BadgeCheck aria-hidden="true" className="size-4 shrink-0 text-brand-sky" />
+                  {item}
+                </li>
+              ))}
+            </ul>
           </div>
-          <ul className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-white/80">
-            {t.trust.map((item) => (
-              <li key={item} className="flex items-center gap-2">
-                <BadgeCheck aria-hidden="true" className="size-4 text-brand-sky" />
-                {item}
-              </li>
-            ))}
-          </ul>
+          <ProductShot
+            name="ordini"
+            language={language}
+            alt={t.shots.ordini}
+            priority
+            className="border-white/20 shadow-2xl shadow-black/30 max-sm:mx-auto max-sm:max-w-sm"
+          />
         </div>
       </section>
       <section
         id={stepsId}
         aria-labelledby={`${stepsId}-titolo`}
-        className={cn(siteColumn, "grid scroll-mt-4 gap-8 py-16")}
+        className={cn(siteColumn, "grid scroll-mt-4 gap-8 py-14 sm:py-16")}
       >
-        <h2 id={`${stepsId}-titolo`} className="text-2xl font-semibold">
+        <h2 id={`${stepsId}-titolo`} className="text-2xl font-semibold sm:text-3xl">
           {t.howItWorks}
         </h2>
-        <ol className="grid gap-8 md:grid-cols-3">
+        <ol className="grid gap-6 md:grid-cols-3 md:gap-8">
           {t.steps.map((step, index) => (
-            <li key={step.title} className="grid content-start gap-3">
+            <li key={step.title} className="flex gap-4 md:grid md:content-start md:gap-3">
               <IconTile icon={stepIcons[index]!.icon} tone={stepIcons[index]!.tone} size="lg" />
-              <h3 className="font-semibold">{step.title}</h3>
-              <p className="leading-relaxed text-pretty text-muted-foreground">{step.body}</p>
+              <div className="grid content-start gap-1.5">
+                <h3 className="font-semibold">{step.title}</h3>
+                <p className="leading-relaxed text-pretty text-muted-foreground">{step.body}</p>
+              </div>
             </li>
           ))}
         </ol>
-        <div className="grid gap-3 border-t pt-8">
-          <p className="text-pretty">{t.quota}</p>
-          <div className="flex flex-wrap gap-x-6 gap-y-2">
-            <a
-              href={localizedPath(language, pricingPath)}
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              {t.pricingLink}
-            </a>
-            <a
-              href={localizedPath(language, featuresPath)}
-              className="font-medium text-primary underline-offset-4 hover:underline"
-            >
-              {t.allFeatures}
-            </a>
+      </section>
+      <section aria-labelledby="dentro-fiscalbay" className="border-y bg-muted/40">
+        <div className={cn(siteColumn, "grid gap-14 py-14 sm:gap-20 sm:py-20")}>
+          <h2 id="dentro-fiscalbay" className="text-2xl font-semibold sm:text-3xl">
+            {t.showcaseTitle}
+          </h2>
+          {t.highlights.map((item, index) => (
+            <ShotRow
+              key={item.shot}
+              id={`dentro-${item.shot}`}
+              title={item.title}
+              badge={item.premium ? <Badge variant="premium">{t.premium}</Badge> : null}
+              body={item.body}
+              shot={item.shot as ShotName}
+              language={language}
+              alt={t.shots[item.shot as ShotName]}
+              reverse={index % 2 === 1}
+            />
+          ))}
+          <a href={localizedPath(language, featuresPath)} className={cn(textLink, "w-fit")}>
+            {t.allFeatures}
+          </a>
+        </div>
+      </section>
+      <section aria-labelledby="piani" className={cn(siteColumn, "grid gap-6 py-14 sm:py-16")}>
+        <h2 id="piani" className="text-2xl font-semibold sm:text-3xl">
+          {t.plansTitle}
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid content-start gap-2 rounded-2xl border bg-card p-6">
+            <h3 className="font-semibold">{t.freePlan}</h3>
+            <p className="text-3xl font-semibold">{t.freePrice}</p>
+            <p className="leading-relaxed text-pretty text-muted-foreground">{t.quota}</p>
           </div>
+          <div className="grid content-start gap-2 rounded-2xl border border-primary bg-card p-6 ring-1 ring-primary">
+            <h3 className="font-semibold">{t.premiumPlan}</h3>
+            <p className="text-lg font-semibold text-pretty">{t.premiumPrice}</p>
+            <p className="leading-relaxed text-pretty text-muted-foreground">{t.premiumBody}</p>
+          </div>
+        </div>
+        <a href={localizedPath(language, pricingPath)} className={cn(textLink, "w-fit")}>
+          {t.pricingLink}
+        </a>
+      </section>
+      <section aria-labelledby="domande" className="border-t">
+        <div className={cn(siteColumn, "grid max-w-3xl gap-6 py-14 sm:py-16")}>
+          <h2 id="domande" className="text-2xl font-semibold sm:text-3xl">
+            {t.faqTitle}
+          </h2>
+          <FaqList items={t.faq} />
+          <a href={localizedPath(language, faqPath)} className={cn(textLink, "w-fit")}>
+            {t.faqLink}
+          </a>
         </div>
       </section>
       <section className="bg-brand-navy text-white">

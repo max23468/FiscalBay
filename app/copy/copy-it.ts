@@ -997,7 +997,6 @@ export const it = {
       pricing: "Prezzi",
       security: "Sicurezza",
       faq: "FAQ",
-      menu: "Menu",
     },
     independent: "Servizio indipendente, non affiliato a eBay.",
     support: "Supporto",

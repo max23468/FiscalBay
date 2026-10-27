@@ -32,6 +32,44 @@ const it = {
         body: "Copi il dato con un clic ed esporti gli ordini. Con Premium ricevi anche le notifiche su Telegram.",
       },
     ],
+    showcaseTitle: "Dentro FiscalBay",
+    highlights: [
+      {
+        shot: "scheda",
+        title: "Il Codice Fiscale nella scheda dell’ordine",
+        body: "Ogni ordine mostra acquirente, indirizzo di fatturazione e Codice Fiscale, quando disponibile su eBay, pronto da copiare con un clic. Se c’è, anche la Partita IVA.",
+        premium: false,
+      },
+      {
+        shot: "telegram",
+        title: "Ogni nuovo ordine su Telegram",
+        body: "Il bot ti scrive appena arriva un ordine, con il Codice Fiscale da copiare direttamente dal messaggio.",
+        premium: true,
+      },
+      {
+        shot: "esportazione",
+        title: "Un file pronto per la fatturazione",
+        body: "Ordini, acquirenti e dati fiscali in CSV o XLSX, da importare nel gestionale o nel software di fatturazione.",
+        premium: false,
+      },
+      {
+        shot: "negozi",
+        title: "Tutti i tuoi negozi eBay",
+        body: "Colleghi più negozi e li tieni aggiornati insieme: per ognuno vedi collegamento, ultima lettura e ordini importati.",
+        premium: true,
+      },
+    ],
+    premium: "Premium",
+    plansTitle: "Piani",
+    freePlan: "Free",
+    freePrice: "0 €",
+    premiumPlan: "Premium",
+    premiumPrice: (monthly: string, annual: string) =>
+      `${monthly} + IVA al mese o ${annual} + IVA all’anno`,
+    premiumBody:
+      "Ordini da sbloccare senza limite per ciclo, più negozi, un anno di storico, XLSX e notifiche Telegram. Prova di 14 giorni senza carta.",
+    faqTitle: "Domande frequenti",
+    faqLink: "Tutte le domande",
     allFeatures: "Tutte le funzionalità",
     pricingLink: "Vedi i prezzi",
     closing: "Prova FiscalBay con il tuo negozio eBay.",
@@ -45,41 +83,43 @@ const it = {
       "Codice Fiscale e Partita IVA dagli ordini eBay, sincronizzazione automatica, ricerca, export CSV e XLSX, notifiche Telegram e più negozi.",
     lead: "Il Codice Fiscale dei tuoi ordini eBay a portata di mano, dal collegamento del negozio all’export.",
     premium: "Premium",
-    items: [
+    showcase: [
       {
+        shot: "scheda",
         title: "Codice Fiscale e Partita IVA",
         body: "FiscalBay mostra il Codice Fiscale indicato dall’acquirente, quando disponibile su eBay, e la Partita IVA se c’è. Lo copi con un clic, senza spazi e in maiuscolo; quando manca, un modello di messaggio ti aiuta a chiederlo.",
         premium: false,
       },
       {
-        title: "Sincronizzazione automatica",
-        body: "Al collegamento importa gli ordini recenti, poi legge da solo i nuovi ordini e gli aggiornamenti, anche quando non sei collegato.",
-        premium: false,
-      },
-      {
+        shot: "ordini",
         title: "Ordini in un solo elenco",
-        body: "Gli ordini dei tuoi negozi insieme, con ricerca per ordine, acquirente, articolo, SKU o Codice Fiscale e filtri per trovare subito quelli da gestire.",
+        body: "Gli ordini dei tuoi negozi insieme, con ricerca per ordine, acquirente, articolo, SKU o Codice Fiscale e filtri per negozio, periodo, pagamento, spedizione e dato fiscale.",
         premium: false,
       },
       {
-        title: "Export CSV",
-        body: "Esporti gli ordini in CSV, con una riga per ordine o per articolo, pronti per il tuo gestionale o il software di fatturazione.",
+        shot: "esportazione",
+        title: "Export CSV e XLSX",
+        body: "Esporti gli ordini in CSV, una riga per ordine o per articolo, pronti per il gestionale o il software di fatturazione. Con Premium anche in XLSX, con le colonne che scegli e le configurazioni salvate.",
         premium: false,
       },
       {
-        title: "XLSX e colonne a scelta",
-        body: "Esporti anche in XLSX, scegli e ordini le colonne e salvi le configurazioni che usi più spesso.",
-        premium: true,
-      },
-      {
+        shot: "telegram",
         title: "Notifiche Telegram",
         body: "Ricevi su Telegram i nuovi ordini con il dato fiscale, oppure un riepilogo, e copi il Codice Fiscale dal messaggio.",
         premium: true,
       },
       {
+        shot: "negozi",
         title: "Più negozi e un anno di storico",
         body: "Il piano Free ha un negozio attivo, sostituibile ogni 90 giorni, e gli ultimi 30 giorni di ordini. Premium collega più negozi e conserva un anno di storico.",
         premium: true,
+      },
+    ],
+    items: [
+      {
+        title: "Sincronizzazione automatica",
+        body: "Al collegamento importa gli ordini recenti, poi legge da solo i nuovi ordini e gli aggiornamenti, anche quando non sei collegato.",
+        premium: false,
       },
       {
         title: "Suggerimenti dagli ordini precedenti",
@@ -90,6 +130,7 @@ const it = {
     security: "Sola lettura su eBay, token cifrati e dati conservati nell’Unione Europea.",
     securityLink: "Come proteggiamo i dati",
   },
+
   pricing: {
     title: "Prezzi",
     description:
@@ -262,6 +303,15 @@ const it = {
     more: "Non trovi la risposta?",
     support: "Vai al Supporto",
   },
+  /** Testi alternativi delle schermate del prodotto, una per immagine. */
+  shots: {
+    ordini: "Elenco Ordini di FiscalBay con filtri, Codice Fiscale e Partita IVA degli acquirenti",
+    scheda: "Scheda di un ordine eBay con acquirente, indirizzo e Codice Fiscale da copiare",
+    esportazione: "File degli ordini esportato da FiscalBay con Codice Fiscale e Partita IVA",
+    telegram: "Messaggio del bot Telegram di FiscalBay per un nuovo ordine con il Codice Fiscale",
+    negozi: "Negozi eBay collegati a FiscalBay con stato, ultima lettura e ordini importati",
+    sicurezza: "Metodi di accesso e sessioni attive nelle Impostazioni di FiscalBay",
+  },
   legal: {
     description: {
       termini: "Termini di servizio di FiscalBay.",
@@ -306,6 +356,43 @@ const en: SitePagesCopy = {
         body: "Copy the identifier in one click and export your orders. With Premium you also get notifications on Telegram.",
       },
     ],
+    showcaseTitle: "Inside FiscalBay",
+    highlights: [
+      {
+        shot: "scheda",
+        title: "The Codice Fiscale on the order card",
+        body: "Every order shows the buyer, billing address and Codice Fiscale, when eBay provides it, ready to copy in one click. The Partita IVA too, when there is one.",
+        premium: false,
+      },
+      {
+        shot: "telegram",
+        title: "Every new order on Telegram",
+        body: "The bot writes to you as soon as an order arrives, with the Codice Fiscale to copy straight from the message.",
+        premium: true,
+      },
+      {
+        shot: "esportazione",
+        title: "A file ready for invoicing",
+        body: "Orders, buyers and tax identifiers as CSV or XLSX, to import into your management or invoicing software.",
+        premium: false,
+      },
+      {
+        shot: "negozi",
+        title: "All your eBay stores",
+        body: "Connect several stores and keep them up to date together: for each one you see the connection, last read and imported orders.",
+        premium: true,
+      },
+    ],
+    premium: "Premium",
+    plansTitle: "Plans",
+    freePlan: "Free",
+    freePrice: "€0",
+    premiumPlan: "Premium",
+    premiumPrice: (monthly, annual) => `${monthly} + VAT per month or ${annual} + VAT per year`,
+    premiumBody:
+      "Unlimited orders to unlock per cycle, more stores, one year of history, XLSX and Telegram notifications. 14-day trial with no card.",
+    faqTitle: "Frequently asked questions",
+    faqLink: "All questions",
     allFeatures: "All features",
     pricingLink: "See pricing",
     closing: "Try FiscalBay with your eBay store.",
@@ -319,41 +406,43 @@ const en: SitePagesCopy = {
       "Codice Fiscale and Partita IVA from your eBay orders, automatic sync, search, CSV and XLSX export, Telegram notifications and multiple stores.",
     lead: "The Codice Fiscale of your eBay orders at hand, from connecting your store to exporting.",
     premium: "Premium",
-    items: [
+    showcase: [
       {
+        shot: "scheda",
         title: "Codice Fiscale and Partita IVA",
         body: "FiscalBay shows the Codice Fiscale the buyer entered, when eBay provides it, and the Partita IVA when there is one. Copy it in one click, without spaces and in capitals; when it is missing, a message template helps you ask for it.",
         premium: false,
       },
       {
-        title: "Automatic sync",
-        body: "When you connect, it imports your recent orders, then reads new orders and updates on its own, even when you are not signed in.",
-        premium: false,
-      },
-      {
+        shot: "ordini",
         title: "All orders in one list",
-        body: "Orders from all your stores together, with search by order, buyer, item, SKU or Codice Fiscale and filters to find the ones to handle right away.",
+        body: "Orders from all your stores together, with search by order, buyer, item, SKU or Codice Fiscale and filters by store, period, payment, shipping and tax identifier.",
         premium: false,
       },
       {
-        title: "CSV export",
-        body: "Export your orders as CSV, with one row per order or per item, ready for your management or invoicing software.",
+        shot: "esportazione",
+        title: "CSV and XLSX export",
+        body: "Export your orders as CSV, one row per order or per item, ready for your management or invoicing software. With Premium as XLSX too, with the columns you choose and saved configurations.",
         premium: false,
       },
       {
-        title: "XLSX and chosen columns",
-        body: "Export as XLSX too, choose and order the columns and save the configurations you use most.",
-        premium: true,
-      },
-      {
+        shot: "telegram",
         title: "Telegram notifications",
         body: "Get new orders with their tax identifier on Telegram, or a digest, and copy the Codice Fiscale from the message.",
         premium: true,
       },
       {
+        shot: "negozi",
         title: "More stores and a year of history",
         body: "The Free plan has one active store, replaceable every 90 days, and the last 30 days of orders. Premium connects more stores and keeps a year of history.",
         premium: true,
+      },
+    ],
+    items: [
+      {
+        title: "Automatic sync",
+        body: "When you connect, it imports your recent orders, then reads new orders and updates on its own, even when you are not signed in.",
+        premium: false,
       },
       {
         title: "Suggestions from earlier orders",
@@ -364,6 +453,7 @@ const en: SitePagesCopy = {
     security: "Read-only access to eBay, encrypted tokens and data stored in the European Union.",
     securityLink: "How we protect your data",
   },
+
   pricing: {
     title: "Pricing",
     description:
@@ -535,6 +625,14 @@ const en: SitePagesCopy = {
     ],
     more: "Can’t find the answer?",
     support: "Go to Support",
+  },
+  shots: {
+    ordini: "FiscalBay order list with filters and the buyers’ Codice Fiscale and Partita IVA",
+    scheda: "eBay order card with buyer, address and the Codice Fiscale to copy",
+    esportazione: "Order file exported from FiscalBay with Codice Fiscale and Partita IVA",
+    telegram: "FiscalBay Telegram bot message for a new order with the Codice Fiscale",
+    negozi: "eBay stores connected to FiscalBay with status, last read and imported orders",
+    sicurezza: "Sign-in methods and active sessions in FiscalBay Settings",
   },
   legal: {
     description: {

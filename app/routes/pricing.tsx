@@ -176,12 +176,12 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]">
           <section
             aria-labelledby="piano-free"
-            className="grid content-start gap-5 rounded-2xl border bg-card p-6"
+            className="grid content-start gap-4 rounded-2xl border bg-card p-5 sm:gap-5 sm:p-6"
           >
             <h2 id="piano-free" className="text-xl font-semibold">
               {t.free}
             </h2>
-            <p className="text-4xl font-semibold">{t.freePrice}</p>
+            <p className="text-3xl font-semibold sm:text-4xl">{t.freePrice}</p>
             <ul className="grid gap-2">
               {t.freeItems.map((item) => (
                 <li key={item} className="flex gap-2">
@@ -199,7 +199,7 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
           </section>
           <section
             aria-labelledby="piano-premium"
-            className="grid content-start gap-5 rounded-2xl border bg-card p-6"
+            className="grid content-start gap-4 rounded-2xl border bg-card p-5 sm:gap-5 sm:p-6"
           >
             <h2 id="piano-premium" className="text-xl font-semibold">
               {t.premium}
@@ -220,16 +220,27 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
                 <li
                   key={offer.offer}
                   className={cn(
-                    "grid content-start gap-2 rounded-xl border p-4",
+                    "grid content-start gap-1 rounded-xl border p-3 md:gap-2 md:p-4",
                     offer.best && "border-primary ring-1 ring-primary",
                   )}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="font-semibold">{offer.name}</h3>
-                    {offer.best ? <Badge>{t.best}</Badge> : null}
-                    {offer.soldOut ? <Badge variant="neutral">{t.soldOut}</Badge> : null}
+                  {/* Su smartphone una riga: nome a sinistra, prezzo a destra. */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-semibold">{offer.name}</h3>
+                      {offer.best ? <Badge>{t.best}</Badge> : null}
+                      {offer.soldOut ? <Badge variant="neutral">{t.soldOut}</Badge> : null}
+                    </div>
+                    <p className="text-right md:hidden">
+                      <span className="block text-xl leading-tight font-semibold">
+                        {offer.price}
+                      </span>
+                      <span className="block text-xs whitespace-nowrap text-muted-foreground">
+                        {offer.period}
+                      </span>
+                    </p>
                   </div>
-                  <p className="flex flex-wrap items-baseline gap-x-1.5">
+                  <p className="flex flex-wrap items-baseline gap-x-1.5 max-md:hidden">
                     <span className="text-3xl font-semibold">{offer.price}</span>
                     <span className="text-sm text-muted-foreground">{offer.period}</span>
                   </p>
@@ -250,10 +261,10 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
         {purchasesOpen ? (
           <section
             aria-labelledby="prova"
-            className="flex flex-wrap gap-4 rounded-2xl border border-premium/30 bg-premium-surface p-6 dark:bg-premium/10"
+            className="flex gap-4 rounded-2xl border border-premium/30 bg-premium-surface p-5 sm:p-6 dark:bg-premium/10"
           >
-            <IconTile icon={Gift} tone="violet" size="lg" />
-            <div className="grid flex-1 basis-64 gap-2">
+            <IconTile icon={Gift} tone="violet" size="lg" className="max-sm:size-9" />
+            <div className="grid flex-1 gap-2">
               <h2 id="prova" className="text-lg font-semibold">
                 {t.trialTitle}
               </h2>

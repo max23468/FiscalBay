@@ -1,0 +1,112 @@
+{
+  "ordini": {
+    "it": {
+      "width": 1280,
+      "height": 800
+    },
+    "en": {
+      "width": 1280,
+      "height": 800
+    }
+  },
+  "ordini-mobile": {
+    "it": {
+      "width": 390,
+      "height": 640
+    },
+    "en": {
+      "width": 390,
+      "height": 640
+    }
+  },
+  "scheda": {
+    "it": {
+      "width": 688,
+      "height": 401
+    },
+    "en": {
+      "width": 688,
+      "height": 401
+    }
+  },
+  "scheda-mobile": {
+    "it": {
+      "width": 358,
+      "height": 500
+    },
+    "en": {
+      "width": 358,
+      "height": 500
+    }
+  },
+  "negozi": {
+    "it": {
+      "width": 1178,
+      "height": 369
+    },
+    "en": {
+      "width": 1178,
+      "height": 369
+    }
+  },
+  "negozi-mobile": {
+    "it": {
+      "width": 390,
+      "height": 618
+    },
+    "en": {
+      "width": 390,
+      "height": 618
+    }
+  },
+  "sicurezza": {
+    "it": {
+      "width": 670,
+      "height": 749
+    },
+    "en": {
+      "width": 670,
+      "height": 749
+    }
+  },
+  "sicurezza-mobile": {
+    "it": {
+      "width": 390,
+      "height": 605
+    },
+    "en": {
+      "width": 390,
+      "height": 605
+    }
+  },
+  "telegram": {
+    "it": {
+      "width": 420,
+      "height": 349
+    },
+    "en": {
+      "width": 420,
+      "height": 349
+    }
+  },
+  "esportazione": {
+    "it": {
+      "width": 862,
+      "height": 218
+    },
+    "en": {
+      "width": 848,
+      "height": 218
+    }
+  },
+  "esportazione-mobile": {
+    "it": {
+      "width": 385,
+      "height": 192
+    },
+    "en": {
+      "width": 385,
+      "height": 192
+    }
+  }
+}

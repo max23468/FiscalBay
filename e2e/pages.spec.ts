@@ -192,6 +192,15 @@ for (const scenario of scenarios) {
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
         ).toBe(true);
+        // Le immagini sotto la piega si caricano tardi: qui si caricano tutte, così una rotta emerge.
+        await page.locator("img").evaluateAll((images) =>
+          Promise.all(
+            images.map((image) => {
+              (image as HTMLImageElement).loading = "eager";
+              return (image as HTMLImageElement).decode().catch(() => undefined);
+            }),
+          ),
+        );
         expect(
           await page
             .locator("img")
