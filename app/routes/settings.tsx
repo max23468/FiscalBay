@@ -85,6 +85,14 @@ import {
   type SettingsSection,
 } from "../view-models";
 import { listVisibleOrders, visibleOrderTallies, type OrderTally } from "../domain/orders.server";
+import {
+  deleteExportConfiguration,
+  listExportConfigurations,
+  maxExportConfigurations,
+  parseConfigurationName,
+  parseExportLayout,
+  saveExportConfiguration,
+} from "../domain/export-configurations.server";
 import { exportContext } from "../orders/export-scope";
 import { accountExportScope } from "../orders/export-scope.server";
 import { formatDate } from "../format";
@@ -92,10 +100,9 @@ import type { Route } from "./+types/settings";
 import { subscriptionView } from "../domain/plan-view.server";
 
 /**
- * Servizi reali delle categorie. Esportazione e cancellazione dell'account e opzioni Premium
- * dell'esportazione compaiono insieme ai loro servizi. L'acquisto compare con la configurazione
- * Stripe, la gestione dell'abbonamento con il portale di Stripe, le notifiche Telegram con il bot
- * dell'ambiente.
+ * Servizi reali delle categorie. Esportazione e cancellazione dell'account compaiono insieme ai
+ * loro servizi. L'acquisto compare con la configurazione Stripe, la gestione dell'abbonamento con
+ * il portale di Stripe, le notifiche Telegram con il bot dell'ambiente.
  */
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
@@ -103,7 +110,6 @@ const services = (): SettingsPageData["services"] => ({
   telegram: telegramConfigured(env),
   accountData: false,
   support: true,
-  exportAdvanced: false,
 });
 
 function isSection(value: string | undefined): value is SettingsSection {
@@ -160,6 +166,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     pendingEmail,
     telegram,
     admissionState,
+    exportConfigurations,
   ] = await measure("d1", "settings", () =>
     Promise.all([
       orderAllowance(env.DB, userId, now),
@@ -173,6 +180,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       pendingEmailChange(env.DB, userId, session.user.email),
       telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
       admission(env.DB, userId),
+      listExportConfigurations(env.DB, userId),
     ]),
   );
   const [exportData, subscription] = await Promise.all([
@@ -223,6 +231,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     whatsNew: whatsNew.length > 0,
     telegram,
     ...exportData,
+    exportConfigurations,
     now: now.toISOString(),
   };
   return {
@@ -453,6 +462,22 @@ export async function action({ request }: Route.ActionArgs) {
       await saveTemplates(env.DB, userId, templates);
       return { ok: true } satisfies ActionResult;
     }
+    if (intent === "export-save") {
+      // Le configurazioni si salvano soltanto con Premium, riletto all'istante della richiesta.
+      const layout = parseExportLayout(form);
+      const name = parseConfigurationName(form);
+      if (!layout || !name) return failed(400, t.export.exportConfigInvalid);
+      if (!(await orderAllowance(env.DB, userId, new Date()))?.premium)
+        return failed(403, t.export.exportPremium);
+      if (!(await saveExportConfiguration(env.DB, userId, name, layout, new Date())))
+        return failed(409, t.export.exportConfigFull(maxExportConfigurations));
+      return { ok: true, notice: t.export.exportConfigSaved } satisfies ActionResult;
+    }
+    if (intent === "export-delete") {
+      if (!(await deleteExportConfiguration(env.DB, userId, String(form.get("id") ?? ""))))
+        return failed(404, t.export.exportConfigInvalid);
+      return { ok: true, notice: t.export.exportConfigDeleted } satisfies ActionResult;
+    }
     if (intent === "telegram-link") {
       // Il modulo apre una nuova scheda: il link porta al bot dell'ambiente.
       if (!telegramConfigured(env)) return failed(409, t.notifications.telegramUnavailable);
@@ -543,7 +568,9 @@ export async function action({ request }: Route.ActionArgs) {
           ? appCopy[language].errors.unexpected
           : intent === "manage-billing"
             ? t.plan.billingUnavailable
-            : t.saveFailed,
+            : intent === "export-save"
+              ? t.export.exportConfigFailed
+              : t.saveFailed,
     );
   }
   return securityAction(request, area, form);

@@ -192,9 +192,6 @@ importers:
       cn:
         specifier: 0.5.0
         version: 0.5.0
-      exceljs:
-        specifier: 4.4.0
-        version: 4.4.0
       fflate:
         specifier: 0.8.3
         version: 0.8.3
@@ -262,6 +259,9 @@ importers:
       cf:
         specifier: 1.0.0-beta.18
         version: 1.0.0-beta.18(patch_hash=0685c316a12e86d1646814639129cbd11dfed98f4c127b29965d33bddbf61d6f)(@types/node@26.6.5)
+      exceljs:
+        specifier: 4.4.0
+        version: 4.4.0
       knip:
         specifier: 6.42.1
         version: 6.42.1

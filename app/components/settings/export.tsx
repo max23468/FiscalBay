@@ -1,17 +1,31 @@
-import { useState } from "react";
+import { ArrowDown, ArrowUp } from "lucide-react";
+import { useId, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { useAction, useNotice } from "~/components/action";
 import { PremiumNote, StatusBadge } from "~/components/status";
 import { Button } from "~/components/ui/button";
-import { FieldGroup, FieldLegend, FieldSet } from "~/components/ui/field";
+import { FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
+import { Input } from "~/components/ui/input";
 import { RadioGroup } from "~/components/ui/radio-group";
 import { useCopy, useLinks } from "~/components/copy-context";
 import { orderExportPath } from "../../app-links";
 import type { AppCopy } from "../../copy/copy-it";
+import type { ExportConfiguration } from "../../domain/export-configurations.server";
+import {
+  columnName,
+  maxConfigurationName,
+  standardColumns,
+  type ExportColumn,
+  type ExportFormat,
+  type ExportRows,
+} from "../../orders/export-columns";
 import type { ExportContext, ExportTally } from "../../orders/export-scope";
 import { orderPeriods, premiumOrderPeriods, type OrderPeriod } from "../../view-models";
 import { CheckboxOption, Group, RadioOption, SimpleSelect } from "./controls";
+
+/** Valore della scelta «Standard» fra le configurazioni salvate. */
+const standardChoice = "";
 
 /** Ambito ricevuto dagli Ordini, sempre esplicito, con il ritorno all'elenco di partenza. */
 function ExportContextNote({ context }: { context: ExportContext }) {
@@ -62,7 +76,10 @@ function CreateFileForm({
       const response = await fetch(form.action, {
         method: "POST",
         body: new FormData(form),
-        headers: { accept: "text/csv, application/json" },
+        headers: {
+          accept:
+            "text/csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/json",
+        },
       });
       if (!response.ok) {
         const result = (await response.json().catch(() => null)) as { notice?: string } | null;
@@ -73,7 +90,7 @@ function CreateFileForm({
       const href = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = href;
-      link.download = fileName(response) ?? "fiscalbay.csv";
+      link.download = fileName(response) ?? "fiscalbay";
       link.click();
       // Safari legge l'oggetto dopo il clic: si libera più tardi.
       setTimeout(() => URL.revokeObjectURL(href), 60_000);
@@ -102,6 +119,32 @@ function CreateFileForm({
   );
 }
 
+/** «Crea file»: nell'anteprima la risposta è simulata, nell'area reale il file si scarica. */
+function CreateFile({
+  context,
+  fields,
+  disabled,
+}: {
+  context: ExportContext | null;
+  fields: Record<string, string>;
+  disabled: boolean;
+}) {
+  const { t } = useCopy();
+  const { preview } = useLinks();
+  const action = useAction();
+  if (!preview) return <CreateFileForm context={context} fields={fields} disabled={disabled} />;
+  return (
+    <Button
+      disabled={disabled}
+      onClick={() =>
+        action.run("export-create", { ...fields, ...(context ? { scope: context.query } : {}) })
+      }
+    >
+      {t.settings.export.exportCreate}
+    </Button>
+  );
+}
+
 /** Ordini del file con le scelte correnti, oppure perché non ce ne sono. */
 function exportStatus(
   t: AppCopy,
@@ -123,14 +166,18 @@ function FormatField({
   onChange,
 }: {
   premium: boolean;
-  value: string;
-  onChange: (value: string) => void;
+  value: ExportFormat;
+  onChange: (value: ExportFormat) => void;
 }) {
   const { t } = useCopy();
   return (
     <FieldSet>
       <FieldLegend variant="label">{t.settings.export.exportFormat}</FieldLegend>
-      <RadioGroup value={value} onValueChange={(next) => onChange(String(next))} className="gap-3">
+      <RadioGroup
+        value={value}
+        onValueChange={(next) => onChange(next === "xlsx" ? "xlsx" : "csv")}
+        className="gap-3"
+      >
         <RadioOption value="csv">CSV</RadioOption>
         <RadioOption value="xlsx" disabled={!premium}>
           XLSX
@@ -141,86 +188,349 @@ function FormatField({
   );
 }
 
-/** Colonne scelte con Premium; nel Free soltanto la nota del piano. */
+/** Forma del file scelta: formato, granularità e colonne, comprese quelle escluse. */
+interface Layout {
+  format: ExportFormat;
+  rows: ExportRows;
+  /** Ogni colonna nell'ordine scelto; quelle non incluse seguono nell'ordine standard. */
+  order: ExportColumn[];
+  chosen: ExportColumn[];
+}
+
+function layoutOf(configuration: ExportConfiguration | null): Layout {
+  const all = standardColumns("item");
+  if (!configuration) return { format: "csv", rows: "order", order: all, chosen: all };
+  const { format, rows, columns } = configuration;
+  const saved = new Set(columns);
+  return {
+    format,
+    rows,
+    order: [...columns, ...all.filter((column) => !saved.has(column))],
+    chosen: columns,
+  };
+}
+
+/** Colonne del file, nell'ordine scelto, fra quelle della granularità. */
+function fileColumns(layout: Layout): ExportColumn[] {
+  const available = new Set(standardColumns(layout.rows));
+  const chosen = new Set(layout.chosen);
+  return layout.order.filter((column) => available.has(column) && chosen.has(column));
+}
+
+/**
+ * Colonne scelte e ordinate con Premium: ogni colonna si include e si sposta con i pulsanti,
+ * e lo spostamento è annunciato. Nel Free soltanto la nota del piano.
+ */
 function ColumnsField({
   premium,
-  chosen,
+  layout,
+  onChange,
+}: {
+  premium: boolean;
+  layout: Layout;
+  onChange: (layout: Layout) => void;
+}) {
+  const { t } = useCopy();
+  const copy = t.settings.export;
+  const [moved, setMoved] = useState("");
+  if (!premium)
+    return (
+      <FieldSet>
+        <FieldLegend variant="label">{copy.exportColumns}</FieldLegend>
+        <PremiumNote>{copy.exportColumnsPremium}</PremiumNote>
+      </FieldSet>
+    );
+  const available = new Set(standardColumns(layout.rows));
+  const visible = layout.order.filter((column) => available.has(column));
+  const chosen = new Set(layout.chosen);
+  const name = (column: ExportColumn) => columnName(column, layout.rows, t);
+  const move = (column: ExportColumn, step: -1 | 1) => {
+    const index = visible.indexOf(column);
+    const other = visible[index + step];
+    if (!other) return;
+    const order = layout.order.map((current) =>
+      current === column ? other : current === other ? column : current,
+    );
+    onChange({ ...layout, order });
+    setMoved(copy.exportColumnMoved(name(column), index + step + 1, visible.length));
+  };
+  return (
+    <FieldSet>
+      <FieldLegend variant="label">{copy.exportColumns}</FieldLegend>
+      <ol className="grid max-h-96 gap-1 overflow-y-auto rounded-lg border p-2">
+        {visible.map((column, index) => (
+          <li key={column} className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <CheckboxOption
+                checked={chosen.has(column)}
+                onCheckedChange={(checked) =>
+                  onChange({
+                    ...layout,
+                    chosen: checked
+                      ? [...layout.chosen, column]
+                      : layout.chosen.filter((current) => current !== column),
+                  })
+                }
+              >
+                {name(column)}
+              </CheckboxOption>
+            </div>
+            {/* Agli estremi il pulsante resta raggiungibile: disattivarlo sposterebbe il focus. */}
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="aria-disabled:opacity-40"
+              aria-label={copy.exportMoveUp(name(column))}
+              aria-disabled={index === 0 || undefined}
+              onClick={() => move(column, -1)}
+            >
+              <ArrowUp aria-hidden />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="aria-disabled:opacity-40"
+              aria-label={copy.exportMoveDown(name(column))}
+              aria-disabled={index === visible.length - 1 || undefined}
+              onClick={() => move(column, 1)}
+            >
+              <ArrowDown aria-hidden />
+            </Button>
+          </li>
+        ))}
+      </ol>
+      <p role="status" className="sr-only">
+        {moved}
+      </p>
+    </FieldSet>
+  );
+}
+
+/**
+ * Salvataggio della forma corrente con un nome: un nome già usato sostituisce quella
+ * configurazione. Annullando, il focus torna a «Salva configurazione».
+ */
+function SaveConfiguration({
+  name,
+  layout,
+  onSaved,
+  children,
+}: {
+  name: string;
+  layout: Layout;
+  onSaved: (name: string) => void;
+  /** Comandi accanto a «Salva configurazione», nascosti mentre si scrive il nome. */
+  children?: React.ReactNode;
+}) {
+  const { t } = useCopy();
+  const copy = t.settings.export;
+  const id = useId();
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(name);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const action = useAction((result) => {
+    if (!result.ok) return;
+    setOpen(false);
+    onSaved(draft.trim());
+  });
+  const columns = fileColumns(layout);
+  if (!open)
+    return (
+      <>
+        <Button
+          ref={trigger}
+          variant="outline"
+          disabled={columns.length === 0}
+          onClick={() => {
+            setDraft(name);
+            setOpen(true);
+          }}
+        >
+          {copy.exportSaveConfig}
+        </Button>
+        {children}
+      </>
+    );
+  return (
+    <form
+      className="grid basis-full justify-items-start gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        action.run("export-save", {
+          name: draft.trim(),
+          format: layout.format,
+          rows: layout.rows,
+          columns: columns.join(","),
+        });
+      }}
+    >
+      <FieldLabel htmlFor={id}>{copy.exportConfigName}</FieldLabel>
+      <Input
+        id={id}
+        value={draft}
+        required
+        maxLength={maxConfigurationName}
+        className="sm:max-w-sm"
+        autoFocus
+        onChange={(event) => setDraft(event.currentTarget.value)}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="submit"
+          disabled={!draft.trim() || action.pending}
+          aria-busy={action.pending || undefined}
+        >
+          {action.pending ? t.common.saving : t.common.save}
+        </Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            setOpen(false);
+            requestAnimationFrame(() => trigger.current?.focus());
+          }}
+        >
+          {t.common.cancel}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/** Configurazione salvata, formato, granularità e colonne del file. */
+function LayoutFields({
+  premium,
+  configurations,
+  configuration,
+  layout,
+  onChange,
   onChoose,
 }: {
   premium: boolean;
-  chosen: ReadonlySet<string>;
-  onChoose: (key: string, checked: boolean) => void;
+  configurations: ExportConfiguration[];
+  configuration: ExportConfiguration | null;
+  layout: Layout;
+  onChange: (layout: Layout) => void;
+  onChoose: (name: string) => void;
 }) {
-  const { t } = useCopy();
+  const copy = useCopy().t.settings.export;
   return (
-    <FieldSet>
-      <FieldLegend variant="label">{t.settings.export.exportColumns}</FieldLegend>
-      {premium ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {Object.entries(t.settings.export.columns).map(([key, label]) => (
-            <CheckboxOption
-              key={key}
-              checked={chosen.has(key)}
-              onCheckedChange={(checked) => onChoose(key, checked)}
-            >
-              {label}
-            </CheckboxOption>
-          ))}
-        </div>
-      ) : (
-        <PremiumNote>{t.settings.export.exportColumnsPremium}</PremiumNote>
-      )}
-    </FieldSet>
+    <>
+      {premium && configurations.length ? (
+        <SimpleSelect
+          label={copy.exportConfiguration}
+          items={[
+            { value: standardChoice, label: copy.exportConfigurationStandard },
+            ...configurations.map((current) => ({ value: current.name, label: current.name })),
+          ]}
+          value={configuration?.name ?? standardChoice}
+          onChange={onChoose}
+        />
+      ) : null}
+      <FormatField
+        premium={premium}
+        value={layout.format}
+        onChange={(format) => onChange({ ...layout, format })}
+      />
+      <FieldSet>
+        <FieldLegend variant="label">{copy.exportRows}</FieldLegend>
+        <RadioGroup
+          value={layout.rows}
+          onValueChange={(next) =>
+            onChange({ ...layout, rows: next === "item" ? "item" : "order" })
+          }
+          className="gap-3"
+        >
+          <RadioOption value="order">{copy.exportRowOrder}</RadioOption>
+          <RadioOption value="item">{copy.exportRowItem}</RadioOption>
+        </RadioGroup>
+      </FieldSet>
+      <ColumnsField premium={premium} layout={layout} onChange={onChange} />
+    </>
+  );
+}
+
+/** Salvataggio della forma corrente ed eliminazione della configurazione scelta. */
+function ConfigurationCommands({
+  configuration,
+  layout,
+  onSelect,
+}: {
+  configuration: ExportConfiguration | null;
+  layout: Layout;
+  onSelect: (name: string | null) => void;
+}) {
+  const copy = useCopy().t.settings.export;
+  const remove = useAction((result) => {
+    if (result.ok) onSelect(null);
+  });
+  return (
+    <SaveConfiguration
+      key={configuration?.name ?? standardChoice}
+      name={configuration?.name ?? ""}
+      layout={layout}
+      onSaved={onSelect}
+    >
+      {configuration ? (
+        <Button
+          variant="destructive"
+          disabled={remove.pending}
+          onClick={() => remove.run("export-delete", { id: configuration.id })}
+        >
+          {copy.exportConfigDelete}
+        </Button>
+      ) : null}
+    </SaveConfiguration>
   );
 }
 
 export function ExportSection({
   premium,
-  advanced,
+  configurations,
   context,
   periods,
 }: {
   premium: boolean;
-  /** XLSX, colonne scelte e configurazioni salvate; senza il servizio non compaiono. */
-  advanced: boolean;
+  /** Configurazioni salvate; valgono soltanto con Premium. */
+  configurations: ExportConfiguration[];
   context: ExportContext | null;
   /** Ordini di ogni periodo, quando l'esportazione non viene dagli Ordini. */
   periods: Record<OrderPeriod, ExportTally> | null;
 }) {
   const { t, language } = useCopy();
-  const { preview } = useLinks();
-  const action = useAction();
+  const copy = t.settings.export;
   const [period, setPeriod] = useState<OrderPeriod>("30");
-  const [format, setFormat] = useState("csv");
-  const [rows, setRows] = useState("order");
   const [fiscal, setFiscal] = useState("all");
-  // Colonne del file, tutte all'inizio: la scelta viaggia con la richiesta dell'esportazione.
-  const [chosen, setChosen] = useState(() => new Set(Object.keys(t.settings.export.columns)));
-  const choose = (key: string, checked: boolean) =>
-    setChosen((current) => {
-      const next = new Set(current);
-      if (checked) next.add(key);
-      else next.delete(key);
-      return next;
-    });
+  const [layout, setLayout] = useState(() => layoutOf(null));
+  // Configurazione scelta, per nome: dopo un salvataggio la rilettura la ritrova.
+  const [selected, setSelected] = useState<string | null>(null);
+  const configuration = premium
+    ? (configurations.find((current) => current.name === selected) ?? null)
+    : null;
   const tally = context?.estimate ?? periods?.[period] ?? { orders: 0, locked: 0, available: 0 };
   const status = exportStatus(t, tally, fiscal === "available", context !== null);
-  const orders = status.orders;
-  const fields = {
+  const columns = fileColumns(layout);
+  // Il file standard nel Free; con Premium formato e colonne scelti.
+  const fields: Record<string, string> = {
     language,
-    rows,
+    rows: layout.rows,
     fiscal,
+    ...(premium ? { format: layout.format, columns: columns.join(",") } : {}),
     ...(context ? {} : { period }),
+  };
+  const choose = (name: string) => {
+    const next = configurations.find((current) => current.name === name) ?? null;
+    setSelected(next?.name ?? null);
+    setLayout(layoutOf(next));
   };
   return (
     <>
-      <Group title={t.settings.export.exportScope}>
+      <Group title={copy.exportScope}>
         {context ? <ExportContextNote context={context} /> : null}
         <FieldGroup>
           {/* Con l'ambito degli Ordini il periodo è già nei loro filtri. */}
           {context ? null : (
             <SimpleSelect
-              label={t.settings.export.exportPeriod}
+              label={copy.exportPeriod}
               items={orderPeriods.map((period) => ({
                 value: period,
                 label: t.orders.periods[period],
@@ -232,61 +542,47 @@ export function ExportSection({
             />
           )}
           <FieldSet>
-            <FieldLegend variant="label">{t.settings.export.exportFiscal}</FieldLegend>
+            <FieldLegend variant="label">{copy.exportFiscal}</FieldLegend>
             <RadioGroup
               value={fiscal}
               onValueChange={(next) => setFiscal(String(next))}
               className="gap-3"
             >
-              <RadioOption value="all">{t.settings.export.exportFiscalAll}</RadioOption>
-              <RadioOption value="available">{t.settings.export.exportFiscalAvailable}</RadioOption>
+              <RadioOption value="all">{copy.exportFiscalAll}</RadioOption>
+              <RadioOption value="available">{copy.exportFiscalAvailable}</RadioOption>
             </RadioGroup>
           </FieldSet>
-          {advanced ? <FormatField premium={premium} value={format} onChange={setFormat} /> : null}
-          <FieldSet>
-            <FieldLegend variant="label">{t.settings.export.exportRows}</FieldLegend>
-            <RadioGroup
-              value={rows}
-              onValueChange={(next) => setRows(String(next))}
-              className="gap-3"
-            >
-              <RadioOption value="order">{t.settings.export.exportRowOrder}</RadioOption>
-              <RadioOption value="item">{t.settings.export.exportRowItem}</RadioOption>
-            </RadioGroup>
-          </FieldSet>
-          {advanced ? <ColumnsField premium={premium} chosen={chosen} onChoose={choose} /> : null}
+          <LayoutFields
+            premium={premium}
+            configurations={configurations}
+            configuration={configuration}
+            layout={layout}
+            onChange={setLayout}
+            onChoose={choose}
+          />
         </FieldGroup>
         <p className="text-sm text-muted-foreground" role="status">
-          {status.text}
+          {columns.length === 0 ? copy.exportColumnsInvalid : status.text}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-start gap-2">
           {/* Il file nasce soltanto da qui: nessuno sblocco e nessun download prima. */}
-          {preview ? (
-            <Button
-              disabled={orders === 0}
-              onClick={() =>
-                action.run("export-create", {
-                  ...(context ? { scope: context.query } : { period }),
-                  format,
-                  rows,
-                  fiscal,
-                  ...(premium ? { columns: [...chosen].join(",") } : {}),
-                })
-              }
-            >
-              {t.settings.export.exportCreate}
-            </Button>
-          ) : (
-            <CreateFileForm context={context} fields={fields} disabled={orders === 0} />
-          )}
-          {advanced && premium ? (
-            <Button variant="outline" onClick={() => action.run("export-save")}>
-              {t.settings.export.exportSaveConfig}
-            </Button>
+          <CreateFile
+            context={context}
+            fields={fields}
+            disabled={status.orders === 0 || columns.length === 0}
+          />
+          {premium ? (
+            <ConfigurationCommands
+              configuration={configuration}
+              layout={layout}
+              onSelect={setSelected}
+            />
           ) : null}
         </div>
         {/* Le istruzioni seguono il file; l'ultimo elemento della sezione non è un comando. */}
-        <p className="text-sm text-muted-foreground">{t.settings.export.exportTextHint}</p>
+        <p className="text-sm text-muted-foreground">
+          {premium && layout.format === "xlsx" ? copy.exportXlsxHint : copy.exportTextHint}
+        </p>
       </Group>
     </>
   );

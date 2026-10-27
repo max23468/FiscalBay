@@ -185,10 +185,15 @@ async function main() {
     const exportAccounts = ["chromium", "webkit"].flatMap((browser) =>
       ["it", "en"].map((language) => `export-${language}-${browser}`),
     );
+    // XLSX e configurazioni dell'esportazione con Premium.
+    const xlsxAccounts = ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].map((language) => `xlsx-${language}-${browser}`),
+    );
     for (const id of [
       ...unlockAccounts,
       ...trialAccounts,
       ...exportAccounts,
+      ...xlsxAccounts,
       "suggestions-it",
       "suggestions-en",
       "stores-premium",
@@ -254,6 +259,9 @@ async function main() {
       if (id.startsWith("export-"))
         statements.push(`INSERT INTO order_grants (id, workspace_id, order_id, cycle_id, source, granted_at)
           VALUES ('${id}', '${id}', '${id}', NULL, 'admin', '${now}');`);
+      if (id.startsWith("xlsx-"))
+        statements.push(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+          VALUES ('${id}', '${id}', 'premium', '${now}', '${expires}');`);
       if (id.startsWith("trial-"))
         statements.push(`INSERT INTO sync_state (store_id, polled_at, last_success_at, updated_at)
           VALUES ('${id}', '${now}', '${now}', '${now}');`);
