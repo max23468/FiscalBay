@@ -64,8 +64,9 @@ export type QuotaAnomaly = {
 /** Ultima parte del nome: eBay può prefissare la chiamata con l'API. */
 const callName = (resource: string) => resource.split(".").at(-1)!;
 
-function usedByFiscalBay(api: string, resource: string) {
-  return expectedCalls.some(
+/** Posizione fra le chiamate di FiscalBay, prima le più usate; -1 per le altre. */
+function callRank(api: string, resource: string) {
+  return expectedCalls.findIndex(
     (expected) =>
       expected.api === api &&
       (api === "Fulfillment"
@@ -105,7 +106,7 @@ function quotaRow(api: string, resource: string, rates: ApiRate[]): QuotaRow | n
     share,
     daily,
     over: daily && share > quotaAlertShare,
-    used: usedByFiscalBay(api, resource),
+    used: callRank(api, resource) >= 0,
   };
 }
 
@@ -182,7 +183,13 @@ export async function readEbayQuotas(
         quotas = {
           environment,
           read: "ok",
-          rows: rows.sort((a, b) => Number(b.used) - Number(a.used) || b.share - a.share),
+          // Le chiamate di FiscalBay nell'ordine di importanza, poi le altre per consumo.
+          rows: rows.sort((a, b) => {
+            const [first, second] = [callRank(a.api, a.resource), callRank(b.api, b.resource)];
+            if (first >= 0 || second >= 0)
+              return (first < 0 ? Infinity : first) - (second < 0 ? Infinity : second);
+            return b.share - a.share;
+          }),
           suspended,
         };
       } catch (error) {
@@ -202,7 +209,7 @@ export async function quotaAnomalies(db: D1Database, now = new Date()): Promise<
         opened_at AS openedAt, resolved_at AS resolvedAt FROM admin_anomalies
       WHERE kind = 'ebay_quota' AND (resolved_at IS NULL
         OR julianday(resolved_at) > julianday(?1) - 7)
-      ORDER BY resolved_at IS NOT NULL, opened_at DESC`)
+      ORDER BY resolved_at IS NOT NULL, severity, opened_at DESC, subject`)
     .bind(now.toISOString())
     .all<QuotaAnomaly>();
   return results;

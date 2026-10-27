@@ -61,9 +61,12 @@ export function AdminShell({
             <Logo className="h-6 w-auto" />
             <span className="text-sm font-semibold text-muted-foreground">{t.console}</span>
           </a>
-          <span className="ml-auto flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
-            <ShieldCheck aria-hidden="true" className="size-4 text-success" />
-            {passkeyUntil ? t.passkeyUntil(passkeyUntil) : t.technical}
+          {/* La scadenza può portare la data: su schermi stretti va a capo invece di allargare. */}
+          <span className="ml-auto flex min-w-0 items-center gap-1.5 text-right text-xs text-muted-foreground">
+            <ShieldCheck aria-hidden="true" className="size-4 shrink-0 text-success" />
+            <span className="min-w-0 text-pretty">
+              {passkeyUntil ? t.passkeyUntil(passkeyUntil) : t.technical}
+            </span>
           </span>
           <a
             href={localizedPath(language)}
