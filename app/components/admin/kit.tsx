@@ -136,8 +136,8 @@ export type TableRow = { key: string; cells: ReactNode[] };
 
 /**
  * Tabella leggera da 768 px; sotto, ogni riga diventa una scheda: la prima cella fa da titolo,
- * le altre seguono con la loro etichetta e le azioni, senza intestazione, chiudono la scheda.
- * Senza righe dice che è vuota.
+ * le altre seguono con la loro etichetta e la colonna «Azioni» chiude la scheda. Le intestazioni
+ * sono distinte e fanno da chiave delle celle. Senza righe dice che è vuota.
  */
 export function DataTable({
   head,
@@ -151,32 +151,37 @@ export function DataTable({
 }) {
   const { t } = useAdmin();
   const panel = use(PanelTitle);
+  // Colonna delle azioni: senza intestazione visibile, su mobile chiude la scheda.
+  const actions = t.workspace.actions;
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{t.common.none}</p>;
   return (
     <>
       <ul className="grid gap-2 md:hidden">
-        {rows.map((row) => (
-          <li key={row.key} className="grid gap-2 rounded-lg border p-3 text-sm">
-            <div className="min-w-0 font-medium break-words">{row.cells[0]}</div>
-            <dl className="grid grid-cols-[minmax(6.5rem,auto)_1fr] gap-x-3 gap-y-1.5">
-              {row.cells.slice(1).map((cell, index) =>
-                head[index + 1] && cell !== null && cell !== "" ? (
-                  <div key={head[index + 1]} className="contents">
-                    <dt className="text-muted-foreground">{head[index + 1]}</dt>
-                    <dd className="min-w-0 break-words">{cell}</dd>
+        {rows.map((row) => {
+          const cells = head.map((column, index) => ({ column, cell: row.cells[index] }));
+          return (
+            <li key={row.key} className="grid gap-2 rounded-lg border p-3 text-sm">
+              <div className="min-w-0 font-medium break-words">{cells[0]!.cell}</div>
+              <dl className="grid grid-cols-[minmax(6.5rem,auto)_1fr] gap-x-3 gap-y-1.5">
+                {cells.slice(1).map(({ column, cell }) =>
+                  column !== actions && cell !== null && cell !== "" ? (
+                    <div key={column} className="contents">
+                      <dt className="text-muted-foreground">{column}</dt>
+                      <dd className="min-w-0 break-words">{cell}</dd>
+                    </div>
+                  ) : null,
+                )}
+              </dl>
+              {cells
+                .filter(({ column, cell }) => column === actions && cell)
+                .map(({ column, cell }) => (
+                  <div key={column} className="pt-1">
+                    {cell}
                   </div>
-                ) : null,
-              )}
-            </dl>
-            {row.cells.slice(1).map((cell, index) =>
-              head[index + 1] ? null : (
-                <div key={`action-${index}`} className="pt-1">
-                  {cell}
-                </div>
-              ),
-            )}
-          </li>
-        ))}
+                ))}
+            </li>
+          );
+        })}
       </ul>
       {/* Su schermi medi la tabella può ancora scorrere: l'area si raggiunge da tastiera. */}
       <div
@@ -188,13 +193,16 @@ export function DataTable({
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b text-left text-xs text-muted-foreground">
-              {head.map((label, index) => (
+              {head.map((column) => (
                 <th
-                  key={label || index}
+                  key={column}
                   scope="col"
-                  className="px-2 py-2 font-medium whitespace-nowrap"
+                  className={cn(
+                    "px-2 py-2 font-medium whitespace-nowrap",
+                    column === actions && "sr-only",
+                  )}
                 >
-                  {label}
+                  {column}
                 </th>
               ))}
             </tr>
@@ -202,9 +210,9 @@ export function DataTable({
           <tbody>
             {rows.map((row) => (
               <tr key={row.key} className="border-b align-top last:border-0">
-                {row.cells.map((cell, index) => (
-                  <td key={head[index] || index} className="px-2 py-2.5">
-                    {cell}
+                {head.map((column, index) => (
+                  <td key={column} className="px-2 py-2.5">
+                    {row.cells[index]}
                   </td>
                 ))}
               </tr>

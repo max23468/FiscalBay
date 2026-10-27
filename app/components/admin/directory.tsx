@@ -159,7 +159,14 @@ export function StoresView({
     <>
       <Search query={query} problems={problems} />
       <DataTable
-        head={[s.store, s.workspace, s.state, t.workspace.store.lastSync, s.problemsColumn, ""]}
+        head={[
+          s.store,
+          s.workspace,
+          s.state,
+          t.workspace.store.lastSync,
+          s.problemsColumn,
+          t.workspace.actions,
+        ]}
         rows={rows.map((row) => ({
           key: row.id,
           cells: [

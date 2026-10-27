@@ -144,18 +144,10 @@ function Transfer({ fields }: { fields: Record<string, string> }) {
   );
 }
 
-export function WorkspaceView({
-  workspace,
-  audit,
-  now,
-}: {
-  workspace: WorkspaceDetail;
-  audit: AuditRow[];
-  now: string;
-}) {
-  const { t, date, money } = useAdmin();
+/** Numeri chiave dello spazio: piano con la sua fine, negozi, sblocchi del ciclo e abbonamento. */
+function WorkspaceSummary({ workspace, now }: { workspace: WorkspaceDetail; now: string }) {
+  const { t, date } = useAdmin();
   const w = t.workspace;
-  const fields = { spazio: workspace.id };
   const at = Date.parse(now);
   // Copertura in corso dell'origine mostrata, per la sua fine.
   const coverage = workspace.coverage
@@ -172,52 +164,69 @@ export function WorkspaceView({
     (item) => !item.unavailable && item.status !== "canceled",
   );
   return (
-    <>
-      <StatGrid>
-        <Stat
-          label={t.accounts.plan}
-          value={t.coverage[workspace.coverage ?? "free"]}
-          note={
-            coverage?.endsAt
-              ? w.until(date(coverage.endsAt, "date"))
-              : workspace.coverage === "lifetime" && workspace.lifetime
-                ? w.lifetimeSeat(workspace.lifetime.slot, workspace.lifetime.kind)
-                : undefined
-          }
-        />
-        <Stat
-          label={w.stores}
-          value={workspace.stores.length}
-          note={w.activeStores(activeStores)}
-          tone={activeStores < workspace.stores.length ? "warning" : undefined}
-        />
-        <Stat
-          label={w.unlocks}
-          value={
-            workspace.cycle && !workspace.coverage
-              ? `${workspace.cycle.used}/${workspace.cycle.quota}`
-              : "–"
-          }
-          note={
-            workspace.cycle && !workspace.coverage
-              ? w.cycleUntil(date(workspace.cycle.endsAt, "date"))
-              : w.unlimited
-          }
-        />
-        <Stat
-          label={w.subscriptions}
-          value={
-            openSubscription
-              ? (t.labels.subscription[openSubscription.status] ?? openSubscription.status)
-              : "–"
-          }
-          note={
-            openSubscription
-              ? `${t.commerce.offer[openSubscription.offer as "monthly" | "annual"] ?? openSubscription.offer} · ${w.renewsAt} ${date(openSubscription.periodEnd, "date")}`
+    <StatGrid>
+      <Stat
+        label={t.accounts.plan}
+        value={t.coverage[workspace.coverage ?? "free"]}
+        note={
+          coverage?.endsAt
+            ? w.until(date(coverage.endsAt, "date"))
+            : workspace.coverage === "lifetime" && workspace.lifetime
+              ? w.lifetimeSeat(workspace.lifetime.slot, workspace.lifetime.kind)
               : undefined
-          }
-        />
-      </StatGrid>
+        }
+      />
+      <Stat
+        label={w.stores}
+        value={workspace.stores.length}
+        note={w.activeStores(activeStores)}
+        tone={activeStores < workspace.stores.length ? "warning" : undefined}
+      />
+      <Stat
+        label={w.unlocks}
+        value={
+          workspace.cycle && !workspace.coverage
+            ? `${workspace.cycle.used}/${workspace.cycle.quota}`
+            : "–"
+        }
+        note={
+          workspace.cycle && !workspace.coverage
+            ? w.cycleUntil(date(workspace.cycle.endsAt, "date"))
+            : w.unlimited
+        }
+      />
+      <Stat
+        label={w.subscriptions}
+        value={
+          openSubscription
+            ? (t.labels.subscription[openSubscription.status] ?? openSubscription.status)
+            : "–"
+        }
+        note={
+          openSubscription
+            ? `${t.commerce.offer[openSubscription.offer as "monthly" | "annual"] ?? openSubscription.offer} · ${w.renewsAt} ${date(openSubscription.periodEnd, "date")}`
+            : undefined
+        }
+      />
+    </StatGrid>
+  );
+}
+
+export function WorkspaceView({
+  workspace,
+  audit,
+  now,
+}: {
+  workspace: WorkspaceDetail;
+  audit: AuditRow[];
+  now: string;
+}) {
+  const { t, date, money } = useAdmin();
+  const w = t.workspace;
+  const fields = { spazio: workspace.id };
+  return (
+    <>
+      <WorkspaceSummary workspace={workspace} now={now} />
 
       <Stores workspace={workspace} />
 
@@ -304,7 +313,7 @@ export function WorkspaceView({
 
       <Panel title={w.extensions}>
         <DataTable
-          head={[w.period, w.grantedBy, w.revoked, ""]}
+          head={[w.period, w.grantedBy, w.revoked, t.workspace.actions]}
           rows={workspace.extensions.map((item) => ({
             key: item.id,
             cells: [

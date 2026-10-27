@@ -95,9 +95,7 @@ export function AdminShell({
                     {t.nav[key]}
                   </DropdownMenuLinkItem>
                 ))}
-                <DropdownMenuLinkItem render={<a href={localizedPath(language)} />}>
-                  {t.back}
-                </DropdownMenuLinkItem>
+                <DropdownMenuLinkItem href={localizedPath(language)}>{t.back}</DropdownMenuLinkItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>

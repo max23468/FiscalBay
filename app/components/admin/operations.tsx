@@ -15,7 +15,7 @@ export function JobsView({ tasks, receipts }: { tasks: TaskState[]; receipts: Re
     <>
       <Panel title={j.tasks}>
         <DataTable
-          head={[j.task, t.stores.state, j.slot, ""]}
+          head={[j.task, t.stores.state, j.slot, t.workspace.actions]}
           rows={tasks.map((task) => ({
             key: task.task,
             cells: [
@@ -56,7 +56,7 @@ export function JobsView({ tasks, receipts }: { tasks: TaskState[]; receipts: Re
       </Panel>
       <Panel title={j.receipts}>
         <DataTable
-          head={[j.provider, j.pending, j.stalledCount, j.oldest, ""]}
+          head={[j.provider, j.pending, j.stalledCount, j.oldest, t.workspace.actions]}
           rows={receipts.map((receipt) => ({
             key: receipt.provider,
             cells: [
