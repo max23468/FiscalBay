@@ -11,6 +11,7 @@ export type Phase = "auth" | "d1" | "ebay" | "render";
 export type PhaseOperation =
   | "session"
   | "orders"
+  | "exports"
   | "stores"
   | "allowance"
   | "registration"

@@ -69,6 +69,7 @@ export function logFailure(input: {
     | "support"
     | "inactivity"
     | "maintenance"
+    | "export_files"
     | "scheduling"
     | "telegram"
     | "telegram_commands"

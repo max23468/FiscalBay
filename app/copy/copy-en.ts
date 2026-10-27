@@ -639,6 +639,7 @@ export const en: AppCopy = {
       exportCreated: "Preview: no file created.",
       exportFailed: "File not created. Try again shortly.",
       exportEmpty: "No orders to export with these choices.",
+      exportGone: "File no longer available. Create it again.",
       exportPremium: "XLSX, chosen columns and saved configurations are included in Premium.",
       exportColumnsInvalid: "Choose at least one column.",
       exportXlsxHint:

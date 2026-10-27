@@ -644,6 +644,7 @@ export const it = {
       exportCreated: "Anteprima: nessun file creato.",
       exportFailed: "File non creato. Riprova tra poco.",
       exportEmpty: "Nessun ordine da esportare con queste scelte.",
+      exportGone: "File non più disponibile. Crealo di nuovo.",
       exportPremium: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Premium.",
       exportColumnsInvalid: "Scegli almeno una colonna.",
       exportXlsxHint:

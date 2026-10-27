@@ -25,8 +25,15 @@ import {
 } from "../app/domain/xlsx.server";
 import { visibleOrderTallies, type VisibleOrder } from "../app/domain/orders.server";
 import { action as exportAction, loader as exportLoader } from "../app/routes/order-export";
+import { loader as exportFileLoader } from "../app/routes/export-file";
 import { action as settingsAction, loader as loadSettings } from "../app/routes/settings";
 import { maxExportConfigurations } from "../app/domain/export-configurations.server";
+import {
+  exportPartBytes,
+  exportRevision,
+  publishExportFile,
+  purgeExportFiles,
+} from "../app/domain/export-files.server";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import {
   insertEntitlement,
@@ -751,17 +758,29 @@ describe("file degli ordini", () => {
 
   afterEach(() => vi.useRealTimers());
 
-  const request = (
+  /** Crea il file e, come il browser, segue il rimando al suo download. */
+  const request = async (
     query: string,
     fields: Record<string, string> = {},
     options: { json?: boolean; origin?: string | null; cookie?: string | null } = {},
-  ) =>
-    routeResponse(exportAction, `/api/v1/orders/export${query ? `?${query}` : ""}`, {
-      cookie: options.cookie === undefined ? cookie : options.cookie,
-      origin: options.origin,
-      headers: options.json === false ? {} : { accept: "text/csv, application/json" },
-      fields: { language: "it", ...fields },
-    });
+  ) => {
+    const headers: Record<string, string> =
+      options.json === false ? {} : { accept: "text/csv, application/json" };
+    const response = await routeResponse(
+      exportAction,
+      `/api/v1/orders/export${query ? `?${query}` : ""}`,
+      {
+        cookie: options.cookie === undefined ? cookie : options.cookie,
+        origin: options.origin,
+        headers,
+        fields: { language: "it", ...fields },
+      },
+    );
+    const location = response.headers.get("location") ?? "";
+    const file = /^\/api\/v1\/exports\/([^/]+)$/u.exec(location)?.[1];
+    if (response.status !== 303 || !file) return response;
+    return routeResponse(exportFileLoader, location, { cookie, headers, params: { file } });
+  };
 
   /** Righe del CSV senza BOM, con l'intestazione come chiavi. */
   async function csv(response: Response) {
@@ -1197,5 +1216,266 @@ describe("file degli ordini", () => {
       { orders: 1, locked: 0, available: 1 },
       { orders: 3, locked: 1, available: 1 },
     ]);
+  });
+  /** File creato dall'azione: identificativo dal rimando al download. */
+  async function created(query = "ordini=o-a", fields: Record<string, string> = {}) {
+    const response = await routeResponse(exportAction, `/api/v1/orders/export?${query}`, {
+      cookie,
+      headers: { accept: "text/csv, application/json" },
+      fields: { language: "it", ...fields },
+    });
+    expect(response.status).toBe(303);
+    const id = /^\/(?:en\/)?api\/v1\/exports\/([0-9a-f-]{36})$/u.exec(
+      response.headers.get("location") ?? "",
+    )?.[1];
+    expect(id).toBeDefined();
+    return id!;
+  }
+
+  const download = (id: string, options: { json?: boolean; cookie?: string | null } = {}) =>
+    routeResponse(exportFileLoader, `/api/v1/exports/${id}`, {
+      cookie: options.cookie === undefined ? cookie : options.cookie,
+      headers: options.json === false ? {} : { accept: "text/csv, application/json" },
+      params: { file: id },
+    });
+
+  const gone = async (response: Response) => {
+    expect(response.status).toBe(410);
+    expect(await response.json()).toEqual({ ok: false, notice: it_.settings.export.exportGone });
+  };
+
+  it("salva il file con una chiave opaca e lo scarica soltanto per il suo utente fino a scadenza", async () => {
+    const id = await created();
+    expect(
+      await env.DB.prepare("SELECT * FROM export_files WHERE id = ?").bind(id).first(),
+    ).toEqual({
+      id,
+      user_id: userId,
+      file_name: "fiscalbay-ordini-2026-09-13.csv",
+      content_type: "text/csv; charset=utf-8",
+      access_revision: 0,
+      created_at: now,
+      expires_at: new Date(Date.parse(now) + 86_400_000).toISOString(),
+    });
+    const object = await env.EXPORT_FILES.head(id);
+    expect(object?.httpMetadata?.contentType).toBe("text/csv; charset=utf-8");
+    // Il file resta scaricabile più volte, con le stesse intestazioni del file creato.
+    for (const _ of [1, 2]) {
+      const response = await download(id);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-length")).toBe(String(object!.size));
+      expect(response.headers.get("content-disposition")).toBe(
+        'attachment; filename="fiscalbay-ordini-2026-09-13.csv"',
+      );
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect((await csv(response)).rows.map((row) => row["Numero ordine"])).toEqual(["ebay-a"]);
+    }
+    // Senza sessione, o con la sessione di un altro utente, il file non esiste.
+    expect((await download(id, { cookie: null })).status).toBe(401);
+    const anonymous = await download(id, { cookie: null, json: false });
+    expect(anonymous.headers.get("location")).toBe("/accesso");
+    const other = await verifiedSession(`altro-${crypto.randomUUID()}@example.invalid`);
+    await gone(await download(id, { cookie: other.cookie }));
+    await gone(await download(crypto.randomUUID()));
+    // L'ultimo istante vale ancora; alla scadenza il file è negato anche se i byte esistono.
+    vi.setSystemTime(Date.parse(now) + 86_400_000 - 1);
+    expect((await download(id)).status).toBe(200);
+    vi.setSystemTime(Date.parse(now) + 86_400_000);
+    await gone(await download(id));
+    const navigation = await download(id, { json: false });
+    expect(navigation.status).toBe(303);
+    expect(navigation.headers.get("location")).toBe("/app/impostazioni/esportazione");
+    expect(await env.EXPORT_FILES.head(id)).not.toBeNull();
+    // La pulizia elimina oggetto e riga.
+    expect(await purgeExportFiles(env, new Date())).toBe(1);
+    expect(await env.EXPORT_FILES.head(id)).toBeNull();
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(0);
+  });
+
+  it("in inglese rimanda al download in inglese e un modulo senza JavaScript lo segue", async () => {
+    const response = await routeResponse(exportAction, "/api/v1/orders/export?ordini=o-a", {
+      cookie,
+      fields: { language: "en" },
+    });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toMatch(/^\/en\/api\/v1\/exports\/[0-9a-f-]{36}$/u);
+  });
+
+  it("con Premium il file non vale oltre la fine della copertura", async () => {
+    const endsAt = new Date(Date.parse(now) + 2 * 3_600_000).toISOString();
+    await insertEntitlement({
+      source: "admin",
+      endsAt,
+      grantedBy: "owner",
+      grantReason: "prova",
+    }).run();
+    const id = await created("ordini=o-a", { format: "xlsx" });
+    expect(
+      await env.DB.prepare("SELECT expires_at FROM export_files WHERE id = ?")
+        .bind(id)
+        .first("expires_at"),
+    ).toBe(endsAt);
+    vi.setSystemTime(Date.parse(endsAt));
+    await gone(await download(id));
+  });
+
+  it("ogni revoca dello spazio invalida i suoi file, un nuovo ordine no", async () => {
+    const revision = () => exportRevision(env.DB, userId);
+    const id = await created();
+    await env.DB.prepare(
+      `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
+       VALUES ('o-new', 's-a', 'ebay-new', ?1, ?1, 'EUR', 100)`,
+    )
+      .bind(now)
+      .run();
+    expect(await revision()).toBe(0);
+    expect((await download(id)).status).toBe(200);
+    // Copertura revocata.
+    await insertEntitlement({
+      id: "e-revoked",
+      source: "admin",
+      endsAt: new Date(Date.parse(now) + 86_400_000).toISOString(),
+      grantedBy: "owner",
+      grantReason: "prova",
+    }).run();
+    await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE id = 'e-revoked'")
+      .bind(now)
+      .run();
+    expect(await revision()).toBe(1);
+    await gone(await download(id));
+    expect(await env.EXPORT_FILES.head(id)).not.toBeNull();
+    // Negozio escluso dal piano, poi dati del negozio eliminati e negozio trasferito.
+    await env.DB.prepare(
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'plan', ?)",
+    )
+      .bind(now)
+      .run();
+    expect(await revision()).toBe(2);
+    await env.DB.prepare(
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'manual', ?)",
+    )
+      .bind(now)
+      .run();
+    expect(await revision()).toBe(2);
+    await env.DB.prepare("UPDATE ebay_stores SET data_deleted_at = ? WHERE id = 's-a'")
+      .bind(now)
+      .run();
+    expect(await revision()).toBe(3);
+    await env.DB.prepare("UPDATE ebay_stores SET workspace_id = 'w-b' WHERE id = 's-a'").run();
+    expect(await revision()).toBe(4);
+    expect(await purgeExportFiles(env, new Date())).toBe(1);
+    expect(await env.EXPORT_FILES.head(id)).toBeNull();
+  });
+
+  it("un file generato durante una revoca non diventa scaricabile", async () => {
+    const revision = await exportRevision(env.DB, userId);
+    const before = (await env.EXPORT_FILES.list()).objects.length;
+    const encoder = new TextEncoder();
+    let sent = false;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (sent) {
+          controller.close();
+          return;
+        }
+        sent = true;
+        await env.DB.prepare("UPDATE ebay_stores SET data_deleted_at = ? WHERE id = 's-a'")
+          .bind(now)
+          .run();
+        controller.enqueue(encoder.encode("ordine"));
+      },
+    });
+    const file = {
+      userId,
+      revision,
+      fileName: "fiscalbay-ordini-2026-09-13.csv",
+      contentType: "text/csv; charset=utf-8",
+      now: new Date(now),
+    };
+    expect(await publishExportFile(env, { ...file, body })).toBeNull();
+    expect((await env.EXPORT_FILES.list()).objects.length).toBe(before);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(0);
+    // La revisione nuova pubblica di nuovo; una scadenza già passata no.
+    const fresh = await exportRevision(env.DB, userId);
+    const text = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode("ordine"));
+          controller.close();
+        },
+      });
+    expect(await publishExportFile(env, { ...file, revision: fresh, body: text() })).toMatch(
+      /^[0-9a-f-]{36}$/u,
+    );
+    expect(
+      await publishExportFile(env, { ...file, revision: fresh, body: text(), expiresAt: now }),
+    ).toBeNull();
+    expect((await env.EXPORT_FILES.list()).objects.length).toBe(before + 1);
+  });
+
+  it("scrive un file grande a parti e annulla il caricamento di un flusso interrotto", async () => {
+    const size = 2 * exportPartBytes + 3;
+    const source = new Uint8Array(size);
+    for (let i = 0; i < size; i++) source[i] = (i * 31) % 251;
+    // Pezzi di dimensione irregolare, che attraversano i confini delle parti.
+    const chunked = (fail = false) => {
+      let offset = 0;
+      return new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (offset >= size) {
+            controller.close();
+            return;
+          }
+          if (fail && offset > exportPartBytes) {
+            controller.error(new Error("lettura interrotta"));
+            return;
+          }
+          const next = Math.min(size, offset + 1_000_003);
+          controller.enqueue(source.slice(offset, next));
+          offset = next;
+        },
+      });
+    };
+    const file = {
+      userId,
+      revision: 0,
+      fileName: "fiscalbay-ordini-2026-09-13.csv",
+      contentType: "text/csv; charset=utf-8",
+      now: new Date(now),
+    };
+    const id = await publishExportFile(env, { ...file, body: chunked() });
+    const object = await env.EXPORT_FILES.get(id!);
+    expect(object?.size).toBe(size);
+    const digest = async (bytes: ArrayBuffer | Uint8Array<ArrayBuffer>) =>
+      [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].join(",");
+    expect(await digest(await object!.arrayBuffer())).toBe(await digest(source));
+    const before = (await env.EXPORT_FILES.list()).objects.length;
+    await expect(publishExportFile(env, { ...file, body: chunked(true) })).rejects.toThrow(
+      "lettura interrotta",
+    );
+    expect((await env.EXPORT_FILES.list()).objects.length).toBe(before);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(1);
+  });
+
+  it("un errore a metà del file risponde con l'avviso senza lasciare un file", async () => {
+    const before = (await env.EXPORT_FILES.list()).objects.length;
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = vi
+      .spyOn(env.EXPORT_FILES, "put")
+      .mockRejectedValueOnce(new Error("R2 non disponibile"));
+    try {
+      const response = await request("ordini=o-a");
+      expect(response.status).toBe(500);
+      expect(await response.json()).toEqual({
+        ok: false,
+        notice: it_.settings.export.exportFailed,
+      });
+    } finally {
+      failing.mockRestore();
+      errors.mockRestore();
+    }
+    expect((await env.EXPORT_FILES.list()).objects.length).toBe(before);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(0);
   });
 });

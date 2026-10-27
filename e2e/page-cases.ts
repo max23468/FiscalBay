@@ -45,6 +45,9 @@ export function knownPagePath(pathname: string) {
   });
 }
 
+/** File mai creato: identificativo nella forma di quelli reali. */
+const missingExportFile = "00000000-0000-4000-8000-000000000000";
+
 const settings = [
   "profilo",
   "piano",
@@ -198,6 +201,15 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     ),
     // Riceve soltanto ricerche: una lettura risponde senza contenuto.
     preview("/ricerca", "orders", { endpoint: true, status: 405 }),
+    // Download di un file esportato: senza sessione porta all'accesso, un file inesistente,
+    // scaduto o revocato torna alla sezione Esportazione.
+    ...(["anonymous", "member"] as const).map((role) =>
+      make(`/api/v1/exports/${missingExportFile}`, "settings", {
+        role,
+        pattern: `${prefix}/api/v1/exports/:file`,
+        redirect: role === "member" ? `${prefix}/app/impostazioni/esportazione` : access,
+      }),
+    ),
     make("/pagina-inesistente", "public", { status: 404, pattern: "*", remote: !prefix }),
     ...(prefix
       ? []
