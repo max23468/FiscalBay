@@ -55,7 +55,7 @@ describe("export ordini", () => {
     );
   });
 
-  it("neutralizza ogni prefisso di formula e lascia invariati gli altri valori", () => {
+  it("neutralizza i prefissi di formula e lascia invariati gli altri valori", () => {
     const cell = (value: string) =>
       strFromU8(
         createCsv([
@@ -72,9 +72,11 @@ describe("export ordini", () => {
         .split("\r\n")[1]
         ?.split(",")
         .at(-1);
-    for (const value of ["=1+1", "+1", "-1", "@SUM(A1)", "\tA", "\rA"])
+    for (const value of ["=1+1", "+A1", "-A1", "@SUM(A1)", "\tA", "\rA"])
       expect(cell(value)).toBe(`"'${value}"`);
-    for (const value of ["a=b", "1-2", "IT00123456789"]) expect(cell(value)).toBe(`"${value}"`);
+    // Numeri con segno e telefoni internazionali non eseguono funzioni: restano intatti.
+    for (const value of ["a=b", "1-2", "IT00123456789", "+1", "-1", "+39 333 000"])
+      expect(cell(value)).toBe(`"${value}"`);
   });
 
   it("intesta il foglio XLSX e ne fissa i metadati", async () => {

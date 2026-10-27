@@ -6,6 +6,7 @@ import {
   snapshotInstant,
   snapshotParam,
 } from "../orders/order-list";
+import type { ExportTally } from "../orders/export-scope";
 import { orderSearchText, searchFold, searchTokens } from "../orders/order-search";
 import { orderCriteria, type OrderCriteria } from "../domain/orders.server";
 import { displayTaxValue } from "../tax-quality";
@@ -126,6 +127,15 @@ export function previewListing(
       (filtered.length === 0 || waiting.every((order) => newestFirst(order, filtered[0]!) < 0)),
     snapshot,
     arrival,
+  };
+}
+
+/** Ordini di un'esportazione dell'anteprima, con quelli da sbloccare e quelli con il dato. */
+export function previewTally(orders: OrderView[]): ExportTally {
+  return {
+    orders: orders.length,
+    locked: orders.filter((order) => order.fiscal.state === "locked").length,
+    available: orders.filter((order) => order.fiscal.state === "available").length,
   };
 }
 

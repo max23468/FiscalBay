@@ -181,9 +181,14 @@ async function main() {
     const trialAccounts = ["chromium", "webkit"].flatMap((browser) =>
       ["it", "en"].map((language) => `trial-${language}-${browser}`),
     );
+    // L'esportazione parte con un ordine sbloccato e tre da sbloccare.
+    const exportAccounts = ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].map((language) => `export-${language}-${browser}`),
+    );
     for (const id of [
       ...unlockAccounts,
       ...trialAccounts,
+      ...exportAccounts,
       "suggestions-it",
       "suggestions-en",
       "stores-premium",
@@ -246,6 +251,9 @@ async function main() {
           VALUES ('${id}-2', '${id}', '${id}-2', '${now}', 'Secondo negozio');
         INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
           VALUES ('${id}', '${id}', 'admin', '${now}', '${expires}');`);
+      if (id.startsWith("export-"))
+        statements.push(`INSERT INTO order_grants (id, workspace_id, order_id, cycle_id, source, granted_at)
+          VALUES ('${id}', '${id}', '${id}', NULL, 'admin', '${now}');`);
       if (id.startsWith("trial-"))
         statements.push(`INSERT INTO sync_state (store_id, polled_at, last_success_at, updated_at)
           VALUES ('${id}', '${now}', '${now}', '${now}');`);

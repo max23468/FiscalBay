@@ -1,6 +1,6 @@
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
 import { buyerNameView } from "../contact";
-import { maxListedOrders } from "../orders/order-list";
+import { maxListedOrders, snapshotInstant, snapshotParam } from "../orders/order-list";
 import { searchTokens } from "../orders/order-search";
 import { buyerTaxKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
 import {
@@ -296,6 +296,50 @@ function visibleOrdersParams(
   ];
 }
 
+/** Ordini di un insieme, quanti hanno il dato da sbloccare e quanti il dato disponibile. */
+export type OrderTally = { orders: number; locked: number; available: number };
+
+/**
+ * Ordini consultabili dei criteri, o fra quelli indicati, contati per ciascun inizio di periodo:
+ * il conteggio di un inizio comprende gli ordini creati da quell'istante. Senza inizi conta
+ * l'intero insieme. Una sola lettura, con la situazione fiscale dei filtri.
+ */
+export async function visibleOrderTallies(
+  db: D1Database,
+  userId: string,
+  ebayEnvironment: EbayEnvironment,
+  now: Date,
+  filter: { ids?: string[]; criteria: OrderCriteria },
+  starts: readonly string[] = [],
+): Promise<OrderTally[]> {
+  // Gli inizi soddisfatti da un ordine sono sempre i primi in ordine crescente: basta contarli.
+  const sorted = [...new Set(starts.length ? starts : [""])].sort();
+  const result = await db
+    .prepare(
+      `SELECT fiscal, satisfied, count(*) AS total FROM (
+         SELECT ${fiscalSql(accessSql)} AS fiscal,
+                (SELECT count(*) FROM json_each(?17) s WHERE o.creation_time >= s.value) AS satisfied
+           ${visibleOrdersSql})
+        GROUP BY fiscal, satisfied`,
+    )
+    .bind(
+      ...visibleOrdersParams(userId, ebayEnvironment, now, 0, filter.ids, filter.criteria),
+      JSON.stringify(sorted),
+    )
+    .all<{ fiscal: FiscalSituation; satisfied: number; total: number }>();
+  return (starts.length ? starts : [""]).map((start) => {
+    const rank = sorted.indexOf(start) + 1;
+    const tally: OrderTally = { orders: 0, locked: 0, available: 0 };
+    for (const row of result.results) {
+      if (row.satisfied < rank) continue;
+      tally.orders += row.total;
+      if (row.fiscal === "locked") tally.locked += row.total;
+      if (row.fiscal === "available") tally.available += row.total;
+    }
+    return tally;
+  });
+}
+
 /** Ordini che soddisfano i criteri, senza leggerli. */
 export async function countVisibleOrders(
   db: D1Database,
@@ -417,7 +461,13 @@ export async function listVisibleOrders(
   requestedLimit = 50,
   ebayEnvironment: EbayEnvironment = "production",
   now = new Date(),
-  filter: { ids?: string[]; criteria?: OrderCriteria; provisional?: boolean } = {},
+  filter: {
+    ids?: string[];
+    criteria?: OrderCriteria;
+    provisional?: boolean;
+    /** Senza suggerimenti, che soltanto le pagine mostrano. */
+    suggestions?: false;
+  } = {},
 ): Promise<VisibleOrder[]> {
   const limit = Math.max(1, Math.min(maxListedOrders, Math.trunc(requestedLimit)));
   const listedAccessSql = orderAccessSql("o.id", "vo.workspace_id", "?3");
@@ -584,6 +634,7 @@ export async function listVisibleOrders(
       }),
     };
   });
+  if (filter.suggestions === false) return visible;
   const suggestions = await orderSuggestions(
     db,
     userId,
@@ -631,5 +682,32 @@ export function orderCriteria(
     shipping: known("spedizione", shippingStatuses),
     fiscal: known("fiscale", fiscalSituations),
     tokens: tokens.length ? tokens : undefined,
+  };
+}
+
+/**
+ * Criteri dell'elenco aperto, uguali per la pagina Ordini e per l'esportazione: filtri
+ * dall'indirizzo, negozio soltanto fra quelli filtrabili e istantanea dell'elenco. Senza
+ * istantanea l'elenco si apre adesso.
+ */
+export function listCriteria(
+  query: URLSearchParams,
+  now: Date,
+  plan: "free" | "premium",
+  storeIds: readonly string[],
+  search: string | null,
+) {
+  const opened = snapshotInstant(query.get(snapshotParam));
+  const snapshot = new Date(Math.min(opened?.getTime() ?? now.getTime(), now.getTime()));
+  const parsed = orderCriteria(query, now, plan, search);
+  // Come gli altri filtri, un negozio che non è fra quelli filtrabili vale come «Tutti».
+  const filters: OrderCriteria = storeIds.includes(parsed.storeId ?? "")
+    ? parsed
+    : { ...parsed, storeId: undefined };
+  return {
+    opened,
+    snapshot,
+    filters,
+    criteria: { ...filters, listedBefore: snapshot.toISOString() } satisfies OrderCriteria,
   };
 }
