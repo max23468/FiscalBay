@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { missingPages, missingSections, routePatterns } from "./verify-pages.mjs";
-import { expectedPageError, knownPagePath } from "../e2e/page-cases.ts";
+import { abortedDataRequest, expectedPageError, knownPagePath } from "../e2e/page-cases.ts";
 
 describe("catalogo delle pagine", () => {
   it("ignora errori HTTP attesi solo del documento corrente o dei suoi dati", () => {
@@ -19,6 +19,23 @@ describe("catalogo delle pagine", () => {
       [message, page.href, 500],
     ])
       assert.equal(expectedPageError(text, resource, status, page), false);
+  });
+
+  it("ignora soltanto le richieste di dati della stessa origine interrotte in WebKit", () => {
+    const origin = "http://localhost:5186";
+    const aborted = (text) => Object.assign(new Error(), { stack: `${text}\n    at unknown` });
+    const message = (resource) => `Fetch API cannot load ${resource} due to access control checks.`;
+    for (const resource of [`${origin}/app/ordini.data`, `${origin}/en/app/ordini.data?vista=1`])
+      assert.equal(abortedDataRequest(aborted(message(resource)), origin), true);
+    for (const error of [
+      aborted(message(`${origin}/app/ordini`)),
+      aborted(message("https://external.example.invalid/app/ordini.data")),
+      aborted(message("not a URL")),
+      aborted(`Fetch API cannot load ${origin}/app/ordini.data due to an unknown error.`),
+      aborted(`TypeError: ${message(`${origin}/app/ordini.data`)}`),
+      new Error(message(`${origin}/app/ordini.data`)),
+    ])
+      assert.equal(abortedDataRequest(error, origin), false);
   });
 
   it("rifiuta collegamenti a route assenti ma ammette parametri opzionali e endpoint", () => {
