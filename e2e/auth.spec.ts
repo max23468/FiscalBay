@@ -375,29 +375,45 @@ for (const language of ["it", "en"] as const) {
         .click();
       await expect(passkey).toBeVisible();
       await expect.poll(() => noPageOverflow(page)).toBe(true);
-      for (const path of ["/termini", "/privacy", "/auth/error"]) {
+      // Termini e Privacy sono pagine del sito, con la sua barra e l'operatore (D217).
+      for (const path of ["/termini", "/privacy"]) {
         await page.goto(`${prefix}${path}`);
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
         await expect(
-          page.getByRole("link", {
-            name: language === "it" ? "Torna a FiscalBay" : "Back to FiscalBay",
-            exact: true,
-          }),
-        ).toBeVisible();
-        const logo = page.locator("header img:visible");
-        const card = page.locator("main > div");
-        expect(
-          (await card.boundingBox())!.y -
-            ((await logo.boundingBox())!.y + (await logo.boundingBox())!.height),
-        ).toBeLessThan(40);
+          page
+            .getByRole("banner")
+            .getByRole("link", {
+              name: language === "it" ? "Accedi" : "Sign in",
+              // Sotto i 768 px l'azione sta nel menu chiuso.
+              includeHidden: true,
+            })
+            .first(),
+        ).toHaveAttribute("href", `${prefix}/accesso`);
+        const main = page.locator("main");
+        await expect(main).toContainText("Temisfera");
+        await expect(main.getByRole("link", { name: "info@fiscalbay.it" })).toBeVisible();
+        await expect(main).not.toContainText("bozza-2026");
+        await expect(main).toContainText(
+          language === "it" ? "28 settembre 2026" : "28 September 2026",
+        );
         await expect.poll(() => noPageOverflow(page)).toBe(true);
-        if (path !== "/auth/error") {
-          await expect(page.locator("main")).not.toContainText("bozza-2026");
-          await expect(page.locator("main")).toContainText(
-            language === "it" ? "28 settembre 2026" : "28 September 2026",
-          );
-        }
       }
+      // La pagina d'errore dell'accesso resta una scheda vicino al logo.
+      await page.goto(`${prefix}/auth/error`);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      await expect(
+        page.getByRole("link", {
+          name: language === "it" ? "Torna a FiscalBay" : "Back to FiscalBay",
+          exact: true,
+        }),
+      ).toBeVisible();
+      const logo = page.locator("header img:visible");
+      const card = page.locator("main > div");
+      expect(
+        (await card.boundingBox())!.y -
+          ((await logo.boundingBox())!.y + (await logo.boundingBox())!.height),
+      ).toBeLessThan(40);
+      await expect.poll(() => noPageOverflow(page)).toBe(true);
       for (const provider of ["google", "ebay", "unknown"]) {
         await page.goto(
           `${prefix}/auth/error?error=account_already_linked_to_different_user&provider=${provider}`,
