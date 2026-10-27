@@ -26,10 +26,9 @@ test.describe("area reale", () => {
     );
     await page.goto("/app/impostazioni/aspetto");
     await networkIdle(page);
-    // Le categorie dei servizi non ancora disponibili non compaiono.
     const categories = page.getByRole("navigation", { name: "Categorie" });
-    await expect(categories.getByRole("link")).toHaveCount(8);
-    await expect(categories.getByRole("link", { name: /Esportazione/u })).toHaveCount(0);
+    await expect(categories.getByRole("link")).toHaveCount(9);
+    await expect(categories.getByRole("link", { name: /Esportazione/u })).toHaveCount(1);
 
     const saved = () =>
       page.waitForResponse(

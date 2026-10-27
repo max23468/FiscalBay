@@ -25,11 +25,13 @@ import {
   settingsGroups,
   type AccountView,
   type DiagnosticsView,
+  type OrderPeriod,
   type SettingsSection,
   type TelegramView,
 } from "../../view-models";
 import { AppearanceSection } from "./appearance";
-import { ExportSection, type ExportContext } from "./export";
+import type { ExportContext, ExportTally } from "../../orders/export-scope";
+import { ExportSection } from "./export";
 import { NotificationsSection } from "./notifications";
 import { PlanSection, type FreeStoreView, type PurchaseView } from "./plan";
 import { PrivacySection } from "./privacy";
@@ -64,9 +66,9 @@ export interface SettingsPageData {
   diagnostics: DiagnosticsView | null;
   /** Notifiche Telegram dello spazio; null senza il servizio o senza uno spazio. */
   telegram: TelegramView | null;
-  /** Ordini dell'esportazione e quanti fra loro hanno un dato ancora da sbloccare. */
-  exportEstimate: { orders: number; locked: number };
-  /** Ambito ricevuto dagli Ordini; null se l'esportazione è aperta dalle Impostazioni. */
+  /** Ordini di ogni periodo dell'esportazione aperta dalle Impostazioni; null con un ambito. */
+  exportPeriods: Record<OrderPeriod, ExportTally> | null;
+  /** Ambito ricevuto dagli Ordini, con i suoi ordini; null se l'esportazione è aperta dalle Impostazioni. */
   exportContext: ExportContext | null;
   now: string;
 }
@@ -82,6 +84,8 @@ export interface SettingsServices {
   telegram: boolean;
   accountData: boolean;
   support: boolean;
+  /** XLSX, colonne scelte e configurazioni salvate dell'esportazione. */
+  exportAdvanced: boolean;
 }
 
 /** Icone neutre: le Impostazioni restano sobrie, il colore sta in Ordini e Negozi. */
@@ -237,8 +241,9 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
     esportazione: (
       <ExportSection
         premium={premium}
+        advanced={data.services.exportAdvanced}
         context={data.exportContext}
-        estimate={data.exportEstimate}
+        periods={data.exportPeriods}
       />
     ),
     sicurezza: (

@@ -1,4 +1,4 @@
-import { maxListedOrders, pagesParam } from "./order-list";
+import { maxListedOrders, pagesParam, snapshotParam } from "./order-list";
 
 /**
  * Ambito dell'esportazione richiamata dagli Ordini, uguale nell'area reale e nell'anteprima.
@@ -16,6 +16,48 @@ export const exportSection = "impostazioni/esportazione";
 export type ExportScope =
   | { kind: "orders"; ids: string[] }
   | { kind: "filtered"; criteria: URLSearchParams };
+
+/** Ordini dell'esportazione, quanti hanno il dato da sbloccare e quanti il dato disponibile. */
+export interface ExportTally {
+  orders: number;
+  locked: number;
+  available: number;
+}
+
+/** Selezione, singolo ordine o elenco filtrato degli Ordini, da esportare così com'è. */
+export interface ExportContext {
+  kind: ExportScope["kind"];
+  /** Numero eBay quando l'ambito è un solo ordine. */
+  order: string | null;
+  /** L'elenco ha filtri o una ricerca attivi. */
+  filtered: boolean;
+  /** Torna all'elenco degli Ordini con lo stesso contesto. */
+  returnHref: string;
+  /** Ambito trasmesso alla creazione del file, nella forma dell'indirizzo. */
+  query: string;
+  estimate: ExportTally;
+}
+
+/** Ambito ricevuto dagli Ordini nella forma della sezione, uguale nell'area reale e nell'anteprima. */
+export function exportContext(
+  scope: ExportScope,
+  query: URLSearchParams,
+  ordersPath: string,
+  order: string | null,
+  estimate: ExportTally,
+): ExportContext {
+  return {
+    kind: scope.kind,
+    order: scope.kind === "orders" && scope.ids.length === 1 ? order : null,
+    // Istantanea e ambiente eBay non restringono l'elenco.
+    filtered:
+      scope.kind === "filtered" &&
+      [...scope.criteria.keys()].some((key) => key !== snapshotParam && key !== "environment"),
+    returnHref: exportReturnHref(ordersPath, query),
+    query: query.toString(),
+    estimate,
+  };
+}
 
 /** Indirizzo dell'esportazione da un elenco, con la selezione se presente. */
 export function exportHref(path: string, list: URLSearchParams, ids?: readonly string[]) {
