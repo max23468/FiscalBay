@@ -21,6 +21,7 @@ const items = [
   ["negozi", "stores"],
   ["lavori", "jobs"],
   ["quote", "quotas"],
+  ["prestazioni", "metrics"],
   ["commerciale", "commerce"],
   ["antiabuso", "abuse"],
   ["comunicazioni", "notices"],

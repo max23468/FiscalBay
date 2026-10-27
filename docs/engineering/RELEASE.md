@@ -184,6 +184,25 @@ La qualifica del 12 ottobre 2026 ha rilevato nel grafico CPU nativo il marcatore
 
 `avg.sampleInterval = 1` in entrambi i gruppi; entrambi hanno `status = success`. Il campione ridotto e il carico non controllato qualificano la lettura, non dimostrano una regressione. `settings.workersInvocationsAdaptive` ha confermato dataset abilitato, query fino a 32 giorni e dati non più vecchi di 90 giorni: sono limiti di questo dataset dell'account, non la retention Workers Logs o un'estensione degli analytics della zona.
 
+<a id="metriche-tecniche"></a>
+## Metriche tecniche su Analytics Engine
+
+Il Worker scrive nel dataset dell'ambiente, `fiscalbay_test_metrics` o `fiscalbay_metrics`, che nasce alla prima scrittura e conserva i punti tre mesi. La disposizione dei campi è in `app/metrics.server.ts`, le query in `app/metrics-queries.ts`. Ogni valore è una stima pesata con `_sample_interval`: si riporta con finestra e approssimazione e non decide quote, billing o accessi. I KPI deduplicati restano in D1.
+
+```bash
+node scripts/metrics-query.mjs phases --hours 24
+```
+
+Le query sono `invocations`, `phases` e `pages`; `--mode live` legge la Production, `--hours` va da 1 a 2.160. La CLI `cf` usa il proprio accesso: nessun token passa dallo script.
+
+```bash
+node scripts/metrics-query.mjs sample --count 40
+```
+
+Il campione controllato invia al solo test 40 report della pagina Negozi con TTFB da 1 a 40 ms e pronta oltre 119 s, poi dopo due minuti confronta numero stimato e mediana del TTFB con quelli attesi nella finestra di invio. Esito non zero se divergono; `sampled` indica che Analytics Engine ha campionato. I report restano nel dataset test fino alla scadenza.
+
+La sezione Prestazioni della console legge le stesse query sulle ultime 24 ore con il segreto `ANALYTICS_READ_TOKEN` del Worker: un token API dell'account del progetto con il solo permesso Account Analytics Read, creato dall'owner e custodito come segreto del Worker dell'ambiente, fuori dalla cronologia dei comandi e dai log. Senza il segreto la sezione resta non configurata e nessuna altra parte dell'app ne dipende.
+
 ## Promuovi e ripresa
 
 Il workflow `Promuovi` (`publish.yml`) accetta il commit completo su `main` e la versione presente in `CHANGELOG.md`. `scripts/release/release.mjs readiness` e i passi Production leggono dal Master Plan i [gate commerciale, ripristino e operativita](../MASTER_PLAN.md#pubblicazione-production): tutti devono essere `COMPLETATO`, ciascuno con prova, senza righe mancanti o duplicate. Restano richiesti i [checkpoint owner](../MASTER_PLAN.md#s00), la variabile `PRODUCTION_PUBLISH_ENABLED` e il via dell'environment Production. Nessuno di questi prerequisiti viene compilato o attivato dall'implementazione del workflow.

@@ -16,3 +16,4 @@ STRIPE_SECRET_KEY=replace-with-restricted-test-key
 STRIPE_WEBHOOK_SECRET=replace-with-test-webhook-secret
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_WEBHOOK_SECRET=
+ANALYTICS_READ_TOKEN=

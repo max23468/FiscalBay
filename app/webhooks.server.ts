@@ -33,6 +33,9 @@ const webhookPaths = [
   "/webhooks/telegram",
 ];
 
+/** Percorsi presi in carico dall'ingresso dei webhook, prima della build dell'app. */
+export const isWebhookPath = (path: string) => webhookPaths.includes(path);
+
 /**
  * Messaggio della coda con il riferimento a una ricevuta; il consumer convalida il riferimento e
  * riprova quello malformato.
@@ -211,7 +214,7 @@ export async function receiveWebhook(
   now = new Date(),
 ): Promise<Response | null> {
   const path = new URL(request.url).pathname;
-  if (!webhookPaths.includes(path)) return null;
+  if (!isWebhookPath(path)) return null;
   // Stripe e Telegram consegnano soltanto con POST; eBay verifica l'endpoint con un GET.
   const postOnly = path === "/webhooks/stripe" || path === "/webhooks/telegram";
   if (request.method === "GET" && !postOnly) {

@@ -13,6 +13,9 @@ export const databases = {
   live: { name: "fiscalbay", id: "fa2a79ad-fe72-4882-9cbb-c4009ffd5d8f" },
 };
 
+/** Account Cloudflare del progetto, comune ai due ambienti. */
+const account = "98195e505f42abaaeb4827f71a924b1a";
+
 const secrets = {
   REGISTRATION_ALLOWED_EMAILS: bindings.secret(),
   BETTER_AUTH_SECRET: bindings.secret(),
@@ -28,6 +31,7 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   domain: string;
   queue: string;
   exports: string;
+  metrics: string;
   database: { name: string; id: string };
   vars: Vars;
 }) => ({
@@ -63,6 +67,13 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     // File delle esportazioni: bucket UE raggiungibile soltanto da questo binding, senza dominio
     // pubblico, `r2.dev` o URL prefirmati; il download passa sempre dal Worker.
     EXPORT_FILES: bindings.r2({ name: target.exports, jurisdiction: "eu" }),
+    // Metriche tecniche aggregate, un dataset per ambiente: nasce alla prima scrittura e
+    // conserva i punti tre mesi.
+    METRICS: bindings.analyticsEngineDataset({ name: target.metrics }),
+    // La console legge lo stesso dataset dalla SQL API dell'account, con il token facoltativo
+    // `ANALYTICS_READ_TOKEN`.
+    METRICS_DATASET: bindings.text(target.metrics),
+    CLOUDFLARE_ACCOUNT_ID: bindings.text(account),
     VERSION_METADATA: bindings.versionMetadata(),
   },
 });
@@ -75,6 +86,7 @@ export default defineConfig((ctx) => ({
           domain: "fiscalbay.it",
           queue: "fiscalbay-webhooks",
           exports: "fiscalbay-exports",
+          metrics: "fiscalbay_metrics",
           database: databases.live,
           vars: {
             APP_ORIGIN: bindings.text("https://fiscalbay.it"),
@@ -92,6 +104,7 @@ export default defineConfig((ctx) => ({
           domain: "test.fiscalbay.it",
           queue: "fiscalbay-test-webhooks",
           exports: "fiscalbay-test-exports",
+          metrics: "fiscalbay_test_metrics",
           database: databases.test,
           vars: {
             APP_ORIGIN: bindings.text("https://test.fiscalbay.it"),

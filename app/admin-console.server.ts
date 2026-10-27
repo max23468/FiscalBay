@@ -35,6 +35,7 @@ import {
 } from "./domain/concessions.server";
 import { quotaAnomalies, readEbayQuotas } from "./domain/ebay-quotas.server";
 import { assistFreeStore } from "./domain/free-store.server";
+import { readTechnicalMetrics } from "./domain/technical-metrics.server";
 import { requestStoreSync } from "./domain/order-sync.server";
 import { isScheduledTask, requeueTask } from "./domain/scheduled-work.server";
 import {
@@ -79,6 +80,7 @@ export const adminSections = [
   "negozi",
   "lavori",
   "quote",
+  "prestazioni",
   "commerciale",
   "antiabuso",
   "comunicazioni",
@@ -208,6 +210,8 @@ export async function loadSection(section: AdminSection, item: string | undefine
       const quotas = await readEbayQuotas(env, fetch, now);
       return { section, quotas, anomalies: await quotaAnomalies(env.DB, now) } as const;
     }
+    case "prestazioni":
+      return { section, metrics: await readTechnicalMetrics(env, fetch) } as const;
     case "commerciale": {
       const [overview, prices] = await Promise.all([commerceOverview(env, now), checkPrices(env)]);
       return { section, ...overview, prices } as const;

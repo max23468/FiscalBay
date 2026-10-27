@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { z } from "zod";
 
 import { readBounded } from "../integrations/http.server";
+import { pagePoint, writePoints } from "../metrics.server";
 import { maxTimingMs, serverPhases, timedPages } from "../page-timing";
 import type { Route } from "./+types/page-timing";
 
@@ -26,9 +27,9 @@ export function loader() {
 }
 
 /**
- * Misure del caricamento delle pagine dell'app inviate dal browser: registrate come evento
- * strutturato con i soli campi ammessi. Richieste di altre origini, vuote, troppo grandi o non
- * valide non lasciano traccia.
+ * Misure del caricamento delle pagine dell'app inviate dal browser: scritte su Analytics Engine
+ * con i soli campi ammessi. Richieste di altre origini, vuote, troppo grandi o non valide non
+ * lasciano traccia.
  */
 export async function action({ request }: Route.ActionArgs) {
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin)
@@ -46,6 +47,6 @@ export async function action({ request }: Route.ActionArgs) {
     return new Response(null, { status: 400 });
   }
   if (!parsed.success) return new Response(null, { status: 400 });
-  console.log(JSON.stringify({ event: "page_timing", ...parsed.data }));
+  writePoints(env.METRICS, [pagePoint({ ...parsed.data, version: env.VERSION_METADATA?.id })]);
   return new Response(null, { status: 204 });
 }

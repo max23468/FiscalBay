@@ -324,6 +324,9 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 - [Quote e prezzi Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/pricing/)
 - [Limiti e retention Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/limits/)
 - [SQL API Analytics Engine e campionamento](https://developers.cloudflare.com/analytics/analytics-engine/sql-api/)
+- [Campionamento e indice di Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/sampling/)
+- [Funzioni di aggregazione pesate della SQL API](https://developers.cloudflare.com/analytics/analytics-engine/sql-reference/aggregate-functions/)
+- [Binding Workers della Analytics SQL API](https://developers.cloudflare.com/analytics/sql-api/workers-binding/)
 - [Database supportati da Hyperdrive](https://developers.cloudflare.com/hyperdrive/reference/supported-databases-and-features/)
 - [Prezzi Email Service](https://developers.cloudflare.com/email-service/platform/pricing/)
 - [Workers Logs e Traces nelle Custom Dashboards](https://developers.cloudflare.com/changelog/post/2026-10-02-workers-observability-in-custom-dashboards/)
@@ -341,6 +344,8 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 **Verifica del 2026-10-12:** D1 ha un limite di 500 MB per database sul Free e 10 GB sul Paid, distinto da 5 GB/1 TB per account. Read replication usa Sessions API; `first-primary` avvia la sessione dai dati più recenti, un bookmark conserva soltanto una versione minima. Queue: retention Free fissa a 24 ore, Paid fino a 14 giorni; i messaggi scaduti sono eliminati. Per R2 con giurisdizione UE, Logpush richiede una destinazione S3-compatible sull'endpoint UE: la destinazione R2 diretta non supporta la giurisdizione. Workers Trace Events comprende `Event`, `Exceptions` e `Logs`, da filtrare secondo l'allowlist applicativa. Hyperdrive supporta PostgreSQL e MySQL esterni, non D1.
 
 Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazione. Quote pubblicate: Free 100.000 datapoint e 10.000 query al giorno; Paid 10 milioni di datapoint e un milione di query al mese, poi 0,25 USD e 1 USD per milione rispettivamente. La pagina prezzi dichiara che gli addebiti non sono ancora attivi: riconfermare prima dell'adozione. Nella sua SQL API conteggi, medie e quantili devono rispettare `_sample_interval`. Queste verifiche documentali non attestano binding attivi, capacità residua dell'account o nuovi costi autorizzati.
+
+**Verifica del 2026-10-27:** quote, prezzi e retention di Analytics Engine invariati, addebiti ancora non attivi (pagina prezzi aggiornata al 23 aprile 2026). Limiti per punto: 20 blob, 20 double, un indice fino a 96 byte, 16 KB di blob, 250 punti per invocazione. Il campionamento equo bilancia i valori dell'indice; conteggi, somme, medie e quantili della SQL API si pesano con `_sample_interval`, i quantili con `quantileExactWeighted(q)(valore, _sample_interval)`. Il binding Workers della nuova Analytics SQL API legge i dataset Analytics Engine senza token, ma applica da sé i pesi agli aggregati e non documenta `_sample_interval`: le query FiscalBay restano sulla SQL API di Analytics Engine, con pesi espliciti. L'account non aveva ancora dataset Analytics Engine.
 
 **Uso:** §12, §14, §25, §29, §31; M3-12, M4-01, M6-03, M6-06, M6-10, M6-11, M7-03, M7-04, M7-09, M7-10, M7-11, M7-12; procedura in [RELEASE](engineering/RELEASE.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
 

@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 
 import { ApplicationError, classifyFailure, correlateResponse, logFailure } from "../app/errors";
@@ -8,7 +9,13 @@ import { minorToDecimal, parseMinor } from "../app/money";
 import { formatDate } from "../app/format";
 import { loader as loadAccess } from "../app/routes/sign-in";
 import { action as pageTiming } from "../app/routes/page-timing";
-import { describeRequest, measure, withPhaseTimings } from "../app/observability.server";
+import { invocationPoint, writePoints } from "../app/metrics.server";
+import {
+  describeRequest,
+  measure,
+  withInvocationMetrics,
+  withPhaseTimings,
+} from "../app/observability.server";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 describe("errors, locale and redacted logs", () => {
@@ -155,8 +162,10 @@ describe("errors, locale and redacted logs", () => {
 });
 
 describe("misure delle fasi e del browser", () => {
+  const page = new Request("https://test.fiscalbay.it/app/ordini");
+
   it("espone in Server-Timing la durata delle sole fasi misurate", async () => {
-    const response = await withPhaseTimings(async () => {
+    const response = await withPhaseTimings(page, async () => {
       await measure("auth", "session", async () => undefined);
       await measure("d1", "orders", async () => undefined);
       await measure("d1", "stores", async () => undefined);
@@ -174,7 +183,14 @@ describe("misure delle fasi e del browser", () => {
     );
     // Senza fasi misurate la risposta resta com'è.
     const plain = new Response("ok");
-    expect(await withPhaseTimings(async () => plain)).toBe(plain);
+    expect(await withPhaseTimings(page, async () => plain)).toBe(plain);
+    // La risposta a un provider non porta le durate, anche con fasi misurate.
+    const provider = await withPhaseTimings(
+      page,
+      async () => measure("d1", "orders", async () => new Response(null)),
+      { serverTiming: false },
+    );
+    expect(provider.headers.has("server-timing")).toBe(false);
     // Fuori da una richiesta la misura non registra nulla e restituisce il risultato.
     expect(await measure("render", "document", async () => 1)).toBe(1);
   });
@@ -209,14 +225,18 @@ describe("misure delle fasi e del browser", () => {
           Object.assign(active.attributes, values),
       }),
     } as unknown as Tracing;
-    await withPhaseTimings(async () => {
-      await measure("d1", "orders", async () => undefined);
-      await measure("ebay", "request", async () => {
-        throw new ApplicationError("UPSTREAM_UNAVAILABLE");
-      }).catch(() => undefined);
-      describeRequest({ page: "orders", orders: 2 });
-      return new Response(null);
-    }, tracing);
+    await withPhaseTimings(
+      page,
+      async () => {
+        await measure("d1", "orders", async () => undefined);
+        await measure("ebay", "request", async () => {
+          throw new ApplicationError("UPSTREAM_UNAVAILABLE");
+        }).catch(() => undefined);
+        describeRequest({ page: "orders", orders: 2 });
+        return new Response(null);
+      },
+      { tracing },
+    );
     expect(spans).toEqual([
       {
         name: "fiscalbay.d1",
@@ -244,15 +264,18 @@ describe("misure delle fasi e del browser", () => {
       headers: { "content-type": "application/json", ...headers },
     });
 
-  it("registra le misure del browser soltanto con i campi ammessi", async () => {
+  it("scrive le misure del browser su Analytics Engine soltanto con i campi ammessi", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const written = vi.spyOn(env.METRICS, "writeDataPoint").mockImplementation(() => {});
     const valid = { page: "orders", ttfb: 120, fcp: 300, ready: 650, server: { auth: 12, d1: 8 } };
     expect((await timing(JSON.stringify(valid))).status).toBe(204);
-    expect(JSON.parse(String(log.mock.calls.at(-1)![0]))).toEqual({
-      event: "page_timing",
-      ...valid,
+    // Le misure assenti (LCP, eBay, rendering) valgono -1, mai zero.
+    expect(written).toHaveBeenCalledExactlyOnceWith({
+      indexes: ["page:browser"],
+      blobs: ["page", "browser", "orders", "", "ok", env.VERSION_METADATA.id],
+      doubles: [120, 300, -1, 650, 12, 8, -1, -1],
     });
-    log.mockClear();
+    written.mockClear();
     for (const body of [
       JSON.stringify({ ...valid, url: "/app/ordini?q=RSSMRA80A01H501U" }),
       JSON.stringify({ ...valid, page: "profilo" }),
@@ -287,7 +310,164 @@ describe("misure delle fasi e del browser", () => {
       (await pageTiming({ request: streamed } as Parameters<typeof pageTiming>[0])).status,
     ).toBe(413);
     expect((await timing("")).status).toBe(204);
+    expect(written).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
     log.mockRestore();
+    written.mockRestore();
+  });
+});
+
+describe("metriche tecniche su Analytics Engine", () => {
+  const version = "c66e8cc5-c242-464f-9c0f-90bb4dbf8f44";
+  const recorder = () => {
+    const points: AnalyticsEngineDataPoint[] = [];
+    return {
+      points,
+      dataset: { writeDataPoint: (point) => points.push(point!) } as AnalyticsEngineDataset,
+    };
+  };
+
+  it("scrive esito, latenza e fasi della richiesta senza dati dell'utente, dell'ordine o dell'URL", async () => {
+    const { points, dataset } = recorder();
+    const personal = new Request(
+      "https://test.fiscalbay.it/app/ordini/12-00000-00001.data?q=RSSMRA80A01H501U&email=mario.rossi%40example.invalid",
+      {
+        method: "POST",
+        headers: {
+          cookie: "better-auth.session_token=sessione-segreta",
+          "cf-connecting-ip": "203.0.113.7",
+        },
+      },
+    );
+    await withPhaseTimings(
+      personal,
+      async () => {
+        await measure("d1", "orders", async () => undefined);
+        await measure("d1", "orders", async () => undefined);
+        await measure("ebay", "request", async () => {
+          throw new ApplicationError("UPSTREAM_UNAVAILABLE");
+        }).catch(() => undefined);
+        return new Response(null, { status: 404 });
+      },
+      { dataset, version },
+    );
+    const duration = expect.any(Number);
+    expect(points).toEqual([
+      {
+        indexes: ["invocation:http"],
+        blobs: ["invocation", "http", "data", "POST", "4xx", version],
+        doubles: [1, duration, duration],
+      },
+      {
+        indexes: ["phase:http"],
+        blobs: ["phase", "http", "d1", "orders", "ok", version],
+        doubles: [2, duration, duration],
+      },
+      {
+        indexes: ["phase:http"],
+        blobs: ["phase", "http", "ebay", "request", "UPSTREAM_UNAVAILABLE", version],
+        doubles: [1, duration, duration],
+      },
+    ]);
+    // Le due letture D1 si sommano: il totale non è inferiore alla più lunga.
+    const [, d1] = points;
+    expect(d1!.doubles![1]).toBeGreaterThanOrEqual(d1!.doubles![2]!);
+    const written = JSON.stringify(points);
+    for (const forbidden of [
+      "RSSMRA",
+      "mario",
+      "example.invalid",
+      "12-00000",
+      "/app",
+      "?",
+      "sessione-segreta",
+      "203.0.113",
+      "@",
+    ])
+      expect(written).not.toContain(forbidden);
+
+    // Una richiesta che fallisce conta come errore del server, con le fasi raggiunte.
+    points.length = 0;
+    await expect(
+      withPhaseTimings(
+        new Request("https://test.fiscalbay.it/api/v1/page-timing"),
+        async () => {
+          await measure("auth", "session", async () => undefined);
+          throw new Error("NON-ESPORRE");
+        },
+        { dataset },
+      ),
+    ).rejects.toThrow("NON-ESPORRE");
+    expect(points.map((point) => point.blobs)).toEqual([
+      ["invocation", "http", "api", "GET", "5xx", ""],
+      ["phase", "http", "auth", "session", "ok", ""],
+    ]);
+    expect(JSON.stringify(points)).not.toContain("NON-ESPORRE");
+  });
+
+  it("misura coda e cron con esito, numero di messaggi e fasi attraversate", async () => {
+    const { points, dataset } = recorder();
+    await withInvocationMetrics(
+      "queue",
+      "sync",
+      () => measure("ebay", "request", async () => undefined),
+      { dataset, count: 3, outcome: () => "retry" },
+    );
+    await expect(
+      withInvocationMetrics(
+        "cron",
+        "dispatch",
+        async () => {
+          throw new Error("NON-ESPORRE");
+        },
+        { dataset, outcome: () => "ok" },
+      ),
+    ).rejects.toThrow("NON-ESPORRE");
+    expect(points.map(({ blobs, doubles }) => [blobs, doubles![0]])).toEqual([
+      [["invocation", "queue", "sync", "", "retry", ""], 3],
+      [["phase", "queue", "ebay", "request", "ok", ""], 1],
+      [["invocation", "cron", "dispatch", "", "error", ""], 1],
+    ]);
+  });
+
+  it("non scrive campi fuori elenco né valori non finiti e non interrompe l'invocazione", () => {
+    const { points, dataset } = recorder();
+    const valid = invocationPoint({
+      invocation: "http",
+      detail: "document",
+      method: "PROPFIND",
+      outcome: "2xx",
+      durationMs: 12.345,
+      version: "non-uuid",
+    });
+    // Un metodo fuori elenco diventa OTHER, una versione che non è un UUID resta vuota.
+    expect(valid).toEqual({
+      index: "invocation:http",
+      blobs: ["invocation", "http", "document", "OTHER", "2xx", ""],
+      doubles: [1, 12.3, 12.3],
+    });
+    writePoints(dataset, [
+      valid,
+      { ...valid, blobs: ["invocation", "http", "mario.rossi@example.invalid", "", "2xx", ""] },
+      { ...valid, blobs: ["invocation", "http", "/app/ordini?q=1", "", "2xx", ""] },
+      { ...valid, doubles: [1, Number.NaN, 1] },
+    ]);
+    expect(points).toEqual([
+      { indexes: ["invocation:http"], blobs: valid.blobs, doubles: valid.doubles },
+    ]);
+    // Oltre il limite per scrittura i punti in più restano fuori.
+    points.length = 0;
+    writePoints(
+      dataset,
+      Array.from({ length: 300 }, () => valid),
+    );
+    expect(points).toHaveLength(100);
+    const refusing = {
+      writeDataPoint: () => {
+        throw new Error("limite");
+      },
+    };
+    expect(() => writePoints(refusing, [valid])).not.toThrow();
+    expect(() => writePoints(undefined, [valid])).not.toThrow();
   });
 });

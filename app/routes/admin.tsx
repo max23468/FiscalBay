@@ -5,7 +5,7 @@ import { data } from "react-router";
 import { AccountsView, StoresView } from "~/components/admin/directory";
 import { CommerceView } from "~/components/admin/commerce";
 import { AbuseView, AuditTable, NoticesView } from "~/components/admin/governance";
-import { JobsView, QuotasView } from "~/components/admin/operations";
+import { JobsView, MetricsView, QuotasView } from "~/components/admin/operations";
 import { Overview } from "~/components/admin/overview";
 import { AdminShell, type AdminSectionKey } from "~/components/admin/shell";
 import { SwitchesView } from "~/components/admin/switches";
@@ -51,6 +51,7 @@ function sectionTitle(page: SectionData, language: "it" | "en") {
     negozi: nav.stores,
     lavori: nav.jobs,
     quote: nav.quotas,
+    prestazioni: nav.metrics,
     commerciale: nav.commerce,
     antiabuso: nav.abuse,
     comunicazioni: nav.notices,
@@ -171,6 +172,8 @@ function Section({ page, now }: { page: SectionData; now: string }) {
       return <JobsView tasks={page.tasks} receipts={page.receipts} />;
     case "quote":
       return <QuotasView quotas={page.quotas} anomalies={page.anomalies} />;
+    case "prestazioni":
+      return <MetricsView metrics={page.metrics} />;
     case "commerciale":
       return <CommerceView data={page} now={now} />;
     case "antiabuso":
@@ -192,6 +195,7 @@ const navKey = {
   negozi: "stores",
   lavori: "jobs",
   quote: "quotas",
+  prestazioni: "metrics",
   commerciale: "commerce",
   antiabuso: "abuse",
   comunicazioni: "notices",
