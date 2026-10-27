@@ -19,16 +19,17 @@ export async function subscriptionView(
   now = new Date(),
 ): Promise<Pick<AccountView, "premium" | "payment" | "grant">> {
   if (coverage?.source === "lifetime") {
-    const allocation = await db
-      .prepare("SELECT kind FROM lifetime_allocations WHERE workspace_id = ? AND status = 'active'")
+    // Concesso senza pagamento: un omaggio, anche sul posto di un lifetime rimborsato (D209).
+    const lifetime = await db
+      .prepare(`SELECT stripe_checkout_session_id IS NULL AS granted FROM workspace_entitlements
+        WHERE workspace_id = ? AND source = 'lifetime' AND revoked_at IS NULL`)
       .bind(workspaceId)
-      .first<{ kind: "sale" | "gift" }>();
-    // Il diritto lifetime richiede un posto attivo dello spazio.
+      .first<{ granted: number }>();
     return {
       premium: {
         period: "lifetime",
         renewsAt: null,
-        ...(allocation!.kind === "gift" ? { granted: true as const } : {}),
+        ...(lifetime?.granted ? { granted: true as const } : {}),
       },
     };
   }

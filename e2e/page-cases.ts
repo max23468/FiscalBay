@@ -68,6 +68,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
   const home = prefix || "/";
   const access = `${prefix}/accesso`;
   const orders = `${prefix}/app/ordini`;
+  const admin = `${prefix}/admin/:sezione?/:voce?`;
   const preview = (path: string, area: string, options: Partial<PageCase> = {}) =>
     make(`/anteprima${path}`, area, { preview: true, ...options });
   return [
@@ -141,10 +142,34 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
         remote: !prefix && (suffix === "" || suffix === "/sicurezza"),
       }),
     ),
-    make("/admin", "auth", { status: 404 }),
-    make("/admin", "auth", { role: "member", status: 404 }),
-    make("/admin", "auth", { role: "admin-verify" }),
-    make("/admin", "auth", { role: "admin-granted" }),
+    ...(
+      [
+        { role: "anonymous", status: 404 },
+        { role: "member", status: 404 },
+        { role: "admin-verify", status: 200 },
+      ] as const
+    ).map(({ role, status }) => make("/admin", "auth", { role, status, pattern: admin })),
+    // Ogni sezione della console con la conferma della passkey, la scheda dello spazio di
+    // collaudo e un indirizzo inesistente, che risponde come per chi non è admin.
+    ...[
+      "",
+      "/account",
+      "/negozi",
+      "/lavori",
+      "/quote",
+      "/commerciale",
+      "/antiabuso",
+      "/comunicazioni",
+      "/registro",
+      `/spazi/${testAccount.workspaceId}`,
+      "/non-esiste",
+    ].map((suffix) =>
+      make(`/admin${suffix}`, "auth", {
+        role: "admin-granted",
+        pattern: admin,
+        status: suffix === "/non-esiste" ? 404 : 200,
+      }),
+    ),
     preview("", "orders", { redirect: `${prefix}/anteprima/ordini` }),
     ...["", "/ord-02", "/non-esiste"].map((suffix) =>
       preview(`/ordini${suffix}`, "orders", {

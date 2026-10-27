@@ -10,7 +10,7 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { appCopy, pageTitle } from "../app-copy";
 import { accessPath, ordersPath, visitCookie, visitParam } from "../app-links";
 import { createAuth } from "../auth.server";
-import { baseFreeQuota, currentFreePromotion } from "../domain/grants.server";
+import { currentFreePromotion, freeQuotaSettings } from "../domain/grants.server";
 import { readSession } from "../domain/sessions.server";
 import { tracePhase } from "../errors";
 import { languageFromPath, languages, localizedPath } from "../i18n";
@@ -54,7 +54,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     signedIn: Boolean(session),
     origin: new URL(env.APP_ORIGIN).origin,
     // Senza cache la pagina annuncia la promozione in corso e la quota base appena finisce.
-    baseFreeQuota,
+    baseFreeQuota: (await freeQuotaSettings(env.DB)).quota,
     freePromotion: await currentFreePromotion(env.DB),
   };
 }

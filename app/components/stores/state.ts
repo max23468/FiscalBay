@@ -59,7 +59,9 @@ export function connectionStatus(
           ? t.stores.pausedByPlan
           : store.pauseReason === "inactivity"
             ? t.stores.pausedByInactivity
-            : t.stores.state.paused,
+            : store.pauseReason === "admin"
+              ? t.stores.pausedByAdmin
+              : t.stores.state.paused,
     };
   }
   if (store.connection === "reconnect_required") {
@@ -97,6 +99,7 @@ export function syncDescription(store: StoreView, ebayDown: boolean, t: AppCopy)
   if (store.connection === "active") return t.stores.target(store.targetMinutes);
   if (store.pauseReason === "plan") return t.stores.planPauseHint;
   if (store.pauseReason === "inactivity") return t.stores.inactivityPauseHint;
+  if (store.pauseReason === "admin") return t.stores.adminPauseHint;
   if (store.connection === "paused") return t.stores.pauseHint;
   return t.stores.syncSuspended;
 }
