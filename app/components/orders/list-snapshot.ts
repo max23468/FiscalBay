@@ -1,5 +1,11 @@
 import { useEffect, useEffectEvent, useState } from "react";
-import { useLocation, useNavigate, useNavigation, useSearchParams } from "react-router";
+import {
+  useFetchers,
+  useLocation,
+  useNavigate,
+  useNavigation,
+  useSearchParams,
+} from "react-router";
 
 import { snapshotParam } from "../../orders/order-list";
 import type { OrderView } from "../../view-models";
@@ -8,12 +14,17 @@ import type { OrdersPageData } from "./page";
 /** Distanza dall'inizio della pagina entro cui l'utente è considerato in cima alla lista. */
 const topThreshold = 120;
 
+/** Pausa dopo l'ultimo scorrimento oltre la quale l'utente è considerato fermo. */
+const scrollSettle = 250;
+
 /**
- * L'indirizzo conserva l'istantanea dell'elenco, così ricarica, dettaglio e Indietro ritrovano
- * gli stessi ordini nello stesso ordine. I nuovi ordini entrano subito se stanno tutti sopra il
- * primo mostrato e l'utente è in cima alla lista senza selezionare né leggere un dettaglio
- * (`held`); altrimenti resta l'indicatore, così nulla si sposta mentre legge, il pannello
- * aperto non si chiude e un ordine recuperato dallo storico non entra fra quelli già letti.
+ * L'indirizzo riceve l'istantanea dell'elenco quando c'è qualcosa da tenere fermo: l'utente
+ * lontano dalla cima, una selezione o un dettaglio (`held`), ordini in arrivo. Così ricarica,
+ * dettaglio e Indietro ritrovano gli stessi ordini nello stesso ordine, e in cima l'indirizzo
+ * resta pulito. I nuovi ordini entrano subito se stanno tutti sopra il primo mostrato e
+ * l'utente è in cima alla lista senza selezionare né leggere un dettaglio; altrimenti resta
+ * l'indicatore, così nulla si sposta mentre legge, il pannello aperto non si chiude e un
+ * ordine recuperato dallo storico non entra fra quelli già letti.
  */
 export function useListSnapshot(data: OrdersPageData, held: boolean) {
   const navigate = useNavigate();
@@ -22,13 +33,33 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
   const { snapshot, freshHref, incomingAtTop } = data;
   const synced = params.get(snapshotParam) === snapshot;
   // Durante un'altra navigazione, per esempio Indietro, la sostituzione prenderebbe il posto
-  // della pagina di destinazione: si attende il router inattivo e l'indirizzo del browser
-  // ancora uguale all'elenco mostrato.
-  const idle = useNavigation().state === "idle";
+  // della pagina di destinazione, e durante uno sblocco ne interromperebbe la rilettura: si
+  // attende il router inattivo, senza azioni in corso, e l'indirizzo del browser ancora uguale
+  // all'elenco mostrato.
+  const fetchers = useFetchers();
+  const idle =
+    useNavigation().state === "idle" && fetchers.every((fetcher) => fetcher.state === "idle");
   const shown = `${location.pathname}${location.search}`;
   const current = () => `${window.location.pathname}${window.location.search}` === shown;
+  // Lo scorrimento conta quando si ferma: un clic subito dopo avvia prima la sua navigazione,
+  // che la sostituzione altrimenti interromperebbe.
+  const [away, setAway] = useState(false);
   useEffect(() => {
-    if (synced || !idle || !current()) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settle = () => setAway(window.scrollY >= topThreshold);
+    const scrolled = () => {
+      clearTimeout(timer);
+      timer = setTimeout(settle, scrollSettle);
+    };
+    settle();
+    window.addEventListener("scroll", scrolled, { passive: true });
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("scroll", scrolled);
+    };
+  }, []);
+  useEffect(() => {
+    if (synced || !idle || !current() || !(held || away || freshHref !== null)) return;
     const next = new URLSearchParams(params);
     next.set(snapshotParam, snapshot);
     setParams(next, { replace: true, preventScrollReset: true });

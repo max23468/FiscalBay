@@ -1049,8 +1049,8 @@ test("un nuovo accesso ricorda soltanto il negozio, l'istantanea resta su «Cari
   page,
 }) => {
   await open(page, "/anteprima/ordini?periodo=30", "premium");
-  await expect(page).toHaveURL(/periodo=30&vista=[0-9a-z]+$/u);
-  const vista = new URL(page.url()).searchParams.get("vista");
+  // In cima, senza selezione né dettaglio, l'indirizzo resta senza istantanea.
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?periodo=30$/u);
   const firstLabel = () =>
     page
       .getByRole("article")
@@ -1060,7 +1060,8 @@ test("un nuovo accesso ricorda soltanto il negozio, l'istantanea resta su «Cari
       );
   const before = await firstLabel();
   await page.getByRole("link", { name: "Carica altri" }).click();
-  await expect(page).toHaveURL(new RegExp(`mostra=2&vista=${vista}$`, "u"));
+  await expect(page).toHaveURL(/periodo=30&mostra=2&vista=[0-9a-z]+$/u);
+  const vista = new URL(page.url()).searchParams.get("vista");
   expect(await firstLabel()).toBe(before);
   const store = page.getByRole("combobox", { name: "Negozio", exact: true });
   await store.click();
@@ -1070,14 +1071,17 @@ test("un nuovo accesso ricorda soltanto il negozio, l'istantanea resta su «Cari
   await expect(page).not.toHaveURL(/mostra=/u);
   // L'ingresso dagli Ordini senza parametri riapre il negozio, non il periodo.
   await page.goto("/anteprima/ordini");
-  await expect(page).toHaveURL(/\/anteprima\/ordini\?negozio=[^&]+&vista=[0-9a-z]+$/u);
+  await expect(page).toHaveURL(/\/anteprima\/ordini\?negozio=[^&]+$/u);
   await expect(store).toContainText("magazzino secondario");
   await expect(page.getByRole("combobox", { name: "Periodo", exact: true })).toContainText("Tutti");
   // «Reimposta filtri» lo dimentica.
   await page.goto(`/anteprima/ordini?periodo=7&pagamento=refunded&vista=${vista}`);
   await page.getByRole("link", { name: "Reimposta filtri" }).click();
-  await expect(page).toHaveURL(/\/anteprima\/ordini\?vista=[0-9a-z]+$/u);
+  await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
   await page.goto("/anteprima/ordini");
+  await expect(page).toHaveURL(/\/anteprima\/ordini$/u);
+  // Lontano dalla cima l'elenco riceve l'istantanea, senza una nuova lettura.
+  await page.mouse.wheel(0, 600);
   await expect(page).toHaveURL(/\/anteprima\/ordini\?vista=[0-9a-z]+$/u);
 });
 
