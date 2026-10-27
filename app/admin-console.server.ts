@@ -85,14 +85,54 @@ export function sectionFrom(value: string | undefined): AdminSection | null {
   return (adminSections as readonly string[]).includes(value) ? (value as AdminSection) : null;
 }
 
-/** Sessione admin confermata, oppure il livello di accesso che manca. */
+/** Prefisso dei token tecnici della console, riconoscibile in un'eventuale fuga. */
+const agentTokenPrefix = "fbat_";
+
+async function sha256(value: string) {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Accesso tecnico in sola lettura (D213): un token `Bearer` il cui SHA-256 è registrato e non
+ * revocato apre la lettura della console all'agente che assiste l'owner, anche senza passkey.
+ * Nessuna operazione passa da qui. Restituisce l'etichetta del token, o null.
+ */
+async function agentAccess(request: Request, now: Date) {
+  const header = request.headers.get("authorization") ?? "";
+  const token = header.startsWith(`Bearer ${agentTokenPrefix}`) ? header.slice(7) : null;
+  if (!token || token.length > 128) return null;
+  const row = await env.DB.prepare(`UPDATE admin_agent_tokens SET used_at = ?2
+      WHERE token_hash = ?1 AND revoked_at IS NULL RETURNING label`)
+    .bind(await sha256(token), now.toISOString())
+    .first<{ label: string }>();
+  return row?.label ?? null;
+}
+
+/**
+ * Livello di accesso della richiesta: la sessione admin con passkey verificata, oppure la sola
+ * lettura del token tecnico quando la sessione non basta.
+ */
 export async function adminSession(request: Request) {
   const session = (await readSession(env, request)) as
     | (AuthSession & {
         user: { email: string };
       })
     | null;
-  return { session, access: adminAccess(session) };
+  const access = adminAccess(session);
+  if (access === "granted") return { session, access, agent: null };
+  const agent = await agentAccess(request, new Date());
+  return agent ? { session, access: "agent" as const, agent } : { session, access, agent: null };
+}
+
+/** Lettura con il token tecnico: resta nel registro con l'etichetta del token. */
+export async function recordAgentRead(agent: string, url: URL) {
+  await recordAudit(env.DB, {
+    actor: `agent:${agent}`.slice(0, 128),
+    operation: "agent-read",
+    target: `page:${url.pathname}`.slice(0, 256),
+    outcome: "done",
+  });
 }
 
 export async function loadSection(section: AdminSection, item: string | undefined, url: URL) {
@@ -105,7 +145,7 @@ export async function loadSection(section: AdminSection, item: string | undefine
         listAnomalies(env.DB, now),
         consoleSummary(env.DB, now),
         commerceOverview(env, now),
-        listAudit(env.DB, { limit: 5 }),
+        listAudit(env.DB, { limit: 5, changes: true }),
       ]);
       return {
         section,

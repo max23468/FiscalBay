@@ -45,8 +45,8 @@ export function AdminShell({
   current: AdminSectionKey;
   title: ReactNode;
   subtitle?: ReactNode;
-  /** Ora in cui la conferma con passkey della sessione scade. */
-  passkeyUntil: string;
+  /** Ora in cui la conferma con passkey della sessione scade; null per l'accesso tecnico. */
+  passkeyUntil: string | null;
   children: ReactNode;
 }) {
   const { t, href, language } = useAdmin();
@@ -63,7 +63,7 @@ export function AdminShell({
           </a>
           <span className="ml-auto flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
             <ShieldCheck aria-hidden="true" className="size-4 text-success" />
-            {t.passkeyUntil(passkeyUntil)}
+            {passkeyUntil ? t.passkeyUntil(passkeyUntil) : t.readOnly}
           </span>
           <a
             href={localizedPath(language)}

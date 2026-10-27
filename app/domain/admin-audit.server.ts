@@ -65,15 +65,17 @@ function targetParts(target: string | null) {
 /** Ultime operazioni, dalla più recente, eventualmente di un solo oggetto. */
 export async function listAudit(
   db: D1Database,
-  options: { target?: string; limit?: number } = {},
+  /** `changes`: soltanto le operazioni, senza le letture con l'accesso tecnico. */
+  options: { target?: string; limit?: number; changes?: boolean } = {},
 ): Promise<AuditRow[]> {
   const { results } = await db
     .prepare(`SELECT a.id, a.actor, u.email AS actorEmail, a.operation, a.target, a.reason,
         a.outcome, a.at
       FROM admin_audit a LEFT JOIN "user" u ON u.id = a.actor
-      WHERE ?1 IS NULL OR a.target = ?1 OR a.target LIKE ?1 || ':%'
+      WHERE (?1 IS NULL OR a.target = ?1 OR a.target LIKE ?1 || ':%')
+        AND (?3 = 0 OR a.operation <> 'agent-read')
       ORDER BY a.at DESC, a.rowid DESC LIMIT ?2`)
-    .bind(options.target ?? null, options.limit ?? 100)
+    .bind(options.target ?? null, options.limit ?? 100, options.changes ? 1 : 0)
     .all<Omit<AuditRow, "workspace" | "store">>();
   const parts = results.map((row) => targetParts(row.target));
   const workspaces = [...new Set(parts.flatMap(({ workspace }) => workspace ?? []))];

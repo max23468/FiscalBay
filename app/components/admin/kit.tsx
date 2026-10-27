@@ -7,7 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Spinner } from "~/components/ui/spinner";
 import type { AdminActionResult } from "../../admin-console.server";
-import { useAdmin } from "./use-admin";
+import { ReadOnly, useAdmin } from "./use-admin";
 
 /** Titolo del riquadro che contiene una tabella: dà il nome alla sua area scorrevole. */
 const PanelTitle = createContext<string | null>(null);
@@ -75,6 +75,7 @@ export function ActionForm({
   onResult?: (result: AdminActionResult) => ReactNode;
 }) {
   const { t } = useAdmin();
+  const readOnly = use(ReadOnly);
   const fetcher = useFetcher<AdminActionResult>();
   const pending = fetcher.state !== "idle";
   const result = fetcher.state === "idle" ? fetcher.data : undefined;
@@ -105,6 +106,7 @@ export function ActionForm({
       </div>
     </fetcher.Form>
   );
+  if (readOnly) return null;
   // Il seguito dell'esito, come una conferma, è un modulo a sé: mai dentro questo.
   const next = result && onResult ? onResult(result) : null;
   return next ? (
@@ -122,6 +124,7 @@ export function ActionForm({
  * apre, così le azioni rare non affollano la scheda.
  */
 export function Disclosure({ label, children }: { label: string; children: ReactNode }) {
+  if (use(ReadOnly)) return null;
   return (
     <details className="rounded-lg border px-3 py-2 [&[open]>summary]:mb-3">
       <summary className="cursor-pointer text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring">

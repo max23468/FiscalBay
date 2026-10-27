@@ -8,6 +8,7 @@ import { AbuseView, AuditTable, NoticesView } from "~/components/admin/governanc
 import { JobsView, QuotasView } from "~/components/admin/operations";
 import { Overview } from "~/components/admin/overview";
 import { AdminShell, type AdminSectionKey } from "~/components/admin/shell";
+import { ReadOnly } from "~/components/admin/use-admin";
 import { WorkspaceView } from "~/components/admin/workspace";
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
@@ -18,6 +19,7 @@ import { loadPasskeyClient } from "../account/passkey";
 import {
   adminSessionMaxAge,
   adminSession,
+  recordAgentRead,
   loadSection,
   runAdminAction,
   sectionFrom,
@@ -66,13 +68,14 @@ const confirmedParam = "conferma";
 export async function loader({ request, params }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
-  const { session, access } = await adminSession(request);
+  const { session, access, agent } = await adminSession(request);
   tracePhase(request, "session");
   // Chi non è admin riceve la stessa risposta di un indirizzo inesistente.
   if (access === "none") throw data(null, { status: 404 });
   const section = sectionFrom(params.sezione);
   // Soltanto la scheda di uno spazio ha un elemento nell'indirizzo.
   if (!section || (section === "spazi") !== Boolean(params.voce)) throw data(null, { status: 404 });
+  if (agent) await recordAgentRead(agent, url);
   return {
     language,
     access,
@@ -85,8 +88,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             new Date(session!.session.createdAt).getTime() + adminSessionMaxAge,
           ).toISOString()
         : null,
-    // Senza la conferma con passkey nessuna sezione si legge.
-    page: access === "granted" ? await loadSection(section, params.voce, url) : null,
+    // Senza la conferma con passkey nessuna sezione si legge, salvo l'accesso tecnico.
+    page:
+      access === "granted" || access === "agent"
+        ? await loadSection(section, params.voce, url)
+        : null,
+    readOnly: access === "agent",
     now: new Date().toISOString(),
   };
 }
@@ -193,19 +200,22 @@ function pageHeading(page: SectionData, language: "it" | "en") {
 }
 
 export default function Admin({ loaderData }: Route.ComponentProps) {
-  const { language, unverified, passkeyUntil, page, now } = loaderData;
+  const { language, unverified, passkeyUntil, readOnly, page, now } = loaderData;
   const t = appCopy[language].admin;
-  if (page && passkeyUntil) {
+  if (page) {
     const until = passkeyUntil;
-    const sameDay = formatDate(until, language, "date") === formatDate(now, language, "date");
+    const sameDay =
+      until && formatDate(until, language, "date") === formatDate(now, language, "date");
     return (
       <AdminShell
         current={navKey[page.section]}
         title={pageHeading(page, language)}
         subtitle={page.section === "spazi" ? adminCopy[language].workspace.title : undefined}
-        passkeyUntil={formatDate(until, language, sameDay ? "time" : "dateTime")}
+        passkeyUntil={until ? formatDate(until, language, sameDay ? "time" : "dateTime") : null}
       >
-        <Section page={page} now={now} />
+        <ReadOnly value={readOnly}>
+          <Section page={page} now={now} />
+        </ReadOnly>
       </AdminShell>
     );
   }

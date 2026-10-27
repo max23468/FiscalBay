@@ -73,6 +73,7 @@ const it = {
       "save-notice": "Comunicazione salvata",
       "withdraw-notice": "Comunicazione ritirata",
       "review-abuse": "Revisione antiabuso",
+      "agent-read": "Lettura con accesso tecnico",
     } as Record<string, string>,
     outcomes: {
       done: "Eseguita",
@@ -111,6 +112,7 @@ const it = {
     openAudit: "Apri il registro",
   },
   passkeyUntil: (time: string) => `Passkey fino alle ${time}`,
+  readOnly: "Accesso tecnico in sola lettura",
   menu: "Sezioni",
   common: {
     reason: "Motivo",
@@ -542,6 +544,7 @@ const en: AdminCopy = {
       "save-notice": "Announcement saved",
       "withdraw-notice": "Announcement withdrawn",
       "review-abuse": "Abuse review",
+      "agent-read": "Technical read",
     } as Record<string, string>,
     outcomes: {
       done: "Done",
@@ -580,6 +583,7 @@ const en: AdminCopy = {
     openAudit: "Open the log",
   },
   passkeyUntil: (time: string) => `Passkey until ${time}`,
+  readOnly: "Technical read-only access",
   menu: "Sections",
   common: {
     reason: "Reason",
