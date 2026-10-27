@@ -1,5 +1,6 @@
 import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
 import { listVisibleOrders } from "./orders.server";
+import { serviceSetting } from "./service-settings.server";
 import { planPausedStore, reconnectStore, storeNameSql } from "./store-state.server";
 import {
   consumeTelegramStart,
@@ -46,7 +47,7 @@ import { telegramBotCopy as copy } from "../copy/telegram";
 
 /** Il menu dei comandi del bot dell'ambiente, nelle due lingue. */
 export async function configureBotCommands(env: Env, fetcher: typeof fetch = fetch) {
-  if (!telegramConfigured(env)) return;
+  if (!telegramConfigured(env) || !(await serviceSetting(env.DB, "telegram_sends"))) return;
   await setBotCommands(env, { it: copy.it.commands, en: copy.en.commands }, fetcher);
 }
 
@@ -92,6 +93,8 @@ export async function consumeTelegramUpdate(
   now = new Date(),
 ): Promise<void> {
   const db = env.DB;
+  // Con gli invii spenti dalla console il bot non risponde: l'aggiornamento si chiude.
+  if (!(await serviceSetting(db, "telegram_sends"))) return;
   await db
     .prepare(`UPDATE telegram_links SET resumed_at = ?2, delivery_failure = NULL,
         delivery_failed_at = NULL

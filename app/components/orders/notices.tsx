@@ -45,7 +45,8 @@ export function OrdersHeader({ data }: { data: OrdersPageData }) {
 }
 
 function syncLabel(data: OrdersPageData, t: AppCopy, language: Language) {
-  if (isEbayDown(data)) return t.orders.ebayDownTitle;
+  const down = data.notices.find((notice) => notice.kind === "ebay-down");
+  if (down) return down.maintenance ? t.orders.ebayPausedTitle : t.orders.ebayDownTitle;
   const importing = importingNotice(data);
   if (importing) return t.orders.importingStatus(importing.count);
   if (data.sync.running) return t.orders.refreshingTitle;
@@ -112,10 +113,18 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
         switch (notice.kind) {
           case "ebay-down":
             return (
-              <StatusAlert key={notice.kind} tone="warning" title={t.orders.ebayDownTitle}>
-                {notice.at
-                  ? t.orders.ebayDownBody(formatDate(notice.at, language, "dateTime", zone))
-                  : t.orders.ebayDownNeverBody}
+              <StatusAlert
+                key={notice.kind}
+                tone="warning"
+                title={notice.maintenance ? t.orders.ebayPausedTitle : t.orders.ebayDownTitle}
+              >
+                {notice.maintenance
+                  ? notice.at
+                    ? t.orders.ebayPausedBody(formatDate(notice.at, language, "dateTime", zone))
+                    : t.orders.ebayPausedNeverBody
+                  : notice.at
+                    ? t.orders.ebayDownBody(formatDate(notice.at, language, "dateTime", zone))
+                    : t.orders.ebayDownNeverBody}
               </StatusAlert>
             );
           case "store-read-failed":

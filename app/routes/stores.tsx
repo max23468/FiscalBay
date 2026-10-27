@@ -24,7 +24,8 @@ import { storeNotifications } from "../domain/telegram.server";
 import { telegramConfigured } from "../integrations/telegram.server";
 import { requestStoreSync, type SyncRequestResult } from "../domain/order-sync.server";
 import { languageFromPath, localizedPath } from "../i18n";
-import type { ActionResult, StoreView } from "../view-models";
+import type { ActionResult, EbayEnvironment, StoreView } from "../view-models";
+import { serviceSetting } from "../domain/service-settings.server";
 import { logFailure } from "../errors";
 import { describeRequest, measure } from "../observability.server";
 import { settle } from "../settle.server";
@@ -92,11 +93,12 @@ async function readStores({ request, params }: Route.LoaderArgs) {
   const { language, session, account } = area;
   const now = new Date();
   const telegram = telegramConfigured(env);
-  const [statuses, renews, notifications] = await measure("d1", "stores", () =>
+  const [statuses, renews, notifications, ebayCalls] = await measure("d1", "stores", () =>
     Promise.all([
       listStores(env.DB, session.user.id, now),
       subscriptionRenews(env.DB, env, session.user.id),
       telegram ? storeNotifications(env.DB, session.user.id, now) : null,
+      serviceSetting(env.DB, "ebay_calls"),
     ]),
   );
   const read = () =>
@@ -123,7 +125,9 @@ async function readStores({ request, params }: Route.LoaderArgs) {
       now: now.toISOString(),
       // Con eBay che non risponde restano sospese soltanto le azioni che lo chiamano, per
       // ambiente: Production e Sandbox rispondono ciascuno per sé.
-      ebayDown: [...ebayOutages(statuses).keys()],
+      // Con le chiamate eBay spente dalla console valgono sospese in ogni ambiente.
+      ebayDown: ebayCalls ? [...ebayOutages(statuses).keys()] : ebayEnvironments,
+      ebayMaintenance: !ebayCalls,
       elsewhere: false,
       connectHref: localizedPath(language, storeLinkPath),
       // Il modulo di assistenza esiste: la scorciatoia verso Supporto ha una meta.
@@ -165,6 +169,8 @@ async function ebayDownForStore(userId: string, storeId: string) {
   return store !== undefined && ebayOutages(stores).has(store.ebayEnvironment);
 }
 
+const ebayEnvironments: EbayEnvironment[] = ["production", "sandbox"];
+
 const syncActions: Record<string, { reimport: boolean }> = {
   "store-sync": { reimport: false },
   "store-reimport": { reimport: true },
@@ -189,7 +195,10 @@ export async function action({ request }: Route.ActionArgs) {
   if (sync) {
     let requested: SyncRequestResult;
     try {
-      // Come Riprova negli Ordini: con eBay che non risponde una nuova lettura resta sospesa.
+      // Come Riprova negli Ordini: con eBay che non risponde o le letture sospese una nuova
+      // lettura resta sospesa.
+      if (!(await serviceSetting(env.DB, "ebay_calls")))
+        return data<ActionResult>({ ok: false, notice: t.ebayPaused }, { status: 409 });
       if (await ebayDownForStore(session.user.id, storeId))
         return data<ActionResult>({ ok: false, notice: t.ebayDown }, { status: 409 });
       requested = await requestStoreSync(env, session.user.id, storeId, sync);

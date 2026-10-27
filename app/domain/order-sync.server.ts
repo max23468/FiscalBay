@@ -3,6 +3,7 @@ import { z } from "zod";
 import { acquireOrders, storeAccess, type ActiveStore } from "./order-acquisition.server";
 import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-context.server";
 import { servedSql } from "./admission.server";
+import { switchOnSql } from "./service-settings.server";
 import { activeEntitlementSql } from "./grants.server";
 import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
 import { activeStore, renewableConsent, writableStore } from "./store-state.server";
@@ -92,7 +93,8 @@ type CandidateRow = ActiveStore & {
  * ne accoda la lettura, che il consumer esegue con il budget di un negozio. Il claim in D1
  * precede l'invio: trigger ripetuti o sovrapposti non accodano due volte lo stesso negozio,
  * mentre un turno accodato e mai servito si ripropone dopo `dispatchStaleMilliseconds`. I
- * negozi di un'origine API in attesa per un limite di eBay non si accodano.
+ * negozi di un'origine API in attesa per un limite di eBay non si accodano, nessuno con le
+ * chiamate eBay spente dalla console.
  */
 export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<string[]> {
   const at = now.toISOString();
@@ -117,7 +119,7 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
          JOIN ebay_stores s ON s.id = c.store_id
          LEFT JOIN sync_state ss ON ss.store_id = c.store_id
         WHERE ${activeStore("c", "s")} AND c.access_expires_at > ?2
-          AND ${servedSql("s.workspace_id", "?1")}
+          AND ${servedSql("s.workspace_id", "?1")} AND ${switchOnSql("ebay_calls")}
           AND (ss.polled_at IS NULL OR ss.requested_at IS NOT NULL OR ss.polled_at <= ?3)
           AND (ss.dispatched_at IS NULL OR ss.dispatched_at <= ?5)
         ORDER BY ss.polled_at IS NOT NULL, ss.polled_at, c.store_id
@@ -205,6 +207,8 @@ export type SyncRequestResult =
   | "importing"
   /** eBay chiede di attendere: la richiesta resta e parte alla scadenza dell'attesa. */
   | "limited"
+  /** Chiamate eBay spente dalla console: la richiesta resta e parte alla riaccensione. */
+  | "suspended"
   | "not_found"
   /** Negozio scollegato, in pausa, da ricollegare o di uno spazio in lista d'attesa. */
   | "invalid";
@@ -231,7 +235,7 @@ export async function requestStoreSync(
   const at = now.toISOString();
   const store = await env.DB.prepare(
     `SELECT c.granted_at, s.ebay_environment, ss.store_id AS started, ss.history_done_at,
-            ${servedSql("s.workspace_id", "?3")} AS served
+            ${servedSql("s.workspace_id", "?3")} AS served, ${switchOnSql("ebay_calls")} AS calls
        FROM ebay_stores s
        LEFT JOIN ebay_store_credentials c
          ON c.store_id = s.id AND ${renewableConsent("c", "?3")}
@@ -247,6 +251,7 @@ export async function requestStoreSync(
       started: string | null;
       history_done_at: string | null;
       served: number;
+      calls: number;
     }>();
   if (!store) return "not_found";
   // In lista d'attesa basta la prima lettura del collegamento.
@@ -276,6 +281,7 @@ export async function requestStoreSync(
       .bind(storeId, store.granted_at, at)
       .run();
   }
+  if (!store.calls) return "suspended";
   const apiOrigin = ebayConfiguration(env, store.ebay_environment).apiOrigin;
   if ((await rateLimitWait(env.DB, apiOrigin, now)) > 0) return "limited";
   if (request.requested_at !== at) return "merged";
@@ -309,12 +315,12 @@ export async function consumeStoreSync(
        JOIN sync_state ss ON ss.store_id = c.store_id
       WHERE c.store_id = ?1 AND (ss.requested_at IS NOT NULL OR ss.dispatched_at IS NOT NULL)
         AND ${activeStore("c", "s")} AND c.access_expires_at > ?2
-        AND ${servedSql("s.workspace_id", "?3")}`,
+        AND ${servedSql("s.workspace_id", "?3")} AND ${switchOnSql("ebay_calls")}`,
   )
     .bind(syncStore, new Date(now.getTime() + tokenMarginMilliseconds).toISOString(), at)
     .first<ActiveStore>();
-  // Lavoro già servito o negozio non più attivo. Con il token in rinnovo la richiesta resta in
-  // D1 e il cron la riaccoda.
+  // Lavoro già servito o negozio non più attivo. Con il token in rinnovo o le chiamate eBay
+  // spente la richiesta resta in D1 e il cron la riaccoda.
   if (store) {
     try {
       const wait = await rateLimitWait(

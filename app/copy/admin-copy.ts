@@ -16,6 +16,7 @@ const it = {
     commerce: "Commerciale",
     abuse: "Antiabuso",
     notices: "Comunicazioni",
+    switches: "Interruttori",
     audit: "Registro",
   },
   labels: {
@@ -73,6 +74,9 @@ const it = {
       "save-notice": "Comunicazione salvata",
       "withdraw-notice": "Comunicazione ritirata",
       "review-abuse": "Revisione antiabuso",
+      "set-switch": "Interruttore cambiato",
+      "quota-attention": "Soglia delle quote cambiata",
+      "admit-waitlisted": "Ammissione dalla lista d’attesa",
       "agent-read": "Lettura con accesso tecnico",
     } as Record<string, string>,
     outcomes: {
@@ -140,7 +144,7 @@ const it = {
     count: (count: number) => (count === 1 ? "1 occorrenza" : `${count} occorrenze`),
     kinds: {
       ebay_quota: {
-        title: "Quota eBay oltre il 70%",
+        title: "Quota eBay oltre la soglia",
         consequence: "Al limite eBay sospende la chiamata e le letture che la usano si fermano.",
         action: "Avvia l’Application Growth Check",
       },
@@ -184,6 +188,11 @@ const it = {
         title: "Chiamate eBay sospese per limite",
         consequence: "eBay ha chiesto di attendere: le chiamate riprendono alla scadenza.",
         action: "Controlla le quote",
+      },
+      service_off: {
+        title: "Servizi spenti dalla console",
+        consequence: "Restano fermi finché non li riaccendi: richieste e notifiche attendono.",
+        action: "Apri gli interruttori",
       },
     },
   },
@@ -298,6 +307,7 @@ const it = {
       merged: "Una lettura è già in attesa.",
       importing: "L’importazione dello storico è in corso.",
       limited: "eBay chiede di attendere: la lettura parte alla scadenza.",
+      suspended: "Chiamate eBay spente: la lettura parte alla riaccensione.",
       invalid: "Il negozio non è attivo: scollegato, in pausa o da ricollegare.",
     },
     pause: { done: "Pausa aggiornata.", invalid: "Nessun cambiamento della pausa." },
@@ -329,6 +339,9 @@ const it = {
       invalid: "Date non valide: l’inizio non può essere passato e la fine segue l’inizio.",
     },
     quota: { done: "Quota base programmata.", invalid: "La decorrenza non può essere passata." },
+    unchanged: "Nessun cambiamento: il valore era già questo.",
+    admitted: "Account ammesso: le letture riprendono con la cadenza del piano.",
+    notWaiting: "Lo spazio non ha account in lista d’attesa.",
     notice: { done: "Comunicazione salvata.", withdrawn: "Comunicazione ritirata." },
     abuse: {
       done: "Revisione registrata.",
@@ -392,7 +405,6 @@ const it = {
           : `ogni ${Math.round(seconds / 60)} min`,
     shared: (calls: number) => `Quota condivisa, ${calls} di questa chiamata`,
     otherCalls: (count: number) => `Altre chiamate dell’API (${count})`,
-    over: "Oltre il 70%",
     suspended: "Chiamate sospese",
     allCalls: "Tutte le chiamate dell’ambiente",
     until: (when: string) => `fino al ${when}`,
@@ -452,6 +464,40 @@ const it = {
     paying: "Pagante",
     none: "Nessuna segnalazione.",
   },
+  switches: {
+    admission: "Ammissione",
+    services: "Servizi",
+    quotaAttention: "Soglia delle quote eBay",
+    names: {
+      free_waitlist: "Lista d’attesa del Free",
+      purchases_open: "Acquisti e prove",
+      ebay_calls: "Chiamate eBay",
+      telegram_sends: "Invii Telegram",
+    },
+    hints: {
+      free_waitlist:
+        "Accesa, chi completa la registrazione resta in attesa. Spenta, ammette subito chi aspetta.",
+      purchases_open:
+        "Spenti, si fermano checkout, prova e lifetime per chi non è abbonato. Rinnovi e diritti in corso continuano.",
+      ebay_calls:
+        "Spente, si fermano letture, conferme degli ordini, rinnovi dei token e collegamenti. Le richieste ripartono alla riaccensione.",
+      telegram_sends:
+        "Spenti, si fermano notifiche, riepiloghi e risposte del bot. Le notifiche in attesa partono alla riaccensione.",
+      quota: "Consumo giornaliero, fra 50 e 85, oltre il quale si apre l’anomalia della quota.",
+    },
+    on: "Acceso",
+    off: "Spento",
+    since: (when: string) => `dal ${when}`,
+    fallback: "predefinito",
+    turnOn: "Accendi",
+    turnOff: "Spegni",
+    percent: "Percentuale",
+    change: "Cambia",
+    current: (percent: number) => `${percent}% del consumo giornaliero`,
+    waiting: "In lista d’attesa",
+    waitingMore: (total: number) => `${total} in tutto, i primi in ordine di arrivo`,
+    admit: "Ammetti",
+  },
   notices: {
     title: "Comunicazioni",
     new: "Nuova comunicazione",
@@ -496,6 +542,7 @@ const en: AdminCopy = {
     commerce: "Commercial",
     abuse: "Abuse",
     notices: "Announcements",
+    switches: "Switches",
     audit: "Log",
   },
   labels: {
@@ -553,6 +600,9 @@ const en: AdminCopy = {
       "save-notice": "Announcement saved",
       "withdraw-notice": "Announcement withdrawn",
       "review-abuse": "Abuse review",
+      "set-switch": "Switch changed",
+      "quota-attention": "Quota threshold changed",
+      "admit-waitlisted": "Admitted from the waiting list",
       "agent-read": "Technical read",
     } as Record<string, string>,
     outcomes: {
@@ -620,7 +670,7 @@ const en: AdminCopy = {
     count: (count: number) => (count === 1 ? "1 occurrence" : `${count} occurrences`),
     kinds: {
       ebay_quota: {
-        title: "eBay quota over 70%",
+        title: "eBay quota over the threshold",
         consequence: "At the limit eBay suspends the call and the reads that use it stop.",
         action: "Start the Application Growth Check",
       },
@@ -664,6 +714,12 @@ const en: AdminCopy = {
         title: "eBay calls suspended by a limit",
         consequence: "eBay asked us to wait: calls resume when the wait ends.",
         action: "Check quotas",
+      },
+      service_off: {
+        title: "Services switched off from the console",
+        consequence:
+          "They stay stopped until you switch them back on: requests and notifications wait.",
+        action: "Open switches",
       },
     },
   },
@@ -777,6 +833,7 @@ const en: AdminCopy = {
       merged: "A read is already waiting.",
       importing: "History import in progress.",
       limited: "eBay asks to wait: the read starts when the wait ends.",
+      suspended: "eBay calls are off: the read starts when they are back on.",
       invalid: "The store is not active: disconnected, paused or needing reconnection.",
     },
     pause: { done: "Pause updated.", invalid: "No change to the pause." },
@@ -806,6 +863,9 @@ const en: AdminCopy = {
       invalid: "Invalid dates: the start cannot be in the past and the end follows the start.",
     },
     quota: { done: "Base quota scheduled.", invalid: "The effective date cannot be in the past." },
+    unchanged: "No change: the value was already this.",
+    admitted: "Account admitted: reads resume at the plan’s pace.",
+    notWaiting: "The space has no accounts on the waiting list.",
     notice: { done: "Announcement saved.", withdrawn: "Announcement withdrawn." },
     abuse: {
       done: "Review recorded.",
@@ -869,7 +929,6 @@ const en: AdminCopy = {
           : `every ${Math.round(seconds / 60)} min`,
     shared: (calls: number) => `Shared quota, ${calls} from this call`,
     otherCalls: (count: number) => `Other API calls (${count})`,
-    over: "Over 70%",
     suspended: "Suspended calls",
     allCalls: "Every call in the environment",
     until: (when: string) => `until ${when}`,
@@ -928,6 +987,40 @@ const en: AdminCopy = {
     suspend: "Suspend Free for",
     paying: "Paying",
     none: "No signals.",
+  },
+  switches: {
+    admission: "Admission",
+    services: "Services",
+    quotaAttention: "eBay quota threshold",
+    names: {
+      free_waitlist: "Free waiting list",
+      purchases_open: "Purchases and trials",
+      ebay_calls: "eBay calls",
+      telegram_sends: "Telegram messages",
+    },
+    hints: {
+      free_waitlist:
+        "On, anyone completing sign-up waits. Off, everyone waiting is admitted at once.",
+      purchases_open:
+        "Off, checkout, trial and lifetime stop for non-subscribers. Renewals and current rights continue.",
+      ebay_calls:
+        "Off, reads, order confirmations, token renewals and connections stop. Requests restart when switched back on.",
+      telegram_sends:
+        "Off, notifications, digests and bot replies stop. Pending notifications go out when switched back on.",
+      quota: "Daily usage, between 50 and 85, above which the quota issue opens.",
+    },
+    on: "On",
+    off: "Off",
+    since: (when: string) => `since ${when}`,
+    fallback: "default",
+    turnOn: "Switch on",
+    turnOff: "Switch off",
+    percent: "Percentage",
+    change: "Change",
+    current: (percent: number) => `${percent}% of daily usage`,
+    waiting: "On the waiting list",
+    waitingMore: (total: number) => `${total} in total, earliest first`,
+    admit: "Admit",
   },
   notices: {
     title: "Announcements",

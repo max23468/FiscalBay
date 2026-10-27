@@ -24,6 +24,7 @@ const items = [
   ["commerciale", "commerce"],
   ["antiabuso", "abuse"],
   ["comunicazioni", "notices"],
+  ["interruttori", "switches"],
   ["registro", "audit"],
 ] as const;
 

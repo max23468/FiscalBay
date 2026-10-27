@@ -436,6 +436,30 @@ describe("allineamento dell'anteprima con l'area reale", () => {
   });
 });
 
+describe("letture eBay sospese nell'anteprima", () => {
+  it("mostra la manutenzione con gli avvisi e le azioni sospese dell'area reale", async () => {
+    const scenario = loadScenario("letture-sospese", "it", new Set());
+    const lastSync = scenario.stores[0]!.lastSyncAt;
+    // Lo stesso avviso che l'area reale costruisce con le chiamate eBay spente.
+    expect(scenario.notices).toEqual([{ kind: "ebay-down", at: lastSync, maintenance: true }]);
+    expect(scenario.notifications.some((note) => note.id === "n-ebay")).toBe(false);
+    const cookie = (
+      await writePreviewState({ scenario: "letture-sospese", unlocked: [], saveFailed: false })
+    ).split(";")[0]!;
+    expect(await routeData(previewStores, "/anteprima/negozi", { cookie })).toMatchObject({
+      ebayDown: ["production"],
+      ebayMaintenance: true,
+    });
+    const failed = scenario.orders.find((order) => order.fiscal.state === "error")!;
+    const retry = await routeResponse(previewOrdersAction, "/anteprima/ordini", {
+      cookie,
+      fields: { intent: "retry", order: failed.id },
+    });
+    expect(retry.status).toBe(409);
+    expect(await retry.json()).toEqual({ ok: false, notice: appCopy.it.stores.ebayPaused });
+  });
+});
+
 describe("elenco ordini dell'anteprima", () => {
   const list = async (path: string, scenario: "aggiornamento" | "ordinario") => {
     const cookie = (await writePreviewState({ scenario, unlocked: [], saveFailed: false })).split(

@@ -32,6 +32,8 @@ import { requeueTask } from "../app/domain/scheduled-work.server";
 import { saveServiceNotice, withdrawServiceNotice } from "../app/domain/service-notices.server";
 import { confirmStoreTransfer, prepareStoreTransfer } from "../app/domain/store-transfer.server";
 import { listStores, resumeStore, setAdminPause } from "../app/domain/stores.server";
+import { admission } from "../app/domain/admission.server";
+import { serviceSetting, switchboard } from "../app/domain/service-settings.server";
 import { action as adminAction, loader as adminLoader } from "../app/routes/admin";
 import { loader as loadStores } from "../app/routes/stores";
 import { verifiedSession } from "./fixtures/account-fixtures";
@@ -189,7 +191,7 @@ describe("accesso alla console", () => {
       return new Response("", { status: 503 });
     });
     const sections = ["account", "negozi", "lavori", "quote", "commerciale", "antiabuso"];
-    for (const sezione of [...sections, "comunicazioni", "registro"])
+    for (const sezione of [...sections, "comunicazioni", "interruttori", "registro"])
       expect(await page(cookie, `/admin/${sezione}`, { sezione })).toEqual({
         access: "granted",
         section: sezione,
@@ -795,6 +797,45 @@ describe("quote delle API eBay", () => {
     ).toHaveLength(2);
   });
 
+  it("apre l'anomalia alla soglia scelta nella console", async () => {
+    const { cookie } = await admin();
+    const usage = analytics([daily("GetOrders", 3250)]);
+    const orders = async () =>
+      (await readEbayQuotas(env, usage.fetcher, at(now)))[0]!.rows.find(
+        (row) => row.resource === "GetOrders",
+      );
+    expect(await orders()).toMatchObject({ over: false });
+    for (const soglia of ["49", "86", "sessanta"])
+      expect(
+        await act(cookie, { intent: "quota-attention", soglia, motivo: "Prova" }),
+      ).toMatchObject({ status: 400 });
+    expect(await act(cookie, { intent: "quota-attention", soglia: "60", motivo: "Prova" })).toEqual(
+      {
+        ok: true,
+        notice: "Operazione registrata.",
+      },
+    );
+    expect(await orders()).toMatchObject({ over: true });
+    expect(await quotaAnomalies(env.DB, at(now))).toHaveLength(1);
+    expect(
+      await act(cookie, { intent: "quota-attention", soglia: "60", motivo: "Prova" }),
+    ).toMatchObject({ ok: false });
+    expect(await audit()).toEqual([
+      {
+        operation: "quota-attention",
+        target: "setting:quota_attention:60",
+        reason: "Prova",
+        outcome: "done",
+      },
+      {
+        operation: "quota-attention",
+        target: "setting:quota_attention:60",
+        reason: "Prova",
+        outcome: "unchanged",
+      },
+    ]);
+  });
+
   it("tratta la quota Trading condivisa come una sola, sulle chiamate di FiscalBay", async () => {
     // eBay riporta lo stesso residuo per ogni chiamata Trading: la quota è unica.
     const pooled = (name: string, count: number) => ({
@@ -903,6 +944,198 @@ describe("anomalie e lavori", () => {
     });
     expect(await requeueTask(queueEnv, "billing", stalledLater)).toBe("queued");
     expect(send).toHaveBeenLastCalledWith({ task: "billing", slot: "2026-09-13T23:00:00.000Z" });
+  });
+});
+
+describe("interruttori e ammissione", () => {
+  it("vale il comportamento normale senza configurazione o con un valore non valido", async () => {
+    expect(await switchboard(env.DB)).toMatchObject({
+      waitlist: { value: false, since: null },
+      purchases: { value: true, since: null },
+      ebay: { value: true, since: null },
+      telegram: { value: true, since: null },
+      quotaAttention: { value: 70, since: null },
+      waiting: [],
+      waitingTotal: 0,
+    });
+    await env.DB.prepare(`INSERT INTO service_settings (name, value, updated_at)
+        VALUES ('ebay_calls', '"no"', ?1), ('telegram_sends', '0', ?1), ('quota_attention', '99', ?1)`)
+      .bind(now)
+      .run();
+    expect(await serviceSetting(env.DB, "ebay_calls")).toBe(true);
+    expect(await serviceSetting(env.DB, "telegram_sends")).toBe(true);
+    expect(await serviceSetting(env.DB, "quota_attention")).toBe(70);
+    expect((await listAnomalies(env.DB, at(now))).some((a) => a.kind === "service_off")).toBe(
+      false,
+    );
+  });
+
+  it("spegne e riaccende i servizi con motivo, registro e anomalia in panoramica", async () => {
+    const { cookie, userId } = await admin();
+    const off = (interruttore: string, motivo = "Incidente") =>
+      act(cookie, { intent: "set-switch", interruttore, stato: "off", motivo });
+    const on = (interruttore: string) =>
+      act(cookie, { intent: "set-switch", interruttore, stato: "on", motivo: "Rientro" });
+    expect(
+      await act(cookie, { intent: "set-switch", interruttore: "ebay_calls", stato: "off" }),
+    ).toMatchObject({ status: 400 });
+    expect(await off("sql")).toMatchObject({ status: 400 });
+    expect(
+      await act(cookie, {
+        intent: "set-switch",
+        interruttore: "ebay_calls",
+        stato: "x",
+        motivo: "x",
+      }),
+    ).toMatchObject({ status: 400 });
+
+    expect(await off("ebay_calls")).toEqual({ ok: true, notice: "Operazione registrata." });
+    expect(await off("ebay_calls")).toMatchObject({ ok: false });
+    expect(await off("telegram_sends")).toMatchObject({ ok: true });
+    expect(await off("purchases_open")).toMatchObject({ ok: true });
+    expect(await serviceSetting(env.DB, "ebay_calls")).toBe(false);
+    expect(await admission(env.DB, userId)).toMatchObject({ purchasesOpen: false });
+    // La lista d'attesa resta com'era: l'interruttore degli acquisti non la tocca.
+    expect(await switchboard(env.DB)).toMatchObject({
+      waitlist: { value: false },
+      purchases: { value: false },
+      ebay: { value: false },
+      telegram: { value: false },
+    });
+
+    const anomaly = (await listAnomalies(env.DB)).find((a) => a.kind === "service_off");
+    expect(anomaly).toMatchObject({ severity: "p2", count: 3 });
+    expect(anomaly!.subjects.map((subject) => subject.id).sort()).toEqual([
+      "ebay_calls",
+      "purchases_open",
+      "telegram_sends",
+    ]);
+    const section = await routeData(adminLoader, "/admin/interruttori", {
+      cookie,
+      params: { sezione: "interruttori" },
+    });
+    expect(section.page).toMatchObject({ section: "interruttori", ebay: { value: false } });
+
+    for (const name of ["ebay_calls", "telegram_sends", "purchases_open"])
+      expect(await on(name)).toMatchObject({ ok: true });
+    expect((await listAnomalies(env.DB)).some((a) => a.kind === "service_off")).toBe(false);
+    expect(await admission(env.DB, userId)).toMatchObject({ purchasesOpen: true });
+    expect(await audit()).toEqual([
+      {
+        operation: "set-switch",
+        target: "switch:ebay_calls:off",
+        reason: "Incidente",
+        outcome: "done",
+      },
+      {
+        operation: "set-switch",
+        target: "switch:ebay_calls:off",
+        reason: "Incidente",
+        outcome: "unchanged",
+      },
+      {
+        operation: "set-switch",
+        target: "switch:telegram_sends:off",
+        reason: "Incidente",
+        outcome: "done",
+      },
+      {
+        operation: "set-switch",
+        target: "switch:purchases_open:off",
+        reason: "Incidente",
+        outcome: "done",
+      },
+      {
+        operation: "set-switch",
+        target: "switch:ebay_calls:on",
+        reason: "Rientro",
+        outcome: "done",
+      },
+      {
+        operation: "set-switch",
+        target: "switch:telegram_sends:on",
+        reason: "Rientro",
+        outcome: "done",
+      },
+      {
+        operation: "set-switch",
+        target: "switch:purchases_open:on",
+        reason: "Rientro",
+        outcome: "done",
+      },
+    ]);
+  });
+
+  it("ammette uno spazio in attesa e, spegnendo la lista, tutti gli altri", async () => {
+    const { cookie } = await admin();
+    const first = await verifiedSession("attesa.prima@example.invalid");
+    const second = await verifiedSession("attesa.seconda@example.invalid");
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-prima", userId: first.userId }),
+      ...insertWorkspace({ id: "w-seconda", userId: second.userId }),
+      env.DB.prepare("UPDATE user_profiles SET waitlisted_at = ?1 WHERE user_id IN (?2, ?3)").bind(
+        now,
+        first.userId,
+        second.userId,
+      ),
+    ]);
+    expect(
+      await act(cookie, {
+        intent: "set-switch",
+        interruttore: "free_waitlist",
+        stato: "on",
+        motivo: "Capacità",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await switchboard(env.DB)).toMatchObject({
+      waitlist: { value: true, since: now },
+      purchases: { value: true },
+      waitingTotal: 2,
+      waiting: [
+        { workspaceId: "w-prima", email: "attesa.prima@example.invalid" },
+        { workspaceId: "w-seconda", email: "attesa.seconda@example.invalid" },
+      ],
+    });
+
+    expect(await act(cookie, { intent: "admit-waitlisted", spazio: "w-prima" })).toMatchObject({
+      status: 400,
+    });
+    expect(
+      await act(cookie, {
+        intent: "admit-waitlisted",
+        spazio: "w-prima",
+        motivo: "Venditore noto",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await admission(env.DB, first.userId)).toMatchObject({ waiting: false });
+    expect(await admission(env.DB, second.userId)).toMatchObject({ waiting: true });
+    expect(
+      await act(cookie, { intent: "admit-waitlisted", spazio: "w-prima", motivo: "Ancora" }),
+    ).toMatchObject({ ok: false });
+
+    expect(
+      await act(cookie, {
+        intent: "set-switch",
+        interruttore: "free_waitlist",
+        stato: "off",
+        motivo: "Capacità",
+      }),
+    ).toMatchObject({ ok: true });
+    expect(await admission(env.DB, second.userId)).toMatchObject({ waiting: false });
+    expect((await audit()).filter((row) => row.operation === "admit-waitlisted")).toEqual([
+      {
+        operation: "admit-waitlisted",
+        target: "workspace:w-prima",
+        reason: "Venditore noto",
+        outcome: "done",
+      },
+      {
+        operation: "admit-waitlisted",
+        target: "workspace:w-prima",
+        reason: "Ancora",
+        outcome: "not_found",
+      },
+    ]);
   });
 });
 

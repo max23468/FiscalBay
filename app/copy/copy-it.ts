@@ -241,6 +241,11 @@ export const it = {
       `Gli ordini sono aggiornati al ${time}. Sincronizzazione e ricollegamento tornano disponibili quando eBay risponde.`,
     ebayDownNeverBody:
       "Gli ordini compariranno appena eBay risponde. Sincronizzazione e ricollegamento tornano disponibili in quel momento.",
+    ebayPausedTitle: "Letture da eBay sospese",
+    ebayPausedBody: (time: string) =>
+      `Gli ordini sono aggiornati al ${time}. Per manutenzione FiscalBay non legge eBay: sincronizzazione e collegamento riprendono appena possibile.`,
+    ebayPausedNeverBody:
+      "Per manutenzione FiscalBay non legge eBay: gli ordini compariranno quando le letture riprendono.",
     storeReadFailedTitle: (store: string) => `${store}: aggiornamento non riuscito`,
     storeReadFailedBody: (time: string) =>
       `Gli ordini di questo negozio sono aggiornati al ${time}. Gli altri negozi continuano e FiscalBay riprova automaticamente.`,
@@ -433,11 +438,15 @@ export const it = {
     elsewhereBody:
       "Questo negozio eBay è collegato a un altro account FiscalBay. Accedi con quell’account oppure contatta l’assistenza.",
     ebayDown: "eBay non risponde: sincronizzazione e ricollegamento sono sospesi.",
+    ebayPaused:
+      "Letture da eBay sospese per manutenzione: sincronizzazione e collegamento riprendono appena possibile.",
     requested: {
       queued: "Sincronizzazione richiesta: i nuovi ordini compaiono appena eBay risponde.",
       merged: "Sincronizzazione già richiesta: parte appena possibile.",
       importing: "L’importazione dello storico è già in corso.",
       limited: "eBay ha chiesto di attendere: la sincronizzazione parte appena possibile.",
+      suspended:
+        "Letture da eBay sospese per manutenzione: la sincronizzazione parte alla ripresa.",
     },
     reimportRequested: "Reimportazione dello storico richiesta.",
     disconnectedHint:
@@ -1095,6 +1104,7 @@ export const it = {
       "ebay-non-risponde": "eBay non risponde: ricollega il negozio quando le letture riprendono.",
       "lista-attesa":
         "Il piano Free è al completo e il tuo account è in lista d’attesa: per ora non puoi collegare un negozio.",
+      sospeso: "Il collegamento con eBay è sospeso per manutenzione: riprova più tardi.",
     },
     signInNotices: {
       "metodo-collegato": "Metodo di accesso collegato al tuo account FiscalBay.",

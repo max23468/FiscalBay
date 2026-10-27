@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { setSwitch } from "../app/domain/service-settings.server";
 import { deliverTelegram, zonedInstant } from "../app/domain/telegram-deliveries.server";
 import type { VisibleOrder } from "../app/domain/orders.server";
 import {
@@ -2570,6 +2571,20 @@ describe("esiti delle consegne", () => {
     });
     await run(api.fetcher, 20);
     expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-senza-bot")]);
+  });
+
+  it("con gli invii spenti dalla console il bot tace e consegna alla riaccensione", async () => {
+    const seller = await linked("invii-spenti");
+    await order(seller.store, "o-invii-spenti", { cf: "RSSMRA80A01H501U" });
+    await setSwitch(env.DB, "telegram_sends", false, later(5));
+    const api = bot();
+    await deliverTelegram(environment, api.fetcher, later(10));
+    await configureBotCommands(environment, api.fetcher);
+    await deliver("/stato", seller.chat, api.fetcher);
+    expect(api.calls).toHaveLength(0);
+    await setSwitch(env.DB, "telegram_sends", true, later(15));
+    await run(api.fetcher, 20);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-invii-spenti")]);
   });
 
   it("l'esecuzione per un negozio non chiude le consegne degli altri spazi", async () => {

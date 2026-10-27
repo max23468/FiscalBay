@@ -1,4 +1,5 @@
 import { servedSql } from "./admission.server";
+import { switchOnSql } from "./service-settings.server";
 import { unpausedStore } from "./store-state.server";
 import { logFailure } from "../errors";
 import { inSequence } from "../sequence";
@@ -18,7 +19,7 @@ type ExpiringRow = { store_id: string; access_expires_at: string };
 /**
  * Lavoro in background: rinnova in anticipo i token di accesso vicini alla scadenza. I negozi
  * in pausa e quelli di uno spazio in lista d'attesa non leggono eBay e restano esclusi; quelli
- * scollegati non hanno più token. Il rinnovo comprende i token già scaduti: alla ripresa o
+ * scollegati non hanno più token. Con le chiamate eBay spente dalla console non si rinnova nulla. Il rinnovo comprende i token già scaduti: alla ripresa o
  * all'ammissione l'esecuzione seguente li rinnova prima della lettura.
  *
  * Scorre i negozi a blocchi con un cursore, così un errore non fa rileggere lo stesso negozio,
@@ -41,6 +42,7 @@ export async function refreshExpiringTokens(
         WHERE c.rejected_at IS NULL AND c.access_expires_at <= ?1
           AND (?2 IS NULL OR (c.access_expires_at, c.store_id) > (?2, ?3))
           AND ${unpausedStore("c.store_id")} AND ${servedSql("s.workspace_id", "?5")}
+          AND ${switchOnSql("ebay_calls")}
         ORDER BY c.access_expires_at, c.store_id LIMIT ?4`,
     )
       .bind(threshold, ...cursor, refreshBatch, now.toISOString())

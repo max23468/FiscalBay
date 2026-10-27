@@ -1,6 +1,7 @@
 import { activeEntitlementSql } from "./grants.server";
 import { lockMilliseconds } from "./order-acquisition.server";
 import { listVisibleOrders } from "./orders.server";
+import { serviceSetting } from "./service-settings.server";
 import { consultableStore, listedOrder, storeLabelSql } from "./store-state.server";
 import { telegramPreferencesSql, telegramRecipient, telegramRecipientSql } from "./telegram.server";
 import {
@@ -73,7 +74,8 @@ export async function deliverTelegram(
   now = new Date(),
   scope: { storeId?: string } = {},
 ): Promise<void> {
-  if (!telegramConfigured(env)) return;
+  // Con gli invii spenti dalla console le consegne restano in attesa fino alla riaccensione.
+  if (!telegramConfigured(env) || !(await serviceSetting(env.DB, "telegram_sends"))) return;
   // Senza Premium le consegne in attesa si chiudono: un rinnovo non porta l'arretrato.
   if (!scope.storeId) await closeUncovered(env.DB, now);
   const { results } = await env.DB.prepare(`SELECT l.workspace_id AS workspaceId, l.id AS linkId,

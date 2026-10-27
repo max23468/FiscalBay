@@ -21,7 +21,8 @@ export type AnomalyKind =
   | "task_stalled"
   | "receipts_stalled"
   | "telegram_failed"
-  | "ebay_suspended";
+  | "ebay_suspended"
+  | "service_off";
 
 /** Oggetto colpito, con il collegamento al contesto nella console. */
 export type AnomalySubject = { id: string; label: string; href: string };
@@ -129,6 +130,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
     { results: telegram },
     { results: limits },
     { results: activeStores },
+    { results: switchedOff },
   ] = await db.batch<Record<string, string | number | null>>([
     // Negozi attivi con le ultime due letture fallite, come nella campanella del venditore.
     db
@@ -161,6 +163,11 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
             AND EXISTS (SELECT 1 FROM sync_runs r WHERE r.store_id = s.id)
           GROUP BY s.ebay_environment`)
       .bind(at),
+    // Servizi spenti dalla console: chiamate eBay, invii Telegram e nuovi acquisti.
+    db.prepare(`SELECT name AS id, updated_at AS since FROM service_settings
+          WHERE name IN ('ebay_calls', 'telegram_sends') AND value = 'false'
+        UNION ALL SELECT 'purchases_open', updated_at FROM admission_settings
+          WHERE purchases_open = 0`),
   ]);
   const active = new Map(
     (activeStores as { environment: string; count: number }[]).map((row) => [
@@ -287,6 +294,20 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         id: String(row.id),
         label: String(row.id).replace(/^https:\/\//u, ""),
         href: "quote",
+      })),
+    });
+
+  if (switchedOff.length > 0)
+    anomalies.push({
+      key: "service_off",
+      kind: "service_off",
+      severity: "p2",
+      since: switchedOff.map((row) => String(row.since)).sort()[0]!,
+      count: switchedOff.length,
+      subjects: switchedOff.map((row) => ({
+        id: String(row.id),
+        label: String(row.id),
+        href: "interruttori",
       })),
     });
 

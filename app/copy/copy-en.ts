@@ -237,6 +237,11 @@ export const en: AppCopy = {
       `Orders are up to date as of ${time}. Syncing and reconnecting will be available again when eBay responds.`,
     ebayDownNeverBody:
       "Orders will appear as soon as eBay responds. Syncing and reconnecting will be available again then.",
+    ebayPausedTitle: "eBay reads paused",
+    ebayPausedBody: (time) =>
+      `Orders are up to date as of ${time}. FiscalBay is not reading eBay during maintenance: syncing and connecting resume as soon as possible.`,
+    ebayPausedNeverBody:
+      "FiscalBay is not reading eBay during maintenance: orders will appear when reads resume.",
     storeReadFailedTitle: (store) => `${store}: update failed`,
     storeReadFailedBody: (time) =>
       `Orders from this store are up to date as of ${time}. Other stores continue and FiscalBay retries automatically.`,
@@ -425,11 +430,14 @@ export const en: AppCopy = {
     elsewhereBody:
       "This eBay store is connected to another FiscalBay account. Sign in with that account or contact support.",
     ebayDown: "eBay is not responding: syncing and reconnecting are paused.",
+    ebayPaused:
+      "eBay reads are paused for maintenance: syncing and connecting resume as soon as possible.",
     requested: {
       queued: "Sync requested: new orders appear as soon as eBay responds.",
       merged: "Sync already requested: it starts as soon as possible.",
       importing: "The history import is already in progress.",
       limited: "eBay asked us to wait: the sync starts as soon as possible.",
+      suspended: "eBay reads are paused for maintenance: the sync starts when they resume.",
     },
     reimportRequested: "History re-import requested.",
     disconnectedHint:
@@ -1081,6 +1089,7 @@ export const en: AppCopy = {
       "ebay-non-risponde": "eBay is not responding: reconnect the store when reads resume.",
       "lista-attesa":
         "The Free plan is full and your account is on the waiting list: you cannot connect a store for now.",
+      sospeso: "The eBay connection is paused for maintenance: try again later.",
     },
     signInNotices: {
       "metodo-collegato": "Sign-in method linked to your FiscalBay account.",
