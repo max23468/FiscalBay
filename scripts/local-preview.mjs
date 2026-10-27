@@ -31,6 +31,7 @@ writeFileSync(workerConfig, JSON.stringify(config));
 writeFileSync(
   `${previewRoot}/.dev.vars`,
   [
+    "REGISTRATION_ALLOWED_EMAILS=[]",
     `BETTER_AUTH_SECRET=${localSecret}`,
     "GOOGLE_CLIENT_ID=google-test-client",
     "GOOGLE_CLIENT_SECRET=google-test-secret",

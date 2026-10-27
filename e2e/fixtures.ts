@@ -1,6 +1,8 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { test as base, type BrowserContext, type Page, type Request } from "@playwright/test";
 
+import { abortedDataRequest } from "./page-cases";
+
 export { expect } from "@playwright/test";
 
 interface Traffic {
@@ -104,9 +106,12 @@ export const test = base.extend<{ pageErrors: string[]; browserErrors: string[] 
     await use(context);
     await context.unrouteAll({ behavior: "ignoreErrors" });
   },
-  pageErrors: async ({ page }, use) => {
+  pageErrors: async ({ page, baseURL }, use) => {
     const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
+    page.on("pageerror", (error) => {
+      if (!baseURL || !abortedDataRequest(error, new URL(baseURL).origin))
+        errors.push(error.message);
+    });
     await use(errors);
   },
   browserErrors: async ({ page, pageErrors }, use) => {

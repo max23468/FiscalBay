@@ -27,6 +27,21 @@ export function expectedPageError(text: string, resource: string, status: number
   );
 }
 
+/**
+ * WebKit annota come errore JavaScript una richiesta di dati interrotta da una navigazione
+ * ("Fetch API cannot load … due to access control checks") e Playwright la riporta come
+ * eccezione della pagina, anche se React Router ha già gestito il rifiuto. Una richiesta `.data`
+ * della stessa origine non attraversa controlli di accesso: soltanto quel caso non è un errore.
+ */
+export function abortedDataRequest(error: Error, origin: string) {
+  const [text = ""] = (error.stack ?? "").split("\n");
+  const [, resource = ""] =
+    /^Fetch API cannot load (\S+) due to access control checks\.$/u.exec(text) ?? [];
+  if (!URL.canParse(resource)) return false;
+  const url = new URL(resource);
+  return url.origin === origin && url.pathname.endsWith(".data");
+}
+
 export function knownPagePath(pathname: string) {
   return pageCases.some(({ pattern }) => {
     if (pattern === "*") return false;
