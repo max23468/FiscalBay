@@ -4,6 +4,7 @@ export default [
   index("routes/site.tsx"),
   route("en", "routes/site.tsx", { id: "site-en" }),
   route("robots.txt", "routes/robots.ts"),
+  route("sitemap.xml", "routes/sitemap.ts"),
   route("auth/error", "routes/auth-error.tsx"),
   route("en/auth/error", "routes/auth-error.tsx", { id: "auth-error-en" }),
   route("accesso", "routes/sign-in.tsx"),
@@ -14,6 +15,14 @@ export default [
   route("en/privacy", "routes/legal.tsx", { id: "privacy-en" }),
   route("supporto", "routes/support.tsx"),
   route("en/supporto", "routes/support.tsx", { id: "support-en" }),
+  route("funzionalita", "routes/features.tsx"),
+  route("en/funzionalita", "routes/features.tsx", { id: "features-en" }),
+  route("prezzi", "routes/pricing.tsx"),
+  route("en/prezzi", "routes/pricing.tsx", { id: "pricing-en" }),
+  route("sicurezza", "routes/site-security.tsx"),
+  route("en/sicurezza", "routes/site-security.tsx", { id: "site-security-en" }),
+  route("faq", "routes/faq.tsx"),
+  route("en/faq", "routes/faq.tsx", { id: "faq-en" }),
   // La shell dell'area resta montata fra Ordini, Negozi, Impostazioni e Novità.
   layout("routes/account.tsx", [
     route("app/ordini/:ordine?", "routes/orders.tsx"),

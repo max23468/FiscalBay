@@ -1,10 +1,19 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { headers as siteHeaders, loader as loadSite } from "../app/routes/site";
-import { loader as loadRobots } from "../app/routes/robots";
+import { loader as loadFeatures } from "../app/routes/features";
+import { loader as loadPricing } from "../app/routes/pricing";
+import { loader as loadSecurity } from "../app/routes/site-security";
+import { loader as loadFaq } from "../app/routes/faq";
+import { loader as loadSupport } from "../app/routes/support";
+import { loader as loadLegal } from "../app/routes/legal";
+import { loader as loadRobots, robots } from "../app/routes/robots";
+import { sitemap } from "../app/routes/sitemap";
 import { indexable, isProductionOrigin } from "../app/app-links";
-import { appCopy } from "../app/app-copy";
+import { sitePages } from "../app/copy/site-pages.server";
+import { italianGross } from "../app/catalog";
 import { formatDate } from "../app/format";
+import { siteMeta } from "../app/site-meta";
 import { resetDatabase } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
@@ -21,12 +30,13 @@ describe("radice pubblica e area riservata", () => {
     const first = await verifiedSession("radice-uno@example.invalid");
     const second = await verifiedSession("radice-due@example.invalid");
     // Stesso indirizzo, tre visitatori: la pagina dell'anonimo non contiene dati di account.
-    expect(await root("/")).toEqual({
+    expect(await root("/")).toMatchObject({
       language: "it",
       signedIn: false,
       origin: "http://localhost:5173",
       baseFreeQuota: 5,
       freePromotion: null,
+      copy: { quota: "Con il piano Free sblocchi 5 ordini ogni 7 giorni." },
     });
     expect(await root("/en")).toMatchObject({ language: "en", signedIn: false });
     for (const { cookie } of [first, second]) {
@@ -49,7 +59,7 @@ describe("radice pubblica e area riservata", () => {
       .run();
     const promotion = { quota: 10, endsAt: "2026-11-01T00:00:00.000Z" };
     expect(await root("/")).toMatchObject({ freePromotion: promotion });
-    const t = appCopy.it.site;
+    const t = sitePages.it.home;
     expect(t.freePromotion(10, formatDate(promotion.endsAt, "it"), 5)).toBe(
       "Promozione Free: 10 ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il 1 nov 2026, 01:00, poi 5.",
     );
@@ -87,11 +97,23 @@ describe("radice pubblica e area riservata", () => {
   });
 
   it("indicizza solo le pagine pubbliche del dominio di produzione", async () => {
-    for (const path of ["/", "/en", "/termini", "/en/privacy", "/supporto", "/en/supporto"]) {
+    for (const path of [
+      "/",
+      "/en",
+      "/funzionalita",
+      "/en/prezzi",
+      "/sicurezza",
+      "/en/faq",
+      "/supporto",
+      "/en/supporto",
+    ]) {
       expect(indexable("https://fiscalbay.it", path)).toBe(true);
       expect(indexable("https://test.fiscalbay.it", path)).toBe(false);
     }
     for (const path of [
+      // Termini e Privacy restano raggiungibili ma `noindex` (D204).
+      "/termini",
+      "/en/privacy",
       "/app/ordini",
       "/en/app/negozi/x",
       "/app/novita",
@@ -120,5 +142,161 @@ describe("radice pubblica e area riservata", () => {
       expect(isProductionOrigin(origin), origin).toBe(false);
     // Fuori dalla produzione robots.txt chiude tutto il dominio.
     expect(await loadRobots().text()).toBe("User-agent: *\nDisallow: /\n");
+    // In produzione chiude le aree private, indica la sitemap e lascia raggiungibili i legali,
+    // il cui `noindex` arriva dall'header.
+    const production = robots("https://fiscalbay.it");
+    expect(production).toContain("Disallow: /app\nDisallow: /en/app\n");
+    expect(production).toContain("Disallow: /anteprima\nDisallow: /en/anteprima\n");
+    expect(production).toMatch(/\nSitemap: https:\/\/fiscalbay\.it\/sitemap\.xml\n$/u);
+    expect(production).not.toMatch(/termini|privacy|prezzi/u);
+  });
+
+  it("elenca nella sitemap le sole pagine canoniche, in ogni lingua con le alternate", () => {
+    const xml = sitemap("https://fiscalbay.it");
+    const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/gu)].map((match) => match[1]);
+    expect(locations).toEqual(
+      ["", "/funzionalita", "/prezzi", "/sicurezza", "/faq", "/supporto"].flatMap((path) => [
+        `https://fiscalbay.it${path || "/"}`,
+        `https://fiscalbay.it/en${path}`,
+      ]),
+    );
+    expect(xml).toContain(
+      '<url><loc>https://fiscalbay.it/en/prezzi</loc><xhtml:link rel="alternate" hreflang="it" href="https://fiscalbay.it/prezzi"/><xhtml:link rel="alternate" hreflang="en" href="https://fiscalbay.it/en/prezzi"/><xhtml:link rel="alternate" hreflang="x-default" href="https://fiscalbay.it/prezzi"/></url>',
+    );
+    expect(xml).not.toMatch(/termini|privacy|accesso|\/app/u);
+  });
+
+  it("dà a ogni pagina pubblica canonical, alternate e Open Graph della propria lingua", () => {
+    const meta = siteMeta({
+      language: "en",
+      origin: "https://fiscalbay.it",
+      path: "/prezzi",
+      title: "Pricing",
+      description: "Prezzi",
+    });
+    expect(meta).toEqual(
+      expect.arrayContaining([
+        { title: "FiscalBay | Pricing" },
+        { tagName: "link", rel: "canonical", href: "https://fiscalbay.it/en/prezzi" },
+        { tagName: "link", rel: "alternate", hrefLang: "it", href: "https://fiscalbay.it/prezzi" },
+        {
+          tagName: "link",
+          rel: "alternate",
+          hrefLang: "x-default",
+          href: "https://fiscalbay.it/prezzi",
+        },
+        { property: "og:locale", content: "en_GB" },
+        { property: "og:locale:alternate", content: "it_IT" },
+        { property: "og:url", content: "https://fiscalbay.it/en/prezzi" },
+        { property: "og:image", content: "https://fiscalbay.it/og/fiscalbay-en.png" },
+      ]),
+    );
+  });
+});
+
+describe("pagine del sito pubblico", () => {
+  const visit = (cookie?: string) =>
+    Promise.all([
+      callRoute(loadFeatures, "/funzionalita", { cookie }),
+      callRoute(loadPricing, "/en/prezzi", { cookie }),
+      callRoute(loadSecurity, "/sicurezza", { cookie }),
+      callRoute(loadFaq, "/en/faq", { cookie }),
+      callRoute(loadSupport, "/supporto", { cookie }),
+      callRoute(loadLegal, "/en/termini", { cookie }),
+    ]);
+
+  it("restano sul sito anche con la sessione, che porta «Apri l'app» nella barra", async () => {
+    const { cookie } = await verifiedSession("sito-pagine@example.invalid");
+    const languages = ["it", "en", "it", "en", "it", "en"];
+    expect(await visit()).toMatchObject(
+      languages.map((language) => ({ language, signedIn: false })),
+    );
+    expect(await visit(cookie)).toMatchObject(
+      languages.map((language) => ({ language, signedIn: true })),
+    );
+  });
+
+  it("distingue Termini e Privacy con la versione del documento", async () => {
+    expect(await callRoute(loadLegal, "/privacy")).toMatchObject({ document: "privacy" });
+    expect(await callRoute(loadLegal, "/en/termini")).toMatchObject({ document: "termini" });
+  });
+
+  it("mostra i posti lifetime reali, gli acquisti sospesi e la promozione in corso", async () => {
+    expect(await callRoute(loadPricing, "/prezzi")).toMatchObject({
+      baseFreeQuota: 5,
+      freePromotion: null,
+      lifetime: { left: 20, total: 20 },
+      purchasesOpen: true,
+    });
+    const at = new Date().toISOString();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-prezzi', 'Spazio', ?1)",
+      ).bind(at),
+      // Un posto prenotato da un Checkout aperto non è in vendita.
+      env.DB.prepare(
+        `INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at)
+         VALUES (1, 'w-prezzi', 'reserved', ?2, ?1)`,
+      ).bind(at, new Date(Date.now() + 3_600_000).toISOString()),
+      env.DB.prepare(
+        `INSERT INTO admission_settings (id, free_waitlist, purchases_open, updated_at)
+         VALUES (1, 0, 0, ?1)`,
+      ).bind(at),
+      env.DB.prepare(
+        `INSERT INTO free_promotions (id, starts_at, ends_at, quota, created_at)
+         VALUES ('lancio', '2026-01-01T00:00:00.000Z', '2099-01-01T00:00:00.000Z', 10, ?1)`,
+      ).bind(at),
+    ]);
+    const pricing = await callRoute(loadPricing, "/prezzi");
+    expect(pricing).toMatchObject({
+      freePromotion: { quota: 10, endsAt: "2099-01-01T00:00:00.000Z" },
+      lifetime: { left: 19, total: 20 },
+      purchasesOpen: false,
+    });
+    // Il Free mostra la quota della promozione; il prezzo netto ha accanto il totale con IVA.
+    expect(pricing.copy).toMatchObject({
+      freeItems: expect.arrayContaining(["10 ordini da sbloccare ogni 7 giorni"]),
+      purchaseNote: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
+      offers: [
+        {
+          offer: "monthly",
+          price: "4,90\u00a0€",
+          gross: "5,98\u00a0€ con IVA italiana al 22%",
+          seats: null,
+        },
+        { offer: "annual", best: true, note: "12 mesi al prezzo di 10." },
+        { offer: "lifetime", soldOut: false, seats: "Restano 19 posti su 20" },
+      ],
+    });
+    expect(pricing.copy.promotion).toMatch(/^Promozione Free: 10 ordini/u);
+  });
+
+  it("lascia visibile il lifetime esaurito senza posti residui", async () => {
+    const at = new Date().toISOString();
+    // Venti prenotazioni di spazi diversi bastano a esaurire l'offerta.
+    await env.DB.batch(
+      Array.from({ length: 20 }, (_, index) => [
+        env.DB.prepare(
+          "INSERT INTO workspaces (id, name, created_at) VALUES (?1, 'Spazio', ?2)",
+        ).bind(`w-${index}`, at),
+        env.DB.prepare(
+          `INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at)
+           VALUES (?1, ?2, 'reserved', ?3, ?3)`,
+        ).bind(index + 1, `w-${index}`, at),
+      ]).flat(),
+    );
+    const { copy } = await callRoute(loadPricing, "/en/prezzi");
+    expect(copy.offers.at(-1)).toMatchObject({
+      offer: "lifetime",
+      price: "€149",
+      soldOut: true,
+      seats: "Lifetime places have run out.",
+    });
+  });
+
+  it("affianca al netto il totale con l'IVA italiana arrotondata al centesimo", () => {
+    expect([490, 4900, 14900].map(italianGross)).toEqual([598, 5978, 18178]);
+    // L'imposta della riga si arrotonda: 0,05 € netti danno 0,01 € di IVA.
+    expect(italianGross(5)).toBe(6);
   });
 });

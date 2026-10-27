@@ -2,11 +2,11 @@ import { cn } from "cn";
 
 import { useCopy } from "~/components/copy-context";
 import { appCopy, supportEmail } from "../app-copy";
-import { supportPath } from "../app-links";
+import { privacyPath, supportPath, termsPath } from "../app-links";
 import { localizedPath } from "../i18n";
 
 /**
- * Footer unico delle pagine pubbliche: home, accesso, Supporto, Termini e Privacy (D202), con
+ * Footer unico delle pagine pubbliche, accesso, Termini e Privacy compresi (D202), con
  * l'indirizzo di assistenza. L'area autenticata non ne ha uno. `className` adatta la larghezza
  * alla colonna che lo contiene.
  */
@@ -31,10 +31,10 @@ export function SiteFooter({ className }: { className?: string }) {
           </p>
         </div>
         <nav aria-label={t.legal.navigation} className="flex flex-wrap gap-4">
-          <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
+          <a href={localizedPath(language, termsPath)} className="underline underline-offset-4">
             {t.legal.termsLink}
           </a>
-          <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
+          <a href={localizedPath(language, privacyPath)} className="underline underline-offset-4">
             {t.legal.privacyLink}
           </a>
           <a href={localizedPath(language, supportPath)} className="underline underline-offset-4">

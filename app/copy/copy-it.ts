@@ -513,6 +513,9 @@ export const it = {
       priceMonthlyNote: "Si rinnova ogni mese.",
       priceAnnualNote: (months: number) => `12 mesi al prezzo di ${months}.`,
       priceLifetimeNote: "Pagamento unico, senza rinnovi.",
+      /** Totale con l'IVA italiana accanto al netto, come sul sito. */
+      priceGross: (price: string) => `${price} con IVA italiana al 22%`,
+      lifetimeSeats: (left: number, total: number) => `Restano ${left} posti su ${total}`,
       lifetimeCredit: (amount: string) => `Meno ${amount} del periodo pagato non usato.`,
       lifetimeReplaces: "L’abbonamento si chiude senza altri rinnovi.",
       lifetimeCreditName: "Periodo pagato non usato",
@@ -971,32 +974,33 @@ export const it = {
     draft:
       "Il testo definitivo sarà pubblicato prima dell’apertura del servizio. Se cambia, ti chiederemo di accettare la nuova versione.",
   },
-  /** Home pubblica minima: il sito completo arriva con Funzionalità, Prezzi e FAQ. */
+  /** Barra e footer del sito pubblico; i testi delle pagine sono in `site-pages.server.ts`. */
   site: {
-    title: "Recupera il Codice Fiscale dagli ordini eBay",
-    description:
-      "FiscalBay legge i tuoi ordini eBay con le API ufficiali e ti mostra il Codice Fiscale dell’acquirente, quando disponibile su eBay.",
-    hero: "Trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
-    body: "Colleghi il tuo negozio eBay e FiscalBay riporta il Codice Fiscale dell’acquirente, quando disponibile su eBay, pronto da copiare.",
     start: "Inizia gratis",
     signIn: "Accedi",
-    openApp: "Vai all’app",
-    trust:
-      "Dati letti con le API ufficiali di eBay, in sola lettura: FiscalBay non modifica i tuoi ordini.",
-    freeQuota: (base: number) => `Con il piano Free sblocchi ${base} ordini ogni 7 giorni.`,
-    freePromotion: (quota: number, date: string, base: number) =>
-      `Promozione Free: ${quota} ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il ${date}, poi ${base}.`,
+    openApp: "Apri l’app",
+    nav: {
+      label: "Pagine del sito",
+      features: "Funzionalità",
+      pricing: "Prezzi",
+      security: "Sicurezza",
+      faq: "FAQ",
+      menu: "Menu",
+    },
     independent: "Servizio indipendente, non affiliato a eBay.",
     support: "Supporto",
   },
-  /** Pagina pubblica dell'assistenza: domande frequenti e contatti. */
+  /** Pagina pubblica dell'assistenza: domande d'uso e contatti. */
   supportPage: {
     title: "Supporto",
+    description:
+      "Assistenza FiscalBay: domande sull’uso, modulo di assistenza nell’app e indirizzo email.",
     contact: "Contatta l’assistenza",
     member:
       "Dall’app scrivi dal modulo di assistenza: puoi allegare il riepilogo diagnostico del tuo account.",
     openForm: "Apri il modulo",
     email: "Oppure scrivi a",
+    faq: "Domande prima di iniziare",
   },
   /** Pagina minima di accesso e ordini, finché le route reali non usano la shell. */
   access: {

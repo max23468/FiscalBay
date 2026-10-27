@@ -2302,5 +2302,7 @@ export function previewLifetime(scenario: Scenario): LifetimeOffer | null {
           : "available",
     credit,
     replaces: !!premium || !!payment,
+    // Posti sintetici: lo scenario esaurito li ha finiti tutti.
+    seats: { left: scenario.lifetimeSoldOut ? 0 : 14, total: 20 },
   };
 }

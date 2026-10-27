@@ -307,6 +307,7 @@ describe("stato sintetico dell'anteprima", () => {
         state: "available",
         credit: 0,
         replaces: true,
+        seats: { left: 14, total: 20 },
       });
       const down = loadScenario("stripe-non-disponibile", language, new Set());
       expect(down.stripeDown).toBe(true);

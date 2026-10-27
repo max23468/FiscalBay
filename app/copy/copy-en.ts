@@ -504,6 +504,8 @@ export const en: AppCopy = {
       priceMonthlyNote: "Renews every month.",
       priceAnnualNote: (months) => `12 months for the price of ${months}.`,
       priceLifetimeNote: "One-off payment, no renewals.",
+      priceGross: (price) => `${price} with 22% Italian VAT`,
+      lifetimeSeats: (left, total) => `${left} of ${total} places left`,
       lifetimeCredit: (amount: string) => `Less ${amount} for the unused paid period.`,
       lifetimeReplaces: "Your subscription ends with no further renewals.",
       lifetimeCreditName: "Unused paid period",
@@ -961,29 +963,30 @@ export const en: AppCopy = {
       "The final text will be published before the service opens. If it changes, we will ask you to accept the new version.",
   },
   site: {
-    title: "Get the Codice Fiscale from your eBay orders",
-    description:
-      "FiscalBay reads your eBay orders through the official APIs and shows you the buyer’s Codice Fiscale, when eBay provides it.",
-    hero: "Find and manage the Codice Fiscale of your eBay orders.",
-    body: "Connect your eBay store and FiscalBay shows the buyer’s Codice Fiscale, when eBay provides it, ready to copy.",
     start: "Start for free",
     signIn: "Sign in",
-    openApp: "Go to the app",
-    trust:
-      "Data read through eBay’s official APIs, read-only: FiscalBay never changes your orders.",
-    freeQuota: (base) => `On the Free plan you unlock ${base} orders every 7 days.`,
-    freePromotion: (quota, date, base) =>
-      `Free promotion: ${quota} orders to unlock every 7 days in cycles starting by ${date}, then ${base}.`,
+    openApp: "Open the app",
+    nav: {
+      label: "Site pages",
+      features: "Features",
+      pricing: "Pricing",
+      security: "Security",
+      faq: "FAQ",
+      menu: "Menu",
+    },
     independent: "Independent service, not affiliated with eBay.",
     support: "Support",
   },
   supportPage: {
     title: "Support",
+    description:
+      "FiscalBay support: questions about using the app, the in-app support form and email.",
     contact: "Contact support",
     member:
       "In the app, write from the support form: you can attach your account’s diagnostic summary.",
     openForm: "Open the form",
     email: "Or write to",
+    faq: "Questions before you start",
   },
   access: {
     description: "eBay orders available in FiscalBay",

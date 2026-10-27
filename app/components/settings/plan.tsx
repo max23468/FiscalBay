@@ -21,6 +21,7 @@ import type { AppCopy } from "../../app-copy";
 import {
   annualPaidMonths,
   formatPrice,
+  italianGross,
   firstChargeAt,
   priceGeneration,
   type LifetimeOffer,
@@ -588,7 +589,13 @@ function PurchaseOptions({
           >
             <span className="grid gap-1">
               <span className="font-code text-base font-semibold">{prices[plan].price}</span>
+              <span className="text-sm text-muted-foreground">{prices[plan].gross}</span>
               <span className="text-sm text-muted-foreground">{prices[plan].note}</span>
+              {plan === "lifetime" && lifetime && lifetime.state !== "sold-out" ? (
+                <span className="text-sm font-medium">
+                  {copy.lifetimeSeats(lifetime.seats.left, lifetime.seats.total)}
+                </span>
+              ) : null}
             </span>
             <OfferAction plan={plan} purchase={purchase} action={action} />
           </li>
@@ -605,7 +612,7 @@ function PurchaseOptions({
 }
 
 /**
- * Prezzo e nota di ogni offerta. Mensile e annuale aggiungono il primo addebito della prova; il
+ * Prezzo, totale con l'IVA italiana e nota di ogni offerta. Mensile e annuale aggiungono il primo addebito della prova; il
  * lifetime la detrazione del periodo pagato non usato e la chiusura dell'abbonamento.
  */
 function offerTexts(
@@ -613,21 +620,26 @@ function offerTexts(
   language: Language,
   lifetime: LifetimeOffer | null,
   firstCharge: string | null,
-): Record<PremiumOffer, { price: string; note: string }> {
+): Record<PremiumOffer, { price: string; gross: string; note: string }> {
   const copy = t.settings.plan;
   const net = (offer: PremiumOffer) => formatPrice(priceGeneration.net[offer], language);
+  const gross = (offer: PremiumOffer) =>
+    copy.priceGross(formatPrice(italianGross(priceGeneration.net[offer]), language));
   const withCharge = (note: string) => (firstCharge ? `${note} ${firstCharge}` : note);
   return {
     monthly: {
       price: copy.priceMonthly(net("monthly")),
+      gross: gross("monthly"),
       note: withCharge(copy.priceMonthlyNote),
     },
     annual: {
       price: copy.priceAnnual(net("annual")),
+      gross: gross("annual"),
       note: withCharge(copy.priceAnnualNote(annualPaidMonths())),
     },
     lifetime: {
       price: copy.priceLifetime(net("lifetime")),
+      gross: gross("lifetime"),
       note: [
         copy.priceLifetimeNote,
         lifetime?.credit ? copy.lifetimeCredit(formatPrice(lifetime.credit, language)) : null,

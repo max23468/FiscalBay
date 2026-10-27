@@ -69,11 +69,11 @@ test(
     await expect(page).toHaveTitle("FiscalBay | Profilo | Impostazioni");
 
     // Con la sessione la radice porta agli Ordini; «Visita fiscalbay.it» mostra il sito e
-    // «Vai all'app» torna agli Ordini, senza uscire.
+    // «Apri l'app» torna agli Ordini, senza uscire.
     await page.goto("/?visita=1");
     await expect(page).toHaveURL(/\/$/u);
     await expect(page).toHaveTitle("FiscalBay | Recupera il Codice Fiscale dagli ordini eBay");
-    await page.getByRole("link", { name: "Vai all’app" }).click();
+    await page.getByRole("link", { name: "Apri l’app" }).first().click();
     await expect(page).toHaveTitle("FiscalBay | Ordini");
     await page.goto("/en");
     await expect(page).toHaveURL(/\/en\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);

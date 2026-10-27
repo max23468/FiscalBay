@@ -514,12 +514,12 @@ describe("registrazione e verifica del contatto", () => {
   });
 
   it("pubblica la versione dei Termini e dell'informativa accettate", async () => {
-    expect(await routeData(loadLegal, "/en/privacy")).toEqual({
+    expect(await routeData(loadLegal, "/en/privacy")).toMatchObject({
       language: "en",
       document: "privacy",
       version: legalVersions.privacy,
     });
-    expect(await routeData(loadLegal, "/termini")).toEqual({
+    expect(await routeData(loadLegal, "/termini")).toMatchObject({
       language: "it",
       document: "termini",
       version: legalVersions.terms,

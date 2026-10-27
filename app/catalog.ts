@@ -31,12 +31,14 @@ export function purchaseStateFrom({
 /**
  * Offerta lifetime per la pagina del piano: in vendita, esaurita, in attesa della prima
  * lettura o sospesa come gli altri acquisti. `credit` è il periodo pagato non usato, in centesimi, che si detrae dal prezzo;
- * `replaces` indica un abbonamento che con il lifetime si chiude.
+ * `replaces` indica un abbonamento che con il lifetime si chiude; `seats` i posti ancora liberi
+ * sul totale, come sul sito.
  */
 export type LifetimeOffer = {
   state: "available" | "needs-sync" | "sold-out" | "closed";
   credit: number;
   replaces: boolean;
+  seats: { left: number; total: number };
 };
 
 /**
@@ -56,6 +58,15 @@ export function formatPrice(cents: number, language: Language) {
     currency: "EUR",
     minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
   }).format(cents / 100);
+}
+
+/**
+ * Totale con l'IVA italiana ordinaria, mostrato accanto al netto sul sito. Stripe calcola
+ * l'imposta effettiva del paese dell'acquirente; qui l'imposta della riga si arrotonda al
+ * centesimo come nelle sue fatture.
+ */
+export function italianGross(cents: number) {
+  return cents + Math.round(cents * 0.22);
 }
 
 /** Mesi di mensile che costa l'annuale: il listino ne regala due su dodici. */

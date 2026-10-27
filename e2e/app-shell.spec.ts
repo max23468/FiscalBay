@@ -157,6 +157,28 @@ for (const area of areas)
     expect(await page.evaluate(() => history.length)).toBe(entries);
   });
 
+for (const area of areas)
+  test(`«Visita fiscalbay.it» apre il sito senza uscire dall'account, ${area.name}`, async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await enter(context, baseURL!, area);
+    await open(page, `${area.base}/ordini`);
+    await page.getByRole("button", { name: "Account" }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "Visita fiscalbay.it" }).click();
+    await expect(page).toHaveURL(/\/$/u);
+    await expect(page).toHaveTitle("FiscalBay | Recupera il Codice Fiscale dagli ordini eBay");
+    const bar = page.getByRole("banner");
+    if (area.base !== "/app") {
+      // L'anteprima non ha una sessione: il sito propone l'accesso.
+      await expect(bar.getByRole("link", { name: "Accedi" })).toBeVisible();
+      return;
+    }
+    await bar.getByRole("link", { name: "Apri l’app" }).click();
+    await expectOrdersNavigation(page);
+  });
+
 test("il collegamento diretto al dettaglio regge ricarica e chiusura", async ({ page }) => {
   await open(page, "/anteprima/ordini?fiscale=available");
   const first = page.getByRole("region", { name: "Elenco ordini" }).getByRole("article").first();
