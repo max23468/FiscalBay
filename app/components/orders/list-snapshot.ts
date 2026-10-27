@@ -8,12 +8,17 @@ import type { OrdersPageData } from "./page";
 /** Distanza dall'inizio della pagina entro cui l'utente è considerato in cima alla lista. */
 const topThreshold = 120;
 
+/** Pausa dopo l'ultimo scorrimento oltre la quale l'utente è considerato fermo. */
+const scrollSettle = 250;
+
 /**
- * L'indirizzo conserva l'istantanea dell'elenco, così ricarica, dettaglio e Indietro ritrovano
- * gli stessi ordini nello stesso ordine. I nuovi ordini entrano subito se stanno tutti sopra il
- * primo mostrato e l'utente è in cima alla lista senza selezionare né leggere un dettaglio
- * (`held`); altrimenti resta l'indicatore, così nulla si sposta mentre legge, il pannello
- * aperto non si chiude e un ordine recuperato dallo storico non entra fra quelli già letti.
+ * L'indirizzo riceve l'istantanea dell'elenco quando c'è qualcosa da tenere fermo: l'utente
+ * lontano dalla cima, una selezione o un dettaglio (`held`), ordini in arrivo. Così ricarica,
+ * dettaglio e Indietro ritrovano gli stessi ordini nello stesso ordine, e in cima l'indirizzo
+ * resta pulito. I nuovi ordini entrano subito se stanno tutti sopra il primo mostrato e
+ * l'utente è in cima alla lista senza selezionare né leggere un dettaglio; altrimenti resta
+ * l'indicatore, così nulla si sposta mentre legge, il pannello aperto non si chiude e un
+ * ordine recuperato dallo storico non entra fra quelli già letti.
  */
 export function useListSnapshot(data: OrdersPageData, held: boolean) {
   const navigate = useNavigate();
@@ -27,8 +32,25 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
   const idle = useNavigation().state === "idle";
   const shown = `${location.pathname}${location.search}`;
   const current = () => `${window.location.pathname}${window.location.search}` === shown;
+  // Lo scorrimento conta quando si ferma: un clic subito dopo avvia prima la sua navigazione,
+  // che la sostituzione altrimenti interromperebbe.
+  const [away, setAway] = useState(false);
   useEffect(() => {
-    if (synced || !idle || !current()) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const settle = () => setAway(window.scrollY >= topThreshold);
+    const scrolled = () => {
+      clearTimeout(timer);
+      timer = setTimeout(settle, scrollSettle);
+    };
+    settle();
+    window.addEventListener("scroll", scrolled, { passive: true });
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener("scroll", scrolled);
+    };
+  }, []);
+  useEffect(() => {
+    if (synced || !idle || !current() || !(held || away || freshHref !== null)) return;
     const next = new URLSearchParams(params);
     next.set(snapshotParam, snapshot);
     setParams(next, { replace: true, preventScrollReset: true });
