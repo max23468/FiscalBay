@@ -6,7 +6,9 @@ import {
   criticalModule,
   evaluate,
   mutationConcurrency,
+  mutationJobs,
   mutationMatrix,
+  shardRanges,
 } from "./mutation.mjs";
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 
@@ -75,6 +77,33 @@ describe("esito dei mutation test", () => {
       "app/grants.server.ts:3:5: ConditionalExpression Timeout",
     ]);
     assert.deepEqual(evaluate({ files: {} }), ["nessun mutante generato"]);
+  });
+
+  it("divide un modulo in parti bilanciate senza tagliare un mutante", () => {
+    const at = (start, end = start) => ({ start, end });
+    // Una funzione dalla riga 3 alla 8 contiene i suoi mutanti: nessun taglio fra 4 e 8.
+    const mutants = [at(1), at(2), at(3, 8), at(4), at(5), at(6), at(9), at(10), at(11)];
+    const ranges = shardRanges(mutants, 3, 12);
+    assert.deepEqual(ranges, [at(1, 2), at(3, 8), at(9, 12)]);
+    const inside = ({ start, end }) =>
+      mutants.filter((mutant) => mutant.start >= start && mutant.end <= end).length;
+    assert.deepEqual(ranges.map(inside), [2, 4, 3]);
+    assert.deepEqual(shardRanges(mutants, 1, 12), [at(1, 12)]);
+    // Senza tagli possibili resta una sola parte, che li comprende tutti.
+    assert.deepEqual(shardRanges([at(1, 12), at(5)], 3, 12), [at(1, 12)]);
+  });
+
+  it("assegna a ogni modulo una parte per intervallo", async () => {
+    const parts = { "app/a.server.ts": 1, "app/b.server.ts": 2 };
+    const shardsOf = async (file) => Array.from({ length: parts[file] }, () => ({}));
+    assert.deepEqual(await mutationJobs(Object.keys(parts), shardsOf), {
+      include: [
+        { target: "app/a.server.ts", shard: "1/1" },
+        { target: "app/b.server.ts", shard: "1/2" },
+        { target: "app/b.server.ts", shard: "2/2" },
+      ],
+    });
+    assert.deepEqual(await mutationJobs([], shardsOf), { include: [] });
   });
 
   it("prova ogni modulo con i test che lo importano, anche indirettamente", () => {

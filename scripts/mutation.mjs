@@ -6,6 +6,8 @@
  * Uso: node scripts/mutation.mjs <file>...
  *      node scripts/mutation.mjs --matrix [<file>... | <matrice JSON>]
  * `--matrix` scrive la matrice dei job per GitHub; senza file comprende tutti i moduli critici.
+ * Un modulo con molti mutanti si divide in parti, eseguite in job paralleli: con
+ * `MUTATION_SHARD=<parte>/<parti>` lo script prova soltanto la parte indicata.
  */
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -17,7 +19,8 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { createRequire } from "node:module";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
 
@@ -94,6 +97,83 @@ export function consumerTests(target, files) {
   return tests.length ? tests : suite;
 }
 
+/** Mutanti provati in un job: oltre, il modulo si divide in parti di circa quindici minuti. */
+export const mutantsPerShard = 150;
+
+/**
+ * Righe, numerate da 1, dei mutanti che Stryker genera nel modulo, con lo stesso instrumenter e
+ * le equivalenze motivate comprese.
+ */
+export async function mutantLines(file) {
+  const core = createRequire(import.meta.resolve("@stryker-mutator/core"));
+  const { Instrumenter } = await import(
+    pathToFileURL(core.resolve("@stryker-mutator/instrumenter")).href
+  );
+  const silent = () => {};
+  const logger = {
+    ...Object.fromEntries(
+      ["debug", "info", "warn", "error", "trace"].map((level) => [level, silent]),
+    ),
+    isDebugEnabled: () => false,
+    isTraceEnabled: () => false,
+  };
+  const { mutants } = await new Instrumenter(logger).instrument(
+    [{ name: file, content: readFileSync(file, "utf8"), mutate: true }],
+    { plugins: null, excludedMutations: [], ignorers: [], noHeader: true },
+  );
+  return mutants.map(({ location }) => ({
+    start: location.start.line + 1,
+    end: location.end.line + 1,
+  }));
+}
+
+/**
+ * Intervalli di righe di `shards` parti con circa lo stesso numero di mutanti. Stryker genera
+ * un mutante soltanto se il suo nodo sta per intero in un intervallo: si taglia soltanto fra due
+ * righe che nessun mutante attraversa, così ogni mutante sta in una sola parte.
+ */
+export function shardRanges(mutants, shards, lastLine) {
+  const crossed = (line) => mutants.some(({ start, end }) => start < line && end >= line);
+  const before = (line) => mutants.filter(({ end }) => end < line).length;
+  const cuts = [];
+  for (let part = 1; part < shards; part++) {
+    const target = (part * mutants.length) / shards;
+    let best = null;
+    for (let line = (cuts.at(-1) ?? 1) + 1; line <= lastLine; line++)
+      if (
+        !crossed(line) &&
+        (best === null || Math.abs(before(line) - target) < Math.abs(before(best) - target))
+      )
+        best = line;
+    if (best !== null && before(best) > (cuts.length ? before(cuts.at(-1)) : 0)) cuts.push(best);
+  }
+  return [1, ...cuts].map((start, index) => ({
+    start,
+    end: (cuts[index] ?? lastLine + 1) - 1,
+  }));
+}
+
+/** Intervalli delle parti del modulo, una ogni `mutantsPerShard` mutanti dove i tagli lo consentono. */
+export async function moduleShards(file) {
+  const mutants = await mutantLines(file);
+  const lastLine = readFileSync(file, "utf8").split("\n").length;
+  return shardRanges(mutants, Math.max(1, Math.ceil(mutants.length / mutantsPerShard)), lastLine);
+}
+
+/** Job della matrice: una parte per intervallo di ogni modulo. */
+export async function mutationJobs(targets, shardsOf = moduleShards) {
+  const jobs = await Promise.all(
+    targets.map(async (target) => {
+      const shards = (await shardsOf(target)).length;
+      return Array.from({ length: shards }, (_, index) => ({
+        target,
+        shard: `${index + 1}/${shards}`,
+      }));
+    }),
+  );
+  return { include: jobs.flat() };
+}
+
 /** Matrice dei job: JSON già pronto, file indicati o tutti i moduli critici. */
 export function mutationMatrix(argument, files) {
   if (argument.trim().startsWith("{")) {
@@ -118,10 +198,17 @@ function sources() {
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
 }
 
-async function runTarget(target, files) {
+async function runTarget(target, files, shard = "1/1") {
   if (!criticalModule(target) || !existsSync(target))
     throw new Error(`Modulo critico inesistente: ${target}`);
-  const directory = `reports/mutation/${target.replaceAll("/", "_")}`;
+  const [part, shards] = shard.split("/").map(Number);
+  if (!Number.isInteger(part) || !Number.isInteger(shards) || part < 1 || part > shards)
+    throw new Error(`Parte mutation non valida: ${shard}`);
+  const ranges = shards > 1 ? await moduleShards(target) : [null];
+  // La matrice e il job leggono lo stesso sorgente: parti diverse indicano un altro commit.
+  if (ranges.length !== shards) throw new Error(`Parti mutation diverse per ${target}: ${shard}`);
+  const range = ranges[part - 1];
+  const directory = `reports/mutation/${target.replaceAll("/", "_")}${shards > 1 ? `-${part}-${shards}` : ""}`;
   rmSync(directory, { recursive: true, force: true });
   mkdirSync(directory, { recursive: true });
   const reportPath = `${directory}/mutation.json`;
@@ -132,7 +219,7 @@ async function runTarget(target, files) {
     JSON.stringify({
       ...settings,
       concurrency: mutationConcurrency(settings.concurrency),
-      mutate: [target],
+      mutate: [range ? `${target}:${range.start}-${range.end}` : target],
       jsonReporter: { fileName: reportPath },
       vitest: { configFile: "vitest.mutation.config.ts" },
     }),
@@ -157,7 +244,7 @@ async function runTarget(target, files) {
   const counts = {};
   for (const { status } of Object.values(report?.files ?? {}).flatMap(({ mutants }) => mutants))
     counts[status] = (counts[status] ?? 0) + 1;
-  const summary = `${target}: ${Math.round((Date.now() - start) / 1000)}s, ${tests.length} file di test, ${JSON.stringify(counts)}, ${failures.length} problemi.\n`;
+  const summary = `${target}${shards > 1 ? ` (parte ${shard})` : ""}: ${Math.round((Date.now() - start) / 1000)}s, ${tests.length} file di test, ${JSON.stringify(counts)}, ${failures.length} problemi.\n`;
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
   for (const item of failures) console.error(`Mutante non ucciso: ${item}`);
@@ -173,12 +260,17 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       files.map(({ path: file }) => file),
     );
     console.log(`Moduli critici: ${matrix.target.join(", ") || "nessuno"}.`);
+    const jobs = await mutationJobs(matrix.target);
+    console.log(
+      `Job: ${jobs.include.map(({ target, shard }) => `${target} ${shard}`).join(", ")}.`,
+    );
     if (process.env.GITHUB_OUTPUT)
-      appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(matrix)}\n`);
+      appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(jobs)}\n`);
   } else if (args.length === 0) {
     console.error("Uso: node scripts/mutation.mjs <file>...");
     process.exitCode = 2;
   } else {
-    for (const target of args) if (!(await runTarget(target, files))) process.exitCode = 1;
+    for (const target of args)
+      if (!(await runTarget(target, files, process.env.MUTATION_SHARD))) process.exitCode = 1;
   }
 }
