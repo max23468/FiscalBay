@@ -21,9 +21,6 @@ trustPolicy: no-downgrade
 trustPolicyExclude:
   - semver@6.3.1
 patchedDependencies:
-  # Backport della PR Stryker #6220, commit 4e7930409c221c99ea25f9ab2c961e4fd8485c9b.
-  # Rimuovere quando il runner pubblicato allinea ID e copertura con i nomi di Vitest 5.
-  "@stryker-mutator/vitest-runner@10.0.0": patches/@stryker-mutator__vitest-runner@10.0.0.patch
   # cf include ancora i framework dei pacchetti figli nel rilevamento della radice.
   # Rimuovere quando il rilevamento limita i risultati al progetto corrente.
-  cf@1.0.0-beta.18: patches/cf@1.0.0-beta.18.patch
+  cf@1.0.0-beta.23: patches/cf@1.0.0-beta.23.patch
