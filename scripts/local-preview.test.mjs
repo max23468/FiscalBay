@@ -38,6 +38,8 @@ describe("copia locale dell'artefatto", () => {
           production ? undefined : "FiscalBayCollaudoBot",
         );
         assert.equal(copy.env.TELEGRAM_BOT_TOKEN === undefined, production);
+        const vars = readFileSync(path.join(directory, ".cloudflare/preview/.dev.vars"), "utf8");
+        assert.match(vars, /^REGISTRATION_ALLOWED_EMAILS=\[\]$/mu);
         assert.equal(readFileSync(source, "utf8"), original);
       }
     } finally {
