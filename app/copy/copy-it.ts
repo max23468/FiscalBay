@@ -67,6 +67,8 @@ export const it = {
     security: "Sicurezza",
     planBilling: "Piano e pagamenti",
     visitSite: "Visita fiscalbay.it",
+    whatsNew: "Novità",
+    whatsNewTitle: "Novità di FiscalBay",
     signOut: "Esci",
     close: "Chiudi",
     back: "Indietro",
@@ -271,6 +273,15 @@ export const it = {
     firstUseBody:
       "Collega il tuo negozio eBay per consultare gli ordini e i Codici\u00a0Fiscali disponibili.",
     connectStore: "Collega negozio eBay",
+    /** Proposta del consenso facoltativo dopo i primi passi, separata da quella della registrazione. */
+    marketingProposal: {
+      title: "Vuoi ricevere novità e offerte su FiscalBay?",
+      body: "Poche email su nuove funzioni e promozioni. Puoi cambiare scelta in ogni momento da Impostazioni, Notifiche.",
+      accept: "Sì, ricevile",
+      decline: "No, grazie",
+      accepted: "Riceverai novità e offerte via email.",
+      declined: "Non riceverai novità e offerte.",
+    },
     steps: "Primi passi",
     stepAccount: "Account creato",
     stepEmail: "Email verificata",
@@ -794,9 +805,38 @@ export const it = {
         rights: "Piano",
         reference: "Riferimento",
         none: "Nessuno",
+        unavailable:
+          "Riepilogo non disponibile in questo momento: puoi inviare la richiesta lo stesso.",
+        phases: {
+          none: "Nessun negozio collegato",
+          running: "Aggiornamento in corso",
+          importing: "Importazione dello storico",
+          ok: (at: string) => `Aggiornamento riuscito, ${at}`,
+          failed: (at: string) => `Aggiornamento non riuscito, ${at}`,
+          waiting: "In attesa della prima lettura",
+          paused: "Letture in pausa",
+          reconnect: "Da ricollegare",
+          disconnected: "Negozio scollegato",
+        },
+        plans: {
+          free: "Free",
+          freeQuota: (used: number, limit: number) => `Free, ${used} di ${limit} ordini sbloccati`,
+          waitlist: "Free, in lista d’attesa",
+          trial: "Prova Premium",
+          granted: "Premium concesso",
+          lifetime: "Premium a vita",
+          monthly: "Premium mensile",
+          annual: "Premium annuale",
+        },
       },
       send: "Invia",
-      sent: (email: string) => `Anteprima: richiesta non inviata. Ti risponderemmo a ${email}.`,
+      sent: (email: string) => `Richiesta inviata. Ti risponderemo a ${email}.`,
+      sendFailed:
+        "Invio non riuscito. Riprova tra qualche minuto o scrivi all’indirizzo qui sotto.",
+      limited:
+        "Hai già inviato diverse richieste nelle ultime 24 ore. Per aggiungere altro scrivi all’indirizzo qui sotto.",
+      invalid: "Scegli un argomento e scrivi un messaggio entro 4.000 caratteri.",
+      whatsNew: "Novità",
       formErrors: "Correggi i campi evidenziati.",
       supportEmail: "Puoi scrivere anche a",
       supportWrite: "Scrivi a",
@@ -927,7 +967,16 @@ export const it = {
     freePromotion: (quota: number, date: string, base: number) =>
       `Promozione Free: ${quota} ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il ${date}, poi ${base}.`,
     independent: "Servizio indipendente, non affiliato a eBay.",
-    support: "Assistenza",
+    support: "Supporto",
+  },
+  /** Pagina pubblica dell'assistenza: domande frequenti e contatti. */
+  supportPage: {
+    title: "Supporto",
+    contact: "Contatta l’assistenza",
+    member:
+      "Dall’app scrivi dal modulo di assistenza: puoi allegare il riepilogo diagnostico del tuo account.",
+    openForm: "Apri il modulo",
+    email: "Oppure scrivi a",
   },
   /** Pagina minima di accesso e ordini, finché le route reali non usano la shell. */
   access: {

@@ -1,6 +1,7 @@
 import { orderSearchText } from "../orders/order-search";
 import { auditRetentionDays } from "./admin-audit.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
+import { purgeSupportRequests } from "./support-requests.server";
 import { purgeTelegramLinks } from "./telegram.server";
 import { purgeTelegramDeliveries } from "./telegram-deliveries.server";
 
@@ -23,6 +24,7 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db.prepare("DELETE FROM account_email_changes WHERE expires_at <= ?").bind(at),
     purgeTelegramLinks(db, now),
     purgeTelegramDeliveries(db, now),
+    purgeSupportRequests(db, now),
     // Registro della console e oggetti chiusi da oltre un anno; preparazioni mai confermate.
     db
       .prepare("DELETE FROM admin_audit WHERE julianday(at) < julianday(?) - ?")

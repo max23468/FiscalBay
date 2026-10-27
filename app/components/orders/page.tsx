@@ -25,6 +25,7 @@ import { OrderSheet } from "./detail";
 import { useEnterIndexes, useListSnapshot, useNewOrders } from "./list-snapshot";
 import { LoadingGrid } from "./loading";
 import { OrdersHeader, OrdersNotices, TrialNotice } from "./notices";
+import { MarketingProposal } from "./marketing-proposal";
 import { FirstUse, NoOrders } from "./onboarding";
 import { importingNotice, isEbayDown, remainingUnlocks, type OrdersAccount } from "./labels";
 import { SelectionBar, useOrderSelection } from "./selection";
@@ -75,6 +76,11 @@ export interface OrdersPageData extends SecondaryActions {
   confirmUnlock?: boolean;
   /** Le Impostazioni del piano esistono: l'avviso degli sblocchi esauriti vi rimanda. */
   settings: boolean;
+  /**
+   * Proposta del consenso marketing, una volta e a primi passi conclusi, a chi in registrazione
+   * non ha aderito e non ha più scelto (§14).
+   */
+  marketingProposal?: boolean;
   /**
    * Collegamento di un negozio dal primo accesso: pagina reale, oppure null finché non è
    * possibile (email da confermare). Assente, l'azione resta quella simulata dell'anteprima.
@@ -354,6 +360,7 @@ export function OrdersPage({
       {notice}
       <OrdersNotices data={data} />
       {data.view === "loading" ? null : <TrialNotice data={data} />}
+      {data.marketingProposal ? <MarketingProposal /> : null}
       {data.view === "no-store" ? (
         <FirstUse data={data} />
       ) : data.view === "loading" ? (

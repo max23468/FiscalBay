@@ -1,5 +1,15 @@
 import { env } from "cloudflare:workers";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest";
 import { orderAllowance, startTrial, unlockOrders } from "../app/domain/grants.server";
 import { admission, applyInactivity, recordActivity } from "../app/domain/admission.server";
 import { purchaseState } from "../app/domain/checkout.server";
@@ -30,7 +40,7 @@ import {
 } from "../app/routes/settings";
 import { action as languageAction } from "../app/routes/language";
 import { action as notificationsAction } from "../app/routes/notifications";
-import { appCopy } from "../app/app-copy";
+import { appCopy, supportEmail } from "../app/app-copy";
 import {
   applyFreePlan,
   applyFreePlans,
@@ -39,6 +49,7 @@ import {
 } from "../app/domain/free-store.server";
 import type { ActionResult } from "../app/view-models";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { supportRequestLimit } from "../app/domain/support-requests.server";
 import { refreshStoreToken } from "../app/integrations/ebay/seller-credentials.server";
 import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
 import {
@@ -733,12 +744,22 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         billingPortal: true,
         telegram: true,
         accountData: false,
-        support: false,
+        support: true,
         exportAdvanced: false,
       },
       account: { plan: "free", trialAvailable: false, quota: undefined },
       preferences: { theme: "system", timeZone: "auto", detectedTimeZone: null, marketing: false },
-      diagnostics: null,
+      // Senza negozi il riepilogo lo dice; la versione viene dal deploy.
+      diagnostics: {
+        version: expect.any(String),
+        storeRef: null,
+        syncPhase: "Nessun negozio collegato",
+        errorCode: null,
+        rights: "Free",
+        correlationId: expect.stringMatching(/^[0-9a-f-]{36}$/u),
+      },
+      // L'elenco delle Novità versionato è vuoto: Supporto non collega la pagina.
+      whatsNew: false,
     });
     expect(loaded.page.preferences.templates.it).toContain("{ordine}");
     const missing = await settings(seller.cookie, "/app/impostazioni/inesistente", "inesistente");
@@ -830,6 +851,144 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       { granted: 0, text_version: "2026-09-28", language: "it" },
     ]);
     expect((await settingsPage(seller.cookie)).page.preferences.marketing).toBe(false);
+  });
+
+  describe("modulo di assistenza", () => {
+    const request = (cookie: string, fields: Record<string, string> = {}) =>
+      saveSetting(cookie, {
+        intent: "support",
+        topic: "stores",
+        message: "Il negozio non si aggiorna.",
+        diagnostics: "true",
+        ...fields,
+      });
+    // Un solo sostituto per il gruppo: ogni prova riparte da un elenco di invii vuoto.
+    let send: MockInstance<SendEmail["send"]>;
+    beforeAll(() => {
+      send = vi.spyOn(env.AUTH_EMAIL, "send");
+    });
+    beforeEach(() => {
+      send.mockReset();
+      send.mockResolvedValue({ messageId: "synthetic" });
+    });
+    afterAll(() => send.mockRestore());
+    // Anche la conferma dell'email della registrazione passa dallo stesso invio.
+    const toSupport = () =>
+      send.mock.calls
+        .map(([message]) => message as Sent)
+        .filter((message) => message.to === supportEmail);
+    type Sent = { from: unknown; to: string; replyTo: string; subject: string; text: string };
+
+    it("invia a supporto@ il messaggio con il riepilogo del solo spazio dell'utente", async () => {
+      const seller = await linkedSeller("assistenza@example.invalid");
+      await env.DB.batch(
+        insertWorkspace({ id: "w-altro", name: "Altro", createdAt: new Date().toISOString() }),
+      );
+      await insertStore({ id: "negozio-altrui", workspaceId: "w-altro" }).run();
+      // Senza lo storico delle ultime letture vale l'ultima riuscita, mai «in attesa».
+      await env.DB.prepare("DELETE FROM sync_runs").run();
+      expect((await settingsPage(seller.cookie)).page.diagnostics).toEqual({
+        version: expect.any(String),
+        storeRef: seller.storeId,
+        syncPhase: expect.stringMatching(/^Aggiornamento riuscito, /u),
+        errorCode: null,
+        rights: expect.stringMatching(/^Free/u),
+        correlationId: expect.stringMatching(/^[0-9a-f-]{36}$/u),
+      });
+      expect(await request(seller.cookie, { message: " Riga\u0007 uno\r\nRiga due " })).toEqual({
+        ok: true,
+      });
+      const [sent] = toSupport();
+      expect(sent!).toMatchObject({
+        from: { email: expect.stringMatching(/^noreply@/u), name: "FiscalBay" },
+        to: supportEmail,
+        replyTo: "assistenza@example.invalid",
+        subject: "Assistenza FiscalBay (localhost:5173): Collegamento negozi",
+      });
+      const [head, summary] = sent!.text.split("\n--\n");
+      expect(head).toBe(
+        [
+          "Argomento: Collegamento negozi",
+          `Account: ${seller.userId}`,
+          "Email: assistenza@example.invalid",
+          "Lingua: it",
+          "",
+          "Riga uno\nRiga due",
+          "",
+        ].join("\n"),
+      );
+      // Soltanto i campi allowlistati, riletti sul server: niente nomi eBay, ordini o altri spazi.
+      expect(summary!.split("\n").map((line) => line.split(": ")[0])).toEqual([
+        "Versione",
+        "Negozio",
+        "Sincronizzazione",
+        "Codice errore",
+        "Piano",
+        "Riferimento",
+      ]);
+      expect(summary).toContain(`Negozio: ${seller.storeId}`);
+      expect(sent!.text).not.toMatch(/negozio-altrui|venditore/u);
+      expect(await count("support_requests")).toBe(1);
+    });
+
+    it("con il riepilogo non leggibile la richiesta parte lo stesso", async () => {
+      const seller = await linkedSeller("senza-riepilogo@example.invalid");
+      const prepare = env.DB.prepare.bind(env.DB);
+      const statement = vi.spyOn(env.DB, "prepare").mockImplementation((query: string) => {
+        if (query.includes("group_concat(reason) FROM ebay_store_pauses"))
+          throw new Error("synthetic");
+        return prepare(query);
+      });
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect((await settingsPage(seller.cookie)).page.diagnostics).toBeNull();
+      expect(await request(seller.cookie)).toEqual({ ok: true });
+      expect(toSupport()[0]!.text).toContain(
+        "Riepilogo diagnostico non disponibile al momento dell'invio.",
+      );
+      expect(errors).toHaveBeenCalled();
+      for (const spy of [errors, statement]) spy.mockRestore();
+    });
+
+    it("rifiuta richieste non valide, limita gli invii e non conta quelli non riusciti", async () => {
+      const seller = await verifiedSession("limite@example.invalid");
+      const t = appCopy.it.settings.support;
+      expect(await request(seller.cookie, { diagnostics: "false" })).toEqual({ ok: true });
+      expect(toSupport()[0]!.text).toContain("Riepilogo diagnostico non allegato.");
+      const invalid: Record<string, string>[] = [
+        { topic: "spam" },
+        { message: " \n " },
+        { message: "x".repeat(4001) },
+      ];
+      for (const fields of invalid)
+        expect(await request(seller.cookie, fields)).toMatchObject({
+          init: { status: 400 },
+          data: { ok: false, notice: t.invalid },
+        });
+      // Un rifiuto del provider resta nei log con il suo codice e non consuma il limite.
+      let refused = false;
+      send.mockImplementation(async (message) => {
+        if (refused || (message as Sent).to !== supportEmail) return { messageId: "synthetic" };
+        refused = true;
+        throw Object.assign(new Error("synthetic"), { code: "E_RATE_LIMIT_EXCEEDED" });
+      });
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(await request(seller.cookie)).toMatchObject({
+        init: { status: 503 },
+        data: { ok: false, notice: t.sendFailed },
+      });
+      expect(errors.mock.calls.join("\n")).toContain('"failure":"E_RATE_LIMIT_EXCEEDED"');
+      for (let sent = 1; sent < supportRequestLimit; sent++)
+        expect(await request(seller.cookie)).toEqual({ ok: true });
+      expect(await request(seller.cookie)).toMatchObject({
+        init: { status: 429 },
+        data: { ok: false, notice: t.limited },
+      });
+      expect(toSupport()).toHaveLength(supportRequestLimit + 1);
+      // La manutenzione elimina gli istanti oltre le 24 ore.
+      await purgeExpiredRecords(env.DB, new Date(Date.now() + day + 1000));
+      expect(await count("support_requests")).toBe(0);
+      errors.mockRestore();
+    });
   });
 
   it("salva il modello di messaggio con Salva e lo usa negli Ordini per lingua", async () => {
@@ -1564,6 +1723,27 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       // Un nuovo periodo di inattività riceve un nuovo preavviso.
       await applyInactivity(mail, at(63.1));
       expect(email).toHaveBeenCalledTimes(3);
+      errors.mockRestore();
+    });
+
+    it("un indirizzo soppresso vale come preavviso tentato e la pausa segue i suoi tempi", async () => {
+      const seller = await linkedSeller("soppresso@example.invalid");
+      const { send: email, mail } = mailer();
+      email.mockRejectedValue(
+        Object.assign(new Error("synthetic"), { code: "E_RECIPIENT_SUPPRESSED" }),
+      );
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      await applyInactivity(mail, at(31));
+      expect((await workspace(seller.workspaceId))!.inactivity_notice_at).toBe(
+        at(31).toISOString(),
+      );
+      // Il log riporta il codice del provider, mai il messaggio o l'indirizzo.
+      const logged = errors.mock.calls.map(([line]) => String(line)).join("\n");
+      expect(logged).toContain('"failure":"E_RECIPIENT_SUPPRESSED"');
+      expect(logged).not.toContain("soppresso@example.invalid");
+      await applyInactivity(mail, at(38.1));
+      expect(email).toHaveBeenCalledOnce();
+      expect(await pauses(seller.userId)).toEqual([["inactivity"]]);
       errors.mockRestore();
     });
 

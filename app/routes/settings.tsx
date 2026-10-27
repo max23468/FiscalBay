@@ -12,6 +12,16 @@ import {
   requireAccountArea,
   type AccountArea,
 } from "../account-area.server";
+import { sendEmail } from "../account-email.server";
+import { planDiagnostics } from "../support";
+import { listStores } from "../domain/stores.server";
+import {
+  appVersion,
+  parseSupportRequest,
+  supportDiagnostics,
+  supportEmailMessage,
+} from "../domain/support.server";
+import { releaseSupportRequest, reserveSupportRequest } from "../domain/support-requests.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { checkoutReturn, purchaseStateFrom } from "../catalog";
 import {
@@ -59,7 +69,8 @@ import {
 import { stripeSecretKey } from "../integrations/stripe.server";
 import { telegramConfigured } from "../integrations/telegram.server";
 import { appUrl, ordersPath, planPath } from "../app-links";
-import { logFailure } from "../errors";
+import { correlationId, logFailure } from "../errors";
+import { whatsNew } from "../whats-new.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction } from "../security-actions.server";
@@ -69,6 +80,7 @@ import {
   orderPeriodStart,
   settingsSections,
   type ActionResult,
+  type DiagnosticsView,
   type OrderPeriod,
   type SettingsSection,
 } from "../view-models";
@@ -80,17 +92,17 @@ import type { Route } from "./+types/settings";
 import { subscriptionView } from "../domain/plan-view.server";
 
 /**
- * Servizi reali delle categorie. Esportazione e cancellazione dell'account, modulo di assistenza
- * e opzioni Premium dell'esportazione compaiono insieme ai loro servizi. L'acquisto compare con
- * la configurazione Stripe, la gestione dell'abbonamento con il portale di Stripe, le notifiche
- * Telegram con il bot dell'ambiente.
+ * Servizi reali delle categorie. Esportazione e cancellazione dell'account e opzioni Premium
+ * dell'esportazione compaiono insieme ai loro servizi. L'acquisto compare con la configurazione
+ * Stripe, la gestione dell'abbonamento con il portale di Stripe, le notifiche Telegram con il bot
+ * dell'ambiente.
  */
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
   billingPortal: !!stripeSecretKey(env),
   telegram: telegramConfigured(env),
   accountData: false,
-  support: false,
+  support: true,
   exportAdvanced: false,
 });
 
@@ -163,40 +175,23 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       admission(env.DB, userId),
     ]),
   );
-  const cycle = allowance?.cycle;
-  const exportData = await measure("d1", "settings", () =>
-    exportSection(request, area, params.sezione === "esportazione", !!allowance?.premium, now),
-  );
-  // Periodo dell'abbonamento, pagamento da confermare o rinnovo non riuscito.
-  const subscription = allowance
-    ? await measure("d1", "settings", () =>
-        subscriptionView(env.DB, env, allowance.workspaceId, allowance.coverage, now),
-      )
-    : {};
+  const [exportData, subscription] = await Promise.all([
+    measure("d1", "settings", () =>
+      exportSection(request, area, params.sezione === "esportazione", !!allowance?.premium, now),
+    ),
+    measure("d1", "settings", () => subscriptionState(allowance, now)),
+  ]);
+  const accountView = {
+    ...account,
+    profile,
+    ...planFields(allowance, admissionState.waiting, subscription),
+  };
   const page: SettingsPageData = {
     confirmUnlock,
     section: params.sezione ?? null,
     sections: settingsSections,
     services: services(),
-    account: {
-      ...account,
-      profile,
-      plan: allowance?.premium ? "premium" : "free",
-      trialAvailable: allowance?.trialAvailable ?? false,
-      ...(admissionState.waiting && !allowance?.premium ? { waitlisted: true } : {}),
-      ...accountCoverage(allowance),
-      ...subscription,
-      // Prima del primo collegamento nessun ciclo è avviato e non c'è una quota da mostrare.
-      quota:
-        !allowance?.premium && cycle
-          ? {
-              used: cycle.used,
-              limit: cycle.quota,
-              cycleEndsAt: cycle.ends_at,
-              ...(cycle.next_quota !== cycle.quota ? { nextLimit: cycle.next_quota } : {}),
-            }
-          : undefined,
-    },
+    account: accountView,
     purchase: {
       // Senza spazio nessun negozio è collegato: l'acquisto attende la prima lettura.
       state:
@@ -224,7 +219,8 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       marketing,
       templates: messageTemplates(preferences),
     },
-    diagnostics: null,
+    diagnostics: await readDiagnostics(request, area, accountView, now),
+    whatsNew: whatsNew.length > 0,
     telegram,
     ...exportData,
     now: now.toISOString(),
@@ -236,6 +232,124 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     account,
     page,
   };
+}
+
+type Allowance = Awaited<ReturnType<typeof orderAllowance>>;
+
+/** Periodo dell'abbonamento, pagamento da confermare o rinnovo non riuscito. */
+function subscriptionState(allowance: Allowance, now: Date) {
+  return allowance
+    ? subscriptionView(env.DB, env, allowance.workspaceId, allowance.coverage, now)
+    : Promise.resolve({});
+}
+
+/** Piano, prova, lista d'attesa, sblocchi e abbonamento dell'account. */
+function planFields(
+  allowance: Allowance,
+  waiting: boolean,
+  subscription: Awaited<ReturnType<typeof subscriptionState>>,
+) {
+  const cycle = allowance?.cycle;
+  return {
+    plan: allowance?.premium ? ("premium" as const) : ("free" as const),
+    trialAvailable: allowance?.trialAvailable ?? false,
+    ...(waiting && !allowance?.premium ? { waitlisted: true } : {}),
+    ...accountCoverage(allowance),
+    ...subscription,
+    // Prima del primo collegamento nessun ciclo è avviato e non c'è una quota da mostrare.
+    quota:
+      !allowance?.premium && cycle
+        ? {
+            used: cycle.used,
+            limit: cycle.quota,
+            cycleEndsAt: cycle.ends_at,
+            ...(cycle.next_quota !== cycle.quota ? { nextLimit: cycle.next_quota } : {}),
+          }
+        : undefined,
+  };
+}
+
+/**
+ * Riepilogo diagnostico dell'assistenza, dai soli negozi dello spazio dell'utente. Una lettura
+ * che non riesce lascia il modulo senza riepilogo: la richiesta si invia lo stesso.
+ */
+async function readDiagnostics(
+  request: Request,
+  area: AccountArea,
+  account: Parameters<typeof planDiagnostics>[0],
+  now: Date,
+): Promise<DiagnosticsView | null> {
+  try {
+    const stores = await measure("d1", "settings", () =>
+      listStores(env.DB, area.session.user.id, now),
+    );
+    return supportDiagnostics({
+      stores,
+      plan: planDiagnostics(account, appCopy[area.language]),
+      version: appVersion(env),
+      correlationId: correlationId(request),
+      language: area.language,
+      timeZone: effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone),
+    });
+  } catch (error) {
+    logFailure({ request, error, operation: "support" });
+    return null;
+  }
+}
+
+/** Riepilogo allegato all'invio, riletto con il piano corrente; null se non si legge. */
+async function attachedDiagnostics(request: Request, area: AccountArea, now: Date) {
+  const userId = area.session.user.id;
+  try {
+    const [allowance, admissionState] = await Promise.all([
+      orderAllowance(env.DB, userId, now),
+      admission(env.DB, userId),
+    ]);
+    const subscription = await subscriptionState(allowance, now);
+    return await readDiagnostics(
+      request,
+      area,
+      planFields(allowance, admissionState.waiting, subscription),
+      now,
+    );
+  } catch (error) {
+    logFailure({ request, error, operation: "support" });
+    return null;
+  }
+}
+
+/**
+ * Richiesta di assistenza verso `supporto@`, con Reply-To sull'indirizzo dell'account. Il
+ * riepilogo si rilegge qui, mai dal browser; senza riepilogo la richiesta parte lo stesso.
+ */
+async function sendSupport(request: Request, area: AccountArea, form: FormData) {
+  const t = appCopy[area.language].settings.support;
+  const failed = (status: number, notice: string) =>
+    data<ActionResult>({ ok: false, notice }, { status });
+  const support = parseSupportRequest(form);
+  if (!support) return failed(400, t.invalid);
+  const userId = area.session.user.id;
+  const now = new Date();
+  const reserved = await reserveSupportRequest(env.DB, userId, now);
+  if (!reserved) return failed(429, t.limited);
+  const diagnostics = support.diagnostics ? await attachedDiagnostics(request, area, now) : null;
+  try {
+    await sendEmail(
+      env,
+      supportEmailMessage(env, {
+        request: support,
+        userId,
+        email: area.session.user.email,
+        language: area.language,
+        diagnostics,
+      }),
+    );
+  } catch (error) {
+    logFailure({ request, error, operation: "support" });
+    await releaseSupportRequest(env.DB, reserved);
+    return failed(503, t.sendFailed);
+  }
+  return { ok: true } satisfies ActionResult;
 }
 
 /**
@@ -410,6 +524,7 @@ export async function action({ request }: Route.ActionArgs) {
         );
       return failed(choice.result === "not_found" ? 404 : 409, t.plan.freeStoreUnavailable);
     }
+    if (intent === "support") return await sendSupport(request, area, form);
     if (intent === "profile") {
       // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.
       form.set("tipo", area.profile.accountType === "business" ? "azienda" : "privato");

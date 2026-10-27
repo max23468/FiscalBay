@@ -15,6 +15,7 @@ import type { EbayEnvironment } from "./view-models";
 import { sandboxAvailable } from "./integrations/ebay/environment.server";
 import { logFailure, tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
+import { whatsNew } from "./whats-new.server";
 import { measure } from "./observability.server";
 import { detectedTimeZone, effectiveTimeZone, type ShellData } from "./preferences";
 
@@ -168,7 +169,7 @@ export async function shellData(
       now,
     ),
   );
-  return { display, notifications, now: now.toISOString() };
+  return { display, notifications, whatsNew: whatsNew.length > 0, now: now.toISOString() };
 }
 
 /** Le azioni dell'area riservata accettano solo richieste partite dalla propria origine. */

@@ -87,11 +87,18 @@ describe("radice pubblica e area riservata", () => {
   });
 
   it("indicizza solo le pagine pubbliche del dominio di produzione", async () => {
-    for (const path of ["/", "/en", "/termini", "/en/privacy"]) {
+    for (const path of ["/", "/en", "/termini", "/en/privacy", "/supporto", "/en/supporto"]) {
       expect(indexable("https://fiscalbay.it", path)).toBe(true);
       expect(indexable("https://test.fiscalbay.it", path)).toBe(false);
     }
-    for (const path of ["/app/ordini", "/en/app/negozi/x", "/accesso", "/admin", "/anteprima"]) {
+    for (const path of [
+      "/app/ordini",
+      "/en/app/negozi/x",
+      "/app/novita",
+      "/accesso",
+      "/admin",
+      "/anteprima",
+    ]) {
       expect(indexable("https://fiscalbay.it", path)).toBe(false);
     }
     // Production si riconosce dall'host, non dalla grafia dell'origine. Le varianti si

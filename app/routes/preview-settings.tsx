@@ -139,6 +139,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       templates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
     },
     diagnostics: scenario.diagnostics,
+    // La pagina Novità esiste soltanto nell'area reale (D203).
+    whatsNew: false,
     // Chat e preferenze dimostrative: ogni scelta parte dal predefinito, come le altre.
     telegram: {
       chat: scenario.telegramChat

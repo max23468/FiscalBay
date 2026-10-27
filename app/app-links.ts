@@ -18,6 +18,9 @@ export const appBase = "/app";
 /** Accesso, registrazione e recupero, fuori dall'area riservata. */
 export const accessPath = "/accesso";
 
+/** Pagina pubblica dell'assistenza, con domande frequenti e contatti. */
+export const supportPath = "/supporto";
+
 export const ordersPath = `${appBase}/ordini`;
 
 /** Ricerca ordini della barra superiore: riceve la query nel corpo, mai nell'indirizzo. */
@@ -36,6 +39,9 @@ export const notificationSettingsPath = `${settingsPath}/notifiche`;
 
 /** Sicurezza, fra le categorie delle Impostazioni: riceve anche le sue azioni. */
 export const securityPath = `${settingsPath}/sicurezza`;
+
+/** Supporto, fra le categorie delle Impostazioni: modulo di assistenza e Novità. */
+export const supportSettingsPath = `${settingsPath}/supporto`;
 
 /** Scelta della lingua dell'account; non ha prefisso perché la lingua arriva nel modulo. */
 export const languagePath = `${appBase}/lingua`;
@@ -106,7 +112,7 @@ export function appUrl(
 }
 
 /** Pagine del sito pubblico, senza prefisso di lingua. */
-const publicPages = new Set(["/", "/termini", "/privacy"]);
+const publicPages = new Set(["/", "/termini", "/privacy", "/supporto"]);
 
 /** Indicizzabile solo una pagina pubblica servita dal dominio di produzione. */
 export function indexable(origin: string, pathname: string) {

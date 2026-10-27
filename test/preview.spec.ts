@@ -19,7 +19,10 @@ import {
 } from "../app/preview/state.server";
 import { action as previewSearch } from "../app/routes/preview-search";
 import { action as previewSettingsAction } from "../app/routes/preview-settings";
-import { loader as previewOrders } from "../app/routes/preview-orders";
+import {
+  action as previewOrdersAction,
+  loader as previewOrders,
+} from "../app/routes/preview-orders";
 import { loader as previewStores } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/domain/orders.server";
@@ -388,6 +391,48 @@ describe("ricerca dell'anteprima", () => {
     expect(submitted.status).toBe(303);
     const listed = await routeData(previewOrders, submitted.headers.get("location")!);
     expect(listed).toMatchObject({ search: "rossi", total: found.total });
+  });
+});
+
+describe("allineamento dell'anteprima con l'area reale", () => {
+  it("il riepilogo diagnostico usa le fasi e le date dell'area reale", () => {
+    for (const language of ["it", "en"] as const) {
+      const phases = appCopy[language].settings.support.diag.phases;
+      const fixed = Object.values(phases).filter((phase) => typeof phase === "string");
+      const read = new RegExp(
+        `^(?:${[phases.ok("(.+)"), phases.failed("(.+)")].map((text) => text.replace("(.+)", ".+")).join("|")})$`,
+        "u",
+      );
+      for (const id of scenarioIds) {
+        const { syncPhase } = loadScenario(id, language, new Set()).diagnostics;
+        expect(fixed.includes(syncPhase) || read.test(syncPhase), `${id}: ${syncPhase}`).toBe(true);
+      }
+    }
+  });
+
+  it("propone il consenso nello scenario dedicato e, dopo la risposta, non più", async () => {
+    const cookie = (
+      await writePreviewState({ scenario: "proposta-consenso", unlocked: [], saveFailed: false })
+    ).split(";")[0]!;
+    const page = (headers: string) =>
+      routeData(previewOrders, "/anteprima/ordini", { cookie: headers }) as Promise<{
+        marketingProposal: boolean;
+      }>;
+    expect((await page(cookie)).marketingProposal).toBe(true);
+    const ordinary = (
+      await writePreviewState({ scenario: "ordinario", unlocked: [], saveFailed: false })
+    ).split(";")[0]!;
+    expect((await page(ordinary)).marketingProposal).toBe(false);
+    const answered = await routeResponse(previewOrdersAction, "/anteprima/ordini", {
+      cookie,
+      fields: { intent: "marketing", value: "false" },
+    });
+    expect(await answered.json()).toEqual({
+      ok: true,
+      notice: appCopy.it.orders.marketingProposal.declined,
+    });
+    const after = answered.headers.get("set-cookie")!.split(";")[0]!;
+    expect((await page(after)).marketingProposal).toBe(false);
   });
 });
 

@@ -126,8 +126,8 @@ async function readStores({ request, params }: Route.LoaderArgs) {
       ebayDown: [...ebayOutages(statuses).keys()],
       elsewhere: false,
       connectHref: localizedPath(language, storeLinkPath),
-      // Piano e supporto non hanno ancora tutti i servizi; le notifiche li hanno con il bot.
-      settings: false,
+      // Il modulo di assistenza esiste: la scorciatoia verso Supporto ha una meta.
+      settings: true,
       notificationSettings: telegram,
       subscriptionRenews: renews,
     },

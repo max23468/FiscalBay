@@ -20,6 +20,7 @@ import {
   verifiedSession,
   sessionCookie,
   profileOf,
+  emailLink,
 } from "./fixtures/account-fixtures";
 import {
   accessError,
@@ -277,10 +278,7 @@ describe("registrazione e verifica del contatto", () => {
     expect(resent.headers.get("location")).toBe("/app/ordini?accesso=verifica-inviata");
 
     // Il link di conferma apre la sessione verificata.
-    const verified = await handleAuthRequest(
-      new Request(confirmation.text.split("\n").at(-1)!),
-      env,
-    );
+    const verified = await handleAuthRequest(new Request(emailLink(confirmation.text)), env);
     expect(verified.headers.get("location")).toBe("/en/app/ordini");
     const verifiedCookie = sessionCookie(verified);
     expect(await homeFor(verifiedCookie)).toMatchObject({ verified: true });

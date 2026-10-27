@@ -113,6 +113,8 @@ export interface ShellData {
   display: DisplayPreferences;
   /** Null prima della conferma dell'email, quando la campanella non compare. */
   notifications: NotificationView[] | null;
+  /** Pagina Novità con voci: compare nel menu dell'avatar (D203). */
+  whatsNew?: boolean;
   now: string;
 }
 

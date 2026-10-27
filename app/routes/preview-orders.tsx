@@ -84,6 +84,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         historyWindowDays(scenario.account.plan === "premium", new Date(scenario.now)),
     },
     onboarding: scenario.onboarding,
+    marketingProposal: !!scenario.marketingProposal && !state.marketingAnswered,
     messageTemplates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
     now: scenario.now,
     confirmUnlock: state.confirmUnlock !== false,
