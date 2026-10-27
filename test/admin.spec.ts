@@ -1017,7 +1017,7 @@ describe("panoramica e registro", () => {
   });
 });
 
-describe("accesso tecnico in sola lettura", () => {
+describe("accesso tecnico con token", () => {
   const token = "fbat_token-sintetico-del-collaudo-con-lunghezza-sufficiente";
   async function register(revokedAt: string | null = null) {
     const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
@@ -1030,39 +1030,66 @@ describe("accesso tecnico in sola lettura", () => {
   }
   const bearer = (value = token) => ({ authorization: `Bearer ${value}` });
 
-  it("legge le sezioni senza passkey, non esegue operazioni e lascia la traccia", async () => {
+  it("apre la console senza passkey con le stesse operazioni e lascia la traccia", async () => {
     const hash = await register();
+    await env.DB.batch(insertWorkspace({ id: "w-a" }));
     const result = await routeData(adminLoader, "/admin/registro", {
       headers: bearer(),
       params: { sezione: "registro" },
     });
-    expect(result).toMatchObject({ access: "agent", readOnly: true, passkeyUntil: null });
+    expect(result).toMatchObject({ access: "agent", technical: true, passkeyUntil: null });
     expect(result.page).toMatchObject({ section: "registro" });
-    // Nessuna operazione passa con il token, neppure con un modulo valido e la stessa origine.
+    // Le operazioni passano come per la sessione con passkey, con motivo e controllo d'origine.
+    const granted = await callRoute(adminAction, "/admin", {
+      headers: bearer(),
+      fields: { intent: "grant-premium", spazio: "w-a", giorni: "3", motivo: "Disservizio" },
+    });
+    expect(granted).toMatchObject({ ok: true });
     await expect(
       callRoute(adminAction, "/admin", {
         headers: bearer(),
-        fields: { intent: "requeue-task", lavoro: "billing" },
+        fields: { intent: "grant-premium", spazio: "w-a", giorni: "3", motivo: "Disservizio" },
+        origin: "https://altro.invalid",
       }),
-    ).rejects.toMatchObject({ init: { status: 404 } });
+    ).rejects.toMatchObject({ status: 403 });
     expect(await audit()).toEqual([
       { operation: "agent-read", target: "page:/admin/registro", reason: null, outcome: "done" },
+      {
+        operation: "grant-premium",
+        target: "workspace:w-a",
+        reason: "Disservizio",
+        outcome: "done",
+      },
     ]);
+    expect(
+      await env.DB.prepare(
+        "SELECT granted_by FROM workspace_entitlements WHERE workspace_id = 'w-a'",
+      ).first(),
+    ).toEqual({ granted_by: "agent:agente-test" });
     expect(
       await env.DB.prepare("SELECT used_at FROM admin_agent_tokens WHERE token_hash = ?")
         .bind(hash)
         .first(),
     ).toEqual({ used_at: now });
     // Le letture tecniche non affollano le ultime operazioni della panoramica.
-    expect(await listAudit(env.DB, { changes: true })).toEqual([]);
+    expect((await listAudit(env.DB, { changes: true })).map((entry) => entry.operation)).toEqual([
+      "grant-premium",
+    ]);
   });
 
   it("rifiuta un token revocato, sconosciuto o senza il prefisso", async () => {
     await register(now);
-    for (const headers of [bearer(), bearer("fbat_altro-token"), bearer(token.slice(5))])
+    for (const headers of [bearer(), bearer("fbat_altro-token"), bearer(token.slice(5))]) {
       await expect(routeData(adminLoader, "/admin", { headers })).rejects.toMatchObject({
         init: { status: 404 },
       });
+      await expect(
+        callRoute(adminAction, "/admin", {
+          headers,
+          fields: { intent: "requeue-task", lavoro: "billing" },
+        }),
+      ).rejects.toMatchObject({ init: { status: 404 } });
+    }
     expect(await audit()).toEqual([]);
   });
 });

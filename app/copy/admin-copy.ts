@@ -112,7 +112,7 @@ const it = {
     openAudit: "Apri il registro",
   },
   passkeyUntil: (time: string) => `Passkey fino alle ${time}`,
-  readOnly: "Accesso tecnico in sola lettura",
+  technical: "Accesso tecnico",
   menu: "Sezioni",
   common: {
     reason: "Motivo",
@@ -583,7 +583,7 @@ const en: AdminCopy = {
     openAudit: "Open the log",
   },
   passkeyUntil: (time: string) => `Passkey until ${time}`,
-  readOnly: "Technical read-only access",
+  technical: "Technical access",
   menu: "Sections",
   common: {
     reason: "Reason",

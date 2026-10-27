@@ -94,9 +94,9 @@ async function sha256(value: string) {
 }
 
 /**
- * Accesso tecnico in sola lettura (D213): un token `Bearer` il cui SHA-256 è registrato e non
- * revocato apre la lettura della console all'agente che assiste l'owner, anche senza passkey.
- * Nessuna operazione passa da qui. Restituisce l'etichetta del token, o null.
+ * Accesso tecnico (D213): un token `Bearer` il cui SHA-256 è registrato e non revocato apre la
+ * console all'agente che assiste l'owner, anche senza passkey, con le stesse operazioni della
+ * sessione admin. Restituisce l'etichetta del token, o null.
  */
 async function agentAccess(request: Request, now: Date) {
   const header = request.headers.get("authorization") ?? "";
@@ -110,8 +110,8 @@ async function agentAccess(request: Request, now: Date) {
 }
 
 /**
- * Livello di accesso della richiesta: la sessione admin con passkey verificata, oppure la sola
- * lettura del token tecnico quando la sessione non basta.
+ * Livello di accesso della richiesta: la sessione admin con passkey verificata, oppure il token
+ * tecnico quando la sessione non basta.
  */
 export async function adminSession(request: Request) {
   const session = (await readSession(env, request)) as
@@ -125,10 +125,13 @@ export async function adminSession(request: Request) {
   return agent ? { session, access: "agent" as const, agent } : { session, access, agent: null };
 }
 
+/** Autore delle operazioni e delle letture con il token tecnico, nel registro. */
+export const agentActor = (agent: string) => `agent:${agent}`.slice(0, 128);
+
 /** Lettura con il token tecnico: resta nel registro con l'etichetta del token. */
 export async function recordAgentRead(agent: string, url: URL) {
   await recordAudit(env.DB, {
-    actor: `agent:${agent}`.slice(0, 128),
+    actor: agentActor(agent),
     operation: "agent-read",
     target: `page:${url.pathname}`.slice(0, 256),
     outcome: "done",

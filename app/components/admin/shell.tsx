@@ -63,7 +63,7 @@ export function AdminShell({
           </a>
           <span className="ml-auto flex items-center gap-1.5 text-xs whitespace-nowrap text-muted-foreground">
             <ShieldCheck aria-hidden="true" className="size-4 text-success" />
-            {passkeyUntil ? t.passkeyUntil(passkeyUntil) : t.readOnly}
+            {passkeyUntil ? t.passkeyUntil(passkeyUntil) : t.technical}
           </span>
           <a
             href={localizedPath(language)}

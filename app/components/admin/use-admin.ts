@@ -1,5 +1,3 @@
-import { createContext } from "react";
-
 import { useCopy } from "~/components/copy-context";
 import { adminCopy } from "../../copy/admin-copy";
 import { displayTimeZone, formatDate } from "../../format";
@@ -44,6 +42,3 @@ export function localValue(iso: string | null) {
   );
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
-
-/** Accesso tecnico in sola lettura: operazioni e moduli non compaiono. */
-export const ReadOnly = createContext(false);

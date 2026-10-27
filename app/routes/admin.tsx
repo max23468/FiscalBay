@@ -8,7 +8,6 @@ import { AbuseView, AuditTable, NoticesView } from "~/components/admin/governanc
 import { JobsView, QuotasView } from "~/components/admin/operations";
 import { Overview } from "~/components/admin/overview";
 import { AdminShell, type AdminSectionKey } from "~/components/admin/shell";
-import { ReadOnly } from "~/components/admin/use-admin";
 import { WorkspaceView } from "~/components/admin/workspace";
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
@@ -19,6 +18,7 @@ import { loadPasskeyClient } from "../account/passkey";
 import {
   adminSessionMaxAge,
   adminSession,
+  agentActor,
   recordAgentRead,
   loadSection,
   runAdminAction,
@@ -88,21 +88,23 @@ export async function loader({ request, params }: Route.LoaderArgs) {
             new Date(session!.session.createdAt).getTime() + adminSessionMaxAge,
           ).toISOString()
         : null,
-    // Senza la conferma con passkey nessuna sezione si legge, salvo l'accesso tecnico.
+    // Senza la conferma con passkey nessuna sezione si legge, salvo con il token tecnico.
     page:
       access === "granted" || access === "agent"
         ? await loadSection(section, params.voce, url)
         : null,
-    readOnly: access === "agent",
+    technical: access === "agent",
     now: new Date().toISOString(),
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
-  const { session, access } = await adminSession(request);
-  if (access !== "granted") throw data(null, { status: 404 });
-  return runAdminAction(request, session!.user.id, language);
+  const { session, access, agent } = await adminSession(request);
+  if (access === "granted") return runAdminAction(request, session!.user.id, language);
+  // Il token tecnico esegue le stesse operazioni, con l'etichetta come autore (D213).
+  if (agent) return runAdminAction(request, agentActor(agent), language);
+  throw data(null, { status: 404 });
 }
 
 /** Accesso con passkey: Better Auth propone solo le passkey dell'utente della sessione. */
@@ -200,7 +202,7 @@ function pageHeading(page: SectionData, language: "it" | "en") {
 }
 
 export default function Admin({ loaderData }: Route.ComponentProps) {
-  const { language, unverified, passkeyUntil, readOnly, page, now } = loaderData;
+  const { language, unverified, passkeyUntil, page, now } = loaderData;
   const t = appCopy[language].admin;
   if (page) {
     const until = passkeyUntil;
@@ -213,9 +215,7 @@ export default function Admin({ loaderData }: Route.ComponentProps) {
         subtitle={page.section === "spazi" ? adminCopy[language].workspace.title : undefined}
         passkeyUntil={until ? formatDate(until, language, sameDay ? "time" : "dateTime") : null}
       >
-        <ReadOnly value={readOnly}>
-          <Section page={page} now={now} />
-        </ReadOnly>
+        <Section page={page} now={now} />
       </AdminShell>
     );
   }
