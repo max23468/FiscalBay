@@ -1,6 +1,6 @@
--- Accesso tecnico alla console, con gli stessi permessi della sessione admin (D213), per l'agente
--- che assiste l'owner quando la passkey non è disponibile. Si conserva soltanto l'impronta
--- SHA-256 del token, che vive nel Portachiavi dell'owner; la revoca vale dalla richiesta successiva.
+-- Accesso tecnico alla console in sola lettura, per l'agente che assiste l'owner quando la
+-- passkey non è disponibile. Si conserva soltanto l'impronta SHA-256 del token, che vive nel
+-- Portachiavi dell'owner; la revoca vale dalla richiesta successiva.
 CREATE TABLE admin_agent_tokens (
   token_hash TEXT PRIMARY KEY CHECK (length(token_hash) = 64),
   label TEXT NOT NULL CHECK (length(trim(label)) BETWEEN 1 AND 100),

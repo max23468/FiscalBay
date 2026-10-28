@@ -14,6 +14,7 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import {
   configFile,
+  editedMigrations,
   fileLevel,
   levelScripts,
   plan,
@@ -29,6 +30,28 @@ const testValue = config.replace(
 );
 
 describe("livello del gate dai file modificati", () => {
+  it("ferma le migration già presenti modificate o eliminate, non quelle nuove", () => {
+    const base = {
+      "migrations/0001_a.sql": "-- commento\nCREATE TABLE a (id TEXT);",
+      "migrations/0002_b.sql": "CREATE TABLE b (id TEXT);",
+      "migrations/0003_c.sql": "CREATE TABLE c (id TEXT);",
+    };
+    const head = {
+      "migrations/0001_a.sql": "-- commento corretto\nCREATE TABLE a (id TEXT);",
+      "migrations/0002_b.sql": base["migrations/0002_b.sql"],
+      "migrations/0004_d.sql": "CREATE TABLE d (id TEXT);",
+    };
+    const files = [...Object.keys(base), "migrations/0004_d.sql", "app/root.tsx"];
+    assert.deepEqual(
+      editedMigrations(
+        files,
+        (file) => base[file],
+        (file) => head[file],
+      ),
+      ["migrations/0001_a.sql", "migrations/0003_c.sql"],
+    );
+  });
+
   it("assegna documenti, strumenti, test, build e prodotto ai cinque livelli", () => {
     for (const file of [
       "README.md",

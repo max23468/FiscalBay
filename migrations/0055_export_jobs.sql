@@ -1,8 +1,7 @@
 -- Esportazioni grandi preparate dalla coda. La riga conserva revisione di accesso dello spazio
 -- letta alla richiesta, nome del file, istante e stato; ambito e opzioni restano cifrati
 -- soltanto finché il lavoro non si conclude. Il file pronto è una riga di `export_files`: la
--- sua validità resta decisa dal download. La pulizia oraria elimina la riga quando il file non
--- esiste più o 24 ore dopo un esito non riuscito.
+-- sua validità resta decisa dal download. La pulizia oraria elimina la riga dopo 24 ore.
 CREATE TABLE export_jobs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
