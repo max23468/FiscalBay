@@ -159,8 +159,9 @@ describe("acquisizione con il client", () => {
       { ...environment, WORK_QUEUE: fakeQueue({ sendBatch }) },
       at,
     );
-    for (const storeId of stores)
-      await consumeStoreSync(queueMessage({ syncStore: storeId }), environment, fetcher, at);
+    for (const [batch] of sendBatch.mock.calls)
+      for (const { body } of batch)
+        await consumeStoreSync(queueMessage(body), environment, fetcher, at);
     return stores;
   };
   // Ordini creati a un'ora di distanza prima di `until`, modificati un minuto dopo.
@@ -2437,7 +2438,7 @@ describe("acquisizione con il client", () => {
 
       it("accoda un negozio una volta anche con trigger ripetuti e riaccoda un turno perso", async () => {
         expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual(["s-a"]);
-        expect(sendBatch).toHaveBeenCalledWith([{ body: { syncStore: "s-a" } }]);
+        expect(sendBatch).toHaveBeenCalledWith([{ body: { syncStores: ["s-a"] } }]);
         // Lo stesso turno ricevuto più volte, anche con orari a pochi secondi di distanza.
         expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual([]);
         expect(await dispatchStoreSyncs(cron, minutes(0.1))).toEqual([]);
@@ -2525,6 +2526,99 @@ describe("acquisizione con il client", () => {
         expect(await dispatchStoreSyncs(cron, minutes(10))).toEqual(["s-a"]);
       });
 
+      /** Altri negozi dello spazio con le credenziali di `s-a`, che per loro non si aprono. */
+      const otherStores = async (count: number) => {
+        await env.DB.prepare(
+          `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < ?1)
+           INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
+           SELECT printf('s-%03d', n), workspace_id, printf('e-%03d', n), linked_at
+             FROM ebay_stores, seq WHERE id = 's-a'`,
+        )
+          .bind(count)
+          .run();
+        await env.DB.prepare(
+          `INSERT INTO ebay_store_credentials
+             (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
+           SELECT s.id, c.access_token, c.access_expires_at, c.refresh_token, c.refresh_expires_at,
+                  c.granted_at
+             FROM ebay_stores s, ebay_store_credentials c
+            WHERE c.store_id = 's-a' AND s.id GLOB 's-[0-9][0-9][0-9]'`,
+        ).run();
+      };
+      const turns = async () =>
+        (
+          await env.DB.prepare(
+            `SELECT s.id, ss.dispatched_at, ss.polled_at FROM ebay_stores s
+               LEFT JOIN sync_state ss ON ss.store_id = s.id
+              WHERE s.id = 's-a' OR s.id GLOB 's-[0-9][0-9][0-9]' ORDER BY s.id`,
+          ).all<{ id: string; dispatched_at: string | null; polled_at: string | null }>()
+        ).results;
+
+      it("accoda i negozi dovuti a gruppi da dieci in un solo invio", async () => {
+        await otherStores(249);
+        const claimed = await dispatchStoreSyncs(cron, minutes(0));
+        expect(claimed).toHaveLength(250);
+        expect(sendBatch).toHaveBeenCalledOnce();
+        const groups = [...sendBatch.mock.calls[0]![0]].map(
+          ({ body }) => (body as { syncStores: string[] }).syncStores,
+        );
+        expect(groups.flat()).toEqual(claimed);
+        expect(groups.slice(0, -1).every((group) => group.length === 10)).toBe(true);
+        expect(groups.at(-1)!.length).toBe(claimed.length - (groups.length - 1) * 10);
+        expect((await turns()).every(({ dispatched_at }) => dispatched_at !== null)).toBe(true);
+      });
+
+      it("un gruppo serve i negozi in sequenza e chiude ogni turno anche dopo un errore", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          await otherStores(2);
+          await dispatchStoreSyncs(cron, minutes(0));
+          const [[[{ body }]]] = sendBatch.mock.calls as [[MessageSendRequest[]]];
+          expect(body).toEqual({ syncStores: ["s-001", "s-002", "s-a"] });
+          const fetcher = ebay();
+          const group = queueMessage(body);
+          await consumeStoreSync(group, env, fetcher, minutes(1));
+          expect(group.ack).toHaveBeenCalledOnce();
+          expect(group.retry).not.toHaveBeenCalled();
+          // I due token che non si aprono chiudono il turno con l'errore; `s-a` legge da eBay.
+          expect(errors).toHaveBeenCalledTimes(2);
+          expect(fetcher).toHaveBeenCalled();
+          expect(await turns()).toMatchObject([
+            { id: "s-001", dispatched_at: null },
+            { id: "s-002", dispatched_at: null },
+            { id: "s-a", dispatched_at: null, polled_at: minutes(1).toISOString() },
+          ]);
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
+      it("con un limite di eBay il gruppo si chiude e i negozi tornano al cron dopo l'attesa", async () => {
+        await otherStores(2);
+        await dispatchStoreSyncs(cron, minutes(0));
+        const [[[{ body }]]] = sendBatch.mock.calls as [[MessageSendRequest[]]];
+        await env.DB.prepare(
+          "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
+        )
+          .bind(minutes(15).toISOString())
+          .run();
+        const fetcher = ebay();
+        const group = queueMessage(body);
+        await consumeStoreSync(group, env, fetcher, minutes(1));
+        expect(group.ack).toHaveBeenCalledOnce();
+        expect(group.retry).not.toHaveBeenCalled();
+        expect(fetcher).not.toHaveBeenCalled();
+        expect(await turns()).toEqual(
+          ["s-001", "s-002", "s-a"].map((id) => ({ id, dispatched_at: null, polled_at: null })),
+        );
+        expect(await dispatchStoreSyncs(cron, minutes(2))).toEqual([]);
+        expect((await dispatchStoreSyncs(cron, minutes(16))).sort()).toEqual([
+          "s-001",
+          "s-002",
+          "s-a",
+        ]);
+      });
+
       it("non accoda negozi di un keyset in attesa né negozi in pausa", async () => {
         await env.DB.prepare(
           "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
@@ -2547,7 +2641,7 @@ describe("acquisizione con il client", () => {
           expect(JSON.parse(String(errors.mock.calls[0]![0]))).toMatchObject({
             operation: "scheduling",
           });
-          expect(sendBatch).toHaveBeenLastCalledWith([{ body: { syncStore: "s-a" } }]);
+          expect(sendBatch).toHaveBeenLastCalledWith([{ body: { syncStores: ["s-a"] } }]);
           // I compiti non accodati restano al trigger successivo dello stesso periodo.
           await dispatchScheduledWork(cron, minutes(1));
           expect(sendBatch).toHaveBeenLastCalledWith([

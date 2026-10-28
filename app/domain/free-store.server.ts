@@ -105,10 +105,13 @@ const allScope: Scope = {
 function planStatements(db: D1Database, scope: Scope, at: string) {
   const covered = (workspace: string) => activeEntitlementSql(workspace, "?1");
   const statement = (sql: string) => db.prepare(sql).bind(at, ...scope.binds);
-  // Negozi degli spazi coperti con i mesi della loro finestra; l'alias `c` serve ai termini.
-  const coveredStores = `(SELECT s.id AS store_id, ${coveredMonthsSql("w.id", "?1")} AS months
+  // Negozi degli spazi coperti con i mesi della loro finestra; il nome `c` serve ai termini.
+  // Richiamati anche con `IN`, guidano la lettura degli ordini dall'indice per negozio:
+  // altrimenti il cron scorre tutti gli ordini a ogni turno, anche senza spazi da riallineare.
+  const coveredStores = `WITH c AS (SELECT s.id AS store_id,
+        ${coveredMonthsSql("w.id", "?1")} AS months
       FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
-     WHERE ${scope.orders} AND s.data_deleted_at IS NULL AND ${covered("w.id")}) c`;
+     WHERE ${scope.orders} AND s.data_deleted_at IS NULL AND ${covered("w.id")})`;
   const coveredEnd = `strftime('%Y-%m-%dT%H:%M:%fZ', orders.creation_time,
     '+' || c.months || ' months')`;
   return [
@@ -152,15 +155,17 @@ function planStatements(db: D1Database, scope: Scope, at: string) {
       WHERE retention_until > ${freeWindowSql} AND store_id IN (
         SELECT s.id FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
          WHERE ${scope.orders} AND NOT ${covered("w.id")})`),
-    statement(`UPDATE orders SET retention_until = ${coveredEnd},
-        purge_after = MAX(${coveredEnd}, MIN(purge_after, ${graceSql("?1")}))
-      FROM ${coveredStores}
-      WHERE orders.store_id = c.store_id AND orders.retention_until > ${coveredEnd}`),
-    statement(`UPDATE orders SET retention_until = ${coveredEnd},
-        purge_after = MAX(purge_after, ${coveredEnd})
-      FROM ${coveredStores}
-      WHERE orders.store_id = c.store_id AND orders.retention_until < ${coveredEnd}
-        AND orders.purge_after > ?1`),
+    // Un solo passaggio sugli ordini coperti: chi supera la finestra torna al termine con la
+    // grazia; chi è ancora conservato riprende la finestra intera. Le espressioni leggono i
+    // valori precedenti della riga.
+    statement(`${coveredStores} UPDATE orders SET retention_until = ${coveredEnd},
+        purge_after = CASE WHEN orders.retention_until > ${coveredEnd}
+          THEN MAX(${coveredEnd}, MIN(purge_after, ${graceSql("?1")}))
+          ELSE MAX(purge_after, ${coveredEnd}) END
+      FROM c
+      WHERE orders.store_id IN (SELECT store_id FROM c) AND orders.store_id = c.store_id
+        AND (orders.retention_until > ${coveredEnd}
+          OR (orders.retention_until < ${coveredEnd} AND orders.purge_after > ?1))`),
     statement(`UPDATE orders SET retention_until = MIN(retention_until, ${graceSql("p.paused_at")}),
         purge_after = ${graceSql("p.paused_at")}
       FROM ebay_store_pauses p
