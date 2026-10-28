@@ -122,6 +122,7 @@ const it = {
       unknown_intent: "Operazione sconosciuta",
       out_of_range: "Fuori intervallo",
       foreign_origin: "Origine estranea",
+      in_progress: "In corso, esito non registrato",
     },
   },
   summary: {
@@ -221,6 +222,12 @@ const it = {
         consequence:
           "Stripe non ha confermato lo stop dei rinnovi, oppure il lavoro è fermo da oltre un’ora: restano lo spazio e i riferimenti dei pagamenti.",
         action: "Controlla Stripe e i lavori",
+      },
+      audit_unrecorded: {
+        title: "Operazioni della console senza esito nel registro",
+        consequence:
+          "L’operazione è partita ma il suo esito non è stato registrato: la riga resta in corso con autore, oggetto e motivo. Controlla lo stato reale dell’oggetto.",
+        action: "Apri il registro",
       },
     },
   },
@@ -790,6 +797,7 @@ const en: AdminCopy = {
       unknown_intent: "Unknown operation",
       out_of_range: "Out of range",
       foreign_origin: "Foreign origin",
+      in_progress: "In progress, outcome not recorded",
     },
   },
   summary: {
@@ -890,6 +898,12 @@ const en: AdminCopy = {
         consequence:
           "Stripe has not confirmed that renewals stopped, or the job has been stuck for over an hour: the space and payment references remain.",
         action: "Check Stripe and jobs",
+      },
+      audit_unrecorded: {
+        title: "Console operations without an outcome in the log",
+        consequence:
+          "The operation started but its outcome was not recorded: the row stays in progress with author, item and reason. Check the actual state of the item.",
+        action: "Open the log",
       },
     },
   },

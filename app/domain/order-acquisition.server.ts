@@ -212,7 +212,7 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
       page,
       total,
     );
-    if (await callsOff(ctx)) return false;
+    if (await callsOff(ctx)) break;
   }
   return false;
 }

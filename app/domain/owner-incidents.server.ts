@@ -46,7 +46,10 @@ type IncidentRow = {
 
 const t = adminCopy.it;
 
-/** Nome leggibile dell'oggetto di un'anomalia: lavori, provider e interruttori hanno il loro. */
+/**
+ * Nome leggibile dell'oggetto di un'anomalia: lavori, provider, interruttori e operazioni della
+ * console hanno il loro.
+ */
 function subjectLabel(kind: AnomalyKind, label: string) {
   if (kind === "task_stalled") return t.labels.tasks[label as keyof typeof t.labels.tasks] ?? label;
   if (kind === "receipts_stalled")
@@ -55,6 +58,7 @@ function subjectLabel(kind: AnomalyKind, label: string) {
     return t.switches.names[label as keyof typeof t.switches.names] ?? label;
   if (kind === "ebay_down")
     return t.quotas.environment[label as keyof typeof t.quotas.environment] ?? label;
+  if (kind === "audit_unrecorded") return t.labels.operations[label] ?? label;
   return label;
 }
 

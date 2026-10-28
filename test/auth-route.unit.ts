@@ -14,6 +14,8 @@ const services = vi.hoisted(() => ({
   trace: vi.fn(),
   background: vi.fn(),
   notify: vi.fn(),
+  verification: vi.fn(),
+  secure: { value: true },
 }));
 vi.mock("../app/auth.server", () => ({
   createAuth: () => ({
@@ -24,6 +26,23 @@ vi.mock("../app/auth.server", () => ({
         response: await services.session({ headers }),
       }),
     },
+    $context: Promise.resolve({
+      internalAdapter: { findVerificationValue: services.verification },
+      authCookies: {
+        sessionToken: {
+          name: "fb.session_token",
+          attributes: services.secure.value ? { secure: true } : {},
+        },
+        sessionData: {
+          name: "fb.session_data",
+          attributes: services.secure.value ? { secure: true } : {},
+        },
+        dontRememberToken: {
+          name: "fb.dont_remember",
+          attributes: services.secure.value ? { secure: true } : {},
+        },
+      },
+    }),
   }),
   sessionPolicy: { freshAge: 86400 },
 }));
@@ -35,7 +54,11 @@ vi.mock("../app/integrations/ebay/store-link.server", () => ({
 vi.mock("../app/domain/store-link.server", () => ({ completeStoreLink: services.complete }));
 vi.mock("../app/errors", () => ({ logFailure: services.failure, tracePhase: services.trace }));
 vi.mock("cloudflare:workers", () => ({ waitUntil: services.background }));
-vi.mock("../app/account-email.server", () => ({ notifySecurityEvent: services.notify }));
+vi.mock("../app/account-email.server", () => ({
+  notifySecurityEvent: services.notify,
+  linkLanguage: (url: string) =>
+    new URL(url).searchParams.get("callbackURL")?.startsWith("/en/") ? "en" : "it",
+}));
 
 let sqlite: DatabaseSync;
 let environment: Env;
@@ -506,6 +529,102 @@ describe("limiti dei tentativi", () => {
         .all()
         .map((row) => row.key),
     ).toEqual(["203.0.113.1|/sign-in/email", "edge"]);
+  });
+});
+
+describe("cancellazione dell'account", () => {
+  const link = "/api/auth/delete-user/callback?token=t&callbackURL=/cancellazione-account";
+  const owned = () =>
+    services.verification.mockResolvedValue({ value: "member", expiresAt: new Date(now + 1) });
+
+  it.each(["/api/auth/delete-user", "/API/Auth/Delete-User", "//api//auth//delete-user//"])(
+    "chiude la cancellazione diretta %s",
+    async (path) => {
+      for (const method of ["GET", "POST"]) {
+        const response = await handle(path, { method });
+        expect(response.status).toBe(404);
+        expect(await response.text()).toBe("");
+      }
+      expect(services.handler).not.toHaveBeenCalled();
+    },
+  );
+
+  it("inoltra il link del titolare e toglie i cookie della sessione chiusa", async () => {
+    owned();
+    services.handler.mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: "/cancellazione-account" } }),
+    );
+    for (const path of [link, link.replace("/callback", "/Callback/")]) {
+      const response = await handle(path);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe("/cancellazione-account");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.getSetCookie()).toEqual(
+        ["fb.session_token", "fb.session_data", "fb.dont_remember"].map(
+          (name) => `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure`,
+        ),
+      );
+    }
+    expect(services.verification).toHaveBeenLastCalledWith("delete-account-t");
+    expect(services.handler).toHaveBeenCalledTimes(2);
+  });
+
+  it("senza attributo sicuro i cookie si tolgono senza Secure", async () => {
+    owned();
+    services.secure.value = false;
+    services.handler.mockResolvedValue(new Response(null, { status: 302 }));
+    const response = await handle(link);
+    services.secure.value = true;
+    expect(response.headers.getSetCookie()[0]).toBe(
+      "fb.session_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+    );
+  });
+
+  it("non consuma il link senza token, con un metodo diverso, senza sessione o di un altro", async () => {
+    owned();
+    const location = (language: "" | "/en", error: string) =>
+      `https://test.fiscalbay.it${language}/auth/error?error=${error}`;
+    const check = async (path: string, options: RequestInit = {}, language: "" | "/en" = "") => {
+      const response = await handle(path, options);
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe(location(language, "delete_link"));
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    };
+    await check("/api/auth/delete-user/callback");
+    await check("/api/auth/delete-user/callback?token=");
+    await check(link, { method: "POST" });
+    await check(
+      `${link.replace("/cancellazione-account", "/en/cancellazione-account")}`,
+      {
+        method: "POST",
+      },
+      "/en",
+    );
+    services.session.mockResolvedValue(null);
+    await check(link);
+    services.session.mockResolvedValue(member({ id: "other" }));
+    await check(link);
+    services.session.mockResolvedValue(member());
+    services.verification.mockResolvedValue({ value: "member", expiresAt: new Date(now) });
+    await check(link);
+    services.verification.mockResolvedValue(null);
+    await check(link);
+    expect(services.handler).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [500, "delete_failed"],
+    [503, "delete_failed"],
+    [400, "delete_link"],
+    [200, "delete_link"],
+  ])("una risposta %i di Auth porta a %s", async (status, error) => {
+    owned();
+    services.handler.mockResolvedValue(new Response(null, { status }));
+    const response = await handle(link);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      `https://test.fiscalbay.it/auth/error?error=${error}`,
+    );
   });
 });
 

@@ -170,27 +170,19 @@ export async function openExportFile(
 const purgeBatch = 500;
 
 /**
- * Pulizia applicativa: elimina oggetti e righe dei file scaduti o revocati. L'oggetto si
- * elimina prima della riga, così un errore di R2 lascia la riga al turno successivo. Un oggetto
- * rimasto senza riga per un errore fra le due scritture lo elimina la regola di lifecycle del
- * bucket. Elimina poi i lavori di esportazione conclusi: quello pronto quando il suo file non
- * esiste più, quello non riuscito dopo 24 ore dalla conclusione. Restituisce quanti file ha
- * eliminato.
+ * Elimina a giri oggetti e righe dei file scelti da `select`, che riceve il numero massimo di
+ * righe del giro. L'oggetto si elimina prima della riga, così un errore di R2 lascia la riga al
+ * tentativo successivo. Un oggetto rimasto senza riga per un errore fra le due scritture lo
+ * elimina la regola di lifecycle del bucket. Restituisce quanti file ha eliminato.
  */
-export async function purgeExportFiles(
+export async function deleteExportFiles(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
-  now: Date,
+  select: (limit: number) => D1PreparedStatement,
 ): Promise<number> {
   let purged = 0;
   // Stryker disable BlockStatement,ConditionalExpression,EqualityOperator,ArrowFunction: un corpo vuoto, un'uscita mancata o identificativi persi lasciano il ciclo senza uscita e Stryker li conta come Timeout; le prove di pulizia verificano righe e oggetti eliminati.
   for (;;) {
-    const { results } = await env.DB.prepare(
-      `SELECT id FROM export_files
-        WHERE expires_at <= ?1 OR access_revision <> ${revisionSql("export_files.user_id")}
-        LIMIT ?2`,
-    )
-      .bind(now.toISOString(), purgeBatch)
-      .run<{ id: string }>();
+    const { results } = await select(purgeBatch).run<{ id: string }>();
     if (results.length === 0) break;
     const ids = results.map(({ id }) => id);
     await env.EXPORT_FILES.delete(ids);
@@ -200,6 +192,25 @@ export async function purgeExportFiles(
     purged += ids.length;
   }
   // Stryker restore BlockStatement,ConditionalExpression,EqualityOperator,ArrowFunction
+  return purged;
+}
+
+/**
+ * Pulizia applicativa: elimina oggetti e righe dei file scaduti o revocati, poi i lavori di
+ * esportazione conclusi: quello pronto quando il suo file non esiste più, quello non riuscito
+ * dopo 24 ore dalla conclusione. Restituisce quanti file ha eliminato.
+ */
+export async function purgeExportFiles(
+  env: Pick<Env, "DB" | "EXPORT_FILES">,
+  now: Date,
+): Promise<number> {
+  const purged = await deleteExportFiles(env, (limit) =>
+    env.DB.prepare(
+      `SELECT id FROM export_files
+        WHERE expires_at <= ?1 OR access_revision <> ${revisionSql("export_files.user_id")}
+        LIMIT ?2`,
+    ).bind(now.toISOString(), limit),
+  );
   // Il lavoro pronto vale quanto il suo file; quello non riuscito resta annunciato 24 ore. Un
   // lavoro ancora in coda lo conclude la ripresa dei lavori.
   await env.DB.prepare(

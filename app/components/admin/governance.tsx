@@ -46,7 +46,17 @@ function Outcome({ outcome }: { outcome: string }) {
   const { t } = useAdmin();
   const ok = ["done", "prepared", "queued", "merged", "already"].includes(outcome);
   return (
-    <Badge variant={ok ? "success" : outcome === "failed" ? "danger" : "neutral"}>
+    <Badge
+      variant={
+        ok
+          ? "success"
+          : outcome === "failed"
+            ? "danger"
+            : outcome === "in_progress"
+              ? "warning"
+              : "neutral"
+      }
+    >
       {t.labels.outcomes[outcome as AuditOutcome] ?? outcome}
     </Badge>
   );

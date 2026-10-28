@@ -791,6 +791,26 @@ describe("ingresso del bot", () => {
     expect(tapped({ data: "st" })).toBeNull();
   });
 
+  it("in Production a invii spenti un avvio senza token o con un token ignoto non risponde", async () => {
+    const production = { ...environment, APP_ORIGIN: "https://fiscalbay.it" } as Env;
+    const start = { receiptId: "r-silenzio", chatId: "654", eventAt: new Date(now).toISOString() };
+    for (const reply of [false, true]) {
+      const api = bot();
+      for (const tokenHash of [null, "0".repeat(64)])
+        await consumeTelegramStart(
+          production,
+          { ...start, tokenHash },
+          api.fetcher,
+          new Date(now),
+          {
+            reply,
+          },
+        );
+      // Con le risposte attive partono l'aiuto e l'avviso del link non valido.
+      expect(api.texts()).toHaveLength(reply ? 2 : 0);
+    }
+  });
+
   it("in Production la ricevuta del bot appartiene all'ambiente live", async () => {
     const production = { ...environment, APP_ORIGIN: "https://fiscalbay.it" } as Env;
     const api = bot();
@@ -962,6 +982,12 @@ describe("collegamento della chat", () => {
     const token = await linkToken(seller.cookie);
     await setSwitch(env.DB, "telegram_sends", false, new Date(now));
     const api = bot();
+    // Senza token o con un token che non vale, a invii spenti, nemmeno l'aiuto parte.
+    await deliver("/start", 652, api.fetcher);
+    // Un token della forma giusta ma mai emesso.
+    const unknown = `${token.slice(0, -1)}${token.endsWith("A") ? "B" : "A"}`;
+    await deliver(`/start ${unknown}`, 653, api.fetcher);
+    expect(api.texts()).toEqual([]);
     await deliver(`/start ${token}`, 651, api.fetcher);
     expect(await link(seller.workspace)).toMatchObject({ chat_id: "651" });
     expect(api.texts()).toEqual([]);

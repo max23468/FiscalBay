@@ -147,10 +147,10 @@ export function listCriteria(
   const snapshot = new Date(Math.min(opened?.getTime() ?? now.getTime(), now.getTime()));
   const parsed = orderCriteria(query, now, plan, search);
   // Come gli altri filtri, un negozio che non è fra quelli filtrabili vale come «Tutti».
-  // Stryker disable next-line StringLiteral: senza negozio nell'indirizzo entrambi i rami lasciano storeId assente.
-  const filters: OrderCriteria = storeIds.includes(parsed.storeId ?? "")
-    ? parsed
-    : { ...parsed, storeId: undefined };
+  const filters: OrderCriteria = {
+    ...parsed,
+    storeId: storeIds.find((id) => id === parsed.storeId),
+  };
   return {
     opened,
     snapshot,

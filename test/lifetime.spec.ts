@@ -649,6 +649,8 @@ describe("Lifetime e concessioni", () => {
     await buyMonthly();
     expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
     expect(stripe.requests).toContain("POST /v1/checkout/sessions/cs_lifetime_1/expire");
+    // La sessione aperta si chiude senza fermare alcun abbonamento.
+    expect(stripe.requests.filter((request) => request.includes("/v1/subscriptions"))).toEqual([]);
     // Completata prima che il webhook registri l'abbonamento: l'abbonamento si chiude.
     await buyMonthly();
     Object.assign(stripe.state.sessions[1]!, { status: "complete", subscription: "sub_test" });
@@ -662,6 +664,12 @@ describe("Lifetime e concessioni", () => {
     stripe.requests.length = 0;
     expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
     expect(stripe.requests).toEqual(["GET /v1/checkout/sessions/cs_lifetime_3"]);
+    // Completata senza abbonamento, come un pagamento ancora da confermare: nulla da fermare.
+    await buyMonthly();
+    Object.assign(stripe.state.sessions[3]!, { status: "complete", subscription: null });
+    stripe.requests.length = 0;
+    expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toEqual(["GET /v1/checkout/sessions/cs_lifetime_4"]);
   });
 
   it("il cron rilegge una volta al giorno i lifetime venduti, per i rimborsi senza webhook", async () => {

@@ -7,6 +7,7 @@ import { seal, unseal } from "../sealed.server";
 import { inSequence } from "../sequence";
 import { elapsedMs } from "../time";
 import { stopRenewals } from "./billing.server";
+import { deleteExportFiles } from "./export-files.server";
 import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.server";
 import { queueRetryDelay, taskPeriods } from "./work-timing";
 
@@ -212,10 +213,10 @@ async function deleteUser(
   userId: string,
   at: string,
 ) {
-  const { results } = await env.DB.prepare("SELECT id FROM export_files WHERE user_id = ?")
-    .bind(userId)
-    .all<{ id: string }>();
-  if (results.length) await env.EXPORT_FILES.delete(results.map((file) => file.id));
+  // A giri entro il limite di R2: un errore lascia le righe dei file non ancora eliminati.
+  await deleteExportFiles(env, (limit) =>
+    env.DB.prepare("SELECT id FROM export_files WHERE user_id = ?1 LIMIT ?2").bind(userId, limit),
+  );
   await env.DB.batch([
     env.DB.prepare("DELETE FROM workspace_members WHERE user_id = ?").bind(userId),
     env.DB.prepare("DELETE FROM ebay_store_link_sessions WHERE user_id = ?").bind(userId),

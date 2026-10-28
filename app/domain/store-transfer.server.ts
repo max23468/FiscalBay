@@ -110,8 +110,9 @@ export type TransferResult =
 /**
  * Esegue il trasferimento preparato in un solo commit. Ogni istruzione dipende dalla prima, che
  * segna la preparazione eseguita soltanto se il negozio è ancora dello spazio di partenza, la
- * destinazione esiste e nessuno dei due spazi si sta cancellando: due conferme concorrenti o
- * ripetute ne eseguono una sola.
+ * destinazione esiste e nessuno dei due spazi si sta cancellando, con l'identificativo casuale
+ * di questa esecuzione: due conferme concorrenti o ripetute, anche nello stesso istante, ne
+ * eseguono una sola e l'altra non scrive nulla.
  */
 export async function confirmStoreTransfer(
   env: Pick<Env, "DB" | "BETTER_AUTH_SECRET">,
@@ -120,8 +121,10 @@ export async function confirmStoreTransfer(
 ): Promise<{ result: TransferResult; transfer?: { storeId: string; from: string; to: string } }> {
   const db = env.DB;
   const at = now.toISOString();
+  // Esecuzione di questa conferma: due conferme nello stesso istante restano distinte.
+  const execution = crypto.randomUUID();
   // Le istruzioni seguenti valgono soltanto per il trasferimento eseguito da questa conferma.
-  const mine = `EXISTS (SELECT 1 FROM store_transfers t WHERE t.id = ?1 AND t.executed_at = ?2
+  const mine = `EXISTS (SELECT 1 FROM store_transfers t WHERE t.id = ?1 AND t.execution_id = ?4
     AND t.store_id = ?3)`;
   const transfer = await db
     .prepare(`SELECT store_id, from_workspace_id, to_workspace_id, executed_at, expires_at
@@ -142,23 +145,24 @@ export async function confirmStoreTransfer(
     .bind(transfer.store_id)
     .first<string>("ebay_user_id");
   if (!identity) return { result: "conflict" };
-  const step = (sql: string) => db.prepare(sql).bind(input.id, at, transfer.store_id);
+  const step = (sql: string) => db.prepare(sql).bind(input.id, at, transfer.store_id, execution);
   const [claimed] = await db.batch([
     db
-      .prepare(`UPDATE store_transfers SET executed_at = ?2
+      .prepare(`UPDATE store_transfers SET executed_at = ?2, execution_id = ?3
         WHERE id = ?1 AND executed_at IS NULL AND julianday(expires_at) > julianday(?2)
           AND EXISTS (SELECT 1 FROM ebay_stores s WHERE s.id = store_transfers.store_id
             AND s.workspace_id = store_transfers.from_workspace_id)
           AND EXISTS (SELECT 1 FROM workspaces w WHERE w.id = store_transfers.to_workspace_id)
           AND NOT ${deletionSql("store_transfers.from_workspace_id", "store_transfers.to_workspace_id")}`)
-      .bind(input.id, at),
+      .bind(input.id, at, execution),
     // Il segno con i limiti del negozio nello spazio di partenza, prima che lo lasci.
     db
-      .prepare(storeMarkSql({ hash: "?4", store: "?3", at: "?2", trialExpires: "?5" }, mine))
+      .prepare(storeMarkSql({ hash: "?5", store: "?3", at: "?2", trialExpires: "?6" }, mine))
       .bind(
         input.id,
         at,
         transfer.store_id,
+        execution,
         await storeIdentityHash(env.BETTER_AUTH_SECRET, identity),
         trialMarkExpiry(now),
       ),

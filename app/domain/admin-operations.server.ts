@@ -1,4 +1,5 @@
 import { stalledDeletions } from "./account-deletion.server";
+import { auditInProgress } from "./admin-audit.server";
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
 import { stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
 import { storeLabelSql } from "./store-state.server";
@@ -23,7 +24,8 @@ export type AnomalyKind =
   | "telegram_failed"
   | "ebay_suspended"
   | "service_off"
-  | "account_deletion";
+  | "account_deletion"
+  | "audit_unrecorded";
 
 /** Oggetto colpito, con il collegamento al contesto nella console. */
 export type AnomalySubject = { id: string; label: string; href: string };
@@ -57,6 +59,9 @@ export type ReceiptState = {
 };
 
 const minute = 60_000;
+
+/** Oltre questa attesa una riga del registro ancora «in corso» non ha ricevuto l'esito. */
+const unrecordedAuditMs = 10 * minute;
 
 /** Turno dei compiti periodici: fermo se non concluso oltre due periodi o un'ora dall'accodamento. */
 export async function taskStates(db: D1Database, now = new Date()): Promise<TaskState[]> {
@@ -132,6 +137,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
     { results: limits },
     { results: activeStores },
     { results: switchedOff },
+    { results: unrecorded },
   ] = await db.batch<Record<string, string | number | null>>([
     // Negozi attivi con le ultime due letture fallite, come nella campanella del venditore.
     db
@@ -169,6 +175,12 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
           WHERE name IN ('ebay_calls', 'telegram_sends') AND value = 'false'
         UNION ALL SELECT 'purchases_open', updated_at FROM admission_settings
           WHERE purchases_open = 0`),
+    // Operazioni della console partite senza che la loro riga abbia ricevuto l'esito.
+    db
+      .prepare(`SELECT operation AS id, COUNT(*) AS count, MIN(at) AS since FROM admin_audit
+          WHERE outcome = '${auditInProgress}' AND julianday(at) <= julianday(?)
+          GROUP BY operation`)
+      .bind(new Date(now.getTime() - unrecordedAuditMs).toISOString()),
   ]);
   const active = new Map(
     (activeStores as { environment: string; count: number }[]).map((row) => [
@@ -325,6 +337,20 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         id: deletion.id,
         label: deletion.workspace_id ?? deletion.id,
         href: "lavori",
+      })),
+    });
+
+  if (unrecorded.length > 0)
+    anomalies.push({
+      key: "audit_unrecorded",
+      kind: "audit_unrecorded",
+      severity: "p3",
+      since: unrecorded.map((row) => String(row.since)).sort()[0]!,
+      count: unrecorded.reduce((total, row) => total + Number(row.count), 0),
+      subjects: unrecorded.map((row) => ({
+        id: String(row.id),
+        label: String(row.id),
+        href: "registro",
       })),
     });
 
