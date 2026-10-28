@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { data } from "react-router";
 
 import { assertSameOrigin } from "./account-area.server";
-import { adminCopy } from "./copy/admin-copy";
+import { adminCopy, type AuditOutcome } from "./copy/admin-copy";
 import { listAbuseSignals, reviewAbuseSignal } from "./domain/abuse-review.server";
 import { listAudit, reasonSchema, recordAudit } from "./domain/admin-audit.server";
 import {
@@ -307,7 +307,7 @@ export async function runAdminAction(
   const t = adminCopy[language];
   const now = new Date();
   const reason = reasonSchema.safeParse(field("motivo"));
-  const audit = (target: string, outcome: string) =>
+  const audit = (target: string, outcome: AuditOutcome) =>
     recordAudit(
       env.DB,
       { actor, operation: intent, target, reason: reason.success ? reason.data : null, outcome },
@@ -315,7 +315,7 @@ export async function runAdminAction(
     );
   const result = async (
     target: string,
-    outcome: string,
+    outcome: AuditOutcome,
     notice: string,
     ok = outcome === "done",
   ) => {
