@@ -39,7 +39,7 @@ import {
   grantPremium,
   revokeHistoryExtension,
 } from "./domain/concessions.server";
-import { quotaAnomalies, readEbayQuotas } from "./domain/ebay-quotas.server";
+import { bulkDataAnomalies, quotaAnomalies, readEbayQuotas } from "./domain/ebay-quotas.server";
 import { assistFreeStore } from "./domain/free-store.server";
 import { metricWindowFrom, productMetrics } from "./domain/product-metrics.server";
 import { readTechnicalMetrics } from "./domain/technical-metrics.server";
@@ -218,7 +218,11 @@ export async function loadSection(section: AdminSection, item: string | undefine
       } as const;
     case "quote": {
       const quotas = await readEbayQuotas(env, fetch, now);
-      return { section, quotas, anomalies: await quotaAnomalies(env.DB, now) } as const;
+      const [anomalies, bulk] = await Promise.all([
+        quotaAnomalies(env.DB, now),
+        bulkDataAnomalies(env.DB, now),
+      ]);
+      return { section, quotas, anomalies, bulk } as const;
     }
     case "prestazioni":
       return { section, performance: await readTechnicalMetrics(env, fetch) } as const;

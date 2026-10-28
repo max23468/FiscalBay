@@ -419,7 +419,7 @@ describe("accesso alla console", () => {
       params: { sezione: "quote" },
     });
     // eBay non risponde: la quota resta non letta, non piena né vuota.
-    expect(quotas.page).toMatchObject({ quotas: [{ read: "failed", rows: [] }] });
+    expect(quotas.page).toMatchObject({ quotas: [{ read: "failed", rows: [] }], bulk: [] });
     expect(
       requests.every(
         (request) =>

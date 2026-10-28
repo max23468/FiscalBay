@@ -2557,11 +2557,13 @@ Le funzioni non si dichiarano complete dal solo toggle della dashboard: report n
 <a id="m7-13"></a>
 #### M7-13 · Topic eBay dell'applicazione
 
-**Stato:** In corso · **Prerequisiti:** M3-11, M6-04 · **Contratto:** [§8](#s08) · [§15](#s15)
+**Stato:** Completato · **Prerequisiti:** M3-11, M6-04 · **Contratto:** [§8](#s08) · [§15](#s15)
 
-L'ingresso `/webhooks/ebay` accetta, con la verifica della firma di `ORDER_CONFIRMATION`, due topic a livello di applicazione: una sottoscrizione per keyset, senza scope aggiuntivi dei venditori (`getTopic` del 2026-10-27). `AUTHORIZATION_REVOCATION` accoda una ricevuta che porta il negozio con quel `userId` in «da ricollegare», come un rinnovo rifiutato, senza cancellare dati né token; una revoca anteriore al consenso corrente, di un negozio non attivo o di prova non ha effetti. `BULK_DATA_TRANSFER_THRESHOLD` apre o aggiorna subito un'anomalia della console per ambiente, regione, categoria di dati e finestra di aggregazione, grave a soglia raggiunta; eBay non notifica il rientro, quindi l'anomalia si chiude alla fine della finestra. L'avviso Telegram appartiene a [M6-09](#m6-09). La migration `0051_bulk_data_anomalies.sql` ricrea la tabella delle anomalie per il nuovo tipo. `REGULATORY_GUIDELINE` non si sottoscrive (D215).
+L'ingresso `/webhooks/ebay` accetta, con la verifica della firma di `ORDER_CONFIRMATION`, due topic a livello di applicazione: una sottoscrizione per keyset, senza scope aggiuntivi dei venditori (`getTopic` del 2026-10-27). `AUTHORIZATION_REVOCATION` accoda una ricevuta che porta il negozio con quel `userId` in «da ricollegare», come un rinnovo rifiutato, senza cancellare dati né token; una revoca anteriore al consenso corrente, di un negozio non attivo o di prova non ha effetti. `BULK_DATA_TRANSFER_THRESHOLD` apre o aggiorna subito un'anomalia della console per ambiente, regione, categoria di dati e finestra di aggregazione, grave a soglia raggiunta; eBay non notifica il rientro, quindi l'anomalia si chiude alla fine della finestra; una consegna ritentata fuori ordine non abbassa gravità e conteggio. La sezione «Quote eBay» della console e `/quote` del bot elencano le soglie aperte con gravità, percentuale e fine della finestra. L'avviso Telegram appartiene a [M6-09](#m6-09). La migration `0051_bulk_data_anomalies.sql` ricrea la tabella delle anomalie per il nuovo tipo. `REGULATORY_GUIDELINE` non si sottoscrive (D215).
 
 **Criterio di completamento:** test su consegne firmate sintetiche per revoca, revoca senza effetti, soglia ripetuta e chiusura della finestra; sottoscrizione dei due topic sul keyset e readback di una consegna di prova in [M8-03](#m8-03).
+
+**Limiti residui:** nessuna consegna reale osservata: la sottoscrizione dei due topic sul keyset e il readback di una consegna di prova appartengono a [M8-03](#m8-03).
 
 <a id="m7-08"></a>
 #### M7-08 · Verifica interna della matrice funzionale
