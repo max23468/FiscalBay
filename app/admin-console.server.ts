@@ -4,7 +4,13 @@ import { data } from "react-router";
 import { assertSameOrigin } from "./account-area.server";
 import { adminCopy, type AdminCopy, type AuditOutcome } from "./copy/admin-copy";
 import { listAbuseSignals, reviewAbuseSignal } from "./domain/abuse-review.server";
-import { listAudit, reasonSchema, recordAudit } from "./domain/admin-audit.server";
+import {
+  listAudit,
+  openAudit,
+  reasonSchema,
+  recordAudit,
+  settleAudit,
+} from "./domain/admin-audit.server";
 import {
   checkPrices,
   commerceOverview,
@@ -310,6 +316,9 @@ type ActionContext = {
     notice: string,
     ok?: boolean,
   ) => Promise<AdminActionResult>;
+  /** Esito definitivo della riga dell'operazione, quando la risposta non passa da `result`. */
+  settle: (target: string | null, outcome: AuditOutcome) => Promise<void>;
+  /** Riga aggiuntiva che accompagna quella dell'operazione. */
   audit: (target: string | null, outcome: AuditOutcome, operation?: string) => Promise<void>;
   invalid: () => Promise<ReturnType<typeof data>>;
   refuse: (outcome: AuditOutcome) => Promise<ReturnType<typeof data>>;
@@ -471,7 +480,7 @@ const adminActions: Record<string, AdminAction> = {
   },
   "transfer-prepare": {
     needsReason: true,
-    run: async ({ field, actor, why, now, t, result, audit, language }) => {
+    run: async ({ field, actor, why, now, t, result, settle, language }) => {
       const storeId = field("negozio");
       const [prepared, target] = await Promise.all([
         prepareStoreTransfer(
@@ -487,7 +496,7 @@ const adminActions: Record<string, AdminAction> = {
           prepared.result,
           prepared.result === "not_found" ? t.common.notFound : t.results.transfer[prepared.result],
         );
-      await audit(target, "prepared");
+      await settle(target, "prepared");
       return {
         ok: true,
         notice: "",
@@ -682,10 +691,23 @@ const adminActions: Record<string, AdminAction> = {
   },
 };
 
+/** Scrittura del registro, ripetuta una volta dopo un errore. */
+async function twice<T>(write: () => Promise<T>) {
+  try {
+    return await write();
+  } catch {
+    return write();
+  }
+}
+
 /**
  * Esegue un'operazione e ne registra l'esito. Ogni ramo restituisce l'oggetto del registro,
  * l'esito tecnico e l'avviso; il motivo, dove serve, è obbligatorio. Anche i rifiuti decisi dal
  * modulo, come il motivo mancante o l'origine estranea, lasciano la loro riga.
+ *
+ * La riga dell'operazione si scrive prima, «in corso» con l'oggetto del modulo: senza registro
+ * l'operazione non parte. Dopo riceve l'oggetto riletto e l'esito; se questa scrittura non
+ * riesce la riga resta «in corso», la panoramica la segnala e la risposta riflette l'esito reale.
  */
 export async function runAdminAction(
   request: Request,
@@ -699,45 +721,22 @@ export async function runAdminAction(
   const t = adminCopy[language];
   const now = new Date();
   const reason = reasonSchema.safeParse(field("motivo"));
+  const operation = intent.slice(0, 64) || "unknown";
+  const why = reason.success ? reason.data : "";
+  const failed = (error: unknown) => logFailure({ request, error, operation: "admin" });
   /**
-   * Riga del registro. L'operazione è già avvenuta: un errore della scrittura si riprova una
-   * volta, poi resta nei log senza cambiare la risposta, che riflette l'esito reale.
+   * Riga completa in una sola scrittura, per i rifiuti decisi prima dell'operazione e per le
+   * righe che accompagnano quella dell'operazione. Un errore resta nei log.
    */
-  const audit = async (
-    target: string | null,
-    outcome: AuditOutcome,
-    operation = intent.slice(0, 64) || "unknown",
-  ) => {
-    const entry = {
-      actor,
-      operation,
-      target,
-      reason: reason.success ? reason.data : null,
-      outcome,
-    };
-    try {
-      await recordAudit(env.DB, entry, now);
-    } catch {
-      await recordAudit(env.DB, entry, now).catch((error: unknown) =>
-        logFailure({ request, error, operation: "admin" }),
-      );
-    }
+  const audit = async (target: string | null, outcome: AuditOutcome, kind = operation) => {
+    const entry = { actor, operation: kind, target, reason: why || null, outcome };
+    await twice(() => recordAudit(env.DB, entry, now)).catch(failed);
   };
-  const result = async (
-    target: string,
-    outcome: AuditOutcome,
-    notice: string,
-    ok = outcome === "done",
-  ) => {
-    await audit(target, outcome);
-    return { ok, notice } satisfies AdminActionResult;
-  };
-  /** Rifiuto deciso dal modulo, registrato con l'oggetto indicato quando è valido. */
-  const refuse = async (outcome: AuditOutcome) => {
+  /** Rifiuto deciso prima dell'operazione, registrato con l'oggetto indicato quando è valido. */
+  const reject = async (outcome: AuditOutcome) => {
     await audit(await formTarget(intent, field), outcome);
     return data({ ok: false, notice: t.common.invalid }, { status: 400 });
   };
-  const invalid = () => refuse("invalid");
   try {
     assertSameOrigin(request);
   } catch (error) {
@@ -745,18 +744,49 @@ export async function runAdminAction(
     throw error;
   }
   const action = Object.hasOwn(adminActions, intent) ? adminActions[intent] : undefined;
-  if (action?.needsReason && !reason.success) return refuse("reason_required");
+  if (action?.needsReason && !reason.success) return reject("reason_required");
   // Gli identificativi vengono dal modulo: oltre la lunghezza del registro non sono validi.
   if (
     [...form.keys()].some(
       (name) => name !== "motivo" && !name.startsWith("testo") && field(name).length > 128,
     )
   )
-    return refuse("too_long");
-  const why = reason.success ? reason.data : "";
+    return reject("too_long");
+  if (!action) return reject("unknown_intent");
+  let opened: { id: string; target: string | null };
+  try {
+    opened = await twice(async () => {
+      const target = await formTarget(intent, field);
+      return {
+        id: await openAudit(env.DB, { actor, operation, target, reason: why }, now),
+        target,
+      };
+    });
+  } catch (error) {
+    failed(error);
+    return data({ ok: false, notice: t.common.failed }, { status: 503 });
+  }
+  let settled = false;
+  const settle = async (target: string | null, outcome: AuditOutcome) => {
+    settled = true;
+    await twice(() => settleAudit(env.DB, opened.id, target, outcome)).catch(failed);
+  };
+  const result = async (
+    target: string,
+    outcome: AuditOutcome,
+    notice: string,
+    ok = outcome === "done",
+  ) => {
+    await settle(target, outcome);
+    return { ok, notice } satisfies AdminActionResult;
+  };
+  /** Rifiuto deciso dall'operazione sul modulo: chiude la sua riga. */
+  const refuse = async (outcome: AuditOutcome) => {
+    await settle(opened.target, outcome);
+    return data({ ok: false, notice: t.common.invalid }, { status: 400 });
+  };
   const date = (value: string) => formatDate(value, language);
   try {
-    if (!action) return refuse("unknown_intent");
     return await action.run({
       field,
       actor,
@@ -766,13 +796,14 @@ export async function runAdminAction(
       t,
       date,
       result,
+      settle,
       audit,
-      invalid,
+      invalid: () => refuse("invalid"),
       refuse,
     });
   } catch (error) {
-    logFailure({ request, error, operation: "admin" });
-    await audit(await formTarget(intent, field).catch(() => null), "failed");
+    failed(error);
+    if (!settled) await settle(opened.target, "failed");
     return data({ ok: false, notice: t.common.failed }, { status: 500 });
   }
 }

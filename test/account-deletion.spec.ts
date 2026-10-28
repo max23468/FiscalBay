@@ -989,6 +989,40 @@ describe("cancellazione dell'account", () => {
     expect(await leftovers(userId)).toMatchObject({ user: 0, orders: 0, workspace: 0 });
   });
 
+  it("elimina oltre mille file entro il limite di R2 e dopo un errore riprende dai rimasti", async () => {
+    const email = `file-${crypto.randomUUID()}@example.invalid`;
+    const { userId } = await populatedAccount(email);
+    await env.DB.prepare(`WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM n
+        WHERE x < 1000)
+      INSERT INTO export_files (id, user_id, file_name, content_type, access_revision,
+        created_at, expires_at)
+      SELECT 'f-' || x, ?1, 'ordini.csv', 'text/csv', 0, ?2, '2026-09-14T20:00:00.000Z' FROM n`)
+      .bind(userId, now)
+      .run();
+    const files = () =>
+      env.DB.prepare("SELECT COUNT(*) AS n FROM export_files WHERE user_id = ?")
+        .bind(userId)
+        .first("n");
+    const remove = env.EXPORT_FILES.delete.bind(env.EXPORT_FILES);
+    let calls = 0;
+    // Il binding R2 rifiuta più di mille chiavi; la seconda richiesta non riesce una volta.
+    const limited = vi.spyOn(env.EXPORT_FILES, "delete").mockImplementation(async (keys) => {
+      if (Array.isArray(keys) && keys.length > 1000) throw new Error("r2_too_many_keys");
+      if (++calls === 2) throw new Error("r2");
+      await remove(keys);
+    });
+    const id = await startAccountDeletion(env, { id: userId, email }, "it", at(now));
+    await expect(runAccountDeletion(env, id, fetch, at(now))).rejects.toThrow("r2");
+    // Restano soltanto le righe dei file non ancora eliminati, e l'utente.
+    expect(await files()).toBe(501);
+    expect(await leftovers(userId)).toMatchObject({ user: 1 });
+    await expect(runAccountDeletion(env, id, fetch, later(16))).resolves.toBe("done");
+    expect(await files()).toBe(0);
+    expect(await leftovers(userId)).toMatchObject({ user: 0 });
+    expect(await env.EXPORT_FILES.get("f-a")).toBeNull();
+    expect(limited.mock.calls.every(([keys]) => (keys as string[]).length <= 1000)).toBe(true);
+  });
+
   it("senza lo stop dei rinnovi conserva solo spazio e riferimenti, segnala e riprova", async () => {
     const email = `bloccata-${crypto.randomUUID()}@example.invalid`;
     const { userId } = await populatedAccount(email);

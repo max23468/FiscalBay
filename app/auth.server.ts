@@ -154,6 +154,7 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
             if (deleting) {
               throw new APIError("FORBIDDEN", {
                 code: "account_deletion_in_progress",
+                // Stryker disable next-line StringLiteral: i client leggono il codice, non il testo.
                 message: "Account deletion in progress.",
               });
             }
@@ -193,6 +194,8 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
           sendAuthEmail(env, "delete-account", { to: user.email, url });
         },
         beforeDelete: async (user, request) => {
+          // Better Auth passa sempre la richiesta del link: «it» vale soltanto per i tipi.
+          // Stryker disable next-line StringLiteral: nessun percorso chiama la cancellazione senza richiesta.
           const language = request ? linkLanguage(request.url) : "it";
           // Il lavoro porta con sé lo stop dei rinnovi: si carica soltanto alla conferma.
           const { startAccountDeletion } = await import("./domain/account-deletion.server");
@@ -200,7 +203,7 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
           // pagina invita a chiedere un nuovo link, perché questo è già consumato.
           await startAccountDeletion(env, user, language).catch((error: unknown) => {
             logFailure({ request, error, operation: "account_deletion" });
-            throw new APIError("INTERNAL_SERVER_ERROR", { code: "account_deletion_failed" });
+            throw new APIError("INTERNAL_SERVER_ERROR");
           });
           throw new APIError("FOUND", undefined, {
             location: localizedPath(language, accountDeletionPath),

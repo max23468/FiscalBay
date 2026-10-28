@@ -338,8 +338,9 @@ export async function visibleOrderTallies(
       JSON.stringify(sorted),
     )
     .all<{ fiscal: FiscalSituation; satisfied: number; total: number }>();
-  return (starts.length ? starts : [""]).map((start) => {
-    const rank = sorted.indexOf(start) + 1;
+  // Senza istanti di partenza un solo conteggio, di grado zero: ogni ordine dei criteri.
+  const ranks = starts.length ? starts.map((start) => sorted.indexOf(start) + 1) : [0];
+  return ranks.map((rank) => {
     const tally: OrderTally = { orders: 0, locked: 0, available: 0 };
     for (const row of result.results) {
       if (row.satisfied < rank) continue;

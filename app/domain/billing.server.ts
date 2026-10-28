@@ -686,6 +686,7 @@ export async function stopRenewals(
     // Una sessione aperta si chiude; una completata ha creato un abbonamento da fermare.
     const checkout = async (id: string) => {
       const session = await closeCheckoutSession(stripe, id);
+      // Stryker disable next-line ConditionalExpression: Stripe assegna l'abbonamento soltanto alla sessione completata, quindi senza il controllo dello stato l'esito non cambia.
       if (session.status === "complete" && session.subscription)
         await stop(stripeId(session.subscription));
     };

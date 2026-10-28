@@ -346,14 +346,14 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
   });
 
   it("registra dall'assistenza la cancellazione tramite Link soltanto se Stripe la conferma", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const stripe = stripeAccount();
     stripe.state.invoices = [firstInvoice];
     stripe.state.charges = [paid("in_first")];
     await event(stripe, "invoice.paid", "in_first");
-    const record = (customerId = "cus_test", workspaceId = "w-a") =>
+    const record = (customerId = "cus_test", workspaceId = "w-a", target = env) =>
       recordSupportErasure(
-        env,
+        target,
         { workspaceId, customerId, actor: "admin", reason: "Richiesta tramite Link" },
         stripe.fetcher,
         at(now),
@@ -364,7 +364,25 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
     expect(await record()).toBe("not_deleted");
     stripe.state.subscription.status = "canceled";
     stripe.state.deletedCustomers = ["cus_test"];
+    // Senza chiave non parte nessuna richiesta e non c'è un errore da registrare.
+    errors.mockClear();
+    stripe.requests.length = 0;
+    const missing = { ...env, STRIPE_SECRET_KEY: undefined } as Env;
+    expect(await record("cus_test", "w-a", missing)).toBe("unavailable");
+    expect(stripe.requests).toEqual([]);
+    expect(errors).not.toHaveBeenCalled();
+    // Stripe non disponibile: nulla di registrato, il guasto si segnala.
+    stripe.state.down = true;
+    expect(await record()).toBe("unavailable");
+    expect(logged(errors)).toEqual([
+      expect.objectContaining({ operation: "billing", failure: "unavailable" }),
+    ]);
+    stripe.state.down = false;
     expect(await record()).toBe("done");
+    // L'abbonamento ancora aperto in locale si rilegge chiuso.
+    expect(
+      await env.DB.prepare("SELECT status FROM stripe_subscriptions WHERE id = 'sub_test'").first(),
+    ).toEqual({ status: "canceled" });
     expect(
       await env.DB.prepare(
         "SELECT source, recorded_by, reason FROM stripe_customer_erasures",

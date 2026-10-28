@@ -370,7 +370,7 @@ export function handleAuthRequest(
   const pathname = new URL(request.url).pathname
     .toLowerCase()
     .replace(/\/{2,}/gu, "/")
-    .replace(/\/+$/u, "");
+    .replace(/\/$/u, "");
   if (closedAuthPaths.has(pathname)) return new Response(null, { status: 404 });
   if (pathname === deletionCallbackPath) return handleDeletionCallback(request, env);
   if (pathname !== ebayCallbackPath) return authResponse(request, env);

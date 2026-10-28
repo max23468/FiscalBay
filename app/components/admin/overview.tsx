@@ -21,7 +21,7 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
   return <Badge variant={severityTone[severity]}>{t.severity[severity]}</Badge>;
 }
 
-/** Nome leggibile dell'oggetto: lavoro, provider o quota al posto del codice tecnico. */
+/** Nome leggibile dell'oggetto: lavoro, provider, quota o operazione al posto del codice. */
 function subjectName(id: string, kind: Anomaly["kind"], t: AdminCopy) {
   if (kind === "task_stalled")
     return t.labels.tasks[id as keyof AdminCopy["labels"]["tasks"]] ?? id;
@@ -34,6 +34,7 @@ function subjectName(id: string, kind: Anomaly["kind"], t: AdminCopy) {
       .replaceAll(":", " · ");
   if (kind === "service_off")
     return t.switches.names[id as keyof AdminCopy["switches"]["names"]] ?? id;
+  if (kind === "audit_unrecorded") return t.labels.operations[id] ?? id;
   return id;
 }
 
