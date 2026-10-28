@@ -2413,7 +2413,7 @@ Integrato da CF Ready e Hub Fatture: il callback 2.0 di cancellazione account eB
 
 Prove: ingresso con utente sconosciuto, venditore noto anche oltre la finestra delle ricevute, ripetizione, coda non disponibile, firma e schema non validi e limite per origine con espulsione; lavoro su venditore, acquirente, ambienti separati, omonimo con altro token, lotti, richiesta occupata, consumer con retry, restore con dati ricomparsi, anomalia e pulizia; conferma eBay di un ordine cancellato che non lo reimporta; scansione dell'intero schema senza identità eBay residue. Con la pulizia sospesa elenco, ricerca, dettaglio, suggerimenti ed export negano subito scadenza e cancellazione, e il file pubblicato prima non si scarica. Il lifetime concesso dalla console a un nuovo account dopo la cancellazione non riporta ordini, sblocchi né prova.
 
-**Per chiudere:** registrazione dell'endpoint di Production sul keyset e cutover con Hub Fatture (owner); collaudo sul test con una notifica di prova eBay; audit [M7-01](#m7-01) come prerequisito; scelta dell'owner sul recupero del lifetime dopo la cancellazione dell'account: oggi la concessione dalla console usa un nuovo posto, perché lo schema non riassegna un posto attivo a un altro spazio.
+**Per chiudere:** registrazione dell'endpoint di Production sul keyset e cutover con Hub Fatture (owner); collaudo sul test con una notifica di prova eBay; scelta dell'owner sul recupero del lifetime dopo la cancellazione dell'account: oggi la concessione dalla console usa un nuovo posto, perché lo schema non riassegna un posto attivo a un altro spazio.
 
 <a id="m7-03"></a>
 #### M7-03 · Stress capacità e costi residui
