@@ -539,7 +539,62 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
   );
 }
 
-export type LifetimeGrant = "done" | "owned" | "pending" | "sold-out" | "not_found";
+export type LifetimeGrant =
+  | "done"
+  | "owned"
+  | "pending"
+  | "sold-out"
+  | "seat-unavailable"
+  | "not_found";
+
+/** Posti attivi rimasti senza spazio dopo la cancellazione dell'account, dal più vecchio. */
+export async function vacantLifetimeSeats(db: D1Database) {
+  const { results } = await db
+    .prepare(`SELECT slot, kind, customer_id AS customerId, activated_at AS activatedAt
+      FROM lifetime_allocations WHERE status = 'active' AND workspace_id IS NULL ORDER BY slot`)
+    .all<{ slot: number; kind: string; customerId: string | null; activatedAt: string | null }>();
+  return results;
+}
+
+/**
+ * Riprende per lo spazio il posto attivo rimasto senza spazio dopo la cancellazione
+ * dell'account dello stesso cliente: non consuma un altro dei venti posti. Il diritto porta
+ * autore e motivo e, per un posto venduto, il riferimento della vendita, così rimborsi e
+ * dispute della vendita originale lo revocano ancora. Ordini, sblocchi e prova dello spazio
+ * cancellato non tornano.
+ */
+async function recoverLifetimeSeat(
+  env: Env,
+  input: { workspaceId: string; slot: number; author: string; reason: string },
+  at: string,
+): Promise<"done" | "seat-unavailable" | "not_found"> {
+  const [moved] = await env.DB.batch<{ slot: number }>([
+    env.DB.prepare(`UPDATE lifetime_allocations SET workspace_id = ?1
+      WHERE slot = ?2 AND status = 'active' AND workspace_id IS NULL
+        AND EXISTS (SELECT 1 FROM workspaces WHERE id = ?1)
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
+        AND NOT ${lifetimeInForceSql("?1")}
+      RETURNING slot`).bind(input.workspaceId, input.slot),
+    env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+        stripe_checkout_session_id, granted_by, grant_reason)
+      SELECT ?1, a.workspace_id, 'lifetime', ?3, CASE WHEN a.kind = 'sale' THEN a.provider_reference END,
+        ?4, ?5 FROM lifetime_allocations a
+      WHERE a.slot = ?6 AND a.workspace_id = ?2 AND a.status = 'active'
+        AND NOT ${lifetimeInForceSql("?2")}`).bind(
+      crypto.randomUUID(),
+      input.workspaceId,
+      at,
+      input.author,
+      input.reason,
+      input.slot,
+    ),
+  ]);
+  if (moved!.results.length) return "done";
+  const workspace = await env.DB.prepare("SELECT 1 FROM workspaces WHERE id = ?")
+    .bind(input.workspaceId)
+    .first();
+  return workspace ? "seat-unavailable" : "not_found";
+}
 
 /**
  * Lifetime in omaggio, dalla console amministrativa: consuma uno dei venti posti, registra
@@ -547,15 +602,25 @@ export type LifetimeGrant = "done" | "owned" | "pending" | "sold-out" | "not_fou
  * un unico commit; uno spazio con una prenotazione aperta aspetta l'esito del suo checkout.
  * Uno spazio che ha già un posto con il lifetime revocato, per rimborso o disputa persa, lo
  * riceve di nuovo sullo stesso posto, senza consumarne un altro: il posto resta della vendita
- * originale e il nuovo diritto porta autore e motivo dell'omaggio.
+ * originale e il nuovo diritto porta autore e motivo dell'omaggio. Con `slot` lo spazio riprende
+ * invece il posto rimasto senza spazio dopo la cancellazione dell'account dello stesso cliente.
  */
 export async function grantLifetime(
   env: Env,
   stripe: Stripe | null,
-  input: { workspaceId: string; author: string; reason: string },
+  input: { workspaceId: string; author: string; reason: string; slot?: number },
   now = new Date(),
 ): Promise<LifetimeGrant> {
   const at = now.toISOString();
+  if (input.slot !== undefined) {
+    const recovered = await recoverLifetimeSeat(env, { ...input, slot: input.slot }, at);
+    if (recovered !== "done") return recovered;
+    if (stripe)
+      await endReplacedSubscriptions(env, stripe, input.workspaceId, now).catch((error: unknown) =>
+        logFailure({ error, operation: "billing" }),
+      );
+    return "done";
+  }
   const [slot] = await env.DB.batch<{ slot: number }>([
     env.DB.prepare(`${freeSlotSql}
       INSERT INTO lifetime_allocations (slot, workspace_id, status, kind, activated_at, created_at)

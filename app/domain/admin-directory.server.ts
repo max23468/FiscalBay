@@ -1,4 +1,5 @@
 import { stripeEnvironment } from "../integrations/stripe.server";
+import { vacantLifetimeSeats } from "./lifetime.server";
 import { activeCoverageSql } from "./grants.server";
 import { storeLabelSql } from "./store-state.server";
 import { listWorkspaceStores, pauseReasonSql, type StoreStatus } from "./stores.server";
@@ -106,6 +107,8 @@ export type WorkspaceDetail = {
     unavailable: boolean;
   }[];
   lifetime: { slot: number; kind: string; status: string; customerId: string | null } | null;
+  /** Posti rimasti senza spazio dopo una cancellazione, che lo spazio può riprendere. */
+  vacantSeats: Awaited<ReturnType<typeof vacantLifetimeSeats>>;
   customers: { id: string; erased: { source: string; at: string } | null }[];
   cycle: { startsAt: string; endsAt: string; quota: number; used: number } | null;
   freeStore: { storeId: string; kind: string; changedAt: string } | null;
@@ -238,6 +241,7 @@ export async function workspaceDetail(
     extensions: extensions!.results as WorkspaceDetail["extensions"],
     stores: await listWorkspaceStores(db, workspaceId, now),
     removedStores: removed!.results as WorkspaceDetail["removedStores"],
+    vacantSeats: await vacantLifetimeSeats(db),
   };
 }
 

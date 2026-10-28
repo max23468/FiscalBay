@@ -21,7 +21,8 @@ import { applyStripeEvent } from "../app/domain/billing.server";
 import { consumeExportJob } from "../app/domain/export-jobs.server";
 import { orderAllowance } from "../app/domain/grants.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { grantLifetime } from "../app/domain/lifetime.server";
+import { vacantLifetimeSeats } from "../app/domain/lifetime.server";
+import { grantLifetimeConcession } from "../app/domain/concessions.server";
 import { consumeStoreSync } from "../app/domain/order-sync.server";
 import { completeStoreLink } from "../app/domain/store-link.server";
 import {
@@ -1302,19 +1303,17 @@ describe("cancellazione dell'account", () => {
     expect(await runAccountDeletion(env, id, fetch, when)).toBe("done");
   };
 
-  it("il lifetime concesso di nuovo dopo la cancellazione non riporta dati né la prova", async () => {
+  it("il cliente che torna riprende lo stesso posto lifetime, senza dati né prova", async () => {
     const first = `lifetime-${crypto.randomUUID()}@example.invalid`;
     const owner = await verifiedSession(first);
     expect(await linkEbay(owner.userId, "seller-lifetime", at(now))).toBe("collegato");
     const space = (await orderAllowance(env.DB, owner.userId, at(now)))!.workspaceId;
+    const storeId = (await env.DB.prepare("SELECT id FROM ebay_stores WHERE workspace_id = ?")
+      .bind(space)
+      .first<string>("id"))!;
     await env.DB.batch([
       insertEntitlement({ workspaceId: space, source: "trial", endsAt: later(60).toISOString() }),
-      ...insertOrder(
-        "o-lifetime",
-        (await env.DB.prepare("SELECT id FROM ebay_stores WHERE workspace_id = ?")
-          .bind(space)
-          .first<string>("id"))!,
-      ),
+      ...insertOrder("o-lifetime", storeId),
       env.DB.prepare(
         `INSERT INTO lifetime_allocations (slot, workspace_id, status, provider_reference,
            created_at, activated_at, customer_id)
@@ -1329,40 +1328,64 @@ describe("cancellazione dell'account", () => {
     ]);
     await deleteAccount(owner, first, later(2));
     // Il posto venduto resta occupato, senza spazio e con i riferimenti della vendita.
-    expect(
-      await env.DB.prepare("SELECT workspace_id, customer_id FROM lifetime_allocations").all(),
-    ).toMatchObject({ results: [{ workspace_id: null, customer_id: "cus_lifetime" }] });
+    expect(await vacantLifetimeSeats(env.DB)).toEqual([
+      { slot: 1, kind: "sale", customerId: "cus_lifetime", activatedAt: now },
+    ]);
 
-    // L'assistenza riconosce il cliente in un nuovo account e gli concede di nuovo il lifetime.
+    // L'assistenza riconosce il cliente in un nuovo account e gli restituisce il suo posto.
     const second = await verifiedSession(`ritorno-${crypto.randomUUID()}@example.invalid`);
     expect(await linkEbay(second.userId, "seller-lifetime", later(3))).toBe("collegato");
     const returning = (await orderAllowance(env.DB, second.userId, later(3)))!;
+    const input = {
+      workspaceId: returning.workspaceId,
+      author: "owner",
+      reason: "Cliente tornato dopo la cancellazione",
+    };
+    // Un posto inesistente o di nessuno spazio cancellato non si riprende.
+    expect(await grantLifetimeConcession(env, { ...input, slot: 2 }, later(4))).toBe(
+      "seat-unavailable",
+    );
+    expect(await grantLifetimeConcession(env, { ...input, slot: 0 }, later(4))).toBe("invalid");
     expect(
-      await grantLifetime(
-        env,
-        null,
-        {
-          workspaceId: returning.workspaceId,
-          author: "owner",
-          reason: "Lifetime dopo cancellazione",
-        },
-        later(4),
-      ),
-    ).toBe("done");
+      await grantLifetimeConcession(env, { ...input, workspaceId: "w-none", slot: 1 }, later(4)),
+    ).toBe("not_found");
+    expect(await grantLifetimeConcession(env, { ...input, slot: 1 }, later(4))).toBe("done");
+    // Ripetuta, non cambia nulla: il posto ha di nuovo uno spazio.
+    expect(await grantLifetimeConcession(env, { ...input, slot: 1 }, later(5))).toBe(
+      "seat-unavailable",
+    );
     const after = (await orderAllowance(env.DB, second.userId, later(5)))!;
     expect(after.trialAvailable).toBe(false);
     expect(after.premium).toBe(true);
-    // Nessun ordine, sblocco, ciclo o prova dello spazio cancellato torna nel nuovo.
+    // Stesso posto, con la vendita originale: rimborsi e dispute lo revocano ancora.
+    expect(
+      await env.DB.prepare(`SELECT a.slot, a.workspace_id, a.customer_id, e.stripe_checkout_session_id,
+          e.granted_by, e.grant_reason FROM lifetime_allocations a
+          JOIN workspace_entitlements e ON e.workspace_id = a.workspace_id AND e.source = 'lifetime'`).all(),
+    ).toMatchObject({
+      results: [
+        {
+          slot: 1,
+          workspace_id: returning.workspaceId,
+          customer_id: "cus_lifetime",
+          stripe_checkout_session_id: "cs_lifetime",
+          granted_by: "owner",
+          grant_reason: "Cliente tornato dopo la cancellazione",
+        },
+      ],
+    });
+    // Nessun ordine, sblocco o prova dello spazio cancellato torna nel nuovo.
     expect(
       await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM orders) AS orders,
           (SELECT COUNT(*) FROM order_grants) AS grants,
           (SELECT COUNT(*) FROM workspace_entitlements WHERE source = 'trial') AS trials,
-          (SELECT COUNT(*) FROM workspace_entitlements WHERE workspace_id = ?1
-            AND source = 'lifetime') AS lifetime,
-          (SELECT COUNT(*) FROM lifetime_allocations) AS seats`)
-        .bind(returning.workspaceId)
-        .first(),
-    ).toEqual({ orders: 0, grants: 0, trials: 0, lifetime: 1, seats: 2 });
+          (SELECT COUNT(*) FROM lifetime_allocations) AS seats`).first(),
+    ).toEqual({ orders: 0, grants: 0, trials: 0, seats: 1 });
+    expect(await vacantLifetimeSeats(env.DB)).toEqual([]);
+    // Lo spazio di un posto assegnato non cambia più se non con una nuova cancellazione.
+    await expect(
+      env.DB.prepare("UPDATE lifetime_allocations SET workspace_id = 'w-a' WHERE slot = 1").run(),
+    ).rejects.toThrow(/immutable_lifetime_allocation/);
   });
 
   it("i segni di più negozi valgono anche dopo un altro negozio, con la stessa regola", async () => {

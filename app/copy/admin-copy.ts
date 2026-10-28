@@ -108,6 +108,7 @@ const it = {
       owned: "Lifetime già in vigore",
       pending: "Acquisto in corso",
       "sold-out": "Posti esauriti",
+      "seat-unavailable": "Posto non disponibile",
       importing: "Importazione in corso",
       limited: "Attesa di eBay",
       suspended: "Chiamate eBay spente",
@@ -307,6 +308,10 @@ const it = {
     grantLifetime: "Concedi lifetime",
     grantLifetimeHint:
       "Consuma un posto, oppure riusa il posto di un lifetime rimborsato dello stesso spazio.",
+    vacantSeat: "Posto da riprendere",
+    vacantSeatHint:
+      "Solo per il cliente che torna dopo la cancellazione dell’account: lascia vuoto per un nuovo posto. Ordini e prova non tornano.",
+    vacantSeats: "Posti lasciati da account cancellati",
     grantHistory: "Estendi lo storico",
     revoke: "Revoca",
     erasure: "Registra cancellazione tramite Link",
@@ -329,6 +334,8 @@ const it = {
       owned: "Lo spazio ha già il lifetime in vigore.",
       pending: "Lo spazio ha un acquisto lifetime in corso.",
       "sold-out": "Posti lifetime esauriti.",
+      "seat-unavailable":
+        "Posto non ripreso: non è libero da una cancellazione, oppure lo spazio ha già un posto lifetime.",
     },
     freeStore: {
       done: "Negozio attivo cambiato.",
@@ -783,6 +790,7 @@ const en: AdminCopy = {
       owned: "Lifetime already active",
       pending: "Purchase in progress",
       "sold-out": "Sold out",
+      "seat-unavailable": "Seat unavailable",
       importing: "Import in progress",
       limited: "Waiting for eBay",
       suspended: "eBay calls off",
@@ -982,6 +990,10 @@ const en: AdminCopy = {
     days: "Days",
     grantLifetime: "Grant lifetime",
     grantLifetimeHint: "Uses a seat, or reuses the seat of a refunded lifetime in the same space.",
+    vacantSeat: "Seat to take back",
+    vacantSeatHint:
+      "Only for a customer returning after account deletion: leave empty for a new seat. Orders and trial do not return.",
+    vacantSeats: "Seats left by deleted accounts",
     grantHistory: "Extend history",
     revoke: "Revoke",
     erasure: "Record deletion through Link",
@@ -1004,6 +1016,8 @@ const en: AdminCopy = {
       owned: "The space already has lifetime in force.",
       pending: "The space has a lifetime purchase in progress.",
       "sold-out": "Lifetime seats are sold out.",
+      "seat-unavailable":
+        "Seat not taken back: it was not freed by a deletion, or the space already has a lifetime seat.",
     },
     freeStore: {
       done: "Active store changed.",
