@@ -7,7 +7,15 @@ import { maxAuditReason } from "../limits";
  * Registro delle operazioni della console amministrativa (§15): ogni operazione eseguita da un
  * admin lascia autore, oggetto, motivo ed esito, anche quando lo stato riletto la rifiuta. Il
  * registro non contiene dati dei buyer né valori fiscali.
+ *
+ * La riga di un'operazione nasce prima dell'operazione, con l'esito «in corso», e riceve una
+ * sola volta l'esito definitivo e l'oggetto riletto: se quell'ultima scrittura non riesce, la
+ * riga resta «in corso» con autore, oggetto, motivo e istante. Un trigger rifiuta ogni altra
+ * modifica.
  */
+
+/** Esito della riga scritta prima dell'operazione, finché non riceve quello definitivo. */
+export const auditInProgress = "in_progress";
 
 /** Conservazione del registro: un anno dall'operazione. */
 export const auditRetentionDays = 365;
@@ -24,12 +32,17 @@ export type AuditEntry = {
 };
 
 /** Riga del registro, da eseguire nello stesso batch dell'operazione quando è possibile. */
-export function auditStatement(db: D1Database, entry: AuditEntry, at: string) {
+export function auditStatement(
+  db: D1Database,
+  entry: AuditEntry,
+  at: string,
+  id: string = crypto.randomUUID(),
+) {
   return db
     .prepare(`INSERT INTO admin_audit (id, actor, operation, target, reason, outcome, at)
       VALUES (?, ?, ?, ?, ?, ?, ?)`)
     .bind(
-      crypto.randomUUID(),
+      id,
       entry.actor,
       entry.operation,
       entry.target ?? null,
@@ -41,6 +54,31 @@ export function auditStatement(db: D1Database, entry: AuditEntry, at: string) {
 
 export async function recordAudit(db: D1Database, entry: AuditEntry, now = new Date()) {
   await auditStatement(db, entry, now.toISOString()).run();
+}
+
+/** Apre la riga di un'operazione che sta per partire e ne restituisce l'identificativo. */
+export async function openAudit(
+  db: D1Database,
+  entry: Omit<AuditEntry, "outcome">,
+  now = new Date(),
+): Promise<string> {
+  const id = crypto.randomUUID();
+  await auditStatement(db, { ...entry, outcome: auditInProgress }, now.toISOString(), id).run();
+  return id;
+}
+
+/** Esito definitivo e oggetto riletto della riga aperta: una volta sola. */
+export async function settleAudit(
+  db: D1Database,
+  id: string,
+  target: string | null,
+  outcome: string,
+) {
+  await db
+    .prepare(`UPDATE admin_audit SET target = ?2, outcome = ?3
+      WHERE id = ?1 AND outcome = '${auditInProgress}'`)
+    .bind(id, target, outcome)
+    .run();
 }
 
 export type AuditRow = {

@@ -261,20 +261,26 @@ describe("accesso alla console", () => {
     expect((await audit()).map((entry) => entry.operation)).toEqual(["requeue-task"]);
   });
 
-  it("la riga del registro che non si scrive non cambia l'esito dell'operazione riuscita", async () => {
-    const { cookie } = await admin();
+  it("senza la riga del registro l'operazione non parte; senza l'esito la riga resta in corso", async () => {
+    const { cookie, userId } = await admin();
     await env.DB.batch(insertWorkspace({ id: "w-a" }));
     const original = env.DB.prepare.bind(env.DB);
-    let failures = 1;
+    let failures = { insert: 1, update: 0 };
+    const unavailable = {
+      bind: () => ({ run: () => Promise.reject(new Error("database_unavailable")) }),
+    } as unknown as D1PreparedStatement;
     vi.spyOn(env.DB, "prepare").mockImplementation((query) =>
-      query.includes("INSERT INTO admin_audit") && failures-- > 0
-        ? ({
-            bind: () => ({ run: () => Promise.reject(new Error("database_unavailable")) }),
-          } as unknown as D1PreparedStatement)
+      (query.includes("INSERT INTO admin_audit") && failures.insert-- > 0) ||
+      (query.includes("UPDATE admin_audit") && failures.update-- > 0)
+        ? unavailable
         : original(query),
     );
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
     const grant = { intent: "grant-premium", spazio: "w-a", giorni: "3", motivo: "Disservizio" };
+    const grants = () =>
+      env.DB.prepare(
+        "SELECT count(*) AS n FROM workspace_entitlements WHERE workspace_id = 'w-a'",
+      ).first("n");
     // Il primo errore si riprova: la riga c'è e la risposta è quella dell'operazione.
     expect(await act(cookie, grant)).toMatchObject({ ok: true });
     expect(await audit()).toEqual([
@@ -286,17 +292,76 @@ describe("accesso alla console", () => {
       },
     ]);
     expect(logged).not.toHaveBeenCalled();
-    // Con il registro che non risponde l'esito resta quello reale e l'errore va nei log.
-    failures = 2;
-    expect(await act(cookie, grant)).toMatchObject({ ok: true });
+    // Con il registro che non risponde l'operazione non parte: nessuna concessione in più.
+    failures = { insert: 2, update: 0 };
+    expect(await act(cookie, grant)).toMatchObject({ status: 503, ok: false });
     expect(await audit()).toHaveLength(1);
+    expect(await grants()).toBe(1);
     expect(logged).toHaveBeenCalledOnce();
-    // Entrambe le concessioni sono avvenute.
+
+    // Lo stesso per un interruttore: resta acceso.
+    const off = {
+      intent: "set-switch",
+      interruttore: "ebay_calls",
+      stato: "off",
+      motivo: "Manutenzione autorizzata",
+    };
+    const ebayCalls = () =>
+      env.DB.prepare("SELECT value FROM service_settings WHERE name = 'ebay_calls'").first("value");
+    failures = { insert: 2, update: 0 };
+    expect(await act(cookie, off)).toMatchObject({ status: 503, ok: false });
+    expect(await ebayCalls()).toBeNull();
+    expect(await audit()).toHaveLength(1);
+
+    // L'esito che non si scrive lascia la riga in corso con autore, oggetto, motivo e istante;
+    // la risposta è quella reale e la panoramica la segnala dopo l'attesa.
+    failures = { insert: 0, update: 2 };
+    expect(await act(cookie, off)).toMatchObject({ ok: true });
+    expect(await ebayCalls()).toBe("false");
     expect(
       await env.DB.prepare(
-        "SELECT count(*) AS n FROM workspace_entitlements WHERE workspace_id = 'w-a'",
-      ).first(),
-    ).toEqual({ n: 2 });
+        "SELECT actor, operation, target, reason, outcome FROM admin_audit WHERE operation = ?",
+      )
+        .bind("set-switch")
+        .all(),
+    ).toMatchObject({
+      results: [
+        {
+          actor: userId,
+          operation: "set-switch",
+          target: "switch:ebay_calls:off",
+          reason: "Manutenzione autorizzata",
+          outcome: "in_progress",
+        },
+      ],
+    });
+    expect(logged).toHaveBeenCalledTimes(3);
+    const recorded = await env.DB.prepare(
+      "SELECT at FROM admin_audit WHERE outcome = 'in_progress'",
+    ).first<string>("at");
+    const anomaly = (when: number) =>
+      listAnomalies(env.DB, new Date(Date.parse(recorded!) + when)).then((anomalies) =>
+        anomalies.find(({ kind }) => kind === "audit_unrecorded"),
+      );
+    expect(await anomaly(60_000)).toBeUndefined();
+    expect(await anomaly(10 * 60_000)).toMatchObject({
+      severity: "p3",
+      count: 1,
+      subjects: [{ id: "set-switch", href: "registro" }],
+    });
+    // La riga in corso riceve l'esito una volta sola; le altre restano immutabili.
+    vi.mocked(env.DB.prepare).mockRestore();
+    await expect(
+      env.DB.prepare("UPDATE admin_audit SET reason = 'altro' WHERE outcome = 'in_progress'").run(),
+    ).rejects.toThrow("immutable_audit");
+    await env.DB.prepare(
+      "UPDATE admin_audit SET outcome = 'done' WHERE outcome = 'in_progress'",
+    ).run();
+    await expect(
+      env.DB.prepare(
+        "UPDATE admin_audit SET outcome = 'in_progress' WHERE operation = 'set-switch'",
+      ).run(),
+    ).rejects.toThrow("immutable_audit");
   });
 
   it("legge ogni sezione senza chiamare eBay o Stripe per conto dei negozi", async () => {
@@ -795,6 +860,35 @@ describe("trasferimento assistito di un negozio", () => {
     expect(
       await env.DB.prepare("SELECT workspace_id FROM ebay_stores WHERE id = 's-a'").first(),
     ).toEqual({ workspace_id: "w-b" });
+  });
+
+  it("due conferme nello stesso istante: la seconda non ha alcun effetto", async () => {
+    await stores();
+    // Chi riceve ha usato la prova, chi cede no: un segno scritto dopo il passaggio la porterebbe.
+    await env.DB.prepare("UPDATE workspaces SET trial_used_at = ? WHERE id = 'w-b'")
+      .bind(now)
+      .run();
+    const prepared = await prepare();
+    if (prepared.result !== "prepared") throw new Error();
+    const results = await Promise.all([
+      confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
+      confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
+    ]);
+    expect(results.map(({ result }) => result).sort()).toEqual(["already", "done"]);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM store_identity_marks").first()).toEqual({
+      n: 0,
+    });
+    // Il negozio resta come l'ha lasciato la prima conferma, senza nuove scritture.
+    expect(
+      await env.DB.prepare(
+        "SELECT workspace_id, disconnected_at FROM ebay_stores WHERE id = 's-a'",
+      ).first(),
+    ).toEqual({ workspace_id: "w-b", disconnected_at: now });
+    expect(
+      await env.DB.prepare(
+        "SELECT executed_at, execution_id IS NOT NULL AS claimed FROM store_transfers",
+      ).first(),
+    ).toEqual({ executed_at: now, claimed: 1 });
   });
 
   it("rifiuta il trasferimento con una cancellazione dell'account in corso", async () => {
