@@ -8,7 +8,11 @@ import { localizedPath } from "../i18n";
 import { searchQuery } from "../orders/order-search";
 import { searchHref } from "../orders/order-search.server";
 import { previewSearchMatches, previewSearchScope } from "../preview/order-list.server";
-import { assertPreviewAvailable, currentScenario } from "../preview/state.server";
+import {
+  assertPreviewAction,
+  assertPreviewAvailable,
+  currentScenario,
+} from "../preview/state.server";
 import type { Route } from "./+types/preview-search";
 
 /** Il percorso riceve soltanto ricerche: una lettura non ha contenuto. */
@@ -22,6 +26,7 @@ export function loader() {
  * reale: query nel corpo, elenco con la ricerca cifrata nell'indirizzo.
  */
 export async function action({ request }: Route.ActionArgs) {
+  assertPreviewAction(request);
   const [{ language, scenario }, form] = await Promise.all([
     currentScenario(request),
     request.formData(),

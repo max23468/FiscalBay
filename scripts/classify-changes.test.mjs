@@ -15,6 +15,7 @@ import { describe, it } from "node:test";
 import {
   configFile,
   editedMigrations,
+  fileImpact,
   fileLevel,
   levelScripts,
   plan,
@@ -140,6 +141,11 @@ describe("livello del gate dai file modificati", () => {
       .map((file) => `scripts/${file.split(path.sep).join("/")}`);
     assert.ok(scripts.length > 0);
     for (const file of scripts) assert.notEqual(fileLevel(file), "full", file);
+    assert.deepEqual(fileImpact("scripts/third-party-notices.mjs"), {
+      level: "build",
+      e2e: false,
+      deploy: true,
+    });
   });
 
   it("separa prove unitarie, prove browser e prodotto distribuito", () => {

@@ -5,7 +5,12 @@ import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import { previewSettingsPage } from "../preview/settings-page.server";
-import { pageScenario, simulateAction, simulateSecurity } from "../preview/state.server";
+import {
+  assertPreviewAction,
+  pageScenario,
+  simulateAction,
+  simulateSecurity,
+} from "../preview/state.server";
 import { settingsSections, type SettingsSection } from "../view-models";
 import type { Route } from "./+types/preview-settings";
 
@@ -31,6 +36,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 /** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */
 export async function action({ request }: Route.ActionArgs) {
+  assertPreviewAction(request);
   const form = await request.formData();
   return simulateSecurity(request, form) ?? simulateAction(request, form);
 }

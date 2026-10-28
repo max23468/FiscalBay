@@ -26,11 +26,7 @@ import { previewBase, previewOrdersPath, previewSettingsPath } from "../app-link
 import { localizedPath } from "../i18n";
 import { revalidateUnlessSnapshot } from "../orders/order-list";
 import { isScenarioId, scenarioOptions } from "../preview/scenarios.server";
-import {
-  currentScenario,
-  assertPreviewAvailable,
-  writePreviewState,
-} from "../preview/state.server";
+import { currentScenario, assertPreviewAction, writePreviewState } from "../preview/state.server";
 import type { Route } from "./+types/preview";
 
 export async function loader({ request }: Route.LoaderArgs) {
@@ -60,7 +56,7 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
  * l'indirizzo, perché l'anteprima non conserva preferenze.
  */
 export async function action({ request }: Route.ActionArgs) {
-  assertPreviewAvailable();
+  assertPreviewAction(request);
   const form = await request.formData();
   const chosen = form.get("language");
   if (chosen === "it" || chosen === "en") {

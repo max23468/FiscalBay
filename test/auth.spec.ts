@@ -90,11 +90,13 @@ it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
 
 it("conserva il rifiuto POST da origine estranea e del collegamento senza sessione in entrambe le lingue", async () => {
   for (const base of ["", "/en"]) {
-    const foreign = { origin: "https://example.invalid", fields: {} };
-    expect((await routeResponse(signInAction, `${base}/accesso`, foreign)).status).toBe(403);
-    expect(
-      (await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, foreign)).status,
-    ).toBe(403);
+    for (const origin of ["https://example.invalid", null]) {
+      const foreign = { origin, fields: {} };
+      expect((await routeResponse(signInAction, `${base}/accesso`, foreign)).status).toBe(403);
+      expect(
+        (await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, foreign)).status,
+      ).toBe(403);
+    }
     const response = await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, {
       fields: {},
     });

@@ -1,5 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
-import type { BrowserContext } from "@playwright/test";
+import type { BrowserContext, Response } from "@playwright/test";
 import { expect, networkIdle, test } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { abortedDataRequest, pageCases, knownPagePath, expectedPageError } from "./page-cases";
@@ -173,6 +173,11 @@ for (const scenario of scenarios) {
           )
             errors.push(`Risorsa ${response.status()}: ${url.pathname}`);
         });
+        const documents: Response[] = [];
+        page.on("response", (response) => {
+          if (response.request().isNavigationRequest() && response.frame() === page.mainFrame())
+            documents.push(response);
+        });
         const response = await page.goto(scenario.path);
         expect(response?.status()).toBe(expectedStatus);
         if (scenario.redirect && !(production && scenario.preview))
@@ -180,6 +185,20 @@ for (const scenario of scenarios) {
           await expect(page).toHaveURL((url) => url.pathname === scenario.redirect);
         else expect(new URL(page.url()).pathname).toBe(new URL(scenario.path, baseURL!).pathname);
         checked("HTTP e percorso/redirect");
+        // Ogni documento ha la CSP con il proprio nonce, portato da tutti gli script inline:
+        // una violazione comparirebbe anche fra gli errori della console raccolti sopra.
+        // In locale il proxy della sessione trasforma un redirect in una pagina che cambia
+        // indirizzo: conta l'ultimo documento caricato, non quello restituito da `goto`.
+        const policy = (await documents.at(-1)!.allHeaders())["content-security-policy"] ?? "";
+        const nonce = /'nonce-([^']+)'/u.exec(policy)?.[1];
+        expect(policy).toContain("frame-ancestors 'none'");
+        expect(nonce).toBeTruthy();
+        const nonces = await page
+          .locator("script:not([src]):not([type='application/ld+json'])")
+          .evaluateAll((scripts) => scripts.map((script) => (script as HTMLScriptElement).nonce));
+        expect(nonces.length).toBeGreaterThan(0);
+        expect(new Set(nonces)).toEqual(new Set([nonce]));
+        checked("CSP e nonce degli script");
         await expect(page).toHaveTitle(/^FiscalBay \| /);
         await expect(page.locator("main")).toBeVisible();
         await expect(page.getByRole("heading").first()).toBeVisible();

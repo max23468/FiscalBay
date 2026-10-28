@@ -46,7 +46,9 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   observability: {
     enabled: true,
     logs: { enabled: true, headSamplingRate: 1 },
-    traces: { enabled: true, headSamplingRate: 0.01 },
+    // Spente come in CF Ready: gli span delle chiamate in uscita registrano l'URL completo, e
+    // l'API Telegram vuole il token del bot nel percorso (D225).
+    traces: { enabled: false },
   },
   domains: [target.domain],
   triggers: [
