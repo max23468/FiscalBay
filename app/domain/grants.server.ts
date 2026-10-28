@@ -82,16 +82,36 @@ export function storeReadSql(workspace: string) {
 }
 
 /**
- * La prova si offre allo spazio che non l'ha mai avuta, né con i suoi negozi in uno spazio
- * cancellato, senza una copertura in corso né un abbonamento che può ancora incassare, dopo la
+ * Spazio con il beneficio Free sospeso da una revisione antiabuso, finché l'esito resta (D210).
+ * Argomento: espressione dello spazio.
+ */
+export const abuseSuspendedSql = (workspace: string) =>
+  `EXISTS (SELECT 1 FROM abuse_reviews r WHERE r.workspace_id = ${workspace}
+    AND r.outcome = 'suspended')`;
+
+/**
+ * Copertura pagata o concessa in corso all'istante `at`: ogni diritto attivo tranne la prova.
+ * La sospensione antiabuso non la tocca.
+ */
+export function paidCoverageSql(workspace: string, at: string) {
+  return `EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
+    AND e.source <> 'trial' AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(${at})
+    AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at)))`;
+}
+
+/**
+ * La prova si offre allo spazio che non l'ha mai avuta, né con i suoi negozi in un altro
+ * spazio, senza una copertura in corso né un abbonamento che può ancora incassare, dopo la
  * prima lettura riuscita di un suo negozio, e soltanto con gli acquisti aperti: senza capacità
- * per nuovi Premium la prova non è erogabile.
+ * per nuovi Premium la prova non è erogabile. Uno spazio con il Free sospeso dalla revisione
+ * antiabuso non la riceve.
  */
 function trialAvailableSql(workspace: string, at: string) {
   return `(NOT EXISTS (SELECT 1 FROM workspace_entitlements e
       WHERE e.workspace_id = ${workspace} AND e.source = 'trial')
     AND NOT EXISTS (SELECT 1 FROM workspaces tw
       WHERE tw.id = ${workspace} AND tw.trial_used_at IS NOT NULL)
+    AND NOT ${abuseSuspendedSql(workspace)}
     AND NOT ${activeEntitlementSql(workspace, at)} AND NOT ${openSubscriptionSql(workspace)}
     AND ${storeReadSql(workspace)} AND ${purchasesOpenSql})`;
 }
@@ -124,7 +144,9 @@ export type UnlockErrorCode =
   | "tax_data_unavailable"
   | "invalid_grant_cycle"
   | "order_already_granted_or_merged"
-  | "order_already_granted";
+  | "order_already_granted"
+  /** Beneficio Free sospeso dalla revisione antiabuso, senza una copertura in corso. */
+  | "free_suspended";
 
 export class UnlockError extends Error {
   constructor(readonly code: UnlockErrorCode) {
@@ -248,6 +270,32 @@ export async function currentFreePromotion(db: D1Database, now = new Date()) {
     .first<{ quota: number; endsAt: string }>();
 }
 
+/**
+ * Creazione del ciclo che contiene l'istante, sui confini fissati dall'ancoraggio dello spazio,
+ * con la quota decisa al suo inizio; null senza ancoraggio. Richieste concorrenti calcolano la
+ * stessa finestra e la stessa quota: vince una riga.
+ */
+export function freeCycleStatement(
+  db: D1Database,
+  workspaceId: string,
+  anchorAt: string | null,
+  now: Date,
+) {
+  if (!anchorAt) return null;
+  const anchor = Date.parse(anchorAt);
+  const start = anchor + Math.floor((now.getTime() - anchor) / cycleLength) * cycleLength;
+  if (start < anchor) return null;
+  return db
+    .prepare(`INSERT OR IGNORE INTO free_cycles (id, workspace_id, starts_at, ends_at, quota)
+      VALUES (?1, ?2, ?3, ?4, ${cycleQuotaSql("?3")})`)
+    .bind(
+      crypto.randomUUID(),
+      workspaceId,
+      new Date(start).toISOString(),
+      new Date(start + cycleLength).toISOString(),
+    );
+}
+
 type EntitlementSource = "premium" | "trial" | "lifetime" | "admin";
 
 type FreeCycle = { id: string; used: number; quota: number; ends_at: string; next_quota: number };
@@ -264,6 +312,7 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
       ${activeCoverageSql("source", "w.id", "?1")} AS coverage,
       ${activeCoverageSql("ends_at", "w.id", "?1")} AS coverage_ends_at,
       ${trialAvailableSql("w.id", "?1")} AS trial_available, ${waitingSql("w.id")} AS waiting,
+      ${abuseSuspendedSql("w.id")} AS suspended,
       ${purchasesOpenSql} AS purchases_open
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?2`)
@@ -275,6 +324,7 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
       coverage: EntitlementSource | null;
       coverage_ends_at: string | null;
       trial_available: number;
+      suspended: number;
       waiting: number;
       purchases_open: number;
     }>();
@@ -285,23 +335,10 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
       AND julianday(?2) < julianday(c.ends_at) ORDER BY c.starts_at DESC LIMIT 1`)
     .bind(workspace.id, at);
   let cycle = await current.first<FreeCycle>();
-  if (!cycle && workspace.free_cycle_anchor_at) {
-    const anchor = Date.parse(workspace.free_cycle_anchor_at);
-    const start = anchor + Math.floor((now.getTime() - anchor) / cycleLength) * cycleLength;
-    if (start >= anchor) {
-      // Richieste concorrenti calcolano la stessa finestra e la stessa quota: vince una riga.
-      await db
-        .prepare(`INSERT OR IGNORE INTO free_cycles (id, workspace_id, starts_at, ends_at, quota)
-        VALUES (?1, ?2, ?3, ?4, ${cycleQuotaSql("?3")})`)
-        .bind(
-          crypto.randomUUID(),
-          workspace.id,
-          new Date(start).toISOString(),
-          new Date(start + cycleLength).toISOString(),
-        )
-        .run();
-      cycle = await current.first<FreeCycle>();
-    }
+  const create = freeCycleStatement(db, workspace.id, workspace.free_cycle_anchor_at, now);
+  if (!cycle && create) {
+    await create.run();
+    cycle = await current.first<FreeCycle>();
   }
   return {
     workspaceId: workspace.id,
@@ -313,12 +350,17 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
     trialAvailable: !!workspace.trial_available,
     /** In lista d'attesa senza copertura: il Free, con i suoi sblocchi, non è ancora erogato. */
     waiting: !workspace.premium && !!workspace.waiting,
+    /**
+     * Beneficio Free sospeso dalla revisione antiabuso senza copertura: nessuno sblocco del
+     * Free, neppure sugli ordini già importati; quelli già fatti restano.
+     */
+    suspended: !workspace.premium && !!workspace.suspended,
     /** Acquisti e prove aperti. */
     purchasesOpen: !!workspace.purchases_open,
     cycle,
     remaining: workspace.premium
       ? null
-      : cycle && !workspace.waiting
+      : cycle && !workspace.waiting && !workspace.suspended
         ? cycle.quota - cycle.used
         : 0,
   };
@@ -342,6 +384,7 @@ export async function unlockOrders(
   const allowance = await orderAllowance(db, userId, now);
   if (!allowance?.cycle) throw new UnlockError("order_not_available");
   if (allowance.waiting) throw new UnlockError("free_quota_exhausted");
+  if (allowance.suspended) throw new UnlockError("free_suspended");
   const at = now.toISOString();
   const access = orderAccessSql("o.id", "?2", "?4");
   const grants = [

@@ -7,6 +7,7 @@ import {
   sealToken,
 } from "../app/integrations/ebay/seller-credentials.server";
 import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
+import { sendReconnectNotices } from "../app/domain/reconnect-notices.server";
 import { UpstreamError } from "../app/integrations/http.server";
 import { insertCredentials, resetDatabase } from "./fixtures/database-fixtures";
 import { syntheticEbay } from "./fixtures/ebay-fixtures";
@@ -258,6 +259,76 @@ describe("rinnovo dei token del negozio", () => {
       }),
     ).rejects.toBeInstanceOf(UpstreamError);
     expect(await credentials()).toEqual(before);
+  });
+
+  it("manda al titolare una sola email per interruzione del consenso, verso Negozi", async () => {
+    const storeId = await linkedStore("ricollega@example.invalid");
+    const send = vi.fn<Env["AUTH_EMAIL"]["send"]>().mockResolvedValue({ messageId: "synthetic" });
+    const mail = { ...env, AUTH_EMAIL: { send } } as unknown as Env;
+    const update = (fields: string, ...values: string[]) =>
+      env.DB.prepare(`UPDATE ebay_store_credentials SET ${fields}`)
+        .bind(...values)
+        .run();
+    const run = (at: string) => sendReconnectNotices(mail, new Date(at));
+    type Sent = { to: string; subject: string; text: string; html: string };
+    const sent = (index: number) => send.mock.calls[index]![0] as Sent;
+    // Con il consenso valido non parte nulla.
+    await run("2026-10-20T10:00:00.000Z");
+    expect(send).not.toHaveBeenCalled();
+    // Il rifiuto di eBay: una sola email, anche nelle esecuzioni seguenti.
+    await update("rejected_at = ?", "2026-10-20T09:50:00.000Z");
+    await run("2026-10-20T10:00:00.000Z");
+    await run("2026-10-20T10:10:00.000Z");
+    expect(send).toHaveBeenCalledOnce();
+    expect(sent(0)).toMatchObject({
+      to: "ricollega@example.invalid",
+      subject: "Ricollega il tuo negozio eBay a FiscalBay",
+      text: expect.stringContaining("Apri Negozi: http://localhost:5173/app/negozi\n"),
+    });
+    expect(sent(0).text).not.toMatch(/acquirent|Codice Fiscale/u);
+    // Ricollegato, il nuovo consenso arriva alla scadenza nota: un'altra email, nella lingua
+    // scelta dal titolare, soltanto dopo la scadenza.
+    await update("rejected_at = NULL, refresh_expires_at = ?", "2026-10-25T00:00:00.000Z");
+    await env.DB.prepare(
+      `INSERT INTO user_preferences (user_id, language, updated_at)
+       SELECT "id", 'en', ?1 FROM "user"`,
+    )
+      .bind("2026-10-20T00:00:00.000Z")
+      .run();
+    await run("2026-10-24T23:50:00.000Z");
+    expect(send).toHaveBeenCalledOnce();
+    await run("2026-10-25T00:10:00.000Z");
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(sent(1)).toMatchObject({
+      subject: "Reconnect your eBay store to FiscalBay",
+      text: expect.stringContaining("Open Stores: http://localhost:5173/en/app/negozi\n"),
+    });
+    // Un negozio in pausa non legge comunque, e oltre trenta giorni l'email non parte più.
+    await update("refresh_expires_at = ?", "2026-10-26T00:00:00.000Z");
+    await env.DB.prepare(
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES (?, 'manual', ?)",
+    )
+      .bind(storeId, "2026-10-25T00:00:00.000Z")
+      .run();
+    await run("2026-10-26T00:10:00.000Z");
+    await env.DB.prepare("DELETE FROM ebay_store_pauses").run();
+    await run("2026-11-25T00:10:00.000Z");
+    expect(send).toHaveBeenCalledTimes(2);
+    // Un invio rifiutato si riprova all'esecuzione seguente; un indirizzo soppresso vale come
+    // avvisato. Il log riporta il codice del provider, mai l'indirizzo.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const refusal = (code: string) => Object.assign(new Error("synthetic"), { code });
+    send.mockRejectedValueOnce(refusal("E_RATE_LIMIT_EXCEEDED"));
+    await run("2026-10-26T00:20:00.000Z");
+    send.mockRejectedValueOnce(refusal("E_RECIPIENT_SUPPRESSED"));
+    await run("2026-10-26T00:30:00.000Z");
+    await run("2026-10-26T00:40:00.000Z");
+    expect(send).toHaveBeenCalledTimes(4);
+    const logged = errors.mock.calls.map(([line]) => String(line)).join("\n");
+    expect(logged).toContain('"failure":"E_RATE_LIMIT_EXCEEDED"');
+    expect(logged).toContain('"failure":"E_RECIPIENT_SUPPRESSED"');
+    expect(logged).not.toContain("ricollega@example.invalid");
+    errors.mockRestore();
   });
 
   it("produce cifrati diversi per lo stesso token", async () => {

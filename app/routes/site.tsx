@@ -10,7 +10,7 @@ import { ProductShot, ShotRow, type ShotName } from "~/components/product-shot";
 import { SiteLayout, siteColumn } from "~/components/site-layout";
 import { Badge } from "~/components/ui/badge";
 import { buttonLink } from "~/components/ui/button-variants";
-import { supportEmail } from "../app-copy";
+import { infoEmail } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
 import {
   accessPath,
@@ -21,11 +21,9 @@ import {
   visitCookie,
   visitParam,
 } from "../app-links";
-import { currentFreePromotion, freeQuotaSettings } from "../domain/grants.server";
+import { freeQuotaSettings } from "../domain/grants.server";
 import { languageFromPath, localizedPath } from "../i18n";
-import { formatDate } from "../format";
-import { formatPrice, priceGeneration } from "../catalog";
-import { publicPage } from "../site.server";
+import { publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/site";
 
@@ -58,33 +56,40 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (session && !visiting) {
     throw redirect(localizedPath(language, ordersPath), { headers: noStore });
   }
-  // Senza cache la pagina annuncia la promozione in corso e la quota base appena finisce.
-  const [{ quota: baseFreeQuota }, freePromotion] = await Promise.all([
+  // Senza cache la pagina annuncia la promozione in corso e la quota base appena finisce; prezzi
+  // e prova seguono il listino di Prezzi.
+  const [{ quota: baseFreeQuota }, listing] = await Promise.all([
     freeQuotaSettings(env.DB),
-    currentFreePromotion(env.DB),
+    siteListing(language),
   ]);
+  const { freePromotion, prices, purchasesOpen } = listing;
   const pages = sitePages[language];
-  const { freeQuota, freePromotion: promotionLine, premiumPrice, ...copy } = pages.home;
+  const {
+    freeQuota,
+    freePromotion: promotionLine,
+    premiumPrice,
+    premiumGross,
+    premiumBody,
+    premiumTrial,
+    ...copy
+  } = pages.home;
   return {
     language,
     signedIn: Boolean(session),
     origin,
     baseFreeQuota,
     freePromotion,
+    purchasesOpen,
     copy: {
       ...copy,
-      premiumPrice: premiumPrice(
-        formatPrice(priceGeneration.net.monthly, language),
-        formatPrice(priceGeneration.net.annual, language),
-      ),
+      premiumPrice: premiumPrice(prices.monthly.net, prices.annual.net),
+      premiumGross: premiumGross(prices.monthly.gross, prices.annual.gross),
+      // Con acquisti e prove sospesi la home lo dice, come Prezzi, invece di promettere la prova.
+      premiumBody: `${premiumBody} ${purchasesOpen ? premiumTrial : pages.pricing.closed}`,
       faq: pages.faq.items.slice(0, 4),
       shots: pages.shots,
       quota: freePromotion
-        ? promotionLine(
-            freePromotion.quota,
-            formatDate(freePromotion.endsAt, language),
-            baseFreeQuota,
-          )
+        ? promotionLine(freePromotion.quota, listing.promotionEnd!, baseFreeQuota)
         : freeQuota(baseFreeQuota),
     },
   };
@@ -110,7 +115,8 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
             name: "FiscalBay",
             url: `${origin}/`,
             logo: `${origin}/apple-touch-icon.png`,
-            email: supportEmail,
+            // I contatti generali usano `info@`; `supporto@` resta all'assistenza clienti (§14).
+            email: infoEmail,
           },
           {
             "@type": "WebSite",
@@ -255,6 +261,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
           <div className="grid content-start gap-2 rounded-2xl border border-primary bg-card p-6 ring-1 ring-primary">
             <h3 className="font-semibold">{t.premiumPlan}</h3>
             <p className="text-lg font-semibold text-pretty">{t.premiumPrice}</p>
+            <p className="text-sm text-pretty text-muted-foreground">{t.premiumGross}</p>
             <p className="leading-relaxed text-pretty text-muted-foreground">{t.premiumBody}</p>
           </div>
         </div>

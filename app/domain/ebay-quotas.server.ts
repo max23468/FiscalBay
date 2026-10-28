@@ -8,9 +8,10 @@ import { serviceSetting } from "./service-settings.server";
 /**
  * Vista delle quote eBay della console (D177, D188). Per ambiente, API e chiamata mostra limite,
  * consumo, residuo e azzeramento, insieme alle chiamate che FiscalBay ha sospeso perché eBay ha
- * risposto con il limite superato. Oltre la soglia di attenzione della quota giornaliera di
- * una chiamata, 70% salvo diversa scelta nella console, la lettura apre un'anomalia, una sola per finestra giornaliera e per chiamata, che si chiude quando una lettura
- * riuscita trova il consumo rientrato. Una lettura non riuscita non apre né chiude nulla.
+ * risposto con il limite superato. Oltre la soglia di attenzione della quota giornaliera, 70%
+ * salvo diversa scelta nella console, la lettura apre un'anomalia, una sola per finestra
+ * giornaliera e per quota, anche quando più chiamate la condividono, che si chiude quando una
+ * lettura riuscita trova il consumo rientrato. Una lettura non riuscita non apre né chiude nulla.
  */
 
 /** Consumo oltre il quale le letture sono a rischio nella stessa giornata. */
@@ -119,13 +120,21 @@ const subjectOf = (environment: EbayEnvironment, row: Pick<QuotaRow, "api" | "re
   `${environment}:${row.api}:${row.resource}`;
 
 /**
- * Apre l'anomalia della finestra giornaliera per ogni chiamata oltre la soglia e chiude le altre
- * dell'ambiente: quelle rientrate e quelle di una finestra già azzerata. La chiave porta
- * l'azzeramento indicato da eBay, o il giorno UTC se manca: nella stessa finestra la stessa
- * chiamata resta una sola anomalia aperta.
+ * Apre l'anomalia della finestra giornaliera per ogni quota oltre la soglia e chiude le altre
+ * dell'ambiente: quelle rientrate e quelle di una finestra già azzerata. Il soggetto è la prima
+ * chiamata di FiscalBay della quota, qualunque sia il numero delle chiamate che la condividono.
+ * La chiave porta l'azzeramento indicato da eBay alla prima lettura, o il giorno UTC se manca:
+ * finché quell'azzeramento non è passato la stessa quota resta la stessa anomalia, anche se eBay
+ * sposta l'orario indicato.
  */
-function anomalyStatements(db: D1Database, quotas: EnvironmentQuotas, now: Date) {
+async function anomalyStatements(db: D1Database, quotas: EnvironmentQuotas, now: Date) {
   const at = now.toISOString();
+  const { results: open } = await db
+    .prepare(`SELECT key, subject, json_extract(detail, '$.resetAt') AS resetAt
+      FROM admin_anomalies
+      WHERE kind = 'ebay_quota' AND resolved_at IS NULL AND subject LIKE ?1 || ':%'`)
+    .bind(quotas.environment)
+    .all<{ key: string; subject: string; resetAt: string | null }>();
   // Le chiamate con lo stesso limite, residuo e azzeramento condividono la quota: una sola
   // anomalia per la quota, e soltanto se FiscalBay usa almeno una delle sue chiamate.
   const pools = new Map<string, QuotaRow[]>();
@@ -136,10 +145,18 @@ function anomalyStatements(db: D1Database, quotas: EnvironmentQuotas, now: Date)
   const over = [...pools.values()]
     .filter((rows) => rows.some((row) => row.used))
     .map((rows) => {
+      // Le righe sono già nell'ordine di importanza delle chiamate di FiscalBay.
       const row = rows.find((item) => item.used)!;
-      const subject =
-        rows.length > 1 ? `${quotas.environment}:${row.api}` : subjectOf(quotas.environment, row);
-      return { row, subject, key: `ebay_quota:${subject}:${row.rate.resetAt ?? at.slice(0, 10)}` };
+      const subject = subjectOf(quotas.environment, row);
+      const current = open.find(
+        (anomaly) =>
+          anomaly.subject === subject &&
+          (anomaly.resetAt
+            ? Date.parse(anomaly.resetAt) > now.getTime()
+            : anomaly.key.endsWith(`:${at.slice(0, 10)}`)),
+      );
+      const key = current?.key ?? `ebay_quota:${subject}:${row.rate.resetAt ?? at.slice(0, 10)}`;
+      return { row, subject, key };
     });
   return [
     db
@@ -202,7 +219,7 @@ export async function readEbayQuotas(
         logFailure({ error, operation: "admin" });
         return { environment, read: "failed", rows: [], suspended };
       }
-      await env.DB.batch(anomalyStatements(env.DB, quotas, now));
+      await env.DB.batch(await anomalyStatements(env.DB, quotas, now));
       return quotas;
     }),
   );

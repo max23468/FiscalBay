@@ -124,11 +124,18 @@ export async function consumeTelegramStart(
   start: Pick<TelegramStart, "chatId" | "tokenHash" | "eventAt"> & { receiptId: string },
   fetcher: typeof fetch = fetch,
   now = new Date(),
+  options: { reply?: boolean } = {},
 ): Promise<void> {
   const db = env.DB;
   const url = (language: Language) => settingsUrl(env, language);
-  const reply = (text: string) => confirm(env, start.chatId, text, fetcher);
-  const both = (kind: "help" | "invalid") => unknownChatReply(env, start.chatId, kind, fetcher);
+  // Senza risposte, per gli invii spenti dalla console, il collegamento si scrive lo stesso.
+  const silent = options.reply === false;
+  const reply = async (text: string) => {
+    if (!silent) await confirm(env, start.chatId, text, fetcher);
+  };
+  const both = async (kind: "help" | "invalid") => {
+    if (!silent) await unknownChatReply(env, start.chatId, kind, fetcher);
+  };
   if (!start.tokenHash) return both("help");
   const request = await db
     .prepare(

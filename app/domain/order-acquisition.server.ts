@@ -123,8 +123,17 @@ async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
       await pass.finish();
       return true;
     }
+    if (await callsOff(ctx)) return false;
   }
   return false;
+}
+
+/**
+ * Chiamate eBay spente dalla console durante l'esecuzione: la lettura si ferma prima della pagina
+ * successiva, come a budget esaurito, e riprende alla riaccensione dall'ultima pagina applicata.
+ */
+async function callsOff(ctx: Context) {
+  return !(await serviceSetting(ctx.db, "ebay_calls"));
 }
 
 type SyncRow = {
@@ -203,6 +212,7 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
       page,
       total,
     );
+    if (await callsOff(ctx)) return false;
   }
   return false;
 }
@@ -391,7 +401,7 @@ export async function acquireOrders(input: {
       (await runTradingPass(ctx, state).catch((error: unknown) => tradingFailure(ctx, error)));
     const history =
       recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
-    const details = await readDetails(ctx);
+    const details = !(await callsOff(ctx)) && (await readDetails(ctx));
     outcome = { ok: true, served: true };
     return trading && history && details ? "complete" : "budget";
   } catch (error) {

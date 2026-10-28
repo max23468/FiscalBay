@@ -30,7 +30,7 @@ import {
 import { Spinner } from "~/components/ui/spinner";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "cn";
-import type { AppCopy } from "../../app-copy";
+import { supportEmail, type AppCopy } from "../../app-copy";
 import { mailtoHref } from "../../contact";
 import { languages, languageNames, type Language } from "../../i18n";
 import { defaultTemplate, requestEmailSubject } from "../../preferences";
@@ -70,6 +70,19 @@ export function CardNote({
       {tone ? <StatusIcon tone={tone} className="mt-1 size-3.5" /> : null}
       <span>{children}</span>
     </p>
+  );
+}
+
+/** Avviso dello sblocco con il Free sospeso dall'assistenza, con il contatto per chiarimenti. */
+export function FreeSuspendedNote() {
+  const { t } = useCopy();
+  return (
+    <>
+      {t.orders.freeSuspended}{" "}
+      <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+        {supportEmail}
+      </a>
+    </>
   );
 }
 
@@ -354,6 +367,12 @@ function LockedNote({
   const { t, language } = useCopy();
   const zone = useTimeZone();
   if (fiscal.hold) return <CardNote tone="info">{t.orders.lockedHold[fiscal.hold]}</CardNote>;
+  if (account.freeSuspended)
+    return (
+      <CardNote tone="warning">
+        <FreeSuspendedNote />
+      </CardNote>
+    );
   const remaining = remainingUnlocks(account);
   if (remaining === null || !account.quota) return null;
   if (remaining > 0) return compact ? null : <CardNote>{t.orders.lockedHint(remaining)}</CardNote>;

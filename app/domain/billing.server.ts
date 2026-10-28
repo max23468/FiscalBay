@@ -246,7 +246,8 @@ export async function reconcileSubscription(
     return charge ? paymentReversal(stripe, charge) : null;
   });
   const offers = subscriptionOffers(subscription, owner.data.offer);
-  // Lo spazio deve esistere: un abbonamento di uno spazio cancellato non ricrea nulla.
+  // Lo spazio deve esistere: un abbonamento di uno spazio cancellato non ricrea nulla, e uno
+  // spazio in cancellazione, rimasto soltanto per fermare i rinnovi, non riceve coperture.
   await env.DB.batch([
     env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id,
         offer, price_generation, status, current_period_start, current_period_end,
@@ -278,6 +279,8 @@ export async function reconcileSubscription(
           ends_at, stripe_invoice_id, amount_paid, currency, paid_at)
         SELECT ?1, s.workspace_id, 'premium', ?3, ?4, ?5, ?6, ?7, ?8
           FROM stripe_subscriptions s WHERE s.id = ?2
+            AND NOT EXISTS (SELECT 1 FROM account_deletions d
+              WHERE d.workspace_id = s.workspace_id AND d.completed_at IS NULL)
         ON CONFLICT DO NOTHING`).bind(
         crypto.randomUUID(),
         subscription.id,

@@ -10,6 +10,7 @@ import {
   type InvocationOutcome,
   type MetricPoint,
 } from "./metrics.server";
+import { samplePath } from "./metrics-queries";
 
 /**
  * Fasi misurate di una richiesta. I nomi, le operazioni e gli attributi sono un elenco chiuso:
@@ -109,8 +110,12 @@ async function observe<T>(
   }
 }
 
-/** Classe della route dal solo percorso, senza identificativi, query o valori dell'utente. */
-function routeClass(pathname: string): InvocationDetail {
+/**
+ * Classe della route dal solo percorso e dal metodo, senza identificativi, query o valori
+ * dell'utente. Il campione controllato delle metriche ha la classe propria.
+ */
+function routeClass(pathname: string, method: string): InvocationDetail {
+  if (pathname === samplePath && method === "HEAD") return "sample";
   if (pathname.startsWith("/webhooks/")) return "webhook";
   if (pathname.startsWith("/api/")) return "api";
   if (pathname.endsWith(".data")) return "data";
@@ -141,7 +146,7 @@ export async function withPhaseTimings(
     run,
     ({ value, failed }) => ({
       invocation: "http",
-      detail: routeClass(new URL(request.url).pathname),
+      detail: routeClass(new URL(request.url).pathname, request.method),
       method: request.method,
       outcome: failed || !value ? "5xx" : statusClass(value.status),
     }),

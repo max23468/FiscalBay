@@ -14,6 +14,26 @@ export const maxTimingMs = 120_000;
 let reported = false;
 
 /**
+ * Il documento è stato caricato sulla pagina resa: il percorso dell'entry di navigazione è quello
+ * attuale. Una pagina aperta nel client da un documento di un'altra pagina non ha un caricamento
+ * proprio, e le misure del documento non sono sue.
+ */
+export function loadedHere(navigationName: string, pathname: string) {
+  try {
+    return new URL(navigationName).pathname === pathname;
+  } catch {
+    return false;
+  }
+}
+
+/** Durata plausibile arrotondata al millisecondo; fuori limite o non finita resta assente. */
+export function timingValue(value: number | undefined) {
+  return value === undefined || !Number.isFinite(value) || value < 0 || value > maxTimingMs
+    ? undefined
+    : Math.round(value);
+}
+
+/**
  * Invia una volta, quando la pagina viene nascosta o lasciata o dopo dieci secondi, le misure del
  * caricamento in cui la pagina è stata resa, con il biglietto del suo loader. Senza biglietto,
  * come nell'anteprima, non parte nessun report.
@@ -30,6 +50,7 @@ export function usePageTiming(page: TimedPage, ticket: string | undefined) {
       "navigation",
     ) as PerformanceNavigationTiming[];
     if (!navigation || typeof navigator.sendBeacon !== "function") return;
+    if (!loadedHere(navigation.name, location.pathname)) return;
     let lcp: number | undefined;
     const observer = PerformanceObserver.supportedEntryTypes?.includes("largest-contentful-paint")
       ? new PerformanceObserver((list) => {
@@ -42,20 +63,15 @@ export function usePageTiming(page: TimedPage, ticket: string | undefined) {
       if (sent) return;
       sent = true;
       observer?.disconnect();
-      // Solo durate plausibili, arrotondate al millisecondo: un valore non finito resta fuori.
-      const round = (value: number | undefined) =>
-        value === undefined || !Number.isFinite(value) || value < 0 || value > maxTimingMs
-          ? undefined
-          : Math.round(value);
       const server = Object.fromEntries(
         (navigation.serverTiming ?? []).flatMap((entry) => {
-          const value = round(entry.duration);
+          const value = timingValue(entry.duration);
           return (serverPhases as readonly string[]).includes(entry.name) && value !== undefined
             ? [[entry.name, value]]
             : [];
         }),
       );
-      const ttfb = round(navigation.responseStart);
+      const ttfb = timingValue(navigation.responseStart);
       if (ttfb === undefined) return;
       navigator.sendBeacon(
         pageTimingPath,
@@ -64,9 +80,11 @@ export function usePageTiming(page: TimedPage, ticket: string | undefined) {
             JSON.stringify({
               page,
               ttfb,
-              fcp: round(performance.getEntriesByName("first-contentful-paint")[0]?.startTime),
-              lcp: round(lcp),
-              ready: round(ready) ?? maxTimingMs,
+              fcp: timingValue(
+                performance.getEntriesByName("first-contentful-paint")[0]?.startTime,
+              ),
+              lcp: timingValue(lcp),
+              ready: timingValue(ready),
               server,
               ticket,
             }),

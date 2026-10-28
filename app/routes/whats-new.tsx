@@ -20,7 +20,9 @@ export function headers(): HeadersInit {
   return { "cache-control": "no-store" };
 }
 
-/** Novità dell'app (D203): senza voci la pagina non esiste, come la sua voce nel menu. */
+/**
+ * Novità dell'app (D203): senza voci già uscite la pagina non esiste, come la sua voce nel menu.
+ */
 export function loader({ request }: Route.LoaderArgs) {
   return areaPage(request, async () => {
     const { language } = await requireAccountArea(request);

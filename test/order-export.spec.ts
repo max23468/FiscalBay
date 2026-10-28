@@ -13,7 +13,12 @@ import {
   exportXlsxStream,
   formulaLike,
 } from "../app/domain/order-export.server";
-import { exportHeader, parseColumns, standardColumns } from "../app/orders/export-columns";
+import {
+  exportHeader,
+  parseColumns,
+  standardColumns,
+  type ExportColumn,
+} from "../app/orders/export-columns";
 import {
   columnLetters,
   serialDate,
@@ -21,13 +26,20 @@ import {
   xlsxRow,
   xlsxStream,
   xlsxText,
+  XlsxRowLimitError,
+  xlsxMaxRows,
   type XlsxCell,
 } from "../app/domain/xlsx.server";
 import { visibleOrderTallies, type VisibleOrder } from "../app/domain/orders.server";
 import { action as exportAction, loader as exportLoader } from "../app/routes/order-export";
 import { loader as exportFileLoader } from "../app/routes/export-file";
 import { action as settingsAction, loader as loadSettings } from "../app/routes/settings";
-import { maxExportConfigurations } from "../app/domain/export-configurations.server";
+import {
+  deleteExportConfiguration,
+  listExportConfigurations,
+  maxExportConfigurations,
+  saveExportConfiguration,
+} from "../app/domain/export-configurations.server";
 import {
   exportPartBytes,
   exportRevision,
@@ -37,10 +49,18 @@ import {
 import {
   consumeExportJob,
   exportJobOrders,
+  maxQueuedExports,
   publishOrderFile,
   queueOrderFile,
+  resumeExportJobs,
   type OrderFileRequest,
 } from "../app/domain/export-jobs.server";
+import { consumeTask, taskSlot } from "../app/domain/scheduled-work.server";
+import { revokeHistoryExtension } from "../app/domain/concessions.server";
+import { reversalStatements } from "../app/domain/refunds.server";
+import { applyFreePlan, applyFreePlans } from "../app/domain/free-store.server";
+import { deleteStoreData } from "../app/domain/stores.server";
+import { confirmStoreTransfer, prepareStoreTransfer } from "../app/domain/store-transfer.server";
 import { listNotifications } from "../app/domain/notifications.server";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { queued, queueMessage } from "./fixtures/queue-fixture";
@@ -147,13 +167,25 @@ describe("righe e celle del file", () => {
       "\nA",
       "+cmd|' /C calc'!A0",
       "-2+HYPERLINK(1)",
+      // Excel calcola anche telefoni, sottrazioni e divisioni che iniziano con un segno.
+      "+39-333-1234567",
+      "-2-3",
+      "-1/0",
+      "+39 333 000 1000",
+      "-",
+      "+",
     ])
       expect([value, formulaLike(value)]).toEqual([value, true]);
-    for (const value of ["", "a=b", "1-2", "00123456789", "+39 333 000 1000", "-12.50", "+1", "-"])
+    for (const value of ["", "a=b", "1-2", "00123456789", "-12.50", "+1", "-1,5", "+007"])
+      expect([value, formulaLike(value)]).toEqual([value, false]);
+    // Casi documentati: uno spazio o un carattere Unicode iniziale (spazio unificatore, segno
+    // uguale a larghezza piena, spazio a larghezza zero) non apre una formula e resta intatto.
+    for (const value of [" =1+1", "\u00a0=1+1", "\uff1d1+1", "\u200b=1+1", " +39 333"])
       expect([value, formulaLike(value)]).toEqual([value, false]);
     expect(csvCell("=1+1")).toBe(`"'=1+1"`);
     expect(csvCell('Ditta "Rossi", via\r\nRoma')).toBe('"Ditta ""Rossi"", via\r\nRoma"');
-    expect(csvCell("+39 333")).toBe('"+39 333"');
+    expect(csvCell("+39 333")).toBe(`"'+39 333"`);
+    expect(csvCell("-12.50")).toBe('"-12.50"');
   });
 
   it("scrive data e ora nel fuso dell'utente, anche a mezzanotte", () => {
@@ -253,6 +285,31 @@ describe("righe e celle del file", () => {
     expect(cell("Articolo")).toBe("");
     const locked = exportRows(visible({ fiscalState: "locked" }), "order", it_, "Europe/Rome")[0]!;
     expect(locked[exportHeader("order", it_).indexOf("Situazione fiscale")]).toBe("Da sbloccare");
+  });
+
+  it("scrive la situazione fiscale con l'avvertenza della pagina sull'ultima lettura", () => {
+    const situation = (overrides: Partial<VisibleOrder>, language: "it" | "en" = "it") =>
+      exportRows(visible(overrides), "order", appCopy[language], "Europe/Rome", ["fiscal"])[0]![0];
+    expect(situation({})).toBe("Disponibile");
+    expect(situation({ taxVerification: "error" })).toBe(
+      "Disponibile, ultima lettura da eBay non riuscita",
+    );
+    expect(situation({ taxVerification: "checking" })).toBe(
+      "Disponibile, nuova lettura da eBay in corso",
+    );
+    expect(situation({ taxAvailability: "masked" })).toBe("Disponibile, ora nascosto da eBay");
+    expect(situation({ taxAvailability: "absent" })).toBe("Disponibile, non più riportato da eBay");
+    expect(situation({ taxAvailability: "not_included" })).toBe(
+      "Disponibile, non più riportato da eBay",
+    );
+    expect(situation({ taxVerification: "error" }, "en")).toBe(
+      "Available, latest eBay read failed",
+    );
+    // Senza valore resta lo stato della pagina, anche con la lettura non riuscita o in corso.
+    expect(situation({ fiscalState: "locked", taxVerification: "checking" })).toBe("Da sbloccare");
+    expect(situation({ fiscalState: "error", taxVerification: "error" })).toBe(
+      "Aggiornamento non riuscito",
+    );
   });
 });
 
@@ -506,6 +563,34 @@ describe("colonne scelte e file XLSX", () => {
     expect(closed).toBe(true);
   });
 
+  it("interrompe il foglio oltre il limite di righe di Excel prima di scriverlo", async () => {
+    const sheet = { name: "Ordini", header: ["A"], widths: [10], modified: new Date(now) };
+    let closed = false;
+    async function* pages(sizes: number[]) {
+      try {
+        for (const size of sizes) yield size;
+      } finally {
+        closed = true;
+      }
+    }
+    const rows = (size: number): XlsxCell[][] =>
+      Array.from({ length: size }, () => [{ type: "text", value: "x" }]);
+    const bytes = (stream: ReadableStream<Uint8Array>) => new Response(stream).arrayBuffer();
+    // Con l'intestazione il foglio arriva esattamente al limite e si scrive.
+    expect((await bytes(xlsxStream(sheet, pages([1, 1]), rows, 3))).byteLength).toBeGreaterThan(0);
+    closed = false;
+    await expect(bytes(xlsxStream(sheet, pages([2, 1]), rows, 3))).rejects.toBeInstanceOf(
+      XlsxRowLimitError,
+    );
+    expect(closed).toBe(true);
+    // Il limite predefinito è quello di un foglio di Excel, intestazione compresa.
+    expect(xlsxMaxRows).toBe(1_048_576);
+    const empty = (size: number): XlsxCell[][] => Array.from({ length: size }, () => []);
+    await expect(bytes(xlsxStream(sheet, pages([xlsxMaxRows]), empty))).rejects.toBeInstanceOf(
+      XlsxRowLimitError,
+    );
+  });
+
   it("nomina il file XLSX con la sua estensione", () => {
     expect(exportFileName(it_, new Date(now), "UTC", "xlsx")).toBe(
       "fiscalbay-ordini-2026-09-13.xlsx",
@@ -652,10 +737,23 @@ describe("righe complete del file", () => {
     ]);
   });
 
-  it("lascia intatti numeri con punteggiatura e neutralizza il testo dopo il segno", () => {
-    for (const value of ["+(39) 333", "-1,5", "-12.50", "+39/333", "+39-333", "-(1)"])
+  it("dopo il segno lascia intatto soltanto un numero semplice", () => {
+    for (const value of ["-1,5", "-12.50", "+3", "-0.5", "+1234567"])
       expect([value, formulaLike(value)]).toEqual([value, false]);
-    for (const value of ["+39 a", "-1e5", "+ SUM(1)", "-(A1)"])
+    for (const value of [
+      "+(39) 333",
+      "+39/333",
+      "+39-333",
+      "-(1)",
+      "+39 a",
+      "-1e5",
+      "+ SUM(1)",
+      "-(A1)",
+      "-1.",
+      "-.5",
+      "-1,5,0",
+      "+1 ",
+    ])
       expect([value, formulaLike(value)]).toEqual([value, true]);
   });
 
@@ -1468,9 +1566,38 @@ describe("file degli ordini", () => {
       [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].join(",");
     expect(await digest(await object!.arrayBuffer())).toBe(await digest(source));
     const before = (await env.EXPORT_FILES.list()).objects.length;
-    await expect(publishExportFile(env, { ...file, body: chunked(true) })).rejects.toThrow(
-      "lettura interrotta",
-    );
+    // Il caricamento a parti già iniziato si annulla: `list()` non mostra le parti caricate, che
+    // senza annullamento resterebbero nel bucket fino alla sua scadenza.
+    const started = env.EXPORT_FILES.createMultipartUpload.bind(env.EXPORT_FILES);
+    const uploads: Array<{ parts: number; aborted: boolean }> = [];
+    const interrupted = vi
+      .spyOn(env.EXPORT_FILES, "createMultipartUpload")
+      .mockImplementation(async (...args) => {
+        const upload = await started(...args);
+        const seen = { parts: 0, aborted: false };
+        uploads.push(seen);
+        return {
+          key: upload.key,
+          uploadId: upload.uploadId,
+          uploadPart: (number: number, value: Uint8Array) => {
+            seen.parts++;
+            return upload.uploadPart(number, value);
+          },
+          complete: (parts: R2UploadedPart[]) => upload.complete(parts),
+          abort: async () => {
+            seen.aborted = true;
+            await upload.abort();
+          },
+        } as R2MultipartUpload;
+      });
+    try {
+      await expect(publishExportFile(env, { ...file, body: chunked(true) })).rejects.toThrow(
+        "lettura interrotta",
+      );
+    } finally {
+      interrupted.mockRestore();
+    }
+    expect(uploads).toEqual([{ parts: 1, aborted: true }]);
     expect((await env.EXPORT_FILES.list()).objects.length).toBe(before);
     expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(1);
     // Un file di una parte esatta è una parte sola, senza una parte vuota in coda.
@@ -1671,8 +1798,9 @@ describe("file degli ordini", () => {
         fileName: "fiscalbay-ordini-2026-09-13.csv",
         now: new Date(),
       });
+      expect(id).not.toBeNull();
       expect(send).toHaveBeenCalledExactlyOnceWith({ exportJob: id });
-      return id;
+      return id!;
     } finally {
       send.mockRestore();
     }
@@ -1819,18 +1947,22 @@ describe("file degli ordini", () => {
     await consumeExportJob(queueMessage({ exportJob: ready }), env);
     const { file_id: file } = (await job(ready))!;
     expect(await expiry(file!)).toBe(hours(1));
-    const xlsx = await queuedJob({ format: "xlsx" });
-    const columns = await queuedJob({ columns: ["order", "taxCode"] });
     const late = await queuedJob();
+    const xlsx = await queuedJob({ format: "xlsx" });
     vi.setSystemTime(Date.parse(hours(1)));
-    await consumeExportJob(queueMessage({ exportJob: columns }), env);
-    expect(await job(columns)).toMatchObject({ state: "failed" });
     await consumeExportJob(queueMessage({ exportJob: xlsx }), env);
     expect(await job(xlsx)).toMatchObject({ state: "failed" });
+    const columns = await queuedJob({ columns: ["order", "taxCode"] });
+    await consumeExportJob(queueMessage({ exportJob: columns }), env);
+    expect(await job(columns)).toMatchObject({ state: "failed" });
+    // Colonne uguali allo schema standard non chiedono Premium, anche finito prima del lavoro.
+    const standard = await queuedJob({ columns: standardColumns("order") });
+    await consumeExportJob(queueMessage({ exportJob: standard }), env);
+    expect(await job(standard)).toMatchObject({ state: "ready" });
     vi.setSystemTime(Date.parse(hours(24)));
     await consumeExportJob(queueMessage({ exportJob: late }), env);
     expect(await job(late)).toMatchObject({ state: "failed" });
-    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(1);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(2);
   });
 
   it("un lavoro senza ordini o senza spazio si chiude senza file, uno non accodato non resta", async () => {
@@ -1913,10 +2045,14 @@ describe("file degli ordini", () => {
     await env.DB.prepare("UPDATE export_jobs SET locked_until = ? WHERE id = ?")
       .bind(hours(0.25), id)
       .run();
+    // La consegna aspetta lo scadere del blocco con un solo tentativo, invece di uno al minuto.
     const busy = queueMessage({ exportJob: id });
     await consumeExportJob(busy, env);
-    expect(busy.retry).toHaveBeenCalledExactlyOnceWith({ delaySeconds: 60 });
+    expect(busy.retry).toHaveBeenCalledExactlyOnceWith({ delaySeconds: 900 });
     expect(busy.ack).not.toHaveBeenCalled();
+    const soon = queueMessage({ exportJob: id }, 2);
+    await consumeExportJob(soon, env, new Date(Date.parse(hours(0.25)) - 1_500));
+    expect(soon.retry).toHaveBeenCalledExactlyOnceWith({ delaySeconds: 2 });
     // Allo scadere del blocco il lavoro riparte; un errore di R2 lo libera per il tentativo dopo.
     vi.setSystemTime(Date.parse(hours(0.25)));
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -1950,6 +2086,675 @@ describe("file degli ordini", () => {
     const missing = queueMessage({ exportJob: crypto.randomUUID() });
     await consumeExportJob(missing, env);
     expect(missing.ack).toHaveBeenCalledOnce();
+  });
+
+  it("la ripresa oraria riaccoda un lavoro interrotto e due consumer creano un solo file", async () => {
+    const id = await queuedJob();
+    // Un consumer prende il lavoro e si interrompe senza concluderlo.
+    await env.DB.prepare("UPDATE export_jobs SET locked_until = ? WHERE id = ?")
+      .bind(hours(0.25), id)
+      .run();
+    const sendBatch = vi.spyOn(env.WORK_QUEUE, "sendBatch").mockResolvedValue(queued);
+    try {
+      // Finché il blocco vale il lavoro resta a quel consumer.
+      vi.setSystemTime(Date.parse(hours(0.25)) - 1);
+      expect(await resumeExportJobs(env, new Date())).toBe(0);
+      expect(sendBatch).not.toHaveBeenCalled();
+      vi.setSystemTime(Date.parse(hours(1)));
+      expect(await resumeExportJobs(env, new Date())).toBe(1);
+      expect(sendBatch).toHaveBeenCalledExactlyOnceWith([{ body: { exportJob: id } }]);
+    } finally {
+      sendBatch.mockRestore();
+    }
+    // Il messaggio riaccodato e quello originale arrivano insieme: uno crea il file, l'altro
+    // aspetta lo scadere del blocco del primo.
+    const deliveries = [queueMessage({ exportJob: id }), queueMessage({ exportJob: id }, 5)];
+    await Promise.all(deliveries.map((delivery) => consumeExportJob(delivery, env)));
+    expect(deliveries.map((delivery) => delivery.ack.mock.calls.length).sort()).toEqual([0, 1]);
+    expect(deliveries.flatMap((delivery) => delivery.retry.mock.calls)).toEqual([
+      [{ delaySeconds: 900 }],
+    ]);
+    expect(await job(id)).toMatchObject({ state: "ready", locked_until: null });
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(1);
+    // La consegna rimandata trova il lavoro concluso e si chiude; la ripresa non ha altro da fare.
+    const later = queueMessage({ exportJob: id }, 6);
+    await consumeExportJob(later, env);
+    expect(later.ack).toHaveBeenCalledOnce();
+    expect(await resumeExportJobs(env, new Date())).toBe(0);
+  });
+
+  it("il compito orario riaccoda un lavoro senza messaggio e chiude quello che non può più concludersi", async () => {
+    const lost = await queuedJob();
+    const running = await queuedJob();
+    const run = async (at: string) => {
+      const slot = taskSlot("export_files", new Date(at));
+      await env.DB.prepare(
+        `INSERT INTO scheduled_tasks (task, slot, queued_at) VALUES ('export_files', ?1, ?2)
+         ON CONFLICT(task) DO UPDATE SET slot = excluded.slot, queued_at = excluded.queued_at,
+           done_at = NULL, lease = NULL, locked_until = NULL`,
+      )
+        .bind(slot, at)
+        .run();
+      const delivery = queueMessage({ task: "export_files", slot });
+      await consumeTask(delivery, env, fetch, new Date(at));
+      expect(delivery.ack).toHaveBeenCalledOnce();
+    };
+    const sendBatch = vi.spyOn(env.WORK_QUEUE, "sendBatch").mockResolvedValue(queued);
+    try {
+      // Un lavoro appena richiesto aspetta ancora il suo messaggio.
+      await run(hours(0.2));
+      expect(sendBatch).not.toHaveBeenCalled();
+      await run(hours(0.25));
+      expect(sendBatch).toHaveBeenCalledOnce();
+      expect(
+        [...sendBatch.mock.calls[0]![0]]
+          .map(({ body }) => (body as { exportJob: string }).exportJob)
+          .sort(),
+      ).toEqual([lost, running].sort());
+      // Dopo 24 ore il lavoro libero non riesce; quello di un consumer in corso resta a lui.
+      sendBatch.mockClear();
+      await env.DB.prepare("UPDATE export_jobs SET locked_until = ? WHERE id = ?")
+        .bind(hours(24.1), running)
+        .run();
+      await run(hours(24));
+      expect(sendBatch).not.toHaveBeenCalled();
+    } finally {
+      sendBatch.mockRestore();
+    }
+    expect(await job(lost)).toEqual({
+      state: "failed",
+      file_id: null,
+      request_sealed: null,
+      locked_until: null,
+      finished_at: hours(24),
+    });
+    expect(await job(running)).toMatchObject({ state: "queued", locked_until: hours(24.1) });
+    vi.setSystemTime(Date.parse(hours(24)));
+    expect(await bell()).toEqual([
+      expect.objectContaining({ id: `export:${lost}`, tone: "warning", at: hours(24) }),
+    ]);
+    // Richiesti nello stesso istante: l'ordine fra i due segue l'identificativo.
+    expect((await sectionFiles()).map(({ id, state }) => `${id} ${state}`).sort()).toEqual(
+      [`${running} queued`, `${lost} failed`].sort(),
+    );
+  });
+
+  it("un errore dopo la pubblicazione non lascia un secondo file al tentativo successivo", async () => {
+    const id = await queuedJob();
+    const keys = async () => (await env.EXPORT_FILES.list()).objects.map(({ key }) => key);
+    const before = await keys();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const prepare = env.DB.prepare.bind(env.DB);
+    let failed = false;
+    // La conclusione del lavoro non riesce una volta, con il file già scritto nel bucket.
+    const concluding = vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) => {
+      if (!failed && /^\s*UPDATE export_jobs SET state = /u.test(sql) && sql.includes("file_id")) {
+        failed = true;
+        return {
+          bind: () => prepare("SELECT * FROM conclusione_non_riuscita"),
+        } as unknown as D1PreparedStatement;
+      }
+      return prepare(sql);
+    });
+    try {
+      const first = queueMessage({ exportJob: id });
+      await consumeExportJob(first, env);
+      expect(failed).toBe(true);
+      expect(first.retry).toHaveBeenCalledOnce();
+      expect(await job(id)).toMatchObject({ state: "queued", file_id: null, locked_until: null });
+      expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(0);
+      const second = queueMessage({ exportJob: id }, 2);
+      await consumeExportJob(second, env);
+      expect(second.ack).toHaveBeenCalledOnce();
+    } finally {
+      concluding.mockRestore();
+      errors.mockRestore();
+    }
+    const { file_id: file } = (await job(id))!;
+    expect(
+      (await env.DB.prepare("SELECT id FROM export_files").all<{ id: string }>()).results,
+    ).toEqual([{ id: file }]);
+    expect((await keys()).filter((key) => !before.includes(key))).toEqual([file]);
+  });
+
+  it("la campanella annuncia il file finché resta scaricabile e il lavoro non riuscito per 24 ore", async () => {
+    const ready = await queuedJob();
+    const failed = await queuedJob({ filter: { ids: ["o-assente"], criteria: {} } });
+    // Il consumer parte due ore dopo la richiesta: il file vale fino a 26 ore da essa.
+    vi.setSystemTime(Date.parse(hours(2)));
+    await consumeExportJob(queueMessage({ exportJob: ready }), env);
+    await consumeExportJob(queueMessage({ exportJob: failed }), env);
+    const { file_id: file } = (await job(ready))!;
+    expect(await expiry(file!)).toBe(hours(26));
+    const announced = async () =>
+      (await bell())
+        .map(({ id, tone, at }) => [id, tone, at])
+        .sort((a, b) => a[0]!.localeCompare(b[0]!));
+    vi.setSystemTime(Date.parse(hours(26)) - 1);
+    expect(await announced()).toEqual(
+      [
+        [`export:${failed}`, "warning", hours(2)],
+        [`export:${ready}`, "success", hours(2)],
+      ].sort((a, b) => a[0]!.localeCompare(b[0]!)),
+    );
+    expect((await sectionFiles()).map(({ state }) => state).sort()).toEqual(["failed", "ready"]);
+    await purgeExportFiles(env, new Date());
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_jobs").first("n")).toBe(2);
+    vi.setSystemTime(Date.parse(hours(26)));
+    expect(await bell()).toEqual([]);
+    expect(await sectionFiles()).toEqual([]);
+    await purgeExportFiles(env, new Date());
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_jobs").first("n")).toBe(0);
+  });
+
+  it("ammette due lavori in preparazione per utente, anche con richieste concorrenti", async () => {
+    const other = await verifiedSession(`altro-${crypto.randomUUID()}@example.invalid`);
+    const queue = (user: string) =>
+      queueOrderFile(env, {
+        userId: user,
+        revision: 0,
+        request: {
+          environment: "production",
+          filter: { ids: ["o-a"], criteria: {} },
+          rows: "order",
+          format: "csv",
+          columns: null,
+          language: "it",
+          timeZone: "Europe/Rome",
+        },
+        fileName: "fiscalbay-ordini-2026-09-13.csv",
+        now: new Date(),
+      });
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
+    try {
+      const ids = await Promise.all([queue(userId), queue(userId), queue(userId)]);
+      expect(ids.filter((id) => id === null)).toHaveLength(3 - maxQueuedExports);
+      expect(send).toHaveBeenCalledTimes(maxQueuedExports);
+      // Il limite vale per utente; concluso un lavoro se ne chiede un altro.
+      expect(await queue(other.userId)).not.toBeNull();
+      expect(await queue(userId)).toBeNull();
+      await consumeExportJob(queueMessage({ exportJob: ids.find((id) => id !== null)! }), env);
+      expect(await queue(userId)).not.toBeNull();
+    } finally {
+      send.mockRestore();
+    }
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS n FROM export_jobs WHERE user_id = ? AND state = 'queued'",
+      )
+        .bind(userId)
+        .first("n"),
+    ).toBe(maxQueuedExports);
+  });
+
+  it("dalla sezione, un CSV standard resta senza Premium e oltre due file in preparazione c'è l'avviso", async () => {
+    await env.DB.prepare(
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?1)
+       INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,
+         currency, total_minor, payment_status)
+       SELECT 'bulk-' || i, 's-a', 'bulk-' || i,
+              strftime('%Y-%m-%dT%H:%M:%fZ', ?2, '-' || i || ' seconds'), ?2, 'EUR', 100, 'PAID'
+         FROM n`,
+    )
+      .bind(exportJobOrders, now)
+      .run();
+    await insertEntitlement({
+      source: "admin",
+      endsAt: hours(1),
+      grantedBy: "owner",
+      grantReason: "prova",
+    }).run();
+    // Con Premium la sezione invia sempre le colonne, qui uguali a quelle standard.
+    const fields = { period: "30", format: "csv", columns: standardColumns("order").join(",") };
+    const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
+    let message: unknown;
+    try {
+      for (const _ of [1, 2]) expect((await request("", fields)).status).toBe(202);
+      message = send.mock.calls[0]![0];
+      const busy = await request("", fields);
+      expect(busy.status).toBe(429);
+      expect(await busy.json()).toEqual({
+        ok: false,
+        notice: it_.settings.export.exportBusy(maxQueuedExports),
+      });
+      expect(send).toHaveBeenCalledTimes(2);
+    } finally {
+      send.mockRestore();
+    }
+    expect(it_.settings.export.exportBusy(2)).toBe(
+      "Hai già 2 file in preparazione: potrai crearne un altro quando uno sarà pronto.",
+    );
+    expect(appCopy.en.settings.export.exportBusy(2)).toBe(
+      "You already have 2 files being prepared: you can create another one when one is ready.",
+    );
+    // Premium finisce prima che il lavoro parta: il CSV standard si crea comunque.
+    vi.setSystemTime(Date.parse(hours(1)));
+    const { exportJob: id } = message as { exportJob: string };
+    await consumeExportJob(queueMessage(message), env);
+    expect(await job(id)).toMatchObject({ state: "ready" });
+    // Nel Free le colonne standard valgono come lo schema standard, quelle scelte no.
+    expect(
+      (await request("ordini=o-a", { columns: standardColumns("order").join(",") })).status,
+    ).toBe(200);
+    expect((await request("ordini=o-a", { columns: "taxCode,order" })).status).toBe(403);
+  });
+
+  it("un XLSX oltre il limite di righe del foglio non riesce subito e lo dice", async () => {
+    await insertEntitlement({
+      source: "admin",
+      endsAt: hours(48),
+      grantedBy: "owner",
+      grantReason: "prova",
+    }).run();
+    const id = await queuedJob({ format: "xlsx" });
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const full = vi.spyOn(env.EXPORT_FILES, "put").mockRejectedValue(new XlsxRowLimitError());
+    try {
+      const delivery = queueMessage({ exportJob: id });
+      await consumeExportJob(delivery, env);
+      expect(delivery.retry).not.toHaveBeenCalled();
+      expect(delivery.ack).toHaveBeenCalledOnce();
+      expect(await job(id)).toMatchObject({ state: "failed", request_sealed: null });
+      const response = await request("ordini=o-a", { format: "xlsx" });
+      expect(response.status).toBe(413);
+      expect(await response.json()).toEqual({
+        ok: false,
+        notice: it_.settings.export.exportTooManyRows,
+      });
+    } finally {
+      full.mockRestore();
+      errors.mockRestore();
+    }
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(0);
+  });
+
+  it("una revoca fra la revisione e la lettura dei dati non rende il file scaricabile", async () => {
+    const before = (await env.EXPORT_FILES.list()).objects.length;
+    const prepare = env.DB.prepare.bind(env.DB);
+    let revoked = false;
+    const revoke = async () => {
+      if (revoked) return;
+      revoked = true;
+      await env.DB.prepare("UPDATE tax_identifiers SET removed_at = ? WHERE id = 't-c'")
+        .bind(now)
+        .run();
+    };
+    // La revoca arriva appena prima che il file legga gli ordini.
+    const reading = vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) => {
+      const statement = prepare(sql);
+      if (revoked || !sql.trimStart().startsWith("WITH visible_orders")) return statement;
+      return {
+        bind: (...values: unknown[]) => {
+          const bound = statement.bind(...values);
+          return {
+            all: async () => {
+              await revoke();
+              return bound.all();
+            },
+          };
+        },
+      } as unknown as D1PreparedStatement;
+    });
+    let response: Response;
+    try {
+      response = await request("ordini=o-a");
+    } finally {
+      reading.mockRestore();
+    }
+    expect(revoked).toBe(true);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ ok: false, notice: it_.settings.export.exportGone });
+    expect((await env.EXPORT_FILES.list()).objects.length).toBe(before);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM export_files").first("n")).toBe(0);
+    // Lo stesso vale per un lavoro dalla coda: si chiude come non riuscito, senza file.
+    const id = await queuedJob();
+    revoked = false;
+    const queuedReading = vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) => {
+      const statement = prepare(sql);
+      if (revoked || !sql.trimStart().startsWith("WITH visible_orders")) return statement;
+      return {
+        bind: (...values: unknown[]) => {
+          const bound = statement.bind(...values);
+          return {
+            all: async () => {
+              revoked = true;
+              await env.DB.prepare(
+                `INSERT INTO history_extensions (id, workspace_id, months, reason, actor, granted_at, revoked_at)
+                 VALUES ('x-revocata', 'w-a', 18, 'Storico', 'owner', ?1, NULL)`,
+              )
+                .bind(now)
+                .run();
+              await env.DB.prepare(
+                "UPDATE history_extensions SET revoked_at = ? WHERE id = 'x-revocata'",
+              )
+                .bind(now)
+                .run();
+              return bound.all();
+            },
+          };
+        },
+      } as unknown as D1PreparedStatement;
+    });
+    const delivery = queueMessage({ exportJob: id });
+    try {
+      await consumeExportJob(delivery, env);
+    } finally {
+      queuedReading.mockRestore();
+    }
+    expect(revoked).toBe(true);
+    expect(delivery.ack).toHaveBeenCalledOnce();
+    expect(await job(id)).toMatchObject({ state: "failed", file_id: null, request_sealed: null });
+    expect((await env.EXPORT_FILES.list()).objects.length).toBe(before);
+  });
+
+  it("un download già autorizzato si completa, quello dopo la revoca è negato", async () => {
+    const id = await created();
+    const get = env.EXPORT_FILES.get.bind(env.EXPORT_FILES);
+    // La revoca arriva fra il controllo della riga e la lettura dei byte.
+    const reading = vi.spyOn(env.EXPORT_FILES, "get").mockImplementation(async (...args) => {
+      await env.DB.prepare("UPDATE ebay_stores SET data_deleted_at = ? WHERE id = 's-a'")
+        .bind(now)
+        .run();
+      return get(...(args as [string]));
+    });
+    let response: Response;
+    try {
+      response = await download(id);
+    } finally {
+      reading.mockRestore();
+    }
+    expect(response.status).toBe(200);
+    expect((await csv(response)).rows.map((row) => row["Numero ordine"])).toEqual(["ebay-a"]);
+    await gone(await download(id));
+  });
+
+  it("dal dettaglio esporta l'ordine come lo mostra il dettaglio, fuori dai filtri dell'elenco", async () => {
+    // L'elenco «Da sbloccare» è stato aperto prima che o-c entrasse; o-c è appena sbloccato.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE orders SET listed_at = ? WHERE id = 'o-c'").bind(hours(1)),
+      env.DB.prepare(
+        `INSERT INTO order_grants (id, workspace_id, order_id, cycle_id, source, granted_at)
+         VALUES ('g-c', 'w-a', 'o-c', NULL, 'admin', ?)`,
+      ).bind(now),
+    ]);
+    vi.setSystemTime(Date.parse(hours(2)));
+    const list = `fiscale=locked&vista=${snapshotCursor(new Date(now))}`;
+    const rows = async (query: string) =>
+      (await csv(await request(query))).rows.map((row) => [
+        row["Numero ordine"],
+        row["Codice Fiscale"],
+      ]);
+    expect(await rows(`${list}&ordine=o-c`)).toEqual([["ebay-c", "VRDGPP80A01H501X"]]);
+    // La selezione conta invece soltanto gli ordini ancora presenti nell'elenco.
+    expect((await request(`${list}&ordini=o-c`)).status).toBe(409);
+    // Come il dettaglio: l'acquisto non pagato soltanto con «Non pagato», mai un altro spazio.
+    expect((await request("ordine=o-p")).status).toBe(409);
+    expect(await rows("pagamento=unpaid&ordine=o-p")).toEqual([["ebay-p", ""]]);
+    expect((await request("ordine=o-b")).status).toBe(409);
+    // La sezione conta lo stesso ordine e torna all'elenco di partenza.
+    const { page } = await routePage(
+      loadSettings,
+      `/app/impostazioni/esportazione?${list}&ordine=o-c`,
+      { cookie, params: { sezione: "esportazione" } },
+    );
+    expect(page.exportContext).toMatchObject({
+      kind: "orders",
+      order: "ebay-c",
+      returnHref: `/app/ordini?${list}`,
+      estimate: { orders: 1, locked: 0, available: 1 },
+    });
+  });
+
+  it("il file riporta la stessa avvertenza della pagina dopo una lettura non riuscita", async () => {
+    await env.DB.prepare(
+      `INSERT INTO order_tax_checks (order_id, source, observed_at, availability, verification)
+       VALUES ('o-a', 'ebay_fulfillment', ?, 'present', 'error')`,
+    )
+      .bind(hours(-1))
+      .run();
+    const [row] = (await csv(await request("ordini=o-a"))).rows;
+    expect(row).toMatchObject({
+      "Codice Fiscale": "RSSMRA80A01H501U",
+      "Situazione fiscale": "Disponibile, ultima lettura da eBay non riuscita",
+    });
+  });
+
+  it("CF e Partita IVA letti da Trading e da Fulfillment compaiono una volta nel file", async () => {
+    await insertTaxIdentifiers(
+      {
+        id: "t-a3",
+        orderId: "o-a",
+        type: "CODICE_FISCALE",
+        country: "IT",
+        value: "RSSMRA80A01H501U",
+        source: "ebay_fulfillment",
+      },
+      {
+        id: "t-a4",
+        orderId: "o-a",
+        type: "VATIN",
+        country: "IT",
+        value: "01234567890",
+        source: "ebay_fulfillment",
+      },
+    ).run();
+    const [row] = (await csv(await request("ordini=o-a"))).rows;
+    expect(row).toMatchObject({
+      "Codice Fiscale": "RSSMRA80A01H501U",
+      "Partita IVA": "01234567890",
+    });
+  });
+
+  it("le revoche dei percorsi reali invalidano i file, le ripetizioni non aumentano la revisione", async () => {
+    const revision = () => exportRevision(env.DB, userId);
+    const valid = async () => (await download(await created())).status === 200;
+    // Concessione revocata: l'estensione dello storico.
+    await env.DB.prepare(
+      `INSERT INTO history_extensions (id, workspace_id, months, reason, actor, granted_at)
+       VALUES ('x-a', 'w-a', 18, 'Storico verificato', 'owner', ?)`,
+    )
+      .bind(now)
+      .run();
+    let id = await created();
+    expect(await revokeHistoryExtension(env.DB, { workspaceId: "w-a", extensionId: "x-a" })).toBe(
+      "done",
+    );
+    expect(await revision()).toBe(1);
+    await gone(await download(id));
+    expect(await revokeHistoryExtension(env.DB, { workspaceId: "w-a", extensionId: "x-a" })).toBe(
+      "not_found",
+    );
+    expect(await revision()).toBe(1);
+    // Rimborso di una copertura pagata.
+    await env.DB.prepare(
+      `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
+         stripe_invoice_id, amount_paid, currency, paid_at)
+       VALUES ('e-paid', 'w-a', 'premium', ?1, ?2, 'in_rimborso', 999, 'EUR', ?1)`,
+    )
+      .bind(now, hours(24 * 30))
+      .run();
+    id = await created();
+    const refund = () =>
+      env.DB.batch(
+        reversalStatements(
+          env.DB,
+          "stripe_invoice_id",
+          "in_rimborso",
+          { refunded: 999, revocation: "refund" },
+          now,
+        ),
+      );
+    await refund();
+    expect(await revision()).toBe(2);
+    await gone(await download(id));
+    await refund();
+    expect(await revision()).toBe(2);
+    // Nel Free un secondo negozio entra in pausa una volta sola, anche con il cron ripetuto.
+    id = await created();
+    await env.DB.prepare(
+      `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
+       VALUES ('s-a2', 'w-a', 'e-a2', ?)`,
+    )
+      .bind(hours(1))
+      .run();
+    await applyFreePlan(env.DB, userId);
+    const paused = await revision();
+    expect(paused).toBe(3);
+    await gone(await download(id));
+    id = await created();
+    await applyFreePlan(env.DB, userId);
+    await applyFreePlans(env.DB);
+    expect(await revision()).toBe(paused);
+    expect(await valid()).toBe(true);
+    // Dati del negozio eliminati dall'utente.
+    await env.DB.prepare("UPDATE ebay_stores SET store_name = 'Negozio A' WHERE id = 's-a'").run();
+    const deleted = await revision();
+    expect(await deleteStoreData(env.DB, userId, "s-a", "Negozio A")).toBe("done");
+    expect(await revision()).toBeGreaterThan(deleted);
+    await gone(await download(id));
+  });
+
+  it("il trasferimento di un negozio invalida i file dello spazio di partenza", async () => {
+    const id = await created();
+    const prepared = await prepareStoreTransfer(env.DB, {
+      storeId: "s-a",
+      toWorkspaceId: "w-b",
+      actor: "owner",
+      reason: "Richiesta del titolare",
+    });
+    expect(prepared.result).toBe("prepared");
+    expect((await download(id)).status).toBe(200);
+    const confirmed = await confirmStoreTransfer(env, {
+      id: prepared.result === "prepared" ? prepared.id : "",
+      actor: "owner",
+    });
+    expect(confirmed.result).toBe("done");
+    expect(await exportRevision(env.DB, userId)).toBeGreaterThan(0);
+    await gone(await download(id));
+    // Lo spazio di arrivo non riceve una revoca dei propri file.
+    expect(
+      await env.DB.prepare("SELECT access_revision FROM workspaces WHERE id = 'w-b'").first(
+        "access_revision",
+      ),
+    ).toBe(0);
+  });
+
+  it("le configurazioni restano di ciascun utente, anche con lo stesso nome e salvataggi concorrenti", async () => {
+    const other = await verifiedSession(`altro-${crypto.randomUUID()}@example.invalid`);
+    const layout = (columns: ExportColumn[]) => ({
+      format: "csv" as const,
+      rows: "order" as const,
+      columns,
+    });
+    expect(
+      await saveExportConfiguration(
+        env.DB,
+        userId,
+        "Commercialista",
+        layout(["order"]),
+        new Date(),
+      ),
+    ).toBe(true);
+    expect(
+      await saveExportConfiguration(
+        env.DB,
+        other.userId,
+        "Commercialista",
+        layout(["taxCode"]),
+        new Date(),
+      ),
+    ).toBe(true);
+    expect((await listExportConfigurations(env.DB, userId)).map((c) => c.columns)).toEqual([
+      ["order"],
+    ]);
+    expect((await listExportConfigurations(env.DB, other.userId)).map((c) => c.columns)).toEqual([
+      ["taxCode"],
+    ]);
+    // L'eliminazione con l'identificativo di un altro utente non tocca la sua configurazione.
+    const [mine] = await listExportConfigurations(env.DB, userId);
+    expect(await deleteExportConfiguration(env.DB, other.userId, mine!.id)).toBe(false);
+    expect(await listExportConfigurations(env.DB, userId)).toHaveLength(1);
+    // Al limite meno uno, tre salvataggi concorrenti di nomi nuovi ne aggiungono uno soltanto.
+    for (let index = 1; index < maxExportConfigurations - 1; index++)
+      await saveExportConfiguration(env.DB, userId, `C${index}`, layout(["order"]), new Date());
+    const saved = await Promise.all(
+      ["X", "Y", "Z"].map((name) =>
+        saveExportConfiguration(env.DB, userId, name, layout(["order"]), new Date()),
+      ),
+    );
+    expect(saved.filter(Boolean)).toHaveLength(1);
+    expect(await listExportConfigurations(env.DB, userId)).toHaveLength(maxExportConfigurations);
+    // Il limite è per utente: l'altro salva ancora.
+    expect(
+      await saveExportConfiguration(env.DB, other.userId, "Altro", layout(["order"]), new Date()),
+    ).toBe(true);
+  });
+
+  it("lo ZIP dell'account in inglese scrive le date nel fuso dell'utente, senza cliente né importi Stripe", async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO user_preferences (user_id, time_zone, updated_at) VALUES (?1, 'America/New_York', ?2)
+         ON CONFLICT (user_id) DO UPDATE SET time_zone = excluded.time_zone`,
+      ).bind(userId, now),
+      env.DB.prepare(
+        `INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id, offer,
+           price_generation, status, current_period_start, current_period_end,
+           cancel_at_period_end, synced_at, checked_at)
+         VALUES ('sub_segreto', 'w-a', 'test', 'cus_segreto', 'monthly', 'g-segreta', 'active',
+                 ?1, ?2, 0, ?1, ?1)`,
+      ).bind(now, hours(24 * 30)),
+      env.DB.prepare(
+        `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
+           stripe_invoice_id, amount_paid, currency, paid_at)
+         VALUES ('e-paid', 'w-a', 'premium', ?1, ?2, 'in_segreta', 4321, 'EUR', ?1)`,
+      ).bind(now, hours(24 * 30)),
+    ]);
+    const result = (await callRoute(settingsAction, "/en/app/impostazioni/esportazione", {
+      cookie,
+      fields: { intent: "account-export" },
+    })) as { ok: boolean; download: string };
+    expect(result).toEqual({
+      ok: true,
+      download: expect.stringMatching(/^\/en\/api\/v1\/exports\//u),
+    });
+    const id = result.download.split("/").at(-1)!;
+    const response = await download(id);
+    expect(response.headers.get("content-disposition")).toBe(
+      'attachment; filename="fiscalbay-account-data-2026-09-13.zip"',
+    );
+    const files = unzipSync(new Uint8Array(await response.arrayBuffer()));
+    expect(Object.keys(files).sort()).toEqual([
+      "export-configurations.csv",
+      "fiscalbay-account.json",
+      "plan.csv",
+      "profile.csv",
+      "sign-in.csv",
+      "stores.csv",
+    ]);
+    const text = Object.values(files)
+      .map((bytes) => strFromU8(bytes))
+      .join("\n");
+    for (const secret of ["cus_segreto", "sub_segreto", "in_segreta", "4321", "43.21", "g-segreta"])
+      expect(text).not.toContain(secret);
+    // Le 20:00 UTC sono le 16:00 a New York; il JSON resta in UTC.
+    const plan = strFromU8(files["plan.csv"]!);
+    expect(plan).toContain('"Item","Type","From","To","Status"\r\n');
+    expect(plan).toContain(
+      '"coverage","premium","2026-09-13 16:00:00","2026-10-13 16:00:00",""\r\n',
+    );
+    expect(plan).toContain(
+      '"subscription","monthly","2026-09-13 16:00:00","2026-10-13 16:00:00","active"\r\n',
+    );
+    expect(strFromU8(files["profile.csv"]!)).toContain('"Time zone","America/New_York"\r\n');
+    expect(JSON.parse(strFromU8(files["fiscalbay-account.json"]!)).plan.subscriptions).toEqual([
+      {
+        offer: "monthly",
+        status: "active",
+        periodStart: now,
+        periodEnd: hours(24 * 30),
+        cancelAtPeriodEnd: false,
+      },
+    ]);
   });
 
   it("i dati dell'account si scaricano in uno ZIP senza segreti né ordini", async () => {

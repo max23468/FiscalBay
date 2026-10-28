@@ -96,8 +96,10 @@ async function writeObject(
 /**
  * Salva il file e lo rende scaricabile per l'utente fino a `expiresAt`, al più 24 ore. La riga
  * nasce soltanto se la revisione dello spazio è ancora `revision`: un file generato prima di una
- * revoca non diventa scaricabile e il suo oggetto si elimina subito. Restituisce l'identificativo
- * del file, null se una revoca è arrivata durante la generazione.
+ * revoca non diventa scaricabile e il suo oggetto si elimina subito. `alongside` aggiunge
+ * un'istruzione, che riceve l'identificativo del file, allo stesso commit della riga: se non
+ * riesce, il file non esiste e il suo oggetto si elimina. Restituisce l'identificativo del file,
+ * null se una revoca è arrivata durante la generazione.
  */
 export async function publishExportFile(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
@@ -109,6 +111,7 @@ export async function publishExportFile(
     body: ReadableStream<Uint8Array>;
     now: Date;
     expiresAt?: string | null;
+    alongside?: (fileId: string) => D1PreparedStatement;
   },
 ): Promise<string | null> {
   const id = crypto.randomUUID();
@@ -120,23 +123,22 @@ export async function publishExportFile(
   // Stryker restore EqualityOperator
   let published = false;
   try {
-    const row = await env.DB.prepare(
+    const insert = env.DB.prepare(
       `INSERT INTO export_files
         (id, user_id, file_name, content_type, access_revision, created_at, expires_at)
        SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE ${revisionSql("?2")} = ?5 AND ?7 > ?6
        RETURNING id`,
-    )
-      .bind(
-        id,
-        file.userId,
-        file.fileName,
-        file.contentType,
-        file.revision,
-        file.now.toISOString(),
-        expiresAt,
-      )
-      .first();
-    published = !!row;
+    ).bind(
+      id,
+      file.userId,
+      file.fileName,
+      file.contentType,
+      file.revision,
+      file.now.toISOString(),
+      expiresAt,
+    );
+    const [row] = await env.DB.batch(file.alongside ? [insert, file.alongside(id)] : [insert]);
+    published = row!.results.length > 0;
   } finally {
     if (!published) await env.EXPORT_FILES.delete(id);
   }
@@ -169,10 +171,11 @@ const purgeBatch = 500;
 
 /**
  * Pulizia applicativa: elimina oggetti e righe dei file scaduti o revocati. L'oggetto si
- * elimina prima della riga, così un errore di R2 lascia la riga al turno successivo. Gli
- * oggetti rimasti senza riga, per esempio dopo la cancellazione dell'account, li elimina la
- * regola di lifecycle del bucket. Elimina poi i lavori di esportazione conclusi o mai partiti
- * dopo 24 ore dalla richiesta. Restituisce quanti file ha eliminato.
+ * elimina prima della riga, così un errore di R2 lascia la riga al turno successivo. Un oggetto
+ * rimasto senza riga per un errore fra le due scritture lo elimina la regola di lifecycle del
+ * bucket. Elimina poi i lavori di esportazione conclusi: quello pronto quando il suo file non
+ * esiste più, quello non riuscito dopo 24 ore dalla conclusione. Restituisce quanti file ha
+ * eliminato.
  */
 export async function purgeExportFiles(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
@@ -197,8 +200,14 @@ export async function purgeExportFiles(
     purged += ids.length;
   }
   // Stryker restore BlockStatement,ConditionalExpression,EqualityOperator,ArrowFunction
-  // I lavori valgono quanto un file: dopo 24 ore dalla richiesta non servono più.
-  await env.DB.prepare("DELETE FROM export_jobs WHERE julianday(requested_at) <= julianday(?)")
+  // Il lavoro pronto vale quanto il suo file; quello non riuscito resta annunciato 24 ore. Un
+  // lavoro ancora in coda lo conclude la ripresa dei lavori.
+  await env.DB.prepare(
+    `DELETE FROM export_jobs
+      WHERE (state = 'ready' AND NOT EXISTS (SELECT 1 FROM export_files f
+               WHERE f.id = export_jobs.file_id))
+         OR (state = 'failed' AND julianday(finished_at) <= julianday(?))`,
+  )
     .bind(new Date(now.getTime() - exportFileMilliseconds).toISOString())
     .run();
   return purged;

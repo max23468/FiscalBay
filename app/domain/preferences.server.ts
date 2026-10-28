@@ -8,7 +8,7 @@ import {
   type Theme,
   type TimeZoneChoice,
 } from "../preferences";
-import { legalVersions } from "./registration.server";
+import { marketingTextVersions, type MarketingSource } from "./registration.server";
 
 /**
  * Preferenze dell'account: ogni valore ha una sola fonte, la riga di `user_preferences`, e un
@@ -155,12 +155,16 @@ export async function marketingProposal(db: D1Database, userId: string): Promise
   return row?.choices === 1 && row.granted === 0;
 }
 
-/** Ogni scelta resta come prova, con la versione del testo e la lingua in cui è stata resa. */
+/**
+ * Ogni scelta resta come prova, con la lingua e la versione del testo della superficie che l'ha
+ * raccolta: proposta negli Ordini o Notifiche delle Impostazioni.
+ */
 export async function recordMarketingConsent(
   db: D1Database,
   userId: string,
   granted: boolean,
   language: Language,
+  source: Exclude<MarketingSource, "registration">,
   now = new Date(),
 ): Promise<void> {
   await db
@@ -172,7 +176,7 @@ export async function recordMarketingConsent(
       crypto.randomUUID(),
       userId,
       granted ? 1 : 0,
-      legalVersions.marketing,
+      marketingTextVersions[source],
       language,
       now.toISOString(),
     )

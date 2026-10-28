@@ -205,6 +205,29 @@ describe("primi passaggi deduplicati", () => {
     expect(space!.active_at).toBeNull();
   });
 
+  it("ricostruisce il collegamento degli spazi con il negozio già rimosso", async () => {
+    const removed = await merchant({ createdAt: before(10) });
+    const removedStore = await store(removed, before(9));
+    await run(removedStore, before(8), true).run();
+    const kept = await merchant({ createdAt: before(10) });
+    await store(kept, before(6));
+    // Stato lasciato dalla prima ricostruzione: il negozio rimosso aveva già perso le credenziali,
+    // quindi c'è la prima lettura ma non il collegamento.
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM ebay_store_credentials WHERE store_id = ?").bind(removedStore),
+      env.DB.prepare(
+        "DELETE FROM workspace_funnel_steps WHERE workspace_id = ? AND step = 'store_linked'",
+      ).bind(removed),
+    ]);
+    const migration = env.TEST_MIGRATIONS.find(
+      ({ name }) => name === "0061_funnel_store_linked.sql",
+    )!;
+    await env.DB.batch(migration.queries.map((query) => env.DB.prepare(query)));
+    expect(await stepsOf(removed)).toEqual({ store_linked: before(9), first_sync: before(8) });
+    // I passaggi già registrati non cambiano.
+    expect(await stepsOf(kept)).toEqual({ store_linked: before(6) });
+  });
+
   it("conta le letture per giorno senza conservare i negozi", async () => {
     const workspace = await merchant({ createdAt: before(3) });
     const storeId = await store(workspace, before(3));
@@ -431,6 +454,14 @@ describe("KPI della console", () => {
     expect(metrics.capacity.databaseBytes).toBeGreaterThan(0);
     // Le righe conservate restano poche: un passaggio per spazio e un giorno per data.
     expect(metrics.volume).toEqual({ steps: 6, days: 3, runs: 4 });
+    // Le letture di oggi contano: il pannello vale fino ad adesso.
+    await run(readingStore, before(0, 1), false).run();
+    expect((await productMetrics(env, 30)).reads).toEqual({
+      attempts: 4,
+      failures: 2,
+      errorRate: 0.5,
+      days: 3,
+    });
   });
 
   it("elimina gli aggregati oltre novanta giorni e i biglietti scaduti", async () => {
@@ -504,6 +535,22 @@ describe("report del browser", () => {
     const ahead = await issueTimingTicket(secret, "orders", new Date(Date.parse(clock) + 120_000));
     expect((await report(ahead)).status).toBe(204);
     expect((await report("orders.x.y.z")).status).toBe(204);
+    // Firme alterate, che non sono base64url, di lunghezza impossibile o troncate non contano.
+    const fresh = await issueTimingTicket(secret, "orders");
+    const cut = fresh.lastIndexOf(".");
+    const [payload, signed] = [fresh.slice(0, cut), fresh.slice(cut + 1)];
+    const other = signed.startsWith("A") ? "B" : "A";
+    for (const tampered of [
+      `${other}${signed.slice(1)}`,
+      `${signed.slice(0, -1)}+`,
+      `${signed}A`,
+      `${signed}AA`,
+      signed.slice(0, -4),
+    ])
+      expect(await redeemTimingTicket(env.DB, secret, `${payload}.${tampered}`, "orders")).toBe(
+        false,
+      );
+    expect(await redeemTimingTicket(env.DB, secret, fresh, "orders")).toBe(true);
     expect(written).not.toHaveBeenCalled();
     written.mockRestore();
     // Il biglietto di Negozi vale per Negozi.

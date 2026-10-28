@@ -235,6 +235,28 @@ describe("comandi e pulsanti", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  it("un pannello che Telegram rifiuta per la sua forma parte come testo copiabile", async () => {
+    const tooLarge = (call: Call) =>
+      call.method === "sendRichMessage" || call.method === "editMessageText"
+        ? rejected("Bad Request: message is too long")
+        : undefined;
+    const api = bot(tooLarge);
+    await post(message("/console"), api.fetcher);
+    expect(api.methods()).toEqual(["sendRichMessage", "sendMessage"]);
+    const text = String(api.calls[1]!.params.text);
+    expect(text.startsWith("🧭 FiscalBay · Test")).toBe(true);
+    expect(text.length).toBeLessThanOrEqual(4096);
+    // Anche la modifica rifiutata dal pulsante finisce nello stesso testo.
+    const tapped = bot(tooLarge);
+    await post(tap("oc1:console:0"), tapped.fetcher);
+    expect(tapped.methods()).toEqual([
+      "answerCallbackQuery",
+      "editMessageText",
+      "sendRichMessage",
+      "sendMessage",
+    ]);
+  });
+
   it("ignora senza risposta e senza ricevuta i comandi da altre chat o da altri utenti", async () => {
     const api = bot();
     for (const body of [
@@ -743,6 +765,68 @@ describe("avvisi degli incidenti", () => {
       { notified: "opened", opened_at: openedAt, resolved_at: null, attempts: 0 },
     ]);
   });
+
+  it("senza un'attesa indicata da Telegram ritenta dopo attese crescenti, fino a sei ore", async () => {
+    await setSwitch(env.DB, "ebay_calls", false, new Date(now));
+    const down = bot((call) =>
+      call.method === "sendRichMessage" ? new Response("", { status: 502 }) : undefined,
+    );
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const waits: number[] = [];
+    let at = later(1);
+    for (let attempt = 0; attempt < 8; attempt++) {
+      await reconcileOwnerIncidents(environment, down.fetcher, at);
+      const [row] = (await incident()) as [{ retry_at: string; attempts: number }];
+      expect(row.attempts).toBe(attempt + 1);
+      waits.push((Date.parse(row.retry_at) - at.getTime()) / minute);
+      // Prima della scadenza dell'attesa non parte nessun tentativo.
+      const calls = down.calls.length;
+      await reconcileOwnerIncidents(
+        environment,
+        down.fetcher,
+        new Date(Date.parse(row.retry_at) - minute),
+      );
+      expect(down.calls).toHaveLength(calls);
+      at = new Date(row.retry_at);
+    }
+    expect(waits).toEqual([10, 20, 40, 80, 160, 320, 360, 360]);
+    expect(logged).toHaveBeenCalledTimes(8);
+    // L'invio riuscito azzera i tentativi.
+    await reconcileOwnerIncidents(environment, bot().fetcher, at);
+    expect(await incident()).toMatchObject([{ notified: "opened", attempts: 0, retry_at: null }]);
+  });
+
+  it("una P1 che torna P2 e poi P1 non ripete l'avviso", async () => {
+    const receipt = (provider: string, id: string) =>
+      env.DB.prepare(`INSERT INTO webhook_receipts (id, provider, environment, provider_id, topic,
+          object_id, event_at, expires_at, queued_at)
+        VALUES (?1, ?2, 'test', ?1, 'x', 'o', ?3, ?4, ?3)`)
+        .bind(id, provider, later(-120).toISOString(), later(60 * 24).toISOString())
+        .run();
+    await receipt("telegram", "r-telegram");
+    await receipt("stripe", "r-stripe");
+    const api = bot();
+    await reconcileOwnerIncidents(environment, api.fetcher, new Date(now));
+    expect(api.calls.map(heading)).toEqual(["🔴 Aperta · Eventi dei provider in ritardo"]);
+    await env.DB.prepare("DELETE FROM webhook_receipts WHERE id = 'r-stripe'").run();
+    await reconcileOwnerIncidents(environment, api.fetcher, later(10));
+    expect(await incident()).toMatchObject([{ severity: "p2", resolved_at: null }]);
+    await receipt("stripe", "r-stripe-2");
+    await reconcileOwnerIncidents(environment, api.fetcher, later(20));
+    expect(await incident()).toMatchObject([{ severity: "p1", notified_severity: "p1" }]);
+    expect(api.calls).toHaveLength(1);
+  });
+
+  it("un avviso che Telegram rifiuta per la sua forma parte come testo e non si ritenta", async () => {
+    await setSwitch(env.DB, "ebay_calls", false, new Date(now));
+    const api = bot((call) =>
+      call.method === "sendRichMessage" ? rejected("Bad Request: message is too long") : undefined,
+    );
+    await reconcileOwnerIncidents(environment, api.fetcher, later(1));
+    expect(api.methods()).toEqual(["sendRichMessage", "sendMessage"]);
+    expect(String(api.calls[1]!.params.text)).toContain("Aperta · Servizi spenti dalla console");
+    expect(await incident()).toMatchObject([{ notified: "opened", attempts: 0, retry_at: null }]);
+  });
 });
 
 describe("compiti periodici", () => {
@@ -761,11 +845,8 @@ describe("compiti periodici", () => {
     const api = bot();
     await run("telegram_commands", api.fetcher);
     expect(
-      api.calls.filter((call) => call.method === "setMyCommands").at(-1)?.params.scope,
-    ).toEqual({
-      type: "chat",
-      chat_id: String(owner),
-    });
+      api.calls.filter((call) => call.method === "setMyCommands").map((call) => call.params.scope),
+    ).toContainEqual({ type: "chat", chat_id: String(owner) });
 
     const quotas = vi.fn<typeof fetch>(async () => new Response("", { status: 503 }));
     await run("ebay_quotas", quotas);
@@ -775,5 +856,33 @@ describe("compiti periodici", () => {
     const alerts = bot();
     await run("owner_incidents", alerts.fetcher);
     expect(alerts.calls.map(heading)).toEqual(["🟠 Aperta · Servizi spenti dalla console"]);
+  });
+
+  it("riallineano il menu dell'owner anche quando quello dei venditori non riesce", async () => {
+    const api = bot((call) =>
+      call.method === "setMyCommands" &&
+      (call.params.scope as { type: string }).type === "all_private_chats"
+        ? new Response("", { status: 502 })
+        : undefined,
+    );
+    const at = new Date(now);
+    const slot = taskSlot("telegram_commands", at);
+    await env.DB.prepare("UPDATE scheduled_tasks SET slot = ?2, done_at = NULL WHERE task = ?1")
+      .bind("telegram_commands", slot)
+      .run();
+    const message = queueMessage({ task: "telegram_commands", slot });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await consumeTask(message, environment, api.fetcher, at);
+    expect(
+      api.calls.some(
+        (call) =>
+          call.method === "setMyCommands" &&
+          (call.params.scope as { type: string }).type === "chat",
+      ),
+    ).toBe(true);
+    // L'errore del menu dei venditori fa ripetere il compito.
+    expect(message.retry).toHaveBeenCalled();
+    expect(message.ack).not.toHaveBeenCalled();
+    expect(logged).toHaveBeenCalled();
   });
 });

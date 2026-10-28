@@ -194,6 +194,8 @@ export const en: AppCopy = {
     lockedExhausted: (date) =>
       `You have used all the unlocks for this cycle. The next one starts on ${date}.`,
     lockedUntil: (date) => `Unlocking available from ${date}.`,
+    freeSuspended:
+      "Support has suspended Free plan unlocks for this account. Orders already unlocked remain visible. For details, write to",
     lockedHold: {
       checking: "eBay is verifying this order again: unlocking is available once it finishes.",
       unpaid: "This purchase isn’t paid yet: unlocking is available once it’s paid.",
@@ -636,14 +638,14 @@ export const en: AppCopy = {
       exportFiscalAll: "All",
       exportFiscalAvailable: "Only with tax data available",
       exportCount: (orders, locked) =>
-        `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax code stays empty.`}`,
+        `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax data stays empty.`}`,
       exportNone: {
         scope: "No orders to export: the chosen orders are no longer available.",
         period: "No orders in this period.",
         available: "None of these orders has tax data available.",
       },
       exportTextHint:
-        "To keep leading zeros in Codice Fiscale, Partita IVA and SKU, open the file in Excel from Data > From Text/CSV and set those columns to Text.",
+        "To keep leading zeros in Codice Fiscale, Partita IVA, SKU, postal code and phone, open the file in Excel from Data > From Text/CSV and set those columns to Text.",
       exportContextSelection: "Orders selected on the Orders page.",
       exportContextOrder: (id) => `Order ${id}.`,
       exportContextFiltered: "Orders in the list with the active filters and search.",
@@ -655,6 +657,10 @@ export const en: AppCopy = {
       exportEmpty: "No orders to export with these choices.",
       exportGone: "File no longer available. Create it again.",
       exportQueued: "File being prepared: the bell will tell you when it is ready.",
+      exportBusy: (max) =>
+        `You already have ${max} files being prepared: you can create another one when one is ready.`,
+      exportTooManyRows:
+        "The file exceeds the number of rows in an XLSX sheet: choose CSV or fewer orders.",
       exportFiles: "Created files",
       exportFileReady: (until) => `Available until ${until}`,
       exportFileQueued: "Being prepared",
@@ -714,6 +720,12 @@ export const en: AppCopy = {
           fiscal: "Tax data status",
           checkedAt: "Last tax check",
           updatedAt: "Last modified on eBay",
+        },
+        fiscalNotice: {
+          lastKnown: "Available, latest eBay read failed",
+          checking: "Available, new eBay read in progress",
+          notReturned: "Available, no longer returned by eBay",
+          masked: "Available, now hidden by eBay",
         },
       },
     },
@@ -954,6 +966,10 @@ export const en: AppCopy = {
       title: "Deletion link not valid",
       body: "The link has expired, has already been used or was opened without being signed in to the same account. Sign in and request the deletion again from Settings › Data and privacy.",
     },
+    deletionFailed: {
+      title: "Deletion not started",
+      body: "We could not record the request: your account and data have not changed. The link is no longer valid: request the deletion again from Settings › Data and privacy.",
+    },
     deletionInProgress: {
       title: "Deletion in progress",
       body: "You confirmed the deletion of this account: signing in is no longer possible. We will email you when the data has been erased.",
@@ -961,8 +977,8 @@ export const en: AppCopy = {
   },
   accountDeletion: {
     title: "Deletion started",
-    body: "We signed out every session and stopped store reads, notifications and renewals. Data erasure continues on its own: we will email you when it is complete.",
-    note: "Deletion cannot be undone. You can create a new account at any time, but the same stores do not get a new trial or new Free unlocks in the current cycle.",
+    body: "We signed out every session and stopped store reads and notifications. We are now stopping subscription renewals and erasing the data: we will email you when everything is complete.",
+    note: "Deletion cannot be undone. You can create a new account at any time, but the same stores do not get a new trial and, until the current Free cycle ends, the unlocks already used still count.",
   },
   storeLink: {
     title: "Connect an eBay store",

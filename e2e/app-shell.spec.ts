@@ -310,7 +310,7 @@ test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno
   const section = page.locator("main");
   await expect(section).toContainText("Ordini selezionati nella pagina Ordini.");
   await expect(section).toContainText(
-    "2 ordini. Per 2 ordini da sbloccare il Codice Fiscale resta vuoto.",
+    "2 ordini. Per 2 ordini da sbloccare i dati fiscali restano vuoti.",
   );
   // Il periodo è già nei filtri degli Ordini; il file nasce soltanto da «Crea file».
   await expect(page.getByRole("combobox", { name: "Periodo" })).toHaveCount(0);

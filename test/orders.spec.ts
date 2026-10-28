@@ -180,6 +180,40 @@ describe("percorso ordini", () => {
     }
   });
 
+  it("non confronta gli identificativi senza chiave e ne lascia intatte le modifiche", async () => {
+    await seed();
+    await unlockOrders(env.DB, "u-a", ["o-a"]);
+    await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
+    const earlier = "2026-09-01T00:00:00.000Z";
+    // Il CF sintetico sostituisce un valore rimosso; quello di Fulfillment con un altro nome di
+    // tipo non si confronta con nessuno e resta senza modifica.
+    await insertTaxIdentifiers(
+      {
+        id: "s-old",
+        orderId: "o-a",
+        type: "CODICE_FISCALE",
+        country: "IT",
+        value: "VECCHIO",
+        observedAt: earlier,
+        removedAt: earlier,
+      },
+      { id: "s-new", orderId: "o-a", type: "CODICE_FISCALE", country: "IT", value: "SINTETICO" },
+      {
+        id: "f",
+        orderId: "o-a",
+        type: "CodiceFiscale",
+        country: "IT",
+        value: "SINTETICO",
+        source: "ebay_fulfillment",
+      },
+    ).run();
+    const identifiers = (await listVisibleOrders(env.DB, "u-a"))[0]!.taxIdentifiers;
+    expect(identifiers.map(({ source, updated }) => [source, updated])).toEqual([
+      ["synthetic_fixture", true],
+      ["ebay_fulfillment", false],
+    ]);
+  });
+
   it.each([
     ["CODICE_FISCALE", null, "CodiceFiscale", null, 1],
     ["CODICE_FISCALE", "IT", "CodiceFiscale", "IT", 1],
@@ -195,6 +229,14 @@ describe("percorso ordini", () => {
     ["CODICE_FISCALE", "IT", "codice_fiscale", "IT", 2],
     ["CODICE_FISCALE", "IT", "CodiceFiscale", "IT", 2, "synthetic_fixture"],
     ["CODICE_FISCALE", "IT", "CODICE_FISCALE", "IT", 2, "ebay_fulfillment", "synthetic_fixture"],
+    // La stessa Partita IVA, o lo stesso identificativo estero, dalle due fonti eBay.
+    ["VATIN", "IT", "PartitaIVA", null, 1],
+    ["VATIN", "IT", "PartitaIVA", "IT", 1],
+    ["VAT_ID", "IT", "VATIN", "IT", 1],
+    ["VATIN", "DE", "VATIN", "DE", 1],
+    ["VATIN", null, "PartitaIVA", null, 2],
+    ["VATIN", "DE", "VATIN", "FR", 2],
+    ["VATIN", "IT", "PartitaIVA", null, 2, "ebay_fulfillment", "synthetic_fixture"],
   ])(
     "conserva tipi e Paesi non qualificati nella consultazione: %s %s / %s %s",
     async (
@@ -607,7 +649,7 @@ describe("percorso ordini", () => {
     for (const change of [
       "UPDATE orders SET is_provisional = 1 WHERE id = 'o-a'",
       "UPDATE orders SET retention_until = '2026-09-12T00:00:00.000Z' WHERE id = 'o-a'",
-      "INSERT INTO ebay_store_pauses VALUES ('s-a', 'plan', '2026-09-13T20:00:00.000Z')",
+      "INSERT INTO ebay_store_pauses (store_id, reason, paused_at) VALUES ('s-a', 'plan', '2026-09-13T20:00:00.000Z')",
     ]) {
       await env.DB.prepare(change).run();
       await expect(unlockOrders(env.DB, "u-a", ["o-a"], true)).rejects.toThrow();
@@ -625,6 +667,55 @@ describe("percorso ordini", () => {
     expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(1);
     expect(await unlockConfirmation(env.DB, "u-a")).toBe(true);
     expect(JSON.stringify(await listVisibleOrders(env.DB, "u-b"))).not.toContain("RSSMRA");
+  });
+
+  it("con il Free sospeso dall'antiabuso nessuno sblocco del Free, salvo con una copertura", async () => {
+    await seed();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM free_cycles"),
+      env.DB.prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota)
+        VALUES ('c-a', 'w-a', '2026-09-01T00:00:00Z', '2026-10-01T00:00:00Z', 5)`),
+      env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time,
+          last_modified_time, currency, total_minor) VALUES ('o-a2', 's-a', 'ebay-a2', ?1, ?1, 'EUR', 100)`).bind(
+        now,
+      ),
+      insertTaxIdentifiers({
+        id: "t-a3",
+        orderId: "o-a2",
+        type: "CODICE_FISCALE",
+        value: "VRDLGI80A01H501X",
+      }),
+    ]);
+    expect(await unlockOrders(env.DB, "u-a", ["o-a"], true)).toMatchObject({ remaining: 4 });
+    await env.DB.prepare(`INSERT INTO abuse_reviews (signal, outcome, workspace_id, actor, reason,
+        reviewed_at) VALUES ('company:sintetico', 'suspended', 'w-a', 'admin', 'Stessa attività', ?)`)
+      .bind(now)
+      .run();
+    expect(await orderAllowance(env.DB, "u-a")).toMatchObject({ suspended: true, remaining: 0 });
+    // Anche sugli ordini già importati lo sblocco è rifiutato e non consuma nulla.
+    await expect(unlockOrders(env.DB, "u-a", ["o-a2"], true)).rejects.toThrow("free_suspended");
+    expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
+      used: 1,
+    });
+    // Lo sblocco già fatto resta visibile.
+    const visible = await listVisibleOrders(env.DB, "u-a");
+    expect(JSON.stringify(visible.find((order) => order.id === "o-a"))).toContain("RSSMRA");
+    expect(JSON.stringify(visible.find((order) => order.id === "o-a2"))).not.toContain("VRDLGI");
+    // Con una copertura concessa tutto funziona.
+    await insertEntitlement({
+      source: "admin",
+      startsAt: now,
+      endsAt: "2026-09-20T00:00:00.000Z",
+      grantedBy: "admin",
+      grantReason: "Verifica",
+    }).run();
+    expect(await orderAllowance(env.DB, "u-a")).toMatchObject({
+      suspended: false,
+      remaining: null,
+    });
+    expect(
+      JSON.stringify((await listVisibleOrders(env.DB, "u-a")).find((order) => order.id === "o-a2")),
+    ).toContain("VRDLGI");
   });
 
   it("accetta i limiti della selezione senza trasformare i duplicati in nuovi consumi o consenso singolo", async () => {

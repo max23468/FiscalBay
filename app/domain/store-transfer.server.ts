@@ -1,3 +1,4 @@
+import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./account-deletion.server";
 import { applyWorkspacePlan } from "./free-store.server";
 import { storeNameSql } from "./store-state.server";
 
@@ -9,9 +10,21 @@ import { storeNameSql } from "./store-state.server";
  * Passa soltanto l'identità del negozio. Ordini, sblocchi, credenziali, preferenze Telegram e
  * lavori pendenti restano allo spazio precedente e si eliminano: lo storico, il login e i
  * pagamenti non si trasferiscono. Il negozio arriva scollegato e il nuovo proprietario lo
- * ricollega con il proprio consenso eBay, poi lo storico si importa secondo il suo piano. Prova,
- * quota e vincoli del Free dei due spazi non ripartono.
+ * ricollega con il proprio consenso eBay, poi lo storico si importa secondo il suo piano.
+ *
+ * Il negozio porta i suoi limiti: la conferma scrive lo stesso segno della cancellazione
+ * dell'account, che il ricollegamento applica allo spazio di destinazione con la stessa regola.
+ * Una prova già usata non si ripete e il ciclo Free in corso prosegue con i suoi sblocchi. Uno
+ * dei due spazi con una cancellazione dell'account in corso non partecipa a un trasferimento.
  */
+
+/**
+ * Cancellazione dell'account in corso per uno degli spazi o dei loro membri. Argomenti:
+ * espressioni SQL dei due spazi.
+ */
+const deletionSql = (from: string, to: string) => `EXISTS (SELECT 1 FROM account_deletions d
+  WHERE d.completed_at IS NULL AND (d.workspace_id IN (${from}, ${to})
+    OR d.user_id IN (SELECT user_id FROM workspace_members WHERE workspace_id IN (${from}, ${to}))))`;
 
 /** Durata della preparazione: oltre, la conferma va ripetuta su uno stato riletto. */
 const preparationMs = 30 * 60_000;
@@ -26,7 +39,7 @@ export type TransferPreview = {
 
 export type PreparedTransfer =
   | { result: "prepared"; id: string; expiresAt: string; preview: TransferPreview }
-  | { result: "not_found" | "same_workspace" | "workspace_not_found" };
+  | { result: "not_found" | "same_workspace" | "workspace_not_found" | "account_deletion" };
 
 export async function prepareStoreTransfer(
   db: D1Database,
@@ -36,13 +49,22 @@ export async function prepareStoreTransfer(
   const row = await db
     .prepare(`SELECT s.id, ${storeNameSql("s")} AS name, s.workspace_id,
         (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id) AS orders,
-        EXISTS (SELECT 1 FROM workspaces WHERE id = ?2) AS target
+        EXISTS (SELECT 1 FROM workspaces WHERE id = ?2) AS target,
+        ${deletionSql("s.workspace_id", "?2")} AS deleting
       FROM ebay_stores s WHERE s.id = ?1`)
     .bind(input.storeId, input.toWorkspaceId)
-    .first<{ id: string; name: string; workspace_id: string; orders: number; target: number }>();
+    .first<{
+      id: string;
+      name: string;
+      workspace_id: string;
+      orders: number;
+      target: number;
+      deleting: number;
+    }>();
   if (!row) return { result: "not_found" };
   if (row.workspace_id === input.toWorkspaceId) return { result: "same_workspace" };
   if (!row.target) return { result: "workspace_not_found" };
+  if (row.deleting) return { result: "account_deletion" };
   const id = crypto.randomUUID();
   const expiresAt = new Date(now.getTime() + preparationMs).toISOString();
   await db
@@ -81,18 +103,22 @@ export type TransferResult =
   /** Preparazione scaduta, inesistente o di un altro admin. */
   | "expired"
   /** Il negozio o lo spazio di destinazione non sono più quelli verificati. */
-  | "conflict";
+  | "conflict"
+  /** Uno dei due spazi ha nel frattempo una cancellazione dell'account in corso. */
+  | "account_deletion";
 
 /**
  * Esegue il trasferimento preparato in un solo commit. Ogni istruzione dipende dalla prima, che
- * segna la preparazione eseguita soltanto se il negozio è ancora dello spazio di partenza e
- * la destinazione esiste: due conferme concorrenti o ripetute ne eseguono una sola.
+ * segna la preparazione eseguita soltanto se il negozio è ancora dello spazio di partenza, la
+ * destinazione esiste e nessuno dei due spazi si sta cancellando: due conferme concorrenti o
+ * ripetute ne eseguono una sola.
  */
 export async function confirmStoreTransfer(
-  db: D1Database,
+  env: Pick<Env, "DB" | "BETTER_AUTH_SECRET">,
   input: { id: string; actor: string },
   now = new Date(),
 ): Promise<{ result: TransferResult; transfer?: { storeId: string; from: string; to: string } }> {
+  const db = env.DB;
   const at = now.toISOString();
   // Le istruzioni seguenti valgono soltanto per il trasferimento eseguito da questa conferma.
   const mine = `EXISTS (SELECT 1 FROM store_transfers t WHERE t.id = ?1 AND t.executed_at = ?2
@@ -111,6 +137,11 @@ export async function confirmStoreTransfer(
   if (!transfer) return { result: "expired" };
   if (transfer.executed_at) return { result: "already" };
   if (Date.parse(transfer.expires_at) <= now.getTime()) return { result: "expired" };
+  const identity = await db
+    .prepare("SELECT ebay_user_id FROM ebay_stores WHERE id = ?")
+    .bind(transfer.store_id)
+    .first<string>("ebay_user_id");
+  if (!identity) return { result: "conflict" };
   const step = (sql: string) => db.prepare(sql).bind(input.id, at, transfer.store_id);
   const [claimed] = await db.batch([
     db
@@ -118,8 +149,19 @@ export async function confirmStoreTransfer(
         WHERE id = ?1 AND executed_at IS NULL AND julianday(expires_at) > julianday(?2)
           AND EXISTS (SELECT 1 FROM ebay_stores s WHERE s.id = store_transfers.store_id
             AND s.workspace_id = store_transfers.from_workspace_id)
-          AND EXISTS (SELECT 1 FROM workspaces w WHERE w.id = store_transfers.to_workspace_id)`)
+          AND EXISTS (SELECT 1 FROM workspaces w WHERE w.id = store_transfers.to_workspace_id)
+          AND NOT ${deletionSql("store_transfers.from_workspace_id", "store_transfers.to_workspace_id")}`)
       .bind(input.id, at),
+    // Il segno con i limiti del negozio nello spazio di partenza, prima che lo lasci.
+    db
+      .prepare(storeMarkSql({ hash: "?4", store: "?3", at: "?2", trialExpires: "?5" }, mine))
+      .bind(
+        input.id,
+        at,
+        transfer.store_id,
+        await storeIdentityHash(env.BETTER_AUTH_SECRET, identity),
+        trialMarkExpiry(now),
+      ),
     // Credenziali e consenso del vecchio proprietario: ogni lettura partita prima non scrive più.
     step(`DELETE FROM ebay_store_credentials WHERE store_id = ?3 AND ${mine}`),
     // Gli ordini portano con sé articoli, identificativi fiscali, fonti, notifiche e sblocchi.
@@ -142,10 +184,12 @@ export async function confirmStoreTransfer(
   ]);
   if (!claimed!.meta.changes) {
     const after = await db
-      .prepare("SELECT executed_at FROM store_transfers WHERE id = ?")
+      .prepare(`SELECT executed_at, ${deletionSql("from_workspace_id", "to_workspace_id")} AS deleting
+        FROM store_transfers WHERE id = ?`)
       .bind(input.id)
-      .first<{ executed_at: string | null }>();
-    return { result: after?.executed_at ? "already" : "conflict" };
+      .first<{ executed_at: string | null; deleting: number }>();
+    if (after?.executed_at) return { result: "already" };
+    return { result: after?.deleting ? "account_deletion" : "conflict" };
   }
   // Il vecchio spazio sceglie un nuovo negozio attivo del Free fra quelli che gli restano.
   await applyWorkspacePlan(db, transfer.from_workspace_id, now);

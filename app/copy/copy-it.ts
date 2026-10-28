@@ -199,6 +199,8 @@ export const it = {
     lockedExhausted: (date: string) =>
       `Hai usato tutti gli sblocchi di questo ciclo. Il prossimo inizia il ${date}.`,
     lockedUntil: (date: string) => `Sblocco disponibile dal ${date}.`,
+    freeSuspended:
+      "Gli sblocchi del piano Free sono sospesi dall’assistenza per questo account. Gli ordini già sbloccati restano visibili. Per chiarimenti scrivi a",
     lockedHold: {
       checking: "Nuova verifica da eBay in corso: lo sblocco torna disponibile al termine.",
       unpaid: "Acquisto non ancora pagato: lo sblocco è disponibile dopo il pagamento.",
@@ -644,14 +646,14 @@ export const it = {
       exportFiscalAll: "Tutti",
       exportFiscalAvailable: "Solo con dati fiscali disponibili",
       exportCount: (orders: number, locked: number) =>
-        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} il Codice Fiscale resta vuoto.`}`,
+        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} i dati fiscali restano vuoti.`}`,
       exportNone: {
         scope: "Nessun ordine da esportare: gli ordini scelti non sono più disponibili.",
         period: "Nessun ordine nel periodo.",
         available: "Nessuno di questi ordini ha dati fiscali disponibili.",
       },
       exportTextHint:
-        "Per conservare gli zeri iniziali di Codice Fiscale, Partita IVA e SKU, apri il file in Excel da Dati > Da testo/CSV e imposta quelle colonne come Testo.",
+        "Per conservare gli zeri iniziali di Codice Fiscale, Partita IVA, SKU, CAP e telefono, apri il file in Excel da Dati > Da testo/CSV e imposta quelle colonne come Testo.",
       exportContextSelection: "Ordini selezionati nella pagina Ordini.",
       exportContextOrder: (id: string) => `Ordine ${id}.`,
       exportContextFiltered: "Ordini dell’elenco con i filtri e la ricerca attivi.",
@@ -663,6 +665,10 @@ export const it = {
       exportEmpty: "Nessun ordine da esportare con queste scelte.",
       exportGone: "File non più disponibile. Crealo di nuovo.",
       exportQueued: "File in preparazione: ti avvisiamo nella campanella quando è pronto.",
+      exportBusy: (max: number) =>
+        `Hai già ${max} file in preparazione: potrai crearne un altro quando uno sarà pronto.`,
+      exportTooManyRows:
+        "Il file supera il numero di righe di un foglio XLSX: scegli CSV o meno ordini.",
       exportFiles: "File creati",
       exportFileReady: (until: string) => `Scaricabile fino a ${until}`,
       exportFileQueued: "In preparazione",
@@ -722,6 +728,13 @@ export const it = {
           fiscal: "Situazione fiscale",
           checkedAt: "Ultima verifica fiscale",
           updatedAt: "Ultima modifica su eBay",
+        },
+        // Dato disponibile con la stessa avvertenza della pagina Ordini.
+        fiscalNotice: {
+          lastKnown: "Disponibile, ultima lettura da eBay non riuscita",
+          checking: "Disponibile, nuova lettura da eBay in corso",
+          notReturned: "Disponibile, non più riportato da eBay",
+          masked: "Disponibile, ora nascosto da eBay",
         },
       },
     },
@@ -966,6 +979,10 @@ export const it = {
       title: "Link di cancellazione non valido",
       body: "Il link è scaduto, è già stato usato oppure è stato aperto senza aver effettuato l’accesso con lo stesso account. Accedi e chiedi di nuovo la cancellazione da Impostazioni › Dati e privacy.",
     },
+    deletionFailed: {
+      title: "Cancellazione non avviata",
+      body: "Non siamo riusciti a registrare la richiesta: l’account e i dati non sono cambiati. Il link non vale più: chiedi di nuovo la cancellazione da Impostazioni › Dati e privacy.",
+    },
     deletionInProgress: {
       title: "Cancellazione in corso",
       body: "Hai confermato la cancellazione di questo account: l’accesso non è più possibile. Ti scriviamo quando l’eliminazione dei dati è completata.",
@@ -973,8 +990,8 @@ export const it = {
   },
   accountDeletion: {
     title: "Cancellazione avviata",
-    body: "Abbiamo chiuso tutte le sessioni e fermato letture dei negozi, notifiche e rinnovi. L’eliminazione dei dati prosegue da sola: ti scriviamo quando è completata.",
-    note: "La cancellazione non si può annullare. Puoi creare un nuovo account quando vuoi, ma gli stessi negozi non ricevono una nuova prova né nuovi sblocchi Free nel ciclo in corso.",
+    body: "Abbiamo chiuso tutte le sessioni e fermato letture dei negozi e notifiche. Ora fermiamo i rinnovi degli abbonamenti ed eliminiamo i dati: ti scriviamo quando è tutto completato.",
+    note: "La cancellazione non si può annullare. Puoi creare un nuovo account quando vuoi, ma gli stessi negozi non ricevono una nuova prova e, fino alla fine del ciclo Free in corso, gli sblocchi già usati restano contati.",
   },
   storeLink: {
     title: "Collega un negozio eBay",

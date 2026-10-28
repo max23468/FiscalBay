@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useLocation } from "react-router";
 
 import { AccessNotice, VerifyEmail } from "~/components/access-notice";
+import { DeleteAccount } from "~/components/delete-account";
 import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
@@ -65,8 +66,19 @@ function useAccessAction() {
 
 const rise = "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]";
 
-/** Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. */
-function AgreementFields({ v, values }: { v: FieldErrors; values?: Record<string, string> }) {
+/**
+ * Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. Il marketing manca
+ * per chi ha già una scelta, che si cambia dalle Impostazioni.
+ */
+function AgreementFields({
+  v,
+  values,
+  marketing = true,
+}: {
+  v: FieldErrors;
+  values?: Record<string, string>;
+  marketing?: boolean;
+}) {
   const { t: copy, language } = useCopy();
   const t = copy.access;
   return (
@@ -92,21 +104,23 @@ function AgreementFields({ v, values }: { v: FieldErrors; values?: Record<string
         </span>
       </FieldLabel>
       {v.error("termini")}
-      <Field orientation="horizontal">
-        <Checkbox
-          id="marketing"
-          name="marketing"
-          defaultChecked={values?.marketing === "on"}
-          aria-labelledby="marketing-label"
-          aria-describedby="marketing-hint"
-        />
-        <FieldContent>
-          <FieldLabel id="marketing-label" htmlFor="marketing" className="font-normal">
-            {t.marketing}
-          </FieldLabel>
-          <FieldDescription id="marketing-hint">{t.marketingHint}</FieldDescription>
-        </FieldContent>
-      </Field>
+      {marketing ? (
+        <Field orientation="horizontal">
+          <Checkbox
+            id="marketing"
+            name="marketing"
+            defaultChecked={values?.marketing === "on"}
+            aria-labelledby="marketing-label"
+            aria-describedby="marketing-hint"
+          />
+          <FieldContent>
+            <FieldLabel id="marketing-label" htmlFor="marketing" className="font-normal">
+              {t.marketing}
+            </FieldLabel>
+            <FieldDescription id="marketing-hint">{t.marketingHint}</FieldDescription>
+          </FieldContent>
+        </Field>
+      ) : null}
     </div>
   );
 }
@@ -439,11 +453,13 @@ function ResetPassword({ token }: { token: string }) {
 function CompleteRegistration({
   needsProfile,
   needsAgreement,
+  needsMarketing,
   suggestedName,
   remembered,
 }: {
   needsProfile: boolean;
   needsAgreement: boolean;
+  needsMarketing: boolean;
   suggestedName: { firstName: string; lastName: string };
   remembered: Remembered | null;
 }) {
@@ -461,7 +477,9 @@ function CompleteRegistration({
       <form method="post" action={formAction} {...v.form} onSubmit={(event) => void v.check(event)}>
         <FieldGroup>
           {needsProfile ? <ProfileFields v={v} values={values} suggested={suggestedName} /> : null}
-          {needsAgreement ? <AgreementFields v={v} values={values} /> : null}
+          {needsAgreement ? (
+            <AgreementFields v={v} values={values} marketing={needsMarketing} />
+          ) : null}
           <Button type="submit" name="intent" value="completa" className="w-full">
             {t.agreementSubmit}
           </Button>
@@ -545,12 +563,24 @@ function AccessPanel({
   const t = copy.access;
   if (loaderData.authenticated) {
     return (
-      <CompleteRegistration
-        needsProfile={loaderData.needsProfile}
-        needsAgreement={loaderData.needsAgreement}
-        suggestedName={loaderData.suggestedName}
-        remembered={remembered}
-      />
+      <div className="grid gap-6">
+        <CompleteRegistration
+          needsProfile={loaderData.needsProfile}
+          needsAgreement={loaderData.needsAgreement}
+          needsMarketing={loaderData.needsMarketing}
+          suggestedName={loaderData.suggestedName}
+          remembered={remembered}
+        />
+        {/* Senza registrazione completa le Impostazioni non si aprono: la cancellazione è qui. */}
+        <div className="border-t pt-4">
+          <DeleteAccount
+            email={loaderData.email}
+            access={loaderData.deletion}
+            actionPath={localizedPath(loaderData.language, accessPath)}
+            inline
+          />
+        </div>
+      </div>
     );
   }
   if (loaderData.resetToken) {
@@ -573,8 +603,10 @@ function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: Access
 /** Accesso, registrazione e completamento: marchio a sinistra, form a destra. */
 export default function SignIn({ loaderData, actionData }: Route.ComponentProps) {
   const { language } = loaderData;
-  const notice = actionData?.notice ?? loaderData.notice;
-  const remembered = actionData?.remembered ?? null;
+  // Gli esiti della cancellazione arrivano al suo riquadro: qui soltanto quelli dei moduli.
+  const form = actionData && "remembered" in actionData ? actionData : null;
+  const notice = form?.notice ?? loaderData.notice;
+  const remembered = form?.remembered ?? null;
   const t = appCopy[language].access;
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">

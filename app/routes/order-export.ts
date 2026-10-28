@@ -12,13 +12,20 @@ import { exportFilePath, settingsPath } from "../app-links";
 import { exportRevision } from "../domain/export-files.server";
 import {
   exportJobOrders,
+  maxQueuedExports,
   publishOrderFile,
   queueOrderFile,
   type OrderFileRequest,
 } from "../domain/export-jobs.server";
 import { orderAllowance } from "../domain/grants.server";
 import { exportFileName } from "../domain/order-export.server";
-import { parseColumns, standardColumns, type ExportRows } from "../orders/export-columns";
+import { XlsxRowLimitError } from "../domain/xlsx.server";
+import {
+  customColumns,
+  parseColumns,
+  standardColumns,
+  type ExportRows,
+} from "../orders/export-columns";
 import { visibleOrderTallies } from "../domain/orders.server";
 import { errorResponse } from "../error-response";
 import { logFailure } from "../errors";
@@ -42,13 +49,15 @@ export function loader() {
  * File degli ordini, creato soltanto dalla conferma «Crea file». L'ambito arriva
  * nell'indirizzo, uguale a quello della sezione Esportazione (filtri, ricerca cifrata,
  * istantanea e selezione); le opzioni nel corpo. XLSX e colonne scelte valgono soltanto con
- * Premium, riletto qui come gli altri diritti. Sessione, negozi, conservazione e diritti si
- * rileggono qui, all'istante della richiesta. Il file si salva nel bucket privato e la risposta
+ * Premium, riletto qui come gli altri diritti; colonne uguali allo schema standard non sono una
+ * scelta Premium. Sessione, negozi, conservazione e diritti si rileggono qui, all'istante della
+ * richiesta. Il file si salva nel bucket privato e la risposta
  * rimanda al suo download, che passa dal Worker senza URL bearer; il file vale al più 24 ore,
  * non oltre la fine della copertura Premium con cui è nato né oltre il primo termine dei dati
  * inclusi. Oltre `exportJobOrders` ordini il file si prepara dalla coda: la risposta 202 lo
- * annuncia e la campanella avvisa quando è pronto. Con `Accept: application/json` un rifiuto
- * risponde con l'avviso; un modulo inviato senza JavaScript torna alla sezione.
+ * annuncia e la campanella avvisa quando è pronto, con al più `maxQueuedExports` file in
+ * preparazione per utente. Con `Accept: application/json` un rifiuto risponde con l'avviso; un
+ * modulo inviato senza JavaScript torna alla sezione.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
@@ -84,11 +93,12 @@ export async function action({ request }: Route.ActionArgs) {
     const revision = await measure("d1", "exports", () => exportRevision(env.DB, userId));
     const allowance = await measure("d1", "allowance", () => orderAllowance(env.DB, userId, now));
     const premium = !!allowance?.premium;
+    const columns = chosen === null ? standardColumns(rows) : parseColumns(String(chosen), rows);
+    const custom = columns ? customColumns(columns, rows) : null;
     // Senza Premium, anche se scaduto mentre la pagina era aperta, il file standard non parte
     // al posto di quello chiesto.
-    if (!premium && (format === "xlsx" || chosen !== null))
+    if (!premium && (format === "xlsx" || custom || (chosen !== null && !columns)))
       return refused(403, t.settings.export.exportPremium);
-    const columns = chosen === null ? standardColumns(rows) : parseColumns(String(chosen), rows);
     if (!columns) return refused(400, t.settings.export.exportColumnsInvalid);
     const fromOrders = await measure("d1", "orders", () =>
       accountExportScope(area, query, environment, premium, now),
@@ -108,15 +118,16 @@ export async function action({ request }: Route.ActionArgs) {
       filter,
       rows,
       format,
-      columns: chosen === null ? null : columns,
+      columns: custom,
       language,
       timeZone,
     };
     const fileName = exportFileName(t, now, timeZone, format);
     if (tally.orders > exportJobOrders) {
-      await measure("d1", "exports", () =>
+      const queued = await measure("d1", "exports", () =>
         queueOrderFile(env, { userId, revision, request: fileRequest, fileName, now }),
       );
+      if (!queued) return refused(429, t.settings.export.exportBusy(maxQueuedExports));
       return json
         ? Response.json(
             { ok: true, notice: t.settings.export.exportQueued } satisfies ActionResult,
@@ -140,6 +151,8 @@ export async function action({ request }: Route.ActionArgs) {
     return redirect(localizedPath(language, exportFilePath(id)), 303);
   } catch (error) {
     if (error instanceof Response) throw error;
+    if (error instanceof XlsxRowLimitError)
+      return refused(413, t.settings.export.exportTooManyRows);
     logFailure({ request, error, operation: "route" });
     return refused(500, t.settings.export.exportFailed);
   }

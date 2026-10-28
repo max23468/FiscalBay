@@ -314,6 +314,7 @@ function OrdersList({
           selected={visibleSelected.map((order) => order.id)}
           lockedSelected={lockedSelected}
           remaining={remainingUnlocks(data.account)}
+          suspended={data.account.freeSuspended}
           onUnlock={submitSelection}
           onCancel={stopSelecting}
           onExport={

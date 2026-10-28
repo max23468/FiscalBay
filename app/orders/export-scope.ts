@@ -7,14 +7,23 @@ import { maxListedOrders, pagesParam, snapshotParam } from "./order-list";
  * stesso conteggio dell'elenco, il resto serve a tornarvi con lo stesso contesto.
  */
 
-/** Ordini scelti, con la selezione o dal menu di un ordine: prevalgono sui filtri. */
+/**
+ * Ordini scelti nell'elenco, con la selezione o dal menu di un ordine: prevalgono sui filtri e,
+ * come la selezione, contano soltanto quelli ancora presenti nell'elenco.
+ */
 export const exportOrdersParam = "ordini";
+
+/**
+ * Ordine aperto nel dettaglio: si esporta con le regole del dettaglio, che lo mostra anche fuori
+ * dai filtri e dall'istantanea dell'elenco, per esempio appena sbloccato con «Da sbloccare».
+ */
+export const exportOrderParam = "ordine";
 
 /** Sezione delle Impostazioni che riceve l'ambito. */
 export const exportSection = "impostazioni/esportazione";
 
 export type ExportScope =
-  | { kind: "orders"; ids: string[] }
+  | { kind: "orders"; ids: string[]; detail?: true }
   | { kind: "filtered"; criteria: URLSearchParams };
 
 /** Ordini dell'esportazione, quanti hanno il dato da sbloccare e quanti il dato disponibile. */
@@ -62,9 +71,18 @@ export function exportContext(
 /** Indirizzo dell'esportazione da un elenco, con la selezione se presente. */
 export function exportHref(path: string, list: URLSearchParams, ids?: readonly string[]) {
   const next = new URLSearchParams(list);
+  next.delete(exportOrderParam);
   if (ids) next.set(exportOrdersParam, ids.join(","));
   else next.delete(exportOrdersParam);
   return next.size ? `${path}?${next}` : path;
+}
+
+/** Indirizzo dell'esportazione dal dettaglio: l'elenco resta soltanto per tornarvi. */
+export function exportOrderHref(path: string, list: URLSearchParams, id: string) {
+  const next = new URLSearchParams(list);
+  next.delete(exportOrdersParam);
+  next.set(exportOrderParam, id);
+  return `${path}?${next}`;
 }
 
 /**
@@ -72,6 +90,9 @@ export function exportHref(path: string, list: URLSearchParams, ids?: readonly s
  * contesto degli Ordini. Una selezione vuota o fuori misura non vale come «tutti gli ordini».
  */
 export function exportScope(query: URLSearchParams): ExportScope | null {
+  const detail = query.get(exportOrderParam);
+  if (detail !== null)
+    return { kind: "orders", ids: detail && detail.length <= 128 ? [detail] : [], detail: true };
   const ids = query.get(exportOrdersParam);
   if (ids !== null) {
     const unique = [...new Set(ids.split(","))].filter((id) => id && id.length <= 128);
@@ -86,6 +107,7 @@ export function exportScope(query: URLSearchParams): ExportScope | null {
 export function exportReturnHref(ordersPath: string, query: URLSearchParams) {
   const next = new URLSearchParams(query);
   next.delete(exportOrdersParam);
+  next.delete(exportOrderParam);
   return next.size ? `${ordersPath}?${next}` : ordersPath;
 }
 

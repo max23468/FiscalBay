@@ -1,7 +1,10 @@
 import { formatDate } from "../format";
 import { isProduction } from "../app-links";
+import { UpstreamError } from "../integrations/http.server";
 import {
   ownerCallbackPrefix,
+  sendPreformatted,
+  sendRichMessage,
   type BotButton,
   type RichBlock,
   type RichMessage,
@@ -84,6 +87,40 @@ export function plainText(env: Env, panel: Panel, now: Date) {
   // Il taglio non divide una coppia surrogata, come un'emoji.
   if (/[\uD800-\uDBFF]/u.test(text[end - 1]!)) end -= 1;
   return `${text.slice(0, end)}${truncated}`;
+}
+
+/**
+ * Rifiuto del messaggio a tabelle per la sua forma, come un pannello oltre i limiti di Telegram:
+ * ripeterlo non cambierebbe l'esito. Restano fuori la chat bloccata (403) e i rifiuti noti
+ * della modifica.
+ */
+export function panelRejected(error: unknown) {
+  return (
+    error instanceof UpstreamError &&
+    error.failure === "rejected" &&
+    error.details.status === 400 &&
+    error.details.providerCode === undefined
+  );
+}
+
+/**
+ * Pannello a tabelle in un nuovo messaggio. Se Telegram lo rifiuta per la sua forma parte lo
+ * stesso pannello in testo semplice troncato, quello di «Copia», invece di ritentare fino alla
+ * scadenza un invio che fallirebbe sempre.
+ */
+export async function sendPanel(
+  env: Env,
+  chatId: string,
+  panel: Panel,
+  now: Date,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  try {
+    await sendRichMessage(env, chatId, richMessage(env, panel, now), fetcher);
+  } catch (error) {
+    if (!panelRejected(error)) throw error;
+    await sendPreformatted(env, chatId, plainText(env, panel, now), fetcher);
+  }
 }
 
 /**

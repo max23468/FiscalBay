@@ -98,7 +98,7 @@ export function AbuseView({ signals }: { signals: AbuseSignal[] }) {
     <ul className="grid gap-3">
       {signals.map((signal) => (
         <li key={signal.key}>
-          <Panel title={`${a.kinds[signal.kind]}: ${signal.value}`}>
+          <Panel title={`${a.kinds[signal.kind]}: ${signal.current ? signal.value : a.stale}`}>
             {signal.review ? (
               <p className="text-sm">
                 <Badge variant={signal.review.outcome === "clear" ? "success" : "warning"}>

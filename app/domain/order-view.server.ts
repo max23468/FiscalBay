@@ -11,19 +11,26 @@ import type {
   SourceStatus,
 } from "../view-models";
 
+/**
+ * Avvertenza su un dato disponibile, uguale nella pagina Ordini e nel file: l'ultima lettura non
+ * riuscita, in corso o che non riporta più il valore letto in precedenza.
+ */
+export function fiscalNotice(order: VisibleOrder): FiscalNotice | null {
+  return order.taxVerification === "error"
+    ? "lastKnown"
+    : order.taxVerification === "checking"
+      ? "checking"
+      : order.taxAvailability === "masked"
+        ? "masked"
+        : order.taxAvailability === "absent" || order.taxAvailability === "not_included"
+          ? "notReturned"
+          : null;
+}
+
 /** Dato fiscale nella forma della pagina Ordini: valori presenti soltanto se autorizzati. */
 function fiscalView(order: VisibleOrder): FiscalView {
   if (order.fiscalState === "available") {
-    const notice: FiscalNotice | null =
-      order.taxVerification === "error"
-        ? "lastKnown"
-        : order.taxVerification === "checking"
-          ? "checking"
-          : order.taxAvailability === "masked"
-            ? "masked"
-            : order.taxAvailability === "absent" || order.taxAvailability === "not_included"
-              ? "notReturned"
-              : null;
+    const notice = fiscalNotice(order);
     return {
       state: "available",
       identifiers: order.taxIdentifiers.map((identifier) => {

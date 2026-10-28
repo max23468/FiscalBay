@@ -67,9 +67,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   let exportContext: ExportContext | null = null;
   let exportPeriods: Record<OrderPeriod, ExportTally> | null = null;
   if (scope) {
-    // La selezione conta soltanto gli ordini dell'elenco da cui è partita, alla sua istantanea.
+    // La selezione conta soltanto gli ordini dell'elenco da cui è partita, alla sua istantanea;
+    // l'ordine del dettaglio vale come nel dettaglio, anche fuori dall'elenco.
     const search = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, query);
-    const listed = visible(query, search);
+    const listed =
+      scope.kind === "orders" && scope.detail
+        ? [...scenario.orders, ...scenario.incoming]
+        : visible(query, search);
     const ids = new Set(scope.kind === "orders" ? scope.ids : []);
     const chosen = scope.kind === "orders" ? listed.filter((order) => ids.has(order.id)) : listed;
     exportContext = exportContextView(

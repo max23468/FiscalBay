@@ -64,7 +64,7 @@ function storeView(store: StoreStatus, notifications: Map<string, boolean> | nul
         ? undefined
         : store.pauseReasons.includes("plan")
           ? "plan"
-          : store.pauseReasons.includes("admin")
+          : store.pauseReasons.includes("admin") || store.pauseReasons.includes("abuse")
             ? "admin"
             : store.pauseReasons.includes("inactivity")
               ? "inactivity"

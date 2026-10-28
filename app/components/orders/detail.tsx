@@ -16,7 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { appHref } from "../../app-links";
 import { formatAmount, type Language } from "../../i18n";
 import { buyerNameView, contactText } from "../../contact";
-import { exportHref, exportSection } from "../../orders/export-scope";
+import { exportOrderHref, exportSection } from "../../orders/export-scope";
 import { itemPrice, marketplaceLabel, type OrderView } from "../../view-models";
 import { countryName, formatDate } from "../../format";
 import { BuyerAddress, EmailLink, ItemThumbnail, PhoneNumber, type SecondaryActions } from "./card";
@@ -380,10 +380,10 @@ export function OrderSheet({
               ) : null}
               {actions.exportable ? (
                 <Link
-                  to={exportHref(
+                  to={exportOrderHref(
                     appHref(links, exportSection),
                     new URLSearchParams(location.search),
-                    [shown.id],
+                    shown.id,
                   )}
                   {...buttonLink({ variant: "outline", size: "sm" })}
                 >

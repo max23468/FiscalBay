@@ -93,20 +93,15 @@ export async function consumeTelegramUpdate(
   now = new Date(),
 ): Promise<void> {
   const db = env.DB;
-  // Con gli invii spenti dalla console il bot non risponde: l'aggiornamento si chiude.
-  if (!(await serviceSetting(db, "telegram_sends"))) return;
   await db
     .prepare(`UPDATE telegram_links SET resumed_at = ?2, delivery_failure = NULL,
         delivery_failed_at = NULL
       WHERE chat_id = ?1 AND delivery_failure = 'blocked'`)
     .bind(update.chatId, update.eventAt)
     .run();
-  const { results: links } = await db
-    .prepare(
-      `SELECT ${linkColumns} FROM telegram_links l WHERE l.chat_id = ?1 ORDER BY l.linked_at`,
-    )
-    .bind(update.chatId, now.toISOString())
-    .all<Link>();
+  // Con gli invii spenti dalla console il bot non risponde, ma il collegamento chiesto in quel
+  // periodo si crea comunque, senza conferma: la ricevuta chiusa non lo riproporrebbe.
+  const answers = await serviceSetting(db, "telegram_sends");
   // Soltanto l'avvio porta un token. Senza, l'avvio è l'aiuto: chi non è collegato riceve dove
   // collegarsi, come per i comandi.
   if (update.tokenHash)
@@ -120,7 +115,15 @@ export async function consumeTelegramUpdate(
       },
       fetcher,
       now,
+      { reply: answers },
     );
+  if (!answers) return;
+  const { results: links } = await db
+    .prepare(
+      `SELECT ${linkColumns} FROM telegram_links l WHERE l.chat_id = ?1 ORDER BY l.linked_at`,
+    )
+    .bind(update.chatId, now.toISOString())
+    .all<Link>();
   if (update.topic === "callback") return consumeCallback(env, update, links, fetcher, now);
   if (links.length === 0) return unknownChatReply(env, update.chatId, "help", fetcher);
   const command = (update.topic === "start" ? "help" : update.command) as BotCommand;

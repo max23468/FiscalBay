@@ -7,6 +7,7 @@ import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { accessNotice, isStoreNotice } from "../access-notice";
+import { deletionAccess } from "../account-page.server";
 import { issueTimingTicket } from "../page-timing.server";
 import { unconfirmedOnFailure } from "../client-action";
 import {
@@ -245,6 +246,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
       // La prova si propone dopo la prima lettura riuscita, anche senza ordini.
       trialAvailable: allowance?.trialAvailable ?? false,
       ...accountCoverage(allowance),
+      ...(allowance?.suspended ? { freeSuspended: true } : {}),
       // Prima del primo collegamento nessun ciclo è avviato e nessuno sblocco è disponibile.
       // Anche in lista d'attesa nessuno sblocco del Free è disponibile.
       quota: premium
@@ -294,6 +296,8 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     account,
     notice,
     verified,
+    // Chi non ha verificato l'email non raggiunge le Impostazioni: la cancellazione è nell'avviso.
+    deletion: verified ? null : await deletionAccess(session, now),
     ebayEnvironment,
     sandbox: sandboxAvailable(env),
     page: pageData,
@@ -334,7 +338,7 @@ export async function action({ request }: Route.ActionArgs) {
     const value = form.get("value");
     if (value !== "true" && value !== "false")
       return data<ActionResult>({ ok: false, notice: t.settings.saveFailed }, { status: 400 });
-    await recordMarketingConsent(env.DB, session.user.id, value === "true", language);
+    await recordMarketingConsent(env.DB, session.user.id, value === "true", language, "proposal");
     return {
       ok: true,
       notice:
@@ -426,7 +430,11 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
   const alerts = (
     <>
       <AccessNotice notice={notice} />
-      <VerifyEmail email={account.email} verified={loaderData.verified} />
+      <VerifyEmail
+        email={account.email}
+        verified={loaderData.verified}
+        deletion={"deletion" in loaderData ? loaderData.deletion : null}
+      />
     </>
   );
   return loaderData.notFound ? (

@@ -211,6 +211,66 @@ test.describe("area reale", () => {
       await expect(page).toHaveURL(new RegExp(`${prefix}/accesso`, "u"));
       expect(errors).toEqual([]);
     });
+
+  for (const language of ["it", "en"] as const)
+    test(`senza registrazione completa né email verificata l'account si elimina lo stesso ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+      pageErrors: errors,
+    }) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      const id = `account-incomplete-${language}-${browserName}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      const deleteButton = () =>
+        page.getByRole("button", { name: it ? "Elimina account" : "Delete account", exact: true });
+      // Email da verificare: l'avviso degli Ordini offre la cancellazione.
+      await writeLocal(`UPDATE "user" SET "emailVerified" = 0 WHERE id = '${id}';`);
+      await page.goto(`${prefix}/app/ordini`);
+      await networkIdle(page);
+      await expect(deleteButton()).toBeVisible();
+      // Termini da accettare: la pagina di completamento offre lo stesso flusso.
+      await writeLocal(`DELETE FROM terms_acceptances WHERE user_id = '${id}';`);
+      await page.goto(`${prefix}/accesso`);
+      await networkIdle(page);
+      await expect(
+        page.getByRole("heading", {
+          level: 2,
+          name: it ? "Completa la registrazione" : "Complete your registration",
+        }),
+      ).toBeVisible();
+      await deleteButton().click();
+      const dialog = page.getByRole("alertdialog");
+      await dialog
+        .getByRole("textbox", {
+          name: it
+            ? "Scrivi il tuo indirizzo email per confermare"
+            : "Type your email address to confirm",
+        })
+        .fill(`${id}@example.invalid`);
+      await dialog
+        .getByRole("button", { name: it ? "Invia il link di conferma" : "Send confirmation link" })
+        .click();
+      const identity = page.getByRole("alertdialog", {
+        name: it ? "Conferma che sei tu" : "Confirm it’s you",
+      });
+      await identity.getByLabel("Password", { exact: true }).fill(localPassword);
+      await identity
+        .getByRole("button", { name: it ? "Conferma" : "Confirm", exact: true })
+        .click();
+      // L'avviso della verifica dice anche «We sent a link»: conta soltanto l'esito della
+      // cancellazione, sotto il pulsante.
+      await expect(
+        page.getByRole("status").filter({
+          hasText: it
+            ? `Ti abbiamo inviato un link a ${id}@example.invalid. Aprilo entro un’ora`
+            : `We sent a link to ${id}@example.invalid. Open it within one hour`,
+        }),
+      ).toBeVisible();
+      expect(errors).toEqual([]);
+    });
 });
 
 for (const width of [390, 768, 1440]) {
@@ -538,6 +598,34 @@ for (const width of [390, 768, 1440]) {
     }
   });
 }
+
+test("il modulo di assistenza allega il riepilogo dalla casella, con il riferimento mostrato", async ({
+  page,
+}) => {
+  await open(page, "/anteprima/impostazioni/supporto");
+  const message = page.getByRole("textbox", { name: "Messaggio", exact: true });
+  const send = async () => {
+    const request = page.waitForRequest(
+      (sent) => sent.method() === "POST" && sent.url().includes("/anteprima/impostazioni/supporto"),
+    );
+    await page.getByRole("button", { name: "Invia", exact: true }).click();
+    const fields = Object.fromEntries(new URLSearchParams((await request).postData() ?? ""));
+    // L'invio riuscito svuota il messaggio: il successivo si scrive dopo, o andrebbe perso.
+    await expect(message).toHaveValue("");
+    return fields;
+  };
+  // La casella di Base UI vale «on» quando è spuntata: la richiesta dice «true» e porta il
+  // correlation ID che il riepilogo mostra.
+  const reference = "c0a8f3e1-5b2d-4e7a-9c11-7d2f0b6e4a90";
+  await expect(page.getByText(reference)).toBeVisible();
+  await message.fill("Il negozio non si aggiorna.");
+  expect(await send()).toMatchObject({ intent: "support", diagnostics: "true", reference });
+  await message.fill("Il negozio non si aggiorna ancora.");
+  await page.getByRole("checkbox", { name: "Allega il riepilogo diagnostico" }).click();
+  const unchecked = await send();
+  expect(unchecked).toMatchObject({ intent: "support", diagnostics: "false" });
+  expect(unchecked).not.toHaveProperty("reference");
+});
 
 // La conferma si verifica nel pannello di un negozio.
 test.describe("negozi", () => {

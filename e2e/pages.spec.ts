@@ -121,9 +121,10 @@ for (const scenario of scenarios) {
           // L'anteprima non esiste in Production, nemmeno con i suoi endpoint.
           expect(response.status()).toBe(production && scenario.preview ? 404 : scenario.status);
           if (scenario.path.endsWith("/robots.txt")) {
-            // In produzione chiude l'area riservata, altrove tutto il dominio.
+            // In produzione chiude l'area riservata con la barra finale, così l'icona
+            // `/apple-touch-icon.png` resta raggiungibile; altrove chiude tutto il dominio.
             expect(await response.text()).toMatch(
-              production ? /^Disallow: \/app$/mu : /^User-agent: \*\nDisallow: \/\n/u,
+              production ? /^Disallow: \/app\/$/mu : /^User-agent: \*\nDisallow: \/\n/u,
             );
             checked("HTTP e robots.txt");
             return;

@@ -1,7 +1,7 @@
 import { stripeEnvironment } from "../integrations/stripe.server";
 import { activeCoverageSql } from "./grants.server";
 import { storeLabelSql } from "./store-state.server";
-import { listWorkspaceStores, type StoreStatus } from "./stores.server";
+import { listWorkspaceStores, pauseReasonSql, type StoreStatus } from "./stores.server";
 
 /**
  * Anagrafica della console (§15): account, spazi e negozi con piano, diritti, incassi e stato
@@ -276,7 +276,8 @@ export async function listAllStores(
         s.disconnected_at IS NOT NULL AS disconnected, s.data_deleted_at IS NOT NULL AS removed,
         CASE WHEN c.store_id IS NULL THEN 'none' WHEN c.rejected_at IS NOT NULL THEN 'rejected'
           WHEN c.refresh_expires_at <= ?1 THEN 'expired' ELSE 'valid' END AS consent,
-        (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id) AS pauses,
+        (SELECT group_concat(${pauseReasonSql}) FROM ebay_store_pauses p
+          WHERE p.store_id = s.id) AS pauses,
         ss.last_success_at AS lastSuccessAt, ss.requested_at AS requestedAt,
         COALESCE(ss.locked_until > ?1, 0) AS syncing,
         (SELECT COUNT(*) FROM (SELECT ok FROM sync_runs r WHERE r.store_id = s.id

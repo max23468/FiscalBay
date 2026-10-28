@@ -42,7 +42,10 @@ export type InvocationRow = {
   detail: string;
   method: string;
   outcome: string;
+  /** Invocazioni; la media e i quantili valgono per invocazione. */
   count: number;
+  /** Messaggi della coda portati dalle invocazioni; per HTTP e cron coincide con `count`. */
+  messages: number;
   meanMs: number;
   p50Ms: number;
   p95Ms: number;
@@ -199,6 +202,7 @@ export async function readTechnicalMetrics(
         method: text(row.method),
         outcome: text(row.outcome),
         count: numeric(row.count),
+        messages: numeric(row.messages),
         meanMs: numeric(row.mean_ms),
         p50Ms: numeric(row.p50_ms),
         p95Ms: numeric(row.p95_ms),

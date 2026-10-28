@@ -18,49 +18,38 @@ import {
 import { appCopy } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
 import { accessPath, planPath, pricingPath, visitParam } from "../app-links";
-import {
-  annualPaidMonths,
-  formatPrice,
-  italianGross,
-  premiumOffers,
-  priceGeneration,
-} from "../catalog";
-import { purchasesOpenSql } from "../domain/admission-state.server";
-import { currentFreePromotion, freeQuotaSettings } from "../domain/grants.server";
+import { annualPaidMonths, premiumOffers } from "../catalog";
+import { freeQuotaSettings } from "../domain/grants.server";
 import { lifetimeSlots, lifetimeSlotsLeft } from "../domain/lifetime.server";
-import { formatDate } from "../format";
-import { localizedPath } from "../i18n";
-import { publicPage } from "../site.server";
+import { languageFromPath, localizedPath } from "../i18n";
+import { publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/pricing";
 
 /**
- * Prezzi (§23): Free e le tre modalità Premium nello stesso confronto, dal listino corrente.
- * Promozione, posti lifetime e sospensione degli acquisti si leggono a ogni richiesta, come la
- * sessione della barra: la risposta resta `no-store`.
+ * Prezzi (§23): Free e le tre modalità Premium nello stesso confronto, dal listino del sito
+ * comune alla home. Promozione, posti lifetime e sospensione degli acquisti si leggono a ogni
+ * richiesta, come la sessione della barra: la risposta resta `no-store`.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const [{ language, origin, session }, settings, freePromotion, lifetimeLeft, admission] =
-    await Promise.all([
-      publicPage(request),
-      freeQuotaSettings(env.DB),
-      currentFreePromotion(env.DB),
-      lifetimeSlotsLeft(env.DB),
-      env.DB.prepare(`SELECT ${purchasesOpenSql} AS open`).first<{ open: number }>(),
-    ]);
-  const purchasesOpen = Boolean(admission?.open);
+  const [{ language, origin, session }, settings, listing, lifetimeLeft] = await Promise.all([
+    publicPage(request),
+    freeQuotaSettings(env.DB),
+    siteListing(languageFromPath(new URL(request.url).pathname)),
+    lifetimeSlotsLeft(env.DB),
+  ]);
+  const { purchasesOpen, prices, freePromotion, promotionEnd } = listing;
   const t = sitePages[language].pricing;
   const plan = appCopy[language].settings.plan;
   const quota = freePromotion?.quota ?? settings.quota;
   const offers = premiumOffers.map((offer) => {
-    const net = priceGeneration.net[offer];
     const soldOut = offer === "lifetime" && lifetimeLeft <= 0;
     return {
       offer,
       name: t.offers[offer].name,
-      price: formatPrice(net, language),
+      price: prices[offer].net,
       period: `${t.vat} ${t.offers[offer].period}`,
-      gross: plan.priceGross(formatPrice(italianGross(net), language)),
+      gross: plan.priceGross(prices[offer].gross),
       note: offer === "annual" ? t.offers.annual.note(annualPaidMonths()) : t.offers[offer].note,
       best: offer === "annual",
       soldOut,
@@ -96,11 +85,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       description: t.description,
       lead: t.lead,
       promotion: freePromotion
-        ? sitePages[language].home.freePromotion(
-            freePromotion.quota,
-            formatDate(freePromotion.endsAt, language),
-            settings.quota,
-          )
+        ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd!, settings.quota)
         : null,
       free: t.free,
       freePrice: t.freePrice,

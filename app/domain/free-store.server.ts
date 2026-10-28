@@ -1,4 +1,4 @@
-import { activeEntitlementSql } from "./grants.server";
+import { abuseSuspendedSql, activeEntitlementSql, paidCoverageSql } from "./grants.server";
 import { coveredMonthsSql, freeHistoryDays, historyEndSql } from "./history-window.server";
 import { storeNameSql } from "./store-state.server";
 import { dayMilliseconds } from "../time";
@@ -98,7 +98,9 @@ const allScope: Scope = {
  * restano conservati, non consultabili, per trenta giorni; i negozi esclusi dal Free conservano i
  * propri dati per trenta giorni dalla pausa. Con una copertura gli ordini ancora conservati
  * riprendono la finestra intera, anche durante quei trenta giorni; gli altri termini non si
- * allungano mai.
+ * allungano mai. La sospensione antiabuso del Free mette la pausa dell'assistenza su ogni
+ * negozio reale dello spazio sospeso senza copertura pagata o concessa e la toglie negli altri
+ * casi, senza toccare la pausa manuale della console.
  */
 function planStatements(db: D1Database, scope: Scope, at: string) {
   const covered = (workspace: string) => activeEntitlementSql(workspace, "?1");
@@ -133,6 +135,14 @@ function planStatements(db: D1Database, scope: Scope, at: string) {
     statement(`UPDATE workspaces SET inactivity_notice_at = NULL WHERE id IN (
       SELECT w.id FROM workspaces w WHERE ${scope.workspaces} AND w.inactivity_notice_at IS NOT NULL
          AND ${covered("w.id")})`),
+    statement(`DELETE FROM ebay_store_pauses WHERE reason = 'admin' AND abuse_review = 1
+      AND store_id IN (SELECT s.id FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
+       WHERE ${scope.workspaces} AND (NOT ${abuseSuspendedSql("w.id")}
+         OR ${paidCoverageSql("w.id", "?1")} OR NOT (${realStore("s")})))`),
+    statement(`INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at, abuse_review)
+      SELECT s.id, 'admin', ?1, 1 FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
+       WHERE ${scope.workspaces} AND ${realStore("s")} AND ${abuseSuspendedSql("w.id")}
+         AND NOT ${paidCoverageSql("w.id", "?1")}`),
     statement(`INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at)
       SELECT s.id, 'plan', ?1 FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
        WHERE ${scope.workspaces} AND ${realStore("s")} AND NOT ${covered("w.id")}

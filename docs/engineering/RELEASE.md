@@ -193,13 +193,13 @@ Il Worker scrive nel dataset dell'ambiente, `fiscalbay_test_metrics` o `fiscalba
 node scripts/metrics-query.mjs phases --hours 24
 ```
 
-Le query sono `invocations`, `phases` e `pages`; `--mode live` legge la Production, `--hours` va da 1 a 2.160. La CLI `cf` usa il proprio accesso: nessun token passa dallo script.
+Le query sono `invocations`, `phases` e `pages`; in `invocations` numero, media e quantili valgono per invocazione e `messages` conta i messaggi della coda; `--mode live` legge la Production, `--hours` va da 1 a 2.160. La CLI `cf` usa il proprio accesso: nessun token passa dallo script.
 
 ```bash
 node scripts/metrics-query.mjs sample --count 40
 ```
 
-Il campione controllato invia al solo test 40 richieste anonime `HEAD /api/v1/page-timing`, che rispondono 405 senza effetti e scrivono punti con classe `api`, metodo `HEAD` ed esito `4xx`, una combinazione che nessuna pagina usa. Dopo due minuti confronta il conteggio stimato e pesato con `_sample_interval` nella finestra di invio con quello atteso. Esito non zero se diverge; `sampled` indica che Analytics Engine ha campionato. I punti restano nel dataset test fino alla scadenza. I report del browser richiedono il biglietto della pagina, quindi il campione non li usa.
+Il campione controllato invia al solo test 40 richieste anonime `HEAD /api/v1/page-timing`, che rispondono 405 senza effetti. Il Worker dà a questa sola richiesta la classe `sample`, con metodo `HEAD` ed esito `4xx`: altre richieste `HEAD` sulle API restano nella classe `api` e fuori dal conteggio. Dopo due minuti confronta il conteggio stimato e pesato con `_sample_interval` nella finestra di invio con quello atteso. Esito non zero se diverge; `sampled` indica che Analytics Engine ha campionato. I punti restano nel dataset test fino alla scadenza. I report del browser richiedono il biglietto della pagina, quindi il campione non li usa.
 
 Il rendering non è una fase misurata nel Worker: l'orologio resta fermo durante il calcolo, quindi una durata misurata nel codice vale zero. Il suo costo si legge come tempo CPU delle pagine dai Workers Logs, conservati sette giorni e registrati per ogni invocazione.
 
@@ -207,7 +207,7 @@ Il rendering non è una fase misurata nel Worker: l'orologio resta fermo durante
 node scripts/metrics-query.mjs cpu --hours 24
 ```
 
-Per Ordini e Negozi, documento e dati (`.data`), la query conta le richieste GET e riporta CPU mediana e al 95° percentile e durata mediana; `--hours` va da 1 a 168. La CPU comprende rendering e resto del calcolo della richiesta, senza le attese di D1 ed eBay. L'indirizzo resta nel filtro della query, mai nel risultato.
+Per Ordini e Negozi, documento e dati (`.data`), la query conta le richieste GET, senza il collegamento di un negozio (`negozi/collega`) che è un'altra route, e riporta CPU mediana e al 95° percentile e durata mediana; `--hours` va da 1 a 168. La CPU comprende rendering e resto del calcolo della richiesta, senza le attese di D1 ed eBay. L'indirizzo resta nel filtro della query, mai nel risultato.
 
 La sezione Prestazioni della console legge le stesse query sulle ultime 24 ore con il segreto `ANALYTICS_READ_TOKEN` del Worker: un token API dell'account con i soli permessi Account Analytics Read e Workers Observability Read, uno per ambiente. Si crea con `pnpm exec cf accounts tokens create --name "<nome>" --policies @<file>` e una policy limitata all'account e ai due gruppi; il valore passa dall'output JSON al Portachiavi e poi al segreto del Worker dell'ambiente, mai nella cronologia dei comandi o nei log. Il token del test è «FiscalBay metriche test», nel Portachiavi alla voce «FiscalBay analytics test». Senza il segreto la sezione resta non configurata e nessuna altra parte dell'app ne dipende.
 

@@ -117,9 +117,18 @@ export type VisibleOrder = {
   }>;
 };
 
-function isFulfillmentCf(tax: VisibleOrder["taxIdentifiers"][number]): boolean {
-  // cfKey qualifica già il Paese prima del confronto fra le fonti.
-  return tax.source === "ebay_fulfillment" && tax.type === "CODICE_FISCALE";
+/**
+ * Chiave dello stesso dato letto da Trading e da Fulfillment: tipo, Paese e valore normalizzati
+ * come in `buyerTaxKey`, così il CF o la Partita IVA riportati da entrambe le fonti compaiono una
+ * volta. Fulfillment qualifica il CF soltanto con il proprio nome `CODICE_FISCALE`; un'altra
+ * fonte resta distinta. null per un identificativo che non si confronta.
+ */
+function sourceTaxKey(tax: VisibleOrder["taxIdentifiers"][number]): string | null {
+  const read =
+    tax.source === "ebay_trading_get_orders" ||
+    (tax.source === "ebay_fulfillment" &&
+      (taxIdentifierType(tax.type, tax.issuingCountry) !== "CF" || tax.type === "CODICE_FISCALE"));
+  return read ? buyerTaxKey(tax) : null;
 }
 
 /**
@@ -309,10 +318,11 @@ export async function visibleOrderTallies(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria },
+  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean },
   starts: readonly string[] = [],
 ): Promise<OrderTally[]> {
   // Gli inizi soddisfatti da un ordine sono sempre i primi in ordine crescente: basta contarli.
+  // Stryker disable next-line ArrayDeclaration,StringLiteral: senza inizi il rango cercato è quello di "" e un altro elenco dà rango 0, che conta comunque ogni ordine.
   const sorted = [...new Set(starts.length ? starts : [""])].sort();
   const result = await db
     .prepare(
@@ -323,7 +333,15 @@ export async function visibleOrderTallies(
         GROUP BY fiscal, satisfied`,
     )
     .bind(
-      ...visibleOrdersParams(userId, ebayEnvironment, now, 0, filter.ids, filter.criteria),
+      ...visibleOrdersParams(
+        userId,
+        ebayEnvironment,
+        now,
+        0,
+        filter.ids,
+        filter.criteria,
+        filter.provisional,
+      ),
       JSON.stringify(sorted),
     )
     .all<{ fiscal: FiscalSituation; satisfied: number; total: number }>();
@@ -366,7 +384,7 @@ export async function visibleOrdersTerm(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria },
+  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean },
 ): Promise<string | null> {
   const row = await db
     .prepare(
@@ -378,8 +396,19 @@ export async function visibleOrdersTerm(
                       AND g.revoked_at IS NULL AND julianday(g.expires_at) > julianday(?3))) AS unlock
          ${visibleOrdersSql}`,
     )
-    .bind(...visibleOrdersParams(userId, ebayEnvironment, now, 0, filter.ids, filter.criteria))
+    .bind(
+      ...visibleOrdersParams(
+        userId,
+        ebayEnvironment,
+        now,
+        0,
+        filter.ids,
+        filter.criteria,
+        filter.provisional,
+      ),
+    )
     .first<{ retention: string | null; unlock: string | null }>();
+  // Stryker disable next-line MethodExpression,ConditionalExpression: uno sblocco esiste soltanto con un ordine, quindi un termine assente è sempre l'ultimo e l'ordinamento lascia per primo quello presente.
   const terms = [row!.retention, row!.unlock].filter((term): term is string => term !== null);
   return terms.sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null;
 }
@@ -634,19 +663,16 @@ export async function listVisibleOrders(
   }
   const visible = [...orders.values()].map((order) => {
     const primary = new Map<string, VisibleOrder["taxIdentifiers"][number]>();
-    const cfKey = (tax: VisibleOrder["taxIdentifiers"][number]) =>
-      taxIdentifierType(tax.type, tax.issuingCountry) === "CF" &&
-      (tax.source === "ebay_trading_get_orders" || isFulfillmentCf(tax))
-        ? buyerTaxKey(tax)
-        : null;
+    const fulfillment = (tax: VisibleOrder["taxIdentifiers"][number]) =>
+      tax.source === "ebay_fulfillment";
     for (const tax of order.taxIdentifiers) {
-      const key = cfKey(tax);
+      const key = sourceTaxKey(tax);
       if (key === null) continue;
       const previous = primary.get(key);
       const updated = !!previous?.updated || tax.updated;
       if (
         !previous ||
-        (isFulfillmentCf(tax) && !isFulfillmentCf(previous)) ||
+        (fulfillment(tax) && !fulfillment(previous)) ||
         (tax.source === previous.source && tax.issuingCountry === "IT")
       ) {
         tax.updated = updated;
@@ -655,13 +681,14 @@ export async function listVisibleOrders(
     }
     return {
       ...order,
-      // Le osservazioni restano nel database; la consultazione sceglie il CF più completo.
+      // Le osservazioni restano nel database; la consultazione sceglie il valore più completo.
       taxIdentifiers: order.taxIdentifiers.filter((tax) => {
-        const key = cfKey(tax);
+        const key = sourceTaxKey(tax);
         return key === null || primary.get(key) === tax;
       }),
     };
   });
+  // Stryker disable next-line ConditionalExpression,BooleanLiteral: senza questa uscita i suggerimenti si calcolano anche per il file, che non li legge: stesse righe, lettura più costosa.
   if (filter.suggestions === false) return visible;
   const suggestions = await orderSuggestions(
     db,

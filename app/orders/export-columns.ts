@@ -68,6 +68,17 @@ export function parseColumns(value: string, rows: ExportRows): ExportColumn[] | 
   return columns.length ? columns : null;
 }
 
+/**
+ * Colonne che cambiano lo schema standard della granularità; null se sono le stesse, nello
+ * stesso ordine: soltanto una scelta diversa chiede Premium.
+ */
+export function customColumns(
+  columns: readonly ExportColumn[],
+  rows: ExportRows,
+): ExportColumn[] | null {
+  return columns.join() === standardColumns(rows).join() ? null : [...columns];
+}
+
 /** Nome della colonna nella granularità scelta. */
 export function columnName(column: ExportColumn, rows: ExportRows, t: AppCopy): string {
   const names = t.settings.export.file.columns;

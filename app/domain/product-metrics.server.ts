@@ -258,10 +258,11 @@ async function operations(db: D1Database, from: string, to: string) {
   const [reads, stores, spaces, quota, volume] = await db.batch<
     Record<string, number | string | null>
   >([
+    // Giorni di calendario della finestra fino a oggi compreso, come il resto del pannello.
     db
       .prepare(`SELECT COALESCE(SUM(attempts), 0) AS attempts,
           COALESCE(SUM(failures), 0) AS failures, COUNT(*) AS days
-        FROM sync_daily WHERE day >= date(?1) AND day < date(?2)`)
+        FROM sync_daily WHERE day > date(?1) AND day <= date(?2)`)
       .bind(from, to),
     db
       .prepare(`SELECT t.last_success_at AS lastSuccess FROM ebay_stores s

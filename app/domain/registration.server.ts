@@ -8,8 +8,20 @@ import type { Language } from "../i18n";
 export const legalVersions = {
   terms: "bozza-2026-09-28",
   privacy: "bozza-2026-09-28",
-  marketing: "2026-09-28",
 } as const;
+
+/**
+ * Versione del testo del consenso marketing per ogni superficie che lo mostra: registrazione,
+ * proposta negli Ordini e Notifiche delle Impostazioni hanno testi diversi, quindi la prova di
+ * ogni scelta dice quale testo è stato reso. Un testo modificato richiede una nuova versione.
+ */
+export const marketingTextVersions = {
+  registration: "registrazione-2026-09-29",
+  proposal: "proposta-2026-10-27",
+  settings: "impostazioni-2026-09-29",
+} as const;
+
+export type MarketingSource = keyof typeof marketingTextVersions;
 
 /** Il tipo di account descrive chi si registra: non cambia piano, quote o limiti. */
 export type Profile = {
@@ -19,7 +31,12 @@ export type Profile = {
   companyName: string | null;
 };
 
-export type RegistrationStatus = { termsAccepted: boolean; profile: Profile | null };
+export type RegistrationStatus = {
+  termsAccepted: boolean;
+  /** Esiste già una scelta sul consenso marketing, di qualunque superficie. */
+  marketingChosen: boolean;
+  profile: Profile | null;
+};
 
 /** Legge il profilo dal modulo; null se manca un campo obbligatorio o supera la lunghezza. */
 export function parseProfile(form: FormData): Profile | null {
@@ -48,7 +65,8 @@ export async function registrationStatus(
       `SELECT p.first_name, p.last_name, p.account_type, p.company_name,
               EXISTS (
                 SELECT 1 FROM terms_acceptances WHERE user_id = ?1 AND terms_version = ?2
-              ) AS terms_accepted
+              ) AS terms_accepted,
+              EXISTS (SELECT 1 FROM marketing_consents WHERE user_id = ?1) AS marketing_chosen
          FROM (SELECT 1)
          LEFT JOIN user_profiles p ON p.user_id = ?1`,
     )
@@ -59,9 +77,11 @@ export async function registrationStatus(
       account_type: Profile["accountType"] | null;
       company_name: string | null;
       terms_accepted: number;
+      marketing_chosen: number;
     }>())!;
   return {
     termsAccepted: row.terms_accepted === 1,
+    marketingChosen: row.marketing_chosen === 1,
     profile: row.first_name
       ? {
           firstName: row.first_name,
@@ -73,13 +93,17 @@ export async function registrationStatus(
   };
 }
 
-export function registrationComplete(status: RegistrationStatus): boolean {
+export function registrationComplete(
+  status: Pick<RegistrationStatus, "termsAccepted" | "profile">,
+): boolean {
   return status.termsAccepted && status.profile !== null;
 }
 
 /**
  * Salva in una transazione ciò che la registrazione ha raccolto: il profilo, e
- * l'accettazione dei Termini con la scelta marketing, tenute in tabelle distinte. Il primo
+ * l'accettazione dei Termini con la scelta marketing, tenute in tabelle distinte. La scelta
+ * marketing si registra soltanto se il modulo l'ha chiesta: chi accetta una nuova versione dei
+ * Termini e ha già scelto conserva la propria scelta. Il primo
  * profilo salvato con la lista d'attesa attiva mette l'account in attesa; le modifiche
  * successive non lo cambiano. Il frammento della lista d'attesa è scritto qui perché gli script
  * Node caricano questo modulo senza risolvere altri import.
@@ -91,7 +115,8 @@ export async function completeRegistration(
     language: Language;
     now: Date;
     profile?: Profile;
-    agreement?: { marketing: boolean };
+    /** `marketing` assente quando il modulo non ha mostrato la casella. */
+    agreement?: { marketing?: boolean };
   },
 ): Promise<void> {
   const at = input.now.toISOString();
@@ -119,6 +144,7 @@ export async function completeRegistration(
     );
   }
   if (input.agreement) {
+    const { marketing } = input.agreement;
     statements.push(
       db
         .prepare(
@@ -128,21 +154,24 @@ export async function completeRegistration(
            ON CONFLICT (user_id, terms_version) DO NOTHING`,
         )
         .bind(input.userId, legalVersions.terms, legalVersions.privacy, input.language, at),
-      db
-        .prepare(
-          `INSERT INTO marketing_consents
-             (id, user_id, granted, text_version, language, recorded_at)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-        )
-        .bind(
-          crypto.randomUUID(),
-          input.userId,
-          input.agreement.marketing ? 1 : 0,
-          legalVersions.marketing,
-          input.language,
-          at,
-        ),
     );
+    if (marketing !== undefined)
+      statements.push(
+        db
+          .prepare(
+            `INSERT INTO marketing_consents
+               (id, user_id, granted, text_version, language, recorded_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+          )
+          .bind(
+            crypto.randomUUID(),
+            input.userId,
+            marketing ? 1 : 0,
+            marketingTextVersions.registration,
+            input.language,
+            at,
+          ),
+      );
   }
   if (statements.length > 0) await db.batch(statements);
 }
