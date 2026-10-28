@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
-import { areas, enter, open, searched } from "./components";
+import { areas, enter, open, searched, setScenario } from "./components";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -376,12 +376,7 @@ for (const language of ["it", "en"] as const) {
         watchNetwork(context);
         const page = await context.newPage();
         const base = language === "it" ? "/anteprima" : "/en/anteprima";
-        const reset = async (scenario: string) => {
-          await page.request.post(base, {
-            form: { scenario, redirectTo: `${base}/ordini` },
-            maxRedirects: 0,
-          });
-        };
+        const reset = (scenario: string) => setScenario(page, scenario, base);
         try {
           await reset("ordinario");
           await open(page, `${base}/ordini?fiscale=locked`);
@@ -765,10 +760,7 @@ test("contatti cliccabili e copiabili, senza richiesta fiscale precompilata agli
       },
     });
   });
-  await page.request.post("/anteprima", {
-    form: { scenario: "dati-discordanti", redirectTo: "/anteprima/ordini" },
-    maxRedirects: 0,
-  });
+  await setScenario(page, "dati-discordanti");
   // Indirizzo tutto in maiuscolo e cellulare senza prefisso.
   await page.goto("/anteprima/ordini/ord-09");
   const dialog = page.getByRole("dialog");

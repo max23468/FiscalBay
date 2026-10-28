@@ -2,6 +2,7 @@ import type { EntryContext, RouterContextProvider } from "react-router";
 import { isRouteErrorResponse, ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import { renderToReadableStream } from "react-dom/server";
+import { contentSecurityPolicy, scriptNonce } from "./content-security.server";
 import { logFailure } from "./errors";
 
 export const streamTimeout = 5_000;
@@ -22,13 +23,15 @@ export default async function handleRequest(
   }
 
   let shellRendered = false;
+  const nonce = scriptNonce();
   const userAgent = request.headers.get("user-agent");
 
   // Il rendering non si misura qui: l'orologio del Worker resta fermo durante il calcolo, quindi
   // la sua durata si legge come tempo CPU della pagina dai Workers Logs (`pageCpuQuery`).
   const body = await renderToReadableStream(
-    <ServerRouter context={routerContext} url={request.url} />,
+    <ServerRouter context={routerContext} url={request.url} nonce={nonce} />,
     {
+      nonce,
       signal: AbortSignal.timeout(streamTimeout + 1000),
       onError(_error: unknown) {
         responseStatusCode = 500;
@@ -45,6 +48,7 @@ export default async function handleRequest(
   }
 
   responseHeaders.set("Content-Type", "text/html");
+  responseHeaders.set("Content-Security-Policy", contentSecurityPolicy(nonce));
   return new Response(body, {
     headers: responseHeaders,
     status: responseStatusCode,

@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { createCookie, data, redirect } from "react-router";
 
+import { assertSameOrigin } from "../account-area.server";
 import { appCopy, type AppCopy } from "../app-copy";
 import { isProduction, previewSettingsPath } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -34,6 +35,15 @@ export interface PreviewState {
 /** L'anteprima esiste solo negli ambienti non Production. */
 export function assertPreviewAvailable() {
   if (isProduction(env)) throw data(null, { status: 404 });
+}
+
+/**
+ * Prima di ogni action dell'anteprima: come nell'area reale, un modulo inviato da un altro sito
+ * non cambia lo scenario né lo stato simulato.
+ */
+export function assertPreviewAction(request: Request) {
+  assertPreviewAvailable();
+  assertSameOrigin(request);
 }
 
 export async function readPreviewState(request: Request): Promise<PreviewState> {

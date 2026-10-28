@@ -1265,8 +1265,9 @@ describe("file degli ordini", () => {
   it("rifiuta richieste senza sessione, da un'altra origine o in lettura", async () => {
     const anonymous = await request("ordini=o-a", {}, { cookie: null });
     expect(anonymous.status).toBe(401);
-    const foreign = await request("ordini=o-a", {}, { origin: "https://altro.invalid" });
-    expect(foreign.status).toBe(403);
+    // Un'origine estranea o assente, come un modulo inviato da altrove, è rifiutata.
+    for (const origin of ["https://altro.invalid", null])
+      expect((await request("ordini=o-a", {}, { origin })).status, String(origin)).toBe(403);
     expect((await callRoute(exportLoader, "/api/v1/orders/export")).status).toBe(405);
     // Senza JavaScript un rifiuto torna alla sezione con lo stesso ambito.
     const form = await request("fiscale=locked", { fiscal: "available" }, { json: false });

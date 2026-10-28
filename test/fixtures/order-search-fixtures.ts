@@ -6,7 +6,7 @@ import { callRoute } from "./route-fixtures";
 export function searchRequest(
   cookie: string | null,
   query: string,
-  options: { origin?: string; json?: boolean; environment?: string } = {},
+  options: { origin?: string | null; json?: boolean; environment?: string } = {},
 ) {
   const environment = options.environment ? `?environment=${options.environment}` : "";
   return callRoute(orderSearch, `/api/v1/orders/search${environment}`, {

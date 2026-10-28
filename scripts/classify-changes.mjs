@@ -112,6 +112,9 @@ export function fileImpact(file, change) {
   if (browser.test(file)) return { level: "build", e2e: true, deploy: false };
   if (file === "scripts/check-bundle-size.mjs")
     return { level: "build", e2e: false, deploy: false };
+  // Gli avvisi delle licenze sono un file statico dell'artefatto: cambia ciò che si distribuisce.
+  if (file === "scripts/third-party-notices.mjs")
+    return { level: "build", e2e: false, deploy: true };
   // Il collaudo remoto dopo il deploy prova le variabili nell'ambiente reale.
   if (file === configFile && testVariablesOnly(change?.before, change?.after))
     return { level: "build", e2e: false, deploy: true };

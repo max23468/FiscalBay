@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import { expect, networkIdle } from "./fixtures";
+import { expect, networkIdle, test } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -9,14 +9,21 @@ import { testAccount } from "./test-account";
  * movimento ridotto. Qui gli aiuti condivisi dalle spec delle aree.
  */
 
+/**
+ * Sceglie lo scenario dell'anteprima come il selettore della pagina. Il modulo dichiara la
+ * propria origine, come il browser: le action dell'anteprima rifiutano gli altri siti.
+ */
+export async function setScenario(page: Page, scenario: string, base = "/anteprima") {
+  await page.request.post(base, {
+    headers: { origin: new URL(test.info().project.use.baseURL!).origin },
+    form: { scenario, redirectTo: `${base}/ordini` },
+    maxRedirects: 0,
+  });
+}
+
 export async function open(page: Page, path = "/anteprima/ordini", scenario?: string) {
   await page.bringToFront();
-  if (scenario) {
-    await page.request.post("/anteprima", {
-      form: { scenario, redirectTo: "/anteprima/ordini" },
-      maxRedirects: 0,
-    });
-  }
+  if (scenario) await setScenario(page, scenario);
   await page.goto(path);
   // Con un pannello aperto il resto della pagina è inerte: si attende il controllo per id.
   if (path.includes("/anteprima"))
