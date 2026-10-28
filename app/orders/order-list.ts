@@ -89,14 +89,13 @@ export function rememberedStore(cookie: string | null, storeIds: readonly string
     .find((part) => part.startsWith(`${rememberedStoreCookie}=`))
     ?.slice(rememberedStoreCookie.length + 1);
   if (!value) return null;
-  let id: string;
   try {
-    id = decodeURIComponent(value);
+    const id = decodeURIComponent(value);
+    // Il filtro del negozio compare soltanto con più negozi: con uno solo resterebbe invisibile.
+    return storeIds.length > 1 && storeIds.includes(id) ? id : null;
   } catch {
     return null;
   }
-  // Il filtro del negozio compare soltanto con più negozi: con uno solo resterebbe invisibile.
-  return storeIds.length > 1 && storeIds.includes(id) ? id : null;
 }
 
 /**
@@ -148,6 +147,7 @@ export function listCriteria(
   const snapshot = new Date(Math.min(opened?.getTime() ?? now.getTime(), now.getTime()));
   const parsed = orderCriteria(query, now, plan, search);
   // Come gli altri filtri, un negozio che non è fra quelli filtrabili vale come «Tutti».
+  // Stryker disable next-line StringLiteral: senza negozio nell'indirizzo entrambi i rami lasciano storeId assente.
   const filters: OrderCriteria = storeIds.includes(parsed.storeId ?? "")
     ? parsed
     : { ...parsed, storeId: undefined };

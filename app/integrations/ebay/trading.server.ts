@@ -1,6 +1,9 @@
 import { UpstreamError, upstreamText } from "../http.server";
 import type { EbayAccess } from "./environment.server";
-import { orderObservationSchema, type OrderObservation } from "../../domain/order-import.server";
+import {
+  orderObservationSchema,
+  type OrderObservation,
+} from "../../domain/order-observation.server";
 import { parseMinor } from "../../money";
 
 /**

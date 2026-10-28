@@ -24,17 +24,88 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
 
+/** Moduli senza suffisso server con regole dei moduli critici: dati fiscali, orari, lista ordini, coda. */
+const criticalShared = new Set([
+  "app/tax-quality.ts",
+  "app/time.ts",
+  "app/orders/order-list.ts",
+  "app/domain/work-timing.ts",
+]);
+
 /**
- * Moduli server di Auth, sessioni, isolamento, ordini, export e file XLSX, negozi, integrazioni, diritti e
- * destinatari Telegram.
+ * Moduli server di Auth, sessioni, chiavi derivate, isolamento, ordini, export e file XLSX, negozi
+ * e loro segni, integrazioni, diritti e destinatari Telegram.
  */
 export function criticalModule(file) {
   return (
-    file === "app/tax-quality.ts" ||
-    /^app\/(?:auth(?:-route)?|domain\/(?:billing|refunds|orders|order-import|order-acquisition|order-sync|order-export|quota|grants|cycles|sessions|sign-in-methods|registration|stores|export|xlsx|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+    criticalShared.has(file) ||
+    /^app\/(?:auth(?:-route)?|sealed|domain\/(?:billing|refunds|orders|order-import|order-observation|order-acquisition|order-sync|order-export|quota|grants|cycles|sessions|sign-in-methods|registration|stores|store-marks|export|xlsx|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:environment|notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
       file,
     )
   );
+}
+
+/**
+ * Moduli non critici importati dai moduli critici: testi, link, tipi, errori e servizi provati
+ * dalla suite senza mutation. Un modulo nuovo importato da un modulo critico, per esempio una
+ * regola estratta, ferma `pnpm test:scripts` finché non diventa critico o non entra qui.
+ */
+export const supportModules = new Set([
+  "app/account-email.server.ts",
+  "app/account/device-name.ts",
+  "app/app-copy.ts",
+  "app/app-links.ts",
+  "app/bot-commands.ts",
+  "app/catalog.ts",
+  "app/contact.ts",
+  "app/copy/copy-it.ts",
+  "app/copy/telegram.ts",
+  "app/domain/account-deletion.server.ts",
+  "app/domain/admission-state.server.ts",
+  "app/domain/admission.server.ts",
+  "app/domain/email-change.server.ts",
+  "app/domain/history-window.server.ts",
+  "app/domain/lifetime.server.ts",
+  "app/domain/order-suggestions.server.ts",
+  "app/domain/order-view.server.ts",
+  "app/domain/service-settings.server.ts",
+  "app/domain/sql.server.ts",
+  "app/domain/store-link.server.ts",
+  "app/domain/store-profile.server.ts",
+  "app/domain/store-state.server.ts",
+  "app/errors.ts",
+  "app/i18n.ts",
+  "app/integrations/ebay/trading.server.ts",
+  "app/integrations/http.server.ts",
+  "app/limits.ts",
+  "app/money.ts",
+  "app/orders/ebay-links.ts",
+  "app/orders/export-columns.ts",
+  "app/orders/export-scope.server.ts",
+  "app/orders/order-search.ts",
+  "app/password.server.ts",
+  "app/preferences.ts",
+  "app/response-cookies.server.ts",
+  "app/sequence.ts",
+  "app/view-models.ts",
+]);
+
+/** Import dei moduli critici verso moduli non critici e non dichiarati, e dichiarazioni superate. */
+export function mutationCoverageGaps(files) {
+  const graph = importGraph(files);
+  const used = new Set();
+  const gaps = [];
+  for (const [file, targets] of graph) {
+    if (!criticalModule(file)) continue;
+    for (const target of targets) {
+      if (criticalModule(target)) continue;
+      used.add(target);
+      if (!supportModules.has(target)) gaps.push(`${file} importa ${target}, non critico`);
+    }
+  }
+  for (const module of supportModules)
+    if (!used.has(module)) gaps.push(`${module} non serve più ai moduli critici`);
+  return gaps;
 }
 
 // Le prove unitarie Node coprono questi moduli; gli altri usano la suite Cloudflare.

@@ -21,7 +21,11 @@ import {
   readTradingOrders,
   tradingAck,
 } from "../app/integrations/ebay/trading.server";
-import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
+import {
+  ebayApiUrl,
+  ebayConfiguration,
+  sandboxAvailable,
+} from "../app/integrations/ebay/environment.server";
 
 const configuration = ebayConfiguration(
   {
@@ -806,5 +810,65 @@ describe("forma mostrata degli identificativi fiscali", () => {
     // Un valore errato resta errato: la forma derivata non lo corregge.
     expect(displayTaxValue({ type: "CF", value: "rss-mra" })).toBe("RSS-MRA");
     expect(displayTaxValue({ type: "OTHER", value: " es b123 456 " })).toBe(" es b123 456 ");
+  });
+});
+
+describe("ambiente eBay", () => {
+  const sandbox = {
+    APP_ORIGIN: "https://test.fiscalbay.it",
+    EBAY_CLIENT_ID: "sintetico",
+    EBAY_CLIENT_SECRET: "sintetico",
+    EBAY_RUNAME: "sintetico",
+    EBAY_SANDBOX_ENABLED: "true",
+    EBAY_SANDBOX_CLIENT_ID: "client",
+    EBAY_SANDBOX_CLIENT_SECRET: "secret",
+    EBAY_SANDBOX_RUNAME: "runame",
+  };
+
+  it.each([
+    "https://test.fiscalbay.it",
+    "http://localhost:5173",
+    "http://127.0.0.1:8787",
+    "http://[::1]:8787",
+  ])("abilita Sandbox sull'origine di test o locale %s", (origin) => {
+    expect(sandboxAvailable({ ...sandbox, APP_ORIGIN: origin })).toBe(true);
+  });
+
+  it.each([
+    ["interruttore spento", { EBAY_SANDBOX_ENABLED: "false" }],
+    ["interruttore assente", { EBAY_SANDBOX_ENABLED: undefined }],
+    ["client id assente", { EBAY_SANDBOX_CLIENT_ID: undefined }],
+    ["segreto assente", { EBAY_SANDBOX_CLIENT_SECRET: undefined }],
+    ["RuName assente", { EBAY_SANDBOX_RUNAME: undefined }],
+    ["dominio Production", { APP_ORIGIN: "https://fiscalbay.it" }],
+  ])("tiene spento Sandbox con %s", (_, override) => {
+    expect(sandboxAvailable({ ...sandbox, ...override })).toBe(false);
+  });
+
+  it("accetta un link relativo o assoluto sotto il percorso atteso", () => {
+    const path = "/sell/fulfillment/v1/order";
+    expect(ebayApiUrl(configuration, `${path}?offset=50`, path).href).toBe(
+      `https://api.ebay.com${path}?offset=50`,
+    );
+    expect(ebayApiUrl(configuration, `https://api.ebay.com${path}/1-2`, path).pathname).toBe(
+      `${path}/1-2`,
+    );
+  });
+
+  /** Link dell'API con credenziali nell'URL. */
+  const withCredentials = (credentials: Partial<Pick<URL, "username" | "password">>) =>
+    Object.assign(new URL("https://api.ebay.com/sell/fulfillment/v1/order"), credentials).href;
+
+  it.each([
+    "http://[",
+    "http://api.ebay.com/sell/fulfillment/v1/order",
+    "https://api.sandbox.ebay.com/sell/fulfillment/v1/order",
+    withCredentials({ username: "utente", password: "segreto" }),
+    withCredentials({ password: "segreto" }),
+    "/sell/fulfillment/v1/orders",
+  ])("rifiuta il link %s prima di inviare il token", (value) => {
+    expect(() => ebayApiUrl(configuration, value, "/sell/fulfillment/v1/order")).toThrow(
+      expect.objectContaining({ failure: "invalid_response" }),
+    );
   });
 });

@@ -4,11 +4,11 @@ import { readDetail } from "../app/domain/order-acquisition-details.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { unlockOrders } from "../app/domain/grants.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
+import { recordOrderObservation } from "../app/domain/order-import.server";
 import {
-  recordOrderObservation,
   orderObservationSchema,
   type OrderObservation,
-} from "../app/domain/order-import.server";
+} from "../app/domain/order-observation.server";
 import { orderSuggestions } from "../app/domain/order-suggestions.server";
 import { deleteStoreData, listStores } from "../app/domain/stores.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";

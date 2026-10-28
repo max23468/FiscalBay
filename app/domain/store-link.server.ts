@@ -1,5 +1,5 @@
 import { logFailure } from "../errors";
-import { applyStoreMark, markAnchorStatement, readStoreMark } from "./account-deletion.server";
+import { applyStoreMark, markAnchorStatement, readStoreMark } from "./store-marks.server";
 import type { Language } from "../i18n";
 import { linkReadAdmitted } from "./admission.server";
 import { applyFreePlan } from "./free-store.server";

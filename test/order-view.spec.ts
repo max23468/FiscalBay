@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { VisibleOrder } from "../app/domain/orders.server";
-import { orderCriteria } from "../app/orders/order-list";
+import {
+  orderCriteria,
+  rememberedStore,
+  rememberStore,
+  revalidateUnlessSnapshot,
+  snapshotInstant,
+  withoutListPosition,
+} from "../app/orders/order-list";
 import { orderView } from "../app/domain/order-view.server";
 import { now } from "./fixtures/database-fixtures";
 import { addressRows } from "../app/format";
@@ -645,5 +652,72 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(criteria(`negozio=${"x".repeat(64)}`).storeId).toBe("x".repeat(64));
     expect(criteria(`negozio=${"x".repeat(65)}`).storeId).toBeUndefined();
     expect(criteria("marketplace=EBAY_IT")).not.toHaveProperty("marketplace");
+  });
+});
+
+describe("posizione e negozio ricordato dell'elenco ordini", () => {
+  it("accetta soltanto un cursore dell'istantanea intero e in base 36", () => {
+    expect(snapshotInstant("1")?.getTime()).toBe(1);
+    expect(snapshotInstant(null)).toBeNull();
+    expect(snapshotInstant("-1")).toBeNull();
+    expect(snapshotInstant("1-")).toBeNull();
+  });
+
+  it("toglie pagine caricate e istantanea e conserva gli altri parametri", () => {
+    const params = new URLSearchParams("fiscale=locked&mostra=2&vista=abc&negozio=s1");
+    expect(withoutListPosition(params).toString()).toBe("fiscale=locked&negozio=s1");
+    expect(params.toString()).toBe("fiscale=locked&mostra=2&vista=abc&negozio=s1");
+  });
+
+  it("non rilegge la pagina quando all'indirizzo si aggiunge soltanto l'istantanea", () => {
+    const revalidate = (current: string, next: string) =>
+      revalidateUnlessSnapshot({
+        currentUrl: new URL(current, "https://esempio.invalid"),
+        nextUrl: new URL(next, "https://esempio.invalid"),
+        defaultShouldRevalidate: true,
+      });
+    expect(revalidate("/app/ordini?fiscale=locked", "/app/ordini?fiscale=locked&vista=abc")).toBe(
+      false,
+    );
+    expect(revalidate("/app/ordini", "/app?vista=abc")).toBe(true);
+    expect(revalidate("/app/ordini?vista=abc", "/app/ordini?vista=def")).toBe(true);
+    expect(revalidate("/app/ordini?fiscale=locked", "/app/ordini?fiscale=locked")).toBe(true);
+    expect(revalidate("/app/ordini?fiscale=locked", "/app/ordini?fiscale=foreign&vista=abc")).toBe(
+      true,
+    );
+  });
+
+  it("legge il negozio ricordato soltanto fra più negozi filtrabili", () => {
+    const stores = ["s1", "s 2"];
+    expect(rememberedStore(null, stores)).toBeNull();
+    expect(rememberedStore("tema=scuro;fiscalbay-negozio=s1", stores)).toBe("s1");
+    expect(rememberedStore("tema=scuro; fiscalbay-negozio=s%202", stores)).toBe("s 2");
+    expect(rememberedStore("fiscalbay-negozio=s3", stores)).toBeNull();
+    expect(rememberedStore("fiscalbay-negozio=%E0%A4%A", stores)).toBeNull();
+    // Con un solo negozio il filtro non compare e il ricordo non vale.
+    expect(rememberedStore("fiscalbay-negozio=s1", ["s1"])).toBeNull();
+    // Un cookie assente non diventa il testo «undefined».
+    expect(rememberedStore("tema=scuro", ["undefined", "s1"])).toBeNull();
+  });
+
+  it("ricorda e dimentica il negozio nel browser, sicuro soltanto in HTTPS", () => {
+    const browser = { cookie: "" };
+    vi.stubGlobal("document", browser);
+    try {
+      vi.stubGlobal("location", { protocol: "https:" });
+      rememberStore("s 2");
+      expect(browser.cookie).toBe(
+        "fiscalbay-negozio=s%202; path=/; max-age=31536000; samesite=lax; secure",
+      );
+      rememberStore(null);
+      expect(browser.cookie).toBe("fiscalbay-negozio=; path=/; max-age=0; samesite=lax; secure");
+      vi.stubGlobal("location", { protocol: "http:" });
+      rememberStore("s1");
+      expect(browser.cookie).toBe("fiscalbay-negozio=s1; path=/; max-age=31536000; samesite=lax");
+      rememberStore(null);
+      expect(browser.cookie).toBe("fiscalbay-negozio=; path=/; max-age=0; samesite=lax");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

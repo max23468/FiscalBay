@@ -1,4 +1,5 @@
-import { deadlineCheckAt, type OrderObservation } from "./order-import.server";
+import { deadlineCheckAt } from "./order-import.server";
+import type { OrderObservation } from "./order-observation.server";
 import { writableStore } from "./store-state.server";
 import {
   limitKey,

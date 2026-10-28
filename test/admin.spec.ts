@@ -9,7 +9,7 @@ import {
 } from "../app/domain/abuse-review.server";
 import { listAudit } from "../app/domain/admin-audit.server";
 import { consoleSummary } from "../app/domain/admin-directory.server";
-import { listAnomalies, taskStates } from "../app/domain/admin-operations.server";
+import { listAnomalies, receiptStates, taskStates } from "../app/domain/admin-operations.server";
 import {
   endPromotion,
   lifetimeSeats,
@@ -373,6 +373,7 @@ describe("accesso alla console", () => {
   it("converte l'ora del modulo dal fuso della console", () => {
     expect(localInstant("2026-10-27T10:00")).toBe("2026-10-27T09:00:00.000Z");
     expect(localInstant("2026-07-01T10:00")).toBe("2026-07-01T08:00:00.000Z");
+    expect(localInstant("2026-07-01T10:45")).toBe("2026-07-01T08:45:00.000Z");
     expect(localInstant("27/10/2026")).toBeNull();
   });
 });
@@ -1556,6 +1557,24 @@ describe("anomalie e lavori", () => {
     const down = await listAnomalies(env.DB, at(later(hour)));
     expect(down.find((a) => a.kind === "ebay_down")).toMatchObject({ severity: "p1", count: 3 });
     expect(down.some((a) => a.kind === "store_reads")).toBe(false);
+  });
+
+  it("conta in ritardo le ricevute ancora aperte da più di un'ora", async () => {
+    const receipt = (id: string, eventAt: string, completedAt: string | null = null) =>
+      env.DB.prepare(
+        `INSERT INTO webhook_receipts (id, provider, environment, provider_id, topic, object_id,
+          event_at, expires_at, completed_at) VALUES (?1, 'stripe', 'test', ?1, 'evento', 'o', ?2, ?3, ?4)`,
+      ).bind(id, eventAt, later(24 * hour), completedAt);
+    await env.DB.batch([
+      receipt("r-fresca", later(-hour + 60_000)),
+      receipt("r-ferma", later(-hour - 60_000)),
+      receipt("r-chiusa", later(-2 * hour), later(-hour)),
+    ]);
+    expect(await receiptStates(env.DB, at(now))).toEqual([
+      { provider: "ebay", pending: 0, stalled: 0, oldest: null },
+      { provider: "stripe", pending: 2, stalled: 1, oldest: later(-hour - 60_000) },
+      { provider: "telegram", pending: 0, stalled: 0, oldest: null },
+    ]);
   });
 
   it("riaccoda soltanto un lavoro fermo e non preso da un consumer", async () => {

@@ -4,7 +4,7 @@ import {
   orderObservationSchema,
   type MaskedBuyerField,
   type OrderObservation,
-} from "../../domain/order-import.server";
+} from "../../domain/order-observation.server";
 import { parseMinor } from "../../money";
 import { dayMilliseconds } from "../../time";
 import { upstreamJson } from "../http.server";

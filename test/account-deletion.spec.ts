@@ -8,9 +8,13 @@ import {
   resumeAccountDeletions,
   runAccountDeletion,
   startAccountDeletion,
+} from "../app/domain/account-deletion.server";
+import {
+  applyStoreMark,
+  readStoreMark,
   storeIdentityHash,
   trialMarkDays,
-} from "../app/domain/account-deletion.server";
+} from "../app/domain/store-marks.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
 import { reconcileOwnerIncidents } from "../app/domain/owner-incidents.server";
 import { applyStripeEvent } from "../app/domain/billing.server";
@@ -1372,6 +1376,106 @@ describe("cancellazione dell'account", () => {
         cycle_used: null,
       })),
     );
+  });
+
+  it("il segno riprende soltanto un ciclo aperto e ancorato, con la sua quota", async () => {
+    const day = 86_400_000;
+    const shift = (ms: number) => new Date(Date.parse(now) + ms).toISOString();
+    const record = async (identity: string, trialUsed: number, cycle: Partial<Cycle> | null) =>
+      env.DB.prepare(
+        `INSERT INTO store_identity_marks (identity_hash, trial_used, cycle_anchor_at,
+          cycle_starts_at, cycle_ends_at, cycle_quota, cycle_used, recorded_at, expires_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)`,
+      )
+        .bind(
+          await storeIdentityHash(env.BETTER_AUTH_SECRET, identity),
+          trialUsed,
+          cycle?.anchor ?? null,
+          cycle?.startsAt ?? null,
+          cycle?.endsAt ?? null,
+          cycle?.quota ?? null,
+          cycle?.used ?? null,
+          shift(-day),
+          shift(trialMarkDays * day),
+        )
+        .run();
+    type Cycle = { anchor: string; startsAt: string; endsAt: string; quota: number; used: number };
+    const open: Cycle = {
+      anchor: shift(-10 * day),
+      startsAt: shift(-3 * day),
+      endsAt: shift(4 * day),
+      quota: 50,
+      used: 3,
+    };
+    await record("aperto", 0, open);
+    // Concluso proprio ora, senza ancoraggio o con la sola prova: nessun ciclo da riprendere.
+    await record("concluso", 1, { ...open, startsAt: shift(-7 * day), endsAt: now });
+    await record("senza-ancoraggio", 0, { ...open, anchor: undefined });
+    await record("prova", 1, null);
+    const read = (identity: string) =>
+      readStoreMark(env.DB, env.BETTER_AUTH_SECRET, identity, at(now));
+    const mark = await read("aperto");
+    expect(mark).toEqual({ trialUsed: false, cycle: open });
+    expect(await read("concluso")).toEqual({ trialUsed: true, cycle: null });
+    expect(await read("senza-ancoraggio")).toEqual({ trialUsed: false, cycle: null });
+    const trialOnly = await read("prova");
+    expect(trialOnly).toEqual({ trialUsed: true, cycle: null });
+
+    const anchored = (id: string, anchor: string | null) =>
+      env.DB.prepare(
+        "INSERT INTO workspaces (id, name, created_at, free_cycle_anchor_at) VALUES (?, 'S', ?, ?)",
+      ).bind(id, shift(-20 * day), anchor);
+    await env.DB.batch([
+      anchored("w-stesso", open.anchor),
+      anchored("w-altro", shift(-day)),
+      anchored("w-nuovo", null),
+      insertEntitlement({
+        workspaceId: "w-nuovo",
+        source: "trial",
+        startsAt: shift(-day),
+        endsAt: shift(6 * day),
+      }),
+      insertEntitlement({
+        workspaceId: "w-stesso",
+        source: "trial",
+        startsAt: shift(-30 * day),
+        endsAt: shift(-16 * day),
+      }),
+    ]);
+    const cycles = (workspace: string) =>
+      env.DB.prepare(
+        "SELECT starts_at, ends_at, quota, used FROM free_cycles WHERE workspace_id = ?",
+      )
+        .bind(workspace)
+        .all()
+        .then(({ results }) => results);
+    // Lo spazio con lo stesso ancoraggio riprende il ciclo del segno con la sua quota; un altro
+    // ancoraggio crea il ciclo in corso con la quota base e vi aggiunge gli sblocchi.
+    await applyStoreMark(env.DB, "w-stesso", mark!, at(now));
+    await applyStoreMark(env.DB, "w-altro", mark!, at(now));
+    await applyStoreMark(env.DB, "w-nuovo", mark!, at(now));
+    expect(await cycles("w-stesso")).toEqual([
+      { starts_at: open.startsAt, ends_at: open.endsAt, quota: 50, used: 3 },
+    ]);
+    expect(await cycles("w-altro")).toEqual([
+      { starts_at: shift(-day), ends_at: shift(6 * day), quota: 5, used: 3 },
+    ]);
+    // Senza ancoraggio non c'è un ciclo da toccare; la sola prova chiude quella in corso, non
+    // una già conclusa.
+    expect(await cycles("w-nuovo")).toEqual([]);
+    await applyStoreMark(env.DB, "w-nuovo", trialOnly!, at(now));
+    await applyStoreMark(env.DB, "w-stesso", trialOnly!, at(now));
+    expect(await cycles("w-nuovo")).toEqual([]);
+    expect(
+      (
+        await env.DB.prepare(
+          "SELECT ends_at, revoked_at FROM workspace_entitlements WHERE source = 'trial' ORDER BY starts_at",
+        ).all()
+      ).results,
+    ).toEqual([
+      { ends_at: shift(-16 * day), revoked_at: null },
+      { ends_at: shift(6 * day), revoked_at: now },
+    ]);
   });
 
   it("la pulizia elimina le richieste concluse dopo la finestra di Time Travel", async () => {

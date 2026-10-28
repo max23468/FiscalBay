@@ -550,7 +550,7 @@ test.describe("area reale", () => {
       await expect(status).toHaveText(it ? "1 ordine." : "1 order.");
       expect(errors).toEqual([]);
     });
-    test(`ordini reali: con Premium l'XLSX segue le colonne scelte e la configurazione salvata ${language}`, async ({
+    test(`ordini reali: con Premium l'XLSX segue le colonne scelte ${language}`, async ({
       page,
       context,
       baseURL,
@@ -599,7 +599,30 @@ test.describe("area reale", () => {
           `${id}${suffix}`,
         ]),
       );
-      // La forma scelta si salva con un nome e torna dopo una nuova apertura.
+      expect(errors).toEqual([]);
+    });
+    test(`ordini reali: con Premium la configurazione salvata torna e si elimina ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+      browserErrors: errors,
+    }) => {
+      const id = `xlsx-${language}-${browserName}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      await open(page, `${prefix}/app/impostazioni/esportazione`);
+      const section = page.getByRole("region", {
+        name: it ? "Ordini da esportare" : "Orders to export",
+      });
+      const columns = section.getByRole("group", { name: it ? "Colonne" : "Columns" });
+      // Una forma diversa da quella standard: XLSX, una riga per articolo, una colonna in meno.
+      await section.getByRole("radio", { name: "XLSX" }).check();
+      await section.getByRole("radio", { name: it ? "Articolo" : "Item", exact: true }).check();
+      const dropped = columns.getByRole("checkbox", {
+        name: it ? "Numero ordine" : "Order number",
+      });
+      await dropped.uncheck();
+      const kept = await columns.getByRole("checkbox", { checked: true }).count();
       await section
         .getByRole("button", { name: it ? "Salva configurazione" : "Save configuration" })
         .click();
@@ -613,18 +636,24 @@ test.describe("area reale", () => {
       ).toBeVisible({
         timeout: 20_000,
       });
+      // Una nuova apertura riparte dalla forma standard; la configurazione si ritrova per nome.
       await open(page, `${prefix}/app/impostazioni/esportazione`);
+      await expect(section.getByRole("radio", { name: "XLSX" })).not.toBeChecked();
       const configuration = section.getByRole("combobox", {
         name: it ? "Configurazione" : "Configuration",
       });
       await configuration.click();
       await page.getByRole("option", { name: "Commercialista" }).click();
       await expect(section.getByRole("radio", { name: "XLSX" })).toBeChecked();
-      await expect(columns.getByRole("checkbox", { checked: true })).toHaveCount(2);
+      await expect(
+        section.getByRole("radio", { name: it ? "Articolo" : "Item", exact: true }),
+      ).toBeChecked();
+      await expect(dropped).not.toBeChecked();
+      await expect(columns.getByRole("checkbox", { checked: true })).toHaveCount(kept);
       await section
         .getByRole("button", { name: it ? "Elimina configurazione" : "Delete configuration" })
         .click();
-      // L'esito arriva dopo il salvataggio e la rilettura della pagina.
+      // L'esito arriva dopo l'eliminazione e la rilettura della pagina.
       await expect(
         page.getByText(it ? "Configurazione eliminata." : "Configuration deleted."),
       ).toBeVisible({
