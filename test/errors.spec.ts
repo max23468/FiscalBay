@@ -330,6 +330,15 @@ describe("misure delle fasi e del browser", () => {
     expect(
       (await timing(JSON.stringify(valid), { origin: "https://estraneo.invalid" })).status,
     ).toBe(403);
+    expect(
+      (
+        await routeResponse(pageTiming, "/api/v1/page-timing", {
+          body: JSON.stringify(valid),
+          origin: null,
+          headers: { "content-type": "application/json" },
+        })
+      ).status,
+    ).toBe(403);
     expect((await timing(JSON.stringify({ ...valid, padding: "x".repeat(2_000) }))).status).toBe(
       413,
     );

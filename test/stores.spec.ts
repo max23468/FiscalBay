@@ -712,17 +712,19 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       },
     });
 
-    const save = (fields: Record<string, string>, origin = testOrigin) =>
+    const save = (fields: Record<string, string>, origin: string | null = testOrigin) =>
       callRoute(settingsAction, "/app/impostazioni/profilo", {
         cookie: seller.cookie,
         origin,
         fields: { intent: "profile", ...fields },
       });
 
-    const foreign = await save({ nome: "Altro", cognome: "Nome" }, "https://esempio.invalid").catch(
-      (response: Response) => response,
-    );
-    expect((foreign as Response).status).toBe(403);
+    for (const origin of ["https://esempio.invalid", null]) {
+      const foreign = await save({ nome: "Altro", cognome: "Nome" }, origin).catch(
+        (response: Response) => response,
+      );
+      expect((foreign as Response).status, String(origin)).toBe(403);
+    }
     const invalid = await save({ nome: " ", cognome: "Nome" });
     expect((invalid as { init: ResponseInit }).init.status).toBe(400);
 
@@ -1681,6 +1683,15 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         store: "estraneo",
       })) as { init: ResponseInit };
       expect(missing.init.status).toBe(404);
+      // Il negozio di un altro spazio vale come inesistente e la scelta resta quella salvata.
+      const other = await verifiedSession("piano-negozio-altro@example.invalid");
+      await env.DB.batch(insertWorkspace({ id: "w-altrui", userId: other.userId }));
+      await insertStore({ id: "altrui", workspaceId: "w-altrui" }).run();
+      const othersStore = (await saveSetting(seller.cookie, {
+        intent: "free-store",
+        store: "altrui",
+      })) as { init: ResponseInit };
+      expect(othersStore.init.status).toBe(404);
       const foreign = (await saveSetting(
         seller.cookie,
         { intent: "free-store", store: seller.storeId },

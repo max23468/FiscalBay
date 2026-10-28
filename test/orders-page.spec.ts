@@ -816,9 +816,10 @@ describe("pagina Ordini reale", () => {
 
   it("la barra superiore cerca con la query nel corpo e l'elenco la riceve cifrata", async () => {
     const { cookie, userId } = await owner();
-    await expect(
-      searchRequest(cookie, "articolo", { origin: "https://estraneo.invalid" }),
-    ).rejects.toMatchObject({ status: 403 });
+    for (const origin of ["https://estraneo.invalid", null])
+      await expect(searchRequest(cookie, "articolo", { origin })).rejects.toMatchObject({
+        status: 403,
+      });
     // Senza sessione la richiesta del browser riceve un errore, il modulo l'accesso.
     const anonymous = await searchRequest(null, "articolo");
     expect(anonymous.status).toBe(401);
@@ -848,6 +849,12 @@ describe("pagina Ordini reale", () => {
     expect(submitted.headers.get("location")).toMatch(/^\/app\/ordini\?ricerca=[\w-]+$/u);
     expect(submitted.headers.get("location")?.toLowerCase()).not.toContain("articolo");
     expect(await searchOrders(cookie, "   ")).toEqual({ items: [], total: 0, href: "/app/ordini" });
+    // Con la sessione di un altro utente lo stesso termine non trova gli ordini di questo spazio.
+    const stranger = await verifiedSession("ricerca-estraneo@example.invalid");
+    expect(await searchOrders(stranger.cookie, "articolo a")).toMatchObject({
+      items: [],
+      total: 0,
+    });
 
     // La presentazione del nome non riscrive la fonte né cambia lo username di ripiego.
     for (const [buyer, display] of [

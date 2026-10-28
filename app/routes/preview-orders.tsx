@@ -19,6 +19,7 @@ import { rememberedStore, revalidateUnlessSnapshot } from "../orders/order-list"
 import { openSearch } from "../orders/order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
 import {
+  assertPreviewAction,
   currentScenario,
   pageScenario,
   simulateAction,
@@ -105,6 +106,7 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
  * quota; le altre azioni rispondono con la simulazione comune.
  */
 export async function action({ request }: Route.ActionArgs) {
+  assertPreviewAction(request);
   const form = await request.formData();
   if (form.get("intent") !== "unlock") return simulateAction(request, form);
   const { state, scenario } = await currentScenario(request);

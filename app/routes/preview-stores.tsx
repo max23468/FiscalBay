@@ -6,7 +6,7 @@ import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import type { AccountView } from "../view-models";
-import { pageScenario, simulateAction } from "../preview/state.server";
+import { assertPreviewAction, pageScenario, simulateAction } from "../preview/state.server";
 import type { Route } from "./+types/preview-stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -46,6 +46,7 @@ function renewsAfterUnlink({ premium, payment }: Pick<AccountView, "premium" | "
 
 /** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */
 export async function action({ request }: Route.ActionArgs) {
+  assertPreviewAction(request);
   return simulateAction(request, await request.formData());
 }
 

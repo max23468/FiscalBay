@@ -149,13 +149,14 @@ describe("accesso alla console", () => {
   it("rifiuta un'operazione da un'altra origine e chiede il motivo dove serve", async () => {
     const { cookie } = await admin();
     await env.DB.batch(insertWorkspace({ id: "w-a" }));
-    await expect(
-      callRoute(adminAction, "/admin", {
-        cookie,
-        fields: { intent: "grant-premium", spazio: "w-a", giorni: "3", motivo: "x" },
-        origin: "https://altro.invalid",
-      }),
-    ).rejects.toMatchObject({ status: 403 });
+    for (const origin of ["https://altro.invalid", null])
+      await expect(
+        callRoute(adminAction, "/admin", {
+          cookie,
+          fields: { intent: "grant-premium", spazio: "w-a", giorni: "3", motivo: "x" },
+          origin,
+        }),
+      ).rejects.toMatchObject({ status: 403 });
     expect(
       await act(cookie, { intent: "grant-premium", spazio: "w-a", giorni: "3" }),
     ).toMatchObject({
@@ -177,13 +178,16 @@ describe("accesso alla console", () => {
       await act(cookie, { intent: "quota-attention", soglia: "99", motivo: "Prova" }),
     ).toMatchObject({ status: 400 });
     // Anche i rifiuti decisi dal modulo restano nel registro, con l'oggetto quando è indicato.
+    // Un rifiuto per l'origine estranea e uno per quella assente.
+    const foreign = {
+      operation: "grant-premium",
+      target: "workspace:w-a",
+      reason: "x",
+      outcome: "foreign_origin",
+    };
     expect(await audit()).toEqual([
-      {
-        operation: "grant-premium",
-        target: "workspace:w-a",
-        reason: "x",
-        outcome: "foreign_origin",
-      },
+      foreign,
+      foreign,
       {
         operation: "grant-premium",
         target: "workspace:w-a",

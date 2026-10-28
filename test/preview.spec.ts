@@ -17,13 +17,20 @@ import {
   writePreviewState,
   type PreviewState,
 } from "../app/preview/state.server";
+import { action as previewRootAction, loader as previewRoot } from "../app/routes/preview";
 import { action as previewSearch } from "../app/routes/preview-search";
-import { action as previewSettingsAction } from "../app/routes/preview-settings";
+import {
+  action as previewSettingsAction,
+  loader as previewSettings,
+} from "../app/routes/preview-settings";
 import {
   action as previewOrdersAction,
   loader as previewOrders,
 } from "../app/routes/preview-orders";
-import { loader as previewStores } from "../app/routes/preview-stores";
+import {
+  action as previewStoresAction,
+  loader as previewStores,
+} from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/orders/order-list";
 import type { SearchResults } from "../app/components/shell-search";
@@ -337,6 +344,60 @@ describe("stato sintetico dell'anteprima", () => {
       expect(t.legal.version("2026-10-03")).not.toMatch(/Bozza|Draft/);
     });
   }
+});
+
+describe("confine dell'anteprima", () => {
+  const actions = [
+    [
+      previewRootAction,
+      "/anteprima",
+      { scenario: "dati-discordanti", redirectTo: "/anteprima/ordini" },
+    ],
+    [previewOrdersAction, "/anteprima/ordini", { intent: "unlock", orderId: "ord-03" }],
+    [previewStoresAction, "/anteprima/negozi", { intent: "pause" }],
+    [previewSettingsAction, "/anteprima/impostazioni/piano", { intent: "start-trial" }],
+    [previewSearch, "/anteprima/ricerca", { q: "rossi" }],
+  ] as const;
+  // Esito di una action o di un loader, anche quando lancia `data()` invece di una Response.
+  const outcome = (run: () => Promise<unknown>) =>
+    run().then(
+      (value) => value,
+      (thrown: unknown) => thrown,
+    );
+
+  it("rifiuta i moduli di un altro sito o senza origine, senza cambiare lo stato simulato", async () => {
+    for (const [action, path, fields] of actions)
+      for (const origin of ["https://estraneo.invalid", null]) {
+        const response = await outcome(() => callRoute(action as never, path, { fields, origin }));
+        expect(response, `${path} ${origin}`).toBeInstanceOf(Response);
+        expect((response as Response).status, `${path} ${origin}`).toBe(403);
+        expect((response as Response).headers.get("set-cookie"), path).toBeNull();
+      }
+  });
+
+  it("in Production non esiste: pagine e action rispondono 404", async () => {
+    const previous = env.APP_ORIGIN;
+    Object.assign(env, { APP_ORIGIN: "https://fiscalbay.it" });
+    try {
+      const loaders = [
+        [previewRoot, "/anteprima"],
+        [previewOrders, "/anteprima/ordini"],
+        [previewStores, "/anteprima/negozi"],
+        [previewSettings, "/anteprima/impostazioni/piano"],
+      ] as const;
+      for (const [handler, path, fields] of [
+        ...loaders.map(([handler, path]) => [handler, path, undefined] as const),
+        ...actions,
+      ]) {
+        const thrown = await outcome(() =>
+          callRoute(handler as never, path, { fields, origin: "https://fiscalbay.it" }),
+        );
+        expect(thrown, path).toMatchObject({ init: { status: 404 } });
+      }
+    } finally {
+      Object.assign(env, { APP_ORIGIN: previous });
+    }
+  });
 });
 
 describe("prova simulata dell'anteprima", () => {
