@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { resumeAccountDeletions } from "./account-deletion.server";
+import { resumeEbayAccountDeletions } from "./ebay-account-deletion.server";
 import { applyInactivity } from "./admission.server";
 import { reconcileBilling } from "./billing.server";
 import { purgeExportFiles } from "./export-files.server";
@@ -108,11 +109,18 @@ const tasks = {
     period: taskPeriods.owner_incidents,
     run: (env: Env, fetcher: typeof fetch, now: Date) => reconcileOwnerIncidents(env, fetcher, now),
   },
-  // Cancellazioni dell'account da riprendere: messaggio perso, rinnovi non ancora fermati,
-  // email da ritentare o dati ricomparsi dopo un restore.
+  // Cancellazioni da riprendere, dell'account e richieste da eBay: messaggio perso, rinnovi non
+  // ancora fermati, email da ritentare o dati ricomparsi dopo un restore. Un errore di una parte
+  // non ferma l'altra.
   account_deletion: {
     period: taskPeriods.account_deletion,
-    run: (env: Env, fetcher: typeof fetch, now: Date) => resumeAccountDeletions(env, fetcher, now),
+    run: async (env: Env, fetcher: typeof fetch, now: Date) => {
+      const [account, ebay] = await Promise.allSettled([
+        resumeAccountDeletions(env, fetcher, now),
+        resumeEbayAccountDeletions(env, now),
+      ]);
+      for (const result of [account, ebay]) if (result.status === "rejected") throw result.reason;
+    },
   },
 } satisfies Record<
   ScheduledTask,

@@ -67,6 +67,7 @@ export function logFailure(input: {
     | "order_acquisition"
     | "account_email"
     | "account_deletion"
+    | "ebay_account_deletion"
     | "support"
     | "inactivity"
     | "maintenance"

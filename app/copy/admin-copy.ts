@@ -220,7 +220,7 @@ const it = {
       account_deletion: {
         title: "Cancellazioni dell’account non concluse",
         consequence:
-          "Stripe non ha confermato lo stop dei rinnovi, oppure il lavoro è fermo da oltre un’ora: restano lo spazio e i riferimenti dei pagamenti.",
+          "Stripe non ha confermato lo stop dei rinnovi, oppure il lavoro è fermo da oltre un’ora: restano lo spazio e i riferimenti dei pagamenti. Le cancellazioni richieste da eBay compaiono con l’ambiente e lasciano ancora i dati dell’utente eBay.",
         action: "Controlla Stripe e i lavori",
       },
       audit_unrecorded: {
@@ -896,7 +896,7 @@ const en: AdminCopy = {
       account_deletion: {
         title: "Account deletions not completed",
         consequence:
-          "Stripe has not confirmed that renewals stopped, or the job has been stuck for over an hour: the space and payment references remain.",
+          "Stripe has not confirmed that renewals stopped, or the job has been stuck for over an hour: the space and payment references remain. Deletions requested by eBay appear with their environment and still leave the eBay user’s data.",
         action: "Check Stripe and jobs",
       },
       audit_unrecorded: {

@@ -21,6 +21,7 @@ import { applyStripeEvent } from "../app/domain/billing.server";
 import { consumeExportJob } from "../app/domain/export-jobs.server";
 import { orderAllowance } from "../app/domain/grants.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { grantLifetime } from "../app/domain/lifetime.server";
 import { consumeStoreSync } from "../app/domain/order-sync.server";
 import { completeStoreLink } from "../app/domain/store-link.server";
 import {
@@ -1300,6 +1301,69 @@ describe("cancellazione dell'account", () => {
     const id = await startAccountDeletion(env, { id: user.userId, email }, "it", when);
     expect(await runAccountDeletion(env, id, fetch, when)).toBe("done");
   };
+
+  it("il lifetime concesso di nuovo dopo la cancellazione non riporta dati né la prova", async () => {
+    const first = `lifetime-${crypto.randomUUID()}@example.invalid`;
+    const owner = await verifiedSession(first);
+    expect(await linkEbay(owner.userId, "seller-lifetime", at(now))).toBe("collegato");
+    const space = (await orderAllowance(env.DB, owner.userId, at(now)))!.workspaceId;
+    await env.DB.batch([
+      insertEntitlement({ workspaceId: space, source: "trial", endsAt: later(60).toISOString() }),
+      ...insertOrder(
+        "o-lifetime",
+        (await env.DB.prepare("SELECT id FROM ebay_stores WHERE workspace_id = ?")
+          .bind(space)
+          .first<string>("id"))!,
+      ),
+      env.DB.prepare(
+        `INSERT INTO lifetime_allocations (slot, workspace_id, status, provider_reference,
+           created_at, activated_at, customer_id)
+         VALUES (1, ?2, 'active', 'cs_lifetime', ?1, ?1, 'cus_lifetime')`,
+      ).bind(now, space),
+      insertEntitlement({
+        workspaceId: space,
+        source: "lifetime",
+        startsAt: later(1).toISOString(),
+        stripeCheckoutSessionId: "cs_lifetime",
+      }),
+    ]);
+    await deleteAccount(owner, first, later(2));
+    // Il posto venduto resta occupato, senza spazio e con i riferimenti della vendita.
+    expect(
+      await env.DB.prepare("SELECT workspace_id, customer_id FROM lifetime_allocations").all(),
+    ).toMatchObject({ results: [{ workspace_id: null, customer_id: "cus_lifetime" }] });
+
+    // L'assistenza riconosce il cliente in un nuovo account e gli concede di nuovo il lifetime.
+    const second = await verifiedSession(`ritorno-${crypto.randomUUID()}@example.invalid`);
+    expect(await linkEbay(second.userId, "seller-lifetime", later(3))).toBe("collegato");
+    const returning = (await orderAllowance(env.DB, second.userId, later(3)))!;
+    expect(
+      await grantLifetime(
+        env,
+        null,
+        {
+          workspaceId: returning.workspaceId,
+          author: "owner",
+          reason: "Lifetime dopo cancellazione",
+        },
+        later(4),
+      ),
+    ).toBe("done");
+    const after = (await orderAllowance(env.DB, second.userId, later(5)))!;
+    expect(after.trialAvailable).toBe(false);
+    expect(after.premium).toBe(true);
+    // Nessun ordine, sblocco, ciclo o prova dello spazio cancellato torna nel nuovo.
+    expect(
+      await env.DB.prepare(`SELECT (SELECT COUNT(*) FROM orders) AS orders,
+          (SELECT COUNT(*) FROM order_grants) AS grants,
+          (SELECT COUNT(*) FROM workspace_entitlements WHERE source = 'trial') AS trials,
+          (SELECT COUNT(*) FROM workspace_entitlements WHERE workspace_id = ?1
+            AND source = 'lifetime') AS lifetime,
+          (SELECT COUNT(*) FROM lifetime_allocations) AS seats`)
+        .bind(returning.workspaceId)
+        .first(),
+    ).toEqual({ orders: 0, grants: 0, trials: 0, lifetime: 1, seats: 2 });
+  });
 
   it("i segni di più negozi valgono anche dopo un altro negozio, con la stessa regola", async () => {
     // Uno spazio con due negozi, la prova usata e due sblocchi nel ciclo.

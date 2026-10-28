@@ -95,7 +95,8 @@ anche i dettagli e i retry pendenti.
 | Accesso tecnico alla console | Soltanto l'impronta SHA-256 del token, con etichetta, creazione, revoca e ultimo uso; il token resta nella custodia dell'owner. Le letture con il token entrano nel registro della console e ne seguono la conservazione. |
 | Metriche della console | Per spazio, il nome e l'istante del primo di ciascun passaggio del funnel, senza ordini, buyer, valori fiscali o identificativi eBay: escono con lo spazio. Le letture sono conteggi giornalieri di tutti i negozi, eliminati dopo novanta giorni. I report del browser lasciano soltanto il nonce del biglietto, eliminato dopo la scadenza di quindici minuti. |
 | Cancellazione dell'account | La richiesta conserva utente e spazio come identificativi, gli istanti dei passi e, cifrati fino all'invio dell'email finale, indirizzo e lingua. Conclusa, resta come marker per un restore e si elimina dopo 30 giorni, la finestra di Time Travel. Lo spazio con abbonamenti e sessioni di acquisto resta soltanto finché Stripe non conferma lo stop dei rinnovi. |
-| Segno dei negozi | Dopo la cancellazione dello spazio, per ogni negozio l'impronta SHA-256 dell'identità eBay, la prova già usata e il ciclo Free in corso con quota e sblocchi. Il segno della prova dura due anni (D220), quello del ciclo fino alla sua fine; nessun nome, ordine o dato fiscale. |
+| Segno dei negozi | Dopo la cancellazione dello spazio, per ogni negozio l'impronta SHA-256 dell'identità eBay, la prova già usata e il ciclo Free in corso con quota e sblocchi. Il segno della prova dura due anni (D220), quello del ciclo fino alla sua fine; nessun nome, ordine o dato fiscale. La cancellazione dell'account eBay richiesta da eBay lo elimina subito: quell'identità non può più collegarsi. |
+| Cancellazione richiesta da eBay | La notifica `MARKETPLACE_ACCOUNT_DELETION`, firmata, lascia una richiesta soltanto se FiscalBay conserva dati dell'utente nell'ambiente: negozio, segno, accesso con eBay o ordini da acquirente. La richiesta porta identificativo, token eIAS e username comunicati da eBay, con gli istanti dei passi; conclusa, resta come marker per un restore e si elimina dopo 30 giorni. Le notifiche di utenti sconosciuti non lasciano righe, ricevute o log con l'identità. |
 | Console amministrativa | Il registro delle operazioni porta autore, operazione, oggetto, motivo ed esito, mai dati dei buyer o valori fiscali, non si modifica e si elimina un anno dopo l'operazione. Comunicazioni di servizio e anomalie chiuse si eliminano un anno dopo la fine; una preparazione di trasferimento mai confermata con la pulizia dopo la scadenza, una eseguita dopo un anno. Le revisioni antiabuso conservano un'impronta della chiave del segnale, non il valore condiviso. |
 | Incidenti comunicati all'owner | Una riga per anomalia P1 o P2 con tipo, gravità, istanti, conteggio e al più cinque etichette di negozi, lavori, provider o interruttori, e l'ultimo stato comunicato su Telegram; mai dati dei buyer, email o valori fiscali. Si elimina un anno dopo il rientro comunicato, come le anomalie chiuse. |
 
@@ -104,7 +105,43 @@ allo snapshot prima di riaprire accessi e job, secondo il contratto recovery del
 Master Plan. Le righe di `account_deletions` successive allo snapshot sono i marker
 delle cancellazioni dell'account: riapplicate, bloccano l'accesso e il compito
 periodico riapre quelle concluse il cui utente o spazio è ricomparso, ripetendo la
-cancellazione senza una seconda email. I test locali non provano l'erasure nelle copie native del provider.
+cancellazione senza una seconda email. Allo stesso modo le righe di
+`ebay_account_deletions` riaprono la cancellazione richiesta da eBay quando negozio,
+accesso con eBay o ordini dell'utente ricompaiono. I test locali non provano
+l'erasure nelle copie native del provider.
+
+<a id="cancellazione-ebay"></a>
+## Cancellazione richiesta da eBay
+
+eBay invia la notifica di cancellazione per ogni suo utente eliminato, venditore o
+acquirente, all'endpoint del keyset: FiscalBay la riceve dall'ingresso dei webhook
+(`/webhooks/ebay` e `/webhooks/ebay/sandbox`), con la stessa verifica dell'endpoint,
+firma, limite di dimensione e budget delle chiavi pubbliche delle altre notifiche
+eBay. Prima di leggere il corpo un limite di 600 consegne al minuto per origine, con
+al più mille origini seguite per isolate, risponde 429 e lascia la consegna ai
+tentativi di eBay. La risposta positiva arriva soltanto dopo che la richiesta è
+registrata e accettata dalla coda; altrimenti 503 e il compito periodico riprende la
+richiesta. Non si applica l'esenzione per chi non conserva dati eBay.
+
+Per il venditore il lavoro elimina, nell'ambiente della notifica, consenso, ricevute,
+ordini con le copie dipendenti, letture, pause, marker degli ordini, preferenze e
+consegne Telegram, trasferimenti non eseguiti, segno del negozio e accesso con eBay;
+la riga del negozio resta senza identità eBay né profilo, con i dati eliminati, per
+le righe commerciali che la citano (scelta del negozio Free, trasferimenti eseguiti).
+Per l'acquirente elimina in ogni negozio dell'ambiente gli ordini con il suo token
+eIAS e, per quelli che non lo riportano, con il suo username: è l'unico uso dello
+username per trovare ordini. I marker di `deleted_order_keys` impediscono il reimport
+da letture, conferme o ricevute già in coda. Restano i diritti commerciali minimi
+dello spazio: quota del ciclo già usata, prova usata, coperture e posti lifetime,
+nessuno dei quali porta l'identità eBay. L'utente FiscalBay e i suoi altri metodi di
+accesso restano.
+
+L'eliminazione è fisica nel database: nessuna `deleted=true` e nessuna chiave che
+ricollega le righe all'utente eBay. Le copie native del provider (Time Travel per
+30 giorni) restano fino alla loro scadenza; un restore riapplica le richieste come
+descritto sopra. eBay ritenta finché la consegna non riceve 200, 201, 202 o 204
+([S23](../SOURCES.md#s23)). L'endpoint di Production si registra sul keyset al
+cutover coordinato con Hub Fatture, con cui il keyset è condiviso.
 
 <a id="identita-e-suggerimenti"></a>
 ## Identità e suggerimenti
