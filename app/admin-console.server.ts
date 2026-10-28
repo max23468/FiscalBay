@@ -374,9 +374,10 @@ const adminActions: Record<string, AdminAction> = {
     needsReason: true,
     run: async ({ field, actor, why, now, t, result }) => {
       const workspaceId = field("spazio");
+      const seat = field("posto");
       const grant = await grantLifetimeConcession(
         env,
-        { workspaceId, author: actor, reason: why },
+        { workspaceId, author: actor, reason: why, slot: seat ? Number(seat) : undefined },
         now,
       );
       return result(

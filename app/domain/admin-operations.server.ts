@@ -1,4 +1,5 @@
 import { stalledDeletions } from "./account-deletion.server";
+import { stalledEbayDeletions } from "./ebay-account-deletion.server";
 import { auditInProgress } from "./admin-audit.server";
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
 import { stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
@@ -324,20 +325,31 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       })),
     });
 
-  // Rinnovi non fermati: un abbonamento di un account cancellato può ancora addebitare.
-  const deletions = await stalledDeletions(db, now);
-  if (deletions.length > 0)
+  // Rinnovi non fermati: un abbonamento di un account cancellato può ancora addebitare. Le
+  // cancellazioni richieste da eBay ferme da oltre un'ora si aggiungono come P2.
+  const [deletions, ebayDeletions] = await Promise.all([
+    stalledDeletions(db, now),
+    stalledEbayDeletions(db, now),
+  ]);
+  if (deletions.length + ebayDeletions.length > 0)
     anomalies.push({
       key: "account_deletion",
       kind: "account_deletion",
       severity: deletions.some((deletion) => deletion.renewals_blocked_at) ? "p1" : "p2",
-      since: deletions[0]!.requested_at,
-      count: deletions.length,
-      subjects: deletions.map((deletion) => ({
-        id: deletion.id,
-        label: deletion.workspace_id ?? deletion.id,
-        href: "lavori",
-      })),
+      since: [...deletions, ...ebayDeletions].map((deletion) => deletion.requested_at).sort()[0]!,
+      count: deletions.length + ebayDeletions.length,
+      subjects: [
+        ...deletions.map((deletion) => ({
+          id: deletion.id,
+          label: deletion.workspace_id ?? deletion.id,
+          href: "lavori",
+        })),
+        ...ebayDeletions.map((deletion) => ({
+          id: deletion.id,
+          label: `eBay ${deletion.ebay_environment}`,
+          href: "lavori",
+        })),
+      ],
     });
 
   if (unrecorded.length > 0)

@@ -217,6 +217,10 @@ describe("accesso alla console", () => {
     expect(
       await act(cookie, { intent: "grant-lifetime", spazio: "w-inesistente", motivo: "Prova" }),
     ).toMatchObject({ ok: false });
+    // Il posto da riprendere arriva al dominio: nessun posto senza spazio, nessuna concessione.
+    expect(
+      await act(cookie, { intent: "grant-lifetime", spazio: "w-a", posto: "3", motivo: "Ritorno" }),
+    ).toMatchObject({ ok: false });
     // Esiti riusciti e rifiutati restano nel registro con oggetto e motivo.
     expect(await audit()).toEqual([
       {
@@ -230,6 +234,12 @@ describe("accesso alla console", () => {
         target: "workspace:w-inesistente",
         reason: "Prova",
         outcome: "not_found",
+      },
+      {
+        operation: "grant-lifetime",
+        target: "workspace:w-a",
+        reason: "Ritorno",
+        outcome: "seat-unavailable",
       },
     ]);
     // Il registro non si riscrive.

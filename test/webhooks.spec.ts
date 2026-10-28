@@ -3,7 +3,15 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import Stripe from "stripe";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { receiveWebhook, consumeWebhooks, recoverWebhookIngress } from "../app/webhooks.server";
-import { verifyEbayNotification } from "../app/integrations/ebay/notifications.server";
+import {
+  admitOrigin,
+  NotificationLimit,
+  verifyEbayNotification,
+} from "../app/integrations/ebay/notifications.server";
+import {
+  resumeEbayAccountDeletions,
+  runEbayAccountDeletion,
+} from "../app/domain/ebay-account-deletion.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
@@ -336,11 +344,19 @@ it("la coda smista richieste di sincronizzazione, compiti, esportazioni e riferi
     retry: vi.fn(),
     attempts: 1,
   };
+  const ebayDeletion = {
+    body: { ebayAccountDeletion: crypto.randomUUID() },
+    ack: vi.fn(),
+    retry: vi.fn(),
+    attempts: 1,
+  };
   const unknown = { body: { altro: true }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
   try {
     await worker.queue(
-      { messages: [sync, webhook, task, exportJob, unknown] } as unknown as MessageBatch<unknown>,
+      {
+        messages: [sync, webhook, task, exportJob, ebayDeletion, unknown],
+      } as unknown as MessageBatch<unknown>,
       environment,
     );
     // Un messaggio sconosciuto non passa dai webhook: si riprova fino ai non consegnati.
@@ -366,6 +382,9 @@ it("la coda smista richieste di sincronizzazione, compiti, esportazioni e riferi
   // Un'esportazione senza lavoro registrato si chiude al suo consumer.
   expect(exportJob.ack).toHaveBeenCalledOnce();
   expect(exportJob.retry).not.toHaveBeenCalled();
+  // Una cancellazione richiesta da eBay senza richiesta registrata si chiude al suo consumer.
+  expect(ebayDeletion.ack).toHaveBeenCalledOnce();
+  expect(ebayDeletion.retry).not.toHaveBeenCalled();
 });
 
 it("lascia pagine e callback OAuth al router e rifiuta i metodi diversi", async () => {
@@ -1645,4 +1664,184 @@ it("la soglia Bulk Data Transfer apre un'anomalia della console fino alla fine d
   const empty = threshold("WARNING");
   empty.notification.data.metricData = [];
   expect((await receive(ebayRequest(empty)))?.status).toBe(412);
+});
+
+const accountDeletion = (data: { userId: string; eiasToken?: string; username?: string }) => ({
+  metadata: { topic: "MARKETPLACE_ACCOUNT_DELETION", schemaVersion: "1.0", deprecated: false },
+  notification: {
+    notificationId: `deletion-${data.userId}`,
+    eventDate: now.toISOString(),
+    publishDate: now.toISOString(),
+    publishAttemptCount: 1,
+    data,
+  },
+});
+const deletions = () =>
+  env.DB.prepare(
+    "SELECT id, ebay_environment, ebay_user_id, eias_token, username, notified_at, completed_at FROM ebay_account_deletions",
+  ).all();
+
+it("la cancellazione di un utente eBay sconosciuto risponde 204 senza lasciare traccia", async () => {
+  const payload = accountDeletion({
+    userId: "unknown-user",
+    eiasToken: "eias-unknown",
+    username: "unknown-name",
+  });
+  expect((await receive(ebayRequest(payload)))?.status).toBe(204);
+  // Anche oltre la finestra delle ricevute: eBay ritenta la stessa notifica per giorni.
+  expect(
+    (
+      await receiveWebhook(
+        ebayRequest(payload),
+        environment,
+        fetcher,
+        new Date(now.getTime() + 30 * 86_400_000),
+      )
+    )?.status,
+  ).toBe(204);
+  expect((await deletions()).results).toEqual([]);
+  expect(await receipt()).toBeNull();
+  expect(send).not.toHaveBeenCalled();
+});
+
+it("registra e accoda una sola volta la cancellazione di un venditore noto, anche se tardiva", async () => {
+  const payload = accountDeletion({
+    userId: "seller-synthetic",
+    eiasToken: "eias-seller",
+    username: "seller-name",
+  });
+  const later = new Date(now.getTime() + 10 * 86_400_000);
+  expect((await receiveWebhook(ebayRequest(payload), environment, fetcher, later))?.status).toBe(
+    204,
+  );
+  expect((await receiveWebhook(ebayRequest(payload), environment, fetcher, later))?.status).toBe(
+    204,
+  );
+  const { results } = await deletions();
+  expect(results).toEqual([
+    {
+      id: expect.any(String),
+      ebay_environment: "production",
+      ebay_user_id: "seller-synthetic",
+      eias_token: "eias-seller",
+      username: "seller-name",
+      notified_at: now.toISOString(),
+      completed_at: null,
+    },
+  ]);
+  expect(send.mock.calls).toEqual([
+    [{ ebayAccountDeletion: results[0]!.id }],
+    [{ ebayAccountDeletion: results[0]!.id }],
+  ]);
+  // Nessuna ricevuta: la cancellazione ha una richiesta propria e non scade dopo sette giorni.
+  expect(await receipt()).toBeNull();
+});
+
+it("una coda non disponibile risponde 503 e il compito periodico conclude la cancellazione", async () => {
+  send.mockRejectedValueOnce(new Error("queue_unavailable"));
+  const payload = accountDeletion({ userId: "seller-synthetic" });
+  expect((await receive(ebayRequest(payload)))?.status).toBe(503);
+  expect((await deletions()).results).toMatchObject([{ completed_at: null }]);
+  await resumeEbayAccountDeletions(environment, now);
+  expect((await deletions()).results).toMatchObject([{ completed_at: now.toISOString() }]);
+  expect(
+    await env.DB.prepare(
+      "SELECT ebay_user_id, ebay_account_id, data_deleted_at FROM ebay_stores WHERE id = 'webhook-store'",
+    ).first(),
+  ).toEqual({
+    ebay_user_id: "webhook-store",
+    ebay_account_id: null,
+    data_deleted_at: now.toISOString(),
+  });
+  // eBay ritenta la consegna: l'utente non è più noto e nulla riparte.
+  expect((await receive(ebayRequest(payload)))?.status).toBe(204);
+  expect(send).toHaveBeenCalledOnce();
+  expect((await deletions()).results).toMatchObject([{ completed_at: now.toISOString() }]);
+});
+
+it("una cancellazione con firma o schema non validi non registra nulla", async () => {
+  const valid = ebayRequest(accountDeletion({ userId: "seller-synthetic" }));
+  const altered = new Request(valid.url, {
+    method: "POST",
+    headers: valid.headers,
+    body: JSON.stringify(accountDeletion({ userId: "webhook-store" })),
+  });
+  expect((await receive(altered))?.status).toBe(412);
+  for (const data of [{ userId: "" }, { userId: "seller-synthetic", eiasToken: "x".repeat(257) }])
+    expect((await receive(ebayRequest(accountDeletion(data as { userId: string }))))?.status).toBe(
+      412,
+    );
+  expect((await deletions()).results).toEqual([]);
+  expect(send).not.toHaveBeenCalled();
+});
+
+it("l'ordine di un acquirente cancellato da eBay non ritorna con una nuova conferma", async () => {
+  await acquire(fetcher);
+  await env.DB.prepare("UPDATE orders SET buyer_eias_token = 'eias-buyer'").run();
+  expect(
+    (
+      await receive(
+        ebayRequest(accountDeletion({ userId: "buyer-synthetic", eiasToken: "eias-buyer" })),
+      )
+    )?.status,
+  ).toBe(204);
+  const { results } = await deletions();
+  expect(await runEbayAccountDeletion(environment, String(results[0]!.id), now)).toBe("done");
+  expect((await env.DB.prepare("SELECT id FROM orders").all()).results).toEqual([]);
+  // Una nuova conferma dello stesso ordine, anche già in coda, non lo importa di nuovo.
+  const again = {
+    ...notification,
+    notification: { ...notification.notification, notificationId: "again" },
+  };
+  expect((await receive(ebayRequest(again)))?.status).toBe(204);
+  const work = batch({ receiptId: (await receipt())!.id });
+  await consumeWebhooks(work.value, environment, fetcher, now);
+  expect(work.message.ack).toHaveBeenCalledOnce();
+  expect((await env.DB.prepare("SELECT id FROM orders").all()).results).toEqual([]);
+  // Il negozio resta collegato: la cancellazione riguarda soltanto l'acquirente.
+  expect(
+    await env.DB.prepare("SELECT ebay_account_id, data_deleted_at FROM ebay_stores").first(),
+  ).toEqual({ ebay_account_id: "seller-synthetic", data_deleted_at: null });
+});
+
+it("limita le consegne per origine prima di leggere il corpo, con memoria limitata", async () => {
+  const empty = (origin: string, at = now) =>
+    receiveWebhook(
+      new Request("https://test.fiscalbay.it/webhooks/ebay", {
+        method: "POST",
+        headers: { "cf-connecting-ip": origin, "content-length": "0" },
+      }),
+      environment,
+      fetcher,
+      at,
+    );
+  const start = new Date(now.getTime() + 3_600_000);
+  for (let i = 0; i < 600; i++) expect((await empty("192.0.2.1", start))?.status).toBe(400);
+  expect((await empty("192.0.2.1", start))?.status).toBe(429);
+  expect((await empty("192.0.2.2", start))?.status).toBe(400);
+  // Stripe e Telegram non condividono il limite dell'ingresso eBay.
+  expect(
+    (
+      await receiveWebhook(
+        new Request("https://test.fiscalbay.it/webhooks/stripe", {
+          method: "POST",
+          headers: { "cf-connecting-ip": "192.0.2.1" },
+        }),
+        environment,
+        fetcher,
+        start,
+      )
+    )?.status,
+  ).not.toBe(429);
+  expect((await empty("192.0.2.1", new Date(start.getTime() + 59_999)))?.status).toBe(429);
+  expect((await empty("192.0.2.1", new Date(start.getTime() + 60_000)))?.status).toBe(400);
+
+  // Oltre mille origini la meno recente esce dal conteggio e ricomincia.
+  const at = start.getTime() + 120_000;
+  for (let i = 0; i < 600; i++) admitOrigin("198.51.100.1", at);
+  expect(() => admitOrigin("198.51.100.1", at)).toThrow(NotificationLimit);
+  for (let i = 0; i < 999; i++) admitOrigin(`203.0.113.${i}`, at);
+  expect(() => admitOrigin("198.51.100.1", at)).toThrow(NotificationLimit);
+  admitOrigin("203.0.114.1", at);
+  expect(() => admitOrigin("198.51.100.1", at)).not.toThrow();
 });

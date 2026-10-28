@@ -139,17 +139,24 @@ export async function grantPremium(
   return { result: "unavailable" };
 }
 
-/** Lifetime in omaggio: occupa uno dei venti posti e chiude l'abbonamento dello spazio. */
+/**
+ * Lifetime in omaggio: occupa uno dei venti posti e chiude l'abbonamento dello spazio. Con un
+ * posto indicato lo spazio riprende quello lasciato dalla cancellazione dell'account.
+ */
 export async function grantLifetimeConcession(
   env: Env,
-  input: { workspaceId: string; author: string; reason: string },
+  input: { workspaceId: string; author: string; reason: string; slot?: number },
   now = new Date(),
 ): Promise<LifetimeGrant | "invalid"> {
   const parsed = concession.safeParse(input);
-  if (!parsed.success) return "invalid";
+  if (
+    !parsed.success ||
+    (input.slot !== undefined && (!Number.isInteger(input.slot) || input.slot < 1))
+  )
+    return "invalid";
   const key = stripeSecretKey(env);
   const stripe = key ? await createStripeClient(key) : null;
-  return grantLifetime(env, stripe, parsed.data, now);
+  return grantLifetime(env, stripe, { ...parsed.data, slot: input.slot }, now);
 }
 
 export type HistoryExtensionResult = "done" | "invalid" | "not_found";

@@ -8,6 +8,7 @@ import {
   verifyTelegramUpdate,
 } from "./integrations/telegram.server";
 import {
+  admitOrigin,
   NotificationLimit,
   verifyEbayNotification,
 } from "./integrations/ebay/notifications.server";
@@ -18,6 +19,10 @@ import { applyStripeEvent } from "./domain/billing.server";
 import { consumeOrderConfirmation } from "./domain/order-acquisition.server";
 import { recordBulkDataThreshold } from "./domain/ebay-quotas.server";
 import { consumeOwnerUpdate } from "./domain/owner-control.server";
+import {
+  type EbayAccountDeletion,
+  recordEbayAccountDeletion,
+} from "./domain/ebay-account-deletion.server";
 import { consumeTelegramUpdate } from "./domain/telegram-bot.server";
 import { isProduction } from "./app-links";
 import { logFailure } from "./errors";
@@ -164,6 +169,7 @@ function telegramEvent(request: Request, body: string, env: Env, now: Date): Rec
 /**
  * Notifica eBay firmata; null se autentica ma senza lavoro da accodare. La soglia della Bulk Data
  * Transfer Policy riguarda l'applicazione: apre subito l'anomalia della console, senza ricevuta.
+ * La cancellazione di un account eBay non passa dalle ricevute: ha una richiesta propria.
  */
 async function ebayEvent(
   request: Request,
@@ -172,7 +178,7 @@ async function ebayEvent(
   path: string,
   fetcher: typeof fetch,
   now: Date,
-): Promise<ReceiptEvent | null> {
+): Promise<ReceiptEvent | { deletion: EbayAccountDeletion } | null> {
   const ebayEnvironment = ebayEnvironmentOf(path);
   const { topic, notification } = await verifyEbayNotification(
     body,
@@ -185,6 +191,18 @@ async function ebayEvent(
   if (topic === "BULK_DATA_TRANSFER_THRESHOLD") {
     await recordBulkDataThreshold(env.DB, ebayEnvironment, notification.data, now);
     return null;
+  }
+  if (topic === "MARKETPLACE_ACCOUNT_DELETION") {
+    const { userId, eiasToken, username } = notification.data;
+    return {
+      deletion: {
+        environment: ebayEnvironment,
+        userId,
+        eiasToken: eiasToken ?? null,
+        username: username ?? null,
+        eventAt: new Date(notification.eventDate).toISOString(),
+      },
+    };
   }
   const event = {
     ...noProviderFields,
@@ -248,8 +266,11 @@ export async function receiveWebhook(
       headers: { allow: postOnly ? "POST" : "GET, POST" },
     });
   try {
+    // Prima di leggere il corpo e di cercare la chiave pubblica: una sola origine non esaurisce
+    // le risorse dell'ingresso eBay.
+    if (!postOnly) admitOrigin(request.headers.get("cf-connecting-ip") ?? "", now.getTime());
     const body = await rawBody(request);
-    let event: ReceiptEvent | null;
+    let event: Awaited<ReturnType<typeof ebayEvent>>;
     try {
       event =
         path === "/webhooks/stripe"
@@ -268,6 +289,11 @@ export async function receiveWebhook(
       throw new InvalidWebhook(412);
     }
     if (!event) return new Response(null, { status: 204 });
+    if ("deletion" in event) {
+      // Registrata e accodata prima della risposta positiva: un errore risponde 503 ed eBay ritenta.
+      await recordEbayAccountDeletion(env, event.deletion, now);
+      return new Response(null, { status: 204 });
+    }
     if (event.provider === "ebay") {
       const store =
         await env.DB.prepare(`SELECT s.id, c.granted_at FROM ebay_stores s JOIN ebay_store_credentials c ON c.store_id = s.id

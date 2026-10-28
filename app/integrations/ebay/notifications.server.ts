@@ -67,6 +67,19 @@ const bulkDataTransferThresholdSchema = z.object({
     }),
   }),
 });
+// Cancellazione di un account eBay (Marketplace Account Deletion), inviata per ogni utente eBay
+// eliminato, venditore o acquirente: `userId` immutabile, token eIAS e username.
+const marketplaceAccountDeletionSchema = z.object({
+  metadata: metadata("MARKETPLACE_ACCOUNT_DELETION"),
+  notification: z.object({
+    ...notificationFields,
+    data: z.object({
+      userId: identifier,
+      eiasToken: identifier.optional(),
+      username: identifier.optional(),
+    }),
+  }),
+});
 /** Topic e notifica, distinti per tipo: il chiamante riconosce i dati dal topic. */
 const byTopic = <Topic extends string, Notification>(value: {
   metadata: { topic: Topic };
@@ -76,6 +89,7 @@ const notificationSchema = z.union([
   orderConfirmationSchema.transform(byTopic),
   authorizationRevocationSchema.transform(byTopic),
   bulkDataTransferThresholdSchema.transform(byTopic),
+  marketplaceAccountDeletionSchema.transform(byTopic),
 ]);
 
 export type EbayNotification = z.infer<typeof notificationSchema>;
@@ -87,6 +101,28 @@ let windowStart = 0;
 let lookups = 0;
 
 export class NotificationLimit extends Error {}
+
+/** Consegne accettate per origine in un minuto, prima di ogni verifica. */
+const originRequestsPerMinute = 600;
+/** Origini seguite per isolate: oltre, la meno recente esce dal conteggio. */
+const trackedOrigins = 1000;
+const origins = new Map<string, { start: number; count: number }>();
+
+/**
+ * Limite di consegne per origine, con memoria limitata: oltre il limite l'ingresso risponde
+ * 429 prima di leggere il corpo, ed eBay ritenta la consegna.
+ */
+export function admitOrigin(origin: string, now: number): void {
+  let window = origins.get(origin);
+  if (!window || now - window.start >= 60_000) {
+    origins.delete(origin);
+    if (origins.size >= trackedOrigins) origins.delete(origins.keys().next().value!);
+    window = { start: now, count: 0 };
+    origins.set(origin, window);
+  }
+  if (window.count >= originRequestsPerMinute) throw new NotificationLimit();
+  window.count += 1;
+}
 
 /** Notifica eBay con firma verificata, di uno dei topic gestiti. */
 export async function verifyEbayNotification(

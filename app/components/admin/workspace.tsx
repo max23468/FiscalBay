@@ -261,6 +261,32 @@ export function WorkspaceView({
           <Disclosure label={w.grantLifetime}>
             <ActionForm intent="grant-lifetime" fields={fields} submit={w.grantLifetime} reason>
               <p className="text-sm text-muted-foreground">{w.grantLifetimeHint}</p>
+              {workspace.vacantSeats.length > 0 ? (
+                <>
+                  <Facts
+                    items={[
+                      [
+                        w.vacantSeats,
+                        workspace.vacantSeats
+                          .map(
+                            (seat) =>
+                              `${w.lifetimeSeat(seat.slot, seat.kind)}${seat.customerId ? ` · ${seat.customerId}` : ""}${seat.activatedAt ? ` · ${date(seat.activatedAt, "date")}` : ""}`,
+                          )
+                          .join("; "),
+                      ],
+                    ]}
+                  />
+                  <TextField
+                    label={w.vacantSeat}
+                    name="posto"
+                    type="number"
+                    min={1}
+                    max={20}
+                    aria-describedby={undefined}
+                  />
+                  <p className="text-sm text-muted-foreground">{w.vacantSeatHint}</p>
+                </>
+              ) : null}
             </ActionForm>
           </Disclosure>
         </div>

@@ -17,6 +17,10 @@ import {
   isAccountDeletionMessage,
 } from "../app/domain/account-deletion.server";
 import {
+  consumeEbayAccountDeletion,
+  isEbayAccountDeletionMessage,
+} from "../app/domain/ebay-account-deletion.server";
+import {
   consumeTask,
   dispatchScheduledWork,
   isTaskMessage,
@@ -97,14 +101,17 @@ export default {
     }
   },
   // La coda porta i riferimenti dei webhook, le letture dei negozi, i compiti periodici, le
-  // esportazioni grandi e le cancellazioni dell'account: ogni tipo ha il proprio schema e nessuno
-  // raccoglie i messaggi degli altri.
+  // esportazioni grandi e le cancellazioni, dell'account o richieste da eBay: ogni tipo ha il
+  // proprio schema e nessuno raccoglie i messaggi degli altri.
   async queue(batch, env, ctx?: ExecutionContext) {
     const syncs = batch.messages.filter((message) => isSyncMessage(message.body));
     const tasks = batch.messages.filter((message) => isTaskMessage(message.body));
     const webhooks = batch.messages.filter((message) => isWebhookMessage(message.body));
     const exports = batch.messages.filter((message) => isExportJobMessage(message.body));
-    const deletions = batch.messages.filter((message) => isAccountDeletionMessage(message.body));
+    const deletions = batch.messages.filter(
+      (message) =>
+        isAccountDeletionMessage(message.body) || isEbayAccountDeletionMessage(message.body),
+    );
     // Ogni tipo di messaggio è un'invocazione misurata a sé, con le fasi che attraversa.
     const observe = <T extends Message<unknown>>(
       detail: InvocationDetail,
@@ -146,7 +153,13 @@ export default {
         Promise.all(messages.map((message) => consumeExportJob(message, env))),
       ),
       observe("deletion", deletions, (messages) =>
-        Promise.all(messages.map((message) => consumeAccountDeletion(message, env))),
+        Promise.all(
+          messages.map((message) =>
+            isAccountDeletionMessage(message.body)
+              ? consumeAccountDeletion(message, env)
+              : consumeEbayAccountDeletion(message, env),
+          ),
+        ),
       ),
     ]);
     await observe("webhook", webhooks, (messages) => consumeWebhooks({ messages }, env));
