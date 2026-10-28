@@ -17,11 +17,13 @@ import { ebayConfiguration } from "./integrations/ebay/environment.server";
 import { applyStripeEvent } from "./domain/billing.server";
 import { consumeOrderConfirmation } from "./domain/order-acquisition.server";
 import { recordBulkDataThreshold } from "./domain/ebay-quotas.server";
+import { consumeOwnerUpdate } from "./domain/owner-control.server";
 import { consumeTelegramUpdate } from "./domain/telegram-bot.server";
 import { isProduction } from "./app-links";
 import { logFailure } from "./errors";
 import { inSequence } from "./sequence";
 import { dayMilliseconds } from "./time";
+import { stalledReceiptMilliseconds } from "./domain/work-timing";
 
 const maxBytes = 262_144;
 const retention = 7 * dayMilliseconds;
@@ -146,9 +148,15 @@ function telegramEvent(request: Request, body: string, env: Env, now: Date): Rec
     object_id: update.chatId,
     link_token_hash: update.kind === "start" ? update.tokenHash : null,
     command:
-      update.kind === "command" ? update.command : update.kind === "callback" ? update.data : null,
-    callback_id: update.kind === "callback" ? update.callbackId : null,
-    message_id: update.kind === "callback" ? update.messageId : null,
+      update.kind === "command" || update.kind === "owner"
+        ? update.command
+        : update.kind === "callback" || update.kind === "owner_callback"
+          ? update.data
+          : null,
+    callback_id:
+      update.kind === "callback" || update.kind === "owner_callback" ? update.callbackId : null,
+    message_id:
+      update.kind === "callback" || update.kind === "owner_callback" ? update.messageId : null,
     event_at: update.eventAt,
   };
 }
@@ -323,7 +331,7 @@ export async function receiveWebhook(
       receipt.callback_id !== event.callback_id ||
       receipt.message_id !== event.message_id ||
       // Il tocco su un pulsante prende la data dalla ricezione, che un nuovo tentativo cambia.
-      (event.topic !== "callback" && receipt.event_at !== event.event_at)
+      (!event.callback_id && receipt.event_at !== event.event_at)
     )
       throw new InvalidWebhook(409);
     if (!receipt.queued_at && !receipt.completed_at) {
@@ -349,7 +357,7 @@ export async function receiveWebhook(
  * Aggiornamenti del bot a cui risponde chi scrive: la coda aggiungerebbe da pochi decimi a
  * diversi secondi prima della risposta.
  */
-const interactiveTopics = new Set(["start", "command", "callback"]);
+const interactiveTopics = new Set(["start", "command", "callback", "owner", "owner_callback"]);
 
 /**
  * Esegue subito la ricevuta, con lo stesso lease del consumer. False se non si è completata:
@@ -401,9 +409,6 @@ export async function recoverWebhookIngress(env: Env, now = new Date()) {
   // In sequenza: se Queue non accetta, il recupero si ferma senza altri invii destinati a fallire.
   await inSequence(results, (receipt) => enqueueReceipt(env, receipt.id, now));
 }
-
-/** Ricevute ferme da più di un'ora, considerate in ritardo dalla console. */
-export const stalledReceiptMilliseconds = 60 * 60_000;
 
 /**
  * Ripresa chiesta dalla console per le ricevute in ritardo di un provider, senza aspettare il
@@ -473,6 +478,20 @@ export async function consumeWebhooks(
             environment: receipt.environment,
             orderId: receipt.object_id,
             eventAt: receipt.event_at,
+          },
+          fetcher,
+          now,
+        );
+      } else if (receipt.provider === "telegram" && receipt.topic.startsWith("owner")) {
+        // I comandi dell'owner hanno un percorso proprio, separato da quello dei venditori.
+        await consumeOwnerUpdate(
+          env,
+          {
+            topic: receipt.topic,
+            chatId: receipt.object_id,
+            command: receipt.command,
+            callbackId: receipt.callback_id,
+            messageId: receipt.message_id,
           },
           fetcher,
           now,

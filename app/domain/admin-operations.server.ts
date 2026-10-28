@@ -1,7 +1,6 @@
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
-import { scheduledTasks, type ScheduledTask } from "./scheduled-work.server";
+import { stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
 import { storeLabelSql } from "./store-state.server";
-import { stalledReceiptMilliseconds } from "../webhooks.server";
 
 /**
  * Stato operativo per la console (§15): lavori periodici, ricevute dei provider, letture dei
@@ -70,7 +69,7 @@ export async function taskStates(db: D1Database, now = new Date()): Promise<Task
     }>();
   const rows = new Map(results.map((row) => [row.task, row]));
   const at = now.getTime();
-  return (Object.entries(scheduledTasks) as [ScheduledTask, number][]).map(([task, period]) => {
+  return (Object.entries(taskPeriods) as [ScheduledTask, number][]).map(([task, period]) => {
     const row = rows.get(task);
     const running = !!row?.locked_until && Date.parse(row.locked_until) > at;
     const behind = !row || Date.parse(row.slot) + 2 * period < at;

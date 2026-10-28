@@ -16,8 +16,9 @@ const settings = {
    */
   ebay_calls: { schema: z.boolean(), fallback: true },
   /**
-   * Invii del bot Telegram: notifiche, riepiloghi, risposte ai comandi e menu. Spenti, le
-   * notifiche restano in attesa e i comandi ricevuti non hanno risposta.
+   * Invii del bot Telegram ai venditori: notifiche, riepiloghi, risposte ai comandi e menu.
+   * Spenti, le notifiche restano in attesa e i comandi ricevuti non hanno risposta. Il Control
+   * Center dell'owner, comandi e avvisi, resta attivo.
    */
   telegram_sends: { schema: z.boolean(), fallback: true },
   /** Percentuale del consumo giornaliero di una quota eBay che apre l'anomalia (D188). */

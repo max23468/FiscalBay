@@ -3,14 +3,20 @@ import { z } from "zod";
 import { applyInactivity } from "./admission.server";
 import { reconcileBilling } from "./billing.server";
 import { purgeExportFiles } from "./export-files.server";
+import { readEbayQuotas } from "./ebay-quotas.server";
 import { applyFreePlans } from "./free-store.server";
 import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
 import { dispatchStoreSyncs } from "./order-sync.server";
+import { configureOwnerCommands } from "./owner-control.server";
+import { reconcileOwnerIncidents } from "./owner-incidents.server";
 import { configureBotCommands } from "./telegram-bot.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "./token-refresh.server";
 import { recoverWebhookIngress } from "../webhooks.server";
+import { taskPeriods, type ScheduledTask } from "./work-timing";
+
+export type { ScheduledTask };
 
 /**
  * Smistamento del lavoro pianificato. Un solo Cron Trigger per ambiente parte ogni dieci minuti
@@ -34,7 +40,7 @@ const tasks = {
   // giorno dalla scadenza, mentre le letture rifiutano già i dati scaduti. Poi il testo
   // cercabile degli ordini che non l'hanno ancora.
   maintenance: {
-    period: 24 * 60 * minute,
+    period: taskPeriods.maintenance,
     run: async (env: Env, _fetcher: typeof fetch, now: Date) => {
       await purgeExpiredRecords(env.DB, now);
       await indexOrderSearch(env.DB);
@@ -43,41 +49,54 @@ const tasks = {
   // File delle esportazioni scaduti o revocati: il download li rifiuta già, la pulizia ne
   // elimina i byte entro un'ora dalla scadenza.
   export_files: {
-    period: 60 * minute,
+    period: taskPeriods.export_files,
     run: (env: Env, _fetcher: typeof fetch, now: Date) => purgeExportFiles(env, now),
   },
   // Rinnovo anticipato dei token di accesso dei negozi, prima che servano a una lettura.
   token_refresh: {
-    period: 10 * minute,
+    period: taskPeriods.token_refresh,
     run: (env: Env, fetcher: typeof fetch, now: Date) => refreshExpiringTokens(env, fetcher, now),
   },
   // Preavvisi e pause per inattività del Free, ammissione di chi era in lista d'attesa.
   inactivity: {
-    period: 60 * minute,
+    period: taskPeriods.inactivity,
     run: (env: Env, _fetcher: typeof fetch, now: Date) => applyInactivity(env, now),
   },
   // Riconciliazione degli abbonamenti con Stripe, per i webhook mancati o tardivi.
   billing: {
-    period: 60 * minute,
+    period: taskPeriods.billing,
     run: (env: Env, fetcher: typeof fetch, now: Date) => reconcileBilling(env, fetcher, now),
   },
   // Notifiche Telegram: valutazione degli ordini, riepiloghi dovuti, importazioni completate e
   // invii in attesa o da ritentare. La lettura di un negozio le anticipa per il suo spazio.
   telegram: {
-    period: 10 * minute,
+    period: taskPeriods.telegram,
     run: (env: Env, fetcher: typeof fetch, now: Date) => deliverTelegram(env, fetcher, now),
   },
-  // Menu dei comandi del bot, riallineato ogni giorno: ripeterlo non cambia nulla.
+  // Menu dei comandi del bot, dei venditori e della chat dell'owner, riallineati ogni giorno:
+  // ripeterlo non cambia nulla.
   telegram_commands: {
-    period: 24 * 60 * minute,
-    run: (env: Env, fetcher: typeof fetch) => configureBotCommands(env, fetcher),
+    period: taskPeriods.telegram_commands,
+    run: async (env: Env, fetcher: typeof fetch) => {
+      await configureBotCommands(env, fetcher);
+      await configureOwnerCommands(env, fetcher);
+    },
+  },
+  // Quote delle API eBay rilette ogni ora, come alla visita della console: l'anomalia oltre la
+  // soglia si apre e si chiude anche senza visite.
+  ebay_quotas: {
+    period: taskPeriods.ebay_quotas,
+    run: (env: Env, fetcher: typeof fetch, now: Date) => readEbayQuotas(env, fetcher, now),
+  },
+  // Avvisi all'owner di apertura, aggravamento e rientro delle anomalie P1 e P2.
+  owner_incidents: {
+    period: taskPeriods.owner_incidents,
+    run: (env: Env, fetcher: typeof fetch, now: Date) => reconcileOwnerIncidents(env, fetcher, now),
   },
 } satisfies Record<
-  string,
+  ScheduledTask,
   { period: number; run: (env: Env, fetcher: typeof fetch, now: Date) => Promise<unknown> }
 >;
-
-export type ScheduledTask = keyof typeof tasks;
 
 const taskMessageSchema = z.object({
   task: z.enum(Object.keys(tasks) as [ScheduledTask, ...ScheduledTask[]]),
@@ -130,11 +149,6 @@ export async function dispatchTasks(env: Env, now: Date): Promise<ScheduledTask[
   }
   return claimed.map(({ task }) => task);
 }
-
-/** Compiti periodici con il loro periodo, per la console. */
-export const scheduledTasks = Object.fromEntries(
-  Object.entries(tasks).map(([task, { period }]) => [task, period]),
-) as Record<ScheduledTask, number>;
 
 export function isScheduledTask(value: string): value is ScheduledTask {
   return Object.hasOwn(tasks, value);

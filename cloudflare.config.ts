@@ -13,6 +13,9 @@ export const databases = {
   live: { name: "fiscalbay", id: "fa2a79ad-fe72-4882-9cbb-c4009ffd5d8f" },
 };
 
+/** ID Telegram dell'owner: lo stesso utente in ogni bot, quindi in entrambi gli ambienti. */
+const ownerTelegramId = "573159993";
+
 /** Account Cloudflare del progetto, comune ai due ambienti. */
 const account = "98195e505f42abaaeb4827f71a924b1a";
 
@@ -99,6 +102,8 @@ export default defineConfig((ctx) => ({
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UHl21JP7SSN14Zp0J41hMVs"),
             // Bot attuale, riusato come identità della 2.0; token e segreto restano in custodia.
             TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_bot"),
+            // Utente e chat privata dell'owner per il Control Center (D198).
+            TELEGRAM_OWNER_ID: bindings.text(ownerTelegramId),
           },
         })
       : worker({
@@ -118,6 +123,7 @@ export default defineConfig((ctx) => ({
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UUABxJqfZnQjIbK0m1dpfRa"),
             // Bot separato dal bot Production, con foto e profilo che lo dichiarano di prova.
             TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_test_bot"),
+            TELEGRAM_OWNER_ID: bindings.text(ownerTelegramId),
           },
         }),
 }));

@@ -26,7 +26,8 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     purgeTelegramLinks(db, now),
     purgeTelegramDeliveries(db, now),
     purgeSupportRequests(db, now),
-    // Registro della console e oggetti chiusi da oltre un anno; preparazioni mai confermate.
+    // Registro della console e oggetti chiusi da oltre un anno, compresi gli incidenti
+    // comunicati all'owner; preparazioni mai confermate.
     db
       .prepare("DELETE FROM admin_audit WHERE julianday(at) < julianday(?) - ?")
       .bind(at, auditRetentionDays),
@@ -35,6 +36,10 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
       .bind(at, auditRetentionDays),
     db
       .prepare(`DELETE FROM admin_anomalies WHERE resolved_at IS NOT NULL
+        AND julianday(resolved_at) < julianday(?) - ?`)
+      .bind(at, auditRetentionDays),
+    db
+      .prepare(`DELETE FROM owner_incidents WHERE resolved_at IS NOT NULL AND notified = 'resolved'
         AND julianday(resolved_at) < julianday(?) - ?`)
       .bind(at, auditRetentionDays),
     db
