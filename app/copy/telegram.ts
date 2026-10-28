@@ -1,6 +1,6 @@
 import type { FiscalSituation } from "../view-models";
 import type { Language } from "../i18n";
-import type { BotCommand } from "../integrations/telegram.server";
+import type { BotCommand } from "../bot-commands";
 
 /** Testi del bot Telegram e dei suoi messaggi, nelle due lingue. */
 

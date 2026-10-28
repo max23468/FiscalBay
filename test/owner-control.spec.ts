@@ -1,0 +1,779 @@
+import { env } from "cloudflare:workers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import { consoleSummary } from "../app/domain/admin-directory.server";
+import { listAnomalies } from "../app/domain/admin-operations.server";
+import { productMetrics } from "../app/domain/product-metrics.server";
+import {
+  configureOwnerCommands,
+  ownerPanel,
+  parseOwnerCallback,
+} from "../app/domain/owner-control.server";
+import { reconcileOwnerIncidents as reconcile } from "../app/domain/owner-incidents.server";
+import { duration, plainText, type Panel } from "../app/domain/owner-panels.server";
+import { consumeTask, taskSlot } from "../app/domain/scheduled-work.server";
+import { setSwitch } from "../app/domain/service-settings.server";
+import { taskPeriods, type ScheduledTask } from "../app/domain/work-timing";
+import { ownerCommands } from "../app/bot-commands";
+import { verifyTelegramUpdate } from "../app/integrations/telegram.server";
+import { receiveWebhook } from "../app/webhooks.server";
+import { verifiedSession } from "./fixtures/account-fixtures";
+import {
+  insertCredentials,
+  insertEntitlement,
+  insertStore,
+  insertWorkspace,
+  now,
+  resetDatabase,
+} from "./fixtures/database-fixtures";
+import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
+
+const owner = Number(env.TELEGRAM_OWNER_ID);
+const secret = env.TELEGRAM_WEBHOOK_SECRET!;
+const origin = "http://localhost:5173";
+const send = vi.fn<Queue["send"]>().mockResolvedValue(queued);
+const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) } as Env;
+const minute = 60_000;
+const later = (minutes: number) => new Date(Date.parse(now) + minutes * minute);
+
+type Call = { method: string; params: Record<string, unknown> };
+
+/**
+ * Bot API simulata, con `reply` per le risposte particolari. Le altre richieste (Stripe, eBay)
+ * non hanno risposta: le viste mostrano la lettura non riuscita.
+ */
+function bot(reply?: (call: Call) => Response | undefined) {
+  const calls: Call[] = [];
+  const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (!url.startsWith(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/`))
+      return new Response("", { status: 503 });
+    const call = {
+      method: url.split("/").at(-1)!,
+      params: JSON.parse(String(init?.body)) as Record<string, unknown>,
+    };
+    calls.push(call);
+    const custom = reply?.(call);
+    if (custom) return custom;
+    if (call.method === "getWebhookInfo")
+      return Response.json({
+        ok: true,
+        result: {
+          url: "http://localhost:5173/webhooks/telegram",
+          pending_update_count: 0,
+          allowed_updates: ["message", "callback_query"],
+        },
+      });
+    if (["answerCallbackQuery", "setMyCommands", "deleteMyCommands"].includes(call.method))
+      return Response.json({ ok: true, result: true });
+    return Response.json({ ok: true, result: { message_id: 900 + calls.length } });
+  });
+  return { fetcher, calls, methods: () => calls.map((call) => call.method) };
+}
+
+const rejected = (description: string) =>
+  Response.json({ ok: false, error_code: 400, description }, { status: 400 });
+
+let updateId = 50_000;
+
+function message(text: string, { chat = owner, from = owner, type = "private" } = {}) {
+  return {
+    update_id: ++updateId,
+    message: {
+      date: Math.floor(Date.parse(now) / 1000),
+      chat: { id: chat, type },
+      from: { id: from },
+      text,
+    },
+  };
+}
+
+function tap(data: string, { chat = owner, from = owner, messageId = 77 } = {}) {
+  return {
+    update_id: ++updateId,
+    callback_query: {
+      id: `cb-${updateId}`,
+      from: { id: from },
+      data,
+      message: { message_id: messageId, chat: { id: chat, type: "private" } },
+    },
+  };
+}
+
+function post(body: unknown, fetcher: typeof fetch, at = new Date(now)) {
+  return receiveWebhook(
+    new Request("https://test.fiscalbay.it/webhooks/telegram", {
+      method: "POST",
+      headers: { "x-telegram-bot-api-secret-token": secret },
+      body: JSON.stringify(body),
+    }),
+    environment,
+    fetcher,
+    at,
+  );
+}
+
+type RichParams = {
+  chat_id: string;
+  rich_message: { blocks: Array<Record<string, unknown>>; skip_entity_detection: boolean };
+  reply_markup?: { inline_keyboard: Array<Array<{ text: string } & Record<string, string>>> };
+};
+
+const rich = (call: Call) => call.params as unknown as RichParams;
+const heading = (call: Call) => String(rich(call).rich_message.blocks[0]!.text);
+const buttons = (call: Call) => rich(call).reply_markup?.inline_keyboard.flat() ?? [];
+
+/** Lavori periodici conclusi nel turno corrente: nessuna anomalia dei lavori. */
+async function regularTasks(at = new Date(now)) {
+  await env.DB.batch(
+    (Object.keys(taskPeriods) as ScheduledTask[]).map((task) =>
+      env.DB.prepare(
+        "INSERT OR REPLACE INTO scheduled_tasks (task, slot, queued_at, done_at) VALUES (?1, ?2, ?3, ?3)",
+      ).bind(task, taskSlot(task, at), at.toISOString()),
+    ),
+  );
+}
+
+beforeEach(async () => {
+  await resetDatabase();
+  await regularTasks();
+  send.mockClear();
+});
+afterEach(() => vi.restoreAllMocks());
+
+describe("identità dell'owner", () => {
+  const parse = (body: unknown, environment: Env = env) =>
+    verifyTelegramUpdate(JSON.stringify(body), secret, environment);
+
+  it("accetta comandi e pulsanti dell'owner soltanto dalla sua chat privata e dal suo utente", () => {
+    expect(parse(message("/console"))).toMatchObject({
+      kind: "owner",
+      command: "console",
+      chatId: String(owner),
+    });
+    expect(parse(message("/quote@FiscalBayTestBot"))).toMatchObject({ command: "quote" });
+    // Chat, utente o tipo di chat diversi: nessun effetto e nessuna risposta.
+    expect(parse(message("/console", { chat: 4242, from: 4242 }))).toBeNull();
+    expect(parse(message("/console", { from: 4242 }))).toBeNull();
+    expect(parse(message("/console", { chat: -100, type: "group" }))).toBeNull();
+    expect(
+      parse({
+        ...message("/console"),
+        message: { ...message("/console").message, from: undefined },
+      }),
+    ).toBeNull();
+    expect(parse(tap("oc1:incidenti:0"))).toMatchObject({
+      kind: "owner_callback",
+      data: "oc1:incidenti:0",
+      messageId: 77,
+    });
+    expect(parse(tap("oc1:incidenti:0", { chat: 4242, from: 4242 }))).toBeNull();
+    expect(parse(tap("oc1:incidenti:0", { from: 4242 }))).toBeNull();
+    // I comandi dei venditori restano tali anche nella chat dell'owner.
+    expect(parse(message("/stato"))).toMatchObject({ kind: "command", command: "status" });
+    expect(parse(tap("abcdef12:pr"))).toMatchObject({ kind: "callback" });
+    // Senza l'ID configurato l'owner non esiste.
+    const unset = { ...env, TELEGRAM_OWNER_ID: "" } as unknown as Env;
+    expect(parse(message("/console"), unset)).toBeNull();
+    expect(parse(tap("oc1:console:0"), unset)).toBeNull();
+  });
+
+  it("riconosce soltanto i pulsanti nella forma attesa", () => {
+    expect(parseOwnerCallback("oc1:console:0")).toEqual({ view: "console", arg: 0, copy: false });
+    expect(parseOwnerCallback("oc1:metriche:90:c")).toEqual({
+      view: "metriche",
+      arg: 90,
+      copy: true,
+    });
+    expect(parseOwnerCallback("oc1:negozi:16")).toEqual({ view: "negozi", arg: 16, copy: false });
+    expect(parseOwnerCallback("oc1:incidenti:0:n")).toEqual({
+      view: "incidenti",
+      arg: 0,
+      copy: false,
+      fresh: true,
+    });
+    for (const data of [
+      "oc1:metriche:15",
+      "oc1:negozi:3",
+      "oc1:console:1",
+      "oc1:console:0:x",
+      "oc1:console:0:c:1",
+      "oc1:sconosciuta:0",
+      "oc1:console:",
+      "oc1:console:-8",
+      "oc2:console:0",
+    ])
+      expect(parseOwnerCallback(data), data).toBeNull();
+  });
+});
+
+describe("comandi e pulsanti", () => {
+  it("risponde al comando con un nuovo messaggio a tabelle, una volta sola per aggiornamento", async () => {
+    const api = bot();
+    const body = message("/console");
+    expect((await post(body, api.fetcher))?.status).toBe(204);
+    expect(api.methods()).toEqual(["sendRichMessage"]);
+    const [sent] = api.calls;
+    expect(rich(sent!).chat_id).toBe(String(owner));
+    expect(rich(sent!).rich_message.skip_entity_detection).toBe(true);
+    expect(heading(sent!)).toBe("🧭 FiscalBay · Test");
+    expect(rich(sent!).rich_message.blocks.at(-1)).toEqual({
+      type: "footer",
+      text: "Test · 13 set 2026, 22:00",
+    });
+    expect(buttons(sent!)).toEqual(
+      expect.arrayContaining([
+        { text: "🚨 Incidenti", callback_data: "oc1:incidenti:0" },
+        { text: "↻ Aggiorna", callback_data: "oc1:console:0" },
+        { text: "📋 Copia", callback_data: "oc1:console:0:c" },
+        { text: "🔗 Apri nella console", url: `${origin}/admin` },
+      ]),
+    );
+    // Lo stesso aggiornamento ripetuto da Telegram non ha un secondo effetto.
+    expect((await post(body, api.fetcher))?.status).toBe(204);
+    expect(api.calls).toHaveLength(1);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it("ignora senza risposta e senza ricevuta i comandi da altre chat o da altri utenti", async () => {
+    const api = bot();
+    for (const body of [
+      message("/console", { chat: 4242, from: 4242 }),
+      message("/incidenti", { from: 4242 }),
+      tap("oc1:console:0", { chat: 4242, from: 4242 }),
+    ])
+      expect((await post(body, api.fetcher))?.status).toBe(204);
+    expect(api.calls).toEqual([]);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM webhook_receipts").first()).toEqual({
+      n: 0,
+    });
+  });
+
+  it("il pulsante riscrive lo stesso messaggio; Copia invia testo copiabile; un messaggio non modificabile ne apre uno nuovo", async () => {
+    const api = bot();
+    await post(tap("oc1:lavori:0", { messageId: 31 }), api.fetcher);
+    expect(api.methods()).toEqual(["answerCallbackQuery", "getWebhookInfo", "editMessageText"]);
+    const edit = api.calls[2]!;
+    expect(edit.params.message_id).toBe(31);
+    expect(heading(edit)).toBe("⚙️ Lavori");
+    expect(buttons(edit)).toEqual(
+      expect.arrayContaining([
+        { text: "‹ Console", callback_data: "oc1:console:0" },
+        { text: "🔗 Apri nella console", url: `${origin}/admin/lavori` },
+      ]),
+    );
+
+    const copied = bot();
+    await post(tap("oc1:lavori:0:c"), copied.fetcher);
+    expect(copied.methods()).toEqual(["answerCallbackQuery", "getWebhookInfo", "sendMessage"]);
+    const text = String(copied.calls[2]!.params.text);
+    expect(text.startsWith("⚙️ Lavori\n")).toBe(true);
+    expect(text).toContain("Indirizzo: Corretto");
+    expect(copied.calls[2]!.params.entities).toEqual([
+      { type: "pre", offset: 0, length: text.length },
+    ]);
+
+    const old = bot((call) =>
+      call.method === "editMessageText"
+        ? rejected("Bad Request: message can't be edited")
+        : undefined,
+    );
+    await post(tap("oc1:versione:0"), old.fetcher);
+    expect(old.methods()).toEqual(["answerCallbackQuery", "editMessageText", "sendRichMessage"]);
+
+    const same = bot((call) =>
+      call.method === "editMessageText"
+        ? rejected("Bad Request: message is not modified: specified new message content")
+        : undefined,
+    );
+    await post(tap("oc1:versione:0"), same.fetcher);
+    expect(same.methods()).toEqual(["answerCallbackQuery", "editMessageText"]);
+
+    // Il pulsante di un avviso apre l'elenco in un nuovo messaggio, senza toccare l'avviso.
+    const alert = bot();
+    await post(tap("oc1:incidenti:0:n"), alert.fetcher);
+    expect(alert.methods()).toEqual(["answerCallbackQuery", "sendRichMessage"]);
+
+    // Un pulsante di forma sconosciuta chiude soltanto l'attesa.
+    const unknown = bot();
+    await post(tap("oc1:metriche:15"), unknown.fetcher);
+    expect(unknown.methods()).toEqual(["answerCallbackQuery"]);
+  });
+
+  it("con gli invii Telegram spenti per i venditori il Control Center risponde", async () => {
+    await setSwitch(env.DB, "telegram_sends", false, new Date(now));
+    const api = bot();
+    await post(message("/versione"), api.fetcher);
+    expect(api.methods()).toEqual(["sendRichMessage"]);
+    // Il comando di un venditore nella stessa chat resta senza risposta.
+    const seller = bot();
+    await post(message("/stato"), seller.fetcher);
+    expect(seller.calls).toEqual([]);
+  });
+
+  it("configura il menu della sola chat dell'owner con i comandi del Control Center e dei venditori", async () => {
+    const api = bot();
+    await configureOwnerCommands(environment, api.fetcher);
+    expect(api.calls).toEqual([
+      {
+        method: "setMyCommands",
+        params: {
+          scope: { type: "chat", chat_id: String(owner) },
+          commands: [
+            { command: "console", description: "Panoramica" },
+            { command: "incidenti", description: "Anomalie aperte e rientrate" },
+            { command: "lavori", description: "Lavori periodici, eventi e webhook" },
+            { command: "quote", description: "Quote delle API eBay" },
+            { command: "commerciale", description: "Incassi, lifetime e listino" },
+            { command: "metriche", description: "Funnel e KPI" },
+            { command: "negozi", description: "Negozi con problemi" },
+            { command: "prestazioni", description: "Metriche tecniche" },
+            { command: "versione", description: "Versione distribuita" },
+            { command: "stato", description: "Piano, notifiche e negozi" },
+            { command: "ultimi", description: "Ultimi ordini" },
+            { command: "preferenze", description: "Notifiche e negozi" },
+            { command: "aiuto", description: "Come funziona il bot" },
+          ],
+        },
+      },
+    ]);
+    const unset = bot();
+    await configureOwnerCommands(
+      { ...environment, TELEGRAM_OWNER_ID: "" } as unknown as Env,
+      unset.fetcher,
+    );
+    expect(unset.calls).toEqual([]);
+  });
+});
+
+describe("viste", () => {
+  const rows = (panel: Panel) => panel.sections.flatMap((section) => section.rows);
+  const value = (panel: Panel, label: string) => rows(panel).find(([name]) => name === label)?.[1];
+
+  async function failingStore(id: string, label: string) {
+    await env.DB.batch([
+      insertStore({ id, ebayUserId: label, workspaceId: "w-viste" }),
+      insertCredentials({ storeId: id, accessExpiresAt: later(48 * 60).toISOString() }),
+      ...[0, 1].map((index) =>
+        env.DB.prepare(
+          "INSERT INTO sync_runs (store_id, started_at, ok, new_orders) VALUES (?, ?, 0, 0)",
+        ).bind(id, later(index - 30).toISOString()),
+      ),
+    ]);
+  }
+
+  it("ogni vista legge le stesse query della console, senza email né dati dei buyer", async () => {
+    const { userId } = await verifiedSession("venditore.viste@example.invalid");
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-viste", userId }),
+      insertEntitlement({
+        id: "e-viste",
+        workspaceId: "w-viste",
+        source: "admin",
+        startsAt: later(-60).toISOString(),
+        endsAt: later(60 * 24 * 30).toISOString(),
+      }),
+    ]);
+    await failingStore("s-viste", "negozio_in_errore");
+    await setSwitch(env.DB, "ebay_calls", false, new Date(now));
+    const at = new Date(now);
+    const api = bot();
+    const panels = Object.fromEntries(
+      await Promise.all(
+        ownerCommands.map(
+          async (view) =>
+            [
+              view,
+              await ownerPanel(environment, { view, arg: 0, copy: false }, api.fetcher, at),
+            ] as const,
+        ),
+      ),
+    ) as Record<(typeof ownerCommands)[number], Panel>;
+
+    const summary = await consoleSummary(env.DB, at);
+    expect(value(panels.console, "Account")).toBe(String(summary.users));
+    expect(value(panels.console, "Concesso")).toBe(String(summary.coverage.admin));
+    expect(value(panels.console, "Con problemi")).toBe(String(summary.stores.problems));
+    const anomalies = await listAnomalies(env.DB, at);
+    expect(panels.console.lead).toContain(
+      anomalies.length === 1 ? "1 anomalia aperta" : `${anomalies.length} anomalie aperte`,
+    );
+
+    expect(rows(panels.incidenti).map(([label]) => label)).toEqual(
+      expect.arrayContaining([
+        "🟠 Servizi spenti dalla console",
+        "🟠 Letture dei negozi non riuscite",
+      ]),
+    );
+    expect(value(panels.incidenti, "🟠 Servizi spenti dalla console")).toContain("Chiamate eBay");
+
+    const metrics = await productMetrics(env, 30, at);
+    expect(panels.metriche.title).toBe("📈 Metriche · Ultimi 30 giorni");
+    expect(value(panels.metriche, "Registrati")).toMatch(
+      new RegExp(`^${metrics.funnel.steps[0]!.count}\\b`, "u"),
+    );
+    expect(value(panels.metriche, "Merchant operativi")).toBe(String(metrics.spaces.operative));
+
+    expect(value(panels.negozi, "Con problemi")).toBe(String(summary.stores.problems));
+    expect(value(panels.negozi, "negozio_in_errore")).toContain("Ultime letture non riuscite");
+
+    expect(value(panels.commerciale, "Ultimi 30 giorni")).toBe("0,00\u00a0€");
+    expect(value(panels.commerciale, "Mensile")).toContain("Lettura non riuscita");
+
+    expect(value(panels.lavori, "Indirizzo")).toBe("Corretto");
+    expect(value(panels.lavori, "Riconciliazione Stripe")).toMatch(/^Concluso /u);
+
+    expect(panels.quote.sections[0]).toEqual({
+      title: "📊 Production",
+      rows: [["Stato", "Lettura non riuscita"]],
+    });
+    expect(value(panels.prestazioni, "Stato")).toContain("ANALYTICS_READ_TOKEN");
+    expect(value(panels.versione, "Indirizzo")).toBe("localhost:5173");
+
+    for (const [view, panel] of Object.entries(panels)) {
+      const text = plainText(environment, panel, at);
+      expect(text, view).not.toContain("@example.invalid");
+      expect(text.length, view).toBeLessThanOrEqual(4096);
+    }
+  });
+
+  it("le quote mostrano consumo e anomalie come la console e le metriche cambiano finestra", async () => {
+    const daily = (resource: string, used: number) => ({
+      name: resource,
+      rates: [
+        {
+          count: used,
+          limit: 5000,
+          remaining: 5000 - used,
+          reset: "2026-09-14T07:00:00.000Z",
+          timeWindow: 86_400,
+        },
+      ],
+    });
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+      const url = new URL(String(input instanceof Request ? input.url : input));
+      if (url.pathname.endsWith("/oauth2/token")) return Response.json({ access_token: "app" });
+      return Response.json({
+        rateLimits:
+          url.searchParams.get("api_context") === "tradingapi"
+            ? [
+                {
+                  apiContext: "tradingapi",
+                  apiName: "TradingAPI",
+                  resources: [daily("GetOrders", 4000)],
+                },
+              ]
+            : [
+                {
+                  apiContext: "sell",
+                  apiName: "fulfillment",
+                  resources: [daily("sell.fulfillment.order", 10)],
+                },
+              ],
+      });
+    }) as unknown as typeof fetch;
+    const quotes = await ownerPanel(
+      environment,
+      { view: "quote", arg: 0, copy: false },
+      fetcher,
+      new Date(now),
+    );
+    expect(value(quotes, "Trading · GetOrders")).toBe(
+      "4000 su 5000 · 80% · al giorno · azzera 14 set 2026, 09:00 · oltre la soglia",
+    );
+    expect(value(quotes, "🟠 production:Trading:GetOrders")).toBe("80% · dal 13 set 2026, 22:00");
+    expect(quotes.note).toContain("Application Growth Check");
+
+    const week = await ownerPanel(
+      environment,
+      { view: "metriche", arg: 7, copy: false },
+      fetcher,
+      new Date(now),
+    );
+    expect(week.title).toBe("📈 Metriche · Ultimi 7 giorni");
+    expect(week.buttons).toEqual([
+      [
+        { text: "● 7 giorni", callback_data: "oc1:metriche:7" },
+        { text: "○ 30 giorni", callback_data: "oc1:metriche:30" },
+        { text: "○ 90 giorni", callback_data: "oc1:metriche:90" },
+      ],
+    ]);
+  });
+
+  it("i negozi con problemi vanno a pagine di otto", async () => {
+    await env.DB.batch(insertWorkspace({ id: "w-viste" }));
+    for (let index = 0; index < 9; index++) await failingStore(`s-${index}`, `negozio_${index}`);
+    const first = await ownerPanel(
+      environment,
+      { view: "negozi", arg: 0, copy: false },
+      fetch,
+      new Date(now),
+    );
+    expect(first.sections[1]!.rows).toHaveLength(8);
+    expect(first.buttons).toEqual([[{ text: "›", callback_data: "oc1:negozi:8" }]]);
+    const second = await ownerPanel(
+      environment,
+      { view: "negozi", arg: 8, copy: false },
+      fetch,
+      new Date(now),
+    );
+    expect(second.sections[1]!.rows).toHaveLength(1);
+    expect(second.buttons).toEqual([[{ text: "‹", callback_data: "oc1:negozi:0" }]]);
+  });
+
+  it("le prestazioni riportano stime di Analytics Engine e tempo CPU delle pagine come la console", async () => {
+    const rows = {
+      invocations: [
+        {
+          invocation: "http",
+          detail: "document",
+          method: "GET",
+          outcome: "2xx",
+          count: "40",
+          p95_ms: 190,
+        },
+        {
+          invocation: "queue",
+          detail: "sync",
+          method: "",
+          outcome: "ok",
+          count: "90",
+          p95_ms: 900,
+        },
+      ],
+      phases: [
+        {
+          invocation: "queue",
+          phase: "ebay",
+          operation: "request",
+          outcome: "ok",
+          calls: "12",
+          p95_ms: 410,
+        },
+      ],
+      pages: [{ page: "orders", reports: "8", lcp_reports: "8", lcp_p75_ms: 1300 }],
+    };
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const body = String(init?.body);
+      if (String(input).endsWith("/workers/observability/telemetry/query")) {
+        // Soltanto il documento degli Ordini ha invocazioni nella finestra.
+        const measured =
+          (JSON.parse(body) as { queryId: string }).queryId === "page-cpu-orders-document";
+        const aggregate = (value: number) => [{ value: measured ? value : 0 }];
+        return Response.json({
+          success: true,
+          result: {
+            calculations: [
+              { alias: "invocations", aggregates: aggregate(30) },
+              { alias: "cpu_p50_ms", aggregates: aggregate(42) },
+              { alias: "cpu_p95_ms", aggregates: aggregate(170) },
+              { alias: "wall_p50_ms", aggregates: aggregate(760) },
+            ],
+          },
+        });
+      }
+      const query = body.includes("'phase'")
+        ? "phases"
+        : body.includes("'page'")
+          ? "pages"
+          : "invocations";
+      return Response.json({ meta: [], data: rows[query], rows: 1 });
+    }) as unknown as typeof fetch;
+    const panel = await ownerPanel(
+      { ...environment, ANALYTICS_READ_TOKEN: "token-di-lettura" } as Env,
+      { view: "prestazioni", arg: 0, copy: false },
+      fetcher,
+      new Date(now),
+    );
+    expect(panel.lead).toContain("Ultime 24 ore");
+    expect(panel.sections.map((section) => section.rows)).toEqual([
+      [
+        ["Coda · Letture dei negozi · ok", "90 · p95 900 ms"],
+        ["HTTP · Pagine · 2xx", "40 · p95 190 ms"],
+      ],
+      [["eBay · request", "12 · p95 410 ms"]],
+      [
+        ["Ordini · Documento", "30 · CPU p50 42 ms · CPU p95 170 ms · Durata p50 760 ms"],
+        ["Ordini · Dati", "0 · CPU p50 n.d. · CPU p95 n.d. · Durata p50 n.d."],
+        ["Negozi · Documento", "0 · CPU p50 n.d. · CPU p95 n.d. · Durata p50 n.d."],
+        ["Negozi · Dati", "0 · CPU p50 n.d. · CPU p95 n.d. · Durata p50 n.d."],
+      ],
+      [["Ordini", "8 · LCP p75 1300 ms"]],
+    ]);
+  });
+
+  it("le durate degli avvisi passano da minuti a ore e a giorni", () => {
+    const from = "2026-09-13T20:00:00.000Z";
+    const after = (minutes: number) => new Date(Date.parse(from) + minutes * minute).toISOString();
+    expect(duration(from, after(59))).toBe("59 min");
+    expect(duration(from, after(60))).toBe("1 h");
+    expect(duration(from, after(135))).toBe("2 h 15 min");
+    expect(duration(from, after(3 * 1440))).toBe("3 giorni");
+    expect(duration(after(5), from)).toBe("0 min");
+  });
+
+  it("il testo copiato resta entro il limite di Telegram", () => {
+    const long: Panel = {
+      title: "Prova",
+      sections: [
+        {
+          title: "Righe",
+          rows: Array.from({ length: 300 }, (_, index) => [`riga ${index}`, "🧾".repeat(10)]),
+        },
+      ],
+    };
+    const text = plainText(environment, long, new Date(now));
+    expect(text.length).toBeLessThanOrEqual(4096);
+    expect(text.endsWith("\n… testo troncato")).toBe(true);
+  });
+});
+
+describe("avvisi degli incidenti", () => {
+  /** Controllo degli incidenti con i lavori periodici in regola a quell'istante. */
+  async function reconcileOwnerIncidents(environment: Env, fetcher: typeof fetch, at: Date) {
+    await regularTasks(at);
+    await reconcile(environment, fetcher, at);
+  }
+
+  const incident = () =>
+    env.DB.prepare("SELECT * FROM owner_incidents")
+      .all<Record<string, unknown>>()
+      .then((r) => r.results);
+
+  it("avvisa una volta all'apertura e una al rientro, anche con controlli ripetuti", async () => {
+    await setSwitch(env.DB, "ebay_calls", false, new Date(now));
+    const api = bot();
+    await reconcileOwnerIncidents(environment, api.fetcher, later(1));
+    await reconcileOwnerIncidents(environment, api.fetcher, later(11));
+    expect(api.methods()).toEqual(["sendRichMessage"]);
+    const opened = api.calls[0]!;
+    expect(heading(opened)).toBe("🟠 Aperta · Servizi spenti dalla console");
+    expect(rich(opened).rich_message.blocks[1]).toEqual({
+      type: "paragraph",
+      text: "Restano fermi finché non li riaccendi: richieste e notifiche attendono.",
+    });
+    expect(buttons(opened)).toEqual([
+      { text: "🔗 Apri nella console", url: `${origin}/admin/interruttori` },
+      { text: "🚨 Incidenti", callback_data: "oc1:incidenti:0:n" },
+    ]);
+
+    await setSwitch(env.DB, "ebay_calls", true, later(30));
+    await reconcileOwnerIncidents(environment, api.fetcher, later(31));
+    await reconcileOwnerIncidents(environment, api.fetcher, later(41));
+    expect(api.methods()).toEqual(["sendRichMessage", "sendRichMessage"]);
+    const resolved = api.calls[1]!;
+    expect(heading(resolved)).toBe("🟢 Rientrata · Servizi spenti dalla console");
+    expect(JSON.stringify(resolved.params)).toContain("31 min");
+    expect(await incident()).toMatchObject([{ notified: "resolved", severity: "p2" }]);
+
+    // La stessa anomalia di nuovo aperta è una nuova apertura.
+    await setSwitch(env.DB, "ebay_calls", false, later(50));
+    await reconcileOwnerIncidents(environment, api.fetcher, later(51));
+    expect(heading(api.calls[2]!)).toBe("🟠 Aperta · Servizi spenti dalla console");
+  });
+
+  it("segnala l'aggravamento, ignora le P3 e non comunica il rientro di un incidente mai annunciato", async () => {
+    const receipt = (provider: string, id: string) =>
+      env.DB.prepare(`INSERT INTO webhook_receipts (id, provider, environment, provider_id, topic,
+          object_id, event_at, expires_at, queued_at)
+        VALUES (?1, ?2, 'test', ?1, 'x', 'o', ?3, ?4, ?3)`)
+        .bind(id, provider, later(-120).toISOString(), later(60 * 24).toISOString())
+        .run();
+    await receipt("telegram", "r-telegram");
+    // Messaggi Telegram non consegnati: P3, soltanto nella console e in /incidenti.
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-p3" }),
+      env.DB.prepare(`INSERT INTO telegram_deliveries (id, workspace_id, link_id, kind, event_key,
+          event_at, created_at, failed_at) VALUES ('d-p3', 'w-p3', 'l-p3', 'digest', 'k', ?1, ?1, ?1)`).bind(
+        later(-5).toISOString(),
+      ),
+    ]);
+    expect((await listAnomalies(env.DB, new Date(now))).map((anomaly) => anomaly.kind)).toContain(
+      "telegram_failed",
+    );
+    const api = bot();
+    await reconcileOwnerIncidents(environment, api.fetcher, new Date(now));
+    expect(api.calls.map(heading)).toEqual(["🟠 Aperta · Eventi dei provider in ritardo"]);
+    await receipt("stripe", "r-stripe");
+    await reconcileOwnerIncidents(environment, api.fetcher, later(10));
+    expect(heading(api.calls[1]!)).toBe("🔴 Aggravata · Eventi dei provider in ritardo");
+    await reconcileOwnerIncidents(environment, api.fetcher, later(20));
+    expect(api.calls).toHaveLength(2);
+    expect((await incident()).map((row) => row.kind)).toEqual(["receipts_stalled"]);
+
+    // Senza owner configurato lo stato si registra, ma nessun avviso parte.
+    await env.DB.prepare("DELETE FROM owner_incidents").run();
+    const silent = bot();
+    const unset = { ...environment, TELEGRAM_OWNER_ID: "" } as unknown as Env;
+    await reconcileOwnerIncidents(unset, silent.fetcher, later(30));
+    await env.DB.prepare("DELETE FROM webhook_receipts").run();
+    await reconcileOwnerIncidents(unset, silent.fetcher, later(40));
+    expect(silent.calls).toEqual([]);
+    await reconcileOwnerIncidents(environment, silent.fetcher, later(50));
+    expect(silent.calls).toEqual([]);
+    expect(await incident()).toMatchObject([{ notified: "resolved" }]);
+  });
+
+  it("un rientro e una riapertura fra due avvisi non producono messaggi; un invio fallito si ritenta più tardi", async () => {
+    await setSwitch(env.DB, "ebay_calls", false, new Date(now));
+    const api = bot();
+    await reconcileOwnerIncidents(environment, api.fetcher, later(1));
+    const [{ opened_at: openedAt }] = (await incident()) as [{ opened_at: string }];
+
+    // Il rientro non parte per un limite di Telegram, poi l'anomalia si riapre.
+    await setSwitch(env.DB, "ebay_calls", true, later(5));
+    const limited = bot((call) =>
+      call.method === "sendRichMessage"
+        ? Response.json(
+            { ok: false, error_code: 429, parameters: { retry_after: 120 } },
+            { status: 429 },
+          )
+        : undefined,
+    );
+    await reconcileOwnerIncidents(environment, limited.fetcher, later(6));
+    expect(await incident()).toMatchObject([
+      { notified: "opened", attempts: 1, retry_at: later(8).toISOString() },
+    ]);
+    await reconcileOwnerIncidents(environment, api.fetcher, later(7));
+    expect(api.calls).toHaveLength(1);
+    await setSwitch(env.DB, "ebay_calls", false, later(7));
+    await reconcileOwnerIncidents(environment, api.fetcher, later(9));
+    expect(api.calls).toHaveLength(1);
+    expect(await incident()).toMatchObject([
+      { notified: "opened", opened_at: openedAt, resolved_at: null, attempts: 0 },
+    ]);
+  });
+});
+
+describe("compiti periodici", () => {
+  /** Esegue dalla coda il turno corrente del compito, come il consumer. */
+  async function run(task: ScheduledTask, fetcher: typeof fetch, at = new Date(now)) {
+    const slot = taskSlot(task, at);
+    await env.DB.prepare("UPDATE scheduled_tasks SET slot = ?2, done_at = NULL WHERE task = ?1")
+      .bind(task, slot)
+      .run();
+    const message = queueMessage({ task, slot });
+    await consumeTask(message, environment, fetcher, at);
+    expect(message.ack).toHaveBeenCalled();
+  }
+
+  it("riallineano il menu dell'owner, rileggono le quote eBay e inviano gli avvisi", async () => {
+    const api = bot();
+    await run("telegram_commands", api.fetcher);
+    expect(
+      api.calls.filter((call) => call.method === "setMyCommands").at(-1)?.params.scope,
+    ).toEqual({
+      type: "chat",
+      chat_id: String(owner),
+    });
+
+    const quotas = vi.fn<typeof fetch>(async () => new Response("", { status: 503 }));
+    await run("ebay_quotas", quotas);
+    expect(String(quotas.mock.calls[0]![0])).toContain("oauth2/token");
+
+    await setSwitch(env.DB, "ebay_calls", false, new Date(now));
+    const alerts = bot();
+    await run("owner_incidents", alerts.fetcher);
+    expect(alerts.calls.map(heading)).toEqual(["🟠 Aperta · Servizi spenti dalla console"]);
+  });
+});

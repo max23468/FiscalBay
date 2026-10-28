@@ -36,6 +36,8 @@ const it = {
       billing: "Riconciliazione Stripe",
       telegram: "Notifiche Telegram",
       telegram_commands: "Comandi del bot",
+      ebay_quotas: "Quote eBay",
+      owner_incidents: "Avvisi all’owner",
     },
     providers: { ebay: "eBay", stripe: "Stripe", telegram: "Telegram" },
     subscription: {
@@ -526,7 +528,7 @@ const it = {
       ebay_calls:
         "Spente, si fermano letture, conferme degli ordini, rinnovi dei token e collegamenti. Le richieste ripartono alla riaccensione.",
       telegram_sends:
-        "Spenti, si fermano notifiche, riepiloghi e risposte del bot. Le notifiche in attesa partono alla riaccensione.",
+        "Spenti, si fermano notifiche, riepiloghi e risposte del bot ai venditori. Le notifiche in attesa partono alla riaccensione; il Control Center dell’owner resta attivo.",
       quota: "Consumo giornaliero, fra 50 e 85, oltre il quale si apre l’anomalia della quota.",
     },
     on: "Acceso",
@@ -688,6 +690,8 @@ const en: AdminCopy = {
       billing: "Stripe reconciliation",
       telegram: "Telegram notifications",
       telegram_commands: "Bot commands",
+      ebay_quotas: "eBay quotas",
+      owner_incidents: "Owner alerts",
     },
     providers: { ebay: "eBay", stripe: "Stripe", telegram: "Telegram" },
     subscription: {
@@ -1176,7 +1180,7 @@ const en: AdminCopy = {
       ebay_calls:
         "Off, reads, order confirmations, token renewals and connections stop. Requests restart when switched back on.",
       telegram_sends:
-        "Off, notifications, digests and bot replies stop. Pending notifications go out when switched back on.",
+        "Off, notifications, digests and bot replies to sellers stop. Pending notifications go out when switched back on; the owner Control Center stays active.",
       quota: "Daily usage, between 50 and 85, above which the quota issue opens.",
     },
     on: "On",

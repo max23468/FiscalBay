@@ -1,0 +1,123 @@
+import type { OwnerCommand } from "../bot-commands";
+
+/**
+ * Testi del Control Center Telegram dell'owner, soltanto in italiano. Etichette di sezioni,
+ * anomalie, lavori e metriche vengono dalla console (`admin-copy`), così bot e console parlano
+ * allo stesso modo.
+ */
+export const ownerTelegramCopy = {
+  /** Menu della chat dell'owner, nell'ordine in cui compare. */
+  commands: {
+    console: "Panoramica",
+    incidenti: "Anomalie aperte e rientrate",
+    lavori: "Lavori periodici, eventi e webhook",
+    quote: "Quote delle API eBay",
+    commerciale: "Incassi, lifetime e listino",
+    metriche: "Funnel e KPI",
+    negozi: "Negozi con problemi",
+    prestazioni: "Metriche tecniche",
+    versione: "Versione distribuita",
+  } satisfies Record<OwnerCommand, string>,
+  /** Pulsanti di navigazione, con le stesse icone del titolo della vista. */
+  views: {
+    console: "🧭 Console",
+    incidenti: "🚨 Incidenti",
+    lavori: "⚙️ Lavori",
+    quote: "📊 Quote eBay",
+    commerciale: "💶 Commerciale",
+    metriche: "📈 Metriche",
+    negozi: "🏪 Negozi",
+    prestazioni: "⏱ Prestazioni",
+    versione: "🏷 Versione",
+  } satisfies Record<OwnerCommand, string>,
+  title: (environment: string) => `FiscalBay · ${environment}`,
+  refresh: "↻ Aggiorna",
+  copy: "📋 Copia",
+  openConsole: "🔗 Apri nella console",
+  back: "‹ Console",
+  previous: "‹",
+  next: "›",
+  none: "Nessuno",
+  unavailable: "Lettura non riuscita",
+  state: "Stato",
+  allClear: "Tutto regolare",
+  bySeverity: (p1: number, p2: number, p3: number) =>
+    `Gravi ${p1} · da risolvere ${p2} · da controllare ${p3}`,
+  open: "Aperte",
+  resolvedRecently: "Rientrate negli ultimi 7 giorni",
+  since: (when: string) => `dal ${when}`,
+  occurrences: "Occorrenze",
+  more: (count: number) => `+${count}`,
+  duration: "Durata",
+  openedAt: "Aperta",
+  resolvedAt: "Rientrata",
+  subjects: "Riguarda",
+  action: "Azione",
+  incident: {
+    opened: "Aperta",
+    escalated: "Aggravata",
+    resolved: "Rientrata",
+  },
+  severityIcon: { p1: "🔴", p2: "🟠", p3: "🟡" },
+  resolvedIcon: "🟢",
+  accounts: "Account",
+  waitlisted: "In lista d’attesa",
+  coverage: "Spazi coperti",
+  stores: "Negozi",
+  activeStores: "Attivi",
+  problemStores: "Con problemi",
+  revenue: "Incassi",
+  lifetime: "Posti lifetime",
+  lifetimeLeft: (available: number, total: number) => `${available} su ${total}`,
+  jobs: "Lavori periodici",
+  jobsRegular: (regular: number, total: number) => `${regular} regolari su ${total}`,
+  receipts: "Eventi dei provider",
+  receiptState: (pending: number, stalled: number) =>
+    `${pending} in attesa · ${stalled} in ritardo`,
+  webhook: "Webhook Telegram",
+  webhookUrl: "Indirizzo",
+  webhookUpdates: "Aggiornamenti accettati",
+  webhookPending: "In attesa presso Telegram",
+  webhookError: "Ultimo errore",
+  expected: "Corretto",
+  different: "Diverso da quello atteso",
+  missing: "Non registrato",
+  task: {
+    running: "In esecuzione",
+    stalled: "Fermo",
+    waiting: "In attesa",
+    done: (when: string) => `Concluso ${when}`,
+  },
+  quotas: {
+    used: (consumed: number, limit: number, share: string) => `${consumed} su ${limit} · ${share}`,
+    reset: (when: string) => `azzera ${when}`,
+    over: "oltre la soglia",
+    noRows: "Nessuna quota restituita da eBay",
+  },
+  bulkData: "Soglie Bulk Data Transfer",
+  commerce: {
+    seatsTaken: (sold: number, gifted: number, reserved: number) =>
+      `Venduti ${sold} · omaggio ${gifted} · prenotati ${reserved}`,
+    promotion: (from: string, to: string, quota: number) => `${from} – ${to} · ${quota} sblocchi`,
+    noPromotions: "Nessuna promozione recente",
+  },
+  metrics: {
+    window: (days: number) => `Ultimi ${days} giorni`,
+  },
+  storesView: {
+    problems: "Negozi con problemi",
+    none: "Nessun negozio con problemi",
+    lastRead: (when: string) => `ultima lettura ${when}`,
+  },
+  performance: {
+    slowest: "Più lente (p95)",
+    value: (count: number, p95: number) => `${count} · p95 ${Math.round(p95)} ms`,
+  },
+  version: {
+    worker: "Versione del Worker",
+    tag: "Etichetta",
+    deployed: "Distribuita",
+    origin: "Indirizzo",
+    migration: "Ultima migration",
+  },
+} as const;

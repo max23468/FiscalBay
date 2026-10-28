@@ -22,6 +22,7 @@ import {
   zoneName,
 } from "./telegram-messages.server";
 import { appUrl, ordersPath, planPath } from "../app-links";
+import type { BotCommand } from "../bot-commands";
 import type { Language } from "../i18n";
 import { UpstreamError } from "../integrations/http.server";
 import {
@@ -31,7 +32,6 @@ import {
   setBotCommands,
   telegramConfigured,
   type BotButton,
-  type BotCommand,
   type BotMessage,
 } from "../integrations/telegram.server";
 import { telegramDigestTimes } from "../preferences";
