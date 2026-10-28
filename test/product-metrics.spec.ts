@@ -320,6 +320,13 @@ describe("KPI della console", () => {
       paid(monthly, "premium", before(10)),
       paid(annual, "premium", before(40), 4900),
       paid(lifetime, "lifetime", before(20), 14900),
+      // La prova ancora aperta di uno spazio passato al lifetime non è una prova in corso.
+      insertEntitlement({
+        workspaceId: lifetime,
+        source: "trial",
+        startsAt: before(22),
+        endsAt: before(-1),
+      }),
       env.DB.prepare(`INSERT INTO workspace_entitlements
           (id, workspace_id, source, starts_at, granted_by, grant_reason)
         VALUES ('kpi-gift', ?, 'lifetime', ?, 'admin', 'omaggio')`).bind(gift, before(20)),
@@ -357,7 +364,7 @@ describe("KPI della console", () => {
       lifetimeGifted: 1,
       granted: 0,
       trials: { ended: 2, converted: 1 },
-      purchases: { total: 2, afterTrial: 1 },
+      purchases: { total: 2, afterTrial: 2 },
     });
     // Incassi della finestra: il primo mensile e l'annuale sono più vecchi.
     expect(commerce.cash).toEqual({ paid: 490 + 14900 + 490, refunded: 100 });

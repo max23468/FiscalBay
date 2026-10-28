@@ -342,6 +342,32 @@ describe("metriche tecniche su Analytics Engine", () => {
     };
   };
 
+  it("conta una volta sola il tempo delle misure in parallelo", async () => {
+    const { points, dataset } = recorder();
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    const response = await withPhaseTimings(
+      new Request("https://test.fiscalbay.it/app/ordini"),
+      async () => {
+        await Promise.all([
+          measure("d1", "orders", () => wait(40)),
+          measure("d1", "orders", () => wait(40)),
+          measure("d1", "orders", () => wait(40)),
+        ]);
+        await measure("d1", "orders", () => wait(20));
+        return new Response("ok");
+      },
+      { dataset },
+    );
+    const [invocation, d1] = points;
+    const [count, total, longest] = d1!.doubles!;
+    expect(count).toBe(4);
+    expect(total).toBeGreaterThanOrEqual(longest!);
+    expect(total).toBeLessThan(longest! * 2.5);
+    expect(total).toBeLessThanOrEqual(invocation!.doubles![1]! + 1);
+    const timing = Number(/d1;dur=([\d.]+)/u.exec(response.headers.get("server-timing")!)![1]);
+    expect(Math.abs(timing - total!)).toBeLessThanOrEqual(1);
+  });
+
   it("scrive esito, latenza e fasi della richiesta senza dati dell'utente, dell'ordine o dell'URL", async () => {
     const { points, dataset } = recorder();
     const personal = new Request(
@@ -384,7 +410,7 @@ describe("metriche tecniche su Analytics Engine", () => {
         doubles: [1, duration, duration],
       },
     ]);
-    // Le due letture D1 si sommano: il totale non è inferiore alla più lunga.
+    // Le due letture D1 in sequenza si sommano: il totale non è inferiore alla più lunga.
     const [, d1] = points;
     expect(d1!.doubles![1]).toBeGreaterThanOrEqual(d1!.doubles![2]!);
     const written = JSON.stringify(points);

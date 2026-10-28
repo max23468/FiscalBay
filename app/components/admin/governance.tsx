@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Badge } from "~/components/ui/badge";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
+import type { AuditOutcome } from "../../copy/admin-copy";
 import type { AbuseSignal } from "../../domain/abuse-review.server";
 import type { AuditRow } from "../../domain/admin-audit.server";
 import type { ServiceNotice } from "../../domain/service-notices.server";
@@ -38,7 +39,7 @@ function Outcome({ outcome }: { outcome: string }) {
   const ok = ["done", "prepared", "queued", "merged", "already"].includes(outcome);
   return (
     <Badge variant={ok ? "success" : outcome === "failed" ? "danger" : "neutral"}>
-      {t.labels.outcomes[outcome] ?? outcome}
+      {t.labels.outcomes[outcome as AuditOutcome] ?? outcome}
     </Badge>
   );
 }

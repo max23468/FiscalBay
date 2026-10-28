@@ -1,5 +1,6 @@
 import { priceGeneration } from "../catalog";
 import { stripeEnvironment } from "../integrations/stripe.server";
+import { activeCoverageSql } from "./grants.server";
 
 /**
  * KPI della console (§31): conteggi aggregati con finestra e denominatore espliciti, calcolati
@@ -168,13 +169,15 @@ async function commerce(env: Env, from: string, to: string) {
       .bind(to, stripeEnvironment(env), priceGeneration.id),
     db
       .prepare(`SELECT
-          COUNT(DISTINCT CASE WHEN source = 'trial' THEN workspace_id END) AS trialsOpen,
+          COUNT(DISTINCT CASE WHEN source = 'trial'
+            AND ${activeCoverageSql("source", "o.workspace_id", "?1")} = 'trial'
+            THEN workspace_id END) AS trialsOpen,
           COUNT(DISTINCT CASE WHEN source = 'lifetime' AND amount_paid > 0 THEN workspace_id END)
             AS lifetimePaid,
           COUNT(DISTINCT CASE WHEN source = 'lifetime' AND COALESCE(amount_paid, 0) = 0
             THEN workspace_id END) AS lifetimeGifted,
           COUNT(DISTINCT CASE WHEN source = 'admin' THEN workspace_id END) AS granted
-        FROM workspace_entitlements WHERE revoked_at IS NULL
+        FROM workspace_entitlements o WHERE revoked_at IS NULL
           AND julianday(starts_at) <= julianday(?1)
           AND (ends_at IS NULL OR julianday(ends_at) > julianday(?1))`)
       .bind(to),

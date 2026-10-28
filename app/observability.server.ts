@@ -28,21 +28,39 @@ export type PhaseOperation =
   | "settings"
   | "request";
 
-/** Somma delle misure di una fase e operazione con lo stesso esito, nella stessa invocazione. */
+/** Inizio e fine di una misura, in millisecondi di `performance.now()`. */
+type Interval = readonly [number, number];
+
+/** Misure di una fase e operazione con lo stesso esito, nella stessa invocazione. */
 type PhaseTotal = {
   phase: Phase;
   operation: PhaseOperation;
   outcome: "ok" | ErrorCode;
   count: number;
-  totalMs: number;
+  intervals: Interval[];
   maxMs: number;
 };
 
 type Scope = {
-  timings: Map<Phase, number>;
+  timings: Map<Phase, Interval[]>;
   totals: Map<string, PhaseTotal>;
   tracing?: Tracing;
 };
+
+/**
+ * Tempo coperto da almeno una misura: le misure in parallelo, come le letture D1 di una
+ * pagina, contano una volta sola, così una fase non supera mai la durata della richiesta.
+ */
+function coveredMs(intervals: Interval[]) {
+  let total = 0;
+  let end = -Infinity;
+  for (const [from, to] of [...intervals].sort((a, b) => a[0] - b[0])) {
+    if (to <= end) continue;
+    total += to - Math.max(from, end);
+    end = to;
+  }
+  return total;
+}
 
 /** Durate delle fasi e tracing dell'invocazione in corso. */
 const invocationScope = new AsyncLocalStorage<Scope>();
@@ -78,8 +96,13 @@ async function observe<T>(
     const description = describe({ value, failed });
     const points: MetricPoint[] = [
       invocationPoint({ ...description, durationMs, version }),
-      ...[...scope.totals.values()].map((total) =>
-        phasePoint({ ...total, invocation: description.invocation, version }),
+      ...[...scope.totals.values()].map(({ intervals, ...total }) =>
+        phasePoint({
+          ...total,
+          totalMs: coveredMs(intervals),
+          invocation: description.invocation,
+          version,
+        }),
       ),
     ];
     writePoints(dataset, points);
@@ -130,7 +153,9 @@ export async function withPhaseTimings(
   const headers = new Headers(response.headers);
   headers.set(
     "server-timing",
-    [...scope.timings].map(([phase, duration]) => `${phase};dur=${duration.toFixed(1)}`).join(", "),
+    [...scope.timings]
+      .map(([phase, intervals]) => `${phase};dur=${coveredMs(intervals).toFixed(1)}`)
+      .join(", "),
   );
   return new Response(response.body, {
     status: response.status,
@@ -172,7 +197,7 @@ export async function withInvocationMetrics<T>(
 }
 
 /**
- * Misura una fase: span Workers per la diagnosi, durata per `Server-Timing` e somma per
+ * Misura una fase: span Workers per la diagnosi, tempo coperto per `Server-Timing` e per
  * Analytics Engine. Un errore porta soltanto il suo codice stabile, mai l'eccezione grezza.
  */
 export async function measure<T>(
@@ -197,20 +222,21 @@ export async function measure<T>(
   } finally {
     span?.end();
     if (scope) {
-      const duration = performance.now() - started;
-      scope.timings.set(phase, (scope.timings.get(phase) ?? 0) + duration);
+      const ended = performance.now();
+      const interval = [started, ended] as const;
+      scope.timings.set(phase, [...(scope.timings.get(phase) ?? []), interval]);
       const key = `${phase}:${operation}:${outcome}`;
       const total = scope.totals.get(key) ?? {
         phase,
         operation,
         outcome,
         count: 0,
-        totalMs: 0,
+        intervals: [],
         maxMs: 0,
       };
       total.count += 1;
-      total.totalMs += duration;
-      total.maxMs = Math.max(total.maxMs, duration);
+      total.intervals.push(interval);
+      total.maxMs = Math.max(total.maxMs, ended - started);
       scope.totals.set(key, total);
     }
   }

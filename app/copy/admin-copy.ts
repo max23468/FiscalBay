@@ -100,7 +100,19 @@ const it = {
       expired: "Scaduta",
       busy: "Occupato",
       covered: "Spazio coperto",
-    } as Record<string, string>,
+      lifetime: "Lifetime già in vigore",
+      owned: "Lifetime già in vigore",
+      pending: "Acquisto in corso",
+      "sold-out": "Posti esauriti",
+      importing: "Importazione in corso",
+      limited: "Attesa di eBay",
+      suspended: "Chiamate eBay spente",
+      not_deleted: "Cliente non cancellato",
+      same_workspace: "Stesso spazio",
+      workspace_not_found: "Spazio inesistente",
+      overlap: "Sovrapposta",
+      started: "Già iniziata",
+    },
     target: { workspace: "Spazio", store: "Negozio" },
   },
   summary: {
@@ -665,6 +677,8 @@ const it = {
 };
 
 export type AdminCopy = typeof it;
+/** Esiti che il registro della console sa mostrare. */
+export type AuditOutcome = keyof AdminCopy["labels"]["outcomes"];
 
 const en: AdminCopy = {
   console: "Console",
@@ -762,7 +776,19 @@ const en: AdminCopy = {
       expired: "Expired",
       busy: "Busy",
       covered: "Space covered",
-    } as Record<string, string>,
+      lifetime: "Lifetime already active",
+      owned: "Lifetime already active",
+      pending: "Purchase in progress",
+      "sold-out": "Sold out",
+      importing: "Import in progress",
+      limited: "Waiting for eBay",
+      suspended: "eBay calls off",
+      not_deleted: "Customer not deleted",
+      same_workspace: "Same space",
+      workspace_not_found: "Space not found",
+      overlap: "Overlapping",
+      started: "Already started",
+    },
     target: { workspace: "Space", store: "Store" },
   },
   summary: {
