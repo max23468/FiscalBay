@@ -1845,3 +1845,44 @@ it("limita le consegne per origine prima di leggere il corpo, con memoria limita
   admitOrigin("203.0.114.1", at);
   expect(() => admitOrigin("198.51.100.1", at)).not.toThrow();
 });
+
+it("accetta la firma SHA-1 delle notifiche di cancellazione dichiarata dalla chiave di eBay", async () => {
+  const signed = (payload: object, digest: "SHA1" | "SHA256", kid: string) => {
+    const body = JSON.stringify(payload);
+    const signature = sign(
+      digest === "SHA1" ? "sha1" : "sha256",
+      Buffer.from(body),
+      pair.privateKey,
+    ).toString("base64");
+    return new Request("https://test.fiscalbay.it/webhooks/ebay", {
+      method: "POST",
+      headers: {
+        "x-ebay-signature": btoa(JSON.stringify({ alg: "ecdsa", kid, signature, digest })),
+      },
+      body,
+    });
+  };
+  const sha1Key = vi.fn<typeof fetch>(async (input, init) =>
+    String(input).includes("/public_key/")
+      ? Response.json({
+          algorithm: "ECDSA",
+          digest: "SHA1",
+          key: publicKey.replaceAll("\n", ""),
+        })
+      : fetcher(input, init),
+  );
+  const payload = accountDeletion({ userId: "seller-synthetic", eiasToken: "eias-seller" });
+  expect(
+    (await receiveWebhook(signed(payload, "SHA1", "sha1-key"), environment, sha1Key, now))?.status,
+  ).toBe(204);
+  expect((await deletions()).results).toHaveLength(1);
+  // La chiave dichiara SHA-1: un header con un altro digest, anche firmato, non vale.
+  expect(
+    (await receiveWebhook(signed(payload, "SHA256", "sha1-key"), environment, sha1Key, now))
+      ?.status,
+  ).toBe(412);
+  // Una firma SHA-1 senza il digest dichiarato dalla chiave segue l'header.
+  expect(
+    (await receiveWebhook(signed(payload, "SHA1", "plain-key"), environment, fetcher, now))?.status,
+  ).toBe(204);
+});

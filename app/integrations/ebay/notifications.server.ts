@@ -6,11 +6,16 @@ import { applicationToken, ebayConfiguration } from "./environment.server";
 
 const identifier = z.string().min(1).max(256);
 const encodedSignature = z.string().min(1).max(2048);
+// Le notifiche della Notification API firmano con SHA-256, quelle della cancellazione account
+// con SHA-1, come il SDK ufficiale di eBay: vale il digest dichiarato da eBay per la chiave.
+const digestSchema = z
+  .enum(["SHA256", "sha256", "SHA1", "sha1"])
+  .transform((value) => (value === "SHA1" || value === "sha1" ? "sha1" : "sha256"));
 const headerSchema = z.object({
   kid: identifier,
   signature: z.string().min(1).max(512),
   alg: z.enum(["ECDSA", "ecdsa"]),
-  digest: z.enum(["SHA256", "sha256"]),
+  digest: digestSchema,
 });
 const notificationFields = { notificationId: identifier, eventDate: z.iso.datetime() };
 const metadata = <Topic extends string>(topic: Topic) =>
@@ -96,7 +101,7 @@ export type EbayNotification = z.infer<typeof notificationSchema>;
 
 // Cache e budget limitati per isolate: un header non autenticato non può far crescere
 // la memoria o provocare recuperi illimitati di chiavi. Nessun URL arriva dal payload.
-const keys = new Map<string, { key: string; until: number }>();
+const keys = new Map<string, { key: string; digest: "sha1" | "sha256" | null; until: number }>();
 let windowStart = 0;
 let lookups = 0;
 
@@ -148,7 +153,7 @@ export async function verifyEbayNotification(
     const key = await upstreamJson(
       fetcher,
       `${configuration.apiOrigin}/commerce/notification/v1/public_key/${encodeURIComponent(header.kid)}`,
-      z.object({ key: z.string().min(1).max(4096) }),
+      z.object({ key: z.string().min(1).max(4096), digest: digestSchema.optional() }),
       { headers: { authorization: `Bearer ${token}` } },
       { maxBytes: 8192 },
     );
@@ -156,12 +161,22 @@ export async function verifyEbayNotification(
       key: key.key
         .replace("-----BEGIN PUBLIC KEY-----", "-----BEGIN PUBLIC KEY-----\n")
         .replace("-----END PUBLIC KEY-----", "\n-----END PUBLIC KEY-----"),
+      digest: key.digest ?? null,
       until: now + 3_600_000,
     };
     if (keys.size >= 100) keys.delete(keys.keys().next().value!);
     keys.set(cacheId, publicKey);
   }
-  if (!verify("sha256", Buffer.from(body), publicKey.key, Buffer.from(header.signature, "base64")))
+  // Un header che dichiara un digest diverso da quello della chiave non vale.
+  if (publicKey.digest && publicKey.digest !== header.digest) throw new Error();
+  if (
+    !verify(
+      header.digest,
+      Buffer.from(body),
+      publicKey.key,
+      Buffer.from(header.signature, "base64"),
+    )
+  )
     throw new Error();
   return notificationSchema.parse(JSON.parse(body));
 }
