@@ -324,6 +324,14 @@ describe("accesso alla console", () => {
     expect(await page(cookie, "/admin/spazi/w-a", { sezione: "spazi", voce: "w-a" })).toMatchObject(
       { section: "spazi" },
     );
+    // La scheda dello spazio elenca i suoi negozi con lo stato visto dal venditore.
+    const space = await routeData(adminLoader, "/admin/spazi/w-a", {
+      cookie,
+      params: { sezione: "spazi", voce: "w-a" },
+    });
+    expect(space.page).toMatchObject({
+      workspace: { stores: [expect.objectContaining({ id: "s-a" })] },
+    });
     const overview = await routeData(adminLoader, "/admin", { cookie, params: {} });
     expect(overview.page).toMatchObject({ tasks: { total: 10 } });
     const quotas = await routeData(adminLoader, "/admin/quote", {

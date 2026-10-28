@@ -962,6 +962,10 @@ describe("collegamento della chat", () => {
     const token = await linkToken(seller.cookie);
     await setSwitch(env.DB, "telegram_sends", false, new Date(now));
     const api = bot();
+    // Senza token o con un token che non vale, a invii spenti, nemmeno l'aiuto parte.
+    await deliver("/start", 652, api.fetcher);
+    await deliver("/start sconosciuto", 653, api.fetcher);
+    expect(api.texts()).toEqual([]);
     await deliver(`/start ${token}`, 651, api.fetcher);
     expect(await link(seller.workspace)).toMatchObject({ chat_id: "651" });
     expect(api.texts()).toEqual([]);
