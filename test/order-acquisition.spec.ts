@@ -790,6 +790,76 @@ describe("acquisizione con il client", () => {
     expect(await acquire(resumed, "2026-09-02T00:30:00.000Z")).toBe("complete");
     expect(pages(resumed, "creationdate")).toEqual([25, 50]);
     expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
+
+    // Spente durante i recenti: la lettura non conta come sincronizzazione e non prosegue.
+    const recent = series("12-recente", 60, "2026-09-02T00:00:00.000Z").map((item, index) => ({
+      ...item,
+      lastModifiedDate: new Date(Date.parse("2026-09-02T00:40:00.000Z") + index).toISOString(),
+    }));
+    const paused = ebay({
+      orders: recent,
+      before: async (url) => {
+        if (
+          url.searchParams.get("filter")?.startsWith("lastmodifieddate:") &&
+          !url.searchParams.has("offset")
+        )
+          await setSwitch(env.DB, "ebay_calls", false, new Date("2026-09-02T01:00:00.000Z"));
+      },
+    });
+    expect(await acquire(paused, "2026-09-02T01:00:00.000Z")).toBe("budget");
+    expect(pages(paused, "lastmodifieddate")).toEqual([0]);
+    expect(calls(paused, "GetStore")).toBe(0);
+    expect(await syncState()).toMatchObject({
+      recent_next: expect.stringContaining("offset=25"),
+      last_success_at: "2026-09-02T00:30:00.000Z",
+    });
+
+    await setSwitch(env.DB, "ebay_calls", true, new Date("2026-09-02T01:05:00.000Z"));
+    const caught = ebay({ orders: recent });
+    expect(await acquire(caught, "2026-09-02T01:10:00.000Z")).toBe("complete");
+    expect(pages(caught, "lastmodifieddate")).toEqual([25, 50]);
+    expect(await syncState()).toMatchObject({
+      recent_next: null,
+      last_success_at: "2026-09-02T01:10:00.000Z",
+    });
+    expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(120);
+  });
+
+  it("con le chiamate eBay spente durante la lettura Trading la riprende dalla pagina successiva", async () => {
+    const requested: string[] = [];
+    const provider = ebay({
+      orders: [],
+      before: async (_, init) => {
+        const body = String(init?.body);
+        if (body.includes("<ModTimeFrom>") && body.includes("<PageNumber>1</PageNumber>"))
+          await setSwitch(env.DB, "ebay_calls", false, new Date("2026-09-02T00:00:00.000Z"));
+      },
+      fail: (_, init) => {
+        const body = String(init?.body);
+        if (!body.includes("<ModTimeFrom>")) return;
+        const page = /<PageNumber>(\d+)<\/PageNumber>/u.exec(body)![1]!;
+        requested.push(page);
+        return new Response(
+          `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>2</TotalNumberOfEntries></PaginationResult>` +
+            `<HasMoreOrders>${page === "1"}</HasMoreOrders><OrderArray><Order><OrderID>P-${page}</OrderID><OrderStatus>Active</OrderStatus>` +
+            `<CreatedTime>2026-09-01T10:00:00Z</CreatedTime><CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>` +
+            `<Total currencyID="EUR">1.00</Total><TransactionArray><Transaction><Item><ItemID>123</ItemID><Title>Sintetico</Title></Item>` +
+            `<TransactionID>${page}</TransactionID><QuantityPurchased>1</QuantityPurchased></Transaction></TransactionArray></Order></OrderArray></GetOrdersResponse>`,
+        );
+      },
+    });
+    expect(await acquire(provider)).toBe("budget");
+    expect(requested).toEqual(["1"]);
+    expect(
+      await env.DB.prepare("SELECT trading_cursor, trading_page FROM sync_state").first(),
+    ).toEqual({ trading_cursor: null, trading_page: 2 });
+
+    await setSwitch(env.DB, "ebay_calls", true, new Date("2026-09-02T00:05:00.000Z"));
+    expect(await acquire(provider, "2026-09-02T00:10:00.000Z")).toBe("complete");
+    expect(requested).toEqual(["1", "2"]);
+    expect(
+      await env.DB.prepare("SELECT trading_cursor, trading_page FROM sync_state").first(),
+    ).toEqual({ trading_cursor: "2026-09-02T00:00:00.000Z", trading_page: null });
   });
 
   it("ricomincia la passata se l'elenco cambia sotto la paginazione, senza saltare ordini", async () => {

@@ -345,8 +345,9 @@ export async function visibleOrderTallies(
       JSON.stringify(sorted),
     )
     .all<{ fiscal: FiscalSituation; satisfied: number; total: number }>();
-  return (starts.length ? starts : [""]).map((start) => {
-    const rank = sorted.indexOf(start) + 1;
+  // Senza istanti di partenza un solo conteggio, di grado zero: ogni ordine dei criteri.
+  const ranks = starts.length ? starts.map((start) => sorted.indexOf(start) + 1) : [0];
+  return ranks.map((rank) => {
     const tally: OrderTally = { orders: 0, locked: 0, available: 0 };
     for (const row of result.results) {
       if (row.satisfied < rank) continue;
@@ -756,9 +757,10 @@ export function listCriteria(
   const snapshot = new Date(Math.min(opened?.getTime() ?? now.getTime(), now.getTime()));
   const parsed = orderCriteria(query, now, plan, search);
   // Come gli altri filtri, un negozio che non è fra quelli filtrabili vale come «Tutti».
-  const filters: OrderCriteria = storeIds.includes(parsed.storeId ?? "")
-    ? parsed
-    : { ...parsed, storeId: undefined };
+  const filters: OrderCriteria = {
+    ...parsed,
+    storeId: storeIds.find((id) => id === parsed.storeId),
+  };
   return {
     opened,
     snapshot,
