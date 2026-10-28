@@ -1,4 +1,4 @@
-import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-import.server";
+import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-observation.server";
 import { buyerNameView } from "../contact";
 import { maxListedOrders } from "../orders/order-list";
 import { buyerTaxKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";

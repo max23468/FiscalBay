@@ -107,22 +107,24 @@ export function ebayOutages(
 const expiringNoticeMilliseconds = 30 * dayMilliseconds;
 const expiredReminderMilliseconds = 30 * dayMilliseconds;
 
-type OwnedStore = { name: string; disconnected_at: string | null };
+/**
+ * Negozio ?1 nello spazio dell'utente ?2. Ogni scrittura lo ripete nella propria istruzione: un
+ * trasferimento assistito che sposta il negozio dopo una lettura non lascia scrivere sul negozio
+ * ormai altrui.
+ */
+const ownedStoreSql = `SELECT s.id FROM ebay_stores s
+  JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
+  WHERE s.id = ?1 AND wm.user_id = ?2`;
 
-async function ownedStore(
-  db: D1Database,
-  userId: string,
-  storeId: string,
-): Promise<OwnedStore | null> {
-  return db
+/** Nome del negozio dell'utente, per la conferma dell'eliminazione. */
+async function ownedStoreName(db: D1Database, userId: string, storeId: string) {
+  const row = await db
     .prepare(
-      `SELECT ${storeNameSql("s")} AS name, s.disconnected_at
-         FROM ebay_stores s
-         JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
-        WHERE wm.user_id = ? AND s.id = ?`,
+      `SELECT ${storeNameSql("s")} AS name FROM ebay_stores s WHERE s.id IN (${ownedStoreSql})`,
     )
-    .bind(userId, storeId)
-    .first<OwnedStore>();
+    .bind(storeId, userId)
+    .first<{ name: string }>();
+  return row?.name ?? null;
 }
 
 type StoreRow = {
@@ -307,17 +309,25 @@ export async function pauseStore(
   storeId: string,
   now = new Date(),
 ): Promise<StoreActionResult> {
-  const store = await ownedStore(db, userId, storeId);
-  if (!store) return "not_found";
-  if (store.disconnected_at) return "invalid";
-  await db
-    .prepare(
-      `INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at)
-       SELECT id, 'manual', ? FROM ebay_stores WHERE id = ? AND disconnected_at IS NULL`,
-    )
-    .bind(now.toISOString(), storeId)
-    .run();
-  return "done";
+  // Pausa e lettura dello stato nella stessa transazione: un negozio non più proprio resta intatto.
+  const [, store] = await db.batch<{ disconnected: number }>([
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at)
+         SELECT id, 'manual', ?3 FROM ebay_stores
+          WHERE id IN (${ownedStoreSql}) AND disconnected_at IS NULL`,
+      )
+      .bind(storeId, userId, now.toISOString()),
+    db
+      .prepare(
+        `SELECT disconnected_at IS NOT NULL AS disconnected FROM ebay_stores
+          WHERE id IN (${ownedStoreSql})`,
+      )
+      .bind(storeId, userId),
+  ]);
+  const [row] = store!.results;
+  if (!row) return "not_found";
+  return row.disconnected ? "invalid" : "done";
 }
 
 /**
@@ -330,16 +340,22 @@ export async function resumeStore(
   storeId: string,
   now = new Date(),
 ): Promise<StoreActionResult> {
-  if (!(await ownedStore(db, userId, storeId))) return "not_found";
-  const [, { results }] = await db.batch([
+  const [owned, , inactive] = await db.batch([
+    db.prepare(ownedStoreSql).bind(storeId, userId),
     db
-      .prepare("DELETE FROM ebay_store_pauses WHERE store_id = ? AND reason = 'manual'")
-      .bind(storeId),
+      .prepare(
+        `DELETE FROM ebay_store_pauses WHERE store_id IN (${ownedStoreSql}) AND reason = 'manual'`,
+      )
+      .bind(storeId, userId),
     db
-      .prepare("SELECT 1 FROM ebay_store_pauses WHERE store_id = ? AND reason = 'inactivity'")
-      .bind(storeId),
+      .prepare(
+        `SELECT 1 FROM ebay_store_pauses
+          WHERE store_id IN (${ownedStoreSql}) AND reason = 'inactivity'`,
+      )
+      .bind(storeId, userId),
   ]);
-  if (results.length > 0) await resumeAfterInactivity(db, userId, now);
+  if (owned!.results.length === 0) return "not_found";
+  if (inactive!.results.length > 0) await resumeAfterInactivity(db, userId, now);
   return "done";
 }
 
@@ -376,17 +392,25 @@ export async function setAdminPause(
   return store ? "invalid" : "not_found";
 }
 
-function disconnectStatements(db: D1Database, storeId: string, at: string) {
+/** Scollegamento del negozio dell'utente; l'ultima istruzione tocca zero righe se non è suo. */
+function disconnectStatements(db: D1Database, userId: string, storeId: string, at: string) {
   return [
     // Senza la riga delle credenziali, ogni rinnovo o import partito prima non trova più il
     // consenso che aveva letto e non scrive.
-    db.prepare("DELETE FROM ebay_store_credentials WHERE store_id = ?").bind(storeId),
     db
-      .prepare("DELETE FROM ebay_store_pauses WHERE store_id = ? AND reason = 'manual'")
-      .bind(storeId),
+      .prepare(`DELETE FROM ebay_store_credentials WHERE store_id IN (${ownedStoreSql})`)
+      .bind(storeId, userId),
     db
-      .prepare("UPDATE ebay_stores SET disconnected_at = COALESCE(disconnected_at, ?) WHERE id = ?")
-      .bind(at, storeId),
+      .prepare(
+        `DELETE FROM ebay_store_pauses WHERE store_id IN (${ownedStoreSql}) AND reason = 'manual'`,
+      )
+      .bind(storeId, userId),
+    db
+      .prepare(
+        `UPDATE ebay_stores SET disconnected_at = COALESCE(disconnected_at, ?3)
+          WHERE id IN (${ownedStoreSql})`,
+      )
+      .bind(storeId, userId, at),
   ];
 }
 
@@ -400,9 +424,8 @@ export async function disconnectStore(
   storeId: string,
   now = new Date(),
 ): Promise<StoreActionResult> {
-  if (!(await ownedStore(db, userId, storeId))) return "not_found";
-  await db.batch(disconnectStatements(db, storeId, now.toISOString()));
-  return "done";
+  const results = await db.batch(disconnectStatements(db, userId, storeId, now.toISOString()));
+  return results.at(-1)!.meta.changes ? "done" : "not_found";
 }
 
 /**
@@ -417,24 +440,25 @@ export async function deleteStoreData(
   confirmation: string,
   now = new Date(),
 ): Promise<StoreActionResult> {
-  const store = await ownedStore(db, userId, storeId);
-  if (!store) return "not_found";
-  if (confirmation.trim() !== store.name) return "invalid";
+  const name = await ownedStoreName(db, userId, storeId);
+  if (name === null) return "not_found";
+  if (confirmation.trim() !== name) return "invalid";
   const at = now.toISOString();
-  await db.batch([
-    ...disconnectStatements(db, storeId, at),
+  const results = await db.batch([
+    ...disconnectStatements(db, userId, storeId, at),
     // Articoli, identificativi fiscali e grant seguono gli ordini.
-    db.prepare("DELETE FROM orders WHERE store_id = ?").bind(storeId),
-    db.prepare("DELETE FROM sync_state WHERE store_id = ?").bind(storeId),
-    db.prepare("DELETE FROM sync_runs WHERE store_id = ?").bind(storeId),
+    ...["orders", "sync_state", "sync_runs"].map((table) =>
+      db.prepare(`DELETE FROM ${table} WHERE store_id IN (${ownedStoreSql})`).bind(storeId, userId),
+    ),
     db
       .prepare(
-        `UPDATE ebay_stores SET data_deleted_at = ?1, store_name = NULL, store_logo_url = NULL,
+        `UPDATE ebay_stores SET data_deleted_at = ?3, store_name = NULL, store_logo_url = NULL,
           store_url = NULL, feedback_score = NULL, feedback_positive_percent = NULL,
           top_rated_seller = NULL, store_profile_read_at = NULL,
-          orders_deleted_through = MAX(COALESCE(orders_deleted_through, ?1), ?1) WHERE id = ?2`,
+          orders_deleted_through = MAX(COALESCE(orders_deleted_through, ?3), ?3)
+          WHERE id IN (${ownedStoreSql})`,
       )
-      .bind(at, storeId),
+      .bind(storeId, userId, at),
   ]);
-  return "done";
+  return results.at(-1)!.meta.changes ? "done" : "not_found";
 }

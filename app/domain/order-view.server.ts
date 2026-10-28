@@ -1,4 +1,4 @@
-import type { BuyerSnapshot } from "./order-import.server";
+import type { BuyerSnapshot } from "./order-observation.server";
 import type { VisibleOrder } from "./orders.server";
 import { contactsView } from "../contact";
 import { taxIdentifierType } from "../tax-quality";

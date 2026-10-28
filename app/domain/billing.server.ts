@@ -17,6 +17,7 @@ import {
   stripeListLimit,
   stripeSecretKey,
 } from "../integrations/stripe.server";
+import { cancelSubscription } from "./billing-subscriptions.server";
 import {
   closedSubscriptionStatuses,
   entitlementInForce,
@@ -24,7 +25,6 @@ import {
   openSubscriptionStatuses,
 } from "./grants.server";
 import {
-  cancelSubscription,
   isLifetimeSession,
   reconcileLifetime,
   reconcileLifetimeReservations,

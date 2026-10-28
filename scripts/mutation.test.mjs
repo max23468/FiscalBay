@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   consumerTests,
   criticalModule,
   evaluate,
   mutationConcurrency,
+  mutationCoverageGaps,
   mutationJobs,
   mutationMatrix,
   shardRanges,
@@ -140,6 +143,17 @@ describe("esito dei mutation test", () => {
     assert.equal(criticalModule("app/domain/xlsx.server.ts"), true);
     assert.equal(criticalModule("app/domain/export-configurations.server.ts"), true);
     assert.equal(criticalModule("app/integrations/telegram.server.ts"), true);
+    for (const file of [
+      "app/time.ts",
+      "app/sealed.server.ts",
+      "app/orders/order-list.ts",
+      "app/domain/work-timing.ts",
+      "app/domain/order-observation.server.ts",
+      "app/domain/store-marks.server.ts",
+      "app/domain/billing-subscriptions.server.ts",
+      "app/integrations/ebay/environment.server.ts",
+    ])
+      assert.equal(criticalModule(file), true, file);
     assert.deepEqual(mutationMatrix("", files), {
       target: [
         "app/domain/order-import.server.ts",
@@ -155,5 +169,29 @@ describe("esito dei mutation test", () => {
     });
     assert.throws(() => mutationMatrix("app/i18n.ts", files), /Modulo critico inesistente/u);
     assert.throws(() => mutationMatrix('{"target":["app/i18n.ts"]}', files), /non valida/u);
+  });
+  it("tiene sotto mutation le regole che i moduli critici importano", () => {
+    const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
+      encoding: "utf8",
+    })
+      .split("\n")
+      .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file))
+      .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+    assert.deepEqual(mutationCoverageGaps(files), []);
+    const extracted = [
+      ...files,
+      { path: "app/domain/estratta.server.ts", text: "export const regola = 1;" },
+      {
+        path: "app/domain/grants.server.ts",
+        text: 'import { regola } from "./estratta.server";',
+      },
+    ].filter(
+      (file, index, all) => all.findLastIndex((other) => other.path === file.path) === index,
+    );
+    assert.ok(
+      mutationCoverageGaps(extracted).includes(
+        "app/domain/grants.server.ts importa app/domain/estratta.server.ts, non critico",
+      ),
+    );
   });
 });

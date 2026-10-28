@@ -116,8 +116,9 @@ export function ebayApiUrl(configuration: EbayConfiguration, value: string, path
     throw new UpstreamError("invalid_response");
   }
   if (
-    url.protocol !== "https:" ||
     url.origin !== configuration.apiOrigin ||
+    // Stryker disable next-line ConditionalExpression: l'origine include lo schema, quindi ogni URL non HTTPS è già rifiutato dal confronto con `apiOrigin`.
+    url.protocol !== "https:" ||
     url.username ||
     url.password ||
     (url.pathname !== path && !url.pathname.startsWith(`${path}/`))

@@ -1,4 +1,5 @@
-import { recordOrderObservation, type OrderObservation } from "./order-import.server";
+import { recordOrderObservation } from "./order-import.server";
+import type { OrderObservation } from "./order-observation.server";
 import type { EbayAccess } from "../integrations/ebay/environment.server";
 import type { UpstreamError } from "../integrations/http.server";
 

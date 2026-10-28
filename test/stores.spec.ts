@@ -444,6 +444,39 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(await count("orders")).toBe(1);
   });
 
+  it("un negozio spostato in un altro spazio dopo la lettura resta intatto", async () => {
+    const seller = await linkedSeller("spostato@example.invalid");
+    await insertStorePause({ storeId: seller.storeId, reason: "manual" }).run();
+    await env.DB.prepare(
+      "INSERT INTO workspaces (id, name, created_at) VALUES ('spazio-ricevente', 'Ricevente', ?)",
+    )
+      .bind(now)
+      .run();
+    // L'eliminazione legge nome e proprietà prima delle scritture: il trasferimento arriva in mezzo.
+    const batch = env.DB.batch.bind(env.DB);
+    const spy = vi.spyOn(env.DB, "batch").mockImplementationOnce(async (statements) => {
+      await env.DB.prepare("UPDATE ebay_stores SET workspace_id = 'spazio-ricevente' WHERE id = ?")
+        .bind(seller.storeId)
+        .run();
+      return batch(statements);
+    });
+    expect(await deleteStoreData(env.DB, seller.userId, seller.storeId, "venditore")).toBe(
+      "not_found",
+    );
+    expect(spy).toHaveBeenCalledOnce();
+    spy.mockRestore();
+    expect(await resumeStore(env.DB, seller.userId, seller.storeId)).toBe("not_found");
+    expect(await pauseStore(env.DB, seller.userId, seller.storeId)).toBe("not_found");
+    expect(await disconnectStore(env.DB, seller.userId, seller.storeId)).toBe("not_found");
+    expect(await count("orders")).toBe(1);
+    expect(await count("sync_state")).toBe(1);
+    expect(await count("ebay_store_credentials")).toBe(1);
+    expect(await count("ebay_store_pauses")).toBe(1);
+    expect(
+      await env.DB.prepare("SELECT disconnected_at, data_deleted_at FROM ebay_stores").first(),
+    ).toEqual({ disconnected_at: null, data_deleted_at: null });
+  });
+
   it("un rinnovo o un import partiti prima dello scollegamento non ripristinano token né dati", async () => {
     const seller = await linkedSeller("concorrenza@example.invalid");
     const refreshed = vi.fn<typeof fetch>(async () => {

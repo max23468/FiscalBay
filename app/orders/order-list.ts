@@ -89,14 +89,13 @@ export function rememberedStore(cookie: string | null, storeIds: readonly string
     .find((part) => part.startsWith(`${rememberedStoreCookie}=`))
     ?.slice(rememberedStoreCookie.length + 1);
   if (!value) return null;
-  let id: string;
   try {
-    id = decodeURIComponent(value);
+    const id = decodeURIComponent(value);
+    // Il filtro del negozio compare soltanto con più negozi: con uno solo resterebbe invisibile.
+    return storeIds.length > 1 && storeIds.includes(id) ? id : null;
   } catch {
     return null;
   }
-  // Il filtro del negozio compare soltanto con più negozi: con uno solo resterebbe invisibile.
-  return storeIds.length > 1 && storeIds.includes(id) ? id : null;
 }
 
 /**
