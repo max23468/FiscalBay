@@ -18,6 +18,7 @@ import {
 import { accountDeletionPath } from "./app-links";
 import { logFailure } from "./errors";
 import { localizedPath } from "./i18n";
+import { maxPasswordLength, minPasswordLength } from "./limits";
 import { emailVerificationSeconds } from "./domain/email-change.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
@@ -242,6 +243,8 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
     },
     emailAndPassword: {
       enabled: true,
+      minPasswordLength,
+      maxPasswordLength,
       password: { hash: hashPassword, verify: verifyPassword },
       revokeSessionsOnPasswordReset: true,
       // Lo stesso tempo dei link di conferma, che l'email dichiara.

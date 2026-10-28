@@ -22,7 +22,7 @@ import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
 import { appCopy, loadCopy, pageTitle } from "./app-copy";
-import { appBase } from "./app-links";
+import { appBase, previewBase } from "./app-links";
 import { languageFromPath, localizedPath } from "./i18n";
 import { revalidateUnlessSnapshot } from "./orders/order-list";
 import { defaultDisplay, matchedShell } from "./preferences";
@@ -74,9 +74,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     </html>
   );
 }
-
-/** Radice dell'anteprima: le sue pagine usano gli stessi componenti dell'area reale. */
-const previewBase = "/anteprima";
 
 export default function App({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();

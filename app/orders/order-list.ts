@@ -1,5 +1,16 @@
 import type { ShouldRevalidateFunctionArgs } from "react-router";
 
+import type { OrderCriteria } from "../domain/orders.server";
+import {
+  fiscalSituations,
+  orderPeriods,
+  orderPeriodStart,
+  paymentStatuses,
+  premiumOrderPeriods,
+  shippingStatuses,
+} from "../view-models";
+import { searchTokens } from "./order-search";
+
 /** Ordini mostrati per ogni «Carica altri», nell'area reale e nell'anteprima. */
 export const ordersPageSize = 6;
 
@@ -86,4 +97,65 @@ export function rememberedStore(cookie: string | null, storeIds: readonly string
   }
   // Il filtro del negozio compare soltanto con più negozi: con uno solo resterebbe invisibile.
   return storeIds.length > 1 && storeIds.includes(id) ? id : null;
+}
+
+/**
+ * Criteri dell'elenco dall'indirizzo: un valore sconosciuto, o un'opzione del piano Premium in
+ * Free, vale come «Tutti». La ricerca, già decifrata, diventa un elenco di parole.
+ */
+export function orderCriteria(
+  search: URLSearchParams,
+  now: Date,
+  plan: "free" | "premium",
+  query: string | null = null,
+): OrderCriteria {
+  const known = <Value extends string>(name: string, values: readonly Value[]) => {
+    const value = search.get(name);
+    return values.find((candidate) => candidate === value);
+  };
+  const period = known(
+    "periodo",
+    orderPeriods.filter((value) => plan === "premium" || !premiumOrderPeriods.has(value)),
+  );
+  const tokens = searchTokens(query);
+  const value = (name: string) => {
+    const raw = search.get(name);
+    return raw && raw.length <= 64 ? raw : undefined;
+  };
+  return {
+    storeId: value("negozio"),
+    since: period ? orderPeriodStart(period, now).toISOString() : undefined,
+    payment: known("pagamento", paymentStatuses),
+    shipping: known("spedizione", shippingStatuses),
+    fiscal: known("fiscale", fiscalSituations),
+    tokens: tokens.length ? tokens : undefined,
+  };
+}
+
+/**
+ * Criteri dell'elenco aperto, uguali per la pagina Ordini e per l'esportazione: filtri
+ * dall'indirizzo, negozio soltanto fra quelli filtrabili e istantanea dell'elenco. Senza
+ * istantanea l'elenco si apre adesso.
+ */
+export function listCriteria(
+  query: URLSearchParams,
+  now: Date,
+  plan: "free" | "premium",
+  storeIds: readonly string[],
+  search: string | null,
+) {
+  const opened = snapshotInstant(query.get(snapshotParam));
+  const snapshot = new Date(Math.min(opened?.getTime() ?? now.getTime(), now.getTime()));
+  const parsed = orderCriteria(query, now, plan, search);
+  // Come gli altri filtri, un negozio che non è fra quelli filtrabili vale come «Tutti».
+  const filters: OrderCriteria = {
+    ...parsed,
+    storeId: storeIds.find((id) => id === parsed.storeId),
+  };
+  return {
+    opened,
+    snapshot,
+    filters,
+    criteria: { ...filters, listedBefore: snapshot.toISOString() } satisfies OrderCriteria,
+  };
 }

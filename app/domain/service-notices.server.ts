@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import type { Language } from "../i18n";
 import type { NotificationView } from "../view-models";
+import { maxNoticeBody, maxNoticeTitle } from "../limits";
 import { dayMilliseconds } from "../time";
 
 /**
@@ -18,10 +19,10 @@ const text = (max: number) => z.string().trim().min(1).max(max);
 export const serviceNoticeSchema = z
   .object({
     tone: z.enum(["info", "warning"]),
-    titleIt: text(120),
-    bodyIt: text(1000),
-    titleEn: text(120),
-    bodyEn: text(1000),
+    titleIt: text(maxNoticeTitle),
+    bodyIt: text(maxNoticeBody),
+    titleEn: text(maxNoticeTitle),
+    bodyEn: text(maxNoticeBody),
     startsAt: z.iso.datetime(),
     endsAt: z.iso.datetime(),
   })

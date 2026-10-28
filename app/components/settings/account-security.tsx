@@ -10,7 +10,8 @@ import { formatDate } from "../../format";
 import { ConfirmIdentity } from "./confirm-identity";
 import { EmailChange } from "./security-email";
 import { AddPasskey, PasskeyRename } from "./security-passkeys";
-import { MethodAction, MethodRow, SecurityGroup } from "./security-rows";
+import { Group } from "./controls";
+import { MethodAction, MethodRow } from "./security-rows";
 import { SessionList } from "./security-sessions";
 
 /** Categoria Sicurezza delle Impostazioni, che riceve anche le sue azioni. */
@@ -89,7 +90,7 @@ export function AccountSecurity({
   const passkeys = methods.passkeys;
   return (
     <div
-      className="grid gap-4"
+      className="grid gap-6"
       // Le modifiche protette passano prima dalla conferma dell'identità, poi ripartono.
       onSubmitCapture={(event) => {
         const form = event.target as HTMLFormElement;
@@ -121,7 +122,7 @@ export function AccountSecurity({
         />
       ) : null}
       <EmailChange email={email} actionPath={actionPath} pendingEmail={pendingEmail} />
-      <SecurityGroup id="security-methods" title={settings.security.methods}>
+      <Group id="security-methods" title={settings.security.methods}>
         {lastMethod ? (
           <p role="status" className="text-sm text-warning">
             {settings.security.addAlternative}
@@ -198,7 +199,7 @@ export function AccountSecurity({
           )}
         </ul>
         {passkeys.length > 0 ? <div className="max-w-xl">{addPasskey}</div> : null}
-      </SecurityGroup>
+      </Group>
       <SessionList sessions={sessions} now={now} actionPath={actionPath} />
     </div>
   );

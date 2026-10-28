@@ -4,7 +4,7 @@ import { seal, unseal } from "../../sealed.server";
 import { UpstreamError, upstreamJson } from "../http.server";
 
 import type { EbayEnvironment } from "../../view-models";
-import { ebayConfiguration } from "./environment.server";
+import { basicAuthorization, ebayConfiguration } from "./environment.server";
 
 export type SellerTokens = {
   accessToken: string;
@@ -151,7 +151,7 @@ export async function refreshStoreToken(input: {
     token = await upstreamJson(input.fetcher, configuration.tokenUrl, refreshSchema, {
       method: "POST",
       headers: {
-        authorization: `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`,
+        authorization: basicAuthorization(configuration),
         "content-type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),

@@ -1,12 +1,20 @@
 import { Link } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
-import { Label } from "~/components/ui/label";
+import { Field, FieldLabel } from "~/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import type { AuditOutcome } from "../../copy/admin-copy";
 import type { AbuseSignal } from "../../domain/abuse-review.server";
 import type { AuditRow } from "../../domain/admin-audit.server";
 import type { ServiceNotice } from "../../domain/service-notices.server";
+import { maxNoticeBody, maxNoticeTitle } from "../../limits";
 import { ActionForm, DataTable, Disclosure, Panel, TextField } from "./kit";
 import { localValue, useAdmin } from "./use-admin";
 
@@ -162,44 +170,53 @@ export function AbuseView({ signals }: { signals: AbuseSignal[] }) {
 function NoticeFields({ notice }: { notice?: ServiceNotice }) {
   const { t } = useAdmin();
   const n = t.notices;
+  const prefix = notice?.id ?? "new";
   const area = (name: string, label: string, value?: string) => (
-    <div className="grid gap-1.5">
-      <Label htmlFor={`${notice?.id ?? "new"}-${name}`}>{label}</Label>
+    <Field>
+      <FieldLabel htmlFor={`${prefix}-${name}`}>{label}</FieldLabel>
       <Textarea
-        id={`${notice?.id ?? "new"}-${name}`}
+        id={`${prefix}-${name}`}
         name={name}
         required
-        maxLength={1000}
+        maxLength={maxNoticeBody}
         defaultValue={value}
       />
-    </div>
+    </Field>
   );
+  const tones = (["info", "warning"] as const).map((tone) => ({
+    value: tone,
+    label: n.tone[tone],
+  }));
   return (
     <div className="grid gap-3">
-      <Label className="grid w-fit gap-1.5">
-        {n.toneLabel}
-        <select
-          name="tono"
-          defaultValue={notice?.tone ?? "info"}
-          className="h-9 rounded-lg border border-input bg-card px-3 text-sm font-normal"
-        >
-          <option value="info">{n.tone.info}</option>
-          <option value="warning">{n.tone.warning}</option>
-        </select>
-      </Label>
+      <Field className="w-fit">
+        <FieldLabel htmlFor={`${prefix}-tono`}>{n.toneLabel}</FieldLabel>
+        <Select items={tones} name="tono" defaultValue={notice?.tone ?? "info"}>
+          <SelectTrigger id={`${prefix}-tono`}>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {tones.map((tone) => (
+              <SelectItem key={tone.value} value={tone.value}>
+                {tone.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
       <div className="grid gap-3 md:grid-cols-2">
         <TextField
           label={n.titleIt}
           name="titolo_it"
           required
-          maxLength={120}
+          maxLength={maxNoticeTitle}
           defaultValue={notice?.titleIt}
         />
         <TextField
           label={n.titleEn}
           name="titolo_en"
           required
-          maxLength={120}
+          maxLength={maxNoticeTitle}
           defaultValue={notice?.titleEn}
         />
         {area("testo_it", n.bodyIt, notice?.bodyIt)}

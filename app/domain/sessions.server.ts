@@ -2,6 +2,7 @@ import { createAuth, sessionPolicy } from "../auth.server";
 import { deviceName } from "../account/device-name";
 import type { Language } from "../i18n";
 import { queueResponseCookies } from "../response-cookies.server";
+import { elapsedMs } from "../time";
 
 /** Campi della sessione Better Auth usati qui, compresi quelli aggiunti da FiscalBay. */
 export interface AuthSession {
@@ -25,13 +26,9 @@ export async function readSession(env: Env, request: Request) {
 /** Durata massima della sessione admin dopo la conferma con passkey. */
 export const adminSessionMaxAge = 12 * 3_600_000;
 
-function ageMs(session: AuthSession, now: Date): number {
-  return now.getTime() - new Date(session.session.createdAt).getTime();
-}
-
 /** Accesso delle ultime 24 ore, come la soglia `freshAge` delle route sensibili di Better Auth. */
 export function recentSignIn(session: AuthSession, now = new Date()): boolean {
-  return ageMs(session, now) < sessionPolicy.freshAge * 1000;
+  return elapsedMs(session.session.createdAt, now) < sessionPolicy.freshAge * 1000;
 }
 
 /**
@@ -44,7 +41,10 @@ export function adminAccess(
   now = new Date(),
 ): "none" | "verify" | "granted" {
   if (!session?.user.admin) return "none";
-  if (!session.session.passkeyVerified || ageMs(session, now) >= adminSessionMaxAge) {
+  if (
+    !session.session.passkeyVerified ||
+    elapsedMs(session.session.createdAt, now) >= adminSessionMaxAge
+  ) {
     return "verify";
   }
   return "granted";

@@ -15,6 +15,14 @@ export function appHref({ language, base }: AppLinks, path = "") {
 /** Radice dell'area riservata: il resto del dominio è il sito pubblico. */
 export const appBase = "/app";
 
+/** Radice dell'anteprima: le sue pagine usano gli stessi componenti dell'area reale. */
+export const previewBase = "/anteprima";
+
+export const previewOrdersPath = `${previewBase}/ordini`;
+
+/** Impostazioni dell'anteprima, con le stesse sezioni dell'area reale. */
+export const previewSettingsPath = `${previewBase}/impostazioni`;
+
 /** Accesso, registrazione e recupero, fuori dall'area riservata. */
 export const accessPath = "/accesso";
 

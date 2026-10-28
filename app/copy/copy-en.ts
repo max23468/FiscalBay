@@ -1,6 +1,10 @@
 import { legalDate, plural } from "./format";
 import type { AppCopy } from "./copy-it";
 
+const registrationRestricted = "Private test environment. Registration requires prior approval.";
+
+const inactivityTitle = "Reading paused for inactivity";
+
 export const en: AppCopy = {
   common: {
     cancel: "Cancel",
@@ -59,7 +63,7 @@ export const en: AppCopy = {
       exportReadyBody: (file) => `${file}: download it from Settings › Export.`,
       exportFailedTitle: "File not created",
       exportFailedBody: (file) => `${file}: create it again from Settings › Export.`,
-      inactivityTitle: "Reading paused for inactivity",
+      inactivityTitle,
       inactivityBody:
         "On the Free plan reading stops after 30 days without sign-ins and 7 days' notice. Resume it from Stores.",
     },
@@ -72,12 +76,11 @@ export const en: AppCopy = {
     whatsNewTitle: "What’s new in FiscalBay",
     signOut: "Sign out",
     close: "Close",
-    back: "Back",
   },
   preview: {
     label: "Preview with sample data",
     scenario: "Scenario",
-    note: "Actions here are simulated and use sample data.",
+    note: "Actions are simulated.",
     simulated: "Preview: this action is simulated.",
     signOut: "Preview: signing out is simulated.",
   },
@@ -176,7 +179,6 @@ export const en: AppCopy = {
     moreActions: (id) => `More actions for order ${id}`,
     openOnEbay: "Open on eBay",
     exportOrder: "Export order",
-    items: (count) => `${count} ${plural(count, "item", "items")}`,
     itemsMore: (count) => `+ ${count} more ${plural(count, "item", "items")}`,
     quantity: "Quantity",
     newOrders: (count) => `${count} new ${plural(count, "order", "orders")}`,
@@ -202,7 +204,7 @@ export const en: AppCopy = {
     },
     missingHint: "eBay does not provide the tax code for this order.",
     checkingHint: "Checking the tax code.",
-    errorHint: "We could not get the tax code from eBay. Try again shortly.",
+    errorHint: "We could not get the tax code from eBay. Try again later.",
     errorHintEbayDown:
       "We could not get the tax code from eBay. You can try again once eBay responds.",
     retry: "Try again",
@@ -310,7 +312,6 @@ export const en: AppCopy = {
     source: (time) => `Source: eBay, read on ${time}`,
     buyer: "Buyer",
     username: "eBay username",
-    shipping: "Shipping",
     recipient: "Recipient",
     summary: "Order",
     total: "Total",
@@ -348,7 +349,7 @@ export const en: AppCopy = {
     pausedByPlan: "Paused on the Free plan",
     pausedByInactivity: "Paused for inactivity",
     pausedByAdmin: "Paused by support",
-    inactivityTitle: "Reading paused for inactivity",
+    inactivityTitle,
     inactivityBody:
       "You did not open FiscalBay for 30 days or during the 7 days' notice, so on the Free plan reading from eBay stopped. Resume it to recover the orders still within your plan window.",
     inactivityResume: "Resume reading",
@@ -358,7 +359,6 @@ export const en: AppCopy = {
     notificationsHeldHint: "Paused until sync resumes",
     notificationsFree: "Telegram notifications for new orders are available with Premium.",
     freeLimit: "The Free plan includes one active store.",
-    open: (name) => `Open ${name}`,
     sectionConnection: "Connection",
     sectionSync: "Sync",
     sectionNotifications: "Notifications",
@@ -477,7 +477,6 @@ export const en: AppCopy = {
     plan: {
       currentPlan: "Current plan",
       unlockConfirmation: "Ask before unlocking an order",
-      unlockConfirmationHint: "Unlocking several orders always asks for confirmation.",
       free: "Free",
       premium: "Premium",
       freeSummary: "One active store, the last 30 days of orders, CSV.",
@@ -489,8 +488,7 @@ export const en: AppCopy = {
       cycleEnds: (date) => `The cycle renews on ${date}.`,
       nextCycleLimit: (limit) => `The next cycle will have ${limit} unlocks.`,
       trialTitle: "Try Premium for 14 days",
-      trialBody:
-        "No card and no automatic renewal: when it ends you go back to Free. Orders whose data arrived during the trial stay unlocked.",
+      trialBody: "No card and no automatic renewal: when it ends you go back to Free.",
       trialAction: "Start trial",
       trialStarted: "Premium trial started.",
       trialUnavailable: "The Premium trial is not available for this account.",
@@ -507,9 +505,7 @@ export const en: AppCopy = {
       priceMonthly: (price) => `${price} per month`,
       priceAnnual: (price) => `${price} per year`,
       priceLifetime: (price) => `${price} one-off`,
-      priceMonthlyNote: "Renews every month.",
       priceAnnualNote: (months) => `12 months for the price of ${months}.`,
-      priceLifetimeNote: "One-off payment, no renewals.",
       priceGross: (price) => `${price} with 22% Italian VAT`,
       lifetimeSeats: (left, total) => `${left} of ${total} places left`,
       lifetimeCredit: (amount: string) => `Less ${amount} for the unused paid period.`,
@@ -522,7 +518,7 @@ export const en: AppCopy = {
       lifetimeUpgradeTitle: "Switch to lifetime",
       lifetimeProcessingTitle: "Activating lifetime Premium",
       lifetimeProcessingBody:
-        "Lifetime Premium starts as soon as Stripe confirms the payment; until then your plan stays as it is. Receipts and invoices come from Stripe.",
+        "Lifetime Premium starts as soon as Stripe confirms the payment; until then your plan stays as it is.",
       trialPurchaseNote:
         "With monthly or annual you don't pay today: your trial days stay and the first charge comes when the trial ends.",
       trialEndingPurchaseNote:
@@ -538,14 +534,13 @@ export const en: AppCopy = {
       trialChosenCancelledBody: (date: string) =>
         `No charge: on ${date}, when the trial ends, you go back to Free. Until then you can reactivate it on Stripe.`,
       pricesNote:
-        "Prices exclude VAT. Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
+        "Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
       purchaseNeedsSync: "You can buy Premium once a store has been read successfully.",
       purchaseClosed: "New Premium purchases and trials are paused for now.",
       checkoutUnavailable: "Payment is not available right now. Try again later.",
-      checkoutCovered: "Your workspace already has Premium.",
+      checkoutCovered: "Your account already has Premium.",
       checkoutProcessingTitle: "Activating Premium",
-      checkoutProcessingBody:
-        "Premium starts as soon as Stripe confirms the payment. Stripe sends the receipt and invoice.",
+      checkoutProcessingBody: "Premium starts as soon as Stripe confirms the payment.",
       checkoutCancelled: "Payment cancelled. You have not been charged.",
       buyPeriod: {
         monthly: "Choose monthly",
@@ -653,7 +648,7 @@ export const en: AppCopy = {
       exportContextBack: "Back to orders",
       exportCreate: "Create file",
       exportCreated: "Preview: no file created.",
-      exportFailed: "File not created. Try again shortly.",
+      exportFailed: "File not created. Try again later.",
       exportEmpty: "No orders to export with these choices.",
       exportGone: "File no longer available. Create it again.",
       exportQueued: "File being prepared: the bell will tell you when it is ready.",
@@ -686,7 +681,7 @@ export const en: AppCopy = {
       exportConfigInvalid: "Invalid configuration.",
       exportConfigFull: (max) =>
         `You can save up to ${max} configurations: delete one to save another.`,
-      exportConfigFailed: "Configuration not saved. Try again shortly.",
+      exportConfigFailed: "Configuration not saved. Try again later.",
       file: {
         name: "fiscalbay-orders",
         sheet: "Orders",
@@ -797,7 +792,7 @@ export const en: AppCopy = {
       accountExport: "Export account data",
       accountExportBody: "Profile, stores and settings in a downloadable file.",
       accountExportAction: "Request export",
-      accountExportFailed: "Export failed. Try again shortly.",
+      accountExportFailed: "Export failed. Try again later.",
       deleteAccount: "Delete account",
       deleteAccountBody:
         "Deletes the account with its stores, orders, settings and exported files. First you confirm your identity, then the link you receive by email.",
@@ -813,7 +808,7 @@ export const en: AppCopy = {
         `We sent a link to ${email}. Open it within one hour in this browser to confirm the deletion.`,
       deleteAccountMismatch: "The address does not match the account’s.",
       deleteAccountReauth: "Confirm your identity again to delete the account.",
-      deleteAccountFailed: "The link could not be sent. Try again shortly.",
+      deleteAccountFailed: "The link could not be sent. Try again later.",
     },
     support: {
       faq: "Frequently asked questions",
@@ -879,7 +874,7 @@ export const en: AppCopy = {
       },
       send: "Send",
       sent: (email) => `Request sent. We will reply to ${email}.`,
-      sendFailed: "Sending failed. Try again in a few minutes or write to the address below.",
+      sendFailed: "Sending failed. Try again later or write to the address below.",
       limited:
         "You have already sent several requests in the last 24 hours. To add more, write to the address below.",
       invalid: "Choose a topic and write a message of up to 4,000 characters.",
@@ -916,7 +911,7 @@ export const en: AppCopy = {
     home: "Back to FiscalBay",
     unexpected: "An unexpected error occurred. Try again later.",
     unavailableTitle: "Service unavailable",
-    unavailable: "FiscalBay cannot read your account data right now. Try again in a few minutes.",
+    unavailable: "FiscalBay cannot read your account data right now. Try again later.",
     retry: "Try again",
     unconfirmed:
       "The outcome could not be confirmed. Reload the page to check its state before trying again.",
@@ -943,7 +938,7 @@ export const en: AppCopy = {
     title: "Sign in incomplete",
     registrationRestricted: {
       title: "Registration restricted",
-      body: "Private test environment. Registration requires prior approval.",
+      body: registrationRestricted,
     },
     body: "Try again with the sign-in method you usually use.",
     back: "Back to FiscalBay",
@@ -1060,7 +1055,7 @@ export const en: AppCopy = {
     signIn: "Sign in",
     signUp: "Create account",
     signUpBody: "It only takes a few details to get started.",
-    registrationRestricted: "Private test environment. Registration requires prior approval.",
+    registrationRestricted,
     firstName: "First name",
     requiredFields: "* Required field.",
     lastName: "Last name",
@@ -1164,7 +1159,7 @@ export const en: AppCopy = {
       errore: "Could not complete the operation. Check your email and password.",
       registrato: "Check your inbox: we sent you a link to confirm your email address and sign in.",
       registrazione: "Account not created. Check your email address and password.",
-      autorizzazione: "Private test environment. Registration requires prior approval.",
+      autorizzazione: registrationRestricted,
       termini: "To continue, accept the Terms of service.",
       dati: "Enter your first and last name and, for a business, the company name.",
       "troppi-tentativi": "Too many attempts. Try again in a few minutes.",

@@ -1,4 +1,4 @@
-import { base64Url } from "./sealed.server";
+import { base64Url, derivedKey } from "./sealed.server";
 import type { TimedPage } from "./page-timing";
 
 /**
@@ -12,27 +12,11 @@ const ticketLifetime = 15 * 60_000;
 /** Scarto ammesso fra gli orologi delle istanze del Worker. */
 const clockSkew = 60_000;
 
-async function ticketKey(secret: string) {
-  const material = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    "HKDF",
-    false,
-    ["deriveKey"],
-  );
-  return crypto.subtle.deriveKey(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: new Uint8Array(),
-      info: new TextEncoder().encode("fiscalbay/page-timing"),
-    },
-    material,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-}
+const ticketKey = (secret: string) =>
+  derivedKey(secret, "fiscalbay/page-timing", { name: "HMAC", hash: "SHA-256" }, [
+    "sign",
+    "verify",
+  ]);
 
 async function signature(secret: string, payload: string) {
   const signed = await crypto.subtle.sign(

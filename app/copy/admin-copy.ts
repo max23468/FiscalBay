@@ -1,5 +1,8 @@
 import type { Language } from "../i18n";
 
+/** La stessa azione nell'anomalia della panoramica e nel negozio dello spazio. */
+const retryDetails = { it: "Riprova i dettagli", en: "Retry details" };
+
 /**
  * Testi della console amministrativa, separati da quelli dell’area dei venditori: soltanto le
  * pagine della console li scaricano.
@@ -120,7 +123,6 @@ const it = {
       out_of_range: "Fuori intervallo",
       foreign_origin: "Origine estranea",
     },
-    target: { workspace: "Spazio", store: "Negozio" },
   },
   summary: {
     ok: "Tutto regolare",
@@ -153,10 +155,6 @@ const it = {
     searchPlaceholder: "Email, nome, ragione sociale, spazio o negozio",
     more: "Altri risultati",
     none: "Nessun elemento.",
-    yes: "Sì",
-    no: "No",
-    open: "Apri",
-    unavailable: "Lettura non riuscita. Riprova più tardi.",
     invalid: "Dati non validi: controlla i campi.",
     notFound: "Elemento non trovato o non più disponibile.",
     failed: "Operazione non riuscita. Riprova più tardi.",
@@ -164,7 +162,6 @@ const it = {
   },
   severity: { p1: "Grave", p2: "Da risolvere", p3: "Da controllare" },
   overview: {
-    title: "Panoramica",
     since: (when: string) => `Dal ${when}`,
     count: (count: number) => (count === 1 ? "1 occorrenza" : `${count} occorrenze`),
     kinds: {
@@ -192,7 +189,7 @@ const it = {
       order_details: {
         title: "Dettagli degli ordini non letti",
         consequence: "Alcuni ordini restano senza articoli o dati fiscali completi.",
-        action: "Riprova i dettagli",
+        action: retryDetails.it,
       },
       task_stalled: {
         title: "Lavori periodici fermi",
@@ -228,7 +225,6 @@ const it = {
     },
   },
   accounts: {
-    title: "Account",
     email: "Email",
     name: "Nome",
     company: "Ragione sociale",
@@ -288,14 +284,13 @@ const it = {
         reconnect_required: "Da ricollegare",
         disconnected: "Scollegato",
       },
-      pauses: "Pause",
       lastSync: "Ultima lettura",
       consentUntil: "Consenso eBay fino al",
       never: "Mai",
       sync: "Sincronizza",
       pause: "Pausa assistenza",
       resume: "Togli pausa assistenza",
-      retryDetails: "Riprova dettagli",
+      retryDetails: retryDetails.it,
       freeStore: "Rendi negozio attivo del Free",
       transfer: "Trasferisci",
     },
@@ -383,18 +378,12 @@ const it = {
     },
   },
   stores: {
-    title: "Negozi",
     problems: "Soltanto con problemi",
     store: "Negozio",
     workspace: "Spazio",
-    environment: "Ambiente",
     consent: { valid: "Valido", rejected: "Rifiutato", expired: "Scaduto", none: "Assente" },
     state: "Stato",
-    failures: "Letture fallite",
     orders: "Ordini",
-    details: "Dettagli in errore",
-    disconnected: "Scollegato",
-    removed: "Dati eliminati",
     syncing: "In lettura",
     problemsColumn: "Problemi",
     failedReads: "Ultime letture non riuscite",
@@ -402,7 +391,6 @@ const it = {
       count === 1 ? "1 dettaglio non letto" : `${count} dettagli non letti`,
   },
   jobs: {
-    title: "Lavori",
     tasks: "Lavori periodici",
     task: "Lavoro",
     every: (minutes: number) => (minutes >= 60 ? `Ogni ${minutes / 60} h` : `Ogni ${minutes} min`),
@@ -420,11 +408,9 @@ const it = {
     resume: "Riprendi",
   },
   quotas: {
-    title: "Quote eBay",
     failed:
       "Lettura delle quote non riuscita: i valori non sono disponibili, non sono quote piene né vuote.",
     environment: { production: "Production", sandbox: "Sandbox" },
-    api: "API",
     call: "Chiamata",
     limit: "Limite",
     used: "Consumo",
@@ -490,7 +476,6 @@ const it = {
     wallP50: "Durata p50",
   },
   commerce: {
-    title: "Commerciale",
     seats: "Posti lifetime occupati",
     seatsNote: (sold: number, gifted: number, reserved: number) =>
       `Venduti ${sold} · omaggio ${gifted}${reserved ? ` · prenotati ${reserved}` : ""}`,
@@ -527,7 +512,6 @@ const it = {
     end: "Termina",
   },
   abuse: {
-    title: "Antiabuso",
     kinds: {
       company: "Stessa ragione sociale",
       store_name: "Stesso nome del negozio eBay",
@@ -807,7 +791,6 @@ const en: AdminCopy = {
       out_of_range: "Out of range",
       foreign_origin: "Foreign origin",
     },
-    target: { workspace: "Space", store: "Store" },
   },
   summary: {
     ok: "All clear",
@@ -840,10 +823,6 @@ const en: AdminCopy = {
     searchPlaceholder: "Email, name, company, space or store",
     more: "More results",
     none: "Nothing here.",
-    yes: "Yes",
-    no: "No",
-    open: "Open",
-    unavailable: "Read failed. Try again later.",
     invalid: "Invalid data: check the fields.",
     notFound: "Item not found or no longer available.",
     failed: "Operation failed. Try again later.",
@@ -851,7 +830,6 @@ const en: AdminCopy = {
   },
   severity: { p1: "Critical", p2: "To fix", p3: "To check" },
   overview: {
-    title: "Overview",
     since: (when: string) => `Since ${when}`,
     count: (count: number) => (count === 1 ? "1 occurrence" : `${count} occurrences`),
     kinds: {
@@ -879,7 +857,7 @@ const en: AdminCopy = {
       order_details: {
         title: "Order details not read",
         consequence: "Some orders lack items or complete tax data.",
-        action: "Retry details",
+        action: retryDetails.en,
       },
       task_stalled: {
         title: "Periodic jobs stalled",
@@ -916,7 +894,6 @@ const en: AdminCopy = {
     },
   },
   accounts: {
-    title: "Accounts",
     email: "Email",
     name: "Name",
     company: "Company",
@@ -976,14 +953,13 @@ const en: AdminCopy = {
         reconnect_required: "Needs reconnecting",
         disconnected: "Disconnected",
       },
-      pauses: "Pauses",
       lastSync: "Last read",
       consentUntil: "eBay consent until",
       never: "Never",
       sync: "Sync",
       pause: "Support pause",
       resume: "Lift support pause",
-      retryDetails: "Retry details",
+      retryDetails: retryDetails.en,
       freeStore: "Make active Free store",
       transfer: "Transfer",
     },
@@ -1067,18 +1043,12 @@ const en: AdminCopy = {
     },
   },
   stores: {
-    title: "Stores",
     problems: "Only with problems",
     store: "Store",
     workspace: "Space",
-    environment: "Environment",
     consent: { valid: "Valid", rejected: "Rejected", expired: "Expired", none: "None" },
     state: "State",
-    failures: "Failed reads",
     orders: "Orders",
-    details: "Failed details",
-    disconnected: "Disconnected",
-    removed: "Data deleted",
     syncing: "Reading",
     problemsColumn: "Problems",
     failedReads: "Latest reads failed",
@@ -1086,7 +1056,6 @@ const en: AdminCopy = {
       count === 1 ? "1 detail not read" : `${count} details not read`,
   },
   jobs: {
-    title: "Jobs",
     tasks: "Periodic jobs",
     task: "Job",
     every: (minutes: number) =>
@@ -1105,10 +1074,8 @@ const en: AdminCopy = {
     resume: "Resume",
   },
   quotas: {
-    title: "eBay quotas",
     failed: "Quota read failed: values are unavailable, neither full nor empty.",
     environment: { production: "Production", sandbox: "Sandbox" },
-    api: "API",
     call: "Call",
     limit: "Limit",
     used: "Used",
@@ -1174,7 +1141,6 @@ const en: AdminCopy = {
     wallP50: "Duration p50",
   },
   commerce: {
-    title: "Commercial",
     seats: "Lifetime seats taken",
     seatsNote: (sold: number, gifted: number, reserved: number) =>
       `Sold ${sold} · gift ${gifted}${reserved ? ` · reserved ${reserved}` : ""}`,
@@ -1211,7 +1177,6 @@ const en: AdminCopy = {
     end: "End now",
   },
   abuse: {
-    title: "Abuse",
     kinds: {
       company: "Same company name",
       store_name: "Same eBay store name",

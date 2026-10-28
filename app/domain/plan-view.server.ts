@@ -1,8 +1,56 @@
 import { lapsedStatuses, pricePromiseMs } from "./billing.server";
-import { openSubscriptionStatuses } from "./grants.server";
+import { accountCoverage, openSubscriptionStatuses, type orderAllowance } from "./grants.server";
 import { sqlList } from "./sql.server";
 import { stripeEnvironment } from "../integrations/stripe.server";
 import type { AccountView } from "../view-models";
+
+type Allowance = Awaited<ReturnType<typeof orderAllowance>>;
+
+/**
+ * Piano, prova, sospensione del Free e sblocchi del ciclo, uguali in Ordini e nel Piano salvo la
+ * quota. Il Piano la mostra soltanto con un ciclo avviato, con la quota del ciclo seguente se
+ * cambia. Negli Ordini la quota assente vale «senza limite», cioè Premium: un Free senza ciclo
+ * o in lista d'attesa ha zero sblocchi. `waitlisted` viene dal profilo dell'utente, noto anche
+ * prima che lo spazio nasca con il primo negozio.
+ */
+export function planView(
+  allowance: Allowance,
+  page: "orders" | "plan",
+  waitlisted = false,
+): Pick<
+  AccountView,
+  "plan" | "trialAvailable" | "waitlisted" | "freeSuspended" | "trial" | "quota"
+> {
+  const premium = !!allowance?.premium;
+  const cycle = allowance?.cycle;
+  const quota: AccountView["quota"] =
+    page === "orders"
+      ? premium
+        ? undefined
+        : allowance?.waiting
+          ? { used: 0, limit: 0, cycleEndsAt: null }
+          : {
+              used: cycle?.used ?? 0,
+              limit: cycle?.quota ?? 0,
+              cycleEndsAt: cycle?.ends_at ?? null,
+            }
+      : !premium && cycle
+        ? {
+            used: cycle.used,
+            limit: cycle.quota,
+            cycleEndsAt: cycle.ends_at,
+            ...(cycle.next_quota !== cycle.quota ? { nextLimit: cycle.next_quota } : {}),
+          }
+        : undefined;
+  return {
+    plan: premium ? "premium" : "free",
+    trialAvailable: allowance?.trialAvailable ?? false,
+    ...(waitlisted && !premium ? { waitlisted: true } : {}),
+    ...(allowance?.suspended ? { freeSuspended: true } : {}),
+    ...accountCoverage(allowance),
+    quota,
+  };
+}
 
 /**
  * Stato del pagamento mostrato nel piano. Il lifetime prevale su tutto, senza rinnovi. Con una

@@ -10,7 +10,7 @@ import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components
 import { NotFoundState, UnavailableState } from "~/components/not-found";
 import { remainingUnlocks } from "~/components/orders/labels";
 import { useLinks } from "~/components/copy-context";
-import { appHref } from "../app-links";
+import { appHref, previewOrdersPath } from "../app-links";
 import { historyWindowDays } from "../domain/history-window.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -47,7 +47,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       : null;
   if (remembered)
     throw redirect(
-      `${localizedPath(language, "/anteprima/ordini")}?negozio=${encodeURIComponent(remembered)}`,
+      `${localizedPath(language, previewOrdersPath)}?negozio=${encodeURIComponent(remembered)}`,
     );
   const query = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, search);
   const page = previewOrderPage(
@@ -57,7 +57,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     query,
     scenario.now,
     scenario.account.plan,
-    (next) => `${localizedPath(language, "/anteprima/ordini")}?${next.toString()}`,
+    (next) => `${localizedPath(language, previewOrdersPath)}?${next.toString()}`,
   );
   const detail = params.ordine
     ? ([...scenario.orders, ...scenario.incoming].find((order) => order.id === params.ordine) ??

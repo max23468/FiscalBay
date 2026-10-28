@@ -4,6 +4,7 @@ import { appCopy } from "../app-copy";
 import {
   firstChargeAt,
   priceGeneration,
+  priceVariable,
   purchaseStateFrom,
   type PremiumOffer,
   type PurchaseState,
@@ -12,6 +13,7 @@ import { ApplicationError, logFailure } from "../errors";
 import type { Language } from "../i18n";
 import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
+  closeCheckoutSession,
   createLifetimeCredit,
   createManagedCheckout,
   createStripeClient,
@@ -24,7 +26,12 @@ import {
 } from "../integrations/stripe.server";
 import { purchasesOpenSql } from "./admission-state.server";
 import { reconcileSubscription, workspaceCustomerSql } from "./billing.server";
-import { openSubscriptionSql, storeReadSql } from "./grants.server";
+import {
+  entitlementInForce,
+  openSubscriptionSql,
+  paidCoverageSql,
+  storeReadSql,
+} from "./grants.server";
 import {
   bindLifetimeSession,
   lifetimeContext,
@@ -45,12 +52,6 @@ export const checkoutOffers = [
 
 type CheckoutOffer = (typeof checkoutOffers)[number];
 
-const priceVariable = {
-  monthly: "STRIPE_PRICE_MONTHLY",
-  annual: "STRIPE_PRICE_ANNUAL",
-  lifetime: "STRIPE_PRICE_LIFETIME",
-} as const satisfies Record<CheckoutOffer, keyof Env>;
-
 export function isCheckoutOffer(value: string): value is CheckoutOffer {
   return (checkoutOffers as readonly string[]).includes(value);
 }
@@ -60,12 +61,10 @@ export function checkoutConfigured(env: Env) {
   return !!stripeSecretKey(env) && checkoutOffers.every((offer) => !!env[priceVariable[offer]]);
 }
 
-/** Diritto in corso dello spazio, separato per la prova e per ogni altra origine. */
-function activeSql(workspace: string, at: string, trial: boolean) {
-  return `(SELECT ${trial ? "MAX(e.ends_at)" : "COUNT(*) > 0"} FROM workspace_entitlements e
-    WHERE e.workspace_id = ${workspace} AND e.source ${trial ? "=" : "<>"} 'trial'
-      AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(${at})
-      AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at)))`;
+/** Fine della prova in corso dello spazio. */
+function trialEndsSql(workspace: string, at: string) {
+  return `(SELECT MAX(e.ends_at) FROM workspace_entitlements e
+    WHERE e.workspace_id = ${workspace} AND e.source = 'trial' AND ${entitlementInForce("e", at)})`;
 }
 
 /**
@@ -78,10 +77,10 @@ function activeSql(workspace: string, at: string, trial: boolean) {
  */
 export async function purchaseState(db: D1Database, userId: string, now = new Date()) {
   const row = await db
-    .prepare(`SELECT w.id, (${activeSql("w.id", "?2", false)} OR ${openSubscriptionSql("w.id")}
+    .prepare(`SELECT w.id, (${paidCoverageSql("w.id", "?2")} OR ${openSubscriptionSql("w.id")}
         OR EXISTS (SELECT 1 FROM lifetime_allocations a WHERE a.workspace_id = w.id
           AND a.status = 'reserved' AND a.completed_at IS NOT NULL)) AS covered,
-      ${activeSql("w.id", "?2", true)} AS trial_ends_at, ${storeReadSql("w.id")} AS synced,
+      ${trialEndsSql("w.id", "?2")} AS trial_ends_at, ${storeReadSql("w.id")} AS synced,
       ${purchasesOpenSql} AS open
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?1`)
@@ -192,11 +191,15 @@ export async function startCheckout(
     );
   } catch (error) {
     // Nessun indirizzo è arrivato al cliente: il turno senza sessione si libera.
-    if (claim) await releaseClaim(env.DB, workspaceId, claim).catch(() => {});
+    if (claim) await releaseClaim(env.DB, workspaceId, claim).catch(logRelease(input.request));
     logFailure({ request: input.request, error, code: "CHECKOUT_PENDING", operation: "checkout" });
     return { ok: false, reason: "unavailable" };
   }
 }
+
+/** Liberazione non riuscita di un turno o di un posto: scade da sola, l'errore resta nei log. */
+const logRelease = (request: Request) => (error: unknown) =>
+  logFailure({ request, error, operation: "checkout" });
 
 /**
  * Durata della sessione di mensile e annuale, come per il lifetime: una sessione abbandonata
@@ -235,7 +238,7 @@ export async function closeOpenCheckouts(
   if (row && !row.session_id && now.getTime() - Date.parse(row.created_at) < staleClaimMs)
     return "busy";
   if (row?.session_id && now.getTime() - Date.parse(row.created_at) < recentCheckoutMs) {
-    const session = await closeSession(stripe, row.session_id);
+    const session = await closeCheckoutSession(stripe, row.session_id);
     if (session.status === "complete" && session.subscription) {
       await reconcileSubscription(env, stripe, stripeId(session.subscription), now);
       // L'abbonamento ora è registrato: la sessione conclusa non si rilegge più.
@@ -255,28 +258,13 @@ export async function closeOpenCheckouts(
       .bind(workspaceId)
       .first<{ provider_reference: string }>();
     if (reservation) {
-      await closeSession(stripe, reservation.provider_reference);
+      await closeCheckoutSession(stripe, reservation.provider_reference);
       // Scaduta libera il posto; pagata attiva il lifetime, che ferma il nuovo acquisto.
       await reconcileLifetime(env, stripe, reservation.provider_reference, now);
       settled = true;
     }
   }
   return { settled, claim };
-}
-
-/** Chiude una sessione ancora aperta e la restituisce come è ora su Stripe. */
-async function closeSession(stripe: Stripe, sessionId: string) {
-  const session = await stripeCall(() => stripe.checkout.sessions.retrieve(sessionId));
-  if (session.status !== "open") return session;
-  try {
-    await expireCheckout(stripe, sessionId);
-  } catch (error) {
-    // Completata un istante prima della chiusura: vale il suo esito.
-    const latest = await stripeCall(() => stripe.checkout.sessions.retrieve(sessionId));
-    if (latest.status === "open") throw error;
-    return latest;
-  }
-  return { ...session, status: "expired" as const };
 }
 
 /**
@@ -426,11 +414,14 @@ async function startLifetimeCheckout(
   } catch (error) {
     // Nessun indirizzo è arrivato al cliente: la prenotazione senza sessione si libera.
     if (reservation)
-      await releaseUnboundReservation(env.DB, context.workspaceId, reservation).catch(() => {});
+      await releaseUnboundReservation(env.DB, context.workspaceId, reservation).catch(
+        logRelease(input.request),
+      );
     logFailure({ request: input.request, error, code: "CHECKOUT_PENDING", operation: "checkout" });
     return { ok: false, reason: "unavailable" };
   } finally {
-    if (claim) await releaseClaim(env.DB, context.workspaceId, claim).catch(() => {});
+    if (claim)
+      await releaseClaim(env.DB, context.workspaceId, claim).catch(logRelease(input.request));
   }
 }
 

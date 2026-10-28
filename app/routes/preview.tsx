@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import {
   Outlet,
   redirect,
@@ -19,7 +20,9 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { useCopy } from "~/components/copy-context";
+import { siteColumn } from "~/components/site-column";
 import { appCopy } from "../app-copy";
+import { previewBase, previewOrdersPath, previewSettingsPath } from "../app-links";
 import { localizedPath } from "../i18n";
 import { revalidateUnlessSnapshot } from "../orders/order-list";
 import { isScenarioId, scenarioOptions } from "../preview/scenarios.server";
@@ -30,14 +33,11 @@ import {
 } from "../preview/state.server";
 import type { Route } from "./+types/preview";
 
-/** Radice dell'anteprima: la stessa shell dell'app, alimentata da scenari sintetici. */
-const base = "/anteprima";
-
 export async function loader({ request }: Route.LoaderArgs) {
   const { state, language, scenario } = await currentScenario(request);
   const { pathname } = new URL(request.url);
-  if (pathname.replace(/\/$/u, "") === localizedPath(language, base)) {
-    throw redirect(localizedPath(language, `${base}/ordini`));
+  if (pathname.replace(/\/$/u, "") === localizedPath(language, previewBase)) {
+    throw redirect(localizedPath(language, previewOrdersPath));
   }
   return {
     language,
@@ -66,16 +66,16 @@ export async function action({ request }: Route.ActionArgs) {
   if (chosen === "it" || chosen === "en") {
     const bare = String(form.get("returnTo") ?? "").replace(/^\/en(?=\/|$)/u, "");
     throw redirect(
-      localizedPath(chosen, bare.startsWith(`${base}/`) ? bare : `${base}/impostazioni`),
+      localizedPath(chosen, bare.startsWith(`${previewBase}/`) ? bare : previewSettingsPath),
       303,
     );
   }
   const scenario = form.get("scenario");
   const target = String(form.get("redirectTo") ?? "");
   const language = target.startsWith("/en/") ? "en" : "it";
-  const safeTarget = target.startsWith(localizedPath(language, `${base}/`))
+  const safeTarget = target.startsWith(localizedPath(language, `${previewBase}/`))
     ? target
-    : localizedPath(language, `${base}/ordini`);
+    : localizedPath(language, previewOrdersPath);
   if (!isScenarioId(scenario)) throw redirect(safeTarget);
   throw redirect(safeTarget, {
     headers: {
@@ -103,7 +103,12 @@ function ScenarioBar({
   const current = options.find((option) => option.id === scenario);
   return (
     <div className="border-b bg-muted/60">
-      <div className="mx-auto grid w-[min(72rem,calc(100%-2rem))] gap-x-6 gap-y-2 py-2.5 text-sm md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
+      <div
+        className={cn(
+          siteColumn,
+          "grid gap-x-6 gap-y-2 py-2.5 text-sm md:grid-cols-[auto_minmax(0,1fr)] md:items-center",
+        )}
+      >
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span className="font-medium">{t.preview.label}</span>
           <label htmlFor="preview-scenario" className="sr-only">
@@ -115,7 +120,7 @@ function ScenarioBar({
             onValueChange={(value) =>
               void submit(
                 { scenario: String(value), redirectTo: `${listPath}${location.search}` },
-                { method: "post", action: localizedPath(language, base) },
+                { method: "post", action: localizedPath(language, previewBase) },
               )
             }
           >
@@ -161,7 +166,7 @@ export default function Preview({ loaderData }: Route.ComponentProps) {
       notifications={loaderData.notifications}
       now={loaderData.now}
       search={{
-        action: localizedPath(language, `${base}/ricerca`),
+        action: localizedPath(language, `${previewBase}/ricerca`),
         query: orders ? ((orders.loaderData as OrdersPageData | undefined)?.search ?? "") : null,
       }}
       onSignOut={(notify) => notify(t.preview.signOut)}

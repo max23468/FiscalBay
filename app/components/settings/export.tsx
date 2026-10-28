@@ -19,11 +19,13 @@ import type { AppCopy } from "../../copy/copy-it";
 import type { ExportConfiguration } from "../../domain/export-configurations.server";
 import {
   columnName,
+  fileColumns,
+  layoutOf,
   maxConfigurationName,
   standardColumns,
   type ExportColumn,
   type ExportFormat,
-  type ExportRows,
+  type FileLayout,
 } from "../../orders/export-columns";
 import type { ExportContext, ExportTally } from "../../orders/export-scope";
 import { orderPeriods, premiumOrderPeriods, type OrderPeriod } from "../../view-models";
@@ -111,7 +113,7 @@ function CreateFileForm({
       {Object.entries(fields).map(([name, value]) => (
         <input key={name} type="hidden" name={name} value={value} />
       ))}
-      <Button type="submit" disabled={disabled || pending}>
+      <Button type="submit" disabled={disabled} pending={pending}>
         {t.settings.export.exportCreate}
       </Button>
     </form>
@@ -187,35 +189,6 @@ function FormatField({
   );
 }
 
-/** Forma del file scelta: formato, granularità e colonne, comprese quelle escluse. */
-interface Layout {
-  format: ExportFormat;
-  rows: ExportRows;
-  /** Ogni colonna nell'ordine scelto; quelle non incluse seguono nell'ordine standard. */
-  order: ExportColumn[];
-  chosen: ExportColumn[];
-}
-
-function layoutOf(configuration: ExportConfiguration | null): Layout {
-  const all = standardColumns("item");
-  if (!configuration) return { format: "csv", rows: "order", order: all, chosen: all };
-  const { format, rows, columns } = configuration;
-  const saved = new Set(columns);
-  return {
-    format,
-    rows,
-    order: [...columns, ...all.filter((column) => !saved.has(column))],
-    chosen: columns,
-  };
-}
-
-/** Colonne del file, nell'ordine scelto, fra quelle della granularità. */
-function fileColumns(layout: Layout): ExportColumn[] {
-  const available = new Set(standardColumns(layout.rows));
-  const chosen = new Set(layout.chosen);
-  return layout.order.filter((column) => available.has(column) && chosen.has(column));
-}
-
 /**
  * Colonne scelte e ordinate con Premium: ogni colonna si include e si sposta con i pulsanti,
  * e lo spostamento è annunciato. Nel Free soltanto la nota del piano.
@@ -226,8 +199,8 @@ function ColumnsField({
   onChange,
 }: {
   premium: boolean;
-  layout: Layout;
-  onChange: (layout: Layout) => void;
+  layout: FileLayout;
+  onChange: (layout: FileLayout) => void;
 }) {
   const { t } = useCopy();
   const copy = t.settings.export;
@@ -316,7 +289,7 @@ function SaveConfiguration({
   children,
 }: {
   name: string;
-  layout: Layout;
+  layout: FileLayout;
   onSaved: (name: string) => void;
   /** Comandi accanto a «Salva configurazione», nascosti mentre si scrive il nome. */
   children?: React.ReactNode;
@@ -374,11 +347,7 @@ function SaveConfiguration({
         onChange={(event) => setDraft(event.currentTarget.value)}
       />
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="submit"
-          disabled={!draft.trim() || action.pending}
-          aria-busy={action.pending || undefined}
-        >
+        <Button type="submit" disabled={!draft.trim()} pending={action.pending}>
           {action.pending ? t.common.saving : t.common.save}
         </Button>
         <Button
@@ -407,8 +376,8 @@ function LayoutFields({
   premium: boolean;
   configurations: ExportConfiguration[];
   configuration: ExportConfiguration | null;
-  layout: Layout;
-  onChange: (layout: Layout) => void;
+  layout: FileLayout;
+  onChange: (layout: FileLayout) => void;
   onChoose: (name: string) => void;
 }) {
   const copy = useCopy().t.settings.export;
@@ -455,7 +424,7 @@ function ConfigurationCommands({
   onSelect,
 }: {
   configuration: ExportConfiguration | null;
-  layout: Layout;
+  layout: FileLayout;
   onSelect: (name: string | null) => void;
 }) {
   const copy = useCopy().t.settings.export;
@@ -472,7 +441,7 @@ function ConfigurationCommands({
       {configuration ? (
         <Button
           variant="destructive"
-          disabled={remove.pending}
+          pending={remove.pending}
           onClick={() => remove.run("export-delete", { id: configuration.id })}
         >
           {copy.exportConfigDelete}

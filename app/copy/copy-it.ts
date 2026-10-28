@@ -1,5 +1,12 @@
 import { legalDate, plural } from "./format";
 
+/** Registrazione chiusa sul test: la stessa frase nell'errore di accesso, nel modulo e nell'esito. */
+const registrationRestricted =
+  "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.";
+
+/** Pausa per inattività del Free, nella campanella e nei Negozi. */
+const inactivityTitle = "Letture in pausa per inattività";
+
 export const it = {
   /** Etichette generiche, uguali in ogni pagina. */
   common: {
@@ -63,7 +70,7 @@ export const it = {
       exportFailedTitle: "File non creato",
       exportFailedBody: (file: string) =>
         `${file}: crealo di nuovo da Impostazioni › Esportazione.`,
-      inactivityTitle: "Letture in pausa per inattività",
+      inactivityTitle,
       inactivityBody:
         "Con il piano Free le letture si fermano dopo 30 giorni senza accessi e 7 di preavviso. Riprendile da Negozi.",
     },
@@ -76,12 +83,11 @@ export const it = {
     whatsNewTitle: "Novità di FiscalBay",
     signOut: "Esci",
     close: "Chiudi",
-    back: "Indietro",
   },
   preview: {
     label: "Anteprima con dati di esempio",
     scenario: "Scenario",
-    note: "Qui le azioni sono simulate e usano dati di esempio.",
+    note: "Le azioni sono simulate.",
     simulated: "Anteprima: l’azione è simulata.",
     signOut: "Anteprima: l’uscita è simulata.",
   },
@@ -181,7 +187,6 @@ export const it = {
     moreActions: (id: string) => `Altre azioni per l’ordine ${id}`,
     openOnEbay: "Apri su eBay",
     exportOrder: "Esporta ordine",
-    items: (count: number) => `${count} ${plural(count, "articolo", "articoli")}`,
     itemsMore: (count: number) => `+ ${count} ${plural(count, "altro articolo", "altri articoli")}`,
     quantity: "Quantità",
     newOrders: (count: number) => `${count} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
@@ -207,7 +212,7 @@ export const it = {
     },
     missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
     checkingHint: "Verifica del Codice Fiscale in corso.",
-    errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova tra poco.",
+    errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova più tardi.",
     errorHintEbayDown:
       "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Potrai riprovare quando eBay torna a rispondere.",
     retry: "Riprova",
@@ -319,7 +324,6 @@ export const it = {
     source: (time: string) => `Fonte: eBay, letto il ${time}`,
     buyer: "Acquirente",
     username: "Nome utente eBay",
-    shipping: "Spedizione",
     recipient: "Destinatario",
     summary: "Ordine",
     total: "Totale",
@@ -357,7 +361,7 @@ export const it = {
     pausedByPlan: "In pausa per il piano Free",
     pausedByInactivity: "In pausa per inattività",
     pausedByAdmin: "In pausa dall’assistenza",
-    inactivityTitle: "Letture in pausa per inattività",
+    inactivityTitle,
     inactivityBody:
       "Non hai aperto FiscalBay per 30 giorni né nei 7 giorni di preavviso: con il piano Free le letture da eBay si sono fermate. Riprendile per recuperare gli ordini ancora nella finestra del piano.",
     inactivityResume: "Riprendi le letture",
@@ -367,7 +371,6 @@ export const it = {
     notificationsHeldHint: "Sospese finché la sincronizzazione non riprende",
     notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Premium.",
     freeLimit: "Il piano Free include un solo negozio attivo.",
-    open: (name: string) => `Apri ${name}`,
     sectionConnection: "Collegamento",
     sectionSync: "Sincronizzazione",
     sectionNotifications: "Notifiche",
@@ -487,7 +490,6 @@ export const it = {
     plan: {
       currentPlan: "Piano attuale",
       unlockConfirmation: "Chiedi conferma prima di sbloccare un ordine",
-      unlockConfirmationHint: "Lo sblocco di più ordini chiede sempre conferma.",
       free: "Free",
       premium: "Premium",
       freeSummary: "Un negozio attivo, ultimi 30 giorni di ordini, CSV.",
@@ -499,8 +501,7 @@ export const it = {
       cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
       nextCycleLimit: (limit: number) => `Il prossimo ciclo avrà ${limit} sblocchi.`,
       trialTitle: "Prova Premium per 14 giorni",
-      trialBody:
-        "Senza carta e senza rinnovo automatico: alla fine torni al Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+      trialBody: "Senza carta e senza rinnovo automatico: alla fine torni al Free.",
       trialAction: "Attiva la prova",
       trialStarted: "Prova Premium attivata.",
       trialUnavailable: "La prova Premium non è disponibile per questo account.",
@@ -517,9 +518,7 @@ export const it = {
       priceMonthly: (price: string) => `${price} al mese`,
       priceAnnual: (price: string) => `${price} all’anno`,
       priceLifetime: (price: string) => `${price} una tantum`,
-      priceMonthlyNote: "Si rinnova ogni mese.",
       priceAnnualNote: (months: number) => `12 mesi al prezzo di ${months}.`,
-      priceLifetimeNote: "Pagamento unico, senza rinnovi.",
       /** Totale con l'IVA italiana accanto al netto, come sul sito. */
       priceGross: (price: string) => `${price} con IVA italiana al 22%`,
       lifetimeSeats: (left: number, total: number) => `Restano ${left} posti su ${total}`,
@@ -533,7 +532,7 @@ export const it = {
       lifetimeUpgradeTitle: "Passa a vita",
       lifetimeProcessingTitle: "Premium a vita in attivazione",
       lifetimeProcessingBody:
-        "Premium a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale. Ricevuta e fattura arrivano da Stripe.",
+        "Premium a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale.",
       trialPurchaseNote:
         "Con mensile o annuale oggi non paghi: i giorni di prova restano e il primo addebito arriva quando la prova finisce.",
       trialEndingPurchaseNote:
@@ -549,14 +548,13 @@ export const it = {
       trialChosenCancelledBody: (date: string) =>
         `Nessun addebito: il ${date}, alla fine della prova, torni al Free. Fino ad allora puoi riattivarlo su Stripe.`,
       pricesNote:
-        "Prezzi IVA esclusa. Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
+        "Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
       purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
       purchaseClosed: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
       checkoutUnavailable: "Pagamento non disponibile ora. Riprova più tardi.",
-      checkoutCovered: "Il tuo spazio ha già Premium attivo.",
+      checkoutCovered: "Il tuo account ha già Premium attivo.",
       checkoutProcessingTitle: "Attivazione Premium in corso",
-      checkoutProcessingBody:
-        "Premium si attiva appena Stripe conferma il pagamento. Ricevuta e fattura arrivano da Stripe.",
+      checkoutProcessingBody: "Premium si attiva appena Stripe conferma il pagamento.",
       checkoutCancelled: "Pagamento annullato. Nessun addebito.",
       buyPeriod: { monthly: "Scegli mensile", annual: "Scegli annuale", lifetime: "Scegli a vita" },
       freeStoreHint: "Puoi sostituire il negozio attivo ogni 90 giorni.",
@@ -661,7 +659,7 @@ export const it = {
       exportContextBack: "Torna agli ordini",
       exportCreate: "Crea file",
       exportCreated: "Anteprima: nessun file creato.",
-      exportFailed: "File non creato. Riprova tra poco.",
+      exportFailed: "File non creato. Riprova più tardi.",
       exportEmpty: "Nessun ordine da esportare con queste scelte.",
       exportGone: "File non più disponibile. Crealo di nuovo.",
       exportQueued: "File in preparazione: ti avvisiamo nella campanella quando è pronto.",
@@ -694,7 +692,7 @@ export const it = {
       exportConfigInvalid: "Configurazione non valida.",
       exportConfigFull: (max: number) =>
         `Puoi salvare fino a ${max} configurazioni: eliminane una per salvarne un’altra.`,
-      exportConfigFailed: "Configurazione non salvata. Riprova tra poco.",
+      exportConfigFailed: "Configurazione non salvata. Riprova più tardi.",
       file: {
         name: "fiscalbay-ordini",
         sheet: "Ordini",
@@ -807,7 +805,7 @@ export const it = {
       accountExport: "Esporta i dati dell’account",
       accountExportBody: "Profilo, negozi e impostazioni in un file scaricabile.",
       accountExportAction: "Richiedi esportazione",
-      accountExportFailed: "Esportazione non riuscita. Riprova tra poco.",
+      accountExportFailed: "Esportazione non riuscita. Riprova più tardi.",
       deleteAccount: "Elimina account",
       deleteAccountBody:
         "Elimina l’account con negozi, ordini, impostazioni e file esportati. Prima confermi la tua identità, poi il link che ricevi via email.",
@@ -823,7 +821,7 @@ export const it = {
         `Ti abbiamo inviato un link a ${email}. Aprilo entro un’ora in questo browser per confermare la cancellazione.`,
       deleteAccountMismatch: "L’indirizzo non corrisponde a quello dell’account.",
       deleteAccountReauth: "Conferma di nuovo la tua identità per eliminare l’account.",
-      deleteAccountFailed: "Invio del link non riuscito. Riprova tra poco.",
+      deleteAccountFailed: "Invio del link non riuscito. Riprova più tardi.",
     },
     support: {
       faq: "Domande frequenti",
@@ -890,8 +888,7 @@ export const it = {
       },
       send: "Invia",
       sent: (email: string) => `Richiesta inviata. Ti risponderemo a ${email}.`,
-      sendFailed:
-        "Invio non riuscito. Riprova tra qualche minuto o scrivi all’indirizzo qui sotto.",
+      sendFailed: "Invio non riuscito. Riprova più tardi o scrivi all’indirizzo qui sotto.",
       limited:
         "Hai già inviato diverse richieste nelle ultime 24 ore. Per aggiungere altro scrivi all’indirizzo qui sotto.",
       invalid: "Scegli un argomento e scrivi un messaggio entro 4.000 caratteri.",
@@ -928,7 +925,7 @@ export const it = {
     unexpected: "Si è verificato un errore inatteso. Riprova più tardi.",
     unavailableTitle: "Servizio non disponibile",
     unavailable:
-      "In questo momento FiscalBay non riesce a leggere i dati dell’account. Riprova tra qualche minuto.",
+      "In questo momento FiscalBay non riesce a leggere i dati dell’account. Riprova più tardi.",
     retry: "Riprova",
     unconfirmed:
       "Non è stato possibile confermare l’esito. Ricarica la pagina per verificare lo stato prima di riprovare.",
@@ -956,7 +953,7 @@ export const it = {
     title: "Accesso non completato",
     registrationRestricted: {
       title: "Registrazione riservata",
-      body: "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.",
+      body: registrationRestricted,
     },
     body: "Riprova con il metodo di accesso che usi di solito.",
     back: "Torna a FiscalBay",
@@ -1077,8 +1074,7 @@ export const it = {
     signIn: "Accedi",
     signUp: "Crea account",
     signUpBody: "Bastano pochi dati per iniziare.",
-    registrationRestricted:
-      "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.",
+    registrationRestricted,
     firstName: "Nome",
     requiredFields: "* Campo obbligatorio.",
     lastName: "Cognome",
@@ -1185,8 +1181,7 @@ export const it = {
       registrato:
         "Controlla la posta: ti abbiamo inviato un link per confermare l’indirizzo email e accedere.",
       registrazione: "Account non creato. Controlla l’indirizzo email e la password.",
-      autorizzazione:
-        "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.",
+      autorizzazione: registrationRestricted,
       termini: "Per continuare accetta i Termini di servizio.",
       dati: "Indica nome, cognome e, per un’azienda, la ragione sociale.",
       "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",

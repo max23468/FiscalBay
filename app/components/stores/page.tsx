@@ -9,7 +9,6 @@ import { PageTitle } from "~/components/icon-tile";
 import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import { Spinner } from "~/components/ui/spinner";
 import { useCopy } from "~/components/copy-context";
 import { supportEmail } from "../../app-copy";
 import { usePageTiming } from "../../page-timing";
@@ -122,10 +121,10 @@ function InactivityNotice({ stores }: { stores: StoreView[] }) {
         {t.stores.inactivityBody}
         <Button
           size="sm"
-          disabled={action.pending}
+          pending={action.pending}
           onClick={() => action.run("store-resume", { store: store.id })}
         >
-          {action.pending ? <Spinner /> : <Play aria-hidden="true" data-icon="inline-start" />}
+          <Play aria-hidden="true" data-icon="inline-start" />
           {t.stores.inactivityResume}
         </Button>
       </span>

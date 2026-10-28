@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { storeLabelSql } from "./store-state.server";
+import { maxAuditReason } from "../limits";
 
 /**
  * Registro delle operazioni della console amministrativa (§15): ogni operazione eseguita da un
@@ -12,7 +13,7 @@ import { storeLabelSql } from "./store-state.server";
 export const auditRetentionDays = 365;
 
 /** Motivo obbligatorio delle operazioni che cambiano diritti, configurazioni o negozi. */
-export const reasonSchema = z.string().trim().min(1).max(500);
+export const reasonSchema = z.string().trim().min(1).max(maxAuditReason);
 
 export type AuditEntry = {
   actor: string;

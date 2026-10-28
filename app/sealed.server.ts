@@ -18,7 +18,26 @@ function fromBase64Url(value: string): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(binary, (character) => character.charCodeAt(0));
 }
 
-async function sealingKey(secret: string, purpose: string): Promise<CryptoKey> {
+/** Byte in esadecimale minuscolo. */
+export function hex(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Impronta SHA-256 di un testo, in esadecimale. */
+export async function sha256Hex(value: string): Promise<string> {
+  return hex(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+}
+
+/**
+ * Chiave derivata con HKDF dal segreto server per uno scopo: scopi diversi danno chiavi
+ * indipendenti. Mai esportabile.
+ */
+export async function derivedKey(
+  secret: string,
+  purpose: string,
+  algorithm: AesKeyGenParams | HmacImportParams,
+  usages: KeyUsage[],
+): Promise<CryptoKey> {
   const material = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -35,12 +54,15 @@ async function sealingKey(secret: string, purpose: string): Promise<CryptoKey> {
       info: new TextEncoder().encode(purpose),
     },
     material,
-    { name: "AES-GCM", length: 256 },
+    algorithm,
     false,
-    ["encrypt", "decrypt"],
+    usages,
   );
   // Stryker restore BooleanLiteral
 }
+
+const sealingKey = (secret: string, purpose: string) =>
+  derivedKey(secret, purpose, { name: "AES-GCM", length: 256 }, ["encrypt", "decrypt"]);
 
 /** Vettore iniziale e testo cifrato, in base64url. */
 export async function seal(

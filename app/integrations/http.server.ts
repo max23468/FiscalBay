@@ -104,24 +104,53 @@ function providerCode(text: string): string | undefined {
 }
 
 /**
- * Esegue la richiesta e restituisce il testo di una risposta 2xx entro tempo e dimensione. Ogni
- * provider raggiunto da qui è eBay: la durata rientra nella sua fase.
+ * Esecuzione della richiesta e restituzione del testo di una risposta 2xx entro tempo e
+ * dimensione. Ogni provider raggiunto da qui è eBay: la durata rientra nella sua fase.
  */
-export function upstreamText(
+export async function upstreamText(
   fetcher: typeof fetch,
   url: string,
   init: RequestInit = {},
   options: UpstreamOptions = {},
 ): Promise<string> {
-  return measure("ebay", "request", () => readUpstream(fetcher, url, init, options));
+  const { text } = await measure("ebay", "request", () =>
+    readUpstream(fetcher, url, init, options),
+  );
+  return text;
 }
 
-async function readUpstream(
+/**
+ * Errore da sollevare per una risposta letta per intero, con il suo testo; null se è riuscita.
+ * Il testo serve soltanto a ricavarne codici brevi o attese, mai a portarlo nell'errore.
+ */
+export type StatusClassifier = (
+  response: Response,
+  text: string,
+  now?: number,
+) => UpstreamError | null;
+
+/** Classificazione comune: 2xx riuscita, 401 e 403 credenziali, 429 e 5xx con l'attesa. */
+function providerStatus(response: Response, text: string, now?: number): UpstreamError | null {
+  const { status } = response;
+  if (status >= 200 && status < 300) return null;
+  const retryAfter = retryAfterSeconds(response.headers.get("retry-after"), now) ?? undefined;
+  if (status === 401 || status === 403) return new UpstreamError("credentials", { status });
+  if (status === 429) return new UpstreamError("rate_limited", { status, retryAfter });
+  if (status >= 500) return new UpstreamError("unavailable", { status, retryAfter });
+  return new UpstreamError("rejected", { status, providerCode: providerCode(text) });
+}
+
+/**
+ * Richiesta con timeout sull'intera lettura e limite dei byte, senza misura di fase: stato e
+ * testo di una risposta che `classify` considera riuscita.
+ */
+export async function readUpstream(
   fetcher: typeof fetch,
   url: string,
   init: RequestInit,
   options: UpstreamOptions,
-): Promise<string> {
+  classify: StatusClassifier = providerStatus,
+): Promise<{ status: number; text: string }> {
   const timeout = AbortSignal.timeout(options.timeoutMs ?? defaultTimeoutMs);
   const signal = init.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
   let text: string;
@@ -136,14 +165,9 @@ async function readUpstream(
     // Rete interrotta, timeout o lettura annullata a metà: il provider non ha risposto.
     throw new UpstreamError("unavailable");
   }
-  const { status } = response;
-  if (status >= 200 && status < 300) return text;
-  const retryAfter =
-    retryAfterSeconds(response.headers.get("retry-after"), options.now) ?? undefined;
-  if (status === 401 || status === 403) throw new UpstreamError("credentials", { status });
-  if (status === 429) throw new UpstreamError("rate_limited", { status, retryAfter });
-  if (status >= 500) throw new UpstreamError("unavailable", { status, retryAfter });
-  throw new UpstreamError("rejected", { status, providerCode: providerCode(text) });
+  const failure = classify(response, text, options.now);
+  if (failure) throw failure;
+  return { status: response.status, text };
 }
 
 /** Come upstreamText, poi valida il JSON con lo schema: un payload diverso è un errore distinto. */

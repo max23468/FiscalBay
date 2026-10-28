@@ -1,5 +1,6 @@
 import {
   maxListedOrders,
+  orderCriteria,
   ordersPageSize,
   pagesParam,
   snapshotCursor,
@@ -8,7 +9,7 @@ import {
 } from "../orders/order-list";
 import type { ExportTally } from "../orders/export-scope";
 import { orderSearchText, searchFold, searchTokens } from "../orders/order-search";
-import { orderCriteria, type OrderCriteria } from "../domain/orders.server";
+import type { OrderCriteria } from "../domain/orders.server";
 import { displayTaxValue } from "../tax-quality";
 import { fiscalSituation, type OrderView, type Plan } from "../view-models";
 

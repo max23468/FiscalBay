@@ -3,12 +3,12 @@ import { z } from "zod";
 import { EmailError, sendAccountDeletedNotice } from "../account-email.server";
 import { ApplicationError, logFailure } from "../errors";
 import type { Language } from "../i18n";
-import { seal, unseal } from "../sealed.server";
+import { derivedKey, hex, seal, unseal } from "../sealed.server";
 import { inSequence } from "../sequence";
-import { dayMilliseconds } from "../time";
+import { dayMilliseconds, elapsedMs } from "../time";
 import { stopRenewals } from "./billing.server";
 import { freeCycleStatement } from "./grants.server";
-import { taskPeriods } from "./work-timing";
+import { queueRetryDelay, taskPeriods } from "./work-timing";
 
 /**
  * Cancellazione dell'account (§30, D163). La conferma dal link email registra la richiesta e
@@ -69,7 +69,7 @@ class DeletionSignal extends ApplicationError {
 
 /** Sessione aperta abbastanza di recente per chiedere la cancellazione. */
 export function deletionReauthenticated(createdAt: Date | string, now = new Date()): boolean {
-  return now.getTime() - new Date(createdAt).getTime() < deletionReauthMilliseconds;
+  return elapsedMs(createdAt, now) < deletionReauthMilliseconds;
 }
 
 /**
@@ -145,41 +145,17 @@ export async function startAccountDeletion(
 const markPurpose = "store-identity-mark";
 
 /** Chiave HMAC dei segni, derivata dal segreto del server con uno scopo dedicato. */
-async function markKey(secret: string): Promise<CryptoKey> {
-  const material = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    "HKDF",
-    false,
-    ["deriveKey"],
-  );
-  // Stryker disable BooleanLiteral: la chiave non viene mai esportata, estraibile o no.
-  return crypto.subtle.deriveKey(
-    {
-      name: "HKDF",
-      hash: "SHA-256",
-      salt: new Uint8Array(),
-      info: new TextEncoder().encode(markPurpose),
-    },
-    material,
-    { name: "HMAC", hash: "SHA-256", length: 256 },
-    false,
-    ["sign"],
-  );
-  // Stryker restore BooleanLiteral
-}
+const markKey = (secret: string) =>
+  derivedKey(secret, markPurpose, { name: "HMAC", hash: "SHA-256", length: 256 }, ["sign"]);
 
 /**
  * Impronta dell'identità eBay di un negozio, come la conserva `ebay_stores.ebay_user_id`: HMAC
  * con una chiave del server, quindi chi conosce soltanto l'identificativo eBay non la ricalcola.
  */
 export async function storeIdentityHash(secret: string, ebayUserId: string): Promise<string> {
-  const bytes = await crypto.subtle.sign(
-    "HMAC",
-    await markKey(secret),
-    new TextEncoder().encode(ebayUserId),
+  return hex(
+    await crypto.subtle.sign("HMAC", await markKey(secret), new TextEncoder().encode(ebayUserId)),
   );
-  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /** Fine del segno della prova già usata, registrato all'istante dato. */
@@ -613,7 +589,7 @@ export async function consumeAccountDeletion(
   } catch (error) {
     logFailure({ error, operation: "account_deletion" });
     if (message.attempts > queueRetries) message.ack();
-    else message.retry({ delaySeconds: 30 * 2 ** (message.attempts - 1) });
+    else message.retry({ delaySeconds: queueRetryDelay(message.attempts) });
   }
 }
 

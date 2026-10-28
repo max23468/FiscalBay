@@ -5,7 +5,7 @@ import { downloadExport } from "./download";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { useCopy, useLinks } from "~/components/copy-context";
-import { appHref } from "../../app-links";
+import { appHref, privacyPath, termsPath } from "../../app-links";
 import { localizedPath } from "../../i18n";
 import { DeleteAccount } from "../delete-account";
 import type { SecurityData } from "./security";
@@ -46,13 +46,13 @@ export function PrivacySection({
   // Senza footer nell'area autenticata, i documenti legali si raggiungono da qui (D202).
   const legal = [
     {
-      path: "/termini",
+      path: termsPath,
       title: t.settings.privacy.terms,
       body: t.settings.privacy.termsBody,
       action: t.settings.privacy.readTerms,
     },
     {
-      path: "/privacy",
+      path: privacyPath,
       title: t.settings.privacy.privacyPolicy,
       body: t.settings.privacy.privacyPolicyBody,
       action: t.settings.privacy.readPolicy,

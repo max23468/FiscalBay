@@ -2,6 +2,7 @@ import { cn } from "cn";
 
 import { useCopy } from "~/components/copy-context";
 import { LanguageSwitch } from "~/components/language-switch";
+import { siteColumn } from "~/components/site-column";
 import { SiteFooter } from "~/components/site-footer";
 import { Logo } from "~/components/standalone-page";
 import { buttonLink } from "~/components/ui/button-variants";
@@ -14,9 +15,6 @@ import {
   visitParam,
 } from "../app-links";
 import { localizedPath } from "../i18n";
-
-/** Larghezza comune di barra, sezioni e footer. */
-export const siteColumn = "mx-auto w-[min(72rem,calc(100%-2rem))]";
 
 const navItems = [
   { path: featuresPath, key: "features" },

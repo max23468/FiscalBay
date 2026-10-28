@@ -6,7 +6,7 @@ import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { buttonLink } from "~/components/ui/button-variants";
-import { accessPath, appBase, ordersPath, storeLinkPath } from "../app-links";
+import { accessPath, ordersPath, storeLinkPath, storesPath } from "../app-links";
 import { appCopy, pageTitle } from "../app-copy";
 import { readSession } from "../domain/sessions.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
@@ -124,7 +124,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
   const expectedStoreId = String(form.get("negozio") ?? "");
   const fromStores = form.get("da") === "negozi";
-  const back = fromStores ? localizedPath(language, `${appBase}/negozi`) : base;
+  const back = fromStores ? localizedPath(language, storesPath) : base;
   if (!(await storeLinkAdmitted(env.DB, status.userId))) {
     return redirect(`${back}?negozio=lista-attesa`, { status: 303, ...noStore });
   }
@@ -166,7 +166,7 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
   const { language, reconnect, sandbox, ebayEnvironment } = loaderData;
   const t = appCopy[language].storeLink;
   const home = localizedPath(language, ordersPath);
-  const back = loaderData.fromStores ? localizedPath(language, `${appBase}/negozi`) : home;
+  const back = loaderData.fromStores ? localizedPath(language, storesPath) : home;
   return (
     <StandalonePage
       icon={Store}

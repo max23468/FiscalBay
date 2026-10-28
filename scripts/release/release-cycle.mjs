@@ -666,6 +666,379 @@ function cleanupIntegratedBranches(repository) {
   for (const residual of residuals) console.log(`Residuo conservato: ${residual}.`);
 }
 
+const cycleCommands = ["status", "pr", "cleanup", "candidate", "production", "resume"];
+
+/** Comando e argomento posizionale; il formato dell'argomento si controlla nel comando. */
+export function cycleCommand([command, number]) {
+  if (!cycleCommands.includes(command))
+    throw new Error(
+      "Uso: release:cycle status <run> | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run>.",
+    );
+  return { command, number };
+}
+
+/** Oggetto del blocco locale: cicli su oggetti diversi procedono insieme. */
+export const lockObject = (command, number) =>
+  command === "pr" ? `pr-${number}` : command === "resume" ? `run-${number}` : command;
+
+function assertRun(number) {
+  if (!/^\d+$/u.test(number ?? "")) throw new Error("Run non valida.");
+}
+
+/** Il ciclo PR accetta soltanto feature branch dello stesso repository verso develop. */
+export function assertCyclePullRequest(pr, repository) {
+  if (pr.baseRefName !== "develop" || pr.headRepository?.nameWithOwner !== repository)
+    throw new Error("Il ciclo PR gestisce soltanto branch dello stesso repository verso develop.");
+  if (["main", "develop", "legacy/1.x"].includes(pr.headRefName))
+    throw new Error("La PR non parte da un feature branch.");
+  if (pr.state === "CLOSED") throw new Error("PR chiusa senza merge.");
+}
+
+/** Vero se l'ultima run è fallita al controllo delle migration; i job si leggono solo allora. */
+export function migrationReviewBlocked(run, readJobs) {
+  return (
+    run?.conclusion === "failure" &&
+    readJobs(run.databaseId)
+      .flatMap((job) => job.steps ?? [])
+      .some((step) => step.name === "Check migration review" && step.conclusion === "failure")
+  );
+}
+
+/**
+ * Qualifica fallita: si riprova, fino al terzo tentativo, soltanto se la base è avanzata su file
+ * comuni o globali; `compatible` si valuta solo quando un nuovo tentativo è ammesso.
+ */
+export const retryQualification = (attempt, compatible) => attempt < 3 && !compatible();
+
+/** Al merge la PR entra con la base compatibile, altrimenti si riqualifica fino al terzo giro. */
+export function mergeDecision(round, compatible) {
+  if (compatible) return "merge";
+  if (round === 3) throw new Error("Base avanzata più volte: ciclo riprendibile dalla stessa PR.");
+  return "requalify";
+}
+
+/** Run riprendibili: soltanto i workflow del ciclo sui branch di integrazione. */
+export function assertResumableRun(run) {
+  if (
+    ![".github/workflows/ci.yml", ".github/workflows/publish.yml"].includes(run.path) ||
+    !["develop", "main"].includes(run.head_branch) ||
+    !["push", "workflow_dispatch"].includes(run.event)
+  )
+    throw new Error("Run fuori dal ciclo supportato.");
+}
+
+/** Ambiente distribuito dalla run riuscita, `null` se il job di distribuzione non è riuscito. */
+export function deployedEnvironment(run, jobs) {
+  const environment = run.path.endsWith("publish.yml") ? "production" : "test";
+  const deploy = environment === "test" ? "Deploy test" : "Distribuisci e verifica";
+  return jobs.some((job) => job.name === deploy && job.conclusion === "success")
+    ? environment
+    : null;
+}
+
+/**
+ * Run già presente sul candidato: in corso o non riuscita si riconcilia con resume; riuscita vale
+ * come Production pubblicata o come qualifica da confermare con l'artefatto candidato.
+ */
+export function existingCandidate(command, existing, jobs) {
+  const publish = jobs.find((job) => job.name === "Distribuisci e verifica");
+  if (
+    existing.status !== "completed" ||
+    existing.conclusion !== "success" ||
+    !["success", "skipped"].includes(publish?.conclusion)
+  )
+    throw new Error(
+      `Candidato già presente: riconciliare con release:cycle resume ${existing.databaseId}, senza un nuovo dispatch.`,
+    );
+  return command === "production" && publish.conclusion === "success" ? "published" : "qualified";
+}
+
+function statusCycle({ repository, number }) {
+  assertRun(number);
+  summary(repository, number);
+}
+
+function cleanupCycle({ repository }) {
+  cleanupIntegrated(repository);
+}
+
+async function resumeCycle({ repository, number, values }) {
+  assertRun(number);
+  let run = json("api", `repos/${repository}/actions/runs/${number}`);
+  assertResumableRun(run);
+  assertBase(
+    run.head_sha,
+    gh("api", `repos/${repository}/git/ref/heads/${run.head_branch}`, "--jq", ".object.sha"),
+  );
+  if (run.status === "completed" && run.conclusion !== "success")
+    gh("run", "rerun", number, "--repo", repository, "--failed");
+  if (run.conclusion !== "success")
+    await watch([
+      "run",
+      "watch",
+      number,
+      "--repo",
+      repository,
+      "--exit-status",
+      "--interval",
+      "30",
+    ]);
+  run = summary(repository, number);
+  if (run.conclusion !== "success") throw new Error("Ripresa non riuscita.");
+  const jobs = runJobs(repository, number);
+  const environment = deployedEnvironment(run, jobs);
+  if (environment) {
+    assertConfirmed(jobs, environment);
+    if (environment === "production") {
+      publishedRelease(repository, run.head_sha, values.version);
+      cleanupIntegrated(repository);
+    }
+  }
+  console.log("Run riconciliata; per la pulizia PR riprendere release:cycle pr sul suo numero.");
+}
+
+/**
+ * Le migration non additive si approvano prima della qualifica: senza la riga il ciclo si ferma
+ * subito; con la riga aggiunta dopo l'apertura ripete il `Verify` fallito.
+ */
+async function rerunMigrationReview(repository, pr) {
+  const forkPoint = git("merge-base", "origin/develop", pr.headRefOid);
+  if (!reviewAdded(addedMigrations(forkPoint, pr.headRefOid), pr.body)) return;
+  const last = json(
+    "run",
+    "list",
+    "--repo",
+    repository,
+    "--workflow",
+    "ci.yml",
+    "--commit",
+    pr.headRefOid,
+    "--event",
+    "pull_request",
+    "--limit",
+    "1",
+    "--json",
+    "databaseId,status,conclusion",
+  )[0];
+  if (!migrationReviewBlocked(last, (id) => runJobs(repository, id))) return;
+  gh("run", "rerun", String(last.databaseId), "--repo", repository, "--failed");
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const run = json("api", `repos/${repository}/actions/runs/${last.databaseId}`);
+    if (run.status !== "completed") break;
+    await pause(2000);
+  }
+}
+
+/** Qualifica e merge di una PR aperta; restituisce la PR riletta dopo l'esito. */
+async function mergeOpenPullRequest(repository, number, pr) {
+  // Il merge automatico resta sospeso finché la testa non è qualificata sulla base attuale.
+  if (pr.autoMergeRequest)
+    gh(...pullRequestAction("disable-auto", repository, number, pr.headRefOid));
+  const read = () => readPullRequest(repository, number);
+  const develop = () =>
+    gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
+  const fetchHead = (...refs) => localGit(() => git("fetch", "origin", ...refs, pr.headRefName));
+  // Una base avanzata richiede una nuova qualifica soltanto se tocca file della PR o globali.
+  const independent = (base) =>
+    compatibleBase(git("merge-base", base, pr.headRefOid), base, pr.headRefOid);
+  fetchHead("develop");
+  await rerunMigrationReview(repository, pr);
+  // Una base avanzata su file comuni fa fallire la qualifica: il ciclo aggiorna la PR e segue la
+  // nuova qualifica, fino a tre volte, senza rimetterla in bozza.
+  const qualify = async () => {
+    for (let attempt = 1; ; attempt++) {
+      const base = develop();
+      fetchHead("develop");
+      let since = 0;
+      if (!independent(base)) {
+        since = Date.now() - 1000;
+        gh(
+          "api",
+          "-X",
+          "PUT",
+          `repos/${repository}/pulls/${number}/update-branch`,
+          "-f",
+          `expected_head_sha=${pr.headRefOid}`,
+        );
+        pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
+          fetchHead();
+          return contains(base, head);
+        });
+      }
+      if (pr.isDraft) {
+        since = Date.now() - 1000;
+        gh(...pullRequestAction("ready", repository, number, pr.headRefOid));
+      }
+      // Senza aggiornamento vale la run già avviata sulla testa, anche se ancora in corso.
+      try {
+        await waitRun(repository, "ci.yml", pr.headRefOid, pr.headRefName, ["pull_request"], since);
+        return;
+      } catch (error) {
+        const current = develop();
+        fetchHead("develop");
+        if (!retryQualification(attempt, () => independent(current))) throw error;
+        console.log("Base avanzata su file comuni durante la qualifica: aggiornamento.");
+        pr = read();
+      }
+    }
+  };
+  // Un merge alla volta: le qualifiche delle altre PR proseguono intanto, e la PR entra soltanto
+  // se la base attuale resta compatibile con la sua testa, altrimenti si riqualifica.
+  for (let round = 1; pr.state === "OPEN"; round++) {
+    await qualify();
+    const expectedHead = pr.headRefOid;
+    const requalify = await withLock(lockDirectory("merge"), "il merge", async () => {
+      fetchHead("develop");
+      pr = read();
+      if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante la qualifica.");
+      if (mergeDecision(round, independent(develop())) === "requalify") {
+        console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
+        return true;
+      }
+      enableAutoMerge(repository, number, pr.headRefOid);
+      await waitChecks(repository, pr.headRefOid);
+      // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
+      for (let attempt = 0; attempt < 180; attempt++) {
+        pr = read();
+        if (pr.state !== "OPEN") break;
+        if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante il ciclo.");
+        await pause(10_000);
+      }
+      return false;
+    });
+    if (!requalify) break;
+  }
+  return pr;
+}
+
+/** Run del commit integrato, deploy test confermato e pulizia del branch della PR unita. */
+async function settleMergedPullRequest(repository, number, pr) {
+  const files = pullRequestFiles(repository, number);
+  const { jobs, deployRequired } = await settleMergeRun(pr.mergeCommit.oid, plan(files).deploy, {
+    wait: (sha) =>
+      waitRun(repository, "ci.yml", sha, "develop", undefined, undefined, ["success", "failure"]),
+    jobs: (run) => runJobs(repository, run.id),
+    head: () => gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha"),
+    contains: (ancestor, head) =>
+      localGit(() => {
+        git("fetch", "origin", "develop");
+        try {
+          git("merge-base", "--is-ancestor", ancestor, head);
+          return true;
+        } catch {
+          return false;
+        }
+      }),
+  });
+  if (checkCycleJobs(jobs, deployRequired))
+    console.log("Deploy test, collaudo remoto e readback provider confermati nella run.");
+  localGit(() => {
+    git("fetch", "origin", "develop", `refs/pull/${number}/head`);
+    if (git("branch", "--show-current") === pr.headRefName && !git("status", "--porcelain"))
+      git("merge", "--ff-only", pr.headRefOid);
+    cleanup(pr);
+  });
+  console.log("Merge, collaudo CI e pulizia del branch riconciliati.");
+}
+
+async function pullRequestCycle({ repository, number }) {
+  if (!/^\d+$/u.test(number ?? "")) throw new Error("Numero PR non valido.");
+  let pr = readPullRequest(repository, number);
+  assertCyclePullRequest(pr, repository);
+  if (pr.state === "OPEN") pr = await mergeOpenPullRequest(repository, number, pr);
+  if (pr.state !== "MERGED")
+    throw new Error("Merge non confermato: ciclo riprendibile dalla stessa PR.");
+  await settleMergedPullRequest(repository, number, pr);
+}
+
+function confirmProduction(repository, jobs, sha, version) {
+  assertConfirmed(jobs, "production");
+  publishedRelease(repository, sha, version);
+  cleanupIntegrated(repository);
+}
+
+/** Qualifica del candidato o pubblicazione Production con `publish.yml`, senza doppi dispatch. */
+async function publishCycle({ repository, command, values }) {
+  if (!/^[0-9a-f]{40}$/u.test(values.sha ?? "")) throw new Error("SHA completo richiesto.");
+  const ref = candidateRef(command, values.ref);
+  assertBase(
+    values.sha,
+    gh("api", `repos/${repository}/git/ref/heads/${ref}`, "--jq", ".object.sha"),
+  );
+  if (command === "production" && !values.version)
+    throw new Error("Versione Production richiesta.");
+  const existing = json(
+    "run",
+    "list",
+    "--repo",
+    repository,
+    "--workflow",
+    "publish.yml",
+    "--branch",
+    ref,
+    "--limit",
+    "50",
+    "--json",
+    "databaseId,headSha,status,conclusion",
+  ).find((run) => run.headSha === values.sha);
+  if (existing) {
+    const jobs = runJobs(repository, existing.databaseId);
+    if (existingCandidate(command, existing, jobs) === "published") {
+      const run = summary(repository, existing.databaseId);
+      confirmProduction(repository, jobs, run.head_sha, values.version);
+      return;
+    }
+    const tree = json("api", `repos/${repository}/git/commits/${values.sha}`).tree.sha;
+    const certified = candidateAvailable(repository, tree);
+    if (command === "candidate" && certified) {
+      summary(repository, existing.databaseId);
+      console.log("Qualifica già riuscita: nessun nuovo dispatch.");
+      return;
+    }
+  }
+  const since = Date.now() - 1000;
+  gh(
+    "workflow",
+    "run",
+    "publish.yml",
+    "--repo",
+    repository,
+    "--ref",
+    ref,
+    "-f",
+    `expected_sha=${values.sha}`,
+    "-f",
+    `prova=${command === "candidate"}`,
+    "-f",
+    `version=${values.version ?? ""}`,
+    "-f",
+    `reviewed_migrations=${values["reviewed-migrations"]}`,
+  );
+  const run = await waitRun(
+    repository,
+    "publish.yml",
+    values.sha,
+    ref,
+    ["workflow_dispatch"],
+    since,
+  );
+  if (command === "production")
+    confirmProduction(repository, runJobs(repository, run.id), run.head_sha, values.version);
+  console.log(
+    command === "candidate"
+      ? "Candidato qualificato, senza deploy."
+      : "Workflow Production concluso; ricevuta e release disponibili nella run.",
+  );
+}
+
+const cycles = {
+  cleanup: cleanupCycle,
+  resume: resumeCycle,
+  pr: pullRequestCycle,
+  candidate: publishCycle,
+  production: publishCycle,
+};
+
 async function main() {
   const { positionals, values } = parseArgs({
     allowPositionals: true,
@@ -676,340 +1049,21 @@ async function main() {
       "reviewed-migrations": { type: "string", default: "" },
     },
   });
-  const [command, number] = positionals;
-  if (!["status", "pr", "cleanup", "candidate", "production", "resume"].includes(command))
-    throw new Error(
-      "Uso: release:cycle status <run> | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run>.",
-    );
+  const { command, number } = cycleCommand(positionals);
   const repository = json("api", "repos/{owner}/{repo}").full_name;
-  if (command === "status") {
-    if (!/^\d+$/u.test(number ?? "")) throw new Error("Run non valida.");
-    summary(repository, number);
-    return;
-  }
+  // status legge soltanto: nessun checkout pulito né blocco.
+  if (command === "status") return statusCycle({ repository, number });
   if (git("status", "--porcelain"))
     throw new Error(
       "Il ciclo richiede un checkout pulito; conservare e completare il lavoro locale.",
     );
   localGit(() => completeHistory());
   // Cicli su oggetti diversi procedono insieme; sullo stesso oggetto uno solo.
-  const object =
-    command === "pr" ? `pr-${number}` : command === "resume" ? `run-${number}` : command;
+  const object = lockObject(command, number);
   const directory = lockDirectory(object);
   if (!acquireLock(directory)) throw new Error(`Un altro ciclo locale è già attivo: ${object}.`);
   try {
-    if (command === "cleanup") {
-      cleanupIntegrated(repository);
-      return;
-    }
-    if (command === "resume") {
-      if (!/^\d+$/u.test(number ?? "")) throw new Error("Run non valida.");
-      let run = json("api", `repos/${repository}/actions/runs/${number}`);
-      if (
-        ![".github/workflows/ci.yml", ".github/workflows/publish.yml"].includes(run.path) ||
-        !["develop", "main"].includes(run.head_branch) ||
-        !["push", "workflow_dispatch"].includes(run.event)
-      )
-        throw new Error("Run fuori dal ciclo supportato.");
-      assertBase(
-        run.head_sha,
-        gh("api", `repos/${repository}/git/ref/heads/${run.head_branch}`, "--jq", ".object.sha"),
-      );
-      if (run.status === "completed" && run.conclusion !== "success")
-        gh("run", "rerun", number, "--repo", repository, "--failed");
-      if (run.conclusion !== "success")
-        await watch([
-          "run",
-          "watch",
-          number,
-          "--repo",
-          repository,
-          "--exit-status",
-          "--interval",
-          "30",
-        ]);
-      run = summary(repository, number);
-      if (run.conclusion !== "success") throw new Error("Ripresa non riuscita.");
-      const jobs = runJobs(repository, number);
-      const environment = run.path.endsWith("publish.yml") ? "production" : "test";
-      if (
-        jobs.some(
-          (job) =>
-            job.name === (environment === "test" ? "Deploy test" : "Distribuisci e verifica") &&
-            job.conclusion === "success",
-        )
-      ) {
-        assertConfirmed(jobs, environment);
-        if (environment === "production") {
-          publishedRelease(repository, run.head_sha, values.version);
-          cleanupIntegrated(repository);
-        }
-      }
-      console.log(
-        "Run riconciliata; per la pulizia PR riprendere release:cycle pr sul suo numero.",
-      );
-      return;
-    }
-    if (command === "pr") {
-      if (!/^\d+$/u.test(number ?? "")) throw new Error("Numero PR non valido.");
-      let pr = readPullRequest(repository, number);
-      if (pr.baseRefName !== "develop" || pr.headRepository?.nameWithOwner !== repository)
-        throw new Error(
-          "Il ciclo PR gestisce soltanto branch dello stesso repository verso develop.",
-        );
-      if (["main", "develop", "legacy/1.x"].includes(pr.headRefName))
-        throw new Error("La PR non parte da un feature branch.");
-      if (pr.state === "CLOSED") throw new Error("PR chiusa senza merge.");
-      if (pr.state === "OPEN") {
-        // Il merge automatico resta sospeso finché la testa non è qualificata sulla base attuale.
-        if (pr.autoMergeRequest)
-          gh(...pullRequestAction("disable-auto", repository, number, pr.headRefOid));
-        const read = () => readPullRequest(repository, number);
-        const develop = () =>
-          gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
-        const fetchHead = (...refs) =>
-          localGit(() => git("fetch", "origin", ...refs, pr.headRefName));
-        // Una base avanzata richiede una nuova qualifica soltanto se tocca file della PR o globali.
-        const independent = (base) =>
-          compatibleBase(git("merge-base", base, pr.headRefOid), base, pr.headRefOid);
-        // Le migration non additive si approvano prima della qualifica: senza la riga il ciclo
-        // si ferma subito; con la riga aggiunta dopo l'apertura ripete il `Verify` fallito.
-        fetchHead("develop");
-        const forkPoint = git("merge-base", "origin/develop", pr.headRefOid);
-        if (reviewAdded(addedMigrations(forkPoint, pr.headRefOid), pr.body)) {
-          const last = json(
-            "run",
-            "list",
-            "--repo",
-            repository,
-            "--workflow",
-            "ci.yml",
-            "--commit",
-            pr.headRefOid,
-            "--event",
-            "pull_request",
-            "--limit",
-            "1",
-            "--json",
-            "databaseId,status,conclusion",
-          )[0];
-          const blocked =
-            last?.conclusion === "failure" &&
-            json("api", `repos/${repository}/actions/runs/${last.databaseId}/jobs?per_page=100`)
-              .jobs.flatMap((job) => job.steps ?? [])
-              .some(
-                (step) => step.name === "Check migration review" && step.conclusion === "failure",
-              );
-          if (blocked) {
-            gh("run", "rerun", String(last.databaseId), "--repo", repository, "--failed");
-            for (let attempt = 0; attempt < 30; attempt++) {
-              const run = json("api", `repos/${repository}/actions/runs/${last.databaseId}`);
-              if (run.status !== "completed") break;
-              await pause(2000);
-            }
-          }
-        }
-        // Una base avanzata su file comuni fa fallire la qualifica: il ciclo aggiorna la PR e
-        // segue la nuova qualifica, fino a tre volte, senza rimetterla in bozza.
-        const qualify = async () => {
-          for (let attempt = 1; ; attempt++) {
-            const base = develop();
-            fetchHead("develop");
-            let since = 0;
-            if (!independent(base)) {
-              since = Date.now() - 1000;
-              gh(
-                "api",
-                "-X",
-                "PUT",
-                `repos/${repository}/pulls/${number}/update-branch`,
-                "-f",
-                `expected_head_sha=${pr.headRefOid}`,
-              );
-              pr = await waitUpdatedHead(read, pr.headRefOid, (head) => {
-                fetchHead();
-                return contains(base, head);
-              });
-            }
-            if (pr.isDraft) {
-              since = Date.now() - 1000;
-              gh(...pullRequestAction("ready", repository, number, pr.headRefOid));
-            }
-            // Senza aggiornamento vale la run già avviata sulla testa, anche se ancora in corso.
-            try {
-              await waitRun(
-                repository,
-                "ci.yml",
-                pr.headRefOid,
-                pr.headRefName,
-                ["pull_request"],
-                since,
-              );
-              return;
-            } catch (error) {
-              const current = develop();
-              fetchHead("develop");
-              if (attempt === 3 || independent(current)) throw error;
-              console.log("Base avanzata su file comuni durante la qualifica: aggiornamento.");
-              pr = read();
-            }
-          }
-        };
-        // Un merge alla volta: le qualifiche delle altre PR proseguono intanto, e la PR entra
-        // soltanto se la base attuale resta compatibile con la sua testa, altrimenti si riqualifica.
-        for (let round = 1; pr.state === "OPEN"; round++) {
-          await qualify();
-          const expectedHead = pr.headRefOid;
-          const requalify = await withLock(lockDirectory("merge"), "il merge", async () => {
-            fetchHead("develop");
-            pr = read();
-            if (pr.headRefOid !== expectedHead)
-              throw new Error("PR modificata durante la qualifica.");
-            if (!independent(develop())) {
-              if (round === 3)
-                throw new Error("Base avanzata più volte: ciclo riprendibile dalla stessa PR.");
-              console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
-              return true;
-            }
-            enableAutoMerge(repository, number, pr.headRefOid);
-            await waitChecks(repository, pr.headRefOid);
-            // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
-            for (let attempt = 0; attempt < 180; attempt++) {
-              pr = read();
-              if (pr.state !== "OPEN") break;
-              if (pr.headRefOid !== expectedHead)
-                throw new Error("PR modificata durante il ciclo.");
-              await pause(10_000);
-            }
-            return false;
-          });
-          if (!requalify) break;
-        }
-      }
-      if (pr.state !== "MERGED")
-        throw new Error("Merge non confermato: ciclo riprendibile dalla stessa PR.");
-      const files = pullRequestFiles(repository, number);
-      const { jobs, deployRequired } = await settleMergeRun(
-        pr.mergeCommit.oid,
-        plan(files).deploy,
-        {
-          wait: (sha) =>
-            waitRun(repository, "ci.yml", sha, "develop", undefined, undefined, [
-              "success",
-              "failure",
-            ]),
-          jobs: (run) => runJobs(repository, run.id),
-          head: () => gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha"),
-          contains: (ancestor, head) =>
-            localGit(() => {
-              git("fetch", "origin", "develop");
-              try {
-                git("merge-base", "--is-ancestor", ancestor, head);
-                return true;
-              } catch {
-                return false;
-              }
-            }),
-        },
-      );
-      if (checkCycleJobs(jobs, deployRequired))
-        console.log("Deploy test, collaudo remoto e readback provider confermati nella run.");
-      localGit(() => {
-        git("fetch", "origin", "develop", `refs/pull/${number}/head`);
-        if (git("branch", "--show-current") === pr.headRefName && !git("status", "--porcelain"))
-          git("merge", "--ff-only", pr.headRefOid);
-        cleanup(pr);
-      });
-      console.log("Merge, collaudo CI e pulizia del branch riconciliati.");
-      return;
-    }
-    if (!/^[0-9a-f]{40}$/u.test(values.sha ?? "")) throw new Error("SHA completo richiesto.");
-    const ref = candidateRef(command, values.ref);
-    assertBase(
-      values.sha,
-      gh("api", `repos/${repository}/git/ref/heads/${ref}`, "--jq", ".object.sha"),
-    );
-    if (command === "production" && !values.version)
-      throw new Error("Versione Production richiesta.");
-    const existing = json(
-      "run",
-      "list",
-      "--repo",
-      repository,
-      "--workflow",
-      "publish.yml",
-      "--branch",
-      ref,
-      "--limit",
-      "50",
-      "--json",
-      "databaseId,headSha,status,conclusion",
-    ).find((run) => run.headSha === values.sha);
-    if (existing) {
-      const jobs = json(
-        "api",
-        `repos/${repository}/actions/runs/${existing.databaseId}/jobs?per_page=100`,
-      ).jobs;
-      const publish = jobs.find((job) => job.name === "Distribuisci e verifica");
-      if (
-        existing.status !== "completed" ||
-        existing.conclusion !== "success" ||
-        !["success", "skipped"].includes(publish?.conclusion)
-      )
-        throw new Error(
-          `Candidato già presente: riconciliare con release:cycle resume ${existing.databaseId}, senza un nuovo dispatch.`,
-        );
-      if (command === "production" && publish.conclusion === "success") {
-        const run = summary(repository, existing.databaseId);
-        assertConfirmed(jobs, "production");
-        publishedRelease(repository, run.head_sha, values.version);
-        cleanupIntegrated(repository);
-        return;
-      }
-      const tree = json("api", `repos/${repository}/git/commits/${values.sha}`).tree.sha;
-      const certified = candidateAvailable(repository, tree);
-      if (command === "candidate" && certified) {
-        summary(repository, existing.databaseId);
-        console.log("Qualifica già riuscita: nessun nuovo dispatch.");
-        return;
-      }
-    }
-    const since = Date.now() - 1000;
-    gh(
-      "workflow",
-      "run",
-      "publish.yml",
-      "--repo",
-      repository,
-      "--ref",
-      ref,
-      "-f",
-      `expected_sha=${values.sha}`,
-      "-f",
-      `prova=${command === "candidate"}`,
-      "-f",
-      `version=${values.version ?? ""}`,
-      "-f",
-      `reviewed_migrations=${values["reviewed-migrations"]}`,
-    );
-    const run = await waitRun(
-      repository,
-      "publish.yml",
-      values.sha,
-      ref,
-      ["workflow_dispatch"],
-      since,
-    );
-    if (command === "production") {
-      assertConfirmed(runJobs(repository, run.id), "production");
-      publishedRelease(repository, run.head_sha, values.version);
-      cleanupIntegrated(repository);
-    }
-    console.log(
-      command === "candidate"
-        ? "Candidato qualificato, senza deploy."
-        : "Workflow Production concluso; ricevuta e release disponibili nella run.",
-    );
+    await cycles[command]({ repository, command, number, values });
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

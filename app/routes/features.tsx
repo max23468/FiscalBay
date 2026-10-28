@@ -3,7 +3,8 @@ import { LockKeyhole, RefreshCcw, Sparkles } from "lucide-react";
 
 import { IconTile } from "~/components/icon-tile";
 import { ShotRow, type ShotName } from "~/components/product-shot";
-import { PageIntro, SiteLayout, siteColumn } from "~/components/site-layout";
+import { siteColumn } from "~/components/site-column";
+import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { Badge } from "~/components/ui/badge";
 import { sitePages } from "../copy/site-pages.server";
 import { featuresPath, siteSecurityPath } from "../app-links";

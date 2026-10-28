@@ -4,7 +4,7 @@ import { upstreamJson } from "../http.server";
 import { base64Url } from "../../sealed.server";
 import type { SellerTokens } from "./seller-credentials.server";
 import type { EbayEnvironment } from "../../view-models";
-import { ebayConfiguration, type EbayAccess } from "./environment.server";
+import { basicAuthorization, ebayConfiguration, type EbayAccess } from "./environment.server";
 
 // Il collegamento del negozio non chiede l'email: resta separato dal login eBay.
 export const ebayStoreScopes = [
@@ -187,7 +187,7 @@ export async function exchangeStoreConsent(
   const token = await upstreamJson(fetcher, configuration.tokenUrl, tokenSchema, {
     method: "POST",
     headers: {
-      authorization: `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`,
+      authorization: basicAuthorization(configuration),
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import type { SearchResults } from "~/components/shell-search";
+import { previewOrdersPath } from "../app-links";
 import { buyerNameView } from "../contact";
 import { localizedPath } from "../i18n";
 import { searchQuery } from "../orders/order-search";
@@ -26,7 +27,7 @@ export async function action({ request }: Route.ActionArgs) {
     request.formData(),
   ]);
   const query = searchQuery(form.get("q"));
-  const path = localizedPath(language, "/anteprima/ordini");
+  const path = localizedPath(language, previewOrdersPath);
   const href = query
     ? await searchHref(env.BETTER_AUTH_SECRET, previewSearchScope, path, query)
     : path;

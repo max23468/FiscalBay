@@ -33,15 +33,15 @@ const defaults = {
 
 /**
  * Preferenze della chat con i predefiniti dello schema per uno spazio senza riga, come
- * `enabled`, `filter`, `mode`, `digestTime` e `timeZone`. Argomento: alias di
- * `telegram_preferences`.
+ * `enabled`, `filter`, `mode`, `digestTime` e `timeZone`. Argomenti: alias di
+ * `telegram_preferences` ed espressione SQL del fuso predefinito.
  */
-export const telegramPreferencesSql = (preferences: string) =>
+export const telegramPreferencesSql = (preferences: string, timeZone = "'Europe/Rome'") =>
   `COALESCE(${preferences}.enabled, 1) AS enabled,
    COALESCE(${preferences}.filter, '${defaults.filter}') AS filter,
    COALESCE(${preferences}.mode, '${defaults.mode}') AS mode,
    COALESCE(${preferences}.digest_time, '${defaults.digestTime}') AS digestTime,
-   COALESCE(${preferences}.time_zone, 'Europe/Rome') AS timeZone`;
+   COALESCE(${preferences}.time_zone, ${timeZone}) AS timeZone`;
 
 /**
  * Nuovo deep link per lo spazio dell'utente, legato alla sessione che lo chiede. Sostituisce
@@ -229,13 +229,13 @@ export async function telegramSettings(
 ): Promise<TelegramView> {
   const [{ results: workspaces }, { results: stores }] = await db.batch<Record<string, unknown>>([
     db
-      .prepare(`SELECT l.chat_label, l.linked_at, l.delivery_failure, p.enabled, p.filter, p.mode,
-        p.digest_time, p.time_zone
+      .prepare(`SELECT l.chat_label, l.linked_at, l.delivery_failure,
+        ${telegramPreferencesSql("p", "?2")}
       FROM workspace_members wm
       LEFT JOIN telegram_links l ON l.workspace_id = wm.workspace_id
       LEFT JOIN telegram_preferences p ON p.workspace_id = wm.workspace_id
-      WHERE wm.user_id = ?`)
-      .bind(userId),
+      WHERE wm.user_id = ?1`)
+      .bind(userId, timeZone),
     db
       .prepare(`SELECT s.id, ${storeNameSql("s")} AS name, COALESCE(sp.enabled, 1) AS enabled,
         ${planPausedStore("s.id")} AS paused
@@ -249,11 +249,11 @@ export async function telegramSettings(
         chat_label: string | null;
         linked_at: string | null;
         delivery_failure: "blocked" | "unreachable" | null;
-        enabled: number | null;
-        filter: TelegramFilter | null;
-        mode: TelegramMode | null;
-        digest_time: string | null;
-        time_zone: string | null;
+        enabled: number;
+        filter: TelegramFilter;
+        mode: TelegramMode;
+        digestTime: string;
+        timeZone: string;
       }
     | undefined;
   // Prima del primo negozio non c'è uno spazio: nessuna chat e i predefiniti.
@@ -266,11 +266,11 @@ export async function telegramSettings(
           ...(row.delivery_failure ? { failure: row.delivery_failure } : {}),
         }
       : null,
-    enabled: row.enabled === null ? defaults.enabled : row.enabled === 1,
-    filter: row.filter ?? defaults.filter,
-    mode: row.mode ?? defaults.mode,
-    digestTime: row.digest_time ?? defaults.digestTime,
-    timeZone: row.time_zone ?? timeZone,
+    enabled: row.enabled === 1,
+    filter: row.filter,
+    mode: row.mode,
+    digestTime: row.digestTime,
+    timeZone: row.timeZone,
     stores: (stores as Array<{ id: string; name: string; enabled: number; paused: number }>).map(
       (store) => ({
         id: store.id,

@@ -111,23 +111,3 @@ export function MethodAction({
     </AlertDialog>
   );
 }
-
-/** Gruppo della card Sicurezza, separato dal precedente come nelle Impostazioni. */
-export function SecurityGroup({
-  id,
-  title,
-  children,
-}: {
-  id: string;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section aria-labelledby={id} className="grid gap-3 border-t pt-4 first:border-t-0 first:pt-0">
-      <h2 id={id} className="font-semibold">
-        {title}
-      </h2>
-      {children}
-    </section>
-  );
-}

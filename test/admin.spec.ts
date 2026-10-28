@@ -60,6 +60,7 @@ import {
   resetDatabase,
 } from "./fixtures/database-fixtures";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
+import { stripeAccount } from "./fixtures/stripe-fixtures";
 import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
@@ -535,6 +536,32 @@ describe("configurazioni commerciali", () => {
     expect(
       await subscriptionView(env.DB, env, "w-a", { source: "lifetime", endsAt: null }, at(now)),
     ).toEqual({ premium: { period: "lifetime", renewsAt: null, granted: true } });
+  });
+
+  it("con il lifetime concesso un abbonamento che Stripe non restituisce più resta indisponibile", async () => {
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-a" }),
+      env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+          customer_id, offer, price_generation, status, current_period_start, current_period_end,
+          cancel_at_period_end, synced_at, checked_at)
+        VALUES ('sub_test', 'w-a', 'test', 'cus_test', 'monthly', '2026-09', 'active', ?1,
+          '2026-10-13T20:00:00.000Z', 0, ?1, ?1)`).bind(now),
+    ]);
+    const stripe = stripeAccount();
+    stripe.state.missing = true;
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    expect(
+      await grantLifetimeConcession(
+        env,
+        { workspaceId: "w-a", author: "admin", reason: "Omaggio" },
+        at(now),
+      ),
+    ).toBe("done");
+    expect(stripe.requests).toEqual(["GET /v1/subscriptions/sub_test"]);
+    // Non può più addebitare: il cron non la rilegge come un abbonamento da chiudere.
+    expect(
+      await env.DB.prepare("SELECT status, unavailable_at FROM stripe_subscriptions").first(),
+    ).toEqual({ status: "active", unavailable_at: now });
   });
 });
 

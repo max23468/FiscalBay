@@ -253,18 +253,22 @@ export function SimpleSelect({
 }
 
 export function Group({
+  id: anchor,
   title,
   children,
   className,
   separated = true,
 }: {
+  /** Identificativo del titolo, quando un collegamento porta al gruppo. */
+  id?: string;
   title?: string;
   children: React.ReactNode;
   className?: string;
   /** Linea sopra il gruppo; senza, quando il gruppo precedente finisce già con una linea. */
   separated?: boolean;
 }) {
-  const id = useId();
+  const generated = useId();
+  const id = anchor ?? generated;
   return (
     <section
       aria-labelledby={title ? id : undefined}

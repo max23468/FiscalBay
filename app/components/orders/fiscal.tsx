@@ -27,7 +27,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { Spinner } from "~/components/ui/spinner";
 import { Textarea } from "~/components/ui/textarea";
 import { cn } from "cn";
 import { supportEmail, type AppCopy } from "../../app-copy";
@@ -122,22 +121,8 @@ function UnlockButton({
         if (!open) setDontAsk(false);
       }}
     >
-      <AlertDialogTrigger
-        render={
-          <Button
-            size="sm"
-            className="w-fit"
-            disabled={unlocking}
-            focusableWhenDisabled
-            aria-busy={unlocking || undefined}
-          />
-        }
-      >
-        {unlocking ? (
-          <Spinner data-icon="inline-start" />
-        ) : (
-          <UnlockIcon aria-hidden="true" data-icon="inline-start" />
-        )}
+      <AlertDialogTrigger render={<Button size="sm" className="w-fit" pending={unlocking} />}>
+        <UnlockIcon aria-hidden="true" data-icon="inline-start" />
         {t.orders.unlock}
       </AlertDialogTrigger>
       <AlertDialogContent initialFocus={cancel}>

@@ -1,7 +1,8 @@
 import { cn } from "cn";
 
 import { FaqList } from "~/components/faq-list";
-import { PageIntro, SiteLayout, siteColumn } from "~/components/site-layout";
+import { siteColumn } from "~/components/site-column";
+import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { sitePages } from "../copy/site-pages.server";
 import { faqPath, supportPath } from "../app-links";
 import { localizedPath } from "../i18n";
