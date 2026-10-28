@@ -7,6 +7,7 @@ import { ApplicationError, logFailure } from "../errors";
 import type { Language } from "../i18n";
 import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
+  closeCheckoutSession,
   createBoundedStripeClient,
   createStripeClient,
   isMissingObject,
@@ -16,14 +17,22 @@ import {
   stripeListLimit,
   stripeSecretKey,
 } from "../integrations/stripe.server";
-import { lifetimeInForceSql, openSubscriptionStatuses } from "./grants.server";
 import {
+  closedSubscriptionStatuses,
+  entitlementInForce,
+  lifetimeInForceSql,
+  openSubscriptionStatuses,
+} from "./grants.server";
+import {
+  cancelSubscription,
   isLifetimeSession,
   reconcileLifetime,
   reconcileLifetimeReservations,
 } from "./lifetime.server";
 import {
   customerCharges,
+  erasedCustomerSql,
+  isErasedCustomer,
   paymentReversal,
   recordErasure,
   reversalIntent,
@@ -465,8 +474,7 @@ async function renewingSubscription(db: D1Database, env: Env, userId: string, no
       WHERE wm.user_id = ?1 AND s.environment = ?2 AND s.unavailable_at IS NULL
         AND s.status IN ('active', 'trialing') AND s.cancel_at_period_end = 0
         AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = s.workspace_id
-          AND e.source IN ('premium', 'admin') AND e.revoked_at IS NULL
-          AND julianday(e.starts_at) <= julianday(?3) AND julianday(?3) < julianday(e.ends_at))
+          AND e.source IN ('premium', 'admin') AND ${entitlementInForce("e", "?3")})
       ORDER BY julianday(s.current_period_start) DESC LIMIT 1`)
     .bind(userId, stripeEnvironment(env), now.toISOString())
     .first<{ id: string; workspace_id: string; price_generation: string }>();
@@ -581,8 +589,7 @@ export async function changeSubscriptionPeriod(
   }
 }
 
-const notErasedSql = (alias: string) => `NOT EXISTS (SELECT 1 FROM stripe_customer_erasures r
-  WHERE r.customer_id = ${alias}.customer_id)`;
+const notErasedSql = (alias: string) => `NOT ${erasedCustomerSql(`${alias}.customer_id`)}`;
 
 /**
  * Cliente Stripe dello spazio, espressione SQL: quello dell'abbonamento che può ancora
@@ -649,7 +656,7 @@ export async function stopRenewals(
   const [subscriptions, sessions, checkouts] = await env.DB.batch<{ id: string }>([
     env.DB.prepare(`SELECT id FROM stripe_subscriptions WHERE workspace_id = ?1
         AND environment = ?2 AND unavailable_at IS NULL
-        AND status NOT IN ('canceled', 'incomplete_expired')`).bind(
+        AND status NOT IN (${sqlList(closedSubscriptionStatuses)})`).bind(
       workspaceId,
       stripeEnvironment(env),
     ),
@@ -670,39 +677,17 @@ export async function stopRenewals(
   if (!key) return false;
   try {
     const stripe = await createBoundedStripeClient(key, fetcher);
-    const stop = async (id: string) => {
-      let status: string;
-      try {
-        const current = await stripeCall(() => stripe.subscriptions.retrieve(id));
-        status = ["canceled", "incomplete_expired"].includes(current.status)
-          ? current.status
-          : (await stripeCall(() => stripe.subscriptions.cancel(id))).status;
-      } catch (error) {
-        // Un abbonamento che Stripe non restituisce più non può addebitare.
-        if (!isMissingObject(error)) throw error;
-        await env.DB.prepare(
-          "UPDATE stripe_subscriptions SET unavailable_at = COALESCE(unavailable_at, ?1) WHERE id = ?2",
-        )
-          .bind(at, id)
-          .run();
-        return;
-      }
-      await env.DB.prepare(`UPDATE stripe_subscriptions SET status = ?1, synced_at = ?2
-          WHERE id = ?3 AND julianday(synced_at) <= julianday(?2)`)
-        .bind(status, at, id)
-        .run();
-    };
+    const stop = (id: string) => cancelSubscription(env, stripe, id, now);
     const close = async (id: string) => {
-      const session = await stripeCall(() => stripe.checkout.sessions.retrieve(id));
-      if (session.status === "open") await stripeCall(() => stripe.checkout.sessions.expire(id));
+      await closeCheckoutSession(stripe, id);
       // Scaduta: il posto si libera; pagata: il posto resta con i riferimenti all'acquisto.
       await reconcileLifetime(env, stripe, id, now);
     };
     // Una sessione aperta si chiude; una completata ha creato un abbonamento da fermare.
     const checkout = async (id: string) => {
-      const session = await stripeCall(() => stripe.checkout.sessions.retrieve(id));
-      if (session.status === "open") await stripeCall(() => stripe.checkout.sessions.expire(id));
-      else if (session.subscription) await stop(stripeId(session.subscription));
+      const session = await closeCheckoutSession(stripe, id);
+      if (session.status === "complete" && session.subscription)
+        await stop(stripeId(session.subscription));
     };
     await inSequence(
       checkouts!.results.map(({ id }) => id),
@@ -741,8 +726,7 @@ export async function recordSupportErasure(
   fetcher: typeof fetch = fetch,
   now = new Date(),
 ): Promise<SupportErasure> {
-  const customer = await env.DB.prepare(`SELECT EXISTS (SELECT 1 FROM stripe_customer_erasures
-      WHERE customer_id = ?3) AS erased
+  const customer = await env.DB.prepare(`SELECT ${erasedCustomerSql("?3")} AS erased
     WHERE EXISTS (SELECT 1 FROM stripe_subscriptions WHERE workspace_id = ?1
         AND environment = ?2 AND customer_id = ?3)
       OR EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1 AND customer_id = ?3)`)
@@ -758,12 +742,7 @@ export async function recordSupportErasure(
       actor: input.actor,
       reason: input.reason,
     });
-    const recorded = await env.DB.prepare(
-      "SELECT 1 FROM stripe_customer_erasures WHERE customer_id = ?",
-    )
-      .bind(input.customerId)
-      .first();
-    if (!recorded) return "not_deleted";
+    if (!(await isErasedCustomer(env.DB, input.customerId))) return "not_deleted";
     await inSequence(open, (subscription) => reconcileSubscription(env, stripe, subscription, now));
     return "done";
   } catch (error) {

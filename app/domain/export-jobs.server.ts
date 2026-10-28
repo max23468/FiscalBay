@@ -21,6 +21,7 @@ import {
 import { orderAllowance } from "./grants.server";
 import { exportCsvStream, exportOrderPages, exportXlsxStream } from "./order-export.server";
 import { visibleOrderTallies, visibleOrdersTerm } from "./orders.server";
+import { queueRetryDelay } from "./work-timing";
 import { XlsxRowLimitError } from "./xlsx.server";
 
 /**
@@ -270,12 +271,14 @@ export async function consumeExportJob(
       await fail();
       return;
     }
+    // Una pulizia non riuscita lascia scadere il blocco: il nuovo tentativo parte comunque.
     await env.DB.prepare(
       "UPDATE export_jobs SET locked_until = NULL WHERE id = ? AND state = 'queued'",
     )
       .bind(id)
-      .run();
-    message.retry({ delaySeconds: 30 * 2 ** (message.attempts - 1) });
+      .run()
+      .catch((cleanup: unknown) => logFailure({ error: cleanup, operation: "export_files" }));
+    message.retry({ delaySeconds: queueRetryDelay(message.attempts) });
   }
 }
 

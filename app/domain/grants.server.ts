@@ -21,13 +21,21 @@ export function orderAccessSql(order: string, workspace: string, at: string) {
 }
 
 /**
+ * Diritto `alias` di `workspace_entitlements` non revocato e in vigore all'istante `at`: iniziato
+ * e non ancora finito, senza fine per il lifetime.
+ */
+export function entitlementInForce(alias: string, at: string) {
+  return `${alias}.revoked_at IS NULL AND julianday(${alias}.starts_at) <= julianday(${at})
+    AND (${alias}.ends_at IS NULL OR julianday(${at}) < julianday(${alias}.ends_at))`;
+}
+
+/**
  * Spazio con un abbonamento Premium attivo all'istante `at`. Argomenti: espressioni SQL dello
  * spazio e dell'istante.
  */
 export function activeEntitlementSql(workspace: string, at: string) {
   return `EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
-    AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(${at})
-    AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at)))`;
+    AND ${entitlementInForce("e", at)})`;
 }
 
 /** Stati in cui un abbonamento Stripe può ancora incassare. */
@@ -39,6 +47,13 @@ export const openSubscriptionStatuses = [
   "incomplete",
   "paused",
 ] as const;
+
+/** Stati finali di un abbonamento Stripe: chiuso, non addebita più. */
+export const closedSubscriptionStatuses = ["canceled", "incomplete_expired"] as const;
+
+export function isClosedSubscription(status: string) {
+  return (closedSubscriptionStatuses as readonly string[]).includes(status);
+}
 
 /**
  * Abbonamento dello spazio che può ancora incassare, come un pagamento da confermare o un
@@ -56,8 +71,7 @@ export function openSubscriptionSql(workspace: string) {
  */
 export function activeCoverageSql(column: "source" | "ends_at", workspace: string, at: string) {
   return `(SELECT e.${column} FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
-    AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(${at})
-    AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at))
+    AND ${entitlementInForce("e", at)}
     ORDER BY e.source = 'trial', e.ends_at IS NOT NULL, julianday(e.ends_at) DESC LIMIT 1)`;
 }
 
@@ -95,8 +109,7 @@ export const abuseSuspendedSql = (workspace: string) =>
  */
 export function paidCoverageSql(workspace: string, at: string) {
   return `EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
-    AND e.source <> 'trial' AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(${at})
-    AND (e.ends_at IS NULL OR julianday(${at}) < julianday(e.ends_at)))`;
+    AND e.source <> 'trial' AND ${entitlementInForce("e", at)})`;
 }
 
 /**

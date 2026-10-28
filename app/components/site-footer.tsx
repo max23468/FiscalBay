@@ -1,6 +1,7 @@
 import { cn } from "cn";
 
 import { useCopy } from "~/components/copy-context";
+import { siteColumn } from "~/components/site-column";
 import { appCopy, supportEmail } from "../app-copy";
 import { privacyPath, supportPath, termsPath } from "../app-links";
 import { localizedPath } from "../i18n";
@@ -17,7 +18,8 @@ export function SiteFooter({ className }: { className?: string }) {
     <footer className="border-t">
       <div
         className={cn(
-          "mx-auto flex w-[min(72rem,calc(100%-2rem))] flex-wrap items-center justify-between gap-4 py-6 text-sm text-muted-foreground",
+          siteColumn,
+          "flex flex-wrap items-center justify-between gap-4 py-6 text-sm text-muted-foreground",
           className,
         )}
       >

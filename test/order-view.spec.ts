@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { orderCriteria, type VisibleOrder } from "../app/domain/orders.server";
+import type { VisibleOrder } from "../app/domain/orders.server";
+import { orderCriteria } from "../app/orders/order-list";
 import { orderView } from "../app/domain/order-view.server";
 import { now } from "./fixtures/database-fixtures";
 import { addressRows } from "../app/format";

@@ -79,6 +79,38 @@ export function customColumns(
   return columns.join() === standardColumns(rows).join() ? null : [...columns];
 }
 
+/** Forma del file scelta: formato, granularità e colonne, comprese quelle escluse. */
+export interface FileLayout {
+  format: ExportFormat;
+  rows: ExportRows;
+  /** Ogni colonna nell'ordine scelto; quelle non incluse seguono nell'ordine standard. */
+  order: ExportColumn[];
+  chosen: ExportColumn[];
+}
+
+/** Forma di una configurazione salvata; senza, il file standard. */
+export function layoutOf(
+  configuration: { format: ExportFormat; rows: ExportRows; columns: ExportColumn[] } | null,
+): FileLayout {
+  const all = standardColumns("item");
+  if (!configuration) return { format: "csv", rows: "order", order: all, chosen: all };
+  const { format, rows, columns } = configuration;
+  const saved = new Set(columns);
+  return {
+    format,
+    rows,
+    order: [...columns, ...all.filter((column) => !saved.has(column))],
+    chosen: columns,
+  };
+}
+
+/** Colonne del file, nell'ordine scelto, fra quelle della granularità. */
+export function fileColumns(layout: FileLayout): ExportColumn[] {
+  const available = new Set(standardColumns(layout.rows));
+  const chosen = new Set(layout.chosen);
+  return layout.order.filter((column) => available.has(column) && chosen.has(column));
+}
+
 /** Nome della colonna nella granularità scelta. */
 export function columnName(column: ExportColumn, rows: ExportRows, t: AppCopy): string {
   const names = t.settings.export.file.columns;

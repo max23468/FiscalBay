@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { data } from "react-router";
 
 import { assertSameOrigin } from "./account-area.server";
-import { adminCopy, type AuditOutcome } from "./copy/admin-copy";
+import { adminCopy, type AdminCopy, type AuditOutcome } from "./copy/admin-copy";
 import { listAbuseSignals, reviewAbuseSignal } from "./domain/abuse-review.server";
 import { listAudit, reasonSchema, recordAudit } from "./domain/admin-audit.server";
 import {
@@ -65,6 +65,8 @@ import { setAdminPause } from "./domain/stores.server";
 import { logFailure } from "./errors";
 import { displayTimeZone, formatDate } from "./format";
 import type { Language } from "./i18n";
+import { sha256Hex } from "./sealed.server";
+import { wallInstant } from "./time";
 import { resumeStalledReceipts } from "./webhooks.server";
 
 /**
@@ -100,11 +102,6 @@ export function sectionFrom(value: string | undefined): AdminSection | null {
 /** Prefisso dei token tecnici della console, riconoscibile in un'eventuale fuga. */
 const agentTokenPrefix = "fbat_";
 
-async function sha256(value: string) {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 /**
  * Accesso tecnico (D213): un token `Bearer` il cui SHA-256 è registrato e non revocato apre la
  * console all'agente che assiste l'owner, anche senza passkey, con le stesse operazioni della
@@ -116,7 +113,7 @@ async function agentAccess(request: Request, now: Date) {
   if (!token || token.length > 128) return null;
   const row = await env.DB.prepare(`UPDATE admin_agent_tokens SET used_at = ?2
       WHERE token_hash = ?1 AND revoked_at IS NULL RETURNING label`)
-    .bind(await sha256(token), now.toISOString())
+    .bind(await sha256Hex(token), now.toISOString())
     .first<{ label: string }>();
   return row?.label ?? null;
 }
@@ -243,39 +240,12 @@ export type AdminActionResult = {
   transfer?: { id: string; summary: string };
 };
 
-const wallClocks = new Map<string, Intl.DateTimeFormat>();
-
-/** Ora del muro nel fuso indicato, in millisecondi come se fosse UTC. */
-function wallTime(at: number, timeZone: string) {
-  let format = wallClocks.get(timeZone);
-  if (!format) {
-    format = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hourCycle: "h23",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    wallClocks.set(timeZone, format);
-  }
-  const parts = Object.fromEntries(
-    format.formatToParts(new Date(at)).map((part) => [part.type, part.value]),
-  );
-  return Date.UTC(+parts.year!, +parts.month! - 1, +parts.day!, +parts.hour!, +parts.minute!);
-}
-
 /** Ora locale del modulo, nel fuso della console, convertita in istante UTC. */
 export function localInstant(value: string, timeZone = displayTimeZone): string | null {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/u.exec(value);
   if (!match) return null;
   const [, year, month, day, hour, minute] = match.map(Number) as number[];
-  const wall = Date.UTC(year!, month! - 1, day, hour, minute);
-  const offset = (at: number) => wallTime(at, timeZone) - at;
-  // Due passaggi: il primo stima l'offset, il secondo lo corregge vicino al cambio d'ora.
-  const first = wall - offset(wall);
-  return new Date(wall - offset(first)).toISOString();
+  return wallInstant(Date.UTC(year!, month! - 1, day, hour, minute), timeZone).toISOString();
 }
 
 type Field = (name: string) => string;
@@ -323,6 +293,394 @@ async function formTarget(intent: string, field: Field) {
   }
   return null;
 }
+
+/** Contesto di un'operazione della console: modulo, autore, motivo e scrittura dell'esito. */
+type ActionContext = {
+  field: Field;
+  actor: string;
+  /** Motivo validato, vuoto dove non serve. */
+  why: string;
+  now: Date;
+  language: Language;
+  t: AdminCopy;
+  date: (value: string) => string;
+  result: (
+    target: string,
+    outcome: AuditOutcome,
+    notice: string,
+    ok?: boolean,
+  ) => Promise<AdminActionResult>;
+  audit: (target: string | null, outcome: AuditOutcome, operation?: string) => Promise<void>;
+  invalid: () => Promise<ReturnType<typeof data>>;
+  refuse: (outcome: AuditOutcome) => Promise<ReturnType<typeof data>>;
+};
+
+/** Operazione della console: se chiede il motivo e cosa fa. */
+type AdminAction = {
+  needsReason: boolean;
+  run: (context: ActionContext) => Promise<AdminActionResult | ReturnType<typeof data>>;
+};
+
+/** Pausa manuale di un negozio, messa o tolta. */
+const storePause = (paused: boolean): AdminAction => ({
+  needsReason: true,
+  run: async ({ field, now, t, result }) => {
+    const storeId = field("negozio");
+    const pause = await setAdminPause(env.DB, storeId, paused, now);
+    return result(
+      await storeTarget(storeId),
+      pause,
+      pause === "not_found" ? t.common.notFound : t.results.pause[pause],
+    );
+  },
+});
+
+const adminActions: Record<string, AdminAction> = {
+  "grant-premium": {
+    needsReason: true,
+    run: async ({ field, actor, why, now, t, date, result }) => {
+      const workspaceId = field("spazio");
+      const grant = await grantPremium(
+        env,
+        { workspaceId, author: actor, reason: why, days: Number(field("giorni")) },
+        now,
+      );
+      const notices = t.results.grantPremium;
+      return result(
+        `workspace:${workspaceId}`,
+        grant.result,
+        grant.result === "done"
+          ? notices.done(date(grant.endsAt))
+          : grant.result === "lifetime"
+            ? notices.lifetime
+            : grant.result === "unavailable"
+              ? notices.unavailable
+              : grant.result === "invalid"
+                ? t.common.invalid
+                : t.common.notFound,
+      );
+    },
+  },
+  "grant-lifetime": {
+    needsReason: true,
+    run: async ({ field, actor, why, now, t, result }) => {
+      const workspaceId = field("spazio");
+      const grant = await grantLifetimeConcession(
+        env,
+        { workspaceId, author: actor, reason: why },
+        now,
+      );
+      return result(
+        `workspace:${workspaceId}`,
+        grant,
+        grant === "invalid"
+          ? t.common.invalid
+          : grant === "not_found"
+            ? t.common.notFound
+            : t.results.grantLifetime[grant],
+      );
+    },
+  },
+  "grant-history": {
+    needsReason: true,
+    run: async ({ field, actor, why, now, t, result }) => {
+      const workspaceId = field("spazio");
+      const grant = await grantHistoryExtension(
+        env.DB,
+        { workspaceId, months: Number(field("mesi")), author: actor, reason: why },
+        now,
+      );
+      return result(
+        `workspace:${workspaceId}`,
+        grant,
+        grant === "done"
+          ? t.common.done
+          : grant === "invalid"
+            ? t.common.invalid
+            : t.common.notFound,
+      );
+    },
+  },
+  "revoke-history": {
+    needsReason: true,
+    run: async ({ field, now, t, result }) => {
+      const workspaceId = field("spazio");
+      const revoked = await revokeHistoryExtension(
+        env.DB,
+        { workspaceId, extensionId: field("estensione") },
+        now,
+      );
+      return result(
+        `workspace:${workspaceId}`,
+        revoked,
+        revoked === "done" ? t.common.done : t.common.notFound,
+      );
+    },
+  },
+  "free-store": {
+    needsReason: true,
+    run: async ({ field, actor, why, now, t, result }) => {
+      const storeId = field("negozio");
+      const choice = await assistFreeStore(env.DB, { storeId, actor, reason: why }, now);
+      return result(
+        await storeTarget(storeId),
+        choice,
+        choice === "not_found" ? t.common.notFound : t.results.freeStore[choice],
+      );
+    },
+  },
+  "store-sync": {
+    needsReason: false,
+    run: async ({ field, now, t, result }) => {
+      const storeId = field("negozio");
+      const sync = await requestStoreSync(env, null, storeId, {}, now);
+      return result(
+        await storeTarget(storeId),
+        sync,
+        sync === "not_found" ? t.common.notFound : t.results.sync[sync],
+        sync === "queued" || sync === "merged",
+      );
+    },
+  },
+  "store-pause": storePause(true),
+  "store-resume": storePause(false),
+  "retry-details": {
+    needsReason: false,
+    run: async ({ field, now, t, result }) => {
+      const storeId = field("negozio");
+      const count = await retryOrderDetails(env.DB, storeId, now);
+      return result(await storeTarget(storeId), "done", t.results.details(count));
+    },
+  },
+  "record-erasure": {
+    needsReason: true,
+    run: async ({ field, actor, why, now, t, result }) => {
+      const workspaceId = field("spazio");
+      const erasure = await recordSupportErasure(
+        env,
+        { workspaceId, customerId: field("cliente"), actor, reason: why },
+        fetch,
+        now,
+      );
+      return result(
+        `workspace:${workspaceId}`,
+        erasure,
+        erasure === "not_found" ? t.common.notFound : t.results.erasure[erasure],
+      );
+    },
+  },
+  "transfer-prepare": {
+    needsReason: true,
+    run: async ({ field, actor, why, now, t, result, audit, language }) => {
+      const storeId = field("negozio");
+      const [prepared, target] = await Promise.all([
+        prepareStoreTransfer(
+          env.DB,
+          { storeId, toWorkspaceId: field("destinazione"), actor, reason: why },
+          now,
+        ),
+        storeTarget(storeId),
+      ]);
+      if (prepared.result !== "prepared")
+        return result(
+          target,
+          prepared.result,
+          prepared.result === "not_found" ? t.common.notFound : t.results.transfer[prepared.result],
+        );
+      await audit(target, "prepared");
+      return {
+        ok: true,
+        notice: "",
+        transfer: {
+          id: prepared.id,
+          summary: t.workspace.transferSummary(
+            prepared.preview.storeName,
+            prepared.preview.toWorkspaceId,
+            prepared.preview.orders,
+            formatDate(prepared.expiresAt, language, "time"),
+          ),
+        },
+      };
+    },
+  },
+  "transfer-confirm": {
+    needsReason: false,
+    run: async ({ field, actor, now, t, result, audit }) => {
+      const confirmed = await confirmStoreTransfer(env, { id: field("trasferimento"), actor }, now);
+      const target = confirmed.transfer
+        ? `workspace:${confirmed.transfer.from}:store:${confirmed.transfer.storeId}`
+        : `transfer:${field("trasferimento")}`;
+      if (confirmed.transfer)
+        await audit(
+          `workspace:${confirmed.transfer.to}:store:${confirmed.transfer.storeId}`,
+          "done",
+          "transfer-received",
+        );
+      return result(target, confirmed.result, t.results.transfer[confirmed.result]);
+    },
+  },
+  "requeue-task": {
+    needsReason: false,
+    run: async ({ field, now, t, result, invalid }) => {
+      const task = field("lavoro");
+      if (!isScheduledTask(task)) return invalid();
+      const queued = await requeueTask(env, task, now);
+      return result(`task:${task}`, queued, t.results.task[queued], queued === "queued");
+    },
+  },
+  "resume-receipts": {
+    needsReason: false,
+    run: async ({ field, now, t, result, invalid }) => {
+      const provider = field("provider");
+      if (provider !== "ebay" && provider !== "stripe" && provider !== "telegram") return invalid();
+      const count = await resumeStalledReceipts(env, provider, now);
+      return result(`receipts:${provider}`, "done", t.results.receipts(count));
+    },
+  },
+  "save-promotion": {
+    needsReason: true,
+    run: async ({ field, now, t, result, invalid }) => {
+      const parsed = promotionSchema.safeParse({
+        startsAt: localInstant(field("inizio")),
+        endsAt: localInstant(field("fine")),
+        quota: field("quota"),
+      });
+      if (!parsed.success) return invalid();
+      const id = field("promozione") || undefined;
+      const saved = await savePromotion(env.DB, { id, promotion: parsed.data }, now);
+      return result(
+        `promotion:${id ?? "new"}`,
+        saved,
+        saved === "not_found" ? t.common.notFound : t.results.promotion[saved],
+      );
+    },
+  },
+  "end-promotion": {
+    needsReason: true,
+    run: async ({ field, now, t, result }) => {
+      const id = field("promozione");
+      const ended = await endPromotion(env.DB, id, now);
+      return result(
+        `promotion:${id}`,
+        ended,
+        ended === "done" ? t.results.promotion.done : t.common.notFound,
+      );
+    },
+  },
+  "schedule-quota": {
+    needsReason: true,
+    run: async ({ field, actor, why, now, t, result, invalid }) => {
+      const parsed = quotaChangeSchema.safeParse({
+        quota: field("quota"),
+        effectiveAt: localInstant(field("decorrenza")),
+      });
+      if (!parsed.success) return invalid();
+      const scheduled = await scheduleFreeQuota(
+        env.DB,
+        { ...parsed.data, actor, reason: why },
+        now,
+      );
+      return result("free-quota", scheduled, t.results.quota[scheduled]);
+    },
+  },
+  "save-notice": {
+    needsReason: false,
+    run: async ({ field, actor, now, t, result, invalid }) => {
+      const parsed = serviceNoticeSchema.safeParse({
+        tone: field("tono"),
+        titleIt: field("titolo_it"),
+        bodyIt: field("testo_it"),
+        titleEn: field("titolo_en"),
+        bodyEn: field("testo_en"),
+        startsAt: localInstant(field("inizio")),
+        endsAt: localInstant(field("fine")),
+      });
+      if (!parsed.success) return invalid();
+      const saved = await saveServiceNotice(
+        env.DB,
+        { id: field("comunicazione") || undefined, notice: parsed.data, actor },
+        now,
+      );
+      return result(
+        `notice:${saved.result === "done" ? saved.id : field("comunicazione") || "new"}`,
+        saved.result,
+        saved.result === "done"
+          ? t.results.notice.done
+          : saved.result === "invalid"
+            ? t.common.invalid
+            : t.common.notFound,
+      );
+    },
+  },
+  "withdraw-notice": {
+    needsReason: false,
+    run: async ({ field, now, t, result }) => {
+      const id = field("comunicazione");
+      const withdrawn = await withdrawServiceNotice(env.DB, id, now);
+      return result(
+        `notice:${id}`,
+        withdrawn,
+        withdrawn === "done" ? t.results.notice.withdrawn : t.common.notFound,
+      );
+    },
+  },
+  "review-abuse": {
+    needsReason: true,
+    run: async ({ field, actor, why, now, t, result, invalid }) => {
+      const outcome = field("esito");
+      if (outcome !== "clear" && outcome !== "suspended") return invalid();
+      const workspaceId = field("spazio") || undefined;
+      const reviewed = await reviewAbuseSignal(
+        env.DB,
+        { key: field("segnalazione"), outcome, workspaceId, actor, reason: why },
+        now,
+      );
+      return result(
+        workspaceId ? `workspace:${workspaceId}` : `abuse:${field("segnalazione")}`,
+        reviewed,
+        reviewed === "not_found" ? t.common.notFound : t.results.abuse[reviewed],
+      );
+    },
+  },
+  "set-switch": {
+    needsReason: true,
+    run: async ({ field, now, t, result, invalid }) => {
+      const name = field("interruttore");
+      const state = field("stato");
+      if (!isSwitchName(name) || (state !== "on" && state !== "off")) return invalid();
+      const changed = await setSwitch(env.DB, name, state === "on", now);
+      return result(
+        `switch:${name}:${state}`,
+        changed,
+        changed === "done" ? t.common.done : t.results.unchanged,
+      );
+    },
+  },
+  "quota-attention": {
+    needsReason: true,
+    run: async ({ field, now, t, result, refuse }) => {
+      const saved = await setQuotaAttention(env.DB, Number(field("soglia")), now);
+      if (saved === "invalid") return refuse("out_of_range");
+      return result(
+        `setting:quota_attention:${field("soglia")}`,
+        saved,
+        saved === "done" ? t.common.done : t.results.unchanged,
+      );
+    },
+  },
+  "admit-waitlisted": {
+    needsReason: true,
+    run: async ({ field, t, result }) => {
+      const workspaceId = field("spazio");
+      const admitted = await admitWorkspace(env.DB, workspaceId);
+      return result(
+        `workspace:${workspaceId}`,
+        admitted,
+        admitted === "done" ? t.results.admitted : t.results.notWaiting,
+      );
+    },
+  },
+};
 
 /**
  * Esegue un'operazione e ne registra l'esito. Ogni ramo restituisce l'oggetto del registro,
@@ -386,25 +744,8 @@ export async function runAdminAction(
     await audit(await formTarget(intent, field), "foreign_origin");
     throw error;
   }
-  const needsReason = new Set([
-    "grant-premium",
-    "grant-lifetime",
-    "grant-history",
-    "revoke-history",
-    "free-store",
-    "store-pause",
-    "store-resume",
-    "record-erasure",
-    "transfer-prepare",
-    "save-promotion",
-    "end-promotion",
-    "schedule-quota",
-    "review-abuse",
-    "set-switch",
-    "quota-attention",
-    "admit-waitlisted",
-  ]);
-  if (needsReason.has(intent) && !reason.success) return refuse("reason_required");
+  const action = Object.hasOwn(adminActions, intent) ? adminActions[intent] : undefined;
+  if (action?.needsReason && !reason.success) return refuse("reason_required");
   // Gli identificativi vengono dal modulo: oltre la lunghezza del registro non sono validi.
   if (
     [...form.keys()].some(
@@ -415,304 +756,20 @@ export async function runAdminAction(
   const why = reason.success ? reason.data : "";
   const date = (value: string) => formatDate(value, language);
   try {
-    switch (intent) {
-      case "grant-premium": {
-        const workspaceId = field("spazio");
-        const grant = await grantPremium(
-          env,
-          { workspaceId, author: actor, reason: why, days: Number(field("giorni")) },
-          now,
-        );
-        const notices = t.results.grantPremium;
-        return result(
-          `workspace:${workspaceId}`,
-          grant.result,
-          grant.result === "done"
-            ? notices.done(date(grant.endsAt))
-            : grant.result === "lifetime"
-              ? notices.lifetime
-              : grant.result === "unavailable"
-                ? notices.unavailable
-                : grant.result === "invalid"
-                  ? t.common.invalid
-                  : t.common.notFound,
-        );
-      }
-      case "grant-lifetime": {
-        const workspaceId = field("spazio");
-        const grant = await grantLifetimeConcession(
-          env,
-          { workspaceId, author: actor, reason: why },
-          now,
-        );
-        return result(
-          `workspace:${workspaceId}`,
-          grant,
-          grant === "invalid"
-            ? t.common.invalid
-            : grant === "not_found"
-              ? t.common.notFound
-              : t.results.grantLifetime[grant],
-        );
-      }
-      case "grant-history": {
-        const workspaceId = field("spazio");
-        const grant = await grantHistoryExtension(
-          env.DB,
-          { workspaceId, months: Number(field("mesi")), author: actor, reason: why },
-          now,
-        );
-        return result(
-          `workspace:${workspaceId}`,
-          grant,
-          grant === "done"
-            ? t.common.done
-            : grant === "invalid"
-              ? t.common.invalid
-              : t.common.notFound,
-        );
-      }
-      case "revoke-history": {
-        const workspaceId = field("spazio");
-        const revoked = await revokeHistoryExtension(
-          env.DB,
-          { workspaceId, extensionId: field("estensione") },
-          now,
-        );
-        return result(
-          `workspace:${workspaceId}`,
-          revoked,
-          revoked === "done" ? t.common.done : t.common.notFound,
-        );
-      }
-      case "free-store": {
-        const storeId = field("negozio");
-        const choice = await assistFreeStore(env.DB, { storeId, actor, reason: why }, now);
-        return result(
-          await storeTarget(storeId),
-          choice,
-          choice === "not_found" ? t.common.notFound : t.results.freeStore[choice],
-        );
-      }
-      case "store-sync": {
-        const storeId = field("negozio");
-        const sync = await requestStoreSync(env, null, storeId, {}, now);
-        return result(
-          await storeTarget(storeId),
-          sync,
-          sync === "not_found" ? t.common.notFound : t.results.sync[sync],
-          sync === "queued" || sync === "merged",
-        );
-      }
-      case "store-pause":
-      case "store-resume": {
-        const storeId = field("negozio");
-        const pause = await setAdminPause(env.DB, storeId, intent === "store-pause", now);
-        return result(
-          await storeTarget(storeId),
-          pause,
-          pause === "not_found" ? t.common.notFound : t.results.pause[pause],
-        );
-      }
-      case "retry-details": {
-        const storeId = field("negozio");
-        const count = await retryOrderDetails(env.DB, storeId, now);
-        return result(await storeTarget(storeId), "done", t.results.details(count));
-      }
-      case "record-erasure": {
-        const workspaceId = field("spazio");
-        const erasure = await recordSupportErasure(
-          env,
-          { workspaceId, customerId: field("cliente"), actor, reason: why },
-          fetch,
-          now,
-        );
-        return result(
-          `workspace:${workspaceId}`,
-          erasure,
-          erasure === "not_found" ? t.common.notFound : t.results.erasure[erasure],
-        );
-      }
-      case "transfer-prepare": {
-        const storeId = field("negozio");
-        const prepared = await prepareStoreTransfer(
-          env.DB,
-          { storeId, toWorkspaceId: field("destinazione"), actor, reason: why },
-          now,
-        );
-        const target = await storeTarget(storeId);
-        if (prepared.result !== "prepared")
-          return result(
-            target,
-            prepared.result,
-            prepared.result === "not_found"
-              ? t.common.notFound
-              : t.results.transfer[prepared.result],
-          );
-        await audit(target, "prepared");
-        return {
-          ok: true,
-          notice: "",
-          transfer: {
-            id: prepared.id,
-            summary: t.workspace.transferSummary(
-              prepared.preview.storeName,
-              prepared.preview.toWorkspaceId,
-              prepared.preview.orders,
-              formatDate(prepared.expiresAt, language, "time"),
-            ),
-          },
-        };
-      }
-      case "transfer-confirm": {
-        const confirmed = await confirmStoreTransfer(
-          env,
-          { id: field("trasferimento"), actor },
-          now,
-        );
-        const target = confirmed.transfer
-          ? `workspace:${confirmed.transfer.from}:store:${confirmed.transfer.storeId}`
-          : `transfer:${field("trasferimento")}`;
-        if (confirmed.transfer)
-          await audit(
-            `workspace:${confirmed.transfer.to}:store:${confirmed.transfer.storeId}`,
-            "done",
-            "transfer-received",
-          );
-        return result(target, confirmed.result, t.results.transfer[confirmed.result]);
-      }
-      case "requeue-task": {
-        const task = field("lavoro");
-        if (!isScheduledTask(task)) return invalid();
-        const queued = await requeueTask(env, task, now);
-        return result(`task:${task}`, queued, t.results.task[queued], queued === "queued");
-      }
-      case "resume-receipts": {
-        const provider = field("provider");
-        if (provider !== "ebay" && provider !== "stripe" && provider !== "telegram")
-          return invalid();
-        const count = await resumeStalledReceipts(env, provider, now);
-        return result(`receipts:${provider}`, "done", t.results.receipts(count));
-      }
-      case "save-promotion": {
-        const parsed = promotionSchema.safeParse({
-          startsAt: localInstant(field("inizio")),
-          endsAt: localInstant(field("fine")),
-          quota: field("quota"),
-        });
-        if (!parsed.success) return invalid();
-        const id = field("promozione") || undefined;
-        const saved = await savePromotion(env.DB, { id, promotion: parsed.data }, now);
-        return result(
-          `promotion:${id ?? "new"}`,
-          saved,
-          saved === "not_found" ? t.common.notFound : t.results.promotion[saved],
-        );
-      }
-      case "end-promotion": {
-        const id = field("promozione");
-        const ended = await endPromotion(env.DB, id, now);
-        return result(
-          `promotion:${id}`,
-          ended,
-          ended === "done" ? t.results.promotion.done : t.common.notFound,
-        );
-      }
-      case "schedule-quota": {
-        const parsed = quotaChangeSchema.safeParse({
-          quota: field("quota"),
-          effectiveAt: localInstant(field("decorrenza")),
-        });
-        if (!parsed.success) return invalid();
-        const scheduled = await scheduleFreeQuota(
-          env.DB,
-          { ...parsed.data, actor, reason: why },
-          now,
-        );
-        return result("free-quota", scheduled, t.results.quota[scheduled]);
-      }
-      case "save-notice": {
-        const parsed = serviceNoticeSchema.safeParse({
-          tone: field("tono"),
-          titleIt: field("titolo_it"),
-          bodyIt: field("testo_it"),
-          titleEn: field("titolo_en"),
-          bodyEn: field("testo_en"),
-          startsAt: localInstant(field("inizio")),
-          endsAt: localInstant(field("fine")),
-        });
-        if (!parsed.success) return invalid();
-        const saved = await saveServiceNotice(
-          env.DB,
-          { id: field("comunicazione") || undefined, notice: parsed.data, actor },
-          now,
-        );
-        return result(
-          `notice:${saved.result === "done" ? saved.id : field("comunicazione") || "new"}`,
-          saved.result,
-          saved.result === "done"
-            ? t.results.notice.done
-            : saved.result === "invalid"
-              ? t.common.invalid
-              : t.common.notFound,
-        );
-      }
-      case "withdraw-notice": {
-        const id = field("comunicazione");
-        const withdrawn = await withdrawServiceNotice(env.DB, id, now);
-        return result(
-          `notice:${id}`,
-          withdrawn,
-          withdrawn === "done" ? t.results.notice.withdrawn : t.common.notFound,
-        );
-      }
-      case "review-abuse": {
-        const outcome = field("esito");
-        if (outcome !== "clear" && outcome !== "suspended") return invalid();
-        const workspaceId = field("spazio") || undefined;
-        const reviewed = await reviewAbuseSignal(
-          env.DB,
-          { key: field("segnalazione"), outcome, workspaceId, actor, reason: why },
-          now,
-        );
-        return result(
-          workspaceId ? `workspace:${workspaceId}` : `abuse:${field("segnalazione")}`,
-          reviewed,
-          reviewed === "not_found" ? t.common.notFound : t.results.abuse[reviewed],
-        );
-      }
-      case "set-switch": {
-        const name = field("interruttore");
-        const state = field("stato");
-        if (!isSwitchName(name) || (state !== "on" && state !== "off")) return invalid();
-        const changed = await setSwitch(env.DB, name, state === "on", now);
-        return result(
-          `switch:${name}:${state}`,
-          changed,
-          changed === "done" ? t.common.done : t.results.unchanged,
-        );
-      }
-      case "quota-attention": {
-        const saved = await setQuotaAttention(env.DB, Number(field("soglia")), now);
-        if (saved === "invalid") return refuse("out_of_range");
-        return result(
-          `setting:quota_attention:${field("soglia")}`,
-          saved,
-          saved === "done" ? t.common.done : t.results.unchanged,
-        );
-      }
-      case "admit-waitlisted": {
-        const workspaceId = field("spazio");
-        const admitted = await admitWorkspace(env.DB, workspaceId);
-        return result(
-          `workspace:${workspaceId}`,
-          admitted,
-          admitted === "done" ? t.results.admitted : t.results.notWaiting,
-        );
-      }
-      default:
-        return refuse("unknown_intent");
-    }
+    if (!action) return refuse("unknown_intent");
+    return await action.run({
+      field,
+      actor,
+      why,
+      now,
+      language,
+      t,
+      date,
+      result,
+      audit,
+      invalid,
+      refuse,
+    });
   } catch (error) {
     logFailure({ request, error, operation: "admin" });
     await audit(await formTarget(intent, field).catch(() => null), "failed");

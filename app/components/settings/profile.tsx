@@ -57,12 +57,7 @@ export function ProfileSection({
         {field("cognome", "profile-last-name")}
         {business ? field("ragione_sociale", "profile-company", "sm:col-span-2") : null}
       </div>
-      <Button
-        type="submit"
-        className="w-fit"
-        disabled={!dirty || action.pending}
-        aria-busy={action.pending || undefined}
-      >
+      <Button type="submit" className="w-fit" disabled={!dirty} pending={action.pending}>
         {action.pending ? t.common.saving : t.common.save}
       </Button>
       {action.result ? (

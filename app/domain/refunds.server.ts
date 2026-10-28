@@ -8,6 +8,8 @@ import {
   stripeId,
   stripeListLimit,
 } from "../integrations/stripe.server";
+import { closedSubscriptionStatuses } from "./grants.server";
+import { sqlList } from "./sql.server";
 
 /**
  * Rimborsi, dispute e cancellazioni finanziarie (§6.4, §6.6). Con Managed Payments li decide
@@ -85,11 +87,18 @@ export function reversalStatements(
   ];
 }
 
-const erasedSql = "EXISTS (SELECT 1 FROM stripe_customer_erasures WHERE customer_id = ?)";
+/**
+ * Il cliente ha chiesto la cancellazione dei dati finanziari: FiscalBay non lo usa più.
+ * Argomento: espressione SQL del cliente.
+ */
+export const erasedCustomerSql = (customer: string) =>
+  `EXISTS (SELECT 1 FROM stripe_customer_erasures r WHERE r.customer_id = ${customer})`;
 
-/** Il cliente ha chiesto la cancellazione dei dati finanziari: FiscalBay non lo usa più. */
 export async function isErasedCustomer(db: D1Database, customerId: string) {
-  return !!(await db.prepare(`SELECT 1 WHERE ${erasedSql}`).bind(customerId).first());
+  return !!(await db
+    .prepare(`SELECT 1 WHERE ${erasedCustomerSql("?")}`)
+    .bind(customerId)
+    .first());
 }
 
 /**
@@ -182,7 +191,7 @@ export async function recordErasure(
   if (recorded.meta.changes) signal("financial_erasure");
   const { results } = await env.DB.prepare(`SELECT id FROM stripe_subscriptions
       WHERE customer_id = ?1 AND environment = ?2 AND unavailable_at IS NULL
-        AND status NOT IN ('canceled', 'incomplete_expired')`)
+        AND status NOT IN (${sqlList(closedSubscriptionStatuses)})`)
     .bind(customerId, environment)
     .all<{ id: string }>();
   return results.map(({ id }) => id);

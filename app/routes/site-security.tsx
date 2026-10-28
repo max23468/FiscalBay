@@ -3,7 +3,8 @@ import { Ban, Eye, Fingerprint, MapPin, Wallet } from "lucide-react";
 
 import { IconTile } from "~/components/icon-tile";
 import { ProductShot } from "~/components/product-shot";
-import { PageIntro, SiteLayout, siteColumn } from "~/components/site-layout";
+import { siteColumn } from "~/components/site-column";
+import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { infoEmail } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
 import { siteSecurityPath } from "../app-links";

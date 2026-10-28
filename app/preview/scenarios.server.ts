@@ -2,7 +2,8 @@ import { appCopy, type AppCopy } from "../app-copy";
 import { priceGeneration, type LifetimeOffer } from "../catalog";
 import { contactsView } from "../contact";
 import { planDiagnostics } from "../support";
-import { unusedCredit } from "../domain/lifetime.server";
+import { trialDays } from "../domain/grants.server";
+import { lifetimeOfferState, lifetimeSlots, unusedCredit } from "../domain/lifetime.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { Language } from "../i18n";
 import { formatDate } from "../format";
@@ -1196,6 +1197,9 @@ export interface Scenario {
   lockedValues: Record<string, TaxIdentifierView[]>;
 }
 
+/** Fine del ciclo di sblocchi in corso negli scenari Free. */
+const cycleEndsAt = "2026-10-02T12:20:00Z";
+
 const account = (overrides: Partial<AccountView> = {}): AccountView => ({
   name: "Laura Martini",
   profile: {
@@ -1207,16 +1211,18 @@ const account = (overrides: Partial<AccountView> = {}): AccountView => ({
   email: "laura.martini@esempio.invalid",
   plan: "free",
   trialAvailable: true,
-  quota: { used: 3, limit: 5, cycleEndsAt: "2026-10-02T12:20:00Z" },
+  quota: { used: 3, limit: 5, cycleEndsAt },
   ...overrides,
 });
 
-const premiumAccount = (): AccountView =>
+/** Premium senza quota: abbonamento annuale salvo `overrides`. */
+const premiumAccount = (overrides: Partial<AccountView> = {}): AccountView =>
   account({
     plan: "premium",
     trialAvailable: false,
     quota: undefined,
     premium: { period: "annual", renewsAt: "2027-03-12T10:00:00Z" },
+    ...overrides,
   });
 
 /** Prova Premium in corso fino a `endsAt`, senza abbonamento. */
@@ -1242,16 +1248,6 @@ const text = {
       body: "On 2 October from 6:00 to 6:30 syncing will be paused. Orders remain available.",
     },
   },
-  quota: {
-    it: {
-      title: "Sblocchi esauriti",
-      body: "Hai usato i 5 sblocchi di questo ciclo. Il prossimo inizia il 2 ottobre.",
-    },
-    en: {
-      title: "No unlocks left",
-      body: "You have used the 5 unlocks for this cycle. The next one starts on 2 October.",
-    },
-  },
   // Gli stessi testi della campanella reale.
   ebayDown: storeNote((t) => ({ title: t.ebayDownTitle, body: t.ebayDownBody })),
   readFailed: storeNote((t) => ({
@@ -1260,26 +1256,6 @@ const text = {
   })),
   inactivity: storeNote((t) => ({ title: t.inactivityTitle, body: t.inactivityBody })),
   expired: storeNote((t) => ({ title: t.expiredTitle, body: t.expiredBody(stores.outlet.name) })),
-  permissions: {
-    it: {
-      title: "Autorizzazione incompleta",
-      body: `${stores.retro.name}: eBay non ha concesso l’accesso agli ordini.`,
-    },
-    en: {
-      title: "Incomplete authorisation",
-      body: `${stores.retro.name}: eBay did not grant access to orders.`,
-    },
-  },
-  renewal: {
-    it: {
-      title: "Premium rinnovato",
-      body: "L’abbonamento annuale è attivo fino al 12 marzo 2027.",
-    },
-    en: {
-      title: "Premium renewed",
-      body: "The annual subscription is active until 12 March 2027.",
-    },
-  },
 };
 
 const sessions = (language: Language): SessionView[] => [
@@ -1306,8 +1282,10 @@ const sessions = (language: Language): SessionView[] => [
   },
 ];
 
-/** Fine della prova attivata per finta all'istante dell'anteprima: 14 giorni dopo. */
-const startedTrialEnd = new Date(Date.parse(previewNow) + 14 * dayMilliseconds).toISOString();
+/** Fine della prova attivata per finta all'istante dell'anteprima, con la durata reale. */
+const startedTrialEnd = new Date(
+  Date.parse(previewNow) + trialDays * dayMilliseconds,
+).toISOString();
 
 export function loadScenario(
   id: ScenarioId,
@@ -1326,6 +1304,19 @@ export function loadScenario(
     ...text[key][language],
     ...extra,
   });
+  // Fasi con le stesse parole e date assolute dell'area reale.
+  const phases = appCopy[language].settings.support.diag.phases;
+  const readAt = (minutes: number) => formatDate(minutesAgo(minutes), language);
+  const diagnostics = (overrides: Partial<DiagnosticsView> = {}): DiagnosticsView => ({
+    version: language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)",
+    storeRef: "neg_7f3a91c2",
+    syncPhase: phases.ok(readAt(5)),
+    errorCode: null,
+    rights: "",
+    correlationId: "c0a8f3e1-5b2d-4e7a-9c11-7d2f0b6e4a90",
+    ...overrides,
+  });
+
   const common = {
     id,
     now: previewNow,
@@ -1358,19 +1349,8 @@ export function loadScenario(
     notifications: [
       note("maintenance", { id: "n-maint", tone: "info", at: minutesAgo(300), read: false }),
     ],
+    diagnostics: diagnostics(),
   };
-  // Fasi con le stesse parole e date assolute dell'area reale.
-  const phases = appCopy[language].settings.support.diag.phases;
-  const readAt = (minutes: number) => formatDate(minutesAgo(minutes), language);
-  const diagnostics = (overrides: Partial<DiagnosticsView> = {}): DiagnosticsView => ({
-    version: language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)",
-    storeRef: "neg_7f3a91c2",
-    syncPhase: phases.ok(readAt(5)),
-    errorCode: null,
-    rights: "",
-    correlationId: "c0a8f3e1-5b2d-4e7a-9c11-7d2f0b6e4a90",
-    ...overrides,
-  });
 
   const freeStores = [
     storeView("vintage"),
@@ -1381,58 +1361,54 @@ export function loadScenario(
       recent: [{ at: minutesAgo(8_640), ok: true, newOrders: 0 }],
     }),
   ];
-  const freeSeeds = seeds.filter((seed) => seed.store === "vintage");
+  const vintageSeeds = seeds.filter((seed) => seed.store === "vintage");
+  const withoutRetro = seeds.filter((seed) => seed.store !== "retro");
   const premiumStores = [
     storeView("vintage", { notifications: true, historyDays: 365, targetMinutes: 10 }),
     storeView("outlet", { notifications: false, historyDays: 365, targetMinutes: 10 }),
     storeView("retro", { notifications: true, historyDays: 365, targetMinutes: 10 }),
   ];
 
-  let scenario: Omit<Scenario, "orders" | "lockedValues"> & {
-    seeds: OrderSeed[];
-    premium: boolean;
-  };
+  type Draft = Omit<Scenario, "orders" | "lockedValues"> & { seeds: OrderSeed[] };
+  /** Free ordinario: un negozio attivo e uno in pausa per il piano. */
+  const free = (overrides: Partial<Draft> = {}): Draft => ({
+    ...common,
+    account: account(),
+    stores: freeStores,
+    seeds: vintageSeeds,
+    ...overrides,
+  });
+  /** Premium annuale con tre negozi e tutti gli ordini. */
+  const premium = (overrides: Partial<Draft> = {}): Draft => ({
+    ...common,
+    account: premiumAccount(),
+    stores: premiumStores,
+    seeds,
+    ...overrides,
+  });
+
+  let scenario: Draft;
   switch (id) {
     case "ordinario":
     case "sblocco-non-riuscito":
-      scenario = {
-        ...common,
-        account: account(),
-        stores: freeStores,
-        seeds: freeSeeds,
-        premium: false,
-        diagnostics: diagnostics(),
-      };
+      scenario = free();
       break;
     case "proposta-consenso":
-      scenario = {
-        ...common,
-        account: account(),
-        stores: freeStores,
-        seeds: freeSeeds,
-        premium: false,
+      scenario = free({
         marketingProposal: true,
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "fine-promozione":
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({
-          quota: { used: 7, limit: 10, cycleEndsAt: "2026-10-02T12:20:00Z", nextLimit: 5 },
+          quota: { used: 7, limit: 10, cycleEndsAt, nextLimit: 5 },
         }),
-        stores: freeStores,
-        seeds: freeSeeds,
-        premium: false,
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "free-inattivo": {
       // Pausa dopo 37 giorni senza accessi; la ripresa simulata riporta il Free ordinario.
       const pausedAt = minutesAgo(1_440);
-      scenario = {
-        ...common,
-        account: account(),
+      scenario = free({
         stores: resumed
           ? freeStores
           : [
@@ -1444,8 +1420,6 @@ export function loadScenario(
               }),
               freeStores[1]!,
             ],
-        seeds: freeSeeds,
-        premium: false,
         notifications: resumed
           ? common.notifications
           : [
@@ -1458,17 +1432,15 @@ export function loadScenario(
               }),
               ...common.notifications,
             ],
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     }
     case "lista-d-attesa":
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({ waitlisted: true, quota: { used: 0, limit: 0, cycleEndsAt: null } }),
         stores: [storeView("vintage", { importedOrders: 12 })],
         // Senza Free nessun ordine è mai stato sbloccato: ogni dato fiscale presente resta bloccato.
-        seeds: freeSeeds.map((seed) =>
+        seeds: vintageSeeds.map((seed) =>
           seed.fiscal.state === "available"
             ? {
                 ...seed,
@@ -1480,28 +1452,19 @@ export function loadScenario(
               }
             : seed,
         ),
-        premium: false,
         notices: [{ kind: "waitlist", purchase: true }],
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "acquisti-sospesi":
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({ trialAvailable: false }),
-        stores: freeStores,
-        seeds: freeSeeds,
-        premium: false,
         purchasesClosed: true,
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "quota-esaurita":
-      scenario = {
-        ...common,
-        account: account({ quota: { used: 5, limit: 5, cycleEndsAt: "2026-10-02T12:20:00Z" } }),
-        stores: freeStores,
-        seeds: freeSeeds.map((seed) =>
+      scenario = free({
+        account: account({ quota: { used: 5, limit: 5, cycleEndsAt } }),
+        seeds: vintageSeeds.map((seed) =>
           seed.id === "ord-02"
             ? {
                 ...seed,
@@ -1510,44 +1473,27 @@ export function loadScenario(
               }
             : seed,
         ),
-        premium: false,
-        notices: [{ kind: "quota", until: "2026-10-02T12:20:00Z" }],
-        notifications: [
-          note("quota", {
-            id: "n-quota",
-            tone: "warning",
-            at: minutesAgo(90),
-            read: false,
-            href: "impostazioni/piano",
-          }),
-          ...common.notifications,
-        ],
-        diagnostics: diagnostics(),
-      };
+        notices: [{ kind: "quota", until: cycleEndsAt }],
+      });
       break;
     case "aggiornamento":
-      scenario = {
-        ...common,
-        account: account(),
+      scenario = free({
         stores: [storeView("vintage", { syncing: true }), freeStores[1]!],
         // Un acquisto non ancora pagato con il dato presente: lo sblocco attende il pagamento.
-        seeds: freeSeeds.map((seed) =>
+        seeds: vintageSeeds.map((seed) =>
           seed.id === "ord-08"
             ? { ...seed, fiscal: { state: "locked", shownAs: "CF", hold: "unpaid" } }
             : seed,
         ),
-        premium: false,
         syncRunning: true,
         incoming: incomingSeeds.map((seed) => toOrder(seed, freeStores)),
         diagnostics: diagnostics({
           syncPhase: phases.running,
         }),
-      };
+      });
       break;
     case "ebay-non-disponibile":
-      scenario = {
-        ...common,
-        account: account(),
+      scenario = free({
         stores: [
           storeView("vintage", {
             lastSyncAt: minutesAgo(125),
@@ -1560,8 +1506,6 @@ export function loadScenario(
           }),
           freeStores[1]!,
         ],
-        seeds: freeSeeds,
-        premium: false,
         ebayDown: true,
         // Il consenso in scadenza resta segnalato, con Ricollega sospeso finché eBay non risponde.
         notices: [
@@ -1582,12 +1526,10 @@ export function loadScenario(
           syncPhase: phases.failed(readAt(5)),
           errorCode: "UPSTREAM_UNAVAILABLE",
         }),
-      };
+      });
       break;
     case "letture-sospese":
-      scenario = {
-        ...common,
-        account: account(),
+      scenario = free({
         // Le letture si sono fermate alla sospensione: l'ultima riuscita resta quella di allora.
         stores: [
           storeView("vintage", {
@@ -1600,20 +1542,15 @@ export function loadScenario(
           }),
           freeStores[1]!,
         ],
-        seeds: freeSeeds,
-        premium: false,
         ebayDown: true,
         ebayMaintenance: true,
         notices: [{ kind: "ebay-down", at: minutesAgo(95), maintenance: true }],
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "negozio-sospeso": {
       // Pausa dell'assistenza, come dopo una revisione antiabuso: niente letture né ripresa.
       const pausedAt = minutesAgo(2_880);
-      scenario = {
-        ...common,
-        account: account(),
+      scenario = free({
         stores: [
           storeView("vintage", {
             connection: "paused",
@@ -1622,10 +1559,7 @@ export function loadScenario(
             recent: [{ at: pausedAt, ok: true, newOrders: 0 }],
           }),
         ],
-        seeds: freeSeeds,
-        premium: false,
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     }
     case "negozio-scaduto": {
@@ -1679,12 +1613,9 @@ export function loadScenario(
           ],
         }),
       ];
-      scenario = {
-        ...common,
-        account: premiumAccount(),
+      scenario = premium({
         stores: troubled,
-        seeds: seeds.filter((seed) => seed.store !== "retro"),
-        premium: true,
+        seeds: withoutRetro,
         telegramChat: "Magazzino Vintage",
         notices: [
           { kind: "store-issue", storeId: stores.outlet.id, storeName: stores.outlet.name },
@@ -1730,13 +1661,6 @@ export function loadScenario(
             read: false,
             href: `negozi/${stores.outlet.id}`,
           }),
-          note("permissions", {
-            id: "n-perm",
-            tone: "danger",
-            at: minutesAgo(20),
-            read: false,
-            href: `negozi/${stores.retro.id}`,
-          }),
           ...common.notifications,
         ],
         diagnostics: diagnostics({
@@ -1744,14 +1668,11 @@ export function loadScenario(
           syncPhase: phases.reconnect,
           errorCode: "STORE_RECONNECT_REQUIRED",
         }),
-      };
+      });
       break;
     }
     case "dati-discordanti":
-      scenario = {
-        ...common,
-        account: premiumAccount(),
-        stores: premiumStores,
+      scenario = premium({
         seeds: seeds.map((seed) => {
           if (seed.id === "ord-02")
             return {
@@ -1843,18 +1764,14 @@ export function loadScenario(
             };
           return seed;
         }),
-        premium: true,
         telegramChat: "Magazzino Vintage",
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "primo-accesso":
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({ quota: undefined, trialAvailable: false }),
         stores: [],
         seeds: [],
-        premium: false,
         view: "no-store",
         elsewhere: true,
         onboarding: [
@@ -1868,13 +1785,12 @@ export function loadScenario(
           storeRef: null,
           syncPhase: phases.none,
         }),
-      };
+      });
       break;
     case "prima-sincronizzazione":
       // Come nell'area reale appena dopo il collegamento: lettura avviata, nessun ordine letto,
       // e la prova non ancora disponibile.
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({
           quota: { used: 0, limit: 5, cycleEndsAt: "2026-10-04T12:55:00Z" },
           trialAvailable: false,
@@ -1890,7 +1806,6 @@ export function loadScenario(
           }),
         ],
         seeds: [],
-        premium: false,
         syncRunning: true,
         view: "empty",
         notices: [{ kind: "importing", count: 0 }],
@@ -1904,11 +1819,10 @@ export function loadScenario(
         diagnostics: diagnostics({
           syncPhase: phases.importing,
         }),
-      };
+      });
       break;
     case "importazione":
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({ quota: { used: 0, limit: 5, cycleEndsAt: "2026-10-04T12:55:00Z" } }),
         stores: [
           storeView("vintage", {
@@ -1919,67 +1833,49 @@ export function loadScenario(
             connectedAt: minutesAgo(6),
           }),
         ],
-        seeds: freeSeeds.slice(0, 4),
-        premium: false,
+        seeds: vintageSeeds.slice(0, 4),
         syncRunning: false,
         notices: [{ kind: "importing", count: 4 }],
         diagnostics: diagnostics({
           syncPhase: phases.importing,
         }),
-      };
+      });
       break;
     case "nessun-ordine":
-      scenario = {
-        ...common,
-        account: account({ quota: { used: 0, limit: 5, cycleEndsAt: "2026-10-02T12:20:00Z" } }),
+      scenario = free({
+        account: account({ quota: { used: 0, limit: 5, cycleEndsAt } }),
         stores: [storeView("vintage", { importedOrders: 0 })],
         seeds: [],
-        premium: false,
         view: "empty",
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "caricamento":
-      scenario = {
-        ...common,
-        account: account(),
-        stores: freeStores,
+      scenario = free({
         seeds: [],
-        premium: false,
         view: "loading",
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "cancellazione-in-corso":
-      scenario = {
-        ...common,
-        account: account(),
+      scenario = free({
         stores: [],
         seeds: [],
-        premium: false,
         deleting: true,
         notifications: [],
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "servizio-non-disponibile":
-      scenario = {
-        ...common,
-        account: account(),
+      scenario = free({
         stores: [],
         seeds: [],
-        premium: false,
         unavailable: true,
         notifications: [],
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "prova-premium":
     case "prova-in-scadenza":
     case "prova-con-abbonamento":
     case "prova-con-abbonamento-disdetto":
-      scenario = {
-        ...common,
+      scenario = premium({
         account:
           id === "prova-con-abbonamento" || id === "prova-con-abbonamento-disdetto"
             ? {
@@ -2000,30 +1896,22 @@ export function loadScenario(
           storeView("vintage", { notifications: false, historyDays: 365, targetMinutes: 10 }),
           storeView("outlet", { notifications: false, historyDays: 365, targetMinutes: 10 }),
         ],
-        seeds: seeds.filter((seed) => seed.store !== "retro"),
-        premium: true,
-        diagnostics: diagnostics(),
-      };
+        seeds: withoutRetro,
+      });
       break;
     case "prova-terminata":
       // Dopo la prova restano sbloccati gli ordini con il dato arrivato durante la prova:
       // nello scenario sono quelli già disponibili, gli altri seguono la quota del ciclo.
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({ trialAvailable: false }),
-        stores: freeStores,
-        seeds: freeSeeds,
-        premium: false,
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "pagamento-in-attivazione":
     case "rinnovo-non-riuscito":
     case "pagamento-rimborsato":
     case "lifetime-rimborsato":
     case "stripe-non-disponibile":
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({
           // Senza copertura né abbonamento aperto la prova mai usata resta disponibile, come
           // nell'area reale.
@@ -2045,142 +1933,76 @@ export function loadScenario(
             "stripe-non-disponibile": {},
           }[id],
         }),
-        stores: freeStores,
-        seeds: freeSeeds,
-        premium: false,
         stripeDown: id === "stripe-non-disponibile",
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "lifetime-esaurito":
-      scenario = {
-        ...common,
+      scenario = free({
         account: account({ trialAvailable: false }),
-        stores: freeStores,
-        seeds: freeSeeds,
-        premium: false,
         lifetimeSoldOut: true,
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "premium":
-      scenario = {
-        ...common,
-        account: premiumAccount(),
-        stores: premiumStores,
-        seeds,
-        premium: true,
+      scenario = premium({
         telegramChat: "Magazzino Vintage",
         saveFailsOnce: true,
-        notifications: [
-          note("renewal", {
-            id: "n-renew",
-            tone: "premium",
-            at: minutesAgo(4_000),
-            read: true,
-            href: "impostazioni/piano",
-          }),
-          ...common.notifications,
-        ],
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "telegram-bloccato":
     case "telegram-non-consegnato":
-      scenario = {
-        ...common,
-        account: premiumAccount(),
-        stores: premiumStores,
-        seeds,
-        premium: true,
+      scenario = premium({
         telegramChat: "Magazzino Vintage",
         telegramFailure: id === "telegram-bloccato" ? "blocked" : "unreachable",
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "cambio-rinnovo":
-      scenario = {
-        ...common,
-        account: account({
-          plan: "premium",
-          trialAvailable: false,
-          quota: undefined,
+      scenario = premium({
+        account: premiumAccount({
           premium: { period: "monthly", renewsAt: "2026-10-13T10:00:00Z", nextPeriod: "annual" },
         }),
         stores: [premiumStores[0]!],
-        seeds: seeds.filter((seed) => seed.store === "vintage"),
-        premium: true,
-        diagnostics: diagnostics(),
-      };
+        seeds: vintageSeeds,
+      });
       break;
     case "rinnovo-disdetto":
-      scenario = {
-        ...common,
-        account: account({
-          plan: "premium",
-          trialAvailable: false,
-          quota: undefined,
+      scenario = premium({
+        account: premiumAccount({
           premium: { period: "monthly", renewsAt: null, endsAt: "2026-10-13T10:00:00Z" },
         }),
-        stores: premiumStores,
-        seeds,
-        premium: true,
-        diagnostics: diagnostics(),
-      };
+      });
       break;
     case "passaggio-a-vita":
-      scenario = {
-        ...common,
-        account: account({
-          plan: "premium",
-          trialAvailable: false,
-          quota: undefined,
+      scenario = premium({
+        account: premiumAccount({
           premium: { period: "monthly", renewsAt: "2026-10-13T10:00:00Z" },
           payment: { state: "pending", lifetime: true },
         }),
         stores: [premiumStores[0]!],
-        seeds: seeds.filter((seed) => seed.store === "vintage"),
-        premium: true,
-        diagnostics: diagnostics(),
-      };
+        seeds: vintageSeeds,
+      });
       break;
     case "premium-a-vita-concesso":
-      scenario = {
-        ...common,
-        account: account({
-          plan: "premium",
-          trialAvailable: false,
-          quota: undefined,
+      scenario = premium({
+        account: premiumAccount({
           premium: { period: "lifetime", renewsAt: null, granted: true },
         }),
         stores: [premiumStores[0]!],
-        seeds: seeds.filter((seed) => seed.store === "vintage"),
-        premium: true,
-        diagnostics: diagnostics(),
-      };
+        seeds: vintageSeeds,
+      });
       break;
     case "premium-concesso":
-      scenario = {
-        ...common,
-        account: account({
-          plan: "premium",
-          trialAvailable: false,
-          quota: undefined,
+      scenario = premium({
+        account: premiumAccount({
+          premium: undefined,
           grant: { endsAt: "2026-10-27T13:00:00Z" },
         }),
         stores: [premiumStores[0]!],
-        seeds: seeds.filter((seed) => seed.store === "vintage"),
-        premium: true,
-        diagnostics: diagnostics(),
-      };
+        seeds: vintageSeeds,
+      });
       break;
     case "premium-a-vita":
-      scenario = {
-        ...common,
-        account: account({
-          plan: "premium",
-          trialAvailable: false,
-          quota: undefined,
+      scenario = premium({
+        account: premiumAccount({
           premium: { period: "lifetime", renewsAt: null },
         }),
         stores: [
@@ -2195,22 +2017,18 @@ export function loadScenario(
             recent: [{ at: minutesAgo(2_880), ok: true, newOrders: 0 }],
           }),
         ],
-        seeds: seeds
-          .filter((seed) => seed.store !== "retro")
-          .map((seed) =>
-            seed.id === "ord-02"
-              ? {
-                  ...seed,
-                  fiscal: {
-                    state: "available",
-                    identifiers: [cf("RSSMRA80A41H501X", "checksum")],
-                  },
-                }
-              : seed,
-          ),
-        premium: true,
-        diagnostics: diagnostics(),
-      };
+        seeds: withoutRetro.map((seed) =>
+          seed.id === "ord-02"
+            ? {
+                ...seed,
+                fiscal: {
+                  state: "available",
+                  identifiers: [cf("RSSMRA80A41H501X", "checksum")],
+                },
+              }
+            : seed,
+        ),
+      });
       break;
   }
 
@@ -2237,7 +2055,6 @@ export function loadScenario(
     scenario = {
       ...scenario,
       account: trialAccount(startedTrialEnd),
-      premium: true,
       stores: trialStores,
       notices:
         trialStores.some((store) => store.importing) &&
@@ -2250,15 +2067,15 @@ export function loadScenario(
               },
             ]
           : notices,
-      notifications: scenario.notifications.filter((item) => item.id !== "n-quota"),
     };
   }
-  const { seeds: scenarioSeeds, premium, ...rest } = scenario;
+  const { seeds: scenarioSeeds, ...rest } = scenario;
+  const premiumPlan = rest.account.plan === "premium";
   const lockedValues: Record<string, TaxIdentifierView[]> = {};
   let unlockedCount = 0;
   const orders = scenarioSeeds.map((seed) => {
     // Con Premium non ci sono ordini da sbloccare: il valore è subito accessibile.
-    if (premium && seed.fiscal.state === "locked") {
+    if (premiumPlan && seed.fiscal.state === "locked") {
       return toOrder(
         { ...seed, fiscal: { state: "available", identifiers: seed.lockable ?? [] } },
         rest.stores,
@@ -2293,10 +2110,14 @@ export function loadScenario(
   };
 }
 
+/** Posti lifetime già occupati negli scenari con posti liberi. */
+const previewLifetimeTaken = 6;
+
 /**
- * Offerta lifetime dello scenario, con le regole dell'area reale: non si propone con il
- * lifetime o un pagamento da confermare, aspetta la prima lettura e detrae il periodo pagato
- * non usato, che nell'anteprima termina al rinnovo o alla fine dopo la disdetta.
+ * Offerta lifetime dello scenario, con le regole di `lifetimeContext` dell'area reale: non si
+ * propone con il lifetime o un pagamento da confermare, aspetta la prima lettura e detrae il
+ * periodo pagato non usato, che nell'anteprima termina al rinnovo o alla fine dopo la disdetta.
+ * L'abbonamento aperto, che il lifetime sostituisce, vale anche ad acquisti sospesi.
  */
 export function previewLifetime(scenario: Scenario): LifetimeOffer | null {
   const { premium, payment } = scenario.account;
@@ -2308,6 +2129,7 @@ export function previewLifetime(scenario: Scenario): LifetimeOffer | null {
   )
     return null;
   const synced = scenario.onboarding.some((step) => step.label === "stepSync" && step.done);
+  const subscribed = !!premium || !!payment;
   const end = premium?.renewsAt ?? premium?.endsAt ?? null;
   let credit = 0;
   if (premium && end) {
@@ -2320,17 +2142,14 @@ export function previewLifetime(scenario: Scenario): LifetimeOffer | null {
       new Date(scenario.now),
     );
   }
-  return {
-    state: scenario.purchasesClosed
-      ? "closed"
-      : !synced
-        ? "needs-sync"
-        : scenario.lifetimeSoldOut
-          ? "sold-out"
-          : "available",
-    credit,
-    replaces: !!premium || !!payment,
-    // Posti sintetici: lo scenario esaurito li ha finiti tutti.
-    seats: { left: scenario.lifetimeSoldOut ? 0 : 14, total: 20 },
-  };
+  // Lo scenario esaurito ha occupato tutti i posti.
+  const taken = scenario.lifetimeSoldOut ? lifetimeSlots : previewLifetimeTaken;
+  const { state, seats } = lifetimeOfferState({
+    purchasesOpen: !scenario.purchasesClosed,
+    subscribed,
+    synced,
+    reserved: false,
+    taken,
+  });
+  return { state, credit, replaces: subscribed, seats };
 }

@@ -2,7 +2,7 @@ import { verify } from "node:crypto";
 import { z } from "zod";
 import { upstreamJson } from "../http.server";
 import type { EbayEnvironment } from "../../view-models";
-import { ebayConfiguration } from "./environment.server";
+import { applicationToken, ebayConfiguration } from "./environment.server";
 
 const identifier = z.string().min(1).max(256);
 const encodedSignature = z.string().min(1).max(2048);
@@ -108,28 +108,12 @@ export async function verifyEbayNotification(
     }
     if (lookups >= 10) throw new NotificationLimit();
     lookups += 1;
-    const token = await upstreamJson(
-      fetcher,
-      configuration.tokenUrl,
-      z.object({ access_token: z.string().min(1).max(8192) }),
-      {
-        method: "POST",
-        headers: {
-          authorization: `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`,
-          "content-type": "application/x-www-form-urlencoded",
-        },
-        body: new URLSearchParams({
-          grant_type: "client_credentials",
-          scope: "https://api.ebay.com/oauth/api_scope",
-        }),
-      },
-      { maxBytes: 16_384 },
-    );
+    const token = await applicationToken(configuration, fetcher);
     const key = await upstreamJson(
       fetcher,
       `${configuration.apiOrigin}/commerce/notification/v1/public_key/${encodeURIComponent(header.kid)}`,
       z.object({ key: z.string().min(1).max(4096) }),
-      { headers: { authorization: `Bearer ${token.access_token}` } },
+      { headers: { authorization: `Bearer ${token}` } },
       { maxBytes: 8192 },
     );
     publicKey = {

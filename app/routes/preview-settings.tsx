@@ -1,37 +1,12 @@
-import { env } from "cloudflare:workers";
 import { data, isRouteErrorResponse } from "react-router";
 
-import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
+import { SettingsPage } from "~/components/settings/page";
 import { NotFoundState, UnavailableState } from "~/components/not-found";
-import { accessNotice } from "../access-notice";
 import { appCopy, pageTitle } from "../app-copy";
-import { checkoutReturn, premiumOffers, purchaseStateFrom } from "../catalog";
-import { languageFromPath, localizedPath } from "../i18n";
-import {
-  defaultDisplay,
-  defaultTemplate,
-  detectedTimeZone,
-  effectiveTimeZone,
-} from "../preferences";
-import {
-  exportContext as exportContextView,
-  exportScope,
-  type ExportContext,
-  type ExportTally,
-} from "../orders/export-scope";
-import { openSearch } from "../orders/order-search.server";
-import { exportFileMilliseconds } from "../domain/export-files.server";
-import { exportFileName } from "../domain/order-export.server";
-import { previewListing, previewSearchScope, previewTally } from "../preview/order-list.server";
-import { previewLifetime } from "../preview/scenarios.server";
+import { languageFromPath } from "../i18n";
+import { previewSettingsPage } from "../preview/settings-page.server";
 import { pageScenario, simulateAction, simulateSecurity } from "../preview/state.server";
-import {
-  orderPeriods,
-  orderPeriodStart,
-  settingsSections,
-  type OrderPeriod,
-  type SettingsSection,
-} from "../view-models";
+import { settingsSections, type SettingsSection } from "../view-models";
 import type { Route } from "./+types/preview-settings";
 
 function isSection(value: string | undefined): value is SettingsSection {
@@ -47,156 +22,11 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { scenario, state, language } = await pageScenario(request);
+  const current = await pageScenario(request);
   if (params.sezione !== undefined && !isSection(params.sezione)) {
     throw data(null, { status: 404 });
   }
-  // Ambito ricevuto dagli Ordini, contato con le regole del loro elenco: ordini presenti e,
-  // per i filtri, la stessa istantanea e la stessa ricerca. Senza ambito, ogni periodo.
-  const query = new URL(request.url).searchParams;
-  const scope = params.sezione === "esportazione" ? exportScope(query) : null;
-  const visible = (search: URLSearchParams, text: string | null) =>
-    previewListing(
-      scenario.orders,
-      scenario.incoming,
-      search,
-      text,
-      scenario.now,
-      scenario.account.plan,
-    ).filtered;
-  let exportContext: ExportContext | null = null;
-  let exportPeriods: Record<OrderPeriod, ExportTally> | null = null;
-  if (scope) {
-    // La selezione conta soltanto gli ordini dell'elenco da cui è partita, alla sua istantanea;
-    // l'ordine del dettaglio vale come nel dettaglio, anche fuori dall'elenco.
-    const search = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, query);
-    const listed =
-      scope.kind === "orders" && scope.detail
-        ? [...scenario.orders, ...scenario.incoming]
-        : visible(query, search);
-    const ids = new Set(scope.kind === "orders" ? scope.ids : []);
-    const chosen = scope.kind === "orders" ? listed.filter((order) => ids.has(order.id)) : listed;
-    exportContext = exportContextView(
-      scope,
-      query,
-      localizedPath(language, "/anteprima/ordini"),
-      chosen[0]?.ebayOrderId ?? null,
-      previewTally(chosen),
-    );
-  } else {
-    const all = visible(new URLSearchParams(), null);
-    exportPeriods = Object.fromEntries(
-      orderPeriods.map((period) => {
-        const start = orderPeriodStart(period, new Date(scenario.now)).toISOString();
-        return [period, previewTally(all.filter((order) => order.createdAt >= start))];
-      }),
-    ) as Record<OrderPeriod, ExportTally>;
-  }
-  const page: SettingsPageData = {
-    confirmUnlock: state.confirmUnlock !== false,
-    section: params.sezione ?? null,
-    sections: settingsSections,
-    services: {
-      billing: true,
-      billingPortal: true,
-      telegram: true,
-      accountExport: true,
-      accountDeletion: true,
-      support: true,
-    },
-    account: scenario.account,
-    // Durante la prova l'acquisto resta possibile; lo ferma un abbonamento che può ancora
-    // incassare, non un lifetime rimborsato.
-    purchase: {
-      state: purchaseStateFrom({
-        covered:
-          (scenario.account.plan === "premium" && !scenario.account.trial) ||
-          (!!scenario.account.payment &&
-            !(scenario.account.payment.state === "refunded" && scenario.account.payment.lifetime)),
-        open: !scenario.purchasesClosed,
-        synced: scenario.onboarding.some((step) => step.label === "stepSync" && step.done),
-      }),
-      offers: premiumOffers,
-      lifetime: previewLifetime(scenario),
-      checkout: checkoutReturn(query),
-    },
-    // Il negozio attivo è quello senza la pausa del piano; la sostituzione è simulata.
-    freeStore:
-      scenario.account.plan === "premium"
-        ? null
-        : {
-            stores: scenario.stores.map(({ id, name }) => ({ id, name })),
-            activeId: scenario.stores.find((store) => store.pauseReason !== "plan")?.id ?? null,
-            changeFrom: null,
-          },
-    security: {
-      methods: scenario.signInMethods,
-      sessions: scenario.sessions,
-      passkeyBlock: "nuovo-accesso",
-      notice: accessNotice(query, language),
-    },
-    // Ogni scelta parte dal predefinito: l'anteprima non conserva preferenze. Il fuso
-    // rilevato è quello del dispositivo, come nell'area reale.
-    preferences: {
-      theme: defaultDisplay.theme,
-      timeZone: "auto",
-      detectedTimeZone: detectedTimeZone(request.headers.get("cookie")),
-      marketing: false,
-      templates: { it: defaultTemplate("it"), en: defaultTemplate("en") },
-    },
-    diagnostics: scenario.diagnostics,
-    // La pagina Novità esiste soltanto nell'area reale (D203).
-    whatsNew: false,
-    // Chat e preferenze dimostrative: ogni scelta parte dal predefinito, come le altre.
-    telegram: {
-      chat: scenario.telegramChat
-        ? {
-            label: scenario.telegramChat,
-            linkedAt: scenario.now,
-            ...(scenario.telegramFailure ? { failure: scenario.telegramFailure } : {}),
-          }
-        : null,
-      enabled: true,
-      filter: "fiscal",
-      mode: "each",
-      digestTime: "18:00",
-      timeZone: effectiveTimeZone("auto", detectedTimeZone(request.headers.get("cookie"))),
-      stores: scenario.stores.map((store) => ({
-        id: store.id,
-        name: store.name,
-        enabled: store.notifications === true,
-        paused: store.pauseReason === "plan",
-      })),
-    },
-    exportPeriods,
-    exportContext,
-    // Una configurazione dimostrativa: salvarne o eliminarne una è simulato.
-    exportConfigurations: [
-      {
-        id: "esempio",
-        name: appCopy[language].settings.export.exportConfigSample,
-        format: "xlsx",
-        rows: "order",
-        columns: ["order", "date", "buyer", "taxCode", "vat", "total"],
-      },
-    ],
-    // Un file dimostrativo creato poco fa: scaricarlo è simulato.
-    exportFiles: [
-      {
-        id: "esempio",
-        name: exportFileName(
-          appCopy[language],
-          new Date(scenario.now),
-          effectiveTimeZone("auto", detectedTimeZone(request.headers.get("cookie"))),
-        ),
-        state: "ready",
-        at: scenario.now,
-        expiresAt: new Date(Date.parse(scenario.now) + exportFileMilliseconds).toISOString(),
-      },
-    ],
-    now: scenario.now,
-  };
-  return page;
+  return previewSettingsPage(request, current, params.sezione ?? null);
 }
 
 /** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */

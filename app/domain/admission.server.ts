@@ -4,6 +4,7 @@ import { displayTimeZone, formatDate } from "../format";
 import { purchasesOpenSql, waitingSql, waitlistOnSql } from "./admission-state.server";
 import { activeEntitlementSql } from "./grants.server";
 import { unpausedStore } from "./store-state.server";
+import { dayMilliseconds } from "../time";
 
 /**
  * Ammissione al servizio e inattività del Free (§5, Q569).
@@ -156,7 +157,7 @@ type NoticeRow = {
 async function sendNotices(env: Env, rows: NoticeRow[], now: Date) {
   const { EmailError, sendInactivityNotice } = await import("../account-email.server");
   const at = now.toISOString();
-  const deadline = new Date(now.getTime() + inactivityNoticeDays * 24 * 60 * 60_000).toISOString();
+  const deadline = new Date(now.getTime() + inactivityNoticeDays * dayMilliseconds).toISOString();
   const sent = await Promise.allSettled(
     rows.map((row) => {
       const language = row.language === "en" ? "en" : "it";

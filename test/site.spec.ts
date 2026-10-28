@@ -18,6 +18,9 @@ import { appCopy, infoEmail } from "../app/app-copy";
 import { adminCopy } from "../app/copy/admin-copy";
 import { sitePages } from "../app/copy/site-pages.server";
 import { italianGross } from "../app/catalog";
+import { freeStoreChangeDays } from "../app/domain/free-store.server";
+import { trialDays } from "../app/domain/grants.server";
+import { freeHistoryDays } from "../app/domain/history-window.server";
 import { formatDate } from "../app/format";
 import { siteMeta } from "../app/site-meta";
 import { resetDatabase } from "./fixtures/database-fixtures";
@@ -463,5 +466,57 @@ describe("pagine del sito pubblico", () => {
     expect([490, 4900, 14900].map(italianGross)).toEqual([598, 5978, 18178]);
     // L'imposta della riga si arrotonda: 0,05 € netti danno 0,01 € di IVA.
     expect(italianGross(5)).toBe(6);
+  });
+
+  it("scrive nei testi la durata della prova, il cambio del negozio Free e il suo storico", () => {
+    for (const language of ["it", "en"] as const) {
+      const app = appCopy[language];
+      const site = sitePages[language];
+      // I numeri restano scritti nel testo: qui si confrontano con le regole del dominio.
+      const days = (value: number) =>
+        new RegExp(language === "it" ? `\\b${value} giorni\\b` : `\\b${value}[ -]days?\\b`, "u");
+      const answers = site.faq.items.map((item) => item.a);
+      const negozi = site.features.showcase.find((item) => item.shot === "negozi")!.body;
+      const texts: Array<[number, string[]]> = [
+        [
+          trialDays,
+          [
+            app.orders.trialOffer,
+            app.settings.plan.trialTitle,
+            site.home.premiumTrial,
+            site.pricing.description,
+            site.pricing.trialTitle,
+          ],
+        ],
+        [
+          freeStoreChangeDays,
+          [app.settings.plan.freeStoreHint, site.pricing.rows.stores.free, negozi],
+        ],
+        [
+          freeHistoryDays,
+          [
+            app.settings.plan.freeSummary,
+            site.pricing.rows.history.free,
+            site.pricing.freeItems(5)[2]!,
+            negozi,
+          ],
+        ],
+      ];
+      for (const [value, list] of texts)
+        for (const text of list) expect(text, language).toMatch(days(value));
+      // Le risposte della FAQ sulla prova e sui negozi del Free.
+      expect(
+        answers.filter((answer) => days(trialDays).test(answer)),
+        language,
+      ).toHaveLength(1);
+      expect(
+        answers.filter((answer) => days(freeStoreChangeDays).test(answer)),
+        language,
+      ).toHaveLength(1);
+      expect(
+        site.security.details.filter((item) => days(freeHistoryDays).test(item.body)),
+        language,
+      ).toHaveLength(1);
+    }
   });
 });

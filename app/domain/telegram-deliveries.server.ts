@@ -9,7 +9,6 @@ import {
   emptyFiscalKey,
   fiscalKey,
   importMessage,
-  localClock,
   orderMessage,
   orderNotice,
   type OrderChange,
@@ -21,7 +20,7 @@ import { sendMessage, telegramConfigured, type BotMessage } from "../integration
 import type { Language } from "../i18n";
 import type { EbayEnvironment } from "../view-models";
 import { inSequence } from "../sequence";
-import { dayMilliseconds } from "../time";
+import { dayMilliseconds, localClock, zonedInstant } from "../time";
 
 /**
  * Consegne Telegram degli ordini, in tre passi che si possono interrompere e riprendere:
@@ -315,18 +314,6 @@ async function prepareImportEvents(db: D1Database, workspace: Workspace, now: Da
     ON CONFLICT DO NOTHING`)
     .bind(workspace.workspaceId, now.toISOString(), workspace.linkId)
     .run();
-}
-
-/** Istante dell'ora locale `time` del giorno `day` nel fuso indicato. */
-export function zonedInstant(timeZone: string, day: string, time: string): Date {
-  const wall = Date.parse(`${day}T${time}:00Z`);
-  const offset = (instant: number) => {
-    const clock = localClock(timeZone, new Date(instant));
-    return Date.parse(`${clock.day}T${clock.time}:00Z`) - Math.floor(instant / 60_000) * 60_000;
-  };
-  // La seconda correzione usa la differenza valida all'istante trovato, anche vicino a un cambio
-  // di ora legale.
-  return new Date(wall - offset(wall - offset(wall)));
 }
 
 /**

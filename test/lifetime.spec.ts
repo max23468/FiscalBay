@@ -12,7 +12,7 @@ import { accountCoverage, orderAllowance, startTrial } from "../app/domain/grant
 import { lifetimeContext, refundedShare, unusedCredit } from "../app/domain/lifetime.server";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { subscriptionView } from "../app/domain/plan-view.server";
-import { insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
+import { insertEntitlement, insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
 import {
   workspace,
   buy,
@@ -364,11 +364,16 @@ describe("Lifetime e concessioni", () => {
       env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
           provider_reference, customer_id, activated_at, created_at)
         VALUES (1, 'w-a', 'active', 'sale', 'cs_paid', 'cus_lifetime', ?1, ?1)`).bind(now),
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-          stripe_checkout_session_id, amount_paid, currency, paid_at, revoked_at, revocation)
-        VALUES ('lifetime', 'w-a', 'lifetime', ?1, 'cs_paid', 18178, 'eur', ?1, ?1, 'refund')`).bind(
-        now,
-      ),
+      insertEntitlement({
+        id: "lifetime",
+        source: "lifetime",
+        stripeCheckoutSessionId: "cs_paid",
+        amountPaid: 18178,
+        currency: "eur",
+        paidAt: now,
+        revokedAt: now,
+        revocation: "refund",
+      }),
     ]);
     expect(await portalCustomer()).toBe("cus_lifetime");
     // Il nuovo abbonamento usa lo stesso cliente.
@@ -412,10 +417,7 @@ describe("Lifetime e concessioni", () => {
       env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
           provider_reference, customer_id, activated_at, created_at)
         VALUES (1, 'w-a', 'active', 'sale', 'cs_paid', 'cus_lifetime', ?1, ?1)`).bind(now),
-      env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-          stripe_checkout_session_id) VALUES ('lifetime', 'w-a', 'lifetime', ?1, 'cs_paid')`).bind(
-        now,
-      ),
+      insertEntitlement({ id: "lifetime", source: "lifetime", stripeCheckoutSessionId: "cs_paid" }),
     ]);
     await openBillingPortal(env, userId, "http://localhost:5173/app/impostazioni/piano", "it");
     expect(

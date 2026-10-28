@@ -1,3 +1,5 @@
+import { dayMilliseconds } from "../time";
+
 /**
  * Limite del modulo di assistenza per account: D1 conserva soltanto l'istante di ogni richiesta
  * inviata, che la manutenzione elimina dopo 24 ore. Il modulo resta senza testi
@@ -6,7 +8,7 @@
 
 /** Richieste per account nelle ultime 24 ore. */
 export const supportRequestLimit = 5;
-export const supportWindowMilliseconds = 24 * 60 * 60_000;
+export const supportWindowMilliseconds = dayMilliseconds;
 
 /**
  * Prenota una richiesta entro il limite delle 24 ore, in un'unica istruzione: due schede che

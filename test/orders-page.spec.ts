@@ -1038,6 +1038,11 @@ describe("pagina Ordini reale", () => {
   it("«Riprova» rilegge soltanto un ordine dello spazio con lettura non riuscita", async () => {
     const { cookie } = await owner();
     const send = vi.spyOn(env.WORK_QUEUE, "send").mockResolvedValue(queued);
+    // Un identificativo assente o troppo lungo è una richiesta non valida, come nei Negozi.
+    for (const order of ["", "x".repeat(65)])
+      expect(await ordersAction(cookie, { intent: "retry", order })).toMatchObject({
+        init: { status: 400 },
+      });
     // Con dati da sbloccare la lettura non è da riprovare.
     expect(await ordersAction(cookie, { intent: "retry", order: "o-a" })).toMatchObject({
       init: { status: 409 },

@@ -36,7 +36,6 @@ import {
   onlyAvailable,
   periodExportFilter,
 } from "../orders/export-scope.server";
-import { effectiveTimeZone } from "../preferences";
 import type { ActionResult } from "../view-models";
 import type { Route } from "./+types/order-export";
 
@@ -86,7 +85,7 @@ export async function action({ request }: Route.ActionArgs) {
   const format = form.get("format") === "xlsx" ? "xlsx" : "csv";
   const chosen = form.get("columns");
   const now = new Date();
-  const timeZone = effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone);
+  const { timeZone } = area;
   try {
     // La revisione precede ogni lettura dei dati: una revoca arrivata durante la generazione
     // impedisce al file di diventare scaricabile.

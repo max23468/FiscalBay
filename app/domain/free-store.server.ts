@@ -1,6 +1,7 @@
 import { abuseSuspendedSql, activeEntitlementSql, paidCoverageSql } from "./grants.server";
 import { coveredMonthsSql, freeHistoryDays, historyEndSql } from "./history-window.server";
 import { storeNameSql } from "./store-state.server";
+import { freeStoreChangeDays } from "../limits";
 import { dayMilliseconds } from "../time";
 
 /**
@@ -15,8 +16,7 @@ import { dayMilliseconds } from "../time";
  * collegamento di un negozio: l'utente non vede mai lo stato precedente al downgrade.
  */
 
-/** Giorni di 24 ore fra due sostituzioni del negozio attivo scelte dall'utente. */
-export const freeStoreChangeDays = 90;
+export { freeStoreChangeDays };
 
 /** Conservazione transitoria dei dati esclusi dal Free, dall'istante dell'esclusione. */
 const graceSql = (from: string) => `strftime('%Y-%m-%dT%H:%M:%fZ', ${from}, '+30 days')`;

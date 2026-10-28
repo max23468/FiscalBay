@@ -6,9 +6,8 @@ import { useSubmit } from "react-router";
 import { useCopy, useLinks } from "~/components/copy-context";
 import { useHydrated } from "~/components/hydrated";
 import { Button } from "~/components/ui/button";
-import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
+import { Field, FieldDescription, FieldError, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
-import { Spinner } from "~/components/ui/spinner";
 import type { SignInMethods } from "../../domain/sign-in-methods.server";
 import { deviceName } from "../../account/device-name";
 import { loadPasskeyClient } from "../../account/passkey";
@@ -119,11 +118,7 @@ export function AddPasskey({
   const opener = useRef<HTMLButtonElement>(null);
   const [naming, setNaming] = useState(false);
   const ready = useHydrated();
-  const failure = error ? (
-    <p role="alert" className="text-sm text-danger">
-      {t.passkeyErrors[error]}
-    </p>
-  ) : null;
+  const failure = error ? <FieldError>{t.passkeyErrors[error]}</FieldError> : null;
   // Il nome si chiede soltanto dopo la scelta di aggiungere una passkey, già compilato.
   if (!naming)
     return (
@@ -171,18 +166,8 @@ export function AddPasskey({
         <FieldDescription id={`${id}-hint`}>{settings.security.passkeyNameHint}</FieldDescription>
       </Field>
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="submit"
-          size="sm"
-          disabled={pending}
-          focusableWhenDisabled
-          aria-busy={pending || undefined}
-        >
-          {pending ? (
-            <Spinner data-icon="inline-start" />
-          ) : (
-            <KeyRound aria-hidden="true" data-icon="inline-start" />
-          )}
+        <Button type="submit" size="sm" pending={pending}>
+          <KeyRound aria-hidden="true" data-icon="inline-start" />
           {settings.security.addPasskey}
         </Button>
         <Button

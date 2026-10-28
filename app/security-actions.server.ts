@@ -10,6 +10,7 @@ import {
   securityPath,
   securityReturnPath,
 } from "./app-links";
+import { actionFailure } from "./area-actions.server";
 import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import { deletionReauthenticated } from "./domain/account-deletion.server";
 import { pendingEmailChange } from "./domain/email-change.server";
@@ -46,17 +47,16 @@ export async function requestAccountDeletion(
   confirmation: string,
 ): Promise<ActionResult | ReturnType<typeof data<ActionResult>>> {
   const t = appCopy[language].settings.privacy;
-  const failed = (status: number, notice: string) =>
-    data<ActionResult>({ ok: false, notice }, { status });
   if (!deletionReauthenticated(session.session.createdAt))
-    return failed(403, t.deleteAccountReauth);
+    return actionFailure(403, t.deleteAccountReauth);
   const email = session.user.email;
   if (confirmation.trim().toLowerCase() !== email.toLowerCase())
-    return failed(400, t.deleteAccountMismatch);
+    return actionFailure(400, t.deleteAccountMismatch);
   const response = await forwardToAuth(env, request, "/delete-user", {
     callbackURL: localizedPath(language, accountDeletionPath),
   });
-  if (!response.ok) return failed(response.status === 429 ? 429 : 503, t.deleteAccountFailed);
+  if (!response.ok)
+    return actionFailure(response.status === 429 ? 429 : 503, t.deleteAccountFailed);
   return { ok: true, notice: t.deleteAccountSent(email) } satisfies ActionResult;
 }
 

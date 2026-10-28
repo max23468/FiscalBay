@@ -1,10 +1,11 @@
 import { env } from "cloudflare:workers";
 
 import type { AccountArea } from "../account-area.server";
-import { listCriteria, orderCriteria, type OrderCriteria } from "../domain/orders.server";
+import type { OrderCriteria } from "../domain/orders.server";
 import { listStores } from "../domain/stores.server";
 import type { EbayEnvironment } from "../view-models";
 import { exportScope, type ExportScope } from "./export-scope";
+import { listCriteria, orderCriteria } from "./order-list";
 import { accountSearchScope, openSearch } from "./order-search.server";
 
 /**

@@ -23,7 +23,7 @@ import { isProduction } from "./app-links";
 import { logFailure } from "./errors";
 import { inSequence } from "./sequence";
 import { dayMilliseconds } from "./time";
-import { stalledReceiptMilliseconds } from "./domain/work-timing";
+import { queueRetryDelay, stalledReceiptMilliseconds } from "./domain/work-timing";
 
 const maxBytes = 262_144;
 const retention = 7 * dayMilliseconds;
@@ -539,7 +539,7 @@ export async function consumeWebhooks(
           );
       const delay = error instanceof UpstreamError ? error.details.retryAfter : undefined;
       message.retry({
-        delaySeconds: Math.min(43_200, delay ?? Math.min(3600, 30 * 2 ** (message.attempts - 1))),
+        delaySeconds: Math.min(43_200, delay ?? queueRetryDelay(message.attempts)),
       });
       logFailure({ error, operation: "webhook_consumer" });
     }

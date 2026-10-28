@@ -1,7 +1,8 @@
 import { cn } from "cn";
 
 import { FaqList } from "~/components/faq-list";
-import { PageIntro, SiteLayout, siteColumn } from "~/components/site-layout";
+import { siteColumn } from "~/components/site-column";
+import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { buttonLink } from "~/components/ui/button-variants";
 import { appCopy, supportEmail } from "../app-copy";
 import { faqPath, supportPath, supportSettingsPath } from "../app-links";

@@ -25,7 +25,7 @@ import {
 } from "../app/routes/preview-orders";
 import { loader as previewStores } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
-import { orderCriteria } from "../app/domain/orders.server";
+import { orderCriteria } from "../app/orders/order-list";
 import type { SearchResults } from "../app/components/shell-search";
 import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
 

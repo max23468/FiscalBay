@@ -1,5 +1,5 @@
 import { logFailure } from "../errors";
-import { readBounded } from "../integrations/http.server";
+import { readUpstream, UpstreamError } from "../integrations/http.server";
 import {
   cpuKinds,
   cpuPages,
@@ -122,15 +122,17 @@ async function readJson(
   init: RequestInit,
   token: string,
 ): Promise<unknown> {
-  const response = await fetcher(url, {
-    ...init,
-    method: "POST",
-    headers: { ...init.headers, authorization: `Bearer ${token}` },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  const body = await readBounded(response, maxBytes);
-  if (!response.ok || !body) throw new Error("METRICS_UNAVAILABLE");
-  return JSON.parse(new TextDecoder().decode(body));
+  const { text } = await readUpstream(
+    fetcher,
+    url,
+    { ...init, method: "POST", headers: { ...init.headers, authorization: `Bearer ${token}` } },
+    { timeoutMs, maxBytes },
+  );
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new UpstreamError("invalid_response");
+  }
 }
 
 async function runQuery(
@@ -148,7 +150,7 @@ async function runQuery(
     },
     token,
   )) as { data?: unknown };
-  if (!Array.isArray(parsed.data)) throw new Error("METRICS_UNAVAILABLE");
+  if (!Array.isArray(parsed.data)) throw new UpstreamError("invalid_response");
   return parsed.data as Row[];
 }
 
@@ -169,7 +171,7 @@ async function runCpuQuery(
     token,
   )) as { result?: { calculations?: unknown } };
   const values = cpuValues(parsed.result?.calculations);
-  if (!values) throw new Error("METRICS_UNAVAILABLE");
+  if (!values) throw new UpstreamError("invalid_response");
   return { page, kind, ...values };
 }
 
