@@ -385,10 +385,14 @@ export async function reconcileLifetime(
         AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
       ORDER BY slot LIMIT 1
       ON CONFLICT DO NOTHING`).bind(workspaceId, session.id, customer, at),
+    // Uno spazio in cancellazione, rimasto soltanto per fermare i rinnovi, non riceve coperture:
+    // il posto pagato resta occupato con i riferimenti dell'acquisto, per l'assistenza.
     env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
         stripe_checkout_session_id, amount_paid, currency, paid_at)
       SELECT ?1, a.workspace_id, 'lifetime', ?4, ?3, ?5, ?6, ?4 FROM lifetime_allocations a
       WHERE a.provider_reference = ?3 AND a.workspace_id = ?2 AND a.status = 'active'
+        AND NOT EXISTS (SELECT 1 FROM account_deletions d
+          WHERE d.workspace_id = a.workspace_id AND d.completed_at IS NULL)
       ON CONFLICT DO NOTHING`).bind(
       crypto.randomUUID(),
       workspaceId,

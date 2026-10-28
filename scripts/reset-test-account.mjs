@@ -487,11 +487,14 @@ async function main() {
     }
     // Cancellazione dell'account, una per lingua e browser: password e accesso di ieri, così la
     // richiesta passa dalla conferma dell'identità. La richiesta della prova precedente esce,
-    // altrimenti bloccherebbe l'accesso dell'account ricreato.
-    for (const browser of ["chromium", "webkit"])
-      for (const language of ["it", "en"]) {
-        const id = `account-delete-${language}-${browser}`;
-        statements.push(`DELETE FROM account_deletions WHERE user_id = '${id}';
+    // altrimenti bloccherebbe l'accesso dell'account ricreato. Gli account `account-incomplete`
+    // perdono nella prova verifica dell'email e Termini accettati: la richiesta parte dagli
+    // Ordini e dalla pagina di accesso.
+    for (const flow of ["delete", "incomplete"])
+      for (const browser of ["chromium", "webkit"])
+        for (const language of ["it", "en"]) {
+          const id = `account-${flow}-${language}-${browser}`;
+          statements.push(`DELETE FROM account_deletions WHERE user_id = '${id}';
         DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
         INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
           SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
@@ -509,7 +512,7 @@ async function main() {
         INSERT INTO "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
           SELECT '${id}', '${id}', 'credential', '${id}', password, "createdAt", "updatedAt"
           FROM "account" WHERE "userId" = ${quote(testAccount.userId)} AND "providerId" = 'credential';`);
-      }
+        }
   }
   // Un solo batch di istruzioni SQL: nessun import di file, che sospende il database.
   const sql = statements.join("\n");

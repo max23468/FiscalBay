@@ -957,6 +957,27 @@ describe("collegamento della chat", () => {
     expect(api.texts()[0]?.params.text).toContain("Chat collegata");
   });
 
+  it("con gli invii spenti il collegamento si crea senza conferma e il blocco si chiude", async () => {
+    const seller = await account("invii-spenti-avvio");
+    const token = await linkToken(seller.cookie);
+    await setSwitch(env.DB, "telegram_sends", false, new Date(now));
+    const api = bot();
+    await deliver(`/start ${token}`, 651, api.fetcher);
+    expect(await link(seller.workspace)).toMatchObject({ chat_id: "651" });
+    expect(api.texts()).toEqual([]);
+    // Un messaggio della chat bloccata, anche a invii spenti, chiude il blocco.
+    await env.DB.prepare("UPDATE telegram_links SET delivery_failure = 'blocked' WHERE chat_id = ?")
+      .bind("651")
+      .run();
+    await deliver("/stato", 651, api.fetcher, later(1));
+    expect(
+      await env.DB.prepare("SELECT delivery_failure FROM telegram_links WHERE chat_id = ?")
+        .bind("651")
+        .first(),
+    ).toEqual({ delivery_failure: null });
+    expect(api.texts()).toEqual([]);
+  });
+
   it("un vecchio /start riprovato dopo un cambio di chat non ripristina la chat precedente", async () => {
     const seller = await account("riprova-vecchia");
     const token = await linkToken(seller.cookie);

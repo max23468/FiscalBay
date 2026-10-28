@@ -1,12 +1,19 @@
+import { inSequence } from "../sequence";
+import { applyWorkspacePlan } from "./free-store.server";
 import { storeNameSql } from "./store-state.server";
 
 /**
  * Revisione antiabuso (§15): più spazi che sembrano la stessa attività, per ottenere più
  * volte prova e beneficio Free. I segnali usano soltanto dati già presenti: ragione sociale del
  * profilo, nome del negozio eBay e cliente Stripe condivisi fra spazi diversi. L'admin registra
- * «nessun abuso» oppure sospende il beneficio Free di uno degli spazi con la pausa
- * dell'assistenza sui suoi negozi. I segnali mostrano il valore condiviso soltanto all'admin e
- * la chiave della revisione ne conserva l'impronta, non il valore.
+ * «nessun abuso» oppure sospende il beneficio Free di uno degli spazi. I segnali mostrano il
+ * valore condiviso soltanto all'admin e la chiave della revisione ne conserva l'impronta, non il
+ * valore.
+ *
+ * La sospensione vale per lo spazio finché resta l'esito: il riallineamento del piano mette la
+ * pausa dell'assistenza su ogni suo negozio reale, anche collegato o scelto come attivo dopo, e
+ * la toglie con l'esito «nessun abuso» o mentre una copertura pagata o concessa è in corso. La
+ * pausa resta distinta da quella manuale della console, che non la toglie.
  */
 
 export type AbuseSignalKind = "company" | "store_name" | "customer";
@@ -14,7 +21,10 @@ export type AbuseSignalKind = "company" | "store_name" | "customer";
 export type AbuseSignal = {
   key: string;
   kind: AbuseSignalKind;
+  /** Valore condiviso; vuoto per una sospensione la cui segnalazione non è più corrente. */
   value: string;
+  /** False per una sospensione rimasta dopo un cambio del gruppo: si toglie con «nessun abuso». */
+  current: boolean;
   workspaces: { id: string; email: string | null; premium: boolean }[];
   review: { outcome: "clear" | "suspended"; workspaceId: string | null; at: string } | null;
 };
@@ -39,7 +49,11 @@ async function signalKey(kind: AbuseSignalKind, value: string, workspaces: strin
   return `${kind}:${(await digest(`${kind}\n${value}\n${[...workspaces].sort().join(",")}`)).slice(0, 48)}`;
 }
 
-/** Segnalazioni correnti, prima quelle da rivedere. */
+/**
+ * Segnalazioni correnti, prima quelle da rivedere, poi le sospensioni la cui segnalazione non è
+ * più corrente, come dopo l'ingresso di un nuovo spazio nel gruppo: restano finché l'admin non
+ * registra «nessun abuso».
+ */
 export async function listAbuseSignals(db: D1Database, now = new Date()): Promise<AbuseSignal[]> {
   const at = now.toISOString();
   const [{ results: names }, { results: customers }] = await db.batch<{
@@ -68,13 +82,31 @@ export async function listAbuseSignals(db: D1Database, now = new Date()): Promis
     groups.set(id, group);
   }
   const shared = [...groups.entries()].filter(([, group]) => group.ids.size > 1);
-  if (shared.length === 0) return [];
-  const signals = await Promise.all(
+  const current = await Promise.all(
     shared.map(async ([id, group]) => ({
       key: await signalKey(group.kind, id, [...group.ids]),
       group,
+      current: true,
     })),
   );
+  const { results: stale } = await db
+    .prepare(`SELECT signal, workspace_id FROM abuse_reviews WHERE outcome = 'suspended'
+      AND signal NOT IN (SELECT value FROM json_each(?))`)
+    .bind(JSON.stringify(current.map(({ key }) => key)))
+    .all<{ signal: string; workspace_id: string }>();
+  const signals = [
+    ...current,
+    ...stale.map((row) => ({
+      key: row.signal,
+      group: {
+        kind: row.signal.split(":", 1)[0] as AbuseSignalKind,
+        value: "",
+        ids: new Set([row.workspace_id]),
+      },
+      current: false,
+    })),
+  ];
+  if (signals.length === 0) return [];
   const [{ results: details }, { results: reviews }] = await db.batch<Record<string, unknown>>([
     db
       .prepare(`SELECT w.id,
@@ -108,12 +140,13 @@ export async function listAbuseSignals(db: D1Database, now = new Date()): Promis
     ).map((row) => [row.signal, row]),
   );
   return signals
-    .map(({ key, group }): AbuseSignal => {
+    .map(({ key, group, current: live }): AbuseSignal => {
       const review = reviewed.get(key);
       return {
         key,
         kind: group.kind,
         value: group.value,
+        current: live,
         workspaces: [...group.ids].sort().map((id) => ({
           id,
           email: byId.get(id)?.email ?? null,
@@ -125,16 +158,20 @@ export async function listAbuseSignals(db: D1Database, now = new Date()): Promis
       };
     })
     .sort(
-      (a, b) => Number(a.review !== null) - Number(b.review !== null) || a.key.localeCompare(b.key),
+      (a, b) =>
+        Number(!a.current) - Number(!b.current) ||
+        Number(a.review !== null) - Number(b.review !== null) ||
+        a.key.localeCompare(b.key),
     );
 }
 
 export type AbuseReviewResult = "done" | "not_found" | "invalid" | "covered";
 
 /**
- * Esito della revisione di una segnalazione corrente. La sospensione mette in pausa
- * dell'assistenza i negozi reali dello spazio indicato, che deve far parte della segnalazione;
- * la pausa si toglie dalla scheda dello spazio. Una revisione ripetuta sostituisce la precedente.
+ * Esito della revisione di una segnalazione elencata. La sospensione riguarda lo spazio
+ * indicato, che deve far parte della segnalazione; «nessun abuso» la toglie. Una revisione
+ * ripetuta sostituisce la precedente. Gli spazi coinvolti si riallineano subito; il piano li
+ * tiene allineati anche dopo, a ogni visita, collegamento e giro del cron.
  */
 export async function reviewAbuseSignal(
   db: D1Database,
@@ -163,13 +200,6 @@ export async function reviewAbuseSignal(
         reviewed_at = excluded.reviewed_at`)
     .bind(input.key, input.outcome, workspaceId ?? null, input.actor, input.reason, at)
     .run();
-  // La sospensione è la pausa dell'assistenza sui negozi reali dello spazio, in una istruzione.
-  if (workspaceId)
-    await db
-      .prepare(`INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at)
-        SELECT id, 'admin', ?2 FROM ebay_stores WHERE workspace_id = ?1
-          AND data_deleted_at IS NULL AND ebay_environment = 'production'`)
-      .bind(workspaceId, at)
-      .run();
+  await inSequence(signal.workspaces, (workspace) => applyWorkspacePlan(db, workspace.id, now));
   return "done";
 }

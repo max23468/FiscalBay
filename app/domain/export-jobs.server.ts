@@ -3,7 +3,12 @@ import { z } from "zod";
 import { appCopy } from "../app-copy";
 import { logFailure } from "../errors";
 import type { Language } from "../i18n";
-import { standardColumns, type ExportColumn, type ExportRows } from "../orders/export-columns";
+import {
+  customColumns,
+  standardColumns,
+  type ExportColumn,
+  type ExportRows,
+} from "../orders/export-columns";
 import type { ExportFilter } from "../orders/export-scope.server";
 import { seal, unseal } from "../sealed.server";
 import type { EbayEnvironment } from "../view-models";
@@ -16,6 +21,7 @@ import {
 import { orderAllowance } from "./grants.server";
 import { exportCsvStream, exportOrderPages, exportXlsxStream } from "./order-export.server";
 import { visibleOrderTallies, visibleOrdersTerm } from "./orders.server";
+import { XlsxRowLimitError } from "./xlsx.server";
 
 /**
  * File degli ordini, creati subito o preparati dalla coda (§12.1). Oltre `exportJobOrders`
@@ -23,7 +29,9 @@ import { visibleOrderTallies, visibleOrdersTerm } from "./orders.server";
  * dello spazio, diritti e conservazione all'avvio, crea il file e la campanella lo annuncia.
  * La revisione resta quella letta alla richiesta, così un lavoro partito prima di una revoca
  * non pubblica il file dopo di essa. Ambito e opzioni restano cifrati nella riga soltanto
- * finché il lavoro non si conclude: la ricerca può contenere dati dell'acquirente.
+ * finché il lavoro non si conclude: la ricerca può contenere dati dell'acquirente. Il compito
+ * orario `export_files` riprende i lavori rimasti senza messaggio e chiude come non riusciti
+ * quelli che non possono più concludersi.
  */
 
 /** Ordini oltre i quali il file si prepara dalla coda invece che nella richiesta. */
@@ -31,6 +39,12 @@ export const exportJobOrders = 2_000;
 
 /** Tentativi di un lavoro prima di risultare non riuscito. */
 const maxAttempts = 3;
+
+/** Lavori in preparazione per utente: un altro file si chiede quando uno è concluso. */
+export const maxQueuedExports = 2;
+
+/** Lavori riaccodati in un turno della ripresa; gli altri restano al turno successivo. */
+const resumeBatch = 100;
 
 /** Durata del blocco di un lavoro in esecuzione: un consumer interrotto lo cede allo scadere. */
 const lockMilliseconds = 15 * 60_000;
@@ -47,21 +61,23 @@ export interface OrderFileRequest {
   filter: ExportFilter;
   rows: ExportRows;
   format: keyof typeof contentTypes;
-  /** Colonne scelte con Premium; null per lo schema standard. */
+  /** Colonne scelte con Premium; null per lo schema standard o per colonne uguali a esso. */
   columns: ExportColumn[] | null;
   language: Language;
   timeZone: string;
 }
 
-/** Il file chiede Premium: XLSX o colonne scelte. */
+/** Il file chiede Premium: XLSX o colonne diverse dallo schema standard. */
 const premiumOnly = (request: OrderFileRequest) =>
-  request.format === "xlsx" || request.columns !== null;
+  request.format === "xlsx" ||
+  (request.columns !== null && customColumns(request.columns, request.rows) !== null);
 
 /**
  * Crea e pubblica il file con i dati consultabili all'istante `now`. Il file vale al più 24
  * ore, non oltre la copertura Premium che lo permette né oltre il primo termine di
  * conservazione o di sblocco degli ordini inclusi. null se una revoca è arrivata dopo la
- * lettura di `revision`.
+ * lettura di `revision`. `alongside` entra nello stesso commit del file, come in
+ * `publishExportFile`.
  */
 export async function publishOrderFile(
   env: Pick<Env, "DB" | "EXPORT_FILES">,
@@ -72,6 +88,7 @@ export async function publishOrderFile(
     fileName: string;
     now: Date;
     coverageEndsAt: string | null;
+    alongside?: (fileId: string) => D1PreparedStatement;
   },
 ): Promise<string | null> {
   const { userId, request, now } = file;
@@ -98,13 +115,17 @@ export async function publishOrderFile(
         : exportCsvStream(pages, request.rows, t, request.timeZone, columns),
     now,
     expiresAt,
+    alongside: file.alongside,
   });
 }
 
 // Stryker disable next-line StringLiteral: lo scopo deriva la chiave; un altro valore, uguale per chiusura e apertura, dà lo stesso esito.
 const sealPurpose = "export-job";
 
-/** Registra il lavoro e lo accoda; restituisce il suo identificativo. */
+/**
+ * Registra il lavoro e lo accoda; restituisce il suo identificativo, null se l'utente ha già
+ * `maxQueuedExports` lavori in preparazione.
+ */
 export async function queueOrderFile(
   env: Pick<Env, "DB" | "WORK_QUEUE" | "BETTER_AUTH_SECRET">,
   job: {
@@ -114,15 +135,27 @@ export async function queueOrderFile(
     fileName: string;
     now: Date;
   },
-): Promise<string> {
+): Promise<string | null> {
   const id = crypto.randomUUID();
   const sealed = await seal(env.BETTER_AUTH_SECRET, sealPurpose, id, JSON.stringify(job.request));
-  await env.DB.prepare(
+  // Conteggio e inserimento nella stessa istruzione: richieste concorrenti non superano il limite.
+  const row = await env.DB.prepare(
     `INSERT INTO export_jobs (id, user_id, access_revision, request_sealed, file_name, requested_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     SELECT ?1, ?2, ?3, ?4, ?5, ?6
+      WHERE (SELECT count(*) FROM export_jobs WHERE user_id = ?2 AND state = 'queued') < ?7
+     RETURNING id`,
   )
-    .bind(id, job.userId, job.revision, sealed, job.fileName, job.now.toISOString())
-    .run();
+    .bind(
+      id,
+      job.userId,
+      job.revision,
+      sealed,
+      job.fileName,
+      job.now.toISOString(),
+      maxQueuedExports,
+    )
+    .first();
+  if (!row) return null;
   try {
     await env.WORK_QUEUE.send({ exportJob: id });
   } catch (error) {
@@ -141,9 +174,12 @@ export function isExportJobMessage(body: unknown): body is z.infer<typeof jobMes
 
 /**
  * Esegue un lavoro dalla coda. Una consegna ripetuta di un lavoro concluso non lo ripete; un
- * lavoro in corso altrove si riprova più tardi. Revoca, Premium terminato, ambito ormai vuoto
- * o richiesta più vecchia della durata di un file lo chiudono come non riuscito, da creare di
- * nuovo; un errore riprova con backoff fino a `maxAttempts`.
+ * lavoro in corso altrove si riprova allo scadere del suo blocco, così un consumer interrotto
+ * non esaurisce i tentativi del messaggio prima che il lavoro torni libero. Revoca, Premium
+ * terminato, ambito ormai vuoto, XLSX oltre il limite di righe o richiesta più vecchia della
+ * durata di un file lo chiudono come non riuscito, da creare di nuovo; un errore riprova con
+ * backoff fino a `maxAttempts`. Il file e la conclusione del lavoro nascono nello stesso
+ * commit: un errore dopo la pubblicazione non lascia un secondo file al tentativo successivo.
  */
 export async function consumeExportJob(
   message: Message<unknown>,
@@ -166,34 +202,39 @@ export async function consumeExportJob(
       requested_at: string;
     }>();
   if (!job) {
-    const busy = await env.DB.prepare("SELECT 1 FROM export_jobs WHERE id = ? AND state = 'queued'")
-      .bind(id)
-      .first();
-    if (busy) message.retry({ delaySeconds: 60 });
+    // Il blocco di un altro consumer: un blocco appena liberato vale come già scaduto.
+    const busy = await env.DB.prepare(
+      "SELECT COALESCE(locked_until, ?2) AS until FROM export_jobs WHERE id = ?1 AND state = 'queued'",
+    )
+      .bind(id, at)
+      .first<{ until: string }>();
+    if (busy)
+      message.retry({
+        delaySeconds: Math.max(1, Math.ceil((Date.parse(busy.until) - now.getTime()) / 1000)),
+      });
     else message.ack();
     return;
   }
-  const finish = async (fileId: string | null) => {
+  // Chiude come non riuscito il lavoro ancora in coda e conferma la consegna.
+  const fail = async () => {
     await env.DB.prepare(
-      `UPDATE export_jobs SET state = ?2, file_id = ?3, request_sealed = NULL,
-              locked_until = NULL, finished_at = ?4
+      `UPDATE export_jobs SET state = 'failed', request_sealed = NULL, locked_until = NULL,
+              finished_at = ?2
         WHERE id = ?1 AND state = 'queued'`,
     )
-      .bind(id, fileId ? "ready" : "failed", fileId, at)
+      .bind(id, at)
       .run();
     message.ack();
   };
   try {
-    if (Date.parse(job.requested_at) + exportFileMilliseconds <= now.getTime())
-      return await finish(null);
-    if ((await exportRevision(env.DB, job.user_id)) !== job.access_revision)
-      return await finish(null);
+    if (Date.parse(job.requested_at) + exportFileMilliseconds <= now.getTime()) return await fail();
+    if ((await exportRevision(env.DB, job.user_id)) !== job.access_revision) return await fail();
     const request = JSON.parse(
       await unseal(env.BETTER_AUTH_SECRET, sealPurpose, id, job.request_sealed),
     ) as OrderFileRequest;
     const allowance = await orderAllowance(env.DB, job.user_id, now);
     const premium = !!allowance?.premium;
-    if (premiumOnly(request) && !premium) return await finish(null);
+    if (premiumOnly(request) && !premium) return await fail();
     const [tally] = await visibleOrderTallies(
       env.DB,
       job.user_id,
@@ -201,8 +242,8 @@ export async function consumeExportJob(
       now,
       request.filter,
     );
-    if (!tally!.orders) return await finish(null);
-    const fileId = await publishOrderFile(env, {
+    if (!tally!.orders) return await fail();
+    await publishOrderFile(env, {
       userId: job.user_id,
       revision: job.access_revision,
       request,
@@ -210,17 +251,63 @@ export async function consumeExportJob(
       now,
       // Con Premium spazio e copertura in corso esistono sempre.
       coverageEndsAt: premium ? allowance!.coverage!.endsAt : null,
+      // Il lavoro diventa pronto soltanto se il file è nato.
+      alongside: (fileId) =>
+        env.DB.prepare(
+          `UPDATE export_jobs SET state = 'ready', file_id = ?2, request_sealed = NULL,
+                  locked_until = NULL, finished_at = ?3
+            WHERE id = ?1 AND state = 'queued'
+              AND EXISTS (SELECT 1 FROM export_files WHERE id = ?2)`,
+        ).bind(id, fileId, at),
     });
-    await finish(fileId);
+    // Con il file il lavoro è già pronto e la chiusura non lo tocca; senza, una revoca è
+    // arrivata durante la generazione e il lavoro non riesce.
+    await fail();
   } catch (error) {
     logFailure({ error, operation: "export_files" });
-    if (message.attempts >= maxAttempts) {
-      await finish(null);
+    // Righe oltre il limite del foglio: un altro tentativo darebbe lo stesso esito.
+    if (error instanceof XlsxRowLimitError || message.attempts >= maxAttempts) {
+      await fail();
       return;
     }
-    await env.DB.prepare("UPDATE export_jobs SET locked_until = NULL WHERE id = ?").bind(id).run();
+    await env.DB.prepare(
+      "UPDATE export_jobs SET locked_until = NULL WHERE id = ? AND state = 'queued'",
+    )
+      .bind(id)
+      .run();
     message.retry({ delaySeconds: 30 * 2 ** (message.attempts - 1) });
   }
+}
+
+/**
+ * Ripresa dal compito orario `export_files`. Un lavoro in coda senza un blocco valido da oltre
+ * la durata di un blocco ha perso il suo messaggio (consumer interrotto, tentativi esauriti o
+ * messaggio scaduto) e si riaccoda; dopo 24 ore dalla richiesta non può più concludersi e
+ * risulta non riuscito, annunciato dalla campanella. Un lavoro bloccato da un consumer in corso
+ * resta a quel consumer. Restituisce quanti lavori ha riaccodato.
+ */
+export async function resumeExportJobs(
+  env: Pick<Env, "DB" | "WORK_QUEUE">,
+  now: Date,
+): Promise<number> {
+  const at = now.toISOString();
+  const unlocked = "state = 'queued' AND (locked_until IS NULL OR locked_until <= ?1)";
+  await env.DB.prepare(
+    `UPDATE export_jobs SET state = 'failed', request_sealed = NULL, locked_until = NULL,
+            finished_at = ?1
+      WHERE ${unlocked} AND julianday(requested_at) <= julianday(?2)`,
+  )
+    .bind(at, new Date(now.getTime() - exportFileMilliseconds).toISOString())
+    .run();
+  const { results } = await env.DB.prepare(
+    `SELECT id FROM export_jobs WHERE ${unlocked} AND julianday(requested_at) <= julianday(?2)
+      ORDER BY requested_at LIMIT ?3`,
+  )
+    .bind(at, new Date(now.getTime() - lockMilliseconds).toISOString(), resumeBatch)
+    .all<{ id: string }>();
+  if (results.length)
+    await env.WORK_QUEUE.sendBatch(results.map(({ id }) => ({ body: { exportJob: id } })));
+  return results.length;
 }
 
 /** File di un'esportazione, mostrato nella sezione Esportazione. */
@@ -236,8 +323,8 @@ export interface ExportFileView {
 
 /**
  * File dell'utente ancora utili: quelli pronti e validi all'istante `now`, i lavori in corso
- * e quelli non riusciti, dalle ultime 24 ore. Un file scaduto o revocato non compare, anche
- * se i byte non sono ancora stati eliminati.
+ * e quelli non riusciti nelle ultime 24 ore. Un file scaduto o revocato non compare, anche se
+ * i byte non sono ancora stati eliminati.
  */
 export async function listExportFiles(
   db: D1Database,
@@ -256,7 +343,8 @@ export async function listExportFiles(
          UNION ALL
          SELECT j.id, j.file_name, j.state, j.requested_at, NULL
            FROM export_jobs j
-          WHERE j.user_id = ?1 AND j.state <> 'ready' AND j.requested_at > ?3)
+          WHERE j.user_id = ?1
+            AND (j.state = 'queued' OR (j.state = 'failed' AND j.finished_at > ?3)))
         ORDER BY at DESC, id`,
     )
     .bind(userId, at, since)
@@ -277,8 +365,9 @@ export async function listExportFiles(
 }
 
 /**
- * Lavori conclusi da annunciare nella campanella: il file pronto finché resta scaricabile, il
- * lavoro non riuscito per 24 ore dalla richiesta.
+ * Lavori conclusi da annunciare nella campanella: il file pronto finché resta scaricabile, anche
+ * oltre 24 ore dalla richiesta per il tempo in coda, il lavoro non riuscito per 24 ore dalla
+ * conclusione.
  */
 export async function finishedExportJobs(
   db: D1Database,
@@ -290,9 +379,9 @@ export async function finishedExportJobs(
     .prepare(
       `SELECT j.id, j.file_name, j.state, j.finished_at FROM export_jobs j
          LEFT JOIN export_files f ON f.id = j.file_id
-        WHERE j.user_id = ?1 AND j.requested_at > ?3
-          AND (j.state = 'failed' OR (j.state = 'ready' AND f.expires_at > ?2
-            AND f.access_revision = ${revisionSql("?1")}))`,
+        WHERE j.user_id = ?1
+          AND ((j.state = 'failed' AND j.finished_at > ?3) OR (j.state = 'ready'
+            AND f.expires_at > ?2 AND f.access_revision = ${revisionSql("?1")}))`,
     )
     .bind(userId, now.toISOString(), since)
     .all<{ id: string; file_name: string; state: "ready" | "failed"; finished_at: string }>();

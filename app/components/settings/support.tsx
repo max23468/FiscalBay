@@ -17,7 +17,7 @@ import {
 import { Textarea } from "~/components/ui/textarea";
 import { useCopy } from "~/components/copy-context";
 import { supportEmail } from "../../app-copy";
-import { maxSupportMessage, supportTopics } from "../../support";
+import { maxSupportMessage, supportFields, supportTopics } from "../../support";
 import type { DiagnosticsView } from "../../view-models";
 import { CheckboxOption, Group, SimpleSelect } from "./controls";
 
@@ -133,12 +133,14 @@ function SupportForm({
               return;
             }
             event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            action.run("support", {
-              topic,
-              message: area.value.trim(),
-              diagnostics: String(!!rows && form.get("diagnostics") === "on"),
-            });
+            action.run(
+              "support",
+              supportFields(new FormData(event.currentTarget), {
+                topic,
+                message: area.value.trim(),
+                reference: diagnostics?.correlationId ?? null,
+              }),
+            );
           }}
         >
           <p className="text-sm text-muted-foreground">{t.access.requiredFields}</p>

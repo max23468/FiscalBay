@@ -312,21 +312,42 @@ async function handleEbayCallback(
 }
 
 /**
+ * Il link di cancellazione appartiene all'utente della sessione e vale ancora. Better Auth
+ * consuma il token prima del confronto con l'utente: verificarlo qui evita che lo bruci una
+ * sessione diversa, un accesso mancante o un metodo diverso da GET, e il titolare lo conserva.
+ */
+async function deletionLinkOwned(request: Request, env: Env): Promise<boolean> {
+  const token = new URL(request.url).searchParams.get("token");
+  if (request.method !== "GET" || !token) return false;
+  const session = await readSession(env, request);
+  if (!session) return false;
+  const { internalAdapter } = await createAuth(env).$context;
+  const verification = await internalAdapter.findVerificationValue(`delete-account-${token}`);
+  return (
+    verification?.value === session.user.id &&
+    new Date(verification.expiresAt).getTime() > Date.now()
+  );
+}
+
+/**
  * Link di conferma della cancellazione: riuscito porta all'esito senza la sessione, che il
  * lavoro ha già chiuso; scaduto, già usato o aperto senza la sessione dello stesso utente porta
- * alla pagina di errore, nella lingua della richiesta, invece della risposta JSON di Auth.
+ * alla pagina di errore, nella lingua della richiesta, invece della risposta JSON di Auth. Se la
+ * richiesta non si registra la pagina invita a riprovare con un nuovo link.
  */
 async function handleDeletionCallback(request: Request, env: Env): Promise<Response> {
-  const response = await authResponse(request, env);
   const language = linkLanguage(request.url);
-  if (response.status !== 302) {
-    return noStore(
+  const failure = (error: "delete_link" | "delete_failed") =>
+    noStore(
       Response.redirect(
-        new URL(`${localizedPath(language, "/auth/error")}?error=delete_link`, env.APP_ORIGIN),
+        new URL(`${localizedPath(language, "/auth/error")}?error=${error}`, env.APP_ORIGIN),
         303,
       ),
     );
-  }
+  if (!(await deletionLinkOwned(request, env))) return failure("delete_link");
+  const response = await authResponse(request, env);
+  if (response.status >= 500) return failure("delete_failed");
+  if (response.status !== 302) return failure("delete_link");
   const headers = new Headers(response.headers);
   const { authCookies } = await createAuth(env).$context;
   // I cookie della sessione chiusa si eliminano con gli stessi attributi con cui sono nati.
@@ -348,7 +369,11 @@ export function handleAuthRequest(
   env: Env,
   fetcher: typeof fetch = fetch,
 ): Promise<Response> | Response {
-  const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
+  // Barre ripetute o finali e maiuscole non aggirano i controlli sui percorsi.
+  const pathname = new URL(request.url).pathname
+    .toLowerCase()
+    .replace(/\/{2,}/gu, "/")
+    .replace(/\/+$/u, "");
   if (closedAuthPaths.has(pathname)) return new Response(null, { status: 404 });
   if (pathname === deletionCallbackPath) return handleDeletionCallback(request, env);
   if (pathname !== ebayCallbackPath) return authResponse(request, env);

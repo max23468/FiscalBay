@@ -768,6 +768,30 @@ describe("acquisizione con il client", () => {
     expect(pages(later, "creationdate")).toEqual([]);
   });
 
+  it("con le chiamate eBay spente durante la lettura si ferma prima della pagina successiva", async () => {
+    const stopping = ebay({
+      orders: series("12-spento", 60, "2026-09-02T00:00:00.000Z"),
+      before: async (url) => {
+        if (
+          url.searchParams.get("filter")?.startsWith("creationdate:") &&
+          !url.searchParams.has("offset")
+        )
+          await setSwitch(env.DB, "ebay_calls", false, new Date("2026-09-02T00:00:00.000Z"));
+      },
+    });
+    expect(await acquire(stopping)).toBe("budget");
+    expect(pages(stopping, "creationdate")).toEqual([0]);
+    // Nemmeno il dettaglio parte: la pagina applicata resta da completare.
+    expect(stopping.mock.calls.filter(([input]) => String(input).includes("/order/"))).toEqual([]);
+    expect(await syncState()).toMatchObject({ history_next: expect.stringContaining("offset=25") });
+
+    await setSwitch(env.DB, "ebay_calls", true, new Date("2026-09-02T00:20:00.000Z"));
+    const resumed = ebay({ orders: stopping.orders });
+    expect(await acquire(resumed, "2026-09-02T00:30:00.000Z")).toBe("complete");
+    expect(pages(resumed, "creationdate")).toEqual([25, 50]);
+    expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
+  });
+
   it("ricomincia la passata se l'elenco cambia sotto la paginazione, senza saltare ordini", async () => {
     await acquire(ebay({ orders: [] }));
     // Ordini ancora conservabili, modificati dopo l'ultimo limite dei recenti.

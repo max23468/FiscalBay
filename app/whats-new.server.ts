@@ -8,8 +8,8 @@ import type { NotificationView } from "./view-models";
  * di comportamento, schermate o flussi e correzioni di difetti notati dagli utenti; restano fuori
  * lavoro interno e cambi di piani, prezzi o limiti. Le voci si scrivono in italiano e in inglese
  * nella PR della modifica e compaiono con il deploy che le contiene: in Production con
- * `Promuovi`. Finché l'elenco è vuoto pagina, voce del menu, collegamento di Supporto e
- * campanella non compaiono.
+ * `Promuovi`. Finché l'elenco non ha rilasci arrivati al loro giorno, pagina, voce del menu,
+ * collegamento di Supporto e campanella non compaiono.
  */
 export interface WhatsNewRelease {
   /** Versione che porta le voci, per esempio `2.0.1`. */
@@ -28,12 +28,21 @@ export interface WhatsNewView {
   items: Array<{ title: string; body: string }>;
 }
 
-/** Voci già distribuite nella lingua dell'utente, dal rilascio più recente. */
+/** Istante da cui un rilascio compare: l'inizio del suo giorno, in UTC. */
+const releasedAt = (release: Pick<WhatsNewRelease, "date">) =>
+  Date.parse(`${release.date}T00:00:00.000Z`);
+
+/**
+ * Voci già distribuite nella lingua dell'utente, dal rilascio più recente. Un rilascio con data
+ * futura non compare prima del suo giorno, come nella campanella.
+ */
 export function whatsNewView(
   language: Language,
+  now = new Date(),
   releases: WhatsNewRelease[] = whatsNew,
 ): WhatsNewView[] {
-  return [...releases]
+  return releases
+    .filter((release) => releasedAt(release) <= now.getTime())
     .sort((a, b) => b.date.localeCompare(a.date))
     .map((release) => ({
       version: release.version,
@@ -49,10 +58,9 @@ export function whatsNewNotifications(
   releases: WhatsNewRelease[] = whatsNew,
 ): NotificationView[] {
   const since = now.getTime() - notificationWindowMilliseconds;
-  return whatsNewView(language, releases).flatMap((release) => {
+  return whatsNewView(language, now, releases).flatMap((release) => {
     const at = `${release.date}T00:00:00.000Z`;
-    const time = Date.parse(at);
-    if (time < since || time > now.getTime()) return [];
+    if (releasedAt(release) < since) return [];
     return [
       {
         id: `whats-new:${release.version}`,
@@ -65,6 +73,11 @@ export function whatsNewNotifications(
       },
     ];
   });
+}
+
+/** Pagina Novità, voce del menu e collegamento di Supporto: soltanto con rilasci già usciti. */
+export function hasWhatsNew(now = new Date(), releases: WhatsNewRelease[] = whatsNew): boolean {
+  return releases.some((release) => releasedAt(release) <= now.getTime());
 }
 
 /**

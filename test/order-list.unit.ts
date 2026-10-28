@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import features from "../app/components/orders/motion-features";
-import { exportHref, exportReturnHref, exportScope } from "../app/orders/export-scope";
+import {
+  exportHref,
+  exportOrderHref,
+  exportReturnHref,
+  exportScope,
+} from "../app/orders/export-scope";
 
 describe("animazioni della lista ordini", () => {
   it("caricano dopo la pagina anche il riordino delle schede", () => {
@@ -32,6 +37,32 @@ describe("ambito dell'esportazione dagli Ordini", () => {
     expect(exportScope(new URLSearchParams())).toBeNull();
     expect(exportScope(new URLSearchParams("mostra=3"))).toBeNull();
     expect(exportReturnHref("/app/ordini", new URLSearchParams("ordini=o-1"))).toBe("/app/ordini");
+  });
+
+  it("dal dettaglio porta il solo ordine, con l'elenco soltanto per tornarvi", () => {
+    const list = new URLSearchParams("fiscale=locked&vista=abc&ordini=vecchi");
+    const href = exportOrderHref("/app/impostazioni/esportazione", list, "o-1");
+    expect(href).toBe("/app/impostazioni/esportazione?fiscale=locked&vista=abc&ordine=o-1");
+    const query = new URL(href, "https://esempio.invalid").searchParams;
+    expect(exportScope(query)).toEqual({ kind: "orders", ids: ["o-1"], detail: true });
+    expect(exportReturnHref("/app/ordini", query)).toBe("/app/ordini?fiscale=locked&vista=abc");
+    // Dall'elenco la selezione sostituisce l'ordine del dettaglio.
+    expect(exportHref("/x", query, ["o-2"])).toBe("/x?fiscale=locked&vista=abc&ordini=o-2");
+    expect(exportScope(new URLSearchParams("ordine="))).toEqual({
+      kind: "orders",
+      ids: [],
+      detail: true,
+    });
+    expect(exportScope(new URLSearchParams({ ordine: "x".repeat(129) }))).toEqual({
+      kind: "orders",
+      ids: [],
+      detail: true,
+    });
+    expect(exportScope(new URLSearchParams({ ordine: "x".repeat(128) }))).toEqual({
+      kind: "orders",
+      ids: ["x".repeat(128)],
+      detail: true,
+    });
   });
 
   it("non trasforma una selezione vuota o fuori misura in tutti gli ordini", () => {

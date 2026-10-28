@@ -9,6 +9,7 @@ import { minorToDecimal, parseMinor } from "../app/money";
 import { formatDate } from "../app/format";
 import { loader as loadAccess } from "../app/routes/sign-in";
 
+import { loadedHere, timingValue } from "../app/page-timing";
 import { issueTimingTicket } from "../app/page-timing.server";
 import { loader as pageTimingRead, action as pageTiming } from "../app/routes/page-timing";
 import { invocationPoint, writePoints } from "../app/metrics.server";
@@ -266,6 +267,20 @@ describe("misure delle fasi e del browser", () => {
       headers: { "content-type": "application/json", ...headers },
     });
 
+  it("il browser misura soltanto il documento caricato sulla pagina e scarta le durate fuori limite", () => {
+    expect(loadedHere("https://test.fiscalbay.it/app/ordini?vista=x", "/app/ordini")).toBe(true);
+    expect(loadedHere("https://test.fiscalbay.it/en/app/orders", "/en/app/orders")).toBe(true);
+    // Documento di Impostazioni, poi Ordini aperti nel client: le misure non sono degli Ordini.
+    expect(loadedHere("https://test.fiscalbay.it/app/impostazioni", "/app/ordini")).toBe(false);
+    expect(loadedHere("https://test.fiscalbay.it/app/ordini", "/app/negozi")).toBe(false);
+    expect(loadedHere("", "/app/ordini")).toBe(false);
+    expect(timingValue(649.6)).toBe(650);
+    expect(timingValue(120_000)).toBe(120_000);
+    expect(timingValue(120_001)).toBeUndefined();
+    expect(timingValue(-1)).toBeUndefined();
+    expect(timingValue(Number.NaN)).toBeUndefined();
+  });
+
   it("scrive le misure del browser su Analytics Engine soltanto con i campi ammessi", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const written = vi.spyOn(env.METRICS, "writeDataPoint").mockImplementation(() => {});
@@ -287,6 +302,17 @@ describe("misure delle fasi e del browser", () => {
       blobs: ["page", "browser", "orders", "", "ok", env.VERSION_METADATA.id],
       doubles: [120, 300, -1, 650, 12, 8, -1],
     });
+    written.mockClear();
+    // Una pagina pronta oltre il limite manda il report senza `ready`: la misura resta assente.
+    const late = {
+      ...measures,
+      ready: undefined,
+      ticket: await issueTimingTicket(env.BETTER_AUTH_SECRET, "orders"),
+    };
+    expect((await timing(JSON.stringify(late))).status).toBe(204);
+    expect(written).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ doubles: [120, 300, -1, -1, 12, 8, -1] }),
+    );
     written.mockClear();
     for (const body of [
       JSON.stringify({ ...valid, url: "/app/ordini?q=RSSMRA80A01H501U" }),
@@ -341,6 +367,24 @@ describe("metriche tecniche su Analytics Engine", () => {
       dataset: { writeDataPoint: (point) => points.push(point!) } as AnalyticsEngineDataset,
     };
   };
+
+  it("riconosce il campione controllato dalla classe propria, non da ogni HEAD sulle API", async () => {
+    const { points, dataset } = recorder();
+    const head = (path: string) =>
+      withPhaseTimings(
+        new Request(`https://test.fiscalbay.it${path}`, { method: "HEAD" }),
+        async () => new Response(null, { status: 405 }),
+        { dataset },
+      );
+    await head("/api/v1/page-timing");
+    await head("/api/v1/notifications");
+    await head("/api/v1/page-timing?altro=1");
+    expect(points.map((point) => point.blobs!.slice(2, 5))).toEqual([
+      ["sample", "HEAD", "4xx"],
+      ["api", "HEAD", "4xx"],
+      ["sample", "HEAD", "4xx"],
+    ]);
+  });
 
   it("conta una volta sola il tempo delle misure in parallelo", async () => {
     const { points, dataset } = recorder();
@@ -446,7 +490,7 @@ describe("metriche tecniche su Analytics Engine", () => {
     expect(JSON.stringify(points)).not.toContain("NON-ESPORRE");
 
     // La richiesta del campione controllato (`scripts/metrics-query.mjs sample`): HEAD sul
-    // report del browser, 405 senza effetti, con classe, metodo ed esito che nessuna pagina usa.
+    // report del browser, 405 senza effetti, con la classe propria del campione.
     points.length = 0;
     const sample = await withPhaseTimings(
       new Request("https://test.fiscalbay.it/api/v1/page-timing", { method: "HEAD" }),
@@ -455,7 +499,7 @@ describe("metriche tecniche su Analytics Engine", () => {
     );
     expect(sample.status).toBe(405);
     expect(points.map((point) => point.blobs)).toEqual([
-      ["invocation", "http", "api", "HEAD", "4xx", ""],
+      ["invocation", "http", "sample", "HEAD", "4xx", ""],
     ]);
   });
 

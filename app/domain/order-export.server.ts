@@ -3,6 +3,7 @@ import { minorToDecimal } from "../money";
 import { taxIdentifierType } from "../tax-quality";
 import type { AppCopy } from "../copy/copy-it";
 import type { EbayEnvironment } from "../view-models";
+import { fiscalNotice } from "./order-view.server";
 import { listVisibleOrders, type OrderCriteria, type VisibleOrder } from "./orders.server";
 import { xlsxStream, type XlsxCell } from "./xlsx.server";
 import {
@@ -81,6 +82,16 @@ function taxCells(order: VisibleOrder) {
   return { cf: joined(cf.sort()), vat: joined(vat.sort()), other: joined(other.sort()) };
 }
 
+/**
+ * Situazione fiscale come nella pagina Ordini: un dato disponibile porta la stessa avvertenza
+ * sull'ultima lettura, così il file non lo presenta come confermato dopo una lettura non
+ * riuscita o in corso.
+ */
+function fiscalCell(order: VisibleOrder, t: AppCopy) {
+  const notice = order.fiscalState === "available" ? fiscalNotice(order) : null;
+  return notice ? t.settings.export.file.fiscalNotice[notice] : t.orders.fiscal[order.fiscalState];
+}
+
 /** Stato normalizzato con l'etichetta della pagina; uno stato non previsto resta il codice eBay. */
 function statusCell<Status extends string>(
   status: Status | "unknown" | null,
@@ -129,7 +140,7 @@ export function exportRecords(
     taxCode: tax.cf,
     vat: tax.vat,
     otherTax: tax.other,
-    fiscal: t.orders.fiscal[order.fiscalState],
+    fiscal: fiscalCell(order, t),
     checkedAt: exportDateTime(order.taxCheckedAt, timeZone),
     updatedAt: exportDateTime(order.lastModifiedTime, timeZone),
   };
@@ -176,11 +187,13 @@ export function exportRows(
 
 /**
  * Valore di una cella che un foglio di calcolo eseguirebbe come formula: si apre con `=`, `@`,
- * tabulazione o ritorno a capo, oppure con `+` o `-` seguiti da qualcosa di diverso da cifre e
- * punteggiatura numerica. Un telefono internazionale o un numero negativo restano intatti.
+ * tabulazione o ritorno a capo, oppure con `+` o `-` senza essere un numero semplice con segno.
+ * Excel calcola anche `+39-333-1234567`, `-2-3` o `-1/0`: soltanto cifre con al più un
+ * separatore decimale restano intatte. Uno spazio o un carattere Unicode iniziale, come `＝`,
+ * non apre una formula.
  */
 export function formulaLike(value: string): boolean {
-  return /^[=@\t\r\n]/u.test(value) || /^[+-](?![\d\s().,/-]*$)/u.test(value);
+  return /^[=@\t\r\n]/u.test(value) || /^[+-](?!\d+(?:[.,]\d+)?$)/u.test(value);
 }
 
 /** Cella CSV: sempre fra virgolette, virgolette raddoppiate, formula neutralizzata con `'`. */
@@ -213,11 +226,12 @@ export async function* exportOrderPages(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria },
+  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean },
 ): AsyncGenerator<VisibleOrder[]> {
   const page = await listVisibleOrders(db, userId, maxListedOrders, ebayEnvironment, now, {
     ids: filter.ids,
     criteria: filter.criteria,
+    provisional: filter.provisional,
     // Stryker disable next-line BooleanLiteral: i suggerimenti non entrano nel file; con true la lettura costa di più e dà le stesse righe.
     suggestions: false,
   });

@@ -10,7 +10,6 @@ import {
   ownerCallbackPrefix,
   ownerChatId,
   sendPreformatted,
-  sendRichMessage,
   setOwnerCommands,
   telegramConfigured,
   webhookInfo,
@@ -27,8 +26,10 @@ import {
   duration,
   environmentName,
   ownerCallback,
+  panelRejected,
   plainText,
   richMessage,
+  sendPanel,
   type Panel,
   type Row,
   type Section,
@@ -121,12 +122,22 @@ export async function consumeOwnerUpdate(
   if (!action) return;
   const panel = await ownerPanel(env, action, fetcher, now);
   if (action.copy) return sendPreformatted(env, owner, plainText(env, panel, now), fetcher);
-  const message = richMessage(env, withControls(env, panel, action), now);
+  const shown = withControls(env, panel, action);
   if (update.topic === "owner_callback" && update.messageId !== null && !action.fresh) {
-    const edited = await editRichMessage(env, owner, update.messageId, message, fetcher);
+    // Un pannello rifiutato per la sua forma parte come nuovo messaggio, con la stessa regola.
+    const edited = await editRichMessage(
+      env,
+      owner,
+      update.messageId,
+      richMessage(env, shown, now),
+      fetcher,
+    ).catch((error: unknown) => {
+      if (panelRejected(error)) return "gone" as const;
+      throw error;
+    });
     if (edited === "edited") return;
   }
-  await sendRichMessage(env, owner, message, fetcher);
+  await sendPanel(env, owner, shown, now, fetcher);
 }
 
 /** Pulsanti comuni in fondo a ogni vista: aggiorna, copia, console e ritorno alla panoramica. */

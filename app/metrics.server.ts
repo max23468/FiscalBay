@@ -9,15 +9,16 @@ import type { TimedPage } from "./page-timing";
  * deduplica e campiona: i KPI che devono resistere a retry restano eventi in D1. Il rendering
  * consuma soltanto CPU, che l'orologio del Worker non misura: si legge dai Workers Logs.
  *
- * Disposizione dei punti, letta dalle query di `metrics-queries.server.ts`:
+ * Disposizione dei punti, letta dalle query di `metrics-queries.ts`:
  * - `index1` = `blob1:blob2`, chiave del campionamento equo;
  * - `blob1` famiglia (`invocation`, `phase`, `page`), `blob2` invocazione (`http`, `queue`,
  *   `cron`, `browser`), `blob3` dettaglio (classe della route, tipo di messaggio, fase o
  *   pagina), `blob4` operazione della fase o metodo HTTP, `blob5` esito, `blob6` versione del
  *   Worker;
  * - invocazioni e fasi: `double1` conteggio, `double2` durata totale e `double3` durata massima,
- *   in millisecondi; una richiesta HTTP dura fino alla risposta pronta, senza lo streaming del
- *   corpo;
+ *   in millisecondi; per un'invocazione il conteggio è il numero di messaggi della coda (1 per
+ *   HTTP e cron) e la durata è quella dell'invocazione intera; una richiesta HTTP dura fino alla
+ *   risposta pronta, senza lo streaming del corpo;
  * - pagine: `double1` TTFB, `double2` FCP, `double3` LCP, `double4` pronta, `double5`..`double7`
  *   fasi del server Auth, D1 ed eBay, in millisecondi; -1 per una misura assente. I punti scritti
  *   prima portano in `double8` un rendering sempre nullo, che le query non leggono.
@@ -35,7 +36,8 @@ export type InvocationDetail =
   | "export"
   | "deletion"
   | "unknown"
-  | "dispatch";
+  | "dispatch"
+  | "sample";
 
 export type InvocationOutcome = "2xx" | "3xx" | "4xx" | "5xx" | "ok" | "retry" | "error";
 
@@ -132,7 +134,7 @@ export function pagePoint(input: {
   ttfb: number;
   fcp?: number;
   lcp?: number;
-  ready: number;
+  ready?: number;
   server: Partial<Record<Phase, number>>;
   version?: string;
 }): MetricPoint {
@@ -145,7 +147,7 @@ export function pagePoint(input: {
       input.ttfb,
       value(input.fcp),
       value(input.lcp),
-      input.ready,
+      value(input.ready),
       value(input.server.auth),
       value(input.server.d1),
       value(input.server.ebay),

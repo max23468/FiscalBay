@@ -15,6 +15,15 @@ export type XlsxCell =
   /** Data e ora già nel fuso dell'utente, nella forma `AAAA-MM-GG hh:mm:ss`. */
   | { type: "date"; value: string };
 
+/** Righe di un foglio di Excel, intestazione compresa: oltre, il file non si apre per intero. */
+export const xlsxMaxRows = 1_048_576;
+
+/**
+ * Righe oltre `xlsxMaxRows`: il file non si crea, perché nessun tentativo lo farebbe stare. I
+ * log riportano soltanto campi enumerati, quindi l'errore non porta un messaggio.
+ */
+export class XlsxRowLimitError extends Error {}
+
 export interface XlsxSheet {
   name: string;
   header: string[];
@@ -178,11 +187,14 @@ function sheetEnd(sheet: XlsxSheet, rows: number) {
  * File XLSX in streaming: il foglio si comprime pagina per pagina, la cartella di lavoro si
  * scrive per ultima con l'intervallo del filtro. Un errore a metà interrompe il flusso, così
  * il file incompleto non risulta scaricato; interrompere il download chiude anche le pagine.
+ * Una pagina che porterebbe il foglio oltre `maxRows` righe interrompe il flusso con
+ * `XlsxRowLimitError`, prima di scriverla.
  */
 export function xlsxStream<Page>(
   sheet: XlsxSheet,
   pages: AsyncGenerator<Page>,
   cells: (page: Page) => XlsxCell[][],
+  maxRows = xlsxMaxRows,
 ): ReadableStream<Uint8Array> {
   let rows = 1;
   let chunks = 0;
@@ -227,13 +239,12 @@ export function xlsxStream<Page>(
           zip.end();
           return;
         }
-        worksheet.push(
-          strToU8(
-            cells(next.value)
-              .map((row) => xlsxRow(row, ++rows))
-              .join(""),
-          ),
-        );
+        const page = cells(next.value);
+        if (rows + page.length > maxRows) {
+          await pages.return(undefined);
+          throw new XlsxRowLimitError();
+        }
+        worksheet.push(strToU8(page.map((row) => xlsxRow(row, ++rows)).join("")));
       }
     },
     async cancel() {

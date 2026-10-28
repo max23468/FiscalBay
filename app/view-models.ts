@@ -342,6 +342,11 @@ export interface AccountView {
   trialAvailable: boolean;
   /** In lista d'attesa per il Free: nessuna lettura periodica né sblocco del Free. */
   waitlisted?: boolean;
+  /**
+   * Beneficio Free sospeso dalla revisione antiabuso, senza copertura: nessuno sblocco del Free,
+   * anche sugli ordini già importati; gli sblocchi già fatti restano visibili.
+   */
+  freeSuspended?: boolean;
   /** Prova Premium in corso, senza un'altra copertura: finisce all'istante `endsAt`. */
   trial?: { endsAt: string };
   /**

@@ -17,7 +17,14 @@ export interface SupportRequest {
   message: string;
   /** L'utente allega il riepilogo diagnostico. */
   diagnostics: boolean;
+  /**
+   * Correlation ID del riepilogo mostrato, quello del caricamento della pagina: l'email riporta lo
+   * stesso riferimento che l'utente ha visto. Null se manca o non ha la forma di un correlation ID.
+   */
+  reference: string | null;
 }
+
+const referencePattern = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/u;
 
 /** Argomento dell'elenco e messaggio non vuoto entro il limite; null altrimenti. */
 export function parseSupportRequest(form: FormData): SupportRequest | null {
@@ -29,10 +36,12 @@ export function parseSupportRequest(form: FormData): SupportRequest | null {
     .trim();
   if (!(supportTopics as readonly string[]).includes(topic)) return null;
   if (!message || message.length > maxSupportMessage) return null;
+  const reference = String(form.get("reference") ?? "");
   return {
     topic: topic as SupportTopic,
     message,
     diagnostics: form.get("diagnostics") === "true",
+    reference: referencePattern.test(reference) ? reference : null,
   };
 }
 
@@ -62,7 +71,9 @@ function concernedStore(stores: StoreStatus[]): StoreStatus | null {
 /**
  * Riepilogo allowlistato: versione, riferimento interno del negozio, fase ed esito dell'ultima
  * lettura, codice errore stabile, diritti e correlation ID. Mai token, nomi o username eBay,
- * dati fiscali, acquirenti o altri spazi: i campi nascono qui, non da una copia dei record.
+ * dati fiscali, acquirenti o altri spazi: i campi nascono qui, non da una copia dei record. Le
+ * letture dei negozi partono dalla coda e non conservano un correlation ID: il riferimento è
+ * quello della pagina che mostra il riepilogo, lo stesso che riceve l'assistenza.
  */
 export function supportDiagnostics(input: {
   stores: StoreStatus[];
@@ -110,7 +121,8 @@ export function supportDiagnostics(input: {
 
 /**
  * Testo dell'email verso `supporto@`, sempre in italiano per chi risponde: account, lingua e
- * argomento, il messaggio dell'utente e, se allegato, il riepilogo come lo ha visto l'utente.
+ * argomento, il messaggio dell'utente e, se allegato, il riepilogo riletto all'invio, con il
+ * correlation ID che l'utente ha visto nel modulo.
  */
 export function supportEmailMessage(
   env: Pick<Env, "APP_ORIGIN">,

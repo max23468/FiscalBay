@@ -195,7 +195,12 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
           const language = request ? linkLanguage(request.url) : "it";
           // Il lavoro porta con sé lo stop dei rinnovi: si carica soltanto alla conferma.
           const { startAccountDeletion } = await import("./domain/account-deletion.server");
-          await startAccountDeletion(env, user, language);
+          // Una registrazione non riuscita non scrive nulla: l'account resta com'era e la
+          // pagina invita a chiedere un nuovo link, perché questo è già consumato.
+          await startAccountDeletion(env, user, language).catch((error: unknown) => {
+            logFailure({ request, error, operation: "account_deletion" });
+            throw new APIError("INTERNAL_SERVER_ERROR", { code: "account_deletion_failed" });
+          });
           throw new APIError("FOUND", undefined, {
             location: localizedPath(language, accountDeletionPath),
           });

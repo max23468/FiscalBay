@@ -28,7 +28,9 @@ describe("query delle metriche tecniche", () => {
       new Date("2026-10-27T20:01:00.900Z"),
     );
     assert.match(sql, /SUM\(_sample_interval \* double1\) AS requests/u);
-    assert.match(sql, /blob3 = 'api' AND blob4 = 'HEAD'/u);
+    // Conta soltanto la classe del campione: altre richieste HEAD sulle API restano fuori.
+    assert.match(sql, /blob3 = 'sample' AND blob4 = 'HEAD'/u);
+    assert.doesNotMatch(sql, /blob3 = 'api'/u);
     assert.match(sql, /blob5 = '4xx'/u);
     assert.match(sql, /timestamp >= toDateTime\('2026-10-27 20:00:00'\)/u);
     assert.throws(() => sampleSql("dati; DROP", new Date(), new Date()), /INVALID_DATASET/u);

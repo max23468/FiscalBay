@@ -5,7 +5,10 @@ import { isProductionOrigin } from "../app-links";
 // Indicazione per i motori di ricerca, non un controllo d'accesso: l'area riservata richiede
 // comunque la sessione e ogni risposta non pubblica porta `x-robots-tag: noindex`. Termini e
 // Privacy restano raggiungibili: il loro `noindex` arriva dall'header, non da un `Disallow`.
-const privatePaths = ["/app", "/accesso", "/admin", "/api/", "/auth/", "/anteprima"];
+// Ogni regola è un prefisso: l'area chiude con la barra, così `/apple-touch-icon.png`, logo
+// dei dati strutturati e delle email, resta raggiungibile. Le altre pagine non hanno file
+// pubblici con lo stesso inizio.
+const privatePaths = ["/app/", "/accesso", "/admin", "/api/", "/auth/", "/anteprima"];
 
 export function robots(origin: string) {
   if (!isProductionOrigin(origin)) return "User-agent: *\nDisallow: /\n";

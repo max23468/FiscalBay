@@ -4,11 +4,13 @@ import { forwardToAuth } from "../app/auth-route.server";
 import {
   completeRegistration,
   legalVersions,
+  marketingTextVersions,
   parseProfile,
   registrationComplete,
   registrationStatus,
 } from "../app/domain/registration.server";
 import { createAuth } from "../app/auth.server";
+import { sendExistingAccountEmail } from "../app/account-email.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadLegal } from "../app/routes/legal";
 import { loader as loadAccess } from "../app/routes/sign-in";
@@ -146,6 +148,7 @@ describe("registrazione e verifica del contatto", () => {
     });
     expect(await registrationStatus(env.DB, user.id)).toEqual({
       termsAccepted: false,
+      marketingChosen: false,
       profile: null,
     });
     await completeRegistration(env.DB, {
@@ -156,6 +159,7 @@ describe("registrazione e verifica del contatto", () => {
     });
     expect(await registrationStatus(env.DB, user.id)).toEqual({
       termsAccepted: false,
+      marketingChosen: false,
       profile: syntheticProfile,
     });
     await completeRegistration(env.DB, {
@@ -166,6 +170,7 @@ describe("registrazione e verifica del contatto", () => {
     });
     expect(await registrationStatus(env.DB, user.id)).toEqual({
       termsAccepted: true,
+      marketingChosen: true,
       profile: syntheticProfile,
     });
     const batch = vi.fn();
@@ -228,7 +233,7 @@ describe("registrazione e verifica del contatto", () => {
           language: "en",
         },
       ],
-      marketing: [{ granted: 0, text_version: legalVersions.marketing, language: "en" }],
+      marketing: [{ granted: 0, text_version: marketingTextVersions.registration, language: "en" }],
     });
     await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
     const confirmation = send.mock.calls[0]![0] as { to: string; subject: string; text: string };
@@ -283,6 +288,44 @@ describe("registrazione e verifica del contatto", () => {
     const verifiedCookie = sessionCookie(verified);
     expect(await homeFor(verifiedCookie)).toMatchObject({ verified: true });
     send.mockRestore();
+  });
+
+  it("risponde a un indirizzo già registrato senza attendere l'avviso, che resta nei log", async () => {
+    const email = "gia-registrato@example.invalid";
+    let release!: () => void;
+    const delivery = new Promise<void>((resolve) => (release = resolve));
+    // L'invio resta in corso finché la prova non lo rilascia, poi l'indirizzo risulta soppresso.
+    const send = vi.fn<Env["AUTH_EMAIL"]["send"]>().mockImplementation(async () => {
+      await delivery;
+      throw Object.assign(new Error("synthetic"), { code: "E_RECIPIENT_SUPPRESSED" });
+    });
+    const mail = { ...env, AUTH_EMAIL: { send } } as unknown as Env;
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = () => errors.mock.calls.map(([line]) => String(line)).join("\n");
+    try {
+      const request = new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        body: JSON.stringify({ email, callbackURL: "/en/app/ordini" }),
+      });
+      // Come per un indirizzo nuovo, la risposta non aspetta il provider dell'email.
+      const outcome = await Promise.race([
+        sendExistingAccountEmail(mail, email, request).then(() => "risposta" as const),
+        new Promise<"in attesa">((resolve) => setTimeout(() => resolve("in attesa"), 1_000)),
+      ]);
+      expect(outcome).toBe("risposta");
+      expect(send).toHaveBeenCalledOnce();
+      expect(send.mock.calls[0]![0]).toMatchObject({
+        to: email,
+        subject: "You already have a FiscalBay account",
+      });
+      expect(logged()).toBe("");
+      release();
+      await vi.waitFor(() => expect(logged()).toContain('"failure":"E_RECIPIENT_SUPPRESSED"'));
+      expect(logged()).not.toContain(email);
+    } finally {
+      release();
+      errors.mockRestore();
+    }
   });
 
   it("registra un'azienda solo con la ragione sociale, senza dati fiscali", async () => {
@@ -349,6 +392,7 @@ describe("registrazione e verifica del contatto", () => {
       authenticated: true,
       needsProfile: true,
       needsAgreement: true,
+      needsMarketing: true,
       suggestedName: { firstName: "Luca", lastName: "De Santis" },
     });
     // Anche uno username eBay con spazi non prova nome e cognome della persona.
@@ -385,7 +429,7 @@ describe("registrazione e verifica del contatto", () => {
           language: "it",
         },
       ],
-      marketing: [{ granted: 1, text_version: legalVersions.marketing, language: "it" }],
+      marketing: [{ granted: 1, text_version: marketingTextVersions.registration, language: "it" }],
     });
     expect(await homeFor(cookie)).toMatchObject({
       verified: true,
@@ -410,6 +454,37 @@ describe("registrazione e verifica del contatto", () => {
       needsProfile: true,
       suggestedName: { firstName: "", lastName: "" },
     });
+  });
+
+  it("chiede di nuovo i soli Termini a chi ha già scelto sul marketing, senza toccarne la scelta", async () => {
+    const { cookie, userId } = await verifiedSession("nuovi-termini@example.invalid");
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM marketing_consents WHERE user_id = ?").bind(userId),
+      env.DB.prepare(
+        `INSERT INTO marketing_consents (id, user_id, granted, text_version, language, recorded_at)
+         VALUES ('adesione', ?1, 1, ?2, 'it', ?3)`,
+      ).bind(userId, marketingTextVersions.settings, now),
+      // Una nuova versione dei Termini: quella accettata non è più la corrente.
+      env.DB.prepare(
+        "UPDATE terms_acceptances SET terms_version = 'bozza-precedente' WHERE user_id = ?",
+      ).bind(userId),
+    ]);
+    expect(await accessFor(cookie)).toMatchObject({
+      needsProfile: false,
+      needsAgreement: true,
+      needsMarketing: false,
+    });
+    // Anche un campo marketing inviato a mano non registra una nuova scelta.
+    const response = await accessForm("/accesso", { intent: "completa", termini: "on" }, cookie);
+    expect(response.headers.get("location")).toBe("/app/ordini");
+    await accessForm("/accesso", { intent: "completa", termini: "on", marketing: "on" }, cookie);
+    const { terms, marketing } = await agreements(userId);
+    expect(terms.map((row) => row.terms_version).sort()).toEqual(
+      ["bozza-precedente", legalVersions.terms].sort(),
+    );
+    expect(marketing).toEqual([
+      { granted: 1, text_version: marketingTextVersions.settings, language: "it" },
+    ]);
   });
 
   it("limita per IP i tentativi dei moduli su un ambiente distribuito, contando su D1", async () => {

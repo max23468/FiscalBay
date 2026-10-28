@@ -9,7 +9,7 @@ import { action as storesAction, loader as loadStores } from "../app/routes/stor
 import { action as startStoreLink } from "../app/routes/store-link";
 import { listNotifications } from "../app/domain/notifications.server";
 import { markNotificationsRead } from "../app/domain/notification-reads.server";
-import { recordMarketingConsent } from "../app/domain/preferences.server";
+import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
 import { whatsNew, whatsNewProblems, type WhatsNewRelease } from "../app/whats-new.server";
 import { ebayOutage, listStores } from "../app/domain/stores.server";
@@ -672,8 +672,9 @@ describe("pagina Ordini reale", () => {
   });
 
   it("annuncia le Novità di ogni rilascio nella campanella e nel menu, solo se ci sono", async () => {
-    const { cookie, userId } = await owner();
     const at = new Date("2026-11-20T09:00:00.000Z");
+    vi.setSystemTime(at);
+    const { cookie, userId } = await owner();
     const page = (path: string) => routeResponse(loadWhatsNew, path, { cookie }).catch(() => null);
     const bell = (language: "it" | "en", when = at) =>
       listNotifications(env.DB, userId, [], language, "Europe/Rome", when);
@@ -716,8 +717,22 @@ describe("pagina Ordini reale", () => {
       expect((await bell("en"))[0]).toMatchObject({ title: "What’s new in FiscalBay" });
       await markNotificationsRead(env.DB, userId, ["whats-new:2.0.2"], at);
       expect((await bell("it"))[0]).toMatchObject({ read: true });
-      // Un rilascio con data futura non compare prima del suo giorno.
+      // Un rilascio con data futura non compare prima del suo giorno: né nella campanella né
+      // nella pagina, e senza rilasci già usciti nemmeno la voce del menu.
       expect(await bell("it", new Date("2026-11-09T09:00:00.000Z"))).toEqual([]);
+      whatsNew.push(release("2.0.3", "2026-11-21"));
+      expect(
+        (await routeData(loadWhatsNew, "/app/novita", { cookie })).releases.map(
+          (item: { version: string }) => item.version,
+        ),
+      ).toEqual(["2.0.2", "2.0.1"]);
+      expect(await bell("it")).toHaveLength(1);
+      whatsNew.splice(0, 2);
+      expect((await areaShell(cookie)).whatsNew).toBe(false);
+      expect(await page("/app/novita")).toMatchObject({ status: 404 });
+      vi.setSystemTime(new Date("2026-11-21T00:00:00.000Z"));
+      expect((await areaShell(cookie)).whatsNew).toBe(true);
+      vi.setSystemTime(at);
       expect(
         whatsNewProblems([release("2.0.1", "2026-13-01"), release("2.0.1", "2026-10-01")]),
       ).toEqual(["2.0.1: giorno non valido", "2.0.1: versione ripetuta"]);
@@ -727,17 +742,34 @@ describe("pagina Ordini reale", () => {
     expect(await page("/app/novita")).toMatchObject({ status: 404 });
   });
 
-  it("propone il consenso marketing una sola volta, a primi passi conclusi", async () => {
+  it("propone il consenso marketing una sola volta, a primi passi conclusi, in ogni lingua", async () => {
     const { cookie, userId } = await owner();
-    const proposal = async () => (await ordersPage(cookie)).page.marketingProposal;
+    const proposal = async (path = "/app/ordini") =>
+      (await ordersPage(cookie, path)).page.marketingProposal;
     const choices = () =>
-      env.DB.prepare("SELECT granted FROM marketing_consents WHERE user_id = ? ORDER BY rowid")
+      env.DB.prepare(
+        "SELECT granted, text_version, language FROM marketing_consents WHERE user_id = ? ORDER BY rowid",
+      )
         .bind(userId)
         .all()
         .then(({ results }) => results);
     // La sola scelta della registrazione, senza adesione: l'utente di prova resta fra i test.
-    await env.DB.prepare("DELETE FROM marketing_consents WHERE user_id = ?").bind(userId).run();
-    await recordMarketingConsent(env.DB, userId, false, "it");
+    const register = async (marketing: boolean) => {
+      await env.DB.prepare("DELETE FROM marketing_consents WHERE user_id = ?").bind(userId).run();
+      await completeRegistration(env.DB, {
+        userId,
+        language: "it",
+        now: new Date(now),
+        agreement: { marketing },
+      });
+    };
+    await register(false);
+    const registration = {
+      granted: 0,
+      text_version: marketingTextVersions.registration,
+      language: "it",
+    };
+    expect(await choices()).toEqual([registration]);
     // Prima della prima lettura riuscita i primi passi non sono conclusi.
     expect(await proposal()).toBe(false);
     await env.DB.prepare(
@@ -747,22 +779,38 @@ describe("pagina Ordini reale", () => {
       .run();
     expect((await ordersPage(cookie)).page.onboarding.every((step) => step.done)).toBe(true);
     expect(await proposal()).toBe(true);
-    const answer = (value: string) =>
-      routeData(unlockAction, "/app/ordini", {
+    const answer = (path: string, value: string) =>
+      routeData(unlockAction, path, {
         cookie,
         fields: { intent: "marketing", value },
       });
-    await expect(answer("forse")).resolves.toMatchObject({ ok: false });
-    expect(await answer("false")).toEqual({
+    await expect(answer("/app/ordini", "forse")).resolves.toMatchObject({ ok: false });
+    expect(await answer("/app/ordini", "false")).toEqual({
       ok: true,
       notice: appCopy.it.orders.marketingProposal.declined,
     });
-    // La mancata adesione resta come prova e la proposta non torna.
-    expect(await choices()).toEqual([{ granted: 0 }, { granted: 0 }]);
+    // La mancata adesione resta come prova del testo della proposta e la proposta non torna.
+    expect(await choices()).toEqual([
+      registration,
+      { granted: 0, text_version: marketingTextVersions.proposal, language: "it" },
+    ]);
     expect(await proposal()).toBe(false);
+    // In inglese la risposta registra la lingua della pagina, con la stessa versione del testo.
+    await env.DB.prepare("DELETE FROM marketing_consents WHERE user_id = ? AND text_version = ?")
+      .bind(userId, marketingTextVersions.proposal)
+      .run();
+    expect(await proposal("/en/app/ordini")).toBe(true);
+    expect(await answer("/en/app/ordini", "true")).toEqual({
+      ok: true,
+      notice: appCopy.en.orders.marketingProposal.accepted,
+    });
+    expect(await choices()).toEqual([
+      registration,
+      { granted: 1, text_version: marketingTextVersions.proposal, language: "en" },
+    ]);
+    expect(await proposal("/en/app/ordini")).toBe(false);
     // Chi aderisce in registrazione non riceve la proposta; la revoca resta nelle Impostazioni.
-    await env.DB.prepare("DELETE FROM marketing_consents WHERE user_id = ?").bind(userId).run();
-    await recordMarketingConsent(env.DB, userId, true, "it");
+    await register(true);
     expect(await proposal()).toBe(false);
   });
 
@@ -955,6 +1003,27 @@ describe("pagina Ordini reale", () => {
       fiscal: { state: "missing", reason: "foreign", country: "ES" },
       suggestionStatus: "identity_missing",
     });
+  });
+
+  it("con il Free sospeso dall'antiabuso la pagina lo dice e lo sblocco è rifiutato", async () => {
+    const { cookie } = await owner();
+    await env.DB.prepare(`INSERT INTO abuse_reviews (signal, outcome, workspace_id, actor, reason,
+        reviewed_at) VALUES ('company:sintetico', 'suspended', 'w-a', 'admin', 'Stessa attività', ?)`)
+      .bind(now)
+      .run();
+    expect((await ordersPage(cookie)).page!.account).toMatchObject({
+      plan: "free",
+      freeSuspended: true,
+    });
+    expect(
+      await callRoute(unlockAction, "/app/ordini", {
+        cookie,
+        fields: { intent: "unlock", ids: "o-a", skipConfirmation: "true" },
+      }),
+    ).toMatchObject({ init: { status: 409 }, data: { error: true, unlocked: [] } });
+    // Con una copertura concessa l'avviso sparisce.
+    await premiumCoverage();
+    expect((await ordersPage(cookie)).page!.account).not.toHaveProperty("freeSuspended");
   });
 
   it("forma derivata di CF e Partita IVA italiani senza toccare i tipi esteri", () => {

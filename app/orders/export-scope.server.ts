@@ -7,13 +7,18 @@ import type { EbayEnvironment } from "../view-models";
 import { exportScope, type ExportScope } from "./export-scope";
 import { accountSearchScope, openSearch } from "./order-search.server";
 
-/** Ordini di un'esportazione: quelli indicati fra quelli dei criteri, oppure tutti i criteri. */
-export type ExportFilter = { ids?: string[]; criteria: OrderCriteria };
+/**
+ * Ordini di un'esportazione: quelli indicati fra quelli dei criteri, oppure tutti i criteri.
+ * `provisional` ammette gli acquisti non pagati come il dettaglio aperto con «Non pagato».
+ */
+export type ExportFilter = { ids?: string[]; criteria: OrderCriteria; provisional?: boolean };
 
 /**
  * Ambito ricevuto dagli Ordini nella forma della loro query D1: stessi negozi filtrabili, stessi
  * filtri, stessa ricerca e stessa istantanea, così il file contiene gli ordini dell'elenco e la
- * selezione conta soltanto quelli ancora presenti. null se l'esportazione non viene dagli Ordini.
+ * selezione conta soltanto quelli ancora presenti. L'ordine del dettaglio segue invece le regole
+ * del dettaglio: negozi consultabili, ambiente, conservazione e diritti, con gli acquisti non
+ * pagati soltanto se l'elenco ha «Non pagato». null se l'esportazione non viene dagli Ordini.
  */
 export async function accountExportScope(
   area: AccountArea,
@@ -34,6 +39,11 @@ export async function accountExportScope(
     )
     .map((store) => store.id);
   const { criteria } = listCriteria(query, now, premium ? "premium" : "free", storeIds, search);
+  if (scope.kind === "orders" && scope.detail)
+    return {
+      scope,
+      filter: { ids: scope.ids, criteria: {}, provisional: criteria.payment === "unpaid" },
+    };
   return { scope, filter: { ids: scope.kind === "orders" ? scope.ids : undefined, criteria } };
 }
 

@@ -244,7 +244,17 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
       <p className="text-sm text-muted-foreground">{m.estimate(metrics.windowHours)}</p>
       <Panel title={m.invocations}>
         <DataTable
-          head={[m.kind, m.method, m.outcome, m.count, m.mean, "p50", "p95", "p99"]}
+          head={[
+            m.kind,
+            m.method,
+            m.outcome,
+            m.perInvocation,
+            m.messages,
+            m.mean,
+            "p50",
+            "p95",
+            "p99",
+          ]}
           rows={metrics.invocations.map((row) => ({
             key: `${row.invocation}:${row.detail}:${row.method}:${row.outcome}`,
             cells: [
@@ -259,6 +269,7 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
                 {row.outcome}
               </span>,
               count(row.count),
+              row.invocation === "queue" ? count(row.messages) : "–",
               count(row.meanMs),
               count(row.p50Ms),
               count(row.p95Ms),

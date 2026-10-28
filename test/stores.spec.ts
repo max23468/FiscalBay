@@ -13,6 +13,7 @@ import {
 import { orderAllowance, startTrial, unlockOrders } from "../app/domain/grants.server";
 import { admission, applyInactivity, recordActivity } from "../app/domain/admission.server";
 import { setSwitch } from "../app/domain/service-settings.server";
+import { marketingTextVersions } from "../app/domain/registration.server";
 import { purchaseState } from "../app/domain/checkout.server";
 import { lifetimeContext } from "../app/domain/lifetime.server";
 import { dispatchStoreSyncs, requestStoreSync } from "../app/domain/order-sync.server";
@@ -51,6 +52,7 @@ import {
 import type { ActionResult } from "../app/view-models";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { supportRequestLimit } from "../app/domain/support-requests.server";
+import { maxSupportMessage, supportFields } from "../app/support";
 import { refreshStoreToken } from "../app/integrations/ebay/seller-credentials.server";
 import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
 import {
@@ -847,9 +849,9 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       .bind(seller.userId)
       .all();
     expect(results).toEqual([
-      { granted: 0, text_version: "2026-09-28", language: "it" },
-      { granted: 1, text_version: "2026-09-28", language: "it" },
-      { granted: 0, text_version: "2026-09-28", language: "it" },
+      { granted: 0, text_version: marketingTextVersions.registration, language: "it" },
+      { granted: 1, text_version: marketingTextVersions.settings, language: "it" },
+      { granted: 0, text_version: marketingTextVersions.settings, language: "it" },
     ]);
     expect((await settingsPage(seller.cookie)).page.preferences.marketing).toBe(false);
   });
@@ -888,7 +890,8 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       await insertStore({ id: "negozio-altrui", workspaceId: "w-altro" }).run();
       // Senza lo storico delle ultime letture vale l'ultima riuscita, mai «in attesa».
       await env.DB.prepare("DELETE FROM sync_runs").run();
-      expect((await settingsPage(seller.cookie)).page.diagnostics).toEqual({
+      const shown = (await settingsPage(seller.cookie)).page.diagnostics;
+      expect(shown).toEqual({
         version: expect.any(String),
         storeRef: seller.storeId,
         syncPhase: expect.stringMatching(/^Aggiornamento riuscito, /u),
@@ -896,9 +899,13 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         rights: expect.stringMatching(/^Free/u),
         correlationId: expect.stringMatching(/^[0-9a-f-]{36}$/u),
       });
-      expect(await request(seller.cookie, { message: " Riga\u0007 uno\r\nRiga due " })).toEqual({
-        ok: true,
-      });
+      // Il modulo invia il riferimento che mostra: l'assistenza riceve lo stesso.
+      expect(
+        await request(seller.cookie, {
+          message: " Riga\u0007 uno\r\nRiga due ",
+          reference: shown!.correlationId,
+        }),
+      ).toEqual({ ok: true });
       const [sent] = toSupport();
       expect(sent!).toMatchObject({
         from: { email: expect.stringMatching(/^noreply@/u), name: "FiscalBay" },
@@ -928,16 +935,50 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         "Riferimento",
       ]);
       expect(summary).toContain(`Negozio: ${seller.storeId}`);
+      expect(summary).toContain(`Riferimento: ${shown!.correlationId}`);
       expect(sent!.text).not.toMatch(/negozio-altrui|venditore/u);
       expect(await count("support_requests")).toBe(1);
+      // Un riferimento senza la forma di un correlation ID non entra nell'email: vale quello
+      // dell'invio.
+      expect(await request(seller.cookie, { reference: "riferimento<inventato>" })).toEqual({
+        ok: true,
+      });
+      expect(toSupport()[1]!.text).toMatch(/\nRiferimento: [\da-f]{8}-[\da-f-]{27}$/u);
+      expect(toSupport()[1]!.text).not.toContain("inventato");
+    });
+
+    it("il modulo allega il riepilogo dalla casella spuntata, con il riferimento mostrato", () => {
+      // La casella spuntata vale «on», come la invia il browser.
+      const form = (checked: boolean) => {
+        const data = new FormData();
+        if (checked) data.set("diagnostics", "on");
+        return data;
+      };
+      const reference = "c0a8f3e1-5b2d-4e7a-9c11-7d2f0b6e4a90";
+      const input = { topic: "orders", message: "Testo", reference };
+      expect(supportFields(form(true), input)).toEqual({
+        topic: "orders",
+        message: "Testo",
+        diagnostics: "true",
+        reference,
+      });
+      expect(supportFields(form(false), input)).toEqual({
+        topic: "orders",
+        message: "Testo",
+        diagnostics: "false",
+      });
+      // Senza riepilogo mostrato non c'è nulla da allegare.
+      expect(supportFields(form(true), { ...input, reference: null })).toMatchObject({
+        diagnostics: "false",
+      });
     });
 
     it("con il riepilogo non leggibile la richiesta parte lo stesso", async () => {
       const seller = await linkedSeller("senza-riepilogo@example.invalid");
       const prepare = env.DB.prepare.bind(env.DB);
       const statement = vi.spyOn(env.DB, "prepare").mockImplementation((query: string) => {
-        if (query.includes("group_concat(reason) FROM ebay_store_pauses"))
-          throw new Error("synthetic");
+        // La lettura dei negozi, riconosciuta da una colonna che soltanto lei calcola.
+        if (query.includes("AS inactive_since")) throw new Error("synthetic");
         return prepare(query);
       });
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -955,6 +996,10 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       const t = appCopy.it.settings.support;
       expect(await request(seller.cookie, { diagnostics: "false" })).toEqual({ ok: true });
       expect(toSupport()[0]!.text).toContain("Riepilogo diagnostico non allegato.");
+      // Il messaggio al limite esatto parte intero; un carattere in più no.
+      const longest = "x".repeat(maxSupportMessage);
+      expect(await request(seller.cookie, { message: longest })).toEqual({ ok: true });
+      expect(toSupport()[1]!.text).toContain(`\n${longest}\n`);
       const invalid: Record<string, string>[] = [
         { topic: "spam" },
         { message: " \n " },
@@ -978,7 +1023,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         data: { ok: false, notice: t.sendFailed },
       });
       expect(errors.mock.calls.join("\n")).toContain('"failure":"E_RATE_LIMIT_EXCEEDED"');
-      for (let sent = 1; sent < supportRequestLimit; sent++)
+      for (let sent = 2; sent < supportRequestLimit; sent++)
         expect(await request(seller.cookie)).toEqual({ ok: true });
       expect(await request(seller.cookie)).toMatchObject({
         init: { status: 429 },

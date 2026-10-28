@@ -7,6 +7,8 @@ import { seal, unseal } from "../sealed.server";
 import { inSequence } from "../sequence";
 import { dayMilliseconds } from "../time";
 import { stopRenewals } from "./billing.server";
+import { freeCycleStatement } from "./grants.server";
+import { taskPeriods } from "./work-timing";
 
 /**
  * Cancellazione dell'account (§30, D163). La conferma dal link email registra la richiesta e
@@ -21,6 +23,21 @@ import { stopRenewals } from "./billing.server";
 
 /** Durata del blocco di una richiesta in esecuzione: un consumer interrotto la cede allo scadere. */
 const lockMilliseconds = 15 * 60_000;
+
+/** Attesa massima fra due tentativi di una richiesta ferma. */
+const maxRetryMilliseconds = 6 * 3_600_000;
+
+/**
+ * Prossimo tentativo di una richiesta ferma, su Stripe, sull'email finale o per un errore:
+ * l'attesa cresce con l'età della richiesta, da un periodo del compito a sei ore. Nel
+ * frattempo la richiesta non è candidata e le altre avanzano.
+ */
+function retryAt(requestedAt: string, now: Date): string {
+  const age = now.getTime() - Date.parse(requestedAt);
+  return new Date(
+    now.getTime() + Math.min(maxRetryMilliseconds, Math.max(taskPeriods.account_deletion, age)),
+  ).toISOString();
+}
 
 /** Riautenticazione: la richiesta parte soltanto da una sessione aperta negli ultimi 10 minuti. */
 export const deletionReauthMilliseconds = 10 * 60_000;
@@ -124,83 +141,115 @@ export async function startAccountDeletion(
   return id;
 }
 
-/** Impronta dell'identità eBay di un negozio, come la conserva `ebay_stores.ebay_user_id`. */
-export async function storeIdentityHash(ebayUserId: string): Promise<string> {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ebayUserId));
-  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
+// Stryker disable next-line StringLiteral: lo scopo deriva la chiave; un altro valore, uguale per scrittura e confronto, dà lo stesso esito.
+const markPurpose = "store-identity-mark";
+
+/** Chiave HMAC dei segni, derivata dal segreto del server con uno scopo dedicato. */
+async function markKey(secret: string): Promise<CryptoKey> {
+  const material = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(secret),
+    "HKDF",
+    false,
+    ["deriveKey"],
+  );
+  // Stryker disable BooleanLiteral: la chiave non viene mai esportata, estraibile o no.
+  return crypto.subtle.deriveKey(
+    {
+      name: "HKDF",
+      hash: "SHA-256",
+      salt: new Uint8Array(),
+      info: new TextEncoder().encode(markPurpose),
+    },
+    material,
+    { name: "HMAC", hash: "SHA-256", length: 256 },
+    false,
+    ["sign"],
+  );
+  // Stryker restore BooleanLiteral
 }
 
 /**
- * Segni minimi dei negozi dello spazio: prova già usata e ciclo Free in corso con almeno uno
- * sblocco. Senza nessuno dei due il negozio non lascia nulla. Ripetuti, conservano il valore
- * più ampio.
+ * Impronta dell'identità eBay di un negozio, come la conserva `ebay_stores.ebay_user_id`: HMAC
+ * con una chiave del server, quindi chi conosce soltanto l'identificativo eBay non la ricalcola.
  */
-async function recordStoreMarks(db: D1Database, workspaceId: string, now: Date) {
-  const at = now.toISOString();
-  const { results } = await db
-    .prepare(`SELECT s.ebay_user_id, w.free_cycle_anchor_at AS anchor,
+export async function storeIdentityHash(secret: string, ebayUserId: string): Promise<string> {
+  const bytes = await crypto.subtle.sign(
+    "HMAC",
+    await markKey(secret),
+    new TextEncoder().encode(ebayUserId),
+  );
+  return Array.from(new Uint8Array(bytes), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+/** Fine del segno della prova già usata, registrato all'istante dato. */
+export function trialMarkExpiry(now: Date): string {
+  return new Date(now.getTime() + trialMarkDays * dayMilliseconds).toISOString();
+}
+
+/**
+ * Segno minimo di un negozio con i dati del suo spazio: prova già usata e ciclo Free in corso
+ * con almeno uno sblocco. Senza nessuno dei due il negozio non lascia nulla; ripetuto, conserva
+ * il valore più ampio. Argomenti: espressioni SQL dell'impronta, del negozio, dell'istante e
+ * della fine del segno della prova, più una condizione che deve valere per scriverlo. Lo
+ * scrivono la cancellazione dell'account e il trasferimento assistito del negozio.
+ */
+export function storeMarkSql(
+  input: { hash: string; store: string; at: string; trialExpires: string },
+  condition = "1 = 1",
+) {
+  const { hash, store, at, trialExpires } = input;
+  return `INSERT INTO store_identity_marks (identity_hash, trial_used, cycle_anchor_at,
+      cycle_starts_at, cycle_ends_at, cycle_quota, cycle_used, recorded_at, expires_at)
+    SELECT ${hash}, m.trial_used, CASE WHEN m.starts_at IS NOT NULL THEN m.anchor END,
+      m.starts_at, m.ends_at, m.quota, m.used, ${at},
+      CASE WHEN m.trial_used THEN ${trialExpires} ELSE m.ends_at END
+    FROM (SELECT w.free_cycle_anchor_at AS anchor,
         (w.trial_used_at IS NOT NULL OR EXISTS (SELECT 1 FROM workspace_entitlements e
           WHERE e.workspace_id = w.id AND e.source = 'trial')) AS trial_used,
         c.starts_at, c.ends_at, c.quota, c.used
       FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
       LEFT JOIN free_cycles c ON c.workspace_id = w.id AND c.used > 0
-        AND julianday(c.starts_at) <= julianday(?2) AND julianday(?2) < julianday(c.ends_at)
-      WHERE s.workspace_id = ?1`)
-    .bind(workspaceId, at)
-    .all<{
-      ebay_user_id: string;
-      anchor: string | null;
-      trial_used: number;
-      starts_at: string | null;
-      ends_at: string | null;
-      quota: number | null;
-      used: number | null;
-    }>();
-  const marks = await Promise.all(
-    results
-      .filter((row) => row.trial_used || row.starts_at)
-      .map(async (row) => ({
-        ...row,
-        hash: await storeIdentityHash(row.ebay_user_id),
-        expires: row.trial_used
-          ? new Date(now.getTime() + trialMarkDays * dayMilliseconds).toISOString()
-          : row.ends_at!,
-      })),
-  );
-  if (!marks.length) return;
+        AND julianday(c.starts_at) <= julianday(${at}) AND julianday(${at}) < julianday(c.ends_at)
+      WHERE s.id = ${store}) m
+    WHERE (m.trial_used OR m.starts_at IS NOT NULL) AND ${condition}
+    ON CONFLICT(identity_hash) DO UPDATE SET
+      trial_used = MAX(trial_used, excluded.trial_used),
+      cycle_anchor_at = COALESCE(excluded.cycle_anchor_at, cycle_anchor_at),
+      cycle_starts_at = COALESCE(excluded.cycle_starts_at, cycle_starts_at),
+      cycle_ends_at = COALESCE(excluded.cycle_ends_at, cycle_ends_at),
+      cycle_quota = COALESCE(excluded.cycle_quota, cycle_quota),
+      cycle_used = CASE WHEN excluded.cycle_starts_at IS NULL THEN cycle_used
+        WHEN excluded.cycle_starts_at = cycle_starts_at THEN MAX(cycle_used, excluded.cycle_used)
+        ELSE excluded.cycle_used END,
+      expires_at = MAX(expires_at, excluded.expires_at)`;
+}
+
+/** Segni minimi di tutti i negozi dello spazio, prima che i suoi dati si eliminino. */
+async function recordStoreMarks(db: D1Database, secret: string, workspaceId: string, now: Date) {
+  const { results } = await db
+    .prepare("SELECT id, ebay_user_id FROM ebay_stores WHERE workspace_id = ?")
+    .bind(workspaceId)
+    .all<{ id: string; ebay_user_id: string }>();
+  if (!results.length) return;
+  const statement = storeMarkSql({ hash: "?1", store: "?2", at: "?3", trialExpires: "?4" });
   await db.batch(
-    marks.map((mark) =>
-      db
-        .prepare(`INSERT INTO store_identity_marks (identity_hash, trial_used, cycle_anchor_at,
-            cycle_starts_at, cycle_ends_at, cycle_quota, cycle_used, recorded_at, expires_at)
-          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
-          ON CONFLICT(identity_hash) DO UPDATE SET
-            trial_used = MAX(trial_used, excluded.trial_used),
-            cycle_anchor_at = COALESCE(excluded.cycle_anchor_at, cycle_anchor_at),
-            cycle_starts_at = COALESCE(excluded.cycle_starts_at, cycle_starts_at),
-            cycle_ends_at = COALESCE(excluded.cycle_ends_at, cycle_ends_at),
-            cycle_quota = COALESCE(excluded.cycle_quota, cycle_quota),
-            cycle_used = CASE WHEN excluded.cycle_starts_at IS NULL THEN cycle_used
-              WHEN excluded.cycle_starts_at = cycle_starts_at
-                THEN MAX(cycle_used, excluded.cycle_used)
-              ELSE excluded.cycle_used END,
-            expires_at = MAX(expires_at, excluded.expires_at)`)
-        .bind(
-          mark.hash,
-          mark.trial_used ? 1 : 0,
-          mark.starts_at ? mark.anchor : null,
-          mark.starts_at,
-          mark.ends_at,
-          mark.quota,
-          mark.used,
-          at,
-          mark.expires,
-        ),
+    await Promise.all(
+      results.map(async (store) =>
+        db
+          .prepare(statement)
+          .bind(
+            await storeIdentityHash(secret, store.ebay_user_id),
+            store.id,
+            now.toISOString(),
+            trialMarkExpiry(now),
+          ),
+      ),
     ),
   );
 }
 
-/** Segno ancora valido di un negozio collegato in passato a uno spazio cancellato. */
+/** Segno ancora valido di un negozio lasciato da uno spazio cancellato o da un trasferimento. */
 export type StoreMark = {
   trialUsed: boolean;
   cycle: { anchor: string; startsAt: string; endsAt: string; quota: number; used: number } | null;
@@ -208,13 +257,14 @@ export type StoreMark = {
 
 export async function readStoreMark(
   db: D1Database,
+  secret: string,
   ebayUserId: string,
   now: Date,
 ): Promise<StoreMark | null> {
   const row = await db
     .prepare(`SELECT trial_used, cycle_anchor_at, cycle_starts_at, cycle_ends_at, cycle_quota,
         cycle_used FROM store_identity_marks WHERE identity_hash = ?1 AND expires_at > ?2`)
-    .bind(await storeIdentityHash(ebayUserId), now.toISOString())
+    .bind(await storeIdentityHash(secret, ebayUserId), now.toISOString())
     .first<{
       trial_used: number;
       cycle_anchor_at: string | null;
@@ -241,8 +291,9 @@ export async function readStoreMark(
 
 /**
  * Prima del collegamento di un negozio con un segno: uno spazio ancora senza cicli adotta
- * l'ancoraggio del ciclo in corso, così il trigger del collegamento non ne fissa uno nuovo.
- * Soltanto se nessuno spazio ha già il negozio.
+ * l'ancoraggio del ciclo in corso, così il ciclo prosegue con i suoi confini e il trigger del
+ * collegamento non ne fissa uno nuovo. Non se il negozio è già di un altro spazio, perché il
+ * collegamento non riuscirebbe.
  */
 export function markAnchorStatement(
   db: D1Database,
@@ -254,16 +305,21 @@ export function markAnchorStatement(
     ? [
         db
           .prepare(`UPDATE workspaces SET free_cycle_anchor_at = ?2
-            WHERE id = ?1 AND free_cycle_anchor_at IS NULL
-              AND NOT EXISTS (SELECT 1 FROM ebay_stores WHERE ebay_user_id = ?3)`)
+            WHERE id = ?1 AND free_cycle_anchor_at IS NULL AND NOT EXISTS (
+              SELECT 1 FROM ebay_stores WHERE ebay_user_id = ?3 AND workspace_id <> ?1)`)
           .bind(workspaceId, mark.cycle.anchor, ebayUserId),
       ]
     : [];
 }
 
 /**
- * Dopo il collegamento riuscito: la prova risulta già usata e il ciclo in corso riprende con i
- * suoi sblocchi, se lo spazio ne ha adottato l'ancoraggio. Ripetuto non cambia nulla.
+ * Dopo il collegamento riuscito, la stessa regola per un segno lasciato da una cancellazione o
+ * da un trasferimento. Con la prova già usata lo spazio non può più averla e una prova in corso
+ * termina subito: lo spazio torna al Free. Gli sblocchi del ciclo del segno si aggiungono al
+ * ciclo Free in corso dello spazio, fino alla sua quota; uno spazio che ha adottato l'ancoraggio
+ * del segno riprende proprio quel ciclo, con la sua quota. Gli sblocchi già arrivati dallo
+ * stesso ciclo di partenza, con un altro negozio o un collegamento precedente, non si sommano di
+ * nuovo: ripetuto, il collegamento non cambia nulla.
  */
 export async function applyStoreMark(
   db: D1Database,
@@ -271,7 +327,18 @@ export async function applyStoreMark(
   mark: StoreMark,
   now: Date,
 ) {
+  const at = now.toISOString();
   const { cycle } = mark;
+  const anchor = cycle
+    ? await db
+        .prepare("SELECT free_cycle_anchor_at FROM workspaces WHERE id = ?")
+        .bind(workspaceId)
+        .first<string>("free_cycle_anchor_at")
+    : null;
+  const current = cycle ? freeCycleStatement(db, workspaceId, anchor, now) : null;
+  // Ciclo in corso dello spazio, nelle istruzioni seguenti: ?1 spazio, ?2 istante.
+  const currentCycle = `workspace_id = ?1 AND julianday(starts_at) <= julianday(?2)
+    AND julianday(?2) < julianday(ends_at)`;
   await db.batch([
     ...(mark.trialUsed
       ? [
@@ -279,26 +346,41 @@ export async function applyStoreMark(
             .prepare(
               "UPDATE workspaces SET trial_used_at = COALESCE(trial_used_at, ?2) WHERE id = ?1",
             )
-            .bind(workspaceId, now.toISOString()),
+            .bind(workspaceId, at),
+          db
+            .prepare(`UPDATE workspace_entitlements SET revoked_at = ?2
+              WHERE workspace_id = ?1 AND source = 'trial' AND revoked_at IS NULL
+                AND julianday(starts_at) <= julianday(?2) AND julianday(?2) < julianday(ends_at)`)
+            .bind(workspaceId, at),
         ]
       : []),
     ...(cycle
       ? [
           db
-            .prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota, used)
-              SELECT ?1, w.id, ?3, ?4, ?5, ?6 FROM workspaces w
-               WHERE w.id = ?2 AND w.free_cycle_anchor_at = ?7
-              ON CONFLICT(workspace_id, starts_at) DO UPDATE SET
-                used = MIN(free_cycles.quota, MAX(free_cycles.used, excluded.used))`)
+            .prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota)
+              SELECT ?1, w.id, ?3, ?4, ?5 FROM workspaces w
+               WHERE w.id = ?2 AND w.free_cycle_anchor_at = ?6
+              ON CONFLICT(workspace_id, starts_at) DO NOTHING`)
             .bind(
               crypto.randomUUID(),
               workspaceId,
               cycle.startsAt,
               cycle.endsAt,
               cycle.quota,
-              cycle.used,
               cycle.anchor,
             ),
+          ...(current ? [current] : []),
+          db
+            .prepare(`UPDATE free_cycles SET used = MIN(quota, used + MAX(0, ?3 - COALESCE(
+                (SELECT i.used FROM free_cycle_imports i WHERE i.cycle_id = free_cycles.id
+                  AND i.origin_anchor_at = ?4 AND i.origin_starts_at = ?5), 0)))
+              WHERE ${currentCycle}`)
+            .bind(workspaceId, at, cycle.used, cycle.anchor, cycle.startsAt),
+          db
+            .prepare(`INSERT INTO free_cycle_imports (cycle_id, origin_anchor_at, origin_starts_at,
+                used) SELECT id, ?4, ?5, ?3 FROM free_cycles WHERE ${currentCycle}
+              ON CONFLICT DO UPDATE SET used = MAX(used, excluded.used)`)
+            .bind(workspaceId, at, cycle.used, cycle.anchor, cycle.startsAt),
         ]
       : []),
   ]);
@@ -391,13 +473,14 @@ export async function runAccountDeletion(
   const job = await env.DB.prepare(
     `UPDATE account_deletions SET locked_until = ?2
       WHERE id = ?1 AND completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?3)
-      RETURNING user_id, workspace_id, notice_sealed, notice_attempts, renewals_stopped_at,
-        renewals_blocked_at`,
+      RETURNING user_id, workspace_id, requested_at, notice_sealed, notice_attempts,
+        renewals_stopped_at, renewals_blocked_at`,
   )
     .bind(id, new Date(now.getTime() + lockMilliseconds).toISOString(), at)
     .first<{
       user_id: string;
       workspace_id: string | null;
+      requested_at: string;
       notice_sealed: string | null;
       notice_attempts: number;
       renewals_stopped_at: string | null;
@@ -411,6 +494,11 @@ export async function runAccountDeletion(
   }
   const release = () =>
     env.DB.prepare("UPDATE account_deletions SET locked_until = NULL WHERE id = ?").bind(id).run();
+  // In attesa di Stripe o dell'email finale: il blocco resta fino al prossimo tentativo.
+  const postpone = () =>
+    env.DB.prepare("UPDATE account_deletions SET locked_until = ?2 WHERE id = ?1")
+      .bind(id, retryAt(job.requested_at, now))
+      .run();
   try {
     // Uno spazio nato mentre la richiesta si registrava appartiene comunque all'utente.
     const workspace = job.workspace_id ?? (await userWorkspace(env.DB, job.user_id));
@@ -438,7 +526,7 @@ export async function runAccountDeletion(
       }
     }
     if (workspace) {
-      await recordStoreMarks(env.DB, workspace, now);
+      await recordStoreMarks(env.DB, env.BETTER_AUTH_SECRET, workspace, now);
       if (!(await deleteOrders(env.DB, workspace, budget))) {
         await release();
         return "more";
@@ -447,7 +535,7 @@ export async function runAccountDeletion(
     }
     await deleteUser(env, id, job.user_id, at);
     if (!stopped) {
-      await release();
+      await postpone();
       return "waiting";
     }
     // Nulla può più addebitare: lo spazio esce con abbonamenti e sessioni di acquisto, i posti
@@ -455,7 +543,7 @@ export async function runAccountDeletion(
     if (workspace)
       await env.DB.prepare("DELETE FROM workspaces WHERE id = ?").bind(workspace).run();
     if (job.notice_sealed && !(await sendNotice(env, id, job.notice_sealed, job.notice_attempts))) {
-      await release();
+      await postpone();
       return "waiting";
     }
     await env.DB.prepare(`UPDATE account_deletions SET completed_at = ?2, notice_sealed = NULL,
@@ -501,10 +589,15 @@ export function isAccountDeletionMessage(body: unknown): body is z.infer<typeof 
   return messageSchema.safeParse(body).success;
 }
 
+/** Consegne riprovate dalla coda dopo un errore; poi la richiesta resta al compito periodico. */
+const queueRetries = 3;
+
 /**
  * Esegue un passo dalla coda. Gli ordini oltre il budget ripartono con un nuovo messaggio; lo
- * stop dei rinnovi non confermato e l'email da ritentare restano al compito periodico, così la
- * richiesta non finisce fra i messaggi non consegnati. Un errore riprova con backoff.
+ * stop dei rinnovi non confermato, l'email da ritentare e la richiesta tenuta da un altro
+ * consumer o in attesa del prossimo tentativo restano al compito periodico, così nessuna
+ * richiesta finisce fra i messaggi non consegnati. Un errore riprova con backoff per poche
+ * consegne, entro il limite della coda, poi passa anch'esso al compito.
  */
 export async function consumeAccountDeletion(
   message: Message<unknown>,
@@ -516,11 +609,11 @@ export async function consumeAccountDeletion(
   try {
     const outcome = await runAccountDeletion(env, id, fetcher, now);
     if (outcome === "more") await env.WORK_QUEUE.send({ accountDeletion: id });
-    if (outcome === "busy") message.retry({ delaySeconds: 60 });
-    else message.ack();
+    message.ack();
   } catch (error) {
     logFailure({ error, operation: "account_deletion" });
-    message.retry({ delaySeconds: Math.min(3600, 30 * 2 ** (message.attempts - 1)) });
+    if (message.attempts > queueRetries) message.ack();
+    else message.retry({ delaySeconds: 30 * 2 ** (message.attempts - 1) });
   }
 }
 
@@ -529,9 +622,11 @@ const resumeBatch = 10;
 
 /**
  * Compito periodico: riprende le richieste non concluse (messaggio perso, stop dei rinnovi o
- * email da ritentare) e riapre quelle concluse il cui utente o spazio esiste di nuovo, come dopo
- * un restore con i marker riapplicati. La riapertura ripete anche lo stop dei rinnovi; l'email
- * già inviata non riparte.
+ * email da ritentare, errore) e riapre quelle concluse il cui utente o spazio esiste di nuovo,
+ * come dopo un restore con i marker riapplicati. La riapertura ripete anche lo stop dei rinnovi;
+ * l'email già inviata non riparte. Le richieste dovute partono dal tentativo più vecchio e una
+ * richiesta ferma attende sempre di più: le nuove non restano dietro a quelle bloccate, e un
+ * errore su una richiesta non ferma le altre.
  */
 export async function resumeAccountDeletions(
   env: Env,
@@ -544,19 +639,30 @@ export async function resumeAccountDeletions(
     WHERE completed_at IS NOT NULL AND (
       EXISTS (SELECT 1 FROM "user" u WHERE u."id" = account_deletions.user_id)
       OR EXISTS (SELECT 1 FROM workspaces w WHERE w.id = account_deletions.workspace_id))`).run();
-  const { results } = await env.DB.prepare(`SELECT id FROM account_deletions
+  const { results } = await env.DB.prepare(`SELECT id, requested_at FROM account_deletions
       WHERE completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?1)
-      ORDER BY requested_at LIMIT ?2`)
+      ORDER BY COALESCE(locked_until, requested_at), requested_at LIMIT ?2`)
     .bind(at, resumeBatch)
-    .all<{ id: string }>();
-  await inSequence(results, async ({ id }) => {
-    // Gli ordini oltre il budget proseguono nello stesso compito, fino a un altro esito.
-    // Stryker disable next-line ConditionalExpression: «more» ripetuto senza fine è un Timeout per Stryker; le prove contano gli ordini eliminati.
-    while ((await runAccountDeletion(env, id, fetcher, now)) === "more");
+    .all<{ id: string; requested_at: string }>();
+  await inSequence(results, async ({ id, requested_at }) => {
+    try {
+      // Gli ordini oltre il budget proseguono nello stesso compito, fino a un altro esito.
+      // Stryker disable next-line ConditionalExpression: «more» ripetuto senza fine è un Timeout per Stryker; le prove contano gli ordini eliminati.
+      while ((await runAccountDeletion(env, id, fetcher, now)) === "more");
+    } catch (error) {
+      logFailure({ error, operation: "account_deletion" });
+      await env.DB.prepare(`UPDATE account_deletions SET locked_until = ?2
+          WHERE id = ?1 AND completed_at IS NULL`)
+        .bind(id, retryAt(requested_at, now))
+        .run();
+    }
   });
 }
 
-/** Richieste concluse da oltre la finestra di Time Travel e segni scaduti, per la pulizia. */
+/**
+ * Pulizia: richieste concluse da oltre la finestra di Time Travel, segni scaduti e cicli dei
+ * segni finiti. Il ciclo resta soltanto fino alla sua fine, la prova usata per due anni (D220).
+ */
 export function purgeDeletionMarkers(db: D1Database, now: Date) {
   return [
     db
@@ -564,6 +670,11 @@ export function purgeDeletionMarkers(db: D1Database, now: Date) {
         AND julianday(completed_at) < julianday(?) - ?`)
       .bind(now.toISOString(), deletionMarkerDays),
     db.prepare("DELETE FROM store_identity_marks WHERE expires_at <= ?").bind(now.toISOString()),
+    db
+      .prepare(`UPDATE store_identity_marks SET cycle_anchor_at = NULL, cycle_starts_at = NULL,
+          cycle_ends_at = NULL, cycle_quota = NULL, cycle_used = NULL
+        WHERE julianday(cycle_ends_at) <= julianday(?)`)
+      .bind(now.toISOString()),
   ];
 }
 

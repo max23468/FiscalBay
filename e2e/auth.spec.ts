@@ -379,16 +379,12 @@ for (const language of ["it", "en"] as const) {
       for (const path of ["/termini", "/privacy"]) {
         await page.goto(`${prefix}${path}`);
         await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-        await expect(
-          page
-            .getByRole("banner")
-            .getByRole("link", {
-              name: language === "it" ? "Accedi" : "Sign in",
-              // Sotto i 768 px l'azione sta nel menu chiuso.
-              includeHidden: true,
-            })
-            .first(),
-        ).toHaveAttribute("href", `${prefix}/accesso`);
+        // Anche sotto i 768 px l'azione resta nella prima riga della barra, visibile.
+        const signIn = page
+          .getByRole("banner")
+          .getByRole("link", { name: language === "it" ? "Accedi" : "Sign in", exact: true });
+        await expect(signIn).toBeVisible();
+        await expect(signIn).toHaveAttribute("href", `${prefix}/accesso`);
         const main = page.locator("main");
         await expect(main).toContainText("Temisfera");
         // Il contatto è `info@`, non l'assistenza clienti.

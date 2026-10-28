@@ -8,6 +8,13 @@ import { listAnomalies } from "../app/domain/admin-operations.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import worker from "../workers/app";
+import * as site from "../app/routes/site";
+import * as features from "../app/routes/features";
+import * as pricing from "../app/routes/pricing";
+import * as siteSecurity from "../app/routes/site-security";
+import * as faq from "../app/routes/faq";
+import * as support from "../app/routes/support";
+import * as legal from "../app/routes/legal";
 import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 import delivery from "./fixtures/ebay-order-notification.json";
@@ -433,6 +440,44 @@ it.each([
     expect(forwarded.headers.get("x-correlation-id")).toBe(correlation);
   },
 );
+
+it("il Worker risponde no-store a ogni pagina pubblica e in Production noindex ai soli legali", async () => {
+  // Il router esegue il loader reale della pagina con gli header che la route dichiara, come
+  // React Router: una route che chiedesse una cache pubblica la vedrebbe conservata.
+  const pages: Record<string, { loader: (args: never) => unknown; headers?: () => HeadersInit }> = {
+    "/": site,
+    "/funzionalita": features,
+    "/prezzi": pricing,
+    "/sicurezza": siteSecurity,
+    "/faq": faq,
+    "/supporto": support,
+    "/termini": legal,
+    "/privacy": legal,
+  };
+  router.handle.mockImplementation(async (request: Request) => {
+    const path = new URL(request.url).pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
+    const page = pages[path]!;
+    const data = await page.loader({ request, params: {}, context: {} } as never);
+    return Response.json(data, { headers: page.headers?.() ?? {} });
+  });
+  try {
+    for (const prefix of ["", "/en"])
+      for (const path of Object.keys(pages)) {
+        const url = `https://fiscalbay.it${prefix}${path === "/" && prefix ? "" : path}`;
+        const response = await workerFetch(new Request(url), {
+          ...environment,
+          APP_ORIGIN: "https://fiscalbay.it",
+        } as Env);
+        expect(response.status, url).toBe(200);
+        expect(response.headers.get("cache-control"), url).toBe("no-store");
+        expect(response.headers.get("x-robots-tag"), url).toBe(
+          path === "/termini" || path === "/privacy" ? "noindex, nofollow" : null,
+        );
+      }
+  } finally {
+    router.handle.mockReset();
+  }
+});
 
 it("il Worker conserva cache e redirect dichiarati dal router anche con header immutabili", async () => {
   router.handle.mockResolvedValue(Response.redirect("https://test.fiscalbay.it/accesso", 303));
@@ -1128,7 +1173,7 @@ it("un ID non può cambiare negozio, consenso, tipo o data della ricevuta", asyn
       "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, ebay_account_id, linked_at) VALUES ('other-store', 'webhook-workspace', 'other-seller', 'other-seller', ?)",
     ).bind(grantedAt),
     env.DB.prepare(
-      "INSERT INTO ebay_store_credentials SELECT 'other-store', access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at, refreshed_at, rejected_at FROM ebay_store_credentials WHERE store_id = 'webhook-store'",
+      "INSERT INTO ebay_store_credentials SELECT 'other-store', access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at, refreshed_at, rejected_at, reconnect_notice_at FROM ebay_store_credentials WHERE store_id = 'webhook-store'",
     ),
   ]);
   expect(

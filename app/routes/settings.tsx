@@ -68,14 +68,13 @@ import {
 } from "../domain/telegram.server";
 import { stripeSecretKey } from "../integrations/stripe.server";
 import { telegramConfigured } from "../integrations/telegram.server";
-import { accountDeletionPath, appUrl, exportFilePath, ordersPath, planPath } from "../app-links";
-import { forwardToAuth } from "../auth-route.server";
+import { appUrl, exportFilePath, ordersPath, planPath } from "../app-links";
 import { deletionReauthenticated } from "../domain/account-deletion.server";
 import { correlationId, logFailure } from "../errors";
-import { whatsNew } from "../whats-new.server";
+import { hasWhatsNew } from "../whats-new.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { measure } from "../observability.server";
-import { securityAction } from "../security-actions.server";
+import { requestAccountDeletion, securityAction } from "../security-actions.server";
 import { effectiveTimeZone } from "../preferences";
 import {
   orderPeriods,
@@ -236,7 +235,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       templates: messageTemplates(preferences),
     },
     diagnostics: await readDiagnostics(request, area, accountView, now),
-    whatsNew: whatsNew.length > 0,
+    whatsNew: hasWhatsNew(now),
     telegram,
     ...exportData,
     exportConfigurations,
@@ -289,13 +288,15 @@ function planFields(
 
 /**
  * Riepilogo diagnostico dell'assistenza, dai soli negozi dello spazio dell'utente. Una lettura
- * che non riesce lascia il modulo senza riepilogo: la richiesta si invia lo stesso.
+ * che non riesce lascia il modulo senza riepilogo: la richiesta si invia lo stesso. Il
+ * riferimento è il correlation ID della pagina, oppure quello già mostrato all'utente.
  */
 async function readDiagnostics(
   request: Request,
   area: AccountArea,
   account: Parameters<typeof planDiagnostics>[0],
   now: Date,
+  reference = correlationId(request),
 ): Promise<DiagnosticsView | null> {
   try {
     const stores = await measure("d1", "settings", () =>
@@ -305,7 +306,7 @@ async function readDiagnostics(
       stores,
       plan: planDiagnostics(account, appCopy[area.language]),
       version: appVersion(env),
-      correlationId: correlationId(request),
+      correlationId: reference,
       language: area.language,
       timeZone: effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone),
     });
@@ -315,8 +316,16 @@ async function readDiagnostics(
   }
 }
 
-/** Riepilogo allegato all'invio, riletto con il piano corrente; null se non si legge. */
-async function attachedDiagnostics(request: Request, area: AccountArea, now: Date) {
+/**
+ * Riepilogo allegato all'invio, riletto con il piano corrente; null se non si legge. Porta il
+ * correlation ID mostrato nel modulo, così l'assistenza cerca lo stesso riferimento dell'utente.
+ */
+async function attachedDiagnostics(
+  request: Request,
+  area: AccountArea,
+  now: Date,
+  reference: string | null,
+) {
   const userId = area.session.user.id;
   try {
     const [allowance, admissionState] = await Promise.all([
@@ -329,6 +338,7 @@ async function attachedDiagnostics(request: Request, area: AccountArea, now: Dat
       area,
       planFields(allowance, admissionState.waiting, subscription),
       now,
+      reference ?? correlationId(request),
     );
   } catch (error) {
     logFailure({ request, error, operation: "support" });
@@ -338,7 +348,8 @@ async function attachedDiagnostics(request: Request, area: AccountArea, now: Dat
 
 /**
  * Richiesta di assistenza verso `supporto@`, con Reply-To sull'indirizzo dell'account. Il
- * riepilogo si rilegge qui, mai dal browser; senza riepilogo la richiesta parte lo stesso.
+ * riepilogo si rilegge qui, mai dal browser, che fornisce soltanto il correlation ID già
+ * mostrato; senza riepilogo la richiesta parte lo stesso.
  */
 async function sendSupport(request: Request, area: AccountArea, form: FormData) {
   const t = appCopy[area.language].settings.support;
@@ -350,7 +361,9 @@ async function sendSupport(request: Request, area: AccountArea, form: FormData) 
   const now = new Date();
   const reserved = await reserveSupportRequest(env.DB, userId, now);
   if (!reserved) return failed(429, t.limited);
-  const diagnostics = support.diagnostics ? await attachedDiagnostics(request, area, now) : null;
+  const diagnostics = support.diagnostics
+    ? await attachedDiagnostics(request, area, now, support.reference)
+    : null;
   try {
     await sendEmail(
       env,
@@ -444,7 +457,7 @@ export async function action({ request }: Route.ActionArgs) {
       const name = String(form.get("name") ?? "");
       const value = String(form.get("value") ?? "");
       if (name === "marketing" && (value === "true" || value === "false")) {
-        await recordMarketingConsent(env.DB, userId, value === "true", language);
+        await recordMarketingConsent(env.DB, userId, value === "true", language, "settings");
         return { ok: true } satisfies ActionResult;
       }
       if (name === "unlock-confirmation" && (value === "true" || value === "false")) {
@@ -584,25 +597,8 @@ export async function action({ request }: Route.ActionArgs) {
         download: localizedPath(language, exportFilePath(id)),
       } satisfies ActionResult;
     }
-    if (intent === "account-delete") {
-      // Riautenticazione negli ultimi minuti e indirizzo dell'account scritto per esteso; poi
-      // Better Auth manda il link, la cui conferma avvia la cancellazione.
-      if (!deletionReauthenticated(session.session.createdAt))
-        return failed(403, t.privacy.deleteAccountReauth);
-      const email = session.user.email;
-      if (
-        String(form.get("confirmation") ?? "")
-          .trim()
-          .toLowerCase() !== email.toLowerCase()
-      )
-        return failed(400, t.privacy.deleteAccountMismatch);
-      const response = await forwardToAuth(env, request, "/delete-user", {
-        callbackURL: localizedPath(language, accountDeletionPath),
-      });
-      if (!response.ok)
-        return failed(response.status === 429 ? 429 : 503, t.privacy.deleteAccountFailed);
-      return { ok: true, notice: t.privacy.deleteAccountSent(email) } satisfies ActionResult;
-    }
+    if (intent === "account-delete")
+      return await requestAccountDeletion(request, area, String(form.get("confirmation") ?? ""));
     if (intent === "profile") {
       // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.
       form.set("tipo", area.profile.accountType === "business" ? "azienda" : "privato");

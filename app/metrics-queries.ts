@@ -7,6 +7,13 @@
  */
 
 export const metricQueries = ["invocations", "phases", "pages"] as const;
+
+/**
+ * Richiesta del campione controllato di `scripts/metrics-query.mjs`: `HEAD` sul percorso dei
+ * report del browser, che risponde 405 senza effetti. Nessuna pagina la usa: il Worker la
+ * registra con la classe `sample`, così il conteggio del campione non include altro traffico.
+ */
+export const samplePath = "/api/v1/page-timing";
 export type MetricQuery = (typeof metricQueries)[number];
 
 /** Finestra massima: la retention di Analytics Engine è di tre mesi. */
@@ -43,7 +50,9 @@ const pageMeasures = [
 /**
  * Testo SQL di una query sulla finestra delle ultime `hours` ore.
  * - `invocations`: richieste HTTP per classe di route, metodo ed esito, invocazioni della coda per
- *   tipo di messaggio e del cron, con numero stimato, durata media e quantili;
+ *   tipo di messaggio e del cron. L'unità è l'invocazione: numero stimato, durata media e quantili
+ *   valgono per invocazione, anche quando un gruppo della coda porta più messaggi, contati a
+ *   parte in `messages`;
  * - `phases`: per invocazione, fase, operazione ed esito il numero stimato di misure, di
  *   invocazioni che le contengono e il tempo per invocazione speso nella fase;
  * - `pages`: per pagina il numero stimato di report e, per ogni misura del browser e fase del
@@ -63,8 +72,9 @@ export function metricSql(query: MetricQuery, dataset: string, hours: number): s
   blob3 AS detail,
   blob4 AS method,
   blob5 AS outcome,
-  SUM(_sample_interval * double1) AS count,
-  SUM(_sample_interval * double2) / SUM(_sample_interval * double1) AS mean_ms,
+  SUM(_sample_interval) AS count,
+  SUM(_sample_interval * double1) AS messages,
+  SUM(_sample_interval * double2) / SUM(_sample_interval) AS mean_ms,
   ${quantiles("double2")}
 FROM ${dataset}
 WHERE blob1 = 'invocation' AND ${window}
@@ -105,10 +115,13 @@ FORMAT JSON`;
   }
 }
 
-/** Pagine dell'app di cui si legge il tempo CPU: le stesse dei report del browser. */
+/**
+ * Pagine dell'app di cui si legge il tempo CPU: le stesse dei report del browser. `excluded`:
+ * segmento del dettaglio che appartiene a un'altra route, come il collegamento di un negozio.
+ */
 export const cpuPages = [
-  { page: "orders", path: "app/ordini" },
-  { page: "stores", path: "app/negozi" },
+  { page: "orders", path: "app/ordini", excluded: null },
+  { page: "stores", path: "app/negozi", excluded: "collega" },
 ] as const;
 export const cpuKinds = ["document", "data"] as const;
 export type CpuPage = (typeof cpuPages)[number]["page"];
@@ -119,6 +132,22 @@ export const maxCpuWindowHours = 7 * 24;
 
 /** Nome del Worker, come in `cloudflare.config.ts`. */
 const servicePattern = /^[a-z][a-z0-9-]{0,62}$/u;
+
+/** Carattere di un segmento del dettaglio: niente separatori, query o estensione `.data`. */
+const segmentChar = "[^/?.]";
+
+/**
+ * Segmento del dettaglio diverso da `word`, senza lookahead: la regex dei Workers Logs (RE2) non
+ * li ammette. Un segmento diverso è un prefisso proprio di `word`, diverge da `word` in un punto
+ * oppure la prolunga.
+ */
+function segmentOtherThan(word: string) {
+  const alternatives = [...word].flatMap((char, index) => [
+    `${word.slice(0, index)}[^/?.${char}]${segmentChar}*`,
+    ...(index > 0 ? [word.slice(0, index)] : []),
+  ]);
+  return `(?:${[...alternatives, `${word}${segmentChar}+`].join("|")})`;
+}
 
 /**
  * Corpo della query Telemetry dei Workers Logs sul tempo CPU delle richieste GET di una pagina,
@@ -138,8 +167,9 @@ export function pageCpuQuery(
   if (!servicePattern.test(service)) throw new Error("INVALID_SERVICE");
   if (!Number.isInteger(hours) || hours < 1 || hours > maxCpuWindowHours)
     throw new Error("INVALID_WINDOW");
-  const { path } = cpuPages.find((entry) => entry.page === page)!;
+  const { path, excluded } = cpuPages.find((entry) => entry.page === page)!;
   const suffix = kind === "data" ? String.raw`\.data` : "";
+  const detail = excluded ? segmentOtherThan(excluded) : `${segmentChar}+`;
   return {
     queryId: `page-cpu-${page}-${kind}`,
     view: "calculations",
@@ -155,7 +185,7 @@ export function pageCpuQuery(
           key: "$workers.event.request.url",
           operation: "regex",
           type: "string",
-          value: String.raw`^https://[^/]+(/en)?/${path}(/[^/?.]+)?${suffix}(\?.*)?$`,
+          value: String.raw`^https://[^/]+(/en)?/${path}(/${detail})?${suffix}(\?.*)?$`,
         },
       ],
       calculations: [
@@ -170,24 +200,27 @@ export function pageCpuQuery(
 
 /**
  * Valori di una risposta di `pageCpuQuery` (`result.calculations`), null quando la forma non è
- * quella attesa. Senza invocazioni i quantili non hanno righe: nessun valore, non zero.
+ * quella attesa: una lettura non riuscita, mai zero. Senza invocazioni i quantili non hanno
+ * righe: nessun valore, non zero.
  */
 export function cpuValues(calculations: unknown) {
   if (!Array.isArray(calculations)) return null;
+  /** Valore del calcolo; null senza righe, undefined se manca o non è un numero. */
   const value = (alias: string) => {
     const calculation = calculations.find(
       (entry) => (entry as { alias?: unknown } | null)?.alias === alias,
     ) as { aggregates?: unknown } | undefined;
-    const [aggregate] = Array.isArray(calculation?.aggregates) ? calculation.aggregates : [];
-    const number = Number((aggregate as { value?: unknown } | undefined)?.value);
-    return Number.isFinite(number) ? number : 0;
+    if (!Array.isArray(calculation?.aggregates)) return undefined;
+    if (calculation.aggregates.length === 0) return null;
+    const raw = (calculation.aggregates[0] as { value?: unknown } | null)?.value;
+    const number = typeof raw === "number" || typeof raw === "string" ? Number(raw) : Number.NaN;
+    return Number.isFinite(number) ? number : undefined;
   };
   const invocations = value("invocations");
-  const measured = (alias: string) => (invocations > 0 ? value(alias) : null);
-  return {
-    invocations,
-    cpuP50Ms: measured("cpu_p50_ms"),
-    cpuP95Ms: measured("cpu_p95_ms"),
-    wallP50Ms: measured("wall_p50_ms"),
-  };
+  if (invocations === undefined) return null;
+  if (!invocations) return { invocations: 0, cpuP50Ms: null, cpuP95Ms: null, wallP50Ms: null };
+  const [cpuP50Ms, cpuP95Ms, wallP50Ms] = ["cpu_p50_ms", "cpu_p95_ms", "wall_p50_ms"].map(value);
+  if ([cpuP50Ms, cpuP95Ms, wallP50Ms].some((measure) => measure === undefined || measure === null))
+    return null;
+  return { invocations, cpuP50Ms: cpuP50Ms!, cpuP95Ms: cpuP95Ms!, wallP50Ms: wallP50Ms! };
 }

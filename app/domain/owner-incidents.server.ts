@@ -4,18 +4,13 @@ import { ownerTelegramCopy as copy } from "../copy/owner-telegram";
 import { logFailure } from "../errors";
 import { inSequence } from "../sequence";
 import { UpstreamError } from "../integrations/http.server";
-import {
-  ownerChatId,
-  sendRichMessage,
-  telegramConfigured,
-  type BotButton,
-} from "../integrations/telegram.server";
+import { ownerChatId, telegramConfigured, type BotButton } from "../integrations/telegram.server";
 import { listAnomalies, type Anomaly, type AnomalyKind } from "./admin-operations.server";
 import {
   at,
   duration,
   ownerCallback,
-  richMessage,
+  sendPanel,
   type Panel,
   type Row,
 } from "./owner-panels.server";
@@ -194,7 +189,7 @@ async function deliverOwnerIncidents(env: Env, fetcher: typeof fetch, now: Date)
   await inSequence(results, async (row) => {
     const resolved = row.resolved_at !== null;
     try {
-      await sendRichMessage(env, chatId, richMessage(env, incidentPanel(env, row), now), fetcher);
+      await sendPanel(env, chatId, incidentPanel(env, row), now, fetcher);
     } catch (error) {
       // Attese crescenti fino a sei ore, o quella indicata da Telegram.
       const wait =

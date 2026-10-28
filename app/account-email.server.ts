@@ -267,7 +267,9 @@ export function sendAuthEmail(
 
 /**
  * Chi si registra con un indirizzo già usato riceve la stessa risposta di un nuovo account;
- * il titolare riceve questa email, nella lingua della pagina di registrazione.
+ * il titolare riceve questa email, nella lingua della pagina di registrazione. Come la conferma
+ * di un nuovo indirizzo, l'invio esce dal percorso della risposta: il tempo di risposta non
+ * rivela che l'indirizzo è registrato.
  */
 export async function sendExistingAccountEmail(
   env: Env,
@@ -301,12 +303,14 @@ export async function sendExistingAccountEmail(
           button: "Vai all’accesso",
           note: "Se non eri tu, ignora questa email: il tuo account non è cambiato.",
         };
-  await sendAccountEmail(env, {
-    language,
-    to,
-    url: new URL(localizedPath(language, accessPath), env.APP_ORIGIN).toString(),
-    email,
-  }).catch((error: unknown) => logFailure({ error, operation: "account_email" }));
+  waitUntil(
+    sendAccountEmail(env, {
+      language,
+      to,
+      url: new URL(localizedPath(language, accessPath), env.APP_ORIGIN).toString(),
+      email,
+    }).catch((error: unknown) => logFailure({ error, operation: "account_email" })),
+  );
 }
 
 export type SecurityEvent =
@@ -456,6 +460,41 @@ export async function sendInactivityNotice(
 }
 
 /**
+ * Negozio da ricollegare: eBay ha rifiutato o revocato il consenso, oppure è scaduto, e le
+ * letture sono ferme. Porta a Negozi, dove si ricollega; nessun dato degli acquirenti. Il compito
+ * che la invia la registra soltanto se l'invio riesce.
+ */
+export async function sendReconnectNotice(
+  env: Env,
+  input: { to: string; language: Language; storeName: string },
+): Promise<void> {
+  const { language, storeName } = input;
+  await sendAccountEmail(env, {
+    language,
+    to: input.to,
+    url: new URL(localizedPath(language, storesPath), env.APP_ORIGIN).toString(),
+    email:
+      language === "en"
+        ? {
+            subject: "Reconnect your eBay store to FiscalBay",
+            paragraphs: [
+              `The connection of ${storeName} with eBay is no longer valid: the consent expired or was revoked.`,
+              "FiscalBay cannot read new orders from this store until you reconnect it from Stores. Orders already imported stay available.",
+            ],
+            button: "Open Stores",
+          }
+        : {
+            subject: "Ricollega il tuo negozio eBay a FiscalBay",
+            paragraphs: [
+              `Il collegamento di ${storeName} con eBay non è più valido: il consenso è scaduto o è stato revocato.`,
+              "FiscalBay non può leggere i nuovi ordini di questo negozio finché non lo ricolleghi da Negozi. Gli ordini già importati restano consultabili.",
+            ],
+            button: "Apri Negozi",
+          },
+  });
+}
+
+/**
  * Cancellazione dell'account completata, alla fine del lavoro: l'indirizzo arriva dalla
  * richiesta, perché l'utente non esiste più. Il pulsante porta al sito pubblico.
  */
@@ -474,7 +513,7 @@ export async function sendAccountDeletedNotice(
             subject: "Your FiscalBay account has been deleted",
             paragraphs: [
               "We deleted your FiscalBay account with its orders, stores and settings.",
-              "Subscriptions no longer renew. We keep only what prevents the same stores from getting a new trial or new Free unlocks in the current cycle.",
+              "Subscriptions no longer renew. We keep only: for each store, a keyed fingerprint of the eBay account that records the trial already used for two years and the unlocks already used until the end of the current Free cycle; for one year, store transfers and support operations that concerned the account; the Stripe references of lifetime seats and of customer data erasures at Stripe; the record of the request for thirty days.",
             ],
             button: "Go to FiscalBay",
             footer: `You are receiving this email because you deleted your FiscalBay account. For help, write to ${supportEmail}.`,
@@ -483,7 +522,7 @@ export async function sendAccountDeletedNotice(
             subject: "Il tuo account FiscalBay è stato eliminato",
             paragraphs: [
               "Abbiamo eliminato il tuo account FiscalBay con ordini, negozi e impostazioni.",
-              "Gli abbonamenti non si rinnovano più. Conserviamo soltanto quanto impedisce agli stessi negozi di ricevere una nuova prova o nuovi sblocchi Free nel ciclo in corso.",
+              "Gli abbonamenti non si rinnovano più. Conserviamo soltanto: per ogni negozio un’impronta dell’account eBay calcolata con una chiave segreta, che ricorda per due anni la prova già usata e fino alla fine del ciclo Free in corso gli sblocchi già usati; per un anno i trasferimenti di negozi e le operazioni dell’assistenza che riguardavano l’account; i riferimenti Stripe dei posti lifetime e delle cancellazioni dei dati dei clienti presso Stripe; la registrazione della richiesta per trenta giorni.",
             ],
             button: "Vai a FiscalBay",
             footer: `Ricevi questa email perché hai eliminato il tuo account FiscalBay. Per assistenza scrivi a ${supportEmail}.`,

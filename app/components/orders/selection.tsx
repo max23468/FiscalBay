@@ -15,6 +15,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { useCopy } from "~/components/copy-context";
 import { forgetExportedSelection } from "../../orders/export-scope";
+import { FreeSuspendedNote } from "./fiscal";
 
 /**
  * Modalità di selezione dell'elenco: la chiusura dimentica la selezione esportata e riporta il
@@ -56,6 +57,7 @@ export function SelectionBar({
   selected,
   lockedSelected,
   remaining,
+  suspended = false,
   onUnlock,
   onCancel,
   onExport,
@@ -63,6 +65,8 @@ export function SelectionBar({
   selected: string[];
   lockedSelected: string[];
   remaining: number | null;
+  /** Free sospeso dall'assistenza: lo sblocco non si conferma e l'avviso lo spiega. */
+  suspended?: boolean;
   onUnlock: (ids: string[]) => void;
   onCancel: () => void;
   /** Apre l'esportazione degli ordini selezionati; assente se la sezione non esiste. */
@@ -70,7 +74,7 @@ export function SelectionBar({
 }) {
   const { t } = useCopy();
   const count = lockedSelected.length;
-  const exceeds = remaining !== null && count > remaining;
+  const exceeds = suspended || (remaining !== null && count > remaining);
   const bar = useRef<HTMLDivElement>(null);
   // L'altezza della barra solleva gli avvisi brevi della shell, che altrimenti la coprirebbero.
   useEffect(() => {
@@ -108,11 +112,13 @@ export function SelectionBar({
               <AlertDialogHeader>
                 <AlertDialogTitle>{t.orders.unlockTitle(count)}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  {exceeds
-                    ? t.orders.unlockExceeds(count, remaining ?? 0)
-                    : remaining === null
-                      ? null
-                      : t.orders.unlockConfirmText(count, remaining)}
+                  {suspended ? (
+                    <FreeSuspendedNote />
+                  ) : exceeds ? (
+                    t.orders.unlockExceeds(count, remaining ?? 0)
+                  ) : remaining === null ? null : (
+                    t.orders.unlockConfirmText(count, remaining)
+                  )}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useLocation } from "react-router";
 
 import { useCopy } from "~/components/copy-context";
+import { DeleteAccount, type DeletionAccess } from "~/components/delete-account";
 import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import type { AccessNoticeView } from "../access-notice";
@@ -36,7 +37,19 @@ function SignInAgain() {
 }
 
 /** Avviso di verifica dell'email, finché l'indirizzo non è confermato. */
-export function VerifyEmail({ email, verified }: { email: string; verified: boolean }) {
+/**
+ * Email da verificare: nuovo invio del link e, dove la pagina lo prevede, la cancellazione
+ * dell'account, che senza email verificata non si raggiunge dalle Impostazioni.
+ */
+export function VerifyEmail({
+  email,
+  verified,
+  deletion,
+}: {
+  email: string;
+  verified: boolean;
+  deletion?: DeletionAccess | null;
+}) {
   const { t: copy, language } = useCopy();
   const t = copy.access;
   return verified ? null : (
@@ -47,6 +60,15 @@ export function VerifyEmail({ email, verified }: { email: string; verified: bool
           {t.verifyResend}
         </Button>
       </form>
+      {deletion ? (
+        <div className="mt-4 border-t pt-4">
+          <DeleteAccount
+            email={email}
+            access={deletion}
+            actionPath={localizedPath(language, accessPath)}
+          />
+        </div>
+      ) : null}
     </StatusAlert>
   );
 }

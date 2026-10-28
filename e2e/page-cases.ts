@@ -113,6 +113,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       "account_not_linked",
       "account_already_linked_to_different_user",
       "delete_link",
+      "delete_failed",
       "account_deletion_in_progress",
     ].map((error) =>
       make(`/auth/error?error=${error}&provider=ebay`, "auth", {

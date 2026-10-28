@@ -66,8 +66,11 @@ const it = {
     premiumPlan: "Premium",
     premiumPrice: (monthly: string, annual: string) =>
       `${monthly} + IVA al mese o ${annual} + IVA all’anno`,
+    premiumGross: (monthly: string, annual: string) =>
+      `${monthly} al mese o ${annual} all’anno con IVA italiana al 22%`,
     premiumBody:
-      "Ordini da sbloccare senza limite per ciclo, più negozi, un anno di storico, XLSX e notifiche Telegram. Prova di 14 giorni senza carta.",
+      "Ordini da sbloccare senza limite per ciclo, più negozi, un anno di storico, XLSX e notifiche Telegram.",
+    premiumTrial: "Prova di 14 giorni senza carta.",
     faqTitle: "Domande frequenti",
     faqLink: "Tutte le domande",
     allFeatures: "Tutte le funzionalità",
@@ -389,8 +392,11 @@ const en: SitePagesCopy = {
     freePrice: "€0",
     premiumPlan: "Premium",
     premiumPrice: (monthly, annual) => `${monthly} + VAT per month or ${annual} + VAT per year`,
+    premiumGross: (monthly, annual) =>
+      `${monthly} per month or ${annual} per year with 22% Italian VAT`,
     premiumBody:
-      "Unlimited orders to unlock per cycle, more stores, one year of history, XLSX and Telegram notifications. 14-day trial with no card.",
+      "Unlimited orders to unlock per cycle, more stores, one year of history, XLSX and Telegram notifications.",
+    premiumTrial: "14-day trial with no card.",
     faqTitle: "Frequently asked questions",
     faqLink: "All questions",
     allFeatures: "All features",

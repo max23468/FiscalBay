@@ -20,6 +20,7 @@ function messageFor(
   if (error === "registration_approval_required") return t.registrationRestricted;
   if (error === "account_not_linked") return t.accountNotLinked;
   if (error === "delete_link") return t.deletionLink;
+  if (error === "delete_failed") return t.deletionFailed;
   if (error === "account_deletion_in_progress") return t.deletionInProgress;
   if (error === "account_already_linked_to_different_user")
     return {

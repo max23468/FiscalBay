@@ -85,7 +85,7 @@ export async function completeStoreLink(input: {
 
   // Lo state porta la lingua in cui il merchant ha avviato il collegamento.
   const language: Language = search.get("state")!.split(/[-_]/u, 1)[0] === "en" ? "en" : "it";
-  const storeId = await linkStore(environment.DB, link.userId, identity, now, {
+  const storeId = await linkStore(environment, link.userId, identity, now, {
     ebayEnvironment: link.ebayEnvironment,
     language,
   });
@@ -121,19 +121,21 @@ export async function completeStoreLink(input: {
  * si importano soltanto acquisti successivi, senza ripristinare gli eliminati. null se appartiene ad altri.
  */
 async function linkStore(
-  db: D1Database,
+  env: Pick<Env, "DB" | "BETTER_AUTH_SECRET">,
   userId: string,
   identity: EbayStoreIdentity,
   now: string,
   { ebayEnvironment, language }: { ebayEnvironment: EbayEnvironment; language: Language },
 ): Promise<string | null> {
+  const db = env.DB;
   const workspaceId = await workspaceFor(db, userId, now, language);
   const ebayUserId =
     ebayEnvironment === "production"
       ? identity.userId
       : JSON.stringify([ebayEnvironment, identity.userId]);
-  // Un negozio già collegato a uno spazio cancellato porta con sé prova usata e ciclo Free.
-  const mark = await readStoreMark(db, ebayUserId, new Date(now));
+  // Un negozio lasciato da uno spazio cancellato o trasferito porta con sé prova usata e ciclo
+  // Free.
+  const mark = await readStoreMark(db, env.BETTER_AUTH_SECRET, ebayUserId, new Date(now));
   const linked = await db.batch<{ id: string }>([
     ...markAnchorStatement(db, workspaceId, ebayUserId, mark),
     db

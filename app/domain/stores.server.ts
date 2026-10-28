@@ -16,7 +16,14 @@ import type { EbayEnvironment } from "../view-models";
 const usernameSql = "COALESCE(s.display_name, s.ebay_account_id, s.ebay_user_id)";
 
 export type StoreConnection = "active" | "paused" | "reconnect_required" | "disconnected";
-export type PauseReason = "manual" | "plan" | "inactivity" | "admin";
+/**
+ * Ragioni di pausa: «abuse» è la pausa dell'assistenza messa dalla sospensione antiabuso del
+ * Free, distinta da quella manuale della console («admin»); il venditore le vede uguali.
+ */
+export type PauseReason = "manual" | "plan" | "inactivity" | "admin" | "abuse";
+
+/** Ragione della pausa `p` come la legge l'app. */
+export const pauseReasonSql = "CASE WHEN p.abuse_review = 1 THEN 'abuse' ELSE p.reason END";
 
 export type StoreStatus = {
   id: string;
@@ -194,8 +201,8 @@ async function readStores(
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_done_at,
               ${historyStartSql("s.workspace_id", "?2")} AS window_from,
               ss.locked_until > ?2 AS syncing,
-              (SELECT group_concat(reason) FROM ebay_store_pauses p WHERE p.store_id = s.id)
-                AS pauses,
+              (SELECT group_concat(${pauseReasonSql}) FROM ebay_store_pauses p
+                WHERE p.store_id = s.id) AS pauses,
               (SELECT paused_at FROM ebay_store_pauses p WHERE p.store_id = s.id
                 AND p.reason = 'inactivity') AS inactive_since,
               ${activeEntitlementSql("s.workspace_id", "?2")} AS premium,
@@ -338,7 +345,9 @@ export async function resumeStore(
 
 /**
  * Pausa operativa dell'assistenza (§15): ferma le letture del negozio finché la console non la
- * toglie. Il venditore la vede e non può toglierla; piano, consenso e dati restano.
+ * toglie. Il venditore la vede e non può toglierla; piano, consenso e dati restano. Messa su un
+ * negozio già fermo per la sospensione antiabuso diventa manuale e resta anche dopo l'esito
+ * «nessun abuso»; toglierla non tocca la sospensione.
  */
 export async function setAdminPause(
   db: D1Database,
@@ -348,12 +357,15 @@ export async function setAdminPause(
 ): Promise<StoreActionResult> {
   const result = paused
     ? await db
-        .prepare(`INSERT OR IGNORE INTO ebay_store_pauses (store_id, reason, paused_at)
-          SELECT id, 'admin', ? FROM ebay_stores WHERE id = ? AND data_deleted_at IS NULL`)
+        .prepare(`INSERT INTO ebay_store_pauses (store_id, reason, paused_at)
+          SELECT id, 'admin', ? FROM ebay_stores WHERE id = ? AND data_deleted_at IS NULL
+          ON CONFLICT(store_id, reason) DO UPDATE SET abuse_review = 0
+            WHERE ebay_store_pauses.abuse_review = 1`)
         .bind(now.toISOString(), storeId)
         .run()
     : await db
-        .prepare("DELETE FROM ebay_store_pauses WHERE store_id = ? AND reason = 'admin'")
+        .prepare(`DELETE FROM ebay_store_pauses WHERE store_id = ? AND reason = 'admin'
+          AND abuse_review = 0`)
         .bind(storeId)
         .run();
   if (result.meta.changes) return "done";

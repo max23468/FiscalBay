@@ -3,8 +3,15 @@ import { data, redirect } from "react-router";
 
 import { notifySecurityEvent } from "./account-email.server";
 import type { AccountArea } from "./account-area.server";
-import { accessPath, appUrl, securityPath, securityReturnPath } from "./app-links";
+import {
+  accessPath,
+  accountDeletionPath,
+  appUrl,
+  securityPath,
+  securityReturnPath,
+} from "./app-links";
 import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
+import { deletionReauthenticated } from "./domain/account-deletion.server";
 import { pendingEmailChange } from "./domain/email-change.server";
 import {
   passkeyChangeBlock,
@@ -21,14 +28,42 @@ import {
 } from "./domain/sign-in-methods.server";
 import { appCopy } from "./app-copy";
 import { localizedPath } from "./i18n";
+import type { ActionResult } from "./view-models";
 
 /** Esito della conferma dell'identità, letto dal riquadro senza lasciare la pagina. */
 export type ConfirmResult = { ok: boolean; notice?: string };
 
+/**
+ * Richiesta di cancellazione dell'account (§30), dalle Impostazioni o, per chi non ha ancora
+ * completato la registrazione o verificato l'email, dalla pagina di accesso e dall'avviso della
+ * verifica: accesso degli ultimi minuti e indirizzo dell'account scritto per esteso, poi Better
+ * Auth manda il link, anche a un indirizzo non ancora verificato. La conferma dal link avvia la
+ * cancellazione e il lavoro dalla coda.
+ */
+export async function requestAccountDeletion(
+  request: Request,
+  { language, session }: Pick<AccountArea, "language" | "session">,
+  confirmation: string,
+): Promise<ActionResult | ReturnType<typeof data<ActionResult>>> {
+  const t = appCopy[language].settings.privacy;
+  const failed = (status: number, notice: string) =>
+    data<ActionResult>({ ok: false, notice }, { status });
+  if (!deletionReauthenticated(session.session.createdAt))
+    return failed(403, t.deleteAccountReauth);
+  const email = session.user.email;
+  if (confirmation.trim().toLowerCase() !== email.toLowerCase())
+    return failed(400, t.deleteAccountMismatch);
+  const response = await forwardToAuth(env, request, "/delete-user", {
+    callbackURL: localizedPath(language, accountDeletionPath),
+  });
+  if (!response.ok) return failed(response.status === 429 ? 429 : 503, t.deleteAccountFailed);
+  return { ok: true, notice: t.deleteAccountSent(email) } satisfies ActionResult;
+}
+
 /** Metodi di accesso, email, passkey e sessioni; ogni esito torna alla Sicurezza. */
 export async function securityAction(
   request: Request,
-  { language, session }: AccountArea,
+  { language, session }: Pick<AccountArea, "language" | "session">,
   form: FormData,
 ): Promise<Response | ReturnType<typeof data<ConfirmResult>>> {
   const auth = session as AuthSession;

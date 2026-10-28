@@ -291,28 +291,80 @@ async function storeTarget(storeId: string) {
   return store ? `workspace:${store.workspace_id}:store:${storeId}` : `store:${storeId}`;
 }
 
+/** Campi del modulo che indicano l'oggetto dell'operazione, con il prefisso del registro. */
+const targetFields = [
+  ["spazio", "workspace"],
+  ["trasferimento", "transfer"],
+  ["lavoro", "task"],
+  ["provider", "receipts"],
+  ["promozione", "promotion"],
+  ["comunicazione", "notice"],
+  ["segnalazione", "abuse"],
+] as const;
+
+/**
+ * Oggetto indicato dal modulo, per i rifiuti e gli errori che arrivano prima dell'esito
+ * dell'operazione; null se il modulo non ne indica uno valido.
+ */
+async function formTarget(intent: string, field: Field) {
+  const id = (name: string) => {
+    const value = field(name);
+    return value && value.length <= 128 ? value : null;
+  };
+  if (intent === "schedule-quota") return "free-quota";
+  if (intent === "quota-attention") return `setting:quota_attention:${id("soglia") ?? ""}`;
+  if (intent === "set-switch" && id("interruttore"))
+    return `switch:${id("interruttore")}${id("stato") ? `:${id("stato")}` : ""}`;
+  const store = id("negozio");
+  if (store) return storeTarget(store);
+  for (const [name, kind] of targetFields) {
+    const value = id(name);
+    if (value) return `${kind}:${value}`;
+  }
+  return null;
+}
+
 /**
  * Esegue un'operazione e ne registra l'esito. Ogni ramo restituisce l'oggetto del registro,
- * l'esito tecnico e l'avviso; il motivo, dove serve, è obbligatorio.
+ * l'esito tecnico e l'avviso; il motivo, dove serve, è obbligatorio. Anche i rifiuti decisi dal
+ * modulo, come il motivo mancante o l'origine estranea, lasciano la loro riga.
  */
 export async function runAdminAction(
   request: Request,
   actor: string,
   language: Language,
 ): Promise<AdminActionResult | ReturnType<typeof data>> {
-  assertSameOrigin(request);
-  const form = await request.formData();
+  // Un corpo che non è un modulo vale come modulo vuoto: un'operazione sconosciuta.
+  const form = await request.formData().catch(() => new FormData());
   const field: Field = (name) => String(form.get(name) ?? "").trim();
   const intent = field("intent");
   const t = adminCopy[language];
   const now = new Date();
   const reason = reasonSchema.safeParse(field("motivo"));
-  const audit = (target: string, outcome: AuditOutcome) =>
-    recordAudit(
-      env.DB,
-      { actor, operation: intent, target, reason: reason.success ? reason.data : null, outcome },
-      now,
-    );
+  /**
+   * Riga del registro. L'operazione è già avvenuta: un errore della scrittura si riprova una
+   * volta, poi resta nei log senza cambiare la risposta, che riflette l'esito reale.
+   */
+  const audit = async (
+    target: string | null,
+    outcome: AuditOutcome,
+    operation = intent.slice(0, 64) || "unknown",
+  ) => {
+    const entry = {
+      actor,
+      operation,
+      target,
+      reason: reason.success ? reason.data : null,
+      outcome,
+    };
+    try {
+      await recordAudit(env.DB, entry, now);
+    } catch {
+      await recordAudit(env.DB, entry, now).catch((error: unknown) =>
+        logFailure({ request, error, operation: "admin" }),
+      );
+    }
+  };
   const result = async (
     target: string,
     outcome: AuditOutcome,
@@ -322,7 +374,18 @@ export async function runAdminAction(
     await audit(target, outcome);
     return { ok, notice } satisfies AdminActionResult;
   };
-  const invalid = () => data({ ok: false, notice: t.common.invalid }, { status: 400 });
+  /** Rifiuto deciso dal modulo, registrato con l'oggetto indicato quando è valido. */
+  const refuse = async (outcome: AuditOutcome) => {
+    await audit(await formTarget(intent, field), outcome);
+    return data({ ok: false, notice: t.common.invalid }, { status: 400 });
+  };
+  const invalid = () => refuse("invalid");
+  try {
+    assertSameOrigin(request);
+  } catch (error) {
+    await audit(await formTarget(intent, field), "foreign_origin");
+    throw error;
+  }
   const needsReason = new Set([
     "grant-premium",
     "grant-lifetime",
@@ -341,14 +404,14 @@ export async function runAdminAction(
     "quota-attention",
     "admit-waitlisted",
   ]);
-  if (needsReason.has(intent) && !reason.success) return invalid();
+  if (needsReason.has(intent) && !reason.success) return refuse("reason_required");
   // Gli identificativi vengono dal modulo: oltre la lunghezza del registro non sono validi.
   if (
     [...form.keys()].some(
       (name) => name !== "motivo" && !name.startsWith("testo") && field(name).length > 128,
     )
   )
-    return invalid();
+    return refuse("too_long");
   const why = reason.success ? reason.data : "";
   const date = (value: string) => formatDate(value, language);
   try {
@@ -503,7 +566,7 @@ export async function runAdminAction(
       }
       case "transfer-confirm": {
         const confirmed = await confirmStoreTransfer(
-          env.DB,
+          env,
           { id: field("trasferimento"), actor },
           now,
         );
@@ -511,15 +574,10 @@ export async function runAdminAction(
           ? `workspace:${confirmed.transfer.from}:store:${confirmed.transfer.storeId}`
           : `transfer:${field("trasferimento")}`;
         if (confirmed.transfer)
-          await recordAudit(
-            env.DB,
-            {
-              actor,
-              operation: "transfer-received",
-              target: `workspace:${confirmed.transfer.to}:store:${confirmed.transfer.storeId}`,
-              outcome: "done",
-            },
-            now,
+          await audit(
+            `workspace:${confirmed.transfer.to}:store:${confirmed.transfer.storeId}`,
+            "done",
+            "transfer-received",
           );
         return result(target, confirmed.result, t.results.transfer[confirmed.result]);
       }
@@ -636,7 +694,7 @@ export async function runAdminAction(
       }
       case "quota-attention": {
         const saved = await setQuotaAttention(env.DB, Number(field("soglia")), now);
-        if (saved === "invalid") return invalid();
+        if (saved === "invalid") return refuse("out_of_range");
         return result(
           `setting:quota_attention:${field("soglia")}`,
           saved,
@@ -653,11 +711,11 @@ export async function runAdminAction(
         );
       }
       default:
-        return invalid();
+        return refuse("unknown_intent");
     }
   } catch (error) {
     logFailure({ request, error, operation: "admin" });
-    await audit(intent, "failed").catch(() => {});
+    await audit(await formTarget(intent, field).catch(() => null), "failed");
     return data({ ok: false, notice: t.common.failed }, { status: 500 });
   }
 }

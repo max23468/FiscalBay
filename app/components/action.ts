@@ -30,11 +30,11 @@ export function useFetcherResult<T>(
 }
 
 /**
- * Azione sulla route corrente, distinta da `intent`: esito e avviso li decide il
- * server. L'anteprima risponde con una simulazione, le route reali eseguono.
- * `onResult` riceve ogni nuovo esito, dopo l'avviso.
+ * Azione sulla route corrente, o su quella indicata da `action`, distinta da `intent`: esito e
+ * avviso li decide il server. L'anteprima risponde con una simulazione, le route reali
+ * eseguono. `onResult` riceve ogni nuovo esito, dopo l'avviso.
  */
-export function useAction(onResult?: (result: ActionResult) => void) {
+export function useAction(onResult?: (result: ActionResult) => void, action?: string) {
   const notify = useNotice();
   const fetcher = useFetcher<ActionResult>();
   useFetcherResult(fetcher, (result) => {
@@ -43,7 +43,7 @@ export function useAction(onResult?: (result: ActionResult) => void) {
   });
   return {
     run: (intent: string, fields: Record<string, string> = {}) =>
-      void fetcher.submit({ ...fields, intent }, { method: "post" }),
+      void fetcher.submit({ ...fields, intent }, { method: "post", ...(action ? { action } : {}) }),
     pending: fetcher.state !== "idle",
     /** Ultimo esito, disponibile a richiesta conclusa. */
     result: fetcher.state === "idle" ? fetcher.data : undefined,

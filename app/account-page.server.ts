@@ -11,7 +11,9 @@ import {
   parseProfile,
   registrationStatus,
 } from "./domain/registration.server";
+import { deletionReauthenticated } from "./domain/account-deletion.server";
 import { listSignInMethods } from "./domain/sign-in-methods.server";
+import { requestAccountDeletion, securityAction } from "./security-actions.server";
 import { errorResponse } from "./error-response";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
@@ -19,8 +21,24 @@ import { languageFromPath, localizedPath } from "./i18n";
 const noStore = { "cache-control": "no-store" };
 
 /**
+ * Dati della cancellazione self-service per chi non raggiunge le Impostazioni (registrazione
+ * incompleta o email non verificata): metodi per confermare l'identità sul posto, sessione in
+ * uso e accesso abbastanza recente per chiedere il link.
+ */
+export async function deletionAccess(
+  session: NonNullable<Awaited<ReturnType<typeof readSession>>>,
+  now = new Date(),
+) {
+  return {
+    methods: await listSignInMethods(env.DB, session.user.id),
+    currentSession: session.session.id,
+    ready: deletionReauthenticated(session.session.createdAt, now),
+  };
+}
+
+/**
  * Pagina di accesso: login, registrazione, recupero della password, passkey e completamento del
- * profilo. Con la sessione e la registrazione completa rimanda agli Ordini (o alla Sicurezza
+ * profilo, con la cancellazione dell'account per chi non l'ha ancora completato. Con la sessione e la registrazione completa rimanda agli Ordini (o alla Sicurezza
  * da cui si è partiti), conservando l'esito nell'indirizzo; il link per la nuova password resta
  * qui anche con la sessione.
  */
@@ -50,7 +68,8 @@ export async function accessLoader(request: Request) {
   }
   // eBay fornisce uno username, non il nome della persona. Vale anche per gli utenti
   // già registrati: né lo username né un indirizzo email devono precompilare il profilo.
-  const ebayLinked = (await listSignInMethods(env.DB, session.user.id)).accounts.ebay;
+  const deletion = await deletionAccess(session);
+  const ebayLinked = deletion.methods.accounts.ebay;
   const providerName =
     status.profile || ebayLinked || session.user.name.includes("@") ? "" : session.user.name;
   const [firstName = "", ...lastName] = providerName.trim().split(/\s+/u).filter(Boolean);
@@ -62,7 +81,10 @@ export async function accessLoader(request: Request) {
     emailVerified: session.user.emailVerified,
     needsProfile: !status.profile,
     needsAgreement: !status.termsAccepted,
+    // La casella marketing compare soltanto a chi non ha mai scelto.
+    needsMarketing: !status.marketingChosen,
     suggestedName: { firstName, lastName: lastName.join(" ") },
+    deletion,
   };
 }
 
@@ -185,6 +207,16 @@ export async function accessAction(request: Request) {
     return notice("registrato");
   }
 
+  // Cancellazione dell'account e conferma dell'identità sul posto, o con uscita e nuovo
+  // accesso, per chi non raggiunge le Impostazioni: lo stesso flusso, con la sessione in uso.
+  if (intent === "account-delete" || intent === "conferma-accesso" || intent === "riautentica") {
+    const session = await readSession(env, request);
+    if (!session) return notice("errore");
+    return intent === "account-delete"
+      ? requestAccountDeletion(request, { language, session }, field("confirmation"))
+      : securityAction(request, { language, session }, form);
+  }
+
   if (intent === "verifica" || intent === "completa") {
     const session = await readSession(env, request);
     if (!session) return notice("errore");
@@ -208,7 +240,11 @@ export async function accessAction(request: Request) {
       language,
       now: new Date(),
       profile,
-      agreement: status.termsAccepted ? undefined : { marketing: field("marketing") === "on" },
+      // Una nuova versione dei Termini non chiede di nuovo il consenso marketing: la scelta
+      // esistente resta e non se ne registra una nuova.
+      agreement: status.termsAccepted
+        ? undefined
+        : { marketing: status.marketingChosen ? undefined : field("marketing") === "on" },
     });
     return redirect(base, 303);
   }

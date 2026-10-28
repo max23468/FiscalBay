@@ -611,6 +611,29 @@ describe("Lifetime e concessioni", () => {
     ]);
   });
 
+  it("una vendita completata mentre la cancellazione attende Stripe non crea il diritto", async () => {
+    const stripe = stripeAccount();
+    await buyLifetime(stripe);
+    stripe.settle("cs_lifetime_1", "processing");
+    await event(stripe, "checkout.session.completed", "cs_lifetime_1");
+    // La cancellazione resta in attesa del pagamento in conferma, poi il pagamento riesce.
+    await env.DB.prepare(`INSERT INTO account_deletions (id, user_id, workspace_id, requested_at)
+      VALUES (?1, ?2, 'w-a', ?3)`)
+      .bind(crypto.randomUUID(), userId, now)
+      .run();
+    stripe.settle("cs_lifetime_1", "paid");
+    await event(stripe, "checkout.session.completed", "cs_lifetime_1");
+    expect(await lifetimes()).toEqual([]);
+    // Il posto pagato resta occupato con i riferimenti dell'acquisto.
+    expect(await allocations()).toEqual([
+      expect.objectContaining({
+        provider_reference: "cs_lifetime_1",
+        status: "active",
+        customer_id: "cus_lifetime",
+      }),
+    ]);
+  });
+
   it("alla cancellazione dell'account chiude il checkout dell'abbonamento o ferma quello pagato", async () => {
     const stripe = stripeAccount();
     const buyMonthly = () => {

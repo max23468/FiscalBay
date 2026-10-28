@@ -43,6 +43,26 @@ async function signature(secret: string, payload: string) {
   return base64Url(new Uint8Array(signed));
 }
 
+/** Firma ricevuta verificata dall'HMAC stesso, in tempo costante; false se non è base64url. */
+async function validSignature(secret: string, payload: string, signed: string) {
+  if (!/^[A-Za-z0-9_-]+$/u.test(signed)) return false;
+  let bytes: Uint8Array<ArrayBuffer>;
+  try {
+    bytes = Uint8Array.from(atob(signed.replaceAll("-", "+").replaceAll("_", "/")), (char) =>
+      char.charCodeAt(0),
+    );
+  } catch {
+    // Una lunghezza impossibile per il base64.
+    return false;
+  }
+  return crypto.subtle.verify(
+    "HMAC",
+    await ticketKey(secret),
+    bytes,
+    new TextEncoder().encode(payload),
+  );
+}
+
 export async function issueTimingTicket(secret: string, page: TimedPage, now = new Date()) {
   const nonce = base64Url(crypto.getRandomValues(new Uint8Array(16)));
   const payload = `${page}.${now.getTime()}.${nonce}`;
@@ -65,7 +85,7 @@ export async function redeemTimingTicket(
   if (ticketPage !== page || !nonce || !signed || !Number.isSafeInteger(issuedAt)) return false;
   if (issuedAt > now.getTime() + clockSkew || issuedAt + ticketLifetime <= now.getTime())
     return false;
-  if (signed !== (await signature(secret, `${ticketPage}.${issued}.${nonce}`))) return false;
+  if (!(await validSignature(secret, `${ticketPage}.${issued}.${nonce}`, signed))) return false;
   const stored = await db
     .prepare("INSERT OR IGNORE INTO page_timing_reports (nonce, expires_at) VALUES (?, ?)")
     .bind(nonce, new Date(issuedAt + ticketLifetime).toISOString())

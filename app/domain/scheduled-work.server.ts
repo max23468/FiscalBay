@@ -4,6 +4,7 @@ import { resumeAccountDeletions } from "./account-deletion.server";
 import { applyInactivity } from "./admission.server";
 import { reconcileBilling } from "./billing.server";
 import { purgeExportFiles } from "./export-files.server";
+import { resumeExportJobs } from "./export-jobs.server";
 import { readEbayQuotas } from "./ebay-quotas.server";
 import { applyFreePlans } from "./free-store.server";
 import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
@@ -14,6 +15,7 @@ import { configureBotCommands } from "./telegram-bot.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "./token-refresh.server";
+import { sendReconnectNotices } from "./reconnect-notices.server";
 import { recoverWebhookIngress } from "../webhooks.server";
 import { taskPeriods, type ScheduledTask } from "./work-timing";
 
@@ -47,16 +49,24 @@ const tasks = {
       await indexOrderSearch(env.DB);
     },
   },
-  // File delle esportazioni scaduti o revocati: il download li rifiuta già, la pulizia ne
-  // elimina i byte entro un'ora dalla scadenza.
+  // Lavori di esportazione rimasti senza messaggio, ripresi o chiusi come non riusciti; poi i
+  // file scaduti o revocati: il download li rifiuta già, la pulizia ne elimina i byte entro
+  // un'ora dalla scadenza.
   export_files: {
     period: taskPeriods.export_files,
-    run: (env: Env, _fetcher: typeof fetch, now: Date) => purgeExportFiles(env, now),
+    run: async (env: Env, _fetcher: typeof fetch, now: Date) => {
+      await resumeExportJobs(env, now);
+      await purgeExportFiles(env, now);
+    },
   },
-  // Rinnovo anticipato dei token di accesso dei negozi, prima che servano a una lettura.
+  // Rinnovo anticipato dei token di accesso dei negozi, prima che servano a una lettura; poi
+  // l'email dei negozi da ricollegare, compresi quelli il cui rinnovo è appena stato rifiutato.
   token_refresh: {
     period: taskPeriods.token_refresh,
-    run: (env: Env, fetcher: typeof fetch, now: Date) => refreshExpiringTokens(env, fetcher, now),
+    run: async (env: Env, fetcher: typeof fetch, now: Date) => {
+      await refreshExpiringTokens(env, fetcher, now);
+      await sendReconnectNotices(env, now);
+    },
   },
   // Preavvisi e pause per inattività del Free, ammissione di chi era in lista d'attesa.
   inactivity: {
@@ -75,12 +85,16 @@ const tasks = {
     run: (env: Env, fetcher: typeof fetch, now: Date) => deliverTelegram(env, fetcher, now),
   },
   // Menu dei comandi del bot, dei venditori e della chat dell'owner, riallineati ogni giorno:
-  // ripeterlo non cambia nulla.
+  // ripeterlo non cambia nulla. I due menu sono indipendenti: un errore dell'uno non lascia
+  // indietro l'altro e fa ripetere il compito.
   telegram_commands: {
     period: taskPeriods.telegram_commands,
     run: async (env: Env, fetcher: typeof fetch) => {
-      await configureBotCommands(env, fetcher);
-      await configureOwnerCommands(env, fetcher);
+      const [sellers, owner] = await Promise.allSettled([
+        configureBotCommands(env, fetcher),
+        configureOwnerCommands(env, fetcher),
+      ]);
+      for (const result of [sellers, owner]) if (result.status === "rejected") throw result.reason;
     },
   },
   // Quote delle API eBay rilette ogni ora, come alla visita della console: l'anomalia oltre la

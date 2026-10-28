@@ -15,7 +15,7 @@ const pageTimingSchema = z.strictObject({
   ttfb: duration,
   fcp: duration.optional(),
   lcp: duration.optional(),
-  ready: duration,
+  ready: duration.optional(),
   server: z.partialRecord(z.enum(serverPhases), duration),
   ticket: z.string().max(200),
 });

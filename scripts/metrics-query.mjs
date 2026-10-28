@@ -26,14 +26,11 @@ import {
   metricQueries,
   metricSql,
   pageCpuQuery,
+  samplePath,
 } from "../app/metrics-queries.ts";
 import config from "../cloudflare.config.ts";
 
-/**
- * Richiesta del campione: `HEAD` sul report del browser, che risponde 405 senza effetti. Classe
- * `api`, metodo `HEAD` ed esito `4xx` non vengono da nessuna pagina o integrazione.
- */
-export const samplePath = "/api/v1/page-timing";
+export { samplePath };
 
 /** Dataset, Worker e origine dell'ambiente, letti da `cloudflare.config.ts` come nella build. */
 export function targetOf(mode) {
@@ -49,8 +46,8 @@ export function targetOf(mode) {
 const sqlTime = (date) => date.toISOString().slice(0, 19).replace("T", " ");
 
 /**
- * Query del campione: soltanto le invocazioni della finestra di invio con classe, metodo ed esito
- * del campione, con conteggio pesato e righe conservate.
+ * Query del campione: soltanto le invocazioni della finestra di invio con la classe `sample`,
+ * che il Worker dà alla sola richiesta del campione, con conteggio pesato e righe conservate.
  */
 export function sampleSql(dataset, from, to) {
   if (!/^[a-z][a-z0-9_]{0,62}$/u.test(dataset)) throw new Error("INVALID_DATASET");
@@ -58,7 +55,7 @@ export function sampleSql(dataset, from, to) {
   SUM(_sample_interval * double1) AS requests,
   count() AS rows
 FROM ${dataset}
-WHERE blob1 = 'invocation' AND blob2 = 'http' AND blob3 = 'api' AND blob4 = 'HEAD'
+WHERE blob1 = 'invocation' AND blob2 = 'http' AND blob3 = 'sample' AND blob4 = 'HEAD'
   AND blob5 = '4xx'
   AND timestamp >= toDateTime('${sqlTime(from)}') AND timestamp <= toDateTime('${sqlTime(to)}')
 FORMAT JSON`;

@@ -24,7 +24,11 @@ import {
 import { quotaAnomalies, readEbayQuotas } from "../app/domain/ebay-quotas.server";
 import { readTechnicalMetrics } from "../app/domain/technical-metrics.server";
 import { cpuValues, metricQueries, metricSql, pageCpuQuery } from "../app/metrics-queries";
-import { assistFreeStore, chooseFreeStore } from "../app/domain/free-store.server";
+import {
+  applyWorkspacePlan,
+  assistFreeStore,
+  chooseFreeStore,
+} from "../app/domain/free-store.server";
 import { freeQuotaSettings, orderAllowance } from "../app/domain/grants.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { subscriptionView } from "../app/domain/plan-view.server";
@@ -37,6 +41,14 @@ import { listStores, resumeStore, setAdminPause } from "../app/domain/stores.ser
 import { admission } from "../app/domain/admission.server";
 import { serviceSetting, switchboard } from "../app/domain/service-settings.server";
 import { action as adminAction, loader as adminLoader } from "../app/routes/admin";
+import { action as exportAction } from "../app/routes/order-export";
+import { loader as ordersLoader } from "../app/routes/orders";
+import { completeStoreLink } from "../app/domain/store-link.server";
+import {
+  claimStoreLinkSession,
+  startStoreLink as beginLink,
+} from "../app/integrations/ebay/store-link.server";
+import { syntheticEbay } from "./fixtures/ebay-fixtures";
 import { loader as loadStores } from "../app/routes/stores";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import {
@@ -48,7 +60,7 @@ import {
   resetDatabase,
 } from "./fixtures/database-fixtures";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
-import { callRoute, routeData } from "./fixtures/route-fixtures";
+import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.restoreAllMocks());
@@ -149,7 +161,45 @@ describe("accesso alla console", () => {
       status: 400,
     });
     expect(await act(cookie, { intent: "comando-libero" })).toMatchObject({ status: 400 });
-    expect(await audit()).toEqual([]);
+    expect(
+      await act(cookie, {
+        intent: "grant-premium",
+        spazio: "w-a",
+        giorni: "x".repeat(129),
+        motivo: "y",
+      }),
+    ).toMatchObject({ status: 400 });
+    expect(await act(cookie, { intent: "requeue-task", lavoro: "inesistente" })).toMatchObject({
+      status: 400,
+    });
+    expect(
+      await act(cookie, { intent: "quota-attention", soglia: "99", motivo: "Prova" }),
+    ).toMatchObject({ status: 400 });
+    // Anche i rifiuti decisi dal modulo restano nel registro, con l'oggetto quando è indicato.
+    expect(await audit()).toEqual([
+      {
+        operation: "grant-premium",
+        target: "workspace:w-a",
+        reason: "x",
+        outcome: "foreign_origin",
+      },
+      {
+        operation: "grant-premium",
+        target: "workspace:w-a",
+        reason: null,
+        outcome: "reason_required",
+      },
+      { operation: "comando-libero", target: null, reason: null, outcome: "unknown_intent" },
+      { operation: "grant-premium", target: "workspace:w-a", reason: "y", outcome: "too_long" },
+      { operation: "requeue-task", target: "task:inesistente", reason: null, outcome: "invalid" },
+      {
+        operation: "quota-attention",
+        target: "setting:quota_attention:99",
+        reason: "Prova",
+        outcome: "out_of_range",
+      },
+    ]);
+    await env.DB.prepare("DELETE FROM admin_audit").run();
 
     expect(
       await act(cookie, {
@@ -181,6 +231,71 @@ describe("accesso alla console", () => {
     await expect(env.DB.prepare("UPDATE admin_audit SET outcome = 'x'").run()).rejects.toThrow(
       "immutable_audit",
     );
+  });
+
+  it("la conferma con passkey vale dodici ore dall'apertura della sessione, anche per le operazioni", async () => {
+    const { cookie, userId } = await admin();
+    const row = await env.DB.prepare('SELECT "createdAt" FROM "session" WHERE "userId" = ?')
+      .bind(userId)
+      .first<{ createdAt: string | number }>();
+    const opened = new Date(row!.createdAt).getTime();
+    const requeue = { intent: "requeue-task", lavoro: "billing" };
+    try {
+      vi.setSystemTime(new Date(opened + 12 * hour - 60_000));
+      const granted = await routeData(adminLoader, "/admin", { cookie });
+      expect(granted).toMatchObject({
+        access: "granted",
+        passkeyUntil: new Date(opened + 12 * hour).toISOString(),
+      });
+      expect(await act(cookie, requeue)).toMatchObject({ ok: true });
+      // Allo scadere delle dodici ore la sessione resta aperta, ma la console chiede la passkey.
+      vi.setSystemTime(new Date(opened + 12 * hour));
+      expect(await page(cookie)).toEqual({ access: "verify", section: null });
+      await expect(
+        callRoute(adminAction, "/admin", { cookie, fields: requeue }),
+      ).rejects.toMatchObject({ init: { status: 404 } });
+    } finally {
+      vi.useRealTimers();
+    }
+    expect((await audit()).map((entry) => entry.operation)).toEqual(["requeue-task"]);
+  });
+
+  it("la riga del registro che non si scrive non cambia l'esito dell'operazione riuscita", async () => {
+    const { cookie } = await admin();
+    await env.DB.batch(insertWorkspace({ id: "w-a" }));
+    const original = env.DB.prepare.bind(env.DB);
+    let failures = 1;
+    vi.spyOn(env.DB, "prepare").mockImplementation((query) =>
+      query.includes("INSERT INTO admin_audit") && failures-- > 0
+        ? ({
+            bind: () => ({ run: () => Promise.reject(new Error("database_unavailable")) }),
+          } as unknown as D1PreparedStatement)
+        : original(query),
+    );
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const grant = { intent: "grant-premium", spazio: "w-a", giorni: "3", motivo: "Disservizio" };
+    // Il primo errore si riprova: la riga c'è e la risposta è quella dell'operazione.
+    expect(await act(cookie, grant)).toMatchObject({ ok: true });
+    expect(await audit()).toEqual([
+      {
+        operation: "grant-premium",
+        target: "workspace:w-a",
+        reason: "Disservizio",
+        outcome: "done",
+      },
+    ]);
+    expect(logged).not.toHaveBeenCalled();
+    // Con il registro che non risponde l'esito resta quello reale e l'errore va nei log.
+    failures = 2;
+    expect(await act(cookie, grant)).toMatchObject({ ok: true });
+    expect(await audit()).toHaveLength(1);
+    expect(logged).toHaveBeenCalledOnce();
+    // Entrambe le concessioni sono avvenute.
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS n FROM workspace_entitlements WHERE workspace_id = 'w-a'",
+      ).first(),
+    ).toEqual({ n: 2 });
   });
 
   it("legge ogni sezione senza chiamare eBay o Stripe per conto dei negozi", async () => {
@@ -565,20 +680,16 @@ describe("trasferimento assistito di un negozio", () => {
     });
     if (prepared.result !== "prepared") return;
     // Soltanto l'admin che l'ha preparato lo conferma.
-    expect(
-      await confirmStoreTransfer(env.DB, { id: prepared.id, actor: "altro" }, at(now)),
-    ).toEqual({
+    expect(await confirmStoreTransfer(env, { id: prepared.id, actor: "altro" }, at(now))).toEqual({
       result: "expired",
     });
-    expect(
-      await confirmStoreTransfer(env.DB, { id: prepared.id, actor: "admin" }, at(now)),
-    ).toEqual({
+    expect(await confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now))).toEqual({
       result: "done",
       transfer: { storeId: "s-a", from: "w-a", to: "w-b" },
     });
     // Ripetuta, la conferma non esegue nulla di nuovo.
     expect(
-      await confirmStoreTransfer(env.DB, { id: prepared.id, actor: "admin" }, at(later(1000))),
+      await confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(later(1000))),
     ).toEqual({
       result: "already",
     });
@@ -616,8 +727,8 @@ describe("trasferimento assistito di un negozio", () => {
     const second = await prepare();
     if (first.result !== "prepared" || second.result !== "prepared") throw new Error();
     const results = await Promise.all([
-      confirmStoreTransfer(env.DB, { id: first.id, actor: "admin" }, at(now)),
-      confirmStoreTransfer(env.DB, { id: second.id, actor: "admin" }, at(later(1))),
+      confirmStoreTransfer(env, { id: first.id, actor: "admin" }, at(now)),
+      confirmStoreTransfer(env, { id: second.id, actor: "admin" }, at(later(1))),
     ]);
     expect(results.map(({ result }) => result).sort()).toEqual(["conflict", "done"]);
     expect(
@@ -629,13 +740,146 @@ describe("trasferimento assistito di un negozio", () => {
     const stale = await prepare({ storeId: "s-a2" });
     if (stale.result !== "prepared") throw new Error();
     expect(
-      await confirmStoreTransfer(env.DB, { id: stale.id, actor: "admin" }, at(later(31 * 60_000))),
+      await confirmStoreTransfer(env, { id: stale.id, actor: "admin" }, at(later(31 * 60_000))),
     ).toEqual({ result: "expired" });
     // La preparazione scaduta esce con la pulizia; quella eseguita resta un anno.
     await purgeExpiredRecords(env.DB, at(later(hour)));
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM store_transfers").first()).toEqual({
       n: 1,
     });
+  });
+  it("due conferme concorrenti dello stesso trasferimento ne eseguono una", async () => {
+    await stores();
+    const prepared = await prepare();
+    if (prepared.result !== "prepared") throw new Error();
+    const results = await Promise.all([
+      confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now)),
+      confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(later(1))),
+    ]);
+    expect(results.map(({ result }) => result).sort()).toEqual(["already", "done"]);
+    expect(
+      await env.DB.prepare("SELECT workspace_id FROM ebay_stores WHERE id = 's-a'").first(),
+    ).toEqual({ workspace_id: "w-b" });
+  });
+
+  it("rifiuta il trasferimento con una cancellazione dell'account in corso", async () => {
+    const { owner, buyer } = await stores();
+    const deletion = (userId: string) =>
+      env.DB.prepare(`INSERT INTO account_deletions (id, user_id, workspace_id, requested_at)
+        VALUES (?1, ?2, NULL, ?3)`).bind(crypto.randomUUID(), userId, now);
+    // Preparato prima che l'acquirente chieda la cancellazione: la conferma si ferma.
+    const prepared = await prepare();
+    if (prepared.result !== "prepared") throw new Error();
+    await deletion(buyer.userId).run();
+    expect(await prepare()).toEqual({ result: "account_deletion" });
+    expect(await confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now))).toEqual({
+      result: "account_deletion",
+    });
+    // Anche dal lato di chi cede il negozio.
+    await env.DB.prepare("DELETE FROM account_deletions").run();
+    await deletion(owner.userId).run();
+    expect(await prepare()).toEqual({ result: "account_deletion" });
+    expect(
+      await env.DB.prepare("SELECT workspace_id FROM ebay_stores WHERE id = 's-a'").first(),
+    ).toEqual({ workspace_id: "w-a" });
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM store_identity_marks").first()).toEqual({
+      n: 0,
+    });
+  });
+
+  it("il negozio porta i suoi limiti: prova e sblocchi dello spazio di partenza", async () => {
+    const { owner, buyer } = await stores();
+    const { cookie } = await admin();
+    // Chi cede ha usato la prova e due sblocchi nel ciclo in corso; chi riceve ha un proprio
+    // negozio, una prova in corso e uno sblocco nel suo ciclo.
+    await env.DB.batch([
+      insertEntitlement({
+        source: "trial",
+        startsAt: later(-20 * 24 * hour),
+        endsAt: later(-6 * 24 * hour),
+      }),
+      env.DB.prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota, used)
+        VALUES ('c-a', 'w-a', ?1, ?2, 5, 2)`).bind(now, later(7 * 24 * hour)),
+      insertStore({ id: "s-b", workspaceId: "w-b", ebayUserId: "e-b", linkedAt: later(hour) }),
+      env.DB.prepare(`INSERT INTO sync_state (store_id, last_success_at, updated_at)
+        VALUES ('s-b', ?1, ?1)`).bind(later(hour)),
+      insertEntitlement({
+        workspaceId: "w-b",
+        source: "trial",
+        startsAt: later(hour),
+        endsAt: later(15 * 24 * hour),
+      }),
+      env.DB.prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota, used)
+        VALUES ('c-b', 'w-b', ?1, ?2, 5, 1)`).bind(later(hour), later(8 * 24 * hour)),
+    ]);
+    // Dalla console: preparazione e conferma.
+    const prepared = (await act(cookie, {
+      intent: "transfer-prepare",
+      negozio: "s-a",
+      destinazione: "w-b",
+      motivo: "Cessione verificata",
+    })) as { ok: boolean; transfer: { id: string } };
+    expect(prepared).toMatchObject({ ok: true, transfer: { id: expect.any(String) } });
+    expect(
+      await act(cookie, { intent: "transfer-confirm", trasferimento: prepared.transfer.id }),
+    ).toMatchObject({ ok: true });
+    expect(
+      await env.DB.prepare(
+        "SELECT trial_used, cycle_used, cycle_quota FROM store_identity_marks",
+      ).all(),
+    ).toMatchObject({ results: [{ trial_used: 1, cycle_used: 2, cycle_quota: 5 }] });
+    expect(await audit()).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ operation: "transfer-received", outcome: "done" }),
+      ]),
+    );
+
+    // L'acquirente ricollega il negozio con il proprio consenso: la prova in corso termina e i
+    // due sblocchi del ciclo di partenza si aggiungono al suo.
+    const linkedAt = at(later(2 * hour));
+    const authorize = await beginLink(env, buyer.userId, linkedAt);
+    const state = new URL(authorize).searchParams.get("state")!;
+    const claimed = await claimStoreLinkSession(env.DB, state, linkedAt);
+    if (claimed?.kind !== "new") throw new Error("missing_link");
+    expect(
+      await completeStoreLink({
+        env,
+        link: claimed,
+        sessionUserId: buyer.userId,
+        search: new URLSearchParams({ state, code: "sintetico" }),
+        fetcher: syntheticEbay({ orders: [], userId: "s-a" }),
+        now: linkedAt,
+      }),
+    ).toBe("collegato");
+    const allowance = (await orderAllowance(env.DB, buyer.userId, linkedAt))!;
+    expect(allowance).toMatchObject({
+      premium: false,
+      coverage: null,
+      trialAvailable: false,
+      cycle: { id: "c-b", used: 3 },
+      remaining: 2,
+    });
+    expect((await listStores(env.DB, buyer.userId)).map((store) => store.id).sort()).toEqual([
+      "s-a",
+      "s-b",
+    ]);
+
+    // Il vecchio spazio non raggiunge più negozio e ordini dalle route Ordini ed export.
+    expect(
+      (
+        await routeResponse(ordersLoader, "/app/ordini/o-a", {
+          cookie: owner.cookie,
+          params: { ordine: "o-a" },
+        })
+      ).status,
+    ).toBe(404);
+    const exported = await routeResponse(exportAction, "/api/v1/orders/export?ordini=o-a", {
+      cookie: owner.cookie,
+      headers: { accept: "text/csv, application/json" },
+      fields: { language: "it" },
+    });
+    expect(exported.status).toBe(409);
+    expect(await exported.json()).toMatchObject({ ok: false });
   });
 });
 
@@ -819,6 +1063,16 @@ describe("quote delle API eBay", () => {
       expect(
         await act(cookie, { intent: "quota-attention", soglia, motivo: "Prova" }),
       ).toMatchObject({ status: 400 });
+    // I valori fuori intervallo restano nel registro come rifiuti.
+    expect(await audit()).toEqual(
+      ["49", "86", "sessanta"].map((soglia) => ({
+        operation: "quota-attention",
+        target: `setting:quota_attention:${soglia}`,
+        reason: "Prova",
+        outcome: "out_of_range",
+      })),
+    );
+    await env.DB.prepare("DELETE FROM admin_audit").run();
     expect(await act(cookie, { intent: "quota-attention", soglia: "60", motivo: "Prova" })).toEqual(
       {
         ok: true,
@@ -888,7 +1142,38 @@ describe("quote delle API eBay", () => {
         subject,
         severity,
       })),
-    ).toEqual([{ subject: "production:Trading", severity: "p2" }]);
+    ).toEqual([{ subject: "production:Trading:GetOrders", severity: "p2" }]);
+  });
+
+  it("nella stessa finestra la quota resta la stessa anomalia se cambiano chiamate o azzeramento", async () => {
+    const pooled = (name: string, count: number, reset: string, remaining = 1200) => ({
+      name,
+      rates: [{ count, limit: 5000, remaining, reset, timeWindow: 86_399 }],
+    });
+    const reset = "2026-09-14T07:00:00.000Z";
+    // Prima lettura: la quota condivisa con una sola chiamata oltre soglia nell'elenco.
+    await readEbayQuotas(env, analytics([pooled("GetOrders", 3800, reset)]).fetcher, at(now));
+    // Poi eBay elenca altre chiamate della stessa quota e sposta l'azzeramento di qualche secondo.
+    const shifted = "2026-09-14T06:59:57.000Z";
+    await readEbayQuotas(
+      env,
+      analytics([
+        pooled("GetOrders", 3000, shifted, 1100),
+        pooled("GetItem", 900, shifted, 1100),
+        pooled("AddItem", 0, shifted, 1100),
+      ]).fetcher,
+      at(later(hour)),
+    );
+    const anomalies = await env.DB.prepare(
+      "SELECT key, subject, resolved_at FROM admin_anomalies WHERE kind = 'ebay_quota'",
+    ).all();
+    expect(anomalies.results).toEqual([
+      {
+        key: `ebay_quota:production:Trading:GetOrders:${reset}`,
+        subject: "production:Trading:GetOrders",
+        resolved_at: null,
+      },
+    ]);
   });
 });
 
@@ -906,10 +1191,43 @@ describe("prestazioni da Analytics Engine", () => {
     expect(metricSql("pages", "fiscalbay_metrics", 2160)).toContain(
       "quantileExactWeighted(0.95)(double3, if(double3 >= 0, _sample_interval, 0)) AS lcp_p95_ms",
     );
+    // Numero, media e quantili delle invocazioni hanno la stessa unità: l'invocazione.
+    expect(metricSql("invocations", "fiscalbay_metrics", 24)).toContain(
+      "quantileExactWeighted(0.5)(double2, _sample_interval) AS p50_ms",
+    );
     // Dataset e finestra sono controllati: niente testo libero nella query.
     expect(() => metricSql("phases", "dati; DROP", 24)).toThrow("INVALID_DATASET");
     for (const hours of [0, 1.5, 2161])
       expect(() => metricSql("phases", "fiscalbay_metrics", hours)).toThrow("INVALID_WINDOW");
+  });
+
+  it("conta le invocazioni della coda per invocazione su un campione con pesi diversi", async () => {
+    // Campione controllato: un gruppo di quattro messaggi da 400 ms con peso 1 e tre invocazioni
+    // stimate da un messaggio e 100 ms ciascuna (peso 3). Le funzioni di Analytics Engine che D1
+    // non conosce (finestra e quantili) restano fuori: i quantili usano le stesse colonne.
+    const sql = metricSql("invocations", "metriche_campione", 24)
+      .replace(/timestamp > NOW\(\) - INTERVAL '24' HOUR/u, "1 = 1")
+      .replaceAll(/quantileExactWeighted\([\d.]+\)\(double2, _sample_interval\)/gu, "NULL")
+      .replace("FORMAT JSON", "");
+    await env.DB.prepare(
+      `CREATE TABLE metriche_campione (timestamp TEXT, blob1 TEXT, blob2 TEXT, blob3 TEXT,
+        blob4 TEXT, blob5 TEXT, double1 REAL, double2 REAL, _sample_interval REAL)`,
+    ).run();
+    try {
+      await env.DB.prepare(
+        `INSERT INTO metriche_campione VALUES
+          (?1, 'invocation', 'queue', 'sync', '', 'ok', 4, 400, 1),
+          (?1, 'invocation', 'queue', 'sync', '', 'ok', 1, 100, 3)`,
+      )
+        .bind(now)
+        .run();
+      const { results } = await env.DB.prepare(sql).all();
+      expect(results).toEqual([
+        expect.objectContaining({ invocation: "queue", count: 4, messages: 7, mean_ms: 175 }),
+      ]);
+    } finally {
+      await env.DB.prepare("DROP TABLE metriche_campione").run();
+    }
   });
 
   it("legge le tre query con il token di sola lettura e distingue i valori assenti dagli zeri", async () => {
@@ -1114,6 +1432,18 @@ describe("tempo CPU delle pagine dai Workers Logs", () => {
     expect("https://test.fiscalbay.it/app/negozi/collaudo-attivo").toMatch(
       filterOf("stores", "document"),
     );
+    // Il collegamento di un negozio è un'altra route, anche in inglese e come dati; i negozi con
+    // un nome vicino restano di Negozi.
+    for (const kind of ["document", "data"] as const) {
+      const stores = filterOf("stores", kind);
+      const suffix = kind === "data" ? ".data" : "";
+      for (const path of ["/app/negozi/collega", "/en/app/negozi/collega"])
+        expect(`https://test.fiscalbay.it${path}${suffix}?esito=ok`).not.toMatch(stores);
+      for (const detail of ["", "/c", "/coll", "/collegamento", "/collegb", "/xcollega", "/s-1"])
+        expect(`https://test.fiscalbay.it/app/negozi${detail}${suffix}`).toMatch(stores);
+    }
+    // Nessun segmento di Ordini è escluso: un ordine può chiamarsi come un percorso.
+    expect("https://test.fiscalbay.it/app/ordini/collega").toMatch(filterOf("orders", "document"));
   });
 
   it("controlla Worker e finestra e legge i valori senza confondere assenze e zeri", () => {
@@ -1139,6 +1469,30 @@ describe("tempo CPU delle pagine dai Workers Logs", () => {
       cpuP95Ms: null,
       wallP50Ms: null,
     });
+    const complete = (invocations: unknown) => [
+      { alias: "invocations", aggregates: [{ value: invocations }] },
+      { alias: "cpu_p50_ms", aggregates: [{ value: 4 }] },
+      { alias: "cpu_p95_ms", aggregates: [{ value: "9" }] },
+      { alias: "wall_p50_ms", aggregates: [{ value: 30 }] },
+    ];
+    expect(cpuValues(complete(3))).toEqual({
+      invocations: 3,
+      cpuP50Ms: 4,
+      cpuP95Ms: 9,
+      wallP50Ms: 30,
+    });
+    // Una risposta di forma diversa è una lettura non riuscita, non zero.
+    for (const calculations of [
+      [],
+      [{ alias: "invocations" }],
+      [{ alias: "invocations", aggregates: [{ value: "molti" }] }],
+      complete(null),
+      complete(3).slice(0, 3),
+      complete(3).map((entry) =>
+        entry.alias === "cpu_p95_ms" ? { ...entry, aggregates: [{ value: {} }] } : entry,
+      ),
+    ])
+      expect(cpuValues(calculations)).toBeNull();
   });
 });
 
@@ -1284,6 +1638,19 @@ describe("interruttori e ammissione", () => {
       {
         operation: "set-switch",
         target: "switch:ebay_calls:off",
+        reason: null,
+        outcome: "reason_required",
+      },
+      {
+        operation: "set-switch",
+        target: "switch:sql:off",
+        reason: "Incidente",
+        outcome: "invalid",
+      },
+      { operation: "set-switch", target: "switch:ebay_calls:x", reason: "x", outcome: "invalid" },
+      {
+        operation: "set-switch",
+        target: "switch:ebay_calls:off",
         reason: "Incidente",
         outcome: "done",
       },
@@ -1386,6 +1753,12 @@ describe("interruttori e ammissione", () => {
       {
         operation: "admit-waitlisted",
         target: "workspace:w-prima",
+        reason: null,
+        outcome: "reason_required",
+      },
+      {
+        operation: "admit-waitlisted",
+        target: "workspace:w-prima",
         reason: "Venditore noto",
         outcome: "done",
       },
@@ -1467,6 +1840,111 @@ describe("revisione antiabuso", () => {
     expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM abuse_reviews").first()).toEqual({
       n: 0,
     });
+  });
+  it("la sospensione vale per lo spazio finché resta l'esito e colpisce soltanto il Free", async () => {
+    const users = await Promise.all(
+      ["sosp.a@example.invalid", "sosp.b@example.invalid", "sosp.c@example.invalid"].map(
+        verifiedSession,
+      ),
+    );
+    const seller = users[1]!;
+    await env.DB.batch([
+      ...users.flatMap(({ userId }, index) => insertWorkspace({ id: `w-${index}`, userId })),
+      ...[0, 1].map((index) =>
+        env.DB.prepare(`UPDATE user_profiles SET account_type = 'business', company_name = ?
+          WHERE user_id = ?`).bind("Bianchi S.r.l.", users[index]!.userId),
+      ),
+      insertStore({ id: "s-1", workspaceId: "w-1" }),
+      env.DB.prepare(`INSERT INTO sync_state (store_id, last_success_at, updated_at)
+        VALUES ('s-1', ?1, ?1)`).bind(now),
+    ]);
+    const [signal] = await listAbuseSignals(env.DB, at(now));
+    const review = (outcome: "clear" | "suspended", key = signal!.key) =>
+      reviewAbuseSignal(
+        env.DB,
+        { key, outcome, workspaceId: "w-1", actor: "admin", reason: "Stessa attività" },
+        at(now),
+      );
+    const pauses = async () =>
+      (
+        await env.DB.prepare(
+          `SELECT store_id, reason, abuse_review FROM ebay_store_pauses
+            WHERE reason = 'admin' ORDER BY store_id`,
+        ).all()
+      ).results;
+    const sellerView = async () =>
+      (
+        (await callRoute(loadStores, "/app/negozi", {
+          cookie: seller.cookie,
+          params: {},
+        })) as unknown as { data: { page: { stores: { id: string; pauseReason?: string }[] } } }
+      ).data.page.stores;
+    expect((await orderAllowance(env.DB, seller.userId, at(now)))!.trialAvailable).toBe(true);
+    expect(await review("suspended")).toBe("done");
+    expect(await pauses()).toEqual([{ store_id: "s-1", reason: "admin", abuse_review: 1 }]);
+    // Il venditore la vede come oggi, la pausa dell'assistenza, e non riceve la prova.
+    expect(await sellerView()).toEqual([expect.objectContaining({ pauseReason: "admin" })]);
+    expect((await orderAllowance(env.DB, seller.userId, at(now)))!.trialAvailable).toBe(false);
+    expect(await requestStoreSync(env, seller.userId, "s-1", {}, at(now))).toBe("invalid");
+
+    // Eliminati i dati del negozio in pausa, un nuovo negozio collegato o scelto come attivo
+    // resta sospeso.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE ebay_stores SET data_deleted_at = ? WHERE id = 's-1'").bind(now),
+      insertStore({ id: "s-2", workspaceId: "w-1", ebayUserId: "e-2", linkedAt: later(hour) }),
+    ]);
+    await applyWorkspacePlan(env.DB, "w-1", at(later(hour)));
+    expect(await pauses()).toEqual([{ store_id: "s-2", reason: "admin", abuse_review: 1 }]);
+    expect(await chooseFreeStore(env.DB, seller.userId, "s-2", at(later(hour)))).toMatchObject({
+      result: "done",
+    });
+    expect(await pauses()).toEqual([{ store_id: "s-2", reason: "admin", abuse_review: 1 }]);
+    // La pausa manuale della console resta distinta: toglierla non tocca la sospensione,
+    // metterla la rende manuale.
+    expect(await setAdminPause(env.DB, "s-2", false, at(now))).toBe("invalid");
+    expect(await pauses()).toEqual([{ store_id: "s-2", reason: "admin", abuse_review: 1 }]);
+
+    // Con il Premium pagato le letture riprendono; finito, la sospensione torna.
+    await insertEntitlement({
+      workspaceId: "w-1",
+      source: "premium",
+      startsAt: later(hour),
+      endsAt: later(10 * 24 * hour),
+    }).run();
+    await applyWorkspacePlan(env.DB, "w-1", at(later(2 * hour)));
+    expect(await pauses()).toEqual([]);
+    vi.setSystemTime(at(later(2 * hour)));
+    expect(await sellerView()).toEqual([
+      expect.objectContaining({ id: "s-2", pauseReason: undefined }),
+    ]);
+    vi.setSystemTime(at(now));
+    await applyWorkspacePlan(env.DB, "w-1", at(later(11 * 24 * hour)));
+    expect(await pauses()).toEqual([{ store_id: "s-2", reason: "admin", abuse_review: 1 }]);
+
+    // Un nuovo spazio nel gruppo rende vecchia la segnalazione: la sospensione resta elencata.
+    await env.DB.prepare(`UPDATE user_profiles SET account_type = 'business', company_name = ?
+      WHERE user_id = ?`)
+      .bind("Bianchi Srl", users[2]!.userId)
+      .run();
+    const listed = await listAbuseSignals(env.DB, at(now));
+    expect(listed.find((item) => item.key === signal!.key)).toMatchObject({
+      current: false,
+      review: { outcome: "suspended", workspaceId: "w-1" },
+      workspaces: [{ id: "w-1" }],
+    });
+    // La console mette la propria pausa: resta anche dopo l'esito «nessun abuso».
+    expect(await setAdminPause(env.DB, "s-2", true, at(now))).toBe("done");
+    expect(await review("clear")).toBe("done");
+    expect(await pauses()).toEqual([{ store_id: "s-2", reason: "admin", abuse_review: 0 }]);
+    expect((await listStores(env.DB, seller.userId))[0]!.pauseReasons).toEqual(["admin"]);
+    expect(await setAdminPause(env.DB, "s-2", false, at(now))).toBe("done");
+    expect(await pauses()).toEqual([]);
+    await applyWorkspacePlan(env.DB, "w-1", at(later(12 * 24 * hour)));
+    expect(await pauses()).toEqual([]);
+    // Tolta la sospensione, la vecchia segnalazione non resta più elencata.
+    expect((await listAbuseSignals(env.DB, at(now))).map((item) => item.key)).not.toContain(
+      signal!.key,
+    );
   });
 });
 
@@ -1562,6 +2040,12 @@ describe("accesso tecnico con token", () => {
         reason: "Disservizio",
         outcome: "done",
       },
+      {
+        operation: "grant-premium",
+        target: "workspace:w-a",
+        reason: "Disservizio",
+        outcome: "foreign_origin",
+      },
     ]);
     expect(
       await env.DB.prepare(
@@ -1575,6 +2059,7 @@ describe("accesso tecnico con token", () => {
     ).toEqual({ used_at: now });
     // Le letture tecniche non affollano le ultime operazioni della panoramica.
     expect((await listAudit(env.DB, { changes: true })).map((entry) => entry.operation)).toEqual([
+      "grant-premium",
       "grant-premium",
     ]);
   });

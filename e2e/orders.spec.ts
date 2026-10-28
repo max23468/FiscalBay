@@ -508,8 +508,8 @@ test.describe("area reale", () => {
         .getByRole("status");
       await expect(status).toHaveText(
         it
-          ? "2 ordini. Per 1 ordine da sbloccare il Codice Fiscale resta vuoto."
-          : "2 orders. For 1 order to unlock, the tax code stays empty.",
+          ? "2 ordini. Per 1 ordine da sbloccare i dati fiscali restano vuoti."
+          : "2 orders. For 1 order to unlock, the tax data stays empty.",
       );
       // Nessun file prima della conferma: il download parte soltanto da «Crea file».
       const create = page.getByRole("button", {
@@ -1255,6 +1255,13 @@ test.describe("caricamento degli Ordini reali", () => {
       expect(sent).toHaveLength(1);
       expect(JSON.parse(sent[0]!)).toMatchObject({ page: name });
     }
+    // Aperti nel client da un documento di un'altra pagina, gli Ordini non hanno un caricamento
+    // proprio: le misure del documento sarebbero di Impostazioni.
+    await visit("/app/impostazioni");
+    await page.getByRole("link", { name: "Ordini", exact: true }).first().click();
+    await expect(page.getByRole("heading", { level: 1, name: "Ordini" })).toBeVisible();
+    await expect(page.getByRole("article").first()).toBeVisible();
+    expect(await reports()).toEqual([]);
   });
 });
 

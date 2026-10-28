@@ -39,7 +39,7 @@ export function missingContact(
 
 /** Piano, prova e sblocchi del ciclo: tutto ciò che la pagina Ordini usa dell'account. */
 export type OrdersAccount = Pick<AccountView, "plan" | "quota" | "trial"> &
-  Partial<Pick<AccountView, "trialAvailable">>;
+  Partial<Pick<AccountView, "trialAvailable" | "freeSuspended">>;
 
 export function identifierLabel(identifier: TaxIdentifierView, t: AppCopy) {
   return identifier.type === "OTHER"
@@ -65,8 +65,9 @@ export function contactCopyLabels(label: string, order: string, t: AppCopy) {
   };
 }
 
-/** Sblocchi rimasti nel ciclo; null senza limite (Premium). */
+/** Sblocchi rimasti nel ciclo; null senza limite (Premium), zero con il Free sospeso. */
 export function remainingUnlocks(account: OrdersAccount) {
+  if (account.freeSuspended) return 0;
   return account.quota ? Math.max(account.quota.limit - account.quota.used, 0) : null;
 }
 
