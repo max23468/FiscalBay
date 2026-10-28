@@ -13,6 +13,7 @@ import {
   runEbayAccountDeletion,
 } from "../app/domain/ebay-account-deletion.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
+import { bulkDataAnomalies } from "../app/domain/ebay-quotas.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import worker from "../workers/app";
@@ -1638,6 +1639,8 @@ it("la soglia Bulk Data Transfer apre un'anomalia della console fino alla fine d
   expect((await receive(ebayRequest(threshold("WARNING"))))?.status).toBe(204);
   expect((await receive(ebayRequest(threshold("REACHED"))))?.status).toBe(204);
   expect((await receive(ebayRequest(threshold("REACHED"))))?.status).toBe(204);
+  // Un avviso ritentato da eBay dopo la soglia raggiunta non abbassa gravità e conteggio.
+  expect((await receive(ebayRequest(threshold("WARNING"))))?.status).toBe(204);
   expect(await receipt()).toBeNull();
   expect(send).not.toHaveBeenCalled();
   const { results } = await env.DB.prepare(
@@ -1655,6 +1658,14 @@ it("la soglia Bulk Data Transfer apre un'anomalia della console fino alla fine d
     (await listAnomalies(env.DB, now)).filter((anomaly) => anomaly.kind === "ebay_bulk_data"),
   ).toMatchObject([
     { severity: "p1", subjects: [{ id: "production:US:PersonalFinancialData", href: "quote" }] },
+  ]);
+  expect(await bulkDataAnomalies(env.DB, now)).toMatchObject([
+    {
+      severity: "p1",
+      subject: "production:US:PersonalFinancialData",
+      share: 1,
+      until: "2026-10-31T00:00:00.000Z",
+    },
   ]);
   const closed = (await listAnomalies(env.DB, new Date("2026-10-31T00:00:00.000Z"))).filter(
     (anomaly) => anomaly.kind === "ebay_bulk_data",

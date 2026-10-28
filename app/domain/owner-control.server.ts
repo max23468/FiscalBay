@@ -402,10 +402,10 @@ async function quotasPanel(env: Env, fetcher: typeof fetch, now: Date): Promise<
         ),
       },
       {
-        title: copy.bulkData,
+        title: t.quotas.bulkData,
         rows: bulk.map((anomaly) => [
           `${copy.severityIcon[anomaly.severity]} ${anomaly.subject}`,
-          copy.since(at(anomaly.openedAt)),
+          `${percent(anomaly.share)} · ${t.quotas.until(at(anomaly.until))}`,
         ]),
       },
     ],

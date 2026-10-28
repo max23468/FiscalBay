@@ -94,7 +94,6 @@ export const ownerTelegramCopy = {
     over: "oltre la soglia",
     noRows: "Nessuna quota restituita da eBay",
   },
-  bulkData: "Soglie Bulk Data Transfer",
   commerce: {
     seatsTaken: (sold: number, gifted: number, reserved: number) =>
       `Venduti ${sold} · omaggio ${gifted} · prenotati ${reserved}`,
