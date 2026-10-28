@@ -1658,6 +1658,47 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       expect(await term("libero")).toBe(iso(at + 0.5 * day));
     });
 
+    it("con la copertura in corso la revoca dell'estensione riporta i termini all'anno, con trenta giorni", async () => {
+      const seller = await linkedSeller("estensione-revocata@example.invalid");
+      await resetOrderFixtures();
+      const at = Date.parse("2026-10-01T12:00:00.000Z");
+      const months = (from: number, count: number) => {
+        const date = new Date(from);
+        date.setUTCMonth(date.getUTCMonth() + count);
+        return date.getTime();
+      };
+      // Uno oltre l'anno, conservato dall'estensione di diciotto mesi; uno dentro l'anno.
+      const extended = at - 450 * day;
+      const recent = at - 60 * day;
+      await addOrder("esteso", seller.storeId, extended, months(extended, 18));
+      await addOrder("annuale", seller.storeId, recent, yearAfter(recent));
+      await coverage(seller.workspaceId, "admin", at - 500 * day, at + 30 * day);
+      await env.DB.prepare(
+        `INSERT INTO history_extensions (id, workspace_id, months, reason, actor, granted_at, revoked_at)
+         VALUES ('x-revocata', ?1, 18, 'Storico verificato', 'owner', ?2, ?3)`,
+      )
+        .bind(seller.workspaceId, iso(at - 500 * day), iso(at - day))
+        .run();
+      const expected = [
+        {
+          id: "annuale",
+          retention_until: iso(yearAfter(recent)),
+          purge_after: iso(yearAfter(recent)),
+        },
+        {
+          id: "esteso",
+          retention_until: iso(months(extended, 12)),
+          purge_after: iso(at + 30 * day),
+        },
+      ];
+      // Il cron rivede lo spazio per la revoca recente; ripetere non sposta i termini.
+      await applyFreePlans(env.DB, new Date(at));
+      expect(await terms()).toEqual(expected);
+      await applyFreePlans(env.DB, new Date(at + day));
+      await applyFreePlan(env.DB, seller.userId, new Date(at + day));
+      expect(await terms()).toEqual(expected);
+    });
+
     it("il piano mostra e registra la scelta del negozio attivo soltanto nel Free", async () => {
       const seller = await twoStores("piano-negozio@example.invalid");
       expect((await settingsPage(seller.cookie)).page.freeStore).toEqual({

@@ -591,7 +591,7 @@ it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito
     { body: { task: "owner_incidents", slot: now.toISOString() } },
     { body: { task: "account_deletion", slot: now.toISOString() } },
   ]);
-  expect(sendBatch).toHaveBeenNthCalledWith(2, [{ body: { syncStore: "webhook-store" } }]);
+  expect(sendBatch).toHaveBeenNthCalledWith(2, [{ body: { syncStores: ["webhook-store"] } }]);
   expect(sendBatch).toHaveBeenCalledTimes(2);
   expect(fetcher).not.toHaveBeenCalled();
 });

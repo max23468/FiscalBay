@@ -6,6 +6,7 @@
         "cloudflare.config.ts",
         "vitest.mutation.config.ts",
         "vitest.benchmark.config.ts",
+        "vitest.capacity.config.ts",
         "benchmarks/**/*.bench.ts"
       ],
       "ignoreDependencies": ["cloudflare"],

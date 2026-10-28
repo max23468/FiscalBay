@@ -72,6 +72,9 @@ describe("livello del gate dai file modificati", () => {
       ".github/workflows/ci.yml",
       ".github/actions/setup/action.yml",
       "benchmarks/orders.bench.ts",
+      "benchmarks/capacity.spec.ts",
+      "scripts/capacity.mjs",
+      "vitest.capacity.config.ts",
       "knip.json",
     ])
       assert.equal(fileLevel(file), "tooling", file);

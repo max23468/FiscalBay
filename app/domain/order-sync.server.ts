@@ -34,9 +34,17 @@ const toleranceMilliseconds = 60_000;
 const maxRetryDelaySeconds = 43_200;
 /** Budget di una lettura del negozio, cioè di un'invocazione del consumer. */
 const storeBudget = { calls: 12, pages: 3 };
-// Negozi valutati e accodati per esecuzione del cron, dai letti meno di recente: è anche il
-// massimo di messaggi di un invio a gruppi della coda.
-const dispatchLimit = 100;
+// Negozi valutati e accodati per esecuzione del cron, dai letti meno di recente. Con Premium
+// ogni dieci minuti e Free ogni trenta, un turno serve i Premium più un terzo dei Free: il caso
+// di riferimento ne chiede circa 85. Con gruppi da dieci i messaggi di un turno restano entro i
+// cento di un invio a gruppi della coda.
+const dispatchLimit = 300;
+/**
+ * Negozi di un messaggio del cron, letti in sequenza dalla stessa invocazione: ogni messaggio
+ * costa tre operazioni della coda, e un messaggio per negozio supererebbe le operazioni incluse
+ * nel piano. Le richieste manuali e i webhook restano a un negozio per messaggio.
+ */
+const syncGroupSize = 10;
 // Un turno accodato senza esito entro questo tempo si considera perso e si ripropone.
 const dispatchStaleMilliseconds = 60 * 60_000;
 const tokenMarginMilliseconds = 5 * 60_000;
@@ -174,10 +182,13 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
   // Nell'ordine di priorità: la coda consegna prima i negozi accodati prima.
   const claimed = claims.flatMap(({ results }) => results.map((row) => row.store_id));
   if (claimed.length === 0) return [];
+  const groups = Array.from({ length: Math.ceil(claimed.length / syncGroupSize) }, (_, index) =>
+    claimed.slice(index * syncGroupSize, (index + 1) * syncGroupSize),
+  );
   try {
-    await env.WORK_QUEUE.sendBatch(claimed.map((storeId) => ({ body: { syncStore: storeId } })));
+    await env.WORK_QUEUE.sendBatch(groups.map((syncStores) => ({ body: { syncStores } })));
   } catch (error) {
-    // Il turno torna libero e il prossimo trigger lo riprova.
+    // I turni tornano liberi e il prossimo trigger li riprova.
     await env.DB.prepare(
       `UPDATE sync_state SET dispatched_at = NULL
         WHERE store_id IN (SELECT value FROM json_each(?1)) AND dispatched_at = ?2`,
@@ -213,7 +224,12 @@ export type SyncRequestResult =
   /** Negozio scollegato, in pausa, da ricollegare o di uno spazio in lista d'attesa. */
   | "invalid";
 
-const syncMessageSchema = z.object({ syncStore: z.string().min(1).max(64) });
+const storeIdSchema = z.string().min(1).max(64);
+/** Un negozio, da una richiesta o da un webhook, oppure un gruppo accodato dal cron. */
+const syncMessageSchema = z.union([
+  z.object({ syncStore: storeIdSchema }),
+  z.object({ syncStores: z.array(storeIdSchema).min(1).max(syncGroupSize) }),
+]);
 
 export function isSyncMessage(body: unknown): body is z.infer<typeof syncMessageSchema> {
   return syncMessageSchema.safeParse(body).success;
@@ -294,11 +310,16 @@ export async function requestStoreSync(
   return "queued";
 }
 
+/** Lettura rinviata: un negozio occupato riprova poco dopo, un limite di eBay a fine attesa. */
+type Deferral = { delaySeconds: number; scope: "store" | "origin" };
+
 /**
- * Esegue dalla coda una richiesta manuale o un turno accodato dal cron. Una consegna ripetuta
- * dopo la lettura trova il lavoro già servito e non chiama eBay; un negozio occupato riprova
- * poco dopo, un limite di eBay alla scadenza dell'attesa. Gli altri errori restano fra gli
- * ultimi aggiornamenti e il negozio passa il turno: la lettura riprende con la cadenza del piano.
+ * Esegue dalla coda una richiesta manuale, un webhook o un gruppo di turni accodato dal cron.
+ * Una consegna ripetuta dopo la lettura trova il lavoro già servito e non chiama eBay; un
+ * negozio occupato riprova poco dopo, un limite di eBay alla scadenza dell'attesa. Gli altri
+ * errori restano fra gli ultimi aggiornamenti e il negozio passa il turno: la lettura riprende
+ * con la cadenza del piano. In un gruppo i negozi rinviati tornano al cron, che non li accoda
+ * prima della fine di un'attesa di eBay: il messaggio si chiude comunque.
  */
 export async function consumeStoreSync(
   message: Message<unknown>,
@@ -306,7 +327,36 @@ export async function consumeStoreSync(
   fetcher: typeof fetch = fetch,
   now = new Date(),
 ): Promise<void> {
-  const { syncStore } = syncMessageSchema.parse(message.body);
+  const body = syncMessageSchema.parse(message.body);
+  if ("syncStore" in body) {
+    const deferral = await serveStore(body.syncStore, env, fetcher, now);
+    if (deferral) message.retry({ delaySeconds: deferral.delaySeconds });
+    else message.ack();
+    return;
+  }
+  // In sequenza: un limite di eBay ferma anche i negozi che seguono.
+  for (const [index, storeId] of body.syncStores.entries()) {
+    const deferral = await serveStore(storeId, env, fetcher, now);
+    if (!deferral) continue;
+    const released = deferral.scope === "origin" ? body.syncStores.slice(index) : [storeId];
+    await env.DB.prepare(
+      `UPDATE sync_state SET dispatched_at = NULL
+        WHERE store_id IN (SELECT value FROM json_each(?1)) AND dispatched_at <= ?2`,
+    )
+      .bind(JSON.stringify(released), now.toISOString())
+      .run();
+    if (deferral.scope === "origin") break;
+  }
+  message.ack();
+}
+
+/** Legge un negozio dovuto e chiude il suo turno; restituisce il rinvio se la lettura attende. */
+async function serveStore(
+  storeId: string,
+  env: Env,
+  fetcher: typeof fetch,
+  now: Date,
+): Promise<Deferral | null> {
   const at = now.toISOString();
   const store = await env.DB.prepare(
     `SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment
@@ -317,7 +367,7 @@ export async function consumeStoreSync(
         AND ${activeStore("c", "s")} AND c.access_expires_at > ?2
         AND ${servedSql("s.workspace_id", "?3")} AND ${switchOnSql("ebay_calls")}`,
   )
-    .bind(syncStore, new Date(now.getTime() + tokenMarginMilliseconds).toISOString(), at)
+    .bind(storeId, new Date(now.getTime() + tokenMarginMilliseconds).toISOString(), at)
     .first<ActiveStore>();
   // Lavoro già servito o negozio non più attivo. Con il token in rinnovo o le chiamate eBay
   // spente la richiesta resta in D1 e il cron la riaccoda.
@@ -329,10 +379,7 @@ export async function consumeStoreSync(
         now,
       );
       // Attesa già nota: nessuna chiamata e nessun errore da registrare.
-      if (wait > 0) {
-        message.retry({ delaySeconds: Math.min(maxRetryDelaySeconds, wait) });
-        return;
-      }
+      if (wait > 0) return { delaySeconds: Math.min(maxRetryDelaySeconds, wait), scope: "origin" };
       const result = await acquireOrders({
         db: env.DB,
         storeId: store.store_id,
@@ -341,10 +388,7 @@ export async function consumeStoreSync(
         now,
         budget: { ...storeBudget },
       });
-      if (result === "busy") {
-        message.retry({ delaySeconds: 60 });
-        return;
-      }
+      if (result === "busy") return { delaySeconds: 60, scope: "store" };
       // Le notifiche dello spazio partono appena la lettura ha scritto gli ordini; il compito
       // periodico riprende quelle rimaste.
       await deliverTelegram(env, fetcher, now, { storeId: store.store_id }).catch(
@@ -352,15 +396,14 @@ export async function consumeStoreSync(
       );
     } catch (error) {
       logFailure({ error, operation: "order_acquisition" });
-      if (error instanceof UpstreamError && error.failure === "rate_limited") {
-        message.retry({
+      if (error instanceof UpstreamError && error.failure === "rate_limited")
+        return {
           delaySeconds: Math.min(
             maxRetryDelaySeconds,
             error.details.retryAfter ?? defaultRateLimitSeconds,
           ),
-        });
-        return;
-      }
+          scope: "origin",
+        };
       // Anche un tentativo fallito prima di iniziare, per esempio con un token che non si
       // apre, passa il turno e serve la richiesta: altrimenti il negozio resterebbe sempre il
       // primo della coda.
@@ -377,9 +420,9 @@ export async function consumeStoreSync(
   await env.DB.prepare(
     "UPDATE sync_state SET dispatched_at = NULL WHERE store_id = ? AND dispatched_at <= ?",
   )
-    .bind(syncStore, at)
+    .bind(storeId, at)
     .run();
-  message.ack();
+  return null;
 }
 
 /**

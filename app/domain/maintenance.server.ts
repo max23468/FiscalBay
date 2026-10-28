@@ -16,8 +16,10 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
   const at = now.toISOString();
   await db.batch([
     // Le FK eliminano anche buyer, articoli, fonti, verifiche, versioni e grant.
-    // Il trigger registra prima i riferimenti necessari a impedire il reimport.
-    db.prepare("DELETE FROM orders WHERE merged_into IS NULL AND purge_after <= ?").bind(at),
+    // Il trigger registra prima i riferimenti necessari a impedire il reimport. Il `+` lascia
+    // l'indice di `merged_into`, che vale per quasi ogni ordine, e fa leggere soltanto quelli
+    // scaduti dall'indice di `purge_after`.
+    db.prepare("DELETE FROM orders WHERE +merged_into IS NULL AND purge_after <= ?").bind(at),
     db.prepare("DELETE FROM webhook_receipts WHERE expires_at <= ?").bind(at),
     db.prepare('DELETE FROM "session" WHERE "expiresAt" <= ?').bind(at),
     db.prepare('DELETE FROM "verification" WHERE "expiresAt" <= ?').bind(at),
