@@ -288,9 +288,10 @@ export function needsDeploy(base, head) {
 }
 
 /**
- * Migration già presenti nella base e modificate o eliminate dal diff: il deploy confronta le
- * migration applicate con la versione distribuita e rifiuta ogni differenza, anche di un
- * commento, quindi il gate la ferma prima della PR. `before` e `after` leggono il file.
+ * Migration già presenti nella base e diverse dalla versione con cui sono entrate nella storia, o
+ * eliminate: il deploy confronta le migration applicate con quella versione e rifiuta ogni
+ * differenza, anche di un commento, quindi il gate la ferma prima della PR. Un ripristino della
+ * versione originale passa. `before` legge la versione originale, `after` quella del diff.
  */
 export function editedMigrations(files, before, after) {
   return files.filter((file) => {
@@ -298,6 +299,13 @@ export function editedMigrations(files, before, after) {
     const previous = before(file);
     return previous !== undefined && previous !== after(file);
   });
+}
+
+// Versione con cui un file è entrato nella storia di un commit; `undefined` se non c'è.
+function original(ref, file) {
+  if (show(ref, file) === undefined) return undefined;
+  const added = git("log", "--diff-filter=A", "--format=%H", "-1", ref, "--", file).trim();
+  return added ? show(added, file) : undefined;
 }
 
 // Versione di un file a un commit; `undefined` se manca o il confronto non è disponibile.
@@ -343,7 +351,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const before = committed ? option("--base") : (green ?? mergeBase);
   const edited = editedMigrations(
     files,
-    (file) => show(committed ? option("--base") : mergeBase, file),
+    (file) => original(committed ? option("--base") : mergeBase, file),
     (file) =>
       committed
         ? show(option("--head"), file)
