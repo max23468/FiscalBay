@@ -2,7 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 
 import { botCommands, ownerCommands, type BotCommand, type OwnerCommand } from "../bot-commands";
-import { readBounded, retryAfterSeconds, UpstreamError } from "./http.server";
+import { readUpstream, retryAfterSeconds, UpstreamError } from "./http.server";
 
 // Ogni Worker ha il proprio bot: quello del test non condivide nome, token, segreto o webhook con
 // Production. Senza i tre valori il servizio non compare e l'ingresso risponde 503. Token e
@@ -215,10 +215,38 @@ function rejection(description: string | undefined) {
   return undefined;
 }
 
+/** Risposta della Bot API; un corpo che non è JSON resta senza risposta, come uno di forma diversa. */
+function botReply(text: string) {
+  try {
+    return replySchema.safeParse(JSON.parse(text)).data;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * Chiamata alla Bot API con timeout, limite dei byte e la classificazione comune dei provider:
- * 429 con l'attesa indicata da Telegram, token non valido come credenziali, altri rifiuti come
- * `rejected` con lo stato. Il token sta nell'indirizzo e non entra mai in un errore o in un log.
+ * Stati della Bot API: 429 con l'attesa indicata da Telegram, token non valido (401 o 404) come
+ * credenziali, altri rifiuti come `rejected` con lo stato. Sotto 400 decide il corpo.
+ */
+function botStatus(response: Response, text: string, now?: number): UpstreamError | null {
+  const { status } = response;
+  if (status < 400) return null;
+  const reply = botReply(text);
+  if (status === 429) {
+    const retryAfter =
+      reply?.parameters?.retry_after ??
+      retryAfterSeconds(response.headers.get("retry-after"), now) ??
+      undefined;
+    return new UpstreamError("rate_limited", { status, retryAfter });
+  }
+  if (status >= 500) return new UpstreamError("unavailable", { status });
+  if (status === 401 || status === 404) return new UpstreamError("credentials", { status });
+  return new UpstreamError("rejected", { status, providerCode: rejection(reply?.description) });
+}
+
+/**
+ * Chiamata alla Bot API con timeout, limite dei byte e la classificazione comune dei provider.
+ * Il token sta nell'indirizzo e non entra mai in un errore o in un log.
  */
 async function botApi<Schema extends z.ZodType>(
   env: Env,
@@ -227,39 +255,18 @@ async function botApi<Schema extends z.ZodType>(
   schema: Schema,
   fetcher: typeof fetch,
 ): Promise<z.infer<Schema>> {
-  let response: Response;
-  let text: string;
-  try {
-    response = await fetcher(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, {
+  const { status, text } = await readUpstream(
+    fetcher,
+    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,
+    {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(params),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-    const bytes = await readBounded(response, maxBytes);
-    if (!bytes) throw new UpstreamError("invalid_response", { status: response.status });
-    text = new TextDecoder().decode(bytes);
-  } catch (error) {
-    if (error instanceof UpstreamError) throw error;
-    throw new UpstreamError("unavailable");
-  }
-  // Un corpo che non è JSON resta senza risposta leggibile, come uno di forma diversa.
-  const reply = await new Response(text).json().then(
-    (payload: unknown) => replySchema.safeParse(payload).data,
-    () => undefined,
+    },
+    { timeoutMs, maxBytes },
+    botStatus,
   );
-  const { status } = response;
-  if (status === 429) {
-    const retryAfter =
-      reply?.parameters?.retry_after ??
-      retryAfterSeconds(response.headers.get("retry-after")) ??
-      undefined;
-    throw new UpstreamError("rate_limited", { status, retryAfter });
-  }
-  if (status >= 500) throw new UpstreamError("unavailable", { status });
-  if (status === 401 || status === 404) throw new UpstreamError("credentials", { status });
-  if (status >= 400)
-    throw new UpstreamError("rejected", { status, providerCode: rejection(reply?.description) });
+  const reply = botReply(text);
   if (!reply?.ok) throw new UpstreamError("invalid_response", { status });
   const result = schema.safeParse(reply.result);
   if (!result.success) throw new UpstreamError("invalid_response", { status });

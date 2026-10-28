@@ -1,6 +1,7 @@
 import { priceGeneration } from "../catalog";
 import { stripeEnvironment } from "../integrations/stripe.server";
-import { activeCoverageSql } from "./grants.server";
+import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
+import { dayMilliseconds } from "../time";
 
 /**
  * KPI della console (§31): conteggi aggregati con finestra e denominatore espliciti, calcolati
@@ -51,8 +52,6 @@ const lagTargetMinutes = 30;
 const referenceStores = 150;
 /** Soglia prudenziale del singolo database D1. */
 const databaseBudgetBytes = 8 * 1024 ** 3;
-
-const day = 86_400_000;
 
 /** Istante di Better Auth in giorni giuliani, salvato come testo ISO o come millisecondi. */
 const julian = (column: string) =>
@@ -283,9 +282,7 @@ async function operations(db: D1Database, from: string, to: string) {
           COALESCE(SUM(quota), 0) AS quota, COALESCE(SUM(used = quota), 0) AS exhausted
         FROM free_cycles f WHERE julianday(f.starts_at) <= julianday(?1)
           AND julianday(f.ends_at) > julianday(?1)
-          AND NOT EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = f.workspace_id
-            AND e.revoked_at IS NULL AND julianday(e.starts_at) <= julianday(?1)
-            AND (e.ends_at IS NULL OR julianday(e.ends_at) > julianday(?1)))`)
+          AND NOT ${activeEntitlementSql("f.workspace_id", "?1")}`)
       .bind(to),
     db.prepare(`SELECT (SELECT COUNT(*) FROM workspace_funnel_steps) AS steps,
         (SELECT COUNT(*) FROM sync_daily) AS days, (SELECT COUNT(*) FROM sync_runs) AS runs`),
@@ -331,7 +328,7 @@ async function operations(db: D1Database, from: string, to: string) {
  */
 export async function productMetrics(env: Env, days: MetricWindow, now = new Date()) {
   const to = now.toISOString();
-  const from = new Date(now.getTime() - days * day).toISOString();
+  const from = new Date(now.getTime() - days * dayMilliseconds).toISOString();
   // La dimensione del database arriva con i metadati di qualsiasi lettura.
   const [cohort, money, ops, size] = await Promise.all([
     funnel(env.DB, from, to),

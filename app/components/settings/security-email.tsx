@@ -8,7 +8,7 @@ import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import type { PendingEmailChange } from "../../domain/email-change.server";
-import { SecurityGroup } from "./security-rows";
+import { Group } from "./controls";
 
 /** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
 export function EmailChange({
@@ -26,7 +26,7 @@ export function EmailChange({
   const v = useFieldErrors(t.validation);
   const ready = useHydrated();
   return (
-    <SecurityGroup id="security-email" title={profile.email}>
+    <Group id="security-email" title={profile.email}>
       <div className="flex flex-col items-start gap-x-4 gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <span className="min-w-0 break-all sm:flex-1 sm:basis-48">{email}</span>
         {open ? null : (
@@ -101,6 +101,6 @@ export function EmailChange({
           {profile.emailHint}
         </p>
       )}
-    </SecurityGroup>
+    </Group>
   );
 }

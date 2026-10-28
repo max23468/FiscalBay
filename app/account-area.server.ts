@@ -28,6 +28,8 @@ export type AccountArea = {
   preferences: Preferences;
   /** Fuso del dispositivo comunicato dal browser, se noto. */
   detectedTimeZone: string | null;
+  /** Fuso delle date mostrate: quello scelto, altrimenti quello del dispositivo. */
+  timeZone: string;
 };
 
 /** Sessione corrente, misurata nella fase Auth. */
@@ -137,13 +139,15 @@ export async function requireAccountArea(
     });
   }
   const { firstName, lastName } = status!.profile!;
+  const detected = detectedTimeZone(request.headers.get("cookie"));
   return {
     language,
     session,
     profile: status!.profile!,
     account: { name: `${firstName} ${lastName}`, email: session.user.email },
     preferences: preferences!,
-    detectedTimeZone: detectedTimeZone(request.headers.get("cookie")),
+    detectedTimeZone: detected,
+    timeZone: effectiveTimeZone(preferences!.timeZone, detected),
   };
 }
 
@@ -154,10 +158,7 @@ export async function shellData(
   now = new Date(),
 ): Promise<ShellData> {
   const { session, preferences, language } = area;
-  const display = {
-    theme: preferences.theme,
-    timeZone: effectiveTimeZone(preferences.timeZone, area.detectedTimeZone),
-  };
+  const display = { theme: preferences.theme, timeZone: area.timeZone };
   if (!session.user.emailVerified) return { display, notifications: null, now: now.toISOString() };
   const notifications = await measure("d1", "notifications", async () =>
     listNotifications(

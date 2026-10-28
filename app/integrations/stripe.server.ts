@@ -236,6 +236,21 @@ export async function expireCheckout(stripe: Stripe, sessionId: string) {
   await stripe.checkout.sessions.expire(sessionId);
 }
 
+/** Chiude una sessione Checkout ancora aperta e la restituisce come è ora su Stripe. */
+export async function closeCheckoutSession(stripe: Stripe, sessionId: string) {
+  const session = await stripeCall(() => stripe.checkout.sessions.retrieve(sessionId));
+  if (session.status !== "open") return session;
+  try {
+    await expireCheckout(stripe, sessionId);
+  } catch (error) {
+    // Completata un istante prima della chiusura: vale il suo esito.
+    const latest = await stripeCall(() => stripe.checkout.sessions.retrieve(sessionId));
+    if (latest.status === "open") throw error;
+    return latest;
+  }
+  return { ...session, status: "expired" as const };
+}
+
 export async function verifyStripeEvent(
   body: string,
   signature: string,

@@ -17,7 +17,7 @@ import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "./token-refresh.server";
 import { sendReconnectNotices } from "./reconnect-notices.server";
 import { recoverWebhookIngress } from "../webhooks.server";
-import { taskPeriods, type ScheduledTask } from "./work-timing";
+import { queueRetryDelay, taskPeriods, type ScheduledTask } from "./work-timing";
 
 export type { ScheduledTask };
 
@@ -240,13 +240,15 @@ export async function consumeTask(
       .run();
     message.ack();
   } catch (error) {
+    // Una pulizia non riuscita lascia scadere il blocco: l'errore resta quello del compito.
     await env.DB.prepare(
       "UPDATE scheduled_tasks SET lease = NULL, locked_until = NULL WHERE task = ? AND slot = ? AND lease = ?",
     )
       .bind(task, slot, lease)
-      .run();
+      .run()
+      .catch((cleanup: unknown) => logFailure({ error: cleanup, operation: task }));
     logFailure({ error, operation: task });
-    message.retry({ delaySeconds: Math.min(3600, 30 * 2 ** (message.attempts - 1)) });
+    message.retry({ delaySeconds: queueRetryDelay(message.attempts) });
   }
 }
 

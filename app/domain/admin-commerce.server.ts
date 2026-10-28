@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { priceGeneration, type PremiumOffer } from "../catalog";
+import { priceGeneration, priceVariable, type PremiumOffer } from "../catalog";
 import { logFailure } from "../errors";
 import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../integrations/stripe.server";
 import { freeQuotaSettings } from "./grants.server";
 import { lifetimeSlots } from "./lifetime.server";
+import { dayMilliseconds } from "../time";
 
 /**
  * Vista commerciale della console (§6, §15): posti lifetime, incassi e loro storni, promozioni e
@@ -85,7 +86,7 @@ export type Revenue = {
 
 export async function revenue(env: Env, now = new Date()): Promise<Revenue> {
   const db = env.DB;
-  const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+  const since = new Date(now.getTime() - 30 * dayMilliseconds).toISOString();
   const select = `SELECT id, workspace_id AS workspaceId,
       (SELECT u.email FROM workspace_members wm JOIN "user" u ON u.id = wm.user_id
         WHERE wm.workspace_id = workspace_entitlements.workspace_id
@@ -126,12 +127,6 @@ export type PriceCheck = {
   /** Motivo della differenza dal listino. */
   mismatch?: string;
 };
-
-const priceVariable = {
-  monthly: "STRIPE_PRICE_MONTHLY",
-  annual: "STRIPE_PRICE_ANNUAL",
-  lifetime: "STRIPE_PRICE_LIFETIME",
-} as const satisfies Record<PremiumOffer, keyof Env>;
 
 /**
  * Listino in vigore confrontato con i prezzi configurati su Stripe: importo, valuta, imposte,

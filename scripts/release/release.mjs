@@ -340,111 +340,124 @@ export function readReceipt(directory, manifest) {
   return receipt;
 }
 
-async function main() {
-  const { values, positionals } = parseArgs({
-    allowPositionals: true,
-    options: {
-      environment: { type: "string", default: "test" },
-      "reviewed-migrations": { type: "string", default: "" },
-      "expected-sha": { type: "string" },
-      "receipt-prefix": { type: "string" },
-      base: { type: "string" },
-    },
-  });
-  const environment = values.environment;
-  const target = targets[environment];
-  if (!target) throw new Error("Ambiente non supportato.");
-  const command = positionals[0];
-  if (command === "review") {
-    if (!/^[0-9a-f]{40}$/u.test(values.base ?? "")) throw new Error("Base della PR richiesta.");
-    const added = addedMigrations(values.base, "HEAD");
-    const digest = reviewAdded(added, process.env.PR_BODY);
-    console.log(
-      digest
-        ? `Migration non additive approvate nella PR: ${digest}.`
-        : "Nessuna migration non additiva aggiunta.",
+/** Via Production: interruttore del workflow e approvazione dell'owner sullo stesso commit. */
+export function assertProductionApproval(manifest, expectedSha, env) {
+  if (
+    env.PRODUCTION_PUBLISH_ENABLED !== "true" ||
+    env.OWNER_APPROVED_SHA !== manifest.sha ||
+    expectedSha !== manifest.sha
+  )
+    throw new Error("Manca il via Production sul commit atteso.");
+}
+
+/** Vero al primo tentativo della run: non c'è una ricevuta precedente da ripristinare. */
+export function firstAttempt(runId, attempt, prefix) {
+  if (!/^\d+$/u.test(runId ?? "") || !["deployed", "release-receipt"].includes(prefix))
+    throw new Error("Run o ricevuta non identificata.");
+  return attempt <= 1;
+}
+
+/** Vero se la ricevuta richiede il ritorno alla versione precedente; errore se non è sicuro. */
+export function rollbackRequired(receipt) {
+  if (!receipt.deployed || !receipt.previous) return false;
+  if (!receipt.rollbackCompatible)
+    throw new Error(
+      receipt.schemaChanged
+        ? "Rollback automatico escluso: schema modificato, serve forward-fix o compatibilità qualificata."
+        : "Rollback automatico escluso: versione precedente senza provenienza attestata o con migration e configurazione diverse.",
     );
-    return;
-  }
-  if (command === "readiness") {
-    productionReadiness(readFileSync("docs/MASTER_PLAN.md", "utf8"));
-    return;
-  }
-  if (command === "manifest") {
-    writeFileSync(
-      `${output}/release-manifest.json`,
-      JSON.stringify(manifests(environment), null, 2),
+  return true;
+}
+
+/** La conferma vale soltanto per il candidato ancora in testa e ancora distribuito. */
+export function assertConfirmable(manifest, receipt, remote, current) {
+  if (
+    remote !== manifest.sha ||
+    !receipt.readback ||
+    receipt.rolledBack ||
+    current.version !== receipt.version ||
+    current.identity !== releaseIdentity(manifest)
+  )
+    throw new Error("Distribuzione o candidato cambiato: release rifiutata.");
+}
+
+/** Righe per `GITHUB_OUTPUT` e riepilogo del passo dopo un deploy riuscito. */
+export function deployReport(state) {
+  return {
+    output: `deployed=true\nversion=${state.version}\nrollback-compatible=${state.rollbackCompatible === true}\nprevious=${state.previous || ""}\n`,
+    summary: `\n### Distribuzione e readback\n\nCommit ${state.sha}; tree ${state.tree}; SHA256 ${state.digest}; versione ${state.version}; schema ${state.schema.length} migration. Collaudo browser nel passo successivo.\n`,
+  };
+}
+
+function reviewMigrations(base) {
+  if (!/^[0-9a-f]{40}$/u.test(base ?? "")) throw new Error("Base della PR richiesta.");
+  const added = addedMigrations(base, "HEAD");
+  const digest = reviewAdded(added, process.env.PR_BODY);
+  console.log(
+    digest
+      ? `Migration non additive approvate nella PR: ${digest}.`
+      : "Nessuna migration non additiva aggiunta.",
+  );
+}
+
+const readPlan = () => readFileSync("docs/MASTER_PLAN.md", "utf8");
+
+function writeManifest(environment) {
+  writeFileSync(`${output}/release-manifest.json`, JSON.stringify(manifests(environment), null, 2));
+}
+
+/** Ricevuta del tentativo precedente della stessa run, per riprendere un deploy interrotto. */
+function restoreReceipt(manifest, prefix) {
+  const runId = process.env.GITHUB_RUN_ID;
+  const attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
+  if (firstAttempt(runId, attempt, prefix)) return;
+  const pages = JSON.parse(
+    execFileSync(
+      "gh",
+      [
+        "api",
+        "--paginate",
+        "--slurp",
+        `repos/${process.env.GH_REPO}/actions/runs/${runId}/artifacts?per_page=100`,
+      ],
+      { encoding: "utf8" },
+    ),
+  );
+  const artifact = receiptArtifact(
+    pages.flatMap((page) => page.artifacts),
+    prefix,
+    runId,
+    attempt,
+  );
+  if (!artifact) return;
+  const directory = mkdtempSync(path.join(tmpdir(), "release-receipt-"));
+  try {
+    execFileSync(
+      "gh",
+      [
+        "run",
+        "download",
+        runId,
+        "--repo",
+        process.env.GH_REPO,
+        "--name",
+        artifact.name,
+        "--dir",
+        directory,
+      ],
+      { stdio: "inherit" },
     );
-    return;
+    const receipt = readReceipt(directory, manifest);
+    if (!receipt) return;
+    mkdirSync("reports", { recursive: true });
+    writeFileSync("reports/release.json", JSON.stringify(receipt, null, 2));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
   }
-  const manifest = verify(environment);
-  if (command === "restore") {
-    const runId = process.env.GITHUB_RUN_ID;
-    const attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
-    const prefix = values["receipt-prefix"];
-    if (!/^\d+$/u.test(runId ?? "") || !["deployed", "release-receipt"].includes(prefix))
-      throw new Error("Run o ricevuta non identificata.");
-    if (attempt <= 1) return;
-    const pages = JSON.parse(
-      execFileSync(
-        "gh",
-        [
-          "api",
-          "--paginate",
-          "--slurp",
-          `repos/${process.env.GH_REPO}/actions/runs/${runId}/artifacts?per_page=100`,
-        ],
-        { encoding: "utf8" },
-      ),
-    );
-    const artifact = receiptArtifact(
-      pages.flatMap((page) => page.artifacts),
-      prefix,
-      runId,
-      attempt,
-    );
-    if (!artifact) return;
-    const directory = mkdtempSync(path.join(tmpdir(), "release-receipt-"));
-    try {
-      execFileSync(
-        "gh",
-        [
-          "run",
-          "download",
-          runId,
-          "--repo",
-          process.env.GH_REPO,
-          "--name",
-          artifact.name,
-          "--dir",
-          directory,
-        ],
-        { stdio: "inherit" },
-      );
-      const receipt = readReceipt(directory, manifest);
-      if (!receipt) return;
-      mkdirSync("reports", { recursive: true });
-      writeFileSync("reports/release.json", JSON.stringify(receipt, null, 2));
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-    return;
-  }
-  if (command === "verify") {
-    console.log("Provenienza dell'artefatto confermata.");
-    return;
-  }
-  if (!["deploy", "rollback", "confirm"].includes(command))
-    throw new Error("Comando non supportato.");
-  if (environment === "production") {
-    if (
-      process.env.PRODUCTION_PUBLISH_ENABLED !== "true" ||
-      process.env.OWNER_APPROVED_SHA !== manifest.sha ||
-      values["expected-sha"] !== manifest.sha
-    )
-      throw new Error("Manca il via Production sul commit atteso.");
-    productionReadiness(readFileSync("docs/MASTER_PLAN.md", "utf8"));
-  }
+}
+
+/** Accesso al Worker e al D1 dell'ambiente con `cf` e l'API REST Cloudflare. */
+function provider(target) {
   const cf = (...args) =>
     execFileSync("pnpm", ["exec", "cf", ...args], {
       encoding: "utf8",
@@ -506,69 +519,62 @@ async function main() {
       ? (await query("SELECT name FROM d1_migrations ORDER BY id")).map(({ name }) => name)
       : [];
   };
-  const receiptFile = "reports/release.json";
-  const receipt = existsSync(receiptFile) ? JSON.parse(readFileSync(receiptFile, "utf8")) : {};
-  if (command === "confirm") {
-    assertResume(receipt, manifest);
-    // Sul test la conferma chiude il job di deploy: richiede anche il collaudo remoto completo.
-    // Production lo verifica in `release-notes.mjs`, prima del tag.
-    if (environment === "test")
-      for (const name of ["test-smoke", "test-pages"]) {
-        const evidence = `test-results/browser/${name}.json`;
-        if (!existsSync(evidence)) throw new Error(`Collaudo remoto non disponibile: ${name}.`);
-        assertTestEvidence(JSON.parse(readFileSync(evidence, "utf8")), manifest.sha);
-      }
-    const remote = git("ls-remote", "origin", `refs/heads/${target.ref}`).split(/\s/u)[0];
-    const current = await currentVersion();
-    if (
-      remote !== manifest.sha ||
-      !receipt.readback ||
-      receipt.rolledBack ||
-      current.version !== receipt.version ||
-      current.identity !== releaseIdentity(manifest)
-    )
-      throw new Error("Distribuzione o candidato cambiato: release rifiutata.");
-    await liveReadback(current.version);
-    return;
-  }
-  if (command === "rollback") {
-    assertResume(Object.keys(receipt).length ? receipt : null, manifest);
-    if (!receipt.deployed || !receipt.previous) return;
-    if (!receipt.rollbackCompatible)
-      throw new Error(
-        receipt.schemaChanged
-          ? "Rollback automatico escluso: schema modificato, serve forward-fix o compatibilità qualificata."
-          : "Rollback automatico escluso: versione precedente senza provenienza attestata o con migration e configurazione diverse.",
-      );
-    const current = activeDeployment();
-    if (current?.versions.length !== 1 || current.versions[0].version_id !== receipt.version)
-      throw new Error("Stato remoto cambiato: rollback rifiutato.");
-    cf(
-      "workers",
-      "deployments",
-      "create",
-      "--worker",
-      target.worker,
-      "--body",
-      JSON.stringify({
-        strategy: "percentage",
-        versions: [{ version_id: receipt.previous, percentage: 100 }],
-        annotations: { "workers/message": "Collaudo non superato" },
-      }),
-    );
-    const after = activeDeployment();
-    if (after?.versions[0]?.version_id !== receipt.previous || after.versions[0].percentage !== 100)
-      throw new Error("Rollback non confermato.");
-    await liveReadback(receipt.previous);
-    writeFileSync(receiptFile, JSON.stringify({ ...receipt, rolledBack: true }, null, 2));
-    return;
-  }
+  return { cf, config, database, activeDeployment, currentVersion, liveReadback, applied };
+}
+
+const receiptFile = "reports/release.json";
+const remoteHead = (target) =>
+  git("ls-remote", "origin", `refs/heads/${target.ref}`).split(/\s/u)[0];
+
+async function confirmRelease(manifest, environment, target, remote, receipt) {
+  assertResume(receipt, manifest);
+  // Sul test la conferma chiude il job di deploy: richiede anche il collaudo remoto completo.
+  // Production lo verifica in `release-notes.mjs`, prima del tag.
+  if (environment === "test")
+    for (const name of ["test-smoke", "test-pages"]) {
+      const evidence = `test-results/browser/${name}.json`;
+      if (!existsSync(evidence)) throw new Error(`Collaudo remoto non disponibile: ${name}.`);
+      assertTestEvidence(JSON.parse(readFileSync(evidence, "utf8")), manifest.sha);
+    }
+  const head = remoteHead(target);
+  const current = await remote.currentVersion();
+  assertConfirmable(manifest, receipt, head, current);
+  await remote.liveReadback(current.version);
+}
+
+async function rollbackRelease(manifest, target, remote, receipt) {
+  assertResume(Object.keys(receipt).length ? receipt : null, manifest);
+  if (!rollbackRequired(receipt)) return;
+  const current = remote.activeDeployment();
+  if (current?.versions.length !== 1 || current.versions[0].version_id !== receipt.version)
+    throw new Error("Stato remoto cambiato: rollback rifiutato.");
+  remote.cf(
+    "workers",
+    "deployments",
+    "create",
+    "--worker",
+    target.worker,
+    "--body",
+    JSON.stringify({
+      strategy: "percentage",
+      versions: [{ version_id: receipt.previous, percentage: 100 }],
+      annotations: { "workers/message": "Collaudo non superato" },
+    }),
+  );
+  const after = remote.activeDeployment();
+  if (after?.versions[0]?.version_id !== receipt.previous || after.versions[0].percentage !== 100)
+    throw new Error("Rollback non confermato.");
+  await remote.liveReadback(receipt.previous);
+  writeFileSync(receiptFile, JSON.stringify({ ...receipt, rolledBack: true }, null, 2));
+}
+
+async function deployRelease(manifest, target, remote, receipt, reviewed) {
+  const { cf, config, database, currentVersion, liveReadback, applied } = remote;
   const state = await publish(
     manifest,
     {
       assertCurrent: async () => {
-        const remote = git("ls-remote", "origin", `refs/heads/${target.ref}`).split(/\s/u)[0];
-        if (remote !== manifest.sha)
+        if (remoteHead(target) !== manifest.sha)
           throw new Error("Candidato superato: il branch remoto è avanzato.");
       },
       preflight: async () => {
@@ -598,7 +604,7 @@ async function main() {
           })),
           names,
           // L'approvazione esplicita del dispatch prevale su quella della PR integrata.
-          values["reviewed-migrations"] || declaredReview(process.env.PR_BODY),
+          reviewed || declaredReview(process.env.PR_BODY),
           receipt.migrationPlan,
         );
       },
@@ -653,16 +659,48 @@ async function main() {
     },
     receipt,
   );
-  if (process.env.GITHUB_OUTPUT)
-    appendFileSync(
-      process.env.GITHUB_OUTPUT,
-      `deployed=true\nversion=${state.version}\nrollback-compatible=${state.rollbackCompatible === true}\nprevious=${state.previous || ""}\n`,
-    );
+  const report = deployReport(state);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, report.output);
   if (process.env.GITHUB_STEP_SUMMARY)
-    appendFileSync(
-      process.env.GITHUB_STEP_SUMMARY,
-      `\n### Distribuzione e readback\n\nCommit ${state.sha}; tree ${state.tree}; SHA256 ${state.digest}; versione ${state.version}; schema ${state.schema.length} migration. Collaudo browser nel passo successivo.\n`,
-    );
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, report.summary);
+}
+
+async function main() {
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: {
+      environment: { type: "string", default: "test" },
+      "reviewed-migrations": { type: "string", default: "" },
+      "expected-sha": { type: "string" },
+      "receipt-prefix": { type: "string" },
+      base: { type: "string" },
+    },
+  });
+  const environment = values.environment;
+  const target = targets[environment];
+  if (!target) throw new Error("Ambiente non supportato.");
+  const command = positionals[0];
+  if (command === "review") return reviewMigrations(values.base);
+  if (command === "readiness") return productionReadiness(readPlan());
+  if (command === "manifest") return writeManifest(environment);
+  // Ogni altro comando, anche sconosciuto, parte dalla provenienza verificata dell'artefatto.
+  const manifest = verify(environment);
+  if (command === "restore") return restoreReceipt(manifest, values["receipt-prefix"]);
+  if (command === "verify") {
+    console.log("Provenienza dell'artefatto confermata.");
+    return;
+  }
+  if (!["deploy", "rollback", "confirm"].includes(command))
+    throw new Error("Comando non supportato.");
+  if (environment === "production") {
+    assertProductionApproval(manifest, values["expected-sha"], process.env);
+    productionReadiness(readPlan());
+  }
+  const remote = provider(target);
+  const receipt = existsSync(receiptFile) ? JSON.parse(readFileSync(receiptFile, "utf8")) : {};
+  if (command === "confirm") return confirmRelease(manifest, environment, target, remote, receipt);
+  if (command === "rollback") return rollbackRelease(manifest, target, remote, receipt);
+  await deployRelease(manifest, target, remote, receipt, values["reviewed-migrations"]);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

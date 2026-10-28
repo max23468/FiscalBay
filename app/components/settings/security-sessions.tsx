@@ -3,7 +3,8 @@ import { useTimeZone } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import type { ActiveSession } from "../../domain/sessions.server";
 import { formatDate, formatRelative } from "../../format";
-import { MethodRow, SecurityGroup } from "./security-rows";
+import { Group } from "./controls";
+import { MethodRow } from "./security-rows";
 
 /** Sessioni aperte: si chiudono una alla volta o tutte tranne quella in uso, che esce dal menu. */
 export function SessionList({
@@ -21,7 +22,7 @@ export function SessionList({
     language,
   } = useCopy();
   return (
-    <SecurityGroup id="security-sessions" title={settings.security.sessions}>
+    <Group id="security-sessions" title={settings.security.sessions}>
       <ul className="grid divide-y border-t">
         {sessions.map((session) => (
           <MethodRow
@@ -64,6 +65,6 @@ export function SessionList({
           </Button>
         </form>
       ) : null}
-    </SecurityGroup>
+    </Group>
   );
 }

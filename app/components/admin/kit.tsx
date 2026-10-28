@@ -3,9 +3,17 @@ import { createContext, use, useId, type ReactNode } from "react";
 import { Link, useFetcher } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import { Field, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import { Spinner } from "~/components/ui/spinner";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
+import { maxAuditReason } from "../../limits";
 import type { AdminActionResult } from "../../admin-console.server";
 import { useAdmin } from "./use-admin";
 
@@ -44,10 +52,10 @@ export function TextField({
 }: { label: string } & React.ComponentProps<"input">) {
   const id = useId();
   return (
-    <div className={cn("grid gap-1.5", className)}>
-      <Label htmlFor={id}>{label}</Label>
+    <Field className={className}>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Input id={id} {...props} />
-    </div>
+    </Field>
   );
 }
 
@@ -85,16 +93,16 @@ export function ActionForm({
         <input key={name} type="hidden" name={name} value={value} />
       ))}
       {children}
-      {reason ? <TextField label={t.common.reason} name="motivo" required maxLength={500} /> : null}
+      {reason ? (
+        <TextField label={t.common.reason} name="motivo" required maxLength={maxAuditReason} />
+      ) : null}
       <div className="flex flex-wrap items-center gap-3">
         <Button
           type="submit"
           size="sm"
           variant={destructive ? "destructive" : "outline"}
-          disabled={pending}
-          aria-busy={pending || undefined}
+          pending={pending}
         >
-          {pending ? <Spinner data-icon="inline-start" /> : null}
           {submit}
         </Button>
         {result?.notice ? (
@@ -184,42 +192,39 @@ export function DataTable({
         })}
       </ul>
       {/* Su schermi medi la tabella può ancora scorrere: l'area si raggiunge da tastiera. */}
-      <div
-        className="hidden overflow-x-auto md:block"
-        role="region"
-        aria-label={label ?? panel ?? undefined}
-        tabIndex={0}
+      <Table
+        container={{
+          className: "hidden md:block",
+          role: "region",
+          "aria-label": label ?? panel ?? undefined,
+          tabIndex: 0,
+        }}
       >
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-xs text-muted-foreground">
-              {head.map((column) => (
-                <th
-                  key={column}
-                  scope="col"
-                  className={cn(
-                    "px-2 py-2 font-medium whitespace-nowrap",
-                    column === actions && "sr-only",
-                  )}
-                >
-                  {column}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key} className="border-b align-top last:border-0">
-                {head.map((column, index) => (
-                  <td key={column} className="px-2 py-2.5">
-                    {row.cells[index]}
-                  </td>
-                ))}
-              </tr>
+        <TableHeader>
+          <TableRow className="text-xs hover:bg-transparent">
+            {head.map((column) => (
+              <TableHead
+                key={column}
+                scope="col"
+                className={cn("h-auto py-2 text-muted-foreground", column === actions && "sr-only")}
+              >
+                {column}
+              </TableHead>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={row.key} className="align-top">
+              {head.map((column, index) => (
+                <TableCell key={column} className="py-2.5 align-top whitespace-normal">
+                  {row.cells[index]}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </>
   );
 }

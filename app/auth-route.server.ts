@@ -20,6 +20,7 @@ import { linkLanguage, notifySecurityEvent } from "./account-email.server";
 import { logFailure, tracePhase } from "./errors";
 import { appBase, ordersPath } from "./app-links";
 import { localizedPath } from "./i18n";
+import { sha256Hex } from "./sealed.server";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
 // che conservano sempre un accesso valido. L'elenco delle sessioni restituirebbe i token delle
@@ -139,11 +140,7 @@ async function addressKey(request: Request): Promise<string | null> {
   const email =
     typeof body === "object" && body !== null && "email" in body ? body.email : undefined;
   if (typeof email !== "string" || email.length === 0 || email.length > 254) return null;
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(email.trim().toLowerCase()),
-  );
-  return `email:${Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+  return `email:${await sha256Hex(email.trim().toLowerCase())}`;
 }
 
 /**

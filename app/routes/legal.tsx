@@ -1,6 +1,7 @@
 import { cn } from "cn";
 
-import { PageIntro, SiteLayout, siteColumn } from "~/components/site-layout";
+import { siteColumn } from "~/components/site-column";
+import { PageIntro, SiteLayout } from "~/components/site-layout";
 import type { Route } from "./+types/legal";
 import { appCopy, infoEmail } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";

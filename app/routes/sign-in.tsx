@@ -1,8 +1,12 @@
 import { cn } from "cn";
-import { ClipboardList, Copy, KeyRound, LogOut, Store } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useState } from "react";
 import { useLocation } from "react-router";
 
+import { BrandPanel } from "~/components/access/brand-panel";
+import { EbayMark, GoogleMark } from "~/components/access/marks";
+import { PasskeyButton } from "~/components/access/passkey-button";
+import { rise } from "~/components/access/rise";
 import { AccessNotice, VerifyEmail } from "~/components/access-notice";
 import { DeleteAccount } from "~/components/delete-account";
 import { Logo } from "~/components/standalone-page";
@@ -23,12 +27,11 @@ import {
 import { Input } from "~/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useCopy } from "~/components/copy-context";
-import { accessPath, ordersPath, securityReturnPath } from "../app-links";
+import { accessPath, privacyPath, securityReturnPath, termsPath } from "../app-links";
 import { accessAction, accessLoader } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { loadPasskeyClient } from "../account/passkey";
-import { passkeyFailure, type PasskeyFailure } from "../account/passkey-error";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
+import { maxPasswordLength, minPasswordLength } from "../limits";
 import type { Route } from "./+types/sign-in";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
@@ -55,16 +58,20 @@ type AccessCopy = (typeof appCopy)[Language]["access"];
 /** Campi inviati da ricompilare dopo un errore, senza la password. */
 type Remembered = { tab: string; values: Record<string, string> };
 
+/** Ritorno alla Sicurezza chiesto dall'indirizzo, soltanto fra quelli ammessi. */
+function useReturnTo() {
+  const { language } = useCopy();
+  const { search } = useLocation();
+  return securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
+}
+
 /** Indirizzo dei moduli: conserva il ritorno alla Sicurezza anche quando l'errore resta qui. */
 function useAccessAction() {
   const { language } = useCopy();
-  const { search } = useLocation();
-  const returnTo = securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
-  const path = localizedPath(language, "/accesso");
+  const returnTo = useReturnTo();
+  const path = localizedPath(language, accessPath);
   return returnTo ? `${path}?${new URLSearchParams({ returnTo })}` : path;
 }
-
-const rise = "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]";
 
 /**
  * Termini obbligatori e marketing facoltativo, entrambi mai preselezionati. Il marketing manca
@@ -93,11 +100,11 @@ function AgreementFields({
         />
         <span id="terms-label">
           {t.terms.before}
-          <a href={localizedPath(language, "/termini")} className="underline underline-offset-4">
+          <a href={localizedPath(language, termsPath)} className="underline underline-offset-4">
             {t.terms.terms}
           </a>
           {t.terms.middle}
-          <a href={localizedPath(language, "/privacy")} className="underline underline-offset-4">
+          <a href={localizedPath(language, privacyPath)} className="underline underline-offset-4">
             {t.terms.privacy}
           </a>
           {t.terms.after}
@@ -125,24 +132,8 @@ function AgreementFields({
   );
 }
 
-/** Marchio dal kit ufficiale dei pulsanti di accesso eBay, con proporzioni conservate. */
-function EbayMark() {
-  return (
-    <img
-      src="/ebay-logo.svg"
-      alt=""
-      aria-hidden="true"
-      width="32"
-      height="13"
-      className="h-auto w-8 shrink-0"
-    />
-  );
-}
-
 function ReturnToField() {
-  const { language } = useCopy();
-  const { search } = useLocation();
-  const target = securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
+  const target = useReturnTo();
   return target ? <input type="hidden" name="returnTo" value={target} /> : null;
 }
 
@@ -165,71 +156,6 @@ function SocialForms() {
   );
 }
 
-function PasskeyButton() {
-  const { t: copy, language } = useCopy();
-  const t = copy.access;
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<PasskeyFailure | null>(null);
-  const { search } = useLocation();
-  const target = securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
-  return (
-    <div className="grid gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        disabled={pending}
-        onClick={async () => {
-          setPending(true);
-          setError(null);
-          try {
-            const authClient = await loadPasskeyClient();
-            if (!authClient) {
-              setError("unsupported");
-              return;
-            }
-            const result = await authClient.signIn.passkey();
-            if (result.error) setError(passkeyFailure(result.error));
-            else window.location.assign(target ?? localizedPath(language, ordersPath));
-          } catch (failure) {
-            setError(passkeyFailure(failure));
-          } finally {
-            setPending(false);
-          }
-        }}
-      >
-        <KeyRound aria-hidden="true" data-icon="inline-start" />
-        {t.passkeySignIn}
-      </Button>
-      {error ? (
-        <p role="alert" className="text-sm text-danger">
-          {t.passkeyErrors[error]}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/** Marchio Google nei colori ufficiali, come richiesto dalle linee guida del pulsante. */
-function GoogleMark() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 24 24" data-icon="inline-start" className="size-4">
-      <path
-        fill="#4285F4"
-        d="m23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.6v3h3.9c2.2-2.1 3.5-5.1 3.5-8.8Z"
-      />
-      <path
-        fill="#34A853"
-        d="m12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1 .7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24Z"
-      />
-      <path fill="#FBBC05" d="m5.4 14.4a7.2 7.2 0 0 1 0-4.7V6.6H1.4a12 12 0 0 0 0 10.9l4-3.1Z" />
-      <path
-        fill="#EA4335"
-        d="m12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.6l4 3.1C6.3 6.9 8.9 4.8 12 4.8Z"
-      />
-    </svg>
-  );
-}
-
 function OrSeparator() {
   const t = useCopy().t.access;
   return (
@@ -240,13 +166,14 @@ function OrSeparator() {
 }
 
 function SignInAlternatives({ recovering }: { recovering: boolean }) {
+  const target = useReturnTo();
   if (recovering) return null;
   return (
     <>
       <OrSeparator />
       <div className="grid gap-2">
         <SocialForms />
-        <PasskeyButton />
+        <PasskeyButton target={target} />
       </div>
     </>
   );
@@ -381,8 +308,8 @@ function AccessForms({
                 name="password"
                 type="password"
                 autoComplete="new-password"
-                minLength={8}
-                maxLength={128}
+                minLength={minPasswordLength}
+                maxLength={maxPasswordLength}
                 required
                 {...signUp.control("password")}
               />
@@ -429,8 +356,8 @@ function ResetPassword({ token }: { token: string }) {
           name="password"
           type="password"
           autoComplete="new-password"
-          minLength={8}
-          maxLength={128}
+          minLength={minPasswordLength}
+          maxLength={maxPasswordLength}
           required
           {...v.control("password")}
         />
@@ -500,55 +427,6 @@ function SignOutForm() {
         {t.signOut}
       </Button>
     </form>
-  );
-}
-
-const featureIcons = [
-  { Icon: ClipboardList, className: "text-brand-sky" },
-  { Icon: Copy, className: "text-[#f5c451]" },
-  { Icon: Store, className: "text-[#5fd0c9]" },
-];
-
-/** Colonna del marchio: cosa fa FiscalBay, con i colori del logo. */
-function BrandPanel() {
-  const t = useCopy().t.access;
-  return (
-    <aside className="relative hidden overflow-hidden bg-brand-navy text-white lg:flex lg:flex-col lg:gap-12 lg:p-12 xl:p-16">
-      {/* Righe della tessera del logo, grandi e sfumate, come fondo. */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute -right-24 -bottom-16 grid rotate-[-8deg] gap-6 opacity-25"
-      >
-        <span className="h-8 w-[28rem] rounded-full bg-brand-sky" />
-        <span className="h-8 w-80 rounded-full bg-brand-green" />
-        <span className="h-8 w-40 rounded-full bg-brand-red" />
-      </div>
-      <Logo onDark className="relative h-8 w-fit" />
-      <div className={cn("relative grid max-w-md gap-8", rise)}>
-        <p className="text-3xl leading-tight font-semibold text-balance xl:text-4xl">
-          {t.headline}
-        </p>
-        <ul className="grid gap-5">
-          {t.features.map((feature, index) => {
-            const { Icon, className } = featureIcons[index]!;
-            return (
-              <li key={feature.title} className="flex gap-4">
-                <span
-                  aria-hidden="true"
-                  className="grid size-10 shrink-0 place-items-center rounded-lg bg-white/10"
-                >
-                  <Icon className={cn("size-5", className)} />
-                </span>
-                <span className="grid gap-0.5">
-                  <span className="font-medium">{feature.title}</span>
-                  <span className="text-sm leading-relaxed text-white/75">{feature.body}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-    </aside>
   );
 }
 

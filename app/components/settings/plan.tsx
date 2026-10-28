@@ -15,7 +15,6 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { Spinner } from "~/components/ui/spinner";
 import { useCopy } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import {
@@ -194,10 +193,9 @@ function RenewalPeriod({
       <Button
         variant="outline"
         size="sm"
-        disabled={action.pending}
+        pending={action.pending}
         onClick={() => action.run("change-period", { period: next ? period : other })}
       >
-        {action.pending ? <Spinner /> : null}
         {next ? copy.keepPeriod[period] : copy.switchTo[other]}
       </Button>
     </div>
@@ -211,7 +209,11 @@ function ManageBilling({ lifetime = false }: { lifetime?: boolean }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-3">
-        <Button variant="outline" onClick={() => action.run("manage-billing")}>
+        <Button
+          variant="outline"
+          pending={action.pending}
+          onClick={() => action.run("manage-billing")}
+        >
           {lifetime ? t.settings.plan.billingDocuments : t.settings.plan.manageBilling}
         </Button>
       </div>
@@ -229,8 +231,7 @@ function TrialOffer() {
   return (
     <Group title={t.settings.plan.trialTitle}>
       <p className="text-sm leading-relaxed text-muted-foreground">{t.settings.plan.trialBody}</p>
-      <Button className="w-fit" disabled={action.pending} onClick={() => action.run("start-trial")}>
-        {action.pending ? <Spinner /> : null}
+      <Button className="w-fit" pending={action.pending} onClick={() => action.run("start-trial")}>
         {t.settings.plan.trialAction}
       </Button>
     </Group>
@@ -451,7 +452,6 @@ function FreeUnlocks({
       <AutoSwitch
         name="unlock-confirmation"
         label={t.settings.plan.unlockConfirmation}
-        description={t.settings.plan.unlockConfirmationHint}
         initial={confirmUnlock}
       />
     </>
@@ -590,7 +590,9 @@ function PurchaseOptions({
             <span className="grid gap-1">
               <span className="font-code text-base font-semibold">{prices[plan].price}</span>
               <span className="text-sm text-muted-foreground">{prices[plan].gross}</span>
-              <span className="text-sm text-muted-foreground">{prices[plan].note}</span>
+              {prices[plan].note ? (
+                <span className="text-sm text-muted-foreground">{prices[plan].note}</span>
+              ) : null}
               {plan === "lifetime" && lifetime && lifetime.state !== "sold-out" ? (
                 <span className="text-sm font-medium">
                   {copy.lifetimeSeats(lifetime.seats.left, lifetime.seats.total)}
@@ -612,8 +614,9 @@ function PurchaseOptions({
 }
 
 /**
- * Prezzo, totale con l'IVA italiana e nota di ogni offerta. Mensile e annuale aggiungono il primo addebito della prova; il
- * lifetime la detrazione del periodo pagato non usato e la chiusura dell'abbonamento.
+ * Prezzo, totale con l'IVA italiana e nota di ogni offerta, vuota quando il prezzo dice già
+ * tutto. Mensile e annuale aggiungono il primo addebito della prova; il lifetime la detrazione
+ * del periodo pagato non usato e la chiusura dell'abbonamento.
  */
 function offerTexts(
   t: AppCopy,
@@ -630,7 +633,7 @@ function offerTexts(
     monthly: {
       price: copy.priceMonthly(net("monthly")),
       gross: gross("monthly"),
-      note: withCharge(copy.priceMonthlyNote),
+      note: firstCharge ?? "",
     },
     annual: {
       price: copy.priceAnnual(net("annual")),
@@ -641,7 +644,6 @@ function offerTexts(
       price: copy.priceLifetime(net("lifetime")),
       gross: gross("lifetime"),
       note: [
-        copy.priceLifetimeNote,
         lifetime?.credit ? copy.lifetimeCredit(formatPrice(lifetime.credit, language)) : null,
         lifetime?.replaces ? copy.lifetimeReplaces : null,
       ]
@@ -671,7 +673,7 @@ function OfferAction({
       variant="outline"
       size="sm"
       className="w-fit"
-      disabled={action.pending}
+      pending={action.pending}
       onClick={() => action.run("buy", { plan })}
     >
       {t.settings.plan.buyPeriod[plan]}

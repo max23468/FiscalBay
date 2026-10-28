@@ -14,7 +14,7 @@ import { WorkspaceView } from "~/components/admin/workspace";
 import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import { Spinner } from "~/components/ui/spinner";
+import { FieldError } from "~/components/ui/field";
 import { useCopy } from "~/components/copy-context";
 import { loadPasskeyClient } from "../account/passkey";
 import {
@@ -126,9 +126,7 @@ function PasskeyConfirm({ unverified }: { unverified: boolean }) {
       <Button
         type="button"
         className="w-fit"
-        disabled={pending}
-        focusableWhenDisabled
-        aria-busy={pending || undefined}
+        pending={pending}
         onClick={async () => {
           setPending(true);
           setError(false);
@@ -144,18 +142,10 @@ function PasskeyConfirm({ unverified }: { unverified: boolean }) {
           }
         }}
       >
-        {pending ? (
-          <Spinner data-icon="inline-start" />
-        ) : (
-          <KeyRound aria-hidden="true" data-icon="inline-start" />
-        )}
+        <KeyRound aria-hidden="true" data-icon="inline-start" />
         {t.verifyTitle}
       </Button>
-      {error || (unverified && !retried) ? (
-        <p role="alert" className="text-sm text-danger">
-          {t.verifyFailed}
-        </p>
-      ) : null}
+      {error || (unverified && !retried) ? <FieldError>{t.verifyFailed}</FieldError> : null}
     </div>
   );
 }

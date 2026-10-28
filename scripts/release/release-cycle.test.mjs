@@ -35,6 +35,15 @@ import {
   pullRequestAction,
   checksOutcome,
   pullRequestFiles,
+  cycleCommand,
+  lockObject,
+  assertCyclePullRequest,
+  migrationReviewBlocked,
+  retryQualification,
+  mergeDecision,
+  assertResumableRun,
+  deployedEnvironment,
+  existingCandidate,
 } from "./release-cycle.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
@@ -831,5 +840,146 @@ describe("PR tramite API REST", () => {
       ]),
       "passed",
     );
+  });
+});
+
+describe("comandi del ciclo", () => {
+  it("accetta soltanto i comandi noti e blocca per oggetto", () => {
+    assert.deepEqual(cycleCommand(["pr", "12"]), { command: "pr", number: "12" });
+    assert.deepEqual(cycleCommand(["cleanup"]), { command: "cleanup", number: undefined });
+    for (const positionals of [[], ["deploy"], ["toString"]])
+      assert.throws(() => cycleCommand(positionals), /^Error: Uso: release:cycle/u);
+    assert.equal(lockObject("pr", "12"), "pr-12");
+    assert.equal(lockObject("resume", "34"), "run-34");
+    assert.equal(lockObject("production", undefined), "production");
+  });
+
+  it("rifiuta un comando sconosciuto prima di leggere il repository", () => {
+    const result = spawnSync(
+      process.execPath,
+      [new URL("./release-cycle.mjs", import.meta.url).pathname, "deploy"],
+      { encoding: "utf8", env: { ...process.env, PATH: "" } },
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /Uso: release:cycle status <run>/u);
+  });
+
+  it("gestisce soltanto feature branch dello stesso repository verso develop", () => {
+    const pr = {
+      state: "OPEN",
+      baseRefName: "develop",
+      headRefName: "feature",
+      headRepository: { nameWithOwner: "example/project" },
+    };
+    assert.doesNotThrow(() => assertCyclePullRequest(pr, "example/project"));
+    assert.doesNotThrow(() =>
+      assertCyclePullRequest({ ...pr, state: "MERGED" }, "example/project"),
+    );
+    assert.throws(
+      () => assertCyclePullRequest({ ...pr, baseRefName: "main" }, "example/project"),
+      /verso develop/u,
+    );
+    assert.throws(
+      () => assertCyclePullRequest({ ...pr, headRepository: null }, "example/project"),
+      /stesso repository/u,
+    );
+    assert.throws(
+      () => assertCyclePullRequest({ ...pr, headRefName: "legacy/1.x" }, "example/project"),
+      /feature branch/u,
+    );
+    assert.throws(
+      () => assertCyclePullRequest({ ...pr, state: "CLOSED" }, "example/project"),
+      /chiusa senza merge/u,
+    );
+  });
+
+  it("ripete il Verify soltanto se è fallito al controllo delle migration", () => {
+    const read = [];
+    const jobs = (conclusion) => (id) => {
+      read.push(id);
+      return [
+        { steps: [{ name: "Install", conclusion: "success" }] },
+        { steps: [{ name: "Check migration review", conclusion }] },
+      ];
+    };
+    assert.equal(migrationReviewBlocked(undefined, jobs("failure")), false);
+    assert.equal(
+      migrationReviewBlocked({ databaseId: 1, conclusion: "success" }, jobs("failure")),
+      false,
+    );
+    // I job si leggono soltanto per una run fallita.
+    assert.deepEqual(read, []);
+    assert.equal(
+      migrationReviewBlocked({ databaseId: 2, conclusion: "failure" }, jobs("failure")),
+      true,
+    );
+    assert.equal(
+      migrationReviewBlocked({ databaseId: 3, conclusion: "failure" }, jobs("success")),
+      false,
+    );
+    assert.deepEqual(read, [2, 3]);
+  });
+
+  it("riqualifica soltanto con la base avanzata su file comuni, fino al terzo giro", () => {
+    let evaluated = 0;
+    const compatible = (value) => () => {
+      evaluated++;
+      return value;
+    };
+    assert.equal(retryQualification(1, compatible(false)), true);
+    assert.equal(retryQualification(2, compatible(true)), false);
+    // Al terzo tentativo l'errore si propaga senza rileggere la base.
+    assert.equal(retryQualification(3, compatible(false)), false);
+    assert.equal(evaluated, 2);
+    assert.equal(mergeDecision(1, true), "merge");
+    assert.equal(mergeDecision(3, true), "merge");
+    assert.equal(mergeDecision(2, false), "requalify");
+    assert.throws(() => mergeDecision(3, false), /Base avanzata più volte/u);
+  });
+
+  it("riprende soltanto le run del ciclo e riconosce l'ambiente distribuito", () => {
+    const run = { path: ".github/workflows/ci.yml", head_branch: "develop", event: "push" };
+    assert.doesNotThrow(() => assertResumableRun(run));
+    assert.doesNotThrow(() =>
+      assertResumableRun({
+        ...run,
+        path: ".github/workflows/publish.yml",
+        event: "workflow_dispatch",
+      }),
+    );
+    for (const other of [
+      { path: ".github/workflows/qualify.yml" },
+      { head_branch: "feature" },
+      { event: "pull_request" },
+    ])
+      assert.throws(() => assertResumableRun({ ...run, ...other }), /fuori dal ciclo/u);
+    const job = (name, conclusion) => ({ name, conclusion });
+    assert.equal(deployedEnvironment(run, [job("Deploy test", "success")]), "test");
+    assert.equal(deployedEnvironment(run, [job("Deploy test", "skipped")]), null);
+    assert.equal(deployedEnvironment(run, [job("Distribuisci e verifica", "success")]), null);
+    const publish = { ...run, path: ".github/workflows/publish.yml" };
+    assert.equal(
+      deployedEnvironment(publish, [job("Distribuisci e verifica", "success")]),
+      "production",
+    );
+  });
+
+  it("non ripete il dispatch di un candidato già presente", () => {
+    const existing = { databaseId: 9, status: "completed", conclusion: "success" };
+    const jobs = (conclusion) => [{ name: "Distribuisci e verifica", conclusion }];
+    assert.equal(existingCandidate("production", existing, jobs("success")), "published");
+    assert.equal(existingCandidate("production", existing, jobs("skipped")), "qualified");
+    assert.equal(existingCandidate("candidate", existing, jobs("success")), "qualified");
+    assert.equal(existingCandidate("candidate", existing, jobs("skipped")), "qualified");
+    for (const [run, list] of [
+      [{ ...existing, status: "in_progress" }, jobs("success")],
+      [{ ...existing, conclusion: "failure" }, jobs("skipped")],
+      [existing, jobs("failure")],
+      [existing, []],
+    ])
+      assert.throws(
+        () => existingCandidate("candidate", run, list),
+        /release:cycle resume 9, senza un nuovo dispatch/u,
+      );
   });
 });

@@ -14,6 +14,7 @@ import {
   type NavDestination,
 } from "~/components/shell-links";
 import { GlobalSearch, MobileSearch, type ShellSearch } from "~/components/shell-search";
+import { siteColumn } from "~/components/site-column";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -90,7 +91,7 @@ export function AppShell({
       </a>
       {before}
       <header className="sticky top-0 z-40 border-b bg-background">
-        <div className="mx-auto flex h-14 w-[min(72rem,calc(100%-2rem))] items-center gap-2 md:gap-6">
+        <div className={cn(siteColumn, "flex h-14 items-center gap-2 md:gap-6")}>
           <Link
             to={homeHref}
             className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
@@ -166,10 +167,7 @@ export function AppShell({
       <main
         id="contenuto"
         tabIndex={-1}
-        className={cn(
-          "mx-auto w-[min(72rem,calc(100%-2rem))] pt-6 pb-12 outline-none",
-          navigable && "max-md:pb-28",
-        )}
+        className={cn(siteColumn, "pt-6 pb-12 outline-none", navigable && "max-md:pb-28")}
       >
         {children}
       </main>

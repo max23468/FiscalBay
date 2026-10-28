@@ -4,7 +4,8 @@ import { CircleCheckBig, Gift, Minus } from "lucide-react";
 
 import { useCopy } from "~/components/copy-context";
 import { IconTile } from "~/components/icon-tile";
-import { PageIntro, SiteLayout, siteColumn } from "~/components/site-layout";
+import { siteColumn } from "~/components/site-column";
+import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { Badge } from "~/components/ui/badge";
 import { buttonLink } from "~/components/ui/button-variants";
 import {

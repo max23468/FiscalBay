@@ -5,14 +5,20 @@ import { isProduction } from "../app-links";
 import { priceGeneration, type LifetimeOffer, type PremiumOffer } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import {
+  closeCheckoutSession,
   isMissingObject,
   stripeCall,
   stripeEnvironment,
   stripeId,
 } from "../integrations/stripe.server";
 import { purchasesOpenSql } from "./admission-state.server";
-import { lifetimeInForceSql, openSubscriptionStatuses, storeReadSql } from "./grants.server";
-import { paymentReversal, reversalStatements } from "./refunds.server";
+import {
+  isClosedSubscription,
+  lifetimeInForceSql,
+  openSubscriptionStatuses,
+  storeReadSql,
+} from "./grants.server";
+import { erasedCustomerSql, paymentReversal, reversalStatements } from "./refunds.server";
 import { inSequence } from "../sequence";
 import { sqlList } from "./sql.server";
 
@@ -128,8 +134,7 @@ export async function lifetimeContext(
   if (!workspace) return null;
   const [subscription, paid] = await db.batch<Record<string, unknown>>([
     db
-      .prepare(`SELECT CASE WHEN EXISTS (SELECT 1 FROM stripe_customer_erasures r
-            WHERE r.customer_id = stripe_subscriptions.customer_id) THEN NULL
+      .prepare(`SELECT CASE WHEN ${erasedCustomerSql("stripe_subscriptions.customer_id")} THEN NULL
           ELSE customer_id END AS customer_id, status, offer, price_generation, current_period_end,
           cancel_at_period_end, status IN (${sqlList(openSubscriptionStatuses)}) AS open
         FROM stripe_subscriptions WHERE workspace_id = ?1 AND environment = ?2
@@ -194,18 +199,35 @@ export async function lifetimeContext(
         period.amount_refunded,
       )
     : 0;
+  const { state, seats } = lifetimeOfferState({
+    purchasesOpen: !!workspace.open,
+    subscribed: !!row?.open,
+    synced: !!workspace.synced,
+    reserved: !!reservation,
+    taken: workspace.taken,
+  });
+  return { ...context, offer: { state, credit, replaces: !!row?.open, seats } };
+}
+
+/** Stato e posti dell'offerta lifetime, condivisi dall'area reale e dall'anteprima. */
+export function lifetimeOfferState(input: {
+  purchasesOpen: boolean;
+  subscribed: boolean;
+  synced: boolean;
+  reserved: boolean;
+  taken: number;
+}): Pick<LifetimeOffer, "state" | "seats"> {
   // Senza capacità per nuovi Premium si ferma il lifetime di chi non è già abbonato; il
   // passaggio di un abbonato non aggiunge carico.
   const state =
-    !workspace.open && !row?.open
+    !input.purchasesOpen && !input.subscribed
       ? "closed"
-      : !workspace.synced
+      : !input.synced
         ? "needs-sync"
-        : !reservation && workspace.taken >= lifetimeSlots
+        : !input.reserved && input.taken >= lifetimeSlots
           ? "sold-out"
           : "available";
-  const seats = { left: Math.max(lifetimeSlots - workspace.taken, 0), total: lifetimeSlots };
-  return { ...context, offer: { state, credit, replaces: !!row?.open, seats } };
+  return { state, seats: { left: Math.max(lifetimeSlots - input.taken, 0), total: lifetimeSlots } };
 }
 
 /**
@@ -446,26 +468,44 @@ export async function endReplacedSubscriptions(
     ),
   ]);
   const late = await inSequence(checkouts!, async ({ id }) => {
-    const session = await stripeCall(() => stripe.checkout.sessions.retrieve(id));
-    if (session.status === "open") await stripeCall(() => stripe.checkout.sessions.expire(id));
+    const session = await closeCheckoutSession(stripe, id);
     await env.DB.prepare("DELETE FROM subscription_checkouts WHERE session_id = ?").bind(id).run();
     return session.status === "complete" && session.subscription
       ? [stripeId(session.subscription)]
       : [];
   });
-  const end = async (id: string) => {
-    // Un abbonamento già chiuso su Stripe non si chiude una seconda volta.
-    const current = await stripeCall(() => stripe.subscriptions.retrieve(id));
-    const canceled = ["canceled", "incomplete_expired"].includes(current.status)
-      ? current
-      : await stripeCall(() => stripe.subscriptions.cancel(id));
-    await env.DB.prepare(`UPDATE stripe_subscriptions SET status = ?1, synced_at = ?2
-        WHERE id = ?3 AND julianday(synced_at) <= julianday(?2)`)
-      .bind(canceled.status, now.toISOString(), id)
-      .run();
-  };
   // Una chiamata a Stripe alla volta: il turno resta entro i limiti.
-  await inSequence([...new Set([...results!.map(({ id }) => id), ...late.flat()])], end);
+  await inSequence([...new Set([...results!.map(({ id }) => id), ...late.flat()])], (id) =>
+    cancelSubscription(env, stripe, id, now),
+  );
+}
+
+/**
+ * Chiude subito un abbonamento su Stripe, senza conguaglio né rimborso, e ne registra lo stato.
+ * Uno già chiuso non si chiude una seconda volta; uno che Stripe non restituisce più non può
+ * addebitare e resta indisponibile.
+ */
+export async function cancelSubscription(env: Env, stripe: Stripe, id: string, now: Date) {
+  const at = now.toISOString();
+  let status: string;
+  try {
+    const current = await stripeCall(() => stripe.subscriptions.retrieve(id));
+    status = isClosedSubscription(current.status)
+      ? current.status
+      : (await stripeCall(() => stripe.subscriptions.cancel(id))).status;
+  } catch (error) {
+    if (!isMissingObject(error)) throw error;
+    await env.DB.prepare(
+      "UPDATE stripe_subscriptions SET unavailable_at = COALESCE(unavailable_at, ?1) WHERE id = ?2",
+    )
+      .bind(at, id)
+      .run();
+    return;
+  }
+  await env.DB.prepare(`UPDATE stripe_subscriptions SET status = ?1, synced_at = ?2
+      WHERE id = ?3 AND julianday(synced_at) <= julianday(?2)`)
+    .bind(status, at, id)
+    .run();
 }
 
 /** Lifetime venduti riletti per turno, ognuno una volta al giorno. */

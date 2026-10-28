@@ -6,6 +6,7 @@ import type { EbayEnvironment } from "../view-models";
 import { fiscalNotice } from "./order-view.server";
 import { listVisibleOrders, type OrderCriteria, type VisibleOrder } from "./orders.server";
 import { xlsxStream, type XlsxCell } from "./xlsx.server";
+import { wallClock } from "../time";
 import {
   exportHeader,
   standardColumns,
@@ -25,40 +26,10 @@ import {
 const joined = (values: Array<string | null | undefined>) =>
   values.filter((value): value is string => !!value).join(" | ");
 
-/**
- * Formattatore di un fuso, creato una volta: crearlo per ogni data occupa la maggior parte del
- * tempo di un file grande.
- */
-const formats = new Map<string, Intl.DateTimeFormat>();
-
-function dateTimeFormat(timeZone: string) {
-  let format = formats.get(timeZone);
-  // Stryker disable next-line ConditionalExpression: un formattatore nuovo a ogni data dà lo stesso testo, soltanto più lentamente.
-  if (!format) {
-    format = new Intl.DateTimeFormat("en-GB", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hourCycle: "h23",
-    });
-    // Stryker disable next-line CallExpression: senza memoria il testo resta lo stesso, soltanto più lento.
-    formats.set(timeZone, format);
-  }
-  return format;
-}
-
 /** Data e ora nel fuso indicato, nella forma `AAAA-MM-GG hh:mm:ss` riconosciuta dai fogli. */
 export function exportDateTime(iso: string | null, timeZone: string): string {
   if (!iso) return "";
-  const parts = Object.fromEntries(
-    dateTimeFormat(timeZone)
-      .formatToParts(new Date(iso))
-      .map((part) => [part.type, part.value]),
-  );
+  const parts = wallClock(new Date(iso), timeZone);
   return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`;
 }
 

@@ -87,6 +87,15 @@ type EntitlementRow = {
   stripeCheckoutSessionId?: string | null;
   grantedBy?: string | null;
   grantReason?: string | null;
+  /** Prova del pagamento: fattura, importo in centesimi, valuta e istante. */
+  stripeInvoiceId?: string | null;
+  amountPaid?: number | null;
+  currency?: string | null;
+  paidAt?: string | null;
+  /** Revoca per rimborso totale o disputa persa e somma dei rimborsi riusciti. */
+  revokedAt?: string | null;
+  revocation?: "refund" | "dispute" | null;
+  amountRefunded?: number | null;
 };
 
 /** Diritto d'accesso sintetico dello spazio, eseguibile con `run()` o dentro un `batch`. */
@@ -99,11 +108,20 @@ export function insertEntitlement({
   stripeCheckoutSessionId,
   grantedBy,
   grantReason,
+  stripeInvoiceId,
+  amountPaid,
+  currency,
+  paidAt,
+  revokedAt,
+  revocation,
+  amountRefunded,
 }: EntitlementRow) {
   return env.DB.prepare(
     `INSERT INTO workspace_entitlements
-       (id, workspace_id, source, starts_at, ends_at, stripe_checkout_session_id, granted_by, grant_reason)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, workspace_id, source, starts_at, ends_at, stripe_checkout_session_id, granted_by,
+        grant_reason, stripe_invoice_id, amount_paid, currency, paid_at, revoked_at, revocation,
+        amount_refunded)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).bind(
     id,
     workspaceId,
@@ -113,6 +131,13 @@ export function insertEntitlement({
     stripeCheckoutSessionId ?? null,
     grantedBy ?? null,
     grantReason ?? null,
+    stripeInvoiceId ?? null,
+    amountPaid ?? null,
+    currency ?? null,
+    paidAt ?? null,
+    revokedAt ?? null,
+    revocation ?? null,
+    amountRefunded ?? null,
   );
 }
 

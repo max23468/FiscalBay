@@ -8,7 +8,8 @@ import { accessNotice } from "../access-notice";
 import { unconfirmedOnFailure } from "../client-action";
 import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { appBase, storeLinkPath } from "../app-links";
+import { storeLinkPath, storesPath } from "../app-links";
+import { actionFailure, suspendedEbayRead } from "../area-actions.server";
 import {
   deleteStoreData,
   disconnectStore,
@@ -164,13 +165,6 @@ const storeActions: Record<
     deleteStoreData(env.DB, userId, storeId, String(form.get("conferma") ?? "")),
 };
 
-/** eBay non risponde nell'ambiente del negozio, fra i negozi dello spazio dell'utente. */
-async function ebayDownForStore(userId: string, storeId: string) {
-  const stores = await listStores(env.DB, userId);
-  const store = stores.find((candidate) => candidate.id === storeId);
-  return store !== undefined && ebayOutages(stores).has(store.ebayEnvironment);
-}
-
 const ebayEnvironments: EbayEnvironment[] = ["production", "sandbox"];
 
 const syncActions: Record<string, { reimport: boolean }> = {
@@ -191,27 +185,21 @@ export async function action({ request }: Route.ActionArgs) {
   const storeId = String(form.get("store") ?? "");
   const run = Object.hasOwn(storeActions, intent) ? storeActions[intent] : undefined;
   const sync = Object.hasOwn(syncActions, intent) ? syncActions[intent] : undefined;
-  if ((!run && !sync) || !storeId || storeId.length > 64) {
-    return data<ActionResult>({ ok: false, notice: t.failed }, { status: 400 });
-  }
+  if ((!run && !sync) || !storeId || storeId.length > 64) return actionFailure(400, t.failed);
   if (sync) {
     let requested: SyncRequestResult;
     try {
       // Come Riprova negli Ordini: con eBay che non risponde o le letture sospese una nuova
       // lettura resta sospesa.
-      if (!(await serviceSetting(env.DB, "ebay_calls")))
-        return data<ActionResult>({ ok: false, notice: t.ebayPaused }, { status: 409 });
-      if (await ebayDownForStore(session.user.id, storeId))
-        return data<ActionResult>({ ok: false, notice: t.ebayDown }, { status: 409 });
+      const suspended = await suspendedEbayRead(session.user.id, { storeId });
+      if (suspended) return actionFailure(409, t[suspended]);
       requested = await requestStoreSync(env, session.user.id, storeId, sync);
     } catch (error) {
       logFailure({ request, error, operation: "route" });
-      return data<ActionResult>({ ok: false, notice: t.failed }, { status: 500 });
+      return actionFailure(500, t.failed);
     }
-    if (requested === "not_found")
-      return data<ActionResult>({ ok: false, notice: t.failed }, { status: 404 });
-    if (requested === "invalid")
-      return data<ActionResult>({ ok: false, notice: t.failed }, { status: 409 });
+    if (requested === "not_found") return actionFailure(404, t.failed);
+    if (requested === "invalid") return actionFailure(409, t.failed);
     const notice =
       sync.reimport && (requested === "queued" || requested === "merged")
         ? t.reimportRequested
@@ -223,18 +211,13 @@ export async function action({ request }: Route.ActionArgs) {
     result = await run!(session.user.id, storeId, form);
   } catch (error) {
     logFailure({ request, error, operation: "route" });
-    return data<ActionResult>({ ok: false, notice: t.failed }, { status: 500 });
+    return actionFailure(500, t.failed);
   }
-  if (result === "not_found") {
-    return data<ActionResult>({ ok: false, notice: t.failed }, { status: 404 });
-  }
-  if (result === "invalid") {
-    const notice = intent === "store-delete" ? t.deleteMismatch : t.failed;
-    return data<ActionResult>({ ok: false, notice }, { status: 409 });
-  }
-  if (intent === "store-delete") {
-    return redirect(localizedPath(language, `${appBase}/negozi?negozio=eliminato`), 303);
-  }
+  if (result === "not_found") return actionFailure(404, t.failed);
+  if (result === "invalid")
+    return actionFailure(409, intent === "store-delete" ? t.deleteMismatch : t.failed);
+  if (intent === "store-delete")
+    return redirect(`${localizedPath(language, storesPath)}?negozio=eliminato`, 303);
   return { ok: true, notice: t.done[intent] } satisfies ActionResult;
 }
 

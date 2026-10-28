@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { FieldLabel } from "~/components/ui/field";
+import { FieldError, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import type { SignInMethods } from "../../domain/sign-in-methods.server";
 import type { ConfirmResult } from "../../security-actions.server";
@@ -125,17 +125,9 @@ export function ConfirmIdentity({
               aria-describedby={result?.ok === false ? `${id}-error` : undefined}
             />
             {result?.ok === false ? (
-              <p id={`${id}-error`} role="alert" className="text-sm text-danger">
-                {result.notice}
-              </p>
+              <FieldError id={`${id}-error`}>{result.notice}</FieldError>
             ) : null}
-            <Button
-              type="submit"
-              size="sm"
-              className="w-fit"
-              disabled={fetcher.state !== "idle"}
-              aria-busy={fetcher.state !== "idle" || undefined}
-            >
+            <Button type="submit" size="sm" className="w-fit" pending={fetcher.state !== "idle"}>
               {t.confirm}
             </Button>
           </form>
@@ -147,17 +139,14 @@ export function ConfirmIdentity({
               variant="outline"
               size="sm"
               className="w-fit"
-              disabled={pending || fetcher.state !== "idle"}
+              disabled={fetcher.state !== "idle"}
+              pending={pending}
               onClick={() => void confirmWithPasskey()}
             >
               <KeyRound aria-hidden="true" data-icon="inline-start" />
               {t.confirmPasskey}
             </Button>
-            {passkeyError ? (
-              <p role="alert" className="text-sm text-danger">
-                {t.passkeyErrors[passkeyError]}
-              </p>
-            ) : null}
+            {passkeyError ? <FieldError>{t.passkeyErrors[passkeyError]}</FieldError> : null}
           </div>
         ) : null}
         {passkeyOnly ? null : (

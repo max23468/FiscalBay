@@ -66,11 +66,7 @@ export function TemplateSection({ form }: { form: Draft<Record<Language, string>
         </Tabs>
         <FieldDescription id="template-hint">{t.settings.template.templateHint}</FieldDescription>
         <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="submit"
-            disabled={!dirty || empty || action.pending}
-            aria-busy={action.pending || undefined}
-          >
+          <Button type="submit" disabled={!dirty || empty} pending={action.pending}>
             {action.pending ? t.common.saving : t.common.save}
           </Button>
           <span

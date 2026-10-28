@@ -25,7 +25,7 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import { Field, FieldLabel } from "~/components/ui/field";
+import { Field, FieldError, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { useCopy, useLinks } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
@@ -218,17 +218,12 @@ function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlo
                 </Link>
               </p>
             ) : null}
-            {failure ? (
-              <p role="alert" className="text-sm text-danger">
-                {failure}
-              </p>
-            ) : null}
+            <FieldError>{failure}</FieldError>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={action.pending}>{t.common.cancel}</AlertDialogCancel>
               <Button
                 variant="destructive-solid"
-                disabled={action.pending}
-                aria-busy={action.pending || undefined}
+                pending={action.pending}
                 onClick={() => run("store-disconnect")}
               >
                 {action.pending ? t.common.saving : t.stores.disconnect}
@@ -266,16 +261,12 @@ function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlo
               onChange={(event) => setConfirmName(event.target.value)}
             />
           </Field>
-          {failure ? (
-            <p role="alert" className="text-sm text-danger">
-              {failure}
-            </p>
-          ) : null}
+          <FieldError>{failure}</FieldError>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={action.pending}>{t.common.cancel}</AlertDialogCancel>
             <Button
-              disabled={action.pending || confirmName.trim() !== store.name}
-              aria-busy={action.pending || undefined}
+              disabled={confirmName.trim() !== store.name}
+              pending={action.pending}
               variant="destructive-solid"
               onClick={() => run("store-delete", { conferma: confirmName.trim() })}
             >

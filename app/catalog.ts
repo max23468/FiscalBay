@@ -51,6 +51,13 @@ export const priceGeneration = {
   net: { monthly: 490, annual: 4900, lifetime: 14900 },
 } as const satisfies { id: string; net: Record<PremiumOffer, number> };
 
+/** Variabile del Worker con il prezzo Stripe di ogni offerta. */
+export const priceVariable = {
+  monthly: "STRIPE_PRICE_MONTHLY",
+  annual: "STRIPE_PRICE_ANNUAL",
+  lifetime: "STRIPE_PRICE_LIFETIME",
+} as const satisfies Record<PremiumOffer, keyof Env>;
+
 /** Prezzo netto in euro, senza decimali quando è intero. */
 export function formatPrice(cents: number, language: Language) {
   return new Intl.NumberFormat(language === "it" ? "it-IT" : "en-IE", {

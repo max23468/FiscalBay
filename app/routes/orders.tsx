@@ -19,10 +19,8 @@ import {
 import { appCopy, pageTitle } from "../app-copy";
 import { ordersPath, storeLinkPath } from "../app-links";
 import {
-  accountCoverage,
   orderAllowance,
   restoreUnlockConfirmation,
-  startTrial,
   unlockConfirmation,
   UnlockError,
   unlockOrders,
@@ -37,17 +35,16 @@ import {
 } from "../domain/preferences.server";
 import {
   countVisibleOrders,
-  listCriteria,
   listVisibleOrders,
   type OrderCriteria,
   visibleOrderFacets,
 } from "../domain/orders.server";
-import { ebayOutage, listStores } from "../domain/stores.server";
-import { logFailure } from "../errors";
+import { listStores } from "../domain/stores.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
 import {
+  listCriteria,
   maxListedOrders,
   ordersPageSize,
   pagesParam,
@@ -63,6 +60,16 @@ import { settle } from "../settle.server";
 import type { ActionResult, EbayEnvironment, OrderView } from "../view-models";
 import type { Route } from "./+types/orders";
 import { orderView } from "../domain/order-view.server";
+import { planView } from "../domain/plan-view.server";
+import {
+  actionFailure,
+  areaAction,
+  runAreaAction,
+  suspendedEbayRead,
+  trialAction,
+  type AreaAction,
+  type AreaActionContext,
+} from "../area-actions.server";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
@@ -216,7 +223,6 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     freshHref: incoming > 0 ? `${path}${fresh.size ? `?${fresh}` : ""}` : null,
     incomingAtTop,
   };
-  const cycle = allowance?.cycle ?? null;
   const notices = ordersNotices({
     stores: environmentStores,
     ebayEnvironment,
@@ -241,24 +247,8 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     search: searchText,
     detail,
     stores: filterStores,
-    account: {
-      plan: premium ? "premium" : "free",
-      // La prova si propone dopo la prima lettura riuscita, anche senza ordini.
-      trialAvailable: allowance?.trialAvailable ?? false,
-      ...accountCoverage(allowance),
-      ...(allowance?.suspended ? { freeSuspended: true } : {}),
-      // Prima del primo collegamento nessun ciclo è avviato e nessuno sblocco è disponibile.
-      // Anche in lista d'attesa nessuno sblocco del Free è disponibile.
-      quota: premium
-        ? undefined
-        : allowance?.waiting
-          ? { used: 0, limit: 0, cycleEndsAt: null }
-          : {
-              used: cycle?.used ?? 0,
-              limit: cycle?.quota ?? 0,
-              cycleEndsAt: cycle?.ends_at ?? null,
-            },
-    },
+    // La prova si propone dopo la prima lettura riuscita, anche senza ordini.
+    account: planView(allowance, "orders"),
     notices,
     sync: {
       running: environmentStores.some((store) => store.syncing),
@@ -320,78 +310,78 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
   return args.formMethod ? true : revalidateUnlessSnapshot(args);
 }
 
+/** Nuova lettura di un ordine non riuscito, come il pulsante: sospesa se eBay non è raggiungibile. */
+async function retryOrderRead({ request, area, form }: AreaActionContext) {
+  const t = appCopy[area.language].stores;
+  const userId = area.session.user.id;
+  const id = String(form.get("order") ?? "");
+  if (!id || id.length > 64) return actionFailure(400, t.failed);
+  const environment = requestedEbayEnvironment(request);
+  const suspended = await suspendedEbayRead(userId, { environment });
+  if (suspended) return actionFailure(409, t[suspended]);
+  // Il dominio rilegge soltanto un ordine che l'utente consulta, con lettura non riuscita.
+  const requested = await requestOrderRead(env, userId, id, environment);
+  if (requested === "not_found" || requested === "invalid") return actionFailure(409, t.failed);
+  return {
+    ok: true,
+    notice: requested === "limited" ? t.requested.limited : appCopy[area.language].orders.retried,
+  } satisfies ActionResult;
+}
+
 /**
- * Sblocco, nuova lettura di un ordine non riuscito, ripristino della conferma di sblocco e
- * attivazione della prova, sempre sugli ordini e sullo spazio dell'utente.
+ * Ripristino della conferma di sblocco, consenso proposto, prova e nuova lettura, sempre sugli
+ * ordini e sullo spazio dell'utente.
  */
+const orderActions: Record<string, AreaAction> = {
+  "unlock-confirmation": {
+    run: async ({ area }) => {
+      await restoreUnlockConfirmation(env.DB, area.session.user.id);
+      return { ok: true } satisfies ActionResult;
+    },
+    failureNotice: (t) => t.settings.saveFailed,
+  },
+  marketing: {
+    run: async ({ area, form }) => {
+      const t = appCopy[area.language];
+      const value = form.get("value");
+      if (value !== "true" && value !== "false") return actionFailure(400, t.settings.saveFailed);
+      const accepted = value === "true";
+      await recordMarketingConsent(
+        env.DB,
+        area.session.user.id,
+        accepted,
+        area.language,
+        "proposal",
+      );
+      const { marketingProposal } = t.orders;
+      return {
+        ok: true,
+        notice: accepted ? marketingProposal.accepted : marketingProposal.declined,
+      } satisfies ActionResult;
+    },
+    failureNotice: (t) => t.settings.saveFailed,
+  },
+  "start-trial": trialAction,
+  retry: { run: retryOrderRead, failureNotice: (t) => t.stores.failed },
+};
+
+/** Sblocco e azioni degli Ordini. */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
-  const { language, session } = await requireAccountArea(request);
-  const t = appCopy[language];
+  const area = await requireAccountArea(request);
   const form = await request.formData();
-  const intent = form.get("intent");
-  if (intent === "unlock-confirmation") {
-    await restoreUnlockConfirmation(env.DB, session.user.id);
-    return { ok: true } satisfies ActionResult;
-  }
-  if (intent === "marketing") {
-    const value = form.get("value");
-    if (value !== "true" && value !== "false")
-      return data<ActionResult>({ ok: false, notice: t.settings.saveFailed }, { status: 400 });
-    await recordMarketingConsent(env.DB, session.user.id, value === "true", language, "proposal");
-    return {
-      ok: true,
-      notice:
-        value === "true"
-          ? t.orders.marketingProposal.accepted
-          : t.orders.marketingProposal.declined,
-    } satisfies ActionResult;
-  }
-  if (intent === "start-trial") {
-    const started = await startTrial(env.DB, session.user.id);
-    return started
-      ? ({ ok: true, notice: t.settings.plan.trialStarted } satisfies ActionResult)
-      : data<ActionResult>(
-          { ok: false, notice: t.settings.plan.trialUnavailable },
-          { status: 409 },
-        );
-  }
-  const environment = requestedEbayEnvironment(request);
-  if (intent === "retry") {
-    const id = String(form.get("order") ?? "");
-    if (!id || id.length > 64)
-      return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
-    // Con eBay che non risponde o le letture sospese la nuova lettura resta sospesa, come il
-    // pulsante.
-    if (!(await serviceSetting(env.DB, "ebay_calls")))
-      return data<ActionResult>({ ok: false, notice: t.stores.ebayPaused }, { status: 409 });
-    const stores = await listStores(env.DB, session.user.id);
-    if (ebayOutage(stores.filter((store) => store.ebayEnvironment === environment)))
-      return data<ActionResult>({ ok: false, notice: t.stores.ebayDown }, { status: 409 });
-    let requested;
-    try {
-      // Il dominio rilegge soltanto un ordine che l'utente consulta, con lettura non riuscita.
-      requested = await requestOrderRead(env, session.user.id, id, environment);
-    } catch (error) {
-      logFailure({ request, error, operation: "route" });
-      return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 500 });
-    }
-    if (requested === "not_found" || requested === "invalid")
-      return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
-    return {
-      ok: true,
-      notice: requested === "limited" ? t.stores.requested.limited : t.orders.retried,
-    } satisfies ActionResult;
-  }
+  const intent = String(form.get("intent") ?? "");
+  const chosen = areaAction(orderActions, intent);
+  if (chosen) return runAreaAction(chosen, { request, area, form });
   if (intent !== "unlock")
     return data<UnlockResult>({ unlocked: [], remaining: null, error: true }, { status: 400 });
   try {
     return await unlockOrders(
       env.DB,
-      session.user.id,
+      area.session.user.id,
       String(form.get("ids") ?? "").split(","),
       form.get("skipConfirmation") === "true",
-      environment,
+      requestedEbayEnvironment(request),
     );
   } catch (error) {
     // Le violazioni del dominio non espongono ordine, quota altrui o testo SQL.

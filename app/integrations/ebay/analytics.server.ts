@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { upstreamJson } from "../http.server";
-import { ebayConfiguration } from "./environment.server";
+import { applicationToken, ebayConfiguration } from "./environment.server";
 import type { EbayEnvironment } from "../../view-models";
 
 /**
@@ -96,23 +96,7 @@ export async function readApiQuotas(
 ): Promise<ApiQuota[]> {
   const configuration = ebayConfiguration(env, environment);
   const options = { timeoutMs, maxBytes: 262_144 };
-  const token = await upstreamJson(
-    fetcher,
-    configuration.tokenUrl,
-    z.object({ access_token: z.string().min(1).max(8192) }),
-    {
-      method: "POST",
-      headers: {
-        authorization: `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        scope: "https://api.ebay.com/oauth/api_scope",
-      }),
-    },
-    { ...options, maxBytes: 16_384 },
-  );
+  const token = await applicationToken(configuration, fetcher, { timeoutMs });
   const responses = await Promise.all(
     quotaApis.map((api) => {
       const url = new URL(`${configuration.apiOrigin}/developer/analytics/v1_beta/rate_limit/`);
@@ -122,7 +106,7 @@ export async function readApiQuotas(
         fetcher,
         url.toString(),
         responseSchema,
-        { headers: { authorization: `Bearer ${token.access_token}` } },
+        { headers: { authorization: `Bearer ${token}` } },
         options,
       );
     }),

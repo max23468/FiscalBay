@@ -1,4 +1,6 @@
-import { UpstreamError } from "../http.server";
+import { z } from "zod";
+
+import { upstreamJson, UpstreamError, type UpstreamOptions } from "../http.server";
 import type { EbayEnvironment } from "../../view-models";
 
 /** Segreti eBay facoltativi: senza valore Sandbox e verifica delle notifiche restano spente. */
@@ -59,6 +61,40 @@ export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironmen
 }
 
 export type EbayConfiguration = ReturnType<typeof ebayConfiguration>;
+
+/** Credenziali dell'applicazione per l'endpoint dei token. */
+export function basicAuthorization(configuration: EbayConfiguration) {
+  return `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`;
+}
+
+/**
+ * Token dell'applicazione (`client_credentials`) per le API che non agiscono per un negozio,
+ * come quote e chiavi delle notifiche.
+ */
+export async function applicationToken(
+  configuration: EbayConfiguration,
+  fetcher: typeof fetch,
+  options: Pick<UpstreamOptions, "timeoutMs"> = {},
+): Promise<string> {
+  const token = await upstreamJson(
+    fetcher,
+    configuration.tokenUrl,
+    z.object({ access_token: z.string().min(1).max(8192) }),
+    {
+      method: "POST",
+      headers: {
+        authorization: basicAuthorization(configuration),
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        scope: "https://api.ebay.com/oauth/api_scope",
+      }),
+    },
+    { ...options, maxBytes: 16_384 },
+  );
+  return token.access_token;
+}
 
 /** Ciò che serve a una chiamata seller: il token viaggia solo verso `configuration.apiOrigin`. */
 export type EbayAccess = {

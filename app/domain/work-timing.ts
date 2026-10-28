@@ -23,3 +23,11 @@ export type ScheduledTask = keyof typeof taskPeriods;
 
 /** Ricevute ferme da più di un'ora, considerate in ritardo dalla console. */
 export const stalledReceiptMilliseconds = 60 * minute;
+
+/**
+ * Attesa in secondi prima di ripetere un messaggio della coda non riuscito: raddoppia da 30
+ * secondi a ogni tentativo, fino a un'ora.
+ */
+export function queueRetryDelay(attempts: number): number {
+  return Math.min(3600, 30 * 2 ** (attempts - 1));
+}

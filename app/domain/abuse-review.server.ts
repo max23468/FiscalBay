@@ -1,5 +1,7 @@
+import { sha256Hex } from "../sealed.server";
 import { inSequence } from "../sequence";
 import { applyWorkspacePlan } from "./free-store.server";
+import { paidCoverageSql } from "./grants.server";
 import { storeNameSql } from "./store-state.server";
 
 /**
@@ -39,14 +41,9 @@ export function normalizedName(value: string) {
     .replace(/[^\p{L}\p{N}]/gu, "");
 }
 
-async function digest(value: string) {
-  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
 /** Chiave stabile della segnalazione: tipo, impronta del valore e spazi coinvolti. */
 async function signalKey(kind: AbuseSignalKind, value: string, workspaces: string[]) {
-  return `${kind}:${(await digest(`${kind}\n${value}\n${[...workspaces].sort().join(",")}`)).slice(0, 48)}`;
+  return `${kind}:${(await sha256Hex(`${kind}\n${value}\n${[...workspaces].sort().join(",")}`)).slice(0, 48)}`;
 }
 
 /**
@@ -112,10 +109,7 @@ export async function listAbuseSignals(db: D1Database, now = new Date()): Promis
       .prepare(`SELECT w.id,
           (SELECT u.email FROM workspace_members wm JOIN "user" u ON u.id = wm.user_id
             WHERE wm.workspace_id = w.id AND wm.role = 'owner' LIMIT 1) AS email,
-          EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = w.id
-            AND e.revoked_at IS NULL AND e.source <> 'trial'
-            AND julianday(e.starts_at) <= julianday(?1)
-            AND (e.ends_at IS NULL OR julianday(?1) < julianday(e.ends_at))) AS premium
+          ${paidCoverageSql("w.id", "?1")} AS premium
         FROM workspaces w WHERE w.id IN (SELECT value FROM json_each(?2))`)
       .bind(at, JSON.stringify(signals.flatMap(({ group }) => [...group.ids]))),
     db

@@ -614,11 +614,7 @@ for (const area of areas)
         // Anche su mobile l'anteprima dichiara che le azioni sono simulate.
         if (area.base === "/anteprima")
           await expect(
-            page.getByText(
-              locale === "it"
-                ? "Qui le azioni sono simulate e usano dati di esempio."
-                : "Actions here are simulated and use sample data.",
-            ),
+            page.getByText(locale === "it" ? "Le azioni sono simulate." : "Actions are simulated."),
           ).toBeVisible();
         const bottom = page.getByRole("navigation", { name: labels.nav });
         await expect(bottom).toHaveCount(1);

@@ -36,13 +36,7 @@ import { admission } from "../domain/admission.server";
 import { pendingEmailChange } from "../domain/email-change.server";
 import { lifetimeContext } from "../domain/lifetime.server";
 import { chooseFreeStore, freeStoreState } from "../domain/free-store.server";
-import {
-  accountCoverage,
-  orderAllowance,
-  setUnlockConfirmation,
-  startTrial,
-  unlockConfirmation,
-} from "../domain/grants.server";
+import { orderAllowance, setUnlockConfirmation, unlockConfirmation } from "../domain/grants.server";
 import { completeRegistration, parseProfile } from "../domain/registration.server";
 import {
   marketingConsent,
@@ -75,7 +69,6 @@ import { hasWhatsNew } from "../whats-new.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { measure } from "../observability.server";
 import { requestAccountDeletion, securityAction } from "../security-actions.server";
-import { effectiveTimeZone } from "../preferences";
 import {
   orderPeriods,
   orderPeriodStart,
@@ -101,7 +94,15 @@ import { accountArchive, accountArchiveName, accountData } from "../domain/accou
 import { accountExportScope } from "../orders/export-scope.server";
 import { formatDate } from "../format";
 import type { Route } from "./+types/settings";
-import { subscriptionView } from "../domain/plan-view.server";
+import { planView, subscriptionView } from "../domain/plan-view.server";
+import {
+  actionFailure,
+  areaAction,
+  runAreaAction,
+  trialAction,
+  type AreaAction,
+  type AreaActionContext,
+} from "../area-actions.server";
 
 /**
  * Servizi reali delle categorie. L'acquisto compare con la configurazione Stripe, la gestione
@@ -157,7 +158,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const userId = session.user.id;
   const now = new Date();
   const auth = session as AuthSession;
-  const timeZone = effectiveTimeZone(preferences.timeZone, area.detectedTimeZone);
+  const { timeZone } = area;
   const [
     allowance,
     purchase,
@@ -198,7 +199,8 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const accountView = {
     ...account,
     profile,
-    ...planFields(allowance, admissionState.waiting, subscription),
+    ...planView(allowance, "plan", admissionState.waiting),
+    ...subscription,
   };
   const page: SettingsPageData = {
     confirmUnlock,
@@ -260,32 +262,6 @@ function subscriptionState(allowance: Allowance, now: Date) {
     : Promise.resolve({});
 }
 
-/** Piano, prova, lista d'attesa, sblocchi e abbonamento dell'account. */
-function planFields(
-  allowance: Allowance,
-  waiting: boolean,
-  subscription: Awaited<ReturnType<typeof subscriptionState>>,
-) {
-  const cycle = allowance?.cycle;
-  return {
-    plan: allowance?.premium ? ("premium" as const) : ("free" as const),
-    trialAvailable: allowance?.trialAvailable ?? false,
-    ...(waiting && !allowance?.premium ? { waitlisted: true } : {}),
-    ...accountCoverage(allowance),
-    ...subscription,
-    // Prima del primo collegamento nessun ciclo è avviato e non c'è una quota da mostrare.
-    quota:
-      !allowance?.premium && cycle
-        ? {
-            used: cycle.used,
-            limit: cycle.quota,
-            cycleEndsAt: cycle.ends_at,
-            ...(cycle.next_quota !== cycle.quota ? { nextLimit: cycle.next_quota } : {}),
-          }
-        : undefined,
-  };
-}
-
 /**
  * Riepilogo diagnostico dell'assistenza, dai soli negozi dello spazio dell'utente. Una lettura
  * che non riesce lascia il modulo senza riepilogo: la richiesta si invia lo stesso. Il
@@ -308,7 +284,7 @@ async function readDiagnostics(
       version: appVersion(env),
       correlationId: reference,
       language: area.language,
-      timeZone: effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone),
+      timeZone: area.timeZone,
     });
   } catch (error) {
     logFailure({ request, error, operation: "support" });
@@ -336,7 +312,7 @@ async function attachedDiagnostics(
     return await readDiagnostics(
       request,
       area,
-      planFields(allowance, admissionState.waiting, subscription),
+      { ...planView(allowance, "plan", admissionState.waiting), ...subscription },
       now,
       reference ?? correlationId(request),
     );
@@ -353,14 +329,12 @@ async function attachedDiagnostics(
  */
 async function sendSupport(request: Request, area: AccountArea, form: FormData) {
   const t = appCopy[area.language].settings.support;
-  const failed = (status: number, notice: string) =>
-    data<ActionResult>({ ok: false, notice }, { status });
   const support = parseSupportRequest(form);
-  if (!support) return failed(400, t.invalid);
+  if (!support) return actionFailure(400, t.invalid);
   const userId = area.session.user.id;
   const now = new Date();
   const reserved = await reserveSupportRequest(env.DB, userId, now);
-  if (!reserved) return failed(429, t.limited);
+  if (!reserved) return actionFailure(429, t.limited);
   const diagnostics = support.diagnostics
     ? await attachedDiagnostics(request, area, now, support.reference)
     : null;
@@ -378,7 +352,7 @@ async function sendSupport(request: Request, area: AccountArea, form: FormData) 
   } catch (error) {
     logFailure({ request, error, operation: "support" });
     await releaseSupportRequest(env.DB, reserved);
-    return failed(503, t.sendFailed);
+    return actionFailure(503, t.sendFailed);
   }
   return { ok: true } satisfies ActionResult;
 }
@@ -438,195 +412,225 @@ async function exportSection(
   };
 }
 
+/** Preferenze salvate a ogni modifica: consenso, conferma dello sblocco, Telegram e aspetto. */
+async function savePreferenceChange({ area, form }: AreaActionContext) {
+  const t = appCopy[area.language].settings;
+  const userId = area.session.user.id;
+  const name = String(form.get("name") ?? "");
+  const value = String(form.get("value") ?? "");
+  if (name === "marketing" && (value === "true" || value === "false")) {
+    await recordMarketingConsent(env.DB, userId, value === "true", area.language, "settings");
+    return { ok: true } satisfies ActionResult;
+  }
+  if (name === "unlock-confirmation" && (value === "true" || value === "false")) {
+    await setUnlockConfirmation(env.DB, userId, value === "true");
+    return { ok: true } satisfies ActionResult;
+  }
+  const telegram = parseTelegramChange(name, value);
+  if (telegram) {
+    if (!telegramConfigured(env)) return actionFailure(409, t.saveFailed);
+    if (!(await saveTelegramChange(env.DB, userId, telegram, area.timeZone)))
+      return actionFailure(404, t.saveFailed);
+    return { ok: true } satisfies ActionResult;
+  }
+  const change = parsePreference(name, value);
+  // La lingua cambia l'indirizzo della pagina: ha il proprio percorso.
+  if (!change || change.name === "language") return actionFailure(400, t.saveFailed);
+  await savePreference(env.DB, userId, change);
+  return { ok: true } satisfies ActionResult;
+}
+
+/** Esito di Stripe per ogni acquisto rifiutato, con lo stato HTTP. */
+async function buy({ request, area, form }: AreaActionContext) {
+  const t = appCopy[area.language].settings.plan;
+  const offer = String(form.get("plan") ?? "");
+  if (!isCheckoutOffer(offer)) return actionFailure(400, t.checkoutUnavailable);
+  const checkout = await startCheckout(env, {
+    request,
+    userId: area.session.user.id,
+    email: area.session.user.email,
+    offer,
+    language: area.language,
+  });
+  if (checkout.ok) return redirect(checkout.url);
+  const notices = {
+    covered: t.checkoutCovered,
+    "needs-sync": t.purchaseNeedsSync,
+    closed: t.purchaseClosed,
+    "sold-out": t.lifetimeUnavailable,
+    renewing: t.lifetimeRenewing,
+    unavailable: t.checkoutUnavailable,
+  } satisfies Record<typeof checkout.reason, string>;
+  return actionFailure(checkout.reason === "unavailable" ? 503 : 409, notices[checkout.reason]);
+}
+
+/** Il file nasce soltanto se nessuna revoca dello spazio arriva durante la lettura. */
+async function exportAccount({ area }: AreaActionContext) {
+  const { language, timeZone } = area;
+  const userId = area.session.user.id;
+  const now = new Date();
+  const revision = await exportRevision(env.DB, userId);
+  const archive = accountArchive(await accountData(env.DB, userId), language, timeZone, now);
+  const id = await publishExportFile(env, {
+    userId,
+    revision,
+    fileName: accountArchiveName(language, now, timeZone),
+    contentType: "application/zip",
+    body: new ReadableStream({
+      start(controller) {
+        controller.enqueue(archive);
+        controller.close();
+      },
+    }),
+    now,
+  });
+  if (!id) return actionFailure(409, appCopy[language].settings.privacy.accountExportFailed);
+  return {
+    ok: true,
+    download: localizedPath(language, exportFilePath(id)),
+  } satisfies ActionResult;
+}
+
 /**
- * Scelte semplici salvate a ogni modifica, modello di messaggio con Salva e azioni della
- * Sicurezza. Un rifiuto o un errore non è mai presentato come salvataggio riuscito.
+ * Scelte semplici salvate a ogni modifica, modello di messaggio con Salva, piano, esportazione,
+ * assistenza e privacy. Un rifiuto o un errore non è mai presentato come salvataggio riuscito.
  */
-export async function action({ request }: Route.ActionArgs) {
-  assertSameOrigin(request);
-  const area = await requireAccountArea(request);
-  const { language, session } = area;
-  const t = appCopy[language].settings;
-  const userId = session.user.id;
-  const form = await request.formData();
-  const intent = String(form.get("intent") ?? "");
-  const failed = (status: number, notice: string) =>
-    data<ActionResult>({ ok: false, notice }, { status });
-  try {
-    if (intent === "save") {
-      const name = String(form.get("name") ?? "");
-      const value = String(form.get("value") ?? "");
-      if (name === "marketing" && (value === "true" || value === "false")) {
-        await recordMarketingConsent(env.DB, userId, value === "true", language, "settings");
-        return { ok: true } satisfies ActionResult;
-      }
-      if (name === "unlock-confirmation" && (value === "true" || value === "false")) {
-        await setUnlockConfirmation(env.DB, userId, value === "true");
-        return { ok: true } satisfies ActionResult;
-      }
-      const telegram = parseTelegramChange(name, value);
-      if (telegram) {
-        if (!telegramConfigured(env)) return failed(409, t.saveFailed);
-        const zone = effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone);
-        if (!(await saveTelegramChange(env.DB, userId, telegram, zone)))
-          return failed(404, t.saveFailed);
-        return { ok: true } satisfies ActionResult;
-      }
-      const change = parsePreference(name, value);
-      // La lingua cambia l'indirizzo della pagina: ha il proprio percorso.
-      if (!change || change.name === "language") return failed(400, t.saveFailed);
-      await savePreference(env.DB, userId, change);
-      return { ok: true } satisfies ActionResult;
-    }
-    if (intent === "template") {
+const settingsActions: Record<string, AreaAction> = {
+  save: { run: savePreferenceChange, failureNotice: (t) => t.settings.saveFailed },
+  template: {
+    run: async ({ area, form }) => {
       const templates = parseTemplates(form);
-      if (!templates) return failed(400, t.template.templateInvalid);
-      await saveTemplates(env.DB, userId, templates);
+      if (!templates)
+        return actionFailure(400, appCopy[area.language].settings.template.templateInvalid);
+      await saveTemplates(env.DB, area.session.user.id, templates);
       return { ok: true } satisfies ActionResult;
-    }
-    if (intent === "export-save") {
+    },
+    failureNotice: (t) => t.settings.template.templateFailed,
+  },
+  "export-save": {
+    run: async ({ area, form }) => {
+      const t = appCopy[area.language].settings.export;
+      const userId = area.session.user.id;
       // Le configurazioni si salvano soltanto con Premium, riletto all'istante della richiesta.
       const layout = parseExportLayout(form);
       const name = parseConfigurationName(form);
-      if (!layout || !name) return failed(400, t.export.exportConfigInvalid);
+      if (!layout || !name) return actionFailure(400, t.exportConfigInvalid);
       if (!(await orderAllowance(env.DB, userId, new Date()))?.premium)
-        return failed(403, t.export.exportPremium);
+        return actionFailure(403, t.exportPremium);
       if (!(await saveExportConfiguration(env.DB, userId, name, layout, new Date())))
-        return failed(409, t.export.exportConfigFull(maxExportConfigurations));
-      return { ok: true, notice: t.export.exportConfigSaved } satisfies ActionResult;
-    }
-    if (intent === "export-delete") {
-      if (!(await deleteExportConfiguration(env.DB, userId, String(form.get("id") ?? ""))))
-        return failed(404, t.export.exportConfigInvalid);
-      return { ok: true, notice: t.export.exportConfigDeleted } satisfies ActionResult;
-    }
-    if (intent === "telegram-link") {
+        return actionFailure(409, t.exportConfigFull(maxExportConfigurations));
+      return { ok: true, notice: t.exportConfigSaved } satisfies ActionResult;
+    },
+    failureNotice: (t) => t.settings.export.exportConfigFailed,
+  },
+  "export-delete": {
+    run: async ({ area, form }) => {
+      const t = appCopy[area.language].settings.export;
+      const id = String(form.get("id") ?? "");
+      if (!(await deleteExportConfiguration(env.DB, area.session.user.id, id)))
+        return actionFailure(404, t.exportConfigInvalid);
+      return { ok: true, notice: t.exportConfigDeleted } satisfies ActionResult;
+    },
+    failureNotice: (t) => t.settings.saveFailed,
+  },
+  "telegram-link": {
+    run: async ({ area }) => {
+      const t = appCopy[area.language].settings.notifications;
       // Il modulo apre una nuova scheda: il link porta al bot dell'ambiente.
-      if (!telegramConfigured(env)) return failed(409, t.notifications.telegramUnavailable);
+      if (!telegramConfigured(env)) return actionFailure(409, t.telegramUnavailable);
       const link = await startTelegramLink(env.DB, env, {
-        userId,
-        sessionId: session.session.id,
-        language,
-        timeZone: effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone),
+        userId: area.session.user.id,
+        sessionId: area.session.session.id,
+        language: area.language,
+        timeZone: area.timeZone,
       });
       if ("url" in link) return redirect(link.url);
-      return failed(409, t.notifications.telegramPremium);
-    }
-    if (intent === "start-trial") {
-      // Una prova già usata, anche da un'altra scheda, non riparte: lo stato si rilegge.
-      if (!(await startTrial(env.DB, userId))) return failed(409, t.plan.trialUnavailable);
-      return { ok: true, notice: t.plan.trialStarted } satisfies ActionResult;
-    }
-    if (intent === "buy") {
-      const offer = String(form.get("plan") ?? "");
-      if (!isCheckoutOffer(offer)) return failed(400, t.plan.checkoutUnavailable);
-      const checkout = await startCheckout(env, {
-        request,
-        userId,
-        email: session.user.email,
-        offer,
-        language,
-      });
-      if (checkout.ok) return redirect(checkout.url);
-      const notices = {
-        covered: t.plan.checkoutCovered,
-        "needs-sync": t.plan.purchaseNeedsSync,
-        closed: t.plan.purchaseClosed,
-        "sold-out": t.plan.lifetimeUnavailable,
-        renewing: t.plan.lifetimeRenewing,
-        unavailable: t.plan.checkoutUnavailable,
-      } satisfies Record<typeof checkout.reason, string>;
-      return failed(checkout.reason === "unavailable" ? 503 : 409, notices[checkout.reason]);
-    }
-    if (intent === "manage-billing") {
-      const plan = appUrl(env, language, planPath);
-      const url = await openBillingPortal(env, userId, plan, language);
-      if (!url) return failed(409, t.plan.billingUnavailable);
+      return actionFailure(409, t.telegramPremium);
+    },
+    failureNotice: (t) => t.settings.saveFailed,
+  },
+  "start-trial": trialAction,
+  buy: { run: buy, failureNotice: (t) => t.settings.saveFailed },
+  "manage-billing": {
+    run: async ({ area }) => {
+      const plan = appUrl(env, area.language, planPath);
+      const url = await openBillingPortal(env, area.session.user.id, plan, area.language);
+      if (!url) return actionFailure(409, appCopy[area.language].settings.plan.billingUnavailable);
       return redirect(url);
-    }
-    if (intent === "change-period") {
+    },
+    failureNotice: (t) => t.settings.plan.billingUnavailable,
+  },
+  "change-period": {
+    run: async ({ area, form }) => {
+      const t = appCopy[area.language].settings.plan;
       const period = String(form.get("period") ?? "");
-      if (period !== "monthly" && period !== "annual") return failed(400, t.plan.periodUnavailable);
-      const change = await changeSubscriptionPeriod(env, userId, period);
+      if (period !== "monthly" && period !== "annual")
+        return actionFailure(400, t.periodUnavailable);
+      const change = await changeSubscriptionPeriod(env, area.session.user.id, period);
       if (change === "done" || change === "unchanged")
-        return { ok: true, notice: t.plan.periodChanged } satisfies ActionResult;
-      return failed(change === "not_allowed" ? 409 : 503, t.plan.periodUnavailable);
-    }
-    if (intent === "free-store") {
+        return { ok: true, notice: t.periodChanged } satisfies ActionResult;
+      return actionFailure(change === "not_allowed" ? 409 : 503, t.periodUnavailable);
+    },
+    failureNotice: (t) => t.settings.saveFailed,
+  },
+  "free-store": {
+    run: async ({ area, form }) => {
+      const t = appCopy[area.language].settings.plan;
       // La scelta e le pause sono un unico commit; un rifiuto lascia il negozio attivo com'era.
-      const choice = await chooseFreeStore(env.DB, userId, String(form.get("store") ?? ""));
+      const store = String(form.get("store") ?? "");
+      const choice = await chooseFreeStore(env.DB, area.session.user.id, store);
       if (choice.result === "done")
-        return { ok: true, notice: t.plan.freeStoreChanged } satisfies ActionResult;
+        return { ok: true, notice: t.freeStoreChanged } satisfies ActionResult;
       if (choice.result === "locked")
-        return failed(
+        return actionFailure(
           409,
-          t.plan.freeStoreLocked(
-            formatDate(
-              choice.changeFrom,
-              language,
-              "date",
-              effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone),
-            ),
-          ),
+          t.freeStoreLocked(formatDate(choice.changeFrom, area.language, "date", area.timeZone)),
         );
-      return failed(choice.result === "not_found" ? 404 : 409, t.plan.freeStoreUnavailable);
-    }
-    if (intent === "support") return await sendSupport(request, area, form);
-    if (intent === "account-export") {
-      // Il file nasce soltanto se nessuna revoca dello spazio arriva durante la lettura.
-      const now = new Date();
-      const zone = effectiveTimeZone(area.preferences.timeZone, area.detectedTimeZone);
-      const revision = await exportRevision(env.DB, userId);
-      const archive = accountArchive(await accountData(env.DB, userId), language, zone, now);
-      const id = await publishExportFile(env, {
-        userId,
-        revision,
-        fileName: accountArchiveName(language, now, zone),
-        contentType: "application/zip",
-        body: new ReadableStream({
-          start(controller) {
-            controller.enqueue(archive);
-            controller.close();
-          },
-        }),
-        now,
-      });
-      if (!id) return failed(409, t.privacy.accountExportFailed);
-      return {
-        ok: true,
-        download: localizedPath(language, exportFilePath(id)),
-      } satisfies ActionResult;
-    }
-    if (intent === "account-delete")
-      return await requestAccountDeletion(request, area, String(form.get("confirmation") ?? ""));
-    if (intent === "profile") {
+      return actionFailure(choice.result === "not_found" ? 404 : 409, t.freeStoreUnavailable);
+    },
+    failureNotice: (t) => t.settings.saveFailed,
+  },
+  support: {
+    run: ({ request, area, form }) => sendSupport(request, area, form),
+    failureNotice: (t) => t.settings.saveFailed,
+  },
+  "account-export": {
+    run: exportAccount,
+    failureNotice: (t) => t.settings.privacy.accountExportFailed,
+  },
+  "account-delete": {
+    run: ({ request, area, form }) =>
+      requestAccountDeletion(request, area, String(form.get("confirmation") ?? "")),
+    failureNotice: (t) => t.settings.privacy.deleteAccountFailed,
+  },
+  profile: {
+    run: async ({ area, form }) => {
+      const t = appCopy[area.language].profile;
       // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.
       form.set("tipo", area.profile.accountType === "business" ? "azienda" : "privato");
       const profile = parseProfile(form);
-      if (!profile) return failed(400, appCopy[language].profile.invalid);
-      await completeRegistration(env.DB, { userId, language, now: new Date(), profile });
-      return { ok: true, notice: appCopy[language].profile.updated } satisfies ActionResult;
-    }
-  } catch (error) {
-    logFailure({ request, error, operation: "route" });
-    return failed(
-      500,
-      intent === "template"
-        ? t.template.templateFailed
-        : intent === "profile"
-          ? appCopy[language].errors.unexpected
-          : intent === "manage-billing"
-            ? t.plan.billingUnavailable
-            : intent === "export-save"
-              ? t.export.exportConfigFailed
-              : intent === "account-export"
-                ? t.privacy.accountExportFailed
-                : intent === "account-delete"
-                  ? t.privacy.deleteAccountFailed
-                  : t.saveFailed,
-    );
-  }
-  return securityAction(request, area, form);
+      if (!profile) return actionFailure(400, t.invalid);
+      await completeRegistration(env.DB, {
+        userId: area.session.user.id,
+        language: area.language,
+        now: new Date(),
+        profile,
+      });
+      return { ok: true, notice: t.updated } satisfies ActionResult;
+    },
+    failureNotice: (t) => t.errors.unexpected,
+  },
+};
+
+/** Le azioni delle Impostazioni; le altre sono della Sicurezza. */
+export async function action({ request }: Route.ActionArgs) {
+  assertSameOrigin(request);
+  const area = await requireAccountArea(request);
+  const form = await request.formData();
+  const chosen = areaAction(settingsActions, String(form.get("intent") ?? ""));
+  return chosen
+    ? runAreaAction(chosen, { request, area, form })
+    : securityAction(request, area, form);
 }
 
 export function clientAction(args: Route.ClientActionArgs) {

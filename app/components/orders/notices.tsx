@@ -273,10 +273,9 @@ export function TrialNotice({ data }: { data: OrdersPageData }) {
       <Button
         variant="outline"
         size="sm"
-        disabled={action.pending}
+        pending={action.pending}
         onClick={() => action.run("start-trial")}
       >
-        {action.pending ? <Spinner /> : null}
         {t.settings.plan.trialAction}
       </Button>
     </div>

@@ -618,11 +618,17 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
           'monthly')`)
         .bind(status, now, periodEnd, cancel)
         .run();
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-        ends_at, stripe_invoice_id, amount_paid, currency, paid_at, revoked_at, revocation)
-      VALUES ('paid', 'w-a', 'premium', ?1, ?2, 'in_first', 598, 'eur', ?1, ?1, 'refund')`)
-      .bind(now, periodEnd)
-      .run();
+    await insertEntitlement({
+      id: "paid",
+      source: "premium",
+      endsAt: periodEnd,
+      stripeInvoiceId: "in_first",
+      amountPaid: 598,
+      currency: "eur",
+      paidAt: now,
+      revokedAt: now,
+      revocation: "refund",
+    }).run();
     // Chiuso dopo il rimborso: nessun rinnovo da annunciare.
     expect(await view(later)).toEqual({ payment: { state: "refunded" } });
     // Cambio di periodicità programmato: Premium riprende comunque al rinnovo.
@@ -638,11 +644,16 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
       VALUES (1, 'w-a', 'active', 'sale', 'cs_paid', 'cus_test', ?1, ?1, ?1)`)
       .bind(now)
       .run();
-    await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
-        stripe_checkout_session_id, amount_paid, currency, paid_at, revoked_at, revocation)
-      VALUES ('lifetime', 'w-a', 'lifetime', ?1, 'cs_paid', 18178, 'eur', ?1, ?1, 'refund')`)
-      .bind(now)
-      .run();
+    await insertEntitlement({
+      id: "lifetime",
+      source: "lifetime",
+      stripeCheckoutSessionId: "cs_paid",
+      amountPaid: 18178,
+      currency: "eur",
+      paidAt: now,
+      revokedAt: now,
+      revocation: "refund",
+    }).run();
     await subscription("active");
     expect(await view(later)).toEqual({ payment: { state: "pending" } });
     await env.DB.prepare("DELETE FROM stripe_subscriptions").run();

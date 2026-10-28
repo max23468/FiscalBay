@@ -4,8 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { setSwitch } from "../app/domain/service-settings.server";
-import { deliverTelegram, zonedInstant } from "../app/domain/telegram-deliveries.server";
+import { deliverTelegram } from "../app/domain/telegram-deliveries.server";
 import type { VisibleOrder } from "../app/domain/orders.server";
+import { localClock, zonedInstant } from "../app/time";
 import {
   copyButtons,
   digestMessage,
@@ -14,7 +15,6 @@ import {
   fiscalDigest,
   fiscalKey,
   importMessage,
-  localClock,
   orderEntry,
   orderMessage,
   orderNotice,

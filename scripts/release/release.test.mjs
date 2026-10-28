@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -19,6 +20,11 @@ import {
   releaseIdentity,
   retryReadback,
   assertTestEvidence,
+  assertProductionApproval,
+  firstAttempt,
+  rollbackRequired,
+  assertConfirmable,
+  deployReport,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
 
@@ -367,5 +373,101 @@ describe("pubblicazione riprendibile", () => {
       () => productionReadiness(heading + '<a id="altro"></a>\n' + rows.join("\n")),
       /Checkpoint/u,
     );
+  });
+});
+
+describe("comandi della pubblicazione", () => {
+  const manifest = { sha: "a".repeat(40), digest: "b".repeat(64) };
+  const run = (...args) =>
+    spawnSync(process.execPath, [new URL("./release.mjs", import.meta.url).pathname, ...args], {
+      encoding: "utf8",
+    });
+
+  it("rifiuta ambiente e base mancanti prima di leggere sorgenti o provider", () => {
+    const environment = run("review", "--environment", "staging");
+    assert.equal(environment.status, 1);
+    assert.match(environment.stderr, /Ambiente non supportato/u);
+    const base = run("review", "--base", "develop");
+    assert.equal(base.status, 1);
+    assert.match(base.stderr, /Base della PR richiesta/u);
+  });
+
+  it("richiede interruttore, approvazione dell'owner e SHA atteso sullo stesso commit", () => {
+    const env = { PRODUCTION_PUBLISH_ENABLED: "true", OWNER_APPROVED_SHA: manifest.sha };
+    assert.doesNotThrow(() => assertProductionApproval(manifest, manifest.sha, env));
+    for (const [expected, changed] of [
+      [manifest.sha, { PRODUCTION_PUBLISH_ENABLED: "false" }],
+      [manifest.sha, { OWNER_APPROVED_SHA: "c".repeat(40) }],
+      ["c".repeat(40), {}],
+      [undefined, {}],
+    ])
+      assert.throws(
+        () => assertProductionApproval(manifest, expected, { ...env, ...changed }),
+        /via Production/u,
+      );
+  });
+
+  it("ripristina la ricevuta soltanto dai tentativi successivi di una run identificata", () => {
+    assert.equal(firstAttempt("12", 1, "deployed"), true);
+    assert.equal(firstAttempt("12", 2, "release-receipt"), false);
+    for (const [runId, prefix] of [
+      [undefined, "deployed"],
+      ["run", "deployed"],
+      ["12", "other"],
+      ["12", undefined],
+    ])
+      assert.throws(() => firstAttempt(runId, 2, prefix), /Run o ricevuta/u);
+  });
+
+  it("torna indietro soltanto da un deploy riuscito e compatibile", () => {
+    assert.equal(rollbackRequired({}), false);
+    assert.equal(rollbackRequired({ deployed: true }), false);
+    assert.equal(rollbackRequired({ deployed: false, previous: "old" }), false);
+    assert.equal(
+      rollbackRequired({ deployed: true, previous: "old", rollbackCompatible: true }),
+      true,
+    );
+    assert.throws(
+      () => rollbackRequired({ deployed: true, previous: "old", schemaChanged: true }),
+      /schema modificato/u,
+    );
+    assert.throws(
+      () => rollbackRequired({ deployed: true, previous: "old", rollbackCompatible: false }),
+      /senza provenienza attestata/u,
+    );
+  });
+
+  it("conferma soltanto il candidato in testa, distribuito e non ritirato", () => {
+    const receipt = { readback: true, version: "v2" };
+    const current = { version: "v2", identity: releaseIdentity(manifest) };
+    assert.doesNotThrow(() => assertConfirmable(manifest, receipt, manifest.sha, current));
+    for (const [changedReceipt, remote, changedCurrent] of [
+      [{}, "c".repeat(40), {}],
+      [{ readback: false }, manifest.sha, {}],
+      [{ rolledBack: true }, manifest.sha, {}],
+      [{}, manifest.sha, { version: "v1" }],
+      [{}, manifest.sha, { identity: `${manifest.sha}:other` }],
+    ])
+      assert.throws(
+        () =>
+          assertConfirmable(manifest, { ...receipt, ...changedReceipt }, remote, {
+            ...current,
+            ...changedCurrent,
+          }),
+        /release rifiutata/u,
+      );
+  });
+
+  it("scrive gli output del deploy nel formato del workflow", () => {
+    const state = { sha: "s", tree: "t", digest: "d", version: "v2", schema: [{}, {}] };
+    assert.equal(
+      deployReport({ ...state, rollbackCompatible: true, previous: "v1" }).output,
+      "deployed=true\nversion=v2\nrollback-compatible=true\nprevious=v1\n",
+    );
+    assert.equal(
+      deployReport(state).output,
+      "deployed=true\nversion=v2\nrollback-compatible=false\nprevious=\n",
+    );
+    assert.match(deployReport(state).summary, /Commit s; tree t; SHA256 d; versione v2; schema 2/u);
   });
 });

@@ -369,7 +369,7 @@ describe("Stripe Managed Payments", () => {
         endsAt: "2026-10-13T20:00:00.000Z",
       }).run();
       expect(await buy(cookie, "annual")).toMatchObject({
-        data: { ok: false, notice: "Il tuo spazio ha già Premium attivo." },
+        data: { ok: false, notice: "Il tuo account ha già Premium attivo." },
       });
       expect(paths(api)).toEqual([
         "GET /v1/prices/price_test_monthly",

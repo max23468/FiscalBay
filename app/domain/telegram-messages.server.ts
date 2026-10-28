@@ -8,7 +8,8 @@ import { zoneLabel } from "../preferences";
 import { displayTaxValue, taxIdentifierType } from "../tax-quality";
 import type { EbayEnvironment, FiscalSituation } from "../view-models";
 import type { VisibleOrder } from "./orders.server";
-import { dayMilliseconds } from "../time";
+import { sha256Hex } from "../sealed.server";
+import { dayMilliseconds, localClock } from "../time";
 import { telegramMessageCopy as text } from "../copy/telegram";
 
 /**
@@ -124,11 +125,8 @@ export async function fiscalKey(notice: Pick<OrderNotice, "values">): Promise<st
 
 /** Impronta di un testo dei valori. */
 export async function fiscalDigest(values: string) {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(values));
   // Una stringa JSON, come richiede la colonna.
-  return JSON.stringify(
-    [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join(""),
-  );
+  return JSON.stringify(await sha256Hex(values));
 }
 
 /** Impronta di un ordine senza dato fiscale. */
@@ -157,27 +155,6 @@ export const icons = {
   ebay: "🛍",
   copy: "📋",
 } as const;
-
-/** Data e ora locali nel fuso indicato. */
-export function localClock(timeZone: string, now: Date): { day: string; time: string } {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-CA", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    })
-      .formatToParts(now)
-      .map((part) => [part.type, part.value]),
-  );
-  return {
-    day: `${parts.year}-${parts.month}-${parts.day}`,
-    time: `${parts.hour}:${parts.minute}`,
-  };
-}
 
 /** Giorno, con l'anno soltanto se diverso da quello di `now`. */
 export function date(language: Language, timeZone: string, iso: string, now = new Date()): string {
