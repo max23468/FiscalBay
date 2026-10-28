@@ -574,6 +574,41 @@ it("coda, cron e ingresso dei webhook scrivono esito e durata su Analytics Engin
   ]);
 });
 
+it("durante la sospensione pagine, webhook, coda e cron non toccano i dati", async () => {
+  const sendBatch = vi.fn<Queue["sendBatch"]>().mockResolvedValue(queued);
+  const suspended: Env = {
+    ...environment,
+    SERVICE_FROZEN: "true",
+    WORK_QUEUE: fakeQueue({ send, sendBatch }),
+  };
+  const page = await workerFetch(new Request("https://test.fiscalbay.it/app/ordini"), suspended);
+  expect(page.status).toBe(503);
+  expect(page.headers.get("x-fiscalbay-frozen")).toBe("1");
+  expect(page.headers.get("retry-after")).toBe("600");
+  expect(page.headers.get("cache-control")).toBe("no-store");
+  expect(await page.text()).toContain("<title>FiscalBay | Manutenzione</title>");
+  const webhook = await workerFetch(
+    new Request("https://test.fiscalbay.it/webhooks/stripe", { method: "POST", body: "{}" }),
+    suspended,
+  );
+  expect(webhook.status).toBe(503);
+  expect(await webhook.text()).toBe("");
+  expect(router.handle).not.toHaveBeenCalled();
+  const sync = { body: { syncStore: "webhook-store" }, ack: vi.fn(), retry: vi.fn(), attempts: 1 };
+  await worker.queue({ messages: [sync] } as unknown as MessageBatch<unknown>, suspended);
+  expect(sync.ack).not.toHaveBeenCalled();
+  expect(sync.retry).toHaveBeenCalledWith({ delaySeconds: 43_200 });
+  await worker.scheduled({ scheduledTime: now.getTime() } as ScheduledController, suspended);
+  expect(sendBatch).not.toHaveBeenCalled();
+  expect(send).not.toHaveBeenCalled();
+  // Un valore diverso da «true» non sospende nulla.
+  const open = await workerFetch(new Request("https://test.fiscalbay.it/webhooks/stripe"), {
+    ...environment,
+    SERVICE_FROZEN: "false",
+  });
+  expect(open.status).toBe(405);
+});
+
 it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito in ritardo", async () => {
   const sendBatch = vi.fn<Queue["sendBatch"]>().mockResolvedValue(queued);
   await worker.scheduled({ scheduledTime: now.getTime() } as ScheduledController, {

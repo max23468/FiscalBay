@@ -1,7 +1,7 @@
 name: Promuovi
 
 on:
-  # La prima prova registra il workflow prima della promozione sul branch predefinito.
+  # Una modifica del workflow integrata su develop avvia la sola qualifica del candidato.
   push:
     branches: [develop]
     paths: [.github/workflows/publish.yml]

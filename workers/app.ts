@@ -26,6 +26,43 @@ import {
   isTaskMessage,
 } from "../app/domain/scheduled-work.server";
 
+// Sospensione del servizio durante un ripristino dei dati (§32.1): un segreto del Worker, fuori
+// dal database che il ripristino sostituisce. Dichiararlo con `bindings.secret()` lo renderebbe
+// obbligatorio.
+declare global {
+  namespace Cloudflare {
+    interface Env {
+      SERVICE_FROZEN?: string;
+    }
+  }
+}
+
+const frozen = (env: Env) => env.SERVICE_FROZEN === "true";
+
+/** Attesa suggerita a browser e provider: i webhook rifiutati tornano con i loro tentativi. */
+const frozenRetrySeconds = 600;
+
+/** Ritardo massimo di Queues: un messaggio consegnato durante la sospensione torna dopo. */
+const frozenQueueDelaySeconds = 43_200;
+
+const frozenPage = `<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FiscalBay | Manutenzione</title></head>
+<body><main><h1>FiscalBay è in manutenzione</h1><p>Riprova fra qualche minuto.</p><p lang="en">FiscalBay is under maintenance. Please try again in a few minutes.</p></main></body></html>
+`;
+
+/** Risposta di ogni richiesta durante la sospensione: nessuna lettura o scrittura dei dati. */
+function frozenResponse(pathname: string) {
+  const headers = new Headers({
+    "cache-control": "no-store",
+    "retry-after": String(frozenRetrySeconds),
+    "x-fiscalbay-frozen": "1",
+    "x-robots-tag": "noindex, nofollow",
+  });
+  if (isWebhookPath(pathname)) return new Response(null, { status: 503, headers });
+  headers.set("content-type", "text/html; charset=utf-8");
+  return new Response(frozenPage, { status: 503, headers });
+}
+
 // I webhook vengono rifiutati o presi in carico prima di caricare la build dell'app. Anche
 // React Router si carica con la build: cron, coda e webhook non ne valutano i moduli all'avvio.
 let requestHandler: ReturnType<typeof createRequestHandler> | undefined;
@@ -65,6 +102,7 @@ function observedMessages<T extends Message<unknown>>(messages: T[]) {
 export default {
   async fetch(request, env, ctx) {
     const metrics = { dataset: env.METRICS, version: env.VERSION_METADATA?.id };
+    if (frozen(env)) return frozenResponse(new URL(request.url).pathname);
     if (isWebhookPath(new URL(request.url).pathname))
       return withPhaseTimings(
         request,
@@ -104,6 +142,12 @@ export default {
   // esportazioni grandi e le cancellazioni, dell'account o richieste da eBay: ogni tipo ha il
   // proprio schema e nessuno raccoglie i messaggi degli altri.
   async queue(batch, env, ctx?: ExecutionContext) {
+    // La consegna si sospende sulla coda; un messaggio arrivato comunque non tocca i dati.
+    if (frozen(env)) {
+      for (const message of batch.messages)
+        message.retry({ delaySeconds: frozenQueueDelaySeconds });
+      return;
+    }
     const syncs = batch.messages.filter((message) => isSyncMessage(message.body));
     const tasks = batch.messages.filter((message) => isTaskMessage(message.body));
     const webhooks = batch.messages.filter((message) => isWebhookMessage(message.body));
@@ -167,6 +211,7 @@ export default {
   // Ogni dieci minuti accoda il lavoro dovuto, senza eseguirlo: il consumer lo svolge fuori
   // dal percorso delle pagine e dall'invocazione del cron.
   async scheduled(controller, env, ctx?: ExecutionContext) {
+    if (frozen(env)) return;
     await withInvocationMetrics(
       "cron",
       "dispatch",
