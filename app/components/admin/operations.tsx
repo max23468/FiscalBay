@@ -3,7 +3,12 @@ import { cn } from "cn";
 import { Badge } from "~/components/ui/badge";
 import type { AdminCopy } from "../../copy/admin-copy";
 import type { ReceiptState, TaskState } from "../../domain/admin-operations.server";
-import type { EnvironmentQuotas, QuotaAnomaly, QuotaRow } from "../../domain/ebay-quotas.server";
+import type {
+  BulkDataAnomaly,
+  EnvironmentQuotas,
+  QuotaAnomaly,
+  QuotaRow,
+} from "../../domain/ebay-quotas.server";
 import type { TechnicalMetrics } from "../../domain/technical-metrics.server";
 import { locales } from "../../i18n";
 import { SeverityBadge } from "./overview";
@@ -136,29 +141,44 @@ function QuotaTable({ rows }: { rows: QuotaRow[] }) {
   );
 }
 
+/** Ambiente, API e chiamata, o ambiente, regione e categoria di dati, separati da punti. */
+const subjectLabel = (subject: string) =>
+  subject.replace("production", "Production").replace("sandbox", "Sandbox").replaceAll(":", " · ");
+
 export function QuotasView({
   quotas,
   anomalies,
+  bulk,
 }: {
   quotas: EnvironmentQuotas[];
   anomalies: QuotaAnomaly[];
+  bulk: BulkDataAnomaly[];
 }) {
   const { t, date, percent } = useAdmin();
   const q = t.quotas;
   return (
     <>
+      {bulk.length > 0 ? (
+        <Panel title={q.bulkData}>
+          <ul className="grid gap-2 text-sm">
+            {bulk.map((anomaly) => (
+              <li key={anomaly.key} className="flex flex-wrap items-center gap-2">
+                <SeverityBadge severity={anomaly.severity} />
+                <span className="font-medium">{subjectLabel(anomaly.subject)}</span>
+                <span className="font-code">{percent(anomaly.share)}</span>
+                <span className="text-muted-foreground">{q.until(date(anomaly.until))}</span>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      ) : null}
       {anomalies.length > 0 ? (
         <Panel title={q.anomalies}>
           <ul className="grid gap-2 text-sm">
             {anomalies.map((anomaly) => (
               <li key={anomaly.key} className="flex flex-wrap items-center gap-2">
                 <SeverityBadge severity={anomaly.severity} />
-                <span className="font-medium">
-                  {anomaly.subject
-                    .replace("production", "Production")
-                    .replace("sandbox", "Sandbox")
-                    .replaceAll(":", " · ")}
-                </span>
+                <span className="font-medium">{subjectLabel(anomaly.subject)}</span>
                 <span className="font-code">{percent(anomaly.share)}</span>
                 <span className="text-muted-foreground">
                   {anomaly.resolvedAt

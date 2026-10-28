@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { consoleSummary } from "../app/domain/admin-directory.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
+import { recordBulkDataThreshold } from "../app/domain/ebay-quotas.server";
 import { productMetrics } from "../app/domain/product-metrics.server";
 import {
   configureOwnerCommands,
@@ -494,6 +495,23 @@ describe("viste", () => {
               ],
       });
     }) as unknown as typeof fetch;
+    await recordBulkDataThreshold(env.DB, "production", {
+      policyFramework: "BULK_DATA_TRANSFER_POLICY",
+      region: "US",
+      window: {
+        aggregationWindowStart: "2026-09-01T00:00:00.000Z",
+        aggregationWindowEnd: "2026-09-30T22:00:00.000Z",
+      },
+      metricData: [
+        {
+          metricDataType: "PersonalFinancialData",
+          thresholdStatus: "REACHED",
+          thresholdPercentage: 100,
+          thresholdLimit: 1000,
+          currentCount: 1000,
+        },
+      ],
+    });
     const quotes = await ownerPanel(
       environment,
       { view: "quote", arg: 0, copy: false },
@@ -505,6 +523,9 @@ describe("viste", () => {
     );
     expect(value(quotes, "🟠 production:Trading:GetOrders")).toBe("80% · dal 13 set 2026, 22:00");
     expect(quotes.note).toContain("Application Growth Check");
+    expect(value(quotes, "🔴 production:US:PersonalFinancialData")).toBe(
+      "100% · fino al 1 ott 2026, 00:00",
+    );
 
     const week = await ownerPanel(
       environment,

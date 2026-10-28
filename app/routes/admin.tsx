@@ -165,7 +165,7 @@ function Section({ page, now }: { page: SectionData; now: string }) {
     case "lavori":
       return <JobsView tasks={page.tasks} receipts={page.receipts} />;
     case "quote":
-      return <QuotasView quotas={page.quotas} anomalies={page.anomalies} />;
+      return <QuotasView quotas={page.quotas} anomalies={page.anomalies} bulk={page.bulk} />;
     case "prestazioni":
       return <PerformanceView metrics={page.performance} />;
     case "commerciale":

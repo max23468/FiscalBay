@@ -247,7 +247,8 @@ type BulkDataThreshold = Extract<
  * Soglia della Bulk Data Transfer Policy notificata da eBay: un'anomalia per ambiente, regione,
  * categoria di dati e finestra di aggregazione, grave a soglia raggiunta. eBay non notifica il
  * rientro: l'anomalia si chiude da sé alla fine della finestra. Una consegna ripetuta aggiorna la
- * stessa anomalia.
+ * stessa anomalia; una consegna ritentata fuori ordine non abbassa gravità e conteggio, che nella
+ * finestra possono soltanto crescere.
  */
 export async function recordBulkDataThreshold(
   db: D1Database,
@@ -264,7 +265,9 @@ export async function recordBulkDataThreshold(
         .prepare(`INSERT INTO admin_anomalies (key, kind, severity, subject, detail, opened_at,
             seen_at, resolved_at)
           VALUES (?1, 'ebay_bulk_data', ?2, ?3, ?4, ?5, ?5, ?6)
-          ON CONFLICT(key) DO UPDATE SET severity = excluded.severity, detail = excluded.detail,
+          ON CONFLICT(key) DO UPDATE SET severity = min(severity, excluded.severity),
+            detail = CASE WHEN json_extract(excluded.detail, '$.count')
+              >= json_extract(detail, '$.count') THEN excluded.detail ELSE detail END,
             seen_at = excluded.seen_at`)
         .bind(
           `ebay_bulk_data:${subject}:${windowStart}`,
@@ -285,12 +288,26 @@ export async function recordBulkDataThreshold(
   );
 }
 
+export type BulkDataAnomaly = {
+  key: string;
+  severity: "p1" | "p2";
+  subject: string;
+  share: number;
+  openedAt: string;
+  /** Fine della finestra di aggregazione, quando l'anomalia si chiude. */
+  until: string;
+};
+
 /** Soglie Bulk Data Transfer con la finestra di aggregazione ancora aperta. */
-export async function bulkDataAnomalies(db: D1Database, now = new Date()) {
+export async function bulkDataAnomalies(
+  db: D1Database,
+  now = new Date(),
+): Promise<BulkDataAnomaly[]> {
   const { results } = await db
-    .prepare(`SELECT key, severity, subject, opened_at AS openedAt FROM admin_anomalies
-      WHERE kind = 'ebay_bulk_data' AND resolved_at > ?1 ORDER BY opened_at DESC`)
+    .prepare(`SELECT key, severity, subject, json_extract(detail, '$.share') AS share,
+        opened_at AS openedAt, resolved_at AS until FROM admin_anomalies
+      WHERE kind = 'ebay_bulk_data' AND resolved_at > ?1 ORDER BY severity, opened_at DESC`)
     .bind(now.toISOString())
-    .all<{ key: string; severity: "p1" | "p2"; subject: string; openedAt: string }>();
+    .all<BulkDataAnomaly>();
   return results;
 }
