@@ -117,7 +117,8 @@ eBay invia la notifica di cancellazione per ogni suo utente eliminato, venditore
 acquirente, all'endpoint del keyset: FiscalBay la riceve dall'ingresso dei webhook
 (`/webhooks/ebay` e `/webhooks/ebay/sandbox`), con la stessa verifica dell'endpoint,
 firma, limite di dimensione e budget delle chiavi pubbliche delle altre notifiche
-eBay. Prima di leggere il corpo un limite di 600 consegne al minuto per origine, con
+eBay; la firma usa il digest che eBay dichiara per la chiave, SHA-1 per queste
+notifiche e SHA-256 per quelle della Notification API. Prima di leggere il corpo un limite di 600 consegne al minuto per origine, con
 al più mille origini seguite per isolate, risponde 429 e lascia la consegna ai
 tentativi di eBay. La risposta positiva arriva soltanto dopo che la richiesta è
 registrata e accettata dalla coda; altrimenti 503 e il compito periodico riprende la
