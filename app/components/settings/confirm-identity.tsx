@@ -31,6 +31,8 @@ export function ConfirmIdentity({
   methods,
   passkeyOnly,
   actionPath,
+  returnTo,
+  body,
   currentSession,
   onConfirmed,
   onCancel,
@@ -38,6 +40,10 @@ export function ConfirmIdentity({
   methods: SignInMethods;
   passkeyOnly: boolean;
   actionPath: string;
+  /** Pagina a cui tornare dopo l'uscita e il nuovo accesso. */
+  returnTo: string;
+  /** Motivo della conferma: accesso oltre 24 ore, passkey dell'admin o cancellazione. */
+  body: string;
   currentSession: string | null;
   onConfirmed: () => void;
   onCancel: () => void;
@@ -92,9 +98,7 @@ export function ConfirmIdentity({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{t.confirmTitle}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {passkeyOnly ? t.confirmPasskeyBody : t.confirmBody}
-          </AlertDialogDescription>
+          <AlertDialogDescription>{body}</AlertDialogDescription>
         </AlertDialogHeader>
         {password ? (
           <form
@@ -160,7 +164,7 @@ export function ConfirmIdentity({
           <div className="grid justify-items-start gap-2 text-sm text-muted-foreground">
             <p>{t.confirmOther}</p>
             <form method="post" action={actionPath}>
-              <input type="hidden" name="returnTo" value={`${actionPath}#security-methods`} />
+              <input type="hidden" name="returnTo" value={returnTo} />
               <Button type="submit" variant="outline" size="sm" name="intent" value="riautentica">
                 {t.signOutSignIn}
               </Button>

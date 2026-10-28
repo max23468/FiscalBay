@@ -10,11 +10,14 @@ import { genericOAuth } from "better-auth/plugins";
 import { z } from "zod";
 
 import {
+  linkLanguage,
   notifySecurityEvent,
   sendAuthEmail,
   sendExistingAccountEmail,
 } from "./account-email.server";
+import { accountDeletionPath } from "./app-links";
 import { logFailure } from "./errors";
+import { localizedPath } from "./i18n";
 import { emailVerificationSeconds } from "./domain/email-change.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
@@ -140,14 +143,28 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
       },
       session: {
         create: {
-          before: async (session, context) => ({
-            data: {
-              ...session,
-              passkeyVerified: Boolean(
-                context?.request && userVerifiedRequests.has(context.request),
-              ),
-            },
-          }),
+          before: async (session, context) => {
+            // Cancellazione in corso: nessun metodo apre più una sessione, fino all'eliminazione.
+            const deleting = await env.DB.prepare(
+              "SELECT 1 FROM account_deletions WHERE user_id = ?",
+            )
+              .bind(session.userId)
+              .first();
+            if (deleting) {
+              throw new APIError("FORBIDDEN", {
+                code: "account_deletion_in_progress",
+                message: "Account deletion in progress.",
+              });
+            }
+            return {
+              data: {
+                ...session,
+                passkeyVerified: Boolean(
+                  context?.request && userVerifiedRequests.has(context.request),
+                ),
+              },
+            };
+          },
         },
       },
     },
@@ -163,6 +180,26 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
       additionalFields: {
         // Si concede solo dal database: `input: false` lo esclude da registrazione e modifiche.
         admin: { type: "boolean", required: true, defaultValue: false, input: false },
+      },
+      // Cancellazione dell'account (§30): la richiesta dalle Impostazioni manda il link; la
+      // conferma registra la richiesta, ferma accesso, letture e notifiche e torna alla pagina
+      // dell'esito senza eliminare l'utente, che il lavoro FiscalBay elimina per ultimo. Il
+      // token vale una volta sola e soltanto con la sessione dello stesso utente.
+      deleteUser: {
+        enabled: true,
+        deleteTokenExpiresIn: emailVerificationSeconds,
+        sendDeleteAccountVerification: async ({ user, url }) => {
+          sendAuthEmail(env, "delete-account", { to: user.email, url });
+        },
+        beforeDelete: async (user, request) => {
+          const language = request ? linkLanguage(request.url) : "it";
+          // Il lavoro porta con sé lo stop dei rinnovi: si carica soltanto alla conferma.
+          const { startAccountDeletion } = await import("./domain/account-deletion.server");
+          await startAccountDeletion(env, user, language);
+          throw new APIError("FOUND", undefined, {
+            location: localizedPath(language, accountDeletionPath),
+          });
+        },
       },
       // L'email si cambia con la conferma del vecchio indirizzo, se verificato, e poi del nuovo.
       changeEmail: {

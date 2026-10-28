@@ -2466,6 +2466,7 @@ describe("acquisizione con il client", () => {
             { body: { task: "telegram_commands", slot: "2026-09-02T00:00:00.000Z" } },
             { body: { task: "ebay_quotas", slot: "2026-09-02T00:00:00.000Z" } },
             { body: { task: "owner_incidents", slot: "2026-09-02T00:00:00.000Z" } },
+            { body: { task: "account_deletion", slot: "2026-09-02T00:00:00.000Z" } },
           ]);
           expect(sendBatch).toHaveBeenCalledTimes(3);
           expect(fetcher).not.toHaveBeenCalled();
@@ -2487,6 +2488,7 @@ describe("acquisizione con il client", () => {
           "telegram_commands",
           "ebay_quotas",
           "owner_incidents",
+          "account_deletion",
         ]);
         expect(sendBatch).toHaveBeenCalledWith([
           { body: { task: "maintenance", ...slot(0) } },
@@ -2498,13 +2500,14 @@ describe("acquisizione con il client", () => {
           { body: { task: "telegram_commands", ...slot(0) } },
           { body: { task: "ebay_quotas", ...slot(0) } },
           { body: { task: "owner_incidents", ...slot(0) } },
+          { body: { task: "account_deletion", ...slot(0) } },
         ]);
         // Ripetuto a pochi secondi, o un trigger precedente consegnato in ritardo.
         expect(await dispatchTasks(cron, minutes(0.05))).toEqual([]);
         expect(await dispatchTasks(cron, minutes(-0.05))).toEqual([]);
         // Il periodo successivo del rinnovo; inattività e riconciliazione sono orarie, la pulizia
         // giornaliera.
-        const everyTen = ["token_refresh", "telegram", "owner_incidents"];
+        const everyTen = ["token_refresh", "telegram", "owner_incidents", "account_deletion"];
         expect(await dispatchTasks(cron, minutes(10))).toEqual(everyTen);
         // Trigger saltati fra 20 e 40: il primo che arriva prende il turno.
         expect(await dispatchTasks(cron, minutes(50))).toEqual(everyTen);
@@ -2512,6 +2515,7 @@ describe("acquisizione con il client", () => {
           { body: { task: "token_refresh", ...slot(50) } },
           { body: { task: "telegram", ...slot(50) } },
           { body: { task: "owner_incidents", ...slot(50) } },
+          { body: { task: "account_deletion", ...slot(50) } },
         ]);
         expect(await dispatchTasks(cron, minutes(24 * 60 + 3))).toEqual([
           "maintenance",
@@ -2523,6 +2527,7 @@ describe("acquisizione con il client", () => {
           "telegram_commands",
           "ebay_quotas",
           "owner_incidents",
+          "account_deletion",
         ]);
         expect(sendBatch).toHaveBeenLastCalledWith([
           { body: { task: "maintenance", ...slot(24 * 60) } },
@@ -2534,6 +2539,7 @@ describe("acquisizione con il client", () => {
           { body: { task: "telegram_commands", ...slot(24 * 60) } },
           { body: { task: "ebay_quotas", ...slot(24 * 60) } },
           { body: { task: "owner_incidents", ...slot(24 * 60) } },
+          { body: { task: "account_deletion", ...slot(24 * 60) } },
         ]);
       });
 
@@ -2558,6 +2564,7 @@ describe("acquisizione con il client", () => {
           "token_refresh",
           "telegram",
           "owner_incidents",
+          "account_deletion",
         ]);
         expect(await dispatchTasks(cron, minutes(60))).toEqual([
           "maintenance",
@@ -2569,6 +2576,7 @@ describe("acquisizione con il client", () => {
           "telegram_commands",
           "ebay_quotas",
           "owner_incidents",
+          "account_deletion",
         ]);
         expect(sendBatch).toHaveBeenLastCalledWith(expect.arrayContaining([{ body }]));
 
@@ -2598,6 +2606,7 @@ describe("acquisizione con il client", () => {
           "telegram_commands",
           "ebay_quotas",
           "owner_incidents",
+          "account_deletion",
         ]);
       });
 
@@ -2654,6 +2663,7 @@ describe("acquisizione con il client", () => {
           dispatchTasks(cron, minutes(0)),
         ]);
         expect(turns.flat().sort()).toEqual([
+          "account_deletion",
           "billing",
           "ebay_quotas",
           "export_files",

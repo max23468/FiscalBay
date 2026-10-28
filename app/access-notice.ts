@@ -35,6 +35,7 @@ const signInTones: Record<SignInNotice, Tone> = {
   "sessione-chiusa": "success",
   "sessioni-chiuse": "success",
   "accesso-non-verificato": "warning",
+  "cancellazione-in-corso": "warning",
 };
 
 const storeTones: Record<StoreNotice, Tone> = {

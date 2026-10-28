@@ -1,4 +1,5 @@
 import { orderSearchText } from "../orders/order-search";
+import { purgeDeletionMarkers } from "./account-deletion.server";
 import { auditRetentionDays } from "./admin-audit.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
 import { syncDailyRetentionDays } from "./product-metrics.server";
@@ -51,6 +52,8 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
       .prepare("DELETE FROM sync_daily WHERE julianday(day) < julianday(?) - ?")
       .bind(at, syncDailyRetentionDays),
     db.prepare("DELETE FROM page_timing_reports WHERE expires_at <= ?").bind(at),
+    // Marker delle cancellazioni dell'account oltre Time Travel e segni dei negozi scaduti.
+    ...purgeDeletionMarkers(db, now),
     // Una notifica resta nella campanella al massimo 30 giorni dopo la sua lettura.
     db
       .prepare("DELETE FROM notification_reads WHERE read_at < ?")

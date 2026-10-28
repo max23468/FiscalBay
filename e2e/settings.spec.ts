@@ -4,7 +4,7 @@ import { strFromU8, unzipSync } from "fflate";
 import { areas, enter, noPageOverflow, open } from "./components";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { executeLocal } from "../scripts/local-d1.mjs";
-import { useLocalAccount } from "./local-account";
+import { localPassword, useLocalAccount } from "./local-account";
 
 test.describe("area reale", () => {
   test.skip(
@@ -125,10 +125,6 @@ test.describe("area reale", () => {
       await useLocalAccount(context, "member", baseURL!, `account-data-${language}-${browserName}`);
       await page.goto(`${it ? "" : "/en"}/app/impostazioni/privacy`);
       await networkIdle(page);
-      // La cancellazione dell'account non è ancora disponibile nell'area reale.
-      await expect(
-        page.getByRole("button", { name: it ? "Elimina account" : "Delete account" }),
-      ).toHaveCount(0);
       const downloaded = page.waitForEvent("download");
       await page
         .getByRole("button", { name: it ? "Richiedi esportazione" : "Request export" })
@@ -145,6 +141,74 @@ test.describe("area reale", () => {
       const data = JSON.parse(strFromU8(files["fiscalbay-account.json"]!));
       expect(data.profile.email).toMatch(/@/u);
       expect(data.stores).toEqual([expect.objectContaining({ ebayUser: expect.any(String) })]);
+      expect(errors).toEqual([]);
+    });
+
+  for (const language of ["it", "en"] as const)
+    test(`impostazioni reali: l'account si elimina dal link di conferma ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+      pageErrors: errors,
+    }) => {
+      const it = language === "it";
+      const prefix = it ? "" : "/en";
+      const id = `account-delete-${language}-${browserName}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      await page.goto(`${prefix}/app/impostazioni/privacy`);
+      await networkIdle(page);
+      await page
+        .getByRole("button", { name: it ? "Elimina account" : "Delete account", exact: true })
+        .click();
+      const dialog = page.getByRole("alertdialog");
+      // L'esportazione si propone senza obbligo.
+      await expect(
+        dialog.getByRole("button", {
+          name: it ? "Esporta i dati dell’account" : "Export account data",
+        }),
+      ).toBeVisible();
+      const send = dialog.getByRole("button", {
+        name: it ? "Invia il link di conferma" : "Send confirmation link",
+      });
+      const address = dialog.getByRole("textbox", {
+        name: it
+          ? "Scrivi il tuo indirizzo email per confermare"
+          : "Type your email address to confirm",
+      });
+      await address.fill("altro@example.invalid");
+      await expect(send).toBeDisabled();
+      await address.fill(`${id}@example.invalid`);
+      await send.click();
+      // L'ultimo accesso è di ieri: la richiesta passa dalla conferma dell'identità.
+      const identity = page.getByRole("alertdialog", {
+        name: it ? "Conferma che sei tu" : "Confirm it’s you",
+      });
+      await identity.getByLabel("Password", { exact: true }).fill(localPassword);
+      await identity
+        .getByRole("button", { name: it ? "Conferma" : "Confirm", exact: true })
+        .click();
+      await expect(
+        page.getByRole("status").filter({
+          hasText: it ? "Ti abbiamo inviato un link" : "We sent a link",
+        }),
+      ).not.toHaveCount(0);
+      // Link dell'email: lo stesso formato di Better Auth, con un token noto nella D1 locale.
+      const token = `${id.replaceAll("-", "")}link`;
+      await writeLocal(`INSERT INTO verification (id, identifier, value, "expiresAt", "createdAt",
+          "updatedAt") VALUES ('${id}-link', 'delete-account-${token}', '${id}',
+          '${new Date(Date.now() + 3_600_000).toISOString()}', '${new Date().toISOString()}',
+          '${new Date().toISOString()}');`);
+      await page.goto(
+        `/api/auth/delete-user/callback?token=${token}&callbackURL=${encodeURIComponent(`${prefix}/cancellazione-account`)}`,
+      );
+      await expect(page).toHaveURL(new RegExp(`${prefix}/cancellazione-account$`, "u"));
+      await expect(
+        page.getByRole("heading", { name: it ? "Cancellazione avviata" : "Deletion started" }),
+      ).toBeVisible();
+      // Sessioni chiuse: l'area torna all'accesso.
+      await page.goto(`${prefix}/app/ordini`);
+      await expect(page).toHaveURL(new RegExp(`${prefix}/accesso`, "u"));
       expect(errors).toEqual([]);
     });
 });

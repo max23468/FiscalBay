@@ -139,6 +139,12 @@ export function simulateSecurity(request: Request, form: FormData) {
   if (!Object.hasOwn(securityNotices, intent)) return null;
   const language = languageFromPath(new URL(request.url).pathname);
   const security = localizedPath(language, "/anteprima/impostazioni/sicurezza");
+  // Uscita e nuovo accesso simulati: si torna alla categoria da cui sono partiti, come dopo
+  // il nuovo accesso reale (Sicurezza o Dati e privacy).
+  if (intent === "riautentica") {
+    const privacy = localizedPath(language, "/anteprima/impostazioni/privacy");
+    return redirect(form.get("returnTo") === privacy ? privacy : security, 303);
+  }
   const notice = securityNotices[intent];
   return redirect(notice ? `${security}?accesso=${notice}` : security, 303);
 }
@@ -239,6 +245,20 @@ export async function simulateAction(request: Request, form: FormData) {
     return redirect(
       `${localizedPath(language, "/anteprima/impostazioni/piano")}?checkout=${form.get("plan") === "lifetime" ? "lifetime" : "processing"}`,
     );
+  // Come nell'area reale serve l'indirizzo dell'account; il link non parte.
+  if (intent === "account-delete") {
+    const email = scenario.account.email;
+    if (
+      String(form.get("confirmation") ?? "")
+        .trim()
+        .toLowerCase() !== email.toLowerCase()
+    )
+      return data<ActionResult>(
+        { ok: false, notice: t.settings.privacy.deleteAccountMismatch },
+        { status: 400 },
+      );
+    return { ok: true, notice: t.settings.privacy.deleteAccountSent(email) } satisfies ActionResult;
+  }
   const notice = notices[intent] ? notices[intent](t) : t.preview.simulated;
   return { ok: true, notice } satisfies ActionResult;
 }

@@ -27,7 +27,7 @@ import { loader as previewStores } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/domain/orders.server";
 import type { SearchResults } from "../app/components/shell-search";
-import { routeData, routeResponse } from "./fixtures/route-fixtures";
+import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
 
 describe("stato sintetico dell'anteprima", () => {
   it("conserva lo stato sui cookie HTTP locali e mantiene Secure sul dominio HTTPS", async () => {
@@ -579,5 +579,57 @@ describe("negozi dell'anteprima", () => {
     // Il lifetime rimborsato e il rinnovo disdetto non addebitano più.
     expect(await renews("lifetime-rimborsato")).toBe(false);
     expect(await renews("rinnovo-disdetto")).toBe(false);
+  });
+});
+
+describe("cancellazione dell'account nell'anteprima", () => {
+  const cookieFor = async (scenario: PreviewState["scenario"]) =>
+    (await writePreviewState({ scenario, unlocked: [], saveFailed: false })).split(";")[0]!;
+
+  it("chiede l'indirizzo dello scenario e simula l'invio del link", async () => {
+    const cookie = await cookieFor("ordinario");
+    const email = loadScenario("ordinario", "it", new Set()).account.email;
+    const request = (confirmation: string) =>
+      callRoute(previewSettingsAction, "/anteprima/impostazioni/privacy", {
+        cookie,
+        fields: { intent: "account-delete", confirmation },
+      });
+    expect(await request("altro@example.invalid")).toMatchObject({
+      data: { ok: false, notice: appCopy.it.settings.privacy.deleteAccountMismatch },
+      init: { status: 400 },
+    });
+    expect(await request(email)).toEqual({
+      ok: true,
+      notice: appCopy.it.settings.privacy.deleteAccountSent(email),
+    });
+  });
+
+  it("uscita e nuovo accesso simulati tornano a Dati e privacy", async () => {
+    const cookie = await cookieFor("ordinario");
+    for (const [returnTo, location] of [
+      ["/anteprima/impostazioni/privacy", "/anteprima/impostazioni/privacy"],
+      ["/app/impostazioni/privacy", "/anteprima/impostazioni/sicurezza"],
+    ]) {
+      const response = await routeResponse(
+        previewSettingsAction,
+        "/anteprima/impostazioni/privacy",
+        {
+          cookie,
+          fields: { intent: "riautentica", returnTo },
+        },
+      );
+      expect(response.headers.get("location")).toBe(location);
+    }
+  });
+
+  it("nello scenario della cancellazione in corso l'area non mostra schermate", async () => {
+    const { loader } = await import("../app/routes/preview");
+    const deleting = await routeData(loader, "/anteprima/ordini", {
+      cookie: await cookieFor("cancellazione-in-corso"),
+    });
+    expect(deleting).toMatchObject({ scenario: "cancellazione-in-corso", deleting: true });
+    expect(
+      await routeData(loader, "/anteprima/ordini", { cookie: await cookieFor("ordinario") }),
+    ).toMatchObject({ deleting: false });
   });
 });

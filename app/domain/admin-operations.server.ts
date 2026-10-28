@@ -1,3 +1,4 @@
+import { stalledDeletions } from "./account-deletion.server";
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
 import { stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
 import { storeLabelSql } from "./store-state.server";
@@ -21,7 +22,8 @@ export type AnomalyKind =
   | "receipts_stalled"
   | "telegram_failed"
   | "ebay_suspended"
-  | "service_off";
+  | "service_off"
+  | "account_deletion";
 
 /** Oggetto colpito, con il collegamento al contesto nella console. */
 export type AnomalySubject = { id: string; label: string; href: string };
@@ -307,6 +309,22 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         id: String(row.id),
         label: String(row.id),
         href: "interruttori",
+      })),
+    });
+
+  // Rinnovi non fermati: un abbonamento di un account cancellato può ancora addebitare.
+  const deletions = await stalledDeletions(db, now);
+  if (deletions.length > 0)
+    anomalies.push({
+      key: "account_deletion",
+      kind: "account_deletion",
+      severity: deletions.some((deletion) => deletion.renewals_blocked_at) ? "p1" : "p2",
+      since: deletions[0]!.requested_at,
+      count: deletions.length,
+      subjects: deletions.map((deletion) => ({
+        id: deletion.id,
+        label: deletion.workspace_id ?? deletion.id,
+        href: "lavori",
       })),
     });
 

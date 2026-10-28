@@ -788,11 +788,20 @@ export const en: AppCopy = {
       accountExportFailed: "Export failed. Try again shortly.",
       deleteAccount: "Delete account",
       deleteAccountBody:
-        "Deletes the account, disconnects your stores and erases imported orders. To confirm, we will ask you to sign in again.",
+        "Deletes the account with its stores, orders, settings and exported files. First you confirm your identity, then the link you receive by email.",
       deleteAccountTitle: "Delete your account?",
       deleteAccountConfirmation:
-        "To continue with deletion, confirm your identity by signing in again. In the preview, no data is deleted.",
-      deleteAccountConfirm: "Confirm by signing in again",
+        "Deletion cannot be undone. After you confirm by email, we sign out every session, stop reads, notifications and renewals and erase the account data.",
+      deleteAccountExport:
+        "You can download the account data first. Orders are exported from Export.",
+      deleteAccountOpenExport: "Open Export",
+      deleteAccountEmail: "Type your email address to confirm",
+      deleteAccountConfirm: "Send confirmation link",
+      deleteAccountSent: (email: string) =>
+        `We sent a link to ${email}. Open it within one hour in this browser to confirm the deletion.`,
+      deleteAccountMismatch: "The address does not match the account’s.",
+      deleteAccountReauth: "Confirm your identity again to delete the account.",
+      deleteAccountFailed: "The link could not be sent. Try again shortly.",
     },
     support: {
       faq: "Frequently asked questions",
@@ -941,6 +950,19 @@ export const en: AppCopy = {
       generic:
         "The account you just used is already linked to another FiscalBay user. Sign in to the associated FiscalBay user or choose a different account.",
     },
+    deletionLink: {
+      title: "Deletion link not valid",
+      body: "The link has expired, has already been used or was opened without being signed in to the same account. Sign in and request the deletion again from Settings › Data and privacy.",
+    },
+    deletionInProgress: {
+      title: "Deletion in progress",
+      body: "You confirmed the deletion of this account: signing in is no longer possible. We will email you when the data has been erased.",
+    },
+  },
+  accountDeletion: {
+    title: "Deletion started",
+    body: "We signed out every session and stopped store reads, notifications and renewals. Data erasure continues on its own: we will email you when it is complete.",
+    note: "Deletion cannot be undone. You can create a new account at any time, but the same stores do not get a new trial or new Free unlocks in the current cycle.",
   },
   storeLink: {
     title: "Connect an eBay store",
@@ -1122,6 +1144,7 @@ export const en: AppCopy = {
       "sessione-chiusa": "Session closed on that device.",
       "sessioni-chiuse": "Sessions closed on all other devices.",
       "accesso-non-verificato": "Confirm your email address to add a sign-in method.",
+      "cancellazione-in-corso": "This account is being deleted: signing in is no longer possible.",
       errore: "Could not complete the operation. Check your email and password.",
       registrato: "Check your inbox: we sent you a link to confirm your email address and sign in.",
       registrazione: "Account not created. Check your email address and password.",

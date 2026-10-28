@@ -11,6 +11,8 @@ export interface SecurityData {
   sessions: ActiveSession[];
   passkeyBlock: string;
   recent?: boolean;
+  /** Sessione abbastanza recente per chiedere la cancellazione dell'account. */
+  deletionReady?: boolean;
   passkeyRestriction?: "conferma-passkey" | "nuovo-accesso" | null;
   pendingEmail?: PendingEmailChange | null;
   notice: AccessNoticeView | null;

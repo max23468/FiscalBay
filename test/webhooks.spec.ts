@@ -525,6 +525,7 @@ it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito
     { body: { task: "telegram_commands", slot: "2026-10-11T00:00:00.000Z" } },
     { body: { task: "ebay_quotas", slot: now.toISOString() } },
     { body: { task: "owner_incidents", slot: now.toISOString() } },
+    { body: { task: "account_deletion", slot: now.toISOString() } },
   ]);
   expect(sendBatch).toHaveBeenNthCalledWith(2, [{ body: { syncStore: "webhook-store" } }]);
   expect(sendBatch).toHaveBeenCalledTimes(2);

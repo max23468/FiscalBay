@@ -108,12 +108,18 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       }),
     ),
     make("/auth/error", "auth", { remote: !prefix }),
-    ...["email_not_found", "account_not_linked", "account_already_linked_to_different_user"].map(
-      (error) =>
-        make(`/auth/error?error=${error}&provider=ebay`, "auth", {
-          pattern: `${prefix}/auth/error`,
-        }),
+    ...[
+      "email_not_found",
+      "account_not_linked",
+      "account_already_linked_to_different_user",
+      "delete_link",
+      "account_deletion_in_progress",
+    ].map((error) =>
+      make(`/auth/error?error=${error}&provider=ebay`, "auth", {
+        pattern: `${prefix}/auth/error`,
+      }),
     ),
+    make("/cancellazione-account", "auth"),
     make("/termini", "public", { remote: !prefix }),
     make("/privacy", "public"),
     make("/supporto", "public", { remote: !prefix }),

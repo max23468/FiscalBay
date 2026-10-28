@@ -58,6 +58,8 @@ export interface AccountEmail {
   note?: string;
   /** Anteprima sotto l'oggetto nell'elenco dei messaggi; senza, il primo paragrafo. */
   preview?: string;
+  /** Chiusura al posto di quella comune, per chi non ha più un account. */
+  footer?: string;
 }
 
 /**
@@ -97,7 +99,7 @@ export function accountEmailBody(input: {
   email: AccountEmail;
 }): { text: string; html: string } {
   const { language, url, email } = input;
-  const footer = serviceFooter[language];
+  const footer = email.footer ?? serviceFooter[language];
   const preview = email.preview ?? email.paragraphs[0]!;
   const logo = new URL(emailLogoPath, input.origin).toString();
   const text = [
@@ -155,7 +157,10 @@ export function linkLanguage(url: string): Language {
   }
 }
 
-/** Email dei link di Better Auth: conferma dell'indirizzo, nuova password, cambio email. */
+/**
+ * Email dei link di Better Auth: conferma dell'indirizzo, nuova password, cambio email e
+ * conferma della cancellazione dell'account.
+ */
 function authEmail(
   kind: AuthEmailKind,
   language: Language,
@@ -178,6 +183,16 @@ function authEmail(
           paragraphs: ["We received a request to reset the password of your FiscalBay account."],
           button: "Reset password",
           note: `${validity} If it was not you, ignore this email: your password stays the same.`,
+        };
+      case "delete-account":
+        return {
+          subject: "Confirm the deletion of your FiscalBay account",
+          paragraphs: [
+            "You asked to delete your FiscalBay account.",
+            "After you confirm, we sign out every session, stop store reads, notifications and renewals, then erase orders, stores and settings. Deletion cannot be undone.",
+          ],
+          button: "Delete account",
+          note: `${validity} Open the link in the browser where you are signed in. If it was not you, ignore this email and change your password from Security.`,
         };
       case "change-email":
         return {
@@ -208,6 +223,16 @@ function authEmail(
         button: "Reimposta password",
         note: `${validity} Se non sei stato tu, ignora questa email: la password resta quella attuale.`,
       };
+    case "delete-account":
+      return {
+        subject: "Conferma la cancellazione dell’account FiscalBay",
+        paragraphs: [
+          "Hai chiesto di eliminare il tuo account FiscalBay.",
+          "Dopo la conferma chiudiamo tutte le sessioni, fermiamo letture dei negozi, notifiche e rinnovi, poi eliminiamo ordini, negozi e impostazioni. La cancellazione non si può annullare.",
+        ],
+        button: "Elimina l’account",
+        note: `${validity} Apri il link nel browser in cui hai effettuato l’accesso. Se non sei stato tu, ignora questa email e cambia la password da Sicurezza.`,
+      };
     case "change-email":
       return {
         subject: "Conferma il cambio email di FiscalBay",
@@ -221,7 +246,7 @@ function authEmail(
   }
 }
 
-export type AuthEmailKind = "verify" | "reset" | "change-email";
+export type AuthEmailKind = "verify" | "reset" | "change-email" | "delete-account";
 
 /** Email dei link di Better Auth, nella lingua della pagina da cui è partita la richiesta. */
 export function sendAuthEmail(
@@ -426,6 +451,42 @@ export async function sendInactivityNotice(
               `Con il piano Free, accedi entro il ${deadline} per continuare a leggere i nuovi ordini da eBay. Altrimenti le letture si fermano finché non le riprendi da Negozi; i tuoi ordini restano disponibili.`,
             ],
             button: "Apri Negozi",
+          },
+  });
+}
+
+/**
+ * Cancellazione dell'account completata, alla fine del lavoro: l'indirizzo arriva dalla
+ * richiesta, perché l'utente non esiste più. Il pulsante porta al sito pubblico.
+ */
+export async function sendAccountDeletedNotice(
+  env: Env,
+  input: { to: string; language: Language },
+): Promise<void> {
+  const { language } = input;
+  await sendAccountEmail(env, {
+    language,
+    to: input.to,
+    url: new URL(localizedPath(language), env.APP_ORIGIN).toString(),
+    email:
+      language === "en"
+        ? {
+            subject: "Your FiscalBay account has been deleted",
+            paragraphs: [
+              "We deleted your FiscalBay account with its orders, stores and settings.",
+              "Subscriptions no longer renew. We keep only what prevents the same stores from getting a new trial or new Free unlocks in the current cycle.",
+            ],
+            button: "Go to FiscalBay",
+            footer: `You are receiving this email because you deleted your FiscalBay account. For help, write to ${supportEmail}.`,
+          }
+        : {
+            subject: "Il tuo account FiscalBay è stato eliminato",
+            paragraphs: [
+              "Abbiamo eliminato il tuo account FiscalBay con ordini, negozi e impostazioni.",
+              "Gli abbonamenti non si rinnovano più. Conserviamo soltanto quanto impedisce agli stessi negozi di ricevere una nuova prova o nuovi sblocchi Free nel ciclo in corso.",
+            ],
+            button: "Vai a FiscalBay",
+            footer: `Ricevi questa email perché hai eliminato il tuo account FiscalBay. Per assistenza scrivi a ${supportEmail}.`,
           },
   });
 }

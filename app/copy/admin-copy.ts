@@ -38,6 +38,7 @@ const it = {
       telegram_commands: "Comandi del bot",
       ebay_quotas: "Quote eBay",
       owner_incidents: "Avvisi all’owner",
+      account_deletion: "Cancellazioni degli account",
     },
     providers: { ebay: "eBay", stripe: "Stripe", telegram: "Telegram" },
     subscription: {
@@ -198,6 +199,12 @@ const it = {
         title: "Servizi spenti dalla console",
         consequence: "Restano fermi finché non li riaccendi: richieste e notifiche attendono.",
         action: "Apri gli interruttori",
+      },
+      account_deletion: {
+        title: "Cancellazioni dell’account non concluse",
+        consequence:
+          "Stripe non ha confermato lo stop dei rinnovi, oppure il lavoro è fermo da oltre un’ora: restano lo spazio e i riferimenti dei pagamenti.",
+        action: "Controlla Stripe e i lavori",
       },
     },
   },
@@ -448,6 +455,7 @@ const it = {
       sync: "Letture dei negozi",
       task: "Compiti periodici",
       export: "Esportazioni",
+      deletion: "Cancellazioni degli account",
       unknown: "Messaggi sconosciuti",
       dispatch: "Smistamento",
     },
@@ -692,6 +700,7 @@ const en: AdminCopy = {
       telegram_commands: "Bot commands",
       ebay_quotas: "eBay quotas",
       owner_incidents: "Owner alerts",
+      account_deletion: "Account deletions",
     },
     providers: { ebay: "eBay", stripe: "Stripe", telegram: "Telegram" },
     subscription: {
@@ -853,6 +862,12 @@ const en: AdminCopy = {
         consequence:
           "They stay stopped until you switch them back on: requests and notifications wait.",
         action: "Open switches",
+      },
+      account_deletion: {
+        title: "Account deletions not completed",
+        consequence:
+          "Stripe has not confirmed that renewals stopped, or the job has been stuck for over an hour: the space and payment references remain.",
+        action: "Check Stripe and jobs",
       },
     },
   },
@@ -1100,6 +1115,7 @@ const en: AdminCopy = {
       sync: "Store reads",
       task: "Periodic tasks",
       export: "Exports",
+      deletion: "Account deletions",
       unknown: "Unknown messages",
       dispatch: "Dispatch",
     },
