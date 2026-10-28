@@ -269,6 +269,8 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
       <PrivacySection
         accountExport={data.services.accountExport}
         accountDeletion={data.services.accountDeletion}
+        email={data.account.email}
+        security={data.security}
       />
     ),
     supporto: (

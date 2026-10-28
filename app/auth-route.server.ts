@@ -16,15 +16,17 @@ import {
   recordStoreLinkOutcome,
   type StoreLinkOutcome,
 } from "./integrations/ebay/store-link.server";
-import { notifySecurityEvent } from "./account-email.server";
+import { linkLanguage, notifySecurityEvent } from "./account-email.server";
 import { logFailure, tracePhase } from "./errors";
 import { appBase, ordersPath } from "./app-links";
 import { localizedPath } from "./i18n";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
 // che conservano sempre un accesso valido. L'elenco delle sessioni restituirebbe i token delle
-// altre sessioni: l'app le mostra e le chiude dal server senza esporli.
+// altre sessioni: l'app le mostra e le chiude dal server senza esporli. La cancellazione
+// dell'account parte soltanto dalle Impostazioni, che chiedono riautenticazione e conferma.
 const closedAuthPaths = new Set([
+  "/api/auth/delete-user",
   "/api/auth/get-access-token",
   "/api/auth/refresh-token",
   "/api/auth/passkey/delete-passkey",
@@ -41,6 +43,7 @@ const passkeyRegistrationPath = "/api/auth/passkey/verify-registration";
 const linkSocialPath = "/api/auth/link-social";
 const changeEmailPath = "/api/auth/change-email";
 const ebayCallbackPath = "/api/auth/callback/ebay";
+const deletionCallbackPath = "/api/auth/delete-user/callback";
 
 function validEbayCallback(request: Request): boolean {
   if (request.method !== "GET") return false;
@@ -70,7 +73,7 @@ const attemptLimits = [
   { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, window: 10, max: 3 },
   { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, window: 10, max: 3 },
   {
-    paths: /^\/(send-verification-email|request-password-reset|forget-password)(\/|$)/u,
+    paths: /^\/(send-verification-email|request-password-reset|forget-password|delete-user)(\/|$)/u,
     window: 60,
     max: 3,
   },
@@ -308,6 +311,38 @@ async function handleEbayCallback(
   return noStore(Response.redirect(new URL(destination, env.APP_ORIGIN), 303));
 }
 
+/**
+ * Link di conferma della cancellazione: riuscito porta all'esito senza la sessione, che il
+ * lavoro ha già chiuso; scaduto, già usato o aperto senza la sessione dello stesso utente porta
+ * alla pagina di errore, nella lingua della richiesta, invece della risposta JSON di Auth.
+ */
+async function handleDeletionCallback(request: Request, env: Env): Promise<Response> {
+  const response = await authResponse(request, env);
+  const language = linkLanguage(request.url);
+  if (response.status !== 302) {
+    return noStore(
+      Response.redirect(
+        new URL(`${localizedPath(language, "/auth/error")}?error=delete_link`, env.APP_ORIGIN),
+        303,
+      ),
+    );
+  }
+  const headers = new Headers(response.headers);
+  const { authCookies } = await createAuth(env).$context;
+  // I cookie della sessione chiusa si eliminano con gli stessi attributi con cui sono nati.
+  for (const { name, attributes } of [
+    authCookies.sessionToken,
+    authCookies.sessionData,
+    authCookies.dontRememberToken,
+  ])
+    headers.append(
+      "set-cookie",
+      `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax${attributes.secure ? "; Secure" : ""}`,
+    );
+  headers.set("cache-control", "no-store");
+  return new Response(null, { status: 302, headers });
+}
+
 export function handleAuthRequest(
   request: Request,
   env: Env,
@@ -315,6 +350,7 @@ export function handleAuthRequest(
 ): Promise<Response> | Response {
   const pathname = new URL(request.url).pathname.replace(/\/+$/u, "");
   if (closedAuthPaths.has(pathname)) return new Response(null, { status: 404 });
+  if (pathname === deletionCallbackPath) return handleDeletionCallback(request, env);
   if (pathname !== ebayCallbackPath) return authResponse(request, env);
   return handleEbayCallback(request, env, fetcher);
 }

@@ -82,13 +82,16 @@ export function storeReadSql(workspace: string) {
 }
 
 /**
- * La prova si offre allo spazio che non l'ha mai avuta, senza una copertura in corso né un
- * abbonamento che può ancora incassare, dopo la prima lettura riuscita di un suo negozio, e
- * soltanto con gli acquisti aperti: senza capacità per nuovi Premium la prova non è erogabile.
+ * La prova si offre allo spazio che non l'ha mai avuta, né con i suoi negozi in uno spazio
+ * cancellato, senza una copertura in corso né un abbonamento che può ancora incassare, dopo la
+ * prima lettura riuscita di un suo negozio, e soltanto con gli acquisti aperti: senza capacità
+ * per nuovi Premium la prova non è erogabile.
  */
 function trialAvailableSql(workspace: string, at: string) {
   return `(NOT EXISTS (SELECT 1 FROM workspace_entitlements e
       WHERE e.workspace_id = ${workspace} AND e.source = 'trial')
+    AND NOT EXISTS (SELECT 1 FROM workspaces tw
+      WHERE tw.id = ${workspace} AND tw.trial_used_at IS NOT NULL)
     AND NOT ${activeEntitlementSql(workspace, at)} AND NOT ${openSubscriptionSql(workspace)}
     AND ${storeReadSql(workspace)} AND ${purchasesOpenSql})`;
 }

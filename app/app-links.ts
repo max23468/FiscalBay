@@ -31,6 +31,9 @@ export const faqPath = "/faq";
 export const termsPath = "/termini";
 export const privacyPath = "/privacy";
 
+/** Esito della conferma della cancellazione dell'account, fuori dall'area riservata. */
+export const accountDeletionPath = "/cancellazione-account";
+
 export const ordersPath = `${appBase}/ordini`;
 
 /** Ricerca ordini della barra superiore: riceve la query nel corpo, mai nell'indirizzo. */
@@ -62,12 +65,19 @@ export const languagePath = `${appBase}/lingua`;
 /** Letture della campanella. */
 export const notificationsPath = "/api/v1/notifications";
 
-/** Solo la pagina Sicurezza e i suoi gruppi, mai URL esterni o azioni da rieseguire. */
+/** Dati e privacy, da cui parte la cancellazione dell'account. */
+export const privacySettingsPath = `${settingsPath}/privacy`;
+
+/**
+ * Solo la pagina Sicurezza con i suoi gruppi e Dati e privacy, mai URL esterni o azioni da
+ * rieseguire.
+ */
 export function securityReturnPath(language: Language, value: string | null): string | null {
   const base = localizedPath(language, securityPath);
   return [
     base,
     ...["email", "methods", "sessions"].map((group) => `${base}#security-${group}`),
+    localizedPath(language, privacySettingsPath),
   ].includes(value ?? "")
     ? value
     : null;

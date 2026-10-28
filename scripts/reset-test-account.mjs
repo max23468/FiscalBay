@@ -485,6 +485,31 @@ async function main() {
       INSERT INTO passkey (id, name, "publicKey", "userId", "credentialID", counter, "deviceType", "backedUp", "createdAt")
         VALUES ('${id}', 'Chiave browser sintetica', 'synthetic-not-for-authentication', '${id}', '${id}', 0, 'singleDevice', 0, '${now}');`);
     }
+    // Cancellazione dell'account, una per lingua e browser: password e accesso di ieri, così la
+    // richiesta passa dalla conferma dell'identità. La richiesta della prova precedente esce,
+    // altrimenti bloccherebbe l'accesso dell'account ricreato.
+    for (const browser of ["chromium", "webkit"])
+      for (const language of ["it", "en"]) {
+        const id = `account-delete-${language}-${browser}`;
+        statements.push(`DELETE FROM account_deletions WHERE user_id = '${id}';
+        DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+        INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+          SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+        INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+          SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+          FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+        INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+          FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+        INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo cancellazione', '${now}');
+        INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+        INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+          VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio cancellazione');
+        INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+          VALUES ('${id}', '${id}', '${id}', '${expires}', '${new Date(Date.now() - day).toISOString()}', '${now}');
+        INSERT INTO "account" (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+          SELECT '${id}', '${id}', 'credential', '${id}', password, "createdAt", "updatedAt"
+          FROM "account" WHERE "userId" = ${quote(testAccount.userId)} AND "providerId" = 'credential';`);
+      }
   }
   // Un solo batch di istruzioni SQL: nessun import di file, che sospende il database.
   const sql = statements.join("\n");

@@ -50,6 +50,7 @@ export const scenarioIds = [
   "nessun-ordine",
   "caricamento",
   "servizio-non-disponibile",
+  "cancellazione-in-corso",
   "prova-premium",
   "prova-in-scadenza",
   "prova-terminata",
@@ -288,6 +289,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
   caricamento: {
     it: { name: "Caricamento", focus: "Scheletro aderente al layout delle schede." },
     en: { name: "Loading", focus: "Skeleton matching the card layout." },
+  },
+  "cancellazione-in-corso": {
+    it: {
+      name: "Cancellazione in corso",
+      focus:
+        "Link di conferma aperto: sessioni chiuse, letture, notifiche e rinnovi fermi, nessuna schermata dell’area.",
+    },
+    en: {
+      name: "Deletion in progress",
+      focus:
+        "Confirmation link opened: sessions closed, reads, notifications and renewals stopped, no area screen.",
+    },
   },
   "servizio-non-disponibile": {
     it: {
@@ -1155,6 +1168,8 @@ export interface Scenario {
   ebayMaintenance: boolean;
   /** Auth o database non rispondono: le pagine non mostrano dati. */
   unavailable: boolean;
+  /** Cancellazione dell'account confermata: al posto dell'area, l'esito della conferma. */
+  deleting: boolean;
   elsewhere: boolean;
   notifications: NotificationView[];
   sessions: SessionView[];
@@ -1321,6 +1336,7 @@ export function loadScenario(
     ebayDown: false,
     ebayMaintenance: false,
     unavailable: false,
+    deleting: false,
     elsewhere: false,
     sessions: sessions(language),
     signInMethods: {
@@ -1931,6 +1947,18 @@ export function loadScenario(
         seeds: [],
         premium: false,
         view: "loading",
+        diagnostics: diagnostics(),
+      };
+      break;
+    case "cancellazione-in-corso":
+      scenario = {
+        ...common,
+        account: account(),
+        stores: [],
+        seeds: [],
+        premium: false,
+        deleting: true,
+        notifications: [],
         diagnostics: diagnostics(),
       };
       break;

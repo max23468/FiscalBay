@@ -16,6 +16,7 @@ export const taskPeriods = {
   telegram_commands: 24 * 60 * minute,
   ebay_quotas: 60 * minute,
   owner_incidents: 10 * minute,
+  account_deletion: 10 * minute,
 } as const;
 
 export type ScheduledTask = keyof typeof taskPeriods;

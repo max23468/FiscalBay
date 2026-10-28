@@ -33,6 +33,7 @@ export type InvocationDetail =
   | "sync"
   | "task"
   | "export"
+  | "deletion"
   | "unknown"
   | "dispatch";
 

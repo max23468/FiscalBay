@@ -68,7 +68,9 @@ import {
 } from "../domain/telegram.server";
 import { stripeSecretKey } from "../integrations/stripe.server";
 import { telegramConfigured } from "../integrations/telegram.server";
-import { appUrl, exportFilePath, ordersPath, planPath } from "../app-links";
+import { accountDeletionPath, appUrl, exportFilePath, ordersPath, planPath } from "../app-links";
+import { forwardToAuth } from "../auth-route.server";
+import { deletionReauthenticated } from "../domain/account-deletion.server";
 import { correlationId, logFailure } from "../errors";
 import { whatsNew } from "../whats-new.server";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -103,15 +105,15 @@ import type { Route } from "./+types/settings";
 import { subscriptionView } from "../domain/plan-view.server";
 
 /**
- * Servizi reali delle categorie. La cancellazione dell'account compare insieme al suo servizio. L'acquisto compare con la configurazione Stripe, la gestione dell'abbonamento con
- * il portale di Stripe, le notifiche Telegram con il bot dell'ambiente.
+ * Servizi reali delle categorie. L'acquisto compare con la configurazione Stripe, la gestione
+ * dell'abbonamento con il portale di Stripe, le notifiche Telegram con il bot dell'ambiente.
  */
 const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
   billingPortal: !!stripeSecretKey(env),
   telegram: telegramConfigured(env),
   accountExport: true,
-  accountDeletion: false,
+  accountDeletion: true,
   support: true,
 });
 
@@ -219,6 +221,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       methods,
       sessions,
       recent: recentSignIn(auth, now),
+      deletionReady: deletionReauthenticated(auth.session.createdAt, now),
       passkeyRestriction: passkeyChangeBlock(auth, now),
       // Avviso da mostrare se la registrazione di una passkey viene rifiutata.
       passkeyBlock: passkeyChangeBlock(auth, now) ?? "nuovo-accesso",
@@ -581,6 +584,25 @@ export async function action({ request }: Route.ActionArgs) {
         download: localizedPath(language, exportFilePath(id)),
       } satisfies ActionResult;
     }
+    if (intent === "account-delete") {
+      // Riautenticazione negli ultimi minuti e indirizzo dell'account scritto per esteso; poi
+      // Better Auth manda il link, la cui conferma avvia la cancellazione.
+      if (!deletionReauthenticated(session.session.createdAt))
+        return failed(403, t.privacy.deleteAccountReauth);
+      const email = session.user.email;
+      if (
+        String(form.get("confirmation") ?? "")
+          .trim()
+          .toLowerCase() !== email.toLowerCase()
+      )
+        return failed(400, t.privacy.deleteAccountMismatch);
+      const response = await forwardToAuth(env, request, "/delete-user", {
+        callbackURL: localizedPath(language, accountDeletionPath),
+      });
+      if (!response.ok)
+        return failed(response.status === 429 ? 429 : 503, t.privacy.deleteAccountFailed);
+      return { ok: true, notice: t.privacy.deleteAccountSent(email) } satisfies ActionResult;
+    }
     if (intent === "profile") {
       // Nome, cognome e ragione sociale; il tipo di account resta quello registrato.
       form.set("tipo", area.profile.accountType === "business" ? "azienda" : "privato");
@@ -603,7 +625,9 @@ export async function action({ request }: Route.ActionArgs) {
               ? t.export.exportConfigFailed
               : intent === "account-export"
                 ? t.privacy.accountExportFailed
-                : t.saveFailed,
+                : intent === "account-delete"
+                  ? t.privacy.deleteAccountFailed
+                  : t.saveFailed,
     );
   }
   return securityAction(request, area, form);

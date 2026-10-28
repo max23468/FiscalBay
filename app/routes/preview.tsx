@@ -7,6 +7,7 @@ import {
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 
+import { AccountDeletionPage } from "~/components/account-deletion";
 import { AppShell } from "~/components/app-shell";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import type { OrdersPageData } from "~/components/orders/page";
@@ -45,6 +46,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     account: scenario.account,
     notifications: scenario.notifications,
     now: scenario.now,
+    deleting: scenario.deleting,
   };
 }
 
@@ -145,6 +147,14 @@ export default function Preview({ loaderData }: Route.ComponentProps) {
   useDeviceTimeZone();
   // Su Ordini il campo mostra la ricerca attiva, decifrata dal loader della pagina.
   const orders = useMatches().find((match) => match.id.startsWith("preview-orders"));
+  // Come dopo il link di conferma reale: nessuna schermata dell'area, soltanto l'esito.
+  if (loaderData.deleting)
+    return (
+      <>
+        <ScenarioBar scenario={loaderData.scenario} options={loaderData.options} />
+        <AccountDeletionPage language={language} />
+      </>
+    );
   return (
     <AppShell
       account={loaderData.account}

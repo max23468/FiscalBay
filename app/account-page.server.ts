@@ -218,5 +218,10 @@ export async function accessAction(request: Request) {
     password: field("password"),
   });
   if (response.ok) return redirectWithCookies(destination, response);
+  if (response.status === 403) {
+    const error = await response.clone().json<{ code?: string }>();
+    if (error.code === "account_deletion_in_progress")
+      return failed("cancellazione-in-corso", "accedi");
+  }
   return failed(response.status === 429 ? "troppi-tentativi" : "errore", "accedi");
 }

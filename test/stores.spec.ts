@@ -745,7 +745,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         billingPortal: true,
         telegram: true,
         accountExport: true,
-        accountDeletion: false,
+        accountDeletion: true,
         support: true,
       },
       account: { plan: "free", trialAvailable: false, quota: undefined },

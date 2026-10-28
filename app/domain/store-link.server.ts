@@ -1,4 +1,5 @@
 import { logFailure } from "../errors";
+import { applyStoreMark, markAnchorStatement, readStoreMark } from "./account-deletion.server";
 import type { Language } from "../i18n";
 import { linkReadAdmitted } from "./admission.server";
 import { applyFreePlan } from "./free-store.server";
@@ -127,9 +128,17 @@ async function linkStore(
   { ebayEnvironment, language }: { ebayEnvironment: EbayEnvironment; language: Language },
 ): Promise<string | null> {
   const workspaceId = await workspaceFor(db, userId, now, language);
-  const store = await db
-    .prepare(
-      `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name, ebay_environment, ebay_account_id)
+  const ebayUserId =
+    ebayEnvironment === "production"
+      ? identity.userId
+      : JSON.stringify([ebayEnvironment, identity.userId]);
+  // Un negozio già collegato a uno spazio cancellato porta con sé prova usata e ciclo Free.
+  const mark = await readStoreMark(db, ebayUserId, new Date(now));
+  const linked = await db.batch<{ id: string }>([
+    ...markAnchorStatement(db, workspaceId, ebayUserId, mark),
+    db
+      .prepare(
+        `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name, ebay_environment, ebay_account_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(ebay_user_id) DO UPDATE SET
          display_name = COALESCE(excluded.display_name, ebay_stores.display_name),
@@ -138,20 +147,20 @@ async function linkStore(
        WHERE ebay_stores.workspace_id = excluded.workspace_id
          AND ebay_stores.ebay_environment = excluded.ebay_environment
        RETURNING id`,
-    )
-    .bind(
-      crypto.randomUUID(),
-      workspaceId,
-      ebayEnvironment === "production"
-        ? identity.userId
-        : JSON.stringify([ebayEnvironment, identity.userId]),
-      now,
-      identity.username ?? null,
-      ebayEnvironment,
-      identity.userId,
-    )
-    .first<{ id: string }>();
+      )
+      .bind(
+        crypto.randomUUID(),
+        workspaceId,
+        ebayUserId,
+        now,
+        identity.username ?? null,
+        ebayEnvironment,
+        identity.userId,
+      ),
+  ]);
+  const store = linked.at(-1)!.results[0];
   if (!store) return null;
+  if (mark) await applyStoreMark(db, workspaceId, mark, new Date(now));
   // Un negozio trasferito arriva da un altro spazio: il primo collegamento fissa qui i cicli.
   await db
     .prepare(

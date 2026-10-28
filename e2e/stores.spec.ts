@@ -299,9 +299,9 @@ test.describe("impostazioni e profilo", () => {
           .click();
         await expect(
           confirm.getByRole("button", {
-            name: t("Conferma con un nuovo accesso", "Confirm by signing in again"),
+            name: t("Invia il link di conferma", "Send confirmation link"),
           }),
-        ).toBeVisible();
+        ).toBeDisabled();
         await page.keyboard.press("Escape");
         await open(page, `${prefix}/anteprima/impostazioni/supporto`);
         await expect(

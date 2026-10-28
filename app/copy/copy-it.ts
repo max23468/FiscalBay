@@ -797,11 +797,20 @@ export const it = {
       accountExportFailed: "Esportazione non riuscita. Riprova tra poco.",
       deleteAccount: "Elimina account",
       deleteAccountBody:
-        "Elimina l’account, scollega i negozi e cancella gli ordini importati. Per confermare ti chiederemo di accedere di nuovo.",
+        "Elimina l’account con negozi, ordini, impostazioni e file esportati. Prima confermi la tua identità, poi il link che ricevi via email.",
       deleteAccountTitle: "Eliminare l’account?",
       deleteAccountConfirmation:
-        "Per proseguire con l’eliminazione devi confermare la tua identità con un nuovo accesso. Nell’anteprima nessun dato viene eliminato.",
-      deleteAccountConfirm: "Conferma con un nuovo accesso",
+        "La cancellazione non si può annullare. Dopo la conferma via email chiudiamo tutte le sessioni, fermiamo letture, notifiche e rinnovi ed eliminiamo i dati dell’account.",
+      deleteAccountExport:
+        "Prima puoi scaricare i dati dell’account. Gli ordini si esportano da Esportazione.",
+      deleteAccountOpenExport: "Apri Esportazione",
+      deleteAccountEmail: "Scrivi il tuo indirizzo email per confermare",
+      deleteAccountConfirm: "Invia il link di conferma",
+      deleteAccountSent: (email: string) =>
+        `Ti abbiamo inviato un link a ${email}. Aprilo entro un’ora in questo browser per confermare la cancellazione.`,
+      deleteAccountMismatch: "L’indirizzo non corrisponde a quello dell’account.",
+      deleteAccountReauth: "Conferma di nuovo la tua identità per eliminare l’account.",
+      deleteAccountFailed: "Invio del link non riuscito. Riprova tra poco.",
     },
     support: {
       faq: "Domande frequenti",
@@ -953,6 +962,19 @@ export const it = {
       generic:
         "L’account che hai appena usato è già collegato a un altro utente FiscalBay. Accedi all’utente FiscalBay associato oppure scegli un altro account.",
     },
+    deletionLink: {
+      title: "Link di cancellazione non valido",
+      body: "Il link è scaduto, è già stato usato oppure è stato aperto senza aver effettuato l’accesso con lo stesso account. Accedi e chiedi di nuovo la cancellazione da Impostazioni › Dati e privacy.",
+    },
+    deletionInProgress: {
+      title: "Cancellazione in corso",
+      body: "Hai confermato la cancellazione di questo account: l’accesso non è più possibile. Ti scriviamo quando l’eliminazione dei dati è completata.",
+    },
+  },
+  accountDeletion: {
+    title: "Cancellazione avviata",
+    body: "Abbiamo chiuso tutte le sessioni e fermato letture dei negozi, notifiche e rinnovi. L’eliminazione dei dati prosegue da sola: ti scriviamo quando è completata.",
+    note: "La cancellazione non si può annullare. Puoi creare un nuovo account quando vuoi, ma gli stessi negozi non ricevono una nuova prova né nuovi sblocchi Free nel ciclo in corso.",
   },
   storeLink: {
     title: "Collega un negozio eBay",
@@ -1140,6 +1162,8 @@ export const it = {
       "sessione-chiusa": "Sessione chiusa su quel dispositivo.",
       "sessioni-chiuse": "Sessioni chiuse su tutti gli altri dispositivi.",
       "accesso-non-verificato": "Conferma l’indirizzo email per aggiungere un metodo di accesso.",
+      "cancellazione-in-corso":
+        "La cancellazione di questo account è in corso: l’accesso non è più possibile.",
       errore: "Operazione non riuscita. Controlla email e password.",
       registrato:
         "Controlla la posta: ti abbiamo inviato un link per confermare l’indirizzo email e accedere.",

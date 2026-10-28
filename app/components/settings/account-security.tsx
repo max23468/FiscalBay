@@ -106,6 +106,8 @@ export function AccountSecurity({
           methods={methods}
           passkeyOnly={waiting.passkeyOnly}
           actionPath={actionPath}
+          returnTo={`${actionPath}#security-methods`}
+          body={waiting.passkeyOnly ? t.confirmPasskeyBody : t.confirmBody}
           currentSession={sessions.find((session) => session.current)?.id ?? null}
           onConfirmed={() => {
             const { run } = waiting;

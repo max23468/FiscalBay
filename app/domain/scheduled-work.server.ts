@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { resumeAccountDeletions } from "./account-deletion.server";
 import { applyInactivity } from "./admission.server";
 import { reconcileBilling } from "./billing.server";
 import { purgeExportFiles } from "./export-files.server";
@@ -92,6 +93,12 @@ const tasks = {
   owner_incidents: {
     period: taskPeriods.owner_incidents,
     run: (env: Env, fetcher: typeof fetch, now: Date) => reconcileOwnerIncidents(env, fetcher, now),
+  },
+  // Cancellazioni dell'account da riprendere: messaggio perso, rinnovi non ancora fermati,
+  // email da ritentare o dati ricomparsi dopo un restore.
+  account_deletion: {
+    period: taskPeriods.account_deletion,
+    run: (env: Env, fetcher: typeof fetch, now: Date) => resumeAccountDeletions(env, fetcher, now),
   },
 } satisfies Record<
   ScheduledTask,

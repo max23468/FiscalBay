@@ -13,6 +13,10 @@ import { withResponseCookies } from "../app/response-cookies.server";
 import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
 import { consumeExportJob, isExportJobMessage } from "../app/domain/export-jobs.server";
 import {
+  consumeAccountDeletion,
+  isAccountDeletionMessage,
+} from "../app/domain/account-deletion.server";
+import {
   consumeTask,
   dispatchScheduledWork,
   isTaskMessage,
@@ -92,13 +96,15 @@ export default {
       return new Response(null, { status: 500, headers: { [correlationHeader]: id } });
     }
   },
-  // La coda porta i riferimenti dei webhook, le letture dei negozi, i compiti periodici e le
-  // esportazioni grandi: ogni tipo ha il proprio schema e nessuno raccoglie i messaggi degli altri.
+  // La coda porta i riferimenti dei webhook, le letture dei negozi, i compiti periodici, le
+  // esportazioni grandi e le cancellazioni dell'account: ogni tipo ha il proprio schema e nessuno
+  // raccoglie i messaggi degli altri.
   async queue(batch, env, ctx?: ExecutionContext) {
     const syncs = batch.messages.filter((message) => isSyncMessage(message.body));
     const tasks = batch.messages.filter((message) => isTaskMessage(message.body));
     const webhooks = batch.messages.filter((message) => isWebhookMessage(message.body));
     const exports = batch.messages.filter((message) => isExportJobMessage(message.body));
+    const deletions = batch.messages.filter((message) => isAccountDeletionMessage(message.body));
     // Ogni tipo di messaggio è un'invocazione misurata a sé, con le fasi che attraversa.
     const observe = <T extends Message<unknown>>(
       detail: InvocationDetail,
@@ -117,7 +123,7 @@ export default {
     };
     // Un messaggio di forma sconosciuta non ha un consumer: si riprova fino alla coda dei
     // messaggi non consegnati, dove resta da esaminare.
-    const known = new Set([...syncs, ...tasks, ...webhooks, ...exports]);
+    const known = new Set([...syncs, ...tasks, ...webhooks, ...exports, ...deletions]);
     await observe(
       "unknown",
       batch.messages.filter((message) => !known.has(message)),
@@ -138,6 +144,9 @@ export default {
       ),
       observe("export", exports, (messages) =>
         Promise.all(messages.map((message) => consumeExportJob(message, env))),
+      ),
+      observe("deletion", deletions, (messages) =>
+        Promise.all(messages.map((message) => consumeAccountDeletion(message, env))),
       ),
     ]);
     await observe("webhook", webhooks, (messages) => consumeWebhooks({ messages }, env));

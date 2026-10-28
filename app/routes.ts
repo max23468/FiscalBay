@@ -7,6 +7,8 @@ export default [
   route("sitemap.xml", "routes/sitemap.ts"),
   route("auth/error", "routes/auth-error.tsx"),
   route("en/auth/error", "routes/auth-error.tsx", { id: "auth-error-en" }),
+  route("cancellazione-account", "routes/account-deletion.tsx"),
+  route("en/cancellazione-account", "routes/account-deletion.tsx", { id: "account-deletion-en" }),
   route("accesso", "routes/sign-in.tsx"),
   route("en/accesso", "routes/sign-in.tsx", { id: "sign-in-en" }),
   route("termini", "routes/legal.tsx"),
