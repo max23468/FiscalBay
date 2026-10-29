@@ -188,6 +188,32 @@ Query di diagnosi sull'archivio, con `--days` da 1 a 90 (predefinito 1) e `--mod
 
 Le query scaricano ogni oggetto della finestra con la CLI, quindi le finestre lunghe richiedono tempo; i Workers Logs restano la via più rapida per gli ultimi sette giorni. Ogni invocazione esportata conta per Logpush dei Workers, 10 milioni al mese inclusi nell'account: restano sotto l'incluso finché le invocazioni dei Worker con Logpush dell'account restano sotto quella soglia; lo storage segue la riga R2 della [tabella delle quote](#capacita). R2 elimina gli oggetti scaduti normalmente entro un giorno dalla scadenza della regola.
 
+<a id="protezioni-zona"></a>
+## Protezioni della zona
+
+La zona `fiscalbay.it` è comune ai due ambienti e resta sul piano Free ([D229](../DECISION_REGISTER.md)). `scripts/zone-protection.mjs` gestisce le protezioni del [§24](../MASTER_PLAN.md#s24) per l'ambiente scelto, `--mode live` per la Production:
+
+| Protezione | Configurazione |
+|---|---|
+| Header e HSTS | Response Header Transform Rule `fiscalbay-<ambiente>-headers` sugli host dell'ambiente: `Strict-Transport-Security` al gradino corrente, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` e `Referrer-Policy: strict-origin-when-cross-origin`. La CSP resta del Worker |
+| Webhook | Regola WAF `fiscalbay-<ambiente>-webhooks`: i percorsi esatti di `app/webhook-paths.ts` saltano Browser Integrity Check e modalità sotto attacco; firma e limiti restano del Worker |
+| Sonde | Regola WAF `fiscalbay-<ambiente>-probes`: blocco all'edge di file nascosti (tranne `/.well-known/`), PHP, WordPress, backup e configurazioni |
+| Raffiche di accesso | Regola di rate limiting `fiscalbay-auth-burst`, per tutta la zona: oltre 30 richieste in 10 secondi per IP verso `/api/auth/` rispondono 429 per 10 secondi |
+| Report della posta | DMARC Management aggiunge il proprio `rua` al record `_dmarc` esistente, senza cambiare policy e allineamento |
+| Certificati | Certificate Transparency Monitoring con alert a `info@fiscalbay.it` |
+
+HSTS sale di un gradino, 5 minuti, un giorno, una settimana e un anno, soltanto dopo il readback del precedente, cambiando `hstsStage` nello script; `includeSubDomains` e `preload` restano fuori finché tutti i sottodomini non sono inventariati e provati. L'impostazione HSTS della zona resta spenta: varrebbe per entrambi gli ambienti. Bot Fight Mode resta spento perché non ammette eccezioni.
+
+1. `node scripts/zone-protection.mjs plan` stampa regole, impostazioni della posta e gradino HSTS senza leggere né scrivere.
+2. `node scripts/zone-protection.mjs validate` legge le fasi della zona e fa convalidare al provider, con `dry_run=true`, ogni fase come la scriverebbe `apply`: sintassi, campi e funzioni ammessi dal piano, azioni e quote. Non simula il traffico.
+3. `node scripts/zone-protection.mjs apply` ripete la convalida, poi scrive le tre fasi, attiva gli alert dei certificati e DMARC Management e aggiunge il `rua` al record DMARC se manca. Le regole con il `ref` dell'altro ambiente e quelle create a mano restano dove sono.
+4. Il readback, compreso in `apply` o con `readback`, controlla le regole previste, piano Free, DNSSEC, HTTPS sempre, TLS 1.2 minimo, HSTS della zona senza sottodomini, Bot Fight Mode spento, alert e report della posta, policy DMARC, un solo SPF per nome e MX iCloud. Sulle risposte reali dell'ambiente controlla header di pagina, asset e pagina assente, CSP e `no-store` della pagina, sonda bloccata con 403, webhook invalido rifiutato dal Worker senza challenge e reindirizzamento da HTTP, più quello di `www` per la Production. `--burst` invia richieste al percorso di accesso finché arriva il 429: l'IP che prova resta bloccato su `/api/auth/` per 10 secondi. Esce con 1 se un controllo non passa.
+5. Dopo il readback, i percorsi reali con le protezioni attive: `pnpm test:e2e:smoke` sul test, un accesso con passkey e con Google, un download di esportazione e un webhook valido di ciascun provider.
+
+Il primo report DMARC arriva entro 24 ore dall'attivazione e si legge in **Email** > **DMARC Management** della dashboard; finché non ne arriva uno, la lettura resta una prova aperta. Gli alert dei certificati arrivano per email soltanto alle emissioni non gestite da Cloudflare. La risposta a un certificato inatteso, a un mittente sconosciuto o a un falso positivo WAF appartiene a [M7-04](../MASTER_PLAN.md#m7-04).
+
+Rientro: `node scripts/zone-protection.mjs remove` toglie le regole dell'ambiente e lascia quella di zona finché l'altro ambiente ha le sue; ogni scrittura crea anche una versione del ruleset, rileggibile con `cf rulesets entrypoint versions list <fase>`. DMARC Management e gli alert si spengono con `cf email-auth dmarc-reports edit --enabled false` e `cf ssl ct-alerting update --enabled false`; il `rua` di Cloudflare si toglie dal record `_dmarc` senza toccare gli altri tag.
+
 <a id="metriche-release"></a>
 ## Confronto delle metriche fra release test
 

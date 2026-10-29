@@ -19,6 +19,12 @@ export const databases = {
  */
 export const logArchives = { test: "fiscalbay-test-logs", live: "fiscalbay-logs" };
 
+/**
+ * Zona DNS comune ai due ambienti. Header, regole WAF, rate limit, DMARC Management e
+ * Certificate Transparency Monitoring si applicano con `scripts/zone-protection.mjs` (§24).
+ */
+export const zone = "fiscalbay.it";
+
 /** ID Telegram dell'owner: lo stesso utente in ogni bot, quindi in entrambi gli ambienti. */
 const ownerTelegramId = "573159993";
 
