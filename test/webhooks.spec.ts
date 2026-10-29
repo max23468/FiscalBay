@@ -1892,11 +1892,24 @@ it("limita le consegne per origine prima di leggere il corpo, con memoria limita
   expect(() => admitOrigin("198.51.100.1", at)).not.toThrow();
 });
 
+it("un'origine che riparte con una nuova finestra diventa la più recente", () => {
+  // Mille origini scadute sostituiscono quelle rimaste dalle altre prove.
+  const start = Date.parse("2027-01-01T00:00:00.000Z");
+  for (let i = 0; i < 1000; i++) admitOrigin(`198.18.0.${i}`, start - 120_000);
+  admitOrigin("198.18.1.1", start);
+  admitOrigin("198.18.1.2", start + 1);
+  // La prima origine riparte e raggiunge il limite: altre 999 origini fanno uscire le scadute e
+  // la seconda, non la prima, che resta al limite.
+  for (let i = 0; i < 600; i++) admitOrigin("198.18.1.1", start + 60_000);
+  for (let i = 0; i < 999; i++) admitOrigin(`198.18.2.${i}`, start + 60_001);
+  expect(() => admitOrigin("198.18.1.1", start + 60_002)).toThrow(NotificationLimit);
+});
+
 it("accetta la firma SHA-1 delle notifiche di cancellazione dichiarata dalla chiave di eBay", async () => {
-  const signed = (payload: object, digest: "SHA1" | "SHA256", kid: string) => {
+  const signed = (payload: object, digest: "SHA1" | "sha1" | "SHA256", kid: string) => {
     const body = JSON.stringify(payload);
     const signature = sign(
-      digest === "SHA1" ? "sha1" : "sha256",
+      digest.toLowerCase() === "sha1" ? "sha1" : "sha256",
       Buffer.from(body),
       pair.privateKey,
     ).toString("base64");
@@ -1922,6 +1935,10 @@ it("accetta la firma SHA-1 delle notifiche di cancellazione dichiarata dalla chi
     (await receiveWebhook(signed(payload, "SHA1", "sha1-key"), environment, sha1Key, now))?.status,
   ).toBe(204);
   expect((await deletions()).results).toHaveLength(1);
+  // Il digest dell'header vale in maiuscolo e in minuscolo.
+  expect(
+    (await receiveWebhook(signed(payload, "sha1", "sha1-key"), environment, sha1Key, now))?.status,
+  ).toBe(204);
   // La chiave dichiara SHA-1: un header con un altro digest, anche firmato, non vale.
   expect(
     (await receiveWebhook(signed(payload, "SHA256", "sha1-key"), environment, sha1Key, now))

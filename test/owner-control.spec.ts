@@ -16,7 +16,14 @@ import { consumeTask, taskSlot } from "../app/domain/scheduled-work.server";
 import { setSwitch } from "../app/domain/service-settings.server";
 import { taskPeriods, type ScheduledTask } from "../app/domain/work-timing";
 import { ownerCommands } from "../app/bot-commands";
-import { verifyTelegramUpdate } from "../app/integrations/telegram.server";
+import {
+  editRichMessage,
+  ownerChatId,
+  sendPreformatted,
+  sendRichMessage,
+  verifyTelegramUpdate,
+  webhookInfo,
+} from "../app/integrations/telegram.server";
 import { receiveWebhook } from "../app/webhooks.server";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import {
@@ -156,6 +163,7 @@ describe("identità dell'owner", () => {
     // Chat, utente o tipo di chat diversi: nessun effetto e nessuna risposta.
     expect(parse(message("/console", { chat: 4242, from: 4242 }))).toBeNull();
     expect(parse(message("/console", { from: 4242 }))).toBeNull();
+    expect(parse(message("/console", { chat: 4242 }))).toBeNull();
     expect(parse(message("/console", { chat: -100, type: "group" }))).toBeNull();
     expect(
       parse({
@@ -170,6 +178,7 @@ describe("identità dell'owner", () => {
     });
     expect(parse(tap("oc1:incidenti:0", { chat: 4242, from: 4242 }))).toBeNull();
     expect(parse(tap("oc1:incidenti:0", { from: 4242 }))).toBeNull();
+    expect(parse(tap("oc1:incidenti:0", { chat: 4242 }))).toBeNull();
     // I comandi dei venditori restano tali anche nella chat dell'owner.
     expect(parse(message("/stato"))).toMatchObject({ kind: "command", command: "status" });
     expect(parse(tap("abcdef12:pr"))).toMatchObject({ kind: "callback" });
@@ -177,6 +186,14 @@ describe("identità dell'owner", () => {
     const unset = { ...env, TELEGRAM_OWNER_ID: "" } as unknown as Env;
     expect(parse(message("/console"), unset)).toBeNull();
     expect(parse(tap("oc1:console:0"), unset)).toBeNull();
+  });
+
+  it("accetta come owner soltanto un ID Telegram di sole cifre", () => {
+    const id = (value: string) => ownerChatId({ ...env, TELEGRAM_OWNER_ID: value } as Env);
+    expect(id("573159993")).toBe("573159993");
+    expect(id("1".repeat(20))).toBe("1".repeat(20));
+    for (const value of ["", "x573159993", "573159993x", "-100573159993", "1".repeat(21)])
+      expect(id(value), value).toBeNull();
   });
 
   it("riconosce soltanto i pulsanti nella forma attesa", () => {
@@ -205,6 +222,95 @@ describe("identità dell'owner", () => {
       "oc2:console:0",
     ])
       expect(parseOwnerCallback(data), data).toBeNull();
+  });
+});
+
+describe("Bot API del Control Center", () => {
+  /** Bot API con una risposta fissa; conserva metodo e parametri di ogni chiamata. */
+  const answering = (body: string, status = 200) => {
+    const calls: Array<{ method: string; params: Record<string, unknown> }> = [];
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      calls.push({
+        method: String(input).split("/").at(-1)!,
+        params: JSON.parse(String(init?.body)) as Record<string, unknown>,
+      });
+      return new Response(body, { status });
+    });
+    return { fetcher, calls };
+  };
+  const refused = (description: string) =>
+    answering(JSON.stringify({ ok: false, description }), 400).fetcher;
+  const panel = { blocks: [{ type: "footer" as const, text: "Test" }] };
+
+  it("distingue i rifiuti di una modifica: invariato, non più modificabile, altro", async () => {
+    const edit = (fetcher: typeof fetch) => editRichMessage(env, String(owner), 77, panel, fetcher);
+    expect(await edit(refused("Bad Request: message is not modified"))).toBe("edited");
+    expect(await edit(refused("Bad Request: message to edit not found"))).toBe("gone");
+    expect(await edit(refused("Bad Request: MESSAGE CAN'T BE EDITED"))).toBe("gone");
+    await expect(edit(refused("Bad Request: chat not found"))).rejects.toMatchObject({
+      failure: "rejected",
+    });
+    // Un corpo che non è JSON resta un rifiuto, senza descrizione da leggere.
+    await expect(edit(answering("<html>", 400).fetcher)).rejects.toMatchObject({
+      failure: "rejected",
+    });
+    await expect(edit(answering("{}", 502).fetcher)).rejects.toMatchObject({
+      failure: "unavailable",
+    });
+    const ok = answering(JSON.stringify({ ok: true, result: true }));
+    expect(await edit(ok.fetcher)).toBe("edited");
+    expect(ok.calls).toEqual([
+      {
+        method: "editMessageText",
+        params: {
+          chat_id: String(owner),
+          message_id: 77,
+          rich_message: { blocks: panel.blocks, skip_entity_detection: true },
+        },
+      },
+    ]);
+  });
+
+  it("invia pannelli senza pulsanti e testo copiabile senza anteprime", async () => {
+    const api = answering(JSON.stringify({ ok: true, result: { message_id: 9 } }));
+    expect(await sendRichMessage(env, String(owner), panel, api.fetcher)).toBe(9);
+    expect(api.calls[0]!.params).not.toHaveProperty("reply_markup");
+    await sendPreformatted(env, String(owner), "riga 🙂", api.fetcher);
+    expect(api.calls[1]).toEqual({
+      method: "sendMessage",
+      params: {
+        chat_id: String(owner),
+        text: "riga 🙂",
+        entities: [{ type: "pre", offset: 0, length: 7 }],
+        link_preview_options: { is_disabled: true },
+      },
+    });
+  });
+
+  it("legge lo stato del webhook e rifiuta risposte oltre il limite", async () => {
+    const info = (result: object) =>
+      webhookInfo(env, answering(JSON.stringify({ ok: true, result })).fetcher);
+    expect(
+      await info({
+        url: "https://test.fiscalbay.it/webhooks/telegram",
+        pending_update_count: 2,
+        last_error_date: 1_793_000_000,
+        allowed_updates: ["message", "callback_query"],
+      }),
+    ).toEqual({
+      url: "https://test.fiscalbay.it/webhooks/telegram",
+      pending: 2,
+      lastErrorAt: new Date(1_793_000_000_000).toISOString(),
+      allowedUpdates: ["message", "callback_query"],
+    });
+    expect(await info({ url: "", pending_update_count: 0 })).toEqual({
+      url: "",
+      pending: 0,
+      lastErrorAt: null,
+      allowedUpdates: [],
+    });
+    // 64 KiB al massimo, anche se la risposta è valida.
+    await expect(info({ url: "x".repeat(70_000), pending_update_count: 0 })).rejects.toThrow();
   });
 });
 

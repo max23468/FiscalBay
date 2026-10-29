@@ -827,8 +827,17 @@ describe("collegamento negozio eBay", () => {
 
   it("non collega il negozio con token o identità eBay non validi", async () => {
     const incomplete = () => Response.json({ access_token: "token-sintetico", expires_in: 7200 });
+    // Tutti i campi presenti, ma un token di rinnovo vuoto.
+    const empty = () =>
+      Response.json({
+        access_token: "token-sintetico",
+        expires_in: 7200,
+        refresh_token: "",
+        refresh_token_expires_in: 47_304_000,
+      });
     for (const [index, provider] of [
       syntheticEbay({ token: incomplete }),
+      syntheticEbay({ token: empty }),
       syntheticEbay({ userId: "x".repeat(257) }),
     ].entries()) {
       const { cookie } = await verifiedSession(`risposta-invalida-${index}@example.invalid`);

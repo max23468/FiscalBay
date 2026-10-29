@@ -99,15 +99,13 @@ export function ownerChatId(env: Env): string | null {
   return /^\d{1,20}$/u.test(id) ? id : null;
 }
 
-/** Chat privata dell'owner, con l'owner come mittente: altrimenti l'owner non è riconosciuto. */
+/**
+ * Chat dell'owner, con l'owner come mittente: altrimenti l'owner non è riconosciuto. Chi chiama
+ * ammette soltanto chat private; senza un ID configurato nessuna chat coincide.
+ */
 function fromOwner(env: Env, chat: z.infer<typeof chatSchema>, sender?: { id: number }) {
   const owner = ownerChatId(env);
-  return (
-    owner !== null &&
-    chat.type === "private" &&
-    String(chat.id) === owner &&
-    String(sender?.id) === owner
-  );
+  return String(chat.id) === owner && String(sender?.id) === owner;
 }
 
 type UpdateBase = { updateId: number; chatId: string; eventAt: string };
