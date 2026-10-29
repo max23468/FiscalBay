@@ -14,7 +14,16 @@ if (units !== 0 && units !== files.length)
   throw new Error("La selezione mutation mescola test Node e Cloudflare.");
 const base = units === 0 ? cloudflare : unit;
 
+// La prova iniziale con la copertura per test, su più processi del runner di GitHub, porta oltre i 5
+// secondi predefiniti test che di solito ne impiegano uno. Il timeout di Stryker resta più lungo
+// (`stryker.config.json`): un test bloccato da un mutante cade comunque su quello di Vitest.
 export default defineConfig({
   ...base,
-  test: { ...base.test, include: files, fileParallelism: false },
+  test: {
+    ...base.test,
+    include: files,
+    fileParallelism: false,
+    testTimeout: 10_000,
+    hookTimeout: 20_000,
+  },
 });
