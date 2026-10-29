@@ -12,6 +12,7 @@ import {
 } from "../app/integrations/stripe-account.server";
 import {
   buildManagedCheckoutParams,
+  closeCheckoutSession,
   createManagedCheckout,
   createStripeClient,
   verifyStripeEvent,
@@ -32,6 +33,47 @@ import {
   workspace,
   buy,
 } from "./fixtures/stripe-fixtures";
+
+describe("chiusura di una sessione Checkout", () => {
+  /** Client con le sole chiamate usate: ogni lettura restituisce lo stato successivo. */
+  const client = (statuses: string[], expire: () => Promise<unknown>) => {
+    const retrieve = vi.fn(async () => ({ id: "cs_sintetica", status: statuses.shift() }));
+    const stripe = { checkout: { sessions: { retrieve, expire: vi.fn(expire) } } };
+    return {
+      stripe: stripe as unknown as Stripe,
+      retrieve,
+      expire: stripe.checkout.sessions.expire,
+    };
+  };
+
+  it("chiude soltanto una sessione aperta e ne restituisce lo stato", async () => {
+    const closed = client(["complete"], async () => ({}));
+    expect(await closeCheckoutSession(closed.stripe, "cs_sintetica")).toEqual({
+      id: "cs_sintetica",
+      status: "complete",
+    });
+    expect(closed.expire).not.toHaveBeenCalled();
+    const open = client(["open"], async () => ({}));
+    expect(await closeCheckoutSession(open.stripe, "cs_sintetica")).toEqual({
+      id: "cs_sintetica",
+      status: "expired",
+    });
+    expect(open.expire).toHaveBeenCalledExactlyOnceWith("cs_sintetica");
+  });
+
+  it("dopo una chiusura rifiutata vale l'esito riletto, se la sessione non è più aperta", async () => {
+    const refused = () => Promise.reject(new Error("già completata"));
+    const completed = client(["open", "complete"], refused);
+    expect(await closeCheckoutSession(completed.stripe, "cs_sintetica")).toEqual({
+      id: "cs_sintetica",
+      status: "complete",
+    });
+    expect(completed.retrieve).toHaveBeenCalledTimes(2);
+    const still = client(["open", "open"], refused);
+    await expect(closeCheckoutSession(still.stripe, "cs_sintetica")).rejects.toThrow();
+    expect(still.retrieve).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe("Stripe Managed Payments", () => {
   beforeEach(resetDatabase);
