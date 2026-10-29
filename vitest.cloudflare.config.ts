@@ -24,6 +24,9 @@ export default defineConfig({
           TELEGRAM_BOT_USERNAME: "FiscalBayTestBot",
           TELEGRAM_BOT_TOKEN: "123456:telegram-test-token",
           TELEGRAM_WEBHOOK_SECRET: "telegram-webhook-secret-for-the-test-suite",
+          // Chiavi di prova di Cloudflare che accettano sempre; Siteverify è simulato nei test.
+          TURNSTILE_SITE_KEY: "1x00000000000000000000AA",
+          TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA",
           TEST_MIGRATIONS: await readD1Migrations("./migrations"),
         },
       },
@@ -42,7 +45,7 @@ export default defineConfig({
     // resta sotto il timeout di Stryker (`stryker.config.json`), che vale anche per la mutation.
     testTimeout: 15_000,
     hookTimeout: 20_000,
-    setupFiles: ["./test/apply-migrations.ts"],
+    setupFiles: ["./test/apply-migrations.ts", "./test/fixtures/turnstile-fixtures.ts"],
     diff: "./test/diff-options.ts",
     css: { include: [/app\.css/u] },
   },

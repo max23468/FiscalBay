@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
+import { turnstileField } from "../app/turnstile";
+import { siteverify, testingKeyResult } from "./fixtures/turnstile-fixtures";
 import { completeRegistration } from "../app/domain/registration.server";
 import { adminAccess, readSession, recentSignIn } from "../app/domain/sessions.server";
 import { withResponseCookies } from "../app/response-cookies.server";
@@ -1400,6 +1402,11 @@ describe("Collegamento e modifica dell'identità", () => {
         html: expect.stringContaining('<html lang="it">'),
       });
       send.mockClear();
+      // Il link per la password è una richiesta di reset: senza verifica Turnstile non parte.
+      expect(await outcome({ intent: "password", [turnstileField]: "" }, securityAction)).toContain(
+        "verifica-non-riuscita",
+      );
+      expect(send).not.toHaveBeenCalled();
       expect(await outcome({ intent: "password" }, securityAction)).toContain("password-link");
       await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
       const message = send.mock.calls[0]![0] as { to: string; text: string };
@@ -1483,6 +1490,13 @@ describe("Collegamento e modifica dell'identità", () => {
     send.mockClear();
     expect(await request("email.destinazione@example.invalid")).toContain("email-richiesta");
     await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    // Il nuovo invio del link passa da Turnstile; con Siteverify indisponibile non parte.
+    siteverify.answer = () => new Response(null, { status: 503 });
+    expect(
+      (await securityAction(user.cookie, { intent: "reinvia-email" })).headers.get("location"),
+    ).toContain("verifica-non-disponibile");
+    siteverify.answer = () => Response.json(testingKeyResult);
+    expect(send).toHaveBeenCalledOnce();
     expect(
       (
         await securityAction(user.cookie, {
@@ -1665,12 +1679,19 @@ describe("Sessioni, revoche e area admin", () => {
     sessionCookie(
       await jsonRequest("sign-in/email", "", { email, password: "Password-sintetica-123!" }),
     );
+  // La registrazione con password arriva dal modulo con Turnstile: qui direttamente ad Auth.
   const createUser = async (email: string) => {
-    const response = await jsonRequest("sign-up/email", "", {
-      name: "Sessioni sintetiche",
-      email,
-      password: "Password-sintetica-123!",
-    });
+    const response = await createAuth(env).handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({
+          name: "Sessioni sintetiche",
+          email,
+          password: "Password-sintetica-123!",
+        }),
+      }),
+    );
     const { user } = await response.json<{ user: { id: string } }>();
     await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user.id).run();
     await completeRegistration(env.DB, {

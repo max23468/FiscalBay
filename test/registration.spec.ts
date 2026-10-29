@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { forwardToAuth } from "../app/auth-route.server";
 import {
   completeRegistration,
@@ -33,6 +33,8 @@ import {
 } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
+import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
+import { turnstileField } from "../app/turnstile";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -279,6 +281,13 @@ describe("registrazione e verifica del contatto", () => {
     expect(link.headers.get("location")).toBe("/app/ordini?negozio=accesso");
     expect(await storeLinkSessions()).toBe(0);
 
+    // Il nuovo link passa dalla verifica Turnstile, come la registrazione.
+    const unchecked = await accessForm(
+      "/accesso",
+      { intent: "verifica", [turnstileField]: "" },
+      cookie,
+    );
+    expect(unchecked.headers.get("location")).toBe("/app/ordini?accesso=verifica-non-riuscita");
     const resent = await accessForm("/accesso", { intent: "verifica" }, cookie);
     expect(resent.headers.get("location")).toBe("/app/ordini?accesso=verifica-inviata");
 
@@ -618,5 +627,107 @@ describe("registrazione e verifica del contatto", () => {
       expect(destination.searchParams.get("provider")).toBe(provider);
       expect(destination.searchParams.get("error")).toBe("access_denied");
     }
+  });
+});
+
+describe("Turnstile sugli ingressi pubblici", () => {
+  // Gli utenti restano fra le prove: ognuna usa un proprio indirizzo.
+  let email: string;
+  const signUp = (fields: Record<string, string> = {}) =>
+    accessForm("/accesso", {
+      intent: "registrati",
+      tipo: "privato",
+      nome: "Mario",
+      cognome: "Rossi",
+      email,
+      password: "Una-password-registrazione-lunga",
+      termini: "on",
+      ...fields,
+    });
+  const created = () => env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first();
+  let send: MockInstance<SendEmail["send"]>;
+  beforeEach(() => {
+    email = `turnstile-${crypto.randomUUID()}@example.invalid`;
+    send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+  });
+  afterEach(() => send.mockRestore());
+
+  it("registra con il token del modulo verificato da Siteverify con la chiave dell'ambiente", async () => {
+    expect((await signUp()).headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect(siteverify.requests).toEqual([
+      { secret: env.TURNSTILE_SECRET_KEY, response: testToken },
+    ]);
+    expect(await created()).not.toBeNull();
+  });
+
+  it.each([
+    ["assente", { [turnstileField]: "" }, null, 400, "verifica-non-riuscita"],
+    [
+      "scaduto o già usato",
+      {},
+      { success: false, "error-codes": ["timeout-or-duplicate"] },
+      400,
+      "verifica-non-riuscita",
+    ],
+    [
+      "di un altro hostname",
+      {},
+      { success: true, hostname: "fiscalbay.it", action: "sign-up" },
+      400,
+      "verifica-non-riuscita",
+    ],
+    ["con Siteverify indisponibile", {}, 503, 503, "verifica-non-disponibile"],
+  ] as const)(
+    "rifiuta la registrazione con token %s, senza account né email",
+    async (_, fields, answer, status, key) => {
+      if (answer !== null)
+        siteverify.answer = () =>
+          typeof answer === "number"
+            ? new Response(null, { status: answer })
+            : Response.json(answer);
+      const error = await accessError(await signUp(fields));
+      // I dati tornano per riprovare, senza password né token.
+      expect(error).toMatchObject({ status, key, tab: "registrati", values: { email } });
+      expect(error.values).not.toHaveProperty("password");
+      expect(error.values).not.toHaveProperty(turnstileField);
+      expect(siteverify.requests).toHaveLength(answer === null ? 0 : 1);
+      expect(await created()).toBeNull();
+      expect(send).not.toHaveBeenCalled();
+    },
+  );
+
+  it("chiede la verifica al recupero della password, non all'accesso con Google o eBay", async () => {
+    const recovery = (fields: Record<string, string> = {}) =>
+      accessForm("/accesso", { intent: "recupera-password", email, ...fields });
+    expect((await recovery({ [turnstileField]: "" })).headers.get("location")).toBe(
+      "/accesso?accesso=verifica-non-riuscita",
+    );
+    siteverify.answer = () => Response.json({}, { status: 500 });
+    expect((await recovery()).headers.get("location")).toBe(
+      "/accesso?accesso=verifica-non-disponibile",
+    );
+    expect(send).not.toHaveBeenCalled();
+
+    siteverify.requests.length = 0;
+    for (const intent of ["google", "ebay"]) {
+      expect((await accessForm("/accesso", { intent, [turnstileField]: "" })).status).toBe(303);
+    }
+    expect(siteverify.requests).toEqual([]);
+  });
+
+  it("non accetta registrazione, recupero e nuovo link chiamati direttamente su Auth", async () => {
+    for (const path of ["sign-up/email", "request-password-reset", "send-verification-email"]) {
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "http://localhost:5173" },
+          body: JSON.stringify({ name: "Diretto", email, password: "Password-diretta-123!" }),
+        }),
+        env,
+      );
+      expect(response.status).toBe(404);
+    }
+    expect(await created()).toBeNull();
+    expect(send).not.toHaveBeenCalled();
   });
 });

@@ -224,6 +224,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "Poche ore, al più un giorno",
               ],
               [
+                "Verifica anti-automazione, alla registrazione con password, alla richiesta di una nuova password o di un nuovo link e all’invio di una richiesta di assistenza: indirizzo IP e caratteristiche tecniche del browser e del dispositivo, esaminati dal fornitore di rete",
+                "Impedire registrazioni e invii automatici (legittimo interesse)",
+                "Non conserviamo l’esito; presso il fornitore di rete per il tempo da lui stabilito",
+              ],
+              [
                 "Eventi di rete e protezione: indirizzo IP, percorso richiesto, browser, paese, regola applicata",
                 "Bloccare attacchi e abusi (legittimo interesse)",
                 "31 giorni presso il fornitore di rete",
@@ -259,7 +264,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Cookie e tecnologie simili",
         blocks: [
-          "FiscalBay usa soltanto cookie tecnici necessari all’accesso e alla sicurezza della sessione, e la memoria del browser per conservare temporaneamente una selezione di ordini da esportare. Nessun cookie di analisi, profilazione o pubblicità: per questo non c’è un banner dei cookie.",
+          "FiscalBay usa soltanto cookie tecnici necessari all’accesso e alla sicurezza della sessione, e la memoria del browser per conservare temporaneamente una selezione di ordini da esportare. Nei moduli di registrazione, recupero della password, nuovo link e assistenza, la verifica anti-automazione del fornitore di rete legge caratteristiche tecniche del browser per distinguere le persone dai programmi automatici. Nessun cookie di analisi, profilazione o pubblicità: per questo non c’è un banner dei cookie.",
         ],
       },
       {
@@ -515,6 +520,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "A few hours, at most one day",
               ],
               [
+                "Automation check, when signing up with a password, requesting a new password or a new link and sending a support request: IP address and technical characteristics of the browser and device, examined by the network provider",
+                "Preventing automated sign-ups and submissions (legitimate interest)",
+                "We do not keep the result; at the network provider for the time it sets",
+              ],
+              [
                 "Network and protection events: IP address, requested path, browser, country, rule applied",
                 "Blocking attacks and abuse (legitimate interest)",
                 "31 days at the network provider",
@@ -550,7 +560,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Cookies and similar technologies",
         blocks: [
-          "FiscalBay only uses technical cookies needed for sign-in and session security, and browser storage to temporarily keep a selection of orders to export. No analytics, profiling or advertising cookies: that is why there is no cookie banner.",
+          "FiscalBay only uses technical cookies needed for sign-in and session security, and browser storage to temporarily keep a selection of orders to export. In the sign-up, password recovery, new link and support forms, the network provider’s automation check reads technical characteristics of the browser to tell people from automated programs. No analytics, profiling or advertising cookies: that is why there is no cookie banner.",
         ],
       },
       {

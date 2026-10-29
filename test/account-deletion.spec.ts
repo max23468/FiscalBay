@@ -653,7 +653,8 @@ describe("cancellazione dell'account", () => {
 
     // Accesso automatico dopo la conferma dell'email di un utente ancora da verificare.
     const pending = `da-verificare-${crypto.randomUUID()}@example.invalid`;
-    await handleAuthRequest(
+    // La registrazione con password arriva dal modulo con Turnstile: qui direttamente ad Auth.
+    await createAuth(env).handler(
       new Request(`${testOrigin}/api/auth/sign-up/email`, {
         method: "POST",
         headers: { "content-type": "application/json", origin: testOrigin },
@@ -663,7 +664,6 @@ describe("cancellazione dell'account", () => {
           password: "Password-lunga-123!",
         }),
       }),
-      env,
     );
     await vi.waitFor(() => expect(sentTo(send, pending).length).toBeGreaterThan(0));
     const unverified = (await env.DB.prepare('SELECT "id" FROM "user" WHERE "email" = ?')
@@ -686,13 +686,12 @@ describe("cancellazione dell'account", () => {
     const email = `incompleto-${crypto.randomUUID()}@example.invalid`;
     const password = "Password-incompleta-123!";
     const signUp = (address: string) =>
-      handleAuthRequest(
+      createAuth(env).handler(
         new Request(`${testOrigin}/api/auth/sign-up/email`, {
           method: "POST",
           headers: { "content-type": "application/json", origin: testOrigin },
           body: JSON.stringify({ name: "Venditore", email: address, password }),
         }),
-        env,
       );
     const signIn = async (address: string) =>
       sessionCookie(

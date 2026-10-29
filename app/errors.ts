@@ -70,6 +70,7 @@ export function logFailure(input: {
     | "account_deletion"
     | "ebay_account_deletion"
     | "support"
+    | "turnstile"
     | "inactivity"
     | "maintenance"
     | "export_files"

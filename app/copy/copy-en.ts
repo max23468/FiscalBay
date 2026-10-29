@@ -1158,6 +1158,9 @@ export const en: AppCopy = {
       termini: "To continue, accept the Terms of service.",
       dati: "Enter your first and last name and, for a business, the company name.",
       "troppi-tentativi": "Too many attempts. Try again in a few minutes.",
+      "verifica-non-riuscita": "Security check failed or expired. Try again.",
+      "verifica-non-disponibile":
+        "Security check unavailable right now. Try again in a few minutes.",
       "verifica-inviata": "Confirmation link sent. Check your inbox.",
       "passkey-rimossa": "Passkey removed.",
       "passkey-rinominata": "Passkey name updated.",

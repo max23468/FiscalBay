@@ -16,8 +16,10 @@ import {
 } from "~/components/ui/field";
 import { Textarea } from "~/components/ui/textarea";
 import { useCopy } from "~/components/copy-context";
+import { useTurnstile } from "~/components/turnstile";
 import { supportEmail } from "../../app-copy";
 import { maxSupportMessage, supportFields, supportTopics } from "../../support";
+import { turnstileActions, turnstileField } from "../../turnstile";
 import type { DiagnosticsView } from "../../view-models";
 import { CheckboxOption, Group, SimpleSelect } from "./controls";
 
@@ -94,6 +96,7 @@ function SupportForm({
   const action = useAction((result) => {
     if (result.ok) form.current?.reset();
   });
+  const turnstile = useTurnstile(turnstileActions.support);
   const [topic, setTopic] = useState("orders");
   const [error, setError] = useState(false);
   const sent = !error && action.result?.ok === true;
@@ -103,6 +106,11 @@ function SupportForm({
     required: t.settings.support.messageRequired,
   });
   const message = v.control("message");
+  // La richiesta parte con il token della verifica, che nasce al momento dell'invio.
+  const send = async (fields: Record<string, string>) => {
+    const token = await turnstile.token();
+    if (token !== null) action.run("support", { ...fields, [turnstileField]: token });
+  };
   const diag = t.settings.support.diag;
   const rows = diagnostics
     ? ([
@@ -133,14 +141,12 @@ function SupportForm({
               return;
             }
             event.preventDefault();
-            action.run(
-              "support",
-              supportFields(new FormData(event.currentTarget), {
-                topic,
-                message: area.value.trim(),
-                reference: diagnostics?.correlationId ?? null,
-              }),
-            );
+            const fields = supportFields(new FormData(event.currentTarget), {
+              topic,
+              message: area.value.trim(),
+              reference: diagnostics?.correlationId ?? null,
+            });
+            void send(fields);
           }}
         >
           <p className="text-sm text-muted-foreground">{t.access.requiredFields}</p>
@@ -193,6 +199,7 @@ function SupportForm({
               )}
             </FieldSet>
           </FieldGroup>
+          {turnstile.field}
           <Button type="submit" className="w-fit" disabled={action.pending}>
             {t.settings.support.send}
           </Button>

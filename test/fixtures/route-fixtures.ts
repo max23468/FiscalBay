@@ -1,4 +1,5 @@
 import { loader as loadArea } from "../../app/routes/account";
+import { withTurnstileToken } from "./turnstile-fixtures";
 
 export const testOrigin = "http://localhost:5173";
 
@@ -24,7 +25,10 @@ export function routeRequest(path: string, options: RouteOptions = {}) {
   return new Request(`${testOrigin}${path}`, {
     method: "POST",
     headers: { ...(origin ? { origin } : {}), ...common },
-    body: body ?? (fields instanceof FormData ? fields : new URLSearchParams(fields)),
+    // I moduli protetti da Turnstile ricevono il token di prova, se la prova non ne indica uno.
+    body:
+      body ??
+      (fields instanceof FormData ? withTurnstileToken(fields) : withTurnstileToken(fields!)),
     signal,
   });
 }
