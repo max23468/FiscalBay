@@ -206,9 +206,9 @@ const replySchema = z.object({
  * errore, un messaggio non più modificabile si sostituisce con uno nuovo.
  */
 function rejection(description: string | undefined) {
-  const text = description?.toLowerCase() ?? "";
-  if (text.includes("message is not modified")) return "not_modified";
-  if (text.includes("message to edit not found") || text.includes("message can't be edited"))
+  const text = description?.toLowerCase();
+  if (text?.includes("message is not modified")) return "not_modified";
+  if (text?.includes("message to edit not found") || text?.includes("message can't be edited"))
     return "not_editable";
   return undefined;
 }
@@ -217,6 +217,7 @@ function rejection(description: string | undefined) {
 function botReply(text: string) {
   try {
     return replySchema.safeParse(JSON.parse(text)).data;
+    // Stryker disable next-line BlockStatement: un blocco vuoto restituisce lo stesso undefined.
   } catch {
     return undefined;
   }
@@ -486,6 +487,7 @@ export async function editRichMessage(
       fetcher,
     );
   } catch (error) {
+    // Stryker disable next-line ConditionalExpression,LogicalOperator: la Bot API solleva soltanto UpstreamError e solo i rifiuti portano il codice letto sotto, quindi ogni altro errore arriva comunque all'ultimo throw.
     if (!(error instanceof UpstreamError) || error.failure !== "rejected") throw error;
     if (error.details.providerCode === "not_modified") return "edited";
     if (error.details.providerCode === "not_editable") return "gone";
