@@ -100,16 +100,26 @@ test.describe("impostazioni e profilo", () => {
         await expect(selection).toContainText("Vintage Garage Italia");
         await selection.click();
         await expect(page.getByRole("option")).toHaveCount(2);
-        // La sostituzione chiede conferma: annullare lascia il negozio attivo com'era.
-        await page.getByRole("option").filter({ hasText: "Outlet" }).click();
         const replace = page.getByRole("alertdialog");
+        // In WebKit un tocco sulla voce appena comparsa a volte non sceglie: il menu si riapre e
+        // la scelta si ripete finché compare la conferma, che resta obbligatoria.
+        const chooseOutlet = () =>
+          expect(async () => {
+            if (await replace.isVisible()) return;
+            if (!(await page.getByRole("option").first().isVisible()))
+              await selection.click({ timeout: 2_000 });
+            await page.getByRole("option").filter({ hasText: "Outlet" }).click({ timeout: 2_000 });
+            await expect(replace).toBeVisible({ timeout: 2_000 });
+          }).toPass({ timeout: 20_000 });
+        // La sostituzione chiede conferma: annullare lascia il negozio attivo com'era.
+        await chooseOutlet();
         await expect(replace).toContainText(
           t("Vintage Garage Italia va in pausa", "Vintage Garage Italia will be paused"),
         );
         await replace.getByRole("button", { name: t("Annulla", "Cancel") }).click();
         await expect(selection).toContainText("Vintage Garage Italia");
         await selection.click();
-        await page.getByRole("option").filter({ hasText: "Outlet" }).click();
+        await chooseOutlet();
         await replace.getByRole("button", { name: t("Rendi attivo", "Make active") }).click();
         await expect(selection).toContainText("Outlet");
         await expect(
