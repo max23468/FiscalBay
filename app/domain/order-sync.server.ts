@@ -338,6 +338,7 @@ export async function consumeStoreSync(
   for (const [index, storeId] of body.syncStores.entries()) {
     const deferral = await serveStore(storeId, env, fetcher, now);
     if (!deferral) continue;
+    // Stryker disable next-line MethodExpression: i negozi precedenti hanno già chiuso il turno, quindi liberare l'intero gruppo dà lo stesso esito.
     const released = deferral.scope === "origin" ? body.syncStores.slice(index) : [storeId];
     await env.DB.prepare(
       `UPDATE sync_state SET dispatched_at = NULL
@@ -388,7 +389,9 @@ async function serveStore(
         now,
         budget: { ...storeBudget },
       });
-      if (result === "busy") return { delaySeconds: 60, scope: "store" };
+      if (result === "busy")
+        // Stryker disable next-line StringLiteral: lo scopo conta soltanto nel confronto con «origin».
+        return { delaySeconds: 60, scope: "store" };
       // Le notifiche dello spazio partono appena la lettura ha scritto gli ordini; il compito
       // periodico riprende quelle rimaste.
       await deliverTelegram(env, fetcher, now, { storeId: store.store_id }).catch(

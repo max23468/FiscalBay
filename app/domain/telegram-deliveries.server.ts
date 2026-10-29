@@ -87,6 +87,7 @@ export async function deliverTelegram(
     ORDER BY l.served_at IS NOT NULL, julianday(l.served_at), l.linked_at LIMIT ?3`)
     .bind(scope.storeId ?? null, now.toISOString(), workspacesPerRun)
     .all<Workspace>();
+  // Stryker disable next-line ArrayDeclaration: un identificativo in più non corrisponde a nessun collegamento.
   const served: string[] = [];
   // Uno spazio alla volta. Il bot non più valido ferma l'esecuzione: nessun altro spazio può
   // ricevere messaggi.
@@ -104,6 +105,7 @@ export async function deliverTelegram(
       return "continue";
     }
   });
+  // Stryker disable next-line ConditionalExpression: con l'elenco vuoto l'aggiornamento non tocca righe; la condizione evita soltanto l'istruzione.
   if (served.length)
     await env.DB.prepare(
       "UPDATE telegram_links SET served_at = ?1 WHERE id IN (SELECT value FROM json_each(?2))",

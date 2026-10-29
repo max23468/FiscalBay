@@ -2619,6 +2619,80 @@ describe("acquisizione con il client", () => {
         ]);
       });
 
+      it("un negozio occupato torna al cron da solo e il gruppo prosegue", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          await otherStores(1);
+          await dispatchStoreSyncs(cron, minutes(0));
+          await env.DB.prepare("UPDATE sync_state SET locked_until = ? WHERE store_id = 's-a'")
+            .bind(minutes(10).toISOString())
+            .run();
+          const group = queueMessage({ syncStores: ["s-a", "s-001"] });
+          await consumeStoreSync(group, env, ebay(), minutes(1));
+          expect(group.ack).toHaveBeenCalledOnce();
+          expect(group.retry).not.toHaveBeenCalled();
+          // `s-a` resta al cron senza chiamare eBay; `s-001` viene servito dopo e chiude il
+          // turno con l'errore del token, che per lui non si apre.
+          expect(errors).toHaveBeenCalledOnce();
+          expect(await turns()).toMatchObject([
+            { id: "s-001", dispatched_at: null },
+            { id: "s-a", dispatched_at: null, polled_at: null },
+          ]);
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
+      it("un limite di eBay a metà gruppo ferma anche i negozi di un'altra origine che seguono", async () => {
+        const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+        try {
+          await otherStores(2);
+          await dispatchStoreSyncs(cron, minutes(0));
+          // `s-002` è di un ambiente senza configurazione, con una richiesta manuale in attesa:
+          // servito, registrerebbe un errore e passerebbe il turno.
+          await env.DB.prepare(
+            "UPDATE ebay_stores SET ebay_environment = 'sandbox' WHERE id = 's-002'",
+          ).run();
+          // Attesa già nota per Production e limite ricevuto da eBay durante la lettura.
+          for (const [known, group] of [
+            [true, ["s-001", "s-002"]],
+            [false, ["s-a", "s-002"]],
+          ] as const) {
+            await env.DB.prepare("DELETE FROM ebay_rate_limits").run();
+            await env.DB.prepare(
+              `UPDATE sync_state SET dispatched_at = ?1, polled_at = NULL, locked_until = NULL,
+                  requested_at = CASE WHEN store_id = 's-002' THEN ?1 END`,
+            )
+              .bind(minutes(0).toISOString())
+              .run();
+            if (known)
+              await env.DB.prepare(
+                "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
+              )
+                .bind(minutes(15).toISOString())
+                .run();
+            errors.mockClear();
+            const message = queueMessage({ syncStores: [...group] });
+            await consumeStoreSync(
+              message,
+              env,
+              ebay({ fail: () => new Response(null, { status: 429 }) }),
+              minutes(1),
+            );
+            expect(message.ack).toHaveBeenCalledOnce();
+            // Ogni turno del gruppo torna al cron e il negozio che segue non viene servito: se lo
+            // fosse, registrerebbe l'errore dell'ambiente senza configurazione. Il limite ricevuto
+            // da eBay ne registra uno.
+            const served = await turns();
+            for (const id of group)
+              expect(served.find((turn) => turn.id === id)!.dispatched_at).toBeNull();
+            expect(errors).toHaveBeenCalledTimes(known ? 0 : 1);
+          }
+        } finally {
+          errors.mockRestore();
+        }
+      });
+
       it("non accoda negozi di un keyset in attesa né negozi in pausa", async () => {
         await env.DB.prepare(
           "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com', ?)",
