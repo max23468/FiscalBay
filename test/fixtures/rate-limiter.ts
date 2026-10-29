@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+
 import { requestLimitRules, type RequestLimit } from "../../app/request-limits";
 
 /**
@@ -30,4 +32,20 @@ export function fakeRateLimiters() {
     REQUEST_LIMIT_EMAILS: fakeRateLimiter("emails"),
     REQUEST_LIMIT_WORK: fakeRateLimiter("work"),
   };
+}
+
+/** Tempo che una serie di richieste di prova deve trovare ancora libero nella finestra. */
+const windowMargin = 2_000;
+
+/**
+ * Il binding nativo simulato da Miniflare allinea le finestre all'orologio: una serie a cavallo
+ * del confine troverebbe il contatore azzerato a metà. Se la finestra corrente sta per finire, si
+ * attende l'inizio della successiva. Le finestre di 60 secondi finiscono sempre insieme a una di
+ * 10, quindi basta la più breve.
+ */
+export async function withinOneLimitWindow() {
+  const period = Math.min(...Object.values(requestLimitRules).map((rule) => rule.period)) * 1000;
+  // Il binding conta sull'ora reale, anche quando la prova fissa quella di `Date`.
+  const left = period - (vi.getRealSystemTime() % period);
+  if (left < windowMargin) await new Promise((resolve) => setTimeout(resolve, left + 50));
 }
