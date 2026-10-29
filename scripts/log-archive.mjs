@@ -339,20 +339,24 @@ export function failedInvocations(records) {
     if (!record.invalid && record.Outcome !== "ok")
       increment(
         counts,
-        [record.EventType, record.Outcome, record.ScriptVersion?.Id ?? "-"].join(" "),
+        [record.EventType, record.Outcome, record.ScriptVersion?.ID ?? "-"].join(" "),
       );
   return sorted(counts);
 }
+
+/** Istante dell'evento: Logpush scrive `EventTimestampMs` in millisecondi anche con `rfc3339`. */
+const instant = (value) =>
+  typeof value === "number" && Number.isFinite(value) ? new Date(value).toISOString() : value;
 
 /** Invocazioni con un correlation ID, in ordine di tempo, con i soli eventi applicativi. */
 export function correlationTrail(records, id) {
   return records
     .filter((record) => eventsOf(record).some((event) => event.correlationId === id))
     .map((record) => ({
-      at: record.EventTimestampMs,
+      at: instant(record.EventTimestampMs),
       type: record.EventType,
       outcome: record.Outcome,
-      version: record.ScriptVersion?.Id ?? null,
+      version: record.ScriptVersion?.ID ?? null,
       events: eventsOf(record).map((event) =>
         Object.fromEntries(Object.entries(event).filter(([key]) => key !== "correlationId")),
       ),
