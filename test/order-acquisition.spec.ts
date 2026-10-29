@@ -1988,7 +1988,7 @@ describe("acquisizione con il client", () => {
         await setSwitch(env.DB, name, false, minutes(0));
       const fetcher = ebay({
         fail: (url) =>
-          url.hostname.endsWith("stripe.com") || url.hostname === "api.telegram.org"
+          ["api.stripe.com", "api.telegram.org"].includes(url.hostname)
             ? new Response(null, { status: 503 })
             : undefined,
       });
