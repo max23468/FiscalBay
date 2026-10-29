@@ -424,6 +424,7 @@ export function targetOf(mode) {
   };
 }
 
+/** Comando `cf` con l'esito in JSON; l'eliminazione di un segreto non ne stampa. */
 function cf(...args) {
   const output = execFileSync("pnpm", ["exec", "cf", ...args], {
     encoding: "utf8",
@@ -431,7 +432,8 @@ function cf(...args) {
     stdio: ["ignore", "pipe", "inherit"],
     maxBuffer: 256 << 20,
   });
-  return JSON.parse(output.slice(output.search(/[[{]/u)));
+  const start = output.search(/[[{]/u);
+  return start === -1 ? null : JSON.parse(output.slice(start));
 }
 
 /** Istruzioni sulla D1 remota in chiamate entro il limite; un errore dell'API si ripete. */
@@ -472,10 +474,13 @@ function queueOf(target) {
   return queue;
 }
 
-async function readFreeze(target) {
-  const secret = cf("workers", "secrets", "list", "--worker", target.worker).some(
+const frozenSecret = (target) =>
+  cf("workers", "secrets", "list", "--worker", target.worker).some(
     ({ name }) => name === "SERVICE_FROZEN",
   );
+
+async function readFreeze(target) {
+  const secret = frozenSecret(target);
   const paused = queueOf(target).settings?.delivery_paused === true;
   const response = await fetch(`${target.origin}/`, {
     headers: { "cache-control": "no-cache" },
@@ -515,8 +520,10 @@ async function freeze(target) {
   await expectFreeze(target, "frozen");
 }
 
+/** Ripetibile: una riapertura interrotta riprende dal passo mancante. */
 async function thaw(target) {
-  cf("workers", "secrets", "delete", "SERVICE_FROZEN", "--worker", target.worker);
+  if (frozenSecret(target))
+    cf("workers", "secrets", "delete", "SERVICE_FROZEN", "--worker", target.worker, "--force");
   cf("queues", "edit", queueOf(target).queue_id, "--settings-delivery-paused", "false");
   await expectFreeze(target, "open");
 }
