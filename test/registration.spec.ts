@@ -13,7 +13,7 @@ import { createAuth } from "../app/auth.server";
 import { sendExistingAccountEmail } from "../app/account-email.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadLegal } from "../app/routes/legal";
-import { loader as loadAccess } from "../app/routes/sign-in";
+import { action as signIn, loader as loadAccess } from "../app/routes/sign-in";
 import { action as startStoreLink } from "../app/routes/store-link";
 import { accessNotice } from "../app/access-notice";
 import { now, resetDatabase } from "./fixtures/database-fixtures";
@@ -32,7 +32,7 @@ import {
   homeFor,
 } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
-import { routeData, routeResponse } from "./fixtures/route-fixtures";
+import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
 import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
 import { turnstileField } from "../app/turnstile";
 
@@ -494,6 +494,48 @@ describe("registrazione e verifica del contatto", () => {
     expect(marketing).toEqual([
       { granted: 1, text_version: marketingTextVersions.settings, language: "it" },
     ]);
+  });
+
+  it("con Auth o database non disponibili l'accesso risponde 503 senza incolpare email e password", async () => {
+    const email = "accesso-guasto@example.invalid";
+    const password = "Una-password-negozio-molto-lunga";
+    const { cookie } = await verifiedSession(email);
+    const person = { tipo: "privato", nome: "Mario", cognome: "Rossi" };
+    const outcome = (handler: typeof signIn, options = {}) =>
+      callRoute(handler, "/accesso", options).catch((error: unknown) => error);
+    const page = (options = {}) =>
+      callRoute(loadAccess, "/accesso", options).catch((error: unknown) => error);
+    const unavailable = {
+      data: null,
+      init: { status: 503, headers: { "cache-control": "no-store", "retry-after": "60" } },
+    };
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const prepare = vi.spyOn(env.DB, "prepare").mockImplementation(() => {
+      throw new Error("D1_ERROR: unavailable");
+    });
+    try {
+      // Senza sessione la pagina non legge il database: il modulo resta.
+      expect(await page()).toMatchObject({ authenticated: false });
+      expect(await page({ cookie })).toMatchObject(unavailable);
+      for (const fields of [
+        { email, password },
+        { intent: "registrati", ...person, email: "nuovo-guasto@example.invalid", password },
+      ]) {
+        expect(
+          await outcome(signIn, { fields: { termini: "on", ...fields }, cookie }),
+        ).toMatchObject(unavailable);
+      }
+      // L'uscita cancella comunque il cookie della sessione.
+      const exit = (await outcome(signIn, { fields: { intent: "esci" }, cookie })) as Response;
+      expect([exit.status, exit.headers.get("location")]).toEqual([303, "/"]);
+      expect(exit.headers.get("set-cookie")).toContain("Max-Age=0");
+      expect(new Set(log.mock.calls.map(([line]) => JSON.parse(String(line)).code))).toEqual(
+        new Set(["UPSTREAM_UNAVAILABLE"]),
+      );
+    } finally {
+      prepare.mockRestore();
+      log.mockRestore();
+    }
   });
 
   it("limita per IP i tentativi dei moduli su un ambiente distribuito, contando su D1", async () => {

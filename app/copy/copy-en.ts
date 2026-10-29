@@ -911,7 +911,7 @@ export const en: AppCopy = {
     home: "Back to FiscalBay",
     unexpected: "An unexpected error occurred. Try again later.",
     unavailableTitle: "Service unavailable",
-    unavailable: "FiscalBay cannot read your account data right now. Try again later.",
+    unavailable: "FiscalBay cannot read the data for this page right now. Try again later.",
     retry: "Try again",
     unconfirmed:
       "The outcome could not be confirmed. Reload the page to check its state before trying again.",

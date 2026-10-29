@@ -2634,6 +2634,18 @@ describe("esiti delle consegne", () => {
     expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-invii-spenti")]);
   });
 
+  it("con chiamate eBay spente e acquisti chiusi il bot consegna e risponde", async () => {
+    const seller = await linked("altri-spenti");
+    await order(seller.store, "o-altri-spenti", { cf: "RSSMRA80A01H501U" });
+    for (const name of ["ebay_calls", "purchases_open"] as const)
+      await setSwitch(env.DB, name, false, later(5));
+    const api = bot();
+    await run(api.fetcher, 10);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-altri-spenti")]);
+    await deliver("/stato", seller.chat, api.fetcher, later(11));
+    expect(api.texts()).toHaveLength(2);
+  });
+
   it("l'esecuzione per un negozio non chiude le consegne degli altri spazi", async () => {
     const served = await linked("ambito", 611);
     const expired = await linked("ambito-scaduto", 612);

@@ -24,6 +24,7 @@ import {
 } from "../app-links";
 import { freeQuotaSettings } from "../domain/grants.server";
 import { languageFromPath, localizedPath } from "../i18n";
+import { areaPage } from "../account-area.server";
 import { publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/site";
@@ -59,10 +60,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
   // Senza cache la pagina annuncia la promozione in corso e la quota base appena finisce; prezzi
   // e prova seguono il listino di Prezzi.
-  const [{ quota: baseFreeQuota }, listing] = await Promise.all([
-    freeQuotaSettings(env.DB),
-    siteListing(language),
-  ]);
+  const [{ quota: baseFreeQuota }, listing] = await areaPage(request, () =>
+    Promise.all([freeQuotaSettings(env.DB), siteListing(language)]),
+  );
   const { freePromotion, prices, purchasesOpen } = listing;
   const pages = sitePages[language];
   const {

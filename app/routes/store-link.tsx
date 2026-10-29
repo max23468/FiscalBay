@@ -8,6 +8,7 @@ import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { buttonLink } from "~/components/ui/button-variants";
 import { accessPath, ordersPath, storeLinkPath, storesPath } from "../app-links";
 import { appCopy, pageTitle } from "../app-copy";
+import { areaPage } from "../account-area.server";
 import { readSession } from "../domain/sessions.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
 import { ebayOutages, listStores } from "../domain/stores.server";
@@ -55,8 +56,13 @@ async function eligibility(request: Request): Promise<Eligibility> {
   return { userId: session.user.id };
 }
 
-// Schermata preparatoria: spiega che cosa autorizza il merchant prima di passare a eBay.
-export async function loader({ request }: Route.LoaderArgs) {
+// Schermata preparatoria: spiega che cosa autorizza il merchant prima di passare a eBay. Con
+// Auth o database non disponibili risponde 503 senza dati, come le pagine dell'area.
+export function loader({ request }: Route.LoaderArgs) {
+  return areaPage(request, () => prepare(request));
+}
+
+async function prepare(request: Request) {
   const language = languageFromPath(new URL(request.url).pathname);
   const status = await eligibility(request);
   if ("blocked" in status) {
@@ -99,7 +105,11 @@ export async function loader({ request }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ request }: Route.ActionArgs) {
+export function action({ request }: Route.ActionArgs) {
+  return areaPage(request, () => start(request));
+}
+
+async function start(request: Request) {
   const language = languageFromPath(new URL(request.url).pathname);
   const base = localizedPath(language, ordersPath);
   if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {

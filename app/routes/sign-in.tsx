@@ -29,6 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useCopy } from "~/components/copy-context";
 import { useTurnstile } from "~/components/turnstile";
 import { accessPath, privacyPath, securityReturnPath, termsPath } from "../app-links";
+import { areaPage } from "../account-area.server";
 import { accessAction, accessLoader } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
@@ -47,12 +48,13 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
   return [{ title: pageTitle(title) }, { name: "description", content: access.description }];
 }
 
+// Con Auth o database non disponibili l'accesso risponde 503 senza dati, come l'area.
 export function loader({ request }: Route.LoaderArgs) {
-  return accessLoader(request);
+  return areaPage(request, () => accessLoader(request));
 }
 
 export function action({ request }: Route.ActionArgs) {
-  return accessAction(request);
+  return areaPage(request, () => accessAction(request));
 }
 
 type AccessCopy = (typeof appCopy)[Language]["access"];

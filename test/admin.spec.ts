@@ -146,6 +146,21 @@ describe("accesso alla console", () => {
     expect(await page(granted.cookie)).toBe(404);
   });
 
+  it("con Auth o database non disponibili risponde 503 senza sezioni né operazioni", async () => {
+    const { cookie } = await admin();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(env.DB, "prepare").mockImplementation(() => {
+      throw new Error("D1_ERROR: unavailable");
+    });
+    expect(await page(cookie)).toBe(503);
+    await expect(
+      callRoute(adminAction, "/admin", {
+        cookie,
+        fields: { intent: "requeue-task", lavoro: "billing" },
+      }),
+    ).rejects.toMatchObject({ init: { status: 503, headers: { "retry-after": "60" } } });
+  });
+
   it("rifiuta un'operazione da un'altra origine e chiede il motivo dove serve", async () => {
     const { cookie } = await admin();
     await env.DB.batch(insertWorkspace({ id: "w-a" }));

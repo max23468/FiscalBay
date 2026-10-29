@@ -1082,7 +1082,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M4](#m4) | Completata | Ordini, ricerca e filtri, dettaglio, selezione e sblocco, Impostazioni e stati di errore nelle route reali, con baseline visiva e di accessibilità WCAG 2.2 A/AA automatica. |
 | [M5](#m5) | Completata | Free con cicli e promo, prova Premium, Hosted Checkout Managed Payments, webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. Cambi di periodicità e metodo su un abbonamento live, vendite live e segreti Production in [M9-01](#m9-01). |
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
-| [M7](#m7) | In corso | Audit di sicurezza, capacità, recovery readiness e qualifica legale chiusi; qualifiche remote e hardening da chiudere. |
+| [M7](#m7) | In corso | Audit di sicurezza, capacità, recovery readiness, qualifica legale e degrado per guasto chiusi; qualifiche remote e hardening da chiudere. |
 | [M8](#m8) | Da completare | RC, merchant e prove reali autorizzate ancora da preparare; checkpoint in attesa. |
 | [M9](#m9) | Da completare | Go-live non autorizzato; gate Production sotto ancora aperti. |
 
@@ -1851,11 +1851,13 @@ Gli avvisi commerciali del [§15](#s15) arrivano sul Control Center una volta pe
 <a id="m7-05"></a>
 #### M7-05 · Kill switch e modalità degrade
 
-**Stato:** Da completare · **Prerequisiti:** M7-04 · **Contratto:** [§20](#s20) · [§32](#s32)
+**Stato:** Completato · **Prerequisiti:** M7-04 · **Contratto:** [§20](#s20) · [§32](#s32)
 
-Provare interruttori distinti per eBay, Telegram e nuovi checkout, continuità dei grant validi e dei webhook, accesso alle parti che rimangono sicure.
+Gli interruttori di [M6-05](#m6-05) e i guasti di eBay, Telegram e Stripe fermano soltanto le operazioni che ne dipendono: diritti locali, consultazione, sblocchi e webhook continuano. Con Auth o database non disponibili area, accesso, collegamento del negozio, console, Home e Prezzi rispondono 503 senza dati, con la stessa pagina nell'anteprima; le pagine informative restano consultabili senza sessione e i log ricevono il solo codice. Tabella nel [runbook](engineering/RELEASE.md#incidenti).
 
 **Criterio di completamento:** Simulazioni di guasto limitano soltanto le operazioni pertinenti; nessuna promessa di consultazione quando manca il database o l’autenticazione.
+
+**Limiti residui:** `/api/auth/get-session` con il database guasto risponde con il 500 di Better Auth. Il database guasto non si simula sul test: il readback spegne e riaccende i tre interruttori e rilegge Ordini.
 
 <a id="m7-06"></a>
 #### M7-06 · Release, migration e recovery readiness

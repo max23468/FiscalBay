@@ -925,7 +925,7 @@ export const it = {
     unexpected: "Si è verificato un errore inatteso. Riprova più tardi.",
     unavailableTitle: "Servizio non disponibile",
     unavailable:
-      "In questo momento FiscalBay non riesce a leggere i dati dell’account. Riprova più tardi.",
+      "In questo momento FiscalBay non riesce a leggere i dati di questa pagina. Riprova più tardi.",
     retry: "Riprova",
     unconfirmed:
       "Non è stato possibile confermare l’esito. Ricarica la pagina per verificare lo stato prima di riprovare.",

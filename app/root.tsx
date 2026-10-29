@@ -14,10 +14,11 @@ import {
 } from "react-router";
 import { useEffect } from "react";
 
-import { CircleAlert, CloudOff, FileQuestion } from "lucide-react";
+import { CircleAlert, FileQuestion } from "lucide-react";
 
 import type { Route } from "./+types/root";
 import { LinksProvider } from "./components/copy-context";
+import { UnavailablePage } from "./components/not-found";
 import { StandalonePage } from "./components/standalone-page";
 import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
@@ -113,6 +114,8 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const reference = useRouteLoaderData<typeof loader>("root")?.correlationId;
   const t = appCopy[language].errors;
   const status = isRouteErrorResponse(error) ? error.status : 500;
+  // Auth o database non rispondono: la stessa pagina si riapre appena tornano disponibili.
+  if (status === 503) return <UnavailablePage language={language} reference={reference} />;
   const home = { href: localizedPath(language), label: t.home };
   const page =
     status === 404
@@ -123,16 +126,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
           body: t.notFound,
           home,
         }
-      : status === 503
-        ? // Auth o database non rispondono: la stessa pagina si riapre appena tornano disponibili.
-          {
-            icon: CloudOff,
-            tone: "amber" as const,
-            title: t.unavailableTitle,
-            body: t.unavailable,
-            home: { href: `${location.pathname}${location.search}`, label: t.retry },
-          }
-        : { icon: CircleAlert, tone: "rose" as const, title: t.title, body: t.unexpected, home };
+      : { icon: CircleAlert, tone: "rose" as const, title: t.title, body: t.unexpected, home };
   return (
     <StandalonePage
       icon={page.icon}

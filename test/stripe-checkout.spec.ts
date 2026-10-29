@@ -18,6 +18,7 @@ import {
   verifyStripeEvent,
 } from "../app/integrations/stripe.server";
 import { receiveWebhook } from "../app/webhooks.server";
+import { setSwitch } from "../app/domain/service-settings.server";
 import { localizedPath } from "../app/i18n";
 import { loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
@@ -585,6 +586,48 @@ describe("Stripe Managed Payments", () => {
       object_id: "cs_test_checkout",
       environment: "test",
     });
+  });
+
+  it("con eBay e Telegram spenti apre il checkout; con gli acquisti chiusi riceve ancora gli eventi", async () => {
+    const { userId } = await verifiedSession("checkout-spenti@example.invalid");
+    await workspace(userId);
+    for (const name of ["ebay_calls", "telegram_sends"] as const)
+      await setSwitch(env.DB, name, false);
+    const api = stripeApi(catalogPrice());
+    try {
+      expect(
+        await startCheckout(env, {
+          request: new Request("http://localhost:5173/app/impostazioni/piano", { method: "POST" }),
+          userId,
+          email: "checkout-spenti@example.invalid",
+          offer: "monthly",
+          language: "it",
+        }),
+      ).toMatchObject({ ok: true });
+    } finally {
+      api.mockRestore();
+    }
+
+    // Rinnovi, rimborsi e dispute arrivano anche con i nuovi acquisti sospesi.
+    await setSwitch(env.DB, "purchases_open", false);
+    const body = JSON.stringify(event);
+    const signature = await Stripe.webhooks.generateTestHeaderStringAsync({
+      payload: body,
+      secret: "whsec_fiscalbay_test",
+    });
+    const send = vi.fn().mockResolvedValue(queued);
+    const response = await receiveWebhook(
+      new Request("https://test.fiscalbay.it/webhooks/stripe", {
+        method: "POST",
+        headers: { "stripe-signature": signature },
+        body,
+      }),
+      { ...env, WORK_QUEUE: fakeQueue({ send }) },
+      fetch,
+      new Date(event.created * 1000),
+    );
+    expect(response?.status).toBe(204);
+    expect(send).toHaveBeenCalledOnce();
   });
 
   it("rifiuta una firma non valida", async () => {

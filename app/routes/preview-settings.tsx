@@ -1,7 +1,7 @@
 import { data, isRouteErrorResponse } from "react-router";
 
 import { SettingsPage } from "~/components/settings/page";
-import { NotFoundState, UnavailableState } from "~/components/not-found";
+import { NotFoundState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import { previewSettingsPage } from "../preview/settings-page.server";
@@ -47,7 +47,8 @@ export default function PreviewSettings({ loaderData }: Route.ComponentProps) {
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState />;
+  // Il 503 di Auth o database: il layout mostra già la pagina a sé, come l'area reale.
+  if (isRouteErrorResponse(error) && error.status === 503) return null;
   if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
   return <NotFoundState kind="page" />;
 }

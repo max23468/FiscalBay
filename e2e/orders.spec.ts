@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import ExcelJS from "exceljs";
-import { areas, enter, noPageOverflow, open, searched } from "./components";
+import { areas, enter, noPageOverflow, open, searched, setScenario } from "./components";
 import { expect, test, watchNetwork } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
@@ -1486,21 +1486,29 @@ test.describe("negozi e impostazioni", () => {
       await expect(page.locator('[aria-current="step"]')).toContainText(
         t("Negozio eBay collegato", "eBay store connected"),
       );
-      // Auth o database non disponibili: nessun dato e soltanto Riprova, su ogni pagina.
-      await open(page, `${prefix}/anteprima/ordini`, "servizio-non-disponibile");
+      // Auth o database non disponibili: come l'area reale, la pagina a sé senza la shell, nessun
+      // dato e soltanto Riprova, su ogni pagina; resta la barra degli scenari.
+      await setScenario(page, "servizio-non-disponibile");
       for (const section of ["ordini", "negozi", "impostazioni", "impostazioni/profilo"]) {
-        await page.goto(`${prefix}/anteprima/${section}`);
+        const response = await page.goto(`${prefix}/anteprima/${section}`);
+        expect(response?.status()).toBe(503);
         await expect(
           page.getByRole("heading", {
             level: 1,
             name: t("Servizio non disponibile", "Service unavailable"),
           }),
         ).toBeVisible();
+        await expect(page).toHaveTitle(
+          `FiscalBay | ${t("Servizio non disponibile", "Service unavailable")}`,
+        );
         await expect(page.getByRole("link", { name: t("Riprova", "Try again") })).toHaveAttribute(
           "href",
           `${prefix}/anteprima/${section}`,
         );
         await expect(page.getByRole("article")).toHaveCount(0);
+        await expect(page.getByRole("navigation")).toHaveCount(0);
+        await expect(page.getByRole("searchbox", { includeHidden: true })).toHaveCount(0);
+        await expect(page.locator("#preview-scenario")).toBeEnabled();
       }
       await open(page, `${prefix}/anteprima/ordini`, "ordinario");
       expect(errors).toEqual([]);
