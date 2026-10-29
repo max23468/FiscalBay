@@ -75,7 +75,7 @@ restano in `docs/archive/`.
 | [Master Plan](docs/MASTER_PLAN.md)             | Requisiti, gate, roadmap, avanzamento sintetico, checkpoint e questioni aperte |
 | PR, CI e ricevute di pubblicazione            | Modifiche/verifiche dell'intervento e stato remoto osservato |
 | [Decision Register](docs/DECISION_REGISTER.md) | Scelte sintetiche, motivazioni e alternative superate                    |
-| [Agent Setup](docs/engineering/AGENT_SETUP.md) | Tool per fase, input, ambienti, custodia e responsabilità documentali    |
+| [Agent Setup](docs/engineering/AGENT_SETUP.md) | Strumenti, input, ambienti, custodia e responsabilità documentali        |
 | [Fonti](docs/SOURCES.md)                       | Documentazione esterna da verificare quando pertinente                   |
 | [Riferimenti brand](docs/brand/REFERENCES.md)  | Concept e immagini originali, non asset finali già approvati             |
 | [Design system](docs/brand/DESIGN_SYSTEM.md)  | Token, componenti, catalogo dei riferimenti e provenienza                |
