@@ -1,3 +1,5 @@
+import { writeLog } from "./log-records";
+
 export const errorCatalog = {
   AUTH_REQUIRED: { status: 401, retryable: false },
   FORBIDDEN: { status: 403, retryable: false },
@@ -17,8 +19,7 @@ export const traceHeader = "x-fiscalbay-trace";
  * dati. Una richiesta rimasta in attesa mostra nei log del Worker l'ultima fase superata.
  */
 export function tracePhase(request: Request, phase: string): void {
-  if (request.headers.get(traceHeader) === "1")
-    console.log(JSON.stringify({ event: "phase", phase }));
+  if (request.headers.get(traceHeader) === "1") writeLog("log", { event: "phase", phase });
 }
 
 export function correlateResponse(response: Response, id: string): Response {
@@ -85,14 +86,12 @@ export function logFailure(input: {
   // Il tipo di errore del provider (UpstreamError) è un'etichetta fissa, mai il suo contenuto.
   const failure =
     error instanceof ApplicationError && "failure" in error ? String(error.failure) : undefined;
-  console.error(
-    JSON.stringify({
-      event: "application_error",
-      code: input.code ?? classifyFailure(error),
-      operation: input.operation,
-      ...(input.request ? { correlationId: correlationId(input.request) } : {}),
-      ...(failure ? { failure } : {}),
-      ...(input.status ? { status: input.status } : {}),
-    }),
-  );
+  writeLog("error", {
+    event: "application_error",
+    code: input.code ?? classifyFailure(error),
+    operation: input.operation,
+    ...(input.request ? { correlationId: correlationId(input.request) } : {}),
+    ...(failure ? { failure } : {}),
+    ...(input.status ? { status: input.status } : {}),
+  });
 }

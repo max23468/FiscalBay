@@ -160,9 +160,33 @@ Logs espone anche Durata/media. CPU e tempo di clock nel selettore qualificato o
 
 Per diagnosi scegliere una finestra comune, poi confrontare `fetch`, `queue` e `scheduled`, verificando dove la versione osservata esegue l'acquisizione. Nella release qualificata il cron contiene ancora la sincronizzazione periodica; il consumer esegue webhook e sincronizzazioni manuali. HTTP include pagine, richieste manuali e ingresso webhook. Per isolare un ingresso usare soltanto percorsi statici verificati come `/webhooks/ebay` o `/webhooks/ebay/sandbox` nel filtro nativo `$workers.event.path`; non raggruppare per URL, query, header, messaggi liberi o identificativi di negozio/ordine. Se il campione non distingue l'import dal resto del lavoro, dichiararlo e usare la diagnosi nativa pertinente; non introdurre attributi nuovi per il grafico.
 
-I grafici Logs seguono la retention dei log sottostanti, oggi 7 giorni su Paid, distinta dallo storico analytics della zona e dall'archivio R2 previsto dal piano. Una finestra senza eventi o fuori retention non prova assenza di errori. Query e dashboard non aggiungono un costo secondo i [prezzi Observability](https://developers.cloudflare.com/observability/pricing/); ingestione e storage restano consumi dell'account condiviso.
+I grafici Logs seguono la retention dei log sottostanti, oggi 7 giorni su Paid, distinta dallo storico analytics della zona e dall'[archivio R2](#archivio-log). Una finestra senza eventi o fuori retention non prova assenza di errori. Query e dashboard non aggiungono un costo secondo i [prezzi Observability](https://developers.cloudflare.com/observability/pricing/); ingestione e storage restano consumi dell'account condiviso.
 
 Per mantenere la vista, aprire Configura dal menu di ciascun grafico e controllare dataset, filtri e aggregazione; dopo una modifica salvare, uscire dall'editor e riaprire il collegamento stabile. Verificare nuovamente filtri e valori: un toast di successo non basta. Aggiornare qui il collegamento soltanto se la vista viene sostituita; il completamento operativo e la manutenzione sono assegnati al piano.
+
+<a id="archivio-log"></a>
+## Archivio dei log
+
+Workers Logs conserva sette giorni; i 90 giorni del [§31](../MASTER_PLAN.md#s31) stanno in un bucket R2 UE per ambiente, `fiscalbay-test-logs` per il test e `fiscalbay-logs` soltanto nel mandato Production, scritto da un job Logpush `workers_trace_events` e senza binding del Worker. `logpush: true` in `cloudflare.config.ts` invia gli eventi di invocazione; il job tiene soltanto quelli con lo `ScriptName` dell'ambiente ed esporta `EventTimestampMs`, `EventType`, `Outcome`, `ScriptName`, `ScriptVersion`, `CPUTimeMs`, `WallTimeMs` e `Logs`, senza campionamento. `Event` e `Exceptions` restano fuori: l'esito di un'eccezione si legge in `Outcome`, il suo testo soltanto nei sette giorni di Workers Logs. I messaggi di `Logs` nascono tutti da `app/log-records.ts`, con eventi e chiavi da elenchi chiusi e valori scalari; un test dello script rifiuta altre scritture sulla console nel codice del Worker.
+
+La destinazione R2 diretta di Logpush non accetta bucket con giurisdizione, quindi il job usa quella S3-compatible sull'endpoint `<account>.eu.r2.cloudflarestorage.com`, senza ownership challenge, con oggetti NDJSON compressi in sottocartelle giornaliere UTC. `node scripts/log-archive.mjs plan` stampa bucket, regola e job con le credenziali sostituite.
+
+1. `node scripts/log-archive.mjs apply` crea il bucket con giurisdizione UE se manca e applica la regola `log-scaduti`: oggetti eliminati dopo 90 giorni, caricamenti incompleti dopo uno. Senza credenziali si ferma qui.
+2. Creare con `cf accounts tokens create` un token dell'account con i permessi Workers R2 Storage Bucket Item Read e Write sulla sola risorsa `com.cloudflare.edge.r2.bucket.<account>_eu_<bucket>`. Per l'endpoint S3 l'ID della chiave di accesso è l'ID del token e la chiave segreta è lo SHA-256 del suo valore: salvarli senza stamparli nel Portachiavi, con `security -i` da standard input, alle voci «FiscalBay log archive test access key ID» e «FiscalBay log archive test secret access key» (`live` per la Production). In alternativa lo script legge `LOG_ARCHIVE_ACCESS_KEY_ID` e `LOG_ARCHIVE_SECRET_ACCESS_KEY`. Le credenziali passano alla CLI da un file temporaneo leggibile soltanto dall'utente e non compaiono nell'output. Il token del test è «FiscalBay archivio log test».
+3. Ripetere `apply`: crea o aggiorna il job con il corpo completo, perché l'aggiornamento di Logpush sostituisce l'intero `output_options`. La CLI `cf` alla versione fissata rifiuta la creazione senza `--kind`: lo script passa `--kind edge` soltanto per la validazione, mentre la richiesta usa il corpo, che non ha `kind`.
+4. Dopo il deploy che porta `logpush: true`, `node scripts/log-archive.mjs readback` controlla giurisdizione, `r2.dev` spento e assenza di domini, la sola regola a 90 giorni, un solo job verso il bucket, attivo, con filtro, campi, campionamento ed endpoint attesi e senza errori dopo l'ultimo invio riuscito, e il Worker con Logpush attivo. Esce con 1 se un controllo non passa; non stampa la destinazione.
+5. Qualche minuto dopo un'invocazione, `node scripts/log-archive.mjs verify` scarica l'oggetto più recente degli ultimi due giorni e controlla ogni record: soltanto i campi ammessi, soltanto il Worker dell'ambiente, ogni messaggio un evento applicativo ammesso o il marcatore di troncamento di Logpush. Riporta conteggi, mai il contenuto.
+
+Query di diagnosi sull'archivio, con `--days` da 1 a 90 (predefinito 1) e `--mode live` per la Production:
+
+| Comando | Risultato |
+|---|---|
+| `errors` | Errori applicativi per codice, operazione e tipo di guasto del provider |
+| `webhooks` | Gli stessi, soltanto per ingresso, consumer e webhook Stripe |
+| `failures` | Invocazioni non riuscite per tipo, esito e versione: eccezioni, annullamenti e scritture interrotte |
+| `correlation --id <id>` | Invocazioni con il correlation ID mostrato all'utente o riportato dal supporto, in ordine di tempo |
+
+Le query scaricano ogni oggetto della finestra con la CLI, quindi le finestre lunghe richiedono tempo; i Workers Logs restano la via più rapida per gli ultimi sette giorni. Ogni invocazione esportata conta per Logpush dei Workers, 10 milioni al mese inclusi nell'account: restano sotto l'incluso finché le invocazioni dei Worker con Logpush dell'account restano sotto quella soglia; lo storage segue la riga R2 della [tabella delle quote](#capacita). R2 elimina gli oggetti scaduti normalmente entro un giorno dalla scadenza della regola.
 
 <a id="metriche-release"></a>
 ## Confronto delle metriche fra release test

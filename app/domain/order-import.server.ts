@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { writeLog } from "../log-records";
 import { orderSearchText } from "../orders/order-search";
 import { buyerTaxKey, taxComparisonKey, taxIdentifierType } from "../tax-quality";
 import { historyEndSql, storeWorkspaceSql } from "./history-window.server";
@@ -12,7 +13,7 @@ import {
 import { writableStore } from "./store-state.server";
 
 function staleObservation(): OrderObservationResult {
-  console.info(JSON.stringify({ event: "stale_order_observation", count: 1 }));
+  writeLog("info", { event: "stale_order_observation", count: 1 });
   return { outcome: "stale" };
 }
 
