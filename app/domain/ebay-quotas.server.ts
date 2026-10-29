@@ -256,6 +256,8 @@ export async function recordBulkDataThreshold(
   data: BulkDataThreshold,
   now = new Date(),
 ) {
+  // Un batch D1 vuoto non si conclude: una soglia senza metriche non ha nulla da registrare.
+  if (!data.metricData.length) return;
   const windowStart = new Date(data.window.aggregationWindowStart).toISOString();
   const windowEnd = new Date(data.window.aggregationWindowEnd).toISOString();
   await db.batch(

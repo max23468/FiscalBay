@@ -13,7 +13,7 @@ import {
   runEbayAccountDeletion,
 } from "../app/domain/ebay-account-deletion.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
-import { bulkDataAnomalies } from "../app/domain/ebay-quotas.server";
+import { bulkDataAnomalies, recordBulkDataThreshold } from "../app/domain/ebay-quotas.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import worker from "../workers/app";
@@ -1710,6 +1710,15 @@ it("la soglia Bulk Data Transfer apre un'anomalia della console fino alla fine d
   const empty = threshold("WARNING");
   empty.notification.data.metricData = [];
   expect((await receive(ebayRequest(empty)))?.status).toBe(412);
+  // Registrata comunque, si conclude senza scrivere: un batch D1 vuoto non terminerebbe.
+  await env.DB.prepare("DELETE FROM admin_anomalies").run();
+  await recordBulkDataThreshold(
+    env.DB,
+    "production",
+    empty.notification.data as Parameters<typeof recordBulkDataThreshold>[2],
+    now,
+  );
+  expect(await env.DB.prepare("SELECT count(*) AS n FROM admin_anomalies").first("n")).toBe(0);
 });
 
 const accountDeletion = (data: { userId: string; eiasToken?: string; username?: string }) => ({
