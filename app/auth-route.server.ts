@@ -250,7 +250,17 @@ async function authResponse(request: Request, env: Env): Promise<Response> {
       { status: 429, headers: { "retry-after": String(wait), "cache-control": "no-store" } },
     );
   }
-  const response = await createAuth(env).handler(request);
+  let response: Response;
+  try {
+    response = await createAuth(env).handler(request);
+  } catch (error) {
+    // Auth o il database non rispondono: 503 da riprovare, senza il contenuto dell'errore.
+    logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
+    return new Response(null, {
+      status: 503,
+      headers: { "cache-control": "no-store", "retry-after": "60" },
+    });
+  }
   if (response.ok && emailChange) {
     await recordEmailChange(env.DB, emailChange.userId, emailChange.email, emailChange.newEmail);
   }

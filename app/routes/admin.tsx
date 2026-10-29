@@ -27,6 +27,7 @@ import {
   sectionFrom,
   type SectionData,
 } from "../admin-console.server";
+import { areaPage } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { adminCopy } from "../copy/admin-copy";
 import { tracePhase } from "../errors";
@@ -70,7 +71,12 @@ export function headers(): HeadersInit {
 /** Parametro aggiunto dopo un accesso con passkey riuscito, per spiegare un esito senza verifica. */
 const confirmedParam = "conferma";
 
-export async function loader({ request, params }: Route.LoaderArgs) {
+// Con Auth o database non disponibili la console risponde 503 senza dati, come l'area.
+export function loader(args: Route.LoaderArgs) {
+  return areaPage(args.request, () => consolePage(args));
+}
+
+async function consolePage({ request, params }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const language = languageFromPath(url.pathname);
   const { session, access, agent } = await adminSession(request);
@@ -105,7 +111,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
 export async function action({ request }: Route.ActionArgs) {
   const language = languageFromPath(new URL(request.url).pathname);
-  const { session, access, agent } = await adminSession(request);
+  const { session, access, agent } = await areaPage(request, () => adminSession(request));
   if (access === "granted") return runAdminAction(request, session!.user.id, language);
   // Il token tecnico esegue le stesse operazioni, con l'etichetta come autore (D213).
   if (agent) return runAdminAction(request, agentActor(agent), language);

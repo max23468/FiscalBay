@@ -33,7 +33,7 @@ import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessError, homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { orderView } from "../app/domain/order-view.server";
-import { routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
+import { callRoute, routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -953,6 +953,30 @@ describe("collegamento negozio eBay", () => {
     expect(blockedSandbox.status).toBe(403);
     expect((await homeFor(cookie)).page?.view).toBe("no-store");
     expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
+  });
+
+  it("con Auth o database non disponibili risponde 503 e non parte per eBay", async () => {
+    const { cookie } = await verifiedSession("collega-guasto@example.invalid");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const prepare = vi.spyOn(env.DB, "prepare").mockImplementation(() => {
+      throw new Error("D1_ERROR: unavailable");
+    });
+    const unavailable = {
+      data: null,
+      init: { status: 503, headers: { "cache-control": "no-store", "retry-after": "60" } },
+    };
+    try {
+      for (const outcome of [
+        callRoute(loadStoreLink, "/app/negozi/collega", { cookie }),
+        callRoute(startStoreLink, "/app/negozi/collega", { cookie, fields: {} }),
+      ]) {
+        expect(await outcome.catch((error: unknown) => error)).toMatchObject(unavailable);
+      }
+    } finally {
+      prepare.mockRestore();
+      log.mockRestore();
+    }
+    expect(await storeLinkSessions()).toBe(0);
   });
 
   it("cifra i token legandoli al negozio e calcola le scadenze del consenso", async () => {

@@ -1983,6 +1983,26 @@ describe("acquisizione con il client", () => {
       });
     });
 
+    it("con invii Telegram spenti, acquisti chiusi e Stripe irraggiungibile legge eBay", async () => {
+      for (const name of ["telegram_sends", "purchases_open"] as const)
+        await setSwitch(env.DB, name, false, minutes(0));
+      const fetcher = ebay({
+        fail: (url) =>
+          url.hostname.endsWith("stripe.com") || url.hostname === "api.telegram.org"
+            ? new Response(null, { status: 503 })
+            : undefined,
+      });
+      expect(await request(minutes(0))).toBe("queued");
+      const read = message();
+      await consumeStoreSync(read, queueEnv, fetcher, minutes(1));
+      expect(read.ack).toHaveBeenCalledOnce();
+      expect(fetcher).toHaveBeenCalled();
+      expect(
+        fetcher.mock.calls.every(([input]) => new URL(String(input)).hostname.includes("ebay")),
+      ).toBe(true);
+      expect(await runs()).toMatchObject([{ started_at: minutes(1).toISOString(), ok: 1 }]);
+    });
+
     it("dopo la lettura anticipa le notifiche Telegram del solo spazio del negozio", async () => {
       // Bot configurato e una consegna in attesa di un altro spazio senza Premium: la chiude
       // soltanto il compito periodico, non la lettura di questo negozio.

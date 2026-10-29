@@ -11,19 +11,24 @@ import {
 import { purchasesOpenSql } from "./domain/admission-state.server";
 import { currentFreePromotion } from "./domain/grants.server";
 import { readSession } from "./domain/sessions.server";
-import { tracePhase } from "./errors";
+import { logFailure, tracePhase } from "./errors";
 import { formatDate } from "./format";
 import { languageFromPath, type Language } from "./i18n";
 
 /**
  * Dati comuni delle pagine pubbliche: lingua, origine per canonical e Open Graph e sessione,
  * che porta `Apri l'app` nella barra al posto di `Accedi`. La pagina dipende quindi dalla
- * sessione e nessuna cache la conserva: il Worker risponde `no-store`.
+ * sessione e nessuna cache la conserva: il Worker risponde `no-store`. Con Auth o database non
+ * disponibili la pagina resta consultabile come per chi non ha una sessione: non contiene dati
+ * dell'account e l'app, raggiunta da `Accedi`, dice che non è disponibile.
  */
 export async function publicPage(request: Request) {
-  const auth = createAuth(env);
-  await auth.$context;
-  const session = await readSession(env, request);
+  const session = await createAuth(env)
+    .$context.then(() => readSession(env, request))
+    .catch((error: unknown) => {
+      logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
+      return null;
+    });
   tracePhase(request, "session");
   return {
     language: languageFromPath(new URL(request.url).pathname),
@@ -35,7 +40,8 @@ export async function publicPage(request: Request) {
 /**
  * Listino delle pagine pubbliche (§23), lo stesso per Home e Prezzi: ogni prezzo netto con il
  * totale con l'IVA italiana al 22%, la promozione Free in corso con il solo giorno di fine e gli
- * acquisti con le prove aperti o sospesi dalla console. Tutto si legge a ogni richiesta.
+ * acquisti con le prove aperti o sospesi dalla console. Tutto si legge a ogni richiesta: senza il
+ * database la pagina risponde 503 (`areaPage`), senza promettere prova, quota o posti.
  */
 export async function siteListing(language: Language) {
   const [admission, freePromotion] = await Promise.all([

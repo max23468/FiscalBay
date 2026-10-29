@@ -11,6 +11,7 @@ import {
 import { AccountDeletionPage } from "~/components/account-deletion";
 import { AppShell } from "~/components/app-shell";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
+import { UnavailablePage } from "~/components/not-found";
 import type { OrdersPageData } from "~/components/orders/page";
 import {
   Select,
@@ -43,6 +44,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     notifications: scenario.notifications,
     now: scenario.now,
     deleting: scenario.deleting,
+    unavailable: scenario.unavailable,
   };
 }
 
@@ -154,6 +156,14 @@ export default function Preview({ loaderData }: Route.ComponentProps) {
       <>
         <ScenarioBar scenario={loaderData.scenario} options={loaderData.options} />
         <AccountDeletionPage language={language} />
+      </>
+    );
+  // Come l'area reale con Auth o database non disponibili: la pagina a sé, senza la shell.
+  if (loaderData.unavailable)
+    return (
+      <>
+        <ScenarioBar scenario={loaderData.scenario} options={loaderData.options} />
+        <UnavailablePage language={language} />
       </>
     );
   return (

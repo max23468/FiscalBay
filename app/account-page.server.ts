@@ -14,7 +14,7 @@ import {
 import { deletionReauthenticated } from "./domain/account-deletion.server";
 import { listSignInMethods } from "./domain/sign-in-methods.server";
 import { requestAccountDeletion, securityAction } from "./security-actions.server";
-import { errorResponse } from "./error-response";
+import { errorResponse, unavailableData } from "./error-response";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
 
@@ -128,8 +128,14 @@ export async function accessAction(request: Request) {
       { status, headers: noStore },
     );
   };
-  const forward = (path: string, body?: Record<string, unknown>) =>
-    forwardToAuth(env, request, path, body);
+  // Una risposta 5xx di Auth, che l'ha già registrata, non dipende dai dati inviati: Auth o il
+  // database non rispondono, e la pagina lo dice invece di chiedere di controllare email e
+  // password.
+  const forward = async (path: string, body?: Record<string, unknown>) => {
+    const response = await forwardToAuth(env, request, path, body);
+    if (response.status >= 500) throw unavailableData();
+    return response;
+  };
 
   // Dopo l'uscita la radice torna a essere il sito pubblico, senza la scelta di visita.
   if (intent === "esci") {

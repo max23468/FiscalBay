@@ -18,7 +18,13 @@ import { hashPassword, verifyPassword } from "../app/password.server";
 import { accountEmailBody } from "../app/account-email.server";
 import { emailVerificationSeconds } from "../app/domain/email-change.server";
 import { supportEmail } from "../app/app-copy";
-import { emailLink, emailSender, mailEnv, sessionCookie } from "./fixtures/account-fixtures";
+import {
+  emailLink,
+  emailSender,
+  mailEnv,
+  sessionCookie,
+  verifiedSession,
+} from "./fixtures/account-fixtures";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
 
 /** La registrazione non apre la sessione: la apre l'accesso con la password appena scelta. */
@@ -200,6 +206,52 @@ describe("Better Auth su Workers e D1", () => {
     const second = context.internalAdapter.findUserByEmail("successiva@example.invalid");
     const timeout = new Promise((resolve) => setTimeout(resolve, 2_000, "in attesa"));
     expect(await Promise.race([second, timeout])).toBeNull();
+  });
+
+  it("con il database non disponibile accesso e registrazione rispondono 503 e i log hanno il solo codice", async () => {
+    const { cookie } = await verifiedSession("auth-guasto@example.invalid");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const prepare = vi.spyOn(env.DB, "prepare").mockImplementation(() => {
+      throw new Error("D1_ERROR: unavailable SELECT * FROM session");
+    });
+    try {
+      const post = (path: string, body: Record<string, string>) =>
+        new Request(`http://localhost:5173/api/auth${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "http://localhost:5173", cookie },
+          body: JSON.stringify(body),
+        });
+      for (const request of [
+        post("/sign-in/email", {
+          email: "auth-guasto@example.invalid",
+          password: "Una-password-negozio-molto-lunga",
+        }),
+        post("/sign-up/email", {
+          email: "auth-nuovo@example.invalid",
+          name: "Nuovo",
+          password: "Una-password-negozio-molto-lunga",
+        }),
+      ]) {
+        const response = await handleAuthRequest(request, env);
+        expect([response.status, response.headers.get("retry-after")]).toEqual([503, "60"]);
+      }
+      // La sessione letta da Better Auth fallisce con il suo errore 500, già classificato.
+      const session = await handleAuthRequest(
+        new Request("http://localhost:5173/api/auth/get-session", { headers: { cookie } }),
+        env,
+      );
+      expect(session.status).toBe(500);
+      expect(log.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+        expect.objectContaining({ code: "UPSTREAM_UNAVAILABLE", operation: "route" }),
+        expect.objectContaining({ code: "UPSTREAM_UNAVAILABLE", operation: "route" }),
+        expect.objectContaining({ code: "INTERNAL_ERROR", operation: "route" }),
+      ]);
+      // Né l'errore del database né la query raggiungono i log.
+      expect(JSON.stringify(log.mock.calls)).not.toContain("D1_ERROR");
+    } finally {
+      prepare.mockRestore();
+      log.mockRestore();
+    }
   });
 
   it("riusa l'istanza Better Auth per lo stesso ambiente", () => {

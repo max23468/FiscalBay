@@ -671,6 +671,31 @@ describe("pagina Ordini reale", () => {
     expect(await stores()).toMatchObject({ ebayDown: [], ebayMaintenance: false });
   });
 
+  it("con eBay, Telegram e acquisti spenti e i provider irraggiungibili il Premium resta e sblocca", async () => {
+    const { cookie } = await owner();
+    await premiumCoverage();
+    for (const name of ["ebay_calls", "telegram_sends", "purchases_open"] as const)
+      await setSwitch(env.DB, name, false);
+    // eBay, Stripe e Telegram non rispondono: consultazione e sblocchi usano i soli dati salvati.
+    const providers = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new TypeError("rete assente"));
+    try {
+      expect((await ordersPage(cookie)).page!.account).toMatchObject({ plan: "premium" });
+      expect(
+        await callRoute(unlockAction, "/app/ordini", {
+          cookie,
+          fields: { intent: "unlock", ids: "o-a", skipConfirmation: "true" },
+        }),
+      ).toMatchObject({ unlocked: ["o-a"] });
+      const [order] = (await ordersPage(cookie)).page!.orders;
+      expect(order).toMatchObject({ id: "o-a", fiscal: { state: "available" } });
+      expect(providers).not.toHaveBeenCalled();
+    } finally {
+      providers.mockRestore();
+    }
+  });
+
   it("annuncia le Novità di ogni rilascio nella campanella e nel menu, solo se ci sono", async () => {
     const at = new Date("2026-11-20T09:00:00.000Z");
     vi.setSystemTime(at);

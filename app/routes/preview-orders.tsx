@@ -7,7 +7,7 @@ import {
 } from "react-router";
 
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
-import { NotFoundState, UnavailableState } from "~/components/not-found";
+import { NotFoundState } from "~/components/not-found";
 import { remainingUnlocks } from "~/components/orders/labels";
 import { useLinks } from "~/components/copy-context";
 import { appHref, previewOrdersPath } from "../app-links";
@@ -156,7 +156,8 @@ export default function PreviewOrders({ loaderData }: Route.ComponentProps) {
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
-  if (isRouteErrorResponse(error) && error.status === 503) return <UnavailableState />;
+  // Il 503 di Auth o database: il layout mostra già la pagina a sé, come l'area reale.
+  if (isRouteErrorResponse(error) && error.status === 503) return null;
   if (!isRouteErrorResponse(error) || error.status !== 404) throw error;
   return <NotFoundState kind="order" />;
 }

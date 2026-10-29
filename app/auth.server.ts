@@ -93,6 +93,9 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
     rateLimit: { enabled: false },
     onAPIError: {
       errorURL: "/auth/error",
+      // Un errore imprevisto, come il database che non risponde, esce dal router invece di
+      // finire intero nel suo console.error: auth-route.server.ts lo registra con il solo codice.
+      throw: true,
     },
     logger: { disabled: true },
     hooks: {

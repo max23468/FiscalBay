@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data, redirect } from "react-router";
+import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
 import { recordActivity } from "./domain/admission.server";
@@ -10,10 +10,10 @@ import { registrationStatus, type Profile } from "./domain/registration.server";
 import { readSession } from "./domain/sessions.server";
 import { listStores, type StoreStatus } from "./domain/stores.server";
 import { accessPath, ordersPath } from "./app-links";
-import { errorResponse } from "./error-response";
+import { errorResponse, unavailablePage } from "./error-response";
 import type { EbayEnvironment } from "./view-models";
 import { sandboxAvailable } from "./integrations/ebay/environment.server";
-import { logFailure, tracePhase } from "./errors";
+import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
 import { hasWhatsNew } from "./whats-new.server";
 import { measure } from "./observability.server";
@@ -78,23 +78,14 @@ async function loadAccount(request: Request) {
       : [null, null];
     return { session, status, preferences };
   } catch (error) {
-    throw unavailable(request, error);
+    throw unavailablePage(request, error);
   }
 }
 
-/** Servizio non disponibile: 503 senza dati, con la sola indicazione di riprovare. */
-function unavailable(request: Request, error: unknown) {
-  logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
-  return data(null, {
-    status: 503,
-    headers: { "cache-control": "no-store", "retry-after": "60" },
-  });
-}
-
 /**
- * Pagina dell'area: una lettura che non riesce dopo quella dell'account vale come Auth o
- * database non disponibili, con lo stesso 503 senza dati. Reindirizzamenti e risposte
- * previste dalla pagina (404, 503) passano invariati.
+ * Pagina dell'area, dell'accesso, della console o del sito che legge il database: una lettura
+ * che non riesce vale come Auth o database non disponibili, con lo stesso 503 senza dati.
+ * Reindirizzamenti e risposte previste dalla pagina (404, 503) passano invariati.
  */
 export async function areaPage<T>(request: Request, read: () => Promise<T>): Promise<T> {
   try {
@@ -106,7 +97,7 @@ export async function areaPage<T>(request: Request, read: () => Promise<T>): Pro
         error !== null &&
         "type" in error &&
         error.type === "DataWithResponseInit");
-    throw response ? error : unavailable(request, error);
+    throw response ? error : unavailablePage(request, error);
   }
 }
 

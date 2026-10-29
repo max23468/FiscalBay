@@ -353,6 +353,43 @@ describe("pagine del sito pubblico", () => {
     );
   });
 
+  it("con Auth o database non disponibili restano le pagine informative, Home e Prezzi rispondono 503", async () => {
+    const { cookie } = await verifiedSession("sito-guasto@example.invalid");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const prepare = vi.spyOn(env.DB, "prepare").mockImplementation(() => {
+      throw new Error("D1_ERROR: unavailable");
+    });
+    try {
+      // Chi ha la sessione le legge come chi non l'ha: nessun dato dell'account, «Accedi».
+      const pages = await Promise.all([
+        callRoute(loadFeatures, "/funzionalita", { cookie }),
+        callRoute(loadSecurity, "/sicurezza", { cookie }),
+        callRoute(loadFaq, "/en/faq", { cookie }),
+        callRoute(loadSupport, "/supporto", { cookie }),
+        callRoute(loadLegal, "/privacy", { cookie }),
+      ]);
+      expect(pages).toMatchObject(pages.map(() => ({ signedIn: false })));
+      // Senza prova, quota, promozione e posti letti, Home e Prezzi non promettono nulla.
+      for (const visitor of [cookie, undefined]) {
+        for (const page of [
+          callRoute(loadSite, "/", { cookie: visitor }),
+          callRoute(loadPricing, "/en/prezzi", { cookie: visitor }),
+        ]) {
+          expect(await page.catch((error: unknown) => error)).toMatchObject({
+            data: null,
+            init: { status: 503, headers: { "cache-control": "no-store", "retry-after": "60" } },
+          });
+        }
+      }
+      expect(new Set(log.mock.calls.map(([line]) => JSON.parse(String(line)).code))).toEqual(
+        new Set(["UPSTREAM_UNAVAILABLE"]),
+      );
+    } finally {
+      prepare.mockRestore();
+      log.mockRestore();
+    }
+  });
+
   it("nomina Temisfera soltanto in Termini e Privacy, mai nel footer, nel sito o nell'app", async () => {
     // Testi e modelli, comprese le funzioni che compongono le frasi.
     const texts = (value: unknown): string[] =>

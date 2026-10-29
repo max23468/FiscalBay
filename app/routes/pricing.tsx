@@ -23,6 +23,7 @@ import { annualPaidMonths, premiumOffers } from "../catalog";
 import { freeQuotaSettings } from "../domain/grants.server";
 import { lifetimeSlots, lifetimeSlotsLeft } from "../domain/lifetime.server";
 import { languageFromPath, localizedPath } from "../i18n";
+import { areaPage } from "../account-area.server";
 import { publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/pricing";
@@ -33,12 +34,16 @@ import type { Route } from "./+types/pricing";
  * richiesta, come la sessione della barra: la risposta resta `no-store`.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const [{ language, origin, session }, settings, listing, lifetimeLeft] = await Promise.all([
-    publicPage(request),
-    freeQuotaSettings(env.DB),
-    siteListing(languageFromPath(new URL(request.url).pathname)),
-    lifetimeSlotsLeft(env.DB),
-  ]);
+  const [{ language, origin, session }, settings, listing, lifetimeLeft] = await areaPage(
+    request,
+    () =>
+      Promise.all([
+        publicPage(request),
+        freeQuotaSettings(env.DB),
+        siteListing(languageFromPath(new URL(request.url).pathname)),
+        lifetimeSlotsLeft(env.DB),
+      ]),
+  );
   const { purchasesOpen, prices, freePromotion, promotionEnd } = listing;
   const t = sitePages[language].pricing;
   const plan = appCopy[language].settings.plan;

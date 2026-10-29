@@ -13,6 +13,7 @@ import {
   runEbayAccountDeletion,
 } from "../app/domain/ebay-account-deletion.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
+import { setSwitch } from "../app/domain/service-settings.server";
 import { bulkDataAnomalies, recordBulkDataThreshold } from "../app/domain/ebay-quotas.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
@@ -721,6 +722,14 @@ it("verifica il corpo grezzo, deduplica e accoda soltanto il riferimento", async
       )
     )?.status,
   ).toBe(409);
+});
+
+it("con chiamate eBay, invii Telegram e acquisti spenti l'ingresso riceve e accoda gli eventi", async () => {
+  for (const name of ["ebay_calls", "telegram_sends", "purchases_open"] as const)
+    await setSwitch(env.DB, name, false, now);
+  // La chiave pubblica della firma non è una chiamata dei negozi: resta disponibile.
+  expect((await receive())?.status).toBe(204);
+  expect(send).toHaveBeenCalledExactlyOnceWith({ receiptId: (await receipt())?.id });
 });
 
 it("rifiuta firma, schema, identità, ambiente e data non validi senza claim", async () => {
