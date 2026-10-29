@@ -29,8 +29,9 @@ export default defineConfig({
     ? undefined
     : {
         // Origine e segreti sintetici arrivano dalla copia locale scritta da `local-preview.mjs`.
-        // In CI `pnpm verify` ha già prodotto la build che viene poi distribuita.
-        command: `${process.env.E2E_PREBUILT ? "" : process.env.E2E_PRODUCTION === "1" ? "pnpm build:live && " : "pnpm build && "}node scripts/local-preview.mjs && node node_modules/vite/bin/vite.js preview .cloudflare/preview --config vite.config.ts --host localhost --port ${localPort} --strictPort`,
+        // In CI `pnpm verify` ha già prodotto la build che viene poi distribuita. Il collaudo
+        // Production prepara lo schema della propria D1 locale, senza account sintetici.
+        command: `${process.env.E2E_PREBUILT ? "" : process.env.E2E_PRODUCTION === "1" ? "pnpm build:live && " : "pnpm build && "}node scripts/local-preview.mjs && ${process.env.E2E_PRODUCTION === "1" ? "node scripts/local-d1.mjs migrate && " : ""}node node_modules/vite/bin/vite.js preview .cloudflare/preview --config vite.config.ts --host localhost --port ${localPort} --strictPort`,
         gracefulShutdown: { signal: "SIGTERM", timeout: 5_000 },
         url: `${localOrigin}${process.env.E2E_PRODUCTION === "1" ? "/" : "/anteprima/ordini"}`,
         reuseExistingServer: false,
