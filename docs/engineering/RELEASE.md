@@ -162,7 +162,7 @@ Per diagnosi scegliere una finestra comune, poi confrontare `fetch`, `queue` e `
 
 I grafici Logs seguono la retention dei log sottostanti, oggi 7 giorni su Paid, distinta dallo storico analytics della zona e dall'[archivio R2](#archivio-log). Una finestra senza eventi o fuori retention non prova assenza di errori. Query e dashboard non aggiungono un costo secondo i [prezzi Observability](https://developers.cloudflare.com/observability/pricing/); ingestione e storage restano consumi dell'account condiviso.
 
-Le metriche di Analytics Engine non sono un dataset delle dashboard, che leggono GraphQL e Workers Observability: si leggono nella sezione Prestazioni della console e con `scripts/metrics-query.mjs`. Le protezioni della zona si aggiungono alla vista con un grafico del dataset Security Events, filtrato sull'host dell'ambiente e raggruppato per sorgente e azione.
+Le metriche di Analytics Engine non sono un dataset delle dashboard, che leggono GraphQL e Workers Observability: si leggono nella sezione Prestazioni della console e con `scripts/metrics-query.mjs`. Gli eventi delle protezioni della zona non entrano nella vista: si leggono in Security Events, filtrati sull'host dell'ambiente, e con le query qui sotto.
 
 **Analytics della zona.** Le diagnosi oltre i sette giorni dei log usano la GraphQL Analytics API sulla zona `fiscalbay.it`, piano Free, con il token «FiscalBay analytics zona» del Portachiavi (soli Analytics Read e Firewall Services Read sulla zona, scadenza nel registro). `settings` riletto il 2026-10-29:
 
