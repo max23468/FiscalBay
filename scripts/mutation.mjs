@@ -78,6 +78,7 @@ export const supportModules = new Set([
   "app/integrations/ebay/trading.server.ts",
   "app/integrations/http.server.ts",
   "app/limits.ts",
+  "app/log-records.ts",
   "app/money.ts",
   "app/orders/ebay-links.ts",
   "app/orders/export-columns.ts",

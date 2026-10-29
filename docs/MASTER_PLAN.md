@@ -2539,13 +2539,17 @@ Integrare Turnstile su registrazione con password, richiesta di reset, reinvio d
 <a id="m7-11"></a>
 #### M7-11 · Conservazione di log e audit
 
-**Stato:** Da completare · **Prerequisiti:** M1-02, M1-04 · **Contratto:** [§30](#s30) · [§31](#s31)
+**Stato:** In corso · **Prerequisiti:** M1-02, M1-04 · **Contratto:** [§30](#s30) · [§31](#s31)
 
 **Per chiudere:** M3-12 per la pulizia periodica dell'audit. Workers Paid, necessario a Logpush dei Workers, è confermato con D169. Il bucket dei log resta indipendente dal modulo export M6-10 e non è esposto ai merchant.
 
 Configurare Workers Logpush verso un bucket R2 UE dedicato tramite la destinazione S3-compatible di [§31](#s31), con credenziali limitate al bucket, accesso limitato all'owner e lifecycle a 90 giorni; audit sensibile a un anno in una tabella D1 minimizzata con pulizia periodica nello smistamento di [M3-12](#m3-12). La disponibilità generale di Logpush non elimina requisiti e tariffazione separata di Workers Trace Events: non attribuire a questo dataset i 25 GB inclusi del nuovo modello Logpush; qualificare il costo della destinazione effettiva.
 
 **Criterio di completamento:** L'esportazione contiene soltanto i campi in allowlist e soltanto i Worker FiscalBay dell'ambiente previsto, senza `Event` o eccezioni non sanificate; verificare il contenuto di un oggetto esportato, non soltanto la configurazione del job. Oggetti e righe scaduti spariscono nel margine di pulizia qualificato; query di diagnosi del runbook funzionanti sull'archivio; readback di job Logpush, endpoint UE, bucket e lifecycle sul test.
+
+**Implementazione locale:** il Worker invia gli eventi di invocazione a Logpush (`logpush: true`) e `scripts/log-archive.mjs` descrive, applica e rilegge bucket `fiscalbay-test-logs`, regola a 90 giorni e job `workers_trace_events` con filtro sul Worker dell'ambiente, i soli campi ammessi senza `Event` ed `Exceptions` e destinazione S3-compatible sull'endpoint UE; verifica il contenuto dell'oggetto esportato più recente e interroga l'archivio con le query di diagnosi per codice, webhook, invocazioni non riuscite e correlation ID ([RELEASE](engineering/RELEASE.md#archivio-log)). I log del Worker passano tutti da `app/log-records.ts`, con eventi e chiavi da elenchi chiusi che la verifica dell'archivio riusa. L'audit a un anno era già nella tabella `admin_audit` con la pulizia giornaliera di [M3-12](#m3-12), provata dal test del registro. Le invocazioni esportate contano nei 10 milioni di Logpush dei Workers inclusi nell'account, con i punti di arresto del [runbook](engineering/RELEASE.md#capacita) (D227).
+
+**Limiti residui:** sul test restano creazione di bucket e regola, token R2 limitato al bucket creato dall'owner e custodito nel Portachiavi, job, deploy con Logpush attivo, readback e verifica di un oggetto esportato reale; la scomparsa degli oggetti scaduti si osserva sul primo oggetto oltre i 90 giorni. La Production segue la stessa procedura nel suo mandato.
 
 <a id="m7-12"></a>
 #### M7-12 · Protezioni della zona e della posta

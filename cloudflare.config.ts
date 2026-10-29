@@ -13,6 +13,12 @@ export const databases = {
   live: { name: "fiscalbay", id: "fa2a79ad-fe72-4882-9cbb-c4009ffd5d8f" },
 };
 
+/**
+ * Archivio dei log a 90 giorni per ambiente (§31): bucket R2 UE senza binding, scritto soltanto
+ * dal job Logpush di `scripts/log-archive.mjs` e letto dall'owner con la CLI.
+ */
+export const logArchives = { test: "fiscalbay-test-logs", live: "fiscalbay-logs" };
+
 /** ID Telegram dell'owner: lo stesso utente in ogni bot, quindi in entrambi gli ambienti. */
 const ownerTelegramId = "573159993";
 
@@ -43,6 +49,8 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   compatibilityFlags: ["nodejs_compat"],
   entrypoint: "./workers/app.ts",
   workersDev: false,
+  // Eventi di invocazione verso il job Logpush dell'archivio, che ne esporta i soli campi ammessi.
+  logpush: true,
   observability: {
     enabled: true,
     logs: { enabled: true, headSamplingRate: 1 },
