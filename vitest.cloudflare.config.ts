@@ -37,6 +37,11 @@ export default defineConfig({
   test: {
     name: "cloudflare",
     include: ["test/**/*.spec.ts"],
+    // Le prove che importano decine di ordini impiegano meno di un secondo in locale, ma con la
+    // copertura e più processi sul runner di GitHub superano i 5 secondi predefiniti. Il limite
+    // resta sotto il timeout di Stryker (`stryker.config.json`), che vale anche per la mutation.
+    testTimeout: 15_000,
+    hookTimeout: 20_000,
     setupFiles: ["./test/apply-migrations.ts"],
     diff: "./test/diff-options.ts",
     css: { include: [/app\.css/u] },
