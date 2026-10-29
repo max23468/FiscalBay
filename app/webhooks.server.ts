@@ -27,18 +27,13 @@ import { consumeTelegramUpdate } from "./domain/telegram-bot.server";
 import { isProduction } from "./app-links";
 import { logFailure } from "./errors";
 import { inSequence } from "./sequence";
+import { webhookPaths } from "./webhook-paths";
 import { dayMilliseconds } from "./time";
 import { queueRetryDelay, stalledReceiptMilliseconds } from "./domain/work-timing";
 
 const maxBytes = 262_144;
 const retention = 7 * dayMilliseconds;
 const referenceSchema = z.object({ receiptId: z.string().uuid() });
-const webhookPaths = [
-  "/webhooks/ebay",
-  "/webhooks/ebay/sandbox",
-  "/webhooks/stripe",
-  "/webhooks/telegram",
-];
 
 /** Percorsi presi in carico dall'ingresso dei webhook, prima della build dell'app. */
 export const isWebhookPath = (path: string) => webhookPaths.includes(path);
