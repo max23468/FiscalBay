@@ -26,7 +26,9 @@ export type AnomalyKind =
   | "ebay_suspended"
   | "service_off"
   | "account_deletion"
-  | "audit_unrecorded";
+  | "audit_unrecorded"
+  | "credential_expiry"
+  | "credential_undated";
 
 /** Oggetto colpito, con il collegamento al contesto nella console. */
 export type AnomalySubject = { id: string; label: string; href: string };
@@ -60,6 +62,9 @@ export type ReceiptState = {
 };
 
 const minute = 60_000;
+
+/** Giorni prima della scadenza di una credenziale in cui l'owner riceve l'avviso (§29). */
+export const credentialWarningDays = 45;
 
 /** Oltre questa attesa una riga del registro ancora «in corso» non ha ricevuto l'esito. */
 const unrecordedAuditMs = 10 * minute;
@@ -139,6 +144,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
     { results: activeStores },
     { results: switchedOff },
     { results: unrecorded },
+    { results: credentials },
   ] = await db.batch<Record<string, string | number | null>>([
     // Negozi attivi con le ultime due letture fallite, come nella campanella del venditore.
     db
@@ -182,6 +188,13 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
           WHERE outcome = '${auditInProgress}' AND julianday(at) <= julianday(?)
           GROUP BY operation`)
       .bind(new Date(now.getTime() - unrecordedAuditMs).toISOString()),
+    // Credenziali del registro in scadenza o già scadute, e voci senza data.
+    db
+      .prepare(`SELECT name AS id, expires_on AS expires, recorded_at AS recorded,
+          julianday(expires_on) <= julianday(?1) AS expired FROM credential_expiries
+        WHERE expires_on IS NULL OR julianday(expires_on) - ?2 <= julianday(?1)
+        ORDER BY expires_on IS NULL, expires_on, name`)
+      .bind(at, credentialWarningDays),
   ]);
   const active = new Map(
     (activeStores as { environment: string; count: number }[]).map((row) => [
@@ -364,6 +377,36 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         label: String(row.id),
         href: "registro",
       })),
+    });
+
+  // Una credenziale scaduta ferma la funzione che la usa; una in scadenza va rinnovata.
+  const expiring = credentials.filter((row) => row.expires !== null);
+  if (expiring.length > 0)
+    anomalies.push({
+      key: "credential_expiry",
+      kind: "credential_expiry",
+      severity: expiring.some((row) => row.expired) ? "p1" : "p2",
+      since: new Date(
+        Date.parse(`${String(expiring[0]!.expires)}T00:00:00.000Z`) -
+          credentialWarningDays * 24 * 60 * minute,
+      ).toISOString(),
+      count: expiring.length,
+      subjects: expiring.map((row) => ({
+        id: String(row.id),
+        label: `${String(row.id)} · ${String(row.expires)}`,
+        href: "",
+      })),
+    });
+
+  const undated = credentials.filter((row) => row.expires === null);
+  if (undated.length > 0)
+    anomalies.push({
+      key: "credential_undated",
+      kind: "credential_undated",
+      severity: "p3",
+      since: undated.map((row) => String(row.recorded)).sort()[0]!,
+      count: undated.length,
+      subjects: undated.map((row) => ({ id: String(row.id), label: String(row.id), href: "" })),
     });
 
   return anomalies.sort(

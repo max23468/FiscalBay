@@ -18,6 +18,7 @@ import {
   stripeSecretKey,
 } from "../integrations/stripe.server";
 import { cancelSubscription } from "./billing-subscriptions.server";
+import { recordDisputeOpened } from "./owner-notifications.server";
 import {
   closedSubscriptionStatuses,
   entitlementInForce,
@@ -189,6 +190,8 @@ export async function applyStripeEvent(
     logFailure({ error, operation: "billing" });
     return;
   }
+  if (target && !("erasure" in target) && receipt.topic === "charge.dispute.created")
+    await recordDisputeOpened(env.DB, receipt.objectId, target, now);
   if (target && "subscription" in target)
     await reconcileSubscription(env, stripe, target.subscription, now);
   else if (target && "lifetime" in target)

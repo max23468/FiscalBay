@@ -68,6 +68,7 @@ export const supportModules = new Set([
   "app/domain/lifetime.server.ts",
   "app/domain/order-suggestions.server.ts",
   "app/domain/order-view.server.ts",
+  "app/domain/owner-notifications.server.ts",
   "app/domain/service-settings.server.ts",
   "app/domain/sql.server.ts",
   "app/domain/store-link.server.ts",
