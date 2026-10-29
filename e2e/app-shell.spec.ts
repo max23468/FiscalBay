@@ -479,7 +479,7 @@ for (const language of ["it", "en"] as const) {
           await page.goto(language === "it" ? "/termini" : "/en/termini");
           await expect(
             page.getByText(
-              language === "it" ? "Bozza del 28 settembre 2026" : "Draft dated 28 September 2026",
+              language === "it" ? "Versione del 29 ottobre 2026" : "Version of 29 October 2026",
               { exact: true },
             ),
           ).toBeVisible();
