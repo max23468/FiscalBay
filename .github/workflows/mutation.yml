@@ -56,7 +56,9 @@ jobs:
     strategy:
       # Ogni modulo conclude la propria prova: un fallimento non nasconde gli altri esiti.
       fail-fast: false
-      max-parallel: 8
+      # Venti job contemporanei per l'account: con gli otto browser del candidato restano liberi i
+      # posti per la CI di una PR quando la mutation gira da sola.
+      max-parallel: 12
       matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
     env:
       MUTATION_TARGET: ${{ matrix.target }}
