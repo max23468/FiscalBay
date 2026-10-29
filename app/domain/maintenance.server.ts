@@ -3,6 +3,7 @@ import { purgeDeletionMarkers } from "./account-deletion.server";
 import { purgeEbayDeletionMarkers } from "./ebay-account-deletion.server";
 import { auditRetentionDays } from "./admin-audit.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
+import { notificationRetentionDays } from "./owner-notifications.server";
 import { syncDailyRetentionDays } from "./product-metrics.server";
 import { purgeSupportRequests } from "./support-requests.server";
 import { purgeTelegramLinks } from "./telegram.server";
@@ -50,6 +51,11 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
       .prepare(`DELETE FROM store_transfers WHERE (executed_at IS NULL AND expires_at <= ?1)
         OR julianday(executed_at) < julianday(?1) - ?2`)
       .bind(at, auditRetentionDays),
+    // Avvisi commerciali all'owner, inviati o no: le chiavi durano più della rilettura delle
+    // prove concluse, quindi nessun fatto si ripete.
+    db
+      .prepare("DELETE FROM owner_notifications WHERE julianday(occurred_at) < julianday(?) - ?")
+      .bind(at, notificationRetentionDays),
     // Aggregati giornalieri delle letture e ricevute dei report del browser.
     db
       .prepare("DELETE FROM sync_daily WHERE julianday(day) < julianday(?) - ?")

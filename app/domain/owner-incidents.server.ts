@@ -1,3 +1,5 @@
+import { sendEmail } from "../account-email.server";
+import { infoEmail } from "../app-copy";
 import { originUrl } from "../app-links";
 import { adminCopy } from "../copy/admin-copy";
 import { ownerTelegramCopy as copy } from "../copy/owner-telegram";
@@ -10,6 +12,7 @@ import {
   at,
   duration,
   ownerCallback,
+  plainText,
   sendPanel,
   type Panel,
   type Row,
@@ -21,13 +24,16 @@ import {
  * tabella `owner_incidents` conserva l'ultimo stato comunicato: il controllo ripetuto, un nuovo
  * tentativo o un'anomalia che rientra e si riapre fra due controlli non ripetono l'avviso. Le P3
  * restano nella console e in `/incidenti`. L'interruttore degli invii Telegram riguarda i
- * venditori: gli avvisi dell'owner partono comunque.
+ * venditori: gli avvisi dell'owner partono comunque. Un avviso che Telegram rifiuta per tre
+ * tentativi parte anche per email (§31), come testo semplice.
  */
 
 /** Oggetti elencati in un avviso; gli altri si contano. */
 const subjectsShown = 5;
 /** Avvisi per controllo: il resto parte al controllo successivo. */
 const perRun = 10;
+/** Tentativi Telegram falliti dopo cui l'avviso parte anche per email all'owner. */
+export const emailAfterAttempts = 3;
 const minute = 60_000;
 
 type Detail = { count: number; total: number; subjects: string[]; href: string };
@@ -42,6 +48,7 @@ type IncidentRow = {
   notified: "none" | "opened" | "resolved";
   notified_severity: "p1" | "p2" | null;
   attempts: number;
+  emailed: string | null;
 };
 
 const t = adminCopy.it;
@@ -180,7 +187,7 @@ async function deliverOwnerIncidents(env: Env, fetcher: typeof fetch, now: Date)
   const chatId = ownerChatId(env)!;
   const { results } = await db
     .prepare(`SELECT key, kind, severity, detail, opened_at, resolved_at, notified,
-        notified_severity, attempts FROM owner_incidents
+        notified_severity, attempts, emailed FROM owner_incidents
       WHERE (retry_at IS NULL OR retry_at <= ?1)
         AND ((resolved_at IS NULL AND (notified <> 'opened'
             OR (severity = 'p1' AND notified_severity = 'p2')))
@@ -206,6 +213,7 @@ async function deliverOwnerIncidents(env: Env, fetcher: typeof fetch, now: Date)
         .bind(row.key, new Date(now.getTime() + wait).toISOString())
         .run();
       logFailure({ error, operation: "owner_incidents" });
+      if (row.attempts + 1 >= emailAfterAttempts) await emailIncident(env, row, now);
       throw new DeliveryPaused();
     }
     // Lo stato comunicato si registra soltanto se l'incidente non è cambiato nel frattempo.
@@ -217,6 +225,33 @@ async function deliverOwnerIncidents(env: Env, fetcher: typeof fetch, now: Date)
   }).catch((error: unknown) => {
     if (!(error instanceof DeliveryPaused)) throw error;
   });
+}
+
+/**
+ * Copia per email dell'avviso che Telegram non consegna, a `info@`: una volta per avviso. Un
+ * invio email non riuscito si riprova al tentativo Telegram successivo.
+ */
+async function emailIncident(env: Env, row: IncidentRow, now: Date) {
+  const sent = `${pendingState(row)}:${row.severity}`;
+  if (row.emailed === sent) return;
+  const panel = incidentPanel(env, row);
+  const links = (panel.buttons ?? [])
+    .flat()
+    .flatMap((button) => ("url" in button ? [`${button.text}: ${button.url}`] : []));
+  try {
+    await sendEmail(env, {
+      to: infoEmail,
+      replyTo: infoEmail,
+      subject: `FiscalBay · ${panel.title}`,
+      text: [plainText(env, panel, now), ...links].join("\n\n"),
+    });
+  } catch (error) {
+    logFailure({ error, operation: "owner_incidents" });
+    return;
+  }
+  await env.DB.prepare("UPDATE owner_incidents SET emailed = ?2 WHERE key = ?1")
+    .bind(row.key, sent)
+    .run();
 }
 
 /** Invio fallito: gli avvisi rimasti aspettano il controllo successivo. */

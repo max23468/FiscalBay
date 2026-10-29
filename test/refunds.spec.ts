@@ -327,6 +327,12 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
     ]);
     expect(signals(errors)).toEqual(["dispute_opened", "dispute_lost"]);
     expect(await premium("2026-09-26T11:00:00.000Z")).toBe(false);
+    // Per l'owner una disputa aperta e una persa, anche con l'evento ripetuto.
+    await event(stripe, "charge.dispute.created", "du_ch_in_first", "2026-09-26T12:00:00.000Z");
+    const { results } = await env.DB.prepare(
+      "SELECT kind FROM owner_notifications WHERE kind LIKE 'dispute%' ORDER BY rowid",
+    ).all<{ kind: string }>();
+    expect(results.map((row) => row.kind)).toEqual(["dispute_opened", "dispute_lost"]);
   });
 
   it("un evento di rimborso senza un nostro pagamento non ha effetti", async () => {
@@ -343,6 +349,11 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
       "GET /v1/checkout/sessions",
     ]);
     expect(await entitlements()).toEqual([]);
+    expect(
+      await env.DB.prepare(
+        "SELECT COUNT(*) AS n FROM owner_notifications WHERE kind = 'refund'",
+      ).first("n"),
+    ).toBe(0);
   });
 
   it("registra dall'assistenza la cancellazione tramite Link soltanto se Stripe la conferma", async () => {

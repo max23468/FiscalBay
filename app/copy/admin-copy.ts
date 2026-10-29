@@ -230,6 +230,18 @@ const it = {
           "L’operazione è partita ma il suo esito non è stato registrato: la riga resta in corso con autore, oggetto e motivo. Controlla lo stato reale dell’oggetto.",
         action: "Apri il registro",
       },
+      credential_expiry: {
+        title: "Credenziali in scadenza",
+        consequence:
+          "Una credenziale del registro scade entro 45 giorni o è già scaduta: alla scadenza la funzione che la usa si ferma.",
+        action: "Rinnova la credenziale e aggiorna il registro",
+      },
+      credential_undated: {
+        title: "Credenziali senza scadenza nel registro",
+        consequence:
+          "Il registro delle scadenze non ha una data per queste credenziali: nessun avviso arriverà prima che scadano.",
+        action: "Completa il registro",
+      },
     },
   },
   accounts: {
@@ -913,6 +925,18 @@ const en: AdminCopy = {
         consequence:
           "The operation started but its outcome was not recorded: the row stays in progress with author, item and reason. Check the actual state of the item.",
         action: "Open the log",
+      },
+      credential_expiry: {
+        title: "Credentials about to expire",
+        consequence:
+          "A credential in the register expires within 45 days or has already expired: at expiry the feature that uses it stops.",
+        action: "Renew the credential and update the register",
+      },
+      credential_undated: {
+        title: "Credentials without an expiry in the register",
+        consequence:
+          "The expiry register has no date for these credentials: no warning will arrive before they expire.",
+        action: "Complete the register",
       },
     },
   },
