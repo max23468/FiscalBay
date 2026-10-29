@@ -31,6 +31,7 @@ import { errorResponse } from "../error-response";
 import { logFailure } from "../errors";
 import { localizedPath } from "../i18n";
 import { measure } from "../observability.server";
+import { limitedHeaders, requestLimitWait } from "../request-limits.server";
 import {
   accountExportScope,
   onlyAvailable,
@@ -61,6 +62,20 @@ export function loader() {
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
   const json = request.headers.get("accept")?.includes("application/json") ?? false;
+  const form = await request.formData();
+  const language = form.get("language") === "en" ? "en" : "it";
+  const t = appCopy[language];
+  const query = new URL(request.url).searchParams;
+  const refused = (status: number, notice: string, wait?: number) =>
+    json
+      ? Response.json({ ok: false, notice } satisfies ActionResult, {
+          status,
+          headers: wait === undefined ? { "cache-control": "no-store" } : limitedHeaders(wait),
+        })
+      : redirect(`${localizedPath(language, `${settingsPath}/esportazione`)}?${query}`, 303);
+  // Il filtro per IP precede la sessione e ogni lettura degli ordini.
+  const wait = await requestLimitWait(env, request, "work", "order-export");
+  if (wait !== null) return refused(429, t.access.signInNotices["troppi-tentativi"], wait);
   let area: AccountArea;
   try {
     area = await requireAccountArea(request);
@@ -68,17 +83,6 @@ export async function action({ request }: Route.ActionArgs) {
     if (json && error instanceof Response) return errorResponse(request, "AUTH_REQUIRED");
     throw error;
   }
-  const form = await request.formData();
-  const language = form.get("language") === "en" ? "en" : "it";
-  const t = appCopy[language];
-  const query = new URL(request.url).searchParams;
-  const refused = (status: number, notice: string) =>
-    json
-      ? Response.json({ ok: false, notice } satisfies ActionResult, {
-          status,
-          headers: { "cache-control": "no-store" },
-        })
-      : redirect(`${localizedPath(language, `${settingsPath}/esportazione`)}?${query}`, 303);
   const userId = area.session.user.id;
   const environment = requestedEbayEnvironment(request);
   const rows: ExportRows = form.get("rows") === "item" ? "item" : "order";

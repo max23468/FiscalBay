@@ -5,7 +5,8 @@ import { accessNotice, signInNotice, type SignInNotice } from "./access-notice";
 import { currentSession } from "./account-area.server";
 import { accessPath, ordersPath, originUrl, securityReturnPath, visitCookie } from "./app-links";
 import { readSession } from "./domain/sessions.server";
-import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
+import { authLimitWait, forwardToAuth, redirectWithCookies } from "./auth-route.server";
+import { limitedHeaders } from "./request-limits.server";
 import {
   completeRegistration,
   parseProfile,
@@ -119,7 +120,11 @@ export async function accessAction(request: Request) {
   };
   // Un errore di un modulo compilato resta sulla pagina con i valori inviati da ricompilare,
   // senza conservarli nel browser; password e token Turnstile non tornano mai indietro.
-  const failed = (value: SignInNotice, tab: "accedi" | "registrati" | "completa") => {
+  const failed = (
+    value: SignInNotice,
+    tab: "accedi" | "registrati" | "completa",
+    wait?: number | null,
+  ) => {
     const values: Record<string, string> = {};
     for (const [name, entry] of form) {
       if (name !== "password" && name !== turnstileField && typeof entry === "string")
@@ -135,14 +140,14 @@ export async function accessAction(request: Request) {
             : 400;
     return data(
       { notice: signInNotice(value, language), remembered: { tab, values } },
-      { status, headers: noStore },
+      { status, headers: wait ? limitedHeaders(wait) : noStore },
     );
   };
   // Una risposta 5xx di Auth, che l'ha già registrata, non dipende dai dati inviati: Auth o il
   // database non rispondono, e la pagina lo dice invece di chiedere di controllare email e
   // password.
-  const forward = async (path: string, body?: Record<string, unknown>) => {
-    const response = await forwardToAuth(env, request, path, body);
+  const forward = async (path: string, body?: Record<string, unknown>, admitted = false) => {
+    const response = await forwardToAuth(env, request, path, body, admitted);
     if (response.status >= 500) throw unavailableData();
     return response;
   };
@@ -166,12 +171,15 @@ export async function accessAction(request: Request) {
   }
 
   if (intent === "recupera-password") {
+    if (await authLimitWait(env, request, "/request-password-reset"))
+      return notice("troppi-tentativi");
     const check = await turnstileFailure(env, request, form, turnstileActions.passwordReset);
     if (check) return notice(check);
-    const response = await forward("/request-password-reset", {
-      email: field("email"),
-      redirectTo: originUrl(env, accessReturn),
-    });
+    const response = await forward(
+      "/request-password-reset",
+      { email: field("email"), redirectTo: originUrl(env, accessReturn) },
+      true,
+    );
     return notice(
       response.status === 429 ? "troppi-tentativi" : response.ok ? "recupero-inviato" : "errore",
     );
@@ -192,14 +200,20 @@ export async function accessAction(request: Request) {
     const profile = parseProfile(form);
     if (!profile) return failed("dati", "registrati");
     if (field("termini") !== "on") return failed("termini", "registrati");
+    const wait = await authLimitWait(env, request, "/sign-up/email");
+    if (wait) return failed("troppi-tentativi", "registrati", wait);
     const check = await turnstileFailure(env, request, form, turnstileActions.signUp);
     if (check) return failed(check, "registrati");
-    const response = await forward("/sign-up/email", {
-      email: field("email"),
-      password: field("password"),
-      name: `${profile.firstName} ${profile.lastName}`,
-      callbackURL: base,
-    });
+    const response = await forward(
+      "/sign-up/email",
+      {
+        email: field("email"),
+        password: field("password"),
+        name: `${profile.firstName} ${profile.lastName}`,
+        callbackURL: base,
+      },
+      true,
+    );
     if (!response.ok) {
       if (response.status === 403) {
         const error = await response.clone().json<{ code?: string }>();
@@ -238,16 +252,20 @@ export async function accessAction(request: Request) {
   }
 
   if (intent === "verifica" || intent === "completa") {
+    // Il filtro per IP precede anche la lettura della sessione.
+    if (intent === "verifica" && (await authLimitWait(env, request, "/send-verification-email")))
+      return notice("troppi-tentativi", base);
     const session = await readSession(env, request);
     if (!session) return notice("errore");
     if (intent === "verifica") {
       if (session.user.emailVerified) return redirect(base, 303);
       const check = await turnstileFailure(env, request, form, turnstileActions.emailLink);
       if (check) return notice(check, base);
-      const response = await forward("/send-verification-email", {
-        email: session.user.email,
-        callbackURL: base,
-      });
+      const response = await forward(
+        "/send-verification-email",
+        { email: session.user.email, callbackURL: base },
+        true,
+      );
       if (response.status === 429) return notice("troppi-tentativi", base);
       return notice(response.ok ? "verifica-inviata" : "errore", base);
     }

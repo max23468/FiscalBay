@@ -36,6 +36,7 @@ import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { maxPasswordLength, minPasswordLength } from "../limits";
 import { turnstileActions } from "../turnstile";
 import type { Route } from "./+types/sign-in";
+import { pageHeaders } from "../request-limits.server";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
@@ -52,6 +53,8 @@ export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescri
 export function loader({ request }: Route.LoaderArgs) {
   return areaPage(request, () => accessLoader(request));
 }
+
+export const headers = pageHeaders;
 
 export function action({ request }: Route.ActionArgs) {
   return areaPage(request, () => accessAction(request));

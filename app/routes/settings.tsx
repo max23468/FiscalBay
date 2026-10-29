@@ -100,11 +100,13 @@ import { planView, subscriptionView } from "../domain/plan-view.server";
 import {
   actionFailure,
   areaAction,
+  limitedAction,
   runAreaAction,
   trialAction,
   type AreaAction,
   type AreaActionContext,
 } from "../area-actions.server";
+import { pageHeaders } from "../request-limits.server";
 
 /**
  * Servizi reali delle categorie. L'acquisto compare con la configurazione Stripe, la gestione
@@ -131,9 +133,7 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
   return [{ title: pageTitle(title) }, { name: "robots", content: "noindex" }];
 }
 
-export function headers(): HeadersInit {
-  return { "cache-control": "no-store" };
-}
+export const headers = pageHeaders;
 
 export function loader(args: Route.LoaderArgs) {
   return areaPage(args.request, () => readSettings(args));
@@ -600,10 +600,12 @@ const settingsActions: Record<string, AreaAction> = {
   support: {
     run: ({ request, area, form }) => sendSupport(request, area, form),
     failureNotice: (t) => t.settings.saveFailed,
+    limit: "emails",
   },
   "account-export": {
     run: exportAccount,
     failureNotice: (t) => t.settings.privacy.accountExportFailed,
+    limit: "work",
   },
   "account-delete": {
     run: ({ request, area, form }) =>
@@ -629,12 +631,18 @@ const settingsActions: Record<string, AreaAction> = {
   },
 };
 
-/** Le azioni delle Impostazioni; le altre sono della Sicurezza. */
+/**
+ * Le azioni delle Impostazioni; le altre sono della Sicurezza. Il filtro per IP di assistenza
+ * e archivio dell'account precede la sessione.
+ */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
-  const area = await requireAccountArea(request);
   const form = await request.formData();
-  const chosen = areaAction(settingsActions, String(form.get("intent") ?? ""));
+  const intent = String(form.get("intent") ?? "");
+  const chosen = areaAction(settingsActions, intent);
+  const limited = chosen?.limit ? await limitedAction(request, chosen.limit, intent) : null;
+  if (limited) return limited;
+  const area = await requireAccountArea(request);
   return chosen
     ? runAreaAction(chosen, { request, area, form })
     : securityAction(request, area, form);

@@ -9,7 +9,7 @@ import { unconfirmedOnFailure } from "../client-action";
 import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { storeLinkPath, storesPath } from "../app-links";
-import { actionFailure, suspendedEbayRead } from "../area-actions.server";
+import { actionFailure, limitedAction, suspendedEbayRead } from "../area-actions.server";
 import {
   deleteStoreData,
   disconnectStore,
@@ -32,15 +32,14 @@ import { describeRequest, measure } from "../observability.server";
 import { issueTimingTicket } from "../page-timing.server";
 import { settle } from "../settle.server";
 import type { Route } from "./+types/stores";
+import { pageHeaders } from "../request-limits.server";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
   return [{ title: pageTitle(t.stores.title) }, { name: "robots", content: "noindex" }];
 }
 
-export function headers(): HeadersInit {
-  return { "cache-control": "no-store" };
-}
+export const headers = pageHeaders;
 
 /**
  * Vista del negozio con i soli dati che FiscalBay possiede: lo storico compare dal primo avvio
@@ -178,10 +177,15 @@ const syncActions: Record<string, { reimport: boolean }> = {
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
-  const { language, session } = await requireAccountArea(request);
-  const t = appCopy[language].stores;
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
+  // Il filtro per IP di una lettura a richiesta precede la sessione.
+  const limited = Object.hasOwn(syncActions, intent)
+    ? await limitedAction(request, "work", intent)
+    : null;
+  if (limited) return limited;
+  const { language, session } = await requireAccountArea(request);
+  const t = appCopy[language].stores;
   const storeId = String(form.get("store") ?? "");
   const run = Object.hasOwn(storeActions, intent) ? storeActions[intent] : undefined;
   const sync = Object.hasOwn(syncActions, intent) ? syncActions[intent] : undefined;

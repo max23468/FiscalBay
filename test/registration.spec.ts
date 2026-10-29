@@ -538,7 +538,7 @@ describe("registrazione e verifica del contatto", () => {
     }
   });
 
-  it("limita per IP i tentativi dei moduli su un ambiente distribuito, contando su D1", async () => {
+  it("limita per IP i tentativi dei moduli con il binding nativo, senza contatori D1 per IP", async () => {
     const deployed = { ...env, APP_ORIGIN: "https://test.fiscalbay.it" as const };
     const attempt = (ip: string) =>
       forwardToAuth(
@@ -555,7 +555,7 @@ describe("registrazione e verifica del contatto", () => {
     for (let index = 0; index < 4; index += 1) statuses.push(await attempt("203.0.113.7"));
     expect(statuses).toEqual([401, 401, 401, 429]);
     expect(await attempt("203.0.113.8")).toBe(401);
-    // La route diretta condivide il contatore; la lettura della sessione non ne scrive.
+    // La route diretta condivide il contatore; la lettura della sessione non lo consuma.
     const direct = await handleAuthRequest(
       new Request("https://test.fiscalbay.it/api/auth/sign-in/email", {
         method: "POST",
@@ -589,19 +589,54 @@ describe("registrazione e verifica del contatto", () => {
     const ipv6Statuses = [];
     for (const ip of ipv6) ipv6Statuses.push(await attempt(ip));
     expect(ipv6Statuses).toEqual([401, 401, 401, 429]);
-    const counters = await env.DB.prepare('SELECT COUNT(*) AS total FROM "rateLimit"').first<{
-      total: number;
+    // Su D1 resta soltanto l'impronta dell'indirizzo email, contata per i tentativi ammessi.
+    const counters = await env.DB.prepare('SELECT "key", "count" FROM "rateLimit"').all<{
+      key: string;
+      count: number;
     }>();
-    // Due IP, una rete IPv6 e l'indirizzo email, contato solo per i tentativi ammessi per IP.
-    expect(counters!.total).toBe(4);
+    expect(counters.results).toEqual([{ key: expect.stringMatching(/^email:/u), count: 7 }]);
+  });
 
-    // Una finestra scaduta riparte da uno invece di restare bloccata.
-    await env.DB.prepare('UPDATE "rateLimit" SET "lastRequest" = "lastRequest" - 60000').run();
-    expect(await attempt("203.0.113.7")).toBe(401);
-    const reset = await env.DB.prepare('SELECT "count" FROM "rateLimit" WHERE "key" LIKE ?')
-      .bind("203.0.113.7%")
-      .first<{ count: number }>();
-    expect(reset!.count).toBe(1);
+  it("applica il filtro per IP dei moduli prima di Turnstile, senza contarli due volte", async () => {
+    const deployed = "https://test.fiscalbay.it";
+    const previous = env.APP_ORIGIN;
+    Object.assign(env, { APP_ORIGIN: deployed });
+    // La chiave di prova non vale sui domini HTTPS: Siteverify risponde come per il test.
+    siteverify.answer = () =>
+      Response.json({ success: true, hostname: "test.fiscalbay.it", action: "password-reset" });
+    const submit = (fields: Record<string, string>) =>
+      routeResponse(signIn, "/accesso", {
+        origin: deployed,
+        headers: { "cf-connecting-ip": "198.51.100.77" },
+        fields,
+      });
+    try {
+      const reset = { intent: "recupera-password", email: "filtro@example.invalid" };
+      // Il modulo ammesso inoltra la richiesta senza consumare di nuovo il contatore.
+      for (let count = 0; count < 3; count++)
+        expect((await submit(reset)).headers.get("location")).not.toContain("troppi-tentativi");
+      expect((await submit(reset)).headers.get("location")).toContain("troppi-tentativi");
+      expect(siteverify.requests).toHaveLength(3);
+
+      siteverify.answer = () =>
+        Response.json({ success: true, hostname: "test.fiscalbay.it", action: "sign-up" });
+      const signUp = {
+        intent: "registrati",
+        tipo: "privato",
+        nome: "Mario",
+        cognome: "Rossi",
+        email: "filtro-registrazione@example.invalid",
+        password: "Una-password-registrazione-lunga",
+        termini: "on",
+      };
+      for (let count = 0; count < 3; count++) expect((await submit(signUp)).status).not.toBe(429);
+      const limited = await submit(signUp);
+      expect(limited.status).toBe(429);
+      expect((await accessError(limited)).key).toBe("troppi-tentativi");
+      expect(siteverify.requests).toHaveLength(6);
+    } finally {
+      Object.assign(env, { APP_ORIGIN: previous });
+    }
   });
 
   it("avvia l'accesso Google dal modulo con il callback dell'ambiente", async () => {
