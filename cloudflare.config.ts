@@ -1,5 +1,7 @@
 import { bindings, defineConfig, triggers } from "cf/config";
 
+import { requestLimitRules, type RequestLimitRule } from "./app/request-limits.ts";
+
 /**
  * Due Worker dallo stesso codice. `--mode live` seleziona Production; ogni altra modalità
  * (`production` predefinita di Vite in build, `development` in dev) resta sul Worker test,
@@ -45,6 +47,19 @@ const secrets = {
   TURNSTILE_SECRET_KEY: bindings.secret(),
 };
 
+/**
+ * Namespace del Rate Limiting nativo per ambiente (§29): l'identificativo è unico nell'account,
+ * quindi test e Production non condividono i contatori. Limiti e finestre, comuni ai due
+ * ambienti, stanno in `app/request-limits.ts`.
+ */
+export const requestLimitNamespaces = {
+  test: { attempts: "2910", emails: "2911", work: "2912" },
+  live: { attempts: "2920", emails: "2921", work: "2922" },
+};
+
+const requestLimit = (namespace: string, rule: RequestLimitRule) =>
+  bindings.rateLimit({ namespace, simple: { limit: rule.limit, period: rule.period } });
+
 const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(target: {
   name: string;
   domain: string;
@@ -52,6 +67,7 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   exports: string;
   metrics: string;
   database: { name: string; id: string };
+  limits: { attempts: string; emails: string; work: string };
   vars: Vars;
 }) => ({
   name: target.name,
@@ -93,6 +109,11 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     // Metriche tecniche aggregate, un dataset per ambiente: nasce alla prima scrittura e
     // conserva i punti tre mesi.
     METRICS: bindings.analyticsEngineDataset({ name: target.metrics }),
+    // Primo filtro per IP e operazione davanti ad Auth, invii di email e lavori costosi: il
+    // contatore è del data center e non scrive su D1.
+    REQUEST_LIMIT_ATTEMPTS: requestLimit(target.limits.attempts, requestLimitRules.attempts),
+    REQUEST_LIMIT_EMAILS: requestLimit(target.limits.emails, requestLimitRules.emails),
+    REQUEST_LIMIT_WORK: requestLimit(target.limits.work, requestLimitRules.work),
     // La console legge lo stesso dataset dalla SQL API dell'account, con il token facoltativo
     // `ANALYTICS_READ_TOKEN`.
     METRICS_DATASET: bindings.text(target.metrics),
@@ -113,6 +134,7 @@ export default defineConfig((ctx) => ({
           exports: "fiscalbay-exports",
           metrics: "fiscalbay_metrics",
           database: databases.live,
+          limits: requestLimitNamespaces.live,
           vars: {
             APP_ORIGIN: bindings.text("https://fiscalbay.it"),
             REGISTRATION_MODE: bindings.text("open"),
@@ -133,6 +155,7 @@ export default defineConfig((ctx) => ({
           exports: "fiscalbay-test-exports",
           metrics: "fiscalbay_test_metrics",
           database: databases.test,
+          limits: requestLimitNamespaces.test,
           vars: {
             APP_ORIGIN: bindings.text("https://test.fiscalbay.it"),
             REGISTRATION_MODE: bindings.text("approval"),

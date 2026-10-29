@@ -21,6 +21,8 @@ import { logFailure, tracePhase } from "./errors";
 import { appBase, ordersPath } from "./app-links";
 import { localizedPath } from "./i18n";
 import { sha256Hex } from "./sealed.server";
+import type { RequestLimit } from "./request-limits";
+import { limitedHeaders, requestLimitWait } from "./request-limits.server";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
 // che conservano sempre un accesso valido. L'elenco delle sessioni restituirebbe i token delle
@@ -76,25 +78,43 @@ function noStore(response: Response): Response {
   });
 }
 
-// Soglie per IP e percorso sui soli invii sensibili, come le regole predefinite di Better Auth.
-const attemptLimits = [
-  { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, window: 10, max: 3 },
-  { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, window: 10, max: 3 },
+// Soglie per IP e percorso sui soli invii sensibili, come le regole predefinite di Better Auth:
+// il binding Rate Limiting le applica prima di qualunque lettura o scrittura (§29).
+const attemptLimits: Array<{ paths: RegExp; limit: RequestLimit }> = [
+  { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, limit: "attempts" },
+  { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, limit: "attempts" },
   {
     paths: /^\/(send-verification-email|request-password-reset|forget-password|delete-user)(\/|$)/u,
-    window: 60,
-    max: 3,
+    limit: "emails",
   },
 ];
 
-/** Un indirizzo IPv6 conta per la sua rete /64, che un singolo client controlla per intero. */
-function clientKey(ip: string): string {
-  if (!ip.includes(":")) return ip;
-  const [head, tail = ""] = ip.split("::");
-  const left = head ? head.split(":") : [];
-  const right = tail ? tail.split(":") : [];
-  const groups = [...left, ...Array(8 - left.length - right.length).fill("0"), ...right];
-  return `${groups.slice(0, 4).join(":")}::/64`;
+/** Percorso Auth senza prefisso, barre ripetute o finali e maiuscole. */
+function authPath(request: Request): string {
+  return new URL(request.url).pathname
+    .toLowerCase()
+    .replace(/\/{2,}/gu, "/")
+    .replace(/\/$/u, "")
+    .replace(/^\/api\/auth/u, "");
+}
+
+/**
+ * Secondi di attesa del filtro per IP sui percorsi Auth sensibili. I moduli dell'app lo
+ * chiamano prima di Turnstile e poi inoltrano la richiesta già ammessa.
+ */
+export function authLimitWait(env: Env, request: Request, path = authPath(request)) {
+  const rule = attemptLimits.find(({ paths }) => paths.test(path));
+  return request.method === "POST" && rule
+    ? requestLimitWait(env, request, rule.limit, `auth${path}`)
+    : Promise.resolve(null);
+}
+
+/** Risposta JSON di Auth oltre un limite, uguale per account esistenti e no. */
+export function tooManyAuthRequests(wait: number): Response {
+  return Response.json(
+    { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." },
+    { status: 429, headers: limitedHeaders(wait) },
+  );
 }
 
 /**
@@ -103,10 +123,9 @@ function clientKey(ip: string): string {
  * solo per l'accesso con password: Google, eBay e passkey restano disponibili al titolare.
  */
 const addressLimits = [
-  { paths: /^\/sign-in\/email\/?$/u, window: 900, max: 10 },
+  { paths: /^\/sign-in\/email$/u, window: 900, max: 10 },
   {
-    paths:
-      /^\/(sign-up\/email|send-verification-email|request-password-reset|forget-password)\/?$/u,
+    paths: /^\/(sign-up\/email|send-verification-email|request-password-reset|forget-password)$/u,
     window: 3600,
     max: 5,
   },
@@ -151,17 +170,17 @@ async function addressKey(request: Request): Promise<string | null> {
 }
 
 /**
- * Applica i limiti per IP e poi quelli per indirizzo; restituisce i secondi di attesa oltre il
- * limite. Attivo sui domini HTTPS, dove Cloudflare fornisce l'IP del client; il limite interno
- * di Better Auth resta spento (vedi auth.server.ts).
+ * Applica i limiti per indirizzo, coerenti fra data center; restituisce i secondi di attesa
+ * oltre il limite. Attivo sui domini HTTPS come il filtro per IP; il limite interno di Better
+ * Auth resta spento (vedi auth.server.ts).
  */
-async function attemptWait(request: Request, env: Env): Promise<number | null> {
+async function addressWait(request: Request, env: Env): Promise<number | null> {
   if (request.method !== "POST" || !env.APP_ORIGIN.startsWith("https:")) return null;
-  const path = new URL(request.url).pathname.replace(/^\/api\/auth/u, "");
-  const rule = attemptLimits.find(({ paths }) => paths.test(path));
-  const ip = request.headers.get("cf-connecting-ip");
-  if (!rule || !ip) return null;
-
+  const path = authPath(request);
+  const rule = addressLimits.find(({ paths }) => paths.test(path));
+  if (!rule) return null;
+  const address = await addressKey(request);
+  if (!address) return null;
   const now = Date.now();
   // Pulizia occasionale delle finestre chiuse da oltre un'ora, fuori dal percorso della risposta.
   if (Math.random() < 0.02) {
@@ -171,16 +190,13 @@ async function attemptWait(request: Request, env: Env): Promise<number | null> {
         .run(),
     );
   }
-  const wait = await countAttempt(env, `${clientKey(ip)}|${path}`, rule, now);
-  if (wait !== null) return wait;
-  const addressRule = addressLimits.find(({ paths }) => paths.test(path));
-  const address = addressRule ? await addressKey(request) : null;
-  return address && addressRule
-    ? countAttempt(env, `${address}|${path.replace(/\/$/u, "")}`, addressRule, now)
-    : null;
+  return countAttempt(env, `${address}|${path}`, rule, now);
 }
 
-async function authResponse(request: Request, env: Env): Promise<Response> {
+async function authResponse(request: Request, env: Env, admitted = false): Promise<Response> {
+  // Il filtro per IP precede sessione, corpo e database; un modulo dell'app l'ha già applicato.
+  const limited = admitted ? null : await authLimitWait(env, request);
+  if (limited !== null) return tooManyAuthRequests(limited);
   const pathname = new URL(request.url).pathname;
   let emailChange: { userId: string; email: string; newEmail: string } | null = null;
   if (pathname === linkSocialPath) {
@@ -250,13 +266,8 @@ async function authResponse(request: Request, env: Env): Promise<Response> {
     }
     enrollingUserId = session.user.id;
   }
-  const wait = await attemptWait(request, env);
-  if (wait !== null) {
-    return Response.json(
-      { code: "TOO_MANY_REQUESTS", message: "Too many requests. Try again later." },
-      { status: 429, headers: { "retry-after": String(wait), "cache-control": "no-store" } },
-    );
-  }
+  const wait = await addressWait(request, env);
+  if (wait !== null) return tooManyAuthRequests(wait);
   let response: Response;
   try {
     response = await createAuth(env).handler(request);
@@ -384,10 +395,7 @@ export function handleAuthRequest(
   fetcher: typeof fetch = fetch,
 ): Promise<Response> | Response {
   // Barre ripetute o finali e maiuscole non aggirano i controlli sui percorsi.
-  const pathname = new URL(request.url).pathname
-    .toLowerCase()
-    .replace(/\/{2,}/gu, "/")
-    .replace(/\/$/u, "");
+  const pathname = `/api/auth${authPath(request)}`;
   if (closedAuthPaths.has(pathname) || formOnlyPaths.has(pathname))
     return new Response(null, { status: 404 });
   if (pathname === deletionCallbackPath) return handleDeletionCallback(request, env);
@@ -398,14 +406,16 @@ export function handleAuthRequest(
 const forwardedHeaders = ["cookie", "origin", "user-agent", "accept-language", "cf-connecting-ip"];
 
 /**
- * Invia al router di Better Auth un'azione dei moduli dell'app, con lo stesso limite dei
- * tentativi delle chiamate dirette alle route Auth.
+ * Invia al router di Better Auth un'azione dei moduli dell'app, con gli stessi limiti dei
+ * tentativi delle chiamate dirette alle route Auth. `admitted` indica che il modulo ha già
+ * applicato il filtro per IP di `authLimitWait`, che non conta due volte lo stesso invio.
  */
 export async function forwardToAuth(
   env: Env,
   request: Request,
   path: string,
   body: Record<string, unknown> = {},
+  admitted = false,
 ): Promise<Response> {
   const headers = new Headers({ "content-type": "application/json" });
   for (const name of forwardedHeaders) {
@@ -420,6 +430,7 @@ export async function forwardToAuth(
       body: JSON.stringify(body),
     }),
     env,
+    admitted,
   );
   tracePhase(request, "auth-response");
   return response;

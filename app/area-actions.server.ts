@@ -7,6 +7,9 @@ import { startTrial } from "./domain/grants.server";
 import { serviceSetting } from "./domain/service-settings.server";
 import { ebayOutages, listStores } from "./domain/stores.server";
 import { logFailure } from "./errors";
+import { languageFromPath } from "./i18n";
+import type { RequestLimit } from "./request-limits";
+import { limitedHeaders, requestLimitWait } from "./request-limits.server";
 import type { ActionResult, EbayEnvironment } from "./view-models";
 
 /** Esito negativo di un'azione dell'area, con lo stato HTTP e l'avviso da mostrare. */
@@ -20,12 +23,30 @@ export interface AreaActionContext {
   form: FormData;
 }
 
-/** Azione dell'area scelta da `intent`, con l'avviso di un errore imprevisto. */
+/**
+ * Azione dell'area scelta da `intent`, con l'avviso di un errore imprevisto. Un'azione costosa
+ * o che invia un'email dichiara il filtro per IP che la precede.
+ */
 export interface AreaAction {
   run: (
     context: AreaActionContext,
   ) => Promise<ActionResult | Response | ReturnType<typeof actionFailure>>;
   failureNotice: (copy: AppCopy) => string;
+  limit?: RequestLimit;
+}
+
+/**
+ * Rifiuto 429 del filtro per IP di un'azione, prima della sessione e di ogni dato: l'avviso
+ * segue la lingua dell'indirizzo. Null se la richiesta è ammessa.
+ */
+export async function limitedAction(request: Request, limit: RequestLimit, operation: string) {
+  const wait = await requestLimitWait(env, request, limit, operation);
+  if (wait === null) return null;
+  const t = appCopy[languageFromPath(new URL(request.url).pathname)];
+  return data<ActionResult>(
+    { ok: false, notice: t.access.signInNotices["troppi-tentativi"] },
+    { status: 429, headers: limitedHeaders(wait) },
+  );
 }
 
 /** L'azione di `intent` fra quelle della pagina, se esiste. */

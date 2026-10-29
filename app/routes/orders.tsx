@@ -64,21 +64,21 @@ import { planView } from "../domain/plan-view.server";
 import {
   actionFailure,
   areaAction,
+  limitedAction,
   runAreaAction,
   suspendedEbayRead,
   trialAction,
   type AreaAction,
   type AreaActionContext,
 } from "../area-actions.server";
+import { pageHeaders } from "../request-limits.server";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
   return [{ title: pageTitle(t.orders.title) }, { name: "robots", content: "noindex" }];
 }
 
-export function headers(): HeadersInit {
-  return { "cache-control": "no-store" };
-}
+export const headers = pageHeaders;
 
 /** Una verifica fiscale ancora in corso: lo sblocco resta sospeso finché non è confermata. */
 function verifying(order: OrderView) {
@@ -362,16 +362,18 @@ const orderActions: Record<string, AreaAction> = {
     failureNotice: (t) => t.settings.saveFailed,
   },
   "start-trial": trialAction,
-  retry: { run: retryOrderRead, failureNotice: (t) => t.stores.failed },
+  retry: { run: retryOrderRead, failureNotice: (t) => t.stores.failed, limit: "work" },
 };
 
-/** Sblocco e azioni degli Ordini. */
+/** Sblocco e azioni degli Ordini; il filtro per IP di una nuova lettura precede la sessione. */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
-  const area = await requireAccountArea(request);
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "");
   const chosen = areaAction(orderActions, intent);
+  const limited = chosen?.limit ? await limitedAction(request, chosen.limit, intent) : null;
+  if (limited) return limited;
+  const area = await requireAccountArea(request);
   if (chosen) return runAreaAction(chosen, { request, area, form });
   if (intent !== "unlock")
     return data<UnlockResult>({ unlocked: [], remaining: null, error: true }, { status: 400 });

@@ -267,6 +267,25 @@ Il primo report DMARC arriva entro 24 ore dall'attivazione e si legge in **Email
 
 Rientro: `node scripts/zone-protection.mjs remove` toglie le regole dell'ambiente e lascia quella di zona finché l'altro ambiente ha le sue; ogni scrittura crea anche una versione del ruleset, rileggibile con `cf rulesets entrypoint versions list <fase>`. DMARC Management e gli alert si spengono con `cf email-auth dmarc-reports edit --enabled false` e `cf ssl ct-alerting update --enabled false`; il `rua` di Cloudflare si toglie dal record `_dmarc` senza toccare gli altri tag.
 
+<a id="rate-limiting"></a>
+## Rate Limiting nativo
+
+Il Worker filtra per IP, rete IPv6 /64 e operazione con tre binding Rate Limiting ([§29](../MASTER_PLAN.md#s29)), dichiarati in `cloudflare.config.ts` con namespace separati per ambiente e soglie in `app/request-limits.ts`:
+
+| Binding | Soglia | Operazioni |
+|---|---|---|
+| `REQUEST_LIMIT_ATTEMPTS` | 3 in 10 secondi | accesso e registrazione con password, cambio di password ed email, verifiche passkey |
+| `REQUEST_LIMIT_EMAILS` | 3 in 60 secondi | nuovo link di conferma, recupero della password, cancellazione dell'account, assistenza |
+| `REQUEST_LIMIT_WORK` | 10 in 60 secondi | file degli ordini, archivio dell'account, letture eBay a richiesta da Negozi e Ordini |
+
+Il filtro precede sessione, Turnstile e database e risponde 429 con `Retry-After` pari alla finestra e `no-store`; i moduli di accesso lo applicano prima di Turnstile e inoltrano ad Auth la richiesta già ammessa. D1 conserva soltanto i contatori per impronta dell'indirizzo email e il limite giornaliero dell'assistenza, coerenti fra data center. Il filtro è attivo sui domini HTTPS, dove Cloudflare fornisce l'IP: in locale e nell'anteprima non limita. Il deploy crea i binding con la versione, senza risorse da preparare; gli identificativi dei namespace sono liberi nell'account, dove nessun altro Worker usa Rate Limiting.
+
+Readback dopo il deploy, sul test:
+
+1. `pnpm exec cf workers versions get <versione> --worker-id fiscalbay-test` mostra i tre binding `ratelimit` con i namespace `2910`, `2911` e `2912`.
+2. Quattro `POST https://test.fiscalbay.it/api/auth/sign-in/email` dallo stesso IP entro 10 secondi, con un indirizzo sintetico e una password sbagliata: il quarto risponde 429 con `Retry-After: 10`, `Cache-Control: no-store` e `TOO_MANY_REQUESTS`, uguale per un indirizzo esistente. La regola di zona `fiscalbay-auth-burst` scatta soltanto oltre 30 richieste.
+3. `pnpm exec cf d1 query <id del test in cloudflare.config.ts> --sql 'SELECT "key", "lastRequest" FROM "rateLimit"'`: le prove del punto 2 non aggiungono chiavi per IP, soltanto l'impronta `email:` dell'indirizzo; quelle scritte prima del deploy scompaiono con la pulizia oraria.
+
 <a id="turnstile"></a>
 ## Turnstile
 

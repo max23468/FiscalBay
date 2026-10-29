@@ -33,13 +33,13 @@ const criticalShared = new Set([
 ]);
 
 /**
- * Moduli server di Auth, sessioni, chiavi derivate, isolamento, ordini, export e file XLSX, negozi
+ * Moduli server di Auth, filtro delle richieste, sessioni, chiavi derivate, isolamento, ordini, export e file XLSX, negozi
  * e loro segni, integrazioni, diritti e destinatari Telegram.
  */
 export function criticalModule(file) {
   return (
     criticalShared.has(file) ||
-    /^app\/(?:auth(?:-route)?|sealed|domain\/(?:billing|refunds|orders|order-import|order-observation|order-acquisition|order-sync|order-export|quota|grants|cycles|sessions|sign-in-methods|registration|stores|store-marks|export|xlsx|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:environment|notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
+    /^app\/(?:auth(?:-route)?|request-limits|sealed|domain\/(?:billing|refunds|orders|order-import|order-observation|order-acquisition|order-sync|order-export|quota|grants|cycles|sessions|sign-in-methods|registration|stores|store-marks|export|xlsx|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:environment|notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
       file,
     )
   );
@@ -87,6 +87,7 @@ export const supportModules = new Set([
   "app/orders/order-search.ts",
   "app/password.server.ts",
   "app/preferences.ts",
+  "app/request-limits.ts",
   "app/response-cookies.server.ts",
   "app/sequence.ts",
   "app/view-models.ts",
@@ -113,6 +114,7 @@ export function mutationCoverageGaps(files) {
 // Le prove unitarie Node coprono questi moduli; gli altri usano la suite Cloudflare.
 const unitTargets = new Set([
   "app/auth-route.server.ts",
+  "app/request-limits.server.ts",
   "app/integrations/ebay/fulfillment.server.ts",
   "app/tax-quality.ts",
 ]);

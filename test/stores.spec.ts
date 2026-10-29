@@ -41,6 +41,9 @@ import {
   clientAction as settingsClientAction,
 } from "../app/routes/settings";
 import { action as languageAction } from "../app/routes/language";
+import { action as ordersAction } from "../app/routes/orders";
+import { action as orderExportAction } from "../app/routes/order-export";
+import { requestLimitRules } from "../app/request-limits";
 import { action as notificationsAction } from "../app/routes/notifications";
 import { appCopy, supportEmail } from "../app/app-copy";
 import {
@@ -1091,6 +1094,80 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       errors.mockRestore();
       expect(toSupport()).toEqual([]);
       expect(await count("support_requests")).toBe(0);
+    });
+  });
+
+  describe("filtro per IP delle azioni costose", () => {
+    const deployed = "https://test.fiscalbay.it";
+    let previous: string;
+    beforeAll(() => {
+      previous = env.APP_ORIGIN;
+      Object.assign(env, { APP_ORIGIN: deployed });
+    });
+    afterAll(() => Object.assign(env, { APP_ORIGIN: previous }));
+    type Init = { status: number; headers: Record<string, string> };
+    const post = (
+      action: (args: never) => unknown,
+      path: string,
+      ip: string,
+      fields: Record<string, string>,
+    ) =>
+      (
+        callRoute(action, path, {
+          origin: deployed,
+          headers: { "cf-connecting-ip": ip, accept: "application/json" },
+          fields,
+        }) as Promise<unknown>
+      ).catch((thrown: unknown) => thrown);
+
+    it.each([
+      ["assistenza", settingsAction, "/app/impostazioni", { intent: "support" }, "emails", 1],
+      ["archivio", settingsAction, "/app/impostazioni", { intent: "account-export" }, "work", 2],
+      ["lettura", storesAction, "/app/negozi", { intent: "store-sync", store: "s" }, "work", 3],
+      ["riprova", ordersAction, "/app/ordini", { intent: "retry" }, "work", 4],
+    ] as const)(
+      "%s: oltre il limite risponde 429 prima della sessione",
+      async (_name, action, path, fields, limit, network) => {
+        const ip = `198.51.100.${network}`;
+        const { limit: max, period } = requestLimitRules[limit];
+        // Senza sessione HTTPS valida le richieste ammesse tornano all'accesso.
+        for (let count = 0; count < max; count++)
+          expect(await post(action as never, path, ip, fields)).toBeInstanceOf(Response);
+        const limited = (await post(action as never, path, ip, fields)) as {
+          data: ActionResult;
+          init: Init;
+        };
+        expect(limited.data).toEqual({
+          ok: false,
+          notice: appCopy.it.access.signInNotices["troppi-tentativi"],
+        });
+        expect(limited.init).toEqual({
+          status: 429,
+          headers: { "retry-after": String(period), "cache-control": "no-store" },
+        });
+        // Un'altra rete e un'azione senza filtro restano ammesse.
+        expect(await post(action as never, path, "198.51.100.250", fields)).toBeInstanceOf(
+          Response,
+        );
+        expect(await post(action as never, path, ip, { intent: "save" })).toBeInstanceOf(Response);
+      },
+    );
+
+    it("file degli ordini: 429 JSON con Retry-After e no-store prima della sessione", async () => {
+      const send = () =>
+        post(orderExportAction as never, "/api/v1/orders/export", "198.51.100.200", {
+          language: "en",
+        }) as Promise<Response>;
+      for (let count = 0; count < requestLimitRules.work.limit; count++)
+        expect((await send()).status).toBe(401);
+      const limited = await send();
+      expect(limited.status).toBe(429);
+      expect(limited.headers.get("retry-after")).toBe(String(requestLimitRules.work.period));
+      expect(limited.headers.get("cache-control")).toBe("no-store");
+      expect(await limited.json()).toEqual({
+        ok: false,
+        notice: appCopy.en.access.signInNotices["troppi-tentativi"],
+      });
     });
   });
 

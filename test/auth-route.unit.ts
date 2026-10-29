@@ -1,7 +1,14 @@
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forwardToAuth, handleAuthRequest, redirectWithCookies } from "../app/auth-route.server";
+import {
+  authLimitWait,
+  forwardToAuth,
+  handleAuthRequest,
+  redirectWithCookies,
+} from "../app/auth-route.server";
+import { limitedHeaders, pageHeaders } from "../app/request-limits.server";
+import { fakeRateLimiters } from "./fixtures/rate-limiter";
 
 const services = vi.hoisted(() => ({
   handler: vi.fn(),
@@ -62,6 +69,7 @@ vi.mock("../app/account-email.server", () => ({
 
 let sqlite: DatabaseSync;
 let environment: Env;
+let limiters: ReturnType<typeof fakeRateLimiters>;
 const now = 1_800_000_000_000;
 const member = (overrides = {}) => ({
   user: { id: "member", email: "member@example.invalid", emailVerified: true, ...overrides },
@@ -92,8 +100,10 @@ beforeEach(() => {
     user_id TEXT PRIMARY KEY, current_email TEXT, new_email TEXT, stage TEXT, expires_at TEXT
   )`);
   // La SQL del modulo viene eseguita realmente: soglie, finestre e pulizia non sono simulate.
+  limiters = fakeRateLimiters();
   environment = {
     APP_ORIGIN: "https://test.fiscalbay.it",
+    ...limiters,
     DB: {
       prepare(sql: string) {
         const statement = sqlite.prepare(sql);
@@ -272,6 +282,25 @@ describe("confine HTTP Auth", () => {
     ]);
   });
 
+  it("risponde 503 da riprovare quando Auth o il database non rispondono", async () => {
+    const error = new Error("synthetic");
+    services.handler.mockRejectedValue(error);
+    const input = request("/api/auth/session");
+    const response = await handleAuthRequest(input, environment);
+    expect(response.status).toBe(503);
+    expect(Object.fromEntries(response.headers)).toEqual({
+      "cache-control": "no-store",
+      "retry-after": "60",
+    });
+    expect(await response.text()).toBe("");
+    expect(services.failure).toHaveBeenCalledWith({
+      request: input,
+      code: "UPSTREAM_UNAVAILABLE",
+      error,
+      operation: "route",
+    });
+  });
+
   it.each([499, 500, 503])("registra gli errori solo da 500 (%i)", async (status) => {
     services.handler.mockResolvedValue(new Response("failure", { status }));
     const input = request("/api/auth/session");
@@ -349,20 +378,53 @@ describe("limiti dei tentativi", () => {
     ["/send-verification-email", 60],
     ["/request-password-reset", 60],
     ["/forget-password", 60],
-  ])("limita %s e riapre la finestra a %i secondi", async (path, seconds) => {
-    for (let count = 0; count < 3; count++) expect((await attempt(path)).status).toBe(202);
-    const response = await attempt(path);
-    expect(response.status).toBe(429);
-    expect(response.headers.get("retry-after")).toBe(String(seconds));
-    expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(await response.json()).toEqual({
-      code: "TOO_MANY_REQUESTS",
-      message: "Too many requests. Try again later.",
+  ])(
+    "limita %s per IP e riapre la finestra a %i secondi senza scrivere su D1",
+    async (path, seconds) => {
+      for (let count = 0; count < 3; count++) expect((await attempt(path)).status).toBe(202);
+      const response = await attempt(path);
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe(String(seconds));
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toEqual({
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many requests. Try again later.",
+      });
+      expect(services.handler).toHaveBeenCalledTimes(3);
+      expect(sqlite.prepare('SELECT count(*) AS total FROM "rateLimit"').get()?.total).toBe(0);
+      vi.setSystemTime(now + seconds * 1000);
+      expect((await attempt(path)).status).toBe(202);
+    },
+  );
+
+  it("scarta la richiesta oltre il limite prima di sessione, corpo e indirizzo", async () => {
+    const send = () =>
+      handle("/api/auth/change-email", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "203.0.113.9" },
+        body: JSON.stringify({ newEmail: "nuovo@example.invalid" }),
+      });
+    for (let count = 0; count < 3; count++) await send();
+    services.session.mockClear();
+    expect((await send()).status).toBe(429);
+    expect(services.session).not.toHaveBeenCalled();
+  });
+
+  it("non conta due volte un invio già ammesso dal modulo", async () => {
+    const page = request("/accesso", {
+      method: "POST",
+      headers: { "cf-connecting-ip": "203.0.113.7" },
     });
-    vi.setSystemTime(now + seconds * 1000 - 1001);
-    expect((await attempt(path)).headers.get("retry-after")).toBe("2");
-    vi.setSystemTime(now + seconds * 1000);
-    expect((await attempt(path)).status).toBe(202);
+    for (let count = 0; count < 3; count++) {
+      expect(await authLimitWait(environment, page, "/sign-up/email")).toBeNull();
+      expect((await forwardToAuth(environment, page, "/sign-up/email", {}, true)).status).toBe(202);
+    }
+    expect(await authLimitWait(environment, page, "/sign-up/email")).toBe(10);
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual(
+      Array(4).fill("auth/sign-up/email|203.0.113.7"),
+    );
+    expect(await authLimitWait(environment, page, "/session")).toBeNull();
+    expect(await authLimitWait(environment, request("/accesso"), "/sign-up/email")).toBeNull();
   });
 
   it.each([
@@ -457,6 +519,14 @@ describe("limiti dei tentativi", () => {
     expect((await send("/sign-in/email", longest)).status).toBe(429);
   });
 
+  it("le pagine trasmettono l'attesa dell'action oltre a no-store", () => {
+    expect(pageHeaders({ actionHeaders: new Headers(limitedHeaders(60)) })).toEqual({
+      "cache-control": "no-store",
+      "retry-after": "60",
+    });
+    expect(pageHeaders({ actionHeaders: new Headers() })).toEqual({ "cache-control": "no-store" });
+  });
+
   it("ignora GET, origine HTTP, IP assente e percorsi estranei", async () => {
     await handle("/api/auth/sign-in/email", { headers: { "cf-connecting-ip": "203.0.113.1" } });
     await handle("/api/auth/sign-in/email", { method: "POST" });
@@ -465,51 +535,56 @@ describe("limiti dei tentativi", () => {
     await attempt("/other/sign-in");
     await attempt("/other/passkey/verify-authentication");
     await attempt("/other/request-password-reset");
+    const email = JSON.stringify({ email: "vittima@example.invalid" });
     await handleAuthRequest(
       request("/api/auth/sign-in/email", {
         method: "POST",
         headers: { "cf-connecting-ip": "203.0.113.1" },
+        body: email,
       }),
       { ...environment, APP_ORIGIN: "http://localhost:5173" } as unknown as Env,
     );
+    await handle("/api/auth/sign-in/email", { method: "PUT", body: email });
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([]);
+    expect(limiters.REQUEST_LIMIT_EMAILS.keys).toEqual([]);
     expect(sqlite.prepare('SELECT count(*) AS total FROM "rateLimit"').get()?.total).toBe(0);
   });
 
-  it("isola IP e percorsi e raggruppa IPv6 per /64", async () => {
+  it("isola IP e percorsi, unifica le varianti del percorso e raggruppa IPv6 per /64", async () => {
     for (let count = 0; count < 3; count++)
       await attempt("/sign-in/email", "2001:db8:abcd:1234::1");
     expect((await attempt("/sign-in/email", "2001:db8:abcd:1234:0:0:0:2")).status).toBe(429);
+    expect(
+      (
+        await handle("/API/Auth//Sign-In/Email/", {
+          method: "POST",
+          headers: { "cf-connecting-ip": "2001:db8:abcd:1234::3" },
+        })
+      ).status,
+    ).toBe(429);
     expect((await attempt("/sign-in/email", "2001:db8:abcd:1235::1")).status).toBe(202);
     expect((await attempt("/sign-up/email", "2001:db8:abcd:1234::1")).status).toBe(202);
     expect((await attempt("/sign-in/email", "203.0.113.2")).status).toBe(202);
     expect((await attempt("/sign-in/email", "::1")).status).toBe(202);
-    expect(
-      sqlite
-        .prepare('SELECT key FROM "rateLimit" ORDER BY key')
-        .all()
-        .map((row) => row.key),
-    ).toEqual([
-      "0:0:0:0::/64|/sign-in/email",
-      "2001:db8:abcd:1234::/64|/sign-in/email",
-      "2001:db8:abcd:1234::/64|/sign-up/email",
-      "2001:db8:abcd:1235::/64|/sign-in/email",
-      "203.0.113.2|/sign-in/email",
-    ]);
+    expect(new Set(limiters.REQUEST_LIMIT_ATTEMPTS.keys)).toEqual(
+      new Set([
+        "auth/sign-in/email|2001:db8:abcd:1234::/64",
+        "auth/sign-in/email|2001:db8:abcd:1235::/64",
+        "auth/sign-up/email|2001:db8:abcd:1234::/64",
+        "auth/sign-in/email|203.0.113.2",
+        "auth/sign-in/email|0:0:0:0::/64",
+      ]),
+    );
   });
 
   it("raggruppa anche IPv6 completi e con compressione iniziale o interna", async () => {
     await attempt("/sign-in/email", "2001:db8:abcd:1234:0:0:0:1");
     await attempt("/sign-in/email", "2001::db8:abcd:1234:0:0:1");
     await attempt("/sign-in/email", "::db8:abcd:1234:0:0:1");
-    expect(
-      sqlite
-        .prepare('SELECT key FROM "rateLimit" ORDER BY key')
-        .all()
-        .map((row) => row.key),
-    ).toEqual([
-      "0:0:db8:abcd::/64|/sign-in/email",
-      "2001:0:db8:abcd::/64|/sign-in/email",
-      "2001:db8:abcd:1234::/64|/sign-in/email",
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([
+      "auth/sign-in/email|2001:db8:abcd:1234::/64",
+      "auth/sign-in/email|2001:0:db8:abcd::/64",
+      "auth/sign-in/email|0:0:db8:abcd::/64",
     ]);
   });
 
@@ -518,27 +593,33 @@ describe("limiti dei tentativi", () => {
       method: "POST",
       headers: { "cf-connecting-ip": "203.0.113.1" },
     });
-    expect(sqlite.prepare('SELECT key FROM "rateLimit"').get()?.key).toBe(
-      "203.0.113.1|/sign-in/api/auth/email",
-    );
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([
+      "auth/sign-in/api/auth/email|203.0.113.1",
+    ]);
   });
 
   it("pulisce soltanto le finestre chiuse da oltre un'ora con probabilità del 2%", async () => {
     sqlite.exec(
       `INSERT INTO "rateLimit" VALUES ('old', 'old', 1, ${now - 3600_001}), ('edge', 'edge', 1, ${now - 3600_000})`,
     );
+    const send = () =>
+      post("/sign-in/email", {
+        headers: { "cf-connecting-ip": "203.0.113.1" },
+        body: JSON.stringify({ email: "vittima@example.invalid" }),
+      });
     vi.spyOn(Math, "random").mockReturnValue(0.02);
-    await attempt("/sign-in/email");
+    await send();
     expect(services.background).not.toHaveBeenCalled();
     vi.spyOn(Math, "random").mockReturnValue(0.019);
-    await attempt("/sign-in/email");
+    await send();
     expect(services.background).toHaveBeenCalledOnce();
+    const digest = createHash("sha256").update("vittima@example.invalid").digest("hex");
     expect(
       sqlite
         .prepare('SELECT key FROM "rateLimit" ORDER BY key')
         .all()
         .map((row) => row.key),
-    ).toEqual(["203.0.113.1|/sign-in/email", "edge"]);
+    ).toEqual(["edge", `email:${digest}|/sign-in/email`]);
   });
 });
 
