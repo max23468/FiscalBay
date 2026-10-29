@@ -2089,6 +2089,36 @@ describe("file degli ordini", () => {
     expect(missing.ack).toHaveBeenCalledOnce();
   });
 
+  it("se il blocco non si libera dopo un errore, lo segnala e riprova allo scadere", async () => {
+    const id = await queuedJob();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failing = vi.spyOn(env.EXPORT_FILES, "put").mockRejectedValue(new Error("R2"));
+    const prepare = env.DB.prepare.bind(env.DB);
+    const release = vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) =>
+      sql.includes("SET locked_until = NULL WHERE id = ? AND state = 'queued'")
+        ? ({
+            bind: () => ({ run: () => Promise.reject(new Error("D1")) }),
+          } as unknown as D1PreparedStatement)
+        : prepare(sql),
+    );
+    try {
+      const message = queueMessage({ exportJob: id });
+      await consumeExportJob(message, env);
+      expect(message.retry).toHaveBeenCalledExactlyOnceWith({ delaySeconds: 30 });
+      // Il blocco resta fino alla scadenza: il tentativo seguente parte comunque dopo.
+      expect(await job(id)).toMatchObject({ state: "queued", locked_until: hours(0.25) });
+      // Una segnalazione per l'errore del lavoro e una per il blocco rimasto.
+      expect(errors.mock.calls.map(([entry]) => JSON.parse(entry).operation)).toEqual([
+        "export_files",
+        "export_files",
+      ]);
+    } finally {
+      release.mockRestore();
+      failing.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
   it("la ripresa oraria riaccoda un lavoro interrotto e due consumer creano un solo file", async () => {
     const id = await queuedJob();
     // Un consumer prende il lavoro e si interrompe senza concluderlo.
