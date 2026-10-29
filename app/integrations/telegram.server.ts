@@ -217,10 +217,10 @@ function rejection(description: string | undefined) {
 function botReply(text: string) {
   try {
     return replySchema.safeParse(JSON.parse(text)).data;
-    // Stryker disable next-line BlockStatement: un blocco vuoto restituisce lo stesso undefined.
   } catch {
-    return undefined;
+    // Corpo che non è JSON: nessuna risposta da leggere.
   }
+  return undefined;
 }
 
 /**
