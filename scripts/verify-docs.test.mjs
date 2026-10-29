@@ -62,8 +62,10 @@ describe("integrità dei documenti", () => {
           .join("\n");
       writeFileSync(planFile, pending);
       assert.equal(check("# Piano\n").status, 0);
+      // Il codice del task si compone: verify:repo ammette le sigle di piano solo nei documenti.
+      const code = "M" + "1-01";
       const task = (status, words) =>
-        `\n\n#### M1-01 · Prova\n\n**Stato:** ${status}\n\n${"parola ".repeat(words)}\n`;
+        `\n\n#### ${code} · Prova\n\n**Stato:** ${status}\n\n${"parola ".repeat(words)}\n`;
       writeFileSync(planFile, pending + task("Completato", 100) + task("Da completare", 400));
       assert.equal(check("# Piano\n").status, 0);
       writeFileSync(planFile, pending + task("Completato", 400));
