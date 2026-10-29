@@ -57,3 +57,10 @@ export function accountMenu(links: AppLinks, t: AppCopy, whatsNew = false): Acco
       : []),
   ];
 }
+
+/** Sezione dell'area: la parte dell'indirizzo dopo `app` o `anteprima`. */
+export function areaSection(pathname: string) {
+  const parts = pathname.split("/");
+  const at = parts.findIndex((part) => part === "app" || part === "anteprima");
+  return at < 0 ? "" : (parts[at + 1] ?? "");
+}

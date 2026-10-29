@@ -118,6 +118,36 @@
   }
 }
 
+/*
+ * Caricamento di una pagina: dopo 150 ms la barra avanza rallentando senza arrivare in fondo,
+ * all'arrivo si completa e svanisce. Con il movimento ridotto restano gli stati, senza corsa.
+ */
+@utility navigation-progress {
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  height: 2px;
+  background: var(--primary);
+  transform-origin: left;
+  scale: 0 1;
+  opacity: 0;
+  pointer-events: none;
+  &[data-phase="loading"] {
+    scale: 0.9 1;
+    opacity: 1;
+    transition:
+      scale 8s cubic-bezier(0.1, 0.7, 0.2, 1) var(--duration-quick),
+      opacity 0s linear var(--duration-quick);
+  }
+  &[data-phase="done"] {
+    scale: 1 1;
+    opacity: 0;
+    transition:
+      scale var(--duration-quick) var(--ease-smooth-out),
+      opacity var(--duration-fast) var(--ease-smooth-out) var(--duration-quick);
+  }
+}
+
 @utility fiscal-reveal {
   & [data-slot="button"] {
     animation: value-reveal var(--duration-quick) ease-out 100ms both;

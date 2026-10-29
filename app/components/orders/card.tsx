@@ -292,6 +292,7 @@ export function OrderCard({
   unlocking,
   onUnlock,
   isNew,
+  position,
   confirmUnlock,
   enterIndex,
   actions,
@@ -304,6 +305,11 @@ export function OrderCard({
   selected: boolean;
   onSelect: (selected: boolean) => void;
   isNew: boolean;
+  /**
+   * Posizione nell'elenco. La scheda si rimisura per il riordino soltanto quando cambia, non a
+   * ogni aggiornamento della pagina come la selezione.
+   */
+  position: number;
   /** Posizione tra le schede comparse insieme, per l’ingresso scalato; assente per i nuovi ordini in cima. */
   enterIndex?: number;
   actions: SecondaryActions;
@@ -320,6 +326,7 @@ export function OrderCard({
     // spostano con un riordino FLIP invece di saltare.
     <m.article
       layout="position"
+      layoutDependency={position}
       initial={isNew ? { opacity: 0, y: -4 } : false}
       animate={{ opacity: 1, y: 0 }}
       aria-labelledby={titleId}

@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import features from "../app/components/orders/motion-features";
+import { areaSection } from "../app/components/shell-links";
+import { pendingList } from "../app/orders/order-list";
 import {
   exportHref,
   exportOrderHref,
@@ -80,5 +82,39 @@ describe("ambito dell'esportazione dagli Ordini", () => {
     const scope = exportScope(new URLSearchParams({ ordini: ids.join(",") }));
     expect(scope?.kind === "orders" && scope.ids.length).toBe(300);
     expect(scope?.kind === "orders" && scope.ids.slice(0, 2)).toEqual(["o-1", "n-0"]);
+  });
+});
+
+describe("elenco Ordini in arrivo", () => {
+  const list = { pathname: "/app/ordini", search: "?periodo=30&mostra=2&vista=abc" };
+
+  it("mostra subito i nuovi criteri e attenua l'elenco soltanto se cambiano", () => {
+    expect(pendingList(list, { pathname: "/app/ordini", search: "?periodo=7" })).toEqual({
+      search: "?periodo=7",
+      changing: true,
+    });
+    // «Carica altri» e i nuovi ordini cambiano pagine e istantanea, non i criteri.
+    expect(
+      pendingList(list, { pathname: "/app/ordini", search: "?periodo=30&mostra=3&vista=abc" }),
+    ).toEqual({ search: "?periodo=30&mostra=3&vista=abc", changing: false });
+  });
+
+  it("resta sull'elenco mostrato se la navigazione va altrove o non c'è", () => {
+    expect(pendingList(list, undefined)).toEqual({ search: list.search, changing: false });
+    // Aprire un dettaglio cambia il percorso: filtri ed elenco non si muovono.
+    expect(pendingList(list, { pathname: "/app/ordini/o-1", search: "?periodo=7" })).toEqual({
+      search: list.search,
+      changing: false,
+    });
+  });
+});
+
+describe("sezione dell'area", () => {
+  it("è la parte dopo app o anteprima, in entrambe le lingue", () => {
+    expect(areaSection("/app/ordini/o-1")).toBe("ordini");
+    expect(areaSection("/en/app/impostazioni/sicurezza")).toBe("impostazioni");
+    expect(areaSection("/en/anteprima/negozi")).toBe("negozi");
+    expect(areaSection("/app/profilo")).toBe("profilo");
+    expect(areaSection("/accesso")).toBe("");
   });
 });

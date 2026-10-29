@@ -47,6 +47,25 @@ export function withoutListPosition(params: URLSearchParams): URLSearchParams {
   return next;
 }
 
+/** Criteri dell'elenco: due indirizzi con la stessa chiave mostrano gli stessi ordini. */
+export function listKey(search: string): string {
+  return withoutListPosition(new URLSearchParams(search)).toString();
+}
+
+/**
+ * Indirizzo dell'elenco da mostrare nei controlli: durante una navigazione che resta sulla stessa
+ * pagina vale quello in arrivo, così un filtro appena scelto non torna al valore precedente.
+ * `changing` dice se cambiano i criteri e non soltanto le pagine caricate o l'istantanea.
+ */
+export function pendingList(
+  current: { pathname: string; search: string },
+  next: { pathname: string; search: string } | undefined,
+): { search: string; changing: boolean } {
+  if (!next || next.pathname !== current.pathname)
+    return { search: current.search, changing: false };
+  return { search: next.search, changing: listKey(next.search) !== listKey(current.search) };
+}
+
 /**
  * L'unico cambio è l'istantanea aggiunta all'indirizzo che ne era privo: la pagina la riceve
  * già dalla risposta che sta mostrando e non serve una nuova lettura.
