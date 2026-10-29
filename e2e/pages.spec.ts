@@ -130,10 +130,12 @@ for (const scenario of scenarios) {
             return;
           }
           if (scenario.path.endsWith("/sitemap.xml")) {
-            // Pagine canoniche dell'origine servita, senza Termini e Privacy `noindex`.
+            // Pagine canoniche dell'origine dell'app, senza Termini e Privacy `noindex`: la build
+            // Production dichiara il proprio dominio anche quando la serve la preview locale.
             expect(response.headers()["content-type"]).toMatch(/^application\/xml/u);
             const xml = await response.text();
-            expect(xml).toContain(`<loc>${new URL("/prezzi", baseURL).href}</loc>`);
+            const origin = production ? "https://fiscalbay.it" : baseURL;
+            expect(xml).toContain(`<loc>${new URL("/prezzi", origin).href}</loc>`);
             expect(xml).not.toMatch(/termini|privacy/u);
             checked("HTTP e sitemap");
             return;
