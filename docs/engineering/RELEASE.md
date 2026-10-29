@@ -70,6 +70,11 @@ Il workflow Production con `prova=true` conserva un artefatto `candidate-<tree>`
 
 La ricerca del candidato ammette soltanto artefatti non scaduti dello stesso tree, dal job di certificazione riuscito del workflow Production del repository. Un errore successivo di deploy non annulla la qualifica locale; prima del riuso si ricontrolla il manifest Production. La pubblicazione reale conserva readiness, checkpoint, via sul commit, migration, verifica provider, collaudo remoto e release. Una prova non distribuisce né autorizza Production.
 
+<a id="contenuto-delle-pr"></a>
+### Contenuto delle PR
+
+Fix ordinari, refactoring e miglioramenti dei test si descrivono nella PR, senza una modifica fittizia del piano. Le modifiche documentali ordinarie viaggiano con la PR di contenuto successiva; una PR solo documentale serve per decisioni dell'owner, checkpoint o istruzioni da applicare subito. Le ipotesi diagnostiche su CI o test remoto si provano sul branch e confluiscono in una sola PR. Il readback del deploy test conferma la PR integrata; un esito negativo apre la PR di correzione, che registra il difetto. Le pendenze ancora utili alla ripresa restano nelle questioni aperte del piano.
+
 <a id="ciclo-operativo"></a>
 ### Ciclo operativo
 
