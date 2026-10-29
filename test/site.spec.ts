@@ -16,10 +16,12 @@ import { sitemap } from "../app/routes/sitemap";
 import { indexable, isProductionOrigin } from "../app/app-links";
 import { appCopy, infoEmail } from "../app/app-copy";
 import { adminCopy } from "../app/copy/admin-copy";
+import { legalDocuments, type LegalSection } from "../app/copy/legal-documents.server";
 import { sitePages } from "../app/copy/site-pages.server";
 import { italianGross } from "../app/catalog";
 import { freeStoreChangeDays } from "../app/domain/free-store.server";
 import { trialDays } from "../app/domain/grants.server";
+import { legalVersions } from "../app/domain/registration.server";
 import { freeHistoryDays } from "../app/domain/history-window.server";
 import { formatDate } from "../app/format";
 import { siteMeta } from "../app/site-meta";
@@ -361,10 +363,9 @@ describe("pagine del sito pubblico", () => {
           : [];
     const operator = (value: unknown) => texts(value).filter((text) => text.includes("Temisfera"));
     for (const language of ["it", "en"] as const) {
-      const { legal, ...pages } = sitePages[language];
-      const { operator: legalOperator, ...legalPages } = legal;
-      expect(operator([appCopy[language], adminCopy[language], pages, legalPages])).toEqual([]);
-      expect(operator(legalOperator)).toHaveLength(2);
+      expect(operator([appCopy[language], adminCopy[language], sitePages[language]])).toEqual([]);
+      for (const document of ["termini", "privacy"] as const)
+        expect(operator(legalDocuments[language][document][0])).not.toEqual([]);
     }
     const prefix = (language: "it" | "en") => (language === "it" ? "" : "/en");
     for (const language of ["it", "en"] as const) {
@@ -384,9 +385,48 @@ describe("pagine del sito pubblico", () => {
     }
   });
 
-  it("distingue Termini e Privacy con la versione del documento", async () => {
-    expect(await callRoute(loadLegal, "/privacy")).toMatchObject({ document: "privacy" });
-    expect(await callRoute(loadLegal, "/en/termini")).toMatchObject({ document: "termini" });
+  it("distingue Termini e Privacy con la versione e il testo del documento", async () => {
+    expect(await callRoute(loadLegal, "/privacy")).toMatchObject({
+      document: "privacy",
+      version: legalVersions.privacy,
+      sections: legalDocuments.it.privacy,
+    });
+    expect(await callRoute(loadLegal, "/en/termini")).toMatchObject({
+      document: "termini",
+      version: legalVersions.terms,
+      sections: legalDocuments.en.termini,
+    });
+  });
+
+  it("tiene allineati Termini e Privacy nelle due lingue", () => {
+    const shape = (sections: LegalSection[]) =>
+      sections.map(({ blocks }) =>
+        blocks.map((block) =>
+          typeof block === "string"
+            ? "p"
+            : "items" in block
+              ? block.items.length
+              : [block.head.length, block.rows.map((row) => row.length)],
+        ),
+      );
+    for (const document of ["termini", "privacy"] as const)
+      expect(shape(legalDocuments.en[document])).toEqual(shape(legalDocuments.it[document]));
+    // Il contatto è info@, mai l'assistenza clienti; nessun segnaposto rimasto nei testi.
+    const text = JSON.stringify(legalDocuments);
+    expect(text).toContain(infoEmail);
+    expect(text).not.toContain("supporto@");
+    // La pagina collega il contatto una volta per blocco.
+    const blocks = Object.values(legalDocuments).flatMap((documents) =>
+      Object.values(documents).flatMap((sections) =>
+        sections.flatMap(({ blocks }) =>
+          blocks.flatMap((block) =>
+            typeof block === "string" ? [block] : "items" in block ? block.items : [],
+          ),
+        ),
+      ),
+    );
+    for (const block of blocks) expect(block.split(infoEmail).length).toBeLessThanOrEqual(2);
+    expect(text).not.toMatch(/\[(da rileggere|to be checked|link)/iu);
   });
 
   it("mostra i posti lifetime reali, gli acquisti sospesi e la promozione in corso", async () => {

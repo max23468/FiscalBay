@@ -213,7 +213,7 @@ const it = {
       },
       {
         title: "Dati nell’Unione Europea",
-        body: "Database e file esportati restano su server Cloudflare nell’Unione Europea.",
+        body: "Ordini, dati fiscali e file esportati restano su server Cloudflare nell’Unione Europea. Pagamenti, assistenza e Telegram seguono i fornitori indicati nell’Informativa privacy.",
       },
       {
         title: "Accesso protetto",
@@ -236,11 +236,11 @@ const it = {
       },
       {
         title: "Quanto conserviamo",
-        body: "Gli ordini restano consultabili nella finestra del tuo piano: 30 giorni con Free, un anno con Premium. Quando elimini un negozio o l’account, i suoi dati vengono cancellati.",
+        body: "Gli ordini restano consultabili nella finestra del tuo piano: 30 giorni con Free, un anno con Premium. Quando elimini un negozio o l’account, i suoi dati vengono cancellati, salvo i pochi dati minimi indicati nell’Informativa privacy.",
       },
       {
         title: "Accesso all’account",
-        body: "Accedi con passkey, Google, eBay oppure email e password, con l’indirizzo email confermato. In Impostazioni, Sicurezza, vedi le sessioni attive e chiudi quelle che non riconosci.",
+        body: "Accedi con passkey, Google, eBay oppure email e password. Per collegare un negozio serve l’indirizzo email confermato. In Impostazioni, Sicurezza, vedi le sessioni attive e chiudi quelle che non riconosci.",
       },
     ],
     notTitle: "Cosa non facciamo",
@@ -300,7 +300,7 @@ const it = {
       },
       {
         q: "Dove sono conservati i dati?",
-        a: "Su server Cloudflare nell’Unione Europea. Quando elimini un negozio o l’account, i suoi dati vengono cancellati.",
+        a: "Ordini, dati fiscali e file esportati sono conservati su server Cloudflare nell’Unione Europea. Pagamenti, assistenza e Telegram seguono i fornitori indicati nell’Informativa privacy. Quando elimini un negozio o l’account, i suoi dati vengono cancellati, salvo i pochi dati minimi indicati nell’Informativa privacy.",
       },
     ],
     more: "Non trovi la risposta?",
@@ -319,17 +319,6 @@ const it = {
     description: {
       termini: "Termini di servizio di FiscalBay.",
       privacy: "Informativa privacy di FiscalBay.",
-    },
-    /** L'operatore compare soltanto qui, senza nome della persona, sede o P.IVA (D204). */
-    operator: {
-      termini: {
-        title: "Chi gestisce FiscalBay",
-        body: "FiscalBay è un servizio di Temisfera. Per domande su questi termini scrivi a",
-      },
-      privacy: {
-        title: "Titolare del trattamento",
-        body: "Il titolare del trattamento è Temisfera, che gestisce FiscalBay. Per domande sulla privacy o per esercitare i tuoi diritti scrivi a",
-      },
     },
   },
 };
@@ -539,7 +528,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "Data in the European Union",
-        body: "The database and exported files stay on Cloudflare servers in the European Union.",
+        body: "Orders, tax data and exported files stay on Cloudflare servers in the European Union. Payments, support and Telegram follow the providers listed in the Privacy policy.",
       },
       {
         title: "Protected sign-in",
@@ -562,11 +551,11 @@ const en: SitePagesCopy = {
       },
       {
         title: "How long we keep data",
-        body: "Orders stay available within your plan’s window: 30 days on Free, one year on Premium. When you delete a store or your account, its data is erased.",
+        body: "Orders stay available within your plan’s window: 30 days on Free, one year on Premium. When you delete a store or your account, its data is erased, except for the minimal data listed in the Privacy policy.",
       },
       {
         title: "Signing in",
-        body: "Sign in with a passkey, Google, eBay or email and password, with a confirmed email address. In Settings, Security, you see your active sessions and close the ones you do not recognise.",
+        body: "Sign in with a passkey, Google, eBay or email and password. Connecting a store requires a confirmed email address. In Settings, Security, you see your active sessions and close the ones you do not recognise.",
       },
     ],
     notTitle: "What we don’t do",
@@ -626,7 +615,7 @@ const en: SitePagesCopy = {
       },
       {
         q: "Where is the data stored?",
-        a: "On Cloudflare servers in the European Union. When you delete a store or your account, its data is erased.",
+        a: "Orders, tax data and exported files are stored on Cloudflare servers in the European Union. Payments, support and Telegram follow the providers listed in the Privacy policy. When you delete a store or your account, its data is erased, except for the minimal data listed in the Privacy policy.",
       },
     ],
     more: "Can’t find the answer?",
@@ -644,16 +633,6 @@ const en: SitePagesCopy = {
     description: {
       termini: "FiscalBay terms of service.",
       privacy: "FiscalBay privacy policy.",
-    },
-    operator: {
-      termini: {
-        title: "Who runs FiscalBay",
-        body: "FiscalBay is a service by Temisfera. For questions about these terms, write to",
-      },
-      privacy: {
-        title: "Data controller",
-        body: "The data controller is Temisfera, which runs FiscalBay. For privacy questions or to exercise your rights, write to",
-      },
     },
   },
 };

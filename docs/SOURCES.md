@@ -154,7 +154,7 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 - [How Managed Payments works](https://docs.stripe.com/payments/managed-payments/how-it-works)
 - [Aggiornamento Checkout Managed Payments](https://docs.stripe.com/payments/managed-payments/update-checkout)
 
-**Osservato nella revisione:** vincoli di Checkout e dominio personalizzato; ruolo Link/Portal e contatti di supporto; cancellazione finanziaria tramite Link che può annullare abbonamenti e rimuovere oggetti nell’account del fornitore. Le prove di acquisti visibili in Link e invio ricevute non sono equivalenti tra sandbox e live.
+**Osservato nella revisione:** il cliente vede Link come venditore, con condizioni di pagamento nel checkout, assistenza e rimborsi tramite Link (in alcuni casi entro 60 giorni) e addebito `LINK.COM*` seguito dal descriptor (riletto il 2026-10-29 per D230); vincoli di Checkout e dominio personalizzato; ruolo Link/Portal e contatti di supporto; cancellazione finanziaria tramite Link che può annullare abbonamenti e rimuovere oggetti nell’account del fornitore. Le prove di acquisti visibili in Link e invio ricevute non sono equivalenti tra sandbox e live.
 
 **Uso:** §6.5–6.6, §36.2; M0-08, M5-03/06/08/12, M9-01. Verificare nell’account effettivo; nessuna capability live certificata dalla lettura.
 
@@ -382,7 +382,11 @@ Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazion
 - [DMARC Management e report aggregati](https://developers.cloudflare.com/dmarc-management/)
 - [Attivazione DMARC Management](https://developers.cloudflare.com/dmarc-management/enable/)
 - [Certificate Transparency Monitoring](https://developers.cloudflare.com/ssl/edge-certificates/additional-options/certificate-transparency-monitoring/)
+- [Conservazione degli eventi di sicurezza](https://developers.cloudflare.com/waf/analytics/security-events/)
+- [Invocation logs dei Workers Logs](https://developers.cloudflare.com/workers/observability/logs/workers-logs/)
 
 **Verifica del 2026-10-12:** il Free Managed Ruleset è distribuito per default sul Free; il piano Free della zona ammette cinque regole WAF personalizzate e una di rate limiting. Bot Fight Mode non consente eccezioni con le regole WAF. HSTS richiede HTTPS qualificato, con sottodomini e preload da valutare separatamente. Cloudflare offre modifica degli header; l'effetto sulle risposte Workers/asset va provato sul sito effettivo. DMARC Management è disponibile con Cloudflare DNS su tutti i piani ed è indicato come beta nelle pagine operative: aggiunge `rua` al record esistente per ricevere report aggregati. CT Monitoring avvisa delle emissioni presenti nei log pubblici CT, filtrando quelle gestite da Cloudflare; non rileva domini imitativi. Nessuno di questi dati documentali attesta piano, toggle, regole o destinatari attivi su fiscalbay.it.
+
+**Verifica del 2026-10-29:** Security Events e Security Analytics conservano 31 giorni su ogni piano; la documentazione di DMARC Management non indica una durata dei report. Le invocation logs dei Workers Logs registrano richiesta e risposta; riletti sul test, contengono indirizzo completo, IP, browser e posizione approssimativa, non il cookie di sessione.
 
 **Uso:** §24, §29–31; M6-06, M7-04, M7-07, M7-12, M8-03 e M9-03. Qualificare configurazione, regressioni e rientro nei task competenti prima dell'apertura pubblica; nessun upgrade della zona autorizzato dall'inclusione documentale.
