@@ -29,6 +29,8 @@ import {
 } from "./domain/sign-in-methods.server";
 import { appCopy } from "./app-copy";
 import { localizedPath } from "./i18n";
+import { turnstileActions } from "./turnstile";
+import { turnstileFailure } from "./turnstile.server";
 import type { ActionResult } from "./view-models";
 
 /** Esito della conferma dell'identità, letto dal riquadro senza lasciare la pagina. */
@@ -153,6 +155,8 @@ export async function securityAction(
   // Il link al proprio indirizzo imposta o cambia la password; al reset crea l'account
   // credential che manca a chi è entrato con Google, eBay o passkey.
   if (intent === "password") {
+    const check = await turnstileFailure(env, request, form, turnstileActions.passwordReset);
+    if (check) return notice(check);
     const response = await forwardToAuth(env, request, "/request-password-reset", {
       email: session.user.email,
       redirectTo: appUrl(env, language, accessPath),
@@ -189,6 +193,10 @@ export async function securityAction(
   }
 
   if (intent === "cambia-email" || intent === "reinvia-email") {
+    if (intent === "reinvia-email") {
+      const check = await turnstileFailure(env, request, form, turnstileActions.emailLink);
+      if (check) return notice(check);
+    }
     const pending =
       intent === "reinvia-email"
         ? await pendingEmailChange(env.DB, session.user.id, session.user.email)

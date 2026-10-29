@@ -32,6 +32,7 @@ const fixtureHosts = new Set([
   "i.ebayimg.sandbox.ebay.com",
   "api.telegram.org",
   "api.cloudflare.com",
+  "challenges.cloudflare.com",
   "t.me",
   "www.w3.org",
   "schemas.openxmlformats.org",

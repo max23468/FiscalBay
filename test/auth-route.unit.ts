@@ -127,6 +127,9 @@ describe("confine HTTP Auth", () => {
     "unlink-account",
     "list-sessions",
     "update-session",
+    "sign-up/email",
+    "request-password-reset",
+    "send-verification-email",
   ])("chiude %s anche con slash finali", async (path) => {
     for (const suffix of ["", "/", "///"]) {
       const response = await handle(`/api/auth/${path}${suffix}`);
@@ -322,11 +325,19 @@ describe("confine HTTP Auth", () => {
 });
 
 describe("limiti dei tentativi", () => {
+  // Registrazione, recupero e nuovo link arrivano soltanto dai moduli, inoltrati ad Auth.
+  const formOnly = ["/sign-up/email", "/request-password-reset", "/send-verification-email"];
+  const post = (path: string, init: { headers: Record<string, string>; body?: string }) =>
+    formOnly.includes(path)
+      ? forwardToAuth(
+          environment,
+          request("/accesso", { method: "POST", headers: init.headers }),
+          path,
+          init.body ? JSON.parse(init.body) : {},
+        )
+      : handle(`/api/auth${path}`, { method: "POST", ...init });
   const attempt = (path: string, ip = "203.0.113.1") =>
-    handle(`/api/auth${path}`, {
-      method: "POST",
-      headers: { "cf-connecting-ip": ip },
-    });
+    post(path, { headers: { "cf-connecting-ip": ip } });
 
   it.each([
     ["/sign-in/email", 10],
@@ -364,8 +375,7 @@ describe("limiti dei tentativi", () => {
     async (path, max, seconds) => {
       let ip = 0;
       const send = (email: string) =>
-        handle(`/api/auth${path}`, {
-          method: "POST",
+        post(path, {
           headers: { "cf-connecting-ip": `203.0.113.${++ip}` },
           body: JSON.stringify({ email }),
         });

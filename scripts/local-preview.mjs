@@ -38,6 +38,9 @@ writeFileSync(
     "EBAY_CLIENT_ID=ebay-test-client",
     "EBAY_CLIENT_SECRET=ebay-test-secret",
     "EBAY_RUNAME=ebay-test-runame",
+    // Chiavi di prova di Cloudflare: il loro esito vale soltanto sull'origine locale.
+    "TURNSTILE_SITE_KEY=1x00000000000000000000AA",
+    "TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA",
     "",
   ].join("\n"),
   { mode: 0o600 },

@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import {
   isRouteErrorResponse,
   Links,
@@ -38,6 +39,8 @@ export function loader({ request }: Route.LoaderArgs) {
   return {
     language: languageFromPath(new URL(request.url).pathname),
     correlationId: correlationId(request),
+    // Chiave pubblica del widget Turnstile dell'ambiente, per i moduli che la usano.
+    turnstileSiteKey: env.TURNSTILE_SITE_KEY,
   };
 }
 

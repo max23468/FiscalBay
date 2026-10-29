@@ -39,6 +39,10 @@ const secrets = {
   EBAY_CLIENT_ID: bindings.secret(),
   EBAY_CLIENT_SECRET: bindings.secret(),
   EBAY_RUNAME: bindings.secret(),
+  // Widget Turnstile dell'ambiente: la chiave del sito è pubblica e arriva al browser, ma nasce
+  // con il widget insieme alla chiave segreta per Siteverify e si imposta con lei.
+  TURNSTILE_SITE_KEY: bindings.secret(),
+  TURNSTILE_SECRET_KEY: bindings.secret(),
 };
 
 const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(target: {

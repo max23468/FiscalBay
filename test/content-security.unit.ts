@@ -8,7 +8,7 @@ describe("CSP dei documenti", () => {
     for (const nonce of nonces) expect(atob(nonce)).toHaveLength(16);
   });
 
-  it("ammette solo script dell'origine o con il nonce e nessuna inclusione in frame", () => {
+  it("ammette solo script dell'origine, con il nonce o di Turnstile e nessuna inclusione in frame", () => {
     const directives = new Map(
       contentSecurityPolicy("bm9uY2U=")
         .split("; ")
@@ -17,10 +17,16 @@ describe("CSP dei documenti", () => {
           return [name!, sources] as const;
         }),
     );
-    expect(directives.get("script-src")).toEqual(["'self'", "'nonce-bm9uY2U='"]);
+    expect(directives.get("script-src")).toEqual([
+      "'self'",
+      "'nonce-bm9uY2U='",
+      "https://challenges.cloudflare.com",
+    ]);
+    // Il solo frame ammesso è il widget Turnstile.
+    expect(directives.get("frame-src")).toEqual(["https://challenges.cloudflare.com"]);
     expect(directives.get("default-src")).toEqual(["'self'"]);
     expect(directives.get("connect-src")).toEqual(["'self'"]);
-    for (const name of ["object-src", "base-uri", "frame-ancestors", "frame-src"])
+    for (const name of ["object-src", "base-uri", "frame-ancestors"])
       expect(directives.get(name), name).toEqual(["'none'"]);
     // Immagini: origine, segnaposto `data:` dell'anteprima e i soli host eBay qualificati.
     expect(directives.get("img-src")).toEqual([
