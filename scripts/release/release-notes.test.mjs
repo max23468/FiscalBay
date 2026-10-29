@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { assertBrowserEvidence } from "./release-notes.mjs";
+import { assertBrowserEvidence, releaseStep } from "./release-notes.mjs";
 
 describe("pubblicazione riprendibile", () => {
   const manifest = { sha: "a".repeat(40), tree: "tree", digest: "artifact", environment: "test" };
@@ -28,5 +28,19 @@ describe("pubblicazione riprendibile", () => {
         () => assertBrowserEvidence({ ...evidence, ...change }, manifest.sha),
         /Collaudo/u,
       );
+  });
+
+  it("riprende dopo un tag riuscito senza ripeterlo né spostarlo", () => {
+    const tag = "v2.0.0-rc.1";
+    const published = [{ tag_name: tag, draft: false }];
+    assert.equal(releaseStep(undefined, [], tag, manifest.sha), "create");
+    // Tag creato da un tentativo interrotto prima della release, o release rimasta in bozza.
+    assert.equal(releaseStep(manifest.sha, [], tag, manifest.sha), "create");
+    assert.equal(
+      releaseStep(manifest.sha, [{ tag_name: tag, draft: true }], tag, manifest.sha),
+      "create",
+    );
+    assert.equal(releaseStep(manifest.sha, published, tag, manifest.sha), "done");
+    assert.throws(() => releaseStep("b".repeat(40), published, tag, manifest.sha), /altro commit/u);
   });
 });

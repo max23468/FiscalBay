@@ -29,6 +29,17 @@ export function assertBrowserEvidence(browser, sha) {
     throw new Error("Collaudo incompleto o di un altro candidato/ambiente.");
 }
 
+/**
+ * Passo del tag nella ripresa: «done» se tag e release pubblicata esistono già sul commit,
+ * «create» se manca la release, anche con il tag già creato da un tentativo interrotto. Un tag
+ * su un altro commit non si riscrive.
+ */
+export function releaseStep(tagTarget, releases, tag, sha) {
+  if (tagTarget === undefined) return "create";
+  if (tagTarget !== sha) throw new Error("Tag già pubblicato su un altro commit.");
+  return releases.some((release) => release.tag_name === tag && !release.draft) ? "done" : "create";
+}
+
 async function main() {
   const version = process.argv[2];
   const notes = releaseNotes(readFileSync("CHANGELOG.md", "utf8"), version);
@@ -61,17 +72,14 @@ async function main() {
   const tag = `v${version}`;
   const refs = JSON.parse(gh("api", `repos/${repo}/git/matching-refs/tags/${tag}`));
   const existing = refs.find((ref) => ref.ref === `refs/tags/${tag}`);
-  if (existing) {
-    const target =
-      existing.object.type === "tag"
-        ? JSON.parse(gh("api", `repos/${repo}/git/tags/${existing.object.sha}`)).object.sha
-        : existing.object.sha;
-    if (target !== sha) throw new Error("Tag già pubblicato su un altro commit.");
-    const releases = JSON.parse(
-      gh("api", "--paginate", "--slurp", `repos/${repo}/releases?per_page=100`),
-    ).flat();
-    if (releases.some((release) => release.tag_name === tag && !release.draft)) return;
-  }
+  const target =
+    existing?.object.type === "tag"
+      ? JSON.parse(gh("api", `repos/${repo}/git/tags/${existing.object.sha}`)).object.sha
+      : existing?.object.sha;
+  const releases = existing
+    ? JSON.parse(gh("api", "--paginate", "--slurp", `repos/${repo}/releases?per_page=100`)).flat()
+    : [];
+  if (releaseStep(target, releases, tag, sha) === "done") return;
   gh(
     "release",
     "create",
