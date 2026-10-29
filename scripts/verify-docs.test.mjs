@@ -62,6 +62,14 @@ describe("integrità dei documenti", () => {
           .join("\n");
       writeFileSync(planFile, pending);
       assert.equal(check("# Piano\n").status, 0);
+      const task = (status, words) =>
+        `\n\n#### M1-01 · Prova\n\n**Stato:** ${status}\n\n${"parola ".repeat(words)}\n`;
+      writeFileSync(planFile, pending + task("Completato", 100) + task("Da completare", 400));
+      assert.equal(check("# Piano\n").status, 0);
+      writeFileSync(planFile, pending + task("Completato", 400));
+      const long = check("# Piano\n");
+      assert.equal(long.status, 1);
+      assert.ok(long.errors.some((error) => error.code === "TASK_LENGTH"));
       for (const invalid of [
         "",
         pending.replace("commerciale", "assente"),

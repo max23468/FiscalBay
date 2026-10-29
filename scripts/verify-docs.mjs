@@ -25,6 +25,8 @@ for (let i = 0; i < args.length; i++) {
     process.exit(2);
   }
 }
+// Un task completato riassume la capacità consegnata: prove e cronaca restano in PR e CI.
+const COMPLETED_TASK_WORDS = 150;
 const errors = [],
   stats = {};
 const error = (code, detail) => errors.push({ code, detail });
@@ -199,6 +201,13 @@ function main() {
   stats.decisions = decisions.size;
   const masterPlan = documents.get(path.join(root, "docs/MASTER_PLAN.md"));
   if (masterPlan !== undefined) {
+    for (const task of masterPlan.split(/^(?=#{2,4} )/m)) {
+      const title = task.match(/^#### (M\d+-\d+)/);
+      if (!title || !/\*\*Stato:\*\* Completato\b/.test(task)) continue;
+      const words = task.split(/\s+/).filter(Boolean).length;
+      if (words > COMPLETED_TASK_WORDS)
+        error("TASK_LENGTH", `${title[1]}: ${words} parole, al massimo ${COMPLETED_TASK_WORDS}`);
+    }
     try {
       productionReadiness(masterPlan, false);
     } catch {
