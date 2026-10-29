@@ -35,6 +35,13 @@ const closedAuthPaths = new Set([
   "/api/auth/list-sessions",
   "/api/auth/update-session",
 ]);
+// Registrazione con password, recupero della password e nuovo link di conferma passano soltanto
+// dai moduli dell'app, che verificano prima Turnstile: chiamati direttamente lo aggirerebbero.
+const formOnlyPaths = new Set([
+  "/api/auth/sign-up/email",
+  "/api/auth/request-password-reset",
+  "/api/auth/send-verification-email",
+]);
 const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/generate-register-options",
   "/api/auth/passkey/verify-registration",
@@ -381,7 +388,8 @@ export function handleAuthRequest(
     .toLowerCase()
     .replace(/\/{2,}/gu, "/")
     .replace(/\/$/u, "");
-  if (closedAuthPaths.has(pathname)) return new Response(null, { status: 404 });
+  if (closedAuthPaths.has(pathname) || formOnlyPaths.has(pathname))
+    return new Response(null, { status: 404 });
   if (pathname === deletionCallbackPath) return handleDeletionCallback(request, env);
   if (pathname !== ebayCallbackPath) return authResponse(request, env);
   return handleEbayCallback(request, env, fetcher);

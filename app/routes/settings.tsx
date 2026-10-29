@@ -93,6 +93,8 @@ import { exportRevision, publishExportFile } from "../domain/export-files.server
 import { accountArchive, accountArchiveName, accountData } from "../domain/account-export.server";
 import { accountExportScope } from "../orders/export-scope.server";
 import { formatDate } from "../format";
+import { turnstileActions } from "../turnstile";
+import { turnstileFailure } from "../turnstile.server";
 import type { Route } from "./+types/settings";
 import { planView, subscriptionView } from "../domain/plan-view.server";
 import {
@@ -331,6 +333,11 @@ async function sendSupport(request: Request, area: AccountArea, form: FormData) 
   const t = appCopy[area.language].settings.support;
   const support = parseSupportRequest(form);
   if (!support) return actionFailure(400, t.invalid);
+  const check = await turnstileFailure(env, request, form, turnstileActions.support);
+  if (check) {
+    const notice = appCopy[area.language].access.signInNotices[check];
+    return actionFailure(check === "verifica-non-disponibile" ? 503 : 400, notice);
+  }
   const userId = area.session.user.id;
   const now = new Date();
   const reserved = await reserveSupportRequest(env.DB, userId, now);

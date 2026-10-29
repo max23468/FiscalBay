@@ -4,10 +4,12 @@ import { flushSync } from "react-dom";
 import { useCopy } from "~/components/copy-context";
 import { useFieldErrors } from "~/components/form-validation";
 import { useHydrated } from "~/components/hydrated";
+import { useTurnstile } from "~/components/turnstile";
 import { Button } from "~/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import type { PendingEmailChange } from "../../domain/email-change.server";
+import { turnstileActions } from "../../turnstile";
 import { Group } from "./controls";
 
 /** Email attuale; il nuovo indirizzo si inserisce solo quando serve. */
@@ -25,6 +27,7 @@ export function EmailChange({
   const opener = useRef<HTMLButtonElement>(null);
   const v = useFieldErrors(t.validation);
   const ready = useHydrated();
+  const resend = useTurnstile(turnstileActions.emailLink);
   return (
     <Group id="security-email" title={profile.email}>
       <div className="flex flex-col items-start gap-x-4 gap-y-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
@@ -49,7 +52,13 @@ export function EmailChange({
           <p className="text-muted-foreground">
             {pendingEmail.stage === "new" ? profile.emailPendingNew : profile.emailPendingCurrent}
           </p>
-          <form method="post" action={actionPath}>
+          <form
+            method="post"
+            action={actionPath}
+            className="grid justify-items-start gap-2"
+            onSubmit={resend.submit}
+          >
+            {resend.field}
             <Button type="submit" variant="outline" size="sm" name="intent" value="reinvia-email">
               {profile.emailRestart}
             </Button>

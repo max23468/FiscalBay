@@ -4,11 +4,13 @@ import { useLocation } from "react-router";
 import { useCopy } from "~/components/copy-context";
 import { DeleteAccount, type DeletionAccess } from "~/components/delete-account";
 import { StatusAlert } from "~/components/status";
+import { useTurnstile } from "~/components/turnstile";
 import { Button } from "~/components/ui/button";
 import type { AccessNoticeView } from "../access-notice";
 import { supportEmail } from "../app-copy";
 import { accessPath, securityPath } from "../app-links";
 import { localizedPath } from "../i18n";
+import { turnstileActions } from "../turnstile";
 
 /** Esce e rientra; dalla Sicurezza si torna ai metodi di accesso dopo la nuova autenticazione. */
 function SignInAgain() {
@@ -52,10 +54,17 @@ export function VerifyEmail({
 }) {
   const { t: copy, language } = useCopy();
   const t = copy.access;
+  const turnstile = useTurnstile(turnstileActions.emailLink);
   return verified ? null : (
     <StatusAlert tone="warning" title={t.verifyTitle}>
       <p>{t.verifyBody(email)}</p>
-      <form method="post" action={localizedPath(language, accessPath)} className="mt-2">
+      <form
+        method="post"
+        action={localizedPath(language, accessPath)}
+        className="mt-2 grid justify-items-start gap-2"
+        onSubmit={turnstile.submit}
+      >
+        {turnstile.field}
         <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
           {t.verifyResend}
         </Button>

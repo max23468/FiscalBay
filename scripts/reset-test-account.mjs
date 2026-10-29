@@ -137,6 +137,9 @@ export async function resetStatements(password, now = new Date()) {
      ${row(["collaudo-cf-bloccato", "collaudo-ordine-bloccato", "CODICE_FISCALE", "IT", taxCodes.locked, "synthetic_fixture", iso])};`,
     `INSERT INTO order_grants (id, workspace_id, order_id, cycle_id, source, granted_at)
      VALUES ${row(["collaudo-sblocco", workspaceId, "collaudo-ordine-sbloccato", null, "admin", iso])};`,
+    // Lo spazio ricreato fa scattare i trigger degli avvisi all'owner come uno nuovo: il ripristino
+    // non è un fatto commerciale, quindi gli avvisi spariscono prima che il cron li invii.
+    `DELETE FROM owner_notifications WHERE workspace_id = ${quote(workspaceId)};`,
   ];
 }
 

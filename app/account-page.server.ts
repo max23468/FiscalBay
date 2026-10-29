@@ -17,6 +17,8 @@ import { requestAccountDeletion, securityAction } from "./security-actions.serve
 import { errorResponse, unavailableData } from "./error-response";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
+import { turnstileActions, turnstileField } from "./turnstile";
+import { turnstileFailure } from "./turnstile.server";
 
 const noStore = { "cache-control": "no-store" };
 
@@ -116,13 +118,21 @@ export async function accessAction(request: Request) {
     return redirect(`${page}?${query}`, 303);
   };
   // Un errore di un modulo compilato resta sulla pagina con i valori inviati da ricompilare,
-  // senza conservarli nel browser; la password non torna mai indietro.
+  // senza conservarli nel browser; password e token Turnstile non tornano mai indietro.
   const failed = (value: SignInNotice, tab: "accedi" | "registrati" | "completa") => {
     const values: Record<string, string> = {};
     for (const [name, entry] of form) {
-      if (name !== "password" && typeof entry === "string") values[name] = entry;
+      if (name !== "password" && name !== turnstileField && typeof entry === "string")
+        values[name] = entry;
     }
-    const status = value === "troppi-tentativi" ? 429 : value === "autorizzazione" ? 403 : 400;
+    const status =
+      value === "troppi-tentativi"
+        ? 429
+        : value === "autorizzazione"
+          ? 403
+          : value === "verifica-non-disponibile"
+            ? 503
+            : 400;
     return data(
       { notice: signInNotice(value, language), remembered: { tab, values } },
       { status, headers: noStore },
@@ -156,6 +166,8 @@ export async function accessAction(request: Request) {
   }
 
   if (intent === "recupera-password") {
+    const check = await turnstileFailure(env, request, form, turnstileActions.passwordReset);
+    if (check) return notice(check);
     const response = await forward("/request-password-reset", {
       email: field("email"),
       redirectTo: originUrl(env, accessReturn),
@@ -180,6 +192,8 @@ export async function accessAction(request: Request) {
     const profile = parseProfile(form);
     if (!profile) return failed("dati", "registrati");
     if (field("termini") !== "on") return failed("termini", "registrati");
+    const check = await turnstileFailure(env, request, form, turnstileActions.signUp);
+    if (check) return failed(check, "registrati");
     const response = await forward("/sign-up/email", {
       email: field("email"),
       password: field("password"),
@@ -228,6 +242,8 @@ export async function accessAction(request: Request) {
     if (!session) return notice("errore");
     if (intent === "verifica") {
       if (session.user.emailVerified) return redirect(base, 303);
+      const check = await turnstileFailure(env, request, form, turnstileActions.emailLink);
+      if (check) return notice(check, base);
       const response = await forward("/send-verification-email", {
         email: session.user.email,
         callbackURL: base,

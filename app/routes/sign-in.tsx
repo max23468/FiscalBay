@@ -27,12 +27,14 @@ import {
 import { Input } from "~/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useCopy } from "~/components/copy-context";
+import { useTurnstile } from "~/components/turnstile";
 import { accessPath, privacyPath, securityReturnPath, termsPath } from "../app-links";
 import { areaPage } from "../account-area.server";
 import { accessAction, accessLoader } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath, type Language } from "../i18n";
 import { maxPasswordLength, minPasswordLength } from "../limits";
+import { turnstileActions } from "../turnstile";
 import type { Route } from "./+types/sign-in";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
@@ -199,6 +201,9 @@ function AccessForms({
   const values = remembered?.values;
   const signIn = useFieldErrors(t.validation);
   const signUp = useFieldErrors(t.validation);
+  // L'accesso con password non passa da Turnstile; il recupero e la registrazione sì.
+  const recovery = useTurnstile(recovering ? turnstileActions.passwordReset : null);
+  const registration = useTurnstile(turnstileActions.signUp);
   return (
     <Tabs
       value={tab}
@@ -218,7 +223,9 @@ function AccessForms({
           method="post"
           action={formAction}
           {...signIn.form}
-          onSubmit={(event) => void signIn.check(event)}
+          onSubmit={(event) => {
+            if (signIn.check(event)) recovery.submit(event);
+          }}
         >
           <FieldGroup className="gap-3">
             <ReturnToField />
@@ -253,6 +260,7 @@ function AccessForms({
                 {signIn.error("password")}
               </Field>
             )}
+            {recovery.field}
             <Button
               type="submit"
               className="w-full"
@@ -279,7 +287,9 @@ function AccessForms({
           method="post"
           action={formAction}
           {...signUp.form}
-          onSubmit={(event) => void signUp.check(event)}
+          onSubmit={(event) => {
+            if (signUp.check(event)) registration.submit(event);
+          }}
         >
           <FieldGroup>
             <ProfileFields
@@ -321,6 +331,7 @@ function AccessForms({
               v={signUp}
               values={remembered?.tab === "registrati" ? values : undefined}
             />
+            {registration.field}
             <Button type="submit" name="intent" value="registrati" className="w-full">
               {t.signUp}
             </Button>

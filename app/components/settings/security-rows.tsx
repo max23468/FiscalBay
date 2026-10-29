@@ -12,6 +12,8 @@ import {
   AlertDialogTrigger,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
+import { useTurnstile } from "~/components/turnstile";
+import { turnstileActions } from "../../turnstile";
 
 /** Riga di un metodo di accesso: nome, stato e azioni, come nelle Impostazioni. */
 export function MethodRow({
@@ -72,8 +74,16 @@ export function MethodAction({
   const destructive = intent === "rimuovi-metodo" || intent === "passkey-remove";
   const [open, setOpen] = useState(false);
   const { t } = useCopy();
+  // Il link per la password è una richiesta di reset: passa da Turnstile come dall'accesso.
+  const turnstile = useTurnstile(intent === "password" ? turnstileActions.passwordReset : null);
   const form = (
-    <form method="post" action={actionPath}>
+    <form
+      method="post"
+      action={actionPath}
+      className={turnstile.enabled ? "grid justify-items-start gap-2" : undefined}
+      onSubmit={turnstile.submit}
+    >
+      {turnstile.field}
       {method ? <input type="hidden" name="metodo" value={method} /> : null}
       {id ? <input type="hidden" name="id" value={id} /> : null}
       <Button

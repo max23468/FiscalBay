@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
+import { turnstileField } from "../app/turnstile";
+import { siteverify, testingKeyResult } from "./fixtures/turnstile-fixtures";
 import { completeRegistration } from "../app/domain/registration.server";
 import { adminAccess, readSession, recentSignIn } from "../app/domain/sessions.server";
 import { withResponseCookies } from "../app/response-cookies.server";
@@ -208,7 +210,7 @@ describe("Better Auth su Workers e D1", () => {
     expect(await Promise.race([second, timeout])).toBeNull();
   });
 
-  it("con il database non disponibile accesso e registrazione rispondono 503 e i log hanno il solo codice", async () => {
+  it("con il database non disponibile l'accesso risponde 503 e i log hanno il solo codice", async () => {
     const { cookie } = await verifiedSession("auth-guasto@example.invalid");
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const prepare = vi.spyOn(env.DB, "prepare").mockImplementation(() => {
@@ -221,20 +223,15 @@ describe("Better Auth su Workers e D1", () => {
           headers: { "content-type": "application/json", origin: "http://localhost:5173", cookie },
           body: JSON.stringify(body),
         });
-      for (const request of [
+      // La registrazione con password passa soltanto dal modulo, provato con la pagina di accesso.
+      const response = await handleAuthRequest(
         post("/sign-in/email", {
           email: "auth-guasto@example.invalid",
           password: "Una-password-negozio-molto-lunga",
         }),
-        post("/sign-up/email", {
-          email: "auth-nuovo@example.invalid",
-          name: "Nuovo",
-          password: "Una-password-negozio-molto-lunga",
-        }),
-      ]) {
-        const response = await handleAuthRequest(request, env);
-        expect([response.status, response.headers.get("retry-after")]).toEqual([503, "60"]);
-      }
+        env,
+      );
+      expect([response.status, response.headers.get("retry-after")]).toEqual([503, "60"]);
       // La sessione letta da Better Auth fallisce con il suo errore 500, già classificato.
       const session = await handleAuthRequest(
         new Request("http://localhost:5173/api/auth/get-session", { headers: { cookie } }),
@@ -242,7 +239,6 @@ describe("Better Auth su Workers e D1", () => {
       );
       expect(session.status).toBe(500);
       expect(log.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
-        expect.objectContaining({ code: "UPSTREAM_UNAVAILABLE", operation: "route" }),
         expect.objectContaining({ code: "UPSTREAM_UNAVAILABLE", operation: "route" }),
         expect.objectContaining({ code: "INTERNAL_ERROR", operation: "route" }),
       ]);
@@ -1452,6 +1448,11 @@ describe("Collegamento e modifica dell'identità", () => {
         html: expect.stringContaining('<html lang="it">'),
       });
       send.mockClear();
+      // Il link per la password è una richiesta di reset: senza verifica Turnstile non parte.
+      expect(await outcome({ intent: "password", [turnstileField]: "" }, securityAction)).toContain(
+        "verifica-non-riuscita",
+      );
+      expect(send).not.toHaveBeenCalled();
       expect(await outcome({ intent: "password" }, securityAction)).toContain("password-link");
       await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
       const message = send.mock.calls[0]![0] as { to: string; text: string };
@@ -1535,6 +1536,13 @@ describe("Collegamento e modifica dell'identità", () => {
     send.mockClear();
     expect(await request("email.destinazione@example.invalid")).toContain("email-richiesta");
     await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    // Il nuovo invio del link passa da Turnstile; con Siteverify indisponibile non parte.
+    siteverify.answer = () => new Response(null, { status: 503 });
+    expect(
+      (await securityAction(user.cookie, { intent: "reinvia-email" })).headers.get("location"),
+    ).toContain("verifica-non-disponibile");
+    siteverify.answer = () => Response.json(testingKeyResult);
+    expect(send).toHaveBeenCalledOnce();
     expect(
       (
         await securityAction(user.cookie, {
@@ -1717,12 +1725,19 @@ describe("Sessioni, revoche e area admin", () => {
     sessionCookie(
       await jsonRequest("sign-in/email", "", { email, password: "Password-sintetica-123!" }),
     );
+  // La registrazione con password arriva dal modulo con Turnstile: qui direttamente ad Auth.
   const createUser = async (email: string) => {
-    const response = await jsonRequest("sign-up/email", "", {
-      name: "Sessioni sintetiche",
-      email,
-      password: "Password-sintetica-123!",
-    });
+    const response = await createAuth(env).handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({
+          name: "Sessioni sintetiche",
+          email,
+          password: "Password-sintetica-123!",
+        }),
+      }),
+    );
     const { user } = await response.json<{ user: { id: string } }>();
     await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user.id).run();
     await completeRegistration(env.DB, {

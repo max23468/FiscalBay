@@ -262,6 +262,17 @@ Il primo report DMARC arriva entro 24 ore dall'attivazione e si legge in **Email
 
 Rientro: `node scripts/zone-protection.mjs remove` toglie le regole dell'ambiente e lascia quella di zona finché l'altro ambiente ha le sue; ogni scrittura crea anche una versione del ruleset, rileggibile con `cf rulesets entrypoint versions list <fase>`. DMARC Management e gli alert si spengono con `cf email-auth dmarc-reports edit --enabled false` e `cf ssl ct-alerting update --enabled false`; il `rua` di Cloudflare si toglie dal record `_dmarc` senza toccare gli altri tag.
 
+<a id="turnstile"></a>
+## Turnstile
+
+Registrazione con password, recupero della password, nuovo link di conferma e assistenza passano dalla verifica Turnstile ([§29](../MASTER_PLAN.md#s29), [D231](../DECISION_REGISTER.md)). Ogni ambiente ha un widget proprio, in modalità gestita e limitato al suo dominio, con le chiavi nei segreti `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` del Worker: la chiave del sito arriva al browser, ma nasce con il widget e si imposta insieme alla segreta. Entrambe sono obbligatorie nella configurazione, quindi il deploy si ferma finché mancano.
+
+1. `pnpm exec cf turnstile widgets list` per ritrovare un widget già creato; altrimenti `pnpm exec cf turnstile widgets create --name fiscalbay-test --domains test.fiscalbay.it --widget-mode managed --clearance-level no_clearance`, oppure `--name fiscalbay --domains fiscalbay.it` per la Production. La risposta contiene la chiave segreta: va subito nel Portachiavi, senza stamparla, come voce «FiscalBay Turnstile test» o «FiscalBay Turnstile» con la chiave del sito come account. I due widget esistono dal 29 ottobre 2026.
+2. `pnpm exec cf workers secrets update` imposta le due chiavi sul Worker dell'ambiente, prima del deploy che le richiede, e crea una versione con il codice già attivo: prima va riletto che l'ultima versione sia quella distribuita. Sul test sono impostate; sul Worker Production si impostano con gli altri segreti della pubblicazione M9.
+3. Readback dopo il deploy: un nuovo link di conferma o una richiesta di assistenza sul test riesce; con il campo del token vuoto lo stesso invio risponde con l'avviso «Verifica di sicurezza non riuscita» senza email, e `POST /api/auth/sign-up/email` risponde 404. La CSP del documento ammette `https://challenges.cloudflare.com` soltanto in `script-src` e `frame-src`.
+
+In locale, nei test e nell'anteprima della build valgono le chiavi di prova di Cloudflare, che accettano sempre: Siteverify ne marca l'esito, che l'app accetta soltanto fuori dai domini HTTPS. Sui domini dell'ambiente quell'esito vale come indisponibilità e rifiuta l'invio.
+
 <a id="metriche-release"></a>
 ## Confronto delle metriche fra release test
 

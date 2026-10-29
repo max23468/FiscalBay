@@ -40,6 +40,7 @@ describe("copia locale dell'artefatto", () => {
         assert.equal(copy.env.TELEGRAM_BOT_TOKEN === undefined, production);
         const vars = readFileSync(path.join(directory, ".cloudflare/preview/.dev.vars"), "utf8");
         assert.match(vars, /^REGISTRATION_ALLOWED_EMAILS=\[\]$/mu);
+        assert.match(vars, /^TURNSTILE_SECRET_KEY=1x0{31}AA$/mu);
         assert.equal(readFileSync(source, "utf8"), original);
       }
     } finally {

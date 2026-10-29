@@ -1181,6 +1181,9 @@ export const it = {
       termini: "Per continuare accetta i Termini di servizio.",
       dati: "Indica nome, cognome e, per un’azienda, la ragione sociale.",
       "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",
+      "verifica-non-riuscita": "Verifica di sicurezza non riuscita o scaduta. Riprova.",
+      "verifica-non-disponibile":
+        "Verifica di sicurezza non disponibile in questo momento. Riprova tra qualche minuto.",
       "verifica-inviata": "Link di conferma inviato. Controlla la posta.",
       "passkey-rimossa": "Passkey rimossa.",
       "passkey-rinominata": "Nome della passkey aggiornato.",

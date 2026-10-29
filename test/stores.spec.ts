@@ -70,6 +70,8 @@ import { syntheticProfile, verifiedSession, profileOf } from "./fixtures/account
 import { homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback } from "./fixtures/store-link-fixtures";
 import { queued } from "./fixtures/queue-fixture";
+import { siteverify } from "./fixtures/turnstile-fixtures";
+import { turnstileField } from "../app/turnstile";
 import {
   areaShell,
   callRoute,
@@ -1069,6 +1071,26 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       await purgeExpiredRecords(env.DB, new Date(Date.now() + day + 1000));
       expect(await count("support_requests")).toBe(0);
       errors.mockRestore();
+    });
+
+    it("chiede la verifica Turnstile prima del limite e dell'invio", async () => {
+      const seller = await verifiedSession("verifica-supporto@example.invalid");
+      const notices = appCopy.it.access.signInNotices;
+      expect(await request(seller.cookie, { [turnstileField]: "" })).toMatchObject({
+        init: { status: 400 },
+        data: { ok: false, notice: notices["verifica-non-riuscita"] },
+      });
+      siteverify.answer = () =>
+        Response.json({ success: false, "error-codes": ["internal-error"] });
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(await request(seller.cookie)).toMatchObject({
+        init: { status: 503 },
+        data: { ok: false, notice: notices["verifica-non-disponibile"] },
+      });
+      expect(errors.mock.calls.join("\n")).toContain('"operation":"turnstile"');
+      errors.mockRestore();
+      expect(toSupport()).toEqual([]);
+      expect(await count("support_requests")).toBe(0);
     });
   });
 
