@@ -3,6 +3,7 @@ import { ChevronDown, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, NavLink } from "react-router";
 
+import { NavigationProgress } from "~/components/navigation-progress";
 import { Logo } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
@@ -55,7 +56,8 @@ export function AdminShell({
   const { t, href, language } = useAdmin();
   return (
     <div className="min-h-dvh bg-background">
-      <header className="border-b bg-card">
+      <header className="relative border-b bg-card">
+        <NavigationProgress />
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
           <a
             href={href()}

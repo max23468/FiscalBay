@@ -29,6 +29,7 @@ import { MarketingProposal } from "./marketing-proposal";
 import { FirstUse, NoOrders } from "./onboarding";
 import { importingNotice, isEbayDown, remainingUnlocks, type OrdersAccount } from "./labels";
 import { SelectionBar, useOrderSelection } from "./selection";
+import { usePendingList } from "./pending-list";
 import { OrdersToolbar, SearchChip } from "./toolbar";
 import { useCopy, useLinks } from "~/components/copy-context";
 
@@ -157,6 +158,23 @@ function LoadMore({ data }: { data: OrdersPageData }) {
   );
 }
 
+/**
+ * Con nuovi filtri o una nuova ricerca l'elenco mostrato si attenua finché arriva il nuovo:
+ * l'attenuazione parte dopo 150 ms e finisce subito.
+ */
+function ChangingList({ children }: { children: React.ReactNode }) {
+  const { changing } = usePendingList();
+  return (
+    <div
+      aria-busy={changing || undefined}
+      // Stessa griglia della pagina: elenco e «Carica altri» mantengono la loro distanza.
+      className="grid grid-cols-[minmax(0,1fr)] gap-6 transition-opacity duration-(--duration-quick) aria-busy:opacity-60 aria-busy:delay-(--duration-quick)"
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Un ordine si sblocca solo se è da sbloccare e nessuna verifica o conferma lo sospende. */
 function unlockable(order: OrderView) {
   return order.fiscal.state === "locked" && !order.fiscal.hold;
@@ -274,18 +292,21 @@ function OrdersList({
         </div>
       ) : null}
       {orders.length === 0 ? (
-        <NoResults criteria={criteria} onlySearch={onlySearch} href={ordersHref} />
+        <ChangingList>
+          <NoResults criteria={criteria} onlySearch={onlySearch} href={ordersHref} />
+        </ChangingList>
       ) : (
-        <>
+        <ChangingList>
           <LazyMotion features={loadMotionFeatures} strict>
             <MotionConfig
               reducedMotion="user"
               transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
             >
               <section aria-label={t.orders.list} className="grid gap-3 lg:grid-cols-2">
-                {orders.map((order) => (
+                {orders.map((order, position) => (
                   <OrderCard
                     key={order.id}
+                    position={position}
                     order={order}
                     account={data.account}
                     ebayDown={ebayDown}
@@ -307,7 +328,7 @@ function OrdersList({
             </MotionConfig>
           </LazyMotion>
           <LoadMore data={data} />
-        </>
+        </ChangingList>
       )}
       {selecting ? (
         <SelectionBar

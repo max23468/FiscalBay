@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 import { useCopy } from "~/components/copy-context";
+import { usePendingList } from "./pending-list";
 import { rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
 import {
@@ -182,8 +183,11 @@ export function OrdersToolbar({
 }) {
   const { t } = useCopy();
   const action = useAction();
-  const [params, setParams] = useSearchParams();
+  const [, setParams] = useSearchParams();
+  // I filtri mostrano subito la scelta, anche mentre l'elenco si carica.
+  const { params } = usePendingList();
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [settled, setSettled] = useState(false);
   const filterKeys = ["negozio", "periodo", "pagamento", "spedizione", "fiscale"];
   const active = filterKeys.filter((key) => params.get(key)).length;
   // Un filtro diverso apre un nuovo elenco, dall'inizio e con una nuova istantanea.
@@ -212,7 +216,10 @@ export function OrdersToolbar({
           className="mr-auto md:hidden"
           aria-expanded={filtersOpen}
           aria-controls="orders-filters"
-          onClick={() => setFiltersOpen((open) => !open)}
+          onClick={() => {
+            setSettled(false);
+            setFiltersOpen((open) => !open);
+          }}
         >
           <SlidersHorizontal aria-hidden="true" data-icon="inline-start" />
           {t.orders.filters}
@@ -231,79 +238,96 @@ export function OrdersToolbar({
         </Button>
         <ExportListButton href={exportHref} selecting={selecting} />
       </div>
+      {/*
+        Su mobile i filtri si aprono in altezza e spingono i risultati verso il basso. Il ritaglio
+        serve soltanto durante l'apertura: a pannello aperto gli anelli di focus restano interi.
+      */}
       <div
-        id="orders-filters"
+        data-open={filtersOpen || undefined}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && event.propertyName === "grid-template-rows")
+            setSettled(filtersOpen);
+        }}
         className={cn(
-          // Due colonne anche su smartphone: i filtri aperti lasciano in vista i primi risultati.
-          // Da desktop una sola riga: ogni filtro parte dalla larghezza della sua voce più lunga
-          // e, se lo spazio non basta, tutti si restringono in proporzione. Sul tablet le righe
-          // restano piene: quattro filtri su due colonne, cinque su tre.
-          "grid grid-cols-2 gap-3 md:flex-1 lg:flex",
-          stores.length > 1 ? "md:grid-cols-3" : "md:grid-cols-2",
-          !filtersOpen && "max-md:hidden",
+          // Chiuso non occupa spazio: il margine negativo assorbe la distanza dalla riga sopra.
+          "grid grid-rows-[0fr] transition-[grid-template-rows,margin-top,visibility] duration-(--duration-quick) ease-(--ease-smooth-out) max-md:invisible max-md:-mt-4 md:contents",
+          "data-open:grid-rows-[1fr] data-open:duration-(--duration-fast) max-md:data-open:visible max-md:data-open:mt-0",
         )}
       >
-        {stores.length > 1 ? (
+        <div
+          id="orders-filters"
+          className={cn(
+            // Due colonne anche su smartphone: i filtri aperti lasciano in vista i primi risultati.
+            // Da desktop una sola riga: ogni filtro parte dalla larghezza della sua voce più lunga
+            // e, se lo spazio non basta, tutti si restringono in proporzione. Sul tablet le righe
+            // restano piene: quattro filtri su due colonne, cinque su tre.
+            "grid grid-cols-2 gap-3 md:flex-1 lg:flex",
+            stores.length > 1 ? "md:grid-cols-3" : "md:grid-cols-2",
+            !settled && "max-md:min-h-0 max-md:overflow-hidden",
+          )}
+        >
+          {stores.length > 1 ? (
+            <FilterSelect
+              label={t.orders.store}
+              name="negozio"
+              value={params.get("negozio") ?? ""}
+              options={stores.map((store) => ({ value: store.id, label: store.name }))}
+              fit={false}
+              allLabel={t.orders.all}
+              premiumLabel={t.orders.premiumOption}
+              onChange={change}
+            />
+          ) : null}
           <FilterSelect
-            label={t.orders.store}
-            name="negozio"
-            value={params.get("negozio") ?? ""}
-            options={stores.map((store) => ({ value: store.id, label: store.name }))}
-            fit={false}
+            label={t.orders.period}
+            name="periodo"
+            value={params.get("periodo") ?? ""}
+            options={orderPeriods.map((period) => ({
+              value: period,
+              label: t.orders.periods[period],
+              premium: plan !== "premium" && premiumOrderPeriods.has(period),
+            }))}
             allLabel={t.orders.all}
             premiumLabel={t.orders.premiumOption}
             onChange={change}
           />
-        ) : null}
-        <FilterSelect
-          label={t.orders.period}
-          name="periodo"
-          value={params.get("periodo") ?? ""}
-          options={orderPeriods.map((period) => ({
-            value: period,
-            label: t.orders.periods[period],
-            premium: plan !== "premium" && premiumOrderPeriods.has(period),
-          }))}
-          allLabel={t.orders.all}
-          premiumLabel={t.orders.premiumOption}
-          onChange={change}
-        />
-        <FilterSelect
-          label={t.orders.paymentStatus}
-          name="pagamento"
-          value={params.get("pagamento") ?? ""}
-          options={paymentStatuses.map((status) => ({
-            value: status,
-            label: t.orders.payment[status],
-          }))}
-          allLabel={t.orders.all}
-          premiumLabel={t.orders.premiumOption}
-          onChange={change}
-        />
-        <FilterSelect
-          label={t.orders.shippingStatus}
-          name="spedizione"
-          value={params.get("spedizione") ?? ""}
-          options={shippingStatuses.map((status) => ({
-            value: status,
-            label: t.orders.shipping[status],
-          }))}
-          allLabel={t.orders.all}
-          premiumLabel={t.orders.premiumOption}
-          onChange={change}
-        />
-        <FilterSelect
-          label={t.orders.fiscalStatus}
-          name="fiscale"
-          value={params.get("fiscale") ?? ""}
-          options={fiscalSituations.map((situation) => ({
-            value: situation,
-            label: t.orders.fiscal[situation],
-          }))}
-          allLabel={t.orders.all}
-          premiumLabel={t.orders.premiumOption}
-          onChange={change}
-        />
+          <FilterSelect
+            label={t.orders.paymentStatus}
+            name="pagamento"
+            value={params.get("pagamento") ?? ""}
+            options={paymentStatuses.map((status) => ({
+              value: status,
+              label: t.orders.payment[status],
+            }))}
+            allLabel={t.orders.all}
+            premiumLabel={t.orders.premiumOption}
+            onChange={change}
+          />
+          <FilterSelect
+            label={t.orders.shippingStatus}
+            name="spedizione"
+            value={params.get("spedizione") ?? ""}
+            options={shippingStatuses.map((status) => ({
+              value: status,
+              label: t.orders.shipping[status],
+            }))}
+            allLabel={t.orders.all}
+            premiumLabel={t.orders.premiumOption}
+            onChange={change}
+          />
+          <FilterSelect
+            label={t.orders.fiscalStatus}
+            name="fiscale"
+            value={params.get("fiscale") ?? ""}
+            options={fiscalSituations.map((situation) => ({
+              value: situation,
+              label: t.orders.fiscal[situation],
+            }))}
+            allLabel={t.orders.all}
+            premiumLabel={t.orders.premiumOption}
+            onChange={change}
+          />
+        </div>
       </div>
     </div>
   );

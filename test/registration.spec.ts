@@ -33,6 +33,7 @@ import {
 } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
+import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
 import { turnstileField } from "../app/turnstile";
 
@@ -551,6 +552,7 @@ describe("registrazione e verifica del contatto", () => {
         { email: "tentativi@example.invalid", password: "password-sbagliata-lunga" },
       ).then((response) => response.status);
 
+    await withinOneLimitWindow();
     const statuses = [];
     for (let index = 0; index < 4; index += 1) statuses.push(await attempt("203.0.113.7"));
     expect(statuses).toEqual([401, 401, 401, 429]);
@@ -586,6 +588,7 @@ describe("registrazione e verifica del contatto", () => {
       "2001:db8:1:2::9",
       "2001:db8:1:2::ff",
     ];
+    await withinOneLimitWindow();
     const ipv6Statuses = [];
     for (const ip of ipv6) ipv6Statuses.push(await attempt(ip));
     expect(ipv6Statuses).toEqual([401, 401, 401, 429]);
@@ -612,6 +615,7 @@ describe("registrazione e verifica del contatto", () => {
       });
     try {
       const reset = { intent: "recupera-password", email: "filtro@example.invalid" };
+      await withinOneLimitWindow();
       // Il modulo ammesso inoltra la richiesta senza consumare di nuovo il contatore.
       for (let count = 0; count < 3; count++)
         expect((await submit(reset)).headers.get("location")).not.toContain("troppi-tentativi");
@@ -629,6 +633,7 @@ describe("registrazione e verifica del contatto", () => {
         password: "Una-password-registrazione-lunga",
         termini: "on",
       };
+      await withinOneLimitWindow();
       for (let count = 0; count < 3; count++) expect((await submit(signUp)).status).not.toBe(429);
       const limited = await submit(signUp);
       expect(limited.status).toBe(429);

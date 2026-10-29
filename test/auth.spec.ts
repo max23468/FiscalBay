@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
 import { turnstileField } from "../app/turnstile";
+import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import { siteverify, testingKeyResult } from "./fixtures/turnstile-fixtures";
 import { completeRegistration } from "../app/domain/registration.server";
 import { adminAccess, readSession, recentSignIn } from "../app/domain/sessions.server";
@@ -534,6 +535,7 @@ describe("Better Auth su Workers e D1", () => {
         }),
         deployed,
       );
+    await withinOneLimitWindow();
     expect((await attempt("https://foreign.invalid")).status).toBe(403);
     expect((await attempt(origin)).ok).toBe(false);
     expect((await attempt(origin)).ok).toBe(false);

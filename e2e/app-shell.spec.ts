@@ -157,6 +157,56 @@ for (const area of areas)
     expect(await page.evaluate(() => history.length)).toBe(entries);
   });
 
+/** Trattiene le risposte dei dati finché la prova non le libera. */
+async function holdData(page: Page) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(/\.data(?:\?|$)/u, async (route) => {
+    await released;
+    await route.continue();
+  });
+  return release;
+}
+
+for (const area of areas)
+  test(`durante il caricamento filtri, elenco e navigazione mostrano la scelta, ${area.name}`, async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await enter(context, baseURL!, area);
+    await open(page, `${area.base}/ordini`);
+    const list = page.getByRole("region", { name: "Elenco ordini" });
+    const period = page.getByRole("combobox", { name: "Periodo" });
+    let release = await holdData(page);
+    await period.click();
+    await page.getByRole("option", { name: "Ultimi 30 giorni" }).click();
+    // Il filtro non torna al valore precedente e l'elenco mostrato resta, attenuato.
+    await expect(period).toContainText("Ultimi 30 giorni");
+    const changing = page.locator('main [aria-busy="true"]', { has: list });
+    await expect(changing).toHaveCSS("opacity", "0.6");
+    await expect(page.locator(".navigation-progress")).toHaveAttribute("data-phase", "loading");
+    release();
+    await expect(page).toHaveURL(/periodo=30/u);
+    // Il nuovo elenco, anche vuoto, arriva senza attenuazione.
+    await expect(page.locator("main [aria-busy], main[aria-busy]")).toHaveCount(0);
+    await page.unrouteAll({ behavior: "wait" });
+    // La voce scelta diventa subito quella evidenziata, prima che la pagina arrivi.
+    release = await holdData(page);
+    const nav = page.getByRole("navigation", { name: "Navigazione principale" });
+    const stores = nav.getByRole("link", { name: "Negozi eBay" });
+    await stores.click();
+    await expect(stores).toHaveClass(/\bpending\b/u);
+    const link = await stores.boundingBox();
+    // La barra sotto la voce rientra di 0,75 rem come il segno statico che sostituisce.
+    await expect
+      .poll(async () => (await nav.locator("li[aria-hidden]").boundingBox())?.x)
+      .toBeCloseTo(link!.x + 12, 0);
+    release();
+    await expect(page).toHaveTitle("FiscalBay | Negozi eBay");
+    await expect(stores).toHaveAttribute("aria-current", "page");
+  });
+
 for (const area of areas)
   test(`«Visita fiscalbay.it» apre il sito senza uscire dall'account, ${area.name}`, async ({
     page,
