@@ -388,11 +388,16 @@ for (const language of ["it", "en"] as const) {
         const main = page.locator("main");
         await expect(main).toContainText("Temisfera");
         // Il contatto è `info@`, non l'assistenza clienti.
-        await expect(main.getByRole("link", { name: /^info@/u })).toBeVisible();
-        await expect(main).not.toContainText("bozza-2026");
-        await expect(main).toContainText(
-          language === "it" ? "28 settembre 2026" : "28 September 2026",
-        );
+        await expect(main.getByRole("link", { name: /^info@/u }).first()).toBeVisible();
+        await expect(main.getByRole("link", { name: /^supporto@/u })).toHaveCount(0);
+        await expect(main).toContainText(language === "it" ? "29 ottobre 2026" : "29 October 2026");
+        // Il testo completo, con la tabella dei trattamenti nella Privacy.
+        await expect(main.getByRole("heading", { level: 2 }).first()).toBeVisible();
+        // Sotto i 640 px la tabella dei trattamenti diventa un elenco di schede.
+        if (path === "/privacy")
+          await expect(
+            width < 640 ? main.getByRole("definition").first() : main.getByRole("table"),
+          ).toBeVisible();
         await expect.poll(() => noPageOverflow(page)).toBe(true);
       }
       // La pagina d'errore dell'accesso resta una scheda vicino al logo.

@@ -336,12 +336,9 @@ describe("stato sintetico dell'anteprima", () => {
         expect(text).toContain("Codice Fiscale");
         expect(text).toContain("Partita IVA");
       }
-      expect(t.legal.version("bozza-2026-09-28")).toContain(language === "it" ? "Bozza" : "Draft");
-      expect(t.legal.version("bozza-2026-09-28")).toContain(
-        language === "it" ? "28 settembre 2026" : "28 September 2026",
+      expect(t.legal.version("2026-10-29")).toBe(
+        language === "it" ? "Versione del 29 ottobre 2026" : "Version of 29 October 2026",
       );
-      expect(t.legal.version("bozza-2026-09-28")).not.toContain("bozza-");
-      expect(t.legal.version("2026-10-03")).not.toMatch(/Bozza|Draft/);
     });
   }
 });

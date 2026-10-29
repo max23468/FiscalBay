@@ -1015,12 +1015,8 @@ export const it = {
     /** Etichette brevi del footer, che resta su una riga anche su smartphone. */
     termsLink: "Termini",
     privacyLink: "Privacy",
-    version: (version: string) =>
-      version.startsWith("bozza-")
-        ? `Bozza del ${legalDate("it-IT", version.slice(6))}`
-        : `Versione ${version}`,
-    draft:
-      "Il testo definitivo sarà pubblicato prima dell’apertura del servizio. Se cambia, ti chiederemo di accettare la nuova versione.",
+    /** La versione è la data del testo in vigore. */
+    version: (version: string) => `Versione del ${legalDate("it-IT", version)}`,
   },
   /** Barra e footer del sito pubblico; i testi delle pagine sono in `site-pages.server.ts`. */
   site: {

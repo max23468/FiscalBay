@@ -1,13 +1,13 @@
 import type { Language } from "../i18n";
 
 /**
- * Versioni dei testi presentati alla registrazione. Termini e informativa sono bozze finché
- * il testo definitivo non viene pubblicato: una nuova versione dei Termini richiede una nuova
+ * Versioni dei testi presentati alla registrazione, come data del testo in vigore
+ * (`copy/legal-documents.server.ts`): una nuova versione dei Termini richiede una nuova
  * accettazione prima di usare il servizio.
  */
 export const legalVersions = {
-  terms: "bozza-2026-09-28",
-  privacy: "bozza-2026-09-28",
+  terms: "2026-10-29",
+  privacy: "2026-10-29",
 } as const;
 
 /**

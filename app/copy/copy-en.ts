@@ -999,12 +999,7 @@ export const en: AppCopy = {
     privacy: "Privacy policy",
     termsLink: "Terms",
     privacyLink: "Privacy",
-    version: (version: string) =>
-      version.startsWith("bozza-")
-        ? `Draft dated ${legalDate("en-GB", version.slice(6))}`
-        : `Version ${version}`,
-    draft:
-      "The final text will be published before the service opens. If it changes, we will ask you to accept the new version.",
+    version: (version: string) => `Version of ${legalDate("en-GB", version)}`,
   },
   site: {
     start: "Start for free",
