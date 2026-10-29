@@ -33,11 +33,12 @@ const message = (value) => ({
 });
 
 const record = (overrides = {}) => ({
-  EventTimestampMs: "2026-10-29T10:00:00Z",
+  // Forma osservata nell'archivio del test: millisecondi e versione con `ID`.
+  EventTimestampMs: Date.parse("2026-10-29T10:00:00Z"),
   EventType: "fetch",
   Outcome: "ok",
   ScriptName: "fiscalbay-test",
-  ScriptVersion: { Id: "v1" },
+  ScriptVersion: { ID: "v1", Message: "", Tag: "" },
   CPUTimeMs: 3,
   WallTimeMs: 12,
   Logs: [],
@@ -294,12 +295,12 @@ describe("archivio dei log", () => {
     const trail = correlationTrail(
       [
         record({
-          EventTimestampMs: "2026-10-29T10:02:00Z",
+          EventTimestampMs: Date.parse("2026-10-29T10:02:00Z"),
           Logs: [failure({ operation: "checkout", correlationId: correlation })],
         }),
         record({ Logs: [failure({ operation: "route", correlationId: crypto.randomUUID() })] }),
         record({
-          EventTimestampMs: "2026-10-29T10:01:00Z",
+          EventTimestampMs: Date.parse("2026-10-29T10:01:00Z"),
           Outcome: "exception",
           Logs: [failure({ operation: "route", correlationId: correlation })],
         }),
@@ -309,8 +310,8 @@ describe("archivio dei log", () => {
     assert.deepEqual(
       trail.map(({ at, outcome, events }) => [at, outcome, events[0].operation]),
       [
-        ["2026-10-29T10:01:00Z", "exception", "route"],
-        ["2026-10-29T10:02:00Z", "ok", "checkout"],
+        ["2026-10-29T10:01:00.000Z", "exception", "route"],
+        ["2026-10-29T10:02:00.000Z", "ok", "checkout"],
       ],
     );
     assert.ok(trail.every(({ events }) => events.every((event) => !("correlationId" in event))));
