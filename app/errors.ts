@@ -79,6 +79,7 @@ export function logFailure(input: {
     | "telegram_commands"
     | "ebay_quotas"
     | "owner_incidents"
+    | "owner_notifications"
     | "queue";
   status?: number;
 }): void {

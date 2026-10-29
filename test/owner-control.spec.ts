@@ -11,10 +11,16 @@ import {
   parseOwnerCallback,
 } from "../app/domain/owner-control.server";
 import { reconcileOwnerIncidents as reconcile } from "../app/domain/owner-incidents.server";
+import {
+  recordDisputeOpened,
+  runOwnerNotifications,
+} from "../app/domain/owner-notifications.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { duration, plainText, type Panel } from "../app/domain/owner-panels.server";
 import { consumeTask, taskSlot } from "../app/domain/scheduled-work.server";
 import { setSwitch } from "../app/domain/service-settings.server";
 import { taskPeriods, type ScheduledTask } from "../app/domain/work-timing";
+import { infoEmail } from "../app/app-copy";
 import { ownerCommands } from "../app/bot-commands";
 import {
   editRichMessage,
@@ -25,7 +31,7 @@ import {
   webhookInfo,
 } from "../app/integrations/telegram.server";
 import { receiveWebhook } from "../app/webhooks.server";
-import { verifiedSession } from "./fixtures/account-fixtures";
+import { emailSender, verifiedSession } from "./fixtures/account-fixtures";
 import {
   insertCredentials,
   insertEntitlement,
@@ -899,10 +905,14 @@ describe("avvisi degli incidenti", () => {
       call.method === "sendRichMessage" ? new Response("", { status: 502 }) : undefined,
     );
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const mail = emailSender();
+    const mailed = { ...environment, AUTH_EMAIL: { send: mail } as SendEmail };
     const waits: number[] = [];
     let at = later(1);
     for (let attempt = 0; attempt < 8; attempt++) {
-      await reconcileOwnerIncidents(environment, down.fetcher, at);
+      await reconcileOwnerIncidents(mailed, down.fetcher, at);
+      // Dal terzo tentativo fallito l'avviso parte anche per email, una volta sola.
+      expect(mail).toHaveBeenCalledTimes(attempt >= 2 ? 1 : 0);
       const [row] = (await incident()) as [{ retry_at: string; attempts: number }];
       expect(row.attempts).toBe(attempt + 1);
       waits.push((Date.parse(row.retry_at) - at.getTime()) / minute);
@@ -918,9 +928,46 @@ describe("avvisi degli incidenti", () => {
     }
     expect(waits).toEqual([10, 20, 40, 80, 160, 320, 360, 360]);
     expect(logged).toHaveBeenCalledTimes(8);
+    const [email] = mail.mock.calls[0]!;
+    expect(email).toMatchObject({
+      to: infoEmail,
+      replyTo: infoEmail,
+      subject: "FiscalBay · 🟠 Aperta · Servizi spenti dalla console",
+    });
+    expect(email.text).toContain(`🔗 Apri nella console: ${origin}/admin/interruttori`);
     // L'invio riuscito azzera i tentativi.
     await reconcileOwnerIncidents(environment, bot().fetcher, at);
     expect(await incident()).toMatchObject([{ notified: "opened", attempts: 0, retry_at: null }]);
+  });
+
+  it("avvisa 45 giorni prima di una scadenza del registro, la aggrava alla scadenza e la chiude al rinnovo", async () => {
+    const record = (name: string, expires: string | null) =>
+      env.DB.prepare(`INSERT OR REPLACE INTO credential_expiries (name, expires_on, recorded_at)
+          VALUES (?, ?, ?)`)
+        .bind(name, expires, now)
+        .run();
+    await record("EBAY_CLIENT_SECRET", "2026-11-01");
+    await record("STRIPE_SECRET_KEY", null);
+    // A 49 giorni dalla scadenza nessun avviso; la voce senza data resta nella console.
+    const api = bot();
+    await reconcileOwnerIncidents(environment, api.fetcher, later(0));
+    expect(api.calls).toEqual([]);
+    expect((await listAnomalies(env.DB, later(0))).map((anomaly) => anomaly.key)).toEqual([
+      "credential_undated",
+    ]);
+    const warned = new Date("2026-09-17T00:01:00.000Z");
+    await regularTasks(warned);
+    await reconcile(environment, api.fetcher, warned);
+    expect(api.calls.map(heading)).toEqual(["🟠 Aperta · Credenziali in scadenza"]);
+    expect(JSON.stringify(api.calls[0]!.params)).toContain("EBAY_CLIENT_SECRET · 2026-11-01");
+    const expired = new Date("2026-11-01T00:10:00.000Z");
+    await regularTasks(expired);
+    await reconcile(environment, api.fetcher, expired);
+    expect(heading(api.calls[1]!)).toBe("🔴 Aggravata · Credenziali in scadenza");
+    await record("EBAY_CLIENT_SECRET", "2027-11-01");
+    await reconcile(environment, api.fetcher, new Date("2026-11-01T00:20:00.000Z"));
+    expect(heading(api.calls[2]!)).toBe("🟢 Rientrata · Credenziali in scadenza");
+    expect(api.calls).toHaveLength(3);
   });
 
   it("una P1 che torna P2 e poi P1 non ripete l'avviso", async () => {
@@ -953,6 +1000,324 @@ describe("avvisi degli incidenti", () => {
     expect(api.methods()).toEqual(["sendRichMessage", "sendMessage"]);
     expect(String(api.calls[1]!.params.text)).toContain("Aperta · Servizi spenti dalla console");
     expect(await incident()).toMatchObject([{ notified: "opened", attempts: 0, retry_at: null }]);
+  });
+});
+
+describe("avvisi commerciali", () => {
+  const notifications = () =>
+    env.DB.prepare("SELECT * FROM owner_notifications ORDER BY occurred_at, key")
+      .all<Record<string, unknown>>()
+      .then((r) => r.results);
+
+  /** Utente registrato con profilo, come al completamento della registrazione. */
+  async function register(id: string, options: { waitlisted?: boolean; admin?: boolean } = {}) {
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO "user" ("id", "name", "email", "emailVerified", "createdAt",
+          "updatedAt", "admin") VALUES (?1, 'Mario Rossi', ?2, 1, ?3, ?3, ?4)`).bind(
+        id,
+        `${id}@example.invalid`,
+        now,
+        options.admin ? 1 : 0,
+      ),
+      env.DB.prepare(`INSERT INTO user_profiles (user_id, first_name, last_name, account_type,
+          updated_at, waitlisted_at) VALUES (?1, 'Mario', 'Rossi', 'private', ?2, ?3)`).bind(
+        id,
+        now,
+        options.waitlisted ? now : null,
+      ),
+    ]);
+  }
+
+  function subscription(id: string, workspaceId: string, status = "active") {
+    return env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+        customer_id, offer, price_generation, status, current_period_start, current_period_end,
+        cancel_at_period_end, synced_at, checked_at)
+      VALUES (?1, ?2, 'test', ?3, 'monthly', 'g1', ?4, ?5, ?6, 0, ?5, ?5)`).bind(
+      id,
+      workspaceId,
+      `cus_${id}`,
+      status,
+      now,
+      later(60 * 24 * 30).toISOString(),
+    );
+  }
+
+  const updateSubscription = (id: string, set: string) =>
+    env.DB.prepare(`UPDATE stripe_subscriptions SET ${set} WHERE id = ?`).bind(id).run();
+
+  async function deliver(api = bot(), at = later(1)) {
+    await runOwnerNotifications(environment, api.fetcher, at);
+    return api;
+  }
+
+  it("ogni fatto commerciale avvisa una volta, anche ripetuto o riletto, senza email né nomi", async () => {
+    await register("n-u1", { waitlisted: true });
+    await register("n-admin", { admin: true });
+    await env.DB.batch(insertWorkspace({ id: "w-n", userId: "n-u1" }));
+    await env.DB.prepare(
+      "UPDATE user_profiles SET waitlisted_at = NULL WHERE user_id = 'n-u1'",
+    ).run();
+    await env.DB.batch([
+      insertStore({ id: "s-n", workspaceId: "w-n" }),
+      insertCredentials({ storeId: "s-n", accessExpiresAt: later(600).toISOString() }),
+      insertEntitlement({
+        id: "e-trial",
+        workspaceId: "w-n",
+        source: "trial",
+        endsAt: later(60 * 24 * 14).toISOString(),
+      }),
+      subscription("sub_n", "w-n"),
+    ]);
+    const paid = (id: string, start: number, days: number) =>
+      insertEntitlement({
+        id,
+        workspaceId: "w-n",
+        source: "premium",
+        startsAt: later(start).toISOString(),
+        endsAt: later(start + days * 24 * 60).toISOString(),
+        stripeInvoiceId: `in_${id}`,
+        amountPaid: 499,
+        currency: "eur",
+        paidAt: later(start).toISOString(),
+      });
+    // Il primo mese, il rinnovo e il primo anno: il rinnovo non avvisa.
+    await env.DB.batch([
+      paid("e-m1", 0, 30),
+      paid("e-m2", 60 * 24 * 30, 30),
+      paid("e-y1", 60 * 24 * 60, 365),
+    ]);
+    await env.DB.prepare(
+      "UPDATE workspace_entitlements SET amount_refunded = 100 WHERE id = 'e-m1'",
+    ).run();
+    // La stessa somma riletta dalla riconciliazione non avvisa di nuovo.
+    await env.DB.prepare(
+      "UPDATE workspace_entitlements SET amount_refunded = 100 WHERE id = 'e-m1'",
+    ).run();
+    await env.DB.prepare(`UPDATE workspace_entitlements SET amount_refunded = 499,
+        revoked_at = ?1, revocation = 'refund' WHERE id = 'e-m1'`)
+      .bind(later(5).toISOString())
+      .run();
+    await updateSubscription("sub_n", "cancel_at_period_end = 1");
+    await updateSubscription("sub_n", "cancel_at_period_end = 1");
+    await updateSubscription("sub_n", "status = 'canceled'");
+
+    const first = await deliver();
+    const second = await deliver(bot(), later(11));
+    expect(first.calls.map(heading)).toEqual([
+      "🆕 Nuova registrazione",
+      "✅ Ammissione dalla lista d’attesa",
+      "🏪 Primo negozio collegato",
+      "🧪 Prova avviata",
+      "💶 Primo acquisto",
+      "💶 Primo acquisto",
+      "↩️ Rimborso",
+      "↩️ Rimborso",
+      "📅 Disdetta programmata",
+      "⛔ Abbonamento chiuso",
+    ]);
+    expect(second.calls).toEqual([]);
+    const text = JSON.stringify(first.calls);
+    expect(text).not.toContain("example.invalid");
+    expect(text).not.toContain("Rossi");
+    expect(text).not.toContain("Sintetico");
+    expect(text).toContain("4,99\u00a0€");
+    expect(text).toContain("Parziale, copertura conservata");
+    expect(text).toContain("Totale, copertura revocata");
+    expect(text).toContain("Annuale");
+    expect(buttons(first.calls[0]!)).toEqual([
+      { text: "🔗 Apri nella console", url: `${origin}/admin/account` },
+    ]);
+    expect(buttons(first.calls[2]!)).toEqual([
+      { text: "🔗 Apri nella console", url: `${origin}/admin/spazi/w-n` },
+    ]);
+    expect(await notifications()).toHaveLength(10);
+    expect((await notifications()).every((row) => row.status === "sent")).toBe(true);
+  });
+
+  it("separa la chiusura programmata di un rinnovo non pagato da una disdetta", async () => {
+    await env.DB.batch([...insertWorkspace({ id: "w-p" }), subscription("sub_p", "w-p")]);
+    await updateSubscription("sub_p", "status = 'past_due'");
+    await updateSubscription("sub_p", "cancel_at_period_end = 1");
+    await updateSubscription("sub_p", "status = 'past_due'");
+    await updateSubscription("sub_p", "status = 'canceled'");
+    // Un checkout mai pagato che scade non è un abbonamento chiuso.
+    await env.DB.batch([subscription("sub_i", "w-p", "incomplete")]);
+    await updateSubscription("sub_i", "status = 'incomplete_expired'");
+    const api = await deliver();
+    expect(api.calls.map(heading)).toEqual(["⚠️ Rinnovo non pagato", "⛔ Abbonamento chiuso"]);
+    expect(JSON.stringify(api.calls[1]!.params)).toContain("Rinnovo non pagato");
+  });
+
+  it("avvisa della prova conclusa con o senza acquisto e della disputa aperta e persa", async () => {
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-t1" }),
+      ...insertWorkspace({ id: "w-t2" }),
+      insertEntitlement({
+        id: "t1",
+        workspaceId: "w-t1",
+        source: "trial",
+        endsAt: later(60).toISOString(),
+      }),
+      insertEntitlement({
+        id: "t2",
+        workspaceId: "w-t2",
+        source: "trial",
+        endsAt: later(60).toISOString(),
+      }),
+      env.DB.prepare(`INSERT INTO workspace_funnel_steps (workspace_id, step, occurred_at)
+        VALUES ('w-t2', 'purchase', ?)`).bind(later(30).toISOString()),
+      subscription("sub_t2", "w-t2"),
+    ]);
+    await deliver(bot(), later(1));
+    // Prima della fine nessuna prova conclusa; dopo, una per prova anche a turni ripetuti.
+    const ended = await deliver(bot(), later(70));
+    await deliver(bot(), later(80));
+    expect(ended.calls.map(heading)).toEqual(["⌛ Prova conclusa", "⌛ Prova conclusa"]);
+    expect(JSON.stringify(ended.calls[0]!.params)).toContain("Senza acquisto");
+    expect(JSON.stringify(ended.calls[1]!.params)).toContain("Con acquisto");
+
+    await recordDisputeOpened(env.DB, "dp_1", { subscription: "sub_t2" }, later(90));
+    await recordDisputeOpened(env.DB, "dp_1", { subscription: "sub_t2" }, later(91));
+    // Un pagamento estraneo non avvisa.
+    await recordDisputeOpened(env.DB, "dp_2", { subscription: "sub_altro" }, later(91));
+    await recordDisputeOpened(env.DB, "dp_3", { lifetime: "cs_altro" }, later(91));
+    await env.DB.batch([
+      insertEntitlement({
+        id: "e-d",
+        workspaceId: "w-t2",
+        source: "premium",
+        endsAt: later(60 * 24 * 30).toISOString(),
+        stripeInvoiceId: "in_d",
+        amountPaid: 499,
+        currency: "eur",
+        paidAt: now,
+      }),
+    ]);
+    await env.DB.prepare(`UPDATE workspace_entitlements SET revoked_at = ?, revocation = 'dispute'
+        WHERE id = 'e-d'`)
+      .bind(later(95).toISOString())
+      .run();
+    const disputes = await deliver(bot(), later(100));
+    expect(disputes.calls.map(heading)).toEqual([
+      "⚖️ Disputa aperta",
+      "💶 Primo acquisto",
+      "⚖️ Disputa persa",
+    ]);
+  });
+
+  it("segnala i posti lifetime a cinque, due e zero, le cancellazioni finanziarie e dell'account", async () => {
+    const seats = Array.from({ length: 20 }, (_, index) => index + 1);
+    await env.DB.batch(seats.flatMap((slot) => insertWorkspace({ id: `w-l${slot}` })));
+    for (const slot of seats.slice(0, 19))
+      await env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
+          activated_at, created_at) VALUES (?1, ?2, 'active', 'gift', ?3, ?3)`)
+        .bind(slot, `w-l${slot}`, now)
+        .run();
+    // L'ultimo posto passa da prenotato ad attivo, come una vendita confermata.
+    await env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
+        expires_at, created_at) VALUES (20, 'w-l20', 'reserved', 'sale', ?1, ?2)`)
+      .bind(later(60).toISOString(), now)
+      .run();
+    await env.DB.prepare(`UPDATE lifetime_allocations SET status = 'active', activated_at = ?1,
+        provider_reference = 'cs_l20', customer_id = 'cus_l20' WHERE slot = 20`)
+      .bind(later(1).toISOString())
+      .run();
+    await env.DB.prepare(`INSERT INTO stripe_customer_erasures (customer_id, environment, source,
+        received_at) VALUES ('cus_l20', 'test', 'webhook', ?)`)
+      .bind(later(2).toISOString())
+      .run();
+    await env.DB.prepare(`INSERT INTO account_deletions (id, user_id, workspace_id, requested_at)
+        VALUES ('del-1', 'n-gone', 'w-sparito', ?)`)
+      .bind(later(3).toISOString())
+      .run();
+    const api = await deliver(bot(), later(5));
+    expect(api.calls.map(heading)).toEqual([
+      "🎟 Posti lifetime in esaurimento",
+      "🎟 Posti lifetime in esaurimento",
+      "🎟 Posti lifetime esauriti",
+      "🧾 Cancellazione dei dati finanziari",
+      "🗑 Account cancellato",
+    ]);
+    expect(JSON.stringify(api.calls[0]!.params)).toContain("5 su 20");
+    expect(JSON.stringify(api.calls[3]!.params)).toContain("Richiesta tramite Link");
+    expect(buttons(api.calls[0]!)).toEqual([
+      { text: "🔗 Apri nella console", url: `${origin}/admin/commerciale` },
+    ]);
+    expect(buttons(api.calls[3]!)).toEqual([
+      { text: "🔗 Apri nella console", url: `${origin}/admin/spazi/w-l20` },
+    ]);
+    // Lo spazio cancellato non c'è più: l'avviso resta senza collegamento allo spazio.
+    expect(buttons(api.calls[4]!)).toEqual([
+      { text: "🔗 Apri nella console", url: `${origin}/admin/account` },
+    ]);
+  });
+
+  it("invia al più dieci avvisi per turno e ritenta con attese crescenti fino a rinunciare", async () => {
+    for (let index = 0; index < 12; index += 1) await register(`n-many-${index}`);
+    const first = await deliver(bot(), later(1));
+    expect(first.calls).toHaveLength(10);
+    const failing = bot(() => new Response("", { status: 502 }));
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const pending = () =>
+      env.DB.prepare(`SELECT key, attempts, status, retry_at FROM owner_notifications
+          WHERE status <> 'sent' ORDER BY rowid`)
+        .all<{ key: string; attempts: number; status: string; retry_at: string | null }>()
+        .then((r) => r.results);
+    // Il primo invio fallito ferma il turno: l'avviso dopo non viene tentato.
+    await deliver(failing, later(11));
+    const [failed, next] = await pending();
+    expect(failed).toMatchObject({
+      attempts: 1,
+      status: "pending",
+      retry_at: later(21).toISOString(),
+    });
+    expect(next).toMatchObject({ attempts: 0, status: "pending", retry_at: null });
+    await env.DB.prepare("UPDATE owner_notifications SET status = 'sent' WHERE key = ?")
+      .bind(next!.key)
+      .run();
+    // Prima dell'attesa nessun nuovo tentativo.
+    const calls = failing.calls.length;
+    await deliver(failing, later(15));
+    expect(failing.calls).toHaveLength(calls);
+    let at = 21;
+    for (const wait of [20, 40, 80]) {
+      await deliver(failing, later(at));
+      at += wait;
+    }
+    expect(await pending()).toMatchObject([
+      { attempts: 4, status: "pending", retry_at: later(at).toISOString() },
+    ]);
+    await deliver(failing, later(at));
+    expect(await pending()).toMatchObject([{ attempts: 5, status: "failed" }]);
+    expect(logged).toHaveBeenCalled();
+    // Un avviso non riuscito non torna nei turni successivi.
+    expect((await deliver(bot(), later(at + 360))).calls).toEqual([]);
+  });
+
+  it("riprende un avviso rimasto in un turno interrotto e la pulizia lo elimina dopo trenta giorni", async () => {
+    await register("n-stale");
+    await env.DB.prepare(`UPDATE owner_notifications SET status = 'processing', attempts = 1,
+        claim_token = 'x', claimed_at = ?`)
+      .bind(later(1).toISOString())
+      .run();
+    expect((await deliver(bot(), later(5))).calls).toEqual([]);
+    expect((await deliver(bot(), later(20))).calls.map(heading)).toEqual([
+      "🆕 Nuova registrazione",
+    ]);
+    await purgeExpiredRecords(env.DB, later(60 * 24 * 29));
+    expect(await notifications()).toHaveLength(1);
+    await purgeExpiredRecords(env.DB, later(60 * 24 * 31));
+    expect(await notifications()).toEqual([]);
+  });
+
+  it("con la cancellazione dell'utente escono gli avvisi con il suo identificativo", async () => {
+    await register("n-del", { waitlisted: true });
+    await env.DB.prepare(
+      "UPDATE user_profiles SET waitlisted_at = NULL WHERE user_id = 'n-del'",
+    ).run();
+    expect(await notifications()).toHaveLength(2);
+    await env.DB.prepare(`DELETE FROM "user" WHERE id = 'n-del'`).run();
+    expect(await notifications()).toEqual([]);
   });
 });
 

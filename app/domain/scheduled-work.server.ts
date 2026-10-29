@@ -12,6 +12,7 @@ import { indexOrderSearch, purgeExpiredRecords } from "./maintenance.server";
 import { dispatchStoreSyncs } from "./order-sync.server";
 import { configureOwnerCommands } from "./owner-control.server";
 import { reconcileOwnerIncidents } from "./owner-incidents.server";
+import { runOwnerNotifications } from "./owner-notifications.server";
 import { configureBotCommands } from "./telegram-bot.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
@@ -104,10 +105,18 @@ const tasks = {
     period: taskPeriods.ebay_quotas,
     run: (env: Env, fetcher: typeof fetch, now: Date) => readEbayQuotas(env, fetcher, now),
   },
-  // Avvisi all'owner di apertura, aggravamento e rientro delle anomalie P1 e P2.
+  // Avvisi all'owner: apertura, aggravamento e rientro delle anomalie P1 e P2, poi gli avvisi
+  // commerciali. Un errore degli uni non ferma gli altri e fa ripetere il compito.
   owner_incidents: {
     period: taskPeriods.owner_incidents,
-    run: (env: Env, fetcher: typeof fetch, now: Date) => reconcileOwnerIncidents(env, fetcher, now),
+    run: async (env: Env, fetcher: typeof fetch, now: Date) => {
+      const [incidents, notifications] = await Promise.allSettled([
+        reconcileOwnerIncidents(env, fetcher, now),
+        runOwnerNotifications(env, fetcher, now),
+      ]);
+      for (const result of [incidents, notifications])
+        if (result.status === "rejected") throw result.reason;
+    },
   },
   // Cancellazioni da riprendere, dell'account e richieste da eBay: messaggio perso, rinnovi non
   // ancora fermati, email da ritentare o dati ricomparsi dopo un restore. Un errore di una parte

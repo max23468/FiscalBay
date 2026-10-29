@@ -867,9 +867,11 @@ describe("cancellazione dell'account", () => {
     expect(await env.EXPORT_FILES.get("f-a")).toBeNull();
     // In tutto lo schema restano soltanto il marker, il segno, il posto lifetime senza spazio, il
     // registro della console, il trasferimento verso l'altro spazio, che resta con il negozio, e
-    // l'aggregato giornaliero delle letture, senza riferimenti.
+    // l'aggregato giornaliero delle letture, senza riferimenti, e l'avviso all'owner della
+    // cancellazione, senza spazio.
     expect(await remainingRows(userId)).toEqual({
       sync_daily: 1,
+      owner_notifications: 1,
       account_deletions: 1,
       store_identity_marks: 1,
       lifetime_allocations: 1,
@@ -878,6 +880,9 @@ describe("cancellazione dell'account", () => {
       workspaces: 1,
       ebay_stores: 1,
     });
+    expect(
+      await env.DB.prepare("SELECT key, workspace_id FROM owner_notifications").first(),
+    ).toEqual({ key: `account_deleted:${id}`, workspace_id: null });
     expect(
       await env.DB.prepare("SELECT workspace_id, customer_id FROM lifetime_allocations").first(),
     ).toEqual({ workspace_id: null, customer_id: "cus_lifetime" });
