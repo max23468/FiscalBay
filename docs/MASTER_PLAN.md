@@ -1955,7 +1955,7 @@ Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effe
 
 **Stato:** Completato · **Prerequisiti:** M7 · **Contratto:** [§34](#s34) · [§37](#s37)
 
-La versione `2.0.0-rc.1` in cima a `CHANGELOG.md` congela `develop` alle sole correzioni: la CI rifiuta titoli `feat` e modifiche incompatibili, e una correzione distribuita apre la RC successiva (D233). `release:cycle rc` identifica in sola lettura commit, artefatto, versione del Worker, schema e configurazione della RC sul test, e la rifiuta senza gate, deploy, readback e qualifica completa del tree ([procedura](engineering/RELEASE.md#release-candidate)). La RC non crea tag né release stabili.
+La versione `2.0.0-rc.1` in cima a `CHANGELOG.md` congela `develop` alle sole correzioni: la CI rifiuta titoli `feat` e modifiche incompatibili, e una correzione distribuita apre la RC successiva (D233). `release:cycle rc` identifica in sola lettura commit, artefatto, versione del Worker, schema e configurazione della RC sul test, e la rifiuta senza gate, deploy, readback e qualifica completa del tree ([procedura](engineering/RELEASE.md#release-candidate)). La RC non crea tag né release stabili. PR: [#532](https://github.com/max23468/FiscalBay/pull/532).
 
 <a id="m8-02"></a>
 #### M8-02 · Preparazione test merchant
