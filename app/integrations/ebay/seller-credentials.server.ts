@@ -16,21 +16,22 @@ export type SellerTokens = {
 type TokenKind = "access" | "refresh";
 
 const sealedPrefix = "v1.";
-const keyInfo = "fiscalbay/ebay-seller-token/v1";
 
-const refreshSchema = z.looseObject({
-  access_token: z.string().min(1),
-  expires_in: z.number().int().positive(),
-});
+/**
+ * Scopo della chiave derivata e dati autenticati: negozio e tipo, così un token copiato su
+ * un'altra riga non si apre. Calcolati a ogni uso, come lo schema del rinnovo, perché il
+ * mutation test provi soltanto le prove che li coprono.
+ */
+const sealContext = (storeId: string, kind: TokenKind) =>
+  ["fiscalbay/ebay-seller-token/v1", `${storeId}:${kind}`] as const;
 
-// Negozio e tipo entrano nei dati autenticati: un token copiato su un'altra riga non si apre.
 export async function sealToken(
   secret: string,
   storeId: string,
   kind: TokenKind,
   token: string,
 ): Promise<string> {
-  return sealedPrefix + (await seal(secret, keyInfo, `${storeId}:${kind}`, token));
+  return sealedPrefix + (await seal(secret, ...sealContext(storeId, kind), token));
 }
 
 /**
@@ -45,7 +46,7 @@ export async function openToken(
   value: string,
 ): Promise<string> {
   if (!value.startsWith(sealedPrefix)) throw new Error("unsupported_token_format");
-  return unseal(secret, keyInfo, `${storeId}:${kind}`, value.slice(sealedPrefix.length));
+  return unseal(secret, ...sealContext(storeId, kind), value.slice(sealedPrefix.length));
 }
 
 /**
@@ -148,6 +149,10 @@ export async function refreshStoreToken(input: {
   } catch {
     return reject();
   }
+  const refreshSchema = z.looseObject({
+    access_token: z.string().min(1),
+    expires_in: z.number().int().positive(),
+  });
   let token: z.infer<typeof refreshSchema>;
   try {
     token = await upstreamJson(input.fetcher, configuration.tokenUrl, refreshSchema, {

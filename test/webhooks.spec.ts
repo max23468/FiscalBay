@@ -162,7 +162,7 @@ it("verifica direttamente una firma valida e rifiuta header fuori limite", async
   for (const invalid of ["", "x".repeat(2049)]) {
     await expect(
       verifyEbayNotification(body, invalid, environment, "production", fetcher, now.getTime()),
-    ).rejects.toThrow();
+    ).rejects.toMatchObject({ failure: "header" });
   }
 });
 
@@ -2056,6 +2056,17 @@ it("accetta la firma SHA-1 delle notifiche di cancellazione dichiarata dalla chi
     (await receiveWebhook(signed(payload, "SHA256", "sha1-key"), environment, sha1Key, now))
       ?.status,
   ).toBe(412);
+  const mismatch = signed(payload, "SHA256", "sha1-key");
+  await expect(
+    verifyEbayNotification(
+      await mismatch.text(),
+      mismatch.headers.get("x-ebay-signature"),
+      environment,
+      "production",
+      sha1Key,
+      now.getTime(),
+    ),
+  ).rejects.toMatchObject({ failure: "signature" });
   // Una firma SHA-1 senza il digest dichiarato dalla chiave segue l'header.
   expect(
     (await receiveWebhook(signed(payload, "SHA1", "plain-key"), environment, fetcher, now))?.status,
