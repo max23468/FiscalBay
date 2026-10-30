@@ -3,7 +3,7 @@
  * dalla console: un modulo senza dipendenze, così chi li legge non dipende da chi li usa.
  */
 
-const minute = 60_000;
+export const minute = 60_000;
 
 /** Periodo di ogni compito periodico smistato dal cron. */
 export const taskPeriods = {
@@ -25,9 +25,24 @@ export type ScheduledTask = keyof typeof taskPeriods;
 export const stalledReceiptMilliseconds = 60 * minute;
 
 /**
+ * Attesa in millisecondi dopo il tentativo `attempts`, contato da 1: raddoppia da `base` a ogni
+ * tentativo fino a `cap`. Un'attesa indicata dal provider, in secondi, vale al suo posto.
+ */
+export function backoffMs(
+  attempts: number,
+  base: number,
+  cap: number,
+  retryAfterSeconds?: number,
+): number {
+  return retryAfterSeconds === undefined
+    ? Math.min(cap, base * 2 ** (attempts - 1))
+    : retryAfterSeconds * 1000;
+}
+
+/**
  * Attesa in secondi prima di ripetere un messaggio della coda non riuscito: raddoppia da 30
  * secondi a ogni tentativo, fino a un'ora.
  */
 export function queueRetryDelay(attempts: number): number {
-  return Math.min(3600, 30 * 2 ** (attempts - 1));
+  return backoffMs(attempts, 30_000, 60 * minute) / 1000;
 }

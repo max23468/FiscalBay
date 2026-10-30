@@ -189,12 +189,14 @@ export async function consumeExportJob(
 ): Promise<void> {
   const { exportJob: id } = jobMessageSchema.parse(message.body);
   const at = now.toISOString();
+  // Il termine del blocco è anche il segno di chi lo tiene: il rilascio lo confronta.
+  const lock = new Date(now.getTime() + lockMilliseconds).toISOString();
   const job = await env.DB.prepare(
     `UPDATE export_jobs SET locked_until = ?2
       WHERE id = ?1 AND state = 'queued' AND (locked_until IS NULL OR locked_until <= ?3)
       RETURNING user_id, access_revision, request_sealed, file_name, requested_at`,
   )
-    .bind(id, new Date(now.getTime() + lockMilliseconds).toISOString(), at)
+    .bind(id, lock, at)
     .first<{
       user_id: string;
       access_revision: number;
@@ -271,11 +273,12 @@ export async function consumeExportJob(
       await fail();
       return;
     }
-    // Una pulizia non riuscita lascia scadere il blocco: il nuovo tentativo parte comunque.
+    // Una pulizia non riuscita lascia scadere il blocco: il nuovo tentativo parte comunque. Un
+    // blocco già scaduto e preso da un altro consumer resta suo.
     await env.DB.prepare(
-      "UPDATE export_jobs SET locked_until = NULL WHERE id = ? AND state = 'queued'",
+      "UPDATE export_jobs SET locked_until = NULL WHERE id = ?1 AND state = 'queued' AND locked_until = ?2",
     )
-      .bind(id)
+      .bind(id, lock)
       .run()
       .catch((cleanup: unknown) => logFailure({ error: cleanup, operation: "export_files" }));
     message.retry({ delaySeconds: queueRetryDelay(message.attempts) });

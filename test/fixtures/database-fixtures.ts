@@ -2,6 +2,9 @@ import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 
 export const now = "2026-09-13T20:00:00.000Z";
+
+/** Istante a `minutes` minuti da `now`. */
+export const later = (minutes: number) => new Date(Date.parse(now) + minutes * 60_000);
 /**
  * Tabelle che vivono con l'utente Better Auth: le prove creano utenti con email proprie e il
  * reset non li elimina, quindi conserva anche profilo, consensi e preferenze personali.
@@ -207,6 +210,52 @@ export function insertWorkspace({
           ).bind(id, userId),
         ]
       : []),
+  ];
+}
+
+/**
+ * Ordine con un articolo e un Codice Fiscale, da eseguire dentro un `batch`. L'acquirente porta
+ * username e token eIAS; `mergedInto` indica l'ordine in cui è confluito, `retentionUntil` la
+ * conservazione e, senza, vale quella predefinita dello schema.
+ */
+export function insertOrder(
+  id: string,
+  {
+    storeId = "s-a",
+    buyer,
+    mergedInto = null,
+    retentionUntil = null,
+  }: {
+    storeId?: string;
+    buyer?: { eias: string | null; username: string };
+    mergedInto?: string | null;
+    retentionUntil?: string | null;
+  } = {},
+) {
+  return [
+    env.DB.prepare(
+      `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,
+         currency, total_minor, buyer_json, buyer_eias_token, merged_into, retention_until,
+         purge_after)
+       VALUES (?1, ?2, ?3, ?4, ?4, 'EUR', 1299, ?5, ?6, ?7, ?8, ?8)`,
+    ).bind(
+      id,
+      storeId,
+      `ebay-${id}`,
+      now,
+      buyer ? JSON.stringify({ username: buyer.username, name: "Mario Rossi" }) : null,
+      buyer?.eias ?? null,
+      mergedInto,
+      retentionUntil,
+    ),
+    env.DB.prepare(
+      `INSERT INTO order_items (id, order_id, line_item_id, title, quantity, total_minor, currency)
+       VALUES (?1, ?2, ?3, 'Articolo', 1, 1299, 'EUR')`,
+    ).bind(`i-${id}`, id, `line-${id}`),
+    env.DB.prepare(
+      `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source,
+         observed_at) VALUES (?1, ?2, 'CODICE_FISCALE', 'IT', 'RSSMRA80A01H501U', 'synthetic_fixture', ?3)`,
+    ).bind(`t-${id}`, id, now),
   ];
 }
 

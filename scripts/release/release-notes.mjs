@@ -2,6 +2,9 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+
+import { gh, ghJson } from "../lib/provider.mjs";
 
 export function releaseNotes(changelog, version) {
   if (!/^2\.\d+\.\d+(?:-(?:alpha|rc)\.\d+)?$/u.test(version))
@@ -41,12 +44,14 @@ export function releaseStep(tagTarget, releases, tag, sha) {
 }
 
 async function main() {
-  const version = process.argv[2];
+  const {
+    positionals: [version],
+    values: { publish: sha },
+  } = parseArgs({ allowPositionals: true, options: { publish: { type: "string" } } });
   const notes = releaseNotes(readFileSync("CHANGELOG.md", "utf8"), version);
   mkdirSync("reports", { recursive: true });
   writeFileSync("reports/release-notes.md", `${notes}\n`);
-  if (process.argv[3] !== "--publish") return;
-  const sha = process.argv[4];
+  if (sha === undefined) return;
   if (!/^[0-9a-f]{40}$/u.test(sha)) throw new Error("Commit non valido.");
   const receipt = JSON.parse(readFileSync("reports/release.json", "utf8"));
   if (receipt.sha !== sha || !receipt.readback || receipt.rolledBack)
@@ -67,17 +72,15 @@ async function main() {
     { stdio: "inherit" },
   );
   const repo = process.env.GH_REPO;
-  const gh = (...args) =>
-    execFileSync("gh", args, { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
   const tag = `v${version}`;
-  const refs = JSON.parse(gh("api", `repos/${repo}/git/matching-refs/tags/${tag}`));
+  const refs = ghJson("api", `repos/${repo}/git/matching-refs/tags/${tag}`);
   const existing = refs.find((ref) => ref.ref === `refs/tags/${tag}`);
   const target =
     existing?.object.type === "tag"
-      ? JSON.parse(gh("api", `repos/${repo}/git/tags/${existing.object.sha}`)).object.sha
+      ? ghJson("api", `repos/${repo}/git/tags/${existing.object.sha}`).object.sha
       : existing?.object.sha;
   const releases = existing
-    ? JSON.parse(gh("api", "--paginate", "--slurp", `repos/${repo}/releases?per_page=100`)).flat()
+    ? ghJson("api", "--paginate", "--slurp", `repos/${repo}/releases?per_page=100`).flat()
     : [];
   if (releaseStep(target, releases, tag, sha) === "done") return;
   gh(
@@ -92,7 +95,7 @@ async function main() {
     "reports/release-notes.md",
     ...(version.includes("-") ? ["--prerelease"] : []),
   );
-  const release = JSON.parse(gh("release", "view", tag, "--json", "url,tagName,isDraft"));
+  const release = ghJson("release", "view", tag, "--json", "url,tagName,isDraft");
   if (release.tagName !== tag || release.isDraft) throw new Error("GitHub Release non confermata.");
   console.log(`Release confermata: ${release.url}`);
 }

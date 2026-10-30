@@ -22,13 +22,13 @@ import {
   type ContactsView,
   type OrderView,
 } from "../../view-models";
-import { addressRows, formatDate } from "../../format";
+import { addressRows } from "../../format";
 import { CopyButton } from "~/components/tax-code";
 import { FiscalCodes, FiscalNotes, type FiscalProps } from "./fiscal";
 import { fromListState, missingContact } from "./labels";
 import { ebayOrderHref } from "../../orders/ebay-links";
-import { buyerLabel, paymentLabel, shippingLabel, type PillTone } from "./status";
-import { useTimeZone } from "~/components/time-zone";
+import { buyerLabel, paymentLabel, shippingLabel } from "./status";
+import { useDate } from "~/components/time-zone";
 import { useCopy } from "~/components/copy-context";
 
 /** Azioni secondarie disponibili nella pagina: eBay ed esportazione del singolo ordine. */
@@ -37,11 +37,6 @@ export interface SecondaryActions {
   openOnEbay: boolean;
   /** Esiste la sezione Esportazione, che riceve selezione, filtri e ricerca degli Ordini. */
   exportable: boolean;
-}
-
-/** Stato di pagamento o spedizione: etichetta tinta, il testo resta la fonte. */
-function StatePill({ tone, children }: { tone: PillTone; children: string }) {
-  return <Badge variant={tone}>{children}</Badge>;
 }
 
 /** Area di tocco invisibile di almeno 44 px per i collegamenti testuali, come per i pulsanti. */
@@ -315,7 +310,7 @@ export function OrderCard({
   actions: SecondaryActions;
 }) {
   const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const date = useDate();
   const titleId = useId();
   const [first, second, ...rest] = order.items;
   const shown = [first, second].filter((item) => item !== undefined);
@@ -378,7 +373,7 @@ export function OrderCard({
         </div>
         <p className="flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
           <time dateTime={order.createdAt} className="whitespace-nowrap">
-            {formatDate(order.createdAt, language, "dateTime", zone)}
+            {date(order.createdAt)}
           </time>
           <span aria-hidden="true">·</span>
           {/* Il punto ha la tinta del negozio, la stessa del suo avatar in Negozi. */}
@@ -391,11 +386,12 @@ export function OrderCard({
             {order.marketplace ? `, ${marketplaceLabel(order.marketplace)}` : null}
           </span>
         </p>
+        {/* Stato di pagamento e spedizione: etichetta tinta, il testo resta la fonte. */}
         <p className="mt-1.5 flex flex-wrap gap-1.5">
-          <StatePill tone={payment.tone}>{payment.label}</StatePill>
-          <StatePill tone={shipping.tone}>{shipping.label}</StatePill>
+          <Badge variant={payment.tone}>{payment.label}</Badge>
+          <Badge variant={shipping.tone}>{shipping.label}</Badge>
           {order.reconciliationIssue ? (
-            <StatePill tone="warning">{t.orders.reconciliationTitle}</StatePill>
+            <Badge variant="warning">{t.orders.reconciliationTitle}</Badge>
           ) : null}
         </p>
       </header>

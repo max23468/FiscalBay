@@ -9,6 +9,7 @@ import {
   type RichBlock,
   type RichMessage,
 } from "../integrations/telegram.server";
+import { backoffMs, minute } from "./work-timing";
 
 /**
  * Forma dei messaggi del Control Center dell'owner: un titolo, tabelle di righe etichetta-valore
@@ -33,6 +34,19 @@ const truncated = "\n… testo troncato";
 
 /** Righe oltre le quali una tabella si riassume, per restare leggibile su smartphone. */
 export const tableRows = 15;
+
+/**
+ * Attesa prima di ritentare un avviso all'owner dopo `failures` invii non riusciti: crescente
+ * fino a sei ore, o quella indicata da Telegram.
+ */
+export function ownerRetryMs(failures: number, error: unknown): number {
+  return backoffMs(
+    failures,
+    10 * minute,
+    6 * 60 * minute,
+    error instanceof UpstreamError ? error.details.retryAfter : undefined,
+  );
+}
 
 /** Ambiente nel piè di pagina: il bot è diverso, ma i messaggi inoltrati restano riconoscibili. */
 export function environmentName(env: Env) {

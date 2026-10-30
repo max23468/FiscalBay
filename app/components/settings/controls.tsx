@@ -3,19 +3,12 @@ import { useEffect, useId, useState } from "react";
 
 import { useAction } from "~/components/action";
 import { useHydrated } from "~/components/hydrated";
-import { StatusIcon } from "~/components/status";
-import { Checkbox } from "~/components/ui/checkbox";
 import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
+import { Select, SelectContent, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { useCopy } from "~/components/copy-context";
+import { PremiumSelectItem } from "~/components/premium-select-item";
 
 export type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -173,41 +166,12 @@ export function RadioOption({
   );
 }
 
-export function CheckboxOption({
-  name,
-  defaultChecked,
-  checked,
-  onCheckedChange,
-  children,
-}: {
-  name?: string;
-  defaultChecked?: boolean;
-  checked?: boolean;
-  onCheckedChange?: (checked: boolean) => void;
-  children: React.ReactNode;
-}) {
-  const id = useId();
-  return (
-    <FieldLabel id={id} className="font-normal">
-      <Checkbox
-        name={name}
-        defaultChecked={defaultChecked}
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        aria-labelledby={id}
-      />
-      {children}
-    </FieldLabel>
-  );
-}
-
 export function SimpleSelect({
   label,
   status,
   hint,
   items,
   value,
-  premiumLabel,
   onChange,
   disabled,
 }: {
@@ -218,7 +182,6 @@ export function SimpleSelect({
   /** `premium`: opzione del piano Premium, visibile con la corona ma non selezionabile. */
   items: Array<{ value: string; label: string; premium?: boolean }>;
   value: string;
-  premiumLabel?: string;
   onChange: (value: string) => void;
   disabled?: boolean;
 }) {
@@ -245,15 +208,7 @@ export function SimpleSelect({
         </SelectTrigger>
         <SelectContent>
           {items.map((item) => (
-            <SelectItem key={item.value} value={item.value} disabled={item.premium}>
-              {item.label}
-              {item.premium ? (
-                <>
-                  <StatusIcon tone="premium" className="ml-auto" />
-                  <span className="sr-only">{premiumLabel}</span>
-                </>
-              ) : null}
-            </SelectItem>
+            <PremiumSelectItem key={item.value} {...item} />
           ))}
         </SelectContent>
       </Select>

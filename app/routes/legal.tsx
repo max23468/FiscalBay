@@ -64,7 +64,7 @@ function withEmail(text: string): ReactNode {
   return (
     <>
       {text.slice(0, at)}
-      <a href={`mailto:${infoEmail}`} className="underline underline-offset-4">
+      <a href={`mailto:${infoEmail}`} className="link-underline">
         {infoEmail}
       </a>
       {text.slice(at + infoEmail.length)}

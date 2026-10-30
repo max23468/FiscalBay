@@ -12,6 +12,7 @@ import {
 } from "../integrations/stripe.server";
 import { freeQuotaSettings } from "./grants.server";
 import { lifetimeSlots } from "./lifetime.server";
+import { utc } from "./order-observation.server";
 import { dayMilliseconds } from "../time";
 
 /**
@@ -174,15 +175,13 @@ export async function listPromotions(db: D1Database, now = new Date()): Promise<
 
 export const promotionSchema = z
   .object({
-    startsAt: z.iso.datetime(),
-    endsAt: z.iso.datetime(),
+    startsAt: utc,
+    endsAt: utc,
     quota: z.coerce.number().int().min(1).max(100),
   })
   .refine(({ startsAt, endsAt }) => Date.parse(endsAt) > Date.parse(startsAt));
 
 export type PromotionResult = "done" | "invalid" | "overlap" | "not_found" | "started";
-
-const iso = (value: string) => new Date(value).toISOString();
 
 /**
  * Nuova promozione o modifica di una non conclusa. Non parte mai nel passato; di una promozione
@@ -203,13 +202,7 @@ export async function savePromotion(
       await db
         .prepare(`INSERT INTO free_promotions (id, starts_at, ends_at, quota, created_at)
           VALUES (?, ?, ?, ?, ?)`)
-        .bind(
-          crypto.randomUUID(),
-          iso(promotion.startsAt),
-          iso(promotion.endsAt),
-          promotion.quota,
-          at,
-        )
+        .bind(crypto.randomUUID(), promotion.startsAt, promotion.endsAt, promotion.quota, at)
         .run();
       return "done";
     }
@@ -219,12 +212,12 @@ export async function savePromotion(
       .first<{ starts_at: string; ends_at: string }>();
     if (!current || Date.parse(current.ends_at) <= now.getTime()) return "not_found";
     const started = Date.parse(current.starts_at) <= now.getTime();
-    if (started && iso(promotion.startsAt) !== current.starts_at) return "started";
+    if (started && promotion.startsAt !== current.starts_at) return "started";
     if (!started && Date.parse(promotion.startsAt) < now.getTime()) return "invalid";
     await db
       .prepare(`UPDATE free_promotions SET starts_at = ?2, ends_at = ?3, quota = ?4, updated_at = ?5
         WHERE id = ?1 AND julianday(ends_at) > julianday(?5)`)
-      .bind(input.id, iso(promotion.startsAt), iso(promotion.endsAt), promotion.quota, at)
+      .bind(input.id, promotion.startsAt, promotion.endsAt, promotion.quota, at)
       .run();
     return "done";
   } catch (error) {

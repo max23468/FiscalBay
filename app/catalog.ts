@@ -58,12 +58,17 @@ export const priceVariable = {
   lifetime: "STRIPE_PRICE_LIFETIME",
 } as const satisfies Record<PremiumOffer, keyof Env>;
 
-/** Prezzo netto in euro, senza decimali quando è intero. */
+/**
+ * Prezzo netto in euro, senza decimali quando è intero. Locali e raggruppamento sono quelli di
+ * `locales` e `formatAmount` in `i18n.ts`, ripetuti qui: `scripts/stripe-account.mjs` carica
+ * questo modulo con Node, che non risolve gli import senza estensione di `i18n.ts`.
+ */
 export function formatPrice(cents: number, language: Language) {
-  return new Intl.NumberFormat(language === "it" ? "it-IT" : "en-IE", {
+  return new Intl.NumberFormat(language === "it" ? "it-IT" : "en-GB", {
     style: "currency",
     currency: "EUR",
     minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    useGrouping: "always",
   }).format(cents / 100);
 }
 

@@ -19,7 +19,7 @@ import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "./token-refresh.server";
 import { sendReconnectNotices } from "./reconnect-notices.server";
 import { recoverWebhookIngress } from "../webhooks.server";
-import { queueRetryDelay, taskPeriods, type ScheduledTask } from "./work-timing";
+import { minute, queueRetryDelay, taskPeriods, type ScheduledTask } from "./work-timing";
 
 export type { ScheduledTask };
 
@@ -36,7 +36,6 @@ export type { ScheduledTask };
  * non concluso: i compiti lavorano su tutto ciò che è scaduto o in scadenza, non su una finestra.
  */
 
-const minute = 60_000;
 const staleMilliseconds = 60 * minute;
 const leaseMilliseconds = 15 * minute;
 

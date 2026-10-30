@@ -97,7 +97,7 @@ Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente q
 
 Non ripetere la stessa prescrizione per esteso in più fonti. Nel piano si mantiene il requisito, nella PR la prova dell'intervento e nel registro il perché. La granularità ordinaria è la milestone o una capacità significativa; i passi tecnici restano nella PR. Aggiornare questo piano soltanto per cambi di requisito, checkpoint, avanzamento significativo o questioni aperte, nella stessa PR dell'implementazione e prima del merge. Fix ordinari, refactoring e miglioramenti dei test non richiedono una modifica documentale fittizia. Il template PR dichiara l'impatto sul piano e il motivo. I test verificano una regola, non la ridefiniscono. Documenti separati solo con contenuto sostanziale e riusato; niente catalogo di file vuoti o API descritte a mano due volte se lo schema eseguibile è già sufficiente.
 
-Gli audit e la copertura numerica del grill in `docs/archive/` sono fotografie storiche, non letture ordinarie, specifiche correnti o vincoli di CI. Nuove sezioni, file accorpati e identificativi non consecutivi sono ammessi se i riferimenti e i requisiti restano coerenti.
+In `docs/archive/` la procedura di adozione è storica e non è una lettura ordinaria; l'audit UI/UX del test si mantiene, registrando ogni correzione verificata. Nessuno dei due è un vincolo di CI. Nuove sezioni, file accorpati e identificativi non consecutivi sono ammessi se i riferimenti e i requisiti restano coerenti.
 
 ### 0.4 Completezza e prove
 
@@ -696,7 +696,7 @@ Dal 2026-10-08, su indicazione dell'owner, nessuna attesa minima di 24 ore dalla
 | Localizzazione | Dizionari IT/EN tipizzati nel codice (`app/app-copy.ts`) e formatter `Intl` nativi, senza libreria di localizzazione (D149) |
 | Stripe | SDK ufficiale server-side, Hosted Checkout; niente Elements per il solo redirect |
 | HTTP, UUID, crittografia | fetch, crypto.randomUUID, Web Crypto del runtime ove qualificato |
-| Test | Vitest, Testing Library/user-event, Playwright, axe/Playwright |
+| Test | Vitest (progetti Node e Cloudflare), Playwright, axe con Playwright |
 | Qualità | Oxlint, Oxfmt, React Doctor bloccante dai warning, typecheck compiler, CI e sicurezza dipendenze |
 | CLI di piattaforma | `cf` a versione esatta per Workers, D1 e risorse Cloudflare, configurazione in `cloudflare.config.ts`; Wrangler solo per `tail` e D1 locale temporaneo (D170) |
 
@@ -948,13 +948,11 @@ Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato P
 
 **Ciclo di una PR.** Una PR pronta si qualifica su una base compatibile, che la CI rilegge prima del gate finale: i commit entrati nella base nel frattempo non toccano file della PR né file globali e non aggiungono migration insieme a lei; altrimenti la PR si aggiorna e si riqualifica. Il push su `develop` riesegue il gate sul tree integrato prima del deploy test ([D195](DECISION_REGISTER.md)). Il comando operativo `release:cycle pr` aggiorna la base mediante merge soltanto quando serve, segue la qualifica già avviata sulla testa senza rimettere la PR in bozza, ripete l'aggiornamento se la base avanza in modo non compatibile durante la qualifica ([D184](DECISION_REGISTER.md)), attiva l'automerge e segue CI del commit integrato e, quando il diff distribuisce, ricevuta e readback provider del test; poi elimina il branch della PR. I residui di cicli precedenti si riconciliano a lotti, almeno una volta al giorno di lavoro e a ogni `Promuovi`, conservando lavoro non integrato o in uso. Le migration non additive si approvano nella PR con il digest del loro piano, prima del merge e non dopo un deploy test fallito. Le modifiche al workflow Production `publish.yml` integrate su `develop` avviano la sola qualifica del candidato, senza promozione né deploy.
 
-**Proporzione delle PR.** Ogni PR porta codice, istruzioni o documentazione di prodotto, mai il solo readback o la chiusura. Le modifiche documentali ordinarie entrano nella PR di contenuto successiva; una PR solo documentale è ammessa per decisioni dell'owner, checkpoint o istruzioni che devono valere subito. Le ipotesi diagnostiche su CI o ambiente remoto si provano sul branch, con `workflow_dispatch` o con un deploy manuale sul test da worktree pulito seguito dal ripristino della versione attiva, e confluiscono in una sola PR. Mentre una qualifica è in corso non si aprono altre PR sul processo, salvo la correzione del difetto che la blocca.
-
-Il collaudo è dell'agente e precede il merge: prove locali dell'area, confronto fra area reale e anteprima e CI. La PR che completa il lavoro porta il task a «Completato» con gli esiti, senza rimandare la chiusura a un intervento successivo; ciò che solo l'owner può provare si dichiara prima di `Pubblica`. Il readback del deploy test conferma e si riferisce all'owner; un esito negativo apre la PR di correzione, che registra il difetto. Una pendenza utile alla ripresa entra nelle questioni aperte.
+**Proporzione delle PR.** Contenuto, collaudo e chiusura delle PR seguono `AGENTS.md` e il [contenuto delle PR](engineering/RELEASE.md#contenuto-delle-pr).
 
 Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta pubblica. `CHANGELOG.md` unica storia delle modifiche rilevanti; le Novità dell'app (D203) ne sono una selezione per l'utente, non una seconda storia tecnica; GitHub Release derivata per ogni versione Production, non ogni deploy test. Nessuna riscrittura tag pubblicati per correggere un errore.
 
-**Pubblica** è un atto esplicito che autorizza il ciclo verso il test della modifica corrente: PR verso `develop`, gate, merge automatico, migration controllate, deploy test quando il diff distribuisce, readback e pulizia del branch. **Promuovi** autorizza l'intero ciclo Production del lotto su `develop`: promozione su `main`, commit atteso, gate, preflight provider, migration controllate, deploy, smoke/readback, ricevuta, tag/release solo dopo successo; richiede il via di M9 e i gate Production, e fino ad allora non avvia nulla. Domande, ipotesi e negazioni non autorizzano nessuno dei due. Non fermarsi dopo push o prima del readback; non estendere i comandi a provider/scopi non approvati. Cinque checkpoint owner restano separati dalle normali attività.
+`Pubblica` e `Promuovi` autorizzano i cicli definiti in `AGENTS.md`, eseguiti secondo il [ciclo operativo](engineering/RELEASE.md#ciclo-operativo); `Promuovi` richiede il via di M9 e i gate Production. Cinque checkpoint owner restano separati dalle normali attività.
 
 `Promuovi` comprende, dopo il readback Production e tag/release riusciti, l'inventario e la pulizia dei branch e worktree temporanei già conclusi, inclusi i residui di cicli precedenti. Il coordinatore verifica per ciascuno PR e contenuto integrato anche quando il merge è squash, stato pulito, commit non pubblicati, file non tracciati e processi o altri lavori che usano il checkout; solo allora elimina branch remoto e locale, libera il worktree e riallinea il checkout principale. Conserva `main`, `develop`, `legacy/1.x`, tag, rollback e ogni lavoro non integrato o ancora in uso. Una pulizia non sicura o un passo fallito conservano ricevuta e riferimento di ripresa e restano nelle questioni aperte, senza dichiarare conclusa la pulizia.
 
@@ -971,7 +969,7 @@ Il readback del candidato confronta commit/artefatto, schema e configurazione at
 <a id="s35"></a>
 ## 35. Strategia di test e criteri osservabili
 
-Vitest dominio/integrazione; Testing Library e user-event componenti; Playwright E2E; axe come aiuto, non certificazione. Chromium e WebKit sui flussi principali e prima delle release; nessun collaudo Firefox dedicato (D156). Viewport desktop/mobile più prova reale su Safari/iOS e un browser mobile rappresentativo quando disponibile: emulazione non dimostra comportamento passkey/clipboard/download su dispositivo. Fixture sintetiche o sanitizzate, accesso live controllato quando necessario.
+Vitest per dominio, integrazioni e risposte delle route; Playwright per componenti e flussi nel browser; axe come aiuto, non certificazione. Chromium e WebKit sui flussi principali e prima delle release; nessun collaudo Firefox dedicato (D156). Viewport desktop/mobile più prova reale su Safari/iOS e un browser mobile rappresentativo quando disponibile: emulazione non dimostra comportamento passkey/clipboard/download su dispositivo. Fixture sintetiche o sanitizzate, accesso live controllato quando necessario.
 
 | Suite critica | Casi minimi bloccanti |
 |---|---|

@@ -43,6 +43,7 @@ import { legalVersions } from "../app/domain/registration.server.ts";
 import { taskPeriods } from "../app/domain/work-timing.ts";
 import { localSecret } from "../e2e/local-account.ts";
 import { databases } from "../cloudflare.config.ts";
+import { d1Query, keychain } from "./lib/provider.mjs";
 import { applyLocalMigrations, executeLocal } from "./local-d1.mjs";
 
 const directory = "reports/capacity";
@@ -444,20 +445,7 @@ async function measurePages(base, cookies) {
  * dell'API si ripete fino a tre volte: la pulizia è ripetibile, mentre un caricamento già
  * applicato fallisce sulle chiavi e la prova si ferma ripulendo.
  */
-function testQuery(sql) {
-  for (let attempt = 1; ; attempt++)
-    try {
-      const output = execFileSync(
-        "pnpm",
-        ["exec", "cf", "d1", "query", databases.test.id, "--sql", sql],
-        { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 },
-      );
-      return JSON.parse(output.slice(output.indexOf("["))).map(({ results }) => results);
-    } catch (error) {
-      if (attempt === 3) throw error;
-      execFileSync("sleep", [String(attempt * 5)]);
-    }
-}
+const testQuery = (sql) => d1Query(databases.test.id, sql, { stderr: "pipe" });
 
 /** Negozi del dataset, nell'ordine in cui si caricano. */
 const datasetStores = () => [
@@ -485,22 +473,24 @@ export function leftoverSql(columns) {
   return blocks;
 }
 
-function cleanTest() {
-  const [present] = testQuery(`SELECT count(*) AS n FROM orders WHERE store_id LIKE 'cap-s-%'`);
+async function cleanTest() {
+  const [present] = await testQuery(
+    `SELECT count(*) AS n FROM orders WHERE store_id LIKE 'cap-s-%'`,
+  );
   // Gli ordini si eliminano negozio per negozio: i trigger scrivono le chiavi dei cancellati.
   if (present[0].n > 0)
     for (const store of datasetStores())
-      testQuery(`DELETE FROM orders WHERE store_id = '${store}'`);
-  testQuery(`DELETE FROM deleted_order_keys WHERE store_id LIKE 'cap-s-%';
+      await testQuery(`DELETE FROM orders WHERE store_id = '${store}'`);
+  await testQuery(`DELETE FROM deleted_order_keys WHERE store_id LIKE 'cap-s-%';
     DELETE FROM workspaces WHERE id LIKE 'cap-w-%';
     DELETE FROM "user" WHERE id LIKE 'cap-u-%'`);
-  const [columns] = testQuery(`SELECT m.name AS t, p.name AS c
+  const [columns] = await testQuery(`SELECT m.name AS t, p.name AS c
     FROM sqlite_master m, pragma_table_info(m.name) p
     WHERE m.type = 'table' AND m.name NOT LIKE '\\_cf%' ESCAPE '\\' AND m.name <> 'd1_migrations'
       AND p.name IN ('id', 'store_id', 'workspace_id', 'user_id', 'userId', 'order_id')`);
-  const left = leftoverSql(columns)
-    .flatMap((sql) => testQuery(sql).flat())
-    .filter(({ n }) => n > 0);
+  const left = [];
+  for (const sql of leftoverSql(columns))
+    left.push(...(await testQuery(sql)).flat().filter(({ n }) => n > 0));
   if (left.length) throw new Error(`Righe sintetiche rimaste: ${JSON.stringify(left)}`);
   return columns.length;
 }
@@ -559,25 +549,25 @@ async function measureRemote() {
   const base = "https://test.fiscalbay.it";
   const shape = { ...referenceShape, now: new Date().toISOString() };
   // Una prova precedente interrotta lascia righe: si ripuliscono prima di ricominciare.
-  cleanTest();
+  await cleanTest();
   const password = randomBytes(24).toString("base64url");
   let measured;
   let failure;
   try {
     const seeded = new Date();
     const statements = capacityStatements(shape, legalVersions);
-    testQuery(
+    await testQuery(
       statements.slice(0, statements.length - capacityStoreStatements(shape).length).join(";\n"),
     );
     // Negozi mai dovuti al cron, che non tenta letture con token che non si aprono.
-    testQuery(`UPDATE sync_state SET polled_at = '2099-01-01T00:00:00.000Z' WHERE store_id LIKE 'cap-s-%';
+    await testQuery(`UPDATE sync_state SET polled_at = '2099-01-01T00:00:00.000Z' WHERE store_id LIKE 'cap-s-%';
       UPDATE workspaces SET active_at = '${shape.now}' WHERE id LIKE 'cap-w-%'`);
     for (const store of datasetStores())
-      testQuery(
+      await testQuery(
         [...capacityStoreStatements(shape, store), searchIndexStatement(store)].join(";\n"),
       );
     const hash = await hashPassword(password);
-    testQuery(
+    await testQuery(
       Object.values(measuredWorkspaces)
         .map(
           (
@@ -587,7 +577,7 @@ async function measureRemote() {
         )
         .join(";\n"),
     );
-    const [[{ n: orders }]] = testQuery(
+    const [[{ n: orders }]] = await testQuery(
       `SELECT count(*) AS n FROM orders WHERE store_id LIKE 'cap-s-%'`,
     );
     const cookies = {};
@@ -605,7 +595,7 @@ async function measureRemote() {
     failure = error;
   }
   try {
-    cleanTest();
+    await cleanTest();
   } catch (error) {
     // Le misure restano anche se la pulizia va ripresa con `remote-clean`.
     if (measured)
@@ -671,11 +661,7 @@ export function accountUsage(data) {
 function analyticsToken() {
   if (process.env.CLOUDFLARE_API_TOKEN) return process.env.CLOUDFLARE_API_TOKEN;
   try {
-    return execFileSync(
-      "security",
-      ["find-generic-password", "-s", "FiscalBay analytics test", "-w"],
-      { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
-    ).trim();
+    return keychain("FiscalBay analytics test");
   } catch {
     throw new Error(
       "Token assente: CLOUDFLARE_API_TOKEN o Portachiavi «FiscalBay analytics test».",
@@ -710,7 +696,7 @@ async function main() {
     return;
   }
   if (step === "remote-clean") {
-    console.log(`Nessuna riga sintetica nel test: ${cleanTest()} colonne verificate.`);
+    console.log(`Nessuna riga sintetica nel test: ${await cleanTest()} colonne verificate.`);
     return;
   }
   if (step && !["costs", "latency", "remote"].includes(step))

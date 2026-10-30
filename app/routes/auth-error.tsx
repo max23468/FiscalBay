@@ -59,7 +59,7 @@ export default function AuthError({ matches }: Route.ComponentProps) {
       homeHref={localizedPath(language)}
     >
       <p className="leading-relaxed text-pretty text-muted-foreground">{message.body}</p>
-      <a href={`mailto:${supportEmail}`} className="w-fit underline underline-offset-4">
+      <a href={`mailto:${supportEmail}`} className="w-fit link-underline">
         {appCopy[language].common.contactSupport}: {supportEmail}
       </a>
       {/* Si torna all'accesso; con la sessione l'accesso porta all'app. */}

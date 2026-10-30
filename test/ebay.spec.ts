@@ -258,9 +258,9 @@ describe("client eBay e normalizzazione", () => {
         `<Ack>Success</Ack><Item><PictureDetails><PictureURL>${valid}</PictureURL></PictureDetails></Item>`,
       ),
     );
-    expect(await readItemImage(access(getItem), "110<1>")).toBe(valid);
+    expect(await readItemImage(access(getItem), `110<1>&"'`)).toBe(valid);
     const [, init] = getItem.mock.calls[0]!;
     expect((init!.headers as Record<string, string>)["x-ebay-api-call-name"]).toBe("GetItem");
-    expect(String(init!.body)).toContain("<ItemID>110&lt;1&gt;</ItemID>");
+    expect(String(init!.body)).toContain("<ItemID>110&lt;1&gt;&amp;&quot;&apos;</ItemID>");
   });
 });

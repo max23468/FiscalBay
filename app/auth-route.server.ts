@@ -1,15 +1,11 @@
 import { waitUntil } from "cloudflare:workers";
 import { redirect } from "react-router";
+import { z } from "zod";
 
 import { createAuth } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
 import { recordEmailChange } from "./domain/email-change.server";
-import {
-  passkeyChangeBlock,
-  readSession,
-  recentSignIn,
-  type AuthSession,
-} from "./domain/sessions.server";
+import { passkeyChangeBlock, readSession, recentSignIn } from "./domain/sessions.server";
 import { completeStoreLink } from "./domain/store-link.server";
 import {
   claimStoreLinkSession,
@@ -155,18 +151,44 @@ async function countAttempt(
   return Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000));
 }
 
-/** Indirizzo del corpo JSON come impronta: la tabella dei limiti non conserva email in chiaro. */
-async function addressKey(request: Request): Promise<string | null> {
-  // Stryker disable ArrowFunction: null e undefined danno entrambi «nessun indirizzo».
+/**
+ * Esito della validazione del corpo JSON, letto da una copia che lascia l'originale ad Auth. Un
+ * corpo assente o non JSON vale undefined.
+ */
+async function jsonBody<Schema extends z.ZodType>(request: Request, schema: Schema) {
   const body: unknown = await request
     .clone()
     .json()
-    .catch(() => null);
-  // Stryker restore ArrowFunction
-  const email =
-    typeof body === "object" && body !== null && "email" in body ? body.email : undefined;
-  if (typeof email !== "string" || email.length === 0 || email.length > 254) return null;
-  return `email:${await sha256Hex(email.trim().toLowerCase())}`;
+    .catch(() => undefined);
+  return schema.safeParse(body);
+}
+
+const addressBody = z.object({ email: z.string().min(1).max(254) });
+
+/** Collegamento di un metodo: il ramo `idToken` resta chiuso. */
+const linkSocialBody = z.looseObject({ idToken: z.never().optional() });
+
+const changeEmailBody = z.object({ newEmail: z.string() });
+
+/**
+ * Nome facoltativo della passkey in un corpo oggetto: non vuoto e al più 80 caratteri. Un corpo
+ * di altra forma, o assente come nelle opzioni di registrazione, resta da validare ad Auth.
+ */
+const passkeyBody = z.union([
+  z.object({
+    name: z
+      .string()
+      .refine((name) => name.trim() !== "" && name.length <= 80)
+      .optional(),
+  }),
+  z.unknown().refine((body) => !z.looseObject({}).safeParse(body).success),
+]);
+
+/** Indirizzo del corpo JSON come impronta: la tabella dei limiti non conserva email in chiaro. */
+async function addressKey(request: Request): Promise<string | null> {
+  const body = await jsonBody(request, addressBody);
+  if (!body.success) return null;
+  return `email:${await sha256Hex(body.data.email.trim().toLowerCase())}`;
 }
 
 /**
@@ -205,36 +227,25 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
     const session = await readSession(env, request);
     if (!session) return new Response(null, { status: 401 });
     // Come le altre modifiche critiche, anche chiamata direttamente: serve un accesso recente.
-    if (!session.user.emailVerified || !recentSignIn(session as AuthSession)) {
+    if (!session.user.emailVerified || !recentSignIn(session)) {
       return new Response(null, { status: 403 });
     }
-    const body = await request
-      .clone()
-      .json()
-      .catch(() => undefined);
-    if (typeof body !== "object" || body === null || "idToken" in body) {
+    if (!(await jsonBody(request, linkSocialBody)).success) {
       return new Response(null, { status: 400 });
     }
   }
   if (pathname === changeEmailPath) {
     const session = await readSession(env, request);
-    if (session && !recentSignIn(session as AuthSession)) {
+    if (session && !recentSignIn(session)) {
       return new Response(null, { status: 403 });
     }
-    // Stryker disable ArrowFunction: null e undefined indicano entrambi un corpo non valido.
-    const body = await request
-      .clone()
-      .json()
-      .catch(() => null);
-    // Stryker restore ArrowFunction
-    if (
-      session &&
-      typeof body === "object" &&
-      body !== null &&
-      "newEmail" in body &&
-      typeof body.newEmail === "string"
-    ) {
-      emailChange = { userId: session.user.id, email: session.user.email, newEmail: body.newEmail };
+    const body = await jsonBody(request, changeEmailBody);
+    if (session && body.success) {
+      emailChange = {
+        userId: session.user.id,
+        email: session.user.email,
+        newEmail: body.data.newEmail,
+      };
     }
   }
   // Utente che registra una passkey, per avvisarlo quando la registrazione riesce.
@@ -249,21 +260,8 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
     // Una nuova passkey richiede un accesso recente. Per un admin, che con la passkey supera
     // il secondo fattore, serve una sessione già confermata da passkey: password o email
     // compromesse non bastano ad aggiungerne una.
-    if (passkeyChangeBlock(session as AuthSession)) return new Response(null, { status: 403 });
-    // Stryker disable ArrowFunction: null e undefined lasciano la validazione del corpo ad Auth.
-    const body = await request
-      .clone()
-      .json()
-      .catch(() => null);
-    // Stryker restore ArrowFunction
-    if (
-      typeof body === "object" &&
-      body !== null &&
-      "name" in body &&
-      (typeof body.name !== "string" || !body.name.trim() || body.name.length > 80)
-    ) {
-      return new Response(null, { status: 400 });
-    }
+    if (passkeyChangeBlock(session)) return new Response(null, { status: 403 });
+    if (!(await jsonBody(request, passkeyBody)).success) return new Response(null, { status: 400 });
     enrollingUserId = session.user.id;
   }
   const wait = await addressWait(request, env);

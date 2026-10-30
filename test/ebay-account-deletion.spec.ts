@@ -26,14 +26,15 @@ import { storeIdentityHash } from "../app/domain/store-marks.server";
 import {
   insertCredentials,
   insertEntitlement,
+  insertOrder,
   insertWorkspace,
+  later,
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
 import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
 
 const at = new Date(now);
-const later = (minutes: number) => new Date(at.getTime() + minutes * 60_000);
 const send = vi.fn<Queue["send"]>();
 const environment: Env = { ...env, WORK_QUEUE: fakeQueue({ send }) };
 
@@ -52,40 +53,16 @@ const buyer = {
   eventAt: now,
 };
 
-/** Ordine con articolo, Codice Fiscale e acquirente; `mergedInto` per un ordine combinato. */
-function insertOrder(
+/**
+ * Ordine con acquirente nel negozio indicato; `mergedInto` per un ordine combinato. Il trigger
+ * che revoca i file confronta la conservazione con l'orologio di D1.
+ */
+const buyerOrder = (
   id: string,
   storeId: string,
-  buyerOf: { eias: string | null; username: string },
+  buyer: { eias: string | null; username: string },
   mergedInto: string | null = null,
-) {
-  return [
-    env.DB.prepare(
-      `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,
-         currency, total_minor, buyer_json, buyer_eias_token, merged_into, retention_until,
-         purge_after)
-       VALUES (?1, ?2, ?3, ?4, ?4, 'EUR', 1299, ?5, ?6, ?7, ?8, ?8)`,
-    ).bind(
-      id,
-      storeId,
-      `ebay-${id}`,
-      now,
-      JSON.stringify({ username: buyerOf.username, name: "Mario Rossi" }),
-      buyerOf.eias,
-      mergedInto,
-      // Il trigger che revoca i file confronta la conservazione con l'orologio di D1.
-      "2099-01-01T00:00:00.000Z",
-    ),
-    env.DB.prepare(
-      `INSERT INTO order_items (id, order_id, line_item_id, title, quantity, total_minor, currency)
-       VALUES (?1, ?2, ?3, 'Articolo', 1, 1299, 'EUR')`,
-    ).bind(`i-${id}`, id, `line-${id}`),
-    env.DB.prepare(
-      `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source,
-         observed_at) VALUES (?1, ?2, 'CODICE_FISCALE', 'IT', 'RSSMRA80A01H501U', 'synthetic_fixture', ?3)`,
-    ).bind(`t-${id}`, id, now),
-  ];
-}
+) => insertOrder(id, { storeId, buyer, mergedInto, retentionUntil: "2099-01-01T00:00:00.000Z" });
 
 const count = async (sql: string, ...values: unknown[]) =>
   (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${sql}`)
@@ -123,20 +100,20 @@ beforeEach(async () => {
         ('s-sandbox', 'w-b', '["sandbox","seller-x"]', 'seller-x', 'seller-name', NULL, ?1, 'sandbox')`).bind(
       now,
     ),
-    ...insertOrder("o-seller-1", "s-seller", { eias: "eias-1", username: "someone" }),
-    ...insertOrder("o-seller-2", "s-seller", { eias: "eias-2", username: "someone-else" }),
-    ...insertOrder("o-other", "s-other", { eias: "eias-3", username: "third" }),
-    ...insertOrder("o-sandbox", "s-sandbox", { eias: "eias-buyer", username: "buyer-name" }),
-    ...insertOrder("o-buyer", "s-buyerside", { eias: "eias-buyer", username: "buyer-name" }),
-    ...insertOrder(
+    ...buyerOrder("o-seller-1", "s-seller", { eias: "eias-1", username: "someone" }),
+    ...buyerOrder("o-seller-2", "s-seller", { eias: "eias-2", username: "someone-else" }),
+    ...buyerOrder("o-other", "s-other", { eias: "eias-3", username: "third" }),
+    ...buyerOrder("o-sandbox", "s-sandbox", { eias: "eias-buyer", username: "buyer-name" }),
+    ...buyerOrder("o-buyer", "s-buyerside", { eias: "eias-buyer", username: "buyer-name" }),
+    ...buyerOrder(
       "o-buyer-merged",
       "s-buyerside",
       { eias: "eias-buyer", username: "buyer-name" },
       "o-buyer",
     ),
-    ...insertOrder("o-buyer-old", "s-buyerside", { eias: null, username: "buyer-name" }),
+    ...buyerOrder("o-buyer-old", "s-buyerside", { eias: null, username: "buyer-name" }),
     // Lo stesso username con un token diverso è un altro acquirente.
-    ...insertOrder("o-namesake", "s-buyerside", { eias: "eias-other", username: "buyer-name" }),
+    ...buyerOrder("o-namesake", "s-buyerside", { eias: "eias-other", username: "buyer-name" }),
     env.DB.prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota, used)
         VALUES ('c-b', 'w-b', ?1, '2026-10-13T20:00:00.000Z', 30, 0)`).bind(now),
     env.DB.prepare(`INSERT INTO order_grants (id, workspace_id, order_id, cycle_id, source, granted_at)
@@ -349,8 +326,7 @@ it("il consumer riaccoda il lavoro che supera il budget", async () => {
   await env.DB.batch(
     Array.from(
       { length: 201 },
-      (_, index) =>
-        insertOrder(`o-bulk-${index}`, "s-seller", { eias: null, username: "bulk" })[0]!,
+      (_, index) => buyerOrder(`o-bulk-${index}`, "s-seller", { eias: null, username: "bulk" })[0]!,
     ),
   );
   await recordEbayAccountDeletion(environment, seller, at);
@@ -373,8 +349,8 @@ it("dopo un restore il compito ripete la cancellazione dei dati ricomparsi", asy
   await env.DB.batch([
     env.DB.prepare(`UPDATE ebay_stores SET ebay_user_id = 'seller-x', ebay_account_id = 'seller-x',
         data_deleted_at = NULL WHERE id = 's-seller'`),
-    ...insertOrder("o-seller-restored", "s-seller", { eias: "eias-9", username: "nine" }),
-    ...insertOrder("o-buyer-restored", "s-other", { eias: "eias-buyer", username: "buyer-name" }),
+    ...buyerOrder("o-seller-restored", "s-seller", { eias: "eias-9", username: "nine" }),
+    ...buyerOrder("o-buyer-restored", "s-other", { eias: "eias-buyer", username: "buyer-name" }),
     env.DB.prepare(`INSERT INTO "account" ("id", "accountId", "providerId", "userId", "createdAt",
         "updatedAt") VALUES ('acc-ebay', 'seller-x', 'ebay', 'u-erase-a', ?1, ?1)`).bind(now),
   ]);

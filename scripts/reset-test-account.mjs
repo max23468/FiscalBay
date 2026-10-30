@@ -8,7 +8,6 @@
  *
  * Uso: E2E_ACCOUNT_PASSWORD=... node scripts/reset-test-account.mjs
  */
-import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 import { hashPassword } from "../app/password.server.ts";
@@ -16,6 +15,7 @@ import { hashPassword } from "../app/password.server.ts";
 import { legalVersions } from "../app/domain/registration.server.ts";
 import { databases } from "../cloudflare.config.ts";
 import { testAccount } from "../e2e/test-account.ts";
+import { cf } from "./lib/provider.mjs";
 import { executeLocal } from "./local-d1.mjs";
 
 const database = databases.test;
@@ -530,10 +530,7 @@ async function main() {
   // Un solo batch di istruzioni SQL: nessun import di file, che sospende il database.
   const sql = statements.join("\n");
   if (local) executeLocal(sql);
-  else
-    execFileSync("pnpm", ["exec", "cf", "d1", "raw", database.id, "--sql", sql], {
-      stdio: ["ignore", "ignore", "inherit"],
-    });
+  else cf(["d1", "raw", database.id, "--sql", sql], { stdout: "ignore" });
   console.log(`Account di collaudo ripristinato su ${database.name}.`);
 }
 

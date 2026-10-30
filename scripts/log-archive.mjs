@@ -14,7 +14,6 @@
  *      node scripts/log-archive.mjs <errors|webhooks|failures> [--days 1] [--mode live]
  *      node scripts/log-archive.mjs correlation --id <correlation ID> [--days 1] [--mode live]
  */
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -24,6 +23,7 @@ import { gunzipSync } from "node:zlib";
 
 import { logEvents, logKeys } from "../app/log-records.ts";
 import config, { logArchives } from "../cloudflare.config.ts";
+import { cf, cfJson, keychain } from "./lib/provider.mjs";
 
 export const retentionDays = 90;
 export const dataset = "workers_trace_events";
@@ -372,30 +372,14 @@ export function dayPrefixes(days, now = new Date()) {
   });
 }
 
-/** CLI `cf`; `quiet` tace gli errori delle letture facoltative, come un bucket non ancora creato. */
-function cf(args, { encoding = "utf8", quiet = false } = {}) {
-  return execFileSync("pnpm", ["exec", "cf", ...args], {
-    encoding,
-    maxBuffer: 512 * 1024 * 1024,
-    stdio: ["ignore", "pipe", quiet ? "ignore" : "inherit"],
-  });
-}
-
-/** Risultato JSON della CLI, con o senza l'involucro `result`. */
-function cfJson(args, options) {
-  const output = cf(args, options);
-  const start = output.search(/[[{]/u);
-  const value = JSON.parse(output.slice(start));
-  return value && !Array.isArray(value) && "result" in value ? value.result : value;
-}
-
 /** Ogni comando sul bucket indica la giurisdizione: senza, la CLI cerca fuori dall'UE. */
 const jurisdiction = ["--cf-r2-jurisdiction", "eu"];
 
 function readState(target) {
+  // Le letture facoltative tacciono gli errori, come per un bucket non ancora creato.
   const optional = (args) => {
     try {
-      return cfJson(args, { quiet: true });
+      return cfJson(args, { stderr: "ignore" });
     } catch {
       return null;
     }
@@ -426,13 +410,6 @@ function readState(target) {
     jobs: optional(["logpush", "account-jobs", "list"]) ?? [],
     worker: optional(["workers", "get", target.worker]),
   };
-}
-
-function keychain(service) {
-  return execFileSync("security", ["find-generic-password", "-s", service, "-w"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  }).trim();
 }
 
 function credentialsOf(target) {

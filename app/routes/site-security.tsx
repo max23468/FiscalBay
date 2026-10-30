@@ -107,7 +107,7 @@ export default function SiteSecurity({ loaderData }: Route.ComponentProps) {
           </h2>
           <p className="text-pretty text-muted-foreground">
             {t.report}{" "}
-            <a href={`mailto:${infoEmail}`} className="underline underline-offset-4">
+            <a href={`mailto:${infoEmail}`} className="link-underline">
               {infoEmail}
             </a>
             .

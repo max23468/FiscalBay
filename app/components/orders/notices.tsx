@@ -6,13 +6,13 @@ import { useAction } from "~/components/action";
 import { useCopy, useLinks } from "~/components/copy-context";
 import { PageTitle } from "~/components/icon-tile";
 import { StatusAlert, StatusIcon } from "~/components/status";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
-import { formatDate, formatRelative } from "../../format";
+import { formatRelative } from "../../format";
 import type { Language } from "../../i18n";
 import { trialDaysLeft, trialEnding } from "../../view-models";
 import { importingNotice, isEbayDown } from "./labels";
@@ -101,8 +101,8 @@ function StoreIssueAlert({ storeId, storeName }: { storeId: string; storeName: s
 
 export function OrdersNotices({ data }: { data: OrdersPageData }) {
   const { links } = useLinks();
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   // L'esito arriva anche quando l'avviso, con la prova attivata, non c'è più.
   const trialAction = useAction();
   if (data.notices.every((notice) => notice.kind === "importing")) return null;
@@ -119,10 +119,10 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
               >
                 {notice.maintenance
                   ? notice.at
-                    ? t.orders.ebayPausedBody(formatDate(notice.at, language, "dateTime", zone))
+                    ? t.orders.ebayPausedBody(date(notice.at))
                     : t.orders.ebayPausedNeverBody
                   : notice.at
-                    ? t.orders.ebayDownBody(formatDate(notice.at, language, "dateTime", zone))
+                    ? t.orders.ebayDownBody(date(notice.at))
                     : t.orders.ebayDownNeverBody}
               </StatusAlert>
             );
@@ -134,7 +134,7 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
                 title={t.orders.storeReadFailedTitle(notice.storeName)}
               >
                 <span className="grid justify-items-start gap-3">
-                  {t.orders.storeReadFailedBody(formatDate(notice.at, language, "dateTime", zone))}
+                  {t.orders.storeReadFailedBody(date(notice.at))}
                   <Link
                     to={appHref(links, `negozi/${notice.storeId}`)}
                     {...buttonLink({ variant: "outline", size: "sm" })}
@@ -148,7 +148,7 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
             return (
               <StatusAlert key={notice.kind} tone="warning" title={t.orders.quotaTitle}>
                 <span className="grid justify-items-start gap-3">
-                  {t.orders.quotaBody(formatDate(notice.until, language, "dateTime", zone))}
+                  {t.orders.quotaBody(date(notice.until))}
                   {/* Con la prova disponibile l'avviso la offre al posto dell'acquisto; senza la
                       pagina del piano nessun collegamento a una destinazione assente. */}
                   {trialOffered(data) ? (
@@ -198,7 +198,7 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
                 title={t.orders.consentExpiringTitle(notice.storeName)}
               >
                 <span className="grid justify-items-start gap-3">
-                  {t.orders.consentExpiringBody(formatDate(notice.at, language, "date", zone))}
+                  {t.orders.consentExpiringBody(date(notice.at, "date"))}
                   {/* Il consenso è ancora valido: il ricollegamento parte subito dalla
                       schermata preparatoria, fuori dalle route dell'app. Con eBay che non
                       risponde resta sospeso, come in Negozi. */}
@@ -234,7 +234,7 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
 export function TrialNotice({ data }: { data: OrdersPageData }) {
   const { links } = useLinks();
   const { t } = useCopy();
-  const zone = useTimeZone();
+  const date = useDate();
   // Fuori dal pulsante: l'esito arriva dopo che l'invito ha lasciato posto ai giorni rimasti.
   const action = useAction();
   const { trial } = data.account;
@@ -247,12 +247,7 @@ export function TrialNotice({ data }: { data: OrdersPageData }) {
         </p>
       );
     return (
-      <StatusAlert
-        tone="premium"
-        title={t.orders.trialEndingTitle(
-          formatDate(trial.endsAt, links.language, "dateTime", zone),
-        )}
-      >
+      <StatusAlert tone="premium" title={t.orders.trialEndingTitle(date(trial.endsAt))}>
         <span className="grid justify-items-start gap-3">
           {t.orders.trialEndingBody}
           <Link

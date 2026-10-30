@@ -4,8 +4,15 @@ import { logFailure } from "../errors";
 import { inSequence } from "../sequence";
 import type { EbayEnvironment } from "../view-models";
 import { deletionMarkerDays } from "./account-deletion.server";
+import {
+  consumeStepJob,
+  deleteOrders,
+  lockUntil,
+  orderBudget,
+  resumeBatch,
+  runToEnd,
+} from "./deletion-steps.server";
 import { storeIdentityHash } from "./store-marks.server";
-import { queueRetryDelay } from "./work-timing";
 
 /**
  * Cancellazione richiesta da eBay (Marketplace Account Deletion, §30): eBay la invia per ogni
@@ -26,12 +33,6 @@ export type EbayAccountDeletion = {
   username: string | null;
   eventAt: string;
 };
-
-/** Durata del blocco di una richiesta in esecuzione: un consumer interrotto la cede allo scadere. */
-const lockMilliseconds = 15 * 60_000;
-
-/** Ordini eliminati per istruzione e istruzioni per giro, poi il lavoro riparte dalla coda. */
-const orderBudget = { batch: 200, batches: 25 };
 
 /**
  * Identità del negozio come la conserva `ebay_stores.ebay_user_id`: l'identificativo eBay in
@@ -99,23 +100,6 @@ export async function recordEbayAccountDeletion(
   return true;
 }
 
-/** Ordini in lotti con la condizione data. True quando non ne resta nessuno. */
-async function deleteOrders(
-  db: D1Database,
-  select: string,
-  bindings: unknown[],
-  budget: typeof orderBudget,
-): Promise<boolean> {
-  for (let batch = 0; batch < budget.batches; batch++) {
-    const { meta } = await db
-      .prepare(`DELETE FROM orders WHERE id IN (${select} LIMIT ${budget.batch})`)
-      .bind(...bindings)
-      .run();
-    if (meta.changes === 0) return true;
-  }
-  return false;
-}
-
 /**
  * Arresto del negozio del venditore, ripetibile: senza consenso letture e notifiche già
  * accodate non scrivono più, e le ricevute con i suoi ordini si eliminano.
@@ -175,11 +159,12 @@ export async function runEbayAccountDeletion(
 ): Promise<EbayDeletionOutcome> {
   const at = now.toISOString();
   const db = env.DB;
+  const lock = lockUntil(now);
   const job = await db
     .prepare(`UPDATE ebay_account_deletions SET locked_until = ?2
       WHERE id = ?1 AND completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?3)
       RETURNING ebay_environment, ebay_user_id, eias_token, username`)
-    .bind(id, new Date(now.getTime() + lockMilliseconds).toISOString(), at)
+    .bind(id, lock, at)
     .first<{
       ebay_environment: EbayEnvironment;
       ebay_user_id: string;
@@ -193,8 +178,14 @@ export async function runEbayAccountDeletion(
       .first<{ completed_at: string | null }>();
     return !row ? "missing" : row.completed_at ? "done" : "busy";
   }
+  // Il rilascio vale soltanto per il blocco ancora preso da questo passo.
   const release = () =>
-    db.prepare("UPDATE ebay_account_deletions SET locked_until = NULL WHERE id = ?").bind(id).run();
+    db
+      .prepare(
+        "UPDATE ebay_account_deletions SET locked_until = NULL WHERE id = ?1 AND locked_until = ?2",
+      )
+      .bind(id, lock)
+      .run();
   try {
     const { results: stores } = await db
       .prepare("SELECT id FROM ebay_stores WHERE ebay_environment = ? AND ebay_account_id = ?")
@@ -256,9 +247,6 @@ export function isEbayAccountDeletionMessage(body: unknown): body is z.infer<typ
   return messageSchema.safeParse(body).success;
 }
 
-/** Consegne riprovate dalla coda dopo un errore; poi la richiesta resta al compito periodico. */
-const queueRetries = 3;
-
 /**
  * Esegue un passo dalla coda. Gli ordini oltre il budget ripartono con un nuovo messaggio; la
  * richiesta tenuta da un altro consumer resta a lui o al compito periodico. Un errore riprova
@@ -270,19 +258,13 @@ export async function consumeEbayAccountDeletion(
   now = new Date(),
 ): Promise<void> {
   const { ebayAccountDeletion: id } = messageSchema.parse(message.body);
-  try {
-    if ((await runEbayAccountDeletion(env, id, now)) === "more")
-      await env.WORK_QUEUE.send({ ebayAccountDeletion: id });
-    message.ack();
-  } catch (error) {
-    logFailure({ error, operation: "ebay_account_deletion" });
-    if (message.attempts > queueRetries) message.ack();
-    else message.retry({ delaySeconds: queueRetryDelay(message.attempts) });
-  }
+  await consumeStepJob(
+    message,
+    () => runEbayAccountDeletion(env, id, now),
+    () => env.WORK_QUEUE.send({ ebayAccountDeletion: id }),
+    "ebay_account_deletion",
+  );
 }
-
-/** Richieste riprese per giro del compito periodico. */
-const resumeBatch = 10;
 
 /**
  * Compito periodico: riapre le richieste concluse i cui dati ricompaiono, come dopo un restore,
@@ -323,8 +305,7 @@ export async function resumeEbayAccountDeletions(
     .all<{ id: string }>();
   await inSequence(results, async ({ id }) => {
     try {
-      // Stryker disable next-line ConditionalExpression: «more» ripetuto senza fine è un Timeout per Stryker; le prove contano gli ordini eliminati.
-      while ((await runEbayAccountDeletion(env, id, now)) === "more");
+      await runToEnd(() => runEbayAccountDeletion(env, id, now));
     } catch (error) {
       logFailure({ error, operation: "ebay_account_deletion" });
     }

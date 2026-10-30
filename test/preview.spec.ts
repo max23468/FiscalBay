@@ -9,7 +9,7 @@ import {
   scenarioIds,
   scenarioOptions,
 } from "../app/preview/scenarios.server";
-import { trialDaysLeft, trialEnding } from "../app/view-models";
+import { fiscalSituation, trialDaysLeft, trialEnding } from "../app/view-models";
 import { formatDate, formatRelative } from "../app/format";
 import { taxQuality } from "../app/tax-quality";
 import {
@@ -33,6 +33,16 @@ import {
 } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
 import { orderCriteria } from "../app/orders/order-list";
+import { listVisibleOrders } from "../app/domain/orders.server";
+import { orderView } from "../app/domain/order-view.server";
+import {
+  insertEntitlement,
+  insertStore,
+  insertTaxIdentifiers,
+  insertWorkspace,
+  now,
+  resetDatabase,
+} from "./fixtures/database-fixtures";
 import type { SearchResults } from "../app/components/shell-search";
 import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
 
@@ -617,6 +627,136 @@ describe("criteri dell'elenco dell'anteprima", () => {
     expect(listed("periodo=6m", "premium")).not.toContain("ord-300-giorni");
     expect(listed("periodo=12m", "premium")).toContain("ord-300-giorni");
     expect(listed("periodo=12m", "free")).toEqual(all);
+  });
+});
+
+describe("filtri dell'anteprima e della query dell'area reale", () => {
+  const daysAgo = (days: number) => new Date(Date.parse(now) - days * 86_400_000).toISOString();
+  /** Ordini con ogni stato di pagamento, evasione e dato fiscale, in due negozi. */
+  const orders = [
+    ["o-1", "s-a", "PAID", "NOT_STARTED", null, 1, "Mario Rossi", "Lampada da tavolo"],
+    ["o-2", "s-b", "PENDING", "FULFILLED", null, 3, "Giulia Bianchi", "Sedia"],
+    ["o-3", "s-a", "FULLY_REFUNDED", "IN_PROGRESS", "CANCELED", 12, "Luca Verdi", "Lampada"],
+    ["o-4", "s-b", "PARTIALLY_REFUNDED", null, null, 20, "Anna Neri", "Tavolo"],
+    ["o-5", "s-a", "SCONOSCIUTO", "ALTRO", null, 25, null, "Specchio"],
+    ["o-6", "s-a", null, null, null, 1, "Mario Bianchi", "Sedia"],
+    ["o-7", "s-b", "FAILED", "NOT_STARTED", null, 40, "Paolo Gialli", "Lampada"],
+    ["o-8", "s-a", "PAID", "FULFILLED", null, 80, "Sara Blu", "Lampada"],
+  ] as const;
+  /** Verifiche concluse senza identificativi: in Italia manca il dato, all'estero non serve. */
+  const checks = [
+    ["o-2", "IT"],
+    ["o-3", "DE"],
+  ] as const;
+
+  it("una ricerca e ogni filtro scelgono gli stessi ordini in memoria e nella query D1", async () => {
+    await resetDatabase();
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-a", userId: "u-a" }),
+      insertStore({ id: "s-a" }),
+      insertStore({ id: "s-b" }),
+      insertEntitlement({ source: "premium", startsAt: daysAgo(60), endsAt: daysAgo(2) }),
+      ...orders.map(([id, store, payment, fulfillment, cancel, age, buyer]) =>
+        env.DB.prepare(
+          `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,
+             currency, total_minor, payment_status, fulfillment_status, cancel_status, buyer_json)
+           VALUES (?1, ?2, ?3, ?4, ?4, 'EUR', 1000, ?5, ?6, ?7, ?8)`,
+        ).bind(
+          id,
+          store,
+          `ebay-${id}`,
+          daysAgo(age),
+          payment,
+          fulfillment,
+          cancel,
+          buyer
+            ? JSON.stringify({
+                name: buyer,
+                username: `u${id}`,
+                billingAddress: {
+                  countryCode: checks.find(([order]) => order === id)?.[1] ?? "IT",
+                },
+              })
+            : null,
+        ),
+      ),
+      ...checks.map(([id]) =>
+        env.DB.prepare(
+          `INSERT INTO order_tax_checks (order_id, source, observed_at, availability)
+           VALUES (?1, 'ebay_trading_get_orders', ?2, 'absent')`,
+        ).bind(id, now),
+      ),
+      ...orders.map(([id, , , , , , , title]) =>
+        env.DB.prepare(
+          `INSERT INTO order_items (id, order_id, line_item_id, title, quantity, total_minor, currency)
+           VALUES (?1, ?2, ?3, ?4, 1, 1000, 'EUR')`,
+        ).bind(`i-${id}`, id, `line-${id}`, title),
+      ),
+      env.DB.prepare("UPDATE orders SET retention_until = ?1, purge_after = ?1").bind(
+        "2027-12-31T00:00:00.000Z",
+      ),
+      insertTaxIdentifiers(
+        {
+          id: "t-1",
+          orderId: "o-1",
+          type: "CODICE_FISCALE",
+          value: "RSSMRA80A01H501U",
+          observedAt: daysAgo(3),
+        },
+        {
+          id: "t-4",
+          orderId: "o-4",
+          type: "VAT_ID",
+          country: "IT",
+          value: "01234567890",
+          observedAt: daysAgo(3),
+        },
+        // Identificativo letto dopo la fine della copertura: il dato resta da sbloccare.
+        { id: "t-8", orderId: "o-8", type: "CODICE_FISCALE", value: "BNCLGU80A01H501Z" },
+      ),
+    ]);
+    const at = new Date(now);
+    const real = await listVisibleOrders(env.DB, "u-a", 200, "production", at);
+    expect(real.length).toBe(orders.length);
+    const views = real.map(orderView);
+    // Ogni situazione fiscale filtrabile dagli ordini sintetici, salvo la verifica in corso.
+    expect(new Set(views.map(({ fiscal }) => fiscalSituation(fiscal)))).toEqual(
+      new Set(["available", "locked", "missing", "foreign", "error"]),
+    );
+    for (const plan of ["free", "premium"] as const)
+      for (const [query, text] of [
+        ["", null],
+        ["negozio=s-b", null],
+        ["periodo=7", null],
+        ["periodo=30", null],
+        ["periodo=90", null],
+        ...["paid", "unpaid", "partially_refunded", "refunded", "sconosciuto"].map(
+          (value) => [`pagamento=${value}`, null] as const,
+        ),
+        ...["to_ship", "in_progress", "shipped", "cancelled"].map(
+          (value) => [`spedizione=${value}`, null] as const,
+        ),
+        ...["available", "locked", "missing", "foreign", "checking", "error"].map(
+          (value) => [`fiscale=${value}`, null] as const,
+        ),
+        ["negozio=s-a&pagamento=paid&spedizione=to_ship", null],
+        ["", "lampada"],
+        ["", "mario"],
+        ["", "rssmra80a01h501u"],
+        ["", "bnclgu80a01h501z"],
+        ["", "ebay-o-2"],
+        ["negozio=s-a", "sedia"],
+      ] as const) {
+        const search = new URLSearchParams(query);
+        const criteria = orderCriteria(search, at, plan, text);
+        const ids = (
+          await listVisibleOrders(env.DB, "u-a", 200, "production", at, { criteria })
+        ).map(({ id }) => id);
+        expect(
+          previewListing(views, [], search, text, now, plan).filtered.map(({ id }) => id),
+          `${plan} ${query} ${text ?? ""}`,
+        ).toEqual(ids);
+      }
   });
 });
 

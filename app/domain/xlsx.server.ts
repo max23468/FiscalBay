@@ -1,5 +1,7 @@
 import { strToU8, Zip, ZipDeflate } from "fflate";
 
+import { escapeMarkup } from "../markup";
+
 /**
  * Cartella XLSX con un solo foglio, scritta in streaming (§12). Le stringhe sono celle di testo
  * in linea con il formato Testo, mai formule: un valore che inizia con `=` resta testo. Importi
@@ -60,19 +62,16 @@ const style = {
  * un carattere e diventa U+FFFD.
  */
 export function xlsxText(value: string): string {
-  return value
-    .replace(
+  return escapeMarkup(
+    value.replace(
       // oxlint-disable-next-line no-control-regex -- i caratteri di controllo sono proprio quelli da codificare
       /_(?=x[\dA-Fa-f]{4}_)|[\u0000-\u0008\u000B\u000C\u000D\u000E-\u001F\uFFFE\uFFFF]|[\uD800-\uDFFF]/gu,
       (match) =>
         /[\uD800-\uDFFF]/u.test(match)
           ? "\uFFFD"
           : `_x${match.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0")}_`,
-    )
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    ),
+  );
 }
 
 /** Lettere della colonna, da 0: A, B, …, Z, AA. */

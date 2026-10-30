@@ -212,7 +212,7 @@ function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlo
                 {t.stores.disconnectSubscription}{" "}
                 <Link
                   to={appHref(links, "impostazioni/piano")}
-                  className="font-medium underline underline-offset-4"
+                  className="font-medium link-underline"
                 >
                   {t.stores.disconnectSubscriptionLink}
                 </Link>

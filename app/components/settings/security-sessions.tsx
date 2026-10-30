@@ -1,8 +1,8 @@
 import { useCopy } from "~/components/copy-context";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import type { ActiveSession } from "../../domain/sessions.server";
-import { formatDate, formatRelative } from "../../format";
+import { formatRelative } from "../../format";
 import { Group } from "./controls";
 import { MethodRow } from "./security-rows";
 
@@ -16,7 +16,7 @@ export function SessionList({
   now: string;
   actionPath: string;
 }) {
-  const zone = useTimeZone();
+  const date = useDate();
   const {
     t: { settings },
     language,
@@ -30,9 +30,7 @@ export function SessionList({
             label={session.device}
             hint={
               session.createdAt
-                ? settings.security.sessionOpened(
-                    formatDate(session.createdAt, language, "dateTime", zone),
-                  )
+                ? settings.security.sessionOpened(date(session.createdAt))
                 : undefined
             }
             status={

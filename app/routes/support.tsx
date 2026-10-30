@@ -68,7 +68,7 @@ export default function Support({ loaderData }: Route.ComponentProps) {
             </a>
             <p className="text-muted-foreground">
               {t.supportPage.email}{" "}
-              <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+              <a href={`mailto:${supportEmail}`} className="link-underline">
                 {supportEmail}
               </a>
               .

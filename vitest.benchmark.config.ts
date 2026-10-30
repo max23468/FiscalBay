@@ -5,8 +5,6 @@ export default defineConfig({
     include: [],
     benchmark: { include: ["benchmarks/**/*.bench.ts"] },
     fileParallelism: false,
-    maxWorkers: 1,
     testTimeout: 120_000,
-    coverage: { enabled: false },
   },
 });

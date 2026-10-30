@@ -109,38 +109,27 @@ export default function App({ loaderData }: Route.ComponentProps) {
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const location = useLocation();
-  const language =
-    useRouteLoaderData<typeof loader>("root")?.language ?? languageFromPath(location.pathname);
-  const reference = useRouteLoaderData<typeof loader>("root")?.correlationId;
+  const root = useRouteLoaderData<typeof loader>("root");
+  const language = root?.language ?? languageFromPath(location.pathname);
+  const reference = root?.correlationId;
   const t = appCopy[language].errors;
   const status = isRouteErrorResponse(error) ? error.status : 500;
   // Auth o database non rispondono: la stessa pagina si riapre appena tornano disponibili.
   if (status === 503) return <UnavailablePage language={language} reference={reference} />;
-  const home = { href: localizedPath(language), label: t.home };
+  const home = localizedPath(language);
   const page =
     status === 404
-      ? {
-          icon: FileQuestion,
-          tone: "neutral" as const,
-          title: t.notFoundTitle,
-          body: t.notFound,
-          home,
-        }
-      : { icon: CircleAlert, tone: "rose" as const, title: t.title, body: t.unexpected, home };
+      ? { icon: FileQuestion, tone: "neutral" as const, title: t.notFoundTitle, body: t.notFound }
+      : { icon: CircleAlert, tone: "rose" as const, title: t.title, body: t.unexpected };
   return (
-    <StandalonePage
-      icon={page.icon}
-      tone={page.tone}
-      title={page.title}
-      homeHref={localizedPath(language)}
-    >
+    <StandalonePage icon={page.icon} tone={page.tone} title={page.title} homeHref={home}>
       <title>{pageTitle(page.title)}</title>
       <p className="leading-relaxed text-pretty text-muted-foreground">{page.body}</p>
       {status !== 404 && reference ? (
         <p className="font-code text-xs text-muted-foreground">{t.reference(reference)}</p>
       ) : null}
-      <a href={page.home.href} {...buttonLink({ variant: "outline", className: "w-fit" })}>
-        {page.home.label}
+      <a href={home} {...buttonLink({ variant: "outline", className: "w-fit" })}>
+        {t.home}
       </a>
     </StandalonePage>
   );

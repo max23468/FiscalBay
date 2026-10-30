@@ -237,7 +237,7 @@ test.describe("area reale", () => {
       await networkIdle(page);
       await expect(
         page.getByRole("heading", {
-          level: 2,
+          level: 1,
           name: it ? "Completa la registrazione" : "Complete your registration",
         }),
       ).toBeVisible();
@@ -486,7 +486,7 @@ for (const width of [390, 768, 1440]) {
       );
       await expect(message).toBeInViewport({ ratio: 1 });
       const contact = page.getByRole("heading", {
-        name: it ? "Scrivi all’assistenza" : "Contact support",
+        name: it ? "Contatta l’assistenza" : "Contact support",
         exact: true,
       });
       await expect

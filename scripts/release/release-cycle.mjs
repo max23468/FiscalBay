@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Coordinamento esplicito del ciclo: status legge; pr/cleanup/candidate/production hanno
- * effetti. Il ciclo di una PR pulisce soltanto il proprio branch; i residui di cicli
+ * effetti; qualification-base controlla nella CI la base di una PR. Il ciclo di una PR pulisce soltanto il proprio branch; i residui di cicli
  * precedenti si riconciliano a lotti con cleanup e a ogni Production.
  */
 import { execFileSync, spawn } from "node:child_process";
@@ -12,15 +12,14 @@ import { fileURLToPath } from "node:url";
 import { plan } from "../classify-changes.mjs";
 import { addedMigrations, reviewAdded } from "./release.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
+import { gh, ghJson } from "../lib/provider.mjs";
 
-// Le risposte di gh su PR e run grandi superano il MiB predefinito di execFileSync.
+// Diff e cronologie grandi superano il MiB predefinito di execFileSync.
 const execute = (command, args, options = {}) =>
   (
     execFileSync(command, args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024, ...options }) ?? ""
   ).trim();
 const git = (...args) => execute("git", args);
-const gh = (...args) => execute("gh", args);
-const json = (...args) => JSON.parse(gh(...args));
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const watch = (args) =>
   new Promise((resolve, reject) => {
@@ -126,12 +125,12 @@ export function pullRequestFiles(repository, number, run = gh) {
 }
 
 const readPullRequest = (repository, number) =>
-  pullRequestView(json("api", `repos/${repository}/pulls/${number}`));
+  pullRequestView(ghJson("api", `repos/${repository}/pulls/${number}`));
 
 async function waitChecks(repository, sha) {
   for (;;) {
     const outcome = checksOutcome(
-      json(
+      ghJson(
         "api",
         "--paginate",
         "--slurp",
@@ -217,7 +216,7 @@ export function assertBase(expected, current) {
 // File che valgono per tutto il prodotto o per la procedura di qualifica: se cambiano da una
 // delle due parti, la PR si riqualifica sulla base attuale.
 const globalFile =
-  /^(?:package\.json|pnpm-(?:lock|workspace)\.yaml|tsconfig[^/]*\.json|[^/]+\.config\.ts|\.github\/|scripts\/(?:classify-changes\.mjs|release\/)|e2e\/(?![^/]+\.spec\.ts$))/u;
+  /^(?:package\.json|pnpm-(?:lock|workspace)\.yaml|tsconfig[^/]*\.json|[^/]+\.config\.ts|\.github\/|scripts\/(?:classify-changes\.mjs|release\/|lib\/)|e2e\/(?![^/]+\.spec\.ts$))/u;
 
 /**
  * Vero se i commit entrati nella base non richiedono di riqualificare la PR: file disgiunti,
@@ -259,6 +258,14 @@ export function assertQualificationBase(ref, tested, current, head, run = git) {
     throw new Error(
       "La base della PR è avanzata su file comuni o globali: aggiornarla e riqualificarla.",
     );
+}
+
+/** Controllo della CI sulla PR: confronta la base provata con quella attuale di `origin`. */
+function qualificationBase({ ref, base, head }) {
+  if (!["develop", "main"].includes(ref)) throw new Error("--ref develop o main richiesto.");
+  git("fetch", "--quiet", "origin", ref);
+  assertQualificationBase(ref, base, git("rev-parse", "FETCH_HEAD"), head);
+  console.log(`Base della qualifica valida verso ${ref}.`);
 }
 
 /**
@@ -393,7 +400,7 @@ export async function settleMergeRun(merge, deployRequired, io) {
 }
 
 const runJobs = (repository, id) =>
-  json("api", `repos/${repository}/actions/runs/${id}/jobs?per_page=100`).jobs;
+  ghJson("api", `repos/${repository}/actions/runs/${id}/jobs?per_page=100`).jobs;
 
 export function assertPublishedRelease(release, tagSha, sha, version) {
   if (release.isDraft || release.tagName !== `v${version}` || tagSha !== sha || !release.url)
@@ -403,17 +410,17 @@ export function assertPublishedRelease(release, tagSha, sha, version) {
 function publishedRelease(repository, sha, version) {
   const releases = version
     ? [{ tagName: `v${version}` }]
-    : json("api", `repos/${repository}/releases?per_page=50`)
+    : ghJson("api", `repos/${repository}/releases?per_page=50`)
         .filter((release) => !release.draft)
         .map((release) => ({ tagName: release.tag_name }));
   for (const release of releases) {
-    const ref = json("api", `repos/${repository}/git/ref/tags/${release.tagName}`);
+    const ref = ghJson("api", `repos/${repository}/git/ref/tags/${release.tagName}`);
     const commit =
       ref.object.type === "tag"
-        ? json("api", `repos/${repository}/git/tags/${ref.object.sha}`).object.sha
+        ? ghJson("api", `repos/${repository}/git/tags/${ref.object.sha}`).object.sha
         : ref.object.sha;
     if (commit !== sha && !version) continue;
-    const found = json("api", `repos/${repository}/releases/tags/${release.tagName}`);
+    const found = ghJson("api", `repos/${repository}/releases/tags/${release.tagName}`);
     const details = { tagName: found.tag_name, isDraft: found.draft, url: found.html_url };
     assertPublishedRelease(details, commit, sha, version ?? release.tagName.slice(1));
     console.log(`Release verificata: ${details.url}.`);
@@ -423,8 +430,8 @@ function publishedRelease(repository, sha, version) {
 }
 
 function candidateAvailable(repository, tree) {
-  const repositoryId = json("api", `repos/${repository}`).id;
-  const artifacts = json(
+  const repositoryId = ghJson("api", `repos/${repository}`).id;
+  const artifacts = ghJson(
     "api",
     `repos/${repository}/actions/artifacts?name=candidate-${tree}&per_page=20`,
   ).artifacts;
@@ -436,8 +443,8 @@ function candidateAvailable(repository, tree) {
       origin.head_repository_id !== repositoryId
     )
       continue;
-    const run = json("api", `repos/${repository}/actions/runs/${origin.id}`);
-    const jobs = json(
+    const run = ghJson("api", `repos/${repository}/actions/runs/${origin.id}`);
+    const jobs = ghJson(
       "api",
       `repos/${repository}/actions/runs/${origin.id}/jobs?per_page=100`,
     ).jobs;
@@ -447,10 +454,10 @@ function candidateAvailable(repository, tree) {
 }
 
 function summary(repository, runId) {
-  const run = json("api", `repos/${repository}/actions/runs/${runId}`);
+  const run = ghJson("api", `repos/${repository}/actions/runs/${runId}`);
   const jobs = [];
   for (let attempt = 1; attempt <= run.run_attempt; attempt++) {
-    const pages = json(
+    const pages = ghJson(
       "api",
       "--paginate",
       "--slurp",
@@ -492,7 +499,7 @@ async function waitRun(
 ) {
   const cancelled = new Set();
   for (let attempt = 0; attempt < 12; attempt++) {
-    const runs = json(
+    const runs = ghJson(
       "run",
       "list",
       "--repo",
@@ -636,7 +643,7 @@ function cleanupIntegratedBranches(repository) {
   const residuals = [];
   for (const branch of new Set([...locals, ...remotes].filter(Boolean))) {
     const owner = repository.split("/")[0];
-    const pr = json(
+    const pr = ghJson(
       "api",
       `repos/${repository}/pulls?state=closed&head=${owner}:${encodeURIComponent(branch)}&per_page=100`,
     )
@@ -666,13 +673,21 @@ function cleanupIntegratedBranches(repository) {
   for (const residual of residuals) console.log(`Residuo conservato: ${residual}.`);
 }
 
-const cycleCommands = ["status", "pr", "cleanup", "candidate", "production", "resume"];
+const cycleCommands = [
+  "status",
+  "pr",
+  "cleanup",
+  "candidate",
+  "production",
+  "resume",
+  "qualification-base",
+];
 
 /** Comando e argomento posizionale; il formato dell'argomento si controlla nel comando. */
 export function cycleCommand([command, number]) {
   if (!cycleCommands.includes(command))
     throw new Error(
-      "Uso: release:cycle status <run> | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run>.",
+      "Uso: release:cycle status <run> | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run> | qualification-base --ref <branch> --base <sha> --head <sha>.",
     );
   return { command, number };
 }
@@ -764,7 +779,7 @@ function cleanupCycle({ repository }) {
 
 async function resumeCycle({ repository, number, values }) {
   assertRun(number);
-  let run = json("api", `repos/${repository}/actions/runs/${number}`);
+  let run = ghJson("api", `repos/${repository}/actions/runs/${number}`);
   assertResumableRun(run);
   assertBase(
     run.head_sha,
@@ -804,7 +819,7 @@ async function resumeCycle({ repository, number, values }) {
 async function rerunMigrationReview(repository, pr) {
   const forkPoint = git("merge-base", "origin/develop", pr.headRefOid);
   if (!reviewAdded(addedMigrations(forkPoint, pr.headRefOid), pr.body)) return;
-  const last = json(
+  const last = ghJson(
     "run",
     "list",
     "--repo",
@@ -823,7 +838,7 @@ async function rerunMigrationReview(repository, pr) {
   if (!migrationReviewBlocked(last, (id) => runJobs(repository, id))) return;
   gh("run", "rerun", String(last.databaseId), "--repo", repository, "--failed");
   for (let attempt = 0; attempt < 30; attempt++) {
-    const run = json("api", `repos/${repository}/actions/runs/${last.databaseId}`);
+    const run = ghJson("api", `repos/${repository}/actions/runs/${last.databaseId}`);
     if (run.status !== "completed") break;
     await pause(2000);
   }
@@ -967,7 +982,7 @@ async function publishCycle({ repository, command, values }) {
   );
   if (command === "production" && !values.version)
     throw new Error("Versione Production richiesta.");
-  const existing = json(
+  const existing = ghJson(
     "run",
     "list",
     "--repo",
@@ -988,7 +1003,7 @@ async function publishCycle({ repository, command, values }) {
       confirmProduction(repository, jobs, run.head_sha, values.version);
       return;
     }
-    const tree = json("api", `repos/${repository}/git/commits/${values.sha}`).tree.sha;
+    const tree = ghJson("api", `repos/${repository}/git/commits/${values.sha}`).tree.sha;
     const certified = candidateAvailable(repository, tree);
     if (command === "candidate" && certified) {
       summary(repository, existing.databaseId);
@@ -1045,12 +1060,16 @@ async function main() {
     options: {
       sha: { type: "string" },
       ref: { type: "string" },
+      base: { type: "string" },
+      head: { type: "string" },
       version: { type: "string" },
       "reviewed-migrations": { type: "string", default: "" },
     },
   });
   const { command, number } = cycleCommand(positionals);
-  const repository = json("api", "repos/{owner}/{repo}").full_name;
+  // Gira nei job della CI senza token: nessuna lettura del repository remoto con gh.
+  if (command === "qualification-base") return qualificationBase(values);
+  const repository = ghJson("api", "repos/{owner}/{repo}").full_name;
   // status legge soltanto: nessun checkout pulito né blocco.
   if (command === "status") return statusCycle({ repository, number });
   if (git("status", "--porcelain"))

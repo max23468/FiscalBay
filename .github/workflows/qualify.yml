@@ -74,9 +74,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: ./.github/actions/setup
-        with:
-          install: "false"
+      # Come in `select`, la ricerca usa il Node del runner: installazione e cache servono
+      # soltanto senza una sorgente già verificata.
       - name: Find verified source
         id: reuse
         if: inputs.source_reuse
@@ -85,7 +84,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
         run: node scripts/find-build.mjs
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
         if: steps.reuse.outputs.run-id == ''
       - name: Qualify source
         if: steps.reuse.outputs.run-id == ''

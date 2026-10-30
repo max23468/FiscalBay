@@ -22,7 +22,7 @@ export function AccountDeletionPage({ language }: { language: Language }) {
       <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
         {t.accountDeletion.note}
       </p>
-      <a href={`mailto:${supportEmail}`} className="w-fit underline underline-offset-4">
+      <a href={`mailto:${supportEmail}`} className="w-fit link-underline">
         {t.common.contactSupport}: {supportEmail}
       </a>
       <a href={localizedPath(language)} {...buttonLink({ variant: "outline", className: "w-fit" })}>

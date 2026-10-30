@@ -42,8 +42,10 @@ import { completeRegistration } from "../app/domain/registration.server";
 import {
   insertCredentials,
   insertEntitlement,
+  insertOrder,
   insertStore,
   insertWorkspace,
+  later,
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
@@ -54,7 +56,6 @@ import { firstInvoice, stripeAccount, workspace } from "./fixtures/stripe-fixtur
 
 const privacy = "/app/impostazioni/privacy";
 const at = (iso: string) => new Date(iso);
-const later = (minutes: number) => new Date(Date.parse(now) + minutes * 60_000);
 
 /** Righe ancora presenti per tabella, filtrate sullo spazio o sull'utente della prova. */
 async function leftovers(userId: string, workspaceId = "w-a") {
@@ -91,24 +92,6 @@ async function leftovers(userId: string, workspaceId = "w-a") {
       workspaceId,
     ),
   };
-}
-
-/** Ordine con un articolo e un Codice Fiscale, del negozio indicato. */
-function insertOrder(id: string, storeId = "s-a") {
-  return [
-    env.DB.prepare(
-      `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,
-         currency, total_minor) VALUES (?1, ?2, ?3, ?4, ?4, 'EUR', 1299)`,
-    ).bind(id, storeId, `ebay-${id}`, now),
-    env.DB.prepare(
-      `INSERT INTO order_items (id, order_id, line_item_id, title, quantity, total_minor, currency)
-       VALUES (?1, ?2, ?3, 'Articolo', 1, 1299, 'EUR')`,
-    ).bind(`i-${id}`, id, `line-${id}`),
-    env.DB.prepare(
-      `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source,
-         observed_at) VALUES (?1, ?2, 'CODICE_FISCALE', 'IT', 'RSSMRA80A01H501U', 'synthetic_fixture', ?3)`,
-    ).bind(`t-${id}`, id, now),
-  ];
 }
 
 /**
@@ -984,6 +967,45 @@ describe("cancellazione dell'account", () => {
     expect(missing.ack).toHaveBeenCalled();
   });
 
+  it("un passo che ha perso il blocco non rilascia né proroga quello di un altro consumer", async () => {
+    const email = `blocco-${crypto.randomUUID()}@example.invalid`;
+    const { userId } = await verifiedSession(email);
+    const id = await startAccountDeletion(env, { id: userId, email }, "it", at(now));
+    await env.DB.prepare(`INSERT INTO export_files (id, user_id, file_name, content_type,
+        access_revision, created_at, expires_at) VALUES ('f-blocco', ?1, 'ordini.csv', 'text/csv',
+        0, ?2, '2026-09-14T20:00:00.000Z')`)
+      .bind(userId, now)
+      .run();
+    const newer = later(31).toISOString();
+    const lock = () =>
+      env.DB.prepare("SELECT locked_until FROM account_deletions WHERE id = ?")
+        .bind(id)
+        .first<string>("locked_until");
+    // Il blocco scade durante il passo e un altro consumer prende la richiesta.
+    const takeOver = () =>
+      env.DB.prepare("UPDATE account_deletions SET locked_until = ? WHERE id = ?")
+        .bind(newer, id)
+        .run();
+    vi.spyOn(env.EXPORT_FILES, "delete").mockImplementationOnce(async () => {
+      await takeOver();
+      throw new Error("r2");
+    });
+    await expect(runAccountDeletion(env, id, fetch, at(now))).rejects.toThrow("r2");
+    expect(await lock()).toBe(newer);
+    await resumeAccountDeletions(env, fetch, later(16));
+    expect(await lock()).toBe(newer);
+    // Lo stesso vale per la proroga in attesa dell'email finale.
+    await env.DB.prepare("UPDATE account_deletions SET locked_until = NULL WHERE id = ?")
+      .bind(id)
+      .run();
+    send.mockImplementationOnce(async () => {
+      await takeOver();
+      throw new Error("email");
+    });
+    expect(await runAccountDeletion(env, id, fetch, at(now))).toBe("waiting");
+    expect(await lock()).toBe(newer);
+  });
+
   it("elimina gli ordini a lotti e prosegue con un nuovo messaggio", async () => {
     const email = `lotti-${crypto.randomUUID()}@example.invalid`;
     const { userId } = await verifiedSession(email);
@@ -1317,7 +1339,7 @@ describe("cancellazione dell'account", () => {
       .first<string>("id"))!;
     await env.DB.batch([
       insertEntitlement({ workspaceId: space, source: "trial", endsAt: later(60).toISOString() }),
-      ...insertOrder("o-lifetime", storeId),
+      ...insertOrder("o-lifetime", { storeId }),
       env.DB.prepare(
         `INSERT INTO lifetime_allocations (slot, workspace_id, status, provider_reference,
            created_at, activated_at, customer_id)

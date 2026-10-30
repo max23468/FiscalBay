@@ -4,6 +4,7 @@ import { ebayOrderHref } from "../orders/ebay-links";
 import { buyerNameView } from "../contact";
 import { formatAmount, type Language, locales } from "../i18n";
 import type { BotButton, BotMessage } from "../integrations/telegram.server";
+import { escapeMarkup } from "../markup";
 import { zoneLabel } from "../preferences";
 import { displayTaxValue, taxIdentifierType } from "../tax-quality";
 import type { EbayEnvironment, FiscalSituation } from "../view-models";
@@ -21,7 +22,7 @@ import { telegramMessageCopy as text } from "../copy/telegram";
 export const messageLimit = 3900;
 
 export function escape(text: string): string {
-  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+  return escapeMarkup(text, /[&<>]/gu);
 }
 
 /**

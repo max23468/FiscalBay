@@ -5,9 +5,11 @@
  * keyset Production dal Portachiavi macOS senza scriverlo in file o argomenti.
  * Uso: node scripts/ebay-mcp.mjs (dalla configurazione MCP del client)
  */
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { pathToFileURL } from "node:url";
+
+import { keychain } from "./lib/provider.mjs";
 
 export const serverPackage = "@ebay/npm-public-api-mcp@1.1.0";
 export const keychainItems = {
@@ -38,13 +40,6 @@ export function serverCommand({ clientId, clientSecret }, environment = process.
       },
     },
   };
-}
-
-function keychain(service) {
-  return execFileSync("security", ["find-generic-password", "-s", service, "-w"], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "ignore"],
-  });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

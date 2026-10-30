@@ -9,10 +9,17 @@ import { Button } from "~/components/ui/button";
 import { FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { RadioGroup } from "~/components/ui/radio-group";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
 import { useCopy, useLinks } from "~/components/copy-context";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import { exportFilePath, orderExportPath } from "../../app-links";
-import { formatDate } from "../../format";
 import { localizedPath } from "../../i18n";
 import type { ExportFileView } from "../../domain/export-jobs.server";
 import { downloadExport, saveFile } from "./download";
@@ -38,7 +45,8 @@ import {
   premiumOrderPeriods,
   type OrderPeriod,
 } from "../../view-models";
-import { CheckboxOption, Group, RadioOption, SimpleSelect } from "./controls";
+import { CheckboxOption } from "~/components/checkbox-option";
+import { Group, RadioOption, SimpleSelect } from "./controls";
 
 /** Valore della scelta «Standard» fra le configurazioni salvate. */
 const standardChoice = "";
@@ -57,7 +65,7 @@ function ExportContextNote({ context }: { context: ExportContext }) {
               ? t.settings.export.exportContextFiltered
               : t.settings.export.exportContextAll}
       </p>
-      <Link to={context.returnHref} className="underline underline-offset-4">
+      <Link to={context.returnHref} className="link-underline">
         {t.settings.export.exportContextBack}
       </Link>
     </div>
@@ -156,6 +164,12 @@ function CreateFile({
 }
 
 /**
+ * Prima colonna ferma mentre la tabella scorre: chi scorre vede sempre di quale riga si tratta e
+ * che a destra ci sono altre colonne.
+ */
+const sticky = "sticky left-0 shadow-[1px_0_0_var(--border)]";
+
+/**
  * Prime righe del file con le scelte correnti: ordini più recenti dell'ambito, granularità e
  * colonne nell'ordine scelto, con gli stessi valori che il file conterrà.
  */
@@ -190,57 +204,47 @@ function ExportPreview({
         {t.settings.export.exportPreview}
       </p>
       {/* La tabella scorre in orizzontale: la regione si raggiunge anche da tastiera. */}
-      <div
-        role="region"
-        aria-labelledby={id}
-        tabIndex={0}
-        className="max-w-full overflow-x-auto rounded-lg border focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      <Table
+        container={{
+          role: "region",
+          "aria-labelledby": id,
+          tabIndex: 0,
+          className:
+            "max-w-full rounded-lg border focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none",
+        }}
+        className="w-max min-w-full"
       >
-        <table className="w-max min-w-full text-left text-sm">
-          <thead className="bg-muted">
-            <tr>
-              {exportHeader(layout.rows, t, columns).map((name, index) => (
-                <th
-                  key={columns[index]}
-                  scope="col"
-                  className={cn(
-                    "px-3 py-2 font-medium whitespace-nowrap",
-                    index === 0 && "sticky left-0 bg-muted shadow-[1px_0_0_var(--border)]",
-                  )}
-                >
-                  {name}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y border-t">
-            {rows.map(({ key, record }) => (
-              <tr key={key}>
-                {columns.map((column, index) => (
-                  <td
-                    key={column}
-                    className={cn(
-                      "max-w-72 truncate px-3 py-2 whitespace-nowrap",
-                      index === 0 && sticky,
-                    )}
-                  >
-                    {record[column]}
-                  </td>
-                ))}
-              </tr>
+        <TableHeader className="bg-muted">
+          <TableRow className="hover:bg-transparent">
+            {exportHeader(layout.rows, t, columns).map((name, index) => (
+              <TableHead
+                key={columns[index]}
+                scope="col"
+                className={cn("h-auto px-3 py-2", index === 0 && [sticky, "bg-muted"])}
+              >
+                {name}
+              </TableHead>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map(({ key, record }) => (
+            <TableRow key={key} className="hover:bg-transparent">
+              {columns.map((column, index) => (
+                <TableCell
+                  key={column}
+                  className={cn("max-w-72 truncate px-3 py-2", index === 0 && [sticky, "bg-card"])}
+                >
+                  {record[column]}
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   );
 }
-
-/**
- * Prima colonna ferma mentre la tabella scorre: chi scorre vede sempre di quale riga si tratta e
- * che a destra ci sono altre colonne.
- */
-const sticky = "sticky left-0 bg-card shadow-[1px_0_0_var(--border)]";
 
 /** Inizio del periodo per le prime righe: come nel file, un periodo Premium nel Free non restringe. */
 function sampleSince(period: OrderPeriod, premium: boolean, now: string): string | null {
@@ -559,9 +563,9 @@ function ConfigurationCommands({
  * download passa dal percorso autenticato, che ricontrolla sessione e validità.
  */
 function ExportFiles({ files }: { files: ExportFileView[] }) {
-  const { t, language } = useCopy();
+  const { t } = useCopy();
   const { links, preview } = useLinks();
-  const zone = useTimeZone();
+  const date = useDate();
   const action = useAction();
   const notify = useNotice();
   const revalidator = useRevalidator();
@@ -588,7 +592,7 @@ function ExportFiles({ files }: { files: ExportFileView[] }) {
               <span className="font-medium break-all">{file.name}</span>
               <span className="text-sm text-muted-foreground">
                 {file.state === "ready"
-                  ? copy.exportFileReady(formatDate(file.expiresAt!, language, "dateTime", zone))
+                  ? copy.exportFileReady(date(file.expiresAt!))
                   : file.state === "queued"
                     ? copy.exportFileQueued
                     : copy.exportFileFailed}
@@ -677,7 +681,6 @@ export function ExportSection({
                 premium: !premium && premiumOrderPeriods.has(period),
               }))}
               value={period}
-              premiumLabel={t.orders.premiumOption}
               onChange={(next) => setPeriod(next as OrderPeriod)}
             />
           )}

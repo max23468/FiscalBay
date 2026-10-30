@@ -10,7 +10,7 @@ import type {
   QuotaRow,
 } from "../../domain/ebay-quotas.server";
 import type { TechnicalMetrics } from "../../domain/technical-metrics.server";
-import { locales } from "../../i18n";
+import { formatNumber } from "../../format";
 import { SeverityBadge } from "./overview";
 import { ActionForm, DataTable, Disclosure, Panel } from "./kit";
 import { useAdmin } from "./use-admin";
@@ -241,7 +241,7 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
   const { t, language } = useAdmin();
   const m = t.performance;
   // Stime e durate in millisecondi, intere come le misure del browser.
-  const whole = (value: number) => Math.round(value).toLocaleString(locales[language]);
+  const whole = (value: number) => formatNumber(Math.round(value), language);
   const count = (value: number) => <span className="font-code">{whole(value)}</span>;
   /** Quantili 75 e 95 di una misura del browser; un trattino quando nessun report la porta. */
   const pair = (value: { p75: number | null; p95: number | null }) =>

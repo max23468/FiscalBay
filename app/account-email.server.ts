@@ -5,16 +5,9 @@ import { accessPath, securityPath, storesPath } from "./app-links";
 import { emailVerificationSeconds } from "./domain/email-change.server";
 import { ApplicationError, logFailure } from "./errors";
 import { languageFromPath, localizedPath, type Language } from "./i18n";
+import { escapeMarkup as escapeHtml } from "./markup";
 
 const emailFrom = { email: "noreply@fiscalbay.it", name: "FiscalBay" };
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
 
 /**
  * Invio non riuscito. Il codice del provider (`E_RECIPIENT_SUPPRESSED`, `E_RATE_LIMIT_EXCEEDED`

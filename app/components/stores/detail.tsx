@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { PremiumNote, StatusAlert, StatusBadge } from "~/components/status";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import {
   Sheet,
   SheetContent,
@@ -15,7 +15,6 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { useCopy, useLinks } from "~/components/copy-context";
 import { appHref } from "../../app-links";
 import { type StoreView } from "../../view-models";
-import { formatDate } from "../../format";
 import { ReconnectButton, StoreActions } from "./actions";
 import {
   FeedbackSummary,
@@ -111,7 +110,7 @@ function ReconnectNotice({
 function StoreDetail({ store, data }: { store: StoreView; data: StoresPageData }) {
   const { links } = useLinks();
   const { t } = useCopy();
-  const zone = useTimeZone();
+  const date = useDate();
   return (
     <div className="grid gap-7 px-4 pb-6">
       {store.issue ? (
@@ -123,10 +122,7 @@ function StoreDetail({ store, data }: { store: StoreView; data: StoresPageData }
         >
           {t.stores.issue[store.issue].body}
           {store.issue === "unverifiable" && data.settings ? (
-            <Link
-              to={appHref(links, "impostazioni/supporto")}
-              className="underline underline-offset-4"
-            >
+            <Link to={appHref(links, "impostazioni/supporto")} className="link-underline">
               {t.common.contactSupport}
             </Link>
           ) : null}
@@ -141,9 +137,7 @@ function StoreDetail({ store, data }: { store: StoreView; data: StoresPageData }
         >
           {(store.connection === "paused"
             ? t.stores.consentExpiringPaused
-            : t.orders.consentExpiringBody)(
-            formatDate(store.consentExpiresAt, links.language, "date", zone),
-          )}
+            : t.orders.consentExpiringBody)(date(store.consentExpiresAt, "date"))}
         </ReconnectNotice>
       ) : null}
       {ebayDownFor(data, store) ? (
@@ -167,8 +161,8 @@ function StoreDetail({ store, data }: { store: StoreView; data: StoresPageData }
 }
 
 function ConnectionSection({ store, now }: SectionProps & { now: string }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   const status = connectionStatus(store, t);
   const expired =
     store.connection === "reconnect_required" ||
@@ -206,16 +200,14 @@ function ConnectionSection({ store, now }: SectionProps & { now: string }) {
         {store.connectedAt ? (
           <div className={row}>
             <dt className="text-muted-foreground">{t.stores.connectedSince}</dt>
-            <dd>{formatDate(store.connectedAt, language, "date", zone)}</dd>
+            <dd>{date(store.connectedAt, "date")}</dd>
           </div>
         ) : null}
         {store.consentExpiresAt ? (
           <div className={row}>
             <dt className="text-muted-foreground">{t.stores.consentUntil}</dt>
             <dd className={expired ? "text-warning" : undefined}>
-              {expired
-                ? t.stores.consentExpired
-                : formatDate(store.consentExpiresAt, language, "date", zone)}
+              {expired ? t.stores.consentExpired : date(store.consentExpiresAt, "date")}
             </dd>
           </div>
         ) : null}
