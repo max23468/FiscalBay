@@ -81,7 +81,7 @@ Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente q
 | Fine M0 | 2026-09-23: Workers, una D1 UE, Queues e Better Auth, costi differiti, limiti e rinvii espliciti; avvio di M1. Nessun nuovo costo o go-live autorizzato. Adozione e avvio originari: 2026-09-13. Costo differito deciso il 2026-10-12: Workers Paid continuativo e invio email con Cloudflare Email Service (D169). |
 | M1 | Logo approvato il 2026-09-26, design system il 2026-09-27, prototipo e chiusura M1 il 2026-09-28. Nessuna pubblicazione Production autorizzata. |
 | M5 | 2026-10-26: configurazione dell'account Stripe live secondo [M5-12](#m5-12), cioè impostazioni fiscali, metodi di pagamento, webhook, portale, Smart Retries e contatto di assistenza. Lo stesso giorno l'owner ha completato il checkpoint: vendite live, segreti del Worker Production e confini degli effetti economici restano alle prove commerciali di [M9-01](#m9-01) e al mandato Production. |
-| M8 | In attesa: merchant, ambiente, dati e prove reali autorizzati. |
+| M8 | 2026-10-30: test merchant sul test con il negozio eBay Production dell'owner, secondo il [manifest](engineering/RELEASE.md#test-merchant): Stripe sandbox, bot del test, Accedi con eBay reale sul test (D234). Nessun deploy o effetto sul Worker Production né incasso live. |
 | M9 | In attesa: candidato/manifest, date promo, checklist e comando `Promuovi`. |
 
 ### 0.3 Una fonte per responsabilità
@@ -1081,7 +1081,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M5](#m5) | Completata | Free con cicli e promo, prova Premium, Hosted Checkout Managed Payments, webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. Cambi di periodicità e metodo su un abbonamento live, vendite live e segreti Production in [M9-01](#m9-01). |
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
-| [M8](#m8) | In corso | RC `2.0.0-rc.1` congelata su `develop` (D233); merchant e prove reali autorizzate ancora da preparare, checkpoint in attesa. |
+| [M8](#m8) | In corso | RC congelata su `develop` (D233) e test merchant approvato; percorsi reali, verifica browser e decisione RC da svolgere. |
 | [M9](#m9) | Da completare | Go-live non autorizzato; gate Production sotto ancora aperti. |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
@@ -1940,7 +1940,7 @@ Il manifest approvato identifica candidato, artefatto, schema/config, account, d
 <a id="prove-ebay"></a>
 #### Prove reali di Sign in with eBay su Production
 
-Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effetti autorizzati del checkpoint M8; non autorizza di per sé deploy o go-live:
+Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effetti autorizzati del checkpoint M8; non autorizza di per sé deploy o go-live. In M8 si svolge sul test con identità eBay Production e il passo 2 si ripete su `fiscalbay.it` dopo `Promuovi` (D234):
 
 1. Registrare esito/data del riferimento `260920-000007` e rileggere sul keyset `botCF` il diritto effettivo, senza cambiare scope, RuName o callback legacy.
 2. Verificare consenso con soli scope base e `commerce.identity.readonly`, RuName FiscalBay attivo e candidato esatto distribuito sul Worker Production dopo gate e autorizzazioni applicabili.
@@ -1960,11 +1960,9 @@ La versione `2.0.0-rc.1` in cima a `CHANGELOG.md` congela `develop` alle sole co
 <a id="m8-02"></a>
 #### M8-02 · Preparazione test merchant
 
-**Stato:** Da completare · **Prerequisiti:** M8-01 e via owner · **Contratto:** [§30](#s30) · [§35](#s35)
+**Stato:** Completato · **Prerequisiti:** M8-01 e via owner · **Contratto:** [§30](#s30) · [§35](#s35)
 
-Preparare il test con un merchant di fiducia, dati e risorse autorizzati, scenari reali e modalità che non falsino i diritti della Production.
-
-**Criterio di completamento:** Manifest del test approvato: account, ambiente, dati, credenziali, bot, eventuali effetti live e condizioni di uscita. Nessuna migrazione implicita di passkey, oggetti sandbox, ordini o diritti nel live; nessuna beta aperta o durata minima senza criterio.
+Il [manifest](engineering/RELEASE.md#test-merchant) approvato fissa candidato, ambiente, account, dati, credenziali, bot, effetti live e condizioni di uscita: l'owner fa da merchant con il proprio negozio eBay Production sul test, Stripe sandbox e bot del test, e Accedi con eBay reale si prova sul test (D234). Le prove reali già registrate valgono se il percorso non è cambiato; nulla del test passa in Production.
 
 <a id="m8-03"></a>
 #### M8-03 · Esecuzione percorsi reali

@@ -99,6 +99,27 @@ Una versione `2.x.y-rc.N` in cima a `CHANGELOG.md` congela `develop` ([D233](../
 
 La RC è la testa di `develop` con l'artefatto dell'ultimo deploy test confermato. Una PR che dopo la sezione della RC cambia ciò che si distribuisce aggiunge nella stessa PR la sezione `rc.N+1` con la correzione; documenti e prove non cambiano la RC. `release:cycle rc` la identifica in sola lettura: versione, commit e tree della testa, commit, SHA256 dell'artefatto e versione del Worker del deploy, run CI, migration applicate, hash di `cloudflare.config.ts` e presenza della qualifica completa del tree. Rifiuta l'identità senza gate, deploy e readback confermati nella run, con modifiche da distribuire dopo il deploy o dopo la sezione della versione o con una versione attiva sul test diversa dalla ricevuta. La qualifica completa, con `release:cycle candidate --ref develop`, precede la decisione sulla RC, non l'identificazione. Ricevuta del deploy e qualifica restano disponibili sette giorni. La RC non crea tag né GitHub Release.
 
+<a id="test-merchant"></a>
+### Test merchant
+
+Manifest dei percorsi reali di [M8](../MASTER_PLAN.md#m8), approvato dall'owner. L'identità del merchant, gli indirizzi e gli ID degli account sono nell'inventario privato, in `~/.config/fiscalbay/merchant-test.json`; qui restano i nomi logici. Un cambio di riga richiede una nuova approvazione.
+
+| Voce | Perimetro |
+|---|---|
+| Candidato | La RC identificata da `release:cycle rc` all'avvio delle prove e a ogni nuova RC; ogni evidenza riporta versione e commit su cui è stata raccolta. |
+| Ambiente | `test.fiscalbay.it`: Worker, D1 UE, coda, R2 e Analytics Engine `fiscalbay-test`, Stripe sandbox, keyset eBay `botCF` con il RuName del test e Sandbox spenta. Nessun deploy, segreto o dato sul Worker Production. |
+| Merchant | L'owner con il proprio negozio eBay Production business, già collegato al suo account del test. |
+| Account | Account dell'owner, Premium a vita, con password, Google, passkey, identità eBay e Telegram: accessi, negozio, sync, dati fiscali, copia, export, Telegram e impostazioni. Secondo account dell'owner, ammesso con un indirizzo suo nella lista `REGISTRATION_ALLOWED_EMAILS`: registrazione, prova volontaria e acquisto nel Checkout. Account sintetico di collaudo: soltanto i controlli automatici dopo il deploy. |
+| Dati | Ordini, acquirenti e identificativi fiscali reali del negozio, letti in sola lettura con la conservazione del piano dello spazio. Evidenze sanificate, senza nomi, indirizzi, identificativi fiscali, token o chat; file esportati aperti sul dispositivo dell'owner e non allegati. |
+| Credenziali | Segreti del Worker test e Portachiavi. Passkey legate a `test.fiscalbay.it`, cookie e sessioni del test, token eBay cifrati con il segreto Auth del test: nessuno vale su `fiscalbay.it`. |
+| Billing | Stripe sandbox con la carta di prova 4242 inserita dall'owner. Il Worker rifiuta oggetti con `livemode` diverso dall'ambiente: sessioni, abbonamenti, ricevute e diritti sandbox non attestano diritti live. Portale, cambi live e commissioni effettive restano a [M9-01](../MASTER_PLAN.md#m9-01). |
+| Bot | `@fiscalbay_test_bot` con la chat dell'owner. Il bot Production non riceve token, webhook o messaggi. |
+| Accedi con eBay | Le [prove reali](../MASTER_PLAN.md#prove-ebay) si svolgono sul test con identità eBay Production; il passaggio su `fiscalbay.it` si ripete nel readback dopo `Promuovi` ([D234](../DECISION_REGISTER.md)). Il passo 7 richiede un account eBay individuale e un'email business già registrata controllati dall'owner, altrimenti resta aperto. |
+| Prove già svolte | Una prova reale sul test già registrata nel piano vale anche per M8 se il codice del percorso non è cambiato dopo la prova: collegamento e lettura del negozio Production ([M3-10](../MASTER_PLAN.md#m3-10)), passkey Safari/iOS, acquisto lifetime sandbox ([M5-07](../MASTER_PLAN.md#m5-07)), webhook Stripe e Telegram ([M5-05](../MASTER_PLAN.md#m5-05), [M5-09](../MASTER_PLAN.md#m5-09)), cancellazione dell'account ([M6-12](../MASTER_PLAN.md#m6-12)), protezioni della zona ([M7-12](../MASTER_PLAN.md#m7-12)). M8-03 ripete solo i percorsi cambiati e svolge quelli mai provati. |
+| Effetti live | Letture eBay Production sulle quote condivise del keyset, entro i [punti di arresto](#capacita). Sottoscrizioni eBay del keyset `AUTHORIZATION_REVOCATION`, `BULK_DATA_TRANSFER_THRESHOLD` e `ORDER_CONFIRMATION` del negozio verso l'ingresso del test. Email reali agli indirizzi dell'owner e messaggi reali nella sua chat. Nessun ordine, inserzione o messaggio eBay modificato, nessun RuName, scope o callback cambiato, nessun incasso. |
+
+**Uscita.** Le prove si chiudono quando ogni percorso di [M8-03](../MASTER_PLAN.md#m8-03) ha un esito registrato e non restano P1/P2. Un P1/P2 su dati, isolamento, sicurezza o billing sospende il percorso fino alla correzione nella RC successiva. Si sospendono anche le letture del negozio a un punto di arresto delle quote o alla revoca del consenso da eBay. A fine M8 il secondo account si cancella dall'app, che chiude l'abbonamento sandbox e il collegamento Telegram, e la lista di ammissione torna `[]`. Al cutover le sottoscrizioni eBay passano a `fiscalbay.it`. Prima del go-live si eliminano dalla D1 test l'utente dell'owner e i dati reali; la copia di Time Travel scade dopo 30 giorni. In Production l'owner si registra e ricollega il negozio da capo: account, passkey, consensi, ordini, versioni fiscali e diritti del test non si copiano.
+
 <a id="contenuto-delle-pr"></a>
 ### Contenuto delle PR
 
