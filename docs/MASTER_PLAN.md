@@ -1081,7 +1081,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M5](#m5) | Completata | Free con cicli e promo, prova Premium, Hosted Checkout Managed Payments, webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. Cambi di periodicità e metodo su un abbonamento live, vendite live e segreti Production in [M9-01](#m9-01). |
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
-| [M8](#m8) | In corso | RC congelata su `develop` (D233) e test merchant approvato; percorsi reali, verifica browser e decisione RC da svolgere. |
+| [M8](#m8) | In corso | RC congelata su `develop` (D233), test merchant approvato e verifica browser completata; percorsi reali e decisione RC da svolgere. |
 | [M9](#m9) | Da completare | Go-live non autorizzato; gate Production sotto ancora aperti. |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
@@ -1982,13 +1982,13 @@ Preparazione: le sottoscrizioni dell'applicazione si rileggono e si allineano co
 <a id="m8-04"></a>
 #### M8-04 · Verifica browser e presentazione
 
-**Stato:** Da completare · **Prerequisiti:** M8-01 · **Contratto:** [§22](#s22) · [§35](#s35)
+**Stato:** Completato · **Prerequisiti:** M8-01 · **Contratto:** [§22](#s22) · [§35](#s35)
 
 Verificare Chromium/WebKit, viewport, touch/tastiera, IT/EN, scuro e testi lunghi. Usare screenshot reali solo nei contesti approvati.
 
 **Criterio di completamento:** Layout e funzioni coerenti; mockup non sostituisce prova del software. Nessuna funzione assente viene annunciata come già attiva.
 
-Avanzamento: il 2026-10-30 la matrice completa delle pagine sul codice della RC passa in Chromium e WebKit, IT/EN, 390, 768 e 1280 px e nei due temi, con tastiera, overflow e axe (2132 prove), testi lunghi nello scenario «ordinario» e tocco nelle prove di shell e Ordini; le schermate di sito, Ordini, Negozi e Impostazioni non mostrano difetti e il sito annuncia soltanto funzioni presenti. Resta la vista su un dispositivo reale dell'owner, da svolgere con i percorsi di [M8-03](#m8-03).
+Avanzamento: il 2026-10-30 la matrice completa delle pagine sul codice della RC passa in Chromium e WebKit, IT/EN, 390, 768 e 1280 px e nei due temi, con tastiera, overflow e axe (2132 prove), testi lunghi nello scenario «ordinario» e tocco nelle prove di shell e Ordini; le schermate di sito, Ordini, Negozi e Impostazioni non mostrano difetti e il sito annuncia soltanto funzioni presenti. Lo stesso giorno l'owner dichiara riuscita la verifica su un proprio dispositivo reale.
 
 <a id="m8-05"></a>
 #### M8-05 · Correzioni e decisione RC
