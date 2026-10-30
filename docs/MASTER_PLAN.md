@@ -1081,7 +1081,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M5](#m5) | Completata | Free con cicli e promo, prova Premium, Hosted Checkout Managed Payments, webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. Cambi di periodicità e metodo su un abbonamento live, vendite live e segreti Production in [M9-01](#m9-01). |
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
-| [M8](#m8) | In corso | RC congelata su `develop` (D233) e test merchant approvato; percorsi reali, verifica browser e decisione RC da svolgere. |
+| [M8](#m8) | In corso | RC congelata su `develop` (D233), test merchant approvato e verifica browser completata; percorsi reali e decisione RC da svolgere. |
 | [M9](#m9) | Da completare | Go-live non autorizzato; gate Production sotto ancora aperti. |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
@@ -1975,18 +1975,20 @@ Comprende le [prove reali di Sign in with eBay](#prove-ebay) rinviate da M2-09 (
 
 Comprende le sottoscrizioni dell'applicazione `AUTHORIZATION_REVOCATION` e `BULK_DATA_TRANSFER_THRESHOLD` di [M7-13](#m7-13), con una consegna di prova, e la sottoscrizione e la consegna attribuita `ORDER_CONFIRMATION` del negozio Production rinviate da M3-04/M3-11, con un solo effetto anche dopo riconsegna e polling.
 
-Preparazione: le sottoscrizioni dell'applicazione si rileggono e si allineano con `scripts/ebay-notifications.mjs` ([procedura](engineering/RELEASE.md#webhook)), che il 2026-10-30 trova sul keyset la sola `MARKETPLACE_ACCOUNT_DELETION`. `ORDER_CONFIRMATION` richiede il token del venditore con `commerce.notification.subscription`, che il collegamento ora chiede: il Worker sottoscrive il negozio dopo la prima lettura del nuovo consenso e lo toglie allo scollegamento (D235). Il negozio dell'owner si ricollega dopo il deploy della RC che lo contiene; restano da osservare la lettura delle sottoscrizioni con il token del venditore e le consegne reali. Il manifest precisa ambiente e mandato; senza consegna osservata la prova resta aperta. Verificare inoltre che la configurazione di zona prevista per la RC non interrompa i percorsi reali autorizzati.
+Preparazione: le sottoscrizioni dell'applicazione si rileggono e si allineano con `scripts/ebay-notifications.mjs` ([procedura](engineering/RELEASE.md#webhook)). Il 2026-10-30 sono attive sull'ingresso del test; delle consegne di prova `MARKETPLACE_ACCOUNT_DELETION` e `BULK_DATA_TRANSFER_THRESHOLD` passano (la soglia apre l'anomalia, chiusa subito perché la finestra di prova è passata), mentre `AUTHORIZATION_REVOCATION` riceveva 412: l'ingresso ora accetta i valori segnaposto e registra il motivo dei rifiuti firmati, e la consegna si ripete dopo il deploy. `ORDER_CONFIRMATION` richiede il token del venditore con `commerce.notification.subscription`, che il collegamento ora chiede: il Worker sottoscrive il negozio dopo la prima lettura del nuovo consenso e lo toglie allo scollegamento (D235). Il negozio dell'owner si ricollega dopo il deploy della RC che lo contiene; restano da osservare la lettura delle sottoscrizioni con il token del venditore e le consegne reali. Il manifest precisa ambiente e mandato; senza consegna osservata la prova resta aperta. Verificare inoltre che la configurazione di zona prevista per la RC non interrompa i percorsi reali autorizzati.
 
 **Criterio di completamento:** Evidenze proporzionate di risultati e limiti, nessun P1/P2 né difficoltà strutturale di comprensione del prodotto principale.
 
 <a id="m8-04"></a>
 #### M8-04 · Verifica browser e presentazione
 
-**Stato:** Da completare · **Prerequisiti:** M8-01 · **Contratto:** [§22](#s22) · [§35](#s35)
+**Stato:** Completato · **Prerequisiti:** M8-01 · **Contratto:** [§22](#s22) · [§35](#s35)
 
 Verificare Chromium/WebKit, viewport, touch/tastiera, IT/EN, scuro e testi lunghi. Usare screenshot reali solo nei contesti approvati.
 
 **Criterio di completamento:** Layout e funzioni coerenti; mockup non sostituisce prova del software. Nessuna funzione assente viene annunciata come già attiva.
+
+Avanzamento: il 2026-10-30 la matrice completa delle pagine sul codice della RC passa in Chromium e WebKit, IT/EN, 390, 768 e 1280 px e nei due temi, con tastiera, overflow e axe (2132 prove), testi lunghi nello scenario «ordinario» e tocco nelle prove di shell e Ordini; le schermate di sito, Ordini, Negozi e Impostazioni non mostrano difetti e il sito annuncia soltanto funzioni presenti. Lo stesso giorno l'owner dichiara riuscita la verifica su un proprio dispositivo reale.
 
 <a id="m8-05"></a>
 #### M8-05 · Correzioni e decisione RC

@@ -1660,12 +1660,79 @@ it("una revoca senza negozio attivo, anteriore al consenso o di prova non accoda
     revokedBy({ userId: "other-seller" }),
     revokedBy({ revocationDate: "2026-10-09T12:00:00.000Z" }),
     revokedBy({ userId: undefined }),
+    // Valori segnaposto di una consegna di prova.
+    revokedBy({ userId: "" }),
   ])
     expect((await receive(ebayRequest(payload)))?.status).toBe(204);
   await env.DB.prepare("UPDATE ebay_store_credentials SET rejected_at = ?").bind(grantedAt).run();
   expect((await receive(ebayRequest(revocation)))?.status).toBe(204);
   expect(await receipt()).toBeNull();
   expect(send).not.toHaveBeenCalled();
+});
+
+it("una data della revoca in un altro formato vale, una illeggibile lascia la data dell'evento", async () => {
+  expect(
+    (await receive(ebayRequest(revokedBy({ revocationDate: "2026-10-11T13:00:00+02:00" }))))
+      ?.status,
+  ).toBe(204);
+  expect(await env.DB.prepare("SELECT event_at FROM webhook_receipts").first("event_at")).toBe(
+    "2026-10-11T11:00:00.000Z",
+  );
+  await env.DB.prepare("DELETE FROM webhook_receipts").run();
+  expect(
+    (
+      await receive(
+        ebayRequest({
+          ...revokedBy({ revocationDate: "string" }),
+          notification: {
+            ...revokedBy({ revocationDate: "string" }).notification,
+            notificationId: "revocation-placeholder",
+          },
+        }),
+      )
+    )?.status,
+  ).toBe(204);
+  expect(await env.DB.prepare("SELECT event_at FROM webhook_receipts").first("event_at")).toBe(
+    now.toISOString(),
+  );
+});
+
+it("il 412 di una consegna firmata registra soltanto il motivo, le sonde nulla", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const malformed = ebayRequest();
+    malformed.headers.set("x-ebay-signature", "invalid");
+    expect((await receive(malformed))?.status).toBe(412);
+    const altered = ebayRequest();
+    const body = await altered.text();
+    expect(
+      (
+        await receive(
+          new Request(altered.url, { method: "POST", headers: altered.headers, body: body + " " }),
+        )
+      )?.status,
+    ).toBe(412);
+    expect(
+      (
+        await receive(
+          ebayRequest({ ...notification, metadata: { topic: "OTHER", schemaVersion: "1.0" } }),
+        )
+      )?.status,
+    ).toBe(412);
+    const logged = errors.mock.calls.map(([line]) => JSON.parse(String(line)));
+    expect(logged).toEqual(
+      ["signature", "schema"].map((failure) => ({
+        event: "application_error",
+        code: "INVALID_REQUEST",
+        operation: "webhook_ingress",
+        failure,
+        status: 412,
+      })),
+    );
+    expect(JSON.stringify(logged)).not.toContain(notification.notification.notificationId);
+  } finally {
+    errors.mockRestore();
+  }
 });
 
 const threshold = (status: "WARNING" | "REACHED") => ({
