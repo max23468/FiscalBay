@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { shardTests, listedTestIds, assertCandidateReports } from "./browser-tests.mjs";
 
@@ -119,6 +120,22 @@ describe("prove browser divise fra macchine", () => {
     assert.ok(scenarios.size > 0);
     for (const [scenario, projects] of scenarios)
       assert.deepEqual([...projects].sort(), ["chromium", "webkit"], scenario);
+  });
+
+  it("motiva come non applicabili le esclusioni possibili nella qualifica locale", () => {
+    // Il report segna parziale la partizione con un'esclusione d'altro tipo, e la qualifica
+    // del candidato la rifiuta: soltanto il collaudo remoto può restare parziale.
+    const skips = readdirSync("e2e").flatMap((file) =>
+      [
+        ...readFileSync(`e2e/${file}`, "utf8").matchAll(
+          /test\.skip\(\s*([\s\S]*?),\s*"([^"]*)",?\s*\)/g,
+        ),
+      ].map(([, condition, reason]) => ({ file, condition, reason })),
+    );
+    assert.ok(skips.length > 0);
+    for (const skip of skips)
+      if (!/^(remote|Boolean\(process\.env\.E2E_BASE_URL\))(\s*&&|$)/.test(skip.condition))
+        assert.match(skip.reason, /^Non applicabile: /, `${skip.file}: ${skip.condition}`);
   });
 
   const listing = {

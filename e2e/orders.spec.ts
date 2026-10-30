@@ -690,7 +690,10 @@ test.describe("area reale", () => {
       // In WebKit la sessione sintetica passa dal proxy delle route del contesto, che non
       // ammette una seconda intercettazione della stessa richiesta: la risposta persa dipende
       // dal server e dall'azione del client, non dal motore.
-      test.skip(browserName === "webkit", "Intercettazione della risposta soltanto in Chromium.");
+      test.skip(
+        browserName === "webkit",
+        "Non applicabile: intercettazione della risposta soltanto in Chromium.",
+      );
       const id = `lost-${language}-${browserName}`;
       const secret = `VALORE-SINTETICO-${language}`;
       await useLocalAccount(context, "member", baseURL!, id);

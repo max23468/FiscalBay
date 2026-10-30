@@ -10,13 +10,16 @@
  * password cambiate dopo il punto non tornano valide. Pagamenti e diritti si riconciliano poi
  * con il reinvio degli eventi Stripe, gli ordini con le letture eBay.
  *
- * Il resoconto riporta soltanto conteggi e nomi delle tabelle, mai valori.
+ * `verify` controlla in sola lettura il database ripristinato rispetto al file: prima della
+ * riapertura tutto lo stato riapplicato, dopo la riconciliazione con `--reconciled` diritti e
+ * decorrenze. Il resoconto riporta soltanto conteggi e nomi delle tabelle, mai valori.
  *
  * Uso:
  *   node scripts/recovery.mjs freeze|status|thaw [--mode live]
  *   RECOVERY_KEY=<base64> node scripts/recovery.mjs capture --at <ISO> --out <file> [--mode live]
  *   RECOVERY_KEY=<base64> node scripts/recovery.mjs restore --in <file>
  *   RECOVERY_KEY=<base64> node scripts/recovery.mjs reapply --in <file>
+ *   RECOVERY_KEY=<base64> node scripts/recovery.mjs verify --in <file> [--reconciled]
  *   node scripts/recovery.mjs stripe --since <ISO> [--mode live] [--project-name <profilo>]
  *   RECOVERY_KEY=<base64> node scripts/recovery.mjs telegram --in <file>
  */
@@ -54,7 +57,8 @@ const internal = /^(?:sqlite_|_cf_|d1_migrations$)/u;
 /**
  * Marker da riportare dopo il ripristino. Senza `since` la tabella si riporta intera: è piccola
  * e il compito periodico riapre da sé le richieste i cui dati ricompaiono. `where` limita le
- * righe lette, `parent` a quelle il cui riferimento esiste ancora.
+ * righe lette, `parent` a quelle il cui riferimento esiste ancora. `name` distingue due voci
+ * della stessa tabella.
  */
 const markerTables = [
   { table: "account_deletions", conflict: "REPLACE" },
@@ -92,7 +96,22 @@ const markerTables = [
     conflict: "REPLACE",
     parent: { column: "store_id", table: "ebay_stores", key: "id" },
   },
+  // Interruttori e ammissione valgono come oggi: un acquisto o una lettura chiusi dopo il punto
+  // non si riaprono. Gli invii Telegram seguono `telegram`.
+  { table: "service_settings", where: "name <> 'telegram_sends'", conflict: "REPLACE" },
+  { table: "admission_settings", conflict: "REPLACE" },
+  // La prova Premium iniziata dopo il punto torna con la prova usata, che non si ripete.
+  {
+    name: "trial_entitlements",
+    table: "workspace_entitlements",
+    where: "source = 'trial'",
+    since: "starts_at",
+    conflict: "IGNORE",
+    parent: { column: "workspace_id", table: "workspaces", key: "id" },
+  },
 ];
+
+const markerName = (marker) => marker.name ?? marker.table;
 
 /** Ruoli concessi da un flag: chi oggi non l'ha più lo perde anche nella copia ripristinata. */
 const grantFlags = [{ table: "user", key: "id", column: "admin" }];
@@ -243,6 +262,60 @@ async function readKeys(run, { name, key }) {
 
 const since = (column, at) => `julianday(${ident(column)}) >= julianday(${literal(at)})`;
 
+/**
+ * Diritti e decorrenze, per spazio e senza gli identificativi delle righe che il webhook Stripe
+ * crea di nuovo. Dopo la riconciliazione le voci `stripe` coincidono con la cattura; le altre
+ * misurano la perdita del punto, perché concessioni della console, cicli e sblocchi successivi
+ * non hanno un provider che li ricostruisca.
+ */
+const rightsQueries = {
+  entitlements: {
+    stripe: true,
+    sql: `SELECT workspace_id, source, starts_at, ends_at, revoked_at FROM workspace_entitlements
+      WHERE source <> 'admin'`,
+  },
+  subscriptions: {
+    stripe: true,
+    sql: `SELECT id, workspace_id, status, current_period_end, cancel_at_period_end
+      FROM stripe_subscriptions`,
+  },
+  lifetime: { stripe: true, sql: "SELECT workspace_id, status FROM lifetime_allocations" },
+  concessions: {
+    sql: `SELECT workspace_id, starts_at, ends_at, revoked_at FROM workspace_entitlements
+      WHERE source = 'admin'`,
+  },
+  cycles: { sql: "SELECT workspace_id, starts_at, ends_at, quota, used FROM free_cycles" },
+  grants: {
+    sql: `SELECT workspace_id, source, COUNT(*) AS orders FROM order_grants
+      GROUP BY workspace_id, source`,
+  },
+};
+
+async function rightsOf(run) {
+  const names = Object.keys(rightsQueries);
+  const results = await run(names.map((name) => rightsQueries[name].sql));
+  return Object.fromEntries(
+    names.map((name, index) => [
+      name,
+      results[index].map((row) => JSON.stringify(Object.values(row))).sort(),
+    ]),
+  );
+}
+
+/** Voci presenti soltanto in uno dei due elenchi, con le ripetizioni. */
+function difference(expected, actual) {
+  const counts = new Map();
+  for (const item of expected) counts.set(item, (counts.get(item) ?? 0) + 1);
+  let extra = 0;
+  for (const item of actual) {
+    const left = counts.get(item) ?? 0;
+    if (left) counts.set(item, left - 1);
+    else extra += 1;
+  }
+  const missing = [...counts.values()].reduce((total, left) => total + left, 0);
+  return { missing, extra };
+}
+
 /** Stato da riapplicare, letto dal database corrente a servizio sospeso. */
 export async function capture(run, at) {
   const threshold = new Date(Date.parse(at) - restoreMarginMs).toISOString();
@@ -252,7 +325,7 @@ export async function capture(run, at) {
   const key = (name) => tables.find((table) => table.name === name).key;
   const markers = {};
   for (const marker of markerTables)
-    markers[marker.table] = await readRows(
+    markers[markerName(marker)] = await readRows(
       run,
       marker.table,
       key(marker.table),
@@ -288,6 +361,7 @@ export async function capture(run, at) {
     grants,
     credentials: credentials.map(({ id }) => id),
     telegramSends: telegram[0]?.value ?? null,
+    rights: await rightsOf(run),
   };
 }
 
@@ -365,7 +439,7 @@ export async function reapply(run, captured, now = new Date()) {
     if (stale[table.name].length) deleted[table.name] = stale[table.name].length;
   }
   const markers = markerTables.flatMap((marker) =>
-    insertMarkers(marker, captured.markers[marker.table]),
+    insertMarkers(marker, captured.markers[markerName(marker)]),
   );
   if (markers.length) await run(markers);
   const stamps = stampTables.flatMap((stamp) =>
@@ -404,13 +478,144 @@ export async function reapply(run, captured, now = new Date()) {
   return {
     deleted,
     markers: Object.fromEntries(
-      markerTables.map(({ table }) => [table, captured.markers[table].length]),
+      markerTables.map((marker) => [
+        markerName(marker),
+        captured.markers[markerName(marker)].length,
+      ]),
     ),
     stamps: stampTables.reduce(
       (total, { name, table }) => total + captured.stamps[name ?? table].length,
       0,
     ),
     credentials: captured.credentials.length,
+  };
+}
+
+/**
+ * Controlli del database ripristinato rispetto alla cattura, in sola lettura. Prima della
+ * riapertura vale tutto lo stato riapplicato; con `reconciled`, dopo riapertura, reinvio Stripe e
+ * compito `billing`, restano i controlli che accessi e nuove righe non cambiano: marker, revoche,
+ * ruoli admin e diritti pagati. `lost` conta per tabella le righe della cattura assenti, cioè la
+ * perdita effettiva del punto; `rights` le differenze di diritti e decorrenze.
+ */
+export async function verify(run, captured, { reconciled = false } = {}) {
+  const [applied] = await run(["SELECT name FROM d1_migrations ORDER BY id"]);
+  const tables = await schemaOf(run);
+  const checks = {
+    schema:
+      JSON.stringify(applied.map(({ name }) => name)) === JSON.stringify(captured.migrations) &&
+      JSON.stringify(tables) === JSON.stringify(captured.tables)
+        ? 0
+        : 1,
+  };
+  if (checks.schema) return { checks, failed: ["schema"], lost: {}, rights: {} };
+  const keyOf = (name) => tables.find((table) => table.name === name).key;
+  const lost = {};
+  let reappeared = 0;
+  for (const table of tables) {
+    const current = (await readKeys(run, table)).map((key) => JSON.stringify(key));
+    const present = new Set(current);
+    const expected = new Set(
+      [...captured.keys[table.name], ...(written[table.name] ?? [])].map((key) =>
+        JSON.stringify(key),
+      ),
+    );
+    const missing = captured.keys[table.name].filter((key) => !present.has(JSON.stringify(key)));
+    // Sessioni e verifiche si chiudono di proposito: non sono perdita.
+    if (missing.length && !transientTables.includes(table.name)) lost[table.name] = missing.length;
+    reappeared += current.filter((key) => !expected.has(key)).length;
+  }
+  if (!reconciled) checks.deletions = reappeared;
+  // Un marker senza più il riferimento resta fuori, come nella riapplicazione.
+  checks.markers = 0;
+  for (const marker of markerTables) {
+    const key = keyOf(marker.table);
+    // Dopo la riapertura una scelta cambiata, come notifiche riattivate, non è una revoca persa.
+    const rows = await readRows(
+      run,
+      marker.table,
+      key,
+      "*",
+      reconciled ? "" : (marker.where ?? ""),
+    );
+    const found = new Map(
+      rows.map((row) => [JSON.stringify(key.map((column) => row[column])), row]),
+    );
+    const parents = marker.parent
+      ? new Set(
+          (
+            await readRows(run, marker.parent.table, [marker.parent.key], ident(marker.parent.key))
+          ).map((row) => row[marker.parent.key]),
+        )
+      : null;
+    for (const row of captured.markers[markerName(marker)]) {
+      if (parents && !parents.has(row[marker.parent.column])) continue;
+      const stored = found.get(JSON.stringify(key.map((column) => row[column])));
+      const same =
+        reconciled ||
+        marker.conflict === "IGNORE" ||
+        JSON.stringify(stored) === JSON.stringify(row);
+      if (!stored || !same) checks.markers += 1;
+    }
+  }
+  checks.stamps = 0;
+  for (const stamp of stampTables) {
+    const [first] = stamp.columns;
+    const rows = await readRows(
+      run,
+      stamp.table,
+      stamp.key,
+      [...stamp.key, first].map(ident).join(", "),
+    );
+    const found = new Map(rows.map((row) => [JSON.stringify(stamp.key.map((c) => row[c])), row]));
+    for (const row of captured.stamps[stamp.name ?? stamp.table]) {
+      const stored = found.get(JSON.stringify(stamp.key.map((c) => row[c])));
+      // Una riga eliminata dopo la cattura non ha più nulla da revocare.
+      if (!stored) continue;
+      if (
+        stored[first] === null ||
+        (stamp.newer && Date.parse(stored[first]) < Date.parse(row[first]))
+      )
+        checks.stamps += 1;
+    }
+  }
+  checks.admins = 0;
+  for (const flag of grantFlags) {
+    const allowed = new Set(captured.grants[flag.table]);
+    const rows = await readRows(
+      run,
+      flag.table,
+      [flag.key],
+      ident(flag.key),
+      `${ident(flag.column)} = 1`,
+    );
+    checks.admins += rows.filter((row) => !allowed.has(row[flag.key])).length;
+  }
+  if (!reconciled) {
+    const [passwords, telegram, ...transient] = await run([
+      captured.credentials.length
+        ? `SELECT COUNT(*) AS count FROM "account" WHERE "password" IS NOT NULL AND "id" IN (${captured.credentials.map(literal).join(", ")})`
+        : "SELECT 0 AS count",
+      "SELECT value FROM service_settings WHERE name = 'telegram_sends'",
+      ...transientTables.map((table) => `SELECT COUNT(*) AS count FROM ${ident(table)}`),
+    ]);
+    checks.passwords = passwords[0].count;
+    checks.telegram = telegram[0]?.value === "false" ? 0 : 1;
+    checks.transient = transient.reduce((total, [{ count }]) => total + count, 0);
+  }
+  const current = await rightsOf(run);
+  const rights = {};
+  for (const [name, { stripe }] of Object.entries(rightsQueries)) {
+    rights[name] = difference(captured.rights[name], current[name]);
+    if (reconciled && stripe) checks[`rights.${name}`] = rights[name].missing + rights[name].extra;
+  }
+  return {
+    checks,
+    failed: Object.entries(checks)
+      .filter(([, count]) => count)
+      .map(([name]) => name),
+    lost,
+    rights,
   };
 }
 
@@ -620,6 +825,7 @@ async function main() {
       in: { type: "string" },
       out: { type: "string" },
       "project-name": { type: "string" },
+      reconciled: { type: "boolean", default: false },
     },
   });
   if (!["test", "live"].includes(values.mode)) throw new Error("--mode accetta test o live.");
@@ -674,6 +880,28 @@ async function main() {
   if (command === "telegram") {
     await run(telegramResume(payload));
     return console.log("Invii Telegram ripresi senza gli eventi precedenti.");
+  }
+  if (command === "verify") {
+    // Prima della riapertura il servizio deve essere ancora sospeso.
+    if (!values.reconciled) await expectFreeze(target, "frozen");
+    const result = await verify(run, payload, { reconciled: values.reconciled });
+    // Time Travel non tocca i segreti: un segreto mancante è un altro incidente.
+    const { worker } = config({ mode: target.live ? "live" : "development" });
+    const names = new Set(
+      cf("workers", "secrets", "list", "--worker", target.worker).map(({ name }) => name),
+    );
+    result.checks.secrets = Object.keys(worker.env).filter(
+      (name) => worker.env[name].type === "secret" && !names.has(name),
+    ).length;
+    if (result.checks.secrets) result.failed.push("secrets");
+    report("controlli", result.checks);
+    report("perdita", result.lost);
+    report("diritti", result.rights);
+    if (result.failed.length) {
+      process.exitCode = 1;
+      return console.error(`Controlli non superati: ${result.failed.join(", ")}.`);
+    }
+    return console.log("Controlli superati.");
   }
   if (!["restore", "reapply"].includes(command)) throw new Error("Comando non supportato.");
   await expectFreeze(target, "frozen");
