@@ -2015,7 +2015,7 @@ La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorve
 
 **Stato:** Completato · **Prerequisiti:** M8 · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
 
-La promozione Free parte al go-live senza fine e si chiude su indicazione dell'owner; sito e console la gestiscono senza data ([D239](DECISION_REGISTER.md)). Nessuna vendita live di prova ([D240](DECISION_REGISTER.md)): l'account live, riletto il 2026-10-31 con il connettore Stripe, ha listino, imposte, webhook e portale allineati. `scripts/commercial.mjs` rilegge configurazione e vendite reali ([procedura](engineering/RELEASE.md#configurazione-commerciale)); Paddle non ha codice.
+La promozione Free parte al go-live senza fine e si chiude su indicazione dell'owner; sito e console la gestiscono senza data ([D239](DECISION_REGISTER.md)). Nessuna vendita live di prova ([D240](DECISION_REGISTER.md)): l'account live, riletto il 2026-10-31 con il connettore Stripe, ha listino, imposte, webhook e portale allineati. `scripts/commercial.mjs` rilegge configurazione e vendite reali ([procedura](engineering/RELEASE.md#configurazione-commerciale)); Paddle non ha codice. PR: [#546](https://github.com/max23468/FiscalBay/pull/546).
 
 **Criterio di completamento:** Nessun caso commerciale necessario rimane solo documentato/simulato senza prova consentita o decisione esplicita sul limite. Configurazione database/Stripe/UI allineata, nessun acquisto di capacità assente, Paddle inattivo salvo owner.
 
