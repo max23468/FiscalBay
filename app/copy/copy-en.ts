@@ -66,6 +66,8 @@ export const en: AppCopy = {
       inactivityTitle,
       inactivityBody:
         "On the Free plan reading stops after 30 days without sign-ins and 7 days' notice. Resume it from Stores.",
+      termsUpdateTitle: "Terms updated",
+      termsUpdateBody: "Read and accept them from Settings › Data and privacy.",
     },
     account: "Account",
     profile: "Profile",
@@ -786,7 +788,11 @@ export const en: AppCopy = {
     privacy: {
       terms: "Terms of service",
       termsBody: "The conditions for using FiscalBay.",
+      termsUpdateBody: "A new version is available: accept it once you have read it.",
       readTerms: "Read the terms",
+      acceptTerms: "Accept",
+      termsAccepted: "Terms accepted.",
+      termsAcceptFailed: "Acceptance failed. Try again later.",
       privacyPolicy: "Privacy policy",
       privacyPolicyBody: "What data we process, for how long and with which providers.",
       readPolicy: "Read the policy",

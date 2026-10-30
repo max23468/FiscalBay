@@ -73,6 +73,8 @@ export const it = {
       inactivityTitle,
       inactivityBody:
         "Con il piano Free le letture si fermano dopo 30 giorni senza accessi e 7 di preavviso. Riprendile da Negozi.",
+      termsUpdateTitle: "Termini aggiornati",
+      termsUpdateBody: "Leggili e accettali da Impostazioni › Dati e privacy.",
     },
     account: "Account",
     profile: "Profilo",
@@ -799,7 +801,11 @@ export const it = {
     privacy: {
       terms: "Termini di servizio",
       termsBody: "Le condizioni d’uso di FiscalBay.",
+      termsUpdateBody: "È disponibile una nuova versione: accettala quando l’hai letta.",
       readTerms: "Leggi i termini",
+      acceptTerms: "Accetta",
+      termsAccepted: "Termini accettati.",
+      termsAcceptFailed: "Accettazione non riuscita. Riprova più tardi.",
       privacyPolicy: "Informativa privacy",
       privacyPolicyBody: "Quali dati trattiamo, per quanto tempo e con quali fornitori.",
       readPolicy: "Leggi l’informativa",

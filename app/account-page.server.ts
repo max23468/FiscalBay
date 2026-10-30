@@ -278,7 +278,7 @@ export async function accessAction(request: Request) {
       if (response.status === 429) return notice("troppi-tentativi", base);
       return notice(response.ok ? "verifica-inviata" : "errore", base);
     }
-    // Chi è entrato con Google o prima di una nuova versione dei Termini completa qui ciò che manca.
+    // Chi è entrato con Google senza profilo o Termini completa qui ciò che manca.
     const status = await registrationStatus(env.DB, session.user.id);
     const profile = status.profile ? undefined : parseProfile(form);
     // Gli errori del completamento restano sull'accesso, dove il passaggio si ripete.

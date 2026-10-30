@@ -218,6 +218,7 @@ export async function previewSettingsPage(
       support: true,
     },
     account,
+    termsUpdate: false,
     // Durante la prova l'acquisto resta possibile; lo ferma un abbonamento che può ancora
     // incassare, non un lifetime rimborsato.
     purchase: {

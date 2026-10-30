@@ -33,7 +33,7 @@ import {
   homeFor,
 } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
-import { callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
+import { areaShell, callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
 import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
 import { turnstileField } from "../app/turnstile";
@@ -152,6 +152,7 @@ describe("registrazione e verifica del contatto", () => {
     });
     expect(await registrationStatus(env.DB, user.id)).toEqual({
       termsAccepted: false,
+      termsCurrent: false,
       marketingChosen: false,
       profile: null,
     });
@@ -163,6 +164,7 @@ describe("registrazione e verifica del contatto", () => {
     });
     expect(await registrationStatus(env.DB, user.id)).toEqual({
       termsAccepted: false,
+      termsCurrent: false,
       marketingChosen: false,
       profile: syntheticProfile,
     });
@@ -174,6 +176,7 @@ describe("registrazione e verifica del contatto", () => {
     });
     expect(await registrationStatus(env.DB, user.id)).toEqual({
       termsAccepted: true,
+      termsCurrent: true,
       marketingChosen: true,
       profile: syntheticProfile,
     });
@@ -467,7 +470,7 @@ describe("registrazione e verifica del contatto", () => {
     });
   });
 
-  it("chiede di nuovo i soli Termini a chi ha già scelto sul marketing, senza toccarne la scelta", async () => {
+  it("una nuova versione dei Termini non blocca nulla: si accetta dalle Impostazioni, senza toccare il marketing", async () => {
     const { cookie, userId } = await verifiedSession("nuovi-termini@example.invalid");
     await env.DB.batch([
       env.DB.prepare("DELETE FROM marketing_consents WHERE user_id = ?").bind(userId),
@@ -480,15 +483,24 @@ describe("registrazione e verifica del contatto", () => {
         "UPDATE terms_acceptances SET terms_version = 'bozza-precedente' WHERE user_id = ?",
       ).bind(userId),
     ]);
-    expect(await accessFor(cookie)).toMatchObject({
-      needsProfile: false,
-      needsAgreement: true,
-      needsMarketing: false,
-    });
+    // Area, collegamento del negozio e accesso restano come per chi ha accettato (D232).
+    await expect(accessFor(cookie)).rejects.toSatisfy(
+      (response: Response) => response.headers.get("location") === "/app/ordini",
+    );
+    expect(await homeFor(cookie)).toMatchObject({ verified: true });
+    expect((await beginStoreLink(cookie)).hostname).toBe("auth.ebay.com");
+    const invitation = `terms:${legalVersions.terms}`;
+    const notifications = async () =>
+      ((await areaShell(cookie)).notifications ?? []).map((item) => item.id);
+    expect(await notifications()).toContain(invitation);
     // Anche un campo marketing inviato a mano non registra una nuova scelta.
-    const response = await accessForm("/accesso", { intent: "completa", termini: "on" }, cookie);
-    expect(response.headers.get("location")).toBe("/app/ordini");
-    await accessForm("/accesso", { intent: "completa", termini: "on", marketing: "on" }, cookie);
+    expect(
+      await callRoute(securityAction, "/app/impostazioni/privacy", {
+        cookie,
+        fields: { intent: "accept-terms", marketing: "on" },
+      }),
+    ).toEqual({ ok: true, notice: "Termini accettati." });
+    expect(await notifications()).not.toContain(invitation);
     const { terms, marketing } = await agreements(userId);
     expect(terms.map((row) => row.terms_version).sort()).toEqual(
       ["bozza-precedente", legalVersions.terms].sort(),

@@ -31,6 +31,7 @@ function useAccountExport() {
 export function PrivacySection({
   accountExport,
   accountDeletion,
+  termsUpdate,
   email,
   security,
 }: {
@@ -38,19 +39,23 @@ export function PrivacySection({
   accountExport: boolean;
   /** Cancellazione dell'account disponibile. */
   accountDeletion: boolean;
+  /** Versione corrente dei Termini ancora da accettare. */
+  termsUpdate: boolean;
   email: string;
   security: SecurityData;
 }) {
   const { links } = useLinks();
   const { t } = useCopy();
   const action = useAccountExport();
+  const accept = useAction();
   // Senza footer nell'area autenticata, i documenti legali si raggiungono da qui (D202).
   const legal = [
     {
       path: termsPath,
       title: t.settings.privacy.terms,
-      body: t.settings.privacy.termsBody,
+      body: termsUpdate ? t.settings.privacy.termsUpdateBody : t.settings.privacy.termsBody,
       action: t.settings.privacy.readTerms,
+      accept: termsUpdate,
     },
     {
       path: privacyPath,
@@ -78,13 +83,24 @@ export function PrivacySection({
               <span className="font-medium">{entry.title}</span>
               <span className="text-sm text-muted-foreground">{entry.body}</span>
             </span>
-            <Link
-              to={localizedPath(links.language, entry.path)}
-              reloadDocument
-              {...buttonLink({ variant: "outline", size: "sm" })}
-            >
-              {entry.action}
-            </Link>
+            <span className="flex flex-wrap gap-2">
+              <Link
+                to={localizedPath(links.language, entry.path)}
+                reloadDocument
+                {...buttonLink({ variant: "outline", size: "sm" })}
+              >
+                {entry.action}
+              </Link>
+              {"accept" in entry && entry.accept ? (
+                <Button
+                  size="sm"
+                  disabled={accept.pending}
+                  onClick={() => accept.run("accept-terms")}
+                >
+                  {t.settings.privacy.acceptTerms}
+                </Button>
+              ) : null}
+            </span>
           </li>
         ))}
         {rows.map((row) => (

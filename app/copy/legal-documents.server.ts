@@ -133,7 +133,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Modifiche ai termini",
         blocks: [
-          "Quando questi termini cambiano pubblichiamo una nuova versione e ti chiediamo di accettarla al primo accesso. Finché non la accetti puoi soltanto accettarla o cancellare l’account.",
+          "Quando questi termini cambiano pubblichiamo una nuova versione e ti invitiamo ad accettarla nell’app. Il servizio resta disponibile anche prima che tu la accetti; se non sei d’accordo puoi cancellare l’account in qualunque momento.",
         ],
       },
       {
@@ -429,7 +429,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Changes to these terms",
         blocks: [
-          "When these terms change we publish a new version and ask you to accept it at your next sign-in. Until you accept it you can only accept it or delete your account.",
+          "When these terms change we publish a new version and invite you to accept it in the app. The service stays available before you accept it; if you disagree you can delete your account at any time.",
         ],
       },
       {

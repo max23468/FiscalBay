@@ -226,6 +226,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     sections: settingsSections,
     services: services(),
     account: accountView,
+    termsUpdate: area.termsUpdate,
     purchase: {
       // Senza spazio nessun negozio è collegato: l'acquisto attende la prima lettura.
       state:
@@ -637,6 +638,22 @@ const settingsActions: Record<string, AreaAction> = {
     run: exportAccount,
     failureNotice: (t) => t.settings.privacy.accountExportFailed,
     limit: "work",
+  },
+  // La versione corrente dei Termini si accetta quando l'utente vuole: nulla la richiede prima.
+  "accept-terms": {
+    run: async ({ area }) => {
+      await completeRegistration(env.DB, {
+        userId: area.session.user.id,
+        language: area.language,
+        now: new Date(),
+        agreement: {},
+      });
+      return {
+        ok: true,
+        notice: appCopy[area.language].settings.privacy.termsAccepted,
+      } satisfies ActionResult;
+    },
+    failureNotice: (t) => t.settings.privacy.termsAcceptFailed,
   },
   "account-delete": {
     // Il filtro per IP di `/delete-user` l'ha già applicato l'action, prima della sessione.
