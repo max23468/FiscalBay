@@ -289,7 +289,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
                   <p className="text-2xl leading-tight font-semibold sm:text-3xl">{offer.amount}</p>
                   <p className="text-xs text-muted-foreground sm:text-sm">{offer.period}</p>
                   {offer.note ? (
-                    <p className="text-xs font-medium whitespace-nowrap text-primary sm:text-sm">
+                    <p className="text-xs font-semibold whitespace-nowrap sm:text-sm">
                       {offer.note}
                     </p>
                   ) : null}
