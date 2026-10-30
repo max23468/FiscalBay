@@ -103,6 +103,9 @@ export async function reconcileOwnerIncidents(env: Env, fetcher: typeof fetch, n
             opened_at = CASE WHEN owner_incidents.resolved_at IS NOT NULL
               AND owner_incidents.notified <> 'opened' THEN excluded.opened_at
               ELSE owner_incidents.opened_at END,
+            emailed = CASE WHEN owner_incidents.resolved_at IS NOT NULL
+              AND owner_incidents.notified <> 'opened' THEN NULL
+              ELSE owner_incidents.emailed END,
             attempts = CASE WHEN owner_incidents.resolved_at IS NULL
               THEN owner_incidents.attempts ELSE 0 END,
             retry_at = CASE WHEN owner_incidents.resolved_at IS NULL
@@ -125,6 +128,10 @@ export async function reconcileOwnerIncidents(env: Env, fetcher: typeof fetch, n
       .prepare(`UPDATE owner_incidents SET resolved_at = ?1, attempts = 0, retry_at = NULL
         WHERE resolved_at IS NULL AND key NOT IN (SELECT value FROM json_each(?2))`)
       .bind(time, JSON.stringify(open.map((anomaly) => anomaly.key))),
+    // Il rientro non mostra gli oggetti: nomi e identificativi eBay dei negozi non restano per
+    // l'anno di conservazione dell'incidente, anche dopo una cancellazione dei dati.
+    db.prepare(`UPDATE owner_incidents SET detail = json_set(detail, '$.subjects', json('[]'))
+      WHERE resolved_at IS NOT NULL AND json_array_length(detail, '$.subjects') > 0`),
     // Il rientro di un incidente mai comunicato non ha nulla da dire.
     db.prepare(`UPDATE owner_incidents SET notified = 'resolved', attempts = 0, retry_at = NULL
       WHERE resolved_at IS NOT NULL AND notified = 'none'`),

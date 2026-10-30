@@ -10,6 +10,7 @@ import {
   packageRoot,
   readPackage,
   type NoticePackage,
+  unpermittedLicenses,
 } from "./scripts/third-party-notices.mjs";
 
 /**
@@ -53,6 +54,9 @@ const thirdPartyNotices = (): Plugin => ({
       packages.set(`${notice.name}@${notice.version}`, notice);
     }
     if (packages.size === 0) this.error("Nessun pacchetto di terze parti nella build client.");
+    const unpermitted = unpermittedLicenses(packages.values());
+    if (unpermitted.length)
+      this.error(`Licenze non permissive nella build client: ${unpermitted.join(", ")}.`);
     this.emitFile({
       type: "asset",
       fileName: noticesFile,

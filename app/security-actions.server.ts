@@ -33,6 +33,19 @@ import { turnstileActions } from "./turnstile";
 import { turnstileFailure } from "./turnstile.server";
 import type { ActionResult } from "./view-models";
 
+/**
+ * Percorso Auth a cui l'azione della Sicurezza inoltra un invio di email o una password: il
+ * filtro per IP di quel percorso si applica prima della sessione e di Turnstile, poi l'inoltro
+ * è già ammesso.
+ */
+export function securityAuthPath(intent: string, form: FormData): string | null {
+  if (intent === "password") return "/request-password-reset";
+  if (intent === "reinvia-email" || intent === "cambia-email") return "/change-email";
+  if (intent === "account-delete") return "/delete-user";
+  if (intent === "conferma-accesso" && form.get("metodo") === "password") return "/sign-in/email";
+  return null;
+}
+
 /** Esito della conferma dell'identità, letto dal riquadro senza lasciare la pagina. */
 export type ConfirmResult = { ok: boolean; notice?: string };
 
@@ -47,6 +60,7 @@ export async function requestAccountDeletion(
   request: Request,
   { language, session }: Pick<AccountArea, "language" | "session">,
   confirmation: string,
+  admitted = false,
 ): Promise<ActionResult | ReturnType<typeof data<ActionResult>>> {
   const t = appCopy[language].settings.privacy;
   if (!deletionReauthenticated(session.session.createdAt))
@@ -54,9 +68,13 @@ export async function requestAccountDeletion(
   const email = session.user.email;
   if (confirmation.trim().toLowerCase() !== email.toLowerCase())
     return actionFailure(400, t.deleteAccountMismatch);
-  const response = await forwardToAuth(env, request, "/delete-user", {
-    callbackURL: localizedPath(language, accountDeletionPath),
-  });
+  const response = await forwardToAuth(
+    env,
+    request,
+    "/delete-user",
+    { callbackURL: localizedPath(language, accountDeletionPath) },
+    admitted,
+  );
   if (!response.ok)
     return actionFailure(response.status === 429 ? 429 : 503, t.deleteAccountFailed);
   return { ok: true, notice: t.deleteAccountSent(email) } satisfies ActionResult;
@@ -67,6 +85,7 @@ export async function securityAction(
   request: Request,
   { language, session }: Pick<AccountArea, "language" | "session">,
   form: FormData,
+  admitted = false,
 ): Promise<Response | ReturnType<typeof data<ConfirmResult>>> {
   const auth = session as AuthSession;
   const field = (name: string) => String(form.get(name) ?? "");
@@ -97,10 +116,13 @@ export async function securityAction(
       );
     };
     if (field("metodo") === "password") {
-      const response = await forwardToAuth(env, request, "/sign-in/email", {
-        email: session.user.email,
-        password: field("password"),
-      });
+      const response = await forwardToAuth(
+        env,
+        request,
+        "/sign-in/email",
+        { email: session.user.email, password: field("password") },
+        admitted,
+      );
       if (!response.ok) return confirmed(false);
       await revokeSession(env.DB, session.user.id, session.session.id);
       return confirmed(true, response);
@@ -157,10 +179,13 @@ export async function securityAction(
   if (intent === "password") {
     const check = await turnstileFailure(env, request, form, turnstileActions.passwordReset);
     if (check) return notice(check);
-    const response = await forwardToAuth(env, request, "/request-password-reset", {
-      email: session.user.email,
-      redirectTo: appUrl(env, language, accessPath),
-    });
+    const response = await forwardToAuth(
+      env,
+      request,
+      "/request-password-reset",
+      { email: session.user.email, redirectTo: appUrl(env, language, accessPath) },
+      admitted,
+    );
     if (response.status === 429) return notice("troppi-tentativi");
     return notice(response.ok ? "password-link" : "errore");
   }
@@ -203,10 +228,13 @@ export async function securityAction(
         : null;
     const email = (intent === "reinvia-email" ? (pending?.new_email ?? "") : field("email")).trim();
     if (!email || email.length > 254) return notice("email-non-valida");
-    const response = await forwardToAuth(env, request, "/change-email", {
-      newEmail: email,
-      callbackURL: `${security}?accesso=email-confermata`,
-    });
+    const response = await forwardToAuth(
+      env,
+      request,
+      "/change-email",
+      { newEmail: email, callbackURL: `${security}?accesso=email-confermata` },
+      admitted,
+    );
     if (response.status === 429) return notice("troppi-tentativi");
     // La risposta non distingue un indirizzo già registrato: non rivela chi usa FiscalBay.
     return notice(response.ok ? "email-richiesta" : "email-non-valida");

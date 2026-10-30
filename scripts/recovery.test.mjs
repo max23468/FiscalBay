@@ -80,9 +80,13 @@ function scenario() {
   credential(db, "a-pass", "u-pass", "hash-old");
   workspace(db, "w-keep", "u-keep");
   workspace(db, "w-gone", "u-gone");
-  db.exec(`INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)
-      VALUES ('st-keep', 'w-keep', 'seller-keep', '${before}'),
-        ('st-gone', 'w-gone', 'seller-gone', '${before}');
+  db.exec(`INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, store_name)
+      VALUES ('st-keep', 'w-keep', 'seller-keep', '${before}', 'Negozio K'),
+        ('st-back', 'w-keep', 'seller-back', '${before}', 'Negozio B'),
+        ('st-gone', 'w-gone', 'seller-gone', '${before}', NULL);
+    INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token,
+        refresh_expires_at, granted_at)
+      VALUES ('st-keep', 'a', '${later}', 'r', '${later}', '${before}');
     INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
       VALUES ('e-keep', 'w-keep', 'admin', '${before}', '2026-11-30T00:00:00.000Z');
     INSERT INTO notification_reads (user_id, notification_id, read_at)
@@ -106,6 +110,10 @@ function scenario() {
     INSERT INTO deleted_order_keys (store_id, kind, external_key, deleted_at)
       VALUES ('st-keep', 'order', '12-00000-00001', '${later}');
     UPDATE workspace_entitlements SET revoked_at = '${later}' WHERE id = 'e-keep';
+    UPDATE ebay_stores SET data_deleted_at = '${later}', store_name = NULL,
+      orders_deleted_through = '${later}' WHERE id IN ('st-keep', 'st-back');
+    UPDATE ebay_stores SET data_deleted_at = NULL WHERE id = 'st-back';
+    UPDATE ebay_store_credentials SET rejected_at = '${later}' WHERE store_id = 'st-keep';
     UPDATE workspaces SET trial_used_at = '${later}' WHERE id = 'w-keep';
     UPDATE "account" SET "password" = 'hash-new', "updatedAt" = '${later}' WHERE "id" = 'a-pass';
     INSERT INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
@@ -148,7 +156,10 @@ describe("ripristino senza dati o diritti revocati", () => {
       workspace_members: 1,
       workspaces: 1,
     });
-    assert.equal(result.stamps, 2);
+    assert.equal(result.stamps, 6);
+    assert.deepEqual(rows(restored, "SELECT rejected_at FROM ebay_store_credentials"), [
+      { rejected_at: later },
+    ]);
     assert.equal(result.credentials, 1);
     assert.deepEqual(rows(restored, `SELECT "id" FROM "user" ORDER BY "id"`), [
       { id: "u-keep" },
@@ -157,7 +168,23 @@ describe("ripristino senza dati o diritti revocati", () => {
     assert.deepEqual(rows(restored, "SELECT notification_id FROM notification_reads"), [
       { notification_id: "n-1" },
     ]);
-    assert.deepEqual(rows(restored, "SELECT id FROM ebay_stores"), [{ id: "st-keep" }]);
+    // Profilo eliminato e limite degli ordini eliminati, anche dopo un nuovo collegamento.
+    assert.deepEqual(
+      rows(
+        restored,
+        `SELECT id, data_deleted_at, store_name, orders_deleted_through FROM ebay_stores
+          ORDER BY id`,
+      ),
+      [
+        {
+          id: "st-back",
+          data_deleted_at: null,
+          store_name: "Negozio B",
+          orders_deleted_through: later,
+        },
+        { id: "st-keep", data_deleted_at: later, store_name: null, orders_deleted_through: later },
+      ],
+    );
     // Nessuna sessione o verifica torna valida, nemmeno quelle esistenti al punto.
     assert.deepEqual(rows(restored, `SELECT "id" FROM "session"`), []);
     assert.deepEqual(rows(restored, `SELECT "id" FROM "verification"`), []);

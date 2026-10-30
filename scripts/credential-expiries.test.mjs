@@ -101,6 +101,9 @@ describe("registro delle scadenze", () => {
       assert.ok(secrets.includes("BETTER_AUTH_SECRET"));
       assert.ok(secrets.includes("EBAY_CLIENT_SECRET"));
       assert.ok(!secrets.includes("APP_ORIGIN"));
+      // Anche i facoltativi: senza la voce la loro scadenza non aprirebbe un incidente.
+      assert.ok(secrets.includes("STRIPE_SECRET_KEY"));
+      assert.equal(secrets.includes("EBAY_SANDBOX_CLIENT_SECRET"), mode !== "live");
     }
   });
 });

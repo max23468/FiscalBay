@@ -34,13 +34,33 @@ export const defaultFile = () =>
   process.env.FISCALBAY_CREDENTIAL_REGISTRY ??
   path.join(homedir(), ".config", "fiscalbay", "credential-expiries.json");
 
-/** Segreti del Worker dell'ambiente dichiarati in `cloudflare.config.ts`. */
+/**
+ * Segreti facoltativi letti dal codice: il deploy non li richiede, ma senza di loro si fermano
+ * acquisti, Telegram, notifiche eBay o metriche, quindi anche la loro scadenza va registrata.
+ */
+const optionalSecrets = [
+  "ANALYTICS_READ_TOKEN",
+  "EBAY_NOTIFICATION_VERIFICATION_TOKEN",
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "TELEGRAM_BOT_TOKEN",
+  "TELEGRAM_WEBHOOK_SECRET",
+];
+
+/** Keyset Sandbox di eBay: soltanto nel test. */
+const sandboxSecrets = ["EBAY_SANDBOX_CLIENT_ID", "EBAY_SANDBOX_CLIENT_SECRET"];
+
+/** Segreti del Worker dell'ambiente: obbligatori in `cloudflare.config.ts` e facoltativi. */
 export function declaredSecrets(mode) {
-  const { env } = config({ mode: mode === "live" ? "live" : "development" }).worker;
-  return Object.entries(env)
-    .filter(([, binding]) => binding?.type === "secret")
-    .map(([name]) => name)
-    .sort();
+  const live = mode === "live";
+  const { env } = config({ mode: live ? "live" : "development" }).worker;
+  return [
+    ...Object.entries(env)
+      .filter(([, binding]) => binding?.type === "secret")
+      .map(([name]) => name),
+    ...optionalSecrets,
+    ...(live ? [] : sandboxSecrets),
+  ].sort();
 }
 
 const validDate = (value) =>

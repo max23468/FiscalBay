@@ -77,7 +77,9 @@ const markerTables = [
 
 /**
  * Revoche e diritti consumati che aggiornano una riga esistente: la prima colonna è l'istante,
- * le altre lo accompagnano. Si riapplicano soltanto dove il ripristino le ha tolte.
+ * le altre lo accompagnano. Si riapplicano soltanto dove il ripristino le ha tolte; con `newer`
+ * anche dove il ripristino ha riportato un istante precedente. `name` distingue due voci della
+ * stessa tabella.
  */
 const stampTables = [
   { table: "admin_agent_tokens", key: ["token_hash"], columns: ["revoked_at"] },
@@ -85,8 +87,33 @@ const stampTables = [
   { table: "order_grants", key: ["id"], columns: ["revoked_at"] },
   { table: "workspace_entitlements", key: ["id"], columns: ["revoked_at", "revocation"] },
   { table: "workspaces", key: ["id"], columns: ["trial_used_at"] },
-  { table: "ebay_stores", key: ["id"], columns: ["data_deleted_at"] },
+  // «Scollega ed elimina» cancella anche il profilo del negozio.
+  {
+    table: "ebay_stores",
+    key: ["id"],
+    columns: [
+      "data_deleted_at",
+      "store_name",
+      "store_logo_url",
+      "store_url",
+      "feedback_score",
+      "feedback_positive_percent",
+      "top_rated_seller",
+      "store_profile_read_at",
+    ],
+  },
+  // Limite degli ordini eliminati: resta anche dopo un nuovo collegamento e non torna indietro,
+  // altrimenti gli ordini mai osservati prima dell'eliminazione si importerebbero di nuovo.
+  {
+    name: "ebay_store_deletion_limits",
+    table: "ebay_stores",
+    key: ["id"],
+    columns: ["orders_deleted_through"],
+    newer: true,
+  },
   { table: "service_notices", key: ["id"], columns: ["withdrawn_at"] },
+  // Un consenso eBay rifiutato o revocato non torna valido.
+  { table: "ebay_store_credentials", key: ["store_id"], columns: ["rejected_at"] },
 ];
 
 /** Righe scritte dalla riapplicazione stessa: una ripetizione non le tratta come eliminate. */
@@ -212,7 +239,7 @@ export async function capture(run, at) {
     );
   const stamps = {};
   for (const stamp of stampTables)
-    stamps[stamp.table] = await readRows(
+    stamps[stamp.name ?? stamp.table] = await readRows(
       run,
       stamp.table,
       stamp.key,
@@ -270,12 +297,12 @@ function insertMarkers({ table, conflict, parent }, rows) {
 }
 
 /** Revoche riportate soltanto dove il ripristino le ha tolte. */
-function restoreStamps({ table, key, columns }, rows) {
+function restoreStamps({ table, key, columns, newer }, rows) {
   return rows.map(
     (row) =>
       `UPDATE ${ident(table)} SET ${columns.map((column) => `${ident(column)} = ${literal(row[column])}`).join(", ")}
         WHERE ${key.map((column) => `${ident(column)} = ${literal(row[column])}`).join(" AND ")}
-          AND ${ident(columns[0])} IS NULL`,
+          AND (${ident(columns[0])} IS NULL${newer ? ` OR ${ident(columns[0])} < ${literal(row[columns[0]])}` : ""})`,
   );
 }
 
@@ -313,7 +340,9 @@ export async function reapply(run, captured, now = new Date()) {
     insertMarkers(marker, captured.markers[marker.table]),
   );
   if (markers.length) await run(markers);
-  const stamps = stampTables.flatMap((stamp) => restoreStamps(stamp, captured.stamps[stamp.table]));
+  const stamps = stampTables.flatMap((stamp) =>
+    restoreStamps(stamp, captured.stamps[stamp.name ?? stamp.table]),
+  );
   if (stamps.length) await run(stamps);
   const credentials = batched(
     captured.credentials,
@@ -339,7 +368,10 @@ export async function reapply(run, captured, now = new Date()) {
     markers: Object.fromEntries(
       markerTables.map(({ table }) => [table, captured.markers[table].length]),
     ),
-    stamps: stampTables.reduce((total, { table }) => total + captured.stamps[table].length, 0),
+    stamps: stampTables.reduce(
+      (total, { name, table }) => total + captured.stamps[name ?? table].length,
+      0,
+    ),
     credentials: captured.credentials.length,
   };
 }

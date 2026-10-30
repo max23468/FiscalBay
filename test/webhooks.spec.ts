@@ -587,6 +587,7 @@ it("durante la sospensione pagine, webhook, coda e cron non toccano i dati", asy
   expect(page.headers.get("x-fiscalbay-frozen")).toBe("1");
   expect(page.headers.get("retry-after")).toBe("600");
   expect(page.headers.get("cache-control")).toBe("no-store");
+  expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
   expect(await page.text()).toContain("<title>FiscalBay | Manutenzione</title>");
   const webhook = await workerFetch(
     new Request("https://test.fiscalbay.it/webhooks/stripe", { method: "POST", body: "{}" }),
@@ -1637,6 +1638,23 @@ it("la revoca del consenso porta il negozio da ricollegare senza toccare i dati"
   expect((await receipt())?.completed_at).toBe(now.toISOString());
 });
 
+it("una revoca consegnata oltre i sette giorni porta comunque il negozio da ricollegare", async () => {
+  const late = new Date(now.getTime() + 8 * 86_400_000);
+  expect((await receiveWebhook(ebayRequest(revocation), environment, fetcher, late))?.status).toBe(
+    204,
+  );
+  const row = await receipt();
+  expect(await env.DB.prepare("SELECT expires_at FROM webhook_receipts").first("expires_at")).toBe(
+    new Date(late.getTime() + 7 * 86_400_000).toISOString(),
+  );
+  const { message, value } = batch({ receiptId: row?.id });
+  await consumeWebhooks(value, environment, fetcher, late);
+  expect(message.ack).toHaveBeenCalledOnce();
+  expect(
+    await env.DB.prepare("SELECT rejected_at FROM ebay_store_credentials").first("rejected_at"),
+  ).toBe(late.toISOString());
+});
+
 it("una revoca senza negozio attivo, anteriore al consenso o di prova non accoda nulla", async () => {
   for (const payload of [
     revokedBy({ userId: "other-seller" }),
@@ -1715,6 +1733,15 @@ it("la soglia Bulk Data Transfer apre un'anomalia della console fino alla fine d
     (anomaly) => anomaly.kind === "ebay_bulk_data",
   );
   expect(closed).toEqual([]);
+  // Con il database guasto risponde 503, così eBay ritenta.
+  const failing = vi
+    .spyOn(env.DB, "batch")
+    .mockRejectedValueOnce(new Error("database_unavailable"));
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  expect((await receive(ebayRequest(threshold("REACHED"))))?.status).toBe(503);
+  expect(logged).toHaveBeenCalledTimes(1);
+  failing.mockRestore();
+  logged.mockRestore();
   // Una soglia senza metriche non è un avviso valido.
   const empty = threshold("WARNING");
   empty.notification.data.metricData = [];

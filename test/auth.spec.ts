@@ -14,6 +14,7 @@ import { withResponseCookies } from "../app/response-cookies.server";
 import { loader as adminLoader } from "../app/routes/admin";
 import { loader as exportFileLoader } from "../app/routes/export-file";
 import { action as notificationsAction } from "../app/routes/notifications";
+import { action as unlockAction } from "../app/routes/orders";
 import { action as exportAction } from "../app/routes/order-export";
 import { action as searchAction } from "../app/routes/order-search";
 import { action as securityRouteAction, loader as securityLoader } from "../app/routes/settings";
@@ -1815,8 +1816,13 @@ describe("Sessioni, revoche e area admin", () => {
         params: { file: "file" },
       }),
       await routeResponse(notificationsAction, "/api/v1/notifications", options({ ids: "a" })),
+      await routeResponse(
+        unlockAction,
+        "/app/ordini",
+        options({ intent: "unlock", ids: "o-a", skipConfirmation: "true" }),
+      ),
     ].map((response) => response.status);
-    expect(statuses).toEqual([401, 401, 401, 302]);
+    expect(statuses).toEqual([401, 401, 401, 302, 302]);
   }
 
   it("inoltra a Better Auth lo user agent dei moduli e nessun header assente", async () => {

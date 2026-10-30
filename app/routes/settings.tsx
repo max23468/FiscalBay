@@ -68,7 +68,11 @@ import { correlationId, logFailure } from "../errors";
 import { hasWhatsNew } from "../whats-new.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { measure } from "../observability.server";
-import { requestAccountDeletion, securityAction } from "../security-actions.server";
+import {
+  requestAccountDeletion,
+  securityAction,
+  securityAuthPath,
+} from "../security-actions.server";
 import {
   orderPeriods,
   orderPeriodStart,
@@ -107,12 +111,14 @@ import {
   actionFailure,
   areaAction,
   limitedAction,
+  tooManyRequests,
   runAreaAction,
   trialAction,
   type AreaAction,
   type AreaActionContext,
 } from "../area-actions.server";
 import { pageHeaders } from "../request-limits.server";
+import { authLimitWait } from "../auth-route.server";
 
 /**
  * Servizi reali delle categorie. L'acquisto compare con la configurazione Stripe, la gestione
@@ -633,8 +639,9 @@ const settingsActions: Record<string, AreaAction> = {
     limit: "work",
   },
   "account-delete": {
+    // Il filtro per IP di `/delete-user` l'ha già applicato l'action, prima della sessione.
     run: ({ request, area, form }) =>
-      requestAccountDeletion(request, area, String(form.get("confirmation") ?? "")),
+      requestAccountDeletion(request, area, String(form.get("confirmation") ?? ""), true),
     failureNotice: (t) => t.settings.privacy.deleteAccountFailed,
   },
   profile: {
@@ -657,8 +664,8 @@ const settingsActions: Record<string, AreaAction> = {
 };
 
 /**
- * Le azioni delle Impostazioni; le altre sono della Sicurezza. Il filtro per IP di assistenza
- * e archivio dell'account precede la sessione.
+ * Le azioni delle Impostazioni; le altre sono della Sicurezza. Il filtro per IP di assistenza,
+ * archivio dell'account e invii ad Auth precede la sessione.
  */
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request);
@@ -667,10 +674,13 @@ export async function action({ request }: Route.ActionArgs) {
   const chosen = areaAction(settingsActions, intent);
   const limited = chosen?.limit ? await limitedAction(request, chosen.limit, intent) : null;
   if (limited) return limited;
+  const authPath = securityAuthPath(intent, form);
+  const wait = authPath ? await authLimitWait(env, request, authPath) : null;
+  if (wait !== null) return tooManyRequests(request, wait);
   const area = await requireAccountArea(request);
   return chosen
     ? runAreaAction(chosen, { request, area, form })
-    : securityAction(request, area, form);
+    : securityAction(request, area, form, authPath !== null);
 }
 
 export function clientAction(args: Route.ClientActionArgs) {

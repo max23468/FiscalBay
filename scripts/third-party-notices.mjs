@@ -44,6 +44,40 @@ export function readPackage(root) {
   };
 }
 
+/** Licenze permissive ammesse nel codice e nei font che il browser riceve (§29). */
+const permissiveLicenses = new Set([
+  "0BSD",
+  "Apache-2.0",
+  "BlueOak-1.0.0",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "CC0-1.0",
+  "ISC",
+  "MIT",
+  "MIT-0",
+  "OFL-1.1",
+  "Unlicense",
+]);
+
+/**
+ * Pacchetti con una licenza non permissiva o non dichiarata. In un'espressione SPDX basta una
+ * alternativa (`OR`) le cui licenze congiunte (`AND`) siano tutte ammesse.
+ * @param {Iterable<NoticePackage>} packages
+ */
+export function unpermittedLicenses(packages) {
+  return [...packages]
+    .filter(
+      ({ license }) =>
+        !license
+          .replaceAll(/[()]/gu, "")
+          .split(" OR ")
+          .some((choice) =>
+            choice.split(" AND ").every((part) => permissiveLicenses.has(part.trim())),
+          ),
+    )
+    .map(({ name, version, license }) => `${name}@${version} (${license})`);
+}
+
 /**
  * Testo degli avvisi, un pacchetto per sezione in ordine di nome.
  * @param {Iterable<NoticePackage>} packages

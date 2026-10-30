@@ -41,7 +41,11 @@ export interface AreaAction {
  */
 export async function limitedAction(request: Request, limit: RequestLimit, operation: string) {
   const wait = await requestLimitWait(env, request, limit, operation);
-  if (wait === null) return null;
+  return wait === null ? null : tooManyRequests(request, wait);
+}
+
+/** Risposta di un'azione oltre il filtro per IP: 429 con l'attesa e nessuna copia in cache. */
+export function tooManyRequests(request: Request, wait: number) {
   const t = appCopy[languageFromPath(new URL(request.url).pathname)];
   return data<ActionResult>(
     { ok: false, notice: t.access.signInNotices["troppi-tentativi"] },

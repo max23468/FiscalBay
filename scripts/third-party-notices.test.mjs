@@ -3,7 +3,12 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { formatNotices, packageRoot, readPackage } from "./third-party-notices.mjs";
+import {
+  formatNotices,
+  packageRoot,
+  readPackage,
+  unpermittedLicenses,
+} from "./third-party-notices.mjs";
 
 describe("avvisi delle licenze di terze parti", () => {
   it("ricava la cartella del pacchetto, anche con scope e nella struttura di pnpm", () => {
@@ -17,6 +22,17 @@ describe("avvisi delle licenze di terze parti", () => {
     );
     assert.equal(packageRoot("/p/app/root.tsx"), null);
     assert.equal(packageRoot("/p/node_modules/@scope"), null);
+  });
+
+  it("ammette soltanto licenze permissive, anche fra alternative SPDX", () => {
+    const of = (license) => ({ name: "p", version: "1.0.0", license, texts: [] });
+    assert.deepEqual(
+      unpermittedLicenses(
+        ["MIT", "(MIT OR GPL-3.0)", "Apache-2.0 AND MIT", "GPL-3.0", "MIT AND LGPL-2.1"].map(of),
+      ),
+      ["p@1.0.0 (GPL-3.0)", "p@1.0.0 (MIT AND LGPL-2.1)"],
+    );
+    assert.deepEqual(unpermittedLicenses([of("non dichiarata")]), ["p@1.0.0 (non dichiarata)"]);
   });
 
   it("riporta licenza dichiarata e testi del pacchetto, o ne segnala l'assenza", () => {

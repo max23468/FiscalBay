@@ -940,6 +940,38 @@ describe("avvisi degli incidenti", () => {
     expect(await incident()).toMatchObject([{ notified: "opened", attempts: 0, retry_at: null }]);
   });
 
+  it("una riapertura dopo il rientro comunicato riparte per email se Telegram è di nuovo giù", async () => {
+    const down = bot((call) =>
+      call.method === "sendRichMessage" ? new Response("", { status: 502 }) : undefined,
+    );
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const mail = emailSender();
+    const mailed = { ...environment, AUTH_EMAIL: { send: mail } as SendEmail };
+    const failTimes = async (from: number) => {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const [row] = (await incident()) as [{ retry_at: string | null }];
+        await reconcileOwnerIncidents(
+          mailed,
+          down.fetcher,
+          row?.retry_at ? new Date(row.retry_at) : later(from),
+        );
+      }
+    };
+    await setSwitch(env.DB, "ebay_calls", false, new Date(now));
+    await failTimes(1);
+    expect(mail).toHaveBeenCalledTimes(1);
+    // Telegram torna e comunica l'apertura e poi il rientro.
+    const [row] = (await incident()) as [{ retry_at: string }];
+    await reconcileOwnerIncidents(environment, bot().fetcher, new Date(row.retry_at));
+    await setSwitch(env.DB, "ebay_calls", true, later(600));
+    await reconcileOwnerIncidents(environment, bot().fetcher, later(601));
+    expect(await incident()).toMatchObject([{ notified: "resolved" }]);
+    // La nuova apertura, con Telegram di nuovo giù, riparte per email.
+    await setSwitch(env.DB, "ebay_calls", false, later(700));
+    await failTimes(701);
+    expect(mail).toHaveBeenCalledTimes(2);
+  });
+
   it("avvisa 45 giorni prima di una scadenza del registro, la aggrava alla scadenza e la chiude al rinnovo", async () => {
     const record = (name: string, expires: string | null) =>
       env.DB.prepare(`INSERT OR REPLACE INTO credential_expiries (name, expires_on, recorded_at)
