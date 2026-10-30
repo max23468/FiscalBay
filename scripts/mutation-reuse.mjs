@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 
 import { criticalModule } from "./mutation.mjs";
 import { importGraph } from "./verify-repo.mjs";
-import { ghJson } from "./lib/provider.mjs";
+import { ghJson, retry } from "./lib/provider.mjs";
 
 /** Workflow le cui mutation valgono come ricevuta. */
 const mutationWorkflows = [".github/workflows/publish.yml", ".github/workflows/mutation.yml"];
@@ -40,7 +40,10 @@ export function moduleOutcomes(jobs) {
   const modules = new Map();
   for (const job of jobs) {
     const parsed = mutationJob(job.name);
-    if (!parsed) continue;
+    // Un job annullato o saltato prima di partire non ha provato nulla; uno interrotto mentre
+    // girava, anche per il limite di tempo, vale come fallito.
+    if (!parsed || (["cancelled", "skipped"].includes(job.conclusion) && !job.steps?.length))
+      continue;
     const entry = modules.get(parsed.target) ?? { parts: parsed.parts, passed: new Set(), ran: 0 };
     entry.ran += 1;
     if (job.conclusion === "success" && entry.parts === parsed.parts) entry.passed.add(parsed.part);
@@ -100,15 +103,15 @@ function isAncestor(commit) {
   }
 }
 
-function main() {
-  const repository = process.env.REPOSITORY;
-  const repositoryId = Number(process.env.REPOSITORY_ID);
-  if (!repository || !repositoryId) throw new Error("Repository non identificato.");
-  const targets = JSON.parse(process.env.MATRIX ?? '{"target":[]}').target;
-  const api = (url) => ghJson("api", url);
+/** Run precedenti con gli esiti per modulo, dalla più recente; gli errori dell'API si ripetono. */
+async function previousRuns(repository, repositoryId) {
+  const api = (url) =>
+    retry(() => ghJson("api", url), { attempts: 3, delay: (attempt) => attempt * 5000 });
   const runs = [];
-  for (const candidate of api(
-    `repos/${repository}/actions/runs?status=completed&exclude_pull_requests=true&per_page=50`,
+  for (const candidate of (
+    await api(
+      `repos/${repository}/actions/runs?status=completed&exclude_pull_requests=true&per_page=50`,
+    )
   ).workflow_runs) {
     if (
       !mutationWorkflows.includes(candidate.path) ||
@@ -118,15 +121,32 @@ function main() {
       !isAncestor(candidate.head_sha)
     )
       continue;
+    // Pagine piccole: con cento job per pagina l'API risponde 502 per alcune run ripetute.
     const jobs = [];
     for (let page = 1; ; page++) {
-      const batch = api(
-        `repos/${repository}/actions/runs/${candidate.id}/jobs?filter=latest&per_page=100&page=${page}`,
-      ).jobs;
-      jobs.push(...batch);
-      if (batch.length < 100) break;
+      const batch = await api(
+        `repos/${repository}/actions/runs/${candidate.id}/jobs?filter=latest&per_page=30&page=${page}`,
+      );
+      jobs.push(...batch.jobs);
+      if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
     }
     runs.push({ id: candidate.id, commit: candidate.head_sha, outcomes: moduleOutcomes(jobs) });
+  }
+  return runs;
+}
+
+async function main() {
+  const repository = process.env.REPOSITORY;
+  const repositoryId = Number(process.env.REPOSITORY_ID);
+  if (!repository || !repositoryId) throw new Error("Repository non identificato.");
+  const targets = JSON.parse(process.env.MATRIX ?? '{"target":[]}').target;
+  let runs;
+  try {
+    runs = await previousRuns(repository, repositoryId);
+  } catch (error) {
+    // Senza esiti leggibili non si riusa nulla: la prova esegue tutta la mutation.
+    console.log(`Esiti precedenti non leggibili, mutation completa: ${error.message}`);
+    return;
   }
   const sources = git("ls-files")
     .split("\n")
@@ -157,4 +177,5 @@ function main() {
     );
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) main();
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]))
+  await main();

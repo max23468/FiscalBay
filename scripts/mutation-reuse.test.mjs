@@ -22,7 +22,11 @@ describe("mutation incrementale della prova del candidato", () => {
   });
 
   it("considera superato un modulo soltanto con ogni parte riuscita", () => {
-    const job = (name, conclusion = "success") => ({ name: `Mutation / ${name}`, conclusion });
+    const job = (name, conclusion = "success") => ({
+      name: `Mutation / ${name}`,
+      conclusion,
+      steps: [{}],
+    });
     const outcomes = moduleOutcomes([
       job("app/a.server.ts 1/2"),
       job("app/a.server.ts 2/2"),
@@ -32,6 +36,8 @@ describe("mutation incrementale della prova del candidato", () => {
       job("app/d.server.ts 1/1", "cancelled"),
       job("app/e.server.ts 1/1"),
       job("app/e.server.ts 1/1"),
+      { name: "Mutation / app/f.server.ts 1/1", conclusion: "cancelled", steps: [] },
+      { name: "Mutation / app/g.server.ts 1/1", conclusion: "cancelled", steps: [{}] },
     ]);
     assert.deepEqual(Object.fromEntries(outcomes), {
       "app/a.server.ts": "passed",
@@ -39,6 +45,7 @@ describe("mutation incrementale della prova del candidato", () => {
       "app/c.server.ts": "failed",
       "app/d.server.ts": "failed",
       "app/e.server.ts": "failed",
+      "app/g.server.ts": "failed",
     });
   });
 
