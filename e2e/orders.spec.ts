@@ -732,6 +732,13 @@ test.describe("area reale", () => {
       await expect(card().getByText(secret, { exact: true })).toBeVisible();
       await page.reload();
       await expect(card().getByText(secret, { exact: true })).toBeVisible();
+      // Anche dopo la ricarica il clic attende l'idratazione: sotto carico andrebbe perso.
+      await expect(
+        page.getByRole("searchbox", {
+          name: it ? "Cerca ordini" : "Search orders",
+          includeHidden: true,
+        }),
+      ).toBeEnabled();
       await card("-2")
         .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
         .click();
@@ -761,6 +768,13 @@ test.describe("area reale", () => {
       ).toBeVisible();
       expect(await page.content()).not.toContain("BNCLCU75C12F205G");
       await page.reload();
+      // Anche dopo la ricarica il clic attende l'idratazione: sotto carico andrebbe perso.
+      await expect(
+        page.getByRole("searchbox", {
+          name: it ? "Cerca ordini" : "Search orders",
+          includeHidden: true,
+        }),
+      ).toBeEnabled();
       await unlock.click();
       await expect(dialog.getByRole("checkbox")).not.toBeChecked();
       await expect(dialog).toContainText(it ? "1 sblocco" : "1 unlock");
