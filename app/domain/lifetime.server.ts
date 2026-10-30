@@ -545,6 +545,8 @@ export type LifetimeGrant =
   | "pending"
   | "sold-out"
   | "seat-unavailable"
+  | "refunded"
+  | "unavailable"
   | "not_found";
 
 /** Posti attivi rimasti senza spazio dopo la cancellazione dell'account, dal più vecchio. */
@@ -554,6 +556,46 @@ export async function vacantLifetimeSeats(db: D1Database) {
       FROM lifetime_allocations WHERE status = 'active' AND workspace_id IS NULL ORDER BY slot`)
     .all<{ slot: number; kind: string; customerId: string | null; activatedAt: string | null }>();
   return results;
+}
+
+/**
+ * La vendita del posto rimasto senza spazio ha restituito l'intero importo: rimborso totale o
+ * disputa persa. Il diritto dello spazio cancellato non c'è più, quindi lo dice soltanto Stripe;
+ * una sessione sparita non prova un rimborso. Senza vendita, o senza Stripe, non c'è nulla da
+ * rileggere: il controllo giornaliero rilegge comunque il diritto ripreso.
+ */
+async function seatSaleReversed(
+  env: Env,
+  stripe: Stripe | null,
+  input: { workspaceId: string; slot: number },
+) {
+  // Soltanto per un posto che lo spazio può riprendere, con le condizioni del ripristino.
+  const seat =
+    await env.DB.prepare(`SELECT provider_reference AS sessionId FROM lifetime_allocations
+      WHERE slot = ?2 AND status = 'active' AND kind = 'sale' AND workspace_id IS NULL
+        AND EXISTS (SELECT 1 FROM workspaces WHERE id = ?1)
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
+        AND NOT ${lifetimeInForceSql("?1")}`)
+      .bind(input.workspaceId, input.slot)
+      .first<{ sessionId: string | null }>();
+  if (!seat?.sessionId || !stripe) return false;
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripeCall(() =>
+      stripe.checkout.sessions.retrieve(seat.sessionId!, {
+        expand: ["payment_intent.latest_charge"],
+      }),
+    );
+  } catch (error) {
+    if (!isMissingObject(error)) throw error;
+    return false;
+  }
+  const intent = session.payment_intent;
+  const charge =
+    intent && typeof intent !== "string" && intent.latest_charge ? intent.latest_charge : null;
+  return (
+    !!charge && typeof charge !== "string" && !!(await paymentReversal(stripe, charge)).revocation
+  );
 }
 
 /**
@@ -603,7 +645,8 @@ async function recoverLifetimeSeat(
  * Uno spazio che ha già un posto con il lifetime revocato, per rimborso o disputa persa, lo
  * riceve di nuovo sullo stesso posto, senza consumarne un altro: il posto resta della vendita
  * originale e il nuovo diritto porta autore e motivo dell'omaggio. Con `slot` lo spazio riprende
- * invece il posto rimasto senza spazio dopo la cancellazione dell'account dello stesso cliente.
+ * invece il posto rimasto senza spazio dopo la cancellazione dell'account dello stesso cliente,
+ * se la sua vendita non è stata rimborsata né persa in disputa.
  */
 export async function grantLifetime(
   env: Env,
@@ -613,6 +656,12 @@ export async function grantLifetime(
 ): Promise<LifetimeGrant> {
   const at = now.toISOString();
   if (input.slot !== undefined) {
+    try {
+      if (await seatSaleReversed(env, stripe, { ...input, slot: input.slot })) return "refunded";
+    } catch (error) {
+      logFailure({ error, operation: "billing" });
+      return "unavailable";
+    }
     const recovered = await recoverLifetimeSeat(env, { ...input, slot: input.slot }, at);
     if (recovered !== "done") return recovered;
     if (stripe)

@@ -109,6 +109,7 @@ const it = {
       pending: "Acquisto in corso",
       "sold-out": "Posti esauriti",
       "seat-unavailable": "Posto non disponibile",
+      refunded: "Vendita rimborsata",
       importing: "Importazione in corso",
       limited: "Attesa di eBay",
       suspended: "Chiamate eBay spente",
@@ -348,6 +349,8 @@ const it = {
       "sold-out": "Posti lifetime esauriti.",
       "seat-unavailable":
         "Posto non ripreso: non è libero da una cancellazione, oppure lo spazio ha già un posto lifetime.",
+      refunded: "Posto non ripreso: la sua vendita è stata rimborsata o persa in disputa.",
+      unavailable: "Stripe non risponde: nessun posto ripreso.",
     },
     freeStore: {
       done: "Negozio attivo cambiato.",
@@ -804,6 +807,7 @@ const en: AdminCopy = {
       pending: "Purchase in progress",
       "sold-out": "Sold out",
       "seat-unavailable": "Seat unavailable",
+      refunded: "Sale refunded",
       importing: "Import in progress",
       limited: "Waiting for eBay",
       suspended: "eBay calls off",
@@ -1043,6 +1047,8 @@ const en: AdminCopy = {
       "sold-out": "Lifetime seats are sold out.",
       "seat-unavailable":
         "Seat not taken back: it was not freed by a deletion, or the space already has a lifetime seat.",
+      refunded: "Seat not taken back: its sale was refunded or lost in a dispute.",
+      unavailable: "Stripe is not responding: no seat taken back.",
     },
     freeStore: {
       done: "Active store changed.",

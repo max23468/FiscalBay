@@ -1375,6 +1375,25 @@ describe("cancellazione dell'account", () => {
     expect(
       await grantLifetimeConcession(env, { ...input, workspaceId: "w-none", slot: 1 }, later(4)),
     ).toBe("not_found");
+    // La vendita del posto si rilegge su Stripe prima di riprenderlo.
+    const stripe = stripeAccount();
+    stripe.state.sessions.push({
+      id: "cs_lifetime",
+      mode: "payment",
+      subscription: null,
+      metadata: { workspace_id: space, offer: "lifetime" },
+    });
+    stripe.settle("cs_lifetime", "paid");
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    stripe.state.down = true;
+    expect(await grantLifetimeConcession(env, { ...input, slot: 1 }, later(4))).toBe("unavailable");
+    stripe.state.down = false;
+    // Rimborsata per intero, il posto non torna: il diritto ripreso sarebbe da revocare.
+    const sale = stripe.state.charges.find((charge) => charge.id === "ch_cs_lifetime")!;
+    sale.refunds.push({ amount: sale.amount, status: "succeeded" });
+    expect(await grantLifetimeConcession(env, { ...input, slot: 1 }, later(4))).toBe("refunded");
+    expect(await vacantLifetimeSeats(env.DB)).toHaveLength(1);
+    sale.refunds.length = 0;
     expect(await grantLifetimeConcession(env, { ...input, slot: 1 }, later(4))).toBe("done");
     // Ripetuta, non cambia nulla: il posto ha di nuovo uno spazio.
     expect(await grantLifetimeConcession(env, { ...input, slot: 1 }, later(5))).toBe(
