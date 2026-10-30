@@ -83,9 +83,16 @@ describe("radice pubblica e area riservata", () => {
 
   it("mostra in home il netto con il totale IVA e la prova soltanto con gli acquisti aperti", async () => {
     expect((await callRoute(loadSite, "/")).copy).toMatchObject({
-      premiumAmount: "4,90\u00a0€",
-      premiumPeriod: "+ IVA al mese",
-      premiumAnnual: "49\u00a0€ + IVA all’anno",
+      premiumOffers: [
+        { offer: "monthly", amount: "4,90\u00a0€", period: "+ IVA al mese", best: false },
+        {
+          offer: "annual",
+          amount: "49\u00a0€",
+          period: "+ IVA all’anno",
+          note: "2 mesi gratis",
+          best: true,
+        },
+      ].map((offer) => expect.objectContaining(offer)),
       premiumGross: "5,98\u00a0€ al mese o 59,78\u00a0€ all’anno con IVA italiana al 22%",
       premiumBody: expect.stringMatching(/\. Prova di 14 giorni senza carta\.$/u),
     });

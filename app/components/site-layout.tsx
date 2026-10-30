@@ -26,7 +26,7 @@ const navItems = [
 /**
  * Barra superiore delle pagine pubbliche (D202): logo, pagine, lingua e `Accedi`, oppure
  * `Apri l'app` con una sessione. Sotto i 768 px le pagine passano in una seconda riga sempre
- * visibile, senza menu da aprire, e la lingua mostra il solo codice.
+ * visibile, allineate al logo con spazi uguali, senza menu da aprire, e la lingua mostra il solo codice.
  * `path` è la pagina corrente senza prefisso di lingua, per lingua e voce attiva.
  */
 function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
@@ -69,7 +69,7 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
         </div>
       </div>
       <nav aria-label={t.site.nav.label} className="border-t md:hidden">
-        <NavLinks path={path} className={cn(siteColumn, "justify-between text-sm")} />
+        <NavLinks path={path} className={cn(siteColumn, "gap-5 text-sm min-[360px]:gap-7")} />
       </nav>
     </header>
   );
@@ -85,7 +85,7 @@ function NavLinks({ path, className }: { path: string; className: string }) {
           <a
             href={localizedPath(language, item.path)}
             aria-current={path === item.path ? "page" : undefined}
-            className="inline-flex min-h-11 items-center rounded-md px-2.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground max-md:rounded-none max-md:border-b-2 max-md:border-transparent max-md:px-1 max-md:aria-[current=page]:border-primary md:min-h-0 md:py-1.5"
+            className="inline-flex min-h-11 items-center rounded-md px-2.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground max-md:rounded-none max-md:border-b-2 max-md:border-transparent max-md:px-0 max-md:aria-[current=page]:border-primary md:min-h-0 md:py-1.5"
           >
             {t.site.nav[item.key]}
           </a>
