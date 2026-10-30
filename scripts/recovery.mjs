@@ -53,8 +53,8 @@ const internal = /^(?:sqlite_|_cf_|d1_migrations$)/u;
 
 /**
  * Marker da riportare dopo il ripristino. Senza `since` la tabella si riporta intera: è piccola
- * e il compito periodico riapre da sé le richieste i cui dati ricompaiono. `parent` limita le
- * righe a quelle il cui riferimento esiste ancora.
+ * e il compito periodico riapre da sé le richieste i cui dati ricompaiono. `where` limita le
+ * righe lette, `parent` a quelle il cui riferimento esiste ancora.
  */
 const markerTables = [
   { table: "account_deletions", conflict: "REPLACE" },
@@ -73,7 +73,29 @@ const markerTables = [
     conflict: "IGNORE",
     parent: { column: "user_id", table: "user", key: "id" },
   },
+  // La chat collegata oggi sostituisce quella recuperata, che ha perso l'autorizzazione.
+  {
+    table: "telegram_links",
+    conflict: "REPLACE",
+    parent: { column: "workspace_id", table: "workspaces", key: "id" },
+  },
+  // Notifiche disattivate: una copia precedente non le riattiva.
+  {
+    table: "telegram_preferences",
+    where: "enabled = 0",
+    conflict: "REPLACE",
+    parent: { column: "workspace_id", table: "workspaces", key: "id" },
+  },
+  {
+    table: "telegram_store_preferences",
+    where: "enabled = 0",
+    conflict: "REPLACE",
+    parent: { column: "store_id", table: "ebay_stores", key: "id" },
+  },
 ];
+
+/** Ruoli concessi da un flag: chi oggi non l'ha più lo perde anche nella copia ripristinata. */
+const grantFlags = [{ table: "user", key: "id", column: "admin" }];
 
 /**
  * Revoche e diritti consumati che aggiornano una riga esistente: la prima colonna è l'istante,
@@ -235,7 +257,7 @@ export async function capture(run, at) {
       marker.table,
       key(marker.table),
       "*",
-      marker.since ? since(marker.since, threshold) : "",
+      [marker.where, marker.since && since(marker.since, threshold)].filter(Boolean).join(" AND "),
     );
   const stamps = {};
   for (const stamp of stampTables)
@@ -246,6 +268,11 @@ export async function capture(run, at) {
       [...stamp.key, ...stamp.columns].map(ident).join(", "),
       since(stamp.columns[0], threshold),
     );
+  const grants = {};
+  for (const flag of grantFlags)
+    grants[flag.table] = (
+      await readRows(run, flag.table, [flag.key], ident(flag.key), `${ident(flag.column)} = 1`)
+    ).map((row) => row[flag.key]);
   const [migrations, credentials, telegram] = await run([
     "SELECT name FROM d1_migrations ORDER BY id",
     `SELECT "id" FROM "account" WHERE "providerId" = 'credential' AND ${since("updatedAt", threshold)}`,
@@ -258,6 +285,7 @@ export async function capture(run, at) {
     keys,
     markers,
     stamps,
+    grants,
     credentials: credentials.map(({ id }) => id),
     telegramSends: telegram[0]?.value ?? null,
   };
@@ -344,6 +372,16 @@ export async function reapply(run, captured, now = new Date()) {
     restoreStamps(stamp, captured.stamps[stamp.name ?? stamp.table]),
   );
   if (stamps.length) await run(stamps);
+  await run(
+    grantFlags.map(
+      ({ table, key, column }) =>
+        `UPDATE ${ident(table)} SET ${ident(column)} = 0 WHERE ${ident(column)} = 1${
+          captured.grants[table].length
+            ? ` AND ${ident(key)} NOT IN (${captured.grants[table].map(literal).join(", ")})`
+            : ""
+        }`,
+    ),
+  );
   const credentials = batched(
     captured.credentials,
     `UPDATE "account" SET "password" = NULL WHERE "providerId" = 'credential' AND "id" IN (`,
