@@ -501,7 +501,7 @@ function provider(target) {
       ? (await query("SELECT name FROM d1_migrations ORDER BY id")).map(({ name }) => name)
       : [];
   };
-  return { cf, config, database, activeDeployment, currentVersion, liveReadback, applied };
+  return { cf, json, config, database, activeDeployment, currentVersion, liveReadback, applied };
 }
 
 const receiptFile = "reports/release.json";
@@ -551,7 +551,7 @@ async function rollbackRelease(manifest, target, remote, receipt) {
 }
 
 async function deployRelease(manifest, target, remote, receipt, reviewed) {
-  const { cf, config, database, currentVersion, liveReadback, applied } = remote;
+  const { cf, json, config, database, currentVersion, liveReadback, applied } = remote;
   const state = await publish(
     manifest,
     {
