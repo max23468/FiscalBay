@@ -1,5 +1,6 @@
 import { verify } from "node:crypto";
 import { z } from "zod";
+import { ApplicationError } from "../../errors";
 import { upstreamJson } from "../http.server";
 import type { EbayEnvironment } from "../../view-models";
 import { applicationToken, ebayConfiguration } from "./environment.server";
@@ -33,13 +34,15 @@ const orderConfirmationSchema = z.object({
 });
 // Revoca del consenso, una sottoscrizione per l'applicazione: `userId` è lo stesso
 // identificativo immutabile di `ORDER_CONFIRMATION`. Username, motivo e token legacy non servono.
+// La consegna di prova può portare valori segnaposto: un identificativo vuoto vale come assente
+// e una data della revoca illeggibile lascia la data dell'evento.
 const authorizationRevocationSchema = z.object({
   metadata: metadata("AUTHORIZATION_REVOCATION"),
   notification: z.object({
     ...notificationFields,
     data: z.object({
-      userId: identifier.optional(),
-      revocationDate: z.iso.datetime().optional(),
+      userId: identifier.optional().catch(undefined),
+      revocationDate: z.iso.datetime({ offset: true }).optional().catch(undefined),
     }),
   }),
 });
@@ -107,6 +110,16 @@ let lookups = 0;
 
 export class NotificationLimit extends Error {}
 
+/**
+ * Consegna rifiutata con 412, con il solo motivo per il log: intestazione della firma, firma o
+ * schema del corpo. Nessun valore della consegna entra nell'errore.
+ */
+export class NotificationRejected extends ApplicationError {
+  constructor(readonly failure: "header" | "signature" | "schema") {
+    super("INVALID_REQUEST");
+  }
+}
+
 /** Consegne accettate per origine in un minuto, prima di ogni verifica. */
 const originRequestsPerMinute = 600;
 /** Origini seguite per isolate: oltre, la meno recente esce dal conteggio. */
@@ -138,7 +151,12 @@ export async function verifyEbayNotification(
   fetcher: typeof fetch,
   now: number,
 ): Promise<EbayNotification> {
-  const header = headerSchema.parse(JSON.parse(atob(encodedSignature.parse(signature))));
+  let header: z.infer<typeof headerSchema>;
+  try {
+    header = headerSchema.parse(JSON.parse(atob(encodedSignature.parse(signature))));
+  } catch {
+    throw new NotificationRejected("header");
+  }
   const configuration = ebayConfiguration(env, ebayEnvironment);
   const cacheId = `${configuration.clientId}:${ebayEnvironment}:${header.kid}`;
   let publicKey = keys.get(cacheId);
@@ -168,7 +186,8 @@ export async function verifyEbayNotification(
     keys.set(cacheId, publicKey);
   }
   // Un header che dichiara un digest diverso da quello della chiave non vale.
-  if (publicKey.digest && publicKey.digest !== header.digest) throw new Error();
+  if (publicKey.digest && publicKey.digest !== header.digest)
+    throw new NotificationRejected("signature");
   if (
     !verify(
       header.digest,
@@ -177,6 +196,10 @@ export async function verifyEbayNotification(
       Buffer.from(header.signature, "base64"),
     )
   )
-    throw new Error();
-  return notificationSchema.parse(JSON.parse(body));
+    throw new NotificationRejected("signature");
+  try {
+    return notificationSchema.parse(JSON.parse(body));
+  } catch {
+    throw new NotificationRejected("schema");
+  }
 }

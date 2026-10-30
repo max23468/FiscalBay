@@ -10,6 +10,7 @@ import {
 import {
   admitOrigin,
   NotificationLimit,
+  NotificationRejected,
   verifyEbayNotification,
 } from "./integrations/ebay/notifications.server";
 import { rejectCredentials } from "./integrations/ebay/seller-credentials.server";
@@ -287,6 +288,10 @@ export async function receiveWebhook(
       )
         throw error;
       if (error instanceof TelegramSecretMismatch) throw new InvalidWebhook(401);
+      // Il motivo del rifiuto resta nel log quando l'intestazione della firma è valida: una
+      // consegna di eBay rifiutata va distinta dalle sonde, che non lasciano traccia.
+      if (error instanceof NotificationRejected && error.failure !== "header")
+        logFailure({ error, operation: "webhook_ingress", status: 412 });
       throw new InvalidWebhook(412);
     }
     if (!event) return new Response(null, { status: 204 });
