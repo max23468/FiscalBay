@@ -370,7 +370,13 @@ for (const scenario of scenarios) {
               "Navigazione interna non applicabile: pagina iniziale, collegamento iniziale assente o coperto da un pannello modale.",
           });
         }
-        if (scenario.role === "member" && scenario.area === "orders" && scenario.status === 200) {
+        // Con il pannello di un ordine aperto la barra superiore resta sotto la velatura modale.
+        if (
+          scenario.role === "member" &&
+          scenario.area === "orders" &&
+          scenario.status === 200 &&
+          !scenario.dialog
+        ) {
           // La barra superiore trova il codice sbloccato e non quello da sbloccare; la query
           // resta fuori dall'indirizzo.
           const searchFor = async (query: string) => {

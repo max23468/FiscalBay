@@ -52,15 +52,15 @@ export function useAutoSave<T extends string | boolean>(name: string, initial: T
 
 /**
  * Esito del salvataggio automatico in una riga sempre riservata: comparire e sparire non
- * sposta il testo intorno.
+ * sposta il testo intorno. Con `inline` sta accanto al titolo del gruppo, senza riga propria.
  */
-export function SaveStatus({ state }: { state: SaveState }) {
+export function SaveStatus({ state, inline = false }: { state: SaveState; inline?: boolean }) {
   const { t } = useCopy();
   return (
     <span
       role="status"
       className={cn(
-        "block min-h-4 text-xs leading-4",
+        inline ? "text-xs" : "block min-h-4 text-xs leading-4",
         state === "error" ? "text-danger" : "text-muted-foreground",
       )}
     >
@@ -163,7 +163,10 @@ export function RadioOption({
 }) {
   const id = useId();
   return (
-    <FieldLabel id={id} className="font-normal">
+    <FieldLabel
+      id={id}
+      className="font-normal has-data-disabled:cursor-not-allowed has-data-disabled:text-muted-foreground"
+    >
       <RadioGroupItem value={value} disabled={disabled} aria-labelledby={id} />
       {children}
     </FieldLabel>
@@ -200,6 +203,7 @@ export function CheckboxOption({
 
 export function SimpleSelect({
   label,
+  status,
   hint,
   items,
   value,
@@ -208,6 +212,8 @@ export function SimpleSelect({
   disabled,
 }: {
   label: string;
+  /** Esito del salvataggio automatico, accanto all'etichetta. */
+  status?: SaveState;
   hint?: string;
   /** `premium`: opzione del piano Premium, visibile con la corona ma non selezionabile. */
   items: Array<{ value: string; label: string; premium?: boolean }>;
@@ -219,7 +225,11 @@ export function SimpleSelect({
   const id = useId();
   return (
     <Field>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      {/* L'esito sta accanto all'etichetta, fuori dal nome del campo. */}
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <FieldLabel htmlFor={id}>{label}</FieldLabel>
+        {status ? <SaveStatus state={status} inline /> : null}
+      </div>
       <Select
         disabled={disabled}
         items={items}
@@ -255,6 +265,7 @@ export function SimpleSelect({
 export function Group({
   id: anchor,
   title,
+  status,
   children,
   className,
   separated = true,
@@ -262,6 +273,8 @@ export function Group({
   /** Identificativo del titolo, quando un collegamento porta al gruppo. */
   id?: string;
   title?: string;
+  /** Esito del salvataggio automatico, sulla riga del titolo. */
+  status?: SaveState;
   children: React.ReactNode;
   className?: string;
   /** Linea sopra il gruppo; senza, quando il gruppo precedente finisce già con una linea. */
@@ -278,7 +291,14 @@ export function Group({
         className,
       )}
     >
-      {title ? (
+      {title && status ? (
+        <div className="flex flex-wrap items-baseline gap-x-3">
+          <h3 id={id} className="text-base font-semibold">
+            {title}
+          </h3>
+          <SaveStatus state={status} inline />
+        </div>
+      ) : title ? (
         <h3 id={id} className="text-base font-semibold">
           {title}
         </h3>

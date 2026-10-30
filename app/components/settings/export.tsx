@@ -1,9 +1,10 @@
+import { cn } from "cn";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 
 import { useAction, useNotice } from "~/components/action";
-import { PremiumNote, StatusBadge } from "~/components/status";
+import { PremiumNote } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { FieldGroup, FieldLabel, FieldLegend, FieldSet } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
@@ -19,16 +20,24 @@ import type { AppCopy } from "../../copy/copy-it";
 import type { ExportConfiguration } from "../../domain/export-configurations.server";
 import {
   columnName,
+  exportHeader,
+  exportSampleSize,
   fileColumns,
   layoutOf,
   maxConfigurationName,
   standardColumns,
   type ExportColumn,
   type ExportFormat,
+  type ExportSample,
   type FileLayout,
 } from "../../orders/export-columns";
 import type { ExportContext, ExportTally } from "../../orders/export-scope";
-import { orderPeriods, premiumOrderPeriods, type OrderPeriod } from "../../view-models";
+import {
+  orderPeriods,
+  orderPeriodStart,
+  premiumOrderPeriods,
+  type OrderPeriod,
+} from "../../view-models";
 import { CheckboxOption, Group, RadioOption, SimpleSelect } from "./controls";
 
 /** Valore della scelta «Standard» fra le configurazioni salvate. */
@@ -146,6 +155,99 @@ function CreateFile({
   );
 }
 
+/**
+ * Prime righe del file con le scelte correnti: ordini più recenti dell'ambito, granularità e
+ * colonne nell'ordine scelto, con gli stessi valori che il file conterrà.
+ */
+function ExportPreview({
+  sample,
+  available,
+  since,
+  layout,
+  columns,
+}: {
+  sample: ExportSample | null;
+  available: boolean;
+  /** Inizio del periodo scelto; null quando l'ambito viene dagli Ordini o non restringe. */
+  since: string | null;
+  layout: FileLayout;
+  columns: ExportColumn[];
+}) {
+  const { t } = useCopy();
+  const id = useId();
+  if (!sample) return null;
+  // Ogni riga ha la chiave del suo ordine e la posizione fra le righe dello stesso ordine.
+  const rows = (available ? sample.available : sample.all)
+    .filter((order) => since === null || order.createdAt >= since)
+    .flatMap((order) =>
+      order.rows[layout.rows].map((record, line) => ({ key: `${record.order}:${line}`, record })),
+    )
+    .slice(0, exportSampleSize * 2);
+  if (rows.length === 0 || columns.length === 0) return null;
+  return (
+    <div className="grid min-w-0 gap-2">
+      <p id={id} className="text-sm font-medium">
+        {t.settings.export.exportPreview}
+      </p>
+      {/* La tabella scorre in orizzontale: la regione si raggiunge anche da tastiera. */}
+      <div
+        role="region"
+        aria-labelledby={id}
+        tabIndex={0}
+        className="max-w-full overflow-x-auto rounded-lg border focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+      >
+        <table className="w-max min-w-full text-left text-sm">
+          <thead className="bg-muted">
+            <tr>
+              {exportHeader(layout.rows, t, columns).map((name, index) => (
+                <th
+                  key={columns[index]}
+                  scope="col"
+                  className={cn(
+                    "px-3 py-2 font-medium whitespace-nowrap",
+                    index === 0 && "sticky left-0 bg-muted shadow-[1px_0_0_var(--border)]",
+                  )}
+                >
+                  {name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y border-t">
+            {rows.map(({ key, record }) => (
+              <tr key={key}>
+                {columns.map((column, index) => (
+                  <td
+                    key={column}
+                    className={cn(
+                      "max-w-72 truncate px-3 py-2 whitespace-nowrap",
+                      index === 0 && sticky,
+                    )}
+                  >
+                    {record[column]}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Prima colonna ferma mentre la tabella scorre: chi scorre vede sempre di quale riga si tratta e
+ * che a destra ci sono altre colonne.
+ */
+const sticky = "sticky left-0 bg-card shadow-[1px_0_0_var(--border)]";
+
+/** Inizio del periodo per le prime righe: come nel file, un periodo Premium nel Free non restringe. */
+function sampleSince(period: OrderPeriod, premium: boolean, now: string): string | null {
+  if (!premium && premiumOrderPeriods.has(period)) return null;
+  return orderPeriodStart(period, new Date(now)).toISOString();
+}
+
 /** Ordini del file con le scelte correnti, oppure perché non ce ne sono. */
 function exportStatus(
   t: AppCopy,
@@ -180,9 +282,9 @@ function FormatField({
         className="gap-3"
       >
         <RadioOption value="csv">CSV</RadioOption>
+        {/* Nel Free la corona compare una sola volta, nella nota sulle colonne. */}
         <RadioOption value="xlsx" disabled={!premium}>
           XLSX
-          {premium ? null : <StatusBadge tone="premium">{t.settings.premiumBadge}</StatusBadge>}
         </RadioOption>
       </RadioGroup>
     </FieldSet>
@@ -191,7 +293,8 @@ function FormatField({
 
 /**
  * Colonne scelte e ordinate con Premium: ogni colonna si include e si sposta con i pulsanti,
- * e lo spostamento è annunciato. Nel Free soltanto la nota del piano.
+ * e lo spostamento è annunciato. Nel Free soltanto la nota del piano, che vale anche per XLSX
+ * e configurazioni.
  */
 function ColumnsField({
   premium,
@@ -209,7 +312,7 @@ function ColumnsField({
     return (
       <FieldSet>
         <FieldLegend variant="label">{copy.exportColumns}</FieldLegend>
-        <PremiumNote>{copy.exportColumnsPremium}</PremiumNote>
+        <PremiumNote>{copy.exportPremium}</PremiumNote>
       </FieldSet>
     );
   const available = new Set(standardColumns(layout.rows));
@@ -516,6 +619,8 @@ export function ExportSection({
   configurations,
   context,
   periods,
+  sample,
+  now,
   files,
 }: {
   premium: boolean;
@@ -524,6 +629,9 @@ export function ExportSection({
   context: ExportContext | null;
   /** Ordini di ogni periodo, quando l'esportazione non viene dagli Ordini. */
   periods: Record<OrderPeriod, ExportTally> | null;
+  /** Prime righe del file per l'anteprima tabellare. */
+  sample: ExportSample | null;
+  now: string;
   files: ExportFileView[];
 }) {
   const { t, language } = useCopy();
@@ -596,6 +704,13 @@ export function ExportSection({
         <p className="text-sm text-muted-foreground" role="status">
           {columns.length === 0 ? copy.exportColumnsInvalid : status.text}
         </p>
+        <ExportPreview
+          sample={sample}
+          available={fiscal === "available"}
+          since={context ? null : sampleSince(period, premium, now)}
+          layout={layout}
+          columns={columns}
+        />
         <div className="flex flex-wrap items-start gap-2">
           {/* Il file nasce soltanto da qui: nessuno sblocco e nessun download prima. */}
           <CreateFile

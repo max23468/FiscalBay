@@ -64,8 +64,6 @@ const it = {
     freePlan: "Free",
     freePrice: "0 €",
     premiumPlan: "Premium",
-    premiumPrice: (monthly: string, annual: string) =>
-      `${monthly} + IVA al mese o ${annual} + IVA all’anno`,
     premiumGross: (monthly: string, annual: string) =>
       `${monthly} al mese o ${annual} all’anno con IVA italiana al 22%`,
     premiumBody:
@@ -380,7 +378,6 @@ const en: SitePagesCopy = {
     freePlan: "Free",
     freePrice: "€0",
     premiumPlan: "Premium",
-    premiumPrice: (monthly, annual) => `${monthly} + VAT per month or ${annual} + VAT per year`,
     premiumGross: (monthly, annual) =>
       `${monthly} per month or ${annual} per year with 22% Italian VAT`,
     premiumBody:

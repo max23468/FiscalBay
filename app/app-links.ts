@@ -20,6 +20,8 @@ export const previewBase = "/anteprima";
 
 export const previewOrdersPath = `${previewBase}/ordini`;
 
+export const previewStoresPath = `${previewBase}/negozi`;
+
 /** Impostazioni dell'anteprima, con le stesse sezioni dell'area reale. */
 export const previewSettingsPath = `${previewBase}/impostazioni`;
 

@@ -1,4 +1,5 @@
 import { cn } from "cn";
+import { ChevronDown } from "lucide-react";
 import { createContext, use, useId, type ReactNode } from "react";
 import { Link, useFetcher } from "react-router";
 
@@ -61,7 +62,8 @@ export function TextField({
 
 /**
  * Modulo di un'operazione della console: invia `intent` e i campi nascosti, mostra l'esito
- * restituito dal server accanto al pulsante. Con `reason` chiede il motivo obbligatorio.
+ * restituito dal server accanto al pulsante. Con `reason` chiede il motivo obbligatorio; con
+ * `primary` il pulsante è blu pieno, per l'azione principale della sezione.
  */
 export function ActionForm({
   intent,
@@ -69,6 +71,7 @@ export function ActionForm({
   submit,
   reason = false,
   destructive = false,
+  primary = false,
   children,
   className,
   onResult,
@@ -78,6 +81,7 @@ export function ActionForm({
   submit: string;
   reason?: boolean;
   destructive?: boolean;
+  primary?: boolean;
   children?: ReactNode;
   className?: string;
   onResult?: (result: AdminActionResult) => ReactNode;
@@ -100,7 +104,7 @@ export function ActionForm({
         <Button
           type="submit"
           size="sm"
-          variant={destructive ? "destructive" : "outline"}
+          variant={destructive ? "destructive" : primary ? "default" : "outline"}
           pending={pending}
         >
           {submit}
@@ -127,13 +131,31 @@ export function ActionForm({
 
 /**
  * Operazione richiudibile: i campi, motivo compreso, compaiono soltanto quando l'admin la
- * apre, così le azioni rare non affollano la scheda.
+ * apre, così le azioni rare non affollano la scheda. Con `destructive` l'etichetta è rossa,
+ * come il pulsante delle operazioni pericolose, e si distingue da quelle ordinarie.
  */
-export function Disclosure({ label, children }: { label: string; children: ReactNode }) {
+export function Disclosure({
+  label,
+  destructive = false,
+  children,
+}: {
+  label: string;
+  destructive?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <details className="rounded-lg border px-3 py-2 [&[open]>summary]:mb-3">
-      <summary className="cursor-pointer text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring">
+    <details className="group rounded-lg border px-3 py-2 [&[open]>summary]:mb-3">
+      <summary
+        className={cn(
+          "flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden",
+          destructive && "text-danger",
+        )}
+      >
         {label}
+        <ChevronDown
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180"
+        />
       </summary>
       {children}
     </details>
@@ -151,16 +173,20 @@ export function DataTable({
   head,
   rows,
   label,
+  numeric = [],
 }: {
   head: string[];
   rows: TableRow[];
   /** Nome dell'area scorrevole; senza, quello del riquadro che la contiene. */
   label?: string;
+  /** Indici delle colonne di numeri e importi, allineate a destra nella tabella. */
+  numeric?: number[];
 }) {
   const { t } = useAdmin();
   const panel = use(PanelTitle);
   // Colonna delle azioni: senza intestazione visibile, su mobile chiude la scheda.
   const actions = t.workspace.actions;
+  const right = new Set(numeric);
   if (rows.length === 0) return <p className="text-sm text-muted-foreground">{t.common.none}</p>;
   return (
     <>
@@ -202,11 +228,15 @@ export function DataTable({
       >
         <TableHeader>
           <TableRow className="text-xs hover:bg-transparent">
-            {head.map((column) => (
+            {head.map((column, index) => (
               <TableHead
                 key={column}
                 scope="col"
-                className={cn("h-auto py-2 text-muted-foreground", column === actions && "sr-only")}
+                className={cn(
+                  "h-auto py-2 text-muted-foreground",
+                  right.has(index) && "text-right",
+                  column === actions && "sr-only",
+                )}
               >
                 {column}
               </TableHead>
@@ -217,7 +247,15 @@ export function DataTable({
           {rows.map((row) => (
             <TableRow key={row.key} className="align-top">
               {head.map((column, index) => (
-                <TableCell key={column} className="py-2.5 align-top whitespace-normal">
+                // I pulsanti, più alti del testo, restano centrati sulla prima riga delle celle.
+                <TableCell
+                  key={column}
+                  className={cn(
+                    "align-top whitespace-normal",
+                    column === actions ? "py-1" : "py-2.5",
+                    right.has(index) && "text-right",
+                  )}
+                >
                   {row.cells[index]}
                 </TableCell>
               ))}

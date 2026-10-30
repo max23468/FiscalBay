@@ -236,7 +236,7 @@ export const it = {
     suggestionStatus: {
       identity_missing:
         "Identità stabile dell’acquirente non disponibile: nessun collegamento automatico con i precedenti.",
-      none: "Nessun precedente autorizzato con dati fiscali utilizzabili.",
+      none: "Nessun precedente autorizzato con un Codice Fiscale utilizzabile.",
       ambiguous:
         "I precedenti più recenti non permettono una scelta univoca per uno o più identificativi: nessun valore proposto per quei dati.",
     },
@@ -520,7 +520,7 @@ export const it = {
       priceLifetime: (price: string) => `${price} una tantum`,
       priceAnnualNote: (months: number) => `12 mesi al prezzo di ${months}.`,
       /** Totale con l'IVA italiana accanto al netto, come sul sito. */
-      priceGross: (price: string) => `${price} con IVA italiana al 22%`,
+      priceGross: (price: string) => `${price} con IVA italiana al\u00a022%`,
       lifetimeSeats: (left: number, total: number) => `Restano ${left} posti su ${total}`,
       lifetimeCredit: (amount: string) => `Meno ${amount} del periodo pagato non usato.`,
       lifetimeReplaces: "L’abbonamento si chiude senza altri rinnovi.",
@@ -622,6 +622,7 @@ export const it = {
       telegramBlocked: "Il bot non riesce a scriverti",
       telegramBlockedHint:
         "Il bot risulta bloccato in Telegram. Sbloccalo e scrivigli /start: le notifiche riprendono da quel momento.",
+      telegramOpenBot: "Apri il bot in Telegram",
       telegramUnreachable: "Alcune notifiche non sono arrivate",
       telegramUnreachableHint:
         "Telegram non ha accettato i messaggi dopo diversi tentativi. Il prossimo invio riuscito chiude l'avviso.",
@@ -639,16 +640,15 @@ export const it = {
       exportRowOrder: "Ordine",
       exportRowItem: "Articolo",
       exportColumns: "Colonne",
-      exportColumnsPremium: "Colonne selezionabili e ordinabili con Premium.",
       exportFiscal: "Ordini inclusi",
       exportFiscalAll: "Tutti",
-      exportFiscalAvailable: "Solo con dati fiscali disponibili",
+      exportFiscalAvailable: "Solo con il Codice Fiscale disponibile",
       exportCount: (orders: number, locked: number) =>
-        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} i dati fiscali restano vuoti.`}`,
+        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} il Codice Fiscale resta vuoto.`}`,
       exportNone: {
         scope: "Nessun ordine da esportare: gli ordini scelti non sono più disponibili.",
         period: "Nessun ordine nel periodo.",
-        available: "Nessuno di questi ordini ha dati fiscali disponibili.",
+        available: "Nessuno di questi ordini ha il Codice Fiscale disponibile.",
       },
       exportTextHint:
         "Per conservare gli zeri iniziali di Codice Fiscale, Partita IVA, SKU, CAP e telefono, apri il file in Excel da Dati > Da testo/CSV e imposta quelle colonne come Testo.",
@@ -658,6 +658,7 @@ export const it = {
       exportContextAll: "Tutti gli ordini dell’elenco.",
       exportContextBack: "Torna agli ordini",
       exportCreate: "Crea file",
+      exportPreview: "Prime righe del file",
       exportCreated: "Anteprima: nessun file creato.",
       exportFailed: "File non creato. Riprova più tardi.",
       exportEmpty: "Nessun ordine da esportare con queste scelte.",
@@ -836,7 +837,7 @@ export const it = {
         },
         {
           q: "FiscalBay modifica gli ordini su eBay?",
-          a: "No. FiscalBay legge gli ordini per mostrarti i dati fiscali: sul tuo negozio eBay resta tutto com’è.",
+          a: "No. FiscalBay legge gli ordini per mostrarti il Codice Fiscale: sul tuo negozio eBay resta tutto com’è.",
         },
       ],
       contact: "Scrivi all’assistenza",
@@ -956,7 +957,7 @@ export const it = {
       body: registrationRestricted,
     },
     body: "Riprova con il metodo di accesso che usi di solito.",
-    back: "Torna a FiscalBay",
+    back: "Torna all’accesso",
     ebayWithoutEmail: {
       title: "Accesso con eBay non disponibile",
       body: "eBay non ci fornisce l’indirizzo email del tuo account, come succede per gli account individuali. Accedi con email, Google o passkey: dopo potrai collegare il tuo negozio eBay.",
@@ -1001,7 +1002,7 @@ export const it = {
     intro:
       "Ti portiamo su eBay per autorizzare FiscalBay. Accedi con l’account venditore del negozio da collegare: può essere diverso da quello che usi per entrare in FiscalBay.",
     points: [
-      "FiscalBay legge gli ordini e i dati fiscali che eBay rende disponibili, in sola lettura.",
+      "FiscalBay legge gli ordini e i Codici Fiscali che eBay rende disponibili, in sola lettura.",
       "Non modifica nulla su eBay e non contatta gli acquirenti.",
       "Non chiede l’indirizzo email del tuo account eBay.",
       "Un negozio eBay può essere collegato a un solo account FiscalBay.",

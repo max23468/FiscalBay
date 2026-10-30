@@ -1,10 +1,9 @@
-import { Globe, Languages } from "lucide-react";
 import { useLocation, useNavigation, useSubmit } from "react-router";
 
 import { AppShell } from "~/components/app-shell";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import { OrdersLoading } from "~/components/orders/loading";
-import { accountMenu, shellDestinations } from "~/components/shell-links";
+import { shellDestinations, shellMenu } from "~/components/shell-links";
 import { useCopy } from "~/components/copy-context";
 import { appCopy } from "../app-copy";
 import {
@@ -14,9 +13,8 @@ import {
   languagePath,
   notificationsPath,
   orderSearchPath,
-  visitParam,
 } from "../app-links";
-import { languageNames, localizedPath, type Language } from "../i18n";
+import { localizedPath } from "../i18n";
 import type { ShellData } from "../preferences";
 
 /**
@@ -46,7 +44,6 @@ export function AccountShell({
   useDeviceTimeZone();
   // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
   const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
-  const other: Language = language === "it" ? "en" : "it";
   const links = { language, base: appBase };
   // Verso gli Ordini da un'altra sezione la pagina precedente lascia subito il posto allo
   // scheletro dell'elenco; dentro gli Ordini i dati mostrati restano durante la lettura.
@@ -56,17 +53,6 @@ export function AccountShell({
     navigation.state === "loading" &&
     navigation.location.pathname === ordersList &&
     !pathname.startsWith(ordersList);
-  const changeLanguage = {
-    href: languagePath,
-    label: languageNames[other],
-    Icon: Languages,
-    lang: other,
-    onSelect: () =>
-      void submit(
-        { language: other, returnTo: `${pathname}${search}` },
-        { method: "post", action: languagePath },
-      ),
-  };
   return (
     <AppShell
       account={account}
@@ -83,18 +69,18 @@ export function AccountShell({
             }
           : undefined
       }
-      menu={[
-        ...(security ? [accountMenu(links, t, shell?.whatsNew)] : []),
-        [
-          ...(security ? [] : [changeLanguage]),
-          {
-            href: `${localizedPath(language)}?${visitParam}=1`,
-            label: t.shell.visitSite,
-            Icon: Globe,
-            reloadDocument: true,
-          },
-        ],
-      ]}
+      menu={shellMenu(links, t, {
+        verified: security,
+        whatsNew: shell?.whatsNew,
+        language: {
+          href: languagePath,
+          onSelect: (chosen) =>
+            void submit(
+              { language: chosen, returnTo: `${pathname}${search}` },
+              { method: "post", action: languagePath },
+            ),
+        },
+      })}
       onSignOut={() =>
         void submit(
           { intent: "esci" },

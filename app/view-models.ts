@@ -304,6 +304,8 @@ export interface TelegramView {
    * `failure`: consegne ferme perché il bot è bloccato, o non riuscite dopo i tentativi.
    */
   chat: { label: string | null; linkedAt: string; failure?: "blocked" | "unreachable" } | null;
+  /** Chat con il bot, per sbloccarlo quando le consegne sono ferme. */
+  botUrl: string;
   enabled: boolean;
   filter: "fiscal" | "all";
   mode: "each" | "digest";

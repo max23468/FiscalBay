@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import { Badge } from "~/components/ui/badge";
+import { StatusBadge } from "~/components/status";
 import type { SectionData } from "../../admin-console.server";
 import { ActionForm, DataTable, Disclosure, Panel, Stat, StatGrid, TextField } from "./kit";
 import { localValue, useAdmin } from "./use-admin";
@@ -60,7 +60,7 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
                       {fields(promotion.id, promotion.startsAt, promotion.endsAt, promotion.quota)}
                     </ActionForm>
                   </Disclosure>
-                  <Disclosure label={c.end}>
+                  <Disclosure label={c.end} destructive>
                     <ActionForm
                       intent="end-promotion"
                       fields={{ promozione: promotion.id }}
@@ -100,8 +100,16 @@ export function CommerceView({ data, now }: { data: CommerceData; now: string })
         {item.ownerEmail ?? item.workspaceId}
       </Link>,
       t.coverage[item.source],
-      money(item.amountPaid, item.currency),
-      item.amountRefunded ? money(item.amountRefunded, item.currency) : "",
+      <span key="paid" className="font-code">
+        {money(item.amountPaid, item.currency)}
+      </span>,
+      item.amountRefunded ? (
+        <span key="refunded" className="font-code">
+          {money(item.amountRefunded, item.currency)}
+        </span>
+      ) : (
+        ""
+      ),
       item.revocation ? t.workspace.revocation[item.revocation] : "",
     ],
   });
@@ -141,7 +149,7 @@ export function CommerceView({ data, now }: { data: CommerceData; now: string })
 
       <Panel title={c.revenue}>
         <h3 className="text-sm font-medium">{c.reversals}</h3>
-        <DataTable head={paymentHead} rows={data.revenue.reversals.map(payment)} />
+        <DataTable head={paymentHead} rows={data.revenue.reversals.map(payment)} numeric={[3, 4]} />
         <h3 className="text-sm font-medium">{c.erasures}</h3>
         <DataTable
           head={[t.audit.at, t.workspace.customer, t.workspace.source, t.workspace.grantedBy]}
@@ -151,22 +159,25 @@ export function CommerceView({ data, now }: { data: CommerceData; now: string })
           }))}
         />
         <h3 className="text-sm font-medium">{c.payments}</h3>
-        <DataTable head={paymentHead} rows={data.revenue.payments.map(payment)} />
+        <DataTable head={paymentHead} rows={data.revenue.payments.map(payment)} numeric={[3, 4]} />
       </Panel>
 
       <Panel title={c.prices}>
         <p className="text-sm text-muted-foreground">{c.generation(data.generation)}</p>
         <DataTable
           head={[t.accounts.plan, t.workspace.paid, t.stores.state]}
+          numeric={[1]}
           rows={data.prices.map((price) => ({
             key: price.offer,
             cells: [
               c.offer[price.offer],
-              money(price.net),
-              <Badge key="state" variant={price.state === "ok" ? "success" : "warning"}>
+              <span key="net" className="font-code">
+                {money(price.net)}
+              </span>,
+              <StatusBadge key="state" tone={price.state === "ok" ? "success" : "warning"}>
                 {c.priceState[price.state]}
                 {price.mismatch ? ` (${price.mismatch})` : ""}
-              </Badge>,
+              </StatusBadge>,
             ],
           }))}
         />

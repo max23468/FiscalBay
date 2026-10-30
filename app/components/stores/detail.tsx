@@ -55,7 +55,12 @@ export function StoreSheet({ data }: { data: StoresPageData }) {
       }}
     >
       {shownDetail ? (
-        <SheetContent ref={panel} initialFocus={panel} closeLabel={t.shell.close}>
+        <SheetContent
+          ref={panel}
+          initialFocus={panel}
+          closeLabel={t.shell.close}
+          className="outline-none"
+        >
           <SheetHeader className="flex-row items-center gap-3">
             <StoreTile store={shownDetail} size="lg" />
             <span className="grid min-w-0 gap-1">
@@ -235,7 +240,7 @@ function SyncSection({ store, data }: SectionProps & { data: StoresPageData }) {
     <StoreSection id="store-sync" icon={RefreshCw} title={t.stores.sectionSync}>
       <ul className="grid gap-2 text-sm">
         <li>
-          <LastSync store={store} now={data.now} slot={false} />
+          <LastSync store={store} now={data.now} slot={false} labelled />
         </li>
         <li className="text-muted-foreground">
           {syncDescription(store, ebayDownFor(data, store) ? ebayDownText(data, t) : null, t)}
@@ -286,14 +291,12 @@ function NotificationsSection({ store, settings }: { store: StoreView; settings:
         <p className="text-sm">{notificationsLabel(store, t, true)}</p>
       )}
       {settings ? (
-        <p className="text-sm text-muted-foreground">
-          <Link
-            to={appHref(links, "impostazioni/notifiche")}
-            className="font-medium text-foreground underline underline-offset-4 hover:text-muted-foreground"
-          >
-            {t.stores.notificationsLink}
-          </Link>
-        </p>
+        <Link
+          to={appHref(links, "impostazioni/notifiche")}
+          {...buttonLink({ variant: "outline", size: "sm", className: "w-fit" })}
+        >
+          {t.stores.notificationsLink}
+        </Link>
       ) : null}
     </StoreSection>
   );

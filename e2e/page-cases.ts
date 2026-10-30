@@ -98,13 +98,15 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/accesso?token=synthetic-reset-token", "auth", { pattern: access }),
     make("/accesso", "auth", { role: "member", redirect: orders }),
     make("/app/ordini", "orders", { pattern: `${orders}/:ordine?`, redirect: access }),
-    // Un ordine inesistente o di un altro spazio risponde 404 dentro la shell.
-    ...["", "/non-esiste"].map((suffix) =>
+    // Un ordine inesistente o di un altro spazio risponde 404 dentro la shell; il dettaglio di
+    // un ordine dello spazio si apre nel pannello.
+    ...["", `/${testAccount.orderDetail}`, "/non-esiste"].map((suffix) =>
       make(`/app/ordini${suffix}`, "orders", {
         role: "member",
         pattern: `${orders}/:ordine?`,
-        status: suffix ? 404 : 200,
+        status: suffix === "/non-esiste" ? 404 : 200,
         remote: !suffix,
+        dialog: suffix === `/${testAccount.orderDetail}`,
       }),
     ),
     make("/auth/error", "auth", { remote: !prefix }),

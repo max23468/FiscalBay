@@ -129,7 +129,6 @@ async function readStores({ request, params }: Route.LoaderArgs) {
       // Con le chiamate eBay spente dalla console valgono sospese in ogni ambiente.
       ebayDown: ebayCalls ? [...ebayOutages(statuses).keys()] : ebayEnvironments,
       ebayMaintenance: !ebayCalls,
-      elsewhere: false,
       connectHref: localizedPath(language, storeLinkPath),
       // Il modulo di assistenza esiste: la scorciatoia verso Supporto ha una meta.
       settings: true,

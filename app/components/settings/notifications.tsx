@@ -178,7 +178,21 @@ function TelegramPreferences({
           tone="warning"
           title={failure === "blocked" ? copy.telegramBlocked : copy.telegramUnreachable}
         >
-          {failure === "blocked" ? copy.telegramBlockedHint : copy.telegramUnreachableHint}
+          {failure === "blocked" ? (
+            <span className="grid justify-items-start gap-3">
+              {copy.telegramBlockedHint}
+              <a
+                href={view.botUrl}
+                target="_blank"
+                rel="noreferrer"
+                {...buttonLink({ variant: "outline", size: "sm" })}
+              >
+                {copy.telegramOpenBot}
+              </a>
+            </span>
+          ) : (
+            copy.telegramUnreachableHint
+          )}
         </StatusAlert>
       ) : null}
       <div className="grid gap-2">

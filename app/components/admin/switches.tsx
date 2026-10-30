@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import { Badge } from "~/components/ui/badge";
+import { StatusBadge } from "~/components/status";
 import type { SectionData } from "../../admin-console.server";
 import type { SettingState } from "../../domain/service-settings.server";
 import { ActionForm, DataTable, Disclosure, Panel, TextField } from "./kit";
@@ -28,13 +28,20 @@ function SwitchRow({ name, state }: { name: SwitchKey; state: SettingState<boole
     <li className="grid gap-3 rounded-lg border p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{s.names[name]}</span>
-        <Badge variant={usual ? "success" : "warning"}>{state.value ? s.on : s.off}</Badge>
+        {/* Fuori dallo stato normale chiede attenzione; nello stato normale acceso e spento si distinguono. */}
+        <StatusBadge tone={usual ? (state.value ? "success" : "neutral") : "warning"}>
+          {state.value ? s.on : s.off}
+        </StatusBadge>
         <span className="text-sm text-muted-foreground">
           {state.since ? s.since(date(state.since)) : s.fallback}
         </span>
       </div>
       {/* A stato cambiato il modulo riparte chiuso: il motivo non passa all'operazione opposta. */}
-      <Disclosure key={String(state.value)} label={next ? s.turnOn : s.turnOff}>
+      <Disclosure
+        key={String(state.value)}
+        label={next ? s.turnOn : s.turnOff}
+        destructive={next !== normal[name]}
+      >
         <ActionForm
           intent="set-switch"
           fields={{ interruttore: name, stato: next ? "on" : "off" }}

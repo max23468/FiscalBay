@@ -68,7 +68,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const {
     freeQuota,
     freePromotion: promotionLine,
-    premiumPrice,
     premiumGross,
     premiumBody,
     premiumTrial,
@@ -83,7 +82,10 @@ export async function loader({ request }: Route.LoaderArgs) {
     purchasesOpen,
     copy: {
       ...copy,
-      premiumPrice: premiumPrice(prices.monthly.net, prices.annual.net),
+      // Come in Prezzi: importo grande, periodo con l'IVA esclusa accanto in piccolo.
+      premiumAmount: prices.monthly.net,
+      premiumPeriod: `${pages.pricing.vat} ${pages.pricing.offers.monthly.period}`,
+      premiumAnnual: `${prices.annual.net} ${pages.pricing.vat} ${pages.pricing.offers.annual.period}`,
       premiumGross: premiumGross(prices.monthly.gross, prices.annual.gross),
       // Con acquisti e prove sospesi la home lo dice, come Prezzi, invece di promettere la prova.
       premiumBody: `${premiumBody} ${purchasesOpen ? premiumTrial : pages.pricing.closed}`,
@@ -157,7 +159,8 @@ export default function Site({ loaderData }: Route.ComponentProps) {
   return (
     <SiteLayout path="/" signedIn={signedIn}>
       <section className="relative overflow-hidden bg-brand-navy text-white">
-        {/* Righe della tessera del logo, come nella pagina di accesso. */}
+        {/* Righe della tessera del logo, come nella pagina di accesso. Da 1024 px il testo finisce
+            in fondo alla fascia: il margine inferiore più ampio tiene le righe inclinate sotto. */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -bottom-16 -left-24 grid rotate-[-8deg] gap-6 opacity-20"
@@ -169,7 +172,7 @@ export default function Site({ loaderData }: Route.ComponentProps) {
         <div
           className={cn(
             siteColumn,
-            "relative grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:py-20",
+            "relative grid items-center gap-10 py-12 sm:py-16 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:pt-20 lg:pb-32",
           )}
         >
           <div className="grid gap-6">
@@ -261,8 +264,15 @@ export default function Site({ loaderData }: Route.ComponentProps) {
           </div>
           <div className="grid content-start gap-2 rounded-2xl border border-primary bg-card p-6 ring-1 ring-primary">
             <h3 className="font-semibold">{t.premiumPlan}</h3>
-            <p className="text-lg font-semibold text-pretty">{t.premiumPrice}</p>
-            <p className="text-sm text-pretty text-muted-foreground">{t.premiumGross}</p>
+            <p className="flex flex-wrap items-baseline gap-x-1.5">
+              <span className="text-3xl font-semibold">{t.premiumAmount}</span>
+              <span className="text-sm text-muted-foreground">{t.premiumPeriod}</span>
+            </p>
+            <p className="text-sm text-pretty text-muted-foreground">
+              {t.premiumAnnual}
+              <br />
+              {t.premiumGross}
+            </p>
             <p className="leading-relaxed text-pretty text-muted-foreground">{t.premiumBody}</p>
           </div>
         </div>
@@ -271,14 +281,17 @@ export default function Site({ loaderData }: Route.ComponentProps) {
         </a>
       </section>
       <section aria-labelledby="domande" className="border-t">
-        <div className={cn(siteColumn, "grid max-w-3xl gap-6 py-14 sm:py-16")}>
-          <h2 id="domande" className="text-2xl font-semibold sm:text-3xl">
-            {t.faqTitle}
-          </h2>
-          <FaqList items={t.faq} />
-          <a href={localizedPath(language, faqPath)} className={cn(textLink, "w-fit")}>
-            {t.faqLink}
-          </a>
+        {/* Allineata alle altre sezioni: la larghezza di lettura limita il contenuto, non la colonna. */}
+        <div className={cn(siteColumn, "py-14 sm:py-16")}>
+          <div className="grid max-w-3xl gap-6">
+            <h2 id="domande" className="text-2xl font-semibold sm:text-3xl">
+              {t.faqTitle}
+            </h2>
+            <FaqList items={t.faq} />
+            <a href={localizedPath(language, faqPath)} className={cn(textLink, "w-fit")}>
+              {t.faqLink}
+            </a>
+          </div>
         </div>
       </section>
       <section className="bg-brand-navy text-white">

@@ -46,6 +46,7 @@ export const scenarioIds = [
   "negozio-sospeso",
   "dati-discordanti",
   "primo-accesso",
+  "email-da-confermare",
   "prima-sincronizzazione",
   "importazione",
   "nessun-ordine",
@@ -75,6 +76,11 @@ export const scenarioIds = [
 ] as const;
 
 export type ScenarioId = (typeof scenarioIds)[number];
+
+/** Email dell'account confermata: prima, come nell'area reale, si raggiungono soltanto gli Ordini. */
+export function scenarioVerified(scenario: Pick<Scenario, "onboarding">) {
+  return scenario.onboarding.find((step) => step.label === "stepEmail")?.done !== false;
+}
 
 export function isScenarioId(value: unknown): value is ScenarioId {
   return typeof value === "string" && (scenarioIds as readonly string[]).includes(value);
@@ -254,6 +260,18 @@ const scenarioText: Record<ScenarioId, Record<Language, { name: string; focus: s
       name: "First sign-in",
       focus:
         "No store and getting started. In Stores the simulated connection is already used by another account.",
+    },
+  },
+  "email-da-confermare": {
+    it: {
+      name: "Email da confermare",
+      focus:
+        "Account appena registrato: solo gli Ordini con l’avviso di conferma, la lingua nel menu e la cancellazione.",
+    },
+    en: {
+      name: "Email to confirm",
+      focus:
+        "Newly registered account: only Orders with the confirmation notice, language in the menu and deletion.",
     },
   },
   "prima-sincronizzazione": {
@@ -1785,6 +1803,22 @@ export function loadScenario(
           storeRef: null,
           syncPhase: phases.none,
         }),
+      });
+      break;
+    case "email-da-confermare":
+      scenario = free({
+        account: account({ quota: undefined, trialAvailable: false }),
+        stores: [],
+        seeds: [],
+        view: "no-store",
+        onboarding: [
+          { label: "stepAccount", done: true },
+          { label: "stepEmail", done: false },
+          { label: "stepStore", done: false },
+          { label: "stepSync", done: false },
+        ],
+        notifications: [],
+        diagnostics: diagnostics({ storeRef: null, syncPhase: phases.none }),
       });
       break;
     case "prima-sincronizzazione":

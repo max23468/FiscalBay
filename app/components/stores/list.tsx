@@ -130,7 +130,7 @@ export function StoreList({ stores, premium, now }: ListProps) {
                 <StatusBadge tone={status.tone} icon={status.icon} filled>
                   {status.label}
                 </StatusBadge>
-                <LastSync store={store} now={now} slot={false} />
+                <LastSync store={store} now={now} slot={false} labelled />
                 {premium ? (
                   <span className="text-muted-foreground">
                     {t.stores.notifications}: {notificationsLabel(store, t)}

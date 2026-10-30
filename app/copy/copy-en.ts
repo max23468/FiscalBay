@@ -228,7 +228,7 @@ export const en: AppCopy = {
     suggestionStatus: {
       identity_missing:
         "Stable buyer identity unavailable: previous orders cannot be linked automatically.",
-      none: "No authorised previous orders with usable tax data.",
+      none: "No authorised previous orders with a usable tax code.",
       ambiguous:
         "The most recent orders do not identify a unique value for one or more identifiers: no value is suggested for those identifiers.",
     },
@@ -611,6 +611,7 @@ export const en: AppCopy = {
       telegramBlocked: "The bot cannot write to you",
       telegramBlockedHint:
         "The bot is blocked in Telegram. Unblock it and send /start: notifications resume from then on.",
+      telegramOpenBot: "Open the bot in Telegram",
       telegramUnreachable: "Some notifications did not arrive",
       telegramUnreachableHint:
         "Telegram did not accept the messages after several attempts. The next successful delivery clears this notice.",
@@ -628,16 +629,15 @@ export const en: AppCopy = {
       exportRowOrder: "Order",
       exportRowItem: "Item",
       exportColumns: "Columns",
-      exportColumnsPremium: "Choose and reorder columns with Premium.",
       exportFiscal: "Orders included",
       exportFiscalAll: "All",
-      exportFiscalAvailable: "Only with tax data available",
+      exportFiscalAvailable: "Only with the tax code available",
       exportCount: (orders, locked) =>
-        `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax data stays empty.`}`,
+        `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax code stays empty.`}`,
       exportNone: {
         scope: "No orders to export: the chosen orders are no longer available.",
         period: "No orders in this period.",
-        available: "None of these orders has tax data available.",
+        available: "None of these orders has the tax code available.",
       },
       exportTextHint:
         "To keep leading zeros in Codice Fiscale, Partita IVA, SKU, postal code and phone, open the file in Excel from Data > From Text/CSV and set those columns to Text.",
@@ -647,6 +647,7 @@ export const en: AppCopy = {
       exportContextAll: "All orders in the list.",
       exportContextBack: "Back to orders",
       exportCreate: "Create file",
+      exportPreview: "First rows of the file",
       exportCreated: "Preview: no file created.",
       exportFailed: "File not created. Try again later.",
       exportEmpty: "No orders to export with these choices.",
@@ -941,7 +942,7 @@ export const en: AppCopy = {
       body: registrationRestricted,
     },
     body: "Try again with the sign-in method you usually use.",
-    back: "Back to FiscalBay",
+    back: "Back to sign-in",
     ebayWithoutEmail: {
       title: "Sign in with eBay unavailable",
       body: "eBay does not share the email address of your account, as happens with individual accounts. Sign in with email, Google or a passkey: you can then connect your eBay store.",
@@ -986,7 +987,7 @@ export const en: AppCopy = {
     intro:
       "We’ll take you to eBay to authorize FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [
-      "FiscalBay reads orders and the tax data eBay makes available, read-only.",
+      "FiscalBay reads orders and the tax codes eBay makes available, read-only.",
       "It changes nothing on eBay and never contacts buyers.",
       "It doesn’t ask for the email address of your eBay account.",
       "An eBay store can be connected to only one FiscalBay account.",

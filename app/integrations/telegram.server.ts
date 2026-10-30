@@ -41,6 +41,11 @@ export function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+/** Chat con il bot dell'ambiente, senza avvio del collegamento. */
+export function botUrl(env: Env): string {
+  return `https://t.me/${env.TELEGRAM_BOT_USERNAME}`;
+}
+
 /** Apre la chat con il bot dell'ambiente; «Avvia» invia `/start <token>`. */
 export function deepLink(env: Env, token: string): string {
   return `https://t.me/${env.TELEGRAM_BOT_USERNAME}?start=${token}`;

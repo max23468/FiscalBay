@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router";
 
-import { useCopy } from "~/components/copy-context";
+import { useAction } from "~/components/action";
+import { useCopy, useLinks } from "~/components/copy-context";
 import { DeleteAccount, type DeletionAccess } from "~/components/delete-account";
 import { StatusAlert } from "~/components/status";
 import { useTurnstile } from "~/components/turnstile";
@@ -38,10 +39,10 @@ function SignInAgain() {
   );
 }
 
-/** Avviso di verifica dell'email, finché l'indirizzo non è confermato. */
 /**
  * Email da verificare: nuovo invio del link e, dove la pagina lo prevede, la cancellazione
- * dell'account, che senza email verificata non si raggiunge dalle Impostazioni.
+ * dell'account, che senza email verificata non si raggiunge dalle Impostazioni. Nell'anteprima
+ * entrambi rispondono con la simulazione della pagina, senza raggiungere l'accesso reale.
  */
 export function VerifyEmail({
   email,
@@ -54,31 +55,50 @@ export function VerifyEmail({
 }) {
   const { t: copy, language } = useCopy();
   const t = copy.access;
+  const { preview } = useLinks();
   const turnstile = useTurnstile(turnstileActions.emailLink);
-  return verified ? null : (
-    <StatusAlert tone="warning" title={t.verifyTitle}>
-      <p>{t.verifyBody(email)}</p>
-      <form
-        method="post"
-        action={localizedPath(language, accessPath)}
-        className="mt-2 grid justify-items-start gap-2"
-        onSubmit={turnstile.submit}
-      >
-        {turnstile.field}
-        <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
-          {t.verifyResend}
-        </Button>
-      </form>
+  const action = useAction();
+  const { pathname } = useLocation();
+  if (verified) return null;
+  return (
+    <>
+      <StatusAlert tone="warning" title={t.verifyTitle}>
+        <p>{t.verifyBody(email)}</p>
+        {preview ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-fit"
+            pending={action.pending}
+            onClick={() => action.run("verifica")}
+          >
+            {t.verifyResend}
+          </Button>
+        ) : (
+          <form
+            method="post"
+            action={localizedPath(language, accessPath)}
+            className="mt-2 grid justify-items-start gap-2"
+            onSubmit={turnstile.submit}
+          >
+            {turnstile.field}
+            <Button type="submit" variant="outline" size="sm" name="intent" value="verifica">
+              {t.verifyResend}
+            </Button>
+          </form>
+        )}
+      </StatusAlert>
+      {/* La cancellazione è una riga a sé, come in Dati e privacy: l'avviso chiede solo la conferma. */}
       {deletion ? (
-        <div className="mt-4 border-t pt-4">
+        <div className="border-y py-3">
           <DeleteAccount
             email={email}
             access={deletion}
-            actionPath={localizedPath(language, accessPath)}
+            actionPath={preview ? pathname : localizedPath(language, accessPath)}
           />
         </div>
       ) : null}
-    </StatusAlert>
+    </>
   );
 }
 
@@ -89,8 +109,9 @@ export function AccessNotice({ notice }: { notice: AccessNoticeView | null }) {
   useEffect(() => {
     if (notice) banner.current?.focus();
   }, [notice]);
-  // L'esito resta visibile ma esce dall'indirizzo, così una ricarica non lo ripropone.
-  // Un link di recupero conserva il token e il proprio errore.
+  // L'esito resta visibile ma esce dall'indirizzo, così una ricarica non lo ripropone, anche
+  // quando arriva da un'azione nella stessa pagina. Un link di recupero conserva il token e il
+  // proprio errore.
   useEffect(() => {
     const url = new URL(window.location.href);
     const before = url.search;
@@ -98,7 +119,7 @@ export function AccessNotice({ notice }: { notice: AccessNoticeView | null }) {
     url.searchParams.delete("negozio");
     if (!url.searchParams.has("token")) url.searchParams.delete("error");
     if (url.search !== before) window.history.replaceState(window.history.state, "", url);
-  }, []);
+  }, [notice]);
   if (!notice) return null;
   const elsewhere = notice.source === "negozio" && notice.key === "altro-spazio";
   const signInAgain =

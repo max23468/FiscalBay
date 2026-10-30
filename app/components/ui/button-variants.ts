@@ -9,7 +9,7 @@ const variants = cva(
         default:
           "bg-primary text-primary-foreground shadow-xs shadow-brand-navy/20 inset-shadow-[0_1px_rgb(255_255_255/0.16)] hover:bg-primary-hover active:inset-shadow-none dark:inset-shadow-[0_1px_rgb(255_255_255/0.24)]",
         outline:
-          "border-border bg-card shadow-xs shadow-brand-navy/5 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-muted/40 dark:hover:bg-muted",
+          "border-border bg-card text-foreground shadow-xs shadow-brand-navy/5 hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-muted/40 dark:hover:bg-muted",
         secondary:
           "bg-muted text-foreground hover:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_6%)] aria-expanded:bg-[color-mix(in_oklch,var(--muted),var(--foreground)_6%)]",
         ghost:

@@ -88,3 +88,12 @@ export function isEbayDown(data: Pick<OrdersPageData, "notices">) {
 export function importingNotice(data: Pick<OrdersPageData, "notices">) {
   return data.notices.find((notice) => notice.kind === "importing");
 }
+
+/** Paesi in cui l'italiano è la lingua dell'acquirente. */
+const italianCountries = new Set(["IT", "SM", "VA"]);
+
+/** Lingua del modello per l'acquirente: italiano in Italia, inglese altrove; null senza Paese. */
+export function buyerLanguage(country: string | null | undefined): Language | null {
+  if (!country) return null;
+  return italianCountries.has(country.toUpperCase()) ? "it" : "en";
+}

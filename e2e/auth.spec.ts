@@ -405,7 +405,7 @@ for (const language of ["it", "en"] as const) {
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expect(
         page.getByRole("link", {
-          name: language === "it" ? "Torna a FiscalBay" : "Back to FiscalBay",
+          name: language === "it" ? "Torna all’accesso" : "Back to sign-in",
           exact: true,
         }),
       ).toBeVisible();

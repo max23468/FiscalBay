@@ -1,6 +1,8 @@
 import {
   ClipboardList,
   CreditCard,
+  Globe,
+  Languages,
   Megaphone,
   Settings,
   ShieldCheck,
@@ -9,8 +11,8 @@ import {
 } from "lucide-react";
 
 import type { AppCopy } from "../app-copy";
-import { appHref, type AppLinks } from "../app-links";
-import type { Language } from "../i18n";
+import { appHref, visitParam, type AppLinks } from "../app-links";
+import { languageNames, localizedPath, type Language } from "../i18n";
 
 /**
  * Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app,
@@ -63,4 +65,48 @@ export function areaSection(pathname: string) {
   const parts = pathname.split("/");
   const at = parts.findIndex((part) => part === "app" || part === "anteprima");
   return at < 0 ? "" : (parts[at + 1] ?? "");
+}
+
+/**
+ * Menu dell'avatar dell'area reale e dell'anteprima: le voci dell'account dopo la conferma
+ * dell'email, prima la sola scelta della lingua; in fondo il sito, che con una sessione porterebbe
+ * agli Ordini senza il parametro della visita.
+ */
+export function shellMenu(
+  links: AppLinks,
+  t: AppCopy,
+  {
+    verified,
+    whatsNew = false,
+    language,
+  }: {
+    verified: boolean;
+    whatsNew?: boolean;
+    /** Scelta della lingua prima della conferma: percorso che la riceve e invio. */
+    language: { href: string; onSelect: (language: Language) => void };
+  },
+): AccountMenuItem[][] {
+  const other: Language = links.language === "it" ? "en" : "it";
+  return [
+    ...(verified ? [accountMenu(links, t, whatsNew)] : []),
+    [
+      ...(verified
+        ? []
+        : [
+            {
+              href: language.href,
+              label: languageNames[other],
+              Icon: Languages,
+              lang: other,
+              onSelect: () => language.onSelect(other),
+            },
+          ]),
+      {
+        href: `${localizedPath(links.language)}?${visitParam}=1`,
+        label: t.shell.visitSite,
+        Icon: Globe,
+        reloadDocument: true,
+      },
+    ],
+  ];
 }

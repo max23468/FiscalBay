@@ -33,6 +33,7 @@ import { AppearanceSection } from "./appearance";
 import type { ExportConfiguration } from "../../domain/export-configurations.server";
 import type { ExportFileView } from "../../domain/export-jobs.server";
 import type { ExportContext, ExportTally } from "../../orders/export-scope";
+import type { ExportSample } from "../../orders/export-columns";
 import { ExportSection } from "./export";
 import { NotificationsSection } from "./notifications";
 import { PlanSection, type FreeStoreView, type PurchaseView } from "./plan";
@@ -74,6 +75,8 @@ export interface SettingsPageData {
   exportPeriods: Record<OrderPeriod, ExportTally> | null;
   /** Ambito ricevuto dagli Ordini, con i suoi ordini; null se l'esportazione è aperta dalle Impostazioni. */
   exportContext: ExportContext | null;
+  /** Prime righe del file per l'anteprima tabellare; null fuori dalla sezione Esportazione. */
+  exportSample: ExportSample | null;
   /** Configurazioni dell'esportazione salvate, mostrate soltanto con Premium. */
   exportConfigurations: ExportConfiguration[];
   /** File creati e lavori delle ultime 24 ore ancora utili. */
@@ -251,6 +254,8 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
         configurations={data.exportConfigurations}
         context={data.exportContext}
         periods={data.exportPeriods}
+        sample={data.exportSample}
+        now={data.now}
         files={data.exportFiles}
       />
     ),
@@ -367,7 +372,7 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
         <div className={cn("grid min-w-0 content-start gap-6", !data.section && "max-md:hidden")}>
           <Link
             to={appHref(links, "impostazioni")}
-            className="-ml-1 inline-flex w-fit items-center gap-1 rounded-md py-1 pr-2 text-sm font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring md:hidden"
+            className="-ml-1 inline-flex w-fit items-center gap-1 rounded-md py-1 pr-2 text-sm pointer-coarse:min-h-11 font-medium text-muted-foreground outline-none hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring md:hidden"
           >
             <ChevronLeft aria-hidden="true" className="size-4" />
             {t.settings.title}

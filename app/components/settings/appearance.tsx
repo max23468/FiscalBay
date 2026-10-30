@@ -8,7 +8,7 @@ import { useCopy, useLinks } from "~/components/copy-context";
 import { appHref, languagePath } from "../../app-links";
 import { languageNames, languages } from "../../i18n";
 import { timeZones, zoneLabel, type Theme, type TimeZoneChoice } from "../../preferences";
-import { Group, RadioOption, SaveStatus, SimpleSelect, useAutoSave } from "./controls";
+import { Group, RadioOption, SimpleSelect, useAutoSave } from "./controls";
 
 /** Tema sul documento: `data-theme` impone chiaro o scuro, senza attributo segue il sistema. */
 function applyTheme(theme: Theme) {
@@ -73,30 +73,27 @@ export function AppearanceSection({
   useEffect(() => applyTheme(theme), [theme]);
   return (
     <>
-      <Group title={t.settings.appearance.theme}>
-        <div className="grid gap-2">
-          <RadioGroup
-            value={theme}
-            disabled={!ready || themeState === "saving"}
-            onValueChange={(value) => setTheme(value as Theme)}
-            className="flex flex-wrap gap-5"
-            aria-label={t.settings.appearance.theme}
-          >
-            {(
-              [
-                ["system", t.settings.appearance.themeSystem, SunMoon],
-                ["light", t.settings.appearance.themeLight, Sun],
-                ["dark", t.settings.appearance.themeDark, Moon],
-              ] as const
-            ).map(([value, label, Icon]) => (
-              <RadioOption key={value} value={value}>
-                <Icon aria-hidden="true" className="size-4" />
-                {label}
-              </RadioOption>
-            ))}
-          </RadioGroup>
-          <SaveStatus state={themeState} />
-        </div>
+      <Group title={t.settings.appearance.theme} status={themeState}>
+        <RadioGroup
+          value={theme}
+          disabled={!ready || themeState === "saving"}
+          onValueChange={(value) => setTheme(value as Theme)}
+          className="flex flex-wrap gap-5"
+          aria-label={t.settings.appearance.theme}
+        >
+          {(
+            [
+              ["system", t.settings.appearance.themeSystem, SunMoon],
+              ["light", t.settings.appearance.themeLight, Sun],
+              ["dark", t.settings.appearance.themeDark, Moon],
+            ] as const
+          ).map(([value, label, Icon]) => (
+            <RadioOption key={value} value={value}>
+              <Icon aria-hidden="true" className="size-4" />
+              {label}
+            </RadioOption>
+          ))}
+        </RadioGroup>
         {preview ? (
           <p className="text-sm text-muted-foreground">{t.settings.appearance.themeNote}</p>
         ) : null}
@@ -104,26 +101,25 @@ export function AppearanceSection({
       <Group title={t.settings.appearance.language}>
         <LanguageChoice />
       </Group>
+      {/* Il fuso ha la sola etichetta del campo, con l'esito del salvataggio accanto. */}
       <Group>
-        <div className="grid gap-2">
-          <SimpleSelect
-            label={t.settings.appearance.timeZone}
-            disabled={!ready || zoneState === "saving"}
-            items={[
-              {
-                value: "auto",
-                label: t.settings.appearance.timeZoneAuto(zoneLabel(detectedTimeZone, t)),
-              },
-              ...timeZones.map((zone) => ({
-                value: zone,
-                label: t.settings.appearance.timeZones[zone],
-              })),
-            ]}
-            value={timeZone}
-            onChange={setTimeZone}
-          />
-          <SaveStatus state={zoneState} />
-        </div>
+        <SimpleSelect
+          label={t.settings.appearance.timeZone}
+          status={zoneState}
+          disabled={!ready || zoneState === "saving"}
+          items={[
+            {
+              value: "auto",
+              label: t.settings.appearance.timeZoneAuto(zoneLabel(detectedTimeZone, t)),
+            },
+            ...timeZones.map((zone) => ({
+              value: zone,
+              label: t.settings.appearance.timeZones[zone],
+            })),
+          ]}
+          value={timeZone}
+          onChange={setTimeZone}
+        />
       </Group>
     </>
   );

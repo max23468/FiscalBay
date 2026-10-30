@@ -1,4 +1,6 @@
-import { Badge } from "~/components/ui/badge";
+import { CirclePause } from "lucide-react";
+
+import { StatusBadge } from "~/components/status";
 import type { AuditRow } from "../../domain/admin-audit.server";
 import type { WorkspaceDetail } from "../../domain/admin-directory.server";
 import type { StoreStatus } from "../../domain/stores.server";
@@ -17,8 +19,8 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
       <li key={item.id} className="grid gap-3 rounded-lg border p-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-medium break-words">{item.name}</span>
-          <Badge
-            variant={
+          <StatusBadge
+            tone={
               item.connection === "active"
                 ? "success"
                 : item.connection === "reconnect_required"
@@ -27,14 +29,14 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
             }
           >
             {w.store.connection[item.connection]}
-          </Badge>
+          </StatusBadge>
           {item.pauseReasons.map((reason) => (
-            <Badge key={reason} variant="outline">
+            <StatusBadge key={reason} tone="neutral" icon={CirclePause}>
               {t.labels.pause[reason]}
-            </Badge>
+            </StatusBadge>
           ))}
           {workspace.freeStore?.storeId === item.id && free ? (
-            <Badge variant="info">{w.freeStore}</Badge>
+            <StatusBadge tone="info">{w.freeStore}</StatusBadge>
           ) : null}
         </div>
         <Facts
@@ -49,7 +51,7 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
               : []),
             [
               "ID",
-              <span key="id" className="font-code text-xs break-all">
+              <span key="id" className="font-code text-xs wrap-anywhere">
                 {item.id}
               </span>,
             ],
@@ -65,6 +67,7 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
           <Disclosure
             key={adminPaused ? "resume" : "pause"}
             label={adminPaused ? w.store.resume : w.store.pause}
+            destructive={!adminPaused}
           >
             <ActionForm
               intent={adminPaused ? "store-resume" : "store-pause"}
@@ -117,7 +120,7 @@ function Transfer({ fields }: { fields: Record<string, string> }) {
   const { t } = useAdmin();
   const w = t.workspace;
   return (
-    <Disclosure label={w.store.transfer}>
+    <Disclosure label={w.store.transfer} destructive>
       <ActionForm
         intent="transfer-prepare"
         fields={fields}
@@ -253,12 +256,12 @@ export function WorkspaceView({
           }))}
         />
         <div className="grid gap-2">
-          <Disclosure label={w.grantPremium}>
+          <Disclosure label={w.grantPremium} destructive>
             <ActionForm intent="grant-premium" fields={fields} submit={w.grantPremium} reason>
               <TextField label={w.days} name="giorni" type="number" min={1} max={366} required />
             </ActionForm>
           </Disclosure>
-          <Disclosure label={w.grantLifetime}>
+          <Disclosure label={w.grantLifetime} destructive>
             <ActionForm intent="grant-lifetime" fields={fields} submit={w.grantLifetime} reason>
               <p className="text-sm text-muted-foreground">{w.grantLifetimeHint}</p>
               {workspace.vacantSeats.length > 0 ? (
@@ -301,7 +304,7 @@ export function WorkspaceView({
               t.commerce.offer[item.offer as "monthly" | "annual"] ?? item.offer,
               `${t.labels.subscription[item.status] ?? item.status}${item.cancelAtPeriodEnd ? ` · ${w.cancelAtEnd}` : ""}`,
               date(item.periodEnd),
-              <span key="id" className="font-code text-xs break-all">
+              <span key="id" className="font-code text-xs wrap-anywhere">
                 {item.id}
               </span>,
             ],
@@ -347,7 +350,7 @@ export function WorkspaceView({
               `${item.actor}: ${item.reason}`,
               item.revokedAt ? date(item.revokedAt, "date") : "",
               item.revokedAt ? null : (
-                <Disclosure key="revoke" label={w.revoke}>
+                <Disclosure key="revoke" label={w.revoke} destructive>
                   <ActionForm
                     intent="revoke-history"
                     fields={{ ...fields, estensione: item.id }}

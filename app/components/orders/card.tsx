@@ -404,18 +404,12 @@ export function OrderCard({
         <ItemThumbnail src={order.thumbnail} />
         <ul className="grid min-w-0 content-start gap-1 text-sm leading-snug">
           {shown.map((item, index) => (
-            <li
-              key={item.id}
-              className={cn(
-                "line-clamp-2 text-pretty break-words",
-                index > 0 && "text-muted-foreground",
-              )}
-            >
-              {item.title}
+            <li key={item.id} className={cn("break-words", index > 0 && "text-muted-foreground")}>
+              {/* Il taglio vale per il solo titolo: la quantità resta sempre visibile. */}
+              <span className="line-clamp-2 text-pretty">{item.title}</span>
               {item.quantity > 1 ? (
-                <span className="whitespace-nowrap text-muted-foreground">
-                  {" "}
-                  · {t.orders.quantity}: {item.quantity}
+                <span className="text-muted-foreground">
+                  {t.orders.quantity}: {item.quantity}
                 </span>
               ) : null}
             </li>
@@ -427,7 +421,7 @@ export function OrderCard({
       </div>
       {/* Colonna fiscale larga quanto il riquadro del codice, mai meno della sua misura base:
           codice e copia restano sulla stessa riga e l'azione va sotto il riquadro. */}
-      <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_minmax(14.5rem,max-content)]">
+      <div className="grid content-start gap-x-4 gap-y-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14.5rem]">
         <p className="grid min-w-0 content-start gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{t.order.buyer}</span>
           <span className="text-sm leading-snug font-medium text-pretty [overflow-wrap:anywhere] sm:min-h-10">

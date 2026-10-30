@@ -34,11 +34,12 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   });
 }
 
+// Blu e verde soltanto: ambra e viola significano attenzione e Premium.
 const summaryIcons = [
   { icon: Eye, tone: "blue" },
   { icon: MapPin, tone: "green" },
-  { icon: Fingerprint, tone: "amber" },
-  { icon: Wallet, tone: "violet" },
+  { icon: Fingerprint, tone: "blue" },
+  { icon: Wallet, tone: "green" },
 ] as const;
 
 /** Sicurezza a due livelli (§23): in breve per tutti, nel dettaglio per chi vuole capire. */
@@ -91,7 +92,7 @@ export default function SiteSecurity({ loaderData }: Route.ComponentProps) {
           <ul className="grid gap-3 sm:grid-cols-2">
             {t.not.map((item) => (
               <li key={item} className="flex gap-2 text-pretty">
-                <Ban aria-hidden="true" className="mt-1 size-4 shrink-0 text-danger" />
+                <Ban aria-hidden="true" className="mt-1 size-4 shrink-0 text-muted-foreground" />
                 {item}
               </li>
             ))}

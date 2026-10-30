@@ -769,6 +769,60 @@ describe("percorso ordini", () => {
     ).toBe("2026-09-27T20:00:00.000Z");
   });
 
+  it("gli ordini dallo storico e quelli nuovi consumano lo stesso contatore del ciclo", async () => {
+    await seed();
+    // Storico: creato prima del collegamento e dell'inizio del ciclo, ma nella finestra Free.
+    const orders = [
+      ["o-storico", "2026-08-20T10:00:00.000Z"],
+      ["o-nuovo", now],
+      ["o-oltre", now],
+    ] as const;
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM free_cycles"),
+      env.DB.prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota)
+        VALUES ('c-a', 'w-a', '2026-09-01T00:00:00Z', '2026-10-01T00:00:00Z', 2)`),
+      ...orders.flatMap(([id, creationTime]) => [
+        env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time,
+            last_modified_time, currency, total_minor) VALUES (?1, 's-a', ?1, ?2, ?2, 'EUR', 100)`).bind(
+          id,
+          creationTime,
+        ),
+        insertTaxIdentifiers({ id: `t-${id}`, orderId: id, type: "VAT_ID", value: "SINTETICO" }),
+      ]),
+    ]);
+    const used = () =>
+      env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'")
+        .first<{ used: number }>()
+        .then((row) => row!.used);
+    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(2);
+    expect(await unlockOrders(env.DB, "u-a", ["o-storico"], true)).toEqual({
+      unlocked: ["o-storico"],
+      remaining: 1,
+    });
+    expect(await unlockOrders(env.DB, "u-a", ["o-nuovo"], true)).toEqual({
+      unlocked: ["o-nuovo"],
+      remaining: 0,
+    });
+    expect(await used()).toBe(2);
+    expect(
+      await env.DB.prepare("SELECT order_id, source, cycle_id FROM order_grants ORDER BY order_id")
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([
+      { order_id: "o-nuovo", source: "free_cycle", cycle_id: "c-a" },
+      { order_id: "o-storico", source: "free_cycle", cycle_id: "c-a" },
+    ]);
+    // Al limite il successivo è rifiutato senza consumo, qualunque sia la sua data.
+    await expect(unlockOrders(env.DB, "u-a", ["o-oltre"], true)).rejects.toThrow(
+      "free_quota_exhausted",
+    );
+    expect(await used()).toBe(2);
+    expect(await env.DB.prepare("SELECT count(*) AS n FROM order_grants").first()).toEqual({
+      n: 2,
+    });
+    expect((await orderAllowance(env.DB, "u-a"))?.remaining).toBe(0);
+  });
+
   describe("cicli e promozione del Free", () => {
     const week = 7 * 24 * 60 * 60 * 1000;
     const promotion = (id: string, startsAt: string, endsAt: string, quota = 10) =>

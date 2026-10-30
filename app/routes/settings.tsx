@@ -61,7 +61,7 @@ import {
   telegramSettings,
 } from "../domain/telegram.server";
 import { stripeSecretKey } from "../integrations/stripe.server";
-import { telegramConfigured } from "../integrations/telegram.server";
+import { botUrl, telegramConfigured } from "../integrations/telegram.server";
 import { appUrl, exportFilePath, ordersPath, planPath } from "../app-links";
 import { deletionReauthenticated } from "../domain/account-deletion.server";
 import { correlationId, logFailure } from "../errors";
@@ -91,7 +91,13 @@ import { exportContext } from "../orders/export-scope";
 import { listExportFiles } from "../domain/export-jobs.server";
 import { exportRevision, publishExportFile } from "../domain/export-files.server";
 import { accountArchive, accountArchiveName, accountData } from "../domain/account-export.server";
-import { accountExportScope } from "../orders/export-scope.server";
+import {
+  accountExportScope,
+  onlyAvailable,
+  type ExportFilter,
+} from "../orders/export-scope.server";
+import { exportSampleOrders } from "../domain/order-export.server";
+import type { ExportSample } from "../orders/export-columns";
 import { formatDate } from "../format";
 import { turnstileActions } from "../turnstile";
 import { turnstileFailure } from "../turnstile.server";
@@ -186,7 +192,11 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
       listSignInMethods(env.DB, userId),
       listActiveSessions(env.DB, userId, session.session.id, language, now),
       pendingEmailChange(env.DB, userId, session.user.email),
-      telegramConfigured(env) ? telegramSettings(env.DB, userId, timeZone) : null,
+      telegramConfigured(env)
+        ? telegramSettings(env.DB, userId, timeZone).then(
+            (view) => view && { ...view, botUrl: botUrl(env) },
+          )
+        : null,
       admission(env.DB, userId),
       listExportConfigurations(env.DB, userId),
       listExportFiles(env.DB, userId, now),
@@ -374,38 +384,52 @@ async function exportSection(
   section: boolean,
   premium: boolean,
   now: Date,
-): Promise<Pick<SettingsPageData, "exportContext" | "exportPeriods">> {
+): Promise<Pick<SettingsPageData, "exportContext" | "exportPeriods" | "exportSample">> {
   const userId = area.session.user.id;
   const query = new URL(request.url).searchParams;
   const environment = requestedEbayEnvironment(request);
-  // Soltanto la sezione Esportazione riceve l'ambito degli Ordini.
+  // Soltanto la sezione Esportazione riceve l'ambito degli Ordini e legge le prime righe.
   const fromOrders = section
     ? await accountExportScope(area, query, environment, premium, now)
     : null;
+  const sample = async (filter: ExportFilter): Promise<ExportSample | null> => {
+    if (!section) return null;
+    const read = (scoped: ExportFilter | null) =>
+      exportSampleOrders(
+        env.DB,
+        userId,
+        environment,
+        now,
+        scoped,
+        appCopy[area.language],
+        area.timeZone,
+      );
+    const [all, available] = await Promise.all([read(filter), read(onlyAvailable(filter))]);
+    return { all, available };
+  };
   if (!fromOrders) {
     const starts = orderPeriods.map((period) => orderPeriodStart(period, now).toISOString());
-    const tallies = await visibleOrderTallies(
-      env.DB,
-      userId,
-      environment,
-      now,
-      { criteria: { listedBefore: now.toISOString() } },
-      starts,
-    );
+    const filter = { criteria: { listedBefore: now.toISOString() } };
+    const [tallies, exportSample] = await Promise.all([
+      visibleOrderTallies(env.DB, userId, environment, now, filter, starts),
+      sample(filter),
+    ]);
     return {
       exportContext: null,
       exportPeriods: Object.fromEntries(
         orderPeriods.map((period, index) => [period, tallies[index]!]),
       ) as Record<OrderPeriod, OrderTally>,
+      exportSample,
     };
   }
   const { scope, filter } = fromOrders;
   const single = scope.kind === "orders" && scope.ids.length === 1;
-  const [[estimate], listed] = await Promise.all([
+  const [[estimate], listed, exportSample] = await Promise.all([
     visibleOrderTallies(env.DB, userId, environment, now, filter),
     single
       ? listVisibleOrders(env.DB, userId, 1, environment, now, { ...filter, suggestions: false })
       : [],
+    sample(filter),
   ]);
   return {
     exportContext: exportContext(
@@ -416,6 +440,7 @@ async function exportSection(
       estimate!,
     ),
     exportPeriods: null,
+    exportSample,
   };
 }
 

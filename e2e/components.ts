@@ -55,7 +55,7 @@ export const areas = [
   {
     name: "area reale",
     base: "/app",
-    detail: "collaudo-ordine-sbloccato",
+    detail: testAccount.orderDetail,
     locked: testAccount.orders.locked,
     copied: { id: testAccount.orders.unlocked, value: testAccount.taxCodes.unlocked },
   },

@@ -34,7 +34,7 @@ export function MetricsView({ metrics }: { metrics: ProductMetrics }) {
             to={href(`metriche?giorni=${days}`)}
             aria-current={days === metrics.window.days ? "page" : undefined}
             className={cn(
-              "rounded-full border px-3 py-1 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring",
+              "inline-flex items-center rounded-full border px-3 py-1 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring pointer-coarse:min-h-11",
               days === metrics.window.days
                 ? "border-primary bg-primary text-primary-foreground"
                 : "hover:bg-muted/50",
@@ -51,14 +51,21 @@ export function MetricsView({ metrics }: { metrics: ProductMetrics }) {
         <p className="text-sm text-muted-foreground text-pretty">{m.funnelNote}</p>
         <DataTable
           head={[m.step, m.reached, m.rate, m.base, m.median]}
+          numeric={[1, 2, 4]}
           rows={funnel.steps.map((step) => ({
             key: step.step,
             cells: [
               m.steps[step.step],
-              step.count,
-              step.after ? rate(step.count, step.of) : m.none,
+              <span key="reached" className="font-code">
+                {step.count}
+              </span>,
+              <span key="rate" className="font-code">
+                {step.after ? rate(step.count, step.of) : m.none}
+              </span>,
               step.after ? m.of(step.of, m.steps[step.after]) : m.none,
-              step.medianHours === null ? m.none : m.hours(step.medianHours),
+              <span key="median" className="font-code">
+                {step.medianHours === null ? m.none : m.hours(step.medianHours)}
+              </span>,
             ],
           }))}
         />

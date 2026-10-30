@@ -167,7 +167,7 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2.4fr)]">
           <section
             aria-labelledby="piano-free"
-            className="grid content-start gap-4 rounded-2xl border bg-card p-5 sm:gap-5 sm:p-6"
+            className="flex flex-col gap-4 rounded-2xl border bg-card p-5 sm:gap-5 sm:p-6"
           >
             <h2 id="piano-free" className="text-xl font-semibold">
               {t.free}
@@ -184,7 +184,11 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
                 </li>
               ))}
             </ul>
-            <a href={freeAction.href} {...buttonLink({ variant: "outline", size: "lg" })}>
+            {/* In fondo alla scheda, alla stessa altezza dell'acquisto di Premium accanto. */}
+            <a
+              href={freeAction.href}
+              {...buttonLink({ variant: "outline", size: "lg", className: "mt-auto" })}
+            >
               {freeAction.label}
             </a>
           </section>
@@ -252,7 +256,7 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
         {purchasesOpen ? (
           <section
             aria-labelledby="prova"
-            className="flex gap-4 rounded-2xl border border-premium/30 bg-premium-surface p-5 sm:p-6 dark:bg-premium/10"
+            className="flex gap-4 rounded-2xl border bg-card p-5 sm:p-6"
           >
             <IconTile icon={Gift} tone="violet" size="lg" className="max-sm:size-9" />
             <div className="grid flex-1 gap-2">
@@ -278,7 +282,7 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
             <TableBody>
               {t.rows.map(([label, free, premium]) => (
                 <TableRow key={label}>
-                  <TableHead scope="row" className="font-normal whitespace-normal">
+                  <TableHead scope="row" className="py-2 font-normal whitespace-normal">
                     {label}
                   </TableHead>
                   <TableCell className="whitespace-normal">{cell(free)}</TableCell>

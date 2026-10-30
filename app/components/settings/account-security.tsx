@@ -128,7 +128,8 @@ export function AccountSecurity({
             {settings.security.addAlternative}
           </p>
         ) : null}
-        <ul className="grid divide-y border-y">
+        {/* Il gruppo delle sessioni apre con la propria linea: qui basta quella in testa. */}
+        <ul className="grid divide-y border-t">
           <MethodRow
             label={settings.security.methodPassword}
             status={status(methods.accounts.password)}
@@ -184,6 +185,8 @@ export function AccountSecurity({
                     : passkey.name || settings.security.methodConnected
                 }
               >
+                {/* Come per la password: prima la modifica, poi la rimozione. */}
+                <PasskeyRename passkey={passkey} actionPath={actionPath} />
                 <MethodAction
                   intent="passkey-remove"
                   id={passkey.id}
@@ -193,7 +196,6 @@ export function AccountSecurity({
                 >
                   {settings.security.remove}
                 </MethodAction>
-                <PasskeyRename passkey={passkey} actionPath={actionPath} />
               </MethodRow>
             ))
           )}

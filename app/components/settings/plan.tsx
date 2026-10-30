@@ -188,16 +188,16 @@ function RenewalPeriod({
   const copy = t.settings.plan;
   const other = period === "monthly" ? "annual" : "monthly";
   return (
+    // Come per il portale: il pulsante, poi la spiegazione, nella stessa misura.
     <div className="grid justify-items-start gap-2">
-      {next ? null : <p className="text-sm text-muted-foreground">{copy.switchHint(renewsAt)}</p>}
       <Button
         variant="outline"
-        size="sm"
         pending={action.pending}
         onClick={() => action.run("change-period", { period: next ? period : other })}
       >
         {next ? copy.keepPeriod[period] : copy.switchTo[other]}
       </Button>
+      {next ? null : <p className="text-sm text-muted-foreground">{copy.switchHint(renewsAt)}</p>}
     </div>
   );
 }
@@ -331,14 +331,18 @@ function CheckoutReturn({
   checkout,
   payment,
   trial = false,
+  billingPortal = false,
 }: {
   checkout: PurchaseView["checkout"];
   payment: AccountView["payment"];
   /** Durante la prova la scelta non comporta un pagamento immediato. */
   trial?: boolean;
+  /** Il portale di Stripe completa il pagamento di un rinnovo non riuscito. */
+  billingPortal?: boolean;
 }) {
   const { t, language } = useCopy();
   const zone = useTimeZone();
+  const portal = useAction();
   const copy = t.settings.plan;
   // Il lifetime si paga subito, anche durante la prova o con un abbonamento.
   if (checkout === "lifetime" || (payment?.state === "pending" && payment.lifetime))
@@ -371,9 +375,21 @@ function CheckoutReturn({
   if (payment?.state === "renewal-failed")
     return (
       <StatusAlert tone="warning" title={t.settings.plan.renewalFailedTitle}>
-        {t.settings.plan.renewalFailedBody(
-          formatDate(payment.protectedUntil, language, "dateTime", zone),
-        )}
+        <span className="grid justify-items-start gap-3">
+          {t.settings.plan.renewalFailedBody(
+            formatDate(payment.protectedUntil, language, "dateTime", zone),
+          )}
+          {billingPortal ? (
+            <Button
+              variant="outline"
+              size="sm"
+              pending={portal.pending}
+              onClick={() => portal.run("manage-billing")}
+            >
+              {t.settings.plan.manageBilling}
+            </Button>
+          ) : null}
+        </span>
       </StatusAlert>
     );
   if (checkout === "processing" || payment?.state === "pending")
@@ -431,7 +447,7 @@ function FreeUnlocks({
             </span>
           </p>
           {/* Il valore è già nel testo sopra: la barra è solo visiva. */}
-          <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-muted">
+          <div aria-hidden="true" className="h-2 overflow-hidden rounded-full bg-border">
             <div
               className={cn(
                 "h-full rounded-full",
@@ -501,16 +517,23 @@ export function PlanSection({
   return (
     <>
       <RefundNotice payment={account.payment} />
-      <CheckoutReturn checkout={purchase.checkout} payment={account.payment} />
+      <CheckoutReturn
+        checkout={purchase.checkout}
+        payment={account.payment}
+        billingPortal={billingPortal}
+      />
+      {account.waitlisted ? (
+        <StatusAlert tone="info" title={t.orders.waitlistTitle}>
+          {purchase.state === "closed"
+            ? t.settings.plan.waitlisted
+            : `${t.settings.plan.waitlisted} ${t.settings.plan.waitlistedPurchase}`}
+        </StatusAlert>
+      ) : null}
       <Group title={t.settings.plan.currentPlan}>
         <div className="grid gap-1">
           <p className="text-lg font-semibold">{t.settings.plan.free}</p>
-          {account.waitlisted ? (
-            <p className="text-sm text-muted-foreground">
-              {t.settings.plan.waitlisted}
-              {purchase.state === "closed" ? null : ` ${t.settings.plan.waitlistedPurchase}`}
-            </p>
-          ) : (
+          {/* In lista d'attesa lo spiega l'avviso sopra, lo stesso degli Ordini. */}
+          {account.waitlisted ? null : (
             <p className="text-sm text-muted-foreground">{t.settings.plan.freeSummary}</p>
           )}
         </div>

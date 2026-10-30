@@ -449,6 +449,12 @@ for (const width of [390, 768, 1440]) {
       await expect(page.locator("main")).toContainText(
         it ? "per mantenere il tuo prezzo" : "to keep your price",
       );
+      // Il pagamento richiesto si completa dal portale di Stripe.
+      await expect(
+        page.getByRole("button", {
+          name: it ? "Gestisci abbonamento su Stripe" : "Manage subscription on Stripe",
+        }),
+      ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`renewal-failed-${locale}.png`) });
       await open(page, `${prefix}/anteprima/impostazioni/piano`, "stripe-non-disponibile");
       await page.getByRole("button", { name: it ? "Scegli mensile" : "Choose monthly" }).click();
@@ -548,7 +554,7 @@ for (const width of [390, 768, 1440]) {
       ).toBeVisible();
       // Come sul sito: netto con il totale IVA italiana accanto e posti lifetime rimasti.
       await expect(main).toContainText(
-        it ? "59,78\u00a0€ con IVA italiana al 22%" : "€59.78 with 22% Italian VAT",
+        it ? "59,78\u00a0€ con IVA italiana al\u00a022%" : "€59.78 with 22% Italian VAT",
       );
       await expect(main).toContainText(it ? "Restano 14 posti su 20" : "14 of 20 places left");
       await page.screenshot({ path: testInfo.outputPath(`trial-purchase-${locale}.png`) });
@@ -625,6 +631,53 @@ test("il modulo di assistenza allega il riepilogo dalla casella, con il riferime
   const unchecked = await send();
   expect(unchecked).toMatchObject({ intent: "support", diagnostics: "false" });
   expect(unchecked).not.toHaveProperty("reference");
+});
+
+test.describe("assistenza reale", () => {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+
+  for (const language of ["it", "en"] as const)
+    test(`il modulo dell'area reale segnala gli errori e invia la richiesta ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }) => {
+      const it = language === "it";
+      const id = `support-${language}-${browserName}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      await open(page, `${it ? "" : "/en"}/app/impostazioni/supporto`);
+      const message = page.getByRole("textbox", {
+        name: it ? "Messaggio" : "Message",
+        exact: true,
+      });
+      const send = page.getByRole("button", { name: it ? "Invia" : "Send", exact: true });
+      await send.click();
+      await expect(message).toBeFocused();
+      await expect(message).toHaveAttribute("aria-invalid", "true");
+      await expect(message).toHaveAccessibleDescription(
+        it ? /Scrivi il messaggio/u : /Write your message/u,
+      );
+      await message.fill("Il negozio non si aggiorna.");
+      const sent = page.waitForResponse(
+        (response) =>
+          response.request().method() === "POST" &&
+          response.url().includes("/app/impostazioni/supporto"),
+      );
+      await send.click();
+      expect((await sent).status()).toBe(200);
+      await expect(
+        page.getByText(
+          it
+            ? `Richiesta inviata. Ti risponderemo a ${id}@example.invalid.`
+            : `Request sent. We will reply to ${id}@example.invalid.`,
+        ),
+      ).toBeVisible();
+      await expect(message).toHaveValue("");
+    });
 });
 
 // La conferma si verifica nel pannello di un negozio.
@@ -1189,6 +1242,12 @@ test.describe("notifiche Telegram", () => {
         await expect(
           deliveryAlert(page, failure === "blocked" ? "unreachable" : "blocked", it),
         ).toHaveCount(0);
+        // Con il bot bloccato l'avviso apre la chat per sbloccarlo.
+        await expect(
+          page.getByRole("link", {
+            name: it ? "Apri il bot in Telegram" : "Open the bot in Telegram",
+          }),
+        ).toHaveCount(failure === "blocked" ? 1 : 0);
       }
     });
 

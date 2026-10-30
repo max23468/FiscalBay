@@ -1,5 +1,4 @@
 import { Play, Plus, Store } from "lucide-react";
-import { useState } from "react";
 import { Link } from "react-router";
 
 import { useAction } from "~/components/action";
@@ -10,7 +9,6 @@ import { StatusAlert } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { useCopy } from "~/components/copy-context";
-import { supportEmail } from "../../app-copy";
 import { usePageTiming } from "../../page-timing";
 import type { StoreView } from "../../view-models";
 import { StoreSheet } from "./detail";
@@ -46,27 +44,22 @@ export function StoresPage({
   const [detail] = useConfirmed(saved.detail ? [saved.detail] : [], confirmation);
   const data = { ...saved, stores, detail: detail ?? null };
   usePageTiming("stores", timing);
-  // «Già collegato a un altro account» è l'esito di un tentativo, non uno stato della pagina.
-  const [attempted, setAttempted] = useState(false);
   const premium = data.account.plan === "premium";
-  const connect = <ConnectButton data={data} onElsewhere={() => setAttempted(true)} />;
+  const connect = <ConnectButton data={data} />;
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
-        <PageTitle icon={Store} tone="teal">
+        {/* Come negli Ordini, la riga che vale per tutto lo spazio sta sotto il titolo. */}
+        <PageTitle
+          icon={Store}
+          tone="teal"
+          description={premium ? null : <FreeNotes stores={data.stores} />}
+        >
           {t.stores.title}
         </PageTitle>
         {data.stores.length > 0 ? connect : null}
       </header>
       {notice}
-      {data.elsewhere && attempted ? (
-        <StatusAlert tone="warning" title={t.stores.elsewhereTitle}>
-          {t.stores.elsewhereBody}
-          <a href={`mailto:${supportEmail}`} className="block underline underline-offset-4">
-            {t.common.contactSupport}: {supportEmail}
-          </a>
-        </StatusAlert>
-      ) : null}
       {data.ebayDown.length > 0 ? (
         <StatusAlert tone="warning" title={ebayDownText(data, t)} />
       ) : null}
@@ -78,7 +71,6 @@ export function StoresPage({
         />
       ) : (
         <>
-          {premium ? null : <FreeNotes stores={data.stores} />}
           <InactivityNotice stores={data.stores} />
           {data.stores.length === 1 ? (
             <StoreOverview store={data.stores[0]!} data={data} />
@@ -99,11 +91,7 @@ export function StoresPage({
 function FreeNotes({ stores }: { stores: StoreView[] }) {
   const { t } = useCopy();
   if (!stores.some((store) => store.pauseReason === "plan")) return null;
-  return (
-    <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
-      {t.stores.freeLimit}
-    </p>
-  );
+  return <p className="text-sm text-pretty text-muted-foreground">{t.stores.freeLimit}</p>;
 }
 
 /**
@@ -133,7 +121,7 @@ function InactivityNotice({ stores }: { stores: StoreView[] }) {
 }
 
 /** Collega: nell'area reale apre la schermata preparatoria, nell'anteprima simula l'esito. */
-function ConnectButton({ data, onElsewhere }: { data: StoresPageData; onElsewhere: () => void }) {
+function ConnectButton({ data }: { data: StoresPageData }) {
   const { t } = useCopy();
   const action = useAction();
   if (data.connectHref && !data.ebayDown.includes("production")) {
@@ -147,7 +135,7 @@ function ConnectButton({ data, onElsewhere }: { data: StoresPageData; onElsewher
   return (
     <Button
       disabled={data.ebayDown.includes("production")}
-      onClick={() => (data.elsewhere ? onElsewhere() : action.run("store-connect"))}
+      onClick={() => action.run("store-connect")}
     >
       <Plus aria-hidden="true" data-icon="inline-start" />
       {t.stores.connect}

@@ -1,5 +1,7 @@
+import { CirclePause } from "lucide-react";
 import { Form, Link } from "react-router";
 
+import { StatusBadge } from "~/components/status";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -118,7 +120,7 @@ export function AccountsView({
 function StoreState({ row }: { row: StoreRow }) {
   const { t } = useAdmin();
   const l = t.labels;
-  const [tone, label] = row.removed
+  const [tone, label, icon] = row.removed
     ? (["neutral", l.storeState.removed] as const)
     : row.disconnected
       ? (["neutral", l.storeState.disconnected] as const)
@@ -130,12 +132,15 @@ function StoreState({ row }: { row: StoreRow }) {
               `${l.storeState.paused}: ${row.pauses
                 .map((pause) => l.pause[pause as keyof typeof l.pause] ?? pause)
                 .join(", ")}`,
+              CirclePause,
             ] as const)
           : (["success", l.storeState.active] as const);
   return (
     <span className="flex flex-wrap gap-1">
-      <Badge variant={tone}>{label}</Badge>
-      {row.syncing ? <Badge variant="info">{t.stores.syncing}</Badge> : null}
+      <StatusBadge tone={tone} icon={icon}>
+        {label}
+      </StatusBadge>
+      {row.syncing ? <StatusBadge tone="info">{t.stores.syncing}</StatusBadge> : null}
     </span>
   );
 }
@@ -176,7 +181,7 @@ export function StoresView({
             <Link
               key="workspace"
               to={href(`spazi/${encodeURIComponent(row.workspaceId)}`)}
-              className="break-all text-primary underline-offset-4 hover:underline"
+              className="text-primary underline-offset-4 wrap-anywhere hover:underline"
             >
               {row.ownerEmail ?? row.workspaceId}
             </Link>,
