@@ -886,6 +886,37 @@ describe("Lifetime e concessioni", () => {
     expect(await grant("w-b")).toBe("sold-out");
   });
 
+  it("riprende il posto se Stripe non ha più la vendita o non c'è una vendita da rileggere", async () => {
+    const stripe = stripeAccount();
+    vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-b', 'Altro', ?)",
+      ).bind(now),
+      env.DB.prepare(`INSERT INTO lifetime_allocations (slot, status, provider_reference,
+          activated_at, created_at) VALUES (1, 'active', 'cs_sparita', ?1, ?1),
+          (2, 'active', NULL, ?1, ?1)`).bind(now),
+    ]);
+    const recover = (workspaceId: string, slot: number) =>
+      grantLifetimeConcession(
+        env,
+        { workspaceId, author: "owner", reason: "Ritorno", slot },
+        at(now),
+      );
+    // Una sessione sparita non prova un rimborso.
+    stripe.state.missing = true;
+    expect(await recover("w-a", 1)).toBe("done");
+    // Un posto senza vendita registrata non chiede nulla a Stripe.
+    stripe.state.down = true;
+    stripe.requests.length = 0;
+    expect(await recover("w-b", 2)).toBe("done");
+    expect(stripe.requests.filter((request) => request.includes("/v1/checkout/"))).toEqual([]);
+    expect(await allocations()).toEqual([
+      expect.objectContaining({ slot: 1, workspace_id: "w-a" }),
+      expect.objectContaining({ slot: 2, workspace_id: "w-b" }),
+    ]);
+  });
+
   it("concede Premium dopo la copertura in corso e ne rinvia il rinnovo", async () => {
     const stripe = stripeAccount();
     vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
