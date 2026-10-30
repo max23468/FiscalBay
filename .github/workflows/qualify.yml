@@ -140,7 +140,8 @@ jobs:
     container:
       image: mcr.microsoft.com/playwright:v${{ needs.select.outputs.playwright }}-noble
       options: --ipc=host
-    timeout-minutes: 20
+    # Una partizione della sorgente arriva a circa venti minuti sul runner.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
