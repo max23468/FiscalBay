@@ -24,7 +24,10 @@ import { recordOrderObservation } from "../app/domain/order-import.server";
 import { listStores } from "../app/domain/stores.server";
 import { applyFreePlans } from "../app/domain/free-store.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
-import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
+import {
+  saveStoreCredentials,
+  sealToken,
+} from "../app/integrations/ebay/seller-credentials.server";
 import {
   insertCredentials,
   insertEntitlement,
@@ -67,6 +70,11 @@ describe("acquisizione con il client", () => {
       await options.before?.(url, init);
       const failed = options.fail?.(url, init);
       if (failed) return failed;
+      // La sottoscrizione agli ordini trova l'ingresso senza destinazione e si ferma.
+      if (url.pathname === "/identity/v1/oauth2/token")
+        return Response.json({ access_token: "token-applicazione" });
+      if (url.pathname === "/commerce/notification/v1/destination")
+        return Response.json({ destinations: [] });
       const call = new Headers(init?.headers).get("x-ebay-api-call-name");
       if (call === "GetStore") return new Response(storeResponse);
       if (call === "GetUser")
@@ -1683,11 +1691,19 @@ describe("acquisizione con il client", () => {
         headers.get("authorization")?.slice("Bearer ".length) ?? headers.get("x-ebay-api-iaf-token")
       );
     };
+    // Chiamate fatte con il token del negozio, senza quelle dell'applicazione.
     const perStore = (fetcher: ReturnType<typeof ebay>) =>
       Object.fromEntries(
-        Object.entries(Object.groupBy(fetcher.mock.calls, ([, init]) => tokenOf(init) ?? "")).map(
-          ([token, list]) => [token, list!.length],
-        ),
+        Object.entries(
+          Object.groupBy(
+            fetcher.mock.calls.filter(
+              ([, init]) =>
+                !new Headers(init?.headers).get("authorization")?.startsWith("Basic ") &&
+                tokenOf(init) !== "token-applicazione",
+            ),
+            ([, init]) => tokenOf(init) ?? "",
+          ),
+        ).map(([token, list]) => [token, list!.length]),
       );
     const attempted = async () =>
       Object.fromEntries(
@@ -1825,6 +1841,112 @@ describe("acquisizione con il client", () => {
         "premium-arretrato",
         "free-arretrato",
       ]);
+    });
+
+    it("dopo la lettura sottoscrive gli ordini una volta per consenso e riprova dopo un giorno", async () => {
+      const outcome = () =>
+        env.DB.prepare(
+          "SELECT order_events, order_events_checked_at FROM ebay_store_credentials WHERE store_id = 's-a'",
+        ).first();
+      const notificationCalls = (fetcher: ReturnType<typeof ebay>) =>
+        fetcher.mock.calls
+          .map(([input, init]) => `${init?.method ?? "GET"} ${new URL(String(input)).pathname}`)
+          .filter((call) => call.includes("/commerce/notification/"));
+      let created = 503;
+      const provider = () =>
+        ebay({
+          fail: (url, init) => {
+            if (url.pathname.endsWith("/destination"))
+              return Response.json({
+                destinations: [
+                  {
+                    destinationId: "locale",
+                    status: "ENABLED",
+                    deliveryConfig: { endpoint: "http://localhost:5173/webhooks/ebay" },
+                  },
+                ],
+              });
+            if (url.pathname.endsWith("/subscription") && init?.method === "POST") {
+              // Il token del venditore, non quello dell'applicazione.
+              expect(new Headers(init.headers).get("authorization")).toBe("Bearer token-s-a");
+              return new Response(null, { status: created });
+            }
+          },
+        });
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        // eBay non risponde: la lettura riesce, il tentativo resta registrato e non si ripete
+        // prima di un giorno.
+        const failing = provider();
+        await cronTurn(env, failing, minutes(0));
+        expect(await state()).toMatchObject({ polled_at: minutes(0).toISOString() });
+        expect(notificationCalls(failing)).toEqual([
+          "GET /commerce/notification/v1/destination",
+          "POST /commerce/notification/v1/subscription",
+        ]);
+        expect(await outcome()).toEqual({
+          order_events: null,
+          order_events_checked_at: minutes(0).toISOString(),
+        });
+        expect(
+          errors.mock.calls.filter(([line]) => String(line).includes('"operation":"order_events"')),
+        ).toHaveLength(1);
+        await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+          .bind(minutes(60).toISOString())
+          .run();
+        const early = provider();
+        await cronTurn(env, early, minutes(60));
+        expect(notificationCalls(early)).toEqual([]);
+
+        // Il giorno dopo la sottoscrizione riesce e non si ripete più per questo consenso.
+        created = 201;
+        const later = provider();
+        await cronTurn(env, later, minutes(24 * 60 + 60));
+        expect(notificationCalls(later)).toHaveLength(2);
+        expect(await outcome()).toMatchObject({ order_events: "subscribed" });
+        await env.DB.prepare(
+          "UPDATE ebay_store_credentials SET order_events_checked_at = '2026-01-01T00:00:00.000Z'",
+        ).run();
+        await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+          .bind(minutes(3 * 24 * 60).toISOString())
+          .run();
+        const done = provider();
+        await cronTurn(env, done, minutes(3 * 24 * 60));
+        expect(notificationCalls(done)).toEqual([]);
+
+        // Un nuovo consenso azzera l'esito: il ricollegamento riprova subito.
+        await saveStoreCredentials(
+          env,
+          "s-a",
+          {
+            accessToken: "token-s-a",
+            accessExpiresAt: minutes(4 * 24 * 60 + 120).toISOString(),
+            refreshToken: "refresh",
+            refreshExpiresAt: minutes(400 * 24 * 60).toISOString(),
+          },
+          minutes(4 * 24 * 60).toISOString(),
+        );
+        expect(await outcome()).toEqual({ order_events: null, order_events_checked_at: null });
+
+        // Un consenso senza lo scope delle notifiche resta senza eventi fino al ricollegamento.
+        created = 403;
+        await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+          .bind(minutes(4 * 24 * 60 + 1).toISOString())
+          .run();
+        await cronTurn(env, provider(), minutes(4 * 24 * 60 + 1));
+        expect(await outcome()).toMatchObject({ order_events: "unauthorized" });
+        await env.DB.prepare(
+          "UPDATE ebay_store_credentials SET order_events_checked_at = '2026-01-01T00:00:00.000Z'",
+        ).run();
+        await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+          .bind(minutes(6 * 24 * 60).toISOString())
+          .run();
+        const unauthorized = provider();
+        await cronTurn(env, unauthorized, minutes(6 * 24 * 60));
+        expect(notificationCalls(unauthorized)).toEqual([]);
+      } finally {
+        errors.mockRestore();
+      }
     });
 
     it("il cron legge con la cadenza Free e l'evento non attende il turno", async () => {

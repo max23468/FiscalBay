@@ -27,7 +27,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           "FiscalBay legge gli ordini dei negozi eBay che colleghi e ti mostra il Codice Fiscale e la Partita IVA dell’acquirente quando eBay li rende disponibili, con ricerca, export e, con Premium, notifiche su Telegram.",
           {
             items: [
-              "FiscalBay chiede a eBay soltanto di leggere gli ordini e l’identità del negozio. Non modifica ordini, annunci o messaggi e non contatta gli acquirenti.",
+              "FiscalBay chiede a eBay soltanto di leggere gli ordini e l’identità del negozio e di avvisarlo dei nuovi ordini. Non modifica ordini, annunci o messaggi e non contatta gli acquirenti.",
               "Il dato fiscale c’è soltanto quando l’acquirente lo ha indicato ed eBay lo fornisce. FiscalBay non lo inventa, non lo corregge e non ne verifica la correttezza.",
               "FiscalBay non emette fatture e non sostituisce il tuo gestionale, il software di fatturazione o il tuo consulente. Resti responsabile dei tuoi adempimenti fiscali.",
             ],
@@ -323,7 +323,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           "FiscalBay reads the orders of the eBay stores you connect and shows you the buyer’s Italian tax code (Codice Fiscale) and VAT number when eBay makes them available, with search, export and, with Premium, Telegram notifications.",
           {
             items: [
-              "FiscalBay only asks eBay to read orders and the store identity. It does not change orders, listings or messages and does not contact buyers.",
+              "FiscalBay only asks eBay to read orders and the store identity and to notify it of new orders. It does not change orders, listings or messages and does not contact buyers.",
               "The tax data is there only when the buyer provided it and eBay supplies it. FiscalBay does not invent, correct or verify it.",
               "FiscalBay does not issue invoices and does not replace your accounting software, invoicing software or adviser. You remain responsible for your tax obligations.",
             ],

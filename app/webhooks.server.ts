@@ -305,11 +305,11 @@ export async function receiveWebhook(
         WHERE s.ebay_account_id = ? AND s.ebay_environment = ? AND s.disconnected_at IS NULL AND c.rejected_at IS NULL`)
           .bind(event.store_id, event.environment)
           .first<{ id: string; granted_at: string }>();
-      if (!store || Date.parse(event.event_at) < Date.parse(store.granted_at)) {
-        // Una revoca senza negozio attivo, o precedente al consenso corrente, non ha effetti.
-        if (event.topic === "AUTHORIZATION_REVOCATION") return new Response(null, { status: 204 });
-        throw new InvalidWebhook(409);
-      }
+      // Un evento senza negozio attivo, o precedente al consenso corrente, non ha effetti: la
+      // sottoscrizione di un venditore scollegato può consegnare ancora, e un rifiuto farebbe
+      // ritentare eBay. La lettura periodica resta la fonte degli ordini.
+      if (!store || Date.parse(event.event_at) < Date.parse(store.granted_at))
+        return new Response(null, { status: 204 });
       event.store_id = store.id;
       event.consent_granted_at = store.granted_at;
     }

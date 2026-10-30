@@ -87,7 +87,9 @@ export async function saveStoreCredentials(
        refresh_expires_at = excluded.refresh_expires_at,
        granted_at = excluded.granted_at,
        refreshed_at = NULL,
-       rejected_at = NULL`,
+       rejected_at = NULL,
+       order_events = NULL,
+       order_events_checked_at = NULL`,
   )
     .bind(
       storeId,

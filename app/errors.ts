@@ -66,6 +66,7 @@ export function logFailure(input: {
     | "webhook_consumer"
     | "token_refresh"
     | "order_acquisition"
+    | "order_events"
     | "account_email"
     | "account_deletion"
     | "ebay_account_deletion"

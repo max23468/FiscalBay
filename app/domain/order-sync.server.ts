@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { acquireOrders, storeAccess, type ActiveStore } from "./order-acquisition.server";
+import { ensureOrderEvents } from "./order-events.server";
 import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-context.server";
 import { servedSql } from "./admission.server";
 import { switchOnSql } from "./service-settings.server";
@@ -382,17 +383,21 @@ async function serveStore(
       );
       // Attesa già nota: nessuna chiamata e nessun errore da registrare.
       if (wait > 0) return { delaySeconds: Math.min(maxRetryDelaySeconds, wait), scope: "origin" };
+      const access = await storeAccess(env, store, fetcher, now);
       const result = await acquireOrders({
         db: env.DB,
         storeId: store.store_id,
         grantedAt: store.granted_at,
-        access: await storeAccess(env, store, fetcher, now),
+        access,
         now,
         budget: { ...storeBudget },
       });
       if (result === "busy")
         // Stryker disable next-line StringLiteral: lo scopo conta soltanto nel confronto con «origin».
         return { delaySeconds: 60, scope: "store" };
+      // Con il consenso appena usato, una volta per consenso: gli ordini nuovi arrivano anche
+      // come evento, fuori dalla cadenza del piano.
+      await ensureOrderEvents(env, store, access, now);
       // Le notifiche dello spazio partono appena la lettura ha scritto gli ordini; il compito
       // periodico riprende quelle rimaste.
       await deliverTelegram(env, fetcher, now, { storeId: store.store_id }).catch(

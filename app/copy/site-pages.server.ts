@@ -207,7 +207,7 @@ const it = {
     summary: [
       {
         title: "Solo lettura",
-        body: "FiscalBay chiede a eBay soltanto di leggere gli ordini e l’identità del negozio.",
+        body: "FiscalBay chiede a eBay soltanto di leggere gli ordini e l’identità del negozio e di avvisarlo dei nuovi ordini.",
       },
       {
         title: "Dati nell’Unione Europea",
@@ -226,7 +226,7 @@ const it = {
     details: [
       {
         title: "Collegamento a eBay",
-        body: "Colleghi il negozio dalla pagina di autorizzazione di eBay, senza dare la tua password a FiscalBay. I permessi sono di sola lettura: FiscalBay non modifica ordini, annunci o messaggi. I token di accesso sono conservati cifrati e puoi revocarli scollegando il negozio o dal tuo account eBay.",
+        body: "Colleghi il negozio dalla pagina di autorizzazione di eBay, senza dare la tua password a FiscalBay. FiscalBay legge ordini e identità del negozio e riceve da eBay l’avviso dei nuovi ordini: non modifica ordini, annunci o messaggi. I token di accesso sono conservati cifrati e puoi revocarli scollegando il negozio o dal tuo account eBay.",
       },
       {
         title: "Chi vede i tuoi dati",
@@ -521,7 +521,7 @@ const en: SitePagesCopy = {
     summary: [
       {
         title: "Read-only",
-        body: "FiscalBay only asks eBay to read your orders and your store’s identity.",
+        body: "FiscalBay only asks eBay to read your orders and your store’s identity, and to notify it of new orders.",
       },
       {
         title: "Data in the European Union",
@@ -540,7 +540,7 @@ const en: SitePagesCopy = {
     details: [
       {
         title: "Connecting to eBay",
-        body: "You connect your store from eBay’s authorisation page, without giving your password to FiscalBay. Permissions are read-only: FiscalBay does not change orders, listings or messages. Access tokens are stored encrypted, and you can revoke them by disconnecting the store or from your eBay account.",
+        body: "You connect your store from eBay’s authorisation page, without giving your password to FiscalBay. FiscalBay reads orders and your store’s identity and receives eBay’s notice of new orders: it does not change orders, listings or messages. Access tokens are stored encrypted, and you can revoke them by disconnecting the store or from your eBay account.",
       },
       {
         title: "Who sees your data",

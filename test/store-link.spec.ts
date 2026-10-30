@@ -419,6 +419,7 @@ describe("collegamento negozio eBay", () => {
       "https://api.ebay.com/oauth/api_scope",
       "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
       "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+      "https://api.ebay.com/oauth/api_scope/commerce.notification.subscription",
     ]);
     expect(authorize.searchParams.get("code_challenge_method")).toBe("S256");
     expect(authorize.searchParams.get("locale")).toBe("it-IT");
