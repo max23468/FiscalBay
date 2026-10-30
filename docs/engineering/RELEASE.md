@@ -92,6 +92,13 @@ Il workflow Production con `prova=true` conserva un artefatto `candidate-<tree>`
 
 La ricerca del candidato ammette soltanto artefatti non scaduti dello stesso tree, dal job di certificazione riuscito del workflow Production del repository. Un errore successivo di deploy non annulla la qualifica locale; prima del riuso si ricontrolla il manifest Production. La pubblicazione reale conserva readiness, checkpoint, via sul commit, migration, verifica provider, collaudo remoto e release. Una prova non distribuisce né autorizza Production.
 
+<a id="release-candidate"></a>
+### Release candidate
+
+Una versione `2.x.y-rc.N` in cima a `CHANGELOG.md` congela `develop` ([D233](../DECISION_REGISTER.md)): il passo `Check release freeze` di `Verify` rilegge il titolo della PR dall'API e rifiuta `feat` e le modifiche incompatibili (`!`). Il congelamento termina quando in cima al changelog compare una versione che non è una RC. La modifica del titolo non avvia la CI: vale dalla run successiva della PR.
+
+La RC è la testa di `develop` con l'artefatto dell'ultimo deploy test confermato. Una PR che dopo la sezione della RC cambia ciò che si distribuisce aggiunge nella stessa PR la sezione `rc.N+1` con la correzione; documenti e prove non cambiano la RC. `release:cycle rc` la identifica in sola lettura: versione, commit e tree della testa, commit, SHA256 dell'artefatto e versione del Worker del deploy, run CI, migration applicate e hash di `cloudflare.config.ts`. Rifiuta l'identità senza gate, deploy e readback confermati nella run, con modifiche da distribuire dopo il deploy o dopo la sezione della versione, con una versione attiva sul test diversa dalla ricevuta o senza la qualifica completa del tree della testa, che si ottiene con `release:cycle candidate --ref develop`. Ricevuta del deploy e qualifica restano disponibili sette giorni. La RC non crea tag né GitHub Release.
+
 <a id="contenuto-delle-pr"></a>
 ### Contenuto delle PR
 
@@ -100,10 +107,11 @@ Contenuto, impatto sul piano e collaudo di ogni PR seguono `AGENTS.md`; qui i ca
 <a id="ciclo-operativo"></a>
 ### Ciclo operativo
 
-Il comando si esegue soltanto nel mandato corrispondente: `Pubblica` usa `pr`, `Promuovi` usa `production` dopo la promozione su `main`. `status` è in lettura; gli altri comandi possono modificare PR, Git o avviare workflow. Richiedono un checkout pulito. I cicli su oggetti diversi (due PR, una PR e una ripresa) procedono insieme e ne resta uno solo per oggetto. Due blocchi brevi, condivisi nel clone, serializzano soltanto fetch, worktree e pulizia dei branch locali e il merge: una PR alla volta entra in `develop`, e se nel frattempo la base è avanzata su file della PR o globali la PR si aggiorna e si riqualifica. Il blocco di un processo terminato si recupera da solo.
+Il comando si esegue soltanto nel mandato corrispondente: `Pubblica` usa `pr`, `Promuovi` usa `production` dopo la promozione su `main`. `status` e `rc` sono in lettura; gli altri comandi possono modificare PR, Git o avviare workflow. Richiedono un checkout pulito. I cicli su oggetti diversi (due PR, una PR e una ripresa) procedono insieme e ne resta uno solo per oggetto. Due blocchi brevi, condivisi nel clone, serializzano soltanto fetch, worktree e pulizia dei branch locali e il merge: una PR alla volta entra in `develop`, e se nel frattempo la base è avanzata su file della PR o globali la PR si aggiorna e si riqualifica. Il blocco di un processo terminato si recupera da solo.
 
 ```sh
 pnpm release:cycle status <run>
+pnpm release:cycle rc
 pnpm release:cycle pr <numero>
 pnpm release:cycle cleanup
 pnpm release:cycle candidate --sha <sha-completo-su-main>

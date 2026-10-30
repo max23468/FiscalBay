@@ -14,14 +14,18 @@ import { needsDeploy } from "./classify-changes.mjs";
 import { ghJson } from "./lib/provider.mjs";
 
 /** Prima run, dalla più recente, con il job di deploy test riuscito su un antenato di HEAD. */
-export function lastDeployed(runs, jobsOf, isAncestor) {
+export function lastDeployRun(runs, jobsOf, isAncestor) {
   for (const run of runs) {
     if (!["push", "workflow_dispatch"].includes(run.event)) continue;
-    const deploy = jobsOf(run).find(({ name }) => name === "Deploy test");
-    if (deploy?.conclusion === "success" && isAncestor(run.head_sha)) return run.head_sha;
+    const jobs = jobsOf(run);
+    const deploy = jobs.find(({ name }) => name === "Deploy test");
+    if (deploy?.conclusion === "success" && isAncestor(run.head_sha)) return { run, jobs };
   }
   return undefined;
 }
+
+export const lastDeployed = (runs, jobsOf, isAncestor) =>
+  lastDeployRun(runs, jobsOf, isAncestor)?.run.head_sha;
 
 /**
  * Run più recente, riuscita, antenata di HEAD e successiva all'ultimo deploy, senza modifiche da

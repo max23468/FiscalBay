@@ -25,6 +25,8 @@ import {
   rollbackRequired,
   assertConfirmable,
   deployReport,
+  candidateVersion,
+  assertFreeze,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
 
@@ -469,5 +471,31 @@ describe("comandi della pubblicazione", () => {
       "deployed=true\nversion=v2\nrollback-compatible=false\nprevious=\n",
     );
     assert.match(deployReport(state).summary, /Commit s; tree t; SHA256 d; versione v2; schema 2/u);
+  });
+
+  it("con una RC in cima al changelog ammette soltanto correzioni su develop", () => {
+    const frozen = "# Changelog\n\n## [2.0.0-rc.2]\n\nCorrezione.\n\n## [2.0.0-rc.1]\n\nRC.\n";
+    assert.equal(candidateVersion(frozen), "2.0.0-rc.2");
+    assert.equal(candidateVersion("## 2.0.0-rc.1 - 2026-10-30\n"), "2.0.0-rc.1");
+    // Una versione stabile o alpha in cima non congela, e nemmeno un changelog senza versioni.
+    for (const open of ["## [2.0.0]\n", "## [2.0.0-alpha.3]\n", "# Changelog\n"])
+      assert.equal(candidateVersion(open), undefined);
+    for (const title of [
+      "fix: corregge il filtro",
+      "fix(ordini): corregge il filtro",
+      "docs: aggiorna il piano",
+      "chore(deps): aggiorna vitest",
+      "ci: rilegge il titolo",
+    ])
+      assert.equal(assertFreeze(frozen, title), "2.0.0-rc.2");
+    for (const title of [
+      "feat: nuova esportazione",
+      "feat(export)!: nuovo formato",
+      "  feat(ordini): filtri",
+      "fix!: cambia il contratto",
+      "refactor(api)!: rinomina",
+    ])
+      assert.throws(() => assertFreeze(frozen, title), /2\.0\.0-rc\.2 congelata/u);
+    assert.equal(assertFreeze("## [2.0.0-alpha.1]\n", "feat: nuova funzione"), undefined);
   });
 });

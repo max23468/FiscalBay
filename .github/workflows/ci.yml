@@ -150,6 +150,18 @@ jobs:
           PR_BODY="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.body // ""')" \
             node scripts/release/release.mjs review --base "${BASE_SHA}"
 
+      # Con una release candidate in cima al changelog `develop` accetta soltanto correzioni.
+      # Il titolo, che diventa il commit integrato, si rilegge dall'API come il corpo.
+      - name: Check release freeze
+        if: github.event_name == 'pull_request' && github.base_ref == 'develop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          PR_TITLE="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.title')" \
+            node scripts/release/release.mjs freeze
+
       - name: Run selected CI gate
         if: steps.reuse.outputs.run-id == ''
         env:
