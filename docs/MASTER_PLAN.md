@@ -1988,6 +1988,8 @@ Verificare Chromium/WebKit, viewport, touch/tastiera, IT/EN, scuro e testi lungh
 
 **Criterio di completamento:** Layout e funzioni coerenti; mockup non sostituisce prova del software. Nessuna funzione assente viene annunciata come già attiva.
 
+Avanzamento: il 2026-10-30 la matrice completa delle pagine sul codice della RC passa in Chromium e WebKit, IT/EN, 390, 768 e 1280 px e nei due temi, con tastiera, overflow e axe (2132 prove), testi lunghi nello scenario «ordinario» e tocco nelle prove di shell e Ordini; le schermate di sito, Ordini, Negozi e Impostazioni non mostrano difetti e il sito annuncia soltanto funzioni presenti. Resta la vista su un dispositivo reale dell'owner, da svolgere con i percorsi di [M8-03](#m8-03).
+
 <a id="m8-05"></a>
 #### M8-05 · Correzioni e decisione RC
 
