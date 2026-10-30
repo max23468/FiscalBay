@@ -4,6 +4,7 @@ import {
   orderObservationSchema,
   type OrderObservation,
 } from "../../domain/order-observation.server";
+import { escapeMarkup } from "../../markup";
 import { parseMinor } from "../../money";
 
 /**
@@ -59,11 +60,9 @@ function xmlField(block: string, tag: string): string | null {
   return match ? xmlText(match[1]!) : null;
 }
 
+/** Valore di un elemento della richiesta, con anche l'apostrofo. */
 function escapeXml(value: string): string {
-  return value.replace(
-    /[<>&"']/gu,
-    (char) => `&${Object.keys(xmlEntities).find((name) => xmlEntities[name] === char)};`,
-  );
+  return escapeMarkup(value, /[&<>"']/gu);
 }
 
 /** Rifiuta una risposta Trading che non si deve neppure analizzare. */

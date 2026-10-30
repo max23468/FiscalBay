@@ -60,45 +60,19 @@ import {
   insertStorePause,
   insertTaxIdentifiers,
   insertWorkspace,
+  later,
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
 import { appUrl } from "../app/app-links";
 import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
 import { callRoute, routePage } from "./fixtures/route-fixtures";
+import { fakeBot as bot, type BotCall } from "./fixtures/telegram-fixtures";
 
 const origin = "http://localhost:5173";
 const secret = env.TELEGRAM_WEBHOOK_SECRET!;
 const send = vi.fn<Queue["send"]>().mockResolvedValue(queued);
 const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) };
-const later = (minutes: number) => new Date(Date.parse(now) + minutes * 60_000);
-
-type BotCall = { method: string; params: Record<string, unknown> };
-
-/** Bot API simulata: registra le chiamate e risponde come Telegram, o con `reply`. */
-function bot(reply?: (call: BotCall) => Response | undefined) {
-  const calls: BotCall[] = [];
-  const fetcher = vi.fn<typeof fetch>(async (input, init) => {
-    const url = String(input);
-    expect(url.startsWith(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/`)).toBe(true);
-    expect(init?.method).toBe("POST");
-    expect(new Headers(init?.headers).get("content-type")).toBe("application/json");
-    const call = {
-      method: url.split("/").at(-1)!,
-      params: JSON.parse(String(init?.body)) as Record<string, unknown>,
-    };
-    calls.push(call);
-    const custom = reply?.(call);
-    if (custom) return custom;
-    if (call.method === "getChat")
-      return Response.json({ ok: true, result: { id: 1, type: "private", username: "venditore" } });
-    if (["answerCallbackQuery", "setMyCommands", "deleteMyCommands"].includes(call.method))
-      return Response.json({ ok: true, result: true });
-    return Response.json({ ok: true, result: { message_id: calls.length } });
-  });
-  return { fetcher, calls, texts: () => calls.filter((c) => c.method === "sendMessage") };
-}
-
 /** Utente con spazio, negozio e, se richiesto, Premium in corso. */
 async function account(name: string, premium = true) {
   const { userId, cookie } = await verifiedSession(`${name}@example.invalid`);

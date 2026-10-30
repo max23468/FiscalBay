@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 import { logFailure } from "../errors";
 import { readUpstream, UpstreamError } from "../integrations/http.server";
 import {
@@ -97,51 +99,125 @@ export type TechnicalMetrics =
       cpu: CpuRow[];
     };
 
-type Row = Record<string, unknown>;
-
 /** La SQL API restituisce gli interi grandi come testo e le medie su zero righe come `nan`. */
-const numeric = (value: unknown) => {
-  const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) ? number : 0;
-};
-const text = (value: unknown) => (typeof value === "string" ? value : "");
+const numeric = z.coerce.number().catch(0);
+const text = z.string().catch("");
 
-const pageMeasureNames = [
-  "ttfb",
-  "fcp",
-  "lcp",
-  "ready",
-  "server_auth",
-  "server_d1",
-  "server_ebay",
-] as const;
+const invocationSchema = z
+  .object({
+    invocation: text,
+    detail: text,
+    method: text,
+    outcome: text,
+    count: numeric,
+    messages: numeric,
+    mean_ms: numeric,
+    p50_ms: numeric,
+    p95_ms: numeric,
+    p99_ms: numeric,
+  })
+  .transform((row): InvocationRow => ({
+    invocation: row.invocation,
+    detail: row.detail,
+    method: row.method,
+    outcome: row.outcome,
+    count: row.count,
+    messages: row.messages,
+    meanMs: row.mean_ms,
+    p50Ms: row.p50_ms,
+    p95Ms: row.p95_ms,
+    p99Ms: row.p99_ms,
+  }));
 
-async function readJson(
+const phaseSchema = z
+  .object({
+    invocation: text,
+    phase: text,
+    operation: text,
+    outcome: text,
+    calls: numeric,
+    invocations: numeric,
+    mean_ms: numeric,
+    p50_ms: numeric,
+    p95_ms: numeric,
+    p99_ms: numeric,
+  })
+  .transform((row): PhaseRow => ({
+    invocation: row.invocation,
+    phase: row.phase,
+    operation: row.operation,
+    outcome: row.outcome,
+    calls: row.calls,
+    invocations: row.invocations,
+    meanMs: row.mean_ms,
+    p50Ms: row.p50_ms,
+    p95Ms: row.p95_ms,
+    p99Ms: row.p99_ms,
+  }));
+
+const pageSchema = z.looseObject({ page: text, reports: numeric }).transform((row): PageRow => {
+  // Senza report con la misura il quantile non ha righe: nessun valore, non zero.
+  const measure = (name: keyof PageRow["measures"]) => {
+    const value = (level: 75 | 95) =>
+      numeric.parse(row[`${name}_reports`]) > 0 ? numeric.parse(row[`${name}_p${level}_ms`]) : null;
+    return { p75: value(75), p95: value(95) };
+  };
+  return {
+    page: row.page,
+    reports: row.reports,
+    measures: {
+      ttfb: measure("ttfb"),
+      fcp: measure("fcp"),
+      lcp: measure("lcp"),
+      ready: measure("ready"),
+      server_auth: measure("server_auth"),
+      server_d1: measure("server_d1"),
+      server_ebay: measure("server_ebay"),
+    },
+  };
+});
+
+/** Righe di ogni query della SQL API. */
+const querySchemas = {
+  invocations: invocationSchema,
+  phases: phaseSchema,
+  pages: pageSchema,
+} satisfies Record<MetricQuery, z.ZodType>;
+
+const telemetrySchema = z.object({ result: z.object({ calculations: z.unknown() }) });
+
+/** Risposta letta e validata con lo schema: un payload diverso è una risposta non valida. */
+async function readJson<Schema extends z.ZodType>(
   fetcher: typeof fetch,
   url: string,
   init: RequestInit,
   token: string,
-): Promise<unknown> {
+  schema: Schema,
+): Promise<z.infer<Schema>> {
   const { text } = await readUpstream(
     fetcher,
     url,
     { ...init, method: "POST", headers: { ...init.headers, authorization: `Bearer ${token}` } },
     { timeoutMs, maxBytes },
   );
+  let payload: unknown;
   try {
-    return JSON.parse(text);
+    payload = JSON.parse(text);
   } catch {
     throw new UpstreamError("invalid_response");
   }
+  const parsed = schema.safeParse(payload);
+  if (!parsed.success) throw new UpstreamError("invalid_response");
+  return parsed.data;
 }
 
-async function runQuery(
+async function runQuery<Query extends MetricQuery>(
   env: Env,
   fetcher: typeof fetch,
-  query: MetricQuery,
+  query: Query,
   token: string,
-): Promise<Row[]> {
-  const parsed = (await readJson(
+): Promise<z.infer<(typeof querySchemas)[Query]>[]> {
+  const { data } = await readJson(
     fetcher,
     `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/analytics_engine/sql`,
     {
@@ -149,9 +225,9 @@ async function runQuery(
       body: metricSql(query, env.METRICS_DATASET, metricsWindowHours),
     },
     token,
-  )) as { data?: unknown };
-  if (!Array.isArray(parsed.data)) throw new UpstreamError("invalid_response");
-  return parsed.data as Row[];
+    z.object({ data: z.array(querySchemas[query]) }),
+  );
+  return data;
 }
 
 async function runCpuQuery(
@@ -161,7 +237,7 @@ async function runCpuQuery(
   kind: CpuKind,
   token: string,
 ): Promise<CpuRow> {
-  const parsed = (await readJson(
+  const { result } = await readJson(
     fetcher,
     `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/workers/observability/telemetry/query`,
     {
@@ -169,8 +245,9 @@ async function runCpuQuery(
       body: JSON.stringify(pageCpuQuery(env.WORKER_NAME, page, kind, metricsWindowHours)),
     },
     token,
-  )) as { result?: { calculations?: unknown } };
-  const values = cpuValues(parsed.result?.calculations);
+    telemetrySchema,
+  );
+  const values = cpuValues(result.calculations);
   if (!values) throw new UpstreamError("invalid_response");
   return { page, kind, ...values };
 }
@@ -183,61 +260,19 @@ export async function readTechnicalMetrics(
   if (!token || !env.CLOUDFLARE_ACCOUNT_ID || !env.METRICS_DATASET || !env.WORKER_NAME)
     return { read: "unconfigured" };
   try {
-    const [[invocations, phases, pages], cpu] = await Promise.all([
-      Promise.all(
-        (["invocations", "phases", "pages"] as const).map((query) =>
-          runQuery(env, fetcher, query, token),
-        ),
-      ),
+    const [invocations, phases, pages, cpu] = await Promise.all([
+      runQuery(env, fetcher, "invocations", token),
+      runQuery(env, fetcher, "phases", token),
+      runQuery(env, fetcher, "pages", token),
       Promise.all(
         cpuPages.flatMap(({ page }) =>
           cpuKinds.map((kind) => runCpuQuery(env, fetcher, page, kind, token)),
         ),
       ),
     ]);
-    return {
-      read: "ok",
-      windowHours: metricsWindowHours,
-      invocations: invocations!.map((row) => ({
-        invocation: text(row.invocation),
-        detail: text(row.detail),
-        method: text(row.method),
-        outcome: text(row.outcome),
-        count: numeric(row.count),
-        messages: numeric(row.messages),
-        meanMs: numeric(row.mean_ms),
-        p50Ms: numeric(row.p50_ms),
-        p95Ms: numeric(row.p95_ms),
-        p99Ms: numeric(row.p99_ms),
-      })),
-      phases: phases!.map((row) => ({
-        invocation: text(row.invocation),
-        phase: text(row.phase),
-        operation: text(row.operation),
-        outcome: text(row.outcome),
-        calls: numeric(row.calls),
-        invocations: numeric(row.invocations),
-        meanMs: numeric(row.mean_ms),
-        p50Ms: numeric(row.p50_ms),
-        p95Ms: numeric(row.p95_ms),
-        p99Ms: numeric(row.p99_ms),
-      })),
-      pages: pages!.map((row) => ({
-        page: text(row.page),
-        reports: numeric(row.reports),
-        measures: Object.fromEntries(
-          pageMeasureNames.map((name) => {
-            // Senza report con la misura il quantile non ha righe: nessun valore, non zero.
-            const value = (level: 75 | 95) =>
-              numeric(row[`${name}_reports`]) > 0 ? numeric(row[`${name}_p${level}_ms`]) : null;
-            return [name, { p75: value(75), p95: value(95) }];
-          }),
-        ) as PageRow["measures"],
-      })),
-      cpu,
-    };
-  } catch {
-    logFailure({ code: "UPSTREAM_UNAVAILABLE", operation: "admin" });
+    return { read: "ok", windowHours: metricsWindowHours, invocations, phases, pages, cpu };
+  } catch (error) {
+    logFailure({ error, code: "UPSTREAM_UNAVAILABLE", operation: "admin" });
     return { read: "failed" };
   }
 }

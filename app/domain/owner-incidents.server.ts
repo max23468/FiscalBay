@@ -4,14 +4,14 @@ import { originUrl } from "../app-links";
 import { adminCopy } from "../copy/admin-copy";
 import { ownerTelegramCopy as copy } from "../copy/owner-telegram";
 import { logFailure } from "../errors";
-import { inSequence } from "../sequence";
-import { UpstreamError } from "../integrations/http.server";
+import { untilStopped } from "../sequence";
 import { ownerChatId, telegramConfigured, type BotButton } from "../integrations/telegram.server";
 import { listAnomalies, type Anomaly, type AnomalyKind } from "./admin-operations.server";
 import {
   at,
   duration,
   ownerCallback,
+  ownerRetryMs,
   plainText,
   sendPanel,
   type Panel,
@@ -34,7 +34,6 @@ const subjectsShown = 5;
 const perRun = 10;
 /** Tentativi Telegram falliti dopo cui l'avviso parte anche per email all'owner. */
 export const emailAfterAttempts = 3;
-const minute = 60_000;
 
 type Detail = { count: number; total: number; subjects: string[]; href: string };
 
@@ -204,16 +203,12 @@ async function deliverOwnerIncidents(env: Env, fetcher: typeof fetch, now: Date)
     .all<IncidentRow>();
   // Un avviso alla volta, nell'ordine: il primo invio fallito ferma gli altri fino al controllo
   // successivo, perché probabilmente fallirebbero allo stesso modo.
-  await inSequence(results, async (row) => {
+  await untilStopped(results, async (row) => {
     const resolved = row.resolved_at !== null;
     try {
       await sendPanel(env, chatId, incidentPanel(env, row), now, fetcher);
     } catch (error) {
-      // Attese crescenti fino a sei ore, o quella indicata da Telegram.
-      const wait =
-        error instanceof UpstreamError && error.details.retryAfter !== undefined
-          ? error.details.retryAfter * 1000
-          : Math.min(360, 10 * 2 ** row.attempts) * minute;
+      const wait = ownerRetryMs(row.attempts + 1, error);
       await db
         .prepare(`UPDATE owner_incidents SET attempts = attempts + 1, retry_at = ?2
           WHERE key = ?1`)
@@ -221,7 +216,7 @@ async function deliverOwnerIncidents(env: Env, fetcher: typeof fetch, now: Date)
         .run();
       logFailure({ error, operation: "owner_incidents" });
       if (row.attempts + 1 >= emailAfterAttempts) await emailIncident(env, row, now);
-      throw new DeliveryPaused();
+      return "stop";
     }
     // Lo stato comunicato si registra soltanto se l'incidente non è cambiato nel frattempo.
     await db
@@ -229,8 +224,7 @@ async function deliverOwnerIncidents(env: Env, fetcher: typeof fetch, now: Date)
           retry_at = NULL WHERE key = ?1 AND (resolved_at IS NOT NULL) = ?4`)
       .bind(row.key, resolved ? "resolved" : "opened", row.severity, resolved ? 1 : 0)
       .run();
-  }).catch((error: unknown) => {
-    if (!(error instanceof DeliveryPaused)) throw error;
+    return "continue";
   });
 }
 
@@ -260,9 +254,6 @@ async function emailIncident(env: Env, row: IncidentRow, now: Date) {
     .bind(row.key, sent)
     .run();
 }
-
-/** Invio fallito: gli avvisi rimasti aspettano il controllo successivo. */
-class DeliveryPaused extends Error {}
 
 export type RecentIncident = {
   key: string;

@@ -37,10 +37,12 @@ import {
   insertEntitlement,
   insertStore,
   insertWorkspace,
+  later,
   now,
   resetDatabase,
 } from "./fixtures/database-fixtures";
 import { fakeQueue, queueMessage, queued } from "./fixtures/queue-fixture";
+import { fakeBot as bot, type BotCall } from "./fixtures/telegram-fixtures";
 
 const owner = Number(env.TELEGRAM_OWNER_ID);
 const secret = env.TELEGRAM_WEBHOOK_SECRET!;
@@ -48,42 +50,6 @@ const origin = "http://localhost:5173";
 const send = vi.fn<Queue["send"]>().mockResolvedValue(queued);
 const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) } as Env;
 const minute = 60_000;
-const later = (minutes: number) => new Date(Date.parse(now) + minutes * minute);
-
-type Call = { method: string; params: Record<string, unknown> };
-
-/**
- * Bot API simulata, con `reply` per le risposte particolari. Le altre richieste (Stripe, eBay)
- * non hanno risposta: le viste mostrano la lettura non riuscita.
- */
-function bot(reply?: (call: Call) => Response | undefined) {
-  const calls: Call[] = [];
-  const fetcher = vi.fn<typeof fetch>(async (input, init) => {
-    const url = String(input instanceof Request ? input.url : input);
-    if (!url.startsWith(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/`))
-      return new Response("", { status: 503 });
-    const call = {
-      method: url.split("/").at(-1)!,
-      params: JSON.parse(String(init?.body)) as Record<string, unknown>,
-    };
-    calls.push(call);
-    const custom = reply?.(call);
-    if (custom) return custom;
-    if (call.method === "getWebhookInfo")
-      return Response.json({
-        ok: true,
-        result: {
-          url: "http://localhost:5173/webhooks/telegram",
-          pending_update_count: 0,
-          allowed_updates: ["message", "callback_query"],
-        },
-      });
-    if (["answerCallbackQuery", "setMyCommands", "deleteMyCommands"].includes(call.method))
-      return Response.json({ ok: true, result: true });
-    return Response.json({ ok: true, result: { message_id: 900 + calls.length } });
-  });
-  return { fetcher, calls, methods: () => calls.map((call) => call.method) };
-}
 
 const rejected = (description: string) =>
   Response.json({ ok: false, error_code: 400, description }, { status: 400 });
@@ -133,9 +99,9 @@ type RichParams = {
   reply_markup?: { inline_keyboard: Array<Array<{ text: string } & Record<string, string>>> };
 };
 
-const rich = (call: Call) => call.params as unknown as RichParams;
-const heading = (call: Call) => String(rich(call).rich_message.blocks[0]!.text);
-const buttons = (call: Call) => rich(call).reply_markup?.inline_keyboard.flat() ?? [];
+const rich = (call: BotCall) => call.params as unknown as RichParams;
+const heading = (call: BotCall) => String(rich(call).rich_message.blocks[0]!.text);
+const buttons = (call: BotCall) => rich(call).reply_markup?.inline_keyboard.flat() ?? [];
 
 /** Lavori periodici conclusi nel turno corrente: nessuna anomalia dei lavori. */
 async function regularTasks(at = new Date(now)) {
@@ -349,7 +315,7 @@ describe("comandi e pulsanti", () => {
   });
 
   it("un pannello che Telegram rifiuta per la sua forma parte come testo copiabile", async () => {
-    const tooLarge = (call: Call) =>
+    const tooLarge = (call: BotCall) =>
       call.method === "sendRichMessage" || call.method === "editMessageText"
         ? rejected("Bad Request: message is too long")
         : undefined;

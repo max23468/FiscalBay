@@ -7,9 +7,17 @@ import { seal, unseal } from "../sealed.server";
 import { inSequence } from "../sequence";
 import { elapsedMs } from "../time";
 import { stopRenewals } from "./billing.server";
+import {
+  consumeStepJob,
+  deleteOrders,
+  lockUntil,
+  orderBudget,
+  resumeBatch,
+  runToEnd,
+} from "./deletion-steps.server";
 import { deleteExportFiles } from "./export-files.server";
 import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.server";
-import { queueRetryDelay, taskPeriods } from "./work-timing";
+import { taskPeriods } from "./work-timing";
 
 /**
  * Cancellazione dell'account (§30, D163). La conferma dal link email registra la richiesta e
@@ -21,9 +29,6 @@ import { queueRetryDelay, taskPeriods } from "./work-timing";
  * segni e lo spazio con i riferimenti necessari a completarlo: la console lo segnala e il
  * compito periodico riprova.
  */
-
-/** Durata del blocco di una richiesta in esecuzione: un consumer interrotto la cede allo scadere. */
-const lockMilliseconds = 15 * 60_000;
 
 /** Attesa massima fra due tentativi di una richiesta ferma. */
 const maxRetryMilliseconds = 6 * 3_600_000;
@@ -45,9 +50,6 @@ export const deletionReauthMilliseconds = 10 * 60_000;
 
 /** Una richiesta conclusa resta come marker per la finestra di Time Travel (§32.1). */
 export const deletionMarkerDays = 30;
-
-/** Ordini eliminati per istruzione e istruzioni per giro, poi il lavoro riparte dalla coda. */
-const orderBudget = { batch: 200, batches: 25 };
 
 /** Tentativi dell'email finale prima di concludere senza. */
 const noticeAttempts = 3;
@@ -160,25 +162,9 @@ async function recordStoreMarks(db: D1Database, secret: string, workspaceId: str
   );
 }
 
-/**
- * Ordini dello spazio a lotti: le chiavi esterne eliminano articoli, identificativi, versioni,
- * verifiche, riferimenti e sblocchi. True quando non ne resta nessuno.
- */
-async function deleteOrders(
-  db: D1Database,
-  workspaceId: string,
-  budget: typeof orderBudget,
-): Promise<boolean> {
-  for (let batch = 0; batch < budget.batches; batch++) {
-    const { meta } = await db
-      .prepare(`DELETE FROM orders WHERE id IN (SELECT o.id FROM orders o
-          JOIN ebay_stores s ON s.id = o.store_id WHERE s.workspace_id = ?1 LIMIT ?2)`)
-      .bind(workspaceId, budget.batch)
-      .run();
-    if (meta.changes === 0) return true;
-  }
-  return false;
-}
+/** Ordini dello spazio, eliminati a lotti. Parametro: ?1 spazio. */
+const workspaceOrdersSql = `SELECT o.id FROM orders o
+  JOIN ebay_stores s ON s.id = o.store_id WHERE s.workspace_id = ?1`;
 
 /**
  * Dati operativi dello spazio: negozi con letture, ricevute, pause, marker degli ordini e
@@ -244,13 +230,14 @@ export async function runAccountDeletion(
   budget = orderBudget,
 ): Promise<DeletionOutcome> {
   const at = now.toISOString();
+  const lock = lockUntil(now);
   const job = await env.DB.prepare(
     `UPDATE account_deletions SET locked_until = ?2
       WHERE id = ?1 AND completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?3)
       RETURNING user_id, workspace_id, requested_at, notice_sealed, notice_attempts,
         renewals_stopped_at, renewals_blocked_at`,
   )
-    .bind(id, new Date(now.getTime() + lockMilliseconds).toISOString(), at)
+    .bind(id, lock, at)
     .first<{
       user_id: string;
       workspace_id: string | null;
@@ -266,12 +253,19 @@ export async function runAccountDeletion(
       .first<{ completed_at: string | null }>();
     return !row ? "missing" : row.completed_at ? "done" : "busy";
   }
+  // Rilascio e proroga valgono soltanto per il blocco ancora preso da questo passo.
   const release = () =>
-    env.DB.prepare("UPDATE account_deletions SET locked_until = NULL WHERE id = ?").bind(id).run();
+    env.DB.prepare(
+      "UPDATE account_deletions SET locked_until = NULL WHERE id = ?1 AND locked_until = ?2",
+    )
+      .bind(id, lock)
+      .run();
   // In attesa di Stripe o dell'email finale: il blocco resta fino al prossimo tentativo.
   const postpone = () =>
-    env.DB.prepare("UPDATE account_deletions SET locked_until = ?2 WHERE id = ?1")
-      .bind(id, retryAt(job.requested_at, now))
+    env.DB.prepare(
+      "UPDATE account_deletions SET locked_until = ?3 WHERE id = ?1 AND locked_until = ?2",
+    )
+      .bind(id, lock, retryAt(job.requested_at, now))
       .run();
   try {
     // Uno spazio nato mentre la richiesta si registrava appartiene comunque all'utente.
@@ -301,7 +295,7 @@ export async function runAccountDeletion(
     }
     if (workspace) {
       await recordStoreMarks(env.DB, env.BETTER_AUTH_SECRET, workspace, now);
-      if (!(await deleteOrders(env.DB, workspace, budget))) {
+      if (!(await deleteOrders(env.DB, workspaceOrdersSql, [workspace], budget))) {
         await release();
         return "more";
       }
@@ -363,9 +357,6 @@ export function isAccountDeletionMessage(body: unknown): body is z.infer<typeof 
   return messageSchema.safeParse(body).success;
 }
 
-/** Consegne riprovate dalla coda dopo un errore; poi la richiesta resta al compito periodico. */
-const queueRetries = 3;
-
 /**
  * Esegue un passo dalla coda. Gli ordini oltre il budget ripartono con un nuovo messaggio; lo
  * stop dei rinnovi non confermato, l'email da ritentare e la richiesta tenuta da un altro
@@ -380,19 +371,13 @@ export async function consumeAccountDeletion(
   now = new Date(),
 ): Promise<void> {
   const { accountDeletion: id } = messageSchema.parse(message.body);
-  try {
-    const outcome = await runAccountDeletion(env, id, fetcher, now);
-    if (outcome === "more") await env.WORK_QUEUE.send({ accountDeletion: id });
-    message.ack();
-  } catch (error) {
-    logFailure({ error, operation: "account_deletion" });
-    if (message.attempts > queueRetries) message.ack();
-    else message.retry({ delaySeconds: queueRetryDelay(message.attempts) });
-  }
+  await consumeStepJob(
+    message,
+    () => runAccountDeletion(env, id, fetcher, now),
+    () => env.WORK_QUEUE.send({ accountDeletion: id }),
+    "account_deletion",
+  );
 }
-
-/** Richieste riprese per giro del compito periodico. */
-const resumeBatch = 10;
 
 /**
  * Compito periodico: riprende le richieste non concluse (messaggio perso, stop dei rinnovi o
@@ -421,13 +406,13 @@ export async function resumeAccountDeletions(
   await inSequence(results, async ({ id, requested_at }) => {
     try {
       // Gli ordini oltre il budget proseguono nello stesso compito, fino a un altro esito.
-      // Stryker disable next-line ConditionalExpression: «more» ripetuto senza fine è un Timeout per Stryker; le prove contano gli ordini eliminati.
-      while ((await runAccountDeletion(env, id, fetcher, now)) === "more");
+      await runToEnd(() => runAccountDeletion(env, id, fetcher, now));
     } catch (error) {
       logFailure({ error, operation: "account_deletion" });
+      // Soltanto se nessun altro consumer ha preso la richiesta nel frattempo.
       await env.DB.prepare(`UPDATE account_deletions SET locked_until = ?2
-          WHERE id = ?1 AND completed_at IS NULL`)
-        .bind(id, retryAt(requested_at, now))
+          WHERE id = ?1 AND completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?3)`)
+        .bind(id, retryAt(requested_at, now), at)
         .run();
     }
   });

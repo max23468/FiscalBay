@@ -14,7 +14,7 @@ import {
 } from "./integrations/ebay/notifications.server";
 import { rejectCredentials } from "./integrations/ebay/seller-credentials.server";
 import { readBounded, UpstreamError } from "./integrations/http.server";
-import { ebayConfiguration } from "./integrations/ebay/environment.server";
+import { ebayEnvironmentAvailable } from "./integrations/ebay/environment.server";
 import { applyStripeEvent } from "./domain/billing.server";
 import { consumeOrderConfirmation } from "./domain/order-acquisition.server";
 import { recordBulkDataThreshold } from "./domain/ebay-quotas.server";
@@ -33,7 +33,7 @@ import { queueRetryDelay, stalledReceiptMilliseconds } from "./domain/work-timin
 
 const maxBytes = 262_144;
 const retention = 7 * dayMilliseconds;
-const referenceSchema = z.object({ receiptId: z.string().uuid() });
+const referenceSchema = z.object({ receiptId: z.uuid() });
 
 /** Percorsi presi in carico dall'ingresso dei webhook, prima della build dell'app. */
 export const isWebhookPath = (path: string) => webhookPaths.includes(path);
@@ -252,11 +252,8 @@ export async function receiveWebhook(
     const token = env.EBAY_NOTIFICATION_VERIFICATION_TOKEN;
     if (!token || !/^[a-zA-Z0-9_-]{32,80}$/u.test(token))
       return new Response(null, { status: 503 });
-    try {
-      ebayConfiguration(env, ebayEnvironmentOf(path));
-    } catch {
+    if (!ebayEnvironmentAvailable(env, ebayEnvironmentOf(path)))
       return new Response(null, { status: 503 });
-    }
     if (!challenge || challenge.length > 256) return new Response(null, { status: 400 });
     return Response.json({
       challengeResponse: createHash("sha256")

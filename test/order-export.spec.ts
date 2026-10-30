@@ -2104,13 +2104,35 @@ describe("file degli ordini", () => {
     expect(missing.ack).toHaveBeenCalledOnce();
   });
 
+  it("un consumer che ha perso il blocco non libera quello preso da un altro", async () => {
+    const id = await queuedJob();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const newer = hours(1);
+    // Il blocco scade durante la generazione e un altro consumer prende il lavoro.
+    const failing = vi.spyOn(env.EXPORT_FILES, "put").mockImplementation(async () => {
+      await env.DB.prepare("UPDATE export_jobs SET locked_until = ? WHERE id = ?")
+        .bind(newer, id)
+        .run();
+      throw new Error("R2");
+    });
+    try {
+      const message = queueMessage({ exportJob: id });
+      await consumeExportJob(message, env);
+      expect(message.retry).toHaveBeenCalledExactlyOnceWith({ delaySeconds: 30 });
+      expect(await job(id)).toMatchObject({ state: "queued", locked_until: newer });
+    } finally {
+      failing.mockRestore();
+      errors.mockRestore();
+    }
+  });
+
   it("se il blocco non si libera dopo un errore, lo segnala e riprova allo scadere", async () => {
     const id = await queuedJob();
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const failing = vi.spyOn(env.EXPORT_FILES, "put").mockRejectedValue(new Error("R2"));
     const prepare = env.DB.prepare.bind(env.DB);
     const release = vi.spyOn(env.DB, "prepare").mockImplementation((sql: string) =>
-      sql.includes("SET locked_until = NULL WHERE id = ? AND state = 'queued'")
+      sql.includes("SET locked_until = NULL WHERE id = ?1 AND state = 'queued'")
         ? ({
             bind: () => ({ run: () => Promise.reject(new Error("D1")) }),
           } as unknown as D1PreparedStatement)

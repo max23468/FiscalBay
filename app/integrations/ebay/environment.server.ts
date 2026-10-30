@@ -37,9 +37,13 @@ export function sandboxAvailable(env: EbayBindings): boolean {
   );
 }
 
+/** Ambiente configurato: Production sempre, la Sandbox soltanto dove è disponibile. */
+export function ebayEnvironmentAvailable(env: EbayBindings, environment: EbayEnvironment) {
+  return environment !== "sandbox" || sandboxAvailable(env);
+}
+
 export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironment) {
-  if (environment === "sandbox" && !sandboxAvailable(env))
-    throw new Error("ebay_sandbox_unavailable");
+  if (!ebayEnvironmentAvailable(env, environment)) throw new Error("ebay_sandbox_unavailable");
   const sandbox = environment === "sandbox";
   const api = sandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
   return {

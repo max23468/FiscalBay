@@ -2,7 +2,7 @@ import { stalledDeletions } from "./account-deletion.server";
 import { stalledEbayDeletions } from "./ebay-account-deletion.server";
 import { auditInProgress } from "./admin-audit.server";
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
-import { stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
+import { minute, stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
 import { storeLabelSql } from "./store-state.server";
 
 /**
@@ -60,8 +60,6 @@ export type ReceiptState = {
   stalled: number;
   oldest: string | null;
 };
-
-const minute = 60_000;
 
 /** Giorni prima della scadenza di una credenziale in cui l'owner riceve l'avviso (§29). */
 export const credentialWarningDays = 45;

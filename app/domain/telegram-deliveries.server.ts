@@ -3,6 +3,7 @@ import { lockMilliseconds } from "./order-acquisition.server";
 import { listVisibleOrders } from "./orders.server";
 import { serviceSetting } from "./service-settings.server";
 import { consultableStore, listedOrder, storeLabelSql } from "./store-state.server";
+import { backoffMs, minute } from "./work-timing";
 import { telegramPreferencesSql, telegramRecipient, telegramRecipientSql } from "./telegram.server";
 import {
   digestMessage,
@@ -19,7 +20,7 @@ import { UpstreamError } from "../integrations/http.server";
 import { sendMessage, telegramConfigured, type BotMessage } from "../integrations/telegram.server";
 import type { Language } from "../i18n";
 import type { EbayEnvironment } from "../view-models";
-import { inSequence } from "../sequence";
+import { inSequence, untilStopped } from "../sequence";
 import { dayMilliseconds, localClock, zonedInstant } from "../time";
 
 /**
@@ -115,14 +116,6 @@ export async function deliverTelegram(
 }
 
 type Next = "continue" | "wait" | "stop";
-
-/** Un passo alla volta, nell'ordine dato, finché un passo non chiede di fermarsi. */
-function untilStopped<T>(items: readonly T[], step: (item: T) => Promise<Next>): Promise<Next> {
-  return items.reduce<Promise<Next>>(
-    (previous, item) => previous.then((next) => (next === "continue" ? step(item) : next)),
-    Promise.resolve("continue"),
-  );
-}
 
 function closeUncovered(db: D1Database, now: Date) {
   return db
@@ -476,13 +469,21 @@ async function recordFailure(
   const at = now.toISOString();
   const release = releaser(db, delivery.id, lease);
   const upstream = error instanceof UpstreamError ? error : null;
+  if (upstream?.failure === "rejected" && upstream.details.status !== 403) {
+    // Rifiuto certo del solo messaggio: ritentarlo darebbe lo stesso esito.
+    logFailure({ error, operation: "telegram" });
+    await db.batch([release("failed_at = ?3", at), closeMembers(db, delivery.id, at)]);
+    return "skip";
+  }
+  if (upstream?.failure === "credentials") {
+    logFailure({ error, operation: "telegram" });
+    await release("retry_at = NULL").run();
+    return "stop";
+  }
   if (upstream?.failure === "rate_limited") {
     const seconds = upstream.details.retryAfter ?? 30;
     await release("retry_at = ?3", new Date(now.getTime() + seconds * 1000).toISOString()).run();
-    // Stryker disable next-line StringLiteral: ogni esito diverso da «continue», «skip» e «stop» ferma allo stesso modo la sola chat.
-    return "wait";
-  }
-  if (upstream?.failure === "rejected" && upstream.details.status === 403) {
+  } else if (upstream?.failure === "rejected") {
     // Bot bloccato o chat chiusa: le consegne in attesa non partono più e la chat resta
     // ferma finché non scrive di nuovo al bot.
     await db.batch([
@@ -496,49 +497,34 @@ async function recordFailure(
           WHERE link_id = ?1 AND sent_at IS NULL AND failed_at IS NULL`)
         .bind(delivery.link_id, at),
     ]);
-    // Stryker disable next-line StringLiteral: ogni esito diverso da «continue», «skip» e «stop» ferma allo stesso modo la sola chat.
-    return "wait";
-  }
-  if (upstream?.failure === "rejected") {
-    // Rifiuto certo del solo messaggio: ritentarlo darebbe lo stesso esito.
+  } else {
     logFailure({ error, operation: "telegram" });
-    await db.batch([release("failed_at = ?3", at), closeMembers(db, delivery.id, at)]);
-    return "skip";
-  }
-  if (upstream?.failure === "credentials") {
-    logFailure({ error, operation: "telegram" });
-    await release("retry_at = NULL").run();
-    return "stop";
-  }
-  logFailure({ error, operation: "telegram" });
-  const attempts = delivery.attempts + 1;
-  // Senza una risposta di Telegram il messaggio può essere arrivato comunque.
-  const uncertain = upstream?.failure === "unavailable" && upstream.details.status === undefined;
-  if (attempts >= maxDeliveryAttempts) {
-    await db.batch([
-      release(
-        `attempts = ?3, failed_at = ?4, uncertain_at = CASE WHEN ?5 THEN ?4 ELSE uncertain_at END`,
+    const attempts = delivery.attempts + 1;
+    // Senza una risposta di Telegram il messaggio può essere arrivato comunque.
+    const uncertain = upstream?.failure === "unavailable" && upstream.details.status === undefined;
+    if (attempts >= maxDeliveryAttempts)
+      await db.batch([
+        release(
+          `attempts = ?3, failed_at = ?4, uncertain_at = CASE WHEN ?5 THEN ?4 ELSE uncertain_at END`,
+          attempts,
+          at,
+          uncertain ? 1 : 0,
+        ),
+        closeMembers(db, delivery.id, at),
+        db
+          .prepare(`UPDATE telegram_links SET delivery_failure = 'unreachable', delivery_failed_at = ?2
+            WHERE id = ?1 AND delivery_failure IS NULL`)
+          .bind(delivery.link_id, at),
+      ]);
+    else
+      await release(
+        `attempts = ?3, retry_at = ?4, uncertain_at = CASE WHEN ?5 THEN ?6 ELSE uncertain_at END`,
         attempts,
-        at,
+        new Date(now.getTime() + backoffMs(attempts, minute, 60 * minute)).toISOString(),
         uncertain ? 1 : 0,
-      ),
-      closeMembers(db, delivery.id, at),
-      db
-        .prepare(`UPDATE telegram_links SET delivery_failure = 'unreachable', delivery_failed_at = ?2
-          WHERE id = ?1 AND delivery_failure IS NULL`)
-        .bind(delivery.link_id, at),
-    ]);
-    // Stryker disable next-line StringLiteral: ogni esito diverso da «continue», «skip» e «stop» ferma allo stesso modo la sola chat.
-    return "wait";
+        at,
+      ).run();
   }
-  const delay = Math.min(3_600_000, 60_000 * 2 ** (attempts - 1));
-  await release(
-    `attempts = ?3, retry_at = ?4, uncertain_at = CASE WHEN ?5 THEN ?6 ELSE uncertain_at END`,
-    attempts,
-    new Date(now.getTime() + delay).toISOString(),
-    uncertain ? 1 : 0,
-    at,
-  ).run();
   // Stryker disable next-line StringLiteral: ogni esito diverso da «continue», «skip» e «stop» ferma allo stesso modo la sola chat.
   return "wait";
 }

@@ -11,7 +11,10 @@ import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
 import type { EbayEnvironment } from "../view-models";
-import { ebayConfiguration } from "../integrations/ebay/environment.server";
+import {
+  ebayConfiguration,
+  ebayEnvironmentAvailable,
+} from "../integrations/ebay/environment.server";
 import { visibleOrderState } from "./orders.server";
 
 /**
@@ -202,11 +205,9 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
 
 /** Origine API dell'ambiente del negozio; undefined se l'ambiente non è configurato. */
 function apiOriginOf(env: Env, ebayEnvironment: ActiveStore["ebay_environment"]) {
-  let origin: string | undefined;
-  try {
-    origin = ebayConfiguration(env, ebayEnvironment).apiOrigin;
-  } catch {}
-  return origin;
+  return ebayEnvironmentAvailable(env, ebayEnvironment)
+    ? ebayConfiguration(env, ebayEnvironment).apiOrigin
+    : undefined;
 }
 
 export type SyncRequestResult =

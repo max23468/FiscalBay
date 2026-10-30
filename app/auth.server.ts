@@ -29,7 +29,7 @@ const ebayIdentitySchema = z.object({
   username: z.string().min(1),
   businessAccount: z
     .object({
-      email: z.string().email().optional(),
+      email: z.email().optional(),
     })
     .optional(),
 });
@@ -57,7 +57,9 @@ function requireRegistrationApproval(env: Env, email: string) {
   // Un elenco assente, vuoto o non valido chiude le nuove registrazioni.
   let emails: string[] | undefined;
   try {
-    emails = z.array(z.string().trim().email()).parse(JSON.parse(env.REGISTRATION_ALLOWED_EMAILS));
+    emails = z
+      .array(z.string().trim().pipe(z.email()))
+      .parse(JSON.parse(env.REGISTRATION_ALLOWED_EMAILS));
   } catch {
     // Non registrare il contenuto della configurazione privata.
   }

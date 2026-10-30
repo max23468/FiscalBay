@@ -72,7 +72,8 @@ function median(values: number[]) {
   return Math.round(value * 10) / 10;
 }
 
-const share = (count: number, of: number) => (of > 0 ? count / of : null);
+/** Quota di `count` su `of`; null senza base. */
+export const share = (count: number, of: number) => (of > 0 ? count / of : null);
 
 /**
  * Base di ogni passaggio: si conta soltanto chi l'ha già raggiunta, così nessuna quota supera il

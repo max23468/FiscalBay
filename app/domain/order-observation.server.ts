@@ -90,7 +90,7 @@ export const orderObservationSchema = z.object({
       quantity: z.number().int().positive(),
       total: money.nullable(),
       // URL qualificato dell'immagine; se assente resta quello già salvato.
-      imageUrl: z.string().url().optional(),
+      imageUrl: z.url().optional(),
     }),
   ),
   taxIdentifiers: z

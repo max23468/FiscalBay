@@ -4,6 +4,7 @@ import type { Language } from "../i18n";
 import type { NotificationView } from "../view-models";
 import { maxNoticeBody, maxNoticeTitle } from "../limits";
 import { dayMilliseconds } from "../time";
+import { utc } from "./order-observation.server";
 
 /**
  * Comunicazioni di servizio o manutenzione scritte dalla console (§15): compaiono nella
@@ -23,8 +24,8 @@ export const serviceNoticeSchema = z
     bodyIt: text(maxNoticeBody),
     titleEn: text(maxNoticeTitle),
     bodyEn: text(maxNoticeBody),
-    startsAt: z.iso.datetime(),
-    endsAt: z.iso.datetime(),
+    startsAt: utc,
+    endsAt: utc,
   })
   .refine(({ startsAt, endsAt }) => {
     const length = Date.parse(endsAt) - Date.parse(startsAt);
@@ -39,8 +40,6 @@ export type ServiceNotice = ServiceNoticeInput & {
   updatedAt: string;
   withdrawnAt: string | null;
 };
-
-const iso = (value: string) => new Date(value).toISOString();
 
 /** Comunicazioni non ancora concluse da più di un mese, dalla più recente. */
 export async function listServiceNotices(db: D1Database, now = new Date()) {
@@ -71,8 +70,8 @@ export async function saveServiceNotice(
     notice.bodyIt,
     notice.titleEn,
     notice.bodyEn,
-    iso(notice.startsAt),
-    iso(notice.endsAt),
+    notice.startsAt,
+    notice.endsAt,
     at,
   ];
   if (!input.id) {

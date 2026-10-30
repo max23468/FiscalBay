@@ -34,7 +34,7 @@ import {
   type Row,
   type Section,
 } from "./owner-panels.server";
-import { metricWindows, productMetrics, type MetricWindow } from "./product-metrics.server";
+import { metricWindows, productMetrics, share, type MetricWindow } from "./product-metrics.server";
 import { readTechnicalMetrics } from "./technical-metrics.server";
 
 /**
@@ -181,7 +181,6 @@ const percentFormat = new Intl.NumberFormat("it-IT", {
 });
 const percent = (share: number | null) =>
   share === null ? t.metrics.none : percentFormat.format(share);
-const share = (count: number, of: number) => (of > 0 ? count / of : null);
 
 /** Vista richiesta, letta come nella console. */
 export async function ownerPanel(

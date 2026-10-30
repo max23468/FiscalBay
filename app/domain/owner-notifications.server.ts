@@ -2,11 +2,11 @@ import { originUrl } from "../app-links";
 import { adminCopy } from "../copy/admin-copy";
 import { ownerTelegramCopy as copy } from "../copy/owner-telegram";
 import { logFailure } from "../errors";
+import { untilStopped } from "../sequence";
 import { formatAmount } from "../i18n";
-import { UpstreamError } from "../integrations/http.server";
 import { ownerChatId, telegramConfigured } from "../integrations/telegram.server";
 import { activeCoverageSql } from "./grants.server";
-import { at, sendPanel, type Panel, type Row } from "./owner-panels.server";
+import { at, ownerRetryMs, sendPanel, type Panel, type Row } from "./owner-panels.server";
 
 /**
  * Avvisi commerciali all'owner (§15, D219): registrazioni, ammissioni, primo negozio, prove,
@@ -52,7 +52,6 @@ export const notificationRetentionDays = 30;
  * impedisce che una prova già avvisata lo sia di nuovo.
  */
 const trialWindowDays = 2;
-const minute = 60_000;
 
 type Detail = {
   waitlisted?: number;
@@ -297,9 +296,10 @@ export async function deliverOwnerNotifications(env: Env, fetcher: typeof fetch,
   const db = env.DB;
   const chatId = ownerChatId(env)!;
   let sent = 0;
-  for (let index = 0; index < perRun; index += 1) {
+  // Fino a `perRun` avvisi; il primo invio non riuscito ferma gli altri fino al turno successivo.
+  await untilStopped(Array.from({ length: perRun }), async () => {
     const row = await claim(db, now);
-    if (!row) break;
+    if (!row) return "stop";
     try {
       await sendPanel(
         env,
@@ -309,11 +309,6 @@ export async function deliverOwnerNotifications(env: Env, fetcher: typeof fetch,
         fetcher,
       );
     } catch (error) {
-      // Attese crescenti fino a sei ore, o quella indicata da Telegram.
-      const wait =
-        error instanceof UpstreamError && error.details.retryAfter !== undefined
-          ? error.details.retryAfter * 1000
-          : Math.min(360, 10 * 2 ** (row.attempts - 1)) * minute;
       await db
         .prepare(`UPDATE owner_notifications SET status = ?3, retry_at = ?4, claim_token = NULL,
             claimed_at = NULL WHERE key = ?1 AND claim_token = ?2`)
@@ -321,11 +316,11 @@ export async function deliverOwnerNotifications(env: Env, fetcher: typeof fetch,
           row.key,
           row.claim_token,
           row.attempts >= maxAttempts ? "failed" : "pending",
-          new Date(now.getTime() + wait).toISOString(),
+          new Date(now.getTime() + ownerRetryMs(row.attempts, error)).toISOString(),
         )
         .run();
       logFailure({ error, operation: "owner_notifications" });
-      break;
+      return "stop";
     }
     await db
       .prepare(`UPDATE owner_notifications SET status = 'sent', sent_at = ?3, claim_token = NULL,
@@ -333,7 +328,8 @@ export async function deliverOwnerNotifications(env: Env, fetcher: typeof fetch,
       .bind(row.key, row.claim_token, now.toISOString())
       .run();
     sent += 1;
-  }
+    return "continue";
+  });
   return sent;
 }
 

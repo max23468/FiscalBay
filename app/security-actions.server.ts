@@ -19,7 +19,6 @@ import {
   recentSignIn,
   revokeOtherSessions,
   revokeSession,
-  type AuthSession,
 } from "./domain/sessions.server";
 import {
   accountMethods,
@@ -87,7 +86,6 @@ export async function securityAction(
   form: FormData,
   admitted = false,
 ): Promise<Response | ReturnType<typeof data<ConfirmResult>>> {
-  const auth = session as AuthSession;
   const field = (name: string) => String(form.get(name) ?? "");
   const intent = field("intent");
   const security = localizedPath(language, securityPath);
@@ -130,7 +128,7 @@ export async function securityAction(
     if (field("metodo") === "passkey") {
       const previous = field("precedente");
       const same =
-        recentSignIn(auth) &&
+        recentSignIn(session) &&
         !!previous &&
         previous.length <= 128 &&
         (previous === session.session.id ||
@@ -159,7 +157,7 @@ export async function securityAction(
   }
 
   if (intent === "passkey-remove" || intent === "passkey-rename") {
-    const block = passkeyChangeBlock(auth);
+    const block = passkeyChangeBlock(session);
     if (block) return notice(block);
     const id = field("id");
     if (!id || id.length > 128) return notice("errore");
@@ -191,7 +189,7 @@ export async function securityAction(
   }
 
   // Collegare, rimuovere e cambiare email richiedono un accesso delle ultime 24 ore.
-  if (!recentSignIn(auth)) return notice("nuovo-accesso");
+  if (!recentSignIn(session)) return notice("nuovo-accesso");
   const method = field("metodo");
 
   if (intent === "collega-metodo") {
