@@ -1,6 +1,16 @@
+import { readFileSync } from "node:fs";
+
 import { bindings, defineConfig, triggers } from "cf/config";
 
-import { requestLimitRules, type RequestLimitRule } from "./app/request-limits.ts";
+/**
+ * Soglie del Rate Limiting lette da disco: il plugin Cloudflare nega al dev server ogni modulo
+ * importato da questo file, e l'app usa le stesse soglie a runtime.
+ */
+const requestLimitRules = JSON.parse(
+  readFileSync(new URL("./app/request-limits.json", import.meta.url), "utf8"),
+) as Record<"attempts" | "emails" | "work", RequestLimitRule>;
+
+type RequestLimitRule = { limit: number; period: 10 | 60 };
 
 /**
  * Due Worker dallo stesso codice. `--mode live` seleziona Production; ogni altra modalità
@@ -50,7 +60,7 @@ const secrets = {
 /**
  * Namespace del Rate Limiting nativo per ambiente (§29): l'identificativo è unico nell'account,
  * quindi test e Production non condividono i contatori. Limiti e finestre, comuni ai due
- * ambienti, stanno in `app/request-limits.ts`.
+ * ambienti, stanno in `app/request-limits.json`.
  */
 export const requestLimitNamespaces = {
   test: { attempts: "2910", emails: "2911", work: "2912" },

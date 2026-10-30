@@ -164,7 +164,8 @@ function telegramEvent(request: Request, body: string, env: Env, now: Date): Rec
 /**
  * Notifica eBay firmata; null se autentica ma senza lavoro da accodare. La soglia della Bulk Data
  * Transfer Policy riguarda l'applicazione: apre subito l'anomalia della console, senza ricevuta.
- * La cancellazione di un account eBay non passa dalle ricevute: ha una richiesta propria.
+ * La cancellazione di un account eBay non passa dalle ricevute: ha una richiesta propria. Entrambe
+ * si scrivono dopo la verifica, così un database guasto risponde 503 ed eBay ritenta.
  */
 async function ebayEvent(
   request: Request,
@@ -173,7 +174,17 @@ async function ebayEvent(
   path: string,
   fetcher: typeof fetch,
   now: Date,
-): Promise<ReceiptEvent | { deletion: EbayAccountDeletion } | null> {
+): Promise<
+  | ReceiptEvent
+  | { deletion: EbayAccountDeletion }
+  | {
+      threshold: {
+        environment: Parameters<typeof recordBulkDataThreshold>[1];
+        data: Parameters<typeof recordBulkDataThreshold>[2];
+      };
+    }
+  | null
+> {
   const ebayEnvironment = ebayEnvironmentOf(path);
   const { topic, notification } = await verifyEbayNotification(
     body,
@@ -183,10 +194,8 @@ async function ebayEvent(
     fetcher,
     now.getTime(),
   );
-  if (topic === "BULK_DATA_TRANSFER_THRESHOLD") {
-    await recordBulkDataThreshold(env.DB, ebayEnvironment, notification.data, now);
-    return null;
-  }
+  if (topic === "BULK_DATA_TRANSFER_THRESHOLD")
+    return { threshold: { environment: ebayEnvironment, data: notification.data } };
   if (topic === "MARKETPLACE_ACCOUNT_DELETION") {
     const { userId, eiasToken, username } = notification.data;
     return {
@@ -284,6 +293,10 @@ export async function receiveWebhook(
       throw new InvalidWebhook(412);
     }
     if (!event) return new Response(null, { status: 204 });
+    if ("threshold" in event) {
+      await recordBulkDataThreshold(env.DB, event.threshold.environment, event.threshold.data, now);
+      return new Response(null, { status: 204 });
+    }
     if ("deletion" in event) {
       // Registrata e accodata prima della risposta positiva: un errore risponde 503 ed eBay ritenta.
       await recordEbayAccountDeletion(env, event.deletion, now);
@@ -304,7 +317,10 @@ export async function receiveWebhook(
       event.consent_granted_at = store.granted_at;
     }
     const age = now.getTime() - Date.parse(event.event_at);
-    if (age >= retention || age < -300_000) throw new InvalidWebhook(400);
+    // Una revoca del consenso vale anche consegnata in ritardo: la ricevuta scade sette giorni
+    // dopo l'arrivo invece che dopo l'evento.
+    const late = event.topic === "AUTHORIZATION_REVOCATION" && age >= retention;
+    if ((age >= retention && !late) || age < -300_000) throw new InvalidWebhook(400);
     // Una chat che scrive troppo in fretta non accoda altro lavoro: il resto si ignora. Il
     // conteggio e la ricevuta sono la stessa istruzione, così aggiornamenti simultanei non
     // superano il limite.
@@ -330,7 +346,7 @@ export async function receiveWebhook(
         event.callback_id,
         event.message_id,
         event.event_at,
-        new Date(Date.parse(event.event_at) + retention).toISOString(),
+        new Date((late ? now.getTime() : Date.parse(event.event_at)) + retention).toISOString(),
         new Date(now.getTime() - 60_000).toISOString(),
         chatUpdatesPerMinute,
       )

@@ -60,6 +60,11 @@ function frozenResponse(pathname: string) {
   });
   if (isWebhookPath(pathname)) return new Response(null, { status: 503, headers });
   headers.set("content-type", "text/html; charset=utf-8");
+  // La pagina non ha script né risorse: la CSP più stretta, come nei documenti dell'app.
+  headers.set(
+    "content-security-policy",
+    "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+  );
   return new Response(frozenPage, { status: 503, headers });
 }
 

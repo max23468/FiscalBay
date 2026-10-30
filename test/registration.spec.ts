@@ -14,6 +14,7 @@ import { sendExistingAccountEmail } from "../app/account-email.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { loader as loadLegal } from "../app/routes/legal";
 import { action as signIn, loader as loadAccess } from "../app/routes/sign-in";
+import { action as securityAction } from "../app/routes/settings";
 import { action as startStoreLink } from "../app/routes/store-link";
 import { accessNotice } from "../app/access-notice";
 import { now, resetDatabase } from "./fixtures/database-fixtures";
@@ -639,6 +640,38 @@ describe("registrazione e verifica del contatto", () => {
       expect(limited.status).toBe(429);
       expect((await accessError(limited)).key).toBe("troppi-tentativi");
       expect(siteverify.requests).toHaveLength(6);
+    } finally {
+      Object.assign(env, { APP_ORIGIN: previous });
+    }
+  });
+
+  it("nella Sicurezza il filtro per IP degli invii ad Auth precede sessione e Turnstile", async () => {
+    const deployed = "https://test.fiscalbay.it";
+    const previous = env.APP_ORIGIN;
+    Object.assign(env, { APP_ORIGIN: deployed });
+    const submit = (fields: Record<string, string>) =>
+      routeResponse(securityAction, "/app/impostazioni/sicurezza", {
+        origin: deployed,
+        headers: { "cf-connecting-ip": "198.51.100.78" },
+        fields,
+      });
+    try {
+      const forms: Array<Record<string, string>> = [
+        { intent: "password" },
+        { intent: "cambia-email", email: "nuovo@example.invalid" },
+        { intent: "conferma-accesso", metodo: "password", password: "x" },
+        { intent: "account-delete", confirmation: "x" },
+      ];
+      for (const fields of forms) {
+        await withinOneLimitWindow();
+        // Senza sessione l'invio torna all'accesso, ma conta per il filtro dell'operazione.
+        for (let count = 0; count < 3; count++) expect((await submit(fields)).status).not.toBe(429);
+        const limited = await submit(fields);
+        expect(limited.status).toBe(429);
+        expect(limited.headers.get("retry-after")).toMatch(/^\d+$/u);
+        expect(limited.headers.get("cache-control")).toBe("no-store");
+      }
+      expect(siteverify.requests).toHaveLength(0);
     } finally {
       Object.assign(env, { APP_ORIGIN: previous });
     }

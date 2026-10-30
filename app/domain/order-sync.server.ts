@@ -16,9 +16,9 @@ import { visibleOrderState } from "./orders.server";
 
 /**
  * Lettura periodica dei negozi e richieste manuali. Il cron parte ogni dieci minuti, sceglie i
- * negozi dovuti e ne accoda la lettura; «Sincronizza» e «Reimporta» la accodano subito. Ogni
- * messaggio porta soltanto il riferimento al negozio e il consumer legge un negozio per
- * invocazione. La richiesta resta in D1 finché una lettura partita dopo non la serve: richieste
+ * negozi dovuti e ne accoda la lettura a gruppi di dieci; «Sincronizza» e «Reimporta» la
+ * accodano subito per il solo negozio. Ogni messaggio porta soltanto i riferimenti ai negozi e il
+ * consumer ne legge uno alla volta. La richiesta resta in D1 finché una lettura partita dopo non la serve: richieste
  * ripetute confluiscono nella stessa e il cron riaccoda quelle che la coda non ha consegnato.
  * Gli eventi eBay seguono l'ingresso dei webhook e non dipendono dal piano.
  */

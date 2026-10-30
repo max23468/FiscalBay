@@ -14,7 +14,12 @@ import {
 } from "./domain/registration.server";
 import { deletionReauthenticated } from "./domain/account-deletion.server";
 import { listSignInMethods } from "./domain/sign-in-methods.server";
-import { requestAccountDeletion, securityAction } from "./security-actions.server";
+import {
+  requestAccountDeletion,
+  securityAction,
+  securityAuthPath,
+} from "./security-actions.server";
+import { tooManyRequests } from "./area-actions.server";
 import { errorResponse, unavailableData } from "./error-response";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
@@ -244,11 +249,15 @@ export async function accessAction(request: Request) {
   // Cancellazione dell'account e conferma dell'identità sul posto, o con uscita e nuovo
   // accesso, per chi non raggiunge le Impostazioni: lo stesso flusso, con la sessione in uso.
   if (intent === "account-delete" || intent === "conferma-accesso" || intent === "riautentica") {
+    // Il filtro per IP precede anche la lettura della sessione.
+    const authPath = securityAuthPath(intent, form);
+    const wait = authPath ? await authLimitWait(env, request, authPath) : null;
+    if (wait !== null) return tooManyRequests(request, wait);
     const session = await readSession(env, request);
     if (!session) return notice("errore");
     return intent === "account-delete"
-      ? requestAccountDeletion(request, { language, session }, field("confirmation"))
-      : securityAction(request, { language, session }, form);
+      ? requestAccountDeletion(request, { language, session }, field("confirmation"), true)
+      : securityAction(request, { language, session }, form, authPath !== null);
   }
 
   if (intent === "verifica" || intent === "completa") {

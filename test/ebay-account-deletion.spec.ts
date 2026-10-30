@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { listAnomalies } from "../app/domain/admin-operations.server";
+import { reconcileOwnerIncidents } from "../app/domain/owner-incidents.server";
 import {
   consumeEbayAccountDeletion,
   recordEbayAccountDeletion,
@@ -505,10 +506,19 @@ it("dopo le cancellazioni nessuna tabella conserva l'identità eBay, salvo la ri
   await env.DB.batch([
     env.DB.prepare("DELETE FROM ebay_stores WHERE id = 's-sandbox'"),
     env.DB.prepare("DELETE FROM orders WHERE id = 'o-namesake'"),
+    // Un avviso all'owner aperto sulle letture del negozio, con il suo nome fra gli oggetti.
+    env.DB.prepare(`INSERT INTO owner_incidents (key, kind, severity, detail, opened_at)
+      VALUES ('store_reads:production', 'store_reads', 'p2', ?, ?)`).bind(
+      JSON.stringify({ count: 1, total: 1, subjects: ["Negozio X"], href: "negozi" }),
+      at.toISOString(),
+    ),
   ]);
   await recordEbayAccountDeletion(environment, seller, at);
   await recordEbayAccountDeletion(environment, buyer, at);
   await resumeEbayAccountDeletions(environment, at);
+  // Senza chat dell'owner: soltanto l'allineamento, nessun invio.
+  const offline = { ...environment, TELEGRAM_OWNER_ID: "" } as unknown as Env;
+  await reconcileOwnerIncidents(offline, vi.fn<typeof fetch>(), at);
   const { results: tables } = await env.DB.prepare(
     `SELECT name FROM sqlite_master WHERE type = 'table'
        AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' AND name NOT LIKE '\\_cf\\_%' ESCAPE '\\'
