@@ -24,6 +24,7 @@ import { subscriptionRenews } from "../domain/billing.server";
 import { storeNotifications } from "../domain/telegram.server";
 import { telegramConfigured } from "../integrations/telegram.server";
 import { requestStoreSync, type SyncRequestResult } from "../domain/order-sync.server";
+import { releaseOrderEvents } from "../domain/order-events.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { ActionResult, EbayEnvironment, StoreView } from "../view-models";
 import { serviceSetting } from "../domain/service-settings.server";
@@ -158,9 +159,15 @@ const storeActions: Record<
 > = {
   "store-pause": (userId, storeId) => pauseStore(env.DB, userId, storeId),
   "store-resume": (userId, storeId) => resumeStore(env.DB, userId, storeId),
-  "store-disconnect": (userId, storeId) => disconnectStore(env.DB, userId, storeId),
+  // La sottoscrizione agli ordini eBay si toglie finché il token del negozio esiste.
+  "store-disconnect": async (userId, storeId) => {
+    await releaseOrderEvents(env, userId, storeId, fetch);
+    return disconnectStore(env.DB, userId, storeId);
+  },
   "store-delete": (userId, storeId, form) =>
-    deleteStoreData(env.DB, userId, storeId, String(form.get("conferma") ?? "")),
+    deleteStoreData(env.DB, userId, storeId, String(form.get("conferma") ?? ""), new Date(), () =>
+      releaseOrderEvents(env, userId, storeId, fetch),
+    ),
 };
 
 const ebayEnvironments: EbayEnvironment[] = ["production", "sandbox"];

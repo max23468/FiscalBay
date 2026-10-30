@@ -439,10 +439,13 @@ export async function deleteStoreData(
   storeId: string,
   confirmation: string,
   now = new Date(),
+  beforeDelete: () => Promise<void> = async () => {},
 ): Promise<StoreActionResult> {
   const name = await ownedStoreName(db, userId, storeId);
   if (name === null) return "not_found";
   if (confirmation.trim() !== name) return "invalid";
+  // Confermata l'eliminazione, prima che i token spariscano.
+  await beforeDelete();
   const at = now.toISOString();
   const results = await db.batch([
     ...disconnectStatements(db, userId, storeId, at),

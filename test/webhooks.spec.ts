@@ -733,7 +733,7 @@ it("con chiamate eBay, invii Telegram e acquisti spenti l'ingresso riceve e acco
   expect(send).toHaveBeenCalledExactlyOnceWith({ receiptId: (await receipt())?.id });
 });
 
-it("rifiuta firma, schema, identità, ambiente e data non validi senza claim", async () => {
+it("rifiuta firma, schema, ambiente e data non validi e ignora venditori senza negozio, senza claim", async () => {
   const missing = new Request("https://test.fiscalbay.it/webhooks/ebay", {
     method: "POST",
     body: "{}",
@@ -749,7 +749,7 @@ it("rifiuta firma, schema, identità, ambiente e data non validi senza claim", a
         ...notification,
         notification: { ...notification.notification, eventDate: "2026-10-01T12:00:00.000Z" },
       },
-      409,
+      204,
     ],
     [
       {
@@ -766,7 +766,7 @@ it("rifiuta firma, schema, identità, ambiente e data non validi senza claim", a
           data: { ...notification.notification.data, user: { userId: "other-seller" } },
         },
       },
-      409,
+      204,
     ],
   ] as const)
     expect((await receive(ebayRequest(payload)))?.status).toBe(status);
@@ -1238,7 +1238,7 @@ it("un ID non può cambiare negozio, consenso, tipo o data della ricevuta", asyn
       "INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, ebay_account_id, linked_at) VALUES ('other-store', 'webhook-workspace', 'other-seller', 'other-seller', ?)",
     ).bind(grantedAt),
     env.DB.prepare(
-      "INSERT INTO ebay_store_credentials SELECT 'other-store', access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at, refreshed_at, rejected_at, reconnect_notice_at FROM ebay_store_credentials WHERE store_id = 'webhook-store'",
+      "INSERT INTO ebay_store_credentials (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at, refreshed_at, rejected_at, reconnect_notice_at) SELECT 'other-store', access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at, refreshed_at, rejected_at, reconnect_notice_at FROM ebay_store_credentials WHERE store_id = 'webhook-store'",
     ),
   ]);
   expect(

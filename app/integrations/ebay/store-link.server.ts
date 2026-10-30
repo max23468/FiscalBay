@@ -6,11 +6,13 @@ import type { SellerTokens } from "./seller-credentials.server";
 import type { EbayEnvironment } from "../../view-models";
 import { basicAuthorization, ebayConfiguration, type EbayAccess } from "./environment.server";
 
-// Il collegamento del negozio non chiede l'email: resta separato dal login eBay.
+// Il collegamento del negozio non chiede l'email: resta separato dal login eBay. Le notifiche
+// servono soltanto a sottoscrivere `ORDER_CONFIRMATION` del venditore (D235).
 export const ebayStoreScopes = [
   "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+  "https://api.ebay.com/oauth/api_scope/commerce.notification.subscription",
 ] as const;
 
 const linkSessionTtlMilliseconds = 10 * 60 * 1000;

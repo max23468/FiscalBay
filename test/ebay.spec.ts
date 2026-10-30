@@ -12,6 +12,12 @@ import {
   readTradingTaxObservation,
   tradingAck,
 } from "../app/integrations/ebay/trading.server";
+import {
+  orderEventsDestination,
+  orderEventsEndpoint,
+  subscribeOrderEvents,
+  unsubscribeOrderEvents,
+} from "../app/integrations/ebay/order-events.server";
 import { UpstreamError } from "../app/integrations/http.server";
 import { resetDatabase } from "./fixtures/database-fixtures";
 import {
@@ -243,5 +249,191 @@ describe("client eBay e normalizzazione", () => {
     const [, init] = getItem.mock.calls[0]!;
     expect((init!.headers as Record<string, string>)["x-ebay-api-call-name"]).toBe("GetItem");
     expect(String(init!.body)).toContain("<ItemID>110&lt;1&gt;&amp;&quot;&apos;</ItemID>");
+  });
+});
+
+describe("sottoscrizione ORDER_CONFIRMATION del venditore", () => {
+  const test = { APP_ORIGIN: "https://test.fiscalbay.it" };
+  const live = { APP_ORIGIN: "https://fiscalbay.it" };
+  type Existing = {
+    subscriptionId: string;
+    topicId: string;
+    status: string;
+    destinationId: string;
+  };
+  /** Notification API sintetica: registra metodo, percorso, token e corpo di ogni chiamata. */
+  const notifications = (state: { create?: number; existing?: Existing[] } = {}) => {
+    const calls: { method: string; path: string; token: string | null; body?: unknown }[] = [];
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const token = new Headers(init?.headers).get("authorization");
+      calls.push({
+        method,
+        path: `${url.pathname.replace("/commerce/notification/v1/", "")}${url.search}`,
+        token,
+        ...(init?.body && typeof init.body === "string" ? { body: JSON.parse(init.body) } : {}),
+      });
+      if (url.pathname === "/identity/v1/oauth2/token")
+        return Response.json({ access_token: "token-applicazione" });
+      if (url.pathname.endsWith("/destination"))
+        return Response.json({
+          destinations: [
+            {
+              destinationId: "spenta",
+              status: "DISABLED",
+              deliveryConfig: { endpoint: "https://test.fiscalbay.it/webhooks/ebay" },
+            },
+            {
+              destinationId: "test",
+              status: "ENABLED",
+              deliveryConfig: { endpoint: "https://test.fiscalbay.it/webhooks/ebay" },
+            },
+            {
+              destinationId: "live",
+              status: "ENABLED",
+              deliveryConfig: { endpoint: "https://fiscalbay.it/webhooks/ebay" },
+            },
+            {
+              destinationId: "sandbox",
+              status: "ENABLED",
+              deliveryConfig: { endpoint: "https://test.fiscalbay.it/webhooks/ebay/sandbox" },
+            },
+          ],
+        });
+      if (method === "POST" && url.pathname.endsWith("/subscription")) {
+        const status = state.create ?? 201;
+        return status === 201
+          ? new Response(null, { status })
+          : Response.json({ errors: [{ errorId: status === 409 ? 195012 : 195011 }] }, { status });
+      }
+      if (method === "GET" && url.pathname.endsWith("/subscription"))
+        return Response.json({ subscriptions: state.existing ?? [] });
+      return new Response(null, { status: method === "DELETE" ? 204 : 200 });
+    });
+    return { calls, access: access(fetcher), fetcher };
+  };
+  const ours = {
+    subscriptionId: "sub/1",
+    topicId: "ORDER_CONFIRMATION",
+    status: "ENABLED",
+    destinationId: "test",
+  };
+  const other = { ...ours, destinationId: "live" };
+  const writes = (calls: { method: string; path: string; body?: unknown }[]) =>
+    calls
+      .filter(({ method }) => method !== "GET")
+      .map(({ method, path, body }) => ({ method, path, ...(body ? { body } : {}) }));
+
+  it("trova la destinazione abilitata dell'ambiente con il token dell'applicazione", async () => {
+    const api = notifications();
+    expect(
+      await orderEventsDestination(test, "production", api.access.configuration, api.fetcher),
+    ).toBe("test");
+    expect(
+      await orderEventsDestination(live, "production", api.access.configuration, api.fetcher),
+    ).toBe("live");
+    expect(
+      await orderEventsDestination(test, "sandbox", api.access.configuration, api.fetcher),
+    ).toBe("sandbox");
+    expect(
+      await orderEventsDestination(
+        { APP_ORIGIN: "http://localhost:5173" },
+        "production",
+        api.access.configuration,
+        api.fetcher,
+      ),
+    ).toBeNull();
+    expect(
+      api.calls
+        .filter(({ path }) => path.startsWith("destination"))
+        .every(({ token }) => token === "Bearer token-applicazione"),
+    ).toBe(true);
+    expect(orderEventsEndpoint({ APP_ORIGIN: "https://test.fiscalbay.it/" }, "sandbox")).toBe(
+      "https://test.fiscalbay.it/webhooks/ebay/sandbox",
+    );
+  });
+
+  it("crea la sottoscrizione del venditore con il suo token, la versione 1.0 e lo stato abilitato", async () => {
+    const api = notifications();
+    expect(await subscribeOrderEvents(test, api.access, "test")).toBe("subscribed");
+    expect(api.calls).toEqual([
+      {
+        method: "POST",
+        path: "subscription",
+        token: "Bearer token-sintetico",
+        body: {
+          topicId: "ORDER_CONFIRMATION",
+          destinationId: "test",
+          payload: { format: "JSON", schemaVersion: "1.0", deliveryProtocol: "HTTPS" },
+          status: "ENABLED",
+        },
+      },
+    ]);
+  });
+
+  it("un consenso senza lo scope delle notifiche non sottoscrive", async () => {
+    const api = notifications({ create: 403 });
+    expect(await subscribeOrderEvents(test, api.access, "test")).toBe("unauthorized");
+    expect(api.calls).toHaveLength(1);
+  });
+
+  it("una sottoscrizione esistente si riaccende sull'ambiente e si sposta soltanto in Production", async () => {
+    const enabled = notifications({ create: 409, existing: [ours] });
+    expect(await subscribeOrderEvents(test, enabled.access, "test")).toBe("subscribed");
+    expect(writes(enabled.calls)).toHaveLength(1);
+
+    const disabled = notifications({ create: 409, existing: [{ ...ours, status: "DISABLED" }] });
+    expect(await subscribeOrderEvents(test, disabled.access, "test")).toBe("subscribed");
+    expect(writes(disabled.calls).at(-1)).toEqual({
+      method: "POST",
+      path: "subscription/sub%2F1/enable",
+    });
+
+    const elsewhere = notifications({ create: 409, existing: [other] });
+    expect(await subscribeOrderEvents(test, elsewhere.access, "test")).toBe("elsewhere");
+    expect(writes(elsewhere.calls)).toHaveLength(1);
+
+    const takeover = notifications({ create: 409, existing: [{ ...ours, destinationId: "test" }] });
+    expect(await subscribeOrderEvents(live, takeover.access, "live")).toBe("subscribed");
+    expect(writes(takeover.calls).at(-1)).toEqual({
+      method: "PUT",
+      path: "subscription/sub%2F1",
+      body: {
+        destinationId: "live",
+        payload: { format: "JSON", schemaVersion: "1.0", deliveryProtocol: "HTTPS" },
+        status: "ENABLED",
+      },
+    });
+
+    const missing = notifications({ create: 409, existing: [] });
+    expect(await failure(subscribeOrderEvents(test, missing.access, "test"))).toEqual({
+      failure: "invalid_response",
+    });
+  });
+
+  it("limiti ed errori di eBay restano errori del provider", async () => {
+    expect(
+      await failure(subscribeOrderEvents(test, notifications({ create: 429 }).access, "test")),
+    ).toEqual({ failure: "rate_limited", status: 429 });
+    expect(
+      await failure(subscribeOrderEvents(test, notifications({ create: 500 }).access, "test")),
+    ).toEqual({ failure: "unavailable", status: 500 });
+    expect(
+      await failure(subscribeOrderEvents(test, notifications({ create: 401 }).access, "test")),
+    ).toEqual({ failure: "credentials", status: 401 });
+    expect(
+      await failure(subscribeOrderEvents(test, notifications({ create: 400 }).access, "test")),
+    ).toEqual({ failure: "rejected", status: 400 });
+  });
+
+  it("toglie soltanto la sottoscrizione che punta all'ambiente", async () => {
+    const api = notifications({ existing: [ours] });
+    expect(await unsubscribeOrderEvents(api.access, "test")).toBe(true);
+    expect(writes(api.calls)).toEqual([{ method: "DELETE", path: "subscription/sub%2F1" }]);
+    const moved = notifications({ existing: [other] });
+    expect(await unsubscribeOrderEvents(moved.access, "test")).toBe(false);
+    expect(writes(moved.calls)).toEqual([]);
+    expect(await unsubscribeOrderEvents(notifications().access, "test")).toBe(false);
   });
 });

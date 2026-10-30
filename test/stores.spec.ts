@@ -7,6 +7,7 @@ import {
   describe,
   expect,
   it,
+  onTestFinished,
   vi,
   type MockInstance,
 } from "vitest";
@@ -580,6 +581,103 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     const anonymous = await routeResponse(loadStores, "/app/negozi");
     expect(anonymous.status).toBe(302);
     expect(anonymous.headers.get("location")).toBe("/accesso");
+  });
+
+  it("scollegamento ed eliminazione tolgono prima la sottoscrizione agli ordini eBay", async () => {
+    const calls: string[] = [];
+    const fetcher = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      calls.push(
+        `${method} ${url.pathname} ${new Headers(init?.headers).get("authorization")?.split(" ")[0]}`,
+      );
+      if (url.pathname === "/identity/v1/oauth2/token")
+        return Response.json({ access_token: "token-applicazione" });
+      if (url.pathname.endsWith("/destination"))
+        return Response.json({
+          destinations: [
+            {
+              destinationId: "locale",
+              status: "ENABLED",
+              deliveryConfig: { endpoint: "http://localhost:5173/webhooks/ebay" },
+            },
+          ],
+        });
+      if (url.pathname.endsWith("/subscription"))
+        return Response.json({
+          subscriptions: [
+            {
+              subscriptionId: "sottoscrizione",
+              topicId: "ORDER_CONFIRMATION",
+              status: "ENABLED",
+              destinationId: "locale",
+            },
+          ],
+        });
+      return new Response(null, { status: 204 });
+    });
+    onTestFinished(() => fetcher.mockRestore());
+    const subscribed = () =>
+      env.DB.prepare("UPDATE ebay_store_credentials SET order_events = 'subscribed'").run();
+    const released = [
+      "POST /identity/v1/oauth2/token Basic",
+      "GET /commerce/notification/v1/destination Bearer",
+      "GET /commerce/notification/v1/subscription Bearer",
+      "DELETE /commerce/notification/v1/subscription/sottoscrizione Bearer",
+    ];
+
+    // Senza sottoscrizione registrata nessuna chiamata.
+    const plain = await linkedSeller("scollega-senza-eventi@example.invalid");
+    calls.length = 0;
+    await storeForm(plain.cookie, { intent: "store-disconnect", store: plain.storeId });
+    expect(calls).toEqual([]);
+    await resetDatabase();
+
+    const seller = await linkedSeller("scollega-eventi@example.invalid");
+    await subscribed();
+    calls.length = 0;
+    await storeForm(seller.cookie, { intent: "store-disconnect", store: seller.storeId });
+    expect(calls).toEqual(released);
+    expect(await count("ebay_store_credentials")).toBe(0);
+    await resetDatabase();
+
+    // L'eliminazione toglie la sottoscrizione soltanto dopo la conferma del nome.
+    const deleting = await linkedSeller("elimina-eventi@example.invalid");
+    await subscribed();
+    calls.length = 0;
+    await storeForm(deleting.cookie, {
+      intent: "store-delete",
+      store: deleting.storeId,
+      conferma: "altro",
+    });
+    expect(calls).toEqual([]);
+    await storeForm(deleting.cookie, {
+      intent: "store-delete",
+      store: deleting.storeId,
+      conferma: "venditore",
+    });
+    expect(calls).toEqual(released);
+    expect(await count("ebay_store_credentials")).toBe(0);
+  });
+
+  it("un errore di eBay non ferma lo scollegamento", async () => {
+    const seller = await linkedSeller("scollega-errore@example.invalid");
+    await env.DB.prepare("UPDATE ebay_store_credentials SET order_events = 'subscribed'").run();
+    const fetcher = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(null, { status: 503 }));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => {
+      fetcher.mockRestore();
+      errors.mockRestore();
+    });
+    expect(
+      await storeForm(seller.cookie, { intent: "store-disconnect", store: seller.storeId }),
+    ).toMatchObject({ ok: true });
+    expect(await count("ebay_store_credentials")).toBe(0);
+    expect(
+      errors.mock.calls.some(([line]) => String(line).includes('"operation":"order_events"')),
+    ).toBe(true);
   });
 
   it("esegue pausa, ripresa, scollegamento ed eliminazione dalla schermata con origine e sessione", async () => {
