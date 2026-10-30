@@ -100,7 +100,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       faq: pages.faq.items.slice(0, 4),
       shots: pages.shots,
       quota: freePromotion
-        ? promotionLine(freePromotion.quota, listing.promotionEnd!, baseFreeQuota)
+        ? promotionLine(freePromotion.quota, listing.promotionEnd, baseFreeQuota)
         : freeQuota(baseFreeQuota),
     },
   };

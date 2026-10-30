@@ -18,7 +18,7 @@ import { appCopy, infoEmail } from "../app/app-copy";
 import { adminCopy } from "../app/copy/admin-copy";
 import { legalDocuments, type LegalSection } from "../app/copy/legal-documents.server";
 import { sitePages } from "../app/copy/site-pages.server";
-import { italianGross } from "../app/catalog";
+import { italianGross, openPromotionEnd } from "../app/catalog";
 import { freeStoreChangeDays } from "../app/domain/free-store.server";
 import { trialDays } from "../app/domain/grants.server";
 import { legalVersions } from "../app/domain/registration.server";
@@ -79,6 +79,25 @@ describe("radice pubblica e area riservata", () => {
     );
     vi.setSystemTime(new Date(promotion.endsAt));
     expect(await root("/en")).toMatchObject({ baseFreeQuota: 5, freePromotion: null });
+  });
+
+  it("annuncia una promozione senza fine come un periodo limitato", async () => {
+    await env.DB.prepare(
+      `INSERT INTO free_promotions (id, starts_at, ends_at, quota, created_at)
+       VALUES ('aperta', '2026-09-01T00:00:00.000Z', ?1, 10, ?2)`,
+    )
+      .bind(openPromotionEnd, new Date().toISOString())
+      .run();
+    const line =
+      "Promozione Free per un periodo limitato: 10 ordini da sbloccare ogni 7 giorni invece di 5.";
+    expect(await root("/")).toMatchObject({
+      freePromotion: { quota: 10, endsAt: null },
+      copy: { quota: line },
+    });
+    expect((await callRoute(loadPricing, "/prezzi")).copy.promotion).toBe(line);
+    expect(sitePages.en.home.freePromotion(10, null, 5)).toBe(
+      "Free promotion for a limited time: 10 orders to unlock every 7 days instead of 5.",
+    );
   });
 
   it("mostra in home il netto con il totale IVA e la prova soltanto con gli acquisti aperti", async () => {

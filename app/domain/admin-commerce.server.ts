@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-import { lifetimeSlots, priceGeneration, priceVariable, type PremiumOffer } from "../catalog";
+import {
+  lifetimeSlots,
+  openPromotionEnd,
+  priceGeneration,
+  priceVariable,
+  type PremiumOffer,
+} from "../catalog";
 import { logFailure } from "../errors";
 import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
@@ -157,7 +163,8 @@ export async function checkPrices(env: Env, fetcher: typeof fetch = fetch): Prom
 export type Promotion = {
   id: string;
   startsAt: string;
-  endsAt: string;
+  /** Null per una promozione senza fine, che dura finché non si termina. */
+  endsAt: string | null;
   quota: number;
   updatedAt: string | null;
 };
@@ -165,9 +172,10 @@ export type Promotion = {
 /** Promozioni non concluse da oltre 90 giorni, dalla più recente. */
 export async function listPromotions(db: D1Database, now = new Date()): Promise<Promotion[]> {
   const { results } = await db
-    .prepare(`SELECT id, starts_at AS startsAt, ends_at AS endsAt, quota, updated_at AS updatedAt
-      FROM free_promotions WHERE julianday(ends_at) > julianday(?) - 90 ORDER BY starts_at DESC`)
-    .bind(now.toISOString())
+    .prepare(`SELECT id, starts_at AS startsAt, NULLIF(ends_at, ?2) AS endsAt, quota,
+        updated_at AS updatedAt
+      FROM free_promotions WHERE julianday(ends_at) > julianday(?1) - 90 ORDER BY starts_at DESC`)
+    .bind(now.toISOString(), openPromotionEnd)
     .all<Promotion>();
   return results;
 }
@@ -175,17 +183,18 @@ export async function listPromotions(db: D1Database, now = new Date()): Promise<
 export const promotionSchema = z
   .object({
     startsAt: utc,
-    endsAt: utc,
+    endsAt: utc.nullable(),
     quota: z.coerce.number().int().min(1).max(100),
   })
-  .refine(({ startsAt, endsAt }) => Date.parse(endsAt) > Date.parse(startsAt));
+  .refine(({ startsAt, endsAt }) => endsAt === null || Date.parse(endsAt) > Date.parse(startsAt));
 
 export type PromotionResult = "done" | "invalid" | "overlap" | "not_found" | "started";
 
 /**
  * Nuova promozione o modifica di una non conclusa. Non parte mai nel passato; di una promozione
  * già iniziata si cambiano soltanto quota e fine, e la fine non torna nel passato: i cicli
- * iniziati conservano la versione in vigore al loro inizio.
+ * iniziati conservano la versione in vigore al loro inizio. Senza fine dura finché non si
+ * termina o non riceve una fine.
  */
 export async function savePromotion(
   db: D1Database,
@@ -193,7 +202,7 @@ export async function savePromotion(
   now = new Date(),
 ): Promise<PromotionResult> {
   const at = now.toISOString();
-  const { promotion } = input;
+  const promotion = { ...input.promotion, endsAt: input.promotion.endsAt ?? openPromotionEnd };
   if (Date.parse(promotion.endsAt) <= now.getTime()) return "invalid";
   try {
     if (!input.id) {

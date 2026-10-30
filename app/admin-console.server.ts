@@ -556,7 +556,8 @@ const adminActions: Record<string, AdminAction> = {
     run: async ({ field, now, t, result, invalid }) => {
       const parsed = promotionSchema.safeParse({
         startsAt: localInstant(field("inizio")),
-        endsAt: localInstant(field("fine")),
+        // Senza fine la promozione dura finché non si termina; una fine illeggibile è rifiutata.
+        endsAt: field("fine") ? (localInstant(field("fine")) ?? "") : null,
         quota: field("quota"),
       });
       if (!parsed.success) return invalid();

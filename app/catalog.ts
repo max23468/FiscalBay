@@ -57,6 +57,13 @@ export const priceGeneration = {
 export const baseFreeQuota = 5;
 
 /**
+ * Fine registrata di una promozione del Free senza data: dura finché la console non la termina.
+ * Il database vuole una fine, quindi la promozione aperta ne ha una che nessun ciclo raggiunge;
+ * chi la legge la riporta come assente.
+ */
+export const openPromotionEnd = "9999-12-31T23:59:59.999Z";
+
+/**
  * Venti posti lifetime fra vendite e omaggi (D031). Il numero del posto è il vincolo atomico
  * del tetto: una prenotazione occupa il posto più basso libero prima del Checkout, la conferma
  * verificata di Stripe lo rende attivo e soltanto una sessione che non può più incassare lo

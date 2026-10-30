@@ -82,7 +82,7 @@ Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente q
 | M1 | Logo approvato il 2026-09-26, design system il 2026-09-27, prototipo e chiusura M1 il 2026-09-28. Nessuna pubblicazione Production autorizzata. |
 | M5 | 2026-10-26: configurazione dell'account Stripe live secondo [M5-12](#m5-12), cioè impostazioni fiscali, metodi di pagamento, webhook, portale, Smart Retries e contatto di assistenza. Lo stesso giorno l'owner ha completato il checkpoint: vendite live, segreti del Worker Production e confini degli effetti economici restano alle prove commerciali di [M9-01](#m9-01) e al mandato Production. |
 | M8 | 2026-10-30: test merchant sul test con il negozio eBay Production dell'owner, secondo il [manifest](engineering/RELEASE.md#test-merchant): Stripe sandbox, bot del test, Accedi con eBay reale sul test (D234). Nessun deploy o effetto sul Worker Production né incasso live. |
-| M9 | In attesa: candidato/manifest, date promo, checklist e comando `Promuovi`. |
+| M9 | In attesa: candidato/manifest, checklist e comando `Promuovi`. Promozione Free attiva dal go-live senza fine (D239). |
 
 ### 0.3 Una fonte per responsabilità
 
@@ -109,7 +109,7 @@ Una prova breve, un test o il log CI pertinenti possono bastare: non serve una r
 
 Avvio e ripresa sono nel [README](../README.md#avvio); la procedura di adozione iniziale è [archiviata](archive/2026-09-adozione-2.0.md). Allineare le istruzioni 1.x e verificare i trigger legacy nell'inventario iniziale, senza alterare istruzioni globali o lavoro altrui. La roadmap conserva avanzamento, task per milestone e pendenze utili alla ripresa; Git conserva la storia. Non creare un archivio del vecchio tracker, un diario o uno stato concorrente.
 
-Accessi, dati legali, destinatario del test e date promo si acquisiscono secondo il [catalogo input](engineering/AGENT_SETUP.md#input). Non occorre ricostruire le decisioni dalla chat; una credenziale mancante blocca soltanto il lavoro dipendente. Le [responsabilità documentali](engineering/AGENT_SETUP.md#deliverable) indicano dove mantenere le informazioni prodotte nello sviluppo, senza imporre file anticipati.
+Accessi, dati legali, destinatario del test e chiusura della promozione si acquisiscono secondo il [catalogo input](engineering/AGENT_SETUP.md#input). Non occorre ricostruire le decisioni dalla chat; una credenziale mancante blocca soltanto il lavoro dipendente. Le [responsabilità documentali](engineering/AGENT_SETUP.md#deliverable) indicano dove mantenere le informazioni prodotte nello sviluppo, senza imporre file anticipati.
 
 <a id="s01"></a>
 ## 1. Visione, pubblico e confini del prodotto
@@ -183,7 +183,7 @@ Il sito mostra netto + IVA con evidenza appropriata del totale per il tipo di ac
 
 Il primo collegamento eBay riuscito fissa l'ancoraggio del ciclo; non la registrazione senza negozio. Cicli consecutivi non sovrapposti, senza accumulo o azzeramento per cambio fuso, logout, riconnessione, sostituzione o nuova importazione. `free_cycles` conserva inizio, fine e quota applicabile; utilizzo dai diritti/eventi validi. Materializzare i cicli quando servono, senza creare milioni di righe vuote.
 
-Promozione globale di **due mesi**, non due mesi per ogni nuovo utente: 10 ordini per ciclo anziché 5. Date effettive stabilite da Matteo in M9; configurazione admin senza deploy. La pagina prezzi mostra la promo e la data finale, con preavviso. Il Piano indica la quota del ciclo in corso e, se diversa, quella del ciclo seguente. Il ciclo personale iniziato prima della fine promo conserva la sua quota fino alla scadenza; quello seguente usa 5.
+Promozione globale, non per ogni nuovo utente: 10 ordini per ciclo anziché 5, attiva dal go-live finché Matteo non la chiude ([D239](DECISION_REGISTER.md)); configurazione admin senza deploy. Senza una fine la pagina prezzi la annuncia per un periodo limitato; quando Matteo decide la chiusura, la fine programmata compare con la sua data. Il Piano indica la quota del ciclo in corso e, se diversa, quella del ciclo seguente. Il ciclo personale iniziato prima della fine promo conserva la sua quota fino alla scadenza; quello seguente usa 5.
 
 La quota conta solo un ordine con almeno un dato fiscale effettivamente reso accessibile, anche se formalmente incoerente. Non conta API call, tentativo fallito, assenza, refresh, copia, esportazione o apertura successiva. Dati presenti ma bloccati rimangono protetti; quota esaurita non ferma acquisizione/consultazione non fiscale.
 
@@ -723,7 +723,7 @@ Lo schema fisico dipende da M0. La tabella descrive **responsabilità logiche**,
 | Snapshot buyer dell’ordine; buyer canonico opzionale | I dati dell’ordine non vengono riscritti dall’anagrafica corrente; collegamento affidabile solo nello spazio |
 | tax_identifiers, tax_versions | Valore, tipo/Paese/fonte, qualità, provenienza e variazioni |
 | order_access_grants, unlock_events | Diritto per ordine, origine, prima disponibilità, ciclo e deduplica |
-| free_cycles, promotions | Ancoraggio, quota congelata, utilizzo derivato e date promo |
+| free_cycles, promotions | Ancoraggio, quota congelata, utilizzo derivato e periodo della promo |
 | commercial_catalog, price_generations | Listini base EUR e prezzi provider per ambiente |
 | subscriptions, entitlement_grants | Stato locale riconciliato, validità/origine/oggetti provider |
 | lifetime_allocations | Prenotazione, conferma, omaggio, vincolo capacità e diritto persistente |
@@ -2004,7 +2004,7 @@ Il [drill](engineering/RELEASE.md#drill-di-ripristino) usa Time Travel della D1 
 <a id="m9"></a>
 ### M9 · Go-live
 
-**Prerequisiti:** M0–M8 chiuse, RC, controlli commerciali live e via owner. **Attività:** fissare date promo globale, validare checklist unica §41, restore drill unico, Promuovi, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Conclusa la sorveglianza e dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
+**Prerequisiti:** M0–M8 chiuse, RC, controlli commerciali live e via owner. **Attività:** attivare la promozione globale al go-live, validare checklist unica §41, restore drill unico, Promuovi, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Conclusa la sorveglianza e dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
 
 **Output:** `2.0.0` realmente pubblicata e verificata, no claim anticipato. **DoD:** dominio/posta/provider/diritti/job/alert/supporto/SEO operativi; rollback o forward-fix pronto; nessuna vecchia automazione concorrente. Il mantenimento del bot 1.x non è prerequisito: può essere dismesso prima, preservando identità bot/keyset utili e storia Git.
 
@@ -2015,13 +2015,13 @@ La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorve
 
 **Stato:** In corso · **Prerequisiti:** M8 · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
 
-Confermare date promo e configurazione commerciale; chiudere le prove Stripe residualmente solo-live nel perimetro autorizzato dei checkpoint M8/M9 già approvati, con effetti economici espliciti e senza apertura pubblica prima di Promuovi. Verificare percorso cliente Link/Portal, ricevute/contatti, riferimento del pagamento e riconciliazione dei diritti, con impatti economici espliciti: commissioni effettive rilette sugli incassi rispetto alle stime di [M5-03](#m5-03) e rappresentazione nell'app Link di un acquisto durante la prova ([M5-04](#m5-04)). Su un abbonamento Managed Payments dopo il primo addebito: cambio e annullamento della periodicità dal Piano, letti su Stripe e in D1, e cambio del metodo di pagamento dal Portal riletto nell'app ([M5-06](#m5-06), [D196](DECISION_REGISTER.md)).
+Attivare la promozione senza fine ([D239](DECISION_REGISTER.md)) e confermare la configurazione commerciale; chiudere le prove Stripe residualmente solo-live nel perimetro autorizzato dei checkpoint M8/M9 già approvati, con effetti economici espliciti e senza apertura pubblica prima di Promuovi. Verificare percorso cliente Link/Portal, ricevute/contatti, riferimento del pagamento e riconciliazione dei diritti, con impatti economici espliciti: commissioni effettive rilette sugli incassi rispetto alle stime di [M5-03](#m5-03) e rappresentazione nell'app Link di un acquisto durante la prova ([M5-04](#m5-04)). Su un abbonamento Managed Payments dopo il primo addebito: cambio e annullamento della periodicità dal Piano, letti su Stripe e in D1, e cambio del metodo di pagamento dal Portal riletto nell'app ([M5-06](#m5-06), [D196](DECISION_REGISTER.md)).
 
 **Criterio di completamento:** Nessun caso commerciale necessario rimane solo documentato/simulato senza prova consentita o decisione esplicita sul limite. Configurazione database/Stripe/UI allineata, nessun acquisto di capacità assente, Paddle inattivo salvo owner.
 
-Le [prove commerciali](engineering/RELEASE.md#prove-commerciali) hanno un preflight e una verifica in sola lettura: `scripts/commercial.mjs` rilegge account Stripe, promozione, quota base, acquisti e posti prima delle vendite, poi diritti, abbonamenti in D1 e commissioni effettive rispetto a [D193](DECISION_REGISTER.md). Provati sulla sandbox del test. Paddle non ha codice.
+Le [prove commerciali](engineering/RELEASE.md#prove-commerciali) hanno un preflight e una verifica in sola lettura: `scripts/commercial.mjs` rilegge account Stripe, promozione in corso, quota base, acquisti e posti prima delle vendite, poi diritti, abbonamenti in D1 e commissioni effettive rispetto a [D193](DECISION_REGISTER.md). Provati sulla sandbox del test. Paddle non ha codice.
 
-**Limiti residui:** date della promozione dall'owner ([IN-18](engineering/AGENT_SETUP.md#input)); acquisti live, osservazioni dell'owner e i due resoconti in `--mode live` richiedono chiave e segreto del webhook sul Worker Production, quindi il via di M9.
+**Limiti residui:** la promozione si crea senza fine in Production al go-live e si chiude su indicazione dell'owner ([IN-18](engineering/AGENT_SETUP.md#input)); acquisti live, osservazioni dell'owner e i due resoconti in `--mode live` richiedono chiave e segreto del webhook sul Worker Production, quindi il via di M9.
 
 <a id="m9-02"></a>
 #### M9-02 · Restore drill pre-go-live
@@ -2087,7 +2087,7 @@ Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore concl
 | ripristino | DA COMPLETARE | - |
 | operativita | DA COMPLETARE | - |
 
-`commerciale`: date promo approvate, Stripe/database/UI allineati, Link/Portal, ricevute, contatti e riconciliazione osservati nei casi solo-live autorizzati da M8/M9, con effetti economici espliciti; nessun acquisto senza capacità o caso necessario soltanto simulato senza decisione sul limite. Nessuna apertura pubblica anticipata.
+`commerciale`: promozione attiva come approvata, Stripe/database/UI allineati, Link/Portal, ricevute, contatti e riconciliazione osservati nei casi solo-live autorizzati da M8/M9, con effetti economici espliciti; nessun acquisto senza capacità o caso necessario soltanto simulato senza decisione sul limite. Nessuna apertura pubblica anticipata.
 
 `ripristino`: unico drill reale isolato sul candidato finale a fine M8 o prima del go-live, senza ripetizioni periodiche; dati, Auth, grant, configurazioni e marker successivi allo snapshot riconciliati, outbound isolato, revoche ed erasure rispettate. Un fallimento blocca la pubblicazione finché corretto e riprovato.
 
@@ -2162,7 +2162,7 @@ La 2.0 è completa, visivamente curata, veloce, responsive, IT/EN, robusta e ope
 | eBay | Scope/fonti/storico reali, sync10/30 target e manuale, quote/capacità con margine |
 | Dati | Isolamento, sblocchi/concorrenza, retention/erasure e prezzi/grant coerenti |
 | Stripe | Managed Payments live eleggibile, checkout/portal/Link, categorie/Paesi coperti, casi Q567 e lifetime, nessun doppio addebito |
-| Commerciale | Catalogo/listino protetto, date promo approvate, quote/ciclo/waitlist e capacità per nuovi acquisti |
+| Commerciale | Catalogo/listino protetto, promozione approvata, quote/ciclo/waitlist e capacità per nuovi acquisti |
 | Telegram/email | Bot corretto, chat/token, preferenze/digest, dominio/iCloud/transazionali, recapiti/alert funzionanti |
 | UX/brand | Logo 2.0 approvato, 2 card, app/sito dark/IT-EN, mobile/browser, baseline accessibilità |
 | Pubblico | Domini/TLS/www, protezioni di zona §24 qualificate, sito/SEO reali, prezzi/tasse chiari, noindex aree private, privacy/termini/supporto/disclaimer |

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { openPromotionEnd } from "../app/catalog.ts";
 import {
-  calendarMonthsApart,
   configurationChecks,
   entitlementChecks,
   feeChecks,
@@ -16,38 +16,32 @@ import {
 const problemsOf = (results) =>
   Object.fromEntries(results.map(({ item, problems }) => [item.split(" (")[0], problems]));
 
-describe("durata della promozione", () => {
-  it("conta i mesi di calendario all'ora italiana, anche con il cambio dell'ora", () => {
-    // 1° marzo a mezzanotte italiana (CET) → 1° maggio a mezzanotte italiana (CEST).
-    assert.equal(calendarMonthsApart("2027-02-28T23:00:00Z", "2027-04-30T22:00:00Z", 2), true);
-    assert.equal(calendarMonthsApart("2027-02-28T23:00:00Z", "2027-04-30T23:00:00Z", 2), false);
-    assert.equal(calendarMonthsApart("2026-11-15T09:00:00Z", "2027-01-15T09:00:00Z", 2), true);
-    assert.equal(calendarMonthsApart("2026-11-15T09:00:00Z", "2027-01-14T09:00:00Z", 2), false);
-  });
-
-  it("porta all'ultimo giorno un giorno che manca nel mese finale", () => {
-    assert.equal(calendarMonthsApart("2026-12-31T11:00:00Z", "2027-02-28T11:00:00Z", 2), true);
-    assert.equal(calendarMonthsApart("2026-12-31T11:00:00Z", "2027-03-03T11:00:00Z", 2), false);
-  });
-});
-
 describe("configurazione commerciale", () => {
-  const promotion = { starts_at: "2026-11-15T09:00:00Z", ends_at: "2027-01-15T09:00:00Z" };
+  const now = new Date("2026-12-01T00:00:00Z");
+  const promotion = { starts_at: "2026-11-15T09:00:00Z", ends_at: openPromotionEnd };
   const base = {
     promotions: [{ ...promotion, quota: 10 }],
     quotas: [],
     admission: undefined,
     seats: 3,
+    now,
   };
 
-  it("accetta una promozione di due mesi con quota 10, acquisti aperti e posti nel tetto", () => {
+  it("accetta una promozione in corso senza fine con quota 10, acquisti aperti e posti", () => {
     const results = configurationChecks(base);
     assert.ok(results.every(({ ok }) => ok));
-    assert.ok(results.some(({ item }) => item.includes("2026-11-15T09:00:00Z → 2027-01-15")));
+    assert.ok(results.some(({ item }) => item.includes("2026-11-15T09:00:00Z → senza fine")));
     assert.ok(results.some(({ item }) => item === "posti lifetime (3 occupati su 20)"));
+    // La fine decisa dall'owner compare nel resoconto.
+    const ending = configurationChecks({
+      ...base,
+      promotions: [{ ...promotion, ends_at: "2027-01-15T09:00:00Z", quota: 10 }],
+    });
+    assert.ok(ending.every(({ ok }) => ok));
+    assert.ok(ending.some(({ item }) => item.includes("→ 2027-01-15T09:00:00Z")));
   });
 
-  it("segnala promozione assente, doppia, con altra quota o durata", () => {
+  it("segnala promozione assente, doppia, con altra quota o non ancora iniziata", () => {
     assert.deepEqual(problemsOf(configurationChecks({ ...base, promotions: [] })).promozione, [
       "assente",
     ]);
@@ -61,24 +55,30 @@ describe("configurazione commerciale", () => {
       problemsOf(
         configurationChecks({
           ...base,
-          promotions: [{ ...promotion, ends_at: "2027-02-15T09:00:00Z", quota: 8 }],
+          promotions: [{ ...promotion, starts_at: "2026-12-02T00:00:00Z", quota: 8 }],
         }),
       ).promozione,
-      ["quota", "durata"],
+      ["quota", "non_iniziata"],
     );
   });
 
-  it("vuole la quota base del listino al ciclo che segue la promozione", () => {
+  it("vuole la quota base del listino dopo la promozione", () => {
     const quota = (value, at, id = 1) => ({ id, quota: value, effective_at: at });
-    const after = (quotas) =>
-      problemsOf(configurationChecks({ ...base, quotas }))["quota base dopo la promozione"];
-    assert.deepEqual(after([quota(7, "2026-12-01T00:00:00.000Z")]), ["quota"]);
-    assert.deepEqual(
-      after([quota(7, "2026-12-01T00:00:00.000Z"), quota(5, "2027-01-15T09:00:00.000Z", 2)]),
-      [],
-    );
-    // Una modifica che arriva dopo la fine non cambia il primo ciclo seguente.
+    const after = (quotas, ends_at = openPromotionEnd) =>
+      problemsOf(
+        configurationChecks({
+          ...base,
+          quotas,
+          promotions: [{ ...promotion, ends_at, quota: 10 }],
+        }),
+      )["quota base dopo la promozione"];
+    // Senza fine vale la quota base in vigore adesso.
+    assert.deepEqual(after([quota(7, "2026-11-20T00:00:00.000Z")]), ["quota"]);
     assert.deepEqual(after([quota(7, "2027-01-20T00:00:00.000Z")]), []);
+    // Con una fine vale quella del ciclo che inizia alla fine.
+    const end = "2027-01-15T09:00:00.000Z";
+    assert.deepEqual(after([quota(7, "2026-12-10T00:00:00.000Z")], end), ["quota"]);
+    assert.deepEqual(after([quota(7, "2026-12-10T00:00:00.000Z"), quota(5, end, 2)], end), []);
   });
 
   it("segnala acquisti chiusi e riporta la lista d'attesa", () => {

@@ -97,7 +97,8 @@ export const ownerTelegramCopy = {
   commerce: {
     seatsTaken: (sold: number, gifted: number, reserved: number) =>
       `Venduti ${sold} · omaggio ${gifted} · prenotati ${reserved}`,
-    promotion: (from: string, to: string, quota: number) => `${from} – ${to} · ${quota} sblocchi`,
+    promotion: (from: string, to: string | null, quota: number) =>
+      `${from} – ${to ?? "senza fine"} · ${quota} sblocchi`,
     noPromotions: "Nessuna promozione recente",
   },
   metrics: {

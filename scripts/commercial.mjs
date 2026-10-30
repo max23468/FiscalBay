@@ -3,8 +3,8 @@
  * Prove commerciali di un ambiente prima del go-live, in sola lettura.
  *
  * `preflight` precede le vendite: account Stripe allineato al codice, una sola promozione
- * globale del Free di due mesi con quota 10 seguita dalla quota base, acquisti aperti e posti
- * lifetime. `verify --since <ISO>` segue le vendite: ogni fattura pagata e ogni lifetime pagato
+ * globale del Free in corso con quota 10, senza fine o con la fine decisa dall'owner, seguita
+ * dalla quota base, acquisti aperti e posti lifetime. `verify --since <ISO>` segue le vendite: ogni fattura pagata e ogni lifetime pagato
  * hanno il loro diritto in D1, ogni abbonamento in D1 coincide con Stripe (stato, periodicità
  * del periodo pagato e del rinnovo, fine del periodo, disdetta, generazione del listino) e le
  * commissioni effettive di ogni offerta si confrontano con le stime di D193. Ricevute, contatti,
@@ -21,13 +21,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { baseFreeQuota, lifetimeSlots, subscriptionOffers } from "../app/catalog.ts";
+import {
+  baseFreeQuota,
+  lifetimeSlots,
+  openPromotionEnd,
+  subscriptionOffers,
+} from "../app/catalog.ts";
 import { d1Query } from "./lib/provider.mjs";
 import { literal, targetOf as databaseOf } from "./recovery.mjs";
 import { checkAccount, cliRequest, report, targetOf as accountOf } from "./stripe-account.mjs";
 
-/** Promozione globale del Free (§5): due mesi con 10 sblocchi per ciclo. */
-export const promotion = { months: 2, quota: 10 };
+/** Promozione globale del Free (§5): 10 sblocchi per ciclo, dal go-live finché l'owner la chiude. */
+export const promotionQuota = 10;
 
 /**
  * Commissioni stimate in D193 sul netto, con carta UE: Managed Payments, carta e Billing. Una
@@ -36,54 +41,12 @@ export const promotion = { months: 2, quota: 10 };
 export const feeEstimates = { monthly: 0.12, annual: 0.075, lifetime: 0.063 };
 const feeTolerance = 1.1;
 
-const zone = "Europe/Rome";
-
-/** Data e ora locali italiane di un istante, per contare i mesi come li conta l'owner. */
-function romeParts(iso) {
-  return Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: zone,
-      hourCycle: "h23",
-      year: "numeric",
-      month: "numeric",
-      day: "numeric",
-      hour: "numeric",
-      minute: "numeric",
-      second: "numeric",
-    })
-      .formatToParts(new Date(iso))
-      .filter(({ type }) => type !== "literal")
-      .map(({ type, value }) => [type, Number(value)]),
-  );
-}
-
-/**
- * Vero se `end` cade `months` mesi di calendario dopo `start` alla stessa ora italiana; un
- * giorno che manca nel mese finale diventa l'ultimo del mese.
- */
-export function calendarMonthsApart(start, end, months) {
-  const from = romeParts(start);
-  const to = romeParts(end);
-  const index = from.year * 12 + from.month - 1 + months;
-  const year = Math.floor(index / 12);
-  const month = (index % 12) + 1;
-  const last = new Date(Date.UTC(year, month, 0)).getUTCDate();
-  return (
-    to.year === year &&
-    to.month === month &&
-    to.day === Math.min(from.day, last) &&
-    to.hour === from.hour &&
-    to.minute === from.minute &&
-    to.second === from.second
-  );
-}
-
 /**
  * Controlli della configurazione commerciale in D1. `promotions` sono le promozioni non ancora
  * concluse, `quotas` le modifiche della quota base, `admission` la riga degli interruttori,
  * `seats` i posti lifetime occupati.
  */
-export function configurationChecks({ promotions, quotas, admission, seats }) {
+export function configurationChecks({ promotions, quotas, admission, seats, now = new Date() }) {
   const results = [];
   const record = (item, problems, detail) =>
     results.push({ item: detail ? `${item} (${detail})` : item, ok: !problems.length, problems });
@@ -92,20 +55,21 @@ export function configurationChecks({ promotions, quotas, admission, seats }) {
   if (promotions.length !== 1)
     record("promozione", [promotions.length ? "più_promozioni" : "assente"]);
   else {
+    const open = current.ends_at === openPromotionEnd;
     record(
       "promozione",
       [
-        ...(current.quota === promotion.quota ? [] : ["quota"]),
-        ...(calendarMonthsApart(current.starts_at, current.ends_at, promotion.months)
-          ? []
-          : ["durata"]),
+        ...(current.quota === promotionQuota ? [] : ["quota"]),
+        ...(Date.parse(current.starts_at) <= now.getTime() ? [] : ["non_iniziata"]),
       ],
-      `${current.starts_at} → ${current.ends_at}`,
+      `${current.starts_at} → ${open ? "senza fine" : current.ends_at}`,
     );
-    // Il ciclo che inizia alla fine della promozione torna alla quota base del listino.
+    // La quota base è quella che il sito promette dopo la promozione: alla sua fine, oppure
+    // quella in vigore finché la promozione non ha una fine.
+    const until = open ? now.getTime() : Date.parse(current.ends_at);
     const base =
       quotas
-        .filter(({ effective_at }) => Date.parse(effective_at) <= Date.parse(current.ends_at))
+        .filter(({ effective_at }) => Date.parse(effective_at) <= until)
         .sort((a, b) => Date.parse(a.effective_at) - Date.parse(b.effective_at) || a.id - b.id)
         .at(-1)?.quota ?? baseFreeQuota;
     record("quota base dopo la promozione", base === baseFreeQuota ? [] : ["quota"]);

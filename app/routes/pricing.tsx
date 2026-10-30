@@ -91,7 +91,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       description: t.description,
       lead: t.lead,
       promotion: freePromotion
-        ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd!, settings.quota)
+        ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd, settings.quota)
         : null,
       free: t.free,
       freePrice: t.freePrice,

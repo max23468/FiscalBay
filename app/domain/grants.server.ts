@@ -1,4 +1,4 @@
-import { baseFreeQuota } from "../catalog";
+import { baseFreeQuota, openPromotionEnd } from "../catalog";
 import { purchasesOpenSql, waitingSql } from "./admission-state.server";
 import { consultableStore } from "./store-state.server";
 import type { EbayEnvironment } from "../view-models";
@@ -272,13 +272,13 @@ function cycleQuotaSql(at: string) {
     ${baseQuotaSql(at)})`;
 }
 
-/** Promozione globale del Free in corso, con la quota e la fine da annunciare. */
+/** Promozione globale del Free in corso, con la quota e la fine da annunciare, se fissata. */
 export async function currentFreePromotion(db: D1Database, now = new Date()) {
   return db
-    .prepare(`SELECT quota, ends_at AS endsAt FROM free_promotions
+    .prepare(`SELECT quota, NULLIF(ends_at, ?2) AS endsAt FROM free_promotions
     WHERE julianday(starts_at) <= julianday(?1) AND julianday(?1) < julianday(ends_at)`)
-    .bind(now.toISOString())
-    .first<{ quota: number; endsAt: string }>();
+    .bind(now.toISOString(), openPromotionEnd)
+    .first<{ quota: number; endsAt: string | null }>();
 }
 
 /**
