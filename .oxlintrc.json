@@ -3,5 +3,12 @@
   "plugins": ["eslint", "typescript", "unicorn", "oxc", "import"],
   "rules": {
     "import/no-cycle": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["scripts/**/*.mjs"],
+      "env": { "node": true, "browser": true },
+      "rules": { "no-undef": "error" }
+    }
+  ]
 }
