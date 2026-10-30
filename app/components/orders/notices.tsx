@@ -16,13 +16,10 @@ import { formatDate, formatRelative } from "../../format";
 import type { Language } from "../../i18n";
 import { trialDaysLeft, trialEnding } from "../../view-models";
 import { importingNotice, isEbayDown } from "./labels";
-import { LoadingHeader } from "./loading";
 import type { OrdersPageData } from "./page";
 
 export function OrdersHeader({ data }: { data: OrdersPageData }) {
   const { t } = useCopy();
-  // Durante il caricamento lo stato dell'aggiornamento non è ancora noto.
-  if (data.view === "loading") return <LoadingHeader />;
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
       <PageTitle
@@ -106,6 +103,8 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
   const { links } = useLinks();
   const { t, language } = useCopy();
   const zone = useTimeZone();
+  // L'esito arriva anche quando l'avviso, con la prova attivata, non c'è più.
+  const trialAction = useAction();
   if (data.notices.every((notice) => notice.kind === "importing")) return null;
   return (
     <div className="grid gap-3">
@@ -150,8 +149,11 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
               <StatusAlert key={notice.kind} tone="warning" title={t.orders.quotaTitle}>
                 <span className="grid justify-items-start gap-3">
                   {t.orders.quotaBody(formatDate(notice.until, language, "dateTime", zone))}
-                  {/* Senza la pagina del piano nessun collegamento a una destinazione assente. */}
-                  {data.settings ? (
+                  {/* Con la prova disponibile l'avviso la offre al posto dell'acquisto; senza la
+                      pagina del piano nessun collegamento a una destinazione assente. */}
+                  {trialOffered(data) ? (
+                    <StartTrial action={trialAction} />
+                  ) : data.settings ? (
                     <Link
                       to={appHref(links, "impostazioni/piano")}
                       {...buttonLink({ variant: "outline", size: "sm" })}
@@ -233,8 +235,9 @@ export function TrialNotice({ data }: { data: OrdersPageData }) {
   const { links } = useLinks();
   const { t } = useCopy();
   const zone = useTimeZone();
+  // Fuori dal pulsante: l'esito arriva dopo che l'invito ha lasciato posto ai giorni rimasti.
   const action = useAction();
-  const { trial, trialAvailable } = data.account;
+  const { trial } = data.account;
   if (trial) {
     if (!trialEnding(trial.endsAt, data.now))
       return (
@@ -262,22 +265,39 @@ export function TrialNotice({ data }: { data: OrdersPageData }) {
       </StatusAlert>
     );
   }
-  if (!trialAvailable || !data.sync.lastAt || (data.view !== "list" && data.view !== "empty"))
-    return null;
+  // Con gli sblocchi esauriti la prova è già l'azione dell'avviso.
+  if (!trialOffered(data) || data.notices.some((notice) => notice.kind === "quota")) return null;
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-muted-foreground">
       <p className="flex items-center gap-2">
         <StatusIcon tone="premium" />
         {t.orders.trialOffer}
       </p>
-      <Button
-        variant="outline"
-        size="sm"
-        pending={action.pending}
-        onClick={() => action.run("start-trial")}
-      >
-        {t.settings.plan.trialAction}
-      </Button>
+      <StartTrial action={action} />
     </div>
+  );
+}
+
+/** La prova si offre dopo la prima lettura riuscita, con l'elenco o senza ordini. */
+function trialOffered(data: OrdersPageData) {
+  return (
+    !data.account.trial &&
+    data.account.trialAvailable &&
+    !!data.sync.lastAt &&
+    (data.view === "list" || data.view === "empty")
+  );
+}
+
+function StartTrial({ action }: { action: ReturnType<typeof useAction> }) {
+  const { t } = useCopy();
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      pending={action.pending}
+      onClick={() => action.run("start-trial")}
+    >
+      {t.settings.plan.trialAction}
+    </Button>
   );
 }

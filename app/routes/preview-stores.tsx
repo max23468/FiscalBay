@@ -1,12 +1,14 @@
 import { data, isRouteErrorResponse } from "react-router";
 
+import { AccessNotice } from "~/components/access-notice";
 import { StoresPage } from "~/components/stores/page";
 import type { StoresPageData } from "~/components/stores/state";
 import { NotFoundState } from "~/components/not-found";
+import { accessNotice } from "../access-notice";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath } from "../i18n";
 import type { AccountView } from "../view-models";
-import { assertPreviewAction, pageScenario, simulateAction } from "../preview/state.server";
+import { assertPreviewAction, verifiedPageScenario, simulateAction } from "../preview/state.server";
 import type { Route } from "./+types/preview-stores";
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -15,7 +17,7 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const { scenario } = await pageScenario(request);
+  const { scenario, language } = await verifiedPageScenario(request);
   const detail = params.negozio
     ? (scenario.stores.find((store) => store.id === params.negozio) ?? null)
     : null;
@@ -27,14 +29,14 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     now: scenario.now,
     ebayDown: scenario.ebayDown ? ["production"] : [],
     ebayMaintenance: scenario.ebayMaintenance,
-    elsewhere: scenario.elsewhere,
     settings: true,
     notificationSettings: true,
     // Come nell'area reale: un abbonamento che addebiterà ancora, anche con il pagamento in
     // attivazione o dopo un periodo rimborsato, non si disdice scollegando.
     subscriptionRenews: renewsAfterUnlink(scenario.account),
   };
-  return page;
+  // Come nell'area reale, l'esito del collegamento arriva nell'indirizzo.
+  return { page, notice: accessNotice(new URL(request.url).searchParams, language) };
 }
 
 function renewsAfterUnlink({ premium, payment }: Pick<AccountView, "premium" | "payment">) {
@@ -51,7 +53,7 @@ export async function action({ request }: Route.ActionArgs) {
 }
 
 export default function PreviewStores({ loaderData }: Route.ComponentProps) {
-  return <StoresPage data={loaderData} />;
+  return <StoresPage data={loaderData.page} notice={<AccessNotice notice={loaderData.notice} />} />;
 }
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */

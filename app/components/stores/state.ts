@@ -19,7 +19,6 @@ export interface StoresPageData {
   ebayDown: EbayEnvironment[];
   /** Le chiamate a eBay sono sospese da FiscalBay per manutenzione, in ogni ambiente. */
   ebayMaintenance?: boolean;
-  elsewhere: boolean;
   /**
    * Schermata preparatoria del collegamento. Nell'area reale collegare e ricollegare la aprono;
    * senza, l'anteprima simula l'esito.

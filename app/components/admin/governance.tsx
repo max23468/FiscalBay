@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 
-import { Badge } from "~/components/ui/badge";
+import { StatusBadge } from "~/components/status";
 import { Field, FieldLabel } from "~/components/ui/field";
 import {
   Select,
@@ -23,7 +23,7 @@ function AuditTarget({ entry }: { entry: AuditRow }) {
   const { href } = useAdmin();
   if (!entry.workspace && !entry.store)
     return (
-      <span className="font-code text-xs break-all text-muted-foreground">{entry.target}</span>
+      <span className="font-code text-xs wrap-anywhere text-muted-foreground">{entry.target}</span>
     );
   return (
     <span className="grid gap-0.5">
@@ -46,8 +46,8 @@ function Outcome({ outcome }: { outcome: string }) {
   const { t } = useAdmin();
   const ok = ["done", "prepared", "queued", "merged", "already"].includes(outcome);
   return (
-    <Badge
-      variant={
+    <StatusBadge
+      tone={
         ok
           ? "success"
           : outcome === "failed"
@@ -58,7 +58,7 @@ function Outcome({ outcome }: { outcome: string }) {
       }
     >
       {t.labels.outcomes[outcome as AuditOutcome] ?? outcome}
-    </Badge>
+    </StatusBadge>
   );
 }
 
@@ -111,7 +111,7 @@ export function AuditList({ entries }: { entries: AuditRow[] }) {
 export function AbuseView({ signals }: { signals: AbuseSignal[] }) {
   const { t, date, href } = useAdmin();
   const a = t.abuse;
-  if (signals.length === 0) return <p className="text-muted-foreground">{a.none}</p>;
+  if (signals.length === 0) return <p className="text-sm text-muted-foreground">{a.none}</p>;
   return (
     <ul className="grid gap-3">
       {signals.map((signal) => (
@@ -119,13 +119,13 @@ export function AbuseView({ signals }: { signals: AbuseSignal[] }) {
           <Panel title={`${a.kinds[signal.kind]}: ${signal.current ? signal.value : a.stale}`}>
             {signal.review ? (
               <p className="text-sm">
-                <Badge variant={signal.review.outcome === "clear" ? "success" : "warning"}>
+                <StatusBadge tone={signal.review.outcome === "clear" ? "success" : "warning"}>
                   {a.reviewed[signal.review.outcome]}
-                </Badge>{" "}
+                </StatusBadge>{" "}
                 {date(signal.review.at)}
               </p>
             ) : (
-              <Badge variant="warning">{a.toReview}</Badge>
+              <StatusBadge tone="warning">{a.toReview}</StatusBadge>
             )}
             <ul className="grid gap-1 text-sm">
               {signal.workspaces.map((workspace) => (
@@ -136,7 +136,7 @@ export function AbuseView({ signals }: { signals: AbuseSignal[] }) {
                   >
                     {workspace.email ?? workspace.id}
                   </Link>
-                  {workspace.premium ? <Badge variant="premium">{a.paying}</Badge> : null}
+                  {workspace.premium ? <StatusBadge tone="premium">{a.paying}</StatusBadge> : null}
                 </li>
               ))}
             </ul>
@@ -155,6 +155,7 @@ export function AbuseView({ signals }: { signals: AbuseSignal[] }) {
                   <Disclosure
                     key={workspace.id}
                     label={`${a.suspend} ${workspace.email ?? workspace.id}`}
+                    destructive
                   >
                     <ActionForm
                       intent="review-abuse"
@@ -265,7 +266,7 @@ export function NoticesView({ notices, now }: { notices: ServiceNotice[]; now: s
   return (
     <>
       <Panel title={n.new}>
-        <ActionForm intent="save-notice" submit={t.common.save}>
+        <ActionForm intent="save-notice" submit={t.common.save} primary>
           <NoticeFields />
         </ActionForm>
       </Panel>
@@ -275,9 +276,9 @@ export function NoticesView({ notices, now }: { notices: ServiceNotice[]; now: s
         return (
           <Panel key={notice.id} title={notice.titleIt}>
             <p className="flex flex-wrap items-center gap-2 text-sm">
-              <Badge variant={current === "active" ? "success" : "neutral"}>
+              <StatusBadge tone={current === "active" ? "success" : "neutral"}>
                 {n.state[current]}
-              </Badge>
+              </StatusBadge>
               {date(notice.startsAt)} – {date(notice.endsAt)}
             </p>
             {editable ? (
@@ -288,6 +289,7 @@ export function NoticesView({ notices, now }: { notices: ServiceNotice[]; now: s
                     intent="save-notice"
                     fields={{ comunicazione: notice.id }}
                     submit={t.common.save}
+                    primary
                   >
                     <NoticeFields notice={notice} />
                   </ActionForm>

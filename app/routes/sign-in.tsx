@@ -97,26 +97,36 @@ function AgreementFields({
   const t = copy.access;
   return (
     <div className="grid gap-4 rounded-lg bg-muted/50 p-3">
-      <FieldLabel className="font-normal" required>
+      {/* Come il consenso marketing: casella in alto e asterisco dentro la frase. */}
+      <Field orientation="horizontal">
         <Checkbox
+          id="termini"
           name="termini"
           required
           defaultChecked={values?.termini === "on"}
           aria-labelledby="terms-label"
           {...v.control("termini")}
         />
-        <span id="terms-label">
-          {t.terms.before}
-          <a href={localizedPath(language, termsPath)} className="underline underline-offset-4">
-            {t.terms.terms}
-          </a>
-          {t.terms.middle}
-          <a href={localizedPath(language, privacyPath)} className="underline underline-offset-4">
-            {t.terms.privacy}
-          </a>
-          {t.terms.after}
-        </span>
-      </FieldLabel>
+        <FieldContent>
+          <FieldLabel htmlFor="termini" className="font-normal">
+            <span id="terms-label">
+              {t.terms.before}
+              <a href={localizedPath(language, termsPath)} className="underline underline-offset-4">
+                {t.terms.terms}
+              </a>
+              {t.terms.middle}
+              <a
+                href={localizedPath(language, privacyPath)}
+                className="underline underline-offset-4"
+              >
+                {t.terms.privacy}
+              </a>
+              {t.terms.after}
+              <span aria-hidden="true"> *</span>
+            </span>
+          </FieldLabel>
+        </FieldContent>
+      </Field>
       {v.error("termini")}
       {marketing ? (
         <Field orientation="horizontal">

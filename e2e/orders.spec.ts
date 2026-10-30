@@ -109,24 +109,21 @@ test.describe("area reale", () => {
       const requestHref = new URL((await request.getAttribute("href"))!);
       expect(requestHref.protocol).toBe("mailto:");
       expect(requestHref.pathname).toBe("Acquirente.Collaudo@example.invalid");
+      // L'acquirente fattura in Italia: il messaggio parte in italiano in entrambe le lingue.
       expect(requestHref.searchParams.get("subject")).toBe(
-        it
-          ? `Ordine eBay suggestions-${language}: Codice Fiscale per la fattura`
-          : `eBay order suggestions-${language}: tax code for the invoice`,
+        `Ordine eBay suggestions-${language}: Codice Fiscale per la fattura`,
       );
       expect(requestHref.searchParams.get("body")).toBe(await message.inputValue());
       await dialog
         .getByRole("combobox", { name: it ? "Lingua del messaggio" : "Message language" })
         .click();
-      await page.getByRole("option", { name: it ? "English" : "Italiano", exact: true }).click();
-      await expect(message).toHaveValue(it ? /^Hello/ : /^Buongiorno/);
+      await page.getByRole("option", { name: "English", exact: true }).click();
+      await expect(message).toHaveValue(/^Hello/);
       await message.fill(`Richiesta modificata suggestions-${language}`);
       // Oggetto nella lingua scelta e testo modificato anche nell'email.
       const edited = new URL((await request.getAttribute("href"))!);
       expect(edited.searchParams.get("subject")).toBe(
-        it
-          ? `eBay order suggestions-${language}: tax code for the invoice`
-          : `Ordine eBay suggestions-${language}: Codice Fiscale per la fattura`,
+        `eBay order suggestions-${language}: tax code for the invoice`,
       );
       expect(edited.searchParams.get("body")).toBe(`Richiesta modificata suggestions-${language}`);
       await dialog
@@ -291,10 +288,10 @@ test.describe("area reale", () => {
       await dialog
         .getByRole("combobox", { name: it ? "Lingua del messaggio" : "Message language" })
         .click();
-      await page.getByRole("option", { name: it ? "English" : "Italiano", exact: true }).click();
+      await page.getByRole("option", { name: "English", exact: true }).click();
       await expect(
         dialog.getByLabel(it ? "Testo per l’acquirente" : "Text for the buyer"),
-      ).toHaveValue(it ? /^Hello/ : /^Buongiorno/);
+      ).toHaveValue(/^Hello/);
     });
     test(`ordini reali: qualità formale visibile e identificativo bloccato protetto ${language}`, async ({
       page,
@@ -508,9 +505,18 @@ test.describe("area reale", () => {
         .getByRole("status");
       await expect(status).toHaveText(
         it
-          ? "2 ordini. Per 1 ordine da sbloccare i dati fiscali restano vuoti."
-          : "2 orders. For 1 order to unlock, the tax data stays empty.",
+          ? "2 ordini. Per 1 ordine da sbloccare il Codice Fiscale resta vuoto."
+          : "2 orders. For 1 order to unlock, the tax code stays empty.",
       );
+      // Le prime righe del file mostrano soltanto i dati sbloccati.
+      const preview = page.getByRole("region", {
+        name: it ? "Prime righe del file" : "First rows of the file",
+      });
+      await expect(preview.getByRole("row")).toHaveCount(3);
+      await expect(preview.getByRole("row", { name: new RegExp(`^${id} `, "u") })).toContainText(
+        secret,
+      );
+      expect(await page.content()).not.toContain(`${secret}-2`);
       // Nessun file prima della conferma: il download parte soltanto da «Crea file».
       const create = page.getByRole("button", {
         name: it ? "Crea file" : "Create file",
@@ -544,10 +550,11 @@ test.describe("area reale", () => {
       expect(await readFile(await (await again).path(), "utf8")).toBe(csv);
       await page
         .getByRole("radio", {
-          name: it ? "Solo con dati fiscali disponibili" : "Only with tax data available",
+          name: it ? "Solo con il Codice Fiscale disponibile" : "Only with the tax code available",
         })
         .check();
       await expect(status).toHaveText(it ? "1 ordine." : "1 order.");
+      await expect(preview.getByRole("row")).toHaveCount(2);
       expect(errors).toEqual([]);
     });
     test(`ordini reali: con Premium l'XLSX segue le colonne scelte ${language}`, async ({
@@ -578,6 +585,18 @@ test.describe("area reale", () => {
       await expect(
         section.getByText(it ? `${other} in posizione 1 di 28.` : `${other} in position 1 of 28.`),
       ).toBeAttached();
+      // L'anteprima tabellare segue colonne e ordine scelti.
+      const preview = section.getByRole("region", {
+        name: it ? "Prime righe del file" : "First rows of the file",
+      });
+      await expect(preview.getByRole("columnheader")).toHaveText([
+        other,
+        it ? "Numero ordine" : "Order number",
+      ]);
+      await expect(preview.getByRole("row")).toHaveCount(4);
+      await expect(preview.getByRole("cell").first()).toHaveText(
+        new RegExp(`^VAT_ID: VALORE-SINTETICO-${language}`, "u"),
+      );
       const downloaded = page.waitForEvent("download");
       await section
         .getByRole("button", { name: it ? "Crea file" : "Create file", exact: true })
@@ -661,6 +680,62 @@ test.describe("area reale", () => {
       });
       await expect(configuration).toHaveCount(0);
       expect(errors).toEqual([]);
+    });
+    test(`ordini reali: sblocco con la risposta persa, consumato una volta sola ${language}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }) => {
+      // In WebKit la sessione sintetica passa dal proxy delle route del contesto, che non
+      // ammette una seconda intercettazione della stessa richiesta: la risposta persa dipende
+      // dal server e dall'azione del client, non dal motore.
+      test.skip(browserName === "webkit", "Intercettazione della risposta soltanto in Chromium.");
+      const id = `lost-${language}-${browserName}`;
+      const secret = `VALORE-SINTETICO-${language}`;
+      await useLocalAccount(context, "member", baseURL!, id);
+      await open(page, `${prefix}/app/ordini`);
+      const card = (suffix = "") =>
+        page.getByRole("article", {
+          name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,
+          exact: true,
+        });
+      const dialog = page.getByRole("alertdialog");
+      const left = (count: number) =>
+        it
+          ? `Dopo lo sblocco ti resteranno ${count} sblocchi in questo ciclo.`
+          : `After unlocking, you will have ${count} unlocks left this cycle.`;
+      await card()
+        .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
+        .click();
+      await expect(dialog).toContainText(left(4));
+      // Lo sblocco arriva al server e la risposta si perde per strada.
+      await page.route(
+        (url) => url.pathname.endsWith("/app/ordini.data"),
+        async (route) => {
+          if (route.request().method() !== "POST") return route.fallback();
+          await route.fetch();
+          await route.abort("failed");
+        },
+        { times: 1 },
+      );
+      await dialog.getByRole("button", { name: it ? "Sblocca" : "Unlock", exact: true }).click();
+      await expect(
+        page.getByText(
+          it
+            ? "Sblocco non riuscito. Controlla gli ordini e gli sblocchi rimasti, poi riprova."
+            : "Unlock failed. Check the orders and remaining unlocks, then try again.",
+        ),
+      ).toBeVisible();
+      // La rilettura della pagina mostra lo sblocco avvenuto sul server, anche dopo la ricarica,
+      // con un solo sblocco consumato.
+      await expect(card().getByText(secret, { exact: true })).toBeVisible();
+      await page.reload();
+      await expect(card().getByText(secret, { exact: true })).toBeVisible();
+      await card("-2")
+        .getByRole("button", { name: it ? "Sblocca ordine" : "Unlock order", exact: true })
+        .click();
+      await expect(dialog).toContainText(left(3));
     });
     test(`ordini: sblocco non riuscito senza consumo o preferenza salvata ${language}`, async ({
       page,
@@ -1327,10 +1402,13 @@ test.describe("impostazioni", () => {
     await expect(page.getByRole("dialog")).toContainText(
       "eBay non riporta il Codice Fiscale per questo ordine.",
     );
+    // Nel Free la corona compare una volta, nella nota che vale per XLSX e colonne.
     await open(page, "/anteprima/impostazioni/esportazione");
-    await expect(page.getByText("Premium", { exact: true }).locator("svg")).toHaveClass(
-      /lucide-crown/,
-    );
+    const note = page.getByRole("region", { name: "Esportazione" }).locator("p").filter({
+      hasText: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Premium.",
+    });
+    await expect(note.locator("svg")).toHaveClass(/lucide-crown/);
+    await expect(page.getByRole("radio", { name: "XLSX" })).toBeDisabled();
   });
 
   test.describe("prova Premium", () => {

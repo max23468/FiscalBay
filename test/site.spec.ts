@@ -83,7 +83,9 @@ describe("radice pubblica e area riservata", () => {
 
   it("mostra in home il netto con il totale IVA e la prova soltanto con gli acquisti aperti", async () => {
     expect((await callRoute(loadSite, "/")).copy).toMatchObject({
-      premiumPrice: "4,90\u00a0€ + IVA al mese o 49\u00a0€ + IVA all’anno",
+      premiumAmount: "4,90\u00a0€",
+      premiumPeriod: "+ IVA al mese",
+      premiumAnnual: "49\u00a0€ + IVA all’anno",
       premiumGross: "5,98\u00a0€ al mese o 59,78\u00a0€ all’anno con IVA italiana al 22%",
       premiumBody: expect.stringMatching(/\. Prova di 14 giorni senza carta\.$/u),
     });
@@ -506,7 +508,7 @@ describe("pagine del sito pubblico", () => {
         {
           offer: "monthly",
           price: "4,90\u00a0€",
-          gross: "5,98\u00a0€ con IVA italiana al 22%",
+          gross: "5,98\u00a0€ con IVA italiana al\u00a022%",
           seats: null,
         },
         { offer: "annual", best: true, note: "12 mesi al prezzo di 10." },

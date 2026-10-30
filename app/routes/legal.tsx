@@ -114,7 +114,7 @@ function Block({ block }: { block: LegalBlock }) {
         <TableBody>
           {block.rows.map(([label, ...cells]) => (
             <TableRow key={label}>
-              <TableHead scope="row" className="align-top font-normal whitespace-normal">
+              <TableHead scope="row" className="py-2 align-top font-normal whitespace-normal">
                 {label}
               </TableHead>
               {block.head.slice(1).map((term, index) => (

@@ -1288,6 +1288,11 @@ describe("file degli ordini", () => {
       estimate: { orders: 1, locked: 1, available: 0 },
     });
     expect(single.page.exportPeriods).toBeNull();
+    // Le prime righe sono quelle del file: il dato da sbloccare resta vuoto.
+    expect(single.page.exportSample?.all.map((order) => order.rows.order[0])).toEqual([
+      expect.objectContaining({ order: "ebay-c", taxCode: "" }),
+    ]);
+    expect(single.page.exportSample?.available).toEqual([]);
     const selection = await routePage(
       loadSettings,
       "/app/impostazioni/esportazione?ordini=o-a,o-c,o-b,o-p",
@@ -1297,6 +1302,10 @@ describe("file degli ordini", () => {
       order: null,
       estimate: { orders: 2, locked: 1, available: 1 },
     });
+    const sample = selection.page.exportSample!;
+    expect(sample.all).toHaveLength(2);
+    expect(sample.available.map((order) => order.rows.item[0]!.order)).toEqual(["ebay-a"]);
+    expect(sample.available[0]!.rows.order[0]!.taxCode).not.toBe("");
     const periods = await routePage(loadSettings, "/app/impostazioni/esportazione", {
       cookie,
       params: { sezione: "esportazione" },
@@ -1304,6 +1313,12 @@ describe("file degli ordini", () => {
     expect(periods.page.exportContext).toBeNull();
     expect(periods.page.exportPeriods?.["7"]).toEqual({ orders: 3, locked: 1, available: 1 });
     expect(periods.page.sections).toContain("esportazione");
+    expect(periods.page.exportSample?.all).toHaveLength(3);
+    const elsewhere = await routePage(loadSettings, "/app/impostazioni/piano", {
+      cookie,
+      params: { sezione: "piano" },
+    });
+    expect(elsewhere.page.exportSample).toBeNull();
   });
 
   it("conta per inizio di periodo con una sola lettura", async () => {

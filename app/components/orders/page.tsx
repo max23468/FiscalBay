@@ -23,7 +23,6 @@ import { orderPeriods, type OrdersNotice, type OrderView } from "../../view-mode
 import { OrderCard, type SecondaryActions } from "./card";
 import { OrderSheet } from "./detail";
 import { useEnterIndexes, useListSnapshot, useNewOrders } from "./list-snapshot";
-import { LoadingGrid } from "./loading";
 import { OrdersHeader, OrdersNotices, TrialNotice } from "./notices";
 import { MarketingProposal } from "./marketing-proposal";
 import { FirstUse, NoOrders } from "./onboarding";
@@ -38,7 +37,7 @@ import { useCopy, useLinks } from "~/components/copy-context";
  * l'anteprima (scenari sintetici). Un valore fiscale da sbloccare non è mai fra questi dati.
  */
 export interface OrdersPageData extends SecondaryActions {
-  view: "list" | "no-store" | "loading" | "empty";
+  view: "list" | "no-store" | "empty";
   orders: OrderView[];
   total: number;
   nextHref: string | null;
@@ -384,12 +383,10 @@ export function OrdersPage({
       <OrdersHeader data={data} />
       {notice}
       <OrdersNotices data={data} />
-      {data.view === "loading" ? null : <TrialNotice data={data} />}
+      <TrialNotice data={data} />
       {data.marketingProposal ? <MarketingProposal /> : null}
       {data.view === "no-store" ? (
         <FirstUse data={data} />
-      ) : data.view === "loading" ? (
-        <LoadingGrid />
       ) : data.view === "empty" ? (
         <NoOrders data={data} />
       ) : (

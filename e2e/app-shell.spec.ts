@@ -360,7 +360,7 @@ test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno
   const section = page.locator("main");
   await expect(section).toContainText("Ordini selezionati nella pagina Ordini.");
   await expect(section).toContainText(
-    "2 ordini. Per 2 ordini da sbloccare i dati fiscali restano vuoti.",
+    "2 ordini. Per 2 ordini da sbloccare il Codice Fiscale resta vuoto.",
   );
   // Il periodo è già nei filtri degli Ordini; il file nasce soltanto da «Crea file».
   await expect(page.getByRole("combobox", { name: "Periodo" })).toHaveCount(0);
@@ -544,9 +544,11 @@ for (const language of ["it", "en"] as const) {
 test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page }) => {
   await open(page);
   await chooseScenario(page, "Sblocchi esauriti");
-  await expect(
-    page.getByRole("status").filter({ hasText: "Sblocchi esauriti per questo ciclo" }),
-  ).toBeVisible();
+  const quota = page.getByRole("status").filter({ hasText: "Sblocchi esauriti per questo ciclo" });
+  await expect(quota).toBeVisible();
+  // Con la prova disponibile l'avviso la offre e non c'è un secondo invito.
+  await expect(quota.getByRole("button", { name: "Attiva la prova" })).toBeVisible();
+  await expect(page.getByText("Prova Premium gratis per 14 giorni, senza carta.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
     "Sblocco disponibile dal 2 ott 2026.",
@@ -795,6 +797,8 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
   await expect(page.getByText("Negozio già collegato a un altro account")).toHaveCount(0);
   await page.getByRole("button", { name: "Collega negozio eBay" }).click();
   await expect(page.getByText("Negozio già collegato a un altro account")).toBeVisible();
+  // Come dopo il ritorno da eBay, l'esito esce dall'indirizzo e una ricarica non lo ripropone.
+  await expect(page).toHaveURL(/\/anteprima\/negozi$/u);
 });
 
 test("contatti cliccabili e copiabili, senza richiesta fiscale precompilata agli alias eBay", async ({

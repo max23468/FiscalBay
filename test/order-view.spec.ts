@@ -19,7 +19,7 @@ import {
   mailtoHref,
   phoneView,
 } from "../app/contact";
-import { billingCopyText, missingContact } from "../app/components/orders/labels";
+import { billingCopyText, buyerLanguage, missingContact } from "../app/components/orders/labels";
 import { appCopy } from "../app/app-copy";
 
 describe("vista condivisa e criteri degli ordini", () => {
@@ -330,6 +330,12 @@ describe("vista condivisa e criteri degli ordini", () => {
         }),
       }).shipTo?.locality,
     ).toBe("Trento (TN)");
+  });
+
+  it("propone il modello nella lingua dell'acquirente dal Paese di fatturazione", () => {
+    expect(["IT", "sm", "VA"].map(buyerLanguage)).toEqual(["it", "it", "it"]);
+    expect(["DE", "GB"].map(buyerLanguage)).toEqual(["en", "en"]);
+    expect([null, undefined, ""].map(buyerLanguage)).toEqual([null, null, null]);
   });
 
   it("formatta telefono, email e indirizzo senza correggere il dato di eBay", () => {

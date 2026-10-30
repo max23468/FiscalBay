@@ -9,6 +9,7 @@ import { appHref, privacyPath, termsPath } from "../../app-links";
 import { localizedPath } from "../../i18n";
 import { DeleteAccount } from "../delete-account";
 import type { SecurityData } from "./security";
+import { settingsRow, settingsRowText } from "./security-rows";
 
 /** Categoria che riceve le azioni, anche nell'anteprima. */
 const privacySection = "impostazioni/privacy";
@@ -72,8 +73,8 @@ export function PrivacySection({
     <div className="grid gap-4">
       <ul className="grid divide-y border-y">
         {legal.map((entry) => (
-          <li key={entry.path} className="flex flex-wrap items-center justify-between gap-3 py-4">
-            <span className="grid min-w-0 flex-1 gap-0.5">
+          <li key={entry.path} className={settingsRow}>
+            <span className={settingsRowText}>
               <span className="font-medium">{entry.title}</span>
               <span className="text-sm text-muted-foreground">{entry.body}</span>
             </span>
@@ -87,8 +88,8 @@ export function PrivacySection({
           </li>
         ))}
         {rows.map((row) => (
-          <li key={row.title} className="flex flex-wrap items-center justify-between gap-3 py-4">
-            <span className="grid min-w-0 flex-1 gap-0.5">
+          <li key={row.title} className={settingsRow}>
+            <span className={settingsRowText}>
               <span className="font-medium">{row.title}</span>
               <span className="text-sm text-muted-foreground">{row.body}</span>
             </span>
@@ -124,7 +125,7 @@ function DeleteAccountRow({
   const { links } = useLinks();
   const exporter = useAccountExport();
   return (
-    <li className="py-4">
+    <li className="py-3">
       <DeleteAccount
         email={email}
         actionPath={appHref(links, privacySection)}

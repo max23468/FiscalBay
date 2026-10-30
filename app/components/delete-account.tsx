@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import { useId, useRef, useState } from "react";
 
 import { useAction } from "~/components/action";
@@ -15,6 +16,7 @@ import { FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { useCopy } from "~/components/copy-context";
 import { ConfirmIdentity } from "./settings/confirm-identity";
+import { settingsRow, settingsRowText } from "./settings/security-rows";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 
 /** Conferma dell'identità per la cancellazione: metodi, sessione in uso e accesso recente. */
@@ -59,8 +61,8 @@ export function DeleteAccount({
   const matches = typed.trim().toLowerCase() === email.toLowerCase();
   const send = () => action.run("account-delete", { confirmation: typed.trim() });
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <span className="grid min-w-0 flex-1 gap-0.5">
+    <div className={cn(settingsRow, "py-0")}>
+      <span className={settingsRowText}>
         <span className="font-medium">{t.settings.privacy.deleteAccount}</span>
         <span className="text-sm text-muted-foreground">
           {t.settings.privacy.deleteAccountBody}

@@ -20,13 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { useCopy } from "~/components/copy-context";
+import { useCopy, useLinks } from "~/components/copy-context";
+import { shellDestinations, shellMenu } from "~/components/shell-links";
 import { siteColumn } from "~/components/site-column";
 import { appCopy } from "../app-copy";
 import { previewBase, previewOrdersPath, previewSettingsPath } from "../app-links";
 import { localizedPath } from "../i18n";
 import { revalidateUnlessSnapshot } from "../orders/order-list";
-import { isScenarioId, scenarioOptions } from "../preview/scenarios.server";
+import { isScenarioId, scenarioOptions, scenarioVerified } from "../preview/scenarios.server";
 import { currentScenario, assertPreviewAction, writePreviewState } from "../preview/state.server";
 import type { Route } from "./+types/preview";
 
@@ -45,6 +46,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     now: scenario.now,
     deleting: scenario.deleting,
     unavailable: scenario.unavailable,
+    verified: scenarioVerified(scenario),
   };
 }
 
@@ -145,8 +147,11 @@ function ScenarioBar({
 }
 
 export default function Preview({ loaderData }: Route.ComponentProps) {
-  const { language } = loaderData;
+  const { language, verified } = loaderData;
   const t = appCopy[language];
+  const { links } = useLinks();
+  const submit = useSubmit();
+  const { pathname, search } = useLocation();
   useDeviceTimeZone();
   // Su Ordini il campo mostra la ricerca attiva, decifrata dal loader della pagina.
   const orders = useMatches().find((match) => match.id.startsWith("preview-orders"));
@@ -169,12 +174,32 @@ export default function Preview({ loaderData }: Route.ComponentProps) {
   return (
     <AppShell
       account={loaderData.account}
-      notifications={loaderData.notifications}
+      // Come nell'area reale, prima della conferma dell'email: niente navigazione, ricerca e
+      // campanella, e la lingua nel menu.
+      notifications={verified ? loaderData.notifications : undefined}
       now={loaderData.now}
-      search={{
-        action: localizedPath(language, `${previewBase}/ricerca`),
-        query: orders ? ((orders.loaderData as OrdersPageData | undefined)?.search ?? "") : null,
-      }}
+      navigation={verified ? shellDestinations(links, t) : []}
+      menu={shellMenu(links, t, {
+        verified,
+        language: {
+          href: localizedPath(language, previewBase),
+          onSelect: (chosen) =>
+            void submit(
+              { language: chosen, returnTo: `${pathname}${search}` },
+              { method: "post", action: localizedPath(language, previewBase) },
+            ),
+        },
+      })}
+      search={
+        verified
+          ? {
+              action: localizedPath(language, `${previewBase}/ricerca`),
+              query: orders
+                ? ((orders.loaderData as OrdersPageData | undefined)?.search ?? "")
+                : null,
+            }
+          : undefined
+      }
       onSignOut={(notify) => notify(t.preview.signOut)}
       before={<ScenarioBar scenario={loaderData.scenario} options={loaderData.options} />}
     >

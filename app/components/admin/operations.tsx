@@ -1,6 +1,6 @@
 import { cn } from "cn";
 
-import { Badge } from "~/components/ui/badge";
+import { StatusAlert, StatusBadge } from "~/components/status";
 import type { AdminCopy } from "../../copy/admin-copy";
 import type { ReceiptState, TaskState } from "../../domain/admin-operations.server";
 import type {
@@ -31,21 +31,21 @@ export function JobsView({ tasks, receipts }: { tasks: TaskState[]; receipts: Re
                 <span className="text-xs text-muted-foreground">{j.every(task.periodMinutes)}</span>
               </span>,
               task.running ? (
-                <Badge key="state" variant="info">
+                <StatusBadge key="state" tone="info">
                   {j.running}
-                </Badge>
+                </StatusBadge>
               ) : task.stalled ? (
-                <Badge key="state" variant="warning">
+                <StatusBadge key="state" tone="warning">
                   {j.stalled}
-                </Badge>
+                </StatusBadge>
               ) : task.doneAt ? (
-                <Badge key="state" variant="success">
+                <StatusBadge key="state" tone="success">
                   {j.done} {date(task.doneAt)}
-                </Badge>
+                </StatusBadge>
               ) : (
-                <Badge key="state" variant="neutral">
+                <StatusBadge key="state" tone="neutral">
                   {j.waiting}
-                </Badge>
+                </StatusBadge>
               ),
               task.slot ? date(task.slot) : "",
               // Un lavoro fermo si riaccoda anche se l'ultimo turno, ormai vecchio, è concluso.
@@ -64,20 +64,22 @@ export function JobsView({ tasks, receipts }: { tasks: TaskState[]; receipts: Re
       <Panel title={j.receipts}>
         <DataTable
           head={[j.provider, j.pending, j.stalledCount, j.oldest, t.workspace.actions]}
+          numeric={[1, 2]}
           rows={receipts.map((receipt) => ({
             key: receipt.provider,
             cells: [
               <span key="provider" className="font-medium">
                 {t.labels.providers[receipt.provider]}
               </span>,
-              receipt.pending,
-              receipt.stalled > 0 ? (
-                <span key="stalled" className="text-warning">
-                  {receipt.stalled}
-                </span>
-              ) : (
-                0
-              ),
+              <span key="pending" className="font-code">
+                {receipt.pending}
+              </span>,
+              <span
+                key="stalled"
+                className={cn("font-code", receipt.stalled > 0 && "text-warning")}
+              >
+                {receipt.stalled}
+              </span>,
               receipt.oldest ? date(receipt.oldest) : "",
               receipt.stalled > 0 ? (
                 <ActionForm
@@ -120,11 +122,12 @@ function QuotaTable({ rows }: { rows: QuotaRow[] }) {
   return (
     <DataTable
       head={[q.call, q.used, q.remaining, q.limit, q.reset]}
+      numeric={[2, 3]}
       rows={rows.map((row) => ({
         key: `${row.api}:${row.resource}`,
         cells: [
           <span key="call" className="grid gap-0.5">
-            <span className="font-medium break-all">{row.resource}</span>
+            <span className="font-medium wrap-anywhere">{row.resource}</span>
             <span className="text-xs text-muted-foreground">{row.api}</span>
           </span>,
           <Usage key="usage" row={row} t={t} />,
@@ -199,9 +202,7 @@ export function QuotasView({
         return (
           <Panel key={environment.environment} title={q.environment[environment.environment]}>
             {environment.read === "failed" ? (
-              <p role="alert" className="text-sm text-danger">
-                {q.failed}
-              </p>
+              <StatusAlert tone="danger" title={q.failed} />
             ) : (
               <>
                 <QuotaTable rows={used} />
@@ -254,9 +255,10 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
   if (metrics.read !== "ok")
     return (
       <Panel title={m.invocations}>
-        <p role="alert" className={cn("text-sm", metrics.read === "failed" && "text-danger")}>
-          {metrics.read === "failed" ? m.failed : m.unconfigured}
-        </p>
+        <StatusAlert
+          tone={metrics.read === "failed" ? "danger" : "info"}
+          title={metrics.read === "failed" ? m.failed : m.unconfigured}
+        />
       </Panel>
     );
   return (
@@ -275,6 +277,7 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
             "p95",
             "p99",
           ]}
+          numeric={[3, 4, 5, 6, 7, 8]}
           rows={metrics.invocations.map((row) => ({
             key: `${row.invocation}:${row.detail}:${row.method}:${row.outcome}`,
             cells: [
@@ -301,6 +304,7 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
       <Panel title={m.phases}>
         <DataTable
           head={[m.phase, m.outcome, m.calls, m.perInvocation, m.mean, "p50", "p95", "p99"]}
+          numeric={[2, 3, 4, 5, 6, 7]}
           rows={metrics.phases.map((row) => ({
             key: `${row.invocation}:${row.phase}:${row.operation}:${row.outcome}`,
             cells: [
@@ -328,6 +332,7 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
       <Panel title={m.cpu}>
         <DataTable
           head={[m.page, m.perInvocation, m.cpuP50, m.cpuP95, m.wallP50]}
+          numeric={[1, 2, 3, 4]}
           rows={metrics.cpu.map((row) => ({
             key: `${row.page}:${row.kind}`,
             cells: [
@@ -354,6 +359,7 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
             `${m.ready} ${m.quantiles}`,
             m.server,
           ]}
+          numeric={[1, 2, 3, 4, 5]}
           rows={metrics.pages.map((row) => ({
             key: row.page,
             cells: [

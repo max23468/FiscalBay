@@ -62,7 +62,7 @@ export function periodExportFilter(period: string, premium: boolean, now: Date):
 }
 
 /**
- * Opzione «solo con dati fiscali disponibili»: limita i criteri a quegli ordini. null se il
+ * Opzione «solo con il Codice Fiscale disponibile»: limita i criteri a quegli ordini. null se il
  * filtro fiscale degli Ordini ne esclude già ogni ordine.
  */
 export function onlyAvailable(filter: ExportFilter): ExportFilter | null {

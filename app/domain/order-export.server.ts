@@ -9,10 +9,12 @@ import { xlsxStream, type XlsxCell } from "./xlsx.server";
 import { wallClock } from "../time";
 import {
   exportHeader,
+  exportSampleSize,
   standardColumns,
   type ExportColumn,
   type ExportFormat,
   type ExportRows,
+  type ExportSampleOrder,
 } from "../orders/export-columns";
 
 /**
@@ -185,6 +187,33 @@ export function exportFileName(
   format: ExportFormat = "csv",
 ) {
   return `${t.settings.export.file.name}-${exportDateTime(now.toISOString(), timeZone).slice(0, 10)}.${format}`;
+}
+
+/**
+ * Ordini più recenti dell'ambito con le loro righe del file, per l'anteprima tabellare: stessi
+ * criteri, diritti e valori della creazione del file, senza suggerimenti.
+ */
+export async function exportSampleOrders(
+  db: D1Database,
+  userId: string,
+  ebayEnvironment: EbayEnvironment,
+  now: Date,
+  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean } | null,
+  t: AppCopy,
+  timeZone: string,
+): Promise<ExportSampleOrder[]> {
+  if (!filter) return [];
+  const orders = await listVisibleOrders(db, userId, exportSampleSize, ebayEnvironment, now, {
+    ...filter,
+    suggestions: false,
+  });
+  return orders.map((order) => ({
+    createdAt: order.creationTime,
+    rows: {
+      order: exportRecords(order, "order", t, timeZone),
+      item: exportRecords(order, "item", t, timeZone),
+    },
+  }));
 }
 
 /**

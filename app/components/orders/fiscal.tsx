@@ -3,7 +3,7 @@ import { useId, useRef, useState } from "react";
 
 import { useAction } from "~/components/action";
 import { UnlockIcon } from "~/components/icons";
-import { StatusAlert, StatusBadge, StatusIcon } from "~/components/status";
+import { StatusBadge, StatusIcon } from "~/components/status";
 import { TaxCode } from "~/components/tax-code";
 import {
   AlertDialog,
@@ -43,7 +43,13 @@ import {
 } from "../../view-models";
 import { countryName, formatDate } from "../../format";
 
-import { identifierLabel, remainingUnlocks, taxCodeLabels, type OrdersAccount } from "./labels";
+import {
+  buyerLanguage,
+  identifierLabel,
+  remainingUnlocks,
+  taxCodeLabels,
+  type OrdersAccount,
+} from "./labels";
 import { useTimeZone } from "~/components/time-zone";
 import { useCopy } from "~/components/copy-context";
 
@@ -449,11 +455,13 @@ export function MissingOrderHelp({
 }) {
   const { t, language } = useCopy();
   const zone = useTimeZone();
-  // La lingua della pagina inizializza il messaggio; poi decide il merchant.
-  const [messageLanguage, setMessageLanguage] = useState<Language>(() => language);
+  // Il messaggio parte nella lingua dell'acquirente, dal Paese di fatturazione; senza Paese vale
+  // quella della pagina. Poi decide il merchant.
+  const initial = buyerLanguage(order.contacts.billingAddress?.countryCode) ?? language;
+  const [messageLanguage, setMessageLanguage] = useState<Language>(initial);
   const defaultMessage = (code: Language) =>
     (templates?.[code] ?? defaultTemplate(code)).replaceAll("{ordine}", order.ebayOrderId);
-  const [message, setMessage] = useState(() => defaultMessage(language));
+  const [message, setMessage] = useState(() => defaultMessage(initial));
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const fieldId = useId();
   // Un alias eBay passa dalla messaggistica eBay, dove non si chiedono dati personali.
@@ -474,9 +482,11 @@ export function MissingOrderHelp({
             <CardLabel>
               {`${label}${suggestion.issuingCountry ? ` (${suggestion.issuingCountry})` : ""}`}
             </CardLabel>
+            {/* Codici precedenti discordanti: riquadro ambra, come un'anomalia del codice. */}
             <TaxCode
               value={displayTaxValue(identifier)}
               labels={taxCodeLabels(label, order.ebayOrderId, t)}
+              warning={suggestion.conflict}
             />
             <p className="text-sm text-muted-foreground">
               {t.orders.suggestionHint(
@@ -495,9 +505,13 @@ export function MissingOrderHelp({
               </p>
             ) : null}
             {suggestion.conflict ? (
-              <StatusAlert tone="warning" title={t.orders.differentCodes}>
-                {t.orders.suggestionConflict}
-              </StatusAlert>
+              <p className="flex gap-2 text-sm text-warning">
+                <StatusIcon tone="warning" className="mt-0.5" />
+                <span>
+                  <span className="font-medium">{t.orders.differentCodes}.</span>{" "}
+                  {t.orders.suggestionConflict}
+                </span>
+              </p>
             ) : null}
             <p className="text-sm text-muted-foreground">{t.orders.suggestionCheck}</p>
           </div>

@@ -14,5 +14,7 @@ export const testAccount = {
     paused: "collaudo-in-pausa",
   },
   orders: { unlocked: "00-00000-00001", locked: "00-00000-00002" },
+  /** Identificativo interno dell'ordine sbloccato, nell'indirizzo del suo dettaglio. */
+  orderDetail: "collaudo-ordine-sbloccato",
   taxCodes: { unlocked: "RSSMRA80A01H501U", locked: "BNCLGU80A01H501Z" },
 } as const;

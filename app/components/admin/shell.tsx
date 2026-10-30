@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { ChevronDown, ShieldCheck } from "lucide-react";
 import type { ReactNode } from "react";
-import { Link, NavLink } from "react-router";
+import { Link } from "react-router";
 
 import { NavigationProgress } from "~/components/navigation-progress";
 import { Logo } from "~/components/standalone-page";
@@ -110,18 +110,17 @@ export function AdminShell({
           <ul className="hidden flex-wrap gap-1 md:flex">
             {items.map(([path, key]) => (
               <li key={key}>
-                <NavLink
+                {/* La sezione viene da `current`, così anche la scheda di uno spazio indica Account. */}
+                <Link
                   to={href(path)}
-                  end
-                  className={({ isActive }) =>
-                    cn(
-                      "block rounded-md px-3 py-1.5 text-sm whitespace-nowrap text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring",
-                      isActive && "bg-muted font-medium text-foreground",
-                    )
-                  }
+                  aria-current={key === current ? "page" : undefined}
+                  className={cn(
+                    "block rounded-md px-3 py-1.5 text-sm whitespace-nowrap text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring",
+                    key === current && "bg-muted font-medium text-foreground",
+                  )}
                 >
                   {t.nav[key]}
-                </NavLink>
+                </Link>
               </li>
             ))}
           </ul>

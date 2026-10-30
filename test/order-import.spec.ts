@@ -958,6 +958,147 @@ describe("modello ordini", () => {
     expect(await orders()).toMatchObject([{ ebay_order_id: "D-1", payment_status: "PAID" }]);
   });
 
+  it("un campo omesso e uno nullo sono lo stesso dato e non creano versioni", async () => {
+    const tax = (issuingCountry?: null) => ({
+      source: "ebay_fulfillment" as const,
+      complete: true,
+      values: [
+        {
+          type: "VAT_ID",
+          ...(issuingCountry === null && { issuingCountry }),
+          value: "01234567890",
+        },
+      ],
+    });
+    const explicit = (lastModifiedTime: string) =>
+      observation({
+        lastModifiedTime,
+        marketplaceId: null,
+        fulfillmentStatus: null,
+        cancelStatus: null,
+        buyerEiasToken: null,
+        buyer: {
+          username: "acquirente",
+          name: "Mario Rossi",
+          email: null,
+          phone: null,
+          billingAddress: {
+            addressLine1: null,
+            addressLine2: null,
+            city: "Trento",
+            postalCode: null,
+            stateOrProvince: null,
+            countryCode: null,
+          },
+          shipTo: null,
+          masked: [],
+        },
+        items: [{ ...line("k1"), legacyItemId: null, sku: null }, line("k2")],
+        taxIdentifiers: tax(null),
+      });
+    const omitted = (lastModifiedTime: string) =>
+      observation({
+        lastModifiedTime,
+        buyer: { username: "acquirente", name: "Mario Rossi", billingAddress: { city: "Trento" } },
+        taxIdentifiers: tax(),
+      });
+    const rows = async () =>
+      Object.fromEntries(
+        await Promise.all(
+          ["orders", "order_items", "tax_identifiers", "order_tax_checks", "order_source_refs"].map(
+            async (table) => [
+              table,
+              (await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>())!
+                .n,
+            ],
+          ),
+        ),
+      );
+    const saved = () =>
+      Promise.all(
+        [
+          "SELECT * FROM orders",
+          "SELECT * FROM order_items ORDER BY line_item_id",
+          "SELECT * FROM tax_identifiers",
+        ].map((sql) =>
+          env.DB.prepare(sql)
+            .all()
+            .then(({ results }) => results),
+        ),
+      );
+    const created = await recordOrderObservation(
+      env.DB,
+      target(),
+      explicit("2026-09-10T11:00:00Z"),
+    );
+    expect(created).toMatchObject({ outcome: "created", taxChanges: 1 });
+    const counts = await rows();
+    const first = await saved();
+    // In entrambe le direzioni la rilettura è invariata: nessuna riga e nessun campo diverso.
+    for (const [read, lastModifiedTime] of [
+      [omitted, "2026-09-10T12:00:00Z"],
+      [explicit, "2026-09-10T12:30:00Z"],
+      [omitted, "2026-09-10T12:45:00Z"],
+    ] as const) {
+      expect(await recordOrderObservation(env.DB, target(), read(lastModifiedTime))).toEqual({
+        outcome: "unchanged",
+        orderId: (created as { orderId: string }).orderId,
+        taxChanges: 0,
+        issue: null,
+      });
+      expect(await rows()).toEqual(counts);
+      expect(await saved()).toEqual(first);
+    }
+
+    // Un null dove prima c'era un valore lo rimuove, come l'omissione.
+    const buyer = () =>
+      orders().then(
+        ([order]) => JSON.parse(order!.buyer_json as string) as { phone: string | null },
+      );
+    const phone = (lastModifiedTime: string, value?: string | null) =>
+      observation({
+        lastModifiedTime,
+        buyer: {
+          username: "acquirente",
+          name: "Mario Rossi",
+          billingAddress: { city: "Trento" },
+          ...(value !== undefined && { phone: value }),
+        },
+        taxIdentifiers: tax(),
+      });
+    for (const [lastModifiedTime, value] of [
+      ["2026-09-10T13:00:00Z", "+39 1"],
+      ["2026-09-10T13:15:00Z", null],
+      ["2026-09-10T13:30:00Z", "+39 1"],
+      ["2026-09-10T13:45:00Z", undefined],
+    ] as const) {
+      expect(
+        await recordOrderObservation(env.DB, target(), phone(lastModifiedTime, value)),
+      ).toMatchObject({ outcome: "updated", taxChanges: 0 });
+      expect((await buyer()).phone).toBe(value ?? null);
+    }
+
+    // L'identità dell'acquirente distingue: assente dalla fonte la conserva, null la toglie.
+    const token = () =>
+      env.DB.prepare("SELECT buyer_eias_token AS token FROM orders")
+        .first<{ token: string | null }>()
+        .then((row) => row!.token);
+    for (const [lastModifiedTime, buyerEiasToken, outcome, stored] of [
+      ["2026-09-10T14:00:00Z", "stable-buyer", "updated", "stable-buyer"],
+      ["2026-09-10T14:15:00Z", undefined, "unchanged", "stable-buyer"],
+      ["2026-09-10T14:30:00Z", null, "updated", null],
+      ["2026-09-10T14:45:00Z", undefined, "unchanged", null],
+    ] as const) {
+      expect(
+        await recordOrderObservation(env.DB, target(), {
+          ...omitted(lastModifiedTime),
+          buyerEiasToken,
+        }),
+      ).toMatchObject({ outcome });
+      expect(await token()).toBe(stored);
+    }
+  });
+
   it("mantiene il testo cercabile dagli ultimi campi scritti, senza contarlo come variazione", async () => {
     const searchText = () =>
       env.DB.prepare("SELECT search_text FROM orders WHERE ebay_order_id = 'D-1'")

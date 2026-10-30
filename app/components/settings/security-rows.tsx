@@ -15,6 +15,16 @@ import { Button } from "~/components/ui/button";
 import { useTurnstile } from "~/components/turnstile";
 import { turnstileActions } from "../../turnstile";
 
+/**
+ * Riga delle Impostazioni con testo e azioni: su smartphone le azioni vanno sotto il testo, da
+ * tablet in poi accanto. Condivisa da Sicurezza e Dati e privacy.
+ */
+export const settingsRow =
+  "flex flex-col items-start gap-x-4 gap-y-2 py-3 md:flex-row md:flex-wrap md:items-center md:justify-between";
+
+/** Testo della riga: occupa lo spazio libero e va a capo prima di comprimere le azioni. */
+export const settingsRowText = "grid min-w-0 max-w-full gap-0.5 md:flex-1 md:basis-48";
+
 /** Riga di un metodo di accesso: nome, stato e azioni, come nelle Impostazioni. */
 export function MethodRow({
   label,
@@ -30,8 +40,8 @@ export function MethodRow({
   // Il gruppo dà ai pulsanti ripetuti in ogni riga («Rimuovi», «Esci») il nome della riga.
   const id = useId();
   return (
-    <li className="flex flex-col items-start gap-x-4 gap-y-2 py-3 md:flex-row md:flex-wrap md:items-center md:justify-between">
-      <span className="grid min-w-0 max-w-full md:flex-1 md:basis-48">
+    <li className={settingsRow}>
+      <span className={settingsRowText}>
         <span id={`${id}-label`} className="font-medium">
           {label}
         </span>

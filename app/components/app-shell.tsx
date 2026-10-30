@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { Globe, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation, useNavigate, useNavigation } from "react-router";
 
@@ -8,13 +8,7 @@ import { InitialsTile } from "~/components/icon-tile";
 import { Button } from "~/components/ui/button";
 import { NavigationProgress } from "~/components/navigation-progress";
 import { NotificationsMenu } from "~/components/notifications-menu";
-import {
-  accountMenu,
-  areaSection,
-  shellDestinations,
-  type AccountMenuItem,
-  type NavDestination,
-} from "~/components/shell-links";
+import { areaSection, type AccountMenuItem, type NavDestination } from "~/components/shell-links";
 import { GlobalSearch, MobileSearch, type ShellSearch } from "~/components/shell-search";
 import { siteColumn } from "~/components/site-column";
 import {
@@ -29,8 +23,7 @@ import {
 import { useCopy, useLinks } from "~/components/copy-context";
 import logoDarkUrl from "../../docs/brand/logo/fiscalbay-logo-dark.svg?url";
 import logoUrl from "../../docs/brand/logo/fiscalbay-logo.svg?url";
-import { appHref, visitParam } from "../app-links";
-import { localizedPath } from "../i18n";
+import { appHref } from "../app-links";
 import type { AccountView, NotificationView } from "../view-models";
 
 /**
@@ -56,10 +49,10 @@ export function AppShell({
   notificationsAction?: string;
   now?: string;
   search?: ShellSearch;
-  /** Destinazioni principali; senza, quelle complete dell'app. Vuota, nessuna navigazione. */
-  navigation?: NavDestination[];
+  /** Destinazioni principali; vuota, nessuna navigazione. */
+  navigation: NavDestination[];
   /** Gruppi di voci separati; «Esci» chiude l'ultimo. */
-  menu?: AccountMenuItem[][];
+  menu: AccountMenuItem[][];
   home?: string;
   /** Riceve la funzione degli avvisi, per confermare l'esito. */
   onSignOut: (notify: (message: string) => void) => void;
@@ -80,7 +73,7 @@ export function AppShell({
     [],
   );
 
-  const destinations = navigation ?? shellDestinations(links, t);
+  const destinations = navigation;
   const navigable = destinations.length > 0;
   const section = useSectionEntry();
 
@@ -130,24 +123,7 @@ export function AppShell({
                 now={now}
               />
             ) : null}
-            <AccountMenu
-              account={account}
-              menu={
-                menu ?? [
-                  accountMenu(links, t),
-                  [
-                    // Come nell'area reale: con una sessione la radice porterebbe agli Ordini.
-                    {
-                      href: `${localizedPath(links.language)}?${visitParam}=1`,
-                      label: t.shell.visitSite,
-                      Icon: Globe,
-                      reloadDocument: true,
-                    },
-                  ],
-                ]
-              }
-              onSignOut={() => onSignOut(notify)}
-            />
+            <AccountMenu account={account} menu={menu} onSignOut={() => onSignOut(notify)} />
           </div>
         </div>
       </header>

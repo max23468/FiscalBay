@@ -113,7 +113,8 @@ function telegramPage(language, scheme) {
         text: "#000000",
         muted: "#7c8b95",
         quote: "#3a8fd6",
-        button: "rgba(0,0,0,.22)",
+        // Più scuro di Telegram: il testo bianco dei pulsanti resta oltre 4,5:1 (5,6:1).
+        button: "rgba(0,0,0,.5)",
         code: "#2b6cb0",
         head: "#ffffff",
       };

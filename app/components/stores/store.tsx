@@ -59,6 +59,7 @@ export function LastSync({
   now,
   slot = true,
   wrap = false,
+  labelled = false,
 }: {
   store: StoreView;
   now: string;
@@ -66,6 +67,8 @@ export function LastSync({
   slot?: boolean;
   /** Nei riquadri stretti della scheda il testo va a capo. */
   wrap?: boolean;
+  /** Fuori dalla tabella, che ha l'intestazione della colonna, il valore ha la sua etichetta. */
+  labelled?: boolean;
 }) {
   const { t, language } = useCopy();
   // Le righe della tessera indicano una sincronizzazione che procede: un negozio
@@ -83,6 +86,7 @@ export function LastSync({
       ) : slot ? (
         <span aria-hidden="true" className="w-4 shrink-0" />
       ) : null}
+      {labelled ? `${t.stores.lastSync}: ` : null}
       {store.syncing
         ? t.stores.syncing
         : store.lastSyncAt

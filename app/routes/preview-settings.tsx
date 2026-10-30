@@ -7,7 +7,7 @@ import { languageFromPath } from "../i18n";
 import { previewSettingsPage } from "../preview/settings-page.server";
 import {
   assertPreviewAction,
-  pageScenario,
+  verifiedPageScenario,
   simulateAction,
   simulateSecurity,
 } from "../preview/state.server";
@@ -27,7 +27,7 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const current = await pageScenario(request);
+  const current = await verifiedPageScenario(request);
   if (params.sezione !== undefined && !isSection(params.sezione)) {
     throw data(null, { status: 404 });
   }

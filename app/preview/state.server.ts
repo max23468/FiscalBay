@@ -3,10 +3,15 @@ import { createCookie, data, redirect } from "react-router";
 
 import { assertSameOrigin } from "../account-area.server";
 import { appCopy, type AppCopy } from "../app-copy";
-import { isProduction, previewSettingsPath } from "../app-links";
+import {
+  isProduction,
+  previewOrdersPath,
+  previewSettingsPath,
+  previewStoresPath,
+} from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
 import type { ActionResult } from "../view-models";
-import { isScenarioId, loadScenario, type ScenarioId } from "./scenarios.server";
+import { isScenarioId, loadScenario, scenarioVerified, type ScenarioId } from "./scenarios.server";
 
 /** Scenario scelto e ordini sbloccati per finta: niente dati personali, solo identificativi sintetici. */
 const previewCookie = createCookie("fb_anteprima", {
@@ -106,6 +111,19 @@ export async function pageScenario(request: Request) {
   const current = await currentScenario(request);
   if (current.scenario.unavailable)
     throw data(null, { status: 503, headers: { "cache-control": "no-store" } });
+  return current;
+}
+
+/**
+ * Scenario di Negozi e Impostazioni: come nell'area reale, prima della conferma dell'email la
+ * pagina rimanda agli Ordini.
+ */
+export async function verifiedPageScenario(request: Request) {
+  const current = await pageScenario(request);
+  if (!scenarioVerified(current.scenario))
+    throw redirect(
+      `${localizedPath(current.language, previewOrdersPath)}${new URL(request.url).search}`,
+    );
   return current;
 }
 
@@ -269,6 +287,9 @@ export async function simulateAction(request: Request, form: FormData) {
       );
     return { ok: true, notice: t.settings.privacy.deleteAccountSent(email) } satisfies ActionResult;
   }
+  // Come il ritorno da eBay nell'area reale: l'esito «già collegato altrove» arriva in Negozi.
+  if ((intent === "store-connect" || intent === "store-fix") && scenario.elsewhere)
+    return redirect(`${localizedPath(language, previewStoresPath)}?negozio=altro-spazio`, 303);
   const notice = notices[intent] ? notices[intent](t) : t.preview.simulated;
   return { ok: true, notice } satisfies ActionResult;
 }

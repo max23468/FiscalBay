@@ -226,7 +226,7 @@ export async function telegramSettings(
   db: D1Database,
   userId: string,
   timeZone: string,
-): Promise<TelegramView> {
+): Promise<Omit<TelegramView, "botUrl">> {
   const [{ results: workspaces }, { results: stores }] = await db.batch<Record<string, unknown>>([
     db
       .prepare(`SELECT l.chat_label, l.linked_at, l.delivery_failure,

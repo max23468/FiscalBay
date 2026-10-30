@@ -12,6 +12,10 @@ import { completeRegistration } from "../app/domain/registration.server";
 import { adminAccess, readSession, recentSignIn } from "../app/domain/sessions.server";
 import { withResponseCookies } from "../app/response-cookies.server";
 import { loader as adminLoader } from "../app/routes/admin";
+import { loader as exportFileLoader } from "../app/routes/export-file";
+import { action as notificationsAction } from "../app/routes/notifications";
+import { action as exportAction } from "../app/routes/order-export";
+import { action as searchAction } from "../app/routes/order-search";
 import { action as securityRouteAction, loader as securityLoader } from "../app/routes/settings";
 import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
@@ -1792,6 +1796,27 @@ describe("Sessioni, revoche e area admin", () => {
     expect(link.headers.get("location")).toContain("negozio=accesso");
     expect((await jsonRequest("passkey/generate-register-options", cookie)).status).toBe(401);
     expect(await admin(cookie)).toBe(404);
+    // Le API dei dati rileggono la sessione prima di cercare, esportare, scaricare o segnare.
+    const options = (fields: Record<string, string>) => ({
+      cookie,
+      fields,
+      headers: { accept: "application/json" },
+    });
+    const statuses = [
+      await routeResponse(
+        searchAction,
+        "/api/v1/orders/search",
+        options({ q: "RSSMRA80A01H501U" }),
+      ),
+      await routeResponse(exportAction, "/api/v1/orders/export", options({ ordini: "o-a" })),
+      await routeResponse(exportFileLoader, "/api/v1/exports/file", {
+        ...options({}),
+        fields: undefined,
+        params: { file: "file" },
+      }),
+      await routeResponse(notificationsAction, "/api/v1/notifications", options({ ids: "a" })),
+    ].map((response) => response.status);
+    expect(statuses).toEqual([401, 401, 401, 302]);
   }
 
   it("inoltra a Better Auth lo user agent dei moduli e nessun header assente", async () => {

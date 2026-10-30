@@ -2,7 +2,7 @@ import { cn } from "cn";
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 
-import { Badge } from "~/components/ui/badge";
+import { StatusBadge } from "~/components/status";
 import type { SectionData } from "../../admin-console.server";
 import type { AdminCopy } from "../../copy/admin-copy";
 import type { Anomaly, Severity } from "../../domain/admin-operations.server";
@@ -18,7 +18,7 @@ const severityTone: Record<Severity, "danger" | "warning" | "neutral"> = {
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
   const { t } = useAdmin();
-  return <Badge variant={severityTone[severity]}>{t.severity[severity]}</Badge>;
+  return <StatusBadge tone={severityTone[severity]}>{t.severity[severity]}</StatusBadge>;
 }
 
 /** Nome leggibile dell'oggetto: lavoro, provider, quota o operazione al posto del codice. */

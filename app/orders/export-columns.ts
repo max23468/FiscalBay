@@ -117,6 +117,24 @@ export function columnName(column: ExportColumn, rows: ExportRows, t: AppCopy): 
   return rows === "item" && column === "items" ? names.item : names[column];
 }
 
+/** Valori di un ordine nel file, per ogni granularità: una riga per ordine o una per articolo. */
+export interface ExportSampleOrder {
+  createdAt: string;
+  rows: Record<ExportRows, Array<Record<ExportColumn, string>>>;
+}
+
+/**
+ * Prime righe del file per l'anteprima tabellare, dagli ordini più recenti dell'ambito: tutti,
+ * oppure soltanto quelli con i dati fiscali disponibili.
+ */
+export interface ExportSample {
+  all: ExportSampleOrder[];
+  available: ExportSampleOrder[];
+}
+
+/** Ordini letti per l'anteprima tabellare; per articolo le righe restano al più il doppio. */
+export const exportSampleSize = 3;
+
 export function exportHeader(
   rows: ExportRows,
   t: AppCopy,

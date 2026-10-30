@@ -505,7 +505,7 @@ describe("letture eBay sospese nell'anteprima", () => {
     const cookie = (
       await writePreviewState({ scenario: "letture-sospese", unlocked: [], saveFailed: false })
     ).split(";")[0]!;
-    expect(await routeData(previewStores, "/anteprima/negozi", { cookie })).toMatchObject({
+    expect((await routeData(previewStores, "/anteprima/negozi", { cookie })).page).toMatchObject({
       ebayDown: ["production"],
       ebayMaintenance: true,
     });
@@ -626,9 +626,7 @@ describe("negozi dell'anteprima", () => {
       const cookie = (await writePreviewState({ scenario, unlocked: [], saveFailed: false })).split(
         ";",
       )[0]!;
-      const page = (await routeData(previewStores, "/anteprima/negozi", { cookie })) as {
-        subscriptionRenews: boolean;
-      };
+      const { page } = await routeData(previewStores, "/anteprima/negozi", { cookie });
       return page.subscriptionRenews;
     };
     // Un abbonamento che addebiterà ancora, anche in attivazione o dopo un periodo rimborsato.
@@ -689,5 +687,67 @@ describe("cancellazione dell'account nell'anteprima", () => {
     expect(
       await routeData(loader, "/anteprima/ordini", { cookie: await cookieFor("ordinario") }),
     ).toMatchObject({ deleting: false });
+  });
+});
+
+describe("stati dell'area reale nell'anteprima", () => {
+  const cookieOf = async (scenario: PreviewState["scenario"]) =>
+    (await writePreviewState({ scenario, unlocked: [], saveFailed: false })).split(";")[0]!;
+
+  it("prima della conferma dell'email mostra soltanto gli Ordini, come l'area reale", async () => {
+    const cookie = await cookieOf("email-da-confermare");
+    const root = await routeData(previewRoot, "/anteprima/ordini", { cookie });
+    expect(root.verified).toBe(false);
+    const orders = await routeData(previewOrders, "/anteprima/ordini", { cookie });
+    if ("loading" in orders) throw new Error("elenco atteso");
+    expect(orders).toMatchObject({ exportable: false, connectHref: null });
+    expect(orders.email?.address).toMatch(/@esempio\.invalid$/u);
+    const redirected = async (response: Response) => response.headers.get("location");
+    expect(
+      await redirected(await routeResponse(previewStores, "/anteprima/negozi", { cookie })),
+    ).toBe("/anteprima/ordini");
+    expect(
+      await redirected(
+        await routeResponse(previewSettings, "/en/anteprima/impostazioni/piano", { cookie }),
+      ),
+    ).toBe("/en/anteprima/ordini");
+    // Il nuovo invio del link resta simulato.
+    expect(
+      await routeData(previewOrdersAction, "/anteprima/ordini", {
+        cookie,
+        fields: { intent: "verifica" },
+      }),
+    ).toEqual({ ok: true, notice: appCopy.it.preview.simulated });
+    expect(
+      (await routeData(previewRoot, "/anteprima/ordini", { cookie: await cookieOf("ordinario") }))
+        .verified,
+    ).toBe(true);
+  });
+
+  it("riporta in Negozi l'esito del negozio già collegato a un altro account", async () => {
+    const cookie = await cookieOf("primo-accesso");
+    const connect = await routeResponse(previewStoresAction, "/anteprima/negozi", {
+      cookie,
+      fields: { intent: "store-connect" },
+    });
+    expect(connect.headers.get("location")).toBe("/anteprima/negozi?negozio=altro-spazio");
+    const { notice } = await routeData(previewStores, "/anteprima/negozi?negozio=altro-spazio", {
+      cookie,
+    });
+    expect(notice).toMatchObject({ source: "negozio", key: "altro-spazio", tone: "warning" });
+    // Senza quell'esito il collegamento resta simulato.
+    expect(
+      await routeData(previewStoresAction, "/anteprima/negozi", {
+        cookie: await cookieOf("ordinario"),
+        fields: { intent: "store-connect" },
+      }),
+    ).toEqual({ ok: true, notice: appCopy.it.preview.simulated });
+  });
+
+  it("il caricamento degli Ordini è quello dell'area reale, senza dati", async () => {
+    const cookie = await cookieOf("caricamento");
+    expect(await routeData(previewOrders, "/anteprima/ordini", { cookie })).toEqual({
+      loading: true,
+    });
   });
 });

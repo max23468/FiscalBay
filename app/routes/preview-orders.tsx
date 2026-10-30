@@ -7,7 +7,9 @@ import {
 } from "react-router";
 
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
+import { VerifyEmail } from "~/components/access-notice";
 import { NotFoundState } from "~/components/not-found";
+import { OrdersLoading } from "~/components/orders/loading";
 import { remainingUnlocks } from "~/components/orders/labels";
 import { useLinks } from "~/components/copy-context";
 import { appHref, previewOrdersPath } from "../app-links";
@@ -18,6 +20,7 @@ import { defaultTemplate } from "../preferences";
 import { rememberedStore, revalidateUnlessSnapshot } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
+import { scenarioVerified } from "../preview/scenarios.server";
 import {
   assertPreviewAction,
   currentScenario,
@@ -34,6 +37,8 @@ export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { language, scenario, state } = await pageScenario(request);
+  // Come la navigazione verso gli Ordini dell'area reale, prima che arrivino i dati.
+  if (scenario.view === "loading") return { loading: true as const };
   const search = new URL(request.url).searchParams;
   const stores = scenario.stores
     .filter((store) => store.pauseReason !== "plan")
@@ -66,6 +71,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     : null;
   if (params.ordine && !detail) throw data(null, { status: 404 });
   const vintage = scenario.stores[0];
+  const verified = scenarioVerified(scenario);
   const pageData: OrdersPageData = {
     view: scenario.view,
     ...page,
@@ -90,10 +96,20 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     now: scenario.now,
     confirmUnlock: state.confirmUnlock !== false,
     settings: true,
-    exportable: true,
+    // Come nell'area reale, prima della conferma dell'email non si collega né si esporta.
+    exportable: verified,
     openOnEbay: true,
+    ...(verified ? {} : { connectHref: null }),
   };
-  return pageData;
+  return {
+    ...pageData,
+    email: verified
+      ? null
+      : {
+          address: scenario.account.email,
+          deletion: { methods: scenario.signInMethods, currentSession: null, ready: true },
+        },
+  };
 }
 
 /** L'istantanea aggiunta all'indirizzo è quella della risposta già mostrata. */
@@ -151,7 +167,19 @@ export async function action({ request }: Route.ActionArgs) {
 
 export default function PreviewOrders({ loaderData }: Route.ComponentProps) {
   const { links } = useLinks();
-  return <OrdersPage data={loaderData} unlockAction={appHref(links, "ordini")} />;
+  if ("loading" in loaderData) return <OrdersLoading />;
+  const { email } = loaderData;
+  return (
+    <OrdersPage
+      data={loaderData}
+      unlockAction={appHref(links, "ordini")}
+      notice={
+        email ? (
+          <VerifyEmail email={email.address} verified={false} deletion={email.deletion} />
+        ) : null
+      }
+    />
+  );
 }
 
 /** Un indirizzo inesistente resta dentro l'app, con la strada per tornare all'elenco. */

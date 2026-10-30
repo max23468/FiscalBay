@@ -180,6 +180,14 @@ async function main() {
     const unlockAccounts = ["chromium", "webkit"].flatMap((browser) =>
       ["it", "en"].map((language) => `unlock-${language}-${browser}`),
     );
+    // Sblocco con la risposta persa: l'esito si ritrova dopo la ricarica.
+    const lostAccounts = ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].map((language) => `lost-${language}-${browser}`),
+    );
+    // Richieste di assistenza: il limite di cinque nelle 24 ore vale per account.
+    const supportAccounts = ["chromium", "webkit"].flatMap((browser) =>
+      ["it", "en"].map((language) => `support-${language}-${browser}`),
+    );
     // La prova Premium si offre dopo la prima lettura riuscita: i suoi account hanno il negozio letto.
     const trialAccounts = ["chromium", "webkit"].flatMap((browser) =>
       ["it", "en"].map((language) => `trial-${language}-${browser}`),
@@ -198,6 +206,8 @@ async function main() {
     );
     for (const id of [
       ...unlockAccounts,
+      ...lostAccounts,
+      ...supportAccounts,
       ...trialAccounts,
       ...exportAccounts,
       ...xlsxAccounts,
