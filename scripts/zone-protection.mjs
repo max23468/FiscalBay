@@ -21,7 +21,6 @@
  * Uso: node scripts/zone-protection.mjs <plan|validate|apply|readback|remove> [--mode live]
  *      node scripts/zone-protection.mjs readback --burst   (prova anche il rate limiting)
  */
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -30,6 +29,7 @@ import { parseArgs } from "node:util";
 
 import { webhookPaths } from "../app/webhook-paths.ts";
 import config, { zone } from "../cloudflare.config.ts";
+import * as provider from "./lib/provider.mjs";
 
 /** Indirizzo che riceve gli alert dei certificati: la casella generale dell'owner. */
 export const alertEmail = "info@fiscalbay.it";
@@ -391,27 +391,14 @@ export function checkReadback(target, state) {
   return { ok: checks.every(([, ok]) => ok), checks: Object.fromEntries(checks) };
 }
 
-/** CLI `cf`; `quiet` tace gli errori delle letture facoltative, come una fase ancora vuota. */
-function cf(args, { quiet = false } = {}) {
-  return execFileSync("pnpm", ["exec", "cf", ...args, "--zone", zone], {
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-    stdio: ["ignore", "pipe", quiet ? "ignore" : "inherit"],
-  });
-}
+/** CLI `cf` sulla zona del sito. */
+const cf = (args, options) => provider.cf([...args, "--zone", zone], options);
+const cfJson = (args, options) => provider.cfJson([...args, "--zone", zone], options);
 
-/** Risultato JSON della CLI, con o senza l'involucro `result`; `null` se la CLI non stampa nulla. */
-function cfJson(args, options) {
-  const output = cf(args, options);
-  const start = output.search(/[[{]/u);
-  if (start === -1) return null;
-  const value = JSON.parse(output.slice(start));
-  return value && !Array.isArray(value) && "result" in value ? value.result : value;
-}
-
+// Le letture facoltative tacciono gli errori, come per una fase ancora vuota.
 const optional = (args) => {
   try {
-    return cfJson(args, { quiet: true });
+    return cfJson(args, { stderr: "ignore" });
   } catch {
     return null;
   }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   checkActionPins,
+  checkCopy,
   checkFixtures,
   checkImports,
   checkPlanCodes,
@@ -115,5 +116,32 @@ describe("Action fissate", () => {
     const text = `      - uses: actions/checkout@v7\n        uses: actions/setup-node@3d3c42e\n      - uses: actions/checkout@${sha}\n`;
     assert.equal(checkActionPins([{ path: ".github/workflows/ci.yml", text }]).length, 3);
     assert.equal(checkActionPins([{ path: ".github/actions/setup/action.yml", text }]).length, 3);
+  });
+});
+
+describe("em dash", () => {
+  const dash = String.fromCodePoint(0x2014);
+  it("rifiuta il carattere e le sue codifiche in ogni file di testo", () => {
+    assert.deepEqual(
+      checkCopy([
+        { path: "docs/piano.md", text: `riga\nprima ${dash} dopo` },
+        { path: "app/copy.ts", text: `"&md${"ash;"}"` },
+        { path: "test/titolo.spec.ts", text: `"&#${"8212;"}" + "&#X${"2014;"}"` },
+        { path: "scripts/a.mjs", text: `"\\u${"2014"}" + "\\u{${"2014"}}"` },
+      ]),
+      [
+        "docs/piano.md:2: em dash non consentito (U+2014)",
+        "app/copy.ts:1: em dash non consentito (U+2014)",
+        "test/titolo.spec.ts:1: em dash non consentito (U+2014)",
+        "scripts/a.mjs:1: em dash non consentito (U+2014)",
+      ],
+    );
+  });
+
+  it("ammette trattino, en dash e separatore dei titoli", () => {
+    assert.deepEqual(
+      checkCopy([{ path: "app/root.tsx", text: "Ordini | FiscalBay - 2026\u2013" }]),
+      [],
+    );
   });
 });

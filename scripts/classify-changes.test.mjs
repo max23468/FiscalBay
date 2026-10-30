@@ -387,11 +387,13 @@ describe("esecuzione del classificatore", () => {
       mkdirSync(bin);
       writeFileSync(path.join(bin, "pnpm"), runner, { mode: 0o700 });
       mkdirSync(path.join(repo, "scripts/release"), { recursive: true });
+      mkdirSync(path.join(repo, "scripts/lib"));
       for (const file of [
         "classify-changes.mjs",
         "mutation.mjs",
         "verify-repo.mjs",
         "release/release.mjs",
+        "lib/provider.mjs",
       ])
         cpSync(path.join("scripts", file), path.join(repo, "scripts", file));
       writeFileSync(path.join(repo, "README.md"), "base\n");

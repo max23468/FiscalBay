@@ -3,28 +3,34 @@
  * Controlli locali della documentazione. Nessuna dipendenza o richiesta di rete.
  * Non verifica semantica del prodotto, conformità o stato live dei provider.
  * Uso: node scripts/verify-docs.mjs [--assets] [--json] [--root DIRECTORY]
- * Audit e snapshot in docs/archive non partecipano ai controlli ordinari.
+ * docs/archive non partecipa ai controlli ordinari: la procedura di adozione è storica e gli
+ * identificativi D1-D5 dell'audit UI/UX, che si mantiene, coincidono con i codici delle decisioni.
  */
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import { productionReadiness } from "./release/release.mjs";
 
-let root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-let assets = false,
-  jsonOutput = false;
-const args = process.argv.slice(2);
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "--assets") assets = true;
-  else if (args[i] === "--json") jsonOutput = true;
-  else if (args[i] === "--root" && args[i + 1] && !args[i + 1].startsWith("--"))
-    root = path.resolve(args[++i]);
-  else {
-    console.error("Uso: node scripts/verify-docs.mjs [--assets] [--json] [--root DIRECTORY]");
-    process.exit(2);
-  }
+let options;
+try {
+  options = parseArgs({
+    options: {
+      assets: { type: "boolean", default: false },
+      json: { type: "boolean", default: false },
+      root: {
+        type: "string",
+        default: path.join(path.dirname(fileURLToPath(import.meta.url)), ".."),
+      },
+    },
+  }).values;
+} catch {
+  console.error("Uso: node scripts/verify-docs.mjs [--assets] [--json] [--root DIRECTORY]");
+  process.exit(2);
 }
+const root = path.resolve(options.root);
+const { assets, json: jsonOutput } = options;
 // Un task completato riassume la capacità consegnata: prove e cronaca restano in PR e CI.
 const COMPLETED_TASK_WORDS = 150;
 const errors = [],

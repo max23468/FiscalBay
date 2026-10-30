@@ -11,6 +11,7 @@ import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { needsDeploy } from "./classify-changes.mjs";
+import { ghJson } from "./lib/provider.mjs";
 
 /** Prima run, dalla più recente, con il job di deploy test riuscito su un antenato di HEAD. */
 export function lastDeployed(runs, jobsOf, isAncestor) {
@@ -41,7 +42,7 @@ export function comparisonBase(runs, jobsOf, isAncestor, needsDeployFrom) {
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const repository = process.env.REPOSITORY;
   if (!repository) throw new Error("Repository non identificato.");
-  const api = (url) => JSON.parse(execFileSync("gh", ["api", url], { encoding: "utf8" }));
+  const api = (url) => ghJson("api", url);
   const runs = api(
     `repos/${repository}/actions/workflows/ci.yml/runs?branch=develop&status=completed&per_page=50`,
   ).workflow_runs.filter(({ id }) => String(id) !== process.env.GITHUB_RUN_ID);

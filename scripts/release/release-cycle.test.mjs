@@ -854,6 +854,51 @@ describe("comandi del ciclo", () => {
     assert.equal(lockObject("production", undefined), "production");
   });
 
+  it("controlla dalla CLI la base della PR rispetto a quella attuale di origin", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "qualification-cli-"));
+    const upstream = path.join(directory, "upstream");
+    const clone = path.join(directory, "clone");
+    const git = (cwd, ...args) =>
+      (spawnSync("git", args, { cwd, encoding: "utf8" }).stdout ?? "").trim();
+    const commit = (cwd, file, text) => {
+      writeFileSync(path.join(cwd, file), text);
+      git(cwd, "add", "--all");
+      git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", file);
+      return git(cwd, "rev-parse", "HEAD");
+    };
+    const check = (ref, base, head) =>
+      spawnSync(
+        process.execPath,
+        [
+          new URL("./release-cycle.mjs", import.meta.url).pathname,
+          "qualification-base",
+          "--ref",
+          ref,
+          "--base",
+          base,
+          "--head",
+          head,
+        ],
+        { cwd: clone, encoding: "utf8" },
+      );
+    try {
+      mkdirSync(upstream);
+      git(upstream, "init", "--quiet", "--initial-branch", "develop");
+      const tested = commit(upstream, "a.ts", "a\n");
+      git(directory, "clone", "--quiet", upstream, clone);
+      git(clone, "switch", "--quiet", "-c", "feature");
+      const head = commit(clone, "b.ts", "b\n");
+      assert.equal(check("develop", tested, head).status, 0);
+      commit(upstream, "b.ts", "b2\n");
+      const advanced = check("develop", tested, head);
+      assert.equal(advanced.status, 1);
+      assert.match(advanced.stderr, /file comuni/u);
+      assert.match(check("legacy/1.x", tested, head).stderr, /--ref develop o main/u);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("rifiuta un comando sconosciuto prima di leggere il repository", () => {
     const result = spawnSync(
       process.execPath,

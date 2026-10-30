@@ -1,6 +1,8 @@
 # Audit UI/UX di FiscalBay 2.0 sul dominio test
 
-**Stato:** audit concluso, correzioni in corso: vedi [§15](#15-correzioni-verificate)
+**Stato:** documento mantenuto: ogni correzione si registra in [§15](#15-correzioni-verificate)
+dopo la verifica su Chrome live. Resta in `docs/archive/` perché `verify-docs` esclude la
+cartella: gli identificativi D1-D5 dei problemi coincidono con i codici delle decisioni
 **Data:** 3 ottobre 2026
 **Ambiente:** Worker `fiscalbay-test` su `test.fiscalbay.it`, codice di `develop`
 a `de1fcab`; la diagnostica dell'anteprima riporta `2.0.0 (anteprima)`

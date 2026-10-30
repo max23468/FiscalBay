@@ -9,7 +9,7 @@
  * - `full`: ogni altro file, un diff vuoto o un confronto non disponibile, `pnpm verify`.
  * La sequenza di ogni livello esiste soltanto negli script di package.json; ogni livello comprende
  * il precedente. Il classificatore sceglie anche le prove browser e il deploy test.
- * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--all] [--github-output] [--run]
+ * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--all] [--github-output] [--json] [--run [--gate-only]]
  * Senza --base confronta il checkout, file non tracciati inclusi, con l'ultimo verde locale di
  * `--run` nello stesso worktree, oppure con origin/develop se manca o con `--all`.
  */
@@ -26,6 +26,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import { criticalModule } from "./mutation.mjs";
 import { migrationEntry, requiredReview } from "./release/release.mjs";
 import { importGraph } from "./verify-repo.mjs";
@@ -54,7 +55,7 @@ const tooling = [
   /^\.codex\//u,
   /^\.mcp\.json$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:copy|docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest)?|find-(?:build|deployed)|reset-test-account|site-screenshots|stripe-account|telegram-bot|metrics-query|log-archive|zone-protection|credential-expiries|watch-invocations|ebay-mcp|recovery|release\/release(?:-notes|-cycle)?)\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest)?|find-(?:build|deployed)|reset-test-account|site-screenshots|stripe-account|telegram-bot|metrics-query|log-archive|zone-protection|credential-expiries|watch-invocations|ebay-mcp|recovery|release\/release(?:-notes|-cycle)?|lib\/provider)\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -224,7 +225,9 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     browsers,
     promotionReuse: !files.some(
       (file) =>
-        /^scripts\/(?:classify-changes|release\/release(?:-notes)?|find-build)\.mjs$/u.test(file) ||
+        /^scripts\/(?:classify-changes|release\/release(?:-notes)?|find-build|lib\/provider)\.mjs$/u.test(
+          file,
+        ) ||
         /^\.github\/(?:actions\/|workflows\/(?:ci|mutation|publish|qualify|promotion)\.yml$)/u.test(
           file,
         ),
@@ -329,35 +332,42 @@ function run(command, args, env = {}) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  const args = process.argv.slice(2);
-  const option = (name) => {
-    const index = args.indexOf(name);
-    return index === -1 ? undefined : args[index + 1] || undefined;
-  };
+  const { values: args } = parseArgs({
+    options: {
+      base: { type: "string" },
+      head: { type: "string" },
+      all: { type: "boolean" },
+      complete: { type: "boolean", default: false },
+      "github-output": { type: "boolean" },
+      "gate-only": { type: "boolean" },
+      json: { type: "boolean" },
+      run: { type: "boolean" },
+    },
+  });
+  const option = (name) => args[name] || undefined;
   // Base vuota, a zeri o non raggiungibile (avvio manuale, nuovo branch, storia riscritta):
   // il diff resta vuoto e il gate completo.
-  const committed = args.includes("--base");
+  const committed = args.base !== undefined;
   const mergeBase = committed ? undefined : git("merge-base", "origin/develop", "HEAD").trim();
   // In locale una nuova verifica prova soltanto ciò che è cambiato dall'ultimo verde.
   const tree = committed ? undefined : checkoutTree();
-  const green =
-    committed || args.includes("--all") || args.includes("--complete") ? undefined : lastGreen();
+  const green = committed || args.all || args.complete ? undefined : lastGreen();
   if (green && green === tree) {
     console.log("Nessuna modifica dall'ultimo verde locale: nessun controllo da ripetere.");
     process.exit(0);
   }
   const files = committed
-    ? committedChanges(option("--base"), option("--head"))
+    ? committedChanges(option("base"), option("head"))
     : green
       ? lines(git("diff", "--name-only", green, tree))
       : localChanges(mergeBase);
-  const before = committed ? option("--base") : (green ?? mergeBase);
+  const before = committed ? option("base") : (green ?? mergeBase);
   const edited = editedMigrations(
     files,
-    (file) => original(committed ? option("--base") : mergeBase, file),
+    (file) => original(committed ? option("base") : mergeBase, file),
     (file) =>
       committed
-        ? show(option("--head"), file)
+        ? show(option("head"), file)
         : existsSync(file)
           ? readFileSync(file, "utf8")
           : undefined,
@@ -371,7 +381,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
         [configFile]: {
           before: show(before, configFile),
           after: committed
-            ? show(option("--head"), configFile)
+            ? show(option("head"), configFile)
             : existsSync(configFile)
               ? readFileSync(configFile, "utf8")
               : undefined,
@@ -381,20 +391,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
     .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
-  const result = plan(files, sources, args.includes("--complete"), changes);
+  const result = plan(files, sources, args.complete, changes);
 
   if (green) console.log(`Confronto con l'ultimo verde locale ${green.slice(0, 12)}.`);
   for (const file of files) console.log(`${fileLevel(file, changes[file])}: ${file}`);
   const summary = `Gate ${result.gate} (\`pnpm ${result.script}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;
   console.log(summary);
-  if (args.includes("--github-output") && process.env.GITHUB_OUTPUT)
+  if (args["github-output"] && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
       `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\npromotion-reuse=${result.promotionReuse}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
     );
-  if (process.env.GITHUB_STEP_SUMMARY && !args.includes("--gate-only"))
+  if (process.env.GITHUB_STEP_SUMMARY && !args["gate-only"])
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Piano dei controlli\n\n${summary}\n`);
-  if (args.includes("--json")) console.log(JSON.stringify(result));
+  if (args.json) console.log(JSON.stringify(result));
   // La riga di approvazione entra nel corpo della PR prima della sua apertura, non dopo un
   // `Verify` fallito.
   if (!committed) {
@@ -409,9 +419,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       );
   }
 
-  if (args.includes("--run")) {
+  if (args.run) {
     run("pnpm", [result.script]);
-    if (result.e2e && !args.includes("--gate-only"))
+    if (result.e2e && !args["gate-only"])
       run(
         "node",
         ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", result.browsers],

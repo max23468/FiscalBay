@@ -11,7 +11,6 @@
  *      node scripts/metrics-query.mjs sample [--count 40] [--wait 120]
  * Il campione si invia soltanto al test: la Production non riceve richieste sintetiche.
  */
-import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -29,6 +28,7 @@ import {
   samplePath,
 } from "../app/metrics-queries.ts";
 import config from "../cloudflare.config.ts";
+import { cfJson } from "./lib/provider.mjs";
 
 export { samplePath };
 
@@ -74,29 +74,20 @@ export function compareSample(count, row) {
   };
 }
 
-function cf(args) {
-  const output = execFileSync("pnpm", ["exec", "cf", ...args], {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "inherit"],
-  });
-  return JSON.parse(output.slice(output.indexOf("{")));
-}
-
-const query = (sql) => cf(["analytics-engine", "sql", "query", "--body", sql]);
+const query = (sql) => cfJson(["analytics-engine", "sql", "query", "--body", sql]);
 
 /** Tempo CPU delle pagine, documento e dati, dai Workers Logs del Worker dell'ambiente. */
 function readCpu(service, hours) {
   return cpuPages.flatMap(({ page }) =>
     cpuKinds.map((kind) => {
-      const result = cf([
+      const result = cfJson([
         "o11y",
         "telemetry",
         "query",
         "--body",
         JSON.stringify(pageCpuQuery(service, page, kind, hours)),
       ]);
-      // La CLI restituisce il risultato della API, con o senza l'involucro `result`.
-      return { page, kind, ...cpuValues((result.result ?? result).calculations) };
+      return { page, kind, ...cpuValues(result.calculations) };
     }),
   );
 }

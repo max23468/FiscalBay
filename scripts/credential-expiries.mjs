@@ -16,7 +16,6 @@
  * Il percorso predefinito è `FISCALBAY_CREDENTIAL_REGISTRY` o
  * `~/.config/fiscalbay/credential-expiries.json`.
  */
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -24,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import config, { databases } from "../cloudflare.config.ts";
+import { cf } from "./lib/provider.mjs";
 import { executeLocal } from "./local-d1.mjs";
 
 export const warningDays = 45;
@@ -176,10 +176,7 @@ async function main() {
   if (command === "plan") return;
   const sql = registrySql(entries, result.missing);
   if (values.local) executeLocal(sql);
-  else
-    execFileSync("pnpm", ["exec", "cf", "d1", "raw", databases[environment].id, "--sql", sql], {
-      stdio: ["ignore", "ignore", "inherit"],
-    });
+  else cf(["d1", "raw", databases[environment].id, "--sql", sql], { stdout: "ignore" });
   console.log(`Registro copiato su ${databases[environment].name}.`);
 }
 

@@ -1,14 +1,16 @@
 #!/usr/bin/env node
 /**
- * Regole di repository fissate da AGENTS e dal governo della pipeline.
- * Ogni regola riceve l'elenco dei file ({ path, text }) e restituisce gli errori,
- * così i test possono provarla su input sintetici. Nessuna richiesta di rete.
- * Uso: node scripts/verify-repo.mjs
+ * Regole di repository fissate da AGENTS e dal governo della pipeline, sui file versionati e su
+ * quelli nuovi non ignorati da Git. Ogni regola riceve l'elenco dei file ({ path, text }) e
+ * restituisce gli errori, così i test possono provarla su input sintetici. Nessuna richiesta di
+ * rete. `--copy` esegue soltanto la regola sul testo, che il gate dei documenti richiede da sola.
+ * Uso: node scripts/verify-repo.mjs [--copy]
  */
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 
 // Migration già applicate: il nome registrato dal database è un vincolo di compatibilità.
 const appliedMigrationNames = new Set(["migrations/0001_m0_slice.sql"]);
@@ -185,6 +187,28 @@ export function checkActionPins(files) {
   return errors;
 }
 
+const emDash = String.fromCodePoint(0x2014);
+// Entità HTML ed escape Unicode del carattere, composti per non contenerli in questo file.
+const encodedEmDash = new RegExp(
+  [
+    "&md" + "ash;",
+    "&#0*" + emDash.codePointAt(0) + ";",
+    "&#x0*201" + "4;",
+    "\\\\u(?:201" + "4|\\{0*201" + "4\\})",
+  ].join("|"),
+  "iu",
+);
+
+/** Nessun em dash (U+2014), nemmeno codificato, in alcun file di testo della repository. */
+export function checkCopy(files) {
+  const errors = [];
+  for (const { path: file, text } of files)
+    for (const [index, line] of text.split("\n").entries())
+      if (line.includes(emDash) || encodedEmDash.test(line))
+        errors.push(`${file}:${index + 1}: em dash non consentito (U+2014)`);
+  return errors;
+}
+
 export const checks = {
   "sigle di piano": checkPlanCodes,
   fixture: checkFixtures,
@@ -212,14 +236,21 @@ function readRepository(root) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  const { values } = parseArgs({ options: { copy: { type: "boolean" } } });
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
   const files = readRepository(root);
+  const selected = values.copy ? { "em dash": checkCopy } : checks;
   let failures = 0;
-  for (const [name, check] of Object.entries(checks)) {
+  for (const [name, check] of Object.entries(selected)) {
     const errors = check(files);
     for (const error of errors) console.error(`${name}: ${error}`);
     failures += errors.length;
   }
   if (failures) process.exitCode = 1;
-  else console.log(`Repository: ${Object.keys(checks).length} regole rispettate.`);
+  else
+    console.log(
+      values.copy
+        ? "Copy: nessun em dash nei file della repository."
+        : `Repository: ${Object.keys(checks).length} regole rispettate.`,
+    );
 }

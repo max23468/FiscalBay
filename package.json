@@ -33,7 +33,7 @@
     "verify:tooling": "pnpm verify:documents && pnpm typegen && pnpm verify:repo && pnpm verify:pages && pnpm test:scripts && pnpm format:check && pnpm lint && pnpm quality:knip",
     "verify:pages": "node scripts/verify-pages.mjs",
     "verify:changed": "node scripts/classify-changes.mjs --run",
-    "verify:copy": "node scripts/verify-copy.mjs",
+    "verify:copy": "node scripts/verify-repo.mjs --copy",
     "verify:docs": "node scripts/verify-docs.mjs",
     "verify:full": "pnpm verify && E2E_PREBUILT=1 E2E_MATRIX=full node scripts/browser-tests.mjs --browsers chromium,webkit",
     "verify:repo": "node scripts/verify-repo.mjs"

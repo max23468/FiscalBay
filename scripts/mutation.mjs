@@ -21,11 +21,13 @@ import {
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { parseArgs } from "node:util";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
 
 /** Moduli senza suffisso server con regole dei moduli critici: dati fiscali, orari, lista ordini, coda. */
 const criticalShared = new Set([
+  "app/markup.ts",
   "app/tax-quality.ts",
   "app/time.ts",
   "app/orders/order-list.ts",
@@ -116,6 +118,7 @@ const unitTargets = new Set([
   "app/auth-route.server.ts",
   "app/request-limits.server.ts",
   "app/integrations/ebay/fulfillment.server.ts",
+  "app/markup.ts",
   "app/tax-quality.ts",
 ]);
 
@@ -327,11 +330,14 @@ async function runTarget(target, files, shard = "1/1") {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  const args = process.argv.slice(2);
+  const {
+    positionals: args,
+    values: { matrix: matrixMode },
+  } = parseArgs({ allowPositionals: true, options: { matrix: { type: "boolean" } } });
   const files = sources();
-  if (args[0] === "--matrix") {
+  if (matrixMode) {
     const matrix = mutationMatrix(
-      args.slice(1).join(" "),
+      args.join(" "),
       files.map(({ path: file }) => file),
     );
     console.log(`Moduli critici: ${matrix.target.join(", ") || "nessuno"}.`);

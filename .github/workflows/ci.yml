@@ -89,9 +89,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_REF: ${{ github.base_ref }}
-        run: |
-          git fetch --quiet origin "${BASE_REF}"
-          node --input-type=module -e 'import { assertQualificationBase } from "./scripts/release/release-cycle.mjs"; assertQualificationBase(process.env.BASE_REF, process.env.BASE_SHA, process.argv[1], process.env.HEAD_SHA);' "$(git rev-parse FETCH_HEAD)"
+        run: node scripts/release/release-cycle.mjs qualification-base --ref "${BASE_REF}" --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       # Sul push il confronto parte dall'ultimo deploy test riuscito, o dalla run verde successiva
       # senza modifiche da distribuire: una run annullata o un deploy fallito restano nel diff.
@@ -258,9 +256,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           BASE_REF: ${{ github.base_ref }}
-        run: |
-          git fetch --quiet origin "${BASE_REF}"
-          node --input-type=module -e 'import { assertQualificationBase } from "./scripts/release/release-cycle.mjs"; assertQualificationBase(process.env.BASE_REF, process.env.BASE_SHA, process.argv[1], process.env.HEAD_SHA);' "$(git rev-parse FETCH_HEAD)"
+        run: node scripts/release/release-cycle.mjs qualification-base --ref "${BASE_REF}" --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Check job results
         env:

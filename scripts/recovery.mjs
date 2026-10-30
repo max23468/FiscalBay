@@ -21,7 +21,6 @@
  *   RECOVERY_KEY=<base64> node scripts/recovery.mjs telegram --in <file>
  */
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,6 +29,7 @@ import { gunzipSync, gzipSync } from "node:zlib";
 
 import { stripeWebhookEvents } from "../app/integrations/stripe-account.server.ts";
 import config, { databases } from "../cloudflare.config.ts";
+import { cfJson, d1Query } from "./lib/provider.mjs";
 import { retryReadback } from "./release/release.mjs";
 import { cliRequest } from "./stripe-account.mjs";
 
@@ -457,45 +457,25 @@ export function targetOf(mode) {
 }
 
 /** Comando `cf` con l'esito in JSON; l'eliminazione di un segreto non ne stampa. */
-function cf(...args) {
-  const output = execFileSync("pnpm", ["exec", "cf", ...args], {
-    encoding: "utf8",
-    env: { ...process.env, CI: "true" },
-    stdio: ["ignore", "pipe", "inherit"],
-    maxBuffer: 256 << 20,
-  });
-  const start = output.search(/[[{]/u);
-  return start === -1 ? null : JSON.parse(output.slice(start));
-}
+const cf = (...args) => cfJson(args, { ci: true });
 
 /** Istruzioni sulla D1 remota in chiamate entro il limite; un errore dell'API si ripete. */
 function remoteRun(database) {
-  const call = (statements) => {
-    for (let attempt = 1; ; attempt++)
-      try {
-        const results = cf("d1", "query", database, "--sql", statements.join(";\n"));
-        if (results.length !== statements.length || results.some(({ success }) => !success))
-          throw new Error("Risposta D1 incompleta.");
-        return results.map(({ results: rows }) => rows);
-      } catch (error) {
-        if (attempt === 3) throw error;
-        execFileSync("sleep", [String(attempt * 5)]);
-      }
-  };
+  const call = (statements) => d1Query(database, statements, { ci: true });
   return async (statements) => {
     const results = [];
     let group = [];
     let length = 0;
     for (const statement of statements) {
       if (group.length && length + statement.length > statementLimit) {
-        results.push(...call(group));
+        results.push(...(await call(group)));
         group = [];
         length = 0;
       }
       group.push(statement);
       length += statement.length + 2;
     }
-    if (group.length) results.push(...call(group));
+    if (group.length) results.push(...(await call(group)));
     return results;
   };
 }

@@ -17,6 +17,8 @@ import { tmpdir } from "node:os";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
+import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
+
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
 // `mode` è la modalità registrata dalla Build Output: test usa quella predefinita di Vite.
@@ -285,16 +287,8 @@ function verify(environment) {
  * Dopo un deploy l'edge può servire ancora la versione precedente per qualche secondo:
  * il readback riprova entro una finestra limitata e fallisce con l'ultimo errore.
  */
-export async function retryReadback(check, attempts = 12, delayMs = 5000) {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await check();
-    } catch (error) {
-      if (attempt >= attempts) throw error;
-      await new Promise((resolve) => setTimeout(resolve, delayMs));
-    }
-  }
-}
+export const retryReadback = (check, attempts = 12, delayMs = 5000) =>
+  retry(check, { attempts, delay: () => delayMs });
 
 export function productionReadiness(plan, requireCompleted = true) {
   const sections = plan.split(/^### Gate per la pubblicazione Production\s*$/mu);
@@ -411,17 +405,11 @@ function restoreReceipt(manifest, prefix) {
   const runId = process.env.GITHUB_RUN_ID;
   const attempt = Number(process.env.GITHUB_RUN_ATTEMPT);
   if (firstAttempt(runId, attempt, prefix)) return;
-  const pages = JSON.parse(
-    execFileSync(
-      "gh",
-      [
-        "api",
-        "--paginate",
-        "--slurp",
-        `repos/${process.env.GH_REPO}/actions/runs/${runId}/artifacts?per_page=100`,
-      ],
-      { encoding: "utf8" },
-    ),
+  const pages = ghJson(
+    "api",
+    "--paginate",
+    "--slurp",
+    `repos/${process.env.GH_REPO}/actions/runs/${runId}/artifacts?per_page=100`,
   );
   const artifact = receiptArtifact(
     pages.flatMap((page) => page.artifacts),
@@ -458,26 +446,20 @@ function restoreReceipt(manifest, prefix) {
 
 /** Accesso al Worker e al D1 dell'ambiente con `cf` e l'API REST Cloudflare. */
 function provider(target) {
-  const cf = (...args) =>
-    execFileSync("pnpm", ["exec", "cf", ...args], {
-      encoding: "utf8",
-      env: { ...process.env, CI: "true" },
-      stdio: ["ignore", "pipe", "inherit"],
-    });
+  const cf = (...args) => cfCli(args, { ci: true });
+  const json = (...args) => cfJson(args, { ci: true });
   const { worker: config } = readOutput();
   const database = config.env.DB;
   // Il primo deployment dell'elenco è quello che serve il traffico.
   const activeDeployment = () =>
-    JSON.parse(cf("workers", "deployments", "list", "--worker", target.worker, "--per-page", "1"))
+    json("workers", "deployments", "list", "--worker", target.worker, "--per-page", "1")
       .deployments[0];
   const currentVersion = async () => {
     const version = activeDeployment()?.versions.find(
       ({ percentage }) => percentage === 100,
     )?.version_id;
     if (!version) throw new Error("Deployment non interamente assegnato a una versione.");
-    const metadata = JSON.parse(
-      cf("workers", "versions", "get", version, "--worker-id", target.worker),
-    );
+    const metadata = json("workers", "versions", "get", version, "--worker-id", target.worker);
     return { version, identity: metadata.annotations?.["workers/message"] };
   };
   const liveReadback = (version) =>
@@ -580,7 +562,7 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
       preflight: async () => {
         if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID)
           throw new Error("Accesso provider non configurato.");
-        const bindings = JSON.parse(cf("workers", "secrets", "list", "--worker", target.worker));
+        const bindings = json("workers", "secrets", "list", "--worker", target.worker);
         const required = Object.keys(config.env).filter(
           (name) => config.env[name].type === "secret",
         );

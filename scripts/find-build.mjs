@@ -4,6 +4,8 @@ import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { ghJson } from "./lib/provider.mjs";
+
 export function verifiedBuildOrigin(candidate, run, jobs, repositoryId, kind = "build") {
   const origin = candidate.workflow_run;
   if (
@@ -29,7 +31,7 @@ function main() {
   const kind = process.argv.includes("--candidate") ? "candidate" : "build";
   const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim();
   const artifact = `${kind}-${tree}`;
-  const api = (url) => JSON.parse(execFileSync("gh", ["api", url], { encoding: "utf8" }));
+  const api = (url) => ghJson("api", url);
   const candidates = api(
     `repos/${repository}/actions/artifacts?name=${artifact}&per_page=20`,
   ).artifacts;

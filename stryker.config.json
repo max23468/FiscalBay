@@ -3,7 +3,6 @@
   "testRunner": "vitest",
   "plugins_comment": "Il pool Cloudflare usa il fallback nativo Stryker per ricreare l'ambiente dei mutanti statici.",
   "plugins": ["./scripts/mutation-vitest.mjs"],
-  "vitest": { "configFile": "vitest.cloudflare.config.ts" },
   "tsconfigFile_comment": "TypeScript 7 non espone l'API usata per riscrivere il tsconfig nella sandbox; i percorsi del progetto restano interni.",
   "tsconfigFile": "tsconfig.none.json",
   "ignorePatterns": [

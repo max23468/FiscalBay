@@ -9,10 +9,11 @@ export default defineConfig({
   test: {
     ...cloudflare.test,
     name: "capacity",
+    // `capacity.mjs` legge le righe `CAPACITY` dalla console: dichiarato, impedisce al reporter
+    // usato nelle sessioni degli agenti di tacere i log delle prove riuscite.
     silent: false,
     include: ["benchmarks/capacity.spec.ts"],
     testTimeout: 600_000,
     hookTimeout: 600_000,
-    coverage: { enabled: false },
   },
 });
