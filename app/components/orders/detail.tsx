@@ -18,7 +18,7 @@ import { formatAmount, type Language } from "../../i18n";
 import { buyerNameView, contactText } from "../../contact";
 import { exportOrderHref, exportSection } from "../../orders/export-scope";
 import { itemPrice, marketplaceLabel, type OrderView } from "../../view-models";
-import { countryName, formatDate } from "../../format";
+import { countryName } from "../../format";
 import { BuyerAddress, EmailLink, ItemThumbnail, PhoneNumber, type SecondaryActions } from "./card";
 import { FiscalCodes, FiscalNotes, MissingOrderHelp, type FiscalProps } from "./fiscal";
 import type { OrdersAccount } from "./labels";
@@ -31,7 +31,7 @@ import {
 } from "./labels";
 import { ebayListingHref, ebayOrderHref } from "../../orders/ebay-links";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import { useCopy, useLinks } from "~/components/copy-context";
 
 /**
@@ -46,8 +46,8 @@ function FiscalDetail({
 }: Pick<FiscalProps, "order" | "account" | "ebayDown"> & {
   templates: Record<Language, string>;
 }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <FiscalNotes order={order} account={account} ebayDown={ebayDown} compact={false} />
@@ -55,9 +55,7 @@ function FiscalDetail({
         <MissingOrderHelp key={order.id} order={order} templates={templates} />
       ) : null}
       {order.lastSyncedAt ? (
-        <p className="text-xs text-muted-foreground">
-          {t.order.source(formatDate(order.lastSyncedAt, language, "dateTime", zone))}
-        </p>
+        <p className="text-xs text-muted-foreground">{t.order.source(date(order.lastSyncedAt))}</p>
       ) : null}
     </div>
   );
@@ -101,7 +99,7 @@ function Recipient({ order }: { order: OrderView }) {
 
 function OrderDetail({ order }: { order: OrderView }) {
   const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const date = useDate();
   const row = "grid min-w-0 gap-0.5 [overflow-wrap:anywhere]";
   const missing = <span className="text-muted-foreground">{t.orders.notProvided}</span>;
   const billing = billingCopyText(order, language, t);
@@ -141,9 +139,7 @@ function OrderDetail({ order }: { order: OrderView }) {
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.created}</dt>
               <dd>
-                <time dateTime={order.createdAt}>
-                  {formatDate(order.createdAt, language, "dateTime", zone)}
-                </time>
+                <time dateTime={order.createdAt}>{date(order.createdAt)}</time>
               </dd>
             </div>
             {order.marketplace ? (
@@ -240,9 +236,7 @@ function OrderDetail({ order }: { order: OrderView }) {
             <div className={row}>
               <dt className="text-muted-foreground">{t.order.updatedOnEbay}</dt>
               <dd>
-                <time dateTime={order.updatedAt}>
-                  {formatDate(order.updatedAt, language, "dateTime", zone)}
-                </time>
+                <time dateTime={order.updatedAt}>{date(order.updatedAt)}</time>
               </dd>
             </div>
           </dl>
@@ -278,7 +272,7 @@ function OrderDetail({ order }: { order: OrderView }) {
                     href={ebayListingHref(item.listingId)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-foreground underline underline-offset-4 hover:no-underline"
+                    className="text-foreground link-underline hover:no-underline"
                   >
                     {t.order.viewListing}
                   </a>
@@ -325,8 +319,7 @@ export function OrderSheet({
 }) {
   const { links } = useLinks();
   const { t } = useCopy();
-  const zone = useTimeZone();
-  const { language } = links;
+  const date = useDate();
   const location = useLocation();
   const navigate = useNavigate();
   // Il pannello conserva l'ultimo ordine durante l'animazione di chiusura.
@@ -361,7 +354,7 @@ export function OrderSheet({
             <SheetHeader>
               <SheetTitle className="break-words">{t.order.title(shown.ebayOrderId)}</SheetTitle>
               <SheetDescription className="text-pretty [overflow-wrap:anywhere]">
-                {formatDate(shown.createdAt, language, "dateTime", zone)} · {buyerLabel(shown, t)}
+                {date(shown.createdAt)} · {buyerLabel(shown, t)}
               </SheetDescription>
             </SheetHeader>
           }

@@ -5,12 +5,21 @@ const registrationRestricted = "Private test environment. Registration requires 
 
 const inactivityTitle = "Reading paused for inactivity";
 
+const contactSupport = "Contact support";
+
+const premiumMonthly = "Premium, monthly";
+const premiumAnnual = "Premium, annual";
+const premiumLifetime = "Premium, lifetime";
+
+const termsTitle = "Terms of service";
+const privacyTitle = "Privacy policy";
+
 export const en: AppCopy = {
   common: {
     cancel: "Cancel",
     save: "Save",
     saving: "Saving…",
-    contactSupport: "Contact support",
+    contactSupport,
   },
   shell: {
     notFound: {
@@ -321,7 +330,7 @@ export const en: AppCopy = {
     marketplace: "Marketplace",
     created: "Order date",
     update: "Update",
-    updatedOnEbay: "Last changed on eBay",
+    updatedOnEbay: "Last modified on eBay",
     sku: "SKU",
     noSku: "No SKU",
     viewListing: "View listing",
@@ -473,7 +482,6 @@ export const en: AppCopy = {
       privacy: { title: "Data and privacy" },
       supporto: { title: "Support" },
     },
-    premiumBadge: "Premium",
     saved: "Saved",
     saveFailed: "Change not saved. The setting has been restored: try again.",
     plan: {
@@ -558,9 +566,9 @@ export const en: AppCopy = {
       freeStoreChanged: "Active store updated.",
       freeStoreUnavailable: "The active store cannot be replaced right now.",
       premiumPeriod: {
-        monthly: "Premium, monthly",
-        annual: "Premium, annual",
-        lifetime: "Premium, lifetime",
+        monthly: premiumMonthly,
+        annual: premiumAnnual,
+        lifetime: premiumLifetime,
       },
       premiumLifetime: "One-off purchase, no renewals.",
       premiumLifetimeGranted: "Granted by FiscalBay, no renewals.",
@@ -786,14 +794,14 @@ export const en: AppCopy = {
       leave: "Leave page",
     },
     privacy: {
-      terms: "Terms of service",
+      terms: termsTitle,
       termsBody: "The conditions for using FiscalBay.",
       termsUpdateBody: "A new version is available: accept it once you have read it.",
       readTerms: "Read the terms",
       acceptTerms: "Accept",
       termsAccepted: "Terms accepted.",
       termsAcceptFailed: "Acceptance failed. Try again later.",
-      privacyPolicy: "Privacy policy",
+      privacyPolicy: privacyTitle,
       privacyPolicyBody: "What data we process, for how long and with which providers.",
       readPolicy: "Read the policy",
       accountExport: "Export account data",
@@ -833,7 +841,7 @@ export const en: AppCopy = {
           a: "No. FiscalBay reads your orders to show you the tax details: everything on your eBay store stays as it is.",
         },
       ],
-      contact: "Contact support",
+      contact: contactSupport,
       topic: "Topic",
       topics: {
         orders: "Orders and tax codes",
@@ -874,9 +882,9 @@ export const en: AppCopy = {
           waitlist: "Free, waiting list",
           trial: "Premium trial",
           granted: "Premium, granted",
-          lifetime: "Premium, lifetime",
-          monthly: "Premium, monthly",
-          annual: "Premium, annual",
+          lifetime: premiumLifetime,
+          monthly: premiumMonthly,
+          annual: premiumAnnual,
         },
       },
       send: "Send",
@@ -1002,8 +1010,8 @@ export const en: AppCopy = {
   },
   legal: {
     navigation: "Legal documents",
-    termini: "Terms of service",
-    privacy: "Privacy policy",
+    termini: termsTitle,
+    privacy: privacyTitle,
     termsLink: "Terms",
     privacyLink: "Privacy",
     version: (version: string) => `Version of ${legalDate("en-GB", version)}`,
@@ -1026,7 +1034,7 @@ export const en: AppCopy = {
     title: "Support",
     description:
       "FiscalBay support: questions about using the app, the in-app support form and email.",
-    contact: "Contact support",
+    contact: contactSupport,
     member:
       "In the app, write from the support form: you can attach your account’s diagnostic summary.",
     openForm: "Open the form",
@@ -1112,9 +1120,9 @@ export const en: AppCopy = {
     confirmOther: "With Google or eBay, sign out and sign in again, then repeat the change.",
     terms: {
       before: "I accept the ",
-      terms: "Terms of service",
+      terms: termsTitle,
       middle: " and I have read the ",
-      privacy: "Privacy policy",
+      privacy: privacyTitle,
       after: ".",
     },
     marketing: "Receive FiscalBay news and offers by email",

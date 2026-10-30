@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { useAction } from "~/components/action";
 import { PremiumNote, StatusAlert } from "~/components/status";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -28,9 +28,9 @@ import {
   type PurchaseState,
 } from "../../catalog";
 import type { Language } from "../../i18n";
+import { freeStoreChangeDays } from "../../limits";
 import { dayMilliseconds } from "../../time";
 import { trialDaysLeft, trialEnding, type AccountView } from "../../view-models";
-import { formatDate } from "../../format";
 import { AutoSwitch, Group, SimpleSelect } from "./controls";
 
 /**
@@ -53,8 +53,8 @@ function TrialPlan({
   purchase: PurchaseView;
   now: string;
 }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   const ending = trialEnding(trial.endsAt, now);
   return (
     <>
@@ -66,10 +66,7 @@ function TrialPlan({
           <p
             className={cn("text-sm", ending ? "font-medium text-warning" : "text-muted-foreground")}
           >
-            {t.settings.plan.trialEnds(
-              formatDate(trial.endsAt, language, "dateTime", zone),
-              trialDaysLeft(trial.endsAt, now),
-            )}
+            {t.settings.plan.trialEnds(date(trial.endsAt), trialDaysLeft(trial.endsAt, now))}
           </p>
           {/* Con un abbonamento scelto la prova non riporta al Free: prosegue in Premium. */}
           <p className="text-sm text-muted-foreground">
@@ -107,8 +104,8 @@ function PremiumPlan({
   billingPortal: boolean;
   purchase: PurchaseView;
 }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   const lifetime = account.premium?.period === "lifetime";
   return (
     <>
@@ -130,7 +127,7 @@ function PremiumPlan({
           <RenewalPeriod
             period={account.premium.period}
             next={account.premium.nextPeriod}
-            renewsAt={formatDate(account.premium.renewsAt, language, "date", zone)}
+            renewsAt={date(account.premium.renewsAt, "date")}
           />
         ) : null}
         {billingPortal && account.premium && !account.premium.granted ? (
@@ -153,20 +150,19 @@ function PremiumStatus({
   premium: AccountView["premium"];
   grant: AccountView["grant"];
 }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   const copy = t.settings.plan;
   let text: string | null = null;
   if (premium?.period === "lifetime")
     text = premium.granted ? copy.premiumLifetimeGranted : copy.premiumLifetime;
   else if (premium?.renewsAt) {
-    const date = formatDate(premium.renewsAt, language, "date", zone);
+    const renewsAt = date(premium.renewsAt, "date");
     text = premium.nextPeriod
-      ? copy.switchScheduled(premium.nextPeriod)(date)
-      : copy.premiumRenews(date);
-  } else if (premium?.endsAt)
-    text = copy.premiumEnds(formatDate(premium.endsAt, language, "dateTime", zone));
-  else if (grant) text = copy.grantEnds(formatDate(grant.endsAt, language, "dateTime", zone));
+      ? copy.switchScheduled(premium.nextPeriod)(renewsAt)
+      : copy.premiumRenews(renewsAt);
+  } else if (premium?.endsAt) text = copy.premiumEnds(date(premium.endsAt));
+  else if (grant) text = copy.grantEnds(date(grant.endsAt));
   return text ? <p className="text-sm text-muted-foreground">{text}</p> : null;
 }
 
@@ -208,15 +204,14 @@ function ManageBilling({ lifetime = false }: { lifetime?: boolean }) {
   const action = useAction();
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          variant="outline"
-          pending={action.pending}
-          onClick={() => action.run("manage-billing")}
-        >
-          {lifetime ? t.settings.plan.billingDocuments : t.settings.plan.manageBilling}
-        </Button>
-      </div>
+      <Button
+        variant="outline"
+        className="w-fit"
+        pending={action.pending}
+        onClick={() => action.run("manage-billing")}
+      >
+        {lifetime ? t.settings.plan.billingDocuments : t.settings.plan.manageBilling}
+      </Button>
       {lifetime ? null : (
         <p className="text-sm text-muted-foreground">{t.settings.plan.billingDocs}</p>
       )}
@@ -258,16 +253,13 @@ export interface FreeStoreView {
   changeFrom: string | null;
 }
 
-/** Giorni fra due sostituzioni del negozio attivo, come sul server. */
-const freeStoreChangeDays = 90;
-
 /**
  * Scelta del negozio attivo, soltanto nel Free (D155). La sostituzione chiede conferma: il
  * negozio lasciato va in pausa e la prossima resta possibile solo dopo 90 giorni.
  */
 function FreeStoreChoice({ freeStore, now }: { freeStore: FreeStoreView; now: string }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   const copy = t.settings.plan;
   const [active, setActive] = useState(freeStore.activeId ?? "");
   const [pending, setPending] = useState<string | null>(null);
@@ -283,7 +275,7 @@ function FreeStoreChoice({ freeStore, now }: { freeStore: FreeStoreView; now: st
         label={t.stores.chooseFreeStore}
         hint={
           freeStore.changeFrom
-            ? copy.freeStoreLocked(formatDate(freeStore.changeFrom, language, "date", zone))
+            ? copy.freeStoreLocked(date(freeStore.changeFrom, "date"))
             : copy.freeStoreHint
         }
         items={freeStore.stores.map((store) => ({ value: store.id, label: store.name }))}
@@ -298,10 +290,7 @@ function FreeStoreChoice({ freeStore, now }: { freeStore: FreeStoreView; now: st
           <AlertDialogHeader>
             <AlertDialogTitle>{copy.freeStoreConfirmTitle(name(pending) ?? "")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {copy.freeStoreConfirmBody(
-                name(active) ?? null,
-                formatDate(next, language, "date", zone),
-              )}
+              {copy.freeStoreConfirmBody(name(active) ?? null, date(next, "date"))}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -340,8 +329,8 @@ function CheckoutReturn({
   /** Il portale di Stripe completa il pagamento di un rinnovo non riuscito. */
   billingPortal?: boolean;
 }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   const portal = useAction();
   const copy = t.settings.plan;
   // Il lifetime si paga subito, anche durante la prova o con un abbonamento.
@@ -357,13 +346,13 @@ function CheckoutReturn({
         tone="info"
         title={copy.trialChosenCancelledTitle(copy.premiumPeriod[payment.period])}
       >
-        {copy.trialChosenCancelledBody(formatDate(payment.chargeAt, language, "dateTime", zone))}
+        {copy.trialChosenCancelledBody(date(payment.chargeAt))}
       </StatusAlert>
     );
   if (payment?.state === "scheduled")
     return (
       <StatusAlert tone="info" title={copy.trialChosenTitle(copy.premiumPeriod[payment.period])}>
-        {copy.trialChosenBody(formatDate(payment.chargeAt, language, "dateTime", zone))}
+        {copy.trialChosenBody(date(payment.chargeAt))}
       </StatusAlert>
     );
   if (trial && checkout === "processing")
@@ -376,9 +365,7 @@ function CheckoutReturn({
     return (
       <StatusAlert tone="warning" title={t.settings.plan.renewalFailedTitle}>
         <span className="grid justify-items-start gap-3">
-          {t.settings.plan.renewalFailedBody(
-            formatDate(payment.protectedUntil, language, "dateTime", zone),
-          )}
+          {t.settings.plan.renewalFailedBody(date(payment.protectedUntil))}
           {billingPortal ? (
             <Button
               variant="outline"
@@ -408,17 +395,15 @@ function CheckoutReturn({
  * riporta Premium se l'abbonamento continua.
  */
 function RefundNotice({ payment }: { payment: AccountView["payment"] }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   if (payment?.state !== "refunded") return null;
   const copy = t.settings.plan;
   return (
     <StatusAlert tone="info" title={copy.refundedTitle}>
       {payment.lifetime
         ? copy.lifetimeRefundedBody
-        : copy.refundedBody(
-            payment.renewsAt ? formatDate(payment.renewsAt, language, "date", zone) : null,
-          )}
+        : copy.refundedBody(payment.renewsAt ? date(payment.renewsAt, "date") : null)}
     </StatusAlert>
   );
 }
@@ -434,8 +419,8 @@ function FreeUnlocks({
   quota: AccountView["quota"];
   confirmUnlock: boolean;
 }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   return (
     <>
       {quota ? (
@@ -458,7 +443,7 @@ function FreeUnlocks({
           </div>
           {quota.cycleEndsAt ? (
             <p className="text-sm text-muted-foreground">
-              {t.settings.plan.cycleEnds(formatDate(quota.cycleEndsAt, language, "dateTime", zone))}
+              {t.settings.plan.cycleEnds(date(quota.cycleEndsAt))}
               {/* La promozione cambia la quota soltanto da un ciclo all'altro. */}
               {quota.nextLimit ? ` ${t.settings.plan.nextCycleLimit(quota.nextLimit)}` : null}
             </p>
@@ -570,7 +555,7 @@ function PurchaseOptions({
   upgrade?: boolean;
 }) {
   const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const date = useDate();
   // Un solo acquisto alla volta: la richiesta in corso ferma tutte le offerte.
   const action = useAction();
   const lifetime = purchase.lifetime;
@@ -582,9 +567,7 @@ function PurchaseOptions({
   // Durante la prova la nota dell'offerta aggiunge la data del primo addebito; con meno di due
   // giorni residui il primo addebito è subito.
   const chargeAt = trial ? firstChargeAt(trial.endsAt, trial.now) : null;
-  const firstCharge = chargeAt
-    ? copy.firstCharge(formatDate(chargeAt, language, "date", zone))
-    : null;
+  const firstCharge = chargeAt ? copy.firstCharge(date(chargeAt, "date")) : null;
   const prices = offerTexts(t, language, lifetime, firstCharge);
   const needsSync = purchase.state === "needs-sync" || lifetime?.state === "needs-sync";
   const closed = purchase.state === "closed" || lifetime?.state === "closed";

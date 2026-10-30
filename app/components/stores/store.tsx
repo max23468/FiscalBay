@@ -4,11 +4,10 @@ import { useState } from "react";
 import { LedgerIndicator } from "~/components/brand";
 import { IconTile, InitialsTile } from "~/components/icon-tile";
 import { StatusBadge, StatusIcon } from "~/components/status";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import { useCopy } from "~/components/copy-context";
-import { locales, type Language } from "../../i18n";
 import { type StoreView } from "../../view-models";
-import { formatDate, formatRelative } from "../../format";
+import { formatNumber, formatPercent, formatRelative } from "../../format";
 import { marketplaceText } from "./state";
 
 /** Logo del negozio eBay; senza logo, o se non si carica, le iniziali del nome. */
@@ -104,24 +103,15 @@ export function FeedbackSummary({ feedback }: { feedback: NonNullable<StoreView[
   return (
     <>
       <span>
-        <span className="font-code">{formatCount(feedback.score, language)}</span>
+        <span className="font-code">{formatNumber(feedback.score, language)}</span>
         {feedback.positivePercent === null
           ? null
-          : ` · ${t.stores.positiveFeedback(formatPercent(feedback.positivePercent, language))}`}
+          : ` · ${t.stores.positiveFeedback(formatPercent(feedback.positivePercent / 100, language))}`}
       </span>
       {feedback.topRated ? <StatusBadge tone="success">{t.stores.topRated}</StatusBadge> : null}
     </>
   );
 }
-
-const formatCount = (value: number, language: Language) =>
-  new Intl.NumberFormat(locales[language], { useGrouping: "always" }).format(value);
-
-/** Percentuale come la riporta eBay, con al massimo un decimale. */
-const formatPercent = (value: number, language: Language) =>
-  new Intl.NumberFormat(locales[language], { style: "percent", maximumFractionDigits: 1 }).format(
-    value / 100,
-  );
 
 /** Sezione del pannello del negozio: titolo con icona, poi il contenuto. */
 export function StoreSection({
@@ -150,8 +140,8 @@ export function StoreSection({
 
 /** Ultime letture del negozio, dalla più recente. */
 export function RecentList({ store }: SectionProps) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   return (
     <ul className="grid gap-2 text-sm">
       {store.recent.map((sync) => (
@@ -166,7 +156,7 @@ export function RecentList({ store }: SectionProps) {
             {sync.ok ? t.stores.recentOk(sync.newOrders) : t.stores.recentFailed}
           </span>
           <time dateTime={sync.at} className="pl-5.5 text-muted-foreground">
-            {formatDate(sync.at, language, "dateTime", zone)}
+            {date(sync.at)}
           </time>
         </li>
       ))}

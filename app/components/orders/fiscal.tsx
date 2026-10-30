@@ -18,7 +18,6 @@ import {
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
-import { Checkbox } from "~/components/ui/checkbox";
 import { Field, FieldLabel } from "~/components/ui/field";
 import {
   Select,
@@ -41,7 +40,7 @@ import {
   type SuggestionView,
   type TaxIdentifierView,
 } from "../../view-models";
-import { countryName, formatDate } from "../../format";
+import { countryName } from "../../format";
 
 import {
   buyerLanguage,
@@ -50,7 +49,8 @@ import {
   taxCodeLabels,
   type OrdersAccount,
 } from "./labels";
-import { useTimeZone } from "~/components/time-zone";
+import { CheckboxOption } from "~/components/checkbox-option";
+import { useDate } from "~/components/time-zone";
 import { useCopy } from "~/components/copy-context";
 
 const cardRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
@@ -84,7 +84,7 @@ export function FreeSuspendedNote() {
   return (
     <>
       {t.orders.freeSuspended}{" "}
-      <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+      <a href={`mailto:${supportEmail}`} className="link-underline">
         {supportEmail}
       </a>
     </>
@@ -139,14 +139,9 @@ function UnlockButton({
             {remaining === null ? null : ` · ${t.orders.unlockConfirmText(1, remaining)}`}
           </AlertDialogDescription>
         </AlertDialogHeader>
-        <label className="flex items-start gap-2 text-sm">
-          <Checkbox
-            aria-label={t.orders.dontAskUnlock}
-            checked={dontAsk}
-            onCheckedChange={(checked) => setDontAsk(checked === true)}
-          />
+        <CheckboxOption checked={dontAsk} onCheckedChange={setDontAsk}>
           {t.orders.dontAskUnlock}
-        </label>
+        </CheckboxOption>
         <AlertDialogFooter>
           <AlertDialogCancel ref={cancel}>{t.common.cancel}</AlertDialogCancel>
           <AlertDialogClose render={<Button />} onClick={() => onUnlock([order.id], dontAsk)}>
@@ -355,8 +350,8 @@ function LockedNote({
   fiscal: Extract<FiscalView, { state: "locked" }>;
   compact: boolean;
 }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   if (fiscal.hold) return <CardNote tone="info">{t.orders.lockedHold[fiscal.hold]}</CardNote>;
   if (account.freeSuspended)
     return (
@@ -369,7 +364,7 @@ function LockedNote({
   if (remaining > 0) return compact ? null : <CardNote>{t.orders.lockedHint(remaining)}</CardNote>;
   const { cycleEndsAt } = account.quota;
   if (!cycleEndsAt) return null;
-  const cycleEnd = formatDate(cycleEndsAt, language, "date", zone);
+  const cycleEnd = date(cycleEndsAt, "date");
   return (
     <CardNote>
       {compact ? t.orders.lockedUntil(cycleEnd) : t.orders.lockedExhausted(cycleEnd)}
@@ -454,7 +449,7 @@ export function MissingOrderHelp({
   templates?: Record<Language, string>;
 }) {
   const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const date = useDate();
   // Il messaggio parte nella lingua dell'acquirente, dal Paese di fatturazione; senza Paese vale
   // quella della pagina. Poi decide il merchant.
   const initial = buyerLanguage(order.contacts.billingAddress?.countryCode) ?? language;
@@ -489,10 +484,7 @@ export function MissingOrderHelp({
               warning={suggestion.conflict}
             />
             <p className="text-sm text-muted-foreground">
-              {t.orders.suggestionHint(
-                suggestion.sourceOrder,
-                formatDate(suggestion.sourceDate, language, "date", zone),
-              )}
+              {t.orders.suggestionHint(suggestion.sourceOrder, date(suggestion.sourceDate, "date"))}
             </p>
             {suggestion.sourceStore ? (
               <p className="text-sm break-words">

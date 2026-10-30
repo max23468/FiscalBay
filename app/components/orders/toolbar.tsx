@@ -4,18 +4,12 @@ import { useId, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useAction } from "~/components/action";
-import { StatusIcon } from "~/components/status";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Field, FieldLabel } from "~/components/ui/field";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
+import { Select, SelectContent, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { useCopy } from "~/components/copy-context";
+import { PremiumSelectItem } from "~/components/premium-select-item";
 import { usePendingList } from "./pending-list";
 import { rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
@@ -41,7 +35,6 @@ function FilterSelect({
   value,
   options,
   allLabel,
-  premiumLabel,
   onChange,
   fit = true,
 }: {
@@ -50,7 +43,6 @@ function FilterSelect({
   value: string;
   options: FilterOption[];
   allLabel: string;
-  premiumLabel: string;
   onChange: (name: string, value: string) => void;
   /**
    * Da desktop il campo parte dalla larghezza della sua voce più lunga. Senza, per i nomi dei
@@ -106,15 +98,7 @@ function FilterSelect({
           className="w-max max-w-[min(var(--available-width),24rem)] min-w-(--anchor-width)"
         >
           {items.map((item) => (
-            <SelectItem key={item.value} value={item.value} disabled={item.premium}>
-              {item.label}
-              {item.premium ? (
-                <>
-                  <StatusIcon tone="premium" className="ml-auto" />
-                  <span className="text-xs">{premiumLabel}</span>
-                </>
-              ) : null}
-            </SelectItem>
+            <PremiumSelectItem key={item.value} {...item} />
           ))}
         </SelectContent>
       </Select>
@@ -274,7 +258,6 @@ export function OrdersToolbar({
               options={stores.map((store) => ({ value: store.id, label: store.name }))}
               fit={false}
               allLabel={t.orders.all}
-              premiumLabel={t.orders.premiumOption}
               onChange={change}
             />
           ) : null}
@@ -288,7 +271,6 @@ export function OrdersToolbar({
               premium: plan !== "premium" && premiumOrderPeriods.has(period),
             }))}
             allLabel={t.orders.all}
-            premiumLabel={t.orders.premiumOption}
             onChange={change}
           />
           <FilterSelect
@@ -300,7 +282,6 @@ export function OrdersToolbar({
               label: t.orders.payment[status],
             }))}
             allLabel={t.orders.all}
-            premiumLabel={t.orders.premiumOption}
             onChange={change}
           />
           <FilterSelect
@@ -312,7 +293,6 @@ export function OrdersToolbar({
               label: t.orders.shipping[status],
             }))}
             allLabel={t.orders.all}
-            premiumLabel={t.orders.premiumOption}
             onChange={change}
           />
           <FilterSelect
@@ -324,7 +304,6 @@ export function OrdersToolbar({
               label: t.orders.fiscal[situation],
             }))}
             allLabel={t.orders.all}
-            premiumLabel={t.orders.premiumOption}
             onChange={change}
           />
         </div>

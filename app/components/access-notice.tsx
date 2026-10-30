@@ -136,7 +136,7 @@ export function AccessNotice({ notice }: { notice: AccessNoticeView | null }) {
         {elsewhere ? (
           <span className="grid gap-2">
             <span>{t.stores.elsewhereBody}</span>
-            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+            <a href={`mailto:${supportEmail}`} className="link-underline">
               {t.common.contactSupport}: {supportEmail}
             </a>
           </span>

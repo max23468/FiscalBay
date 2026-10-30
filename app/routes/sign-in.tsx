@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useLocation } from "react-router";
 
 import { BrandPanel } from "~/components/access/brand-panel";
+import { EmailField, PasswordField } from "~/components/access/credential-fields";
 import { EbayMark, GoogleMark } from "~/components/access/marks";
 import { PasskeyButton } from "~/components/access/passkey-button";
 import { rise } from "~/components/access/rise";
@@ -24,7 +25,6 @@ import {
   FieldLabel,
   FieldSeparator,
 } from "~/components/ui/field";
-import { Input } from "~/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useCopy } from "~/components/copy-context";
 import { useTurnstile } from "~/components/turnstile";
@@ -32,8 +32,7 @@ import { accessPath, privacyPath, securityReturnPath, termsPath } from "../app-l
 import { areaPage } from "../account-area.server";
 import { accessAction, accessLoader } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { languageFromPath, localizedPath, type Language } from "../i18n";
-import { maxPasswordLength, minPasswordLength } from "../limits";
+import { languageFromPath, localizedPath } from "../i18n";
 import { turnstileActions } from "../turnstile";
 import type { Route } from "./+types/sign-in";
 import { pageHeaders } from "../request-limits.server";
@@ -59,8 +58,6 @@ export const headers = pageHeaders;
 export function action({ request }: Route.ActionArgs) {
   return areaPage(request, () => accessAction(request));
 }
-
-type AccessCopy = (typeof appCopy)[Language]["access"];
 
 /** Campi inviati da ricompilare dopo un errore, senza la password. */
 type Remembered = { tab: string; values: Record<string, string> };
@@ -111,14 +108,11 @@ function AgreementFields({
           <FieldLabel htmlFor="termini" className="font-normal">
             <span id="terms-label">
               {t.terms.before}
-              <a href={localizedPath(language, termsPath)} className="underline underline-offset-4">
+              <a href={localizedPath(language, termsPath)} className="link-underline">
                 {t.terms.terms}
               </a>
               {t.terms.middle}
-              <a
-                href={localizedPath(language, privacyPath)}
-                className="underline underline-offset-4"
-              >
+              <a href={localizedPath(language, privacyPath)} className="link-underline">
                 {t.terms.privacy}
               </a>
               {t.terms.after}
@@ -242,36 +236,20 @@ function AccessForms({
         >
           <FieldGroup className="gap-3">
             <ReturnToField />
-            <Field>
-              <FieldLabel htmlFor="email" required>
-                {t.email}
-              </FieldLabel>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                autoComplete="username"
-                defaultValue={remembered?.tab === "accedi" ? values?.email : undefined}
-                required
-                {...signIn.control("email")}
-              />
-              {signIn.error("email")}
-            </Field>
+            <EmailField
+              id="email"
+              label={t.email}
+              autoComplete="username"
+              defaultValue={remembered?.tab === "accedi" ? values?.email : undefined}
+              v={signIn}
+            />
             {recovering ? null : (
-              <Field>
-                <FieldLabel htmlFor="password" required>
-                  {t.password}
-                </FieldLabel>
-                <Input
-                  id="password"
-                  name="password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  {...signIn.control("password")}
-                />
-                {signIn.error("password")}
-              </Field>
+              <PasswordField
+                id="password"
+                label={t.password}
+                autoComplete="current-password"
+                v={signIn}
+              />
             )}
             {recovery.field}
             <Button
@@ -309,37 +287,19 @@ function AccessForms({
               v={signUp}
               values={remembered?.tab === "registrati" ? values : undefined}
             />
-            <Field>
-              <FieldLabel htmlFor="signup-email" required>
-                {t.email}
-              </FieldLabel>
-              <Input
-                id="signup-email"
-                name="email"
-                type="email"
-                autoComplete="email"
-                defaultValue={remembered?.tab === "registrati" ? values?.email : undefined}
-                required
-                {...signUp.control("email")}
-              />
-              {signUp.error("email")}
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="signup-password" required>
-                {t.newPassword}
-              </FieldLabel>
-              <Input
-                id="signup-password"
-                name="password"
-                type="password"
-                autoComplete="new-password"
-                minLength={minPasswordLength}
-                maxLength={maxPasswordLength}
-                required
-                {...signUp.control("password")}
-              />
-              {signUp.error("password")}
-            </Field>
+            <EmailField
+              id="signup-email"
+              label={t.email}
+              autoComplete="email"
+              defaultValue={remembered?.tab === "registrati" ? values?.email : undefined}
+              v={signUp}
+            />
+            <PasswordField
+              id="signup-password"
+              label={t.newPassword}
+              autoComplete="new-password"
+              v={signUp}
+            />
             <AgreementFields
               v={signUp}
               values={remembered?.tab === "registrati" ? values : undefined}
@@ -370,31 +330,16 @@ function ResetPassword({ token }: { token: string }) {
       {...v.form}
       onSubmit={(event) => void v.check(event)}
     >
-      <h2 className="text-xl font-semibold">{t.passwordResetTitle}</h2>
+      <h1 className="text-xl font-semibold">{t.passwordResetTitle}</h1>
       <input type="hidden" name="token" value={token} />
       <ReturnToField />
-      <Field>
-        <FieldLabel htmlFor="reset-password" required>
-          {t.newPassword}
-        </FieldLabel>
-        <Input
-          id="reset-password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-          minLength={minPasswordLength}
-          maxLength={maxPasswordLength}
-          required
-          {...v.control("password")}
-        />
-        {v.error("password")}
-      </Field>
+      <PasswordField id="reset-password" label={t.newPassword} autoComplete="new-password" v={v} />
       <Button type="submit" name="intent" value="reimposta-password">
         {t.passwordRecoveryConfirm}
       </Button>
       <a
         href={localizedPath(language, accessPath)}
-        className="w-fit text-sm text-primary underline underline-offset-4"
+        className="w-fit text-sm text-primary link-underline"
       >
         {t.backToSignIn}
       </a>
@@ -424,7 +369,7 @@ function CompleteRegistration({
   return (
     <div className="grid gap-5">
       <div className="grid gap-1">
-        <h2 className="text-xl font-semibold">{t.agreementTitle}</h2>
+        <h1 className="text-xl font-semibold">{t.agreementTitle}</h1>
         <p className="text-sm text-muted-foreground">{t.agreementBody}</p>
       </div>
       <form method="post" action={formAction} {...v.form} onSubmit={(event) => void v.check(event)}>
@@ -499,11 +444,6 @@ function AccessPanel({
   );
 }
 
-function accessHeading(loaderData: Awaited<ReturnType<typeof loader>>, t: AccessCopy) {
-  if (loaderData.authenticated) return t.agreementTitle;
-  return loaderData.resetToken ? t.passwordResetTitle : t.choose;
-}
-
 /** Accesso, registrazione e completamento: marchio a sinistra, form a destra. */
 export default function SignIn({ loaderData, actionData }: Route.ComponentProps) {
   const { language } = loaderData;
@@ -536,7 +476,10 @@ export default function SignIn({ loaderData, actionData }: Route.ComponentProps)
           <div className="grid gap-2 lg:hidden">
             <p className="text-2xl font-semibold text-balance">{t.headline}</p>
           </div>
-          <h1 className="sr-only">{accessHeading(loaderData, t)}</h1>
+          {/* Completamento e nuova password hanno un titolo visibile; le schede soltanto questo. */}
+          {loaderData.authenticated || loaderData.resetToken ? null : (
+            <h1 className="sr-only">{t.choose}</h1>
+          )}
           <AccessNotice notice={notice} />
           {loaderData.authenticated ? (
             <VerifyEmail email={loaderData.email} verified={loaderData.emailVerified} />

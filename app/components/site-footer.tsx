@@ -27,19 +27,19 @@ export function SiteFooter({ className }: { className?: string }) {
           <p>© {new Date().getFullYear()} FiscalBay</p>
           <p>{t.site.independent}</p>
           <p>
-            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+            <a href={`mailto:${supportEmail}`} className="link-underline">
               {supportEmail}
             </a>
           </p>
         </div>
         <nav aria-label={t.legal.navigation} className="flex flex-wrap gap-4">
-          <a href={localizedPath(language, termsPath)} className="underline underline-offset-4">
+          <a href={localizedPath(language, termsPath)} className="link-underline">
             {t.legal.termsLink}
           </a>
-          <a href={localizedPath(language, privacyPath)} className="underline underline-offset-4">
+          <a href={localizedPath(language, privacyPath)} className="link-underline">
             {t.legal.privacyLink}
           </a>
-          <a href={localizedPath(language, supportPath)} className="underline underline-offset-4">
+          <a href={localizedPath(language, supportPath)} className="link-underline">
             {t.site.support}
           </a>
         </nav>

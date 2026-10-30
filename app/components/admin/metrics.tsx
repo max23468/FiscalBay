@@ -2,18 +2,18 @@ import { cn } from "cn";
 import { Link } from "react-router";
 
 import type { ProductMetrics } from "../../domain/product-metrics.server";
-import { locales } from "../../i18n";
+import { formatNumber } from "../../format";
 import { DataTable, Panel, Stat, StatGrid } from "./kit";
 import { useAdmin } from "./use-admin";
 
 /** Dimensione in megabyte o gigabyte, nella lingua della pagina. */
 function size(bytes: number, language: "it" | "en") {
   const giga = bytes >= 1024 ** 3;
-  return new Intl.NumberFormat(locales[language], {
+  return formatNumber(bytes / 1024 ** (giga ? 3 : 2), language, {
     style: "unit",
     unit: giga ? "gigabyte" : "megabyte",
     maximumFractionDigits: 1,
-  }).format(bytes / 1024 ** (giga ? 3 : 2));
+  });
 }
 
 /**

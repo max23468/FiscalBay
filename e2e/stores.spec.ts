@@ -156,7 +156,7 @@ test.describe("impostazioni e profilo", () => {
         await open(page, `${prefix}/anteprima/negozi/neg-bottega`);
         await expect(
           panel.getByRole("link", {
-            name: t("Contatta il supporto", "Contact support"),
+            name: t("Contatta l’assistenza", "Contact support"),
             exact: true,
           }),
         ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/supporto`);

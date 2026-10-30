@@ -73,8 +73,7 @@ export function AppShell({
     [],
   );
 
-  const destinations = navigation;
-  const navigable = destinations.length > 0;
+  const navigable = navigation.length > 0;
   const section = useSectionEntry();
 
   return (
@@ -108,7 +107,7 @@ export function AppShell({
               className="hidden h-6 w-auto dark:block"
             />
           </Link>
-          {navigable ? <TopNav destinations={destinations} label={t.shell.mainNav} /> : null}
+          {navigable ? <TopNav destinations={navigation} label={t.shell.mainNav} /> : null}
           <div className="ml-auto flex items-center gap-1">
             {search ? (
               <>
@@ -142,7 +141,7 @@ export function AppShell({
       >
         {children}
       </main>
-      {navigable ? <BottomNav destinations={destinations} label={t.shell.mainNav} /> : null}
+      {navigable ? <BottomNav destinations={navigation} label={t.shell.mainNav} /> : null}
       {/*
         Sopra velature e pannelli; `aria-live` esplicito lo tiene annunciato anche quando
         un pannello modale nasconde il resto della pagina. Sale sopra la barra di selezione.

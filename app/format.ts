@@ -23,6 +23,25 @@ export function formatDate(
     .replace("Sept", "Sep");
 }
 
+/**
+ * Numero nella lingua dell'interfaccia. Il raggruppamento esplicito, come in `formatAmount`,
+ * conserva lo stesso testo fra server e browser con dati ICU diversi.
+ */
+export function formatNumber(
+  value: number,
+  language: Language,
+  options?: Intl.NumberFormatOptions,
+): string {
+  return new Intl.NumberFormat(locales[language], { ...options, useGrouping: "always" }).format(
+    value,
+  );
+}
+
+/** Quota fra 0 e 1 come percentuale, con al massimo un decimale. */
+export function formatPercent(share: number, language: Language): string {
+  return formatNumber(share, language, { style: "percent", maximumFractionDigits: 1 });
+}
+
 /** Nome del Paese nella lingua dell'interfaccia, dal codice ISO. */
 export function countryName(code: string, language: Language): string {
   return /^[A-Z]{2}$/u.test(code)

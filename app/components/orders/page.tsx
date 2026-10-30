@@ -5,6 +5,7 @@ import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "rea
 import { useFetcherResult, useNotice } from "~/components/action";
 import { useConfirmed } from "~/components/confirmation";
 import { EmptyState } from "~/components/empty-state";
+import { smoothTransition } from "~/components/motion";
 import { buttonLink } from "~/components/ui/button-variants";
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
@@ -297,10 +298,7 @@ function OrdersList({
       ) : (
         <ChangingList>
           <LazyMotion features={loadMotionFeatures} strict>
-            <MotionConfig
-              reducedMotion="user"
-              transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-            >
+            <MotionConfig reducedMotion="user" transition={smoothTransition}>
               <section aria-label={t.orders.list} className="grid gap-3 lg:grid-cols-2">
                 {orders.map((order, position) => (
                   <OrderCard

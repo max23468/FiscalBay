@@ -21,7 +21,8 @@ import { supportEmail } from "../../app-copy";
 import { maxSupportMessage, supportFields, supportTopics } from "../../support";
 import { turnstileActions, turnstileField } from "../../turnstile";
 import type { DiagnosticsView } from "../../view-models";
-import { CheckboxOption, Group, SimpleSelect } from "./controls";
+import { CheckboxOption } from "~/components/checkbox-option";
+import { Group, SimpleSelect } from "./controls";
 
 export function SupportSection({
   support,
@@ -72,7 +73,7 @@ export function SupportSection({
         <Group title={t.settings.support.contact} separated={false}>
           <p className="text-sm text-muted-foreground">
             {t.settings.support.supportWrite}{" "}
-            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+            <a href={`mailto:${supportEmail}`} className="link-underline">
               {supportEmail}
             </a>
             .
@@ -205,7 +206,7 @@ function SupportForm({
           </Button>
           <p className="text-sm text-muted-foreground">
             {t.settings.support.supportEmail}{" "}
-            <a href={`mailto:${supportEmail}`} className="underline underline-offset-4">
+            <a href={`mailto:${supportEmail}`} className="link-underline">
               {supportEmail}
             </a>
             .

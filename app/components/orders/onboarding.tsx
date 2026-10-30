@@ -5,11 +5,10 @@ import { Link } from "react-router";
 import { useAction } from "~/components/action";
 import { useCopy, useLinks } from "~/components/copy-context";
 import { EmptyState } from "~/components/empty-state";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { appHref } from "../../app-links";
-import { formatDate } from "../../format";
 import type { OrdersPageData } from "./page";
 
 /** Collegamento del primo negozio: pagina reale, azione simulata o, finché non è possibile, nessuna. */
@@ -90,8 +89,7 @@ export function FirstUse({ data }: { data: OrdersPageData }) {
 export function NoOrders({ data }: { data: OrdersPageData }) {
   const { links } = useLinks();
   const { t } = useCopy();
-  const zone = useTimeZone();
-  const { language } = links;
+  const date = useDate();
   return (
     <EmptyState
       variant="all-clear"
@@ -100,10 +98,7 @@ export function NoOrders({ data }: { data: OrdersPageData }) {
       }
       description={
         data.sync.lastAt
-          ? t.orders.noOrdersBody(
-              data.sync.storeName ?? "",
-              formatDate(data.sync.lastAt, language, "dateTime", zone),
-            )
+          ? t.orders.noOrdersBody(data.sync.storeName ?? "", date(data.sync.lastAt))
           : t.orders.firstSyncBody(data.sync.storeName ?? "")
       }
       action={

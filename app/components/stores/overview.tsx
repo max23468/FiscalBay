@@ -4,14 +4,13 @@ import { Link } from "react-router";
 import { useAction } from "~/components/action";
 import { useHydrated } from "~/components/hydrated";
 import { StatusBadge } from "~/components/status";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { useCopy, useLinks } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
 import { type StoreView } from "../../view-models";
-import { formatDate } from "../../format";
 import { PauseButton, ReconnectButton } from "./actions";
 import {
   FeedbackSummary,
@@ -72,7 +71,7 @@ function OverviewIdentity({ store }: { store: StoreView }) {
               href={store.storeUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4 hover:text-muted-foreground"
+              className="inline-flex items-center gap-1 text-sm font-medium link-underline hover:text-muted-foreground"
             >
               {t.stores.openStore}
               <ExternalLink aria-hidden="true" className="size-3.5" />
@@ -93,8 +92,8 @@ function historyText(store: StoreView, t: AppCopy) {
 
 /** Riquadri della scheda: ordini, ultima lettura, storico e scadenza dell'autorizzazione. */
 function OverviewStats({ store, now }: SectionProps & { now: string }) {
-  const { t, language } = useCopy();
-  const zone = useTimeZone();
+  const { t } = useCopy();
+  const date = useDate();
   const history = historyText(store, t);
   const expired =
     store.connection === "reconnect_required" ||
@@ -111,9 +110,7 @@ function OverviewStats({ store, now }: SectionProps & { now: string }) {
       {store.consentExpiresAt ? (
         <OverviewStat label={t.stores.consentUntil}>
           <span className={expired ? "text-warning" : undefined}>
-            {expired
-              ? t.stores.consentExpired
-              : formatDate(store.consentExpiresAt, language, "date", zone)}
+            {expired ? t.stores.consentExpired : date(store.consentExpiresAt, "date")}
           </span>
         </OverviewStat>
       ) : null}

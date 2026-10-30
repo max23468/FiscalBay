@@ -7,13 +7,28 @@ const registrationRestricted =
 /** Pausa per inattività del Free, nella campanella e nei Negozi. */
 const inactivityTitle = "Letture in pausa per inattività";
 
+/** Invito a contattare l'assistenza, uguale in ogni pagina. */
+const contactSupport = "Contatta l’assistenza";
+
+/**
+ * Periodi di Premium, nella pagina del piano e nel riepilogo diagnostico. Stringhe e non un
+ * oggetto condiviso: un oggetto usato in due punti terrebbe i testi nel bundle del browser.
+ */
+const premiumMonthly = "Premium mensile";
+const premiumAnnual = "Premium annuale";
+const premiumLifetime = "Premium a vita";
+
+/** Titoli dei documenti legali, nelle Impostazioni, nelle pagine legali e nel consenso. */
+const termsTitle = "Termini di servizio";
+const privacyTitle = "Informativa privacy";
+
 export const it = {
   /** Etichette generiche, uguali in ogni pagina. */
   common: {
     cancel: "Annulla",
     save: "Salva",
     saving: "Salvataggio…",
-    contactSupport: "Contatta il supporto",
+    contactSupport,
   },
   shell: {
     notFound: {
@@ -486,7 +501,6 @@ export const it = {
       privacy: { title: "Dati e privacy" },
       supporto: { title: "Supporto" },
     },
-    premiumBadge: "Premium",
     saved: "Salvato",
     saveFailed: "Modifica non salvata. L’impostazione è tornata com’era: riprova.",
     plan: {
@@ -568,9 +582,9 @@ export const it = {
       freeStoreChanged: "Negozio attivo aggiornato.",
       freeStoreUnavailable: "Il negozio attivo non si può sostituire ora.",
       premiumPeriod: {
-        monthly: "Premium mensile",
-        annual: "Premium annuale",
-        lifetime: "Premium a vita",
+        monthly: premiumMonthly,
+        annual: premiumAnnual,
+        lifetime: premiumLifetime,
       },
       premiumLifetime: "Acquisto una tantum, senza rinnovi.",
       premiumLifetimeGranted: "Concesso da FiscalBay, senza rinnovi.",
@@ -799,14 +813,14 @@ export const it = {
       leave: "Lascia la pagina",
     },
     privacy: {
-      terms: "Termini di servizio",
+      terms: termsTitle,
       termsBody: "Le condizioni d’uso di FiscalBay.",
       termsUpdateBody: "È disponibile una nuova versione: accettala quando l’hai letta.",
       readTerms: "Leggi i termini",
       acceptTerms: "Accetta",
       termsAccepted: "Termini accettati.",
       termsAcceptFailed: "Accettazione non riuscita. Riprova più tardi.",
-      privacyPolicy: "Informativa privacy",
+      privacyPolicy: privacyTitle,
       privacyPolicyBody: "Quali dati trattiamo, per quanto tempo e con quali fornitori.",
       readPolicy: "Leggi l’informativa",
       accountExport: "Esporta i dati dell’account",
@@ -846,7 +860,7 @@ export const it = {
           a: "No. FiscalBay legge gli ordini per mostrarti il Codice Fiscale: sul tuo negozio eBay resta tutto com’è.",
         },
       ],
-      contact: "Scrivi all’assistenza",
+      contact: contactSupport,
       topic: "Argomento",
       topics: {
         orders: "Ordini e Codice Fiscale",
@@ -888,9 +902,9 @@ export const it = {
           waitlist: "Free, in lista d’attesa",
           trial: "Prova Premium",
           granted: "Premium concesso",
-          lifetime: "Premium a vita",
-          monthly: "Premium mensile",
-          annual: "Premium annuale",
+          lifetime: premiumLifetime,
+          monthly: premiumMonthly,
+          annual: premiumAnnual,
         },
       },
       send: "Invia",
@@ -1017,8 +1031,8 @@ export const it = {
   },
   legal: {
     navigation: "Documenti legali",
-    termini: "Termini di servizio",
-    privacy: "Informativa privacy",
+    termini: termsTitle,
+    privacy: privacyTitle,
     /** Etichette brevi del footer, che resta su una riga anche su smartphone. */
     termsLink: "Termini",
     privacyLink: "Privacy",
@@ -1045,7 +1059,7 @@ export const it = {
     title: "Supporto",
     description:
       "Assistenza FiscalBay: domande sull’uso, modulo di assistenza nell’app e indirizzo email.",
-    contact: "Contatta l’assistenza",
+    contact: contactSupport,
     member:
       "Dall’app scrivi dal modulo di assistenza: puoi allegare il riepilogo diagnostico del tuo account.",
     openForm: "Apri il modulo",
@@ -1132,9 +1146,9 @@ export const it = {
     confirmOther: "Con Google o eBay esci e accedi di nuovo: poi ripeti la modifica.",
     terms: {
       before: "Accetto i ",
-      terms: "Termini di servizio",
+      terms: termsTitle,
       middle: " e ho letto l’",
-      privacy: "Informativa privacy",
+      privacy: privacyTitle,
       after: ".",
     },
     marketing: "Ricevi via email novità e offerte su FiscalBay",

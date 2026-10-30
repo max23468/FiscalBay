@@ -1,12 +1,11 @@
 import { useState } from "react";
 
 import { useCopy, useLinks } from "~/components/copy-context";
-import { useTimeZone } from "~/components/time-zone";
+import { useDate } from "~/components/time-zone";
 import type { PendingEmailChange } from "../../domain/email-change.server";
 import type { ActiveSession } from "../../domain/sessions.server";
 import type { SignInMethods } from "../../domain/sign-in-methods.server";
 import { appHref } from "../../app-links";
-import { formatDate } from "../../format";
 import { ConfirmIdentity } from "./confirm-identity";
 import { EmailChange } from "./security-email";
 import { AddPasskey, PasskeyRename } from "./security-passkeys";
@@ -45,10 +44,9 @@ export function AccountSecurity({
   passkeyRestriction?: "conferma-passkey" | "nuovo-accesso" | null;
   pendingEmail?: PendingEmailChange | null;
 }) {
-  const zone = useTimeZone();
+  const date = useDate();
   const {
     t: { access: t, settings },
-    language,
   } = useCopy();
   // Nell'anteprima le stesse azioni vanno alla sua route, che le simula.
   const actionPath = appHref(useLinks().links, securitySection);
@@ -180,7 +178,7 @@ export function AccountSecurity({
                   passkey.createdAt
                     ? settings.security.passkeyItem(
                         passkey.name || settings.security.methodPasskey,
-                        formatDate(passkey.createdAt, language, "dateTime", zone),
+                        date(passkey.createdAt),
                       )
                     : passkey.name || settings.security.methodConnected
                 }

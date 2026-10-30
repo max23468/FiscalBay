@@ -704,13 +704,13 @@ for (const language of ["it", "en"] as const) {
         await expect(
           page.getByRole("link", {
             name: new RegExp(
-              `${language === "it" ? "Contatta il supporto" : "Contact support"}: ${supportAddress}`,
+              `${language === "it" ? "Contatta l’assistenza" : "Contact support"}: ${supportAddress}`,
             ),
           }),
         ).toBeVisible();
         await page.goto(`${prefix}/accesso?token=synthetic-invalid-token`);
         await expect(page).toHaveTitle(`FiscalBay | ${title}`);
-        await expect(page.getByRole("heading", { name: title, level: 2 })).toBeVisible();
+        await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
         const form = page.locator("form");
         await expect(form).toHaveAttribute("action", `${prefix}/accesso`);
         await expect(form.locator('input[name="token"]')).toHaveValue("synthetic-invalid-token");
@@ -722,7 +722,7 @@ for (const language of ["it", "en"] as const) {
         await expect(backLink).toBeInViewport();
         await expect.poll(() => noPageOverflow(page)).toBe(true);
         if (width < 1024) {
-          const heading = page.getByRole("heading", { name: title, level: 2 });
+          const heading = page.getByRole("heading", { name: title, level: 1 });
           expect((await heading.boundingBox())!.y).toBeLessThan(320);
         }
         await page.evaluate(() => document.fonts.ready);
