@@ -12,6 +12,7 @@ import { SiteLayout } from "~/components/site-layout";
 import { Badge } from "~/components/ui/badge";
 import { buttonLink } from "~/components/ui/button-variants";
 import { infoEmail } from "../app-copy";
+import { annualPaidMonths } from "../catalog";
 import { sitePages } from "../copy/site-pages.server";
 import {
   accessPath,
@@ -71,6 +72,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     premiumGross,
     premiumBody,
     premiumTrial,
+    freeMonths,
     ...copy
   } = pages.home;
   return {
@@ -82,10 +84,16 @@ export async function loader({ request }: Route.LoaderArgs) {
     purchasesOpen,
     copy: {
       ...copy,
-      // Come in Prezzi: importo grande, periodo con l'IVA esclusa accanto in piccolo.
-      premiumAmount: prices.monthly.net,
-      premiumPeriod: `${pages.pricing.vat} ${pages.pricing.offers.monthly.period}`,
-      premiumAnnual: `${prices.annual.net} ${pages.pricing.vat} ${pages.pricing.offers.annual.period}`,
+      // Come in Prezzi: importo grande, periodo con l'IVA esclusa sotto e l'annuale in evidenza.
+      premiumOffers: (["monthly", "annual"] as const).map((offer) => ({
+        offer,
+        name: pages.pricing.offers[offer].name,
+        amount: prices[offer].net,
+        period: `${pages.pricing.vat} ${pages.pricing.offers[offer].period}`,
+        note: offer === "annual" ? freeMonths(12 - annualPaidMonths()) : null,
+        best: offer === "annual",
+      })),
+      best: pages.pricing.best,
       premiumGross: premiumGross(prices.monthly.gross, prices.annual.gross),
       // Con acquisti e prove sospesi la home lo dice, come Prezzi, invece di promettere la prova.
       premiumBody: `${premiumBody} ${purchasesOpen ? premiumTrial : pages.pricing.closed}`,
@@ -264,15 +272,31 @@ export default function Site({ loaderData }: Route.ComponentProps) {
           </div>
           <div className="grid content-start gap-2 rounded-2xl border border-primary bg-card p-6 ring-1 ring-primary">
             <h3 className="font-semibold">{t.premiumPlan}</h3>
-            <p className="flex flex-wrap items-baseline gap-x-1.5">
-              <span className="text-3xl font-semibold">{t.premiumAmount}</span>
-              <span className="text-sm text-muted-foreground">{t.premiumPeriod}</span>
-            </p>
-            <p className="text-sm text-pretty text-muted-foreground">
-              {t.premiumAnnual}
-              <br />
-              {t.premiumGross}
-            </p>
+            {/* Il badge sta sul bordo, così i due prezzi restano sulla stessa riga. */}
+            <div className="mt-4 mb-2 grid grid-cols-2 gap-3">
+              {t.premiumOffers.map((offer) => (
+                <div
+                  key={offer.offer}
+                  className={cn(
+                    "relative grid content-start gap-1 rounded-xl border p-3 sm:p-4",
+                    offer.best && "border-primary bg-primary/5",
+                  )}
+                >
+                  {offer.best ? (
+                    <Badge className="absolute -top-2.5 right-3">{t.best}</Badge>
+                  ) : null}
+                  <p className="text-sm font-medium">{offer.name}</p>
+                  <p className="text-2xl leading-tight font-semibold sm:text-3xl">{offer.amount}</p>
+                  <p className="text-xs text-muted-foreground sm:text-sm">{offer.period}</p>
+                  {offer.note ? (
+                    <p className="text-xs font-semibold whitespace-nowrap sm:text-sm">
+                      {offer.note}
+                    </p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-pretty text-muted-foreground">{t.premiumGross}</p>
             <p className="leading-relaxed text-pretty text-muted-foreground">{t.premiumBody}</p>
           </div>
         </div>

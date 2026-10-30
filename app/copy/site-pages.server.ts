@@ -69,6 +69,7 @@ const it = {
     premiumBody:
       "Ordini da sbloccare senza limite per ciclo, più negozi, un anno di storico, XLSX e notifiche Telegram.",
     premiumTrial: "Prova di 14 giorni senza carta.",
+    freeMonths: (months: number) => `${months} mesi gratis`,
     faqTitle: "Domande frequenti",
     faqLink: "Tutte le domande",
     allFeatures: "Tutte le funzionalità",
@@ -383,6 +384,7 @@ const en: SitePagesCopy = {
     premiumBody:
       "Unlimited orders to unlock per cycle, more stores, one year of history, XLSX and Telegram notifications.",
     premiumTrial: "14-day trial with no card.",
+    freeMonths: (months) => `${months} months free`,
     faqTitle: "Frequently asked questions",
     faqLink: "All questions",
     allFeatures: "All features",
