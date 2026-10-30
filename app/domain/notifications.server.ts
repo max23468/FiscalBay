@@ -1,4 +1,5 @@
 import { appCopy } from "../app-copy";
+import { legalVersions } from "./registration.server";
 import type { Language } from "../i18n";
 import { type NotificationView } from "../view-models";
 import { formatDate } from "../format";
@@ -15,7 +16,8 @@ import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
  * inattività del Free, le esportazioni preparate dalla coda, pronte finché il file resta
  * scaricabile o non riuscite, e le comunicazioni di servizio della console; ogni notifica ha un
  * identificativo stabile per problema, così la lettura vale finché il problema resta lo stesso.
- * Si aggiunge una voce per ogni rilascio con Novità, identificata dalla sua versione.
+ * Si aggiunge una voce per ogni rilascio con Novità, identificata dalla sua versione, e
+ * l'invito ad accettare la versione corrente dei Termini finché manca.
  */
 export async function listNotifications(
   db: D1Database,
@@ -24,6 +26,7 @@ export async function listNotifications(
   language: Language,
   timeZone: string,
   now = new Date(),
+  termsUpdate = false,
 ): Promise<NotificationView[]> {
   const t = appCopy[language].shell.storeNotifications;
   const since = now.getTime() - notificationWindowMilliseconds;
@@ -112,6 +115,19 @@ export async function listNotifications(
     ...[...reads, ...inactivity].filter((item) => Date.parse(item.at) >= since),
     ...(await activeServiceNotices(db, language, now)),
     ...whatsNewNotifications(language, now),
+    ...(termsUpdate
+      ? [
+          {
+            id: `terms:${legalVersions.terms}`,
+            tone: "info",
+            title: t.termsUpdateTitle,
+            body: t.termsUpdateBody,
+            at: `${legalVersions.terms}T00:00:00.000Z`,
+            read: false,
+            href: "impostazioni/privacy",
+          } satisfies NotificationView,
+        ]
+      : []),
   ];
   if (items.length === 0) return [];
   const { results } = await db

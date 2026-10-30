@@ -52,6 +52,8 @@ export interface SettingsPageData {
   /** Servizi che eseguono le azioni; nell'anteprima sono tutti simulati. */
   services: SettingsServices;
   account: AccountView;
+  /** Versione corrente dei Termini ancora da accettare: un invito, mai un blocco. */
+  termsUpdate: boolean;
   purchase: PurchaseView;
   /** Negozio attivo del Free; null in Premium o senza negozi. */
   freeStore: FreeStoreView | null;
@@ -274,6 +276,7 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
       <PrivacySection
         accountExport={data.services.accountExport}
         accountDeletion={data.services.accountDeletion}
+        termsUpdate={data.termsUpdate}
         email={data.account.email}
         security={data.security}
       />

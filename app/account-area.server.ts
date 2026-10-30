@@ -30,6 +30,8 @@ export type AccountArea = {
   detectedTimeZone: string | null;
   /** Fuso delle date mostrate: quello scelto, altrimenti quello del dispositivo. */
   timeZone: string;
+  /** Versione corrente dei Termini ancora da accettare: un invito, mai un blocco (D232). */
+  termsUpdate: boolean;
 };
 
 /** Sessione corrente, misurata nella fase Auth. */
@@ -139,6 +141,7 @@ export async function requireAccountArea(
     preferences: preferences!,
     detectedTimeZone: detected,
     timeZone: effectiveTimeZone(preferences!.timeZone, detected),
+    termsUpdate: !status!.termsCurrent,
   };
 }
 
@@ -159,6 +162,7 @@ export async function shellData(
       language,
       display.timeZone,
       now,
+      area.termsUpdate,
     ),
   );
   return { display, notifications, whatsNew: hasWhatsNew(now), now: now.toISOString() };

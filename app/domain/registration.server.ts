@@ -2,8 +2,8 @@ import type { Language } from "../i18n";
 
 /**
  * Versioni dei testi presentati alla registrazione, come data del testo in vigore
- * (`copy/legal-documents.server.ts`): una nuova versione dei Termini richiede una nuova
- * accettazione prima di usare il servizio.
+ * (`copy/legal-documents.server.ts`): una nuova versione dei Termini si propone nell'area,
+ * senza bloccare alcuna funzione (D232).
  */
 export const legalVersions = {
   terms: "2026-10-29",
@@ -32,7 +32,13 @@ export type Profile = {
 };
 
 export type RegistrationStatus = {
+  /**
+   * Termini accettati in una qualunque versione: completa la registrazione. Una versione nuova
+   * non accettata non blocca alcuna funzione (D232).
+   */
   termsAccepted: boolean;
+  /** Accettata la versione corrente dei Termini; altrimenti l'area ne propone l'accettazione. */
+  termsCurrent: boolean;
   /** Esiste già una scelta sul consenso marketing, di qualunque superficie. */
   marketingChosen: boolean;
   profile: Profile | null;
@@ -63,9 +69,10 @@ export async function registrationStatus(
   const row = (await db
     .prepare(
       `SELECT p.first_name, p.last_name, p.account_type, p.company_name,
+              EXISTS (SELECT 1 FROM terms_acceptances WHERE user_id = ?1) AS terms_accepted,
               EXISTS (
                 SELECT 1 FROM terms_acceptances WHERE user_id = ?1 AND terms_version = ?2
-              ) AS terms_accepted,
+              ) AS terms_current,
               EXISTS (SELECT 1 FROM marketing_consents WHERE user_id = ?1) AS marketing_chosen
          FROM (SELECT 1)
          LEFT JOIN user_profiles p ON p.user_id = ?1`,
@@ -77,10 +84,12 @@ export async function registrationStatus(
       account_type: Profile["accountType"] | null;
       company_name: string | null;
       terms_accepted: number;
+      terms_current: number;
       marketing_chosen: number;
     }>())!;
   return {
     termsAccepted: row.terms_accepted === 1,
+    termsCurrent: row.terms_current === 1,
     marketingChosen: row.marketing_chosen === 1,
     profile: row.first_name
       ? {
