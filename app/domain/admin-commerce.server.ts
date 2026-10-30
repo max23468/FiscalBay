@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { priceGeneration, priceVariable, type PremiumOffer } from "../catalog";
+import { lifetimeSlots, priceGeneration, priceVariable, type PremiumOffer } from "../catalog";
 import { logFailure } from "../errors";
 import { catalogMismatch } from "../integrations/stripe-account.server";
 import {
@@ -11,7 +11,6 @@ import {
   stripeSecretKey,
 } from "../integrations/stripe.server";
 import { freeQuotaSettings } from "./grants.server";
-import { lifetimeSlots } from "./lifetime.server";
 import { utc } from "./order-observation.server";
 import { dayMilliseconds } from "../time";
 

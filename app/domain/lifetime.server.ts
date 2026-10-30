@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import { z } from "zod";
 
 import { isProduction } from "../app-links";
-import { priceGeneration, type LifetimeOffer, type PremiumOffer } from "../catalog";
+import { lifetimeSlots, priceGeneration, type LifetimeOffer, type PremiumOffer } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import {
   closeCheckoutSession,
@@ -22,14 +22,6 @@ import {
 import { erasedCustomerSql, paymentReversal, reversalStatements } from "./refunds.server";
 import { inSequence } from "../sequence";
 import { sqlList } from "./sql.server";
-
-/**
- * Venti posti lifetime fra vendite e omaggi (D031). Il numero del posto è il vincolo atomico
- * del tetto: una prenotazione occupa il posto più basso libero prima del Checkout, la conferma
- * verificata di Stripe lo rende attivo e soltanto una sessione che non può più incassare lo
- * libera. Un posto attivo, anche rimborsato o di un account cancellato, non torna disponibile.
- */
-export const lifetimeSlots = 20;
 
 /**
  * Posti ancora liberi per il sito pubblico: un posto prenotato da un Checkout aperto non è in

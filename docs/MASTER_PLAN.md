@@ -1082,7 +1082,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
 | [M8](#m8) | Completata | RC `2.0.0-rc.7` qualificata e approvabile (D236, D237): test merchant, percorsi reali, verifica browser, correzioni e preflight del restore completati; il drill conclusivo è in [M9-02](#m9-02). |
-| [M9](#m9) | Da completare | Go-live non autorizzato; gate Production sotto ancora aperti. |
+| [M9](#m9) | In corso | Preflight e verifica delle prove commerciali pronti; go-live non autorizzato e gate Production ancora aperti. |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
 
@@ -2013,11 +2013,15 @@ La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorve
 <a id="m9-01"></a>
 #### M9-01 · Preflight commerciale e promo
 
-**Stato:** Da completare · **Prerequisiti:** M8 · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
+**Stato:** In corso · **Prerequisiti:** M8 · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
 
 Confermare date promo e configurazione commerciale; chiudere le prove Stripe residualmente solo-live nel perimetro autorizzato dei checkpoint M8/M9 già approvati, con effetti economici espliciti e senza apertura pubblica prima di Promuovi. Verificare percorso cliente Link/Portal, ricevute/contatti, riferimento del pagamento e riconciliazione dei diritti, con impatti economici espliciti: commissioni effettive rilette sugli incassi rispetto alle stime di [M5-03](#m5-03) e rappresentazione nell'app Link di un acquisto durante la prova ([M5-04](#m5-04)). Su un abbonamento Managed Payments dopo il primo addebito: cambio e annullamento della periodicità dal Piano, letti su Stripe e in D1, e cambio del metodo di pagamento dal Portal riletto nell'app ([M5-06](#m5-06), [D196](DECISION_REGISTER.md)).
 
 **Criterio di completamento:** Nessun caso commerciale necessario rimane solo documentato/simulato senza prova consentita o decisione esplicita sul limite. Configurazione database/Stripe/UI allineata, nessun acquisto di capacità assente, Paddle inattivo salvo owner.
+
+Le [prove commerciali](engineering/RELEASE.md#prove-commerciali) hanno un preflight e una verifica in sola lettura: `scripts/commercial.mjs` rilegge account Stripe, promozione, quota base, acquisti e posti prima delle vendite, poi diritti, abbonamenti in D1 e commissioni effettive rispetto a [D193](DECISION_REGISTER.md). Provati sulla sandbox del test. Paddle non ha codice.
+
+**Limiti residui:** date della promozione dall'owner ([IN-18](engineering/AGENT_SETUP.md#input)); acquisti live, osservazioni dell'owner e i due resoconti in `--mode live` richiedono chiave e segreto del webhook sul Worker Production, quindi il via di M9.
 
 <a id="m9-02"></a>
 #### M9-02 · Restore drill pre-go-live

@@ -19,9 +19,9 @@ import {
 import { appCopy } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
 import { accessPath, planPath, pricingPath, visitParam } from "../app-links";
-import { annualPaidMonths, premiumOffers } from "../catalog";
+import { annualPaidMonths, lifetimeSlots, premiumOffers } from "../catalog";
 import { freeQuotaSettings } from "../domain/grants.server";
-import { lifetimeSlots, lifetimeSlotsLeft } from "../domain/lifetime.server";
+import { lifetimeSlotsLeft } from "../domain/lifetime.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { areaPage } from "../account-area.server";
 import { publicPage, siteListing } from "../site.server";
