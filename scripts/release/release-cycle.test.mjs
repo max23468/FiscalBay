@@ -1076,7 +1076,10 @@ describe("comandi del ciclo", () => {
         migrations: 2,
         lastMigration: "0002_orders.sql",
         config: "config-hash",
+        qualified: true,
       });
+      // La qualifica completa assente si riporta, senza rifiutare l'identità.
+      assert.equal((await identifyCandidate(io({ certified: () => false }))).qualified, false);
       // Lo stesso commit come testa, deploy e sezione: un confronto vuoto non è una modifica.
       const same = await identifyCandidate(
         io({ head: () => "deploy", introduced: () => "deploy", needsDeploy: () => true }),
@@ -1105,7 +1108,6 @@ describe("comandi del ciclo", () => {
       await rejects({ receipt: () => ({ ...receipt, rolledBack: true }) }, /Ricevuta/u);
       await rejects({ receipt: () => ({ ...receipt, sha: "other" }) }, /Ricevuta/u);
       await rejects({ liveVersion: async () => "worker-v2" }, /versione attiva/u);
-      await rejects({ certified: () => false }, /--ref develop --sha head/u);
     });
   });
 });

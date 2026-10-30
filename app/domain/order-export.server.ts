@@ -205,12 +205,14 @@ export async function exportSampleOrders(
   if (!filter) return [];
   const orders = await listVisibleOrders(db, userId, exportSampleSize, ebayEnvironment, now, {
     ...filter,
+    // Stryker disable next-line BooleanLiteral: le prime righe non leggono i suggerimenti.
     suggestions: false,
   });
   return orders.map((order) => ({
     createdAt: order.creationTime,
     rows: {
       order: exportRecords(order, "order", t, timeZone),
+      // Stryker disable next-line StringLiteral: ogni valore diverso da «order» dà le righe per articolo.
       item: exportRecords(order, "item", t, timeZone),
     },
   }));

@@ -104,14 +104,16 @@ export async function recordEndedTrials(db: D1Database, now = new Date()) {
 
 /**
  * Disputa aperta su un pagamento di uno spazio di questo ambiente: Stripe la gestisce e nulla
- * cambia nei diritti, quindi non ha una riga propria. Un pagamento estraneo non avvisa.
+ * cambia nei diritti, quindi non ha una riga propria. Un pagamento estraneo, o senza un
+ * abbonamento o un lifetime, non avvisa.
  */
 export async function recordDisputeOpened(
   db: D1Database,
   disputeId: string,
-  target: { subscription: string } | { lifetime: string },
+  target: { subscription: string } | { lifetime: string } | { erasure: string } | null,
   now = new Date(),
 ) {
+  if (!target || "erasure" in target) return;
   const source =
     "subscription" in target
       ? db
