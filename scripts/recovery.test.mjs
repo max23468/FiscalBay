@@ -18,6 +18,7 @@ import {
   seal,
   telegramResume,
   unseal,
+  verify,
 } from "./recovery.mjs";
 
 const point = "2026-10-20T10:00:00.000Z";
@@ -240,6 +241,100 @@ describe("ripristino senza dati o diritti revocati", () => {
     const again = await reapply(runner(restored), captured, new Date(later));
     assert.deepEqual(again.deleted, {});
     assert.deepEqual(rows(restored, `SELECT "id" FROM "user" ORDER BY "id"`).length, 2);
+  });
+
+  it("riporta interruttori, ammissione e prova Premium successivi al punto", async () => {
+    const { current, restored } = scenario();
+    for (const db of [current, restored])
+      db.exec(`INSERT INTO admission_settings (id, free_waitlist, purchases_open, updated_at)
+          VALUES (1, 0, 1, '${before}');
+        INSERT INTO service_settings (name, value, updated_at)
+          VALUES ('ebay_calls', 'true', '${before}'), ('telegram_sends', 'true', '${before}');`);
+    // Dopo il punto: acquisti e letture chiusi per un incidente, una prova Premium iniziata.
+    current.exec(`UPDATE admission_settings SET purchases_open = 0, updated_at = '${later}';
+      UPDATE service_settings SET value = 'false', updated_at = '${later}' WHERE name = 'ebay_calls';
+      INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+        VALUES ('e-trial', 'w-keep', 'trial', '${later}', '2026-11-05T10:00:00.000Z');`);
+    const captured = await capture(runner(current), "2026-10-20T10:30:00.000Z");
+    assert.equal(captured.telegramSends, "true");
+    await reapply(runner(restored), captured, new Date(later));
+    assert.deepEqual(rows(restored, "SELECT purchases_open FROM admission_settings"), [
+      { purchases_open: 0 },
+    ]);
+    assert.deepEqual(rows(restored, "SELECT name, value FROM service_settings ORDER BY name"), [
+      { name: "ebay_calls", value: "false" },
+      { name: "telegram_sends", value: "false" },
+    ]);
+    assert.deepEqual(
+      rows(restored, "SELECT id FROM workspace_entitlements WHERE source = 'trial'"),
+      [{ id: "e-trial" }],
+    );
+  });
+
+  it("verifica lo stato riapplicato prima della riapertura e misura la perdita", async () => {
+    const { current, restored } = scenario();
+    const captured = await capture(runner(current), "2026-10-20T10:30:00.000Z");
+    const untouched = await verify(runner(restored), captured);
+    assert.deepEqual(untouched.failed, [
+      "deletions",
+      "markers",
+      "stamps",
+      "admins",
+      "passwords",
+      "telegram",
+      "transient",
+    ]);
+    await reapply(runner(restored), captured, new Date(later));
+    const result = await verify(runner(restored), captured);
+    assert.deepEqual(result.failed, []);
+    assert.equal(result.checks.markers, 0);
+    // Utente e consenso nati dopo il punto: nessun provider li ricostruisce.
+    assert.deepEqual(result.lost, { marketing_consents: 1, user: 1 });
+    assert.deepEqual(result.rights.concessions, { missing: 0, extra: 0 });
+    // Una notifica riattivata nel database ripristinato è una revoca persa.
+    restored.exec("UPDATE telegram_preferences SET enabled = 1");
+    assert.deepEqual((await verify(runner(restored), captured)).failed, ["markers"]);
+  });
+
+  it("dopo la riconciliazione controlla diritti pagati, revoche e ruoli", async () => {
+    const { current, restored } = scenario();
+    for (const db of [current, restored])
+      db.exec(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+        VALUES ('e-paid', 'w-keep', 'premium', '${before}', '2026-11-15T10:00:00.000Z')`);
+    // Rinnovo pagato dopo il punto: il reinvio Stripe lo ricrea con un altro identificativo.
+    current.exec(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('e-renew', 'w-keep', 'premium', '2026-11-15T10:00:00.000Z',
+        '2026-12-15T10:00:00.000Z')`);
+    const captured = await capture(runner(current), "2026-10-20T10:30:00.000Z");
+    await reapply(runner(restored), captured, new Date(later));
+    const reconciled = (db) => verify(runner(db), captured, { reconciled: true });
+    assert.deepEqual((await reconciled(restored)).failed, ["rights.entitlements"]);
+    assert.deepEqual((await reconciled(restored)).rights.entitlements, { missing: 1, extra: 0 });
+    // Accessi e scelte dopo la riapertura non sono difetti del ripristino.
+    restored.exec(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+        VALUES ('e-replay', 'w-keep', 'premium', '2026-11-15T10:00:00.000Z',
+          '2026-12-15T10:00:00.000Z');
+      UPDATE telegram_preferences SET enabled = 1;
+      INSERT INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+        VALUES ('s-after', '2026-12-01T00:00:00.000Z', 'token-after', '${later}', '${later}',
+          'u-keep');`);
+    const result = await reconciled(restored);
+    assert.deepEqual(result.failed, []);
+    assert.equal(result.checks.passwords, undefined);
+    // Un ruolo revocato tornato o una revoca persa restano difetti anche dopo.
+    restored.exec(`UPDATE "user" SET "admin" = 1 WHERE "id" = 'u-keep';
+      UPDATE workspaces SET trial_used_at = NULL`);
+    assert.deepEqual((await reconciled(restored)).failed, ["stamps", "admins"]);
+  });
+
+  it("non controlla oltre lo schema se le migration non coincidono", async () => {
+    const { current, restored } = scenario();
+    const captured = await capture(runner(current), "2026-10-20T10:30:00.000Z");
+    const result = await verify(runner(restored), {
+      ...captured,
+      migrations: captured.migrations.slice(0, -1),
+    });
+    assert.deepEqual(result.failed, ["schema"]);
   });
 
   it("rifiuta un database ripristinato con migration o schema diversi", async () => {
