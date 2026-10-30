@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
- * Prove commerciali di un ambiente prima del go-live, in sola lettura.
+ * Configurazione e vendite commerciali di un ambiente, in sola lettura.
  *
- * `preflight` precede le vendite: account Stripe allineato al codice, una sola promozione
- * globale del Free in corso con quota 10, senza fine o con la fine decisa dall'owner, seguita
- * dalla quota base, acquisti aperti e posti lifetime. `verify --since <ISO>` segue le vendite: ogni fattura pagata e ogni lifetime pagato
- * hanno il loro diritto in D1, ogni abbonamento in D1 coincide con Stripe (stato, periodicità
- * del periodo pagato e del rinnovo, fine del periodo, disdetta, generazione del listino) e le
- * commissioni effettive di ogni offerta si confrontano con le stime di D193. Ricevute, contatti,
- * Portal e app Link restano osservazioni dell'owner.
+ * `preflight` si esegue al go-live, prima di aprire le iscrizioni: account Stripe allineato al
+ * codice, una sola promozione globale del Free in corso con quota 10, senza fine o con la fine
+ * decisa dall'owner, seguita dalla quota base, acquisti aperti e posti lifetime. `verify --since
+ * <ISO>` rilegge le vendite reali: ogni fattura pagata e ogni lifetime pagato hanno il loro
+ * diritto in D1, ogni abbonamento in D1 coincide con Stripe (stato, periodicità del periodo
+ * pagato e del rinnovo, fine del periodo, disdetta, generazione del listino) e le commissioni
+ * effettive di ogni offerta si confrontano con le stime di D193.
  *
  * Il resoconto riporta esiti, conteggi e percentuali, mai importi, clienti o riferimenti.
  * Le richieste a Stripe passano dal profilo della CLI, la D1 dalla CLI `cf`.

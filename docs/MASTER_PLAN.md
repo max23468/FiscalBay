@@ -80,7 +80,7 @@ Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente q
 |---|---|
 | Fine M0 | 2026-09-23: Workers, una D1 UE, Queues e Better Auth, costi differiti, limiti e rinvii espliciti; avvio di M1. Nessun nuovo costo o go-live autorizzato. Adozione e avvio originari: 2026-09-13. Costo differito deciso il 2026-10-12: Workers Paid continuativo e invio email con Cloudflare Email Service (D169). |
 | M1 | Logo approvato il 2026-09-26, design system il 2026-09-27, prototipo e chiusura M1 il 2026-09-28. Nessuna pubblicazione Production autorizzata. |
-| M5 | 2026-10-26: configurazione dell'account Stripe live secondo [M5-12](#m5-12), cioè impostazioni fiscali, metodi di pagamento, webhook, portale, Smart Retries e contatto di assistenza. Lo stesso giorno l'owner ha completato il checkpoint: vendite live, segreti del Worker Production e confini degli effetti economici restano alle prove commerciali di [M9-01](#m9-01) e al mandato Production. |
+| M5 | 2026-10-26: configurazione dell'account Stripe live secondo [M5-12](#m5-12), cioè impostazioni fiscali, metodi di pagamento, webhook, portale, Smart Retries e contatto di assistenza. Lo stesso giorno l'owner ha completato il checkpoint: segreti del Worker Production e confini degli effetti economici restano al mandato Production; nessuna vendita live di prova prima del go-live ([D240](DECISION_REGISTER.md)). |
 | M8 | 2026-10-30: test merchant sul test con il negozio eBay Production dell'owner, secondo il [manifest](engineering/RELEASE.md#test-merchant): Stripe sandbox, bot del test, Accedi con eBay reale sul test (D234). Nessun deploy o effetto sul Worker Production né incasso live. |
 | M9 | In attesa: candidato/manifest, checklist e comando `Promuovi`. Promozione Free attiva dal go-live senza fine (D239). |
 
@@ -1078,11 +1078,11 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M2](#m2) | Completata | Account, quattro login, sessioni e MFA admin, OAuth seller, pause e scollegamento, Negozi, Profilo e routing collaudati sul test. Login e linking eBay reali in M8 (D160). |
 | [M3](#m3) | Completata | Modello ordini, client eBay, import paginato, controllo fiscale, quota e diritti per ordine, retention, suggerimenti, template IT/EN, ingresso eventi e ordini combinati. Ordini combinati reali e consegna attribuita eBay Production nel test merchant M8. |
 | [M4](#m4) | Completata | Ordini, ricerca e filtri, dettaglio, selezione e sblocco, Impostazioni e stati di errore nelle route reali, con baseline visiva e di accessibilità WCAG 2.2 A/AA automatica. |
-| [M5](#m5) | Completata | Free con cicli e promo, prova Premium, Hosted Checkout Managed Payments, webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. Cambi di periodicità e metodo su un abbonamento live, vendite live e segreti Production in [M9-01](#m9-01). |
+| [M5](#m5) | Completata | Free con cicli e promo, prova Premium, Hosted Checkout Managed Payments, webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. Cambi di periodicità e metodo su un abbonamento live non osservati prima del go-live ([D240](DECISION_REGISTER.md)); segreti Production nel mandato Production. |
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
 | [M8](#m8) | Completata | RC `2.0.0-rc.7` qualificata e approvabile (D236, D237): test merchant, percorsi reali, verifica browser, correzioni e preflight del restore completati; il drill conclusivo è in [M9-02](#m9-02). |
-| [M9](#m9) | In corso | Preflight e verifica delle prove commerciali pronti; go-live non autorizzato e gate Production ancora aperti. |
+| [M9](#m9) | In corso | Configurazione commerciale chiusa: promozione senza fine dal go-live, nessuna vendita live di prova. Go-live non autorizzato; restano i gate ripristino e operatività. |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
 
@@ -1571,7 +1571,7 @@ Il catalogo delle pagine prova route reali e anteprima in IT/EN, chiaro e scuro,
 <a id="m5"></a>
 ### M5 · Free/Premium, Stripe e Telegram
 
-Free con cicli e promozione, prova Premium, Hosted Checkout Managed Payments con webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. I casi riproducibili soltanto nel live restano alle prove commerciali di [M9-01](#m9-01), senza copertura fittizia; Paddle resta inattivo salvo via dell'owner.
+Free con cicli e promozione, prova Premium, Hosted Checkout Managed Payments con webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. I casi riproducibili soltanto nel live non si provano prima del go-live ([D240](DECISION_REGISTER.md)), senza copertura fittizia; Paddle resta inattivo salvo via dell'owner.
 
 <a id="m5-01"></a>
 #### M5-01 · Cicli, promo e quota Free
@@ -1580,7 +1580,7 @@ Free con cicli e promozione, prova Premium, Hosted Checkout Managed Payments con
 
 I cicli Free durano 7×24 ore sull'istante UTC dal primo collegamento e non si spostano né si azzerano. La promozione globale si configura senza deploy e ogni ciclo conserva la quota della promozione come era al suo inizio, anche se la promozione termina o viene accorciata. Il sito annuncia la promozione con la data finale; il Piano indica la quota del ciclo e quella diversa del ciclo seguente. PR: [#406](https://github.com/max23468/FiscalBay/pull/406), [#459](https://github.com/max23468/FiscalBay/pull/459).
 
-**Limiti residui:** quota base e promozioni si programmano dalla console soltanto per i cicli futuri ([D211](DECISION_REGISTER.md)); le date effettive restano a [M9-01](#m9-01).
+**Limiti residui:** quota base e promozioni si programmano dalla console soltanto per i cicli futuri ([D211](DECISION_REGISTER.md)); la promozione parte senza fine al go-live ([D239](DECISION_REGISTER.md)).
 
 <a id="m5-02"></a>
 #### M5-02 · Trial e grant accesso
@@ -1598,7 +1598,7 @@ La prova di 14×24 ore si attiva volontariamente dopo la prima lettura riuscita 
 
 Il Piano mostra il listino netto della generazione corrente con la nota sul totale calcolato da Stripe e apre l'Hosted Checkout Managed Payments dopo la prima lettura riuscita di un negozio. Il server rilegge il prezzo su Stripe e ferma la vendita se non è conforme; una sessione non Managed Payments si chiude subito. Uno spazio ha una sola sessione che può incassare e il ritorno da Stripe non attribuisce diritti. Metodi e costi qualificati in [D193](DECISION_REGISTER.md). PR: [#410](https://github.com/max23468/FiscalBay/pull/410), [#414](https://github.com/max23468/FiscalBay/pull/414).
 
-**Limiti residui:** le stime di costo usano le tariffe pubbliche del 2026-10-24 senza un incasso reale: le commissioni effettive si rileggono in [M9-01](#m9-01).
+**Limiti residui:** le stime di costo usano le tariffe pubbliche del 2026-10-24 senza un incasso reale: le commissioni effettive si rileggono sulle prime vendite reali ([D240](DECISION_REGISTER.md)).
 
 <a id="m5-04"></a>
 #### M5-04 · Acquisto durante la prova
@@ -1607,7 +1607,7 @@ Il Piano mostra il listino netto della generazione corrente con la nota sul tota
 
 Durante la prova mensile e annuale si scelgono senza pagare: l'abbonamento parte con i giorni residui e il primo addebito arriva alla fine della prova, da cui decorrono i rinnovi; negli ultimi due giorni, che il Checkout non accetta come prova, l'addebito è immediato ([D194](DECISION_REGISTER.md)). Il Piano indica l'abbonamento scelto e la data del primo addebito, senza un secondo acquisto. Giorni di prova contati interi come nel Checkout. PR: [#418](https://github.com/max23468/FiscalBay/pull/418), [#419](https://github.com/max23468/FiscalBay/pull/419).
 
-**Limiti residui:** l'app Link non mostra gli acquisti di prova: la sua rappresentazione resta a [M9-01](#m9-01).
+**Limiti residui:** l'app Link non mostra gli acquisti di prova: la sua rappresentazione non è osservata prima del go-live ([D240](DECISION_REGISTER.md)).
 
 <a id="m5-05"></a>
 #### M5-05 · Webhook e riconciliazione
@@ -1625,7 +1625,7 @@ I webhook Stripe entrano dall'ingresso condiviso e portano a rileggere da Stripe
 
 Nel Free lo spazio ha un solo negozio attivo, scelto in Piano ogni 90 giorni o il primo ancora collegato (D155); gli altri sono in pausa per il piano e il downgrade applica la conservazione del [downgrade](engineering/DATA_RETENTION.md#downgrade). Il cambio di periodicità parte dal Piano, vale dal rinnovo senza conguaglio e conserva i prezzi della generazione dell'abbonamento. Il Portal gestisce disdetta, metodo di pagamento e documenti; scollegare l'ultimo negozio avvisa che l'abbonamento continua. PR: [#421](https://github.com/max23468/FiscalBay/pull/421), [#423](https://github.com/max23468/FiscalBay/pull/423).
 
-**Limiti residui:** su un abbonamento Managed Payments pagato cambio di periodicità e metodo si verificano in [M9-01](#m9-01) ([D196](DECISION_REGISTER.md)). I prezzi di una generazione precedente restano attivi su Stripe finché esistono abbonamenti che la usano.
+**Limiti residui:** su un abbonamento Managed Payments pagato cambio di periodicità e metodo non sono osservati prima del go-live ([D196](DECISION_REGISTER.md), [D240](DECISION_REGISTER.md)). I prezzi di una generazione precedente restano attivi su Stripe finché esistono abbonamenti che la usano.
 
 <a id="m5-07"></a>
 #### M5-07 · Lifetime e concessioni
@@ -1679,7 +1679,7 @@ Dopo 30 giorni senza attività umana lo spazio Free riceve un'email di preavviso
 
 La configurazione attesa dell'account Stripe di ogni ambiente sta nel codice e `scripts/stripe-account.mjs` la rilegge e la allinea senza esporre valori ([RELEASE](engineering/RELEASE.md)). Ogni Worker accetta soltanto le chiavi del proprio ambiente ([D206](DECISION_REGISTER.md)). L'account live ha profilo, listino, imposte, endpoint del webhook, portale, Smart Retries e contatto `supporto@fiscalbay.it` allineati. PR: [#452](https://github.com/max23468/FiscalBay/pull/452), [#457](https://github.com/max23468/FiscalBay/pull/457).
 
-**Limiti residui:** chiave live e segreto del webhook live vanno sul Worker Production soltanto nel mandato Production, prima di [M9-01](#m9-01): fino ad allora `/webhooks/stripe` risponde 404 in Production. Il bot Production si aggancia a 1.x spenta. L'indirizzo di assistenza della sandbox è ancora quello fittizio di Stripe.
+**Limiti residui:** chiave live e segreto del webhook live vanno sul Worker Production soltanto nel mandato Production, prima del go-live: fino ad allora `/webhooks/stripe` risponde 404 in Production. Il bot Production si aggancia a 1.x spenta. L'indirizzo di assistenza della sandbox è ancora quello fittizio di Stripe.
 
 <a id="m5-13"></a>
 #### M5-13 · Storico e conservazione Premium
@@ -1925,7 +1925,7 @@ L'ingresso eBay riceve due topic dell'applicazione senza scope aggiuntivi dei ve
 
 Il riesame di funzioni, route, anteprima e prove rispetto al piano non lascia P1/P2 né funzioni dei concept. L'Esportazione mostra le prime righe del file con i soli valori autorizzati; l'anteprima usa avvisi, caricamento e shell dell'area reale e aggiunge l'email da confermare; le prove reali coprono sessione revocata sulle API dei dati, sblocco con risposta persa e Supporto. PR: [#527](https://github.com/max23468/FiscalBay/pull/527).
 
-**Limiti residui:** P3 da accettare nella RC di [M8](#m8): campanella senza voci di billing, affidate a Stripe dal [§14](#s14); portale Stripe solo con un abbonamento o un rinnovo da regolarizzare; «storico esteso» senza un argomento proprio nel Supporto; Novità con voci fuori da catalogo e anteprima; CSV da aprire a mano in un foglio; righe dell'Esportazione nell'anteprima calcolate a parte. Le prove solo live restano a [M9-01](#m9-01).
+**Limiti residui:** P3 da accettare nella RC di [M8](#m8): campanella senza voci di billing, affidate a Stripe dal [§14](#s14); portale Stripe solo con un abbonamento o un rinnovo da regolarizzare; «storico esteso» senza un argomento proprio nel Supporto; Novità con voci fuori da catalogo e anteprima; CSV da aprire a mano in un foglio; righe dell'Esportazione nell'anteprima calcolate a parte. Prove solo live escluse ([D240](DECISION_REGISTER.md)).
 
 <a id="m8"></a>
 ### M8 · Release Candidate e merchant di fiducia
@@ -2004,7 +2004,7 @@ Il [drill](engineering/RELEASE.md#drill-di-ripristino) usa Time Travel della D1 
 <a id="m9"></a>
 ### M9 · Go-live
 
-**Prerequisiti:** M0–M8 chiuse, RC, controlli commerciali live e via owner. **Attività:** attivare la promozione globale al go-live, validare checklist unica §41, restore drill unico, Promuovi, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Conclusa la sorveglianza e dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
+**Prerequisiti:** M0–M8 chiuse, RC, configurazione commerciale e via owner. **Attività:** attivare la promozione globale al go-live, validare checklist unica §41, restore drill unico, Promuovi, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Conclusa la sorveglianza e dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
 
 **Output:** `2.0.0` realmente pubblicata e verificata, no claim anticipato. **DoD:** dominio/posta/provider/diritti/job/alert/supporto/SEO operativi; rollback o forward-fix pronto; nessuna vecchia automazione concorrente. Il mantenimento del bot 1.x non è prerequisito: può essere dismesso prima, preservando identità bot/keyset utili e storia Git.
 
@@ -2013,15 +2013,13 @@ La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorve
 <a id="m9-01"></a>
 #### M9-01 · Preflight commerciale e promo
 
-**Stato:** In corso · **Prerequisiti:** M8 · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
+**Stato:** Completato · **Prerequisiti:** M8 · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
 
-Attivare la promozione senza fine ([D239](DECISION_REGISTER.md)) e confermare la configurazione commerciale; chiudere le prove Stripe residualmente solo-live nel perimetro autorizzato dei checkpoint M8/M9 già approvati, con effetti economici espliciti e senza apertura pubblica prima di Promuovi. Verificare percorso cliente Link/Portal, ricevute/contatti, riferimento del pagamento e riconciliazione dei diritti, con impatti economici espliciti: commissioni effettive rilette sugli incassi rispetto alle stime di [M5-03](#m5-03) e rappresentazione nell'app Link di un acquisto durante la prova ([M5-04](#m5-04)). Su un abbonamento Managed Payments dopo il primo addebito: cambio e annullamento della periodicità dal Piano, letti su Stripe e in D1, e cambio del metodo di pagamento dal Portal riletto nell'app ([M5-06](#m5-06), [D196](DECISION_REGISTER.md)).
+La promozione Free parte al go-live senza fine e si chiude su indicazione dell'owner; sito e console la gestiscono senza data ([D239](DECISION_REGISTER.md)). Nessuna vendita live di prova ([D240](DECISION_REGISTER.md)): l'account live, riletto il 2026-10-31 con il connettore Stripe, ha listino, imposte, webhook e portale allineati. `scripts/commercial.mjs` rilegge configurazione e vendite reali ([procedura](engineering/RELEASE.md#configurazione-commerciale)); Paddle non ha codice.
 
 **Criterio di completamento:** Nessun caso commerciale necessario rimane solo documentato/simulato senza prova consentita o decisione esplicita sul limite. Configurazione database/Stripe/UI allineata, nessun acquisto di capacità assente, Paddle inattivo salvo owner.
 
-Le [prove commerciali](engineering/RELEASE.md#prove-commerciali) hanno un preflight e una verifica in sola lettura: `scripts/commercial.mjs` rilegge account Stripe, promozione in corso, quota base, acquisti e posti prima delle vendite, poi diritti, abbonamenti in D1 e commissioni effettive rispetto a [D193](DECISION_REGISTER.md). Provati sulla sandbox del test. Paddle non ha codice.
-
-**Limiti residui:** la promozione si crea senza fine in Production al go-live e si chiude su indicazione dell'owner ([IN-18](engineering/AGENT_SETUP.md#input)); acquisti live, osservazioni dell'owner e i due resoconti in `--mode live` richiedono chiave e segreto del webhook sul Worker Production, quindi il via di M9.
+**Limiti residui:** non osservati prima del go-live commissioni effettive, cambi su un abbonamento pagato, app Link e ricevute live. Il profilo pubblico, che il connettore non legge, resta quello di [M5-12](#m5-12). La promozione si crea al go-live ([M9-04](#m9-04)).
 
 <a id="m9-02"></a>
 #### M9-02 · Restore drill pre-go-live
@@ -2048,7 +2046,7 @@ Includere il readback sul dominio Production delle protezioni di §24 e M7-12, c
 
 **Stato:** Da completare · **Prerequisiti:** M9-03 e comando owner · **Contratto:** [§34](#s34)
 
-Dopo `Promuovi` dell’owner, eseguire il workflow Production sul commit atteso: gate, migrazioni, deploy, readback, tag, release e changelog; concludere con l'inventario e la pulizia Git di [§34](#s34).
+Dopo `Promuovi` dell’owner, eseguire il workflow Production sul commit atteso: gate, migrazioni, deploy, readback, tag, release e changelog; prima di aprire le iscrizioni creare la promozione senza fine e superare il preflight della [configurazione commerciale](engineering/RELEASE.md#configurazione-commerciale); concludere con l'inventario e la pulizia Git di [§34](#s34).
 
 **Criterio di completamento:** Artefatto e servizi attivi corrispondono; branch e worktree temporanei conclusi sono rimossi e il checkout è allineato. Eventuali riferimenti conservati per lavoro in corso o ripresa sono motivati qui. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
 
@@ -2083,11 +2081,11 @@ Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore concl
 
 | Gate | Stato | Prova |
 |---|---|---|
-| commerciale | DA COMPLETARE | - |
+| commerciale | COMPLETATO | [M9-01](#m9-01) · [D239](DECISION_REGISTER.md) · [D240](DECISION_REGISTER.md) |
 | ripristino | DA COMPLETARE | - |
 | operativita | DA COMPLETARE | - |
 
-`commerciale`: promozione attiva come approvata, Stripe/database/UI allineati, Link/Portal, ricevute, contatti e riconciliazione osservati nei casi solo-live autorizzati da M8/M9, con effetti economici espliciti; nessun acquisto senza capacità o caso necessario soltanto simulato senza decisione sul limite. Nessuna apertura pubblica anticipata.
+`commerciale`: promozione approvata e da creare al go-live, Stripe/database/UI allineati, casi solo-live provati o esclusi da una decisione dell'owner sul limite, con effetti economici espliciti; nessun acquisto senza capacità. Nessuna apertura pubblica anticipata.
 
 `ripristino`: unico drill reale isolato sul candidato finale a fine M8 o prima del go-live, senza ripetizioni periodiche; dati, Auth, grant, configurazioni e marker successivi allo snapshot riconciliati, outbound isolato, revoche ed erasure rispettate. Un fallimento blocca la pubblicazione finché corretto e riprovato.
 
