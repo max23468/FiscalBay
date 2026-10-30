@@ -1306,6 +1306,21 @@ describe("file degli ordini", () => {
     expect(sample.all).toHaveLength(2);
     expect(sample.available.map((order) => order.rows.item[0]!.order)).toEqual(["ebay-a"]);
     expect(sample.available[0]!.rows.order[0]!.taxCode).not.toBe("");
+    // Per ordine una riga con gli articoli insieme, per articolo una riga ciascuno.
+    expect(sample.available[0]!.rows.order.map((row) => row.items)).toEqual([
+      "1 × Articolo A | 2 × Articolo B",
+    ]);
+    expect(sample.available[0]!.rows.item.map((row) => row.items)).toEqual([
+      "Articolo A",
+      "Articolo B",
+    ]);
+    // Con i soli dati da sbloccare nessuna riga è disponibile.
+    const locked = await routePage(loadSettings, "/app/impostazioni/esportazione?fiscale=locked", {
+      cookie,
+      params: { sezione: "esportazione" },
+    });
+    expect(locked.page.exportSample?.all.length).toBeGreaterThan(0);
+    expect(locked.page.exportSample?.available).toEqual([]);
     const periods = await routePage(loadSettings, "/app/impostazioni/esportazione", {
       cookie,
       params: { sezione: "esportazione" },

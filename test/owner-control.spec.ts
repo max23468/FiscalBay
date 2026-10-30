@@ -1179,6 +1179,9 @@ describe("avvisi commerciali", () => {
     // Un pagamento estraneo non avvisa.
     await recordDisputeOpened(env.DB, "dp_2", { subscription: "sub_altro" }, later(91));
     await recordDisputeOpened(env.DB, "dp_3", { lifetime: "cs_altro" }, later(91));
+    // Senza abbonamento o lifetime, come per un cliente cancellato, nessun avviso.
+    await recordDisputeOpened(env.DB, "dp_4", { erasure: "cus_t2" }, later(91));
+    await recordDisputeOpened(env.DB, "dp_5", null, later(91));
     await env.DB.batch([
       insertEntitlement({
         id: "e-d",

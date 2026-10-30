@@ -190,7 +190,7 @@ export async function applyStripeEvent(
     logFailure({ error, operation: "billing" });
     return;
   }
-  if (target && !("erasure" in target) && receipt.topic === "charge.dispute.created")
+  if (receipt.topic === "charge.dispute.created")
     await recordDisputeOpened(env.DB, receipt.objectId, target, now);
   if (target && "subscription" in target)
     await reconcileSubscription(env, stripe, target.subscription, now);

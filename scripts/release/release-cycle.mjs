@@ -444,7 +444,7 @@ function publishedRelease(repository, sha, version) {
  * Identità della release candidate: la testa di `develop`, con una RC in cima al changelog,
  * distribuita sul test dall'ultimo deploy confermato. Dopo quel deploy e dopo la sezione della
  * versione non entrano modifiche da distribuire: una correzione distribuita apre la RC successiva.
- * Il tree della testa deve avere la qualifica completa del candidato.
+ * La qualifica completa del tree, richiesta dalla decisione sulla RC, si riporta senza attenderla.
  */
 export async function identifyCandidate(io) {
   const head = await io.head();
@@ -466,10 +466,6 @@ export async function identifyCandidate(io) {
   if ((await io.liveVersion()) !== receipt.version)
     throw new Error("La versione attiva sul test non è quella del deploy confermato.");
   const tree = await io.tree(head);
-  if (!(await io.certified(tree)))
-    throw new Error(
-      `Qualifica completa assente: pnpm release:cycle candidate --ref develop --sha ${head}.`,
-    );
   return {
     version,
     commit: head,
@@ -481,6 +477,7 @@ export async function identifyCandidate(io) {
     migrations: receipt.schema.length,
     lastMigration: receipt.schema.at(-1)?.name ?? null,
     config: await io.config(head),
+    qualified: await io.certified(tree),
   };
 }
 
