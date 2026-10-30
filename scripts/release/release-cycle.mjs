@@ -1,17 +1,28 @@
 #!/usr/bin/env node
 /**
- * Coordinamento esplicito del ciclo: status legge; pr/cleanup/candidate/production hanno
+ * Coordinamento esplicito del ciclo: status e rc leggono; pr/cleanup/candidate/production hanno
  * effetti; qualification-base controlla nella CI la base di una PR. Il ciclo di una PR pulisce soltanto il proprio branch; i residui di cicli
  * precedenti si riconciliano a lotti con cleanup e a ogni Production.
  */
+import { createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, statSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  rmSync,
+  existsSync,
+  statSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { plan } from "../classify-changes.mjs";
-import { addedMigrations, reviewAdded } from "./release.mjs";
+import { needsDeploy, plan } from "../classify-changes.mjs";
+import { addedMigrations, candidateVersion, reviewAdded } from "./release.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
+import { lastDeployRun } from "../find-deployed.mjs";
 import { gh, ghJson } from "../lib/provider.mjs";
 
 // Diff e cronologie grandi superano il MiB predefinito di execFileSync.
@@ -429,6 +440,50 @@ function publishedRelease(repository, sha, version) {
   throw new Error("Release sul candidato non osservata.");
 }
 
+/**
+ * Identità della release candidate: la testa di `develop`, con una RC in cima al changelog,
+ * distribuita sul test dall'ultimo deploy confermato. Dopo quel deploy e dopo la sezione della
+ * versione non entrano modifiche da distribuire: una correzione distribuita apre la RC successiva.
+ * Il tree della testa deve avere la qualifica completa del candidato.
+ */
+export async function identifyCandidate(io) {
+  const head = await io.head();
+  const version = candidateVersion(await io.changelog(head));
+  if (!version) throw new Error("Nessuna release candidate in cima al changelog di develop.");
+  const changed = async (base) => base !== head && (await io.needsDeploy(base, head));
+  const deploy = await io.lastDeploy(head);
+  if (!deploy) throw new Error("Nessun deploy test riuscito su un antenato di develop.");
+  checkCycleJobs(deploy.jobs, true);
+  if (await changed(deploy.run.head_sha))
+    throw new Error("Modifiche da distribuire dopo l'ultimo deploy test: attendere il deploy.");
+  if (await changed(await io.introduced(version, head)))
+    throw new Error(
+      `Candidato cambiato dopo la sezione ${version}: aggiungere la RC successiva al changelog.`,
+    );
+  const receipt = await io.receipt(deploy.run);
+  if (receipt.sha !== deploy.run.head_sha || !receipt.readback || receipt.rolledBack)
+    throw new Error("Ricevuta del deploy test non confermata.");
+  if ((await io.liveVersion()) !== receipt.version)
+    throw new Error("La versione attiva sul test non è quella del deploy confermato.");
+  const tree = await io.tree(head);
+  if (!(await io.certified(tree)))
+    throw new Error(
+      `Qualifica completa assente: pnpm release:cycle candidate --ref develop --sha ${head}.`,
+    );
+  return {
+    version,
+    commit: head,
+    tree,
+    deployedCommit: receipt.sha,
+    artifact: receipt.digest,
+    workerVersion: receipt.version,
+    run: deploy.run.html_url,
+    migrations: receipt.schema.length,
+    lastMigration: receipt.schema.at(-1)?.name ?? null,
+    config: await io.config(head),
+  };
+}
+
 function candidateAvailable(repository, tree) {
   const repositoryId = ghJson("api", `repos/${repository}`).id;
   const artifacts = ghJson(
@@ -675,6 +730,7 @@ function cleanupIntegratedBranches(repository) {
 
 const cycleCommands = [
   "status",
+  "rc",
   "pr",
   "cleanup",
   "candidate",
@@ -687,7 +743,7 @@ const cycleCommands = [
 export function cycleCommand([command, number]) {
   if (!cycleCommands.includes(command))
     throw new Error(
-      "Uso: release:cycle status <run> | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run> | qualification-base --ref <branch> --base <sha> --head <sha>.",
+      "Uso: release:cycle status <run> | rc | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run> | qualification-base --ref <branch> --base <sha> --head <sha>.",
     );
   return { command, number };
 }
@@ -771,6 +827,75 @@ export function existingCandidate(command, existing, jobs) {
 function statusCycle({ repository, number }) {
   assertRun(number);
   summary(repository, number);
+}
+
+/** Identità della RC sul test, in sola lettura: GitHub, Git e risposta del Worker test. */
+async function candidateCycle({ repository }) {
+  const show = (sha, file) => git("show", `${sha}:${file}`);
+  const identity = await identifyCandidate({
+    head: () => {
+      const head = gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
+      localGit(() => {
+        git("fetch", "--quiet", "origin", "develop");
+        completeHistory();
+      });
+      return head;
+    },
+    // Senza changelog non c'è una RC da identificare.
+    changelog: (sha) =>
+      git("ls-tree", "--name-only", sha, "CHANGELOG.md") ? show(sha, "CHANGELOG.md") : "",
+    introduced: (version, head) =>
+      git(
+        "log",
+        "--reverse",
+        "--format=%H",
+        "--extended-regexp",
+        `-G^## \\[?${version.replaceAll(".", "\\.")}\\]?( |$)`,
+        head,
+        "--",
+        "CHANGELOG.md",
+      ).split("\n")[0],
+    needsDeploy,
+    lastDeploy: (head) =>
+      lastDeployRun(
+        ghJson(
+          "api",
+          `repos/${repository}/actions/workflows/ci.yml/runs?branch=develop&status=completed&per_page=50`,
+        ).workflow_runs,
+        (run) => runJobs(repository, run.id),
+        (sha) => contains(sha, head),
+      ),
+    receipt: (run) => {
+      const directory = mkdtempSync(path.join(tmpdir(), "release-candidate-"));
+      try {
+        gh(
+          "run",
+          "download",
+          String(run.id),
+          "--repo",
+          repository,
+          "--name",
+          `deployed-${run.id}-${run.run_attempt}`,
+          "--dir",
+          directory,
+        );
+        return JSON.parse(readFileSync(path.join(directory, "reports/release.json"), "utf8"));
+      } finally {
+        rmSync(directory, { recursive: true, force: true });
+      }
+    },
+    liveVersion: async () =>
+      (
+        await fetch("https://test.fiscalbay.it/", {
+          headers: { "cache-control": "no-cache" },
+          signal: AbortSignal.timeout(20000),
+        })
+      ).headers.get("x-fiscalbay-version"),
+    tree: (sha) => git("rev-parse", `${sha}^{tree}`),
+    certified: (tree) => candidateAvailable(repository, tree),
+    config: (sha) => createHash("sha256").update(show(sha, "cloudflare.config.ts")).digest("hex"),
+  });
+  console.log(JSON.stringify(identity, null, 2));
 }
 
 function cleanupCycle({ repository }) {
@@ -1072,6 +1197,7 @@ async function main() {
   const repository = ghJson("api", "repos/{owner}/{repo}").full_name;
   // status legge soltanto: nessun checkout pulito né blocco.
   if (command === "status") return statusCycle({ repository, number });
+  if (command === "rc") return candidateCycle({ repository });
   if (git("status", "--porcelain"))
     throw new Error(
       "Il ciclo richiede un checkout pulito; conservare e completare il lavoro locale.",

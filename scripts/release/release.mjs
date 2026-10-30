@@ -135,6 +135,25 @@ export function migrationPlan(migrations, applied, reviewed = "", approved) {
   return { pending, digest, rollbackCompatible: pending.length === 0 };
 }
 
+/** Release candidate in cima al changelog; `undefined` se la prima versione non è una RC. */
+export function candidateVersion(changelog) {
+  const version = changelog.match(/^## \[?([^\]\s]+)\]?/mu)?.[1];
+  return /^2\.\d+\.\d+-rc\.\d+$/u.test(version ?? "") ? version : undefined;
+}
+
+/**
+ * Con una RC in cima al changelog `develop` accetta soltanto correzioni: il titolo della PR, che
+ * diventa il commit integrato, non può annunciare una funzione o una modifica incompatibile.
+ */
+export function assertFreeze(changelog, title) {
+  const version = candidateVersion(changelog);
+  if (version && /^(?:feat\b|[a-z]+(?:\([a-z0-9._-]+\))?!:)/u.test(title.trim()))
+    throw new Error(
+      `Release candidate ${version} congelata: su develop entrano soltanto correzioni, non "${title.trim()}".`,
+    );
+  return version;
+}
+
 /** Collaudo remoto completo del test sullo stesso commit: smoke e pagine dopo il deploy. */
 export function assertTestEvidence(report, sha) {
   if (
@@ -663,6 +682,11 @@ async function main() {
   if (!target) throw new Error("Ambiente non supportato.");
   const command = positionals[0];
   if (command === "review") return reviewMigrations(values.base);
+  if (command === "freeze") {
+    const version = assertFreeze(readFileSync("CHANGELOG.md", "utf8"), process.env.PR_TITLE ?? "");
+    console.log(version ? `Correzione ammessa nella ${version}.` : "Nessuna RC congelata.");
+    return;
+  }
   if (command === "readiness") return productionReadiness(readPlan());
   if (command === "manifest") return writeManifest(environment);
   // Ogni altro comando, anche sconosciuto, parte dalla provenienza verificata dell'artefatto.

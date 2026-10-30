@@ -950,7 +950,7 @@ Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato P
 
 **Proporzione delle PR.** Contenuto, collaudo e chiusura delle PR seguono `AGENTS.md` e il [contenuto delle PR](engineering/RELEASE.md#contenuto-delle-pr).
 
-Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta pubblica. `CHANGELOG.md` unica storia delle modifiche rilevanti; le Novità dell'app (D203) ne sono una selezione per l'utente, non una seconda storia tecnica; GitHub Release derivata per ogni versione Production, non ogni deploy test. Nessuna riscrittura tag pubblicati per correggere un errore.
+Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta pubblica. Una RC in cima al changelog congela `develop` alle sole correzioni ([D233](DECISION_REGISTER.md)). `CHANGELOG.md` unica storia delle modifiche rilevanti; le Novità dell'app (D203) ne sono una selezione per l'utente, non una seconda storia tecnica; GitHub Release derivata per ogni versione Production, non ogni deploy test. Nessuna riscrittura tag pubblicati per correggere un errore.
 
 `Pubblica` e `Promuovi` autorizzano i cicli definiti in `AGENTS.md`, eseguiti secondo il [ciclo operativo](engineering/RELEASE.md#ciclo-operativo); `Promuovi` richiede il via di M9 e i gate Production. Cinque checkpoint owner restano separati dalle normali attività.
 
@@ -1081,7 +1081,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M5](#m5) | Completata | Free con cicli e promo, prova Premium, Hosted Checkout Managed Payments, webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. Cambi di periodicità e metodo su un abbonamento live, vendite live e segreti Production in [M9-01](#m9-01). |
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
-| [M8](#m8) | Da completare | RC, merchant e prove reali autorizzate ancora da preparare; checkpoint in attesa. |
+| [M8](#m8) | In corso | RC `2.0.0-rc.1` congelata su `develop` (D233); merchant e prove reali autorizzate ancora da preparare, checkpoint in attesa. |
 | [M9](#m9) | Da completare | Go-live non autorizzato; gate Production sotto ancora aperti. |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
@@ -1091,7 +1091,7 @@ Un task completato conserva intestazione, stato, prerequisiti e contratto, poi d
 <a id="questioni-aperte"></a>
 ### Questioni aperte e ripresa
 
-Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o richiedono di riconciliare un effetto remoto. Chiuderle o rimuoverle con il prossimo intervento pertinente, senza accumulare il diario delle prove riuscite. Il prossimo lavoro è la RC di [M8](#m8); le prove eBay reali rinviate da M2/M3 e le qualifiche della pubblicazione non vanno attribuite a un test sintetico.
+Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o richiedono di riconciliare un effetto remoto. Chiuderle o rimuoverle con il prossimo intervento pertinente, senza accumulare il diario delle prove riuscite. Il prossimo lavoro è il test merchant di [M8](#m8) sulla RC congelata; le prove eBay reali rinviate da M2/M3 e le qualifiche della pubblicazione non vanno attribuite a un test sintetico.
 
 | Ambito | Pendenza e condizione di chiusura |
 |---|---|
@@ -1101,7 +1101,7 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | CI alleggerita | D190 e [D200](DECISION_REGISTER.md): browser nel container ufficiale di Playwright, campagna mutation settimanale e avvio manuale su `develop`; i moduli con più di 150 mutanti si dividono in parti parallele ([pubblicazione](engineering/RELEASE.md#mutation-test)). Chiudere con la prima campagna settimanale riuscita. |
 | Configurazione Stripe | Sandbox e account live allineati al codice e riletti con `scripts/stripe-account.mjs` ([M5-12](#m5-12)): listino unico netto, portale con disdetta a fine periodo e senza cambio immediato con conguaglio contrario al [§6.2](#s06), Smart Retries entro una settimana, metodi Managed Payments carta, Link, Apple Pay, Google Pay e Bancontact (D193). Chiave segreta standard live ([D206](DECISION_REGISTER.md)) e segreto del webhook sul Worker Production nel mandato Production. |
 | Ingresso webhook | eBay, Stripe e Telegram attivi sul test ([M3-11](#m3-11), [M5-05](#m5-05), [M5-09](#m5-09)). Sottoscrivere `ORDER_CONFIRMATION` di un negozio Production soltanto con il test merchant. L'endpoint Stripe live esiste ([M5-12](#m5-12)): il suo segreto va sul Worker Production nel mandato Production. Il bot Production `fiscalbay_bot` riceve token, segreto e webhook soltanto nel mandato Production e a 1.x spenta, perché la 1.x usa il long polling e cancella il webhook a ogni avvio. |
-| Pubblicazione | Percorsi `cf` qualificati sul provider test secondo [RELEASE](engineering/RELEASE.md#qualifica-sul-provider-test): migration con errore e ripresa, ripresa senza ricevuta e fra tentativi CI, rollback compatibile e ripristino del candidato. Le nuove migration sui dati applicativi si collaudano nella PR che le introduce. Da completare: modalità `prova` del workflow Production sul candidato autorizzato, `CHANGELOG.md` prima della pubblicazione reale, riconciliazione del deploy successivo al riuso mutation. Il [ripristino dei dati](engineering/RELEASE.md#ripristino-dei-dati) con servizio sospeso è provato sul test ([M7-06](#m7-06)); il drill conclusivo resta [M9-02](#m9-02). |
+| Pubblicazione | Percorsi `cf` qualificati sul provider test secondo [RELEASE](engineering/RELEASE.md#qualifica-sul-provider-test): migration con errore e ripresa, ripresa senza ricevuta e fra tentativi CI, rollback compatibile e ripristino del candidato. Le nuove migration sui dati applicativi si collaudano nella PR che le introduce. Da completare: modalità `prova` del workflow Production sul candidato autorizzato, sezione `2.0.0` di `CHANGELOG.md` prima della pubblicazione reale, riconciliazione del deploy successivo al riuso mutation. Il [ripristino dei dati](engineering/RELEASE.md#ripristino-dei-dati) con servizio sospeso è provato sul test ([M7-06](#m7-06)); il drill conclusivo resta [M9-02](#m9-02). |
 | Consenso eBay | La rotazione di `BETTER_AUTH_SECRET` richiede il ricollegamento dei negozi: un token che non si apre più chiude il consenso alla prima lettura o al primo rinnovo. Senza «Display Title» la pagina di consenso mostra il nome dell'account sviluppatore: prima delle prove Production replicare sul RuName Production la configurazione del RuName Sandbox (nome FiscalBay, privacy e termini, logo orizzontale) con le pagine di fiscalbay.it. Il portale non ha un campo per i termini, che compaiono solo come «About URL». Il collegamento chiede `locale=it-IT`. |
 | API eBay moderne | Il CF arriva solo da Fulfillment `getOrder` e da Trading `GetOrders`; le API moderne e lo schema GraphQL non lo espongono (D135, [M3-09](#m3-09)). Il supporto eBay conferma `getOrder` come API REST supportata per l'identificativo fiscale, con header del marketplace obbligatorio e ordini fino a due anni ([M5-13](#m5-13)), e dismissioni con preavviso. Sostitute moderne e nuovi scope si decidono in [M8](#m8) prima del go-live; Top Rated non viene migrato (D216). Release notes e dismissioni si ricontrollano prima del go-live, perché eBay non offre un feed. |
 | Sandbox e dati fiscali | Sul test la Sandbox è spenta su richiesta dell'owner (`EBAY_SANDBOX_ENABLED` a `false`) e si riattiva soltanto su sua indicazione. I pagamenti Sandbox non riescono (`CashOnPickup` rimosso per managed payments, acquisto confermato non pagato e assente da Fulfillment) e Buy API è esclusa dall'owner: serve un pagamento Sandbox riuscito con importazione, oppure una soluzione concordata. La consultazione Production autorizzata di [M3-10](#m3-10) non prova il pagamento o l'import Sandbox. Nessun permesso implicito di modificare ordini Production o introdurre import Trading. |
@@ -1953,11 +1953,9 @@ Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effe
 <a id="m8-01"></a>
 #### M8-01 · Congelamento RC
 
-**Stato:** Da completare · **Prerequisiti:** M7 · **Contratto:** [§34](#s34) · [§37](#s37)
+**Stato:** Completato · **Prerequisiti:** M7 · **Contratto:** [§34](#s34) · [§37](#s37)
 
-Selezionare il candidato esatto da promuovere a RC, congelare nuove funzioni e identificare artefatto, schema e configurazione dell’ambiente di test.
-
-**Criterio di completamento:** Commit e artefatto corrispondono, gate CI superati; soltanto correzioni necessarie. Nessuna release stabile 2.0 anticipata.
+La versione `2.0.0-rc.1` in cima a `CHANGELOG.md` congela `develop` alle sole correzioni: la CI rifiuta titoli `feat` e modifiche incompatibili, e una correzione distribuita apre la RC successiva (D233). `release:cycle rc` identifica in sola lettura commit, artefatto, versione del Worker, schema e configurazione della RC sul test, e la rifiuta senza gate, deploy, readback e qualifica completa del tree ([procedura](engineering/RELEASE.md#release-candidate)). La RC non crea tag né release stabili. PR: [#532](https://github.com/max23468/FiscalBay/pull/532).
 
 <a id="m8-02"></a>
 #### M8-02 · Preparazione test merchant

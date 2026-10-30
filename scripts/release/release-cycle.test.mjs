@@ -44,6 +44,7 @@ import {
   assertResumableRun,
   deployedEnvironment,
   existingCandidate,
+  identifyCandidate,
 } from "./release-cycle.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
@@ -1026,5 +1027,85 @@ describe("comandi del ciclo", () => {
         () => existingCandidate("candidate", run, list),
         /release:cycle resume 9, senza un nuovo dispatch/u,
       );
+  });
+
+  describe("identità della release candidate", () => {
+    const deployed = {
+      run: { id: 7, run_attempt: 1, head_sha: "deploy", html_url: "https://example.invalid/run/7" },
+      jobs: [
+        { name: "Node 26", conclusion: "success" },
+        {
+          name: "Deploy test",
+          conclusion: "success",
+          steps: [{ name: "Confirm provider readback", conclusion: "success" }],
+        },
+      ],
+    };
+    const receipt = {
+      sha: "deploy",
+      tree: "deploy-tree",
+      digest: "artifact",
+      version: "worker-v1",
+      readback: true,
+      schema: [{ name: "0001_init.sql" }, { name: "0002_orders.sql" }],
+    };
+    // Testa con soli documenti dopo il deploy, che contiene anche la sezione della RC.
+    const io = (overrides = {}) => ({
+      head: () => "head",
+      changelog: () => "## [2.0.0-rc.1]\n\nRC.\n",
+      introduced: () => "deploy",
+      needsDeploy: () => false,
+      lastDeploy: () => deployed,
+      receipt: () => receipt,
+      liveVersion: async () => "worker-v1",
+      tree: () => "head-tree",
+      certified: () => true,
+      config: () => "config-hash",
+      ...overrides,
+    });
+
+    it("lega versione, testa, artefatto distribuito, schema e configurazione", async () => {
+      assert.deepEqual(await identifyCandidate(io()), {
+        version: "2.0.0-rc.1",
+        commit: "head",
+        tree: "head-tree",
+        deployedCommit: "deploy",
+        artifact: "artifact",
+        workerVersion: "worker-v1",
+        run: "https://example.invalid/run/7",
+        migrations: 2,
+        lastMigration: "0002_orders.sql",
+        config: "config-hash",
+      });
+      // Lo stesso commit come testa, deploy e sezione: un confronto vuoto non è una modifica.
+      const same = await identifyCandidate(
+        io({ head: () => "deploy", introduced: () => "deploy", needsDeploy: () => true }),
+      );
+      assert.equal(same.commit, "deploy");
+    });
+
+    it("rifiuta un candidato non congelato, non distribuito o cambiato dopo la RC", async () => {
+      const rejects = (overrides, pattern) =>
+        assert.rejects(identifyCandidate(io(overrides)), pattern);
+      await rejects({ changelog: () => "## [2.0.0]\n" }, /Nessuna release candidate/u);
+      await rejects({ lastDeploy: () => undefined }, /Nessun deploy test/u);
+      await rejects(
+        { lastDeploy: () => ({ ...deployed, jobs: [{ name: "Node 26", conclusion: "failure" }] }) },
+        /Gate/u,
+      );
+      await rejects(
+        { needsDeploy: (base) => base === "deploy", introduced: () => "section" },
+        /attendere il deploy/u,
+      );
+      // Una correzione distribuita dopo la sezione della RC richiede la RC successiva.
+      await rejects(
+        { introduced: () => "section", needsDeploy: (base) => base === "section" },
+        /aggiungere la RC successiva/u,
+      );
+      await rejects({ receipt: () => ({ ...receipt, rolledBack: true }) }, /Ricevuta/u);
+      await rejects({ receipt: () => ({ ...receipt, sha: "other" }) }, /Ricevuta/u);
+      await rejects({ liveVersion: async () => "worker-v2" }, /versione attiva/u);
+      await rejects({ certified: () => false }, /--ref develop --sha head/u);
+    });
   });
 });
