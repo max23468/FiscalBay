@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { escapeMarkup } from "../app/markup";
 import {
   displayTaxValue,
   taxQuality,
@@ -181,6 +182,18 @@ describe("qualità formale degli identificativi", () => {
     ["CODICE_FISCALE", "ES", "OTHER"],
   ])("mappa il tipo %s e Paese %s per la vista", (type, country, expected) => {
     expect(taxIdentifierType(type!, country!)).toBe(expected);
+  });
+});
+
+describe("testo dentro HTML e XML", () => {
+  it("sostituisce soltanto i caratteri riservati indicati", () => {
+    const text = `a&b<c>"d'e`;
+    // Testo e attributo fra virgolette doppie: l'apostrofo resta.
+    expect(escapeMarkup(text)).toBe("a&amp;b&lt;c&gt;&quot;d'e");
+    // HTML di Telegram: soltanto `&`, `<` e `>`.
+    expect(escapeMarkup(text, /[&<>]/gu)).toBe(`a&amp;b&lt;c&gt;"d'e`);
+    // Richiesta XML: anche l'apostrofo.
+    expect(escapeMarkup(text, /[&<>"']/gu)).toBe("a&amp;b&lt;c&gt;&quot;d&apos;e");
   });
 });
 

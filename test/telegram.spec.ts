@@ -40,6 +40,7 @@ import {
   sendText,
   telegramConfigured,
   linkToken as randomLinkToken,
+  botUrl,
   verifyTelegramUpdate,
   type TelegramStart,
 } from "../app/integrations/telegram.server";
@@ -665,6 +666,8 @@ describe("ingresso del bot", () => {
       false,
     );
     expect(telegramConfigured(environment)).toBe(true);
+    // La chat con il bot dell'ambiente, senza avvio del collegamento.
+    expect(botUrl(environment)).toBe("https://t.me/FiscalBayTestBot");
     expect((await receiveWebhook(webhook(update("/start")), off))?.status).toBe(503);
   });
 

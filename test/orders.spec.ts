@@ -13,7 +13,7 @@ import {
   unlockConfirmation,
   restoreUnlockConfirmation,
 } from "../app/domain/grants.server";
-import { listVisibleOrders } from "../app/domain/orders.server";
+import { listVisibleOrders, paymentState, shippingState } from "../app/domain/orders.server";
 import { completeRegistration } from "../app/domain/registration.server";
 import { createAuth } from "../app/auth.server";
 import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
@@ -44,6 +44,25 @@ beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
 
 describe("percorso ordini", () => {
+  // In testa: sotto mutation le tabelle degli stati sono mutanti statici provati con l'intera suite.
+  it("normalizza pagamento ed evasione senza inventare stati sconosciuti", () => {
+    expect(
+      ["PAID", "PENDING", "FAILED", "PARTIALLY_REFUNDED", "FULLY_REFUNDED", "NUOVO", null].map(
+        paymentState,
+      ),
+    ).toEqual(["paid", "unpaid", "unpaid", "partially_refunded", "refunded", "unknown", null]);
+    expect(
+      [
+        ["NOT_STARTED", "NONE_REQUESTED"],
+        ["IN_PROGRESS", "IN_PROGRESS"],
+        ["FULFILLED", null],
+        ["NOT_STARTED", "CANCELED"],
+        ["NUOVO", "NONE_REQUESTED"],
+        [null, null],
+      ].map(([fulfillment, cancel]) => shippingState(fulfillment!, cancel!)),
+    ).toEqual(["to_ship", "in_progress", "shipped", "cancelled", "unknown", null]);
+  });
+
   it("lega la pagina ordini alla sessione e al tenant senza consenso eBay", async () => {
     await seed();
 
