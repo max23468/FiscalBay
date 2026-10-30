@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { VisibleOrder } from "../app/domain/orders.server";
 import {
   orderCriteria,
+  pendingList,
   rememberedStore,
   rememberStore,
   revalidateUnlessSnapshot,
@@ -658,6 +659,30 @@ describe("vista condivisa e criteri degli ordini", () => {
     expect(criteria(`negozio=${"x".repeat(64)}`).storeId).toBe("x".repeat(64));
     expect(criteria(`negozio=${"x".repeat(65)}`).storeId).toBeUndefined();
     expect(criteria("marketplace=EBAY_IT")).not.toHaveProperty("marketplace");
+  });
+});
+
+describe("elenco Ordini in arrivo", () => {
+  const list = { pathname: "/app/ordini", search: "?periodo=30&mostra=2&vista=abc" };
+
+  it("mostra subito i nuovi criteri e attenua l'elenco soltanto se cambiano", () => {
+    expect(pendingList(list, { pathname: "/app/ordini", search: "?periodo=7" })).toEqual({
+      search: "?periodo=7",
+      changing: true,
+    });
+    // «Carica altri» e i nuovi ordini cambiano pagine e istantanea, non i criteri.
+    expect(
+      pendingList(list, { pathname: "/app/ordini", search: "?periodo=30&mostra=3&vista=abc" }),
+    ).toEqual({ search: "?periodo=30&mostra=3&vista=abc", changing: false });
+  });
+
+  it("resta sull'elenco mostrato se la navigazione va altrove o non c'è", () => {
+    expect(pendingList(list, undefined)).toEqual({ search: list.search, changing: false });
+    // Aprire un dettaglio cambia il percorso: filtri ed elenco non si muovono.
+    expect(pendingList(list, { pathname: "/app/ordini/o-1", search: "?periodo=7" })).toEqual({
+      search: list.search,
+      changing: false,
+    });
   });
 });
 
