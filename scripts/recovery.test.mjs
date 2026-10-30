@@ -95,7 +95,12 @@ function scenario() {
       VALUES ('s-old', '2026-12-01T00:00:00.000Z', 'token-old', '${before}', '${before}', 'u-keep');
     INSERT INTO "verification" ("id", "identifier", "value", "expiresAt", "createdAt", "updatedAt")
       VALUES ('v-old', 'reset', 'valore', '2026-12-01T00:00:00.000Z', '${before}', '${before}');
-    INSERT INTO _cf_KV (key, value) VALUES ('interno', NULL);`);
+    INSERT INTO _cf_KV (key, value) VALUES ('interno', NULL);
+    UPDATE "user" SET "admin" = 1 WHERE "id" IN ('u-keep', 'u-pass');
+    INSERT INTO telegram_links (workspace_id, id, chat_id, language, linked_at)
+      VALUES ('w-keep', 'l-old', 'chat-old', 'it', '${before}');
+    INSERT INTO telegram_preferences (workspace_id, enabled, updated_at)
+      VALUES ('w-keep', 1, '${before}');`);
   const snapshot = path.join(directory, `snapshot-${Math.random().toString(36).slice(2)}.sqlite`);
   db.exec(`VACUUM INTO '${snapshot}'`);
   // Dopo il punto: cancellazioni, revoche, una password cambiata e righe nuove.
@@ -116,6 +121,12 @@ function scenario() {
     UPDATE ebay_store_credentials SET rejected_at = '${later}' WHERE store_id = 'st-keep';
     UPDATE workspaces SET trial_used_at = '${later}' WHERE id = 'w-keep';
     UPDATE "account" SET "password" = 'hash-new', "updatedAt" = '${later}' WHERE "id" = 'a-pass';
+    UPDATE "user" SET "admin" = 0 WHERE "id" = 'u-keep';
+    UPDATE telegram_links SET id = 'l-new', chat_id = 'chat-new', linked_at = '${later}'
+      WHERE workspace_id = 'w-keep';
+    UPDATE telegram_preferences SET enabled = 0, updated_at = '${later}' WHERE workspace_id = 'w-keep';
+    INSERT INTO telegram_store_preferences (store_id, enabled, updated_at)
+      VALUES ('st-keep', 0, '${later}');
     INSERT INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
       VALUES ('s-new', '2026-12-01T00:00:00.000Z', 'token-new', '${later}', '${later}', 'u-keep');`);
   user(db, "u-new", later);
@@ -212,6 +223,19 @@ describe("ripristino senza dati o diritti revocati", () => {
       { name: "telegram_sends", value: "false" },
     ]);
     assert.deepEqual(rows(restored, "SELECT key FROM _cf_KV"), [{ key: "interno" }]);
+    // Un ruolo admin revocato non torna; quello ancora valido resta.
+    assert.deepEqual(rows(restored, `SELECT "id", "admin" FROM "user" ORDER BY "id"`), [
+      { id: "u-keep", admin: 0 },
+      { id: "u-pass", admin: 1 },
+    ]);
+    // La chat sostituita non torna destinataria e le notifiche disattivate restano spente.
+    assert.deepEqual(rows(restored, "SELECT workspace_id, id, chat_id FROM telegram_links"), [
+      { workspace_id: "w-keep", id: "l-new", chat_id: "chat-new" },
+    ]);
+    assert.deepEqual(rows(restored, "SELECT enabled FROM telegram_preferences"), [{ enabled: 0 }]);
+    assert.deepEqual(rows(restored, "SELECT store_id, enabled FROM telegram_store_preferences"), [
+      { store_id: "st-keep", enabled: 0 },
+    ]);
     // Ripetibile: la seconda esecuzione non trova altro da eliminare né da riportare.
     const again = await reapply(runner(restored), captured, new Date(later));
     assert.deepEqual(again.deleted, {});
