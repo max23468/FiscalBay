@@ -10,16 +10,16 @@ import { appCopy, pageTitle } from "../app-copy";
 import { formatDate } from "../format";
 import { languageFromPath } from "../i18n";
 import { whatsNewKinds, type WhatsNewKind } from "../changelog";
-import type { TileTone } from "~/components/tile-tone";
 import { whatsNewView } from "../whats-new.server";
 import type { Route } from "./+types/whats-new";
 
 const kinds = Object.keys(whatsNewKinds) as WhatsNewKind[];
 
-const kindStyles: Record<WhatsNewKind, { Icon: typeof Sparkles; tone: TileTone }> = {
-  features: { Icon: Sparkles, tone: "blue" },
-  improvements: { Icon: TrendingUp, tone: "green" },
-  fixes: { Icon: Wrench, tone: "amber" },
+// Il Supporto segue le Impostazioni: tessere neutre, l'icona distingue il gruppo.
+const kindIcons: Record<WhatsNewKind, typeof Sparkles> = {
+  features: Sparkles,
+  improvements: TrendingUp,
+  fixes: Wrench,
 };
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
@@ -47,21 +47,21 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
   if (loaderData.releases.length === 0) return <NotFoundState kind="page" />;
   return (
     <div className="grid gap-6">
-      <PageTitle icon={Megaphone} tone="blue">
+      <PageTitle icon={Megaphone} tone="neutral">
         {t.shell.whatsNew}
       </PageTitle>
       {loaderData.releases.map((release) => (
         <section
           key={release.version}
           aria-labelledby={`release-${release.version}`}
-          className="grid gap-5 rounded-2xl border bg-card p-5 sm:p-6"
+          className="grid gap-6 rounded-xl border bg-card p-4 sm:p-6"
         >
           <header className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h2 id={`release-${release.version}`} className="text-lg font-semibold">
               {t.shell.whatsNewVersion(release.version)}
             </h2>
             {release.date === null ? (
-              <Badge variant="info">{t.shell.whatsNewUpcoming}</Badge>
+              <Badge variant="neutral">{t.shell.whatsNewUpcoming}</Badge>
             ) : (
               <time dateTime={release.date} className="text-sm text-muted-foreground">
                 {formatDate(`${release.date}T12:00:00Z`, language, "date", "UTC")}
@@ -73,7 +73,7 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
             {kinds.flatMap((kind) => {
               const items = release.items.filter((item) => item.kind === kind);
               if (items.length === 0) return [];
-              const { Icon, tone } = kindStyles[kind];
+
               return [
                 <section
                   key={kind}
@@ -84,12 +84,12 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
                     id={`release-${release.version}-${kind}`}
                     className="flex items-center gap-2 text-sm font-semibold"
                   >
-                    <IconTile icon={Icon} tone={tone} size="sm" />
+                    <IconTile icon={kindIcons[kind]} tone="neutral" size="sm" />
                     {whatsNewKinds[kind][language]}
                   </h3>
-                  <ul className="grid gap-3">
+                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-x-8 gap-y-3">
                     {items.map((item) => (
-                      <li key={item.title} className="grid max-w-prose gap-0.5 text-sm">
+                      <li key={item.title} className="grid content-start gap-0.5 text-sm">
                         <h4 className="font-medium">{item.title}</h4>
                         <p className="leading-relaxed text-pretty text-muted-foreground">
                           {item.body}

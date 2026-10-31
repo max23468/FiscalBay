@@ -29,9 +29,35 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 - Console: gli avvisi commerciali del Control Center Telegram si aprono con il titolare dell'account (nome, ragione sociale, email e metodi di accesso) e «Account cancellato» conserva i dati del titolare salvati alla richiesta. La Privacy, nella versione `2026-11-01`, indica Telegram anche per gli avvisi interni sull'uso del servizio.
 - La pagina Novità e la campanella si ricavano dalle parti «Novità» e «What's new» di questo changelog; la promozione su `main` scrive il giorno della versione.
 
-## [2.0.0]
+## [2.0.0] - 2026-11-01
 
 Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce la 1.x. Contiene la `2.0.0-rc.12` provata sul test.
+
+### Novità
+
+#### Funzionalità
+
+- **Nuova FiscalBay.** Un'app web nuova, in italiano e in inglese, al posto della versione precedente: si usa dal browser su computer e smartphone.
+- **Ordini e dati fiscali.** Gli ordini arrivano da eBay con il controllo del codice fiscale o della partita IVA, la ricerca, i filtri, il dettaglio e lo sblocco per ordine.
+- **Negozi eBay.** Colleghi i negozi in sola lettura, li metti in pausa, li ricolleghi o li scolleghi; i nuovi ordini arrivano appena eBay li segnala.
+- **Messaggi all'acquirente.** Copi un messaggio in italiano o in inglese per chiedere il dato fiscale, con suggerimenti.
+- **Esportazione.** Scarichi gli ordini in CSV, XLSX o ZIP, in file privati che scadono.
+- **Telegram.** Il bot avvisa dei nuovi ordini e risponde ai comandi del tuo account.
+- **Accesso e piani.** Entri con email e password, Google, passkey o eBay; scegli fra Free, prova e Premium mensile, annuale o a vita.
+
+### What's new
+
+#### Features
+
+- **New FiscalBay.** A new web app, in Italian and English, replacing the previous version: use it from the browser on computer and smartphone.
+- **Orders and tax data.** Orders arrive from eBay with tax code or VAT number checks, search, filters, details and per-order unlock.
+- **eBay stores.** Connect stores read-only, pause, reconnect or disconnect them; new orders arrive as soon as eBay reports them.
+- **Buyer messages.** Copy a message in Italian or English to ask for the tax data, with suggestions.
+- **Export.** Download orders as CSV, XLSX or ZIP, in private files that expire.
+- **Telegram.** The bot announces new orders and answers the commands of your account.
+- **Sign-in and plans.** Sign in with email and password, Google, passkey or eBay; choose among Free, trial and monthly, annual or lifetime Premium.
+
+### Contenuto
 
 - Account con email e password, Google, passkey e accesso con eBay; sessioni revocabili, verifica dell'email e MFA per l'amministrazione.
 - Collegamento dei negozi eBay in sola lettura, con pausa, ricollegamento e scollegamento; i nuovi ordini arrivano con l'avviso di eBay.

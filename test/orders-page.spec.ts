@@ -104,11 +104,11 @@ describe("pagina Ordini reale", () => {
   }
 
   it("ricava le Novità dal changelog e le annuncia nella campanella e nel menu, solo se ci sono", async () => {
-    // Il changelog versionato è ben formato e porta Novità soltanto dopo la 2.0.0, senza RC.
+    // Il changelog versionato è ben formato e porta Novità dalla 2.0.0, senza RC.
     expect(whatsNewProblems()).toEqual([]);
     const versioned = parseChangelog(versionedChangelog).releases;
     expect(versioned.every(({ version }) => /^\d+\.\d+\.\d+$/u.test(version))).toBe(true);
-    expect(versioned.some(({ version }) => version === "2.0.0")).toBe(false);
+    expect(versioned.some(({ version }) => version === "2.0.0")).toBe(true);
 
     const changelog = [
       "# Changelog",
@@ -250,6 +250,12 @@ describe("pagina Ordini reale", () => {
     expect(whatsNewView("it", new Date("2026-11-09T09:00:00.000Z"), production, releases)).toEqual(
       [],
     );
+    // Il giorno è italiano: a mezzanotte e mezza a Roma la versione c'è, anche se in UTC è ieri.
+    expect(
+      whatsNewView("it", new Date("2026-11-09T23:30:00.000Z"), production, releases).map(
+        ({ version }) => version,
+      ),
+    ).toEqual(["2.0.1"]);
     expect(hasWhatsNew(at, production, [releases[0]])).toBe(false);
     expect(hasWhatsNew(at, test, [releases[0]])).toBe(true);
     expect(whatsNewNotifications("it", at, test, releases)).toEqual([

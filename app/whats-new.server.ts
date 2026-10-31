@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import changelog from "../CHANGELOG.md?raw";
 import { appCopy } from "./app-copy";
 import { isProduction } from "./app-links";
+import { displayTimeZone } from "./format";
 import { notificationWindowMilliseconds } from "./domain/notification-reads.server";
 import type { Language } from "./i18n";
 import { parseChangelog, type WhatsNewKind, type WhatsNewRelease } from "./changelog";
@@ -32,8 +33,9 @@ function served(): WhatsNewContext {
   return { production: isProduction(env), deployedAt: metadata?.timestamp };
 }
 
-/** Istante da cui una versione pubblicata compare: l'inizio del suo giorno, in UTC. */
-const releasedAt = (date: string) => Date.parse(`${date}T00:00:00.000Z`);
+/** Giorno italiano di un istante: il giorno della versione è quello della pubblicazione in Italia. */
+const italianDay = (now: Date) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone }).format(now);
 
 /**
  * Voci da mostrare nella lingua dell'utente, dalla versione più recente: quelle già arrivate al
@@ -47,7 +49,7 @@ export function whatsNewView(
 ): WhatsNewView[] {
   return releases
     .filter((release) =>
-      release.date === null ? !context.production : releasedAt(release.date) <= now.getTime(),
+      release.date === null ? !context.production : release.date <= italianDay(now),
     )
     .map((release) => ({
       version: release.version,

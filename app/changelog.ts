@@ -5,7 +5,7 @@
  * gruppi `####` di `whatsNewKinds`, nello stesso ordine nelle due lingue. Le altre voci della versione restano nel changelog e nella
  * GitHub Release. La promozione su `main` scrive il giorno nell'intestazione
  * (`## [2.0.1] - AAAA-MM-GG`): in Production compaiono soltanto le versioni con il giorno, sul
- * test anche quella in preparazione in cima al changelog. Restano fuori la 2.0.0 e le RC.
+ * test anche quella in preparazione in cima al changelog. Restano fuori le RC.
  * Senza voci pagina, voce del menu, collegamento di Supporto e campanella non compaiono.
  */
 /** Gruppi delle voci, nell'ordine della pagina, con il titolo `####` in ciascuna lingua. */
@@ -27,8 +27,8 @@ export interface WhatsNewRelease {
 
 const headings: Record<"it" | "en", string> = { it: "Novità", en: "What's new" };
 
-/** Versioni con Novità: dopo la 2.0.0 e senza prerelease. */
-const userVersion = (version: string) => /^\d+\.\d+\.\d+$/u.test(version) && version !== "2.0.0";
+/** Versioni con Novità: dalla 2.0.0, senza prerelease. */
+const userVersion = (version: string) => /^[2-9]\d*\.\d+\.\d+$/u.test(version);
 
 /** Giorno di calendario esistente, senza le correzioni di `Date` (31 aprile → 1° maggio). */
 const validDay = (day: string) => {
