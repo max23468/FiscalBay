@@ -62,6 +62,25 @@ function resources(target) {
     customDomains: { domains: [] },
     widgets: [{ name: target.turnstile, mode: "managed", domains: [target.domain] }],
     registry: { rows: [{ name: "EBAY_CLIENT_SECRET", state: "never" }], missing: [] },
+    github: {
+      environment: {
+        protection_rules: target.live
+          ? [
+              {
+                type: "required_reviewers",
+                reviewers: [{ type: "User", reviewer: { login: "owner" } }],
+              },
+            ]
+          : [],
+        deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
+      },
+      branches: [target.github.branch],
+      variables: [
+        { name: "CLOUDFLARE_ACCOUNT_ID", value: "account" },
+        ...(target.live ? [{ name: "PRODUCTION_PUBLISH_ENABLED", value: "true" }] : []),
+      ],
+      secrets: ["CLOUDFLARE_API_TOKEN"],
+    },
   };
 }
 
@@ -101,6 +120,25 @@ describe("risorse", () => {
     const after = checkResources(live, resources(live), "dopo");
     assert.deepEqual(failing(after), []);
     assert.equal(after.length, checkResources(live, resources(live), "prima").length + 1);
+  });
+
+  it("richiede l'ambiente GitHub della pubblicazione con approvazione e interruttore", () => {
+    assert.deepEqual(failing(checkResources(test, resources(test), "prima")), []);
+    const state = resources(live);
+    state.github.environment.protection_rules = [];
+    state.github.branches = ["main", "develop"];
+    state.github.variables = [{ name: "PRODUCTION_PUBLISH_ENABLED", value: "false" }];
+    const results = checkResources(live, state, "prima").filter(({ area }) => area === "Rollback");
+    assert.deepEqual(failing(results), [
+      "ambiente GitHub production soltanto per main con l'approvazione dell'owner",
+      "account, token e interruttore nell'ambiente production",
+    ]);
+    assert.equal(results[1].detail, "mancano CLOUDFLARE_ACCOUNT_ID");
+    // Un ambiente assente non passa, anche con le altre risorse configurate.
+    assert.equal(
+      failing(checkResources(live, { ...resources(live), github: {} }, "prima")).length,
+      2,
+    );
   });
 
   it("elenca i segreti mancanti senza valori", () => {

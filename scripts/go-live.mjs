@@ -5,7 +5,8 @@
  * all'owner o a un'osservazione successiva.
  *
  * Due fasi. `prima` vale prima di `Promuovi`: Worker e dominio, segreti dichiarati, D1, code,
- * bucket dei file, widget Turnstile, registro delle scadenze e account Stripe.
+ * bucket dei file, widget Turnstile, registro delle scadenze, ambiente GitHub della pubblicazione
+ * e account Stripe.
  * `dopo` vale dopo il deploy e prima di aprire le iscrizioni: superficie pubblica (robots,
  * sitemap, pagine indicizzabili e `noindex`), consumer della coda, protezioni della zona sulle
  * risposte reali, archivio dei log, sottoscrizioni eBay, bot Telegram e promozione. Sul test le due fasi si
@@ -27,7 +28,7 @@ import { parseArgs } from "node:util";
 
 import config, { databases } from "../cloudflare.config.ts";
 import { declaredSecrets, defaultFile, parseRegistry, review } from "./credential-expiries.mjs";
-import { cfJson } from "./lib/provider.mjs";
+import { cfJson, ghJson } from "./lib/provider.mjs";
 
 /** Retention delle code e regola dei file esportati, come in RELEASE. */
 export const queueRetention = 14 * 86_400;
@@ -50,6 +51,15 @@ export function targetOf(mode) {
     exports: worker.env.EXPORT_FILES.name,
     turnstile: worker.name,
     secrets: declaredSecrets(mode),
+    // Ambiente GitHub del deploy: in Production con l'approvazione dell'owner e l'interruttore.
+    github: live
+      ? {
+          environment: "production",
+          branch: "main",
+          reviewers: true,
+          enabled: "PRODUCTION_PUBLISH_ENABLED",
+        }
+      : { environment: "test", branch: "develop", reviewers: false },
   };
 }
 
@@ -161,6 +171,43 @@ export const ownerItems = [
 
 const byName = (items, name, key = "name") => items?.find((item) => item?.[key] === name);
 
+/**
+ * Ambiente GitHub del deploy: soltanto il branch dell'ambiente, in Production l'approvazione
+ * obbligatoria dell'owner, poi account, token e interruttore. Il via sul commit
+ * (`OWNER_APPROVED_SHA`) si imposta con `Promuovi` e non si controlla qui.
+ */
+export function checkPublication(expected, state) {
+  const rules = state?.environment?.protection_rules ?? [];
+  const reviewers = rules.find(({ type }) => type === "required_reviewers")?.reviewers ?? [];
+  const policy = state?.environment?.deployment_branch_policy;
+  const variables = new Map((state?.variables ?? []).map(({ name, value }) => [name, value]));
+  const missing = [
+    ...["CLOUDFLARE_ACCOUNT_ID", ...(expected.enabled ? [expected.enabled] : [])].filter(
+      (name) => !variables.get(name),
+    ),
+    ...((state?.secrets ?? []).includes("CLOUDFLARE_API_TOKEN") ? [] : ["CLOUDFLARE_API_TOKEN"]),
+  ];
+  return [
+    {
+      area: "Rollback",
+      item: `ambiente GitHub ${expected.environment} soltanto per ${expected.branch}${expected.reviewers ? " con l'approvazione dell'owner" : ""}`,
+      ok:
+        policy?.custom_branch_policies === true &&
+        JSON.stringify(state?.branches ?? []) === JSON.stringify([expected.branch]) &&
+        (!expected.reviewers || reviewers.length > 0),
+    },
+    {
+      area: "Rollback",
+      item: `${expected.enabled ? "account, token e interruttore" : "account e token"} nell'ambiente ${expected.environment}`,
+      ok:
+        Boolean(state?.environment) &&
+        missing.length === 0 &&
+        (!expected.enabled || variables.get(expected.enabled) === "true"),
+      detail: missing.length ? `mancano ${missing.join(", ")}` : undefined,
+    },
+  ];
+}
+
 /** Controlli sulle risorse dell'ambiente, da uno stato letto con la CLI. */
 export function checkResources(target, state, phase) {
   const worker = byName(state.workers, target.worker);
@@ -229,6 +276,7 @@ export function checkResources(target, state, phase) {
       ok: Boolean(registry) && !registry.error && pending.length === 0,
       detail: registry?.error ?? (pending.length ? pending.join(", ") : undefined),
     },
+    ...checkPublication(target.github, state.github),
   ];
   if (phase === "prima") return results;
   const consumer = queue?.consumers?.find(({ script }) => script === target.worker);
@@ -436,6 +484,23 @@ function readResources(target) {
     ]),
     widgets: optional(["turnstile", "widgets", "list"]),
     registry: readRegistry(target),
+    github: readPublication(target.github),
+  };
+}
+
+function readPublication({ environment }) {
+  const api = (route) => {
+    try {
+      return ghJson("api", `repos/{owner}/{repo}/environments/${environment}${route}`);
+    } catch {
+      return null;
+    }
+  };
+  return {
+    environment: api(""),
+    branches: api("/deployment-branch-policies")?.branch_policies?.map(({ name }) => name),
+    variables: api("/variables")?.variables,
+    secrets: api("/secrets")?.secrets?.map(({ name }) => name),
   };
 }
 
