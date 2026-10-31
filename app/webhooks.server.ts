@@ -25,6 +25,7 @@ import {
   recordEbayAccountDeletion,
 } from "./domain/ebay-account-deletion.server";
 import { consumeTelegramUpdate } from "./domain/telegram-bot.server";
+import { deliverTelegram } from "./domain/telegram-deliveries.server";
 import { isProduction } from "./app-links";
 import { logFailure } from "./errors";
 import { inSequence } from "./sequence";
@@ -520,6 +521,11 @@ export async function consumeWebhooks(
           },
           fetcher,
           now,
+        );
+        // L'evento serve alla notifica immediata: come dopo una lettura, le consegne del negozio
+        // partono subito con i dati fiscali appena letti.
+        await deliverTelegram(env, fetcher, now, { storeId: receipt.store_id! }).catch(
+          (error: unknown) => logFailure({ error, operation: "telegram" }),
         );
       } else if (receipt.provider === "telegram" && receipt.topic.startsWith("owner")) {
         // I comandi dell'owner hanno un percorso proprio, separato da quello dei venditori.

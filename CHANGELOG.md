@@ -2,6 +2,10 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio.
 
+## [2.0.0-rc.11]
+
+- La notifica Telegram di un nuovo ordine arrivato con l'avviso eBay parte subito, insieme alla lettura dell'ordine, invece che con il controllo successivo dei dieci minuti.
+
 ## [2.0.0-rc.10]
 
 - Registrazione: «Registrati come» al posto di «Ti registri come» e consenso a novità e offerte senza ripetizioni («Ricevi novità e offerte via email»). Il testo del consenso cambia, quindi cambia la versione registrata con la scelta.
