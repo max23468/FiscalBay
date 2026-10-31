@@ -33,9 +33,10 @@ function served(): WhatsNewContext {
   return { production: isProduction(env), deployedAt: metadata?.timestamp };
 }
 
+const italianDays = new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone });
+
 /** Giorno italiano di un istante: il giorno della versione è quello della pubblicazione in Italia. */
-const italianDay = (now: Date) =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: displayTimeZone }).format(now);
+const italianDay = (now: Date) => italianDays.format(now);
 
 /**
  * Voci da mostrare nella lingua dell'utente, dalla versione più recente: quelle già arrivate al
