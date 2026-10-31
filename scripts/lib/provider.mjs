@@ -110,3 +110,15 @@ export function gh(...args) {
 }
 
 export const ghJson = (...args) => JSON.parse(gh(...args));
+
+/**
+ * Job di una run o di un suo tentativo, a pagine da 50: con alcune decine di job GitHub risponde
+ * 502 alla pagina da 100, e una pagina sola ne perderebbe oltre il limite.
+ */
+export const runJobs = (repository, id, attempt) =>
+  ghJson(
+    "api",
+    "--paginate",
+    "--slurp",
+    `repos/${repository}/actions/runs/${id}${attempt ? `/attempts/${attempt}` : ""}/jobs?per_page=50`,
+  ).flatMap((page) => page.jobs);
