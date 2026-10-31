@@ -38,25 +38,35 @@ export function mutationJob(name) {
   return match ? { target: match[1], part: Number(match[2]), parts: Number(match[3]) } : null;
 }
 
-/** Esito della mutation di un modulo in una run: `passed` solo con ogni parte riuscita. */
-export function moduleOutcomes(jobs) {
+/**
+ * Esito della mutation di un modulo in una run: `passed` solo con ogni parte riuscita. In una
+ * run annullata, per esempio per avviarne una nuova, un job annullato non ha un esito.
+ */
+export function moduleOutcomes(jobs, cancelledRun = false) {
   const modules = new Map();
+  const interrupted = new Set();
   for (const job of jobs) {
     const parsed = mutationJob(job.name);
+    if (!parsed) continue;
     // Un job annullato o saltato prima di partire non ha provato nulla; uno interrotto mentre
-    // girava, anche per il limite di tempo, vale come fallito.
-    if (!parsed || (["cancelled", "skipped"].includes(job.conclusion) && !job.steps?.length))
+    // girava, anche per il limite di tempo, vale come fallito, salvo nella run annullata.
+    if (["cancelled", "skipped"].includes(job.conclusion) && !job.steps?.length) continue;
+    if (cancelledRun && job.conclusion === "cancelled") {
+      interrupted.add(parsed.target);
       continue;
+    }
     const entry = modules.get(parsed.target) ?? { parts: parsed.parts, passed: new Set(), ran: 0 };
     entry.ran += 1;
     if (job.conclusion === "success" && entry.parts === parsed.parts) entry.passed.add(parsed.part);
     modules.set(parsed.target, entry);
   }
   return new Map(
-    [...modules].map(([target, entry]) => [
-      target,
-      entry.ran === entry.parts && entry.passed.size === entry.parts ? "passed" : "failed",
-    ]),
+    [...modules]
+      .filter(([target]) => !interrupted.has(target))
+      .map(([target, entry]) => [
+        target,
+        entry.ran === entry.parts && entry.passed.size === entry.parts ? "passed" : "failed",
+      ]),
   );
 }
 
@@ -174,9 +184,16 @@ export function packageImporters(sources, packages) {
     .map(({ path: file }) => file);
 }
 
-/** Moduli critici che importano, anche indirettamente, uno dei sorgenti modificati. */
+/** Testi dell'interfaccia e documenti legali: un loro cambio non tocca chi li importa (D244). */
+const copyFiles = /^app\/copy\//u;
+
+/**
+ * Moduli critici che importano, anche indirettamente, uno dei sorgenti modificati. Un testo
+ * cambiato conta soltanto per sé.
+ */
 export function affectedModules(changed, graph) {
-  const affected = new Set(changed.filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file)));
+  const sources = changed.filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file));
+  const affected = new Set(sources.filter((file) => !copyFiles.test(file)));
   let grew = true;
   while (grew) {
     grew = false;
@@ -186,7 +203,7 @@ export function affectedModules(changed, graph) {
         grew = true;
       }
   }
-  return new Set([...affected].filter(criticalModule));
+  return new Set([...affected, ...sources].filter(criticalModule));
 }
 
 /**
@@ -225,11 +242,18 @@ async function previousRuns(repository, repositoryId) {
   const api = (url) =>
     retry(() => ghJson("api", url), { attempts: 3, delay: (attempt) => attempt * 5000 });
   const runs = [];
-  for (const candidate of (
-    await api(
-      `repos/${repository}/actions/runs?status=completed&exclude_pull_requests=true&per_page=50`,
-    )
-  ).workflow_runs) {
+  // Per workflow: fra le run di tutto il repository CI e CodeQL spingono fuori le qualifiche.
+  const candidates = [];
+  for (const workflow of mutationWorkflows)
+    candidates.push(
+      ...(
+        await api(
+          `repos/${repository}/actions/workflows/${path.basename(workflow)}/runs?status=completed&exclude_pull_requests=true&per_page=30`,
+        )
+      ).workflow_runs,
+    );
+  candidates.sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  for (const candidate of candidates) {
     if (
       !mutationWorkflows.includes(candidate.path) ||
       candidate.event === "pull_request" ||
@@ -247,7 +271,11 @@ async function previousRuns(repository, repositoryId) {
       jobs.push(...batch.jobs);
       if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
     }
-    runs.push({ id: candidate.id, commit: candidate.head_sha, outcomes: moduleOutcomes(jobs) });
+    runs.push({
+      id: candidate.id,
+      commit: candidate.head_sha,
+      outcomes: moduleOutcomes(jobs, candidate.conclusion === "cancelled"),
+    });
   }
   return runs;
 }

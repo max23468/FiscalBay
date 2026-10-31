@@ -113,6 +113,33 @@ describe("mutation incrementale della prova del candidato", () => {
     });
   });
 
+  it("in una run annullata ignora i moduli interrotti, non li conta come falliti", () => {
+    const job = (name, conclusion = "success") => ({
+      name: `Mutation / ${name}`,
+      conclusion,
+      steps: [{}],
+    });
+    const jobs = [
+      job("app/a.server.ts 1/2"),
+      job("app/a.server.ts 2/2", "cancelled"),
+      job("app/b.server.ts 1/1"),
+      job("app/c.server.ts 1/1", "failure"),
+    ];
+    assert.deepEqual(Object.fromEntries(moduleOutcomes(jobs, true)), {
+      "app/b.server.ts": "passed",
+      "app/c.server.ts": "failed",
+    });
+    assert.equal(moduleOutcomes(jobs).get("app/a.server.ts"), "failed");
+  });
+
+  it("un testo cambiato conta per sé, non per chi lo importa", () => {
+    const graph = new Map([
+      ["app/domain/telegram.server.ts", new Set(["app/copy/copy-it.ts"])],
+      ["app/copy/copy-it.ts", new Set()],
+    ]);
+    assert.deepEqual([...affectedModules(["app/copy/copy-it.ts"], graph)], []);
+  });
+
   it("ripete i moduli critici che importano un sorgente modificato, anche di supporto", () => {
     const graph = new Map([
       ["app/domain/orders.server.ts", new Set(["app/domain/sql.server.ts"])],
