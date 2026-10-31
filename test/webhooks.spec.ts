@@ -29,6 +29,7 @@ import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acq
 import { ebayConfiguration } from "../app/integrations/ebay/environment.server";
 import delivery from "./fixtures/ebay-order-notification.json";
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
+import { fakeBot } from "./fixtures/telegram-fixtures";
 import {
   insertCredentials,
   insertStorePause,
@@ -819,6 +820,39 @@ it("il consumer importa solo l'ordine del negozio verificato e non ripete gli ef
   await consumeWebhooks(work.value, environment, fetcher, now);
   expect(fetcher).toHaveBeenCalledTimes(calls);
   expect(work.message.ack).toHaveBeenCalledTimes(2);
+});
+
+it("la conferma eBay notifica subito su Telegram il nuovo ordine, senza attendere il cron", async () => {
+  await env.DB.batch([
+    env.DB.prepare(`INSERT INTO "user" ("id", "name", "email", "emailVerified", "createdAt",
+        "updatedAt") VALUES ('webhook-user', 'Nome', 'webhook@example.invalid', 1, ?1, ?1)`).bind(
+      grantedAt,
+    ),
+    env.DB.prepare(`INSERT INTO workspace_members (workspace_id, user_id, role)
+      VALUES ('webhook-workspace', 'webhook-user', 'owner')`),
+    env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)
+      VALUES ('webhook-premium', 'webhook-workspace', 'admin', ?, '2026-12-31T00:00:00.000Z')`).bind(
+      grantedAt,
+    ),
+    env.DB.prepare(`INSERT INTO telegram_links (workspace_id, id, chat_id, language, linked_at)
+      VALUES ('webhook-workspace', 'webhook-link', '601', 'it', ?)`).bind(grantedAt),
+    env.DB.prepare(`INSERT INTO telegram_preferences (workspace_id, filter, updated_at)
+      VALUES ('webhook-workspace', 'all', ?)`).bind(grantedAt),
+    env.DB.prepare(`INSERT INTO sync_state (store_id, history_from, history_until, updated_at)
+      VALUES ('webhook-store', ?1, ?1, ?1)`).bind(grantedAt),
+  ]);
+  const api = fakeBot();
+  const providers: typeof fetch = (input, init) =>
+    String(input).startsWith("https://api.telegram.org/")
+      ? api.fetcher(input, init)
+      : fetcher(input, init);
+  await receive();
+  const work = batch({ receiptId: (await receipt())!.id });
+  await consumeWebhooks(work.value, environment, providers, now);
+  expect(work.message.ack).toHaveBeenCalledOnce();
+  expect(api.texts().map((call) => String(call.params.text))).toEqual([
+    expect.stringContaining(order.orderId),
+  ]);
 });
 
 it.each(["pause", "disconnect", "reconnect", "erase", "expired"])(

@@ -390,7 +390,12 @@ for (const language of ["it", "en"] as const) {
         // Il contatto è `info@`, non l'assistenza clienti.
         await expect(main.getByRole("link", { name: /^info@/u }).first()).toBeVisible();
         await expect(main.getByRole("link", { name: /^supporto@/u })).toHaveCount(0);
-        await expect(main).toContainText(language === "it" ? "29 ottobre 2026" : "29 October 2026");
+        // La data in vigore cambia a ogni nuovo testo: conta che la versione sia mostrata.
+        await expect(main).toContainText(
+          language === "it"
+            ? /Versione del \d{1,2} \p{L}+ \d{4}/u
+            : /Version of \d{1,2} \p{L}+ \d{4}/u,
+        );
         // Il testo completo, con la tabella dei trattamenti nella Privacy.
         await expect(main.getByRole("heading", { level: 2 }).first()).toBeVisible();
         // Sotto i 640 px la tabella dei trattamenti diventa un elenco di schede.

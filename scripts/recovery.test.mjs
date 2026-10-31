@@ -101,7 +101,9 @@ function scenario() {
     INSERT INTO telegram_links (workspace_id, id, chat_id, language, linked_at)
       VALUES ('w-keep', 'l-old', 'chat-old', 'it', '${before}');
     INSERT INTO telegram_preferences (workspace_id, enabled, updated_at)
-      VALUES ('w-keep', 1, '${before}');`);
+      VALUES ('w-keep', 1, '${before}');
+    INSERT INTO admin_agent_tokens (token_hash, label, created_at)
+      VALUES ('${"a".repeat(64)}', 'Agente', '${before}');`);
   const snapshot = path.join(directory, `snapshot-${Math.random().toString(36).slice(2)}.sqlite`);
   db.exec(`VACUUM INTO '${snapshot}'`);
   // Dopo il punto: cancellazioni, revoche, una password cambiata e righe nuove.
@@ -116,6 +118,7 @@ function scenario() {
     INSERT INTO deleted_order_keys (store_id, kind, external_key, deleted_at)
       VALUES ('st-keep', 'order', '12-00000-00001', '${later}');
     UPDATE workspace_entitlements SET revoked_at = '${later}' WHERE id = 'e-keep';
+    UPDATE admin_agent_tokens SET revoked_at = '${later}';
     UPDATE ebay_stores SET data_deleted_at = '${later}', store_name = NULL,
       orders_deleted_through = '${later}' WHERE id IN ('st-keep', 'st-back');
     UPDATE ebay_stores SET data_deleted_at = NULL WHERE id = 'st-back';
@@ -168,7 +171,11 @@ describe("ripristino senza dati o diritti revocati", () => {
       workspace_members: 1,
       workspaces: 1,
     });
-    assert.equal(result.stamps, 6);
+    assert.equal(result.stamps, 7);
+    // Il token tecnico revocato dalla console non riapre l'accesso.
+    assert.deepEqual(rows(restored, "SELECT revoked_at FROM admin_agent_tokens"), [
+      { revoked_at: later },
+    ]);
     assert.deepEqual(rows(restored, "SELECT rejected_at FROM ebay_store_credentials"), [
       { rejected_at: later },
     ]);
@@ -323,7 +330,7 @@ describe("ripristino senza dati o diritti revocati", () => {
     assert.equal(result.checks.passwords, undefined);
     // Un ruolo revocato tornato o una revoca persa restano difetti anche dopo.
     restored.exec(`UPDATE "user" SET "admin" = 1 WHERE "id" = 'u-keep';
-      UPDATE workspaces SET trial_used_at = NULL`);
+      UPDATE admin_agent_tokens SET revoked_at = NULL`);
     assert.deepEqual((await reconciled(restored)).failed, ["stamps", "admins"]);
   });
 

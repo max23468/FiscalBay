@@ -2,6 +2,12 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio.
 
+## [2.0.0-rc.11]
+
+- La notifica Telegram di un nuovo ordine arrivato con l'avviso eBay parte subito, insieme alla lettura dell'ordine, invece che con il controllo successivo dei dieci minuti.
+- Sito: le pagine pubbliche contano visite e tempi di caricamento con Cloudflare Web Analytics, senza cookie, quando l'ambiente ha il suo token; accesso, app e console restano fuori. La Privacy descrive le statistiche e i cookie tecnici che ricordano una scelta.
+- Sul solo ambiente di test l'accesso invia i suoi eventi alla dashboard di Better Auth; la Production resta senza.
+
 ## [2.0.0-rc.10]
 
 - Registrazione: «Registrati come» al posto di «Ti registri come» e consenso a novità e offerte senza ripetizioni («Ricevi novità e offerte via email»). Il testo del consenso cambia, quindi cambia la versione registrata con la scelta.

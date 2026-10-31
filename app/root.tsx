@@ -36,12 +36,24 @@ export const links: Route.LinksFunction = () => [
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
 ];
 
+// Facoltativo: dichiararlo con `bindings.secret()` lo renderebbe obbligatorio in ogni ambiente.
+declare global {
+  namespace Cloudflare {
+    interface Env {
+      WEB_ANALYTICS_TOKEN?: string;
+    }
+  }
+}
+
 export function loader({ request }: Route.LoaderArgs) {
   return {
     language: languageFromPath(new URL(request.url).pathname),
     correlationId: correlationId(request),
     // Chiave pubblica del widget Turnstile dell'ambiente, per i moduli che la usano.
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
+    // Token pubblico del sito Web Analytics dell'ambiente; senza, le pagine pubbliche non
+    // caricano il beacon, come in locale e nelle prove.
+    webAnalyticsToken: env.WEB_ANALYTICS_TOKEN ?? null,
   };
 }
 

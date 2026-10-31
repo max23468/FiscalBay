@@ -23,7 +23,7 @@ import { needsDeploy, plan } from "../classify-changes.mjs";
 import { addedMigrations, candidateVersion, reviewAdded } from "./release.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
 import { lastDeployRun } from "../find-deployed.mjs";
-import { gh, ghJson } from "../lib/provider.mjs";
+import { gh, ghJson, runJobs } from "../lib/provider.mjs";
 
 // Diff e cronologie grandi superano il MiB predefinito di execFileSync.
 const execute = (command, args, options = {}) =>
@@ -410,9 +410,6 @@ export async function settleMergeRun(merge, deployRequired, io) {
   return { run, jobs, deployRequired: required };
 }
 
-const runJobs = (repository, id) =>
-  ghJson("api", `repos/${repository}/actions/runs/${id}/jobs?per_page=100`).jobs;
-
 export function assertPublishedRelease(release, tagSha, sha, version) {
   if (release.isDraft || release.tagName !== `v${version}` || tagSha !== sha || !release.url)
     throw new Error("Tag o release non confermati sul candidato.");
@@ -496,10 +493,7 @@ function candidateAvailable(repository, tree) {
     )
       continue;
     const run = ghJson("api", `repos/${repository}/actions/runs/${origin.id}`);
-    const jobs = ghJson(
-      "api",
-      `repos/${repository}/actions/runs/${origin.id}/jobs?per_page=100`,
-    ).jobs;
+    const jobs = runJobs(repository, origin.id);
     if (verifiedBuildOrigin(artifact, run, jobs, repositoryId, "candidate")) return true;
   }
   return false;
@@ -508,15 +502,8 @@ function candidateAvailable(repository, tree) {
 function summary(repository, runId) {
   const run = ghJson("api", `repos/${repository}/actions/runs/${runId}`);
   const jobs = [];
-  for (let attempt = 1; attempt <= run.run_attempt; attempt++) {
-    const pages = ghJson(
-      "api",
-      "--paginate",
-      "--slurp",
-      `repos/${repository}/actions/runs/${runId}/attempts/${attempt}/jobs?per_page=100`,
-    );
-    jobs.push(...pages.flatMap((page) => page.jobs));
-  }
+  for (let attempt = 1; attempt <= run.run_attempt; attempt++)
+    jobs.push(...runJobs(repository, runId, attempt));
   console.log(
     JSON.stringify({ run: run.html_url, conclusion: run.conclusion, ...runTimings(run, jobs) }),
   );

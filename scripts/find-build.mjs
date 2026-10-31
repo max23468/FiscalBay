@@ -4,7 +4,7 @@ import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
-import { ghJson } from "./lib/provider.mjs";
+import { ghJson, runJobs } from "./lib/provider.mjs";
 
 export function verifiedBuildOrigin(candidate, run, jobs, repositoryId, kind = "build") {
   const origin = candidate.workflow_run;
@@ -44,10 +44,7 @@ function main() {
     )
       continue;
     const run = api(`repos/${repository}/actions/runs/${origin.id}`);
-    const jobs =
-      kind === "candidate"
-        ? api(`repos/${repository}/actions/runs/${origin.id}/jobs?per_page=100`).jobs
-        : [];
+    const jobs = kind === "candidate" ? runJobs(repository, origin.id) : [];
     if (!verifiedBuildOrigin(candidate, run, jobs, repositoryId, kind)) continue;
     appendFileSync(process.env.GITHUB_OUTPUT, `run-id=${origin.id}\nartifact=${artifact}\n`);
     console.log(`Tree ${tree}: riuso ${kind} dalla run ${origin.id}.`);
