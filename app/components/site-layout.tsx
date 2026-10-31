@@ -1,4 +1,5 @@
 import { cn } from "cn";
+import { useRouteLoaderData } from "react-router";
 
 import { useCopy } from "~/components/copy-context";
 import { LanguageSwitch } from "~/components/language-switch";
@@ -15,6 +16,7 @@ import {
   visitParam,
 } from "../app-links";
 import { localizedPath } from "../i18n";
+import { webAnalyticsBeacon, webAnalyticsScript } from "../web-analytics";
 
 const navItems = [
   { path: featuresPath, key: "features" },
@@ -105,11 +107,15 @@ export function SiteLayout({
   signedIn: boolean;
   children: React.ReactNode;
 }) {
+  const token = useRouteLoaderData<{ webAnalyticsToken: string | null }>("root")?.webAnalyticsToken;
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader path={path} signedIn={signedIn} />
       <main className="flex-1">{children}</main>
       <SiteFooter />
+      {token ? (
+        <script defer src={webAnalyticsScript} data-cf-beacon={webAnalyticsBeacon(token)} />
+      ) : null}
     </div>
   );
 }

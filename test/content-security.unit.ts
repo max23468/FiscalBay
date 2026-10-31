@@ -8,7 +8,7 @@ describe("CSP dei documenti", () => {
     for (const nonce of nonces) expect(atob(nonce)).toHaveLength(16);
   });
 
-  it("ammette solo script dell'origine, con il nonce o di Turnstile e nessuna inclusione in frame", () => {
+  it("ammette solo script dell'origine, con il nonce, di Turnstile o del beacon Web Analytics e nessuna inclusione in frame", () => {
     const directives = new Map(
       contentSecurityPolicy("bm9uY2U=")
         .split("; ")
@@ -21,6 +21,7 @@ describe("CSP dei documenti", () => {
       "'self'",
       "'nonce-bm9uY2U='",
       "https://challenges.cloudflare.com",
+      "https://static.cloudflareinsights.com/beacon.min.js",
     ]);
     // Il solo frame ammesso è il widget Turnstile.
     expect(directives.get("frame-src")).toEqual(["https://challenges.cloudflare.com"]);

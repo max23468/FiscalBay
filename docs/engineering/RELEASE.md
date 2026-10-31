@@ -358,6 +358,17 @@ Registrazione con password, recupero della password, nuovo link di conferma e as
 
 In locale, nei test e nell'anteprima della build valgono le chiavi di prova di Cloudflare, che accettano sempre: Siteverify ne marca l'esito, che l'app accetta soltanto fuori dai domini HTTPS. Sui domini dell'ambiente quell'esito vale come indisponibilità e rifiuta l'invio.
 
+<a id="statistiche-sito"></a>
+## Statistiche del sito e Search Console
+
+Le pagine pubbliche caricano il beacon di Cloudflare Web Analytics soltanto se il Worker ha il segreto facoltativo `WEB_ANALYTICS_TOKEN` ([D241](../DECISION_REGISTER.md)); l'area dell'account, la console e l'anteprima non lo caricano mai. Il token è pubblico, ma nasce con il sito Web Analytics e si imposta come segreto per non renderlo obbligatorio in locale e nelle prove.
+
+1. Nella dashboard, Web Analytics, aggiungere un sito per ambiente, `test.fiscalbay.it` e `fiscalbay.it`, con l'installazione manuale del codice: l'inserimento automatico va lasciato spento, perché il Worker sceglie le pagine e la CSP ammette soltanto lo script del beacon. Il token della CLI di progetto non ha il permesso Web Analytics, quindi il sito si crea dall'owner o con un token che lo abbia.
+2. `pnpm exec cf workers secrets update` imposta `WEB_ANALYTICS_TOKEN` sul Worker dell'ambiente, con le stesse cautele dei segreti Turnstile.
+3. Readback: una pagina pubblica contiene lo script `https://static.cloudflareinsights.com/beacon.min.js` con `"spa":false`, `/app` e `/accesso` no; la richiesta a `/cdn-cgi/rum` dello stesso dominio riesce e la visita compare nella dashboard dell'ambiente. La CSP ammette lo script soltanto in `script-src`; i dati arrivano all'origine, già ammessa da `connect-src`.
+
+Search Console si verifica sul dominio `fiscalbay.it` con il record TXT proposto da Google, aggiunto nella zona come gli altri record di §24, e riceve `https://fiscalbay.it/sitemap.xml`. Non aggiunge nulla alle pagine.
+
 <a id="metriche-release"></a>
 ## Confronto delle metriche fra release test
 
