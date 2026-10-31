@@ -1,3 +1,4 @@
+import { dash } from "@better-auth/infra";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
 import {
@@ -22,6 +23,17 @@ import { maxPasswordLength, minPasswordLength } from "./limits";
 import { emailVerificationSeconds } from "./domain/email-change.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
+
+// Chiave facoltativa del progetto su dash.better-auth.com, impostata soltanto sul Worker test:
+// senza, il plugin non viene caricato. Dichiararla con `bindings.secret()` la renderebbe
+// obbligatoria anche in Production.
+declare global {
+  namespace Cloudflare {
+    interface Env {
+      BETTER_AUTH_API_KEY?: string;
+    }
+  }
+}
 
 // Con `commerce.identity.readonly` eBay restituisce l'email soltanto per gli account business.
 const ebayIdentitySchema = z.object({
@@ -306,6 +318,7 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
       },
     },
     plugins: [
+      ...(env.BETTER_AUTH_API_KEY ? [dash({ apiKey: env.BETTER_AUTH_API_KEY })] : []),
       passkey({
         origin: appOrigin.origin,
         rpID: appOrigin.hostname,
