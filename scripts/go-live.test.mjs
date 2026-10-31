@@ -89,6 +89,9 @@ describe("ambiente", () => {
       "fiscalbay-sandbox",
     ]);
     assert.ok(scriptSteps(live).every(({ phase }) => ["prima", "dopo"].includes(phase)));
+    // Prima del deploy la pagina provvisoria non ha Logpush: l'archivio si rilegge dopo.
+    const archive = scriptSteps(live).find(({ args }) => args[0] === "scripts/log-archive.mjs");
+    assert.equal(archive.phase, "dopo");
   });
 });
 

@@ -5,10 +5,10 @@
  * all'owner o a un'osservazione successiva.
  *
  * Due fasi. `prima` vale prima di `Promuovi`: Worker e dominio, segreti dichiarati, D1, code,
- * bucket dei file, widget Turnstile, registro delle scadenze, account Stripe e archivio dei log.
+ * bucket dei file, widget Turnstile, registro delle scadenze e account Stripe.
  * `dopo` vale dopo il deploy e prima di aprire le iscrizioni: superficie pubblica (robots,
  * sitemap, pagine indicizzabili e `noindex`), consumer della coda, protezioni della zona sulle
- * risposte reali, sottoscrizioni eBay, bot Telegram e promozione. Sul test le due fasi si
+ * risposte reali, archivio dei log, sottoscrizioni eBay, bot Telegram e promozione. Sul test le due fasi si
  * rileggono insieme, perché il Worker è già distribuito.
  *
  * Il resoconto riporta soltanto nomi ed esiti, mai valori di segreti o dati degli utenti. Esce
@@ -73,7 +73,8 @@ export function scriptSteps(target) {
       ],
     },
     {
-      phase: "prima",
+      // Il readback richiede anche il Worker con Logpush, che arriva con il deploy.
+      phase: "dopo",
       area: "Alert",
       item: "archivio dei log a 90 giorni e job Logpush",
       args: ["scripts/log-archive.mjs", "readback", ...mode],
@@ -134,12 +135,7 @@ export const ownerItems = [
   {
     phase: "prima",
     area: "eBay",
-    item: "RuName Production con nome, privacy, termini e logo di fiscalbay.it; scelta del keyset per il login eBay del test",
-  },
-  {
-    phase: "prima",
-    area: "Dati",
-    item: "utenti e dati reali di prova eliminati dalla D1 di test",
+    item: "RuName Production con nome, privacy, URL di ritorno e logo di fiscalbay.it e OAuth attivo",
   },
   {
     phase: "dopo",
