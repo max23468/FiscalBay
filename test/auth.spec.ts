@@ -261,6 +261,15 @@ describe("Better Auth su Workers e D1", () => {
     expect(createAuth({ ...env } as Env)).not.toBe(createAuth(env));
   });
 
+  it("collega la dashboard gestita solo con la chiave del progetto", () => {
+    const ids = (options: ReturnType<typeof createAuthOptions>) =>
+      options.plugins?.map((plugin) => plugin.id);
+    expect(ids(createAuthOptions(env))).not.toEqual(expect.arrayContaining(["dash"]));
+    expect(ids(createAuthOptions({ ...env, BETTER_AUTH_API_KEY: "chiave-di-prova" }))).toEqual(
+      expect.arrayContaining(["dash", "durable-background"]),
+    );
+  });
+
   it("usa mittente e Reply-To previsti per verifica e reset", async () => {
     const send = emailSender();
     const options = createAuthOptions(mailEnv(send));
