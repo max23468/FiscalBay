@@ -1,5 +1,5 @@
 import { data } from "react-router";
-import { Megaphone, Sparkles } from "lucide-react";
+import { Megaphone, Sparkles, TrendingUp, Wrench } from "lucide-react";
 
 import { IconTile, PageTitle } from "~/components/icon-tile";
 import { NotFoundState } from "~/components/not-found";
@@ -9,8 +9,18 @@ import { areaPage, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { formatDate } from "../format";
 import { languageFromPath } from "../i18n";
+import { whatsNewKinds, type WhatsNewKind } from "../changelog";
+import type { TileTone } from "~/components/tile-tone";
 import { whatsNewView } from "../whats-new.server";
 import type { Route } from "./+types/whats-new";
+
+const kinds = Object.keys(whatsNewKinds) as WhatsNewKind[];
+
+const kindStyles: Record<WhatsNewKind, { Icon: typeof Sparkles; tone: TileTone }> = {
+  features: { Icon: Sparkles, tone: "blue" },
+  improvements: { Icon: TrendingUp, tone: "green" },
+  fixes: { Icon: Wrench, tone: "amber" },
+};
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
@@ -58,15 +68,36 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
               </time>
             )}
           </header>
-          <ul className="grid gap-5">
-            {release.items.map((item) => (
-              <li key={item.title} className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                <IconTile icon={Sparkles} tone="blue" size="sm" className="row-span-2" />
-                <h3 className="self-center font-medium">{item.title}</h3>
-                <p className="leading-relaxed text-pretty text-muted-foreground">{item.body}</p>
-              </li>
-            ))}
-          </ul>
+          {kinds.flatMap((kind) => {
+            const items = release.items.filter((item) => item.kind === kind);
+            if (items.length === 0) return [];
+            const { Icon, tone } = kindStyles[kind];
+            return [
+              <section
+                key={kind}
+                aria-labelledby={`release-${release.version}-${kind}`}
+                className="grid gap-4"
+              >
+                <h3
+                  id={`release-${release.version}-${kind}`}
+                  className="flex items-center gap-2 text-sm font-semibold"
+                >
+                  <IconTile icon={Icon} tone={tone} size="sm" />
+                  {whatsNewKinds[kind][language]}
+                </h3>
+                <ul className="grid gap-4 border-l-2 pl-4 ml-3.5">
+                  {items.map((item) => (
+                    <li key={item.title} className="grid gap-1">
+                      <h4 className="font-medium">{item.title}</h4>
+                      <p className="leading-relaxed text-pretty text-muted-foreground">
+                        {item.body}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </section>,
+            ];
+          })}
         </section>
       ))}
     </div>

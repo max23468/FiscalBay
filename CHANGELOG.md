@@ -6,9 +6,13 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 ### Novità
 
+#### Correzioni
+
 - **Totale degli ordini letti da eBay Trading.** Il totale non comprende più la tariffa di protezione acquisti che l'acquirente paga a eBay, attiva in Italia per gli acquisti da venditori privati: prima Ordini ed Esportazione potevano mostrare un importo che non incassi.
 
 ### What's new
+
+#### Fixes
 
 - **Totals of orders read from eBay Trading.** The total no longer includes the buyer protection fee the buyer pays to eBay, active in Italy for purchases from private sellers: Orders and Export could previously show an amount you do not receive.
 

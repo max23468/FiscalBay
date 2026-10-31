@@ -5,14 +5,14 @@ import { appCopy } from "./app-copy";
 import { isProduction } from "./app-links";
 import { notificationWindowMilliseconds } from "./domain/notification-reads.server";
 import type { Language } from "./i18n";
-import { parseChangelog, type WhatsNewRelease } from "./changelog";
+import { parseChangelog, type WhatsNewKind, type WhatsNewRelease } from "./changelog";
 import type { NotificationView } from "./view-models";
 
 export interface WhatsNewView {
   version: string;
   /** `null` per la versione in preparazione, mostrata soltanto fuori da Production. */
   date: string | null;
-  items: Array<{ title: string; body: string }>;
+  items: Array<{ kind: WhatsNewKind; title: string; body: string }>;
 }
 
 /** Ambiente servito: Production e istante del deploy della versione del Worker. */
@@ -52,7 +52,7 @@ export function whatsNewView(
     .map((release) => ({
       version: release.version,
       date: release.date,
-      items: release.items.map((item) => item[language]),
+      items: release.items.map((item) => ({ kind: item.kind, ...item[language] })),
     }));
 }
 
