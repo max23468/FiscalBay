@@ -99,6 +99,7 @@ export const it = {
     whatsNew: "Novità",
     whatsNewTitle: "Novità di FiscalBay",
     whatsNewUpcoming: "In preparazione",
+    whatsNewVersion: (version: string) => `Versione ${version}`,
     signOut: "Esci",
     close: "Chiudi",
   },

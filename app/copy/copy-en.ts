@@ -86,6 +86,7 @@ export const en: AppCopy = {
     whatsNew: "What’s new",
     whatsNewTitle: "What’s new in FiscalBay",
     whatsNewUpcoming: "Upcoming",
+    whatsNewVersion: (version: string) => `Version ${version}`,
     signOut: "Sign out",
     close: "Close",
   },
