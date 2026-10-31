@@ -470,10 +470,10 @@ async function commercePanel(env: Env, fetcher: typeof fetch, now: Date): Promis
         rows: promotions.length
           ? capped(
               promotions.map((promotion) => [
-                Date.parse(promotion.endsAt) <= now.getTime() ? "⚪" : "🟢",
+                promotion.endsAt && Date.parse(promotion.endsAt) <= now.getTime() ? "⚪" : "🟢",
                 copy.commerce.promotion(
                   at(promotion.startsAt),
-                  at(promotion.endsAt),
+                  promotion.endsAt ? at(promotion.endsAt) : null,
                   promotion.quota,
                 ),
               ]),

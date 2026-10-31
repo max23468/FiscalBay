@@ -1,3 +1,5 @@
+import type Stripe from "stripe";
+
 import type { Language } from "./i18n";
 
 /** Modalità commerciali dell'unico livello Premium. */
@@ -50,6 +52,44 @@ export const priceGeneration = {
   id: "2026-09",
   net: { monthly: 490, annual: 4900, lifetime: 14900 },
 } as const satisfies { id: string; net: Record<PremiumOffer, number> };
+
+/** Sblocchi di un ciclo Free fuori dalle promozioni, finché la console non ne fissa un'altra. */
+export const baseFreeQuota = 5;
+
+/**
+ * Fine registrata di una promozione del Free senza data: dura finché la console non la termina.
+ * Il database vuole una fine, quindi la promozione aperta ne ha una che nessun ciclo raggiunge;
+ * chi la legge la riporta come assente.
+ */
+export const openPromotionEnd = "9999-12-31T23:59:59.999Z";
+
+/**
+ * Venti posti lifetime fra vendite e omaggi (D031). Il numero del posto è il vincolo atomico
+ * del tetto: una prenotazione occupa il posto più basso libero prima del Checkout, la conferma
+ * verificata di Stripe lo rende attivo e soltanto una sessione che non può più incassare lo
+ * libera. Un posto attivo, anche rimborsato o di un account cancellato, non torna disponibile.
+ */
+export const lifetimeSlots = 20;
+
+/** Periodicità del prezzo di un elemento dell'abbonamento; null per un prezzo non ricorrente. */
+function itemOffer(item: Stripe.SubscriptionItem): "monthly" | "annual" | null {
+  const interval = item.price.recurring?.interval;
+  return interval === "year" ? "annual" : interval === "month" ? "monthly" : null;
+}
+
+/**
+ * Periodicità del periodo pagato e del prossimo rinnovo. Il prezzo dell'abbonamento è quello
+ * del rinnovo; finché il periodo pagato non è concluso (`trialing`, per un acquisto durante la
+ * prova o un cambio programmato) vale quella dei metadati, scritta all'acquisto e al cambio.
+ */
+export function subscriptionOffers(subscription: Stripe.Subscription, metadataOffer: string) {
+  const item = subscription.items.data[0];
+  const renewal = (item && itemOffer(item)) ?? (metadataOffer as "monthly" | "annual");
+  return {
+    offer: subscription.status === "trialing" ? (metadataOffer as "monthly" | "annual") : renewal,
+    renewal,
+  };
+}
 
 /** Variabile del Worker con il prezzo Stripe di ogni offerta. */
 export const priceVariable = {

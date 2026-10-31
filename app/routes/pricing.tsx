@@ -19,9 +19,9 @@ import {
 import { appCopy } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
 import { accessPath, planPath, pricingPath, visitParam } from "../app-links";
-import { annualPaidMonths, premiumOffers } from "../catalog";
+import { annualPaidMonths, lifetimeSlots, premiumOffers } from "../catalog";
 import { freeQuotaSettings } from "../domain/grants.server";
-import { lifetimeSlots, lifetimeSlotsLeft } from "../domain/lifetime.server";
+import { lifetimeSlotsLeft } from "../domain/lifetime.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { areaPage } from "../account-area.server";
 import { publicPage, siteListing } from "../site.server";
@@ -91,7 +91,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       description: t.description,
       lead: t.lead,
       promotion: freePromotion
-        ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd!, settings.quota)
+        ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd, settings.quota)
         : null,
       free: t.free,
       freePrice: t.freePrice,

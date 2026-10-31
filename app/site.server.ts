@@ -39,7 +39,7 @@ export async function publicPage(request: Request) {
 
 /**
  * Listino delle pagine pubbliche (§23), lo stesso per Home e Prezzi: ogni prezzo netto con il
- * totale con l'IVA italiana al 22%, la promozione Free in corso con il solo giorno di fine e gli
+ * totale con l'IVA italiana al 22%, la promozione Free in corso con il solo giorno di fine, se c'è, e gli
  * acquisti con le prove aperti o sospesi dalla console. Tutto si legge a ogni richiesta: senza il
  * database la pagina risponde 503 (`areaPage`), senza promettere prova, quota o posti.
  */
@@ -61,6 +61,6 @@ export async function siteListing(language: Language) {
     purchasesOpen: Boolean(admission?.open),
     prices,
     freePromotion,
-    promotionEnd: freePromotion ? formatDate(freePromotion.endsAt, language, "date") : null,
+    promotionEnd: freePromotion?.endsAt ? formatDate(freePromotion.endsAt, language, "date") : null,
   };
 }

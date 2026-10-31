@@ -1,9 +1,9 @@
 import { appCopy, type AppCopy } from "../app-copy";
-import { priceGeneration, type LifetimeOffer } from "../catalog";
+import { lifetimeSlots, priceGeneration, type LifetimeOffer } from "../catalog";
 import { contactsView } from "../contact";
 import { planDiagnostics } from "../support";
 import { trialDays } from "../domain/grants.server";
-import { lifetimeOfferState, lifetimeSlots, unusedCredit } from "../domain/lifetime.server";
+import { lifetimeOfferState, unusedCredit } from "../domain/lifetime.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
 import type { Language } from "../i18n";
 import { formatDate } from "../format";

@@ -10,7 +10,7 @@ type CommerceData = Extract<SectionData, { section: "commerciale" }>;
 function Promotions({ promotions, now }: { promotions: CommerceData["promotions"]; now: string }) {
   const { t, date } = useAdmin();
   const c = t.commerce;
-  const fields = (id?: string, startsAt?: string, endsAt?: string, quota?: number) => (
+  const fields = (id?: string, startsAt?: string, endsAt?: string | null, quota?: number) => (
     <div className="grid gap-3 sm:grid-cols-3">
       <TextField
         label={c.startsAt}
@@ -19,11 +19,11 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
         required
         defaultValue={localValue(startsAt ?? null)}
       />
+      {/* Vuota: la promozione dura finché non si termina. */}
       <TextField
         label={c.endsAt}
         name="fine"
         type="datetime-local"
-        required
         defaultValue={localValue(endsAt ?? null)}
       />
       <TextField
@@ -42,11 +42,12 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
     <Panel title={c.promotions}>
       <ul className="grid gap-3">
         {promotions.map((promotion) => {
-          const ended = Date.parse(promotion.endsAt) <= Date.parse(now);
+          const ended = !!promotion.endsAt && Date.parse(promotion.endsAt) <= Date.parse(now);
           return (
             <li key={promotion.id} className="grid gap-3 rounded-lg border p-3">
               <p className="text-sm font-medium">
-                {date(promotion.startsAt)} – {date(promotion.endsAt)} · {promotion.quota}
+                {date(promotion.startsAt)} – {promotion.endsAt ? date(promotion.endsAt) : c.noEnd} ·{" "}
+                {promotion.quota}
               </p>
               {ended ? null : (
                 <div className="grid gap-2">

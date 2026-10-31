@@ -13,6 +13,7 @@ import { listAnomalies, receiptStates, taskStates } from "../app/domain/admin-op
 import {
   endPromotion,
   lifetimeSeats,
+  listPromotions,
   savePromotion,
   scheduleFreeQuota,
 } from "../app/domain/admin-commerce.server";
@@ -581,6 +582,48 @@ describe("configurazioni commerciali", () => {
       n: 1,
     });
     expect(await endPromotion(env.DB, id, ending)).toBe("not_found");
+  });
+
+  it("tiene una promozione senza fine finché non si termina, con la quota nei cicli", async () => {
+    const promotion = { startsAt: later(hour), endsAt: null, quota: 10 };
+    expect(await savePromotion(env.DB, { promotion }, at(now))).toBe("done");
+    const [saved] = await listPromotions(env.DB, at(now));
+    expect(saved).toMatchObject({ startsAt: later(hour), endsAt: null, quota: 10 });
+    // Un'altra promozione successiva si sovrappone a quella aperta.
+    expect(
+      await savePromotion(
+        env.DB,
+        { promotion: { startsAt: later(400 * 24 * hour), endsAt: null, quota: 8 } },
+        at(now),
+      ),
+    ).toBe("overlap");
+    // Iniziata, riceve una fine; senza fine si riapre.
+    const running = at(later(2 * hour));
+    const withEnd = { ...promotion, endsAt: later(48 * hour) };
+    expect(await savePromotion(env.DB, { id: saved!.id, promotion: withEnd }, running)).toBe(
+      "done",
+    );
+    expect((await listPromotions(env.DB, running))[0]!.endsAt).toBe(later(48 * hour));
+    const reopened = at(later(150 * 60_000));
+    expect(await savePromotion(env.DB, { id: saved!.id, promotion }, reopened)).toBe("done");
+    expect((await listPromotions(env.DB, reopened))[0]!.endsAt).toBeNull();
+    const ending = at(later(3 * hour));
+    expect(await endPromotion(env.DB, saved!.id, ending)).toBe("done");
+    expect((await listPromotions(env.DB, ending))[0]!.endsAt).toBe(ending.toISOString());
+  });
+
+  it("legge dal modulo della console una fine vuota come promozione senza fine", async () => {
+    const { cookie } = await admin();
+    const fields = { intent: "save-promotion", inizio: "2099-01-01T10:00", quota: "10" };
+    expect(await act(cookie, { ...fields, fine: "domani", motivo: "Lancio" })).toMatchObject({
+      status: 400,
+    });
+    expect(await act(cookie, { ...fields, fine: "", motivo: "Lancio" })).toMatchObject({
+      ok: true,
+    });
+    expect(await listPromotions(env.DB)).toMatchObject([
+      { startsAt: "2099-01-01T09:00:00.000Z", endsAt: null, quota: 10 },
+    ]);
   });
 
   it("conta i posti lifetime e riconcede il lifetime rimborsato sullo stesso posto", async () => {

@@ -97,7 +97,7 @@ Prima di chiedere un input controllare checkout, tool autorizzati e inventario p
 | IN-15 | Budget/prove a pagamento e piani iniziali | Proposta con costi in M0; autorizzazione prima di sostenere la spesa, scelta finale al checkpoint | Eseguire prove gratuite possibili; nessuna spesa retroattivamente autorizzata. |
 | IN-16 | Asset originali e scelte visuali approvate | Già nello ZIP: manifest e quattro PNG; rifiniture logo/prototipo M1 sottoposte all'owner | Verificare checksum, non sostituire con immagini omonime rigenerate. |
 | IN-17 | Merchant di fiducia, consenso al test e dati/ambiente | Acquisizione nel checkpoint M8, non requisito per partire con M0 | Test automatici proseguibili; test reale non inventato. |
-| IN-18 | Date promozione globale e configurazione finale | Owner nella milestone finale, inizio/fine e cicli già avviati coerenti | Nessuna data fittizia o countdown pubblico; go-live commerciale in attesa. |
+| IN-18 | Chiusura della promozione globale | Owner, quando decide di chiuderla: la promozione parte al go-live senza fine (D239) | Nessuna data fittizia o countdown pubblico; la fine si programma soltanto su sua indicazione. |
 | IN-19 | Custodia delle chiavi e percorso di recupero nativo | Assetto selezionato M0 e readiness M7, accesso privato realmente disponibile | Gate recovery aperto; non introdurre automaticamente backup esterni o test periodici. |
 
 Nel contesto privato segnare disponibilità, owner, fonte e blocco; nelle questioni aperte del piano soltanto il nome logico e la capacità dipendente. IN-17/18 non bloccano M0. Un token valido non sostituisce la qualifica del contratto. Dove non si può completare una prova, continuare le attività indipendenti e riportare il limite.

@@ -76,8 +76,10 @@ const it = {
     pricingLink: "Vedi i prezzi",
     closing: "Prova FiscalBay con il tuo negozio eBay.",
     freeQuota: (base: number) => `Con il piano Free sblocchi ${base} ordini ogni 7 giorni.`,
-    freePromotion: (quota: number, date: string, base: number) =>
-      `Promozione Free: ${quota} ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il ${date}, poi ${base}.`,
+    freePromotion: (quota: number, date: string | null, base: number) =>
+      date
+        ? `Promozione Free: ${quota} ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il ${date}, poi ${base}.`
+        : `Promozione Free per un periodo limitato: ${quota} ordini da sbloccare ogni 7 giorni invece di ${base}.`,
   },
   features: {
     title: "Funzionalità",
@@ -392,7 +394,9 @@ const en: SitePagesCopy = {
     closing: "Try FiscalBay with your eBay store.",
     freeQuota: (base) => `On the Free plan you unlock ${base} orders every 7 days.`,
     freePromotion: (quota, date, base) =>
-      `Free promotion: ${quota} orders to unlock every 7 days in cycles starting by ${date}, then ${base}.`,
+      date
+        ? `Free promotion: ${quota} orders to unlock every 7 days in cycles starting by ${date}, then ${base}.`
+        : `Free promotion for a limited time: ${quota} orders to unlock every 7 days instead of ${base}.`,
   },
   features: {
     title: "Features",
