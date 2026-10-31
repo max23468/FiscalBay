@@ -1251,6 +1251,18 @@ test.describe("notifiche Telegram", () => {
       }
     });
 
+  test("su desktop «Passa a Premium» da Telegram scorre fino al piano", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 720 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await open(page, "/anteprima/impostazioni/notifiche");
+    await expect(page.locator("#settings-notifiche")).toBeInViewport();
+    // Il primo collegamento al piano è quello della sezione Telegram, in testa alla pagina.
+    await page.getByRole("link", { name: "Passa a Premium", exact: true }).first().click();
+    await expect(page).toHaveURL(/\/anteprima\/impostazioni\/piano$/u);
+    await expect(page.locator("#settings-piano")).toBeInViewport();
+    await expect(page.locator('a[aria-current="true"][href$="/impostazioni/piano"]')).toBeVisible();
+  });
+
   for (const language of ["it", "en"] as const)
     test(`anteprima: Premium senza chat propone il collegamento simulato, ${language}`, async ({
       page,

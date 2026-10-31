@@ -109,8 +109,8 @@ export function accountEmailBody(input: {
         `<p style="margin:0 0 16px;${font};font-size:15px;line-height:1.6;color:#111827">${escapeHtml(paragraph)}</p>`,
     )
     .join("");
-  const html = `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark"><title>${escapeHtml(email.subject)}</title></head>
-<body style="margin:0;padding:0;background:#f4f6fa">
+  const html = `<!doctype html><html lang="${language}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light"><title>${escapeHtml(email.subject)}</title></head>
+<body style="margin:0;padding:0;background:#f4f6fa;color-scheme:light only">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(preview)}${filler}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6fa"><tr><td align="center" style="padding:32px 16px">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:1px solid #e3e8f0;border-radius:12px">
