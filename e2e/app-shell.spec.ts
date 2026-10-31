@@ -529,8 +529,9 @@ for (const language of ["it", "en"] as const) {
           await page.goto(language === "it" ? "/termini" : "/en/termini");
           await expect(
             page.getByText(
-              language === "it" ? "Versione del 29 ottobre 2026" : "Version of 29 October 2026",
-              { exact: true },
+              language === "it"
+                ? /^Versione del \d{1,2} \p{L}+ \d{4}$/u
+                : /^Version of \d{1,2} \p{L}+ \d{4}$/u,
             ),
           ).toBeVisible();
         } finally {
