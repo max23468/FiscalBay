@@ -2,6 +2,22 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio.
 
+## [2.0.0]
+
+Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce la 1.x. Contiene la `2.0.0-rc.12` provata sul test.
+
+- Account con email e password, Google, passkey e accesso con eBay; sessioni revocabili, verifica dell'email e MFA per l'amministrazione.
+- Collegamento dei negozi eBay in sola lettura, con pausa, ricollegamento e scollegamento; i nuovi ordini arrivano con l'avviso di eBay.
+- Ordini importati da eBay con controllo dell'identificativo fiscale, ricerca, filtri, dettaglio e sblocco per ordine entro la quota del piano.
+- Messaggi all'acquirente in italiano e inglese da copiare, con suggerimenti.
+- Esportazione CSV, XLSX e ZIP con file privati a scadenza.
+- Bot Telegram per avvisi e comandi del proprio account, con la notifica di un nuovo ordine appena eBay lo segnala.
+- Piano Free, con la promozione di lancio attiva fino alla sua chiusura, prova e abbonamento Premium con Stripe Managed Payments, lifetime, concessioni e lista d'attesa.
+- Sito pubblico in italiano e inglese, Termini e Privacy, assistenza e cancellazione self-service dell'account.
+- Email leggibili anche nei client in tema scuro.
+- Console di amministrazione con indicatori, metriche tecniche e quote eBay.
+- Protezioni dei moduli, limiti delle richieste, protezioni della zona, log conservati in UE e ripristino dei dati con servizio sospeso.
+
 ## [2.0.0-rc.12]
 
 - Le email di FiscalBay restano leggibili nei client in tema scuro, come Mail di Apple: prima il titolo e il testo principale diventavano scuri su sfondo scuro.
