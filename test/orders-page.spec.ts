@@ -11,6 +11,7 @@ import { listNotifications } from "../app/domain/notifications.server";
 import { markNotificationsRead } from "../app/domain/notification-reads.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
+import versionedChangelog from "../CHANGELOG.md?raw";
 import { parseChangelog } from "../app/changelog";
 import {
   hasWhatsNew,
@@ -105,8 +106,9 @@ describe("pagina Ordini reale", () => {
   it("ricava le Novità dal changelog e le annuncia nella campanella e nel menu, solo se ci sono", async () => {
     // Il changelog versionato è ben formato e porta Novità soltanto dopo la 2.0.0, senza RC.
     expect(whatsNewProblems()).toEqual([]);
-    expect(whatsNew.every(({ version }) => /^\d+\.\d+\.\d+$/u.test(version))).toBe(true);
-    expect(whatsNew.some(({ version }) => version === "2.0.0")).toBe(false);
+    const versioned = parseChangelog(versionedChangelog).releases;
+    expect(versioned.every(({ version }) => /^\d+\.\d+\.\d+$/u.test(version))).toBe(true);
+    expect(versioned.some(({ version }) => version === "2.0.0")).toBe(false);
 
     const changelog = [
       "# Changelog",
@@ -242,7 +244,6 @@ describe("pagina Ordini reale", () => {
     const page = (path: string) => routeResponse(loadWhatsNew, path, { cookie }).catch(() => null);
     const bell = (language: "it" | "en") =>
       listNotifications(env.DB, userId, [], language, "Europe/Rome", at);
-    const saved = whatsNew.splice(0, whatsNew.length);
     try {
       expect((await areaShell(cookie)).whatsNew).toBe(false);
       expect(await page("/app/novita")).toMatchObject({ status: 404 });
@@ -264,7 +265,7 @@ describe("pagina Ordini reale", () => {
         read: true,
       });
     } finally {
-      whatsNew.splice(0, whatsNew.length, ...saved);
+      whatsNew.length = 0;
     }
   });
 
