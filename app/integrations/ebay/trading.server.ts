@@ -182,6 +182,25 @@ function checkoutModified(block: string): string | null {
   return checkout ? xmlField(checkout, "LastModifiedTime") : null;
 }
 
+/**
+ * Quanto l'acquirente paga a eBay anziché al venditore, come la protezione acquisti con la sua
+ * imposta: Trading lo comprende in `Total`, Fulfillment lo tiene fuori dal totale.
+ */
+function ebayCollectedMinor(header: string, currency: string): number {
+  const details = /<MonetaryDetails>([\s\S]*?)<\/MonetaryDetails>/u.exec(header)?.[1] ?? "";
+  let minor = 0;
+  for (const [, payment] of details.matchAll(/<Payment>([\s\S]*?)<\/Payment>/gu)) {
+    const payee = /<Payee\b([^>]*)>([^<]*)<\/Payee>/u.exec(payment!);
+    const type = payee && /\btype="([^"]*)"/u.exec(payee[1]!)?.[1];
+    if (!payee || (type !== "eBayPartner" && xmlText(payee[2]!).toLowerCase() !== "ebay")) continue;
+    const amount = /<PaymentAmount currencyID="([A-Z]{3})">([^<]+)<\/PaymentAmount>/u.exec(
+      payment!,
+    );
+    if (amount?.[1] === currency) minor += parseMinor(amount[2]!, currency);
+  }
+  return minor;
+}
+
 /** Identificativi fiscali del blocco, nell'ordine della fonte; null per uno senza ID o tipo. */
 function taxIdentifierEntries(block: string): Array<TradingTaxIdentifier | null> {
   return [...block.matchAll(/<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu)].map(
@@ -220,6 +239,8 @@ export function parseTradingOrders(xml: string) {
       const status = xmlField(header, "OrderStatus");
       const total = /<Total currencyID="([A-Z]{3})">([^<]+)<\/Total>/u.exec(header);
       if (!id || !status || !total) throw new Error("invalid_order");
+      const totalMinor = parseMinor(total[2]!, total[1]!) - ebayCollectedMinor(header, total[1]!);
+      if (totalMinor < 0) throw new Error("invalid_order");
       const paid = !!xmlField(header, "PaidTime") || status === "Completed";
       const shipping = /<ShippingAddress>([\s\S]*?)<\/ShippingAddress>/u.exec(header)?.[1];
       const items = [...transactions.matchAll(/<Transaction>([\s\S]*?)<\/Transaction>/gu)].map(
@@ -258,7 +279,7 @@ export function parseTradingOrders(xml: string) {
           provisional: !paid,
           creationTime: xmlField(header, "CreatedTime"),
           lastModifiedTime: checkoutModified(header),
-          total: { minor: parseMinor(total[2]!, total[1]!), currency: total[1] },
+          total: { minor: totalMinor, currency: total[1] },
           paymentStatus: paid
             ? "PAID"
             : [
