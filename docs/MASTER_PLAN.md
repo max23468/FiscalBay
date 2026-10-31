@@ -1083,7 +1083,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
 | [M8](#m8) | Completata | RC `2.0.0-rc.7` qualificata e approvabile (D236, D237): test merchant, percorsi reali, verifica browser, correzioni e preflight del restore completati; il drill conclusivo è in [M9-02](#m9-02). |
-| [M9](#m9) | In corso | Configurazione commerciale chiusa e drill di ripristino riuscito sulla `2.0.0-rc.12`. Go-live non autorizzato; resta il gate operatività. |
+| [M9](#m9) | In corso | Configurazione commerciale chiusa e drill di ripristino riuscito sulla `2.0.0-rc.12`. Checklist operativa pronta e superata sul test; il gate operatività attende risorse e segreti Production. Go-live non autorizzato. |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
 
@@ -2037,11 +2037,13 @@ Restore reale isolato sul candidato finale secondo il [drill conclusivo](enginee
 <a id="m9-03"></a>
 #### M9-03 · Checklist pubblica e operativa
 
-**Stato:** Da completare · **Prerequisiti:** M9-01, M9-02 · **Contratto:** [§41](#s41)
+**Stato:** In corso · **Prerequisiti:** M9-01, M9-02 · **Contratto:** [§41](#s41)
 
 Rileggere in una checklist DNS/TLS/www/test, email, Auth, eBay, Telegram, Stripe, SEO, legali, supporto, alert, KPI, quote e rollback.
 
 Includere il readback delle protezioni di §24 e M7-12, con header, compatibilità degli ingressi, report posta e destinatari degli alert; la prova sul test non attesta la configurazione Production.
+
+La [checklist operativa](engineering/RELEASE.md#checklist-operativa) raccoglie risorse, superficie pubblica, readback di area e voci dell'owner in due fasi, prima di `Promuovi` e dopo il deploy. Il 2026-10-31 il test supera tutti i controlli automatici di entrambe le fasi, dopo il completamento del registro delle scadenze. La Production supera Worker sul dominio, D1 e widget Turnstile; mancano i segreti di Stripe, Telegram, Turnstile, notifiche eBay, lettura delle metriche e ammissione, code, bucket dei file e archivio dei log, che nascono nel mandato Production, e il profilo live della CLI di Stripe. L'`email_not_found` di [M9-02](#m9-02) viene da una risposta eBay senza email business, come previsto da [D153](DECISION_REGISTER.md): nessun errore registrato nella lettura dell'identità, e il nuovo accesso con l'account eBay collegato riesce sullo stesso utente.
 
 **Criterio di completamento:** Gate effettivamente superati, zero P1/P2 e go-live pronto per l’owner. Nessun evento o target non verificato indicato come riuscito.
 
