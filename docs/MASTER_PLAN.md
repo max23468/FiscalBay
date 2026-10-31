@@ -1971,9 +1971,11 @@ Il [manifest](engineering/RELEASE.md#test-merchant) approvato fissa candidato, a
 
 **Stato:** Completato · **Prerequisiti:** M8-02 · **Contratto:** [§35](#s35)
 
-Il 2026-10-30, sulla RC `2.0.0-rc.5` con le protezioni della zona attive, password, Google, passkey e Accedi con eBay ritrovano lo stesso utente senza duplicati né negozi collegati dal login (passi 2 e 4 delle [prove eBay](#prove-ebay)); negozio Production ricollegato e letto, bot di test servito. Le sottoscrizioni eBay dell'applicazione ricevono le consegne di prova con 204 e il negozio è sottoscritto a `ORDER_CONFIRMATION` (D235); la prima consegna reale è facoltativa ([D236](DECISION_REGISTER.md)). Ordini, dati fiscali, copia, export, impostazioni e billing sandbox restano coperti dalle prove già registrate ([M3-10](#m3-10), [M5-07](#m5-07), [M8-04](#m8-04)). PR: [#537](https://github.com/max23468/FiscalBay/pull/537), [#538](https://github.com/max23468/FiscalBay/pull/538), [#539](https://github.com/max23468/FiscalBay/pull/539).
+Il 2026-10-30 la RC.5 supera quattro login, collegamento/lettura, bot e consegne eBay di prova (D235, D236). Prove funzionali: [M3-10](#m3-10), [M5-07](#m5-07), [M8-04](#m8-04). PR: [#537](https://github.com/max23468/FiscalBay/pull/537), [#538](https://github.com/max23468/FiscalBay/pull/538), [#539](https://github.com/max23468/FiscalBay/pull/539).
 
-**Limiti residui:** passo 3 nel readback Production, passi 1 e 6 con il keyset in M9, passo 7 aperto senza account individuale; revoca globale coperta da M2 e dalle prove automatiche; secondo account non registrato.
+Il 2026-10-31, Worker `7800ac47`: secondo account verificato, negozio trasferito e letto, Checkout mensile pagato con `livemode=false`, abbonamento attivo e Premium confermati in D1. Safari avvia, Chrome conclude; rilettura nella seconda sessione Safari: Premium mensile, rinnovo il 30 novembre, gestione Stripe disponibile. L'eBay personale autenticato torna con `email_not_found`: D1 senza identità corrispondente né utenti successivi ai tentativi; callback verificato prima della creazione. Email business già registrata confermata dall'owner.
+
+**Limiti residui:** l'owner accetta l'assenza del nuovo collaudo reale dell'avvio volontario ([D253](DECISION_REGISTER.md)): il negozio conserva la prova usata. [Prove eBay](#prove-ebay): passi 1/3/6 in M9; revoca globale coperta da M2/test. Versione e ricevute correnti: [M9-03](#m9-03); la 2.0.0 sostituisce il candidato RC.
 
 <a id="m8-04"></a>
 #### M8-04 · Verifica browser e presentazione
@@ -2029,11 +2031,11 @@ La promozione Free parte al go-live senza fine e si chiude su indicazione dell'o
 
 **Stato:** Completato · **Prerequisiti:** M8-06 · **Contratto:** [§32](#s32) · [§41](#s41)
 
-Restore reale isolato sul candidato finale secondo il [drill conclusivo](engineering/RELEASE.md#drill-di-ripristino). Riuscito il 2026-10-31 sulla `2.0.0-rc.12` (`be5b4a6a`, Worker `3e916331`, [qualifica](https://github.com/max23468/FiscalBay/actions/runs/41226673717)): servizio sospeso 5 minuti, entrambi i `verify` senza difetti, cancellazione, password, notifiche e accessi confermati dall'owner, nessun invio fuori dagli account controllati. Le correzioni emerse nella preparazione sono nelle `2.0.0-rc.11` e `2.0.0-rc.12`; prove e perdita per tabella nella PR.
+Il [drill conclusivo](engineering/RELEASE.md#drill-di-ripristino) è riuscito il 2026-10-31 sulla `2.0.0-rc.12` (`be5b4a6a`, Worker `3e916331`, [qualifica](https://github.com/max23468/FiscalBay/actions/runs/41226673717)): sospensione di 5 minuti, entrambi i `verify` verdi, cancellazione, password, notifiche e accessi confermati dall'owner, nessun invio estraneo. Correzioni nelle RC.11/RC.12; prove e perdita per tabella nella PR.
 
 **Criterio di completamento:** Un’unica prova conclusiva riuscita: dati/grant/config recuperati, post-snapshot riconciliato e accessi/erasure rispettati, outbound isolato. Può richiamare il drill sullo stesso candidato a fine M8; un fallimento blocca Promuovi finché corretto e riprovato.
 
-**Limiti residui:** acquisto sandbox non svolto, perché il secondo account non ha un negozio e quindi né spazio né Premium. «Accedi con eBay» risponde `email_not_found` dopo la riapertura, senza legame con il ripristino: da analizzare in [M9-03](#m9-03).
+**Limiti residui:** acquisto sandbox successivo registrato in [M8-03](#m8-03), senza prova del suo recupero dopo il punto. `email_not_found` riprodotto con eBay personale, coerente con il limite previsto.
 
 <a id="m9-03"></a>
 #### M9-03 · Checklist pubblica e operativa
