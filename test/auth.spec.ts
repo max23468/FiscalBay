@@ -265,9 +265,13 @@ describe("Better Auth su Workers e D1", () => {
     const ids = (options: ReturnType<typeof createAuthOptions>) =>
       options.plugins?.map((plugin) => plugin.id);
     expect(ids(createAuthOptions(env))).not.toEqual(expect.arrayContaining(["dash"]));
-    expect(ids(createAuthOptions({ ...env, BETTER_AUTH_API_KEY: "chiave-di-prova" }))).toEqual(
-      expect.arrayContaining(["dash", "durable-background"]),
-    );
+    const options = createAuthOptions({ ...env, BETTER_AUTH_API_KEY: "chiave-di-prova" });
+    expect(ids(options)).toEqual(expect.arrayContaining(["dash", "durable-background"]));
+    // La chiave arriva dall'ambiente del Worker, non da una variabile globale del processo.
+    const dash = options.plugins?.find((plugin) => plugin.id === "dash") as
+      | { options?: { apiKey?: string } }
+      | undefined;
+    expect(dash?.options?.apiKey).toBe("chiave-di-prova");
   });
 
   it("usa mittente e Reply-To previsti per verifica e reset", async () => {
