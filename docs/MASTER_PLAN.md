@@ -46,7 +46,7 @@ Specifica canonica del prodotto e dei criteri di accettazione. Le decisioni sono
 - [34. Git, CI/CD, versioning, Pubblica e Promuovi](#s34)
 - [35. Strategia di test e criteri osservabili](#s35)
 - [36. Gate di qualificazione e criteri di arresto](#s36)
-- [37. Milestone M0–M9](#s37)
+- [37. Milestone M0–M10](#s37)
 - [38. Registro rischi operativo](#s38)
 - [39. Roadmap successiva e non-promesse](#s39)
 - [40. Decisioni superate e coerenza trasversale](#s40)
@@ -1061,7 +1061,7 @@ La documentazione Stripe segnala che gli acquisti di test non sono mostrati nell
 G-LEGAL e G-RECOVERY hanno analogamente una qualifica preliminare M0 e una chiusura finale prima del rilascio. Non devono impedire per definizione l’avvio delle milestone che costruiscono ciò che va collaudato; devono impedire uso di dati reali o pubblicazione finché mancano i rispettivi prerequisiti obbligatori.
 
 <a id="s37"></a>
-## 37. Milestone M0–M9
+## 37. Milestone M0–M10
 
 Dipendenze rigide sui gate, attività indipendenti avviabili prima dell'integrazione completa. La numerazione non impone consegne sequenziali né autorizza a rinviare sicurezza/test all'ultima fase. Le integrazioni da CF Ready e Hub Fatture (D143 e D147) sono consolidate nei requisiti funzionali e nei task delle milestone qui sotto; non riaprono M0.
 
@@ -1084,6 +1084,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
 | [M8](#m8) | Completata | RC `2.0.0-rc.7` qualificata e approvabile (D236, D237): test merchant, percorsi reali, verifica browser, correzioni e preflight del restore completati; il drill conclusivo è in [M9-02](#m9-02). |
 | [M9](#m9) | In corso | Configurazione commerciale, drill di ripristino sulla `2.0.0-rc.12` e checklist operativa chiusi: i tre gate Production sono superati. Go-live non autorizzato, in attesa del via owner. |
+| [M10](#m10) | Da completare | Riconoscimento eBay e verifiche esterne: candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D248](DECISION_REGISTER.md)). |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
 
@@ -2099,6 +2100,49 @@ Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore concl
 
 La rilettura operativa include le protezioni della zona di §24 e M7-12 sul dominio Production: impostazioni effettive, header, compatibilità degli ingressi e destinatari degli alert. Le prove reali eBay rinviate a M8-03 restano obbligatorie; nessuna chiusura tecnica precedente le sostituisce.
 
+<a id="m10"></a>
+### M10 · Riconoscimento eBay e verifiche esterne
+
+**Prerequisiti:** nessuno per la candidatura al Partner Program, che ha una scadenza propria; M9-04 per i task che richiedono la Production. **Attività:** ottenere da eBay e Google il riconoscimento di FiscalBay come strumento per i venditori: programma partner, limiti API adeguati, presenza nel Seller Center italiano, schermata di consenso Google con il marchio.
+
+**Output:** candidature inviate, esiti registrati e readback delle verifiche ottenute. **DoD:** nessuno scope eBay in scrittura, funzione di inserzione o spedizione, nuovo costo o provider introdotto per ottenere un riconoscimento ([D248](DECISION_REGISTER.md)); sito, badge e copy citano un riconoscimento soltanto dopo l'esito scritto e nei limiti d'uso del titolare. I moduli riportano numeri e capacità reali, mai stime presentate come risultati.
+
+<a id="m10-01"></a>
+#### M10-01 · Application Growth Check
+
+**Stato:** Da completare · **Prerequisiti:** M9-04 · **Contratto:** [§11](#s11) · [§15](#s15)
+
+Completare l'Application Growth Check sull'applicazione Production per i limiti delle chiamate di lettura degli ordini, senza attendere che l'anomalia della soglia del 70% ([D188](DECISION_REGISTER.md)) lo imponga. Il keyset è condiviso con altri progetti: la richiesta riguarda le sole chiamate di FiscalBay e non cambia impostazioni, RuName o notifiche altrui.
+
+**Criterio di completamento:** esito di eBay registrato e nuovi limiti riletti nelle quote della console; con un rifiuto, motivazione registrata e soglia del 70% invariata.
+
+<a id="m10-02"></a>
+#### M10-02 · eBay Partner Program 2027
+
+**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§1](#s01) · [§11](#s11)
+
+Candidatura alla coorte 2027 del [programma](https://developer.ebay.com/grow/ebay-partner-program) entro il 31 dicembre 2026, con il [modulo](https://www.ebay.com/sml/apply-partner-program-2027) inviato dall'owner perché contiene dati aziendali e di contatto. L'agente prepara le risposte da piano e codice: mercato IT, flussi «Order management», «Reporting and analytics» e «Regulatory compliance», segmenti SMB e C2C, abbonamento a piani fissi, integrazione Fulfillment e Trading con controllo di quote e anomalie. L'owner legge i requisiti tecnici minimi come non cumulativi; se eBay li conferma cumulativi la candidatura si chiude senza ammissione, senza aggiungere funzioni per rientrarvi. Gli impegni del livello Gold, cioè Joint Business Plan e iniziative congiunte di acquisizione, richiedono una scelta dell'owner al momento dell'esito.
+
+**Criterio di completamento:** candidatura inviata entro la scadenza ed esito della coorte, atteso nel primo trimestre 2027, registrato con il livello assegnato; un badge ottenuto si usa secondo le Badge Usage Terms.
+
+<a id="m10-03"></a>
+#### M10-03 · Pagina Solution Provider di eBay Italia
+
+**Stato:** Da completare · **Prerequisiti:** M9-04 · **Contratto:** [§1](#s01) · [§23](#s23)
+
+Chiedere a eBay Italia l'inserimento di FiscalBay nella pagina Solution Provider del Seller Center come strumento per gli adempimenti fiscali dei venditori italiani. Il programma la riserva ai livelli Gold e Silver: la richiesta verifica anche se esiste un percorso per gli strumenti di conformità fuori dal programma, e si ripete dopo l'esito di [M10-02](#m10-02) se il livello assegnato la include.
+
+**Criterio di completamento:** richiesta inviata e risposta registrata; con l'inserimento, scheda riletta con nome, descrizione e link a fiscalbay.it corretti.
+
+<a id="m10-04"></a>
+#### M10-04 · Verifica del brand Google
+
+**Stato:** Da completare · **Prerequisiti:** M9-04 · **Contratto:** [§7](#s07) · [§21](#s21)
+
+Far verificare a Google il brand della schermata di consenso del client OAuth Production, così che «Accedi con Google» mostri nome e logo FiscalBay. Servono home page, Privacy e Termini pubblicati su fiscalbay.it e il dominio verificato in Search Console; gli scope restano quelli del login, senza ambiti sensibili.
+
+**Criterio di completamento:** verifica approvata e schermata di consenso riletta su Production con nome, logo e link legali di FiscalBay.
+
 <a id="s38"></a>
 ## 38. Registro rischi operativo
 
@@ -2137,7 +2181,7 @@ Ordine indicativo approvato, non calendario pubblico:
 
 La disponibilità PayPal **come pagamento** può entrare in 2.0 solo se supportata dal MoR scelto, senza account PayPal personale separato e con costo accettabile; non è garanzia di roadmap o collegamento login. Niente Microsoft login, nessuna app desktop promessa.
 
-Nella 2.0 FiscalBay non invia né legge messaggi eBay (Message API, `NEW_MESSAGE`), non mostra le linee guida normative di `REGULATORY_GUIDELINE` e non sottoscrive topic con scope propri per spedizioni, annullamenti, resi o preventivi, già coperti dalla lettura periodica (D215, D216). Non partecipa all'eBay Partner Program, che richiede gestione di inserzioni e spedizioni. Restano fuori anche le novità eBay estranee agli ordini: Inventory Mapping, garanzia di durabilità UE, taglie moda, condizione delle monete, resi facilitati in Germania, Media API e video, API Buy, annunci video del Marketing, VeRO ed eDIS.
+Nella 2.0 FiscalBay non invia né legge messaggi eBay (Message API, `NEW_MESSAGE`), non mostra le linee guida normative di `REGULATORY_GUIDELINE` e non sottoscrive topic con scope propri per spedizioni, annullamenti, resi o preventivi, già coperti dalla lettura periodica (D215, D216). La candidatura all'eBay Partner Program presenta FiscalBay per gestione degli ordini, analisi e conformità fiscale, senza aggiungere gestione di inserzioni o spedizioni ([D248](DECISION_REGISTER.md), [M10-02](#m10-02)). Restano fuori anche le novità eBay estranee agli ordini: Inventory Mapping, garanzia di durabilità UE, taglie moda, condizione delle monete, resi facilitati in Germania, Media API e video, API Buy, annunci video del Marketing, VeRO ed eDIS.
 
 API pubblica non impegnata a una specifica 2.x: si valuta solo se domanda concreta, mantenendo servizi e contratti riusabili; endpoint solo quando necessari a un client reale. Analisi non diventa una suite e-commerce generale. Lifetime mantiene livello equivalente, non dà licenza di cambiare indiscriminatamente l'offerta già acquistata.
 
