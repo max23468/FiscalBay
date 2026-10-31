@@ -508,15 +508,17 @@ Unico ripristino reale prima del go-live ([§32](../MASTER_PLAN.md#s32), [M9-02]
 
 **Uscita isolata.** Dopo gli eventi successivi al punto e prima di `freeze` si spengono dalla console le chiamate eBay e gli acquisti: la cattura li registra e il ripristino li mantiene. A servizio sospeso non esce nulla: pagine e webhook rispondono 503, il cron non accoda e la coda è in pausa. Dopo la riapertura gli invii Telegram restano spenti fino a `telegram`, eBay e acquisti fino all'esito di `verify --reconciled`; Stripe è il sandbox e il reinvio va soltanto all'endpoint del test. Le email possono raggiungere soltanto gli account presenti nella D1 del test, cioè quelli dell'owner e l'account di collaudo su `example.invalid`, che non riceve. Punto e cattura stanno dalla stessa parte dell'eliminazione dei dati reali dal test prevista prima del go-live, preferibilmente dopo: altrimenti il ripristino riporta per qualche minuto, a servizio sospeso, dati già cancellati.
 
-**Dati controllati.** Al punto: l'account di collaudo nello stato di `reset-test-account` (negozi, ordini, identificativi fiscali, sblocchi e ciclo Free), il secondo account dell'owner con Telegram collegato e un account del drill registrato dall'owner con un proprio indirizzo ammesso, un token tecnico della console creato per la prova. Dopo il punto e prima della sospensione, ciascuno con il controllo che lo prova:
+**Dati controllati.** Al punto: l'account di collaudo nello stato di `reset-test-account` (negozi, ordini, identificativi fiscali, sblocchi e ciclo Free), l'account dell'owner con Telegram collegato, il secondo account dell'owner con la password e un account del drill registrato dall'owner con un proprio indirizzo ammesso, un token tecnico della console creato per la prova. Dopo il punto e prima della sospensione, ciascuno con il controllo che lo prova:
 
 | Evento dopo il punto | Controllo |
 |---|---|
 | Account del drill cancellato dall'app | `deletions` e `markers`: nessuna riga dell'account, cancellazione registrata |
-| Acquisto Premium sandbox del secondo account con la carta 4242 | `rights.subscriptions` e `rights.entitlements` dopo `stripe` e `billing` |
+| Acquisto Premium sandbox con la carta 4242, su un account con un negozio letto | `rights.subscriptions` e `rights.entitlements` dopo `stripe` e `billing` |
 | Password del secondo account cambiata | `passwords`, poi accesso soltanto con una nuova reimpostazione |
-| Notifiche Telegram del secondo account disattivate | `markers`, poi nessuna notifica dopo `telegram` |
+| Notifiche Telegram dell'account dell'owner disattivate | `markers`, poi nessuna notifica dopo `telegram` |
 | Token tecnico revocato dalla console | `stamps` |
 | Chiamate eBay e acquisti spenti | `markers` della configurazione |
+
+Il secondo account dell'owner non ha un negozio: senza lo spazio, che nasce con il primo negozio, non riceve prova, acquisto né Telegram. Nel drill del 2026-10-31 le notifiche sono quindi quelle dell'account dell'owner e l'acquisto sandbox non si è svolto ([M9-02](../MASTER_PLAN.md#m9-02)).
 
 **Esito.** Il drill riesce con entrambi i `verify` superati, accessi dell'owner e del secondo account dopo la riapertura, Ordini e quote dell'account dell'owner leggibili, nessuna notifica Telegram per ordini già notificati e nessun invio fuori dagli account controllati. L'evidenza, nella PR che chiude [M9-02](../MASTER_PLAN.md#m9-02) e la riga `ripristino` dei [gate](../MASTER_PLAN.md#pubblicazione-production), riporta identità del candidato, punto, durata dalla sospensione alla riapertura, controlli e perdita per tabella come stampati da `verify`, senza valori. Alla fine si riaccendono eBay e acquisti, si cancella il secondo account, la lista di ammissione torna `[]` e si eliminano file e chiave dell'incidente.
