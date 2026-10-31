@@ -35,6 +35,8 @@ const fixtureHosts = new Set([
   "api.telegram.org",
   "api.cloudflare.com",
   "challenges.cloudflare.com",
+  "static.cloudflareinsights.com",
+  "cloudflareinsights.com",
   "t.me",
   "www.w3.org",
   "schemas.openxmlformats.org",

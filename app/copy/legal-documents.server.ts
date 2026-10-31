@@ -214,6 +214,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "7 giorni",
               ],
               [
+                "Statistiche delle pagine pubbliche del sito: pagina, sito di provenienza, paese, tipo di dispositivo, browser, sistema operativo e tempi di caricamento, senza cookie e senza identificare il visitatore",
+                "Contare le visite e misurare la velocità del sito (legittimo interesse)",
+                "6 mesi presso il fornitore di rete, in forma aggregata dopo 7 giorni",
+              ],
+              [
                 "Archivio dei log: istante, tipo ed esito delle operazioni, codici di errore, riferimenti interni, senza IP, indirizzi delle pagine, email, dati degli acquirenti o valori fiscali",
                 "Diagnosi e sicurezza (legittimo interesse)",
                 "90 giorni",
@@ -264,7 +269,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Cookie e tecnologie simili",
         blocks: [
-          "FiscalBay usa soltanto cookie tecnici necessari all’accesso e alla sicurezza della sessione, e la memoria del browser per conservare temporaneamente una selezione di ordini da esportare. Nei moduli di registrazione, recupero della password, nuovo link e assistenza, la verifica anti-automazione del fornitore di rete legge caratteristiche tecniche del browser per distinguere le persone dai programmi automatici. Nessun cookie di analisi, profilazione o pubblicità: per questo non c’è un banner dei cookie.",
+          "FiscalBay usa soltanto cookie tecnici: quelli necessari all’accesso e alla sicurezza della sessione e quelli che ricordano una tua scelta, cioè il fuso orario del dispositivo, il negozio scelto nei filtri degli ordini e la visita al sito pubblico senza uscire dall’account. La memoria del browser conserva temporaneamente una selezione di ordini da esportare. Nei moduli di registrazione, recupero della password, nuovo link e assistenza, la verifica anti-automazione del fornitore di rete legge caratteristiche tecniche del browser per distinguere le persone dai programmi automatici. Le pagine pubbliche del sito contano le visite con lo strumento statistico del fornitore di rete, che non usa cookie né altri identificativi salvati nel browser e non segue il visitatore su altri siti. Nessun cookie di analisi, profilazione o pubblicità: per questo non c’è un banner dei cookie.",
         ],
       },
       {
@@ -286,7 +291,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Dove sono i dati",
         blocks: [
-          "Ordini, dati fiscali, file esportati e log sono conservati su server nell’Unione Europea. Le richieste transitano dalla rete globale del fornitore di hosting. Pagamenti, assistenza, accesso con Google, eBay e Telegram seguono i rispettivi fornitori, che possono trattare dati fuori dall’Unione Europea. In questi casi il trasferimento si basa sulle garanzie previste dal GDPR, come una decisione di adeguatezza o le clausole contrattuali tipo della Commissione europea. Puoi chiederne copia a info@fiscalbay.it.",
+          "Ordini, dati fiscali, file esportati e log sono conservati su server nell’Unione Europea. Le richieste transitano dalla rete globale del fornitore di hosting. Pagamenti, assistenza, statistiche del sito, accesso con Google, eBay e Telegram seguono i rispettivi fornitori, che possono trattare dati fuori dall’Unione Europea. In questi casi il trasferimento si basa sulle garanzie previste dal GDPR, come una decisione di adeguatezza o le clausole contrattuali tipo della Commissione europea. Puoi chiederne copia a info@fiscalbay.it.",
         ],
       },
       {
@@ -510,6 +515,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "7 days",
               ],
               [
+                "Statistics of the public website pages: page, referring site, country, device type, browser, operating system and load times, without cookies and without identifying the visitor",
+                "Counting visits and measuring site speed (legitimate interest)",
+                "6 months at the network provider, aggregated after 7 days",
+              ],
+              [
                 "Log archive: time, type and result of operations, error codes, internal references, without IP, page addresses, emails, buyer data or tax values",
                 "Diagnosis and security (legitimate interest)",
                 "90 days",
@@ -560,7 +570,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Cookies and similar technologies",
         blocks: [
-          "FiscalBay only uses technical cookies needed for sign-in and session security, and browser storage to temporarily keep a selection of orders to export. In the sign-up, password recovery, new link and support forms, the network provider’s automation check reads technical characteristics of the browser to tell people from automated programs. No analytics, profiling or advertising cookies: that is why there is no cookie banner.",
+          "FiscalBay only uses technical cookies: those needed for sign-in and session security, and those that remember a choice of yours, namely the device time zone, the store chosen in the order filters and visiting the public website without leaving your account. Browser storage temporarily keeps a selection of orders to export. In the sign-up, password recovery, new link and support forms, the network provider’s automation check reads technical characteristics of the browser to tell people from automated programs. The public website pages count visits with the network provider’s statistics tool, which uses no cookies or other identifiers stored in the browser and does not follow the visitor across other sites. No analytics, profiling or advertising cookies: that is why there is no cookie banner.",
         ],
       },
       {
@@ -582,7 +592,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Where the data is",
         blocks: [
-          "Orders, tax data, exported files and logs are stored on servers in the European Union. Requests pass through the hosting provider’s global network. Payments, support, sign-in with Google, eBay and Telegram follow their respective providers, which may process data outside the European Union. In those cases the transfer relies on the safeguards provided by the GDPR, such as an adequacy decision or the European Commission’s standard contractual clauses. You can request a copy at info@fiscalbay.it.",
+          "Orders, tax data, exported files and logs are stored on servers in the European Union. Requests pass through the hosting provider’s global network. Payments, support, site statistics, sign-in with Google, eBay and Telegram follow their respective providers, which may process data outside the European Union. In those cases the transfer relies on the safeguards provided by the GDPR, such as an adequacy decision or the European Commission’s standard contractual clauses. You can request a copy at info@fiscalbay.it.",
         ],
       },
       {
