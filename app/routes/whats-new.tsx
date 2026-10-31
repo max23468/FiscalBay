@@ -46,7 +46,7 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
   const { t, language } = useCopy();
   if (loaderData.releases.length === 0) return <NotFoundState kind="page" />;
   return (
-    <div className="grid max-w-3xl gap-6">
+    <div className="grid gap-6">
       <PageTitle icon={Megaphone} tone="blue">
         {t.shell.whatsNew}
       </PageTitle>
@@ -68,36 +68,39 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
               </time>
             )}
           </header>
-          {kinds.flatMap((kind) => {
-            const items = release.items.filter((item) => item.kind === kind);
-            if (items.length === 0) return [];
-            const { Icon, tone } = kindStyles[kind];
-            return [
-              <section
-                key={kind}
-                aria-labelledby={`release-${release.version}-${kind}`}
-                className="grid gap-4"
-              >
-                <h3
-                  id={`release-${release.version}-${kind}`}
-                  className="flex items-center gap-2 text-sm font-semibold"
+          {/* Un gruppo occupa tutta la scheda; più gruppi si affiancano dove c'è spazio. */}
+          <div className="grid gap-6 md:grid-cols-[repeat(auto-fit,minmax(18rem,1fr))] md:gap-8">
+            {kinds.flatMap((kind) => {
+              const items = release.items.filter((item) => item.kind === kind);
+              if (items.length === 0) return [];
+              const { Icon, tone } = kindStyles[kind];
+              return [
+                <section
+                  key={kind}
+                  aria-labelledby={`release-${release.version}-${kind}`}
+                  className="grid content-start gap-3"
                 >
-                  <IconTile icon={Icon} tone={tone} size="sm" />
-                  {whatsNewKinds[kind][language]}
-                </h3>
-                <ul className="grid gap-4 border-l-2 pl-4 ml-3.5">
-                  {items.map((item) => (
-                    <li key={item.title} className="grid gap-1">
-                      <h4 className="font-medium">{item.title}</h4>
-                      <p className="leading-relaxed text-pretty text-muted-foreground">
-                        {item.body}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              </section>,
-            ];
-          })}
+                  <h3
+                    id={`release-${release.version}-${kind}`}
+                    className="flex items-center gap-2 text-sm font-semibold"
+                  >
+                    <IconTile icon={Icon} tone={tone} size="sm" />
+                    {whatsNewKinds[kind][language]}
+                  </h3>
+                  <ul className="grid gap-3">
+                    {items.map((item) => (
+                      <li key={item.title} className="grid max-w-prose gap-0.5 text-sm">
+                        <h4 className="font-medium">{item.title}</h4>
+                        <p className="leading-relaxed text-pretty text-muted-foreground">
+                          {item.body}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>,
+              ];
+            })}
+          </div>
         </section>
       ))}
     </div>

@@ -6,11 +6,19 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 ### Novità
 
+#### Funzionalità
+
+- **Novità.** Dal menu del profilo trovi le nuove funzionalità, i miglioramenti e le correzioni di ogni versione di FiscalBay; la campanella annuncia ogni versione nuova.
+
 #### Correzioni
 
 - **Totale degli ordini letti da eBay Trading.** Il totale non comprende più la tariffa di protezione acquisti che l'acquirente paga a eBay, attiva in Italia per gli acquisti da venditori privati: prima Ordini ed Esportazione potevano mostrare un importo che non incassi.
 
 ### What's new
+
+#### Features
+
+- **What's new.** The profile menu shows the new features, improvements and fixes of each FiscalBay version; the bell announces each new version.
 
 #### Fixes
 
