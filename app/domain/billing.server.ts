@@ -2,7 +2,7 @@ import type Stripe from "stripe";
 import { z } from "zod";
 
 import { isProduction } from "../app-links";
-import { priceGeneration, subscriptionOffers } from "../catalog";
+import { priceGeneration } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import type { Language } from "../i18n";
 import { catalogMismatch } from "../integrations/stripe-account.server";
@@ -42,6 +42,7 @@ import {
 } from "./refunds.server";
 import { inSequence } from "../sequence";
 import { sqlList } from "./sql.server";
+import { subscriptionOffers } from "./subscription-offers";
 import { dayMilliseconds } from "../time";
 
 /**
