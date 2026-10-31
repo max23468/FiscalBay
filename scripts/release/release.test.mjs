@@ -498,4 +498,26 @@ describe("comandi della pubblicazione", () => {
       assert.throws(() => assertFreeze(frozen, title), /2\.0\.0-rc\.2 congelata/u);
     assert.equal(assertFreeze("## [2.0.0-alpha.1]\n", "feat: nuova funzione"), undefined);
   });
+
+  it("una correzione da distribuire porta la RC successiva alla base", () => {
+    const base = "# Changelog\n\n## [2.0.0-rc.2]\n\nCorrezione.\n";
+    const next = `# Changelog\n\n## [2.0.0-rc.3]\n\nAltra.\n\n${base.slice(13)}`;
+    assert.throws(
+      () => assertFreeze(base, "fix: copy", { baseChangelog: base, deploy: true }),
+      /RC successiva alla 2\.0\.0-rc\.2/u,
+    );
+    assert.equal(
+      assertFreeze(next, "fix: copy", { baseChangelog: base, deploy: true }),
+      "2.0.0-rc.3",
+    );
+    // Documenti e prove non cambiano la RC; senza RC nella base non c'è congelamento da seguire.
+    assert.equal(
+      assertFreeze(base, "docs: piano", { baseChangelog: base, deploy: false }),
+      "2.0.0-rc.2",
+    );
+    assert.equal(
+      assertFreeze("## [2.0.0]\n", "fix: copy", { baseChangelog: "## [2.0.0]\n", deploy: true }),
+      undefined,
+    );
+  });
 });

@@ -143,13 +143,19 @@ export function candidateVersion(changelog) {
 
 /**
  * Con una RC in cima al changelog `develop` accetta soltanto correzioni: il titolo della PR, che
- * diventa il commit integrato, non può annunciare una funzione o una modifica incompatibile.
+ * diventa il commit integrato, non può annunciare una funzione o una modifica incompatibile. Una
+ * correzione che cambia ciò che si distribuisce porta la RC successiva rispetto alla base.
  */
-export function assertFreeze(changelog, title) {
+export function assertFreeze(changelog, title, { baseChangelog, deploy = false } = {}) {
   const version = candidateVersion(changelog);
   if (version && /^(?:feat\b|[a-z]+(?:\([a-z0-9._-]+\))?!:)/u.test(title.trim()))
     throw new Error(
       `Release candidate ${version} congelata: su develop entrano soltanto correzioni, non "${title.trim()}".`,
+    );
+  const base = baseChangelog === undefined ? undefined : candidateVersion(baseChangelog);
+  if (deploy && base && version === base)
+    throw new Error(
+      `La PR cambia ciò che si distribuisce: aggiungere in cima a CHANGELOG.md la RC successiva alla ${base}.`,
     );
   return version;
 }
@@ -683,7 +689,12 @@ async function main() {
   const command = positionals[0];
   if (command === "review") return reviewMigrations(values.base);
   if (command === "freeze") {
-    const version = assertFreeze(readFileSync("CHANGELOG.md", "utf8"), process.env.PR_TITLE ?? "");
+    const version = assertFreeze(readFileSync("CHANGELOG.md", "utf8"), process.env.PR_TITLE ?? "", {
+      baseChangelog: values.base
+        ? execFileSync("git", ["show", `${values.base}:CHANGELOG.md`], { encoding: "utf8" })
+        : undefined,
+      deploy: process.env.DEPLOY === "true",
+    });
     console.log(version ? `Correzione ammessa nella ${version}.` : "Nessuna RC congelata.");
     return;
   }
