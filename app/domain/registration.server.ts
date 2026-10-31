@@ -16,7 +16,7 @@ export const legalVersions = {
  * ogni scelta dice quale testo è stato reso. Un testo modificato richiede una nuova versione.
  */
 export const marketingTextVersions = {
-  registration: "registrazione-2026-09-29",
+  registration: "registrazione-2026-10-31",
   proposal: "proposta-2026-10-27",
   settings: "impostazioni-2026-09-29",
 } as const;
