@@ -5,6 +5,6 @@
     "enabled": false
   },
   "ignore": {
-    "files": ["build/**", ".react-router/**", "worker-configuration.d.ts"]
+    "files": ["build/**", ".cloudflare/**", ".react-router/**"]
   }
 }

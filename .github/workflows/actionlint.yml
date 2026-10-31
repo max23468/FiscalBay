@@ -20,15 +20,15 @@ permissions:
 jobs:
   actionlint:
     name: Actionlint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Run actionlint
-        uses: reviewdog/action-actionlint@v1
+        uses: reviewdog/action-actionlint@cfa6a621f27735ccc88d35af9d0608692fd9b9f7 # v1.80.8
         with:
           reporter: github-check
           fail_level: error

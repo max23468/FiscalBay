@@ -1,0 +1,706 @@
+import type Stripe from "stripe";
+import { z } from "zod";
+
+import { isProduction } from "../app-links";
+import { lifetimeSlots, priceGeneration, type LifetimeOffer, type PremiumOffer } from "../catalog";
+import { ApplicationError, logFailure } from "../errors";
+import {
+  closeCheckoutSession,
+  isMissingObject,
+  stripeCall,
+  stripeEnvironment,
+  stripeId,
+} from "../integrations/stripe.server";
+import { cancelSubscription } from "./billing-subscriptions.server";
+import { purchasesOpenSql } from "./admission-state.server";
+import {
+  entitlementInForce,
+  lifetimeInForceSql,
+  openSubscriptionStatuses,
+  storeReadSql,
+} from "./grants.server";
+import { erasedCustomerSql, paymentReversal, reversalStatements } from "./refunds.server";
+import { inSequence } from "../sequence";
+import { sqlList } from "./sql.server";
+
+/**
+ * Posti ancora liberi per il sito pubblico: un posto prenotato da un Checkout aperto non è in
+ * vendita finché la sessione può incassare.
+ */
+export async function lifetimeSlotsLeft(db: D1Database) {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS taken FROM lifetime_allocations")
+    .first<{ taken: number }>();
+  return lifetimeSlots - (row?.taken ?? 0);
+}
+
+/**
+ * Durata della sessione Checkout e della prenotazione: Stripe accetta da 30 minuti a 24 ore.
+ * Un'ora lascia il tempo di pagare senza tenere fermo a lungo uno degli ultimi posti.
+ */
+const reservationMs = 60 * 60 * 1000;
+
+/**
+ * Rinnovo troppo vicino: se arrivasse prima del pagamento, il cliente pagherebbe un nuovo
+ * periodo che il credito calcolato oggi non conta.
+ */
+const renewalMarginMs = 10 * 60 * 1000;
+
+/** Primo posto libero, espressione per `INSERT ... SELECT`. */
+const freeSlotSql = `WITH RECURSIVE n(slot) AS (SELECT 1 UNION ALL SELECT slot + 1 FROM n
+    WHERE slot < ${lifetimeSlots})`;
+const freeSlotWhere = "slot NOT IN (SELECT slot FROM lifetime_allocations)";
+
+/**
+ * Netto del listino per una periodicità della generazione dell'abbonamento. Null per una
+ * generazione che il catalogo non conosce: quando ne arriva una nuova, quella precedente
+ * resta nel catalogo finché esistono abbonamenti che la usano.
+ */
+function generationNet(generation: string, offer: PremiumOffer) {
+  return generation === priceGeneration.id ? priceGeneration.net[offer] : null;
+}
+
+/**
+ * Valore netto del periodo pagato non ancora usato, in centesimi, proporzionale al tempo
+ * residuo sull'istante UTC. I giorni di prova e le concessioni non sono periodo pagato.
+ */
+export function unusedCredit(net: number, period: { startsAt: string; endsAt: string }, now: Date) {
+  const start = Date.parse(period.startsAt);
+  const end = Date.parse(period.endsAt);
+  const at = Math.max(now.getTime(), start);
+  if (!(end > start) || at >= end) return 0;
+  return Math.floor((net * (end - at)) / (end - start));
+}
+
+/**
+ * Credito ridotto alla parte del pagamento non rimborsata: un rimborso parziale del periodo
+ * non torna una seconda volta come detrazione.
+ */
+export function refundedShare(credit: number, paid: number | null, refunded: number | null) {
+  if (!refunded || !paid) return credit;
+  return Math.floor((credit * Math.max(paid - refunded, 0)) / paid);
+}
+
+type LifetimeContext = {
+  workspaceId: string;
+  offer: LifetimeOffer | null;
+  /** Posto dello spazio già prenotato da una sessione precedente, non ancora completata. */
+  reservation: { slot: number; reference: string | null } | null;
+  /**
+   * Abbonamento che il lifetime sostituisce, con il rinnovo se ancora previsto e il cliente
+   * Stripe, salvo dopo la cancellazione dei suoi dati finanziari.
+   */
+  subscription: { customerId: string | null; renewsAt: string | null } | null;
+};
+
+/**
+ * Stato del lifetime per lo spazio dell'utente. Non si offre con un posto già attivo, con un
+ * pagamento lifetime da confermare o con un primo pagamento dell'abbonamento ancora aperto; un
+ * abbonamento pagato, scelto durante la prova o con un rinnovo da regolarizzare si sostituisce.
+ * Il credito vale soltanto per il periodo pagato in corso, nella generazione dell'abbonamento.
+ */
+export async function lifetimeContext(
+  db: D1Database,
+  env: Env,
+  userId: string,
+  now = new Date(),
+): Promise<LifetimeContext | null> {
+  const at = now.toISOString();
+  const workspace = await db
+    .prepare(`SELECT w.id, ${storeReadSql("w.id")} AS synced, ${purchasesOpenSql} AS open,
+        (SELECT COUNT(*) FROM lifetime_allocations) AS taken,
+        a.slot, a.status, a.provider_reference, a.completed_at
+      FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
+      LEFT JOIN lifetime_allocations a ON a.workspace_id = w.id
+      WHERE wm.user_id = ?1`)
+    .bind(userId)
+    .first<{
+      id: string;
+      synced: number;
+      open: number;
+      taken: number;
+      slot: number | null;
+      status: "reserved" | "active" | null;
+      provider_reference: string | null;
+      completed_at: string | null;
+    }>();
+  if (!workspace) return null;
+  const [subscription, paid] = await db.batch<Record<string, unknown>>([
+    db
+      .prepare(`SELECT CASE WHEN ${erasedCustomerSql("stripe_subscriptions.customer_id")} THEN NULL
+          ELSE customer_id END AS customer_id, status, offer, price_generation, current_period_end,
+          cancel_at_period_end, status IN (${sqlList(openSubscriptionStatuses)}) AS open
+        FROM stripe_subscriptions WHERE workspace_id = ?1 AND environment = ?2
+          AND unavailable_at IS NULL
+        ORDER BY julianday(current_period_start) DESC LIMIT 1`)
+      .bind(workspace.id, stripeEnvironment(env)),
+    db
+      .prepare(`SELECT starts_at, ends_at, amount_paid, amount_refunded FROM workspace_entitlements
+        WHERE workspace_id = ?1 AND source = 'premium' AND stripe_invoice_id IS NOT NULL
+          AND ${entitlementInForce("workspace_entitlements", "?2")}
+        ORDER BY julianday(ends_at) DESC LIMIT 1`)
+      .bind(workspace.id, at),
+  ]);
+  const row = subscription!.results[0] as
+    | {
+        customer_id: string | null;
+        status: string;
+        offer: "monthly" | "annual";
+        price_generation: string;
+        current_period_end: string;
+        cancel_at_period_end: number;
+        open: number;
+      }
+    | undefined;
+  const period = paid!.results[0] as
+    | {
+        starts_at: string;
+        ends_at: string;
+        amount_paid: number | null;
+        amount_refunded: number | null;
+      }
+    | undefined;
+  const own = workspace.status ? workspace : null;
+  const reservation =
+    own?.status === "reserved" && !own.completed_at
+      ? { slot: own.slot!, reference: own.provider_reference }
+      : null;
+  // Lo stesso cliente Stripe anche dopo un abbonamento chiuso, con un periodo pagato residuo.
+  const context = {
+    workspaceId: workspace.id,
+    reservation,
+    subscription: row
+      ? {
+          customerId: row.customer_id,
+          renewsAt:
+            ["active", "trialing"].includes(row.status) && !row.cancel_at_period_end
+              ? row.current_period_end
+              : null,
+        }
+      : null,
+  };
+  // Posto attivo, pagamento lifetime in conferma o primo pagamento dell'abbonamento aperto.
+  if ((own && !reservation) || (row && ["incomplete", "paused"].includes(row.status)))
+    return { ...context, offer: null };
+  const net = row && period ? generationNet(row.price_generation, row.offer) : 0;
+  if (net === null) return { ...context, offer: null };
+  const credit = period
+    ? refundedShare(
+        unusedCredit(net, { startsAt: period.starts_at, endsAt: period.ends_at }, now),
+        period.amount_paid,
+        period.amount_refunded,
+      )
+    : 0;
+  const { state, seats } = lifetimeOfferState({
+    purchasesOpen: !!workspace.open,
+    subscribed: !!row?.open,
+    synced: !!workspace.synced,
+    reserved: !!reservation,
+    taken: workspace.taken,
+  });
+  return { ...context, offer: { state, credit, replaces: !!row?.open, seats } };
+}
+
+/** Stato e posti dell'offerta lifetime, condivisi dall'area reale e dall'anteprima. */
+export function lifetimeOfferState(input: {
+  purchasesOpen: boolean;
+  subscribed: boolean;
+  synced: boolean;
+  reserved: boolean;
+  taken: number;
+}): Pick<LifetimeOffer, "state" | "seats"> {
+  // Senza capacità per nuovi Premium si ferma il lifetime di chi non è già abbonato; il
+  // passaggio di un abbonato non aggiunge carico.
+  const state =
+    !input.purchasesOpen && !input.subscribed
+      ? "closed"
+      : !input.synced
+        ? "needs-sync"
+        : !input.reserved && input.taken >= lifetimeSlots
+          ? "sold-out"
+          : "available";
+  return { state, seats: { left: Math.max(lifetimeSlots - input.taken, 0), total: lifetimeSlots } };
+}
+
+/**
+ * Prenota un posto per una nuova sessione: lo stesso posto dello spazio se ne aveva già uno
+ * per una sessione ormai chiusa, altrimenti il primo libero. Restituisce il posto, o null se
+ * non ce ne sono o se una richiesta concorrente dello stesso spazio l'ha già preso.
+ */
+export async function reserveLifetime(
+  db: D1Database,
+  workspaceId: string,
+  reservation: LifetimeContext["reservation"],
+  now: Date,
+) {
+  const at = now.toISOString();
+  const expiresAt = new Date(now.getTime() + reservationMs).toISOString();
+  const row = reservation
+    ? await db
+        .prepare(`UPDATE lifetime_allocations SET provider_reference = NULL, expires_at = ?3
+          WHERE slot = ?1 AND workspace_id = ?2 AND status = 'reserved' AND completed_at IS NULL
+            AND provider_reference IS ?4
+          RETURNING slot`)
+        .bind(reservation.slot, workspaceId, expiresAt, reservation.reference)
+        .first<{ slot: number }>()
+    : await db
+        .prepare(`${freeSlotSql}
+          INSERT INTO lifetime_allocations (slot, workspace_id, status, kind, expires_at, created_at)
+          SELECT slot, ?1, 'reserved', 'sale', ?2, ?3 FROM n WHERE ${freeSlotWhere}
+          ORDER BY slot LIMIT 1
+          ON CONFLICT DO NOTHING RETURNING slot`)
+        .bind(workspaceId, expiresAt, at)
+        .first<{ slot: number }>();
+  return row ? { slot: row.slot, expiresAt } : null;
+}
+
+/**
+ * Lega la sessione alla prenotazione prima che il suo indirizzo arrivi al cliente: soltanto la
+ * sessione registrata può incassare. False se la prenotazione è cambiata nel frattempo.
+ */
+export async function bindLifetimeSession(
+  db: D1Database,
+  workspaceId: string,
+  reservation: { slot: number; expiresAt: string },
+  sessionId: string,
+) {
+  const result = await db
+    .prepare(`UPDATE lifetime_allocations SET provider_reference = ?4
+      WHERE slot = ?1 AND workspace_id = ?2 AND status = 'reserved' AND expires_at = ?3
+        AND provider_reference IS NULL`)
+    .bind(reservation.slot, workspaceId, reservation.expiresAt, sessionId)
+    .run();
+  return result.meta.changes === 1;
+}
+
+/**
+ * Libera una prenotazione senza sessione registrata: nessun cliente ne ha ricevuto
+ * l'indirizzo, quindi nessuna sessione può incassare per essa.
+ */
+export async function releaseUnboundReservation(
+  db: D1Database,
+  workspaceId: string,
+  reservation: { slot: number; expiresAt: string },
+) {
+  await db
+    .prepare(`DELETE FROM lifetime_allocations WHERE slot = ?1 AND workspace_id = ?2
+      AND status = 'reserved' AND expires_at = ?3 AND provider_reference IS NULL`)
+    .bind(reservation.slot, workspaceId, reservation.expiresAt)
+    .run();
+}
+
+/** Il rinnovo, o il primo addebito, cadrebbe prima della scadenza del checkout lifetime. */
+export function renewsDuringCheckout(renewsAt: string | null, now: Date) {
+  return !!renewsAt && Date.parse(renewsAt) <= now.getTime() + reservationMs + renewalMarginMs;
+}
+
+const lifetimeOwner = z.object({
+  workspace_id: z.string().min(1).max(128),
+  offer: z.literal("lifetime"),
+});
+
+/** Sessione lifetime senza i riferimenti del nostro checkout: nessun effetto. */
+class UnknownLifetimeSession extends ApplicationError {
+  constructor(readonly failure: string) {
+    super("INVALID_REQUEST");
+  }
+}
+
+/** La sessione completata non può più incassare: pagamento annullato o rifiutato. */
+const failedIntentStatuses = ["canceled", "requires_payment_method"];
+
+/** La sessione è una vendita lifetime del nostro checkout. */
+export function isLifetimeSession(session: Stripe.Checkout.Session) {
+  return session.mode === "payment" && session.metadata?.offer === "lifetime";
+}
+
+/**
+ * Rilegge una sessione lifetime e ne applica lo stato corrente. Pagata: posto attivo, diritto
+ * senza scadenza con la prova dell'incasso e chiusura dell'abbonamento sostituito. Completata
+ * con il pagamento in conferma: il posto resta. Scaduta, o con il pagamento asincrono fallito:
+ * il posto si libera. Ripetuta produce lo stesso risultato; un pagamento confermato senza
+ * posto, dopo una liberazione, occupa il primo libero o, a posti finiti, si segnala senza
+ * attribuire il diritto né rimborsare. Un rimborso totale o una disputa persa revocano il
+ * diritto e il posto resta occupato.
+ */
+export async function reconcileLifetime(
+  env: Env,
+  stripe: Stripe,
+  sessionId: string,
+  now = new Date(),
+) {
+  const at = now.toISOString();
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripeCall(() =>
+      stripe.checkout.sessions.retrieve(sessionId, { expand: ["payment_intent.latest_charge"] }),
+    );
+  } catch (error) {
+    // Una sessione sparita non prova né un incasso né la sua assenza: il posto resta.
+    if (!isMissingObject(error)) throw error;
+    logFailure({ error, operation: "billing" });
+    return;
+  }
+  const owner = lifetimeOwner.safeParse(session.metadata);
+  if (!owner.success || !isLifetimeSession(session) || session.livemode !== isProduction(env)) {
+    logFailure({ error: new UnknownLifetimeSession("unknown_session"), operation: "billing" });
+    return;
+  }
+  const workspaceId = owner.data.workspace_id;
+  const intent =
+    session.payment_intent && typeof session.payment_intent !== "string"
+      ? session.payment_intent
+      : null;
+  const release = () =>
+    env.DB.prepare(
+      "DELETE FROM lifetime_allocations WHERE provider_reference = ? AND status = 'reserved'",
+    )
+      .bind(session.id)
+      .run();
+  if (session.status === "expired") return void (await release());
+  if (session.status === "open") {
+    // Oltre la scadenza Stripe la chiude a breve; chiuderla qui libera subito il posto.
+    const local = await env.DB.prepare(
+      "SELECT expires_at FROM lifetime_allocations WHERE provider_reference = ? AND status = 'reserved'",
+    )
+      .bind(session.id)
+      .first<{ expires_at: string }>();
+    if (local && Date.parse(local.expires_at) <= now.getTime()) {
+      await stripeCall(() => stripe.checkout.sessions.expire(session.id));
+      await release();
+    }
+    return;
+  }
+  if (session.payment_status !== "paid") {
+    if (intent && failedIntentStatuses.includes(intent.status)) return void (await release());
+    // Pagamento asincrono in conferma: il posto resta fino all'esito.
+    await env.DB.prepare(`UPDATE lifetime_allocations SET completed_at = COALESCE(completed_at, ?1)
+        WHERE provider_reference = ?2 AND status = 'reserved'`)
+      .bind(at, session.id)
+      .run();
+    return;
+  }
+  const charge =
+    intent?.latest_charge && typeof intent.latest_charge !== "string" ? intent.latest_charge : null;
+  const reversal = charge ? await paymentReversal(stripe, charge) : null;
+  const paidAt = new Date((charge?.created ?? session.created) * 1000).toISOString();
+  const customer = session.customer ? stripeId(session.customer) : null;
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE lifetime_allocations SET status = 'active', activated_at = ?2,
+        customer_id = ?3, completed_at = COALESCE(completed_at, ?2), expires_at = NULL
+      WHERE provider_reference = ?1 AND status = 'reserved'`).bind(session.id, at, customer),
+    // Pagata dopo una liberazione: occupa il primo posto libero, se lo spazio non ne ha già uno.
+    env.DB.prepare(`${freeSlotSql}
+      INSERT INTO lifetime_allocations (slot, workspace_id, status, kind, provider_reference,
+        customer_id, completed_at, activated_at, created_at)
+      SELECT slot, w.id, 'active', 'sale', ?2, ?3, ?4, ?4, ?4 FROM n, workspaces w
+      WHERE w.id = ?1 AND ${freeSlotWhere}
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE provider_reference = ?2)
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
+      ORDER BY slot LIMIT 1
+      ON CONFLICT DO NOTHING`).bind(workspaceId, session.id, customer, at),
+    // Uno spazio in cancellazione, rimasto soltanto per fermare i rinnovi, non riceve coperture:
+    // il posto pagato resta occupato con i riferimenti dell'acquisto, per l'assistenza.
+    env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+        stripe_checkout_session_id, amount_paid, currency, paid_at)
+      SELECT ?1, a.workspace_id, 'lifetime', ?4, ?3, ?5, ?6, ?4 FROM lifetime_allocations a
+      WHERE a.provider_reference = ?3 AND a.workspace_id = ?2 AND a.status = 'active'
+        AND NOT EXISTS (SELECT 1 FROM account_deletions d
+          WHERE d.workspace_id = a.workspace_id AND d.completed_at IS NULL)
+      ON CONFLICT DO NOTHING`).bind(
+      crypto.randomUUID(),
+      workspaceId,
+      session.id,
+      paidAt,
+      intent?.amount_received ?? session.amount_total ?? 0,
+      intent?.currency ?? session.currency ?? "eur",
+    ),
+    ...(reversal
+      ? reversalStatements(env.DB, "stripe_checkout_session_id", session.id, reversal, at)
+      : []),
+  ]);
+  const granted = await env.DB.prepare(
+    "SELECT revoked_at FROM workspace_entitlements WHERE stripe_checkout_session_id = ?",
+  )
+    .bind(session.id)
+    .first<{ revoked_at: string | null }>();
+  if (!granted) {
+    // Incasso senza posto: lo gestisce l'assistenza, il tetto non cambia.
+    logFailure({ error: new UnknownLifetimeSession("lifetime_unallocated"), operation: "billing" });
+    return;
+  }
+  // Rimborsato prima dell'attivazione: l'abbonamento sostituito resta quello in vigore.
+  if (!granted.revoked_at) await endReplacedSubscriptions(env, stripe, workspaceId, now);
+}
+
+/**
+ * Con il lifetime l'abbonamento dello spazio non si rinnova più: si chiude subito, senza
+ * conguagli né rimborsi automatici, perché il periodo pagato non usato è già stato detratto. Le
+ * coperture già pagate restano fino alla loro fine. Anche la sessione di mensile o annuale
+ * ancora aperta scade, così non può più incassare; se è stata completata nel frattempo, il suo
+ * abbonamento si chiude con gli altri.
+ */
+export async function endReplacedSubscriptions(
+  env: Env,
+  stripe: Stripe,
+  workspaceId: string,
+  now = new Date(),
+) {
+  const [{ results }, { results: checkouts }] = await env.DB.batch<{ id: string }>([
+    env.DB.prepare(`SELECT id FROM stripe_subscriptions
+      WHERE workspace_id = ?1 AND environment = ?2 AND unavailable_at IS NULL
+        AND status IN (${sqlList(openSubscriptionStatuses)})`).bind(
+      workspaceId,
+      stripeEnvironment(env),
+    ),
+    env.DB.prepare(`SELECT session_id AS id FROM subscription_checkouts WHERE workspace_id = ?1
+        AND session_id IS NOT NULL AND julianday(expires_at) > julianday(?2)`).bind(
+      workspaceId,
+      now.toISOString(),
+    ),
+  ]);
+  const late = await inSequence(checkouts!, async ({ id }) => {
+    const session = await closeCheckoutSession(stripe, id);
+    await env.DB.prepare("DELETE FROM subscription_checkouts WHERE session_id = ?").bind(id).run();
+    return session.status === "complete" && session.subscription
+      ? [stripeId(session.subscription)]
+      : [];
+  });
+  // Una chiamata a Stripe alla volta: il turno resta entro i limiti.
+  await inSequence([...new Set([...results!.map(({ id }) => id), ...late.flat()])], (id) =>
+    cancelSubscription(env, stripe, id, now),
+  );
+}
+
+/** Lifetime venduti riletti per turno, ognuno una volta al giorno. */
+const lifetimeChecks = 5;
+
+/**
+ * Passo del cron per i posti: prenotazioni scadute o in attesa di un pagamento asincrono si
+ * rileggono da Stripe; una prenotazione mai legata a una sessione si libera alla scadenza; un
+ * lifetime in vigore con un abbonamento ancora aperto lo chiude; un lifetime venduto e non
+ * revocato si rilegge una volta al giorno, per un rimborso o una disputa di cui il webhook non
+ * è arrivato. Ogni elemento registra il proprio errore senza fermare gli altri.
+ */
+export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, now = new Date()) {
+  const at = now.toISOString();
+  const [, due, replaced, sold] = await env.DB.batch<Record<string, string>>([
+    env.DB.prepare(`DELETE FROM lifetime_allocations WHERE status = 'reserved'
+        AND provider_reference IS NULL AND julianday(expires_at) <= julianday(?)`).bind(at),
+    env.DB.prepare(`SELECT provider_reference FROM lifetime_allocations
+        WHERE status = 'reserved' AND provider_reference IS NOT NULL
+          AND (julianday(expires_at) <= julianday(?) OR completed_at IS NOT NULL)
+        ORDER BY slot`).bind(at),
+    // Anche una sessione di mensile o annuale rimasta aperta dopo il lifetime, se la chiusura
+    // all'attivazione non è riuscita.
+    env.DB.prepare(`SELECT a.workspace_id FROM lifetime_allocations a
+        WHERE a.status = 'active' AND ${lifetimeInForceSql("a.workspace_id")}
+          AND (EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.workspace_id = a.workspace_id
+              AND s.environment = ?1 AND s.unavailable_at IS NULL
+              AND s.status IN (${sqlList(openSubscriptionStatuses)}))
+            OR EXISTS (SELECT 1 FROM subscription_checkouts c WHERE c.workspace_id = a.workspace_id
+              AND c.session_id IS NOT NULL AND julianday(c.expires_at) > julianday(?2)))`).bind(
+      stripeEnvironment(env),
+      at,
+    ),
+    env.DB.prepare(`UPDATE lifetime_allocations SET checked_at = ?1 WHERE slot IN (
+        SELECT a.slot FROM lifetime_allocations a
+        WHERE a.status = 'active' AND a.kind = 'sale'
+          AND (a.checked_at IS NULL OR julianday(a.checked_at) <= julianday(?1, '-1 day'))
+          AND EXISTS (SELECT 1 FROM workspace_entitlements e
+            WHERE e.stripe_checkout_session_id = a.provider_reference AND e.revoked_at IS NULL)
+        ORDER BY a.checked_at IS NOT NULL, julianday(a.checked_at), a.slot
+        LIMIT ${lifetimeChecks})
+      RETURNING provider_reference`).bind(at),
+  ]);
+  const logged = (step: () => Promise<unknown>) => () =>
+    step().catch((error: unknown) => logFailure({ error, operation: "billing" }));
+  await inSequence(
+    [
+      ...due!.results.map(({ provider_reference }) =>
+        logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
+      ),
+      ...replaced!.results.map(({ workspace_id }) =>
+        logged(() => endReplacedSubscriptions(env, stripe, workspace_id!, now)),
+      ),
+      ...sold!.results.map(({ provider_reference }) =>
+        logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
+      ),
+    ],
+    (step) => step(),
+  );
+}
+
+export type LifetimeGrant =
+  | "done"
+  | "owned"
+  | "pending"
+  | "sold-out"
+  | "seat-unavailable"
+  | "refunded"
+  | "unavailable"
+  | "not_found";
+
+/** Posti attivi rimasti senza spazio dopo la cancellazione dell'account, dal più vecchio. */
+export async function vacantLifetimeSeats(db: D1Database) {
+  const { results } = await db
+    .prepare(`SELECT slot, kind, customer_id AS customerId, activated_at AS activatedAt
+      FROM lifetime_allocations WHERE status = 'active' AND workspace_id IS NULL ORDER BY slot`)
+    .all<{ slot: number; kind: string; customerId: string | null; activatedAt: string | null }>();
+  return results;
+}
+
+/**
+ * La vendita del posto rimasto senza spazio ha restituito l'intero importo: rimborso totale o
+ * disputa persa. Il diritto dello spazio cancellato non c'è più, quindi lo dice soltanto Stripe;
+ * una sessione sparita non prova un rimborso. Senza vendita, o senza Stripe, non c'è nulla da
+ * rileggere: il controllo giornaliero rilegge comunque il diritto ripreso.
+ */
+async function seatSaleReversed(
+  env: Env,
+  stripe: Stripe | null,
+  input: { workspaceId: string; slot: number },
+) {
+  // Soltanto per un posto che lo spazio può riprendere, con le condizioni del ripristino.
+  const seat =
+    await env.DB.prepare(`SELECT provider_reference AS sessionId FROM lifetime_allocations
+      WHERE slot = ?2 AND status = 'active' AND kind = 'sale' AND workspace_id IS NULL
+        AND EXISTS (SELECT 1 FROM workspaces WHERE id = ?1)
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
+        AND NOT ${lifetimeInForceSql("?1")}`)
+      .bind(input.workspaceId, input.slot)
+      .first<{ sessionId: string | null }>();
+  if (!seat?.sessionId || !stripe) return false;
+  let session: Stripe.Checkout.Session;
+  try {
+    session = await stripeCall(() =>
+      stripe.checkout.sessions.retrieve(seat.sessionId!, {
+        expand: ["payment_intent.latest_charge"],
+      }),
+    );
+  } catch (error) {
+    if (!isMissingObject(error)) throw error;
+    return false;
+  }
+  const intent = session.payment_intent;
+  const charge =
+    intent && typeof intent !== "string" && intent.latest_charge ? intent.latest_charge : null;
+  return (
+    !!charge && typeof charge !== "string" && !!(await paymentReversal(stripe, charge)).revocation
+  );
+}
+
+/**
+ * Riprende per lo spazio il posto attivo rimasto senza spazio dopo la cancellazione
+ * dell'account dello stesso cliente: non consuma un altro dei venti posti. Il diritto porta
+ * autore e motivo e, per un posto venduto, il riferimento della vendita, così rimborsi e
+ * dispute della vendita originale lo revocano ancora. Ordini, sblocchi e prova dello spazio
+ * cancellato non tornano.
+ */
+async function recoverLifetimeSeat(
+  env: Env,
+  input: { workspaceId: string; slot: number; author: string; reason: string },
+  at: string,
+): Promise<"done" | "seat-unavailable" | "not_found"> {
+  const [moved] = await env.DB.batch<{ slot: number }>([
+    env.DB.prepare(`UPDATE lifetime_allocations SET workspace_id = ?1
+      WHERE slot = ?2 AND status = 'active' AND workspace_id IS NULL
+        AND EXISTS (SELECT 1 FROM workspaces WHERE id = ?1)
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
+        AND NOT ${lifetimeInForceSql("?1")}
+      RETURNING slot`).bind(input.workspaceId, input.slot),
+    env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+        stripe_checkout_session_id, granted_by, grant_reason)
+      SELECT ?1, a.workspace_id, 'lifetime', ?3, CASE WHEN a.kind = 'sale' THEN a.provider_reference END,
+        ?4, ?5 FROM lifetime_allocations a
+      WHERE a.slot = ?6 AND a.workspace_id = ?2 AND a.status = 'active'
+        AND NOT ${lifetimeInForceSql("?2")}`).bind(
+      crypto.randomUUID(),
+      input.workspaceId,
+      at,
+      input.author,
+      input.reason,
+      input.slot,
+    ),
+  ]);
+  if (moved!.results.length) return "done";
+  const workspace = await env.DB.prepare("SELECT 1 FROM workspaces WHERE id = ?")
+    .bind(input.workspaceId)
+    .first();
+  return workspace ? "seat-unavailable" : "not_found";
+}
+
+/**
+ * Lifetime in omaggio, dalla console amministrativa: consuma uno dei venti posti, registra
+ * autore e motivo e chiude l'abbonamento dello spazio come un acquisto. Posto e diritto sono
+ * un unico commit; uno spazio con una prenotazione aperta aspetta l'esito del suo checkout.
+ * Uno spazio che ha già un posto con il lifetime revocato, per rimborso o disputa persa, lo
+ * riceve di nuovo sullo stesso posto, senza consumarne un altro: il posto resta della vendita
+ * originale e il nuovo diritto porta autore e motivo dell'omaggio. Con `slot` lo spazio riprende
+ * invece il posto rimasto senza spazio dopo la cancellazione dell'account dello stesso cliente,
+ * se la sua vendita non è stata rimborsata né persa in disputa.
+ */
+export async function grantLifetime(
+  env: Env,
+  stripe: Stripe | null,
+  input: { workspaceId: string; author: string; reason: string; slot?: number },
+  now = new Date(),
+): Promise<LifetimeGrant> {
+  const at = now.toISOString();
+  if (input.slot !== undefined) {
+    try {
+      if (await seatSaleReversed(env, stripe, { ...input, slot: input.slot })) return "refunded";
+    } catch (error) {
+      logFailure({ error, operation: "billing" });
+      return "unavailable";
+    }
+    const recovered = await recoverLifetimeSeat(env, { ...input, slot: input.slot }, at);
+    if (recovered !== "done") return recovered;
+    if (stripe)
+      await endReplacedSubscriptions(env, stripe, input.workspaceId, now).catch((error: unknown) =>
+        logFailure({ error, operation: "billing" }),
+      );
+    return "done";
+  }
+  const [slot] = await env.DB.batch<{ slot: number }>([
+    env.DB.prepare(`${freeSlotSql}
+      INSERT INTO lifetime_allocations (slot, workspace_id, status, kind, activated_at, created_at)
+      SELECT slot, w.id, 'active', 'gift', ?2, ?2 FROM n, workspaces w
+      WHERE w.id = ?1 AND ${freeSlotWhere}
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
+      ORDER BY slot LIMIT 1
+      ON CONFLICT DO NOTHING RETURNING slot`).bind(input.workspaceId, at),
+    env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
+        granted_by, grant_reason)
+      SELECT ?1, a.workspace_id, 'lifetime', ?3, ?4, ?5 FROM lifetime_allocations a
+      WHERE a.workspace_id = ?2 AND a.status = 'active' AND a.kind = 'gift' AND a.activated_at = ?3
+      ON CONFLICT DO NOTHING`).bind(
+      crypto.randomUUID(),
+      input.workspaceId,
+      at,
+      input.author,
+      input.reason,
+    ),
+  ]);
+  if (!slot!.results.length) {
+    const row = await env.DB.prepare(`SELECT w.id, a.status,
+        (SELECT COUNT(*) FROM lifetime_allocations) AS taken
+      FROM workspaces w LEFT JOIN lifetime_allocations a ON a.workspace_id = w.id WHERE w.id = ?`)
+      .bind(input.workspaceId)
+      .first<{ id: string; status: string | null; taken: number }>();
+    if (!row) return "not_found";
+    if (row.status !== "active") return row.status ? "pending" : "sold-out";
+    const regranted = await env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id,
+        source, starts_at, granted_by, grant_reason)
+      SELECT ?1, ?2, 'lifetime', ?3, ?4, ?5 WHERE NOT ${lifetimeInForceSql("?2")}`)
+      .bind(crypto.randomUUID(), input.workspaceId, at, input.author, input.reason)
+      .run();
+    if (!regranted.meta.changes) return "owned";
+  }
+  if (stripe)
+    await endReplacedSubscriptions(env, stripe, input.workspaceId, now).catch((error: unknown) =>
+      // Il cron ripete la chiusura: il diritto concesso resta.
+      logFailure({ error, operation: "billing" }),
+    );
+  return "done";
+}

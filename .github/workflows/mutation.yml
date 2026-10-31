@@ -1,0 +1,81 @@
+name: Mutation
+
+# Campagna settimanale su `develop` e avvio manuale; il candidato Production la richiama per i
+# moduli critici del diff cumulativo. Le PR non eseguono mutation test.
+on:
+  # Pianificazione e avvio manuale leggono il workflow dal branch predefinito, `develop`.
+  schedule:
+    # Lunedì 03:17 UTC: fuori dagli orari di lavoro e lontano dall'inizio dell'ora.
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: Moduli critici separati da spazi; vuoto per tutti
+        type: string
+        required: false
+  workflow_call:
+    inputs:
+      targets:
+        description: Matrice JSON dei moduli critici da qualificare
+        type: string
+        required: true
+
+env:
+  DO_NOT_TRACK: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    name: Select modules
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.targets.outputs.matrix }}
+    steps:
+      # La pianificazione parte dal branch predefinito: la campagna prova `develop`.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'develop' || '' }}
+          persist-credentials: false
+      # L'instrumenter di Stryker conta i mutanti di ogni modulo per dividerlo in parti.
+      - uses: ./.github/actions/setup
+      - name: List critical modules
+        id: targets
+        env:
+          TARGETS: ${{ inputs.targets }}
+        run: node scripts/mutation.mjs --matrix "${TARGETS}"
+
+  mutation:
+    name: ${{ matrix.target }} ${{ matrix.shard }}
+    needs: select
+    runs-on: ubuntu-26.04
+    # Una parte prova al più circa 150 mutanti: un quarto d'ora, con ampio margine.
+    timeout-minutes: 60
+    strategy:
+      # Ogni modulo conclude la propria prova: un fallimento non nasconde gli altri esiti.
+      fail-fast: false
+      # Venti job contemporanei per l'account: con gli otto browser del candidato restano liberi i
+      # posti per la CI di una PR quando la mutation gira da sola.
+      max-parallel: 12
+      matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
+    env:
+      MUTATION_TARGET: ${{ matrix.target }}
+      MUTATION_SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event_name == 'schedule' && 'develop' || '' }}
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Qualify critical module
+        run: pnpm test:mutation "${MUTATION_TARGET}"
+      - name: Preserve mutation evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
+          path: reports/mutation/
+          if-no-files-found: ignore
+          retention-days: 7

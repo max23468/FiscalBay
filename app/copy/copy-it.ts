@@ -1,0 +1,1221 @@
+import { legalDate, plural } from "./format";
+
+/** Registrazione chiusa sul test: la stessa frase nell'errore di accesso, nel modulo e nell'esito. */
+const registrationRestricted =
+  "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.";
+
+/** Pausa per inattività del Free, nella campanella e nei Negozi. */
+const inactivityTitle = "Letture in pausa per inattività";
+
+/** Invito a contattare l'assistenza, uguale in ogni pagina. */
+const contactSupport = "Contatta l’assistenza";
+
+/**
+ * Periodi di Premium, nella pagina del piano e nel riepilogo diagnostico. Stringhe e non un
+ * oggetto condiviso: un oggetto usato in due punti terrebbe i testi nel bundle del browser.
+ */
+const premiumMonthly = "Premium mensile";
+const premiumAnnual = "Premium annuale";
+const premiumLifetime = "Premium a vita";
+
+/** Titoli dei documenti legali, nelle Impostazioni, nelle pagine legali e nel consenso. */
+const termsTitle = "Termini di servizio";
+const privacyTitle = "Informativa privacy";
+
+export const it = {
+  /** Etichette generiche, uguali in ogni pagina. */
+  common: {
+    cancel: "Annulla",
+    save: "Salva",
+    saving: "Salvataggio…",
+    contactSupport,
+  },
+  shell: {
+    notFound: {
+      order: {
+        title: "Ordine non trovato",
+        body: "L’ordine non esiste in questo account o non è più consultabile.",
+        back: "Torna agli ordini",
+      },
+      store: {
+        title: "Negozio non trovato",
+        body: "Il negozio non è collegato a questo account.",
+        back: "Torna ai negozi",
+      },
+      page: {
+        title: "Pagina non trovata",
+        body: "L’indirizzo non corrisponde a una pagina di FiscalBay.",
+        back: "Torna agli ordini",
+      },
+    },
+    skipToContent: "Vai al contenuto",
+    mainNav: "Navigazione principale",
+    orders: "Ordini",
+    stores: "Negozi eBay",
+    settings: "Impostazioni",
+    search: "Cerca ordini",
+    searchPlaceholder: "Ordine, acquirente, articolo o SKU",
+    searchSeeAll: (count: number) => `Vedi tutti i risultati (${count})`,
+    searchEmpty: "Nessun ordine corrisponde alla ricerca.",
+    searchFailed: "Ricerca non riuscita. Riprova.",
+    searchSummary: (count: number) =>
+      count === 0
+        ? "Nessun suggerimento"
+        : `${count} ${plural(count, "suggerimento", "suggerimenti")}`,
+    notifications: "Notifiche",
+    notificationsUnread: (count: number) =>
+      count === 0 ? "Notifiche" : `Notifiche, ${count} da leggere`,
+    notificationsWindow: "Ultimi 30 giorni",
+    notificationsEmpty: "Nessuna notifica negli ultimi 30 giorni.",
+    markAllRead: "Segna tutte come lette",
+    storeNotifications: {
+      expiredTitle: "Collegamento scaduto",
+      expiredBody: (store: string) =>
+        `${store}: la sincronizzazione è sospesa. Ricollega il negozio.`,
+      expiringTitle: "Autorizzazione in scadenza",
+      expiringBody: (store: string, date: string) =>
+        `${store}: l’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data.`,
+      ebayDownTitle: "eBay non risponde",
+      ebayDownBody: "La sincronizzazione riprenderà appena eBay torna disponibile.",
+      readFailedTitle: "Aggiornamento non riuscito",
+      readFailedBody: (store: string) =>
+        `${store}: le ultime letture da eBay non sono riuscite. FiscalBay riprova automaticamente.`,
+      exportReadyTitle: "File pronto",
+      exportReadyBody: (file: string) => `${file}: scaricalo da Impostazioni › Esportazione.`,
+      exportFailedTitle: "File non creato",
+      exportFailedBody: (file: string) =>
+        `${file}: crealo di nuovo da Impostazioni › Esportazione.`,
+      inactivityTitle,
+      inactivityBody:
+        "Con il piano Free le letture si fermano dopo 30 giorni senza accessi e 7 di preavviso. Riprendile da Negozi.",
+      termsUpdateTitle: "Termini aggiornati",
+      termsUpdateBody: "Leggili e accettali da Impostazioni › Dati e privacy.",
+    },
+    account: "Account",
+    profile: "Profilo",
+    security: "Sicurezza",
+    planBilling: "Piano e pagamenti",
+    visitSite: "Visita fiscalbay.it",
+    whatsNew: "Novità",
+    whatsNewTitle: "Novità di FiscalBay",
+    signOut: "Esci",
+    close: "Chiudi",
+  },
+  preview: {
+    label: "Anteprima con dati di esempio",
+    scenario: "Scenario",
+    note: "Le azioni sono simulate.",
+    simulated: "Anteprima: l’azione è simulata.",
+    signOut: "Anteprima: l’uscita è simulata.",
+  },
+  orders: {
+    title: "Ordini",
+    count: (count: number) => `${count} ${plural(count, "ordine", "ordini")}`,
+    sortedBy: "Dal più recente",
+    filters: "Filtri",
+    store: "Negozio",
+    period: "Periodo",
+    paymentStatus: "Pagamento",
+    shippingStatus: "Spedizione",
+    fiscalStatus: "Codice Fiscale",
+    all: "Tutti",
+    periods: {
+      "7": "Ultimi 7 giorni",
+      "30": "Ultimi 30 giorni",
+      "90": "Ultimi 90 giorni",
+      "6m": "Ultimi 6 mesi",
+      "12m": "Ultimi 12 mesi",
+    },
+    searchActive: (query: string) => `Ricerca: ${query}`,
+    clearSearch: "Cancella ricerca",
+    resetFilters: "Reimposta filtri",
+    premiumOption: "Disponibile con Premium",
+    payment: {
+      paid: "Pagato",
+      unpaid: "Non pagato",
+      partially_refunded: "Rimborsato in parte",
+      refunded: "Rimborsato",
+    },
+    shipping: {
+      to_ship: "Da spedire",
+      in_progress: "Spedito in parte",
+      shipped: "Spedito",
+      cancelled: "Annullato",
+    },
+    billingAddress: "Indirizzo di fatturazione",
+    phone: "Telefono",
+    email: "Email",
+    notProvided: "Non riportato da eBay",
+    maskedContact: "Mascherato da eBay",
+    billingData: "Dati di fatturazione",
+    copyBillingData: "Copia dati di fatturazione",
+    fiscalNotice: {
+      lastKnown:
+        "Ultima lettura da eBay non riuscita: resta mostrato il valore letto in precedenza.",
+      checking: "Nuova lettura da eBay in corso.",
+      notReturned:
+        "L’ultima lettura di eBay non riporta questo dato: resta mostrato il valore letto in precedenza.",
+      masked: "eBay ora nasconde questo dato: resta mostrato il valore letto in precedenza.",
+    },
+    missingReason: {
+      masked: "eBay nasconde il Codice Fiscale di questo ordine.",
+      removed: "eBay ha rimosso il Codice Fiscale da questo ordine.",
+      foreign: (country: string) => `Acquirente estero (${country}).`,
+    },
+    orderLabel: (id: string) => `Ordine ${id}`,
+    fiscal: {
+      available: "Disponibile",
+      locked: "Da sbloccare",
+      missing: "Non disponibile su eBay",
+      foreign: "Acquirente estero",
+      checking: "Verifica in corso",
+      error: "Aggiornamento non riuscito",
+    },
+    select: "Seleziona",
+    selectOrder: (id: string) => `Seleziona l’ordine ${id}`,
+    selected: (count: number) => `${count} ${plural(count, "selezionato", "selezionati")}`,
+    selectedLocked: (count: number) =>
+      count === 0
+        ? "Nessun ordine da sbloccare"
+        : `${count} ${plural(count, "ordine da sbloccare", "ordini da sbloccare")}`,
+    unlock: "Sblocca ordine",
+    unlockSelected: (count: number) => `Sblocca ${count}`,
+    exportSelected: "Esporta",
+    unlockTitle: (count: number) => `Sbloccare ${count} ${plural(count, "ordine", "ordini")}?`,
+    unlockConfirmText: (count: number, remaining: number) =>
+      `Dopo lo sblocco ${plural(remaining - count, "ti resterà", "ti resteranno")} ${remaining - count} ${plural(remaining - count, "sblocco", "sblocchi")} in questo ciclo.`,
+    unlockExceeds: (count: number, remaining: number) =>
+      `Hai selezionato ${count} ordini da sbloccare, ma hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Riduci la selezione.`,
+    unlockConfirm: "Sblocca",
+    dontAskUnlock: "Non chiedermelo più",
+    unlockFailed: "Sblocco non riuscito. Controlla gli ordini e gli sblocchi rimasti, poi riprova.",
+    restoreUnlockConfirmation: "Riattiva conferma sblocco",
+    unlocked: (remaining: number | null) =>
+      remaining === null
+        ? "Ordine sbloccato."
+        : `Ordine sbloccato. ${plural(remaining, "Ti resta", "Ti restano")} ${remaining} ${plural(remaining, "sblocco", "sblocchi")} in questo ciclo.`,
+    unlockedMany: (count: number) => `${count} ordini sbloccati.`,
+    loadMore: "Carica altri",
+    allShown: "Hai visto tutti gli ordini del periodo.",
+    allShownAll: "Hai visto tutti gli ordini disponibili.",
+    listLimit: "Per gli ordini meno recenti usa la ricerca o i filtri.",
+    importMore: "Importazione in corso: gli altri ordini compaiono qui man mano.",
+    details: "Dettaglio",
+    moreActions: (id: string) => `Altre azioni per l’ordine ${id}`,
+    openOnEbay: "Apri su eBay",
+    exportOrder: "Esporta ordine",
+    itemsMore: (count: number) => `+ ${count} ${plural(count, "altro articolo", "altri articoli")}`,
+    quantity: "Quantità",
+    newOrders: (count: number) => `${count} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
+    showNew: "Mostra",
+    identifier: { CF: "Codice Fiscale", PIVA: "Partita IVA" },
+    copy: (label: string, order: string) => `Copia ${label}: ordine ${order}`,
+    copied: "Copiato negli appunti",
+    copyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il codice.",
+    contactCopyFailed: "Copia non riuscita. Riprova oppure seleziona e copia il testo.",
+    lockedLabel: (label: string) => `${label} da sbloccare`,
+    unlockBalance: (remaining: number) =>
+      `${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo.`,
+    lockedHint: (remaining: number) =>
+      `Hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Questo ordine ne usa uno.`,
+    lockedExhausted: (date: string) =>
+      `Hai usato tutti gli sblocchi di questo ciclo. Il prossimo inizia il ${date}.`,
+    lockedUntil: (date: string) => `Sblocco disponibile dal ${date}.`,
+    freeSuspended:
+      "Gli sblocchi del piano Free sono sospesi dall’assistenza per questo account. Gli ordini già sbloccati restano visibili. Per chiarimenti scrivi a",
+    lockedHold: {
+      checking: "Nuova verifica da eBay in corso: lo sblocco torna disponibile al termine.",
+      unpaid: "Acquisto non ancora pagato: lo sblocco è disponibile dopo il pagamento.",
+    },
+    missingHint: "eBay non riporta il Codice Fiscale per questo ordine.",
+    checkingHint: "Verifica del Codice Fiscale in corso.",
+    errorHint: "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Riprova più tardi.",
+    errorHintEbayDown:
+      "Non siamo riusciti a recuperare il Codice Fiscale da eBay. Potrai riprovare quando eBay torna a rispondere.",
+    retry: "Riprova",
+    retried: "Nuova lettura richiesta.",
+    quality: {
+      format: "Il formato del codice non è valido.",
+      checksum: "Il carattere di controllo non corrisponde.",
+      name: "Le lettere del codice non corrispondono al nome dell’ordine.",
+      unverifiable: "Non possiamo verificare che il codice corrisponda al nome dell’acquirente.",
+      unchecked: "FiscalBay non verifica il formato di questo tipo di identificativo.",
+    },
+    codeToCheck: "Codice da controllare",
+    differentCodes: "Codici diversi",
+    updated: "Aggiornato da eBay",
+    updatedHint: "eBay ha modificato questo dato dopo la prima lettura.",
+    suggestion: "Suggerimento da un ordine precedente",
+    suggestionFrom: "Da un ordine precedente:",
+    suggestionCheck: "Controlla che valga anche per questo ordine.",
+    suggestionHint: (order: string, date: string) => `Dall’ordine ${order} del ${date}.`,
+    suggestionConflict: "Gli ordini precedenti riportano codici diversi: questo è il più recente.",
+    suggestionStatus: {
+      identity_missing:
+        "Identità stabile dell’acquirente non disponibile: nessun collegamento automatico con i precedenti.",
+      none: "Nessun precedente autorizzato con un Codice Fiscale utilizzabile.",
+      ambiguous:
+        "I precedenti più recenti non permettono una scelta univoca per uno o più identificativi: nessun valore proposto per quei dati.",
+    },
+    messageLanguage: "Lingua del messaggio",
+    messageText: "Testo per l’acquirente",
+    messageCopyFailed: "Copia non riuscita. Seleziona e copia il testo del messaggio.",
+    requestMessage: "Copia messaggio per l’acquirente",
+    requestCopied: "Messaggio copiato. Invialo all’acquirente dai tuoi canali.",
+    requestEmail: "Scrivi all’acquirente via email",
+    syncedAgo: (time: string) => `Aggiornato ${time}`,
+    refreshingTitle: "Aggiornamento in corso",
+    ebayDownTitle: "eBay non risponde",
+    ebayDownBody: (time: string) =>
+      `Gli ordini sono aggiornati al ${time}. Sincronizzazione e ricollegamento tornano disponibili quando eBay risponde.`,
+    ebayDownNeverBody:
+      "Gli ordini compariranno appena eBay risponde. Sincronizzazione e ricollegamento tornano disponibili in quel momento.",
+    ebayPausedTitle: "Letture da eBay sospese",
+    ebayPausedBody: (time: string) =>
+      `Gli ordini sono aggiornati al ${time}. Per manutenzione FiscalBay non legge eBay: sincronizzazione e collegamento riprendono appena possibile.`,
+    ebayPausedNeverBody:
+      "Per manutenzione FiscalBay non legge eBay: gli ordini compariranno quando le letture riprendono.",
+    storeReadFailedTitle: (store: string) => `${store}: aggiornamento non riuscito`,
+    storeReadFailedBody: (time: string) =>
+      `Gli ordini di questo negozio sono aggiornati al ${time}. Gli altri negozi continuano e FiscalBay riprova automaticamente.`,
+    quotaTitle: "Sblocchi esauriti per questo ciclo",
+    quotaBody: (date: string) =>
+      `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
+    quotaAction: "Passa a Premium",
+    waitlistTitle: "Sei in lista d’attesa per il Free",
+    trialOffer: "Prova Premium gratis per 14 giorni, senza carta.",
+    trialStatus: (days: number) =>
+      `Prova Premium: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}`,
+    trialEndingTitle: (date: string) => `La prova Premium finisce il ${date}`,
+    trialEndingBody:
+      "Poi i Codici Fiscali dei nuovi ordini tornano agli sblocchi del Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+    trialEndingAction: "Vedi il piano",
+    reconciliationTitle: "Ordine da verificare",
+    reconciliationBody:
+      "Non è chiaro se gli articoli di questo ordine compaiono anche in un altro ordine eBay. Controllalo su eBay prima di usarne i dati.",
+    storeIssueTitle: (store: string) => `${store}: collegamento scaduto`,
+    storeIssueBody:
+      "La sincronizzazione di questo negozio è sospesa. Gli altri negozi continuano. Ricollega il negozio.",
+    storeIssueAction: "Apri il negozio",
+    reconnectStore: "Ricollega negozio",
+    consentExpiringTitle: (store: string) => `${store}: autorizzazione in scadenza`,
+    consentExpiringBody: (date: string) =>
+      `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per non interrompere la sincronizzazione.`,
+    importingStatus: (count: number) =>
+      `Importazione in corso: ${count} ${plural(count, "ordine", "ordini")} finora`,
+    firstUseTitle: "Nessun negozio collegato",
+    firstUseBody:
+      "Collega il tuo negozio eBay per consultare gli ordini e i Codici\u00a0Fiscali disponibili.",
+    connectStore: "Collega negozio eBay",
+    /** Proposta del consenso facoltativo dopo i primi passi, separata da quella della registrazione. */
+    marketingProposal: {
+      title: "Vuoi ricevere novità e offerte su FiscalBay?",
+      body: "Poche email su nuove funzioni e promozioni. Puoi cambiare scelta in ogni momento da Impostazioni, Notifiche.",
+      accept: "Sì, ricevile",
+      decline: "No, grazie",
+      accepted: "Riceverai novità e offerte via email.",
+      declined: "Non riceverai novità e offerte.",
+    },
+    steps: "Primi passi",
+    stepAccount: "Account creato",
+    stepEmail: "Email verificata",
+    stepStore: "Negozio eBay collegato",
+    stepSync: "Prima sincronizzazione",
+    noOrdersTitle: (days: number) => `Nessun ordine negli ultimi ${days} giorni`,
+    firstSyncTitle: "Prima sincronizzazione in corso",
+    firstSyncBody: (store: string) =>
+      `${store} è collegato. Gli ordini compariranno qui man mano che vengono importati.`,
+    noOrdersBody: (store: string, time: string) =>
+      `${store} è collegato e aggiornato al ${time}. I nuovi ordini compariranno qui.`,
+    openStore: "Apri il negozio",
+    noResultsTitle: "Nessun risultato",
+    noResultsBody: "Nessun ordine corrisponde ai filtri. Modifica i criteri di ricerca.",
+    noSearchResultsBody: "Prova un’altra ricerca.",
+    loading: "Caricamento degli ordini",
+    list: "Elenco ordini",
+  },
+  order: {
+    title: (id: string) => `Ordine ${id}`,
+    tabDetails: "Dettagli",
+    tabItems: "Articoli",
+    source: (time: string) => `Fonte: eBay, letto il ${time}`,
+    buyer: "Acquirente",
+    username: "Nome utente eBay",
+    recipient: "Destinatario",
+    summary: "Ordine",
+    total: "Totale",
+    store: "Negozio",
+    marketplace: "Marketplace",
+    created: "Data ordine",
+    update: "Aggiornamento",
+    updatedOnEbay: "Ultima modifica su eBay",
+    sku: "SKU",
+    noSku: "Senza SKU",
+    viewListing: "Vedi inserzione",
+    price: "Prezzo unitario",
+    lineAmount: "Importo della riga",
+  },
+  stores: {
+    title: "Negozi eBay",
+    list: "Elenco negozi",
+    connect: "Collega negozio eBay",
+    store: "Negozio",
+    marketplace: "Marketplace",
+    connection: "Collegamento",
+    lastSync: "Ultima sincronizzazione",
+    openDetail: "Apri",
+    notifications: "Notifiche",
+    orders: "Ordini importati",
+    state: {
+      active: "Collegato",
+      paused: "In pausa",
+      reconnect_required: "Collegamento scaduto",
+      error: "Autorizzazione incompleta",
+      disconnected: "Scollegato",
+    },
+    syncing: "In corso",
+    never: "Mai",
+    pausedByPlan: "In pausa per il piano Free",
+    pausedByInactivity: "In pausa per inattività",
+    pausedByAdmin: "In pausa dall’assistenza",
+    inactivityTitle,
+    inactivityBody:
+      "Non hai aperto FiscalBay per 30 giorni né nei 7 giorni di preavviso: con il piano Free le letture da eBay si sono fermate. Riprendile per recuperare gli ordini ancora nella finestra del piano.",
+    inactivityResume: "Riprendi le letture",
+    notificationsOn: "Attive",
+    notificationsOff: "Disattivate",
+    notificationsHeld: "Sospese",
+    notificationsHeldHint: "Sospese finché la sincronizzazione non riprende",
+    notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Premium.",
+    freeLimit: "Il piano Free include un solo negozio attivo.",
+    sectionConnection: "Collegamento",
+    sectionSync: "Sincronizzazione",
+    sectionNotifications: "Notifiche",
+    sectionRecent: "Ultimi aggiornamenti",
+    sectionActions: "Azioni",
+    account: "Account eBay",
+    feedback: "Feedback",
+    positiveFeedback: (percent: string) => `${percent} positivi`,
+    topRated: "Top Rated",
+    openStore: "Apri negozio su eBay",
+    connectedSince: "Collegato dal",
+    consentUntil: "Scadenza autorizzazione",
+    consentExpired: "Scaduta",
+    consentExpiringPaused: (date: string) =>
+      `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per riprendere la sincronizzazione senza interruzioni.`,
+    target: (minutes: number) => `Aggiornamento previsto circa ogni ${minutes} minuti`,
+    history: (days: number) => `Storico degli ultimi ${days} giorni`,
+    importDone: (days: number) => `Storico di ${days} giorni importato`,
+    importRunning: "Importazione dello storico in corso",
+    importNotStarted: "Importazione dello storico non iniziata",
+    historyLabel: "Storico",
+    lastRead: "Ultima lettura",
+    historyImported: (days: number) => `${days} giorni importati`,
+    historyRunning: "In importazione",
+    historyPending: "Non iniziato",
+    details: "Dettagli e azioni",
+    syncSuspended: "Sincronizzazione sospesa fino al ricollegamento.",
+    recentOk: (count: number) =>
+      count === 0
+        ? "Riuscito, nessun nuovo ordine"
+        : `Riuscito, ${count} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
+    recentFailed: "Non riuscito",
+    notificationsLink: "Apri le notifiche",
+    syncNow: "Sincronizza ordini recenti",
+    reimport: "Reimporta storico",
+    pause: "Metti in pausa",
+    resume: "Riprendi",
+    pauseHint:
+      "La pausa manuale ferma le nuove letture. Gli ordini già importati restano consultabili secondo il piano.",
+    inactivityPauseHint:
+      "In pausa per inattività: con il piano Free nessuna nuova lettura dopo 30 giorni senza accessi e 7 di preavviso. Gli ordini restano consultabili; «Riprendi» riprende tutti i negozi.",
+    adminPauseHint:
+      "In pausa dall’assistenza: nessuna nuova lettura finché la verifica non è conclusa. Gli ordini già importati restano consultabili secondo il piano; per informazioni scrivi all’assistenza.",
+    planPauseHint:
+      "In pausa per il piano Free: nessuna nuova lettura e ordini non consultabili. Il piano include un solo negozio attivo.",
+    chooseFreeStore: "Scegli il negozio attivo",
+    reconnect: "Ricollega negozio",
+    disconnect: "Scollega",
+    disconnectDelete: "Scollega ed elimina negozio",
+    deleteStore: "Elimina negozio",
+    disconnectTitle: (name: string) => `Scollegare ${name}?`,
+    disconnectBody:
+      "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito.",
+    disconnectSubscription:
+      "Scollegare il negozio non disdice l’abbonamento Premium: gli addebiti previsti restano.",
+    disconnectSubscriptionLink: "Gestisci l’abbonamento",
+    deleteBody:
+      "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
+    deleteLabel: "Scrivi il nome del negozio per confermare",
+    issue: {
+      reconnect: {
+        title: "Collegamento scaduto",
+        body: "La sincronizzazione è sospesa. Ricollega il negozio.",
+      },
+      permissions: {
+        title: "Autorizzazione incompleta",
+        body: "eBay non ha concesso l’accesso agli ordini. Ricollega il negozio e accetta tutte le autorizzazioni richieste.",
+      },
+      unverifiable: {
+        title: "Negozio non verificabile",
+        body: "eBay non conferma l’identità di questo negozio. La sincronizzazione è sospesa. Ricollega il negozio. Se il problema continua, contatta l’assistenza.",
+      },
+    },
+    elsewhereTitle: "Negozio già collegato a un altro account",
+    elsewhereBody:
+      "Questo negozio eBay è collegato a un altro account FiscalBay. Accedi con quell’account oppure contatta l’assistenza.",
+    ebayDown: "eBay non risponde: sincronizzazione e ricollegamento sono sospesi.",
+    ebayPaused:
+      "Letture da eBay sospese per manutenzione: sincronizzazione e collegamento riprendono appena possibile.",
+    requested: {
+      queued: "Sincronizzazione richiesta: i nuovi ordini compaiono appena eBay risponde.",
+      merged: "Sincronizzazione già richiesta: parte appena possibile.",
+      importing: "L’importazione dello storico è già in corso.",
+      limited: "eBay ha chiesto di attendere: la sincronizzazione parte appena possibile.",
+      suspended:
+        "Letture da eBay sospese per manutenzione: la sincronizzazione parte alla ripresa.",
+    },
+    reimportRequested: "Reimportazione dello storico richiesta.",
+    disconnectedHint:
+      "FiscalBay non legge più questo negozio. Gli ordini già importati restano consultabili; ricollegalo per riprendere.",
+    done: {
+      "store-pause": "Negozio in pausa.",
+      "store-resume": "Negozio ripreso.",
+      "store-disconnect": "Negozio scollegato.",
+    } as Record<string, string>,
+    deleteMismatch: "Il nome non corrisponde: nessun dato eliminato.",
+    failed: "Operazione non riuscita. Riprova.",
+  },
+  settings: {
+    title: "Impostazioni",
+    categories: "Categorie",
+    groups: { ordini: "Ordini", account: "Account", generale: "Generale" },
+    sections: {
+      profilo: { title: "Profilo" },
+      piano: { title: "Piano e pagamenti" },
+      notifiche: { title: "Notifiche" },
+      esportazione: { title: "Esportazione" },
+      sicurezza: { title: "Sicurezza" },
+      aspetto: { title: "Aspetto e lingua" },
+      messaggio: { title: "Modello di messaggio" },
+      privacy: { title: "Dati e privacy" },
+      supporto: { title: "Supporto" },
+    },
+    saved: "Salvato",
+    saveFailed: "Modifica non salvata. L’impostazione è tornata com’era: riprova.",
+    plan: {
+      currentPlan: "Piano attuale",
+      unlockConfirmation: "Chiedi conferma prima di sbloccare un ordine",
+      free: "Free",
+      premium: "Premium",
+      freeSummary: "Un negozio attivo, ultimi 30 giorni di ordini, CSV.",
+      waitlisted:
+        "Il piano Free è al completo e il tuo account è in lista d’attesa: FiscalBay non legge i tuoi negozi e non offre gli sblocchi del Free finché non verrai ammesso.",
+      waitlistedPurchase: "Intanto puoi collegare un negozio e scegliere la prova o Premium.",
+      unlocksCycle: "Ordini sbloccati in questo ciclo",
+      unlocksUsed: (used: number, limit: number) => `${used} di ${limit}`,
+      cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
+      nextCycleLimit: (limit: number) => `Il prossimo ciclo avrà ${limit} sblocchi.`,
+      trialTitle: "Prova Premium per 14 giorni",
+      trialBody: "Senza carta e senza rinnovo automatico: alla fine torni al Free.",
+      trialAction: "Attiva la prova",
+      trialStarted: "Prova Premium attivata.",
+      trialUnavailable: "La prova Premium non è disponibile per questo account.",
+      trialPlan: "Prova Premium",
+      trialEnds: (date: string, days: number) =>
+        `Finisce il ${date}: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}.`,
+      trialAfter:
+        "Nessun addebito: alla fine torni al Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+      trialAfterChosen:
+        "Alla fine Premium continua con il primo addebito. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+      buyTitle: "Passa a Premium",
+      buyBody:
+        "Ordini da sbloccare senza limite per ciclo, più negozi attivi, un anno di storico, XLSX e notifiche Telegram.",
+      priceMonthly: (price: string) => `${price} al mese`,
+      priceAnnual: (price: string) => `${price} all’anno`,
+      priceLifetime: (price: string) => `${price} una tantum`,
+      priceAnnualNote: (months: number) => `12 mesi al prezzo di ${months}.`,
+      /** Totale con l'IVA italiana accanto al netto, come sul sito. */
+      priceGross: (price: string) => `${price} con IVA italiana al\u00a022%`,
+      lifetimeSeats: (left: number, total: number) => `Restano ${left} posti su ${total}`,
+      lifetimeCredit: (amount: string) => `Meno ${amount} del periodo pagato non usato.`,
+      lifetimeReplaces: "L’abbonamento si chiude senza altri rinnovi.",
+      lifetimeCreditName: "Periodo pagato non usato",
+      lifetimeSoldOut: "Posti esauriti",
+      lifetimeUnavailable: "I posti a vita sono esauriti.",
+      lifetimeRenewing:
+        "Il tuo abbonamento si rinnova a breve: potrai passare a vita subito dopo il rinnovo.",
+      lifetimeUpgradeTitle: "Passa a vita",
+      lifetimeProcessingTitle: "Premium a vita in attivazione",
+      lifetimeProcessingBody:
+        "Premium a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale.",
+      trialPurchaseNote:
+        "Con mensile o annuale oggi non paghi: i giorni di prova restano e il primo addebito arriva quando la prova finisce.",
+      trialEndingPurchaseNote:
+        "La prova finisce fra meno di due giorni: con mensile o annuale il primo addebito è oggi e il periodo pagato parte subito.",
+      firstCharge: (date: string) => `Primo addebito il ${date}.`,
+      trialCheckoutProcessingTitle: "Scelta del piano in corso",
+      trialCheckoutProcessingBody:
+        "Stripe sta confermando l’abbonamento. La prova continua e il primo addebito arriva quando finisce.",
+      trialChosenTitle: (plan: string) => `${plan} scelto`,
+      trialChosenBody: (date: string) =>
+        `La prova continua: il primo addebito arriva il ${date}, quando finisce. Fino ad allora non paghi nulla.`,
+      trialChosenCancelledTitle: (plan: string) => `${plan} disdetto`,
+      trialChosenCancelledBody: (date: string) =>
+        `Nessun addebito: il ${date}, alla fine della prova, torni al Free. Fino ad allora puoi riattivarlo su Stripe.`,
+      pricesNote:
+        "Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
+      purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
+      purchaseClosed: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
+      checkoutUnavailable: "Pagamento non disponibile ora. Riprova più tardi.",
+      checkoutCovered: "Il tuo account ha già Premium attivo.",
+      checkoutProcessingTitle: "Attivazione Premium in corso",
+      checkoutProcessingBody: "Premium si attiva appena Stripe conferma il pagamento.",
+      checkoutCancelled: "Pagamento annullato. Nessun addebito.",
+      buyPeriod: { monthly: "Scegli mensile", annual: "Scegli annuale", lifetime: "Scegli a vita" },
+      freeStoreHint: "Puoi sostituire il negozio attivo ogni 90 giorni.",
+      freeStoreLocked: (date: string) => `Potrai sostituire il negozio attivo dal ${date}.`,
+      freeStoreConfirmTitle: (name: string) => `Rendere attivo ${name}?`,
+      freeStoreConfirmBody: (previous: string | null, date: string) =>
+        `${previous ? `${previous} va in pausa: nessuna nuova lettura e ordini non consultabili. ` : ""}Potrai sostituire di nuovo il negozio attivo dal ${date}.`,
+      freeStoreConfirm: "Rendi attivo",
+      freeStoreChanged: "Negozio attivo aggiornato.",
+      freeStoreUnavailable: "Il negozio attivo non si può sostituire ora.",
+      premiumPeriod: {
+        monthly: premiumMonthly,
+        annual: premiumAnnual,
+        lifetime: premiumLifetime,
+      },
+      premiumLifetime: "Acquisto una tantum, senza rinnovi.",
+      premiumLifetimeGranted: "Concesso da FiscalBay, senza rinnovi.",
+      grantEnds: (date: string) => `Premium concesso fino al ${date}.`,
+      premiumRenews: (date: string) => `Si rinnova il ${date}.`,
+      premiumEnds: (date: string) => `Rinnovo disdetto: Premium resta attivo fino al ${date}.`,
+      refundedTitle: "Pagamento rimborsato",
+      refundedBody: (renewsAt: string | null) =>
+        renewsAt
+          ? `Il pagamento del periodo in corso è stato rimborsato e sei nel piano Free. Premium riprende con il rinnovo del ${renewsAt}.`
+          : "Il pagamento del periodo in corso è stato rimborsato e sei di nuovo nel piano Free.",
+      lifetimeRefundedBody:
+        "Il pagamento di Premium a vita è stato rimborsato e sei di nuovo nel piano Free.",
+      renewalFailedTitle: "Rinnovo non riuscito",
+      renewalFailedBody: (date: string) =>
+        `Sei di nuovo nel piano Free. Completa il pagamento richiesto da Stripe entro il ${date} per mantenere il tuo prezzo.`,
+      manageBilling: "Gestisci abbonamento su Stripe",
+      billingDocuments: "Consulta ricevute e fatture su Stripe",
+      billingUnavailable: "Gestione dell’abbonamento non disponibile ora. Riprova più tardi.",
+      switchTo: { monthly: "Passa al mensile", annual: "Passa all’annuale" },
+      switchHint: (date: string) =>
+        `Il cambio vale dal ${date}: nessun addebito prima di quella data e il prezzo resta quello del tuo listino.`,
+      switchScheduled: (period: "monthly" | "annual") => (date: string) =>
+        `Si rinnova il ${date} come ${period === "annual" ? "annuale" : "mensile"}.`,
+      keepPeriod: { monthly: "Resta al mensile", annual: "Resta all’annuale" },
+      periodChanged: "Rinnovo aggiornato.",
+      periodUnavailable: "Il cambio di rinnovo non è disponibile ora. Riprova più tardi.",
+      billingDocs: "Ricevute e fatture sono disponibili su Stripe.",
+    },
+    notifications: {
+      telegramTitle: "Notifiche Telegram",
+      telegramPremium: "Le notifiche degli ordini su Telegram sono incluse in Premium.",
+      telegramChat: "Chat collegata",
+      telegramChange: "Cambia chat",
+      telegramEnabled: "Invia notifiche degli ordini",
+      telegramFilter: "Quali ordini",
+      telegramFilterAll: "Tutti i nuovi ordini",
+      telegramFilterFiscal: "Solo ordini con Codice Fiscale",
+      telegramMode: "Frequenza",
+      telegramModeEach: "Un messaggio per ordine",
+      telegramModeDigest: "Riepilogo giornaliero",
+      telegramDigestTime: "Orario del riepilogo",
+      telegramStores: "Negozi",
+      telegramConnect: "Collega Telegram",
+      telegramPending:
+        "Premi «Avvia» nel bot per completare il collegamento. Il link vale 15 minuti.",
+      telegramChangePending:
+        "Premi «Avvia» nel bot dalla nuova chat. Fino ad allora le notifiche restano su questa.",
+      telegramLinked: "Chat Telegram collegata.",
+      telegramChatUnnamed: "Chat privata",
+      telegramBlocked: "Il bot non riesce a scriverti",
+      telegramBlockedHint:
+        "Il bot risulta bloccato in Telegram. Sbloccalo e scrivigli /start: le notifiche riprendono da quel momento.",
+      telegramOpenBot: "Apri il bot in Telegram",
+      telegramUnreachable: "Alcune notifiche non sono arrivate",
+      telegramUnreachableHint:
+        "Telegram non ha accettato i messaggi dopo diversi tentativi. Il prossimo invio riuscito chiude l'avviso.",
+      telegramDigestZone: (zone: string) => `Fuso orario: ${zone}`,
+      telegramUnavailable: "Le notifiche Telegram non sono disponibili in questo momento.",
+      marketingTitle: "Comunicazioni",
+      marketingConsent: "Ricevi via email novità e offerte su FiscalBay",
+      marketingHint: "Le email sul tuo account arrivano in ogni caso.",
+    },
+    export: {
+      exportScope: "Ordini da esportare",
+      exportPeriod: "Periodo",
+      exportFormat: "Formato",
+      exportRows: "Una riga per",
+      exportRowOrder: "Ordine",
+      exportRowItem: "Articolo",
+      exportColumns: "Colonne",
+      exportFiscal: "Ordini inclusi",
+      exportFiscalAll: "Tutti",
+      exportFiscalAvailable: "Solo con il Codice Fiscale disponibile",
+      exportCount: (orders: number, locked: number) =>
+        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} il Codice Fiscale resta vuoto.`}`,
+      exportNone: {
+        scope: "Nessun ordine da esportare: gli ordini scelti non sono più disponibili.",
+        period: "Nessun ordine nel periodo.",
+        available: "Nessuno di questi ordini ha il Codice Fiscale disponibile.",
+      },
+      exportTextHint:
+        "Per conservare gli zeri iniziali di Codice Fiscale, Partita IVA, SKU, CAP e telefono, apri il file in Excel da Dati > Da testo/CSV e imposta quelle colonne come Testo.",
+      exportContextSelection: "Ordini selezionati nella pagina Ordini.",
+      exportContextOrder: (id: string) => `Ordine ${id}.`,
+      exportContextFiltered: "Ordini dell’elenco con i filtri e la ricerca attivi.",
+      exportContextAll: "Tutti gli ordini dell’elenco.",
+      exportContextBack: "Torna agli ordini",
+      exportCreate: "Crea file",
+      exportPreview: "Prime righe del file",
+      exportCreated: "Anteprima: nessun file creato.",
+      exportFailed: "File non creato. Riprova più tardi.",
+      exportEmpty: "Nessun ordine da esportare con queste scelte.",
+      exportGone: "File non più disponibile. Crealo di nuovo.",
+      exportQueued: "File in preparazione: ti avvisiamo nella campanella quando è pronto.",
+      exportBusy: (max: number) =>
+        `Hai già ${max} file in preparazione: potrai crearne un altro quando uno sarà pronto.`,
+      exportTooManyRows:
+        "Il file supera il numero di righe di un foglio XLSX: scegli CSV o meno ordini.",
+      exportFiles: "File creati",
+      exportFileReady: (until: string) => `Scaricabile fino a ${until}`,
+      exportFileQueued: "In preparazione",
+      exportFileFailed: "Non creato: crealo di nuovo",
+      exportDownload: "Scarica",
+      exportPremium: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Premium.",
+      exportColumnsInvalid: "Scegli almeno una colonna.",
+      exportXlsxHint:
+        "Nel file XLSX Codice Fiscale, Partita IVA e SKU sono colonne di testo e conservano gli zeri iniziali.",
+      exportMoveUp: (column: string) => `Sposta su: ${column}`,
+      exportMoveDown: (column: string) => `Sposta giù: ${column}`,
+      exportColumnMoved: (column: string, position: number, total: number) =>
+        `${column} in posizione ${position} di ${total}.`,
+      exportConfiguration: "Configurazione",
+      exportConfigurationStandard: "Standard",
+      exportSaveConfig: "Salva configurazione",
+      exportConfigName: "Nome della configurazione",
+      exportConfigSaved: "Configurazione salvata.",
+      exportConfigSimulated: "Anteprima: configurazioni non modificate.",
+      exportConfigSample: "Commercialista",
+      exportConfigDelete: "Elimina configurazione",
+      exportConfigDeleted: "Configurazione eliminata.",
+      exportConfigInvalid: "Configurazione non valida.",
+      exportConfigFull: (max: number) =>
+        `Puoi salvare fino a ${max} configurazioni: eliminane una per salvarne un’altra.`,
+      exportConfigFailed: "Configurazione non salvata. Riprova più tardi.",
+      file: {
+        name: "fiscalbay-ordini",
+        sheet: "Ordini",
+        columns: {
+          order: "Numero ordine",
+          date: "Data",
+          timeZone: "Fuso orario",
+          store: "Negozio",
+          marketplace: "Marketplace",
+          buyer: "Acquirente",
+          username: "Utente eBay",
+          email: "Email",
+          phone: "Telefono",
+          address: "Indirizzo di fatturazione",
+          postalCode: "CAP",
+          city: "Città",
+          province: "Provincia",
+          country: "Paese",
+          items: "Articoli",
+          item: "Articolo",
+          sku: "SKU",
+          quantity: "Quantità",
+          itemTotal: "Importo articolo",
+          currency: "Valuta",
+          total: "Totale ordine",
+          payment: "Pagamento",
+          shipping: "Spedizione",
+          taxCode: "Codice Fiscale",
+          vat: "Partita IVA",
+          otherTax: "Altri identificativi fiscali",
+          fiscal: "Situazione fiscale",
+          checkedAt: "Ultima verifica fiscale",
+          updatedAt: "Ultima modifica su eBay",
+        },
+        // Dato disponibile con la stessa avvertenza della pagina Ordini.
+        fiscalNotice: {
+          lastKnown: "Disponibile, ultima lettura da eBay non riuscita",
+          checking: "Disponibile, nuova lettura da eBay in corso",
+          notReturned: "Disponibile, non più riportato da eBay",
+          masked: "Disponibile, ora nascosto da eBay",
+        },
+      },
+    },
+    security: {
+      methods: "Metodi di accesso",
+      methodPassword: "Email e password",
+      methodGoogle: "Google",
+      methodEbay: "eBay",
+      methodPasskey: "Passkey",
+      methodConnected: "Collegato",
+      methodNotConnected: "Non collegato",
+      changePassword: "Cambia password",
+      connect: "Collega",
+      remove: "Rimuovi",
+      removeMethodTitle: "Rimuovere questo metodo di accesso?",
+      removeMethodBody: (method: string) =>
+        `Non potrai più accedere con ${method}. Gli altri metodi restano disponibili.`,
+      addPasskey: "Aggiungi passkey",
+      passkeyName: "Nome della passkey",
+      passkeyNameHint:
+        "Facoltativo: ad esempio iPhone personale o chiave di riserva. Se vuoto usiamo il nome del dispositivo.",
+      renamePasskey: "Rinomina",
+      addAlternative:
+        "Questo è il tuo unico metodo di accesso. Aggiungi una passkey o collega un altro metodo qui sotto prima di rimuoverlo.",
+      sessionOpened: (date: string) => `Sessione aperta il ${date}`,
+      passkeyItem: (device: string, date: string) => `${device}, aggiunta il ${date}`,
+      sessions: "Sessioni attive",
+      thisDevice: "Questo dispositivo",
+      lastActive: (time: string) => `Ultima attività ${time}`,
+      signOutSession: "Esci",
+      signOutAll: "Esci da tutti gli altri dispositivi",
+    },
+    appearance: {
+      theme: "Tema",
+      themeSystem: "Sistema",
+      themeLight: "Chiaro",
+      themeDark: "Scuro",
+      themeNote: "Nell’anteprima la scelta si azzera alla ricarica completa della pagina.",
+      language: "Lingua",
+      timeZone: "Fuso orario",
+      timeZoneAuto: (zone: string | null) =>
+        zone ? `Automatico: ${zone}` : "Automatico, dal dispositivo",
+      timeZones: {
+        "Europe/Rome": "Roma (Italia)",
+        "Europe/London": "Londra (Regno Unito)",
+        "Europe/Berlin": "Berlino (Germania)",
+        "Europe/Madrid": "Madrid (Spagna)",
+        "America/New_York": "New York (Stati Uniti)",
+      },
+    },
+    template: {
+      templateIntro:
+        "Quando eBay non riporta il Codice Fiscale, puoi copiare questo messaggio dall’ordine e inviarlo all’acquirente dai tuoi canali.",
+      templateHint: "{ordine} viene sostituito con il numero dell’ordine.",
+      templateFailed: "Modello non salvato. Il testo scritto resta qui: riprova.",
+      templateInvalid: "Scrivi il modello in entrambe le lingue, entro 2.000 caratteri.",
+      unsavedTitle: "Modifiche non salvate",
+      unsaved: "Hai modifiche non salvate al modello di messaggio. Vuoi lasciare la pagina?",
+      unsavedBoth:
+        "Hai modifiche non salvate al profilo e al modello di messaggio. Vuoi lasciare la pagina?",
+      leave: "Lascia la pagina",
+    },
+    privacy: {
+      terms: termsTitle,
+      termsBody: "Le condizioni d’uso di FiscalBay.",
+      termsUpdateBody: "È disponibile una nuova versione: accettala quando l’hai letta.",
+      readTerms: "Leggi i termini",
+      acceptTerms: "Accetta",
+      termsAccepted: "Termini accettati.",
+      termsAcceptFailed: "Accettazione non riuscita. Riprova più tardi.",
+      privacyPolicy: privacyTitle,
+      privacyPolicyBody: "Quali dati trattiamo, per quanto tempo e con quali fornitori.",
+      readPolicy: "Leggi l’informativa",
+      accountExport: "Esporta i dati dell’account",
+      accountExportBody: "Profilo, negozi e impostazioni in un file scaricabile.",
+      accountExportAction: "Richiedi esportazione",
+      accountExportFailed: "Esportazione non riuscita. Riprova più tardi.",
+      deleteAccount: "Elimina account",
+      deleteAccountBody:
+        "Elimina l’account con negozi, ordini, impostazioni e file esportati. Prima confermi la tua identità, poi il link che ricevi via email.",
+      deleteAccountTitle: "Eliminare l’account?",
+      deleteAccountConfirmation:
+        "La cancellazione non si può annullare. Dopo la conferma via email chiudiamo tutte le sessioni, fermiamo letture, notifiche e rinnovi ed eliminiamo i dati dell’account.",
+      deleteAccountExport:
+        "Prima puoi scaricare i dati dell’account. Gli ordini si esportano da Esportazione.",
+      deleteAccountOpenExport: "Apri Esportazione",
+      deleteAccountEmail: "Scrivi il tuo indirizzo email per confermare",
+      deleteAccountConfirm: "Invia il link di conferma",
+      deleteAccountSent: (email: string) =>
+        `Ti abbiamo inviato un link a ${email}. Aprilo entro un’ora in questo browser per confermare la cancellazione.`,
+      deleteAccountMismatch: "L’indirizzo non corrisponde a quello dell’account.",
+      deleteAccountReauth: "Conferma di nuovo la tua identità per eliminare l’account.",
+      deleteAccountFailed: "Invio del link non riuscito. Riprova più tardi.",
+    },
+    support: {
+      faq: "Domande frequenti",
+      faqItems: [
+        {
+          q: "Perché un ordine non ha il Codice Fiscale?",
+          a: "eBay non lo riporta per tutti gli ordini. Quando manca, puoi chiederlo all’acquirente con il modello di messaggio.",
+        },
+        {
+          q: "Quando un ordine conta come sbloccato?",
+          a: "Quando almeno un suo dato fiscale, Codice Fiscale o Partita IVA, diventa visibile. Ogni ordine conta una sola volta, anche se contiene entrambi. Ordini senza dato o con un errore non contano, e puoi copiare ed esportare quanto vuoi.",
+        },
+        {
+          q: "FiscalBay modifica gli ordini su eBay?",
+          a: "No. FiscalBay legge gli ordini per mostrarti il Codice Fiscale: sul tuo negozio eBay resta tutto com’è.",
+        },
+      ],
+      contact: contactSupport,
+      topic: "Argomento",
+      topics: {
+        orders: "Ordini e Codice Fiscale",
+        stores: "Collegamento negozi",
+        billing: "Piano e pagamenti",
+        other: "Altro",
+      },
+      message: "Messaggio",
+      messagePlaceholder: "Descrivi il problema e cosa stavi facendo quando si è verificato.",
+      messageRequired: "Scrivi il messaggio.",
+      diagnostics: "Riepilogo diagnostico",
+      diagnosticsHint:
+        "Aiuta l’assistenza a capire il problema. Contiene solo informazioni tecniche, come versione, stato della sincronizzazione e codice errore.",
+      includeDiagnostics: "Allega il riepilogo diagnostico",
+      diag: {
+        version: "Versione",
+        store: "Negozio",
+        sync: "Sincronizzazione",
+        error: "Codice errore",
+        rights: "Piano",
+        reference: "Riferimento",
+        none: "Nessuno",
+        unavailable:
+          "Riepilogo non disponibile in questo momento: puoi inviare la richiesta lo stesso.",
+        phases: {
+          none: "Nessun negozio collegato",
+          running: "Aggiornamento in corso",
+          importing: "Importazione dello storico",
+          ok: (at: string) => `Aggiornamento riuscito, ${at}`,
+          failed: (at: string) => `Aggiornamento non riuscito, ${at}`,
+          waiting: "In attesa della prima lettura",
+          paused: "Letture in pausa",
+          reconnect: "Da ricollegare",
+          disconnected: "Negozio scollegato",
+        },
+        plans: {
+          free: "Free",
+          freeQuota: (used: number, limit: number) => `Free, ${used} di ${limit} ordini sbloccati`,
+          waitlist: "Free, in lista d’attesa",
+          trial: "Prova Premium",
+          granted: "Premium concesso",
+          lifetime: premiumLifetime,
+          monthly: premiumMonthly,
+          annual: premiumAnnual,
+        },
+      },
+      send: "Invia",
+      sent: (email: string) => `Richiesta inviata. Ti risponderemo a ${email}.`,
+      sendFailed: "Invio non riuscito. Riprova più tardi o scrivi all’indirizzo qui sotto.",
+      limited:
+        "Hai già inviato diverse richieste nelle ultime 24 ore. Per aggiungere altro scrivi all’indirizzo qui sotto.",
+      invalid: "Scegli un argomento e scrivi un messaggio entro 4.000 caratteri.",
+      whatsNew: "Novità",
+      formErrors: "Correggi i campi evidenziati.",
+      supportEmail: "Puoi scrivere anche a",
+      supportWrite: "Scrivi a",
+    },
+  },
+  profile: {
+    name: "Nome",
+    accountType: "Tipo di account",
+    email: "Email",
+    emailHint: "Per cambiarla confermi con un link all’indirizzo attuale, poi con uno al nuovo.",
+    changeEmail: "Cambia email",
+    saved: "Anteprima: profilo non salvato.",
+    updated: "Profilo aggiornato.",
+    invalid: "Compila nome e cognome, e la ragione sociale per un’azienda.",
+    unsaved: "Hai modifiche non salvate al profilo. Vuoi lasciare la pagina?",
+    stay: "Continua a modificare",
+    emailPending: (email: string) =>
+      `Cambio richiesto verso ${email}. L’indirizzo attuale resta valido fino alla conferma.`,
+    emailPendingCurrent:
+      "Conferma prima dal link all’indirizzo attuale, poi da quello al nuovo indirizzo. Se non ricevi il link, controlla l’indirizzo richiesto.",
+    emailPendingNew:
+      "La prima conferma è completata. Ora apri il link ricevuto al nuovo indirizzo.",
+    emailRestart: "Invia di nuovo il primo link",
+  },
+  errors: {
+    title: "Errore",
+    notFoundTitle: "Pagina non trovata",
+    notFound: "Controlla l’indirizzo oppure torna a FiscalBay per continuare.",
+    home: "Torna a FiscalBay",
+    unexpected: "Si è verificato un errore inatteso. Riprova più tardi.",
+    unavailableTitle: "Servizio non disponibile",
+    unavailable:
+      "In questo momento FiscalBay non riesce a leggere i dati di questa pagina. Riprova più tardi.",
+    retry: "Riprova",
+    unconfirmed:
+      "Non è stato possibile confermare l’esito. Ricarica la pagina per verificare lo stato prima di riprovare.",
+    reference: (id: string) => `Riferimento: ${id}`,
+    codes: {
+      AUTH_REQUIRED: "Accedi per continuare.",
+      FORBIDDEN: "Non puoi eseguire questa operazione.",
+      INVALID_REQUEST: "Controlla i dati e riprova.",
+      UPSTREAM_UNAVAILABLE: "Servizio temporaneamente non disponibile. Riprova più tardi.",
+      STORE_RECONNECT_REQUIRED: "Ricollega il negozio eBay e riprova.",
+      CHECKOUT_PENDING: "Checkout non disponibile ora. Riprova più tardi.",
+      INTERNAL_ERROR: "Operazione non riuscita. Riprova più tardi.",
+    },
+  },
+  admin: {
+    title: "Area amministrativa",
+    verifyTitle: "Conferma con passkey",
+    verifyBody:
+      "L’area amministrativa richiede l’accesso con una passkey di questo account e la verifica sul dispositivo: impronta, volto o PIN. Password, Google ed eBay non bastano.",
+    verifyFailed:
+      "Conferma non riuscita. Usa una passkey di questo account con la verifica del dispositivo.",
+    back: "Torna a FiscalBay",
+  },
+  authError: {
+    title: "Accesso non completato",
+    registrationRestricted: {
+      title: "Registrazione riservata",
+      body: registrationRestricted,
+    },
+    body: "Riprova con il metodo di accesso che usi di solito.",
+    back: "Torna all’accesso",
+    ebayWithoutEmail: {
+      title: "Accesso con eBay non disponibile",
+      body: "eBay non ci fornisce l’indirizzo email del tuo account, come succede per gli account individuali. Accedi con email, Google o passkey: dopo potrai collegare il tuo negozio eBay.",
+    },
+    accountNotLinked: {
+      title: "Email già registrata",
+      body: "Esiste già un account FiscalBay con questo indirizzo email. Accedi con il metodo che usi di solito, poi collega questo da Sicurezza.",
+    },
+    alreadyLinked: {
+      title: "Account già collegato",
+      body: (provider: string) =>
+        `L’account ${provider} che hai appena usato è già collegato a un altro utente FiscalBay. Accedi all’utente FiscalBay associato oppure scegli un altro account ${provider}.`,
+      generic:
+        "L’account che hai appena usato è già collegato a un altro utente FiscalBay. Accedi all’utente FiscalBay associato oppure scegli un altro account.",
+    },
+    deletionLink: {
+      title: "Link di cancellazione non valido",
+      body: "Il link è scaduto, è già stato usato oppure è stato aperto senza aver effettuato l’accesso con lo stesso account. Accedi e chiedi di nuovo la cancellazione da Impostazioni › Dati e privacy.",
+    },
+    deletionFailed: {
+      title: "Cancellazione non avviata",
+      body: "Non siamo riusciti a registrare la richiesta: l’account e i dati non sono cambiati. Il link non vale più: chiedi di nuovo la cancellazione da Impostazioni › Dati e privacy.",
+    },
+    deletionInProgress: {
+      title: "Cancellazione in corso",
+      body: "Hai confermato la cancellazione di questo account: l’accesso non è più possibile. Ti scriviamo quando l’eliminazione dei dati è completata.",
+    },
+  },
+  accountDeletion: {
+    title: "Cancellazione avviata",
+    body: "Abbiamo chiuso tutte le sessioni e fermato letture dei negozi e notifiche. Ora fermiamo i rinnovi degli abbonamenti ed eliminiamo i dati: ti scriviamo quando è tutto completato.",
+    note: "La cancellazione non si può annullare. Puoi creare un nuovo account quando vuoi, ma gli stessi negozi non ricevono una nuova prova e, fino alla fine del ciclo Free in corso, gli sblocchi già usati restano contati.",
+  },
+  storeLink: {
+    title: "Collega un negozio eBay",
+    environment: "Ambiente eBay",
+    production: { name: "eBay", detail: "Account reali" },
+    sandbox: { name: "eBay Sandbox", detail: "Account di prova" },
+    reconnectTitle: "Ricollega un negozio eBay",
+    reconnectIntro:
+      "Ti portiamo su eBay per rinnovare l’autorizzazione. Accedi con l’account venditore del negozio da ricollegare: FiscalBay lo riconosce e conserva gli ordini già importati.",
+    intro:
+      "Ti portiamo su eBay per autorizzare FiscalBay. Accedi con l’account venditore del negozio da collegare: può essere diverso da quello che usi per entrare in FiscalBay.",
+    points: [
+      "FiscalBay legge gli ordini e i Codici Fiscali che eBay rende disponibili, in sola lettura.",
+      "Non modifica nulla su eBay e non contatta gli acquirenti.",
+      "Non chiede l’indirizzo email del tuo account eBay.",
+      "Un negozio eBay può essere collegato a un solo account FiscalBay.",
+    ],
+    continue: "Continua su eBay",
+  },
+  legal: {
+    navigation: "Documenti legali",
+    termini: termsTitle,
+    privacy: privacyTitle,
+    /** Etichette brevi del footer, che resta su una riga anche su smartphone. */
+    termsLink: "Termini",
+    privacyLink: "Privacy",
+    /** La versione è la data del testo in vigore. */
+    version: (version: string) => `Versione del ${legalDate("it-IT", version)}`,
+  },
+  /** Barra e footer del sito pubblico; i testi delle pagine sono in `site-pages.server.ts`. */
+  site: {
+    start: "Inizia gratis",
+    signIn: "Accedi",
+    openApp: "Apri l’app",
+    nav: {
+      label: "Pagine del sito",
+      features: "Funzionalità",
+      pricing: "Prezzi",
+      security: "Sicurezza",
+      faq: "FAQ",
+    },
+    independent: "Servizio indipendente, non affiliato a eBay.",
+    support: "Supporto",
+  },
+  /** Pagina pubblica dell'assistenza: domande d'uso e contatti. */
+  supportPage: {
+    title: "Supporto",
+    description:
+      "Assistenza FiscalBay: domande sull’uso, modulo di assistenza nell’app e indirizzo email.",
+    contact: contactSupport,
+    member:
+      "Dall’app scrivi dal modulo di assistenza: puoi allegare il riepilogo diagnostico del tuo account.",
+    openForm: "Apri il modulo",
+    email: "Oppure scrivi a",
+    faq: "Domande prima di iniziare",
+  },
+  /** Pagina minima di accesso e ordini, finché le route reali non usano la shell. */
+  access: {
+    description: "Ordini eBay disponibili in FiscalBay",
+    headline: "Il Codice Fiscale dei tuoi ordini eBay, in un posto solo.",
+    features: [
+      {
+        title: "Tutti gli ordini insieme",
+        body: "Gli ordini dei tuoi negozi eBay in un unico elenco, aggiornato e facile da cercare.",
+      },
+      {
+        title: "Pronto da copiare",
+        body: "Trovi il Codice Fiscale riportato da eBay, o la Partita IVA se c’è solo quella, pronto da incollare dove ti serve.",
+      },
+      {
+        title: "Collegamento in pochi passaggi",
+        body: "Colleghi il negozio accedendo a eBay e gli ordini iniziano ad arrivare.",
+      },
+    ],
+    choose: "Accedi o crea un account",
+    language: "Lingua",
+    email: "Email",
+    password: "Password",
+    signIn: "Accedi",
+    signUp: "Crea account",
+    signUpBody: "Bastano pochi dati per iniziare.",
+    registrationRestricted,
+    firstName: "Nome",
+    requiredFields: "* Campo obbligatorio.",
+    lastName: "Cognome",
+    accountType: "Registrati come",
+    private: "Privato",
+    business: "Azienda",
+    companyName: "Ragione sociale",
+    accountTypeHint: "Piani e funzioni sono gli stessi per privati e aziende.",
+    newPassword: "Password (almeno 8 caratteri)",
+    or: "oppure",
+    google: "Continua con Google",
+    ebay: "Continua con eBay",
+    ebayAccessBody: "Per accedere a FiscalBay. Il negozio eBay si collega a parte.",
+    newEmail: "Nuova email",
+    sendEmailLink: "Invia il link",
+    setPassword: "Imposta password",
+    passkeySignIn: "Accedi con passkey",
+    passkeyRecovery: "Accedi con impronta, volto o blocco schermo del dispositivo.",
+    passkeyEmpty: "Nessuna passkey aggiunta.",
+    passkeyErrors: {
+      cancelled: "Operazione annullata. Puoi riprovare o usare un altro metodo di accesso.",
+      timeout: "Il tempo per la verifica è scaduto. Riprova tenendo il dispositivo pronto.",
+      unsupported:
+        "Questo browser o dispositivo non supporta le passkey. Usa un browser compatibile o un altro metodo di accesso.",
+      incomplete:
+        "Verifica non completata: può essere stata annullata o essere scaduta. Riprova o usa un altro metodo di accesso.",
+      duplicate:
+        "Questa passkey è già registrata. Usa un’altra passkey o gestisci quella presente nell’elenco.",
+      technical: "Operazione passkey non riuscita. Riprova o usa un altro metodo di accesso.",
+    },
+    passwordRecovery: "Hai dimenticato la password?",
+    passwordResetTitle: "Scegli una nuova password",
+    backToSignIn: "Torna ad accedere",
+    validation: {
+      required: "Compila questo campo.",
+      email: "Inserisci un indirizzo email valido, per esempio nome@dominio.it.",
+      tooShort: (min: number) => `Usa almeno ${min} caratteri.`,
+      checkbox: "Accetta i Termini di servizio per continuare.",
+    },
+    passwordRecoveryBody:
+      "Inserisci l’email del tuo account: ti invieremo un link per scegliere una nuova password.",
+    passwordRecoverySend: "Invia il link",
+    passwordRecoveryConfirm: "Salva nuova password",
+    signOut: "Esci",
+    signOutSignIn: "Esci e accedi di nuovo",
+    confirmTitle: "Conferma che sei tu",
+    confirmBody: "L’ultimo accesso risale a più di 24 ore fa. Conferma per continuare.",
+    confirmPasskeyBody: "Per le passkey dell’amministratore serve la conferma con una passkey.",
+    confirm: "Conferma",
+    confirmPasskey: "Conferma con passkey",
+    confirmFailed: "Conferma non riuscita. Controlla la password e riprova.",
+    confirmOther: "Con Google o eBay esci e accedi di nuovo: poi ripeti la modifica.",
+    terms: {
+      before: "Accetto i ",
+      terms: termsTitle,
+      middle: " e ho letto l’",
+      privacy: privacyTitle,
+      after: ".",
+    },
+    marketing: "Ricevi novità e offerte via email",
+    marketingHint: "Puoi cambiare scelta in Impostazioni.",
+    agreementTitle: "Completa la registrazione",
+    agreementBody: "Completa i dati mancanti per usare FiscalBay.",
+    agreementSubmit: "Continua",
+    verifyTitle: "Conferma l’indirizzo email",
+    verifyBody: (email: string) =>
+      `Abbiamo inviato un link a ${email}. Serve per collegare un negozio eBay. Intanto puoi esplorare FiscalBay.`,
+    verifyResend: "Invia di nuovo il link",
+    storeNotices: {
+      collegato: "Negozio eBay collegato.",
+      eliminato: "Negozio eliminato da FiscalBay.",
+      negato: "Collegamento annullato su eBay.",
+      "negozio-diverso":
+        "Hai scelto un account eBay diverso dal negozio da ricollegare, quindi il consenso non è stato salvato. Se eBay ti fa entrare in automatico con un altro account, esci da eBay e riprova con quello del negozio.",
+      "altro-spazio": "Questo negozio eBay è già collegato a un altro account FiscalBay.",
+      accesso: "Conferma l’indirizzo email per collegare un negozio.",
+      errore: "Collegamento non riuscito. Riprova.",
+      "ebay-non-risponde": "eBay non risponde: ricollega il negozio quando le letture riprendono.",
+      "lista-attesa":
+        "Il piano Free è al completo e il tuo account è in lista d’attesa: per ora non puoi collegare un negozio.",
+      sospeso: "Il collegamento con eBay è sospeso per manutenzione: riprova più tardi.",
+    },
+    signInNotices: {
+      "metodo-collegato": "Metodo di accesso collegato al tuo account FiscalBay.",
+      "metodo-rimosso": "Metodo di accesso rimosso.",
+      "ebay-rimosso": "Accesso eBay rimosso. I negozi collegati restano invariati.",
+      "ultimo-metodo": "Aggiungi un altro metodo di accesso prima di rimuovere questo.",
+      "password-link":
+        "Ti abbiamo inviato un link per impostare una nuova password. Dopo il salvataggio accedi di nuovo.",
+      "email-richiesta": "Controlla la posta e apri il link per confermare il nuovo indirizzo.",
+      "email-confermata":
+        "Conferma registrata. Se l’indirizzo non è ancora cambiato, apri il link inviato alla nuova email.",
+      "email-non-valida": "Indica un indirizzo email valido e diverso da quello attuale.",
+      "nuovo-accesso":
+        "Per questa modifica serve un accesso recente: esci e accedi di nuovo a FiscalBay.",
+      "conferma-passkey":
+        "Le passkey di un account amministratore si modificano dopo l’accesso con una passkey.",
+      "sessione-chiusa": "Sessione chiusa su quel dispositivo.",
+      "sessioni-chiuse": "Sessioni chiuse su tutti gli altri dispositivi.",
+      "accesso-non-verificato": "Conferma l’indirizzo email per aggiungere un metodo di accesso.",
+      "cancellazione-in-corso":
+        "La cancellazione di questo account è in corso: l’accesso non è più possibile.",
+      errore: "Operazione non riuscita. Controlla email e password.",
+      registrato:
+        "Controlla la posta: ti abbiamo inviato un link per confermare l’indirizzo email e accedere.",
+      registrazione: "Account non creato. Controlla l’indirizzo email e la password.",
+      autorizzazione: registrationRestricted,
+      termini: "Per continuare accetta i Termini di servizio.",
+      dati: "Indica nome, cognome e, per un’azienda, la ragione sociale.",
+      "troppi-tentativi": "Troppi tentativi. Riprova tra qualche minuto.",
+      "verifica-non-riuscita": "Verifica di sicurezza non riuscita o scaduta. Riprova.",
+      "verifica-non-disponibile":
+        "Verifica di sicurezza non disponibile in questo momento. Riprova tra qualche minuto.",
+      "verifica-inviata": "Link di conferma inviato. Controlla la posta.",
+      "passkey-rimossa": "Passkey rimossa.",
+      "passkey-rinominata": "Nome della passkey aggiornato.",
+      "passkey-nome-non-valido": "Indica un nome per la passkey, fino a 80 caratteri.",
+      "ultimo-accesso": "Aggiungi un altro metodo di accesso prima di rimuovere questa passkey.",
+      "recupero-inviato":
+        "Controlla la posta: se l’indirizzo è registrato, trovi il link per scegliere una nuova password.",
+      "password-reimpostata": "Password aggiornata. Accedi con la nuova password.",
+      "recupero-scaduto": "Link non valido o scaduto. Richiedine uno nuovo.",
+    },
+  },
+};
+
+export type AppCopy = typeof it;

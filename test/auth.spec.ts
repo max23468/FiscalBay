@@ -1,0 +1,2192 @@
+import { env } from "cloudflare:workers";
+import { hashPassword as originalHash } from "better-auth/crypto";
+import { getMigrations } from "better-auth/db/migration";
+import { describe, expect, it, vi } from "vitest";
+
+import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
+import { createAuth, createAuthOptions, gmailDomain } from "../app/auth.server";
+import { turnstileField } from "../app/turnstile";
+import { withinOneLimitWindow } from "./fixtures/rate-limiter";
+import { siteverify, testingKeyResult } from "./fixtures/turnstile-fixtures";
+import { completeRegistration } from "../app/domain/registration.server";
+import { adminAccess, readSession, recentSignIn } from "../app/domain/sessions.server";
+import { withResponseCookies } from "../app/response-cookies.server";
+import { loader as adminLoader } from "../app/routes/admin";
+import { loader as exportFileLoader } from "../app/routes/export-file";
+import { action as notificationsAction } from "../app/routes/notifications";
+import { action as unlockAction } from "../app/routes/orders";
+import { action as exportAction } from "../app/routes/order-export";
+import { action as searchAction } from "../app/routes/order-search";
+import { action as securityRouteAction, loader as securityLoader } from "../app/routes/settings";
+import { action as signInAction, loader as signInLoader } from "../app/routes/sign-in";
+import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
+import { pendingEmailChange } from "../app/domain/email-change.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { hashPassword, verifyPassword } from "../app/password.server";
+import { accountEmailBody } from "../app/account-email.server";
+import { emailVerificationSeconds } from "../app/domain/email-change.server";
+import { supportEmail } from "../app/app-copy";
+import {
+  emailLink,
+  emailSender,
+  mailEnv,
+  sessionCookie,
+  verifiedSession,
+} from "./fixtures/account-fixtures";
+import { routeData, routeResponse } from "./fixtures/route-fixtures";
+
+/** La registrazione non apre la sessione: la apre l'accesso con la password appena scelta. */
+async function passwordSession(environment: Env, email: string, password: string) {
+  const response = await createAuth(environment).handler(
+    new Request("http://localhost:5173/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost:5173" },
+      body: JSON.stringify({ email, password }),
+    }),
+  );
+  return sessionCookie(response);
+}
+
+it("salva le password con il costo ridotto e rifiuta il formato predefinito di Better Auth", async () => {
+  const hash = await hashPassword("password-di-prova-lunga");
+  expect(hash).toMatch(/^v2:[0-9a-f]{32}:[0-9a-f]{128}$/u);
+  expect(await verifyPassword({ hash, password: "password-di-prova-lunga" })).toBe(true);
+  expect(await verifyPassword({ hash, password: "password-errata-lunga" })).toBe(false);
+  for (const malformed of ["", "v2:00", "v3:00:00", "00:00:00:00"]) {
+    expect(await verifyPassword({ hash: malformed, password: "password-di-prova-lunga" })).toBe(
+      false,
+    );
+  }
+
+  const email = "costo-password@example.invalid";
+  const signup = await createAuth(env).handler(
+    new Request("http://localhost:5173/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ name: "Utente password", email, password: "password-di-prova-lunga" }),
+    }),
+  );
+  expect(signup.status).toBe(200);
+  const stored = () =>
+    env.DB.prepare(
+      `SELECT a."password" FROM "account" a JOIN "user" u ON u."id" = a."userId"
+        WHERE u."email" = ? AND a."providerId" = 'credential'`,
+    )
+      .bind(email)
+      .first<{ password: string }>();
+  expect((await stored())?.password).toMatch(/^v2:/u);
+
+  // Un hash nel formato predefinito di Better Auth, `sale:chiave` con r=16, non apre l'accesso.
+  await env.DB.prepare(
+    `UPDATE "account" SET "password" = ?
+      WHERE "providerId" = 'credential' AND "userId" = (SELECT "id" FROM "user" WHERE "email" = ?)`,
+  )
+    .bind(await originalHash("password-di-prova-lunga"), email)
+    .run();
+  expect(await passwordSession(env, email, "password-di-prova-lunga")).not.toContain(
+    "session_token",
+  );
+});
+
+it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
+  for (const base of ["", "/en"]) {
+    const query = "?token=synthetic&redirectTo=https://example.invalid";
+    // L'accesso mostra il modulo per la nuova password, senza seguire il redirect richiesto.
+    const access = await routeData(signInLoader, `${base}/accesso${query}`);
+    expect(access).toMatchObject({ authenticated: false, resetToken: "synthetic" });
+    const response = await routeResponse(storeLinkLoader, `${base}/app/negozi/collega${query}`);
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(`${base}/accesso`);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.getSetCookie()).toEqual([]);
+  }
+});
+
+it("conserva il rifiuto POST da origine estranea e del collegamento senza sessione in entrambe le lingue", async () => {
+  for (const base of ["", "/en"]) {
+    for (const origin of ["https://example.invalid", null]) {
+      const foreign = { origin, fields: {} };
+      expect((await routeResponse(signInAction, `${base}/accesso`, foreign)).status).toBe(403);
+      expect(
+        (await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, foreign)).status,
+      ).toBe(403);
+    }
+    const response = await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, {
+      fields: {},
+    });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(`${base}/app/ordini?negozio=accesso`);
+  }
+});
+
+it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {
+  const options = createAuthOptions(env);
+  expect(options.appName).toBe("FiscalBay");
+  const migration = await getMigrations(options);
+  expect(migration.toBeCreated).toEqual([]);
+  expect(migration.toBeAdded).toEqual([]);
+  expect(migration.toBeAddedIndexes).toEqual([]);
+  expect(migration.schemaProblems).toEqual([]);
+  expect(migration.unsafeChanges).toEqual([]);
+});
+
+it.each([undefined, "[]", "", "non-json", "{}", '["non-email"]', '["ok@example.invalid", 1]'])(
+  "rifiuta nuove registrazioni con elenco vuoto o non valido: %s",
+  async (list) => {
+    const email = `rifiuto-${crypto.randomUUID()}@example.invalid`;
+    const send = emailSender();
+    const environment = mailEnv(send, {
+      REGISTRATION_MODE: "approval",
+      REGISTRATION_ALLOWED_EMAILS: list,
+    });
+    const response = await createAuth(environment).handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, name: "Sintetico", password: "Password-sintetica-123!" }),
+      }),
+    );
+    expect(response.status).toBe(403);
+    expect(await response.json()).toMatchObject({
+      code: "registration_approval_required",
+      message: "Registration requires approval.",
+    });
+    expect(response.headers.getSetCookie()).toEqual([]);
+    expect(
+      await env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first(),
+    ).toBeNull();
+    expect(send).not.toHaveBeenCalled();
+  },
+);
+
+it("autorizza solo email esatte, conserva il login e non rivela gli account fuori elenco", async () => {
+  const email = "approvato@example.invalid";
+  const environment = mailEnv(emailSender(), {
+    REGISTRATION_MODE: "approval",
+    REGISTRATION_ALLOWED_EMAILS: '[" Approvato@Example.Invalid "]',
+  });
+  const signup = (target: Env, address: string) =>
+    createAuth(target).handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          email: address,
+          name: "Approvato",
+          password: "Password-sintetica-123!",
+        }),
+      }),
+    );
+  expect((await signup(environment, email.toUpperCase())).status).toBe(200);
+  const closed = { ...environment, REGISTRATION_ALLOWED_EMAILS: "[]" };
+  for (const address of [email, "approvato+alias@example.invalid", "altro@example.invalid"]) {
+    const denied = await signup(closed, address);
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ code: "registration_approval_required" });
+  }
+  expect(await passwordSession(closed, email, "Password-sintetica-123!")).toContain(
+    "session_token",
+  );
+  // Nemmeno un alias dello stesso indirizzo o un altro utente sul dominio sono autorizzati.
+  for (const address of ["approvato+alias@example.invalid", "altro@example.invalid"]) {
+    expect((await signup(environment, address)).status).toBe(403);
+  }
+});
+
+describe("Better Auth su Workers e D1", () => {
+  it("non accoda le query D1 dietro una richiesta rimasta sospesa", async () => {
+    // Una richiesta annullata dal browser lascia la sua query D1 senza risposta: con l'istanza
+    // condivisa dall'isolate, le richieste successive non devono restare in attesa dietro di lei.
+    let stalled = false;
+    const database = new Proxy(env.DB, {
+      get(target, key) {
+        const value = Reflect.get(target, key) as unknown;
+        if (key !== "prepare") return typeof value === "function" ? value.bind(target) : value;
+        return (query: string) => {
+          if (stalled) return target.prepare(query);
+          stalled = true;
+          return { bind: () => ({ all: () => new Promise(() => {}) }) };
+        };
+      },
+    });
+    const context = await createAuth({ ...env, DB: database } as Env).$context;
+    void context.internalAdapter.findUserByEmail("sospesa@example.invalid");
+    const second = context.internalAdapter.findUserByEmail("successiva@example.invalid");
+    const timeout = new Promise((resolve) => setTimeout(resolve, 2_000, "in attesa"));
+    expect(await Promise.race([second, timeout])).toBeNull();
+  });
+
+  it("con il database non disponibile l'accesso risponde 503 e i log hanno il solo codice", async () => {
+    const { cookie } = await verifiedSession("auth-guasto@example.invalid");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const prepare = vi.spyOn(env.DB, "prepare").mockImplementation(() => {
+      throw new Error("D1_ERROR: unavailable SELECT * FROM session");
+    });
+    try {
+      const post = (path: string, body: Record<string, string>) =>
+        new Request(`http://localhost:5173/api/auth${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "http://localhost:5173", cookie },
+          body: JSON.stringify(body),
+        });
+      // La registrazione con password passa soltanto dal modulo, provato con la pagina di accesso.
+      const response = await handleAuthRequest(
+        post("/sign-in/email", {
+          email: "auth-guasto@example.invalid",
+          password: "Una-password-negozio-molto-lunga",
+        }),
+        env,
+      );
+      expect([response.status, response.headers.get("retry-after")]).toEqual([503, "60"]);
+      // La sessione letta da Better Auth fallisce con il suo errore 500, già classificato.
+      const session = await handleAuthRequest(
+        new Request("http://localhost:5173/api/auth/get-session", { headers: { cookie } }),
+        env,
+      );
+      expect(session.status).toBe(500);
+      expect(log.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+        expect.objectContaining({ code: "UPSTREAM_UNAVAILABLE", operation: "route" }),
+        expect.objectContaining({ code: "INTERNAL_ERROR", operation: "route" }),
+      ]);
+      // Né l'errore del database né la query raggiungono i log.
+      expect(JSON.stringify(log.mock.calls)).not.toContain("D1_ERROR");
+    } finally {
+      prepare.mockRestore();
+      log.mockRestore();
+    }
+  });
+
+  it("riusa l'istanza Better Auth per lo stesso ambiente", () => {
+    expect(createAuth(env)).toBe(createAuth(env));
+    expect(createAuth({ ...env } as Env)).not.toBe(createAuth(env));
+  });
+
+  it("collega la dashboard gestita solo con la chiave del progetto", () => {
+    const ids = (options: ReturnType<typeof createAuthOptions>) =>
+      options.plugins?.map((plugin) => plugin.id);
+    expect(ids(createAuthOptions(env))).not.toEqual(expect.arrayContaining(["dash"]));
+    const options = createAuthOptions({ ...env, BETTER_AUTH_API_KEY: "chiave-di-prova" });
+    expect(ids(options)).toEqual(expect.arrayContaining(["dash", "durable-background"]));
+    // La chiave arriva dall'ambiente del Worker, non da una variabile globale del processo.
+    const dash = options.plugins?.find((plugin) => plugin.id === "dash") as
+      | { options?: { apiKey?: string } }
+      | undefined;
+    expect(dash?.options?.apiKey).toBe("chiave-di-prova");
+  });
+
+  it("usa mittente e Reply-To previsti per verifica e reset", async () => {
+    const send = emailSender();
+    const options = createAuthOptions(mailEnv(send));
+    const user = { id: "auth-email-fixture", email: "auth@example.invalid" };
+    const url = "https://test.fiscalbay.it/verifica";
+
+    await options.emailVerification?.sendVerificationEmail?.(
+      { user, url } as never,
+      new Request(url),
+    );
+    await options.emailAndPassword?.sendResetPassword?.({ user, url } as never, new Request(url));
+
+    expect(send).toHaveBeenCalledTimes(2);
+    for (const [message] of send.mock.calls) {
+      expect(message).toMatchObject({
+        from: {
+          email: ["noreply", "fiscalbay.it"].join("@"),
+          name: "FiscalBay",
+        },
+        replyTo: ["supporto", "fiscalbay.it"].join("@"),
+        to: user.email,
+      });
+    }
+  });
+
+  it("cifra i token OAuth e non li espone tramite le route HTTP", async () => {
+    const options = createAuthOptions(env);
+    expect(options.account?.encryptOAuthTokens).toBe(true);
+    expect(options.account?.accountLinking?.allowDifferentEmails).toBe(true);
+    expect(options.advanced?.ipAddress?.ipAddressHeaders).toEqual(["cf-connecting-ip"]);
+    expect(options.advanced?.database?.joins).toBe(true);
+    expect(options.advanced?.database?.validateSchema).toBe(false);
+    expect(options.onAPIError?.errorURL).toBe("/auth/error");
+
+    for (const path of ["get-access-token", "refresh-token"]) {
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/${path}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ accountId: "account-test" }),
+        }),
+        env,
+      );
+      expect(response.status).toBe(404);
+    }
+  });
+
+  it("rifiuta callback eBay ambigui o privi di stato senza creare account", async () => {
+    for (const query of [
+      "code=synthetic",
+      "code=synthetic&state=one&state=two",
+      "code=synthetic&error=access_denied&state=one",
+    ]) {
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/callback/ebay?${query}`),
+        env,
+      );
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe("http://localhost:5173/auth/error");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+
+    const account = await env.DB.prepare(
+      'SELECT COUNT(*) AS total FROM "account" WHERE "providerId" = ?',
+    )
+      .bind("ebay")
+      .first<{ total: number }>();
+    expect(account?.total).toBe(0);
+  });
+
+  it("crea un account email non verificato nel database locale", async () => {
+    const response = await createAuth(env).handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Utente test",
+          email: "auth@example.invalid",
+          password: "Una-password-auth-molto-lunga",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    const user = await env.DB.prepare('SELECT email, "emailVerified" FROM "user" WHERE email = ?')
+      .bind("auth@example.invalid")
+      .first<{ email: string; emailVerified: number }>();
+    expect(user).toEqual({ email: "auth@example.invalid", emailVerified: 0 });
+  });
+
+  it("espone il percorso passkey solo a una sessione autenticata", async () => {
+    const response = await createAuth(env).handler(
+      new Request("http://localhost:5173/api/auth/passkey/generate-register-options"),
+    );
+    expect(response.status).toBe(401);
+  });
+
+  it("registra passkey solo dopo verifica e protegge l'ultimo accesso", async () => {
+    const origin = "http://localhost:5173";
+    const signup = await createAuth(env).handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Utente passkey",
+          email: "passkey@example.invalid",
+          password: "password-di-prova-lunga",
+        }),
+      }),
+    );
+    expect(signup.status).toBe(200);
+    const cookie = await passwordSession(env, "passkey@example.invalid", "password-di-prova-lunga");
+    const user = await env.DB.prepare('SELECT "id" FROM "user" WHERE "email" = ?')
+      .bind("passkey@example.invalid")
+      .first<{ id: string }>();
+    expect(user).not.toBeNull();
+    const id = user!.id;
+    const options = () =>
+      handleAuthRequest(
+        new Request(`${origin}/api/auth/passkey/generate-register-options`, {
+          headers: { cookie },
+        }),
+        env,
+      );
+    expect((await options()).status).toBe(403);
+    const verify = await handleAuthRequest(
+      new Request(`${origin}/api/auth/passkey/verify-registration`, {
+        method: "POST",
+        headers: { cookie, origin, "content-type": "application/json" },
+        body: JSON.stringify({ response: {} }),
+      }),
+      env,
+    );
+    expect(verify.status).toBe(403);
+    const trailing = await handleAuthRequest(
+      new Request(`${origin}/api/auth/passkey/generate-register-options/`, {
+        headers: { cookie },
+      }),
+      env,
+    );
+    expect(trailing.status).toBe(404);
+    await completeRegistration(env.DB, {
+      userId: id,
+      language: "it",
+      now: new Date(),
+      profile: {
+        firstName: "Utente",
+        lastName: "Passkey",
+        accountType: "private",
+        companyName: null,
+      },
+      agreement: { marketing: false },
+    });
+    expect((await options()).status).toBe(403);
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE "id" = ?').bind(id).run();
+    const response = await options();
+    expect(response.status).toBe(200);
+    expect((await response.json<{ rp: { id: string } }>()).rp.id).toBe("localhost");
+
+    await env.DB.prepare('DELETE FROM "account" WHERE "userId" = ?').bind(id).run();
+    for (const passkeyId of ["first", "second"]) {
+      await env.DB.prepare(
+        `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+         VALUES (?, 'synthetic', ?, ?, 0, 'singleDevice', 0)`,
+      )
+        .bind(passkeyId, id, passkeyId)
+        .run();
+    }
+    const remove = (passkeyId: string) =>
+      routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", {
+        cookie,
+        fields: { intent: "passkey-remove", id: passkeyId },
+      });
+    expect((await remove("first")).headers.get("location")).toContain("passkey-rimossa");
+    expect((await remove("second")).headers.get("location")).toContain("ultimo-accesso");
+    await env.DB.prepare(
+      `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "password", "createdAt", "updatedAt")
+       VALUES ('empty-credential', ?, 'credential', ?, '', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    )
+      .bind(id, id)
+      .run();
+    expect((await remove("second")).headers.get("location")).toContain("ultimo-accesso");
+    expect((await remove("foreign-passkey")).headers.get("location")).toContain("ultimo-accesso");
+    const remaining = await env.DB.prepare('SELECT "id" FROM "passkey" WHERE "userId" = ?')
+      .bind(id)
+      .all<{ id: string }>();
+    expect(remaining.results.map((row) => row.id)).toEqual(["second"]);
+    await env.DB.prepare(
+      `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+       VALUES ('linked-ebay-access', 'synthetic-business-subject', 'ebay', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    )
+      .bind(id)
+      .run();
+    expect((await remove("second")).headers.get("location")).toContain("passkey-rimossa");
+    expect(
+      await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey" WHERE "userId" = ?')
+        .bind(id)
+        .first(),
+    ).toEqual({ count: 0 });
+    expect(
+      (
+        await handleAuthRequest(
+          new Request(`${origin}/api/auth/passkey/delete-passkey`, { method: "POST" }),
+          env,
+        )
+      ).status,
+    ).toBe(404);
+    await env.DB.prepare('DELETE FROM "user" WHERE "id" = ?').bind(id).run();
+  });
+
+  it("recupera l'accesso con una password nuova e revoca le sessioni precedenti", async () => {
+    const origin = "http://localhost:5173";
+    const auth = createAuth(env);
+    const signup = await auth.handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Utente recupero",
+          email: "recovery@example.invalid",
+          password: "password-precedente-lunga",
+        }),
+      }),
+    );
+    expect(signup.ok).toBe(true);
+    const { user } = await signup.json<{ user: { id: string } }>();
+    const cookie = await passwordSession(
+      env,
+      "recovery@example.invalid",
+      "password-precedente-lunga",
+    );
+    const context = await auth.$context;
+    await context.internalAdapter.createVerificationValue({
+      identifier: "reset-password:synthetic-recovery-token",
+      value: user.id,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const reset = () =>
+      routeResponse(signInAction, "/accesso", {
+        cookie,
+        fields: {
+          intent: "reimposta-password",
+          token: "synthetic-recovery-token",
+          password: "password-recuperata-lunga",
+        },
+      });
+    expect((await reset()).headers.get("location")).toContain("password-reimpostata");
+    expect(await auth.api.getSession({ headers: new Headers({ cookie }) })).toBeNull();
+    expect((await reset()).headers.get("location")).toContain("recupero-scaduto");
+    const signIn = (password: string) =>
+      auth.handler(
+        new Request(`${origin}/api/auth/sign-in/email`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ email: "recovery@example.invalid", password }),
+        }),
+      );
+    expect((await signIn("password-precedente-lunga")).status).toBe(401);
+    expect((await signIn("password-recuperata-lunga")).ok).toBe(true);
+  });
+
+  it("limita le verifiche WebAuthn e rifiuta origini estranee senza creare identità", async () => {
+    const before = await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first();
+    const origin = "https://test.fiscalbay.it";
+    const deployed = { ...env, APP_ORIGIN: origin as typeof env.APP_ORIGIN };
+    const attempt = (requestOrigin: string) =>
+      handleAuthRequest(
+        new Request(`${origin}/api/auth/passkey/verify-authentication`, {
+          method: "POST",
+          headers: {
+            origin: requestOrigin,
+            "content-type": "application/json",
+            "cf-connecting-ip": "203.0.113.45",
+            cookie: "origin-probe=synthetic",
+          },
+          body: JSON.stringify({ response: {} }),
+        }),
+        deployed,
+      );
+    await withinOneLimitWindow();
+    expect((await attempt("https://foreign.invalid")).status).toBe(403);
+    expect((await attempt(origin)).ok).toBe(false);
+    expect((await attempt(origin)).ok).toBe(false);
+    const limited = await attempt(origin);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toMatch(/^\d+$/u);
+    expect(await env.DB.prepare('SELECT COUNT(*) AS count FROM "passkey"').first()).toEqual(before);
+    const options = await handleAuthRequest(
+      new Request(`${origin}/api/auth/passkey/generate-authenticate-options`),
+      deployed,
+    );
+    expect((await options.json<{ rpId: string }>()).rpId).toBe("test.fiscalbay.it");
+    const production = await handleAuthRequest(
+      new Request("https://fiscalbay.it/api/auth/passkey/generate-authenticate-options"),
+      { ...env, APP_ORIGIN: "https://fiscalbay.it" },
+    );
+    expect((await production.json<{ rpId: string }>()).rpId).toBe("fiscalbay.it");
+  });
+
+  it.each([
+    ["google", "accounts.google.com"],
+    ["ebay", "auth.ebay.com"],
+  ])("avvia il login %s sul provider previsto", async (provider, host) => {
+    const response = await createAuth(env).handler(
+      new Request("http://localhost:5173/api/auth/sign-in/social", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ provider, callbackURL: "/" }),
+      }),
+    );
+    expect(response.status).toBe(200);
+    const result = await response.json<{ url: string }>();
+    const authorizationUrl = new URL(result.url);
+    expect(authorizationUrl.hostname).toBe(host);
+
+    if (provider === "ebay") {
+      expect(authorizationUrl.searchParams.get("redirect_uri")).toBe("fiscalbay-test-runame");
+      expect(authorizationUrl.searchParams.get("state")).toBeTruthy();
+      expect(authorizationUrl.searchParams.get("code_challenge")).toBeTruthy();
+      expect(authorizationUrl.searchParams.get("code_challenge_method")).toBe("S256");
+      const scopes = new Set((authorizationUrl.searchParams.get("scope") ?? "").split(" "));
+      expect(scopes).toEqual(
+        new Set([
+          "https://api.ebay.com/oauth/api_scope",
+          "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
+        ]),
+      );
+    }
+  });
+
+  it.each([
+    ["individuale", {}, "email_not_found"],
+    [
+      "business con l'email di un utente esistente",
+      { businessAccount: { email: "esistente@example.invalid" } },
+      "account_not_linked",
+    ],
+  ])(
+    "rifiuta il login eBay di un account %s senza creare o collegare account",
+    async (_account, identity, error) => {
+      await env.DB.prepare(
+        'INSERT OR IGNORE INTO "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt") VALUES (?, ?, ?, 1, ?, ?)',
+      )
+        .bind(
+          "utente-esistente",
+          "Utente esistente",
+          "esistente@example.invalid",
+          Date.now(),
+          Date.now(),
+        )
+        .run();
+      const start = await createAuth(env).handler(
+        new Request("http://localhost:5173/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            provider: "ebay",
+            callbackURL: "/",
+            additionalData: {
+              link: { userId: "utente-esistente", email: "esistente@example.invalid" },
+            },
+          }),
+        }),
+      );
+      const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+      const cookie = sessionCookie(start);
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/identity/v1/oauth2/token")) {
+          return Response.json({
+            access_token: "sintetico",
+            token_type: "Bearer",
+            expires_in: 7200,
+          });
+        }
+        return Response.json({
+          userId: "ebay-utente-sintetico",
+          username: "venditore",
+          ...identity,
+        });
+      });
+
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`, {
+          headers: { cookie },
+        }),
+        env,
+      );
+      fetchMock.mockRestore();
+
+      expect(response.status).toBe(302);
+      expect(
+        new URL(response.headers.get("location")!, "http://localhost:5173").searchParams.get(
+          "error",
+        ),
+      ).toBe(error);
+      const accounts = await env.DB.prepare(
+        'SELECT COUNT(*) AS total FROM "account" WHERE "providerId" = ?',
+      )
+        .bind("ebay")
+        .first<{ total: number }>();
+      expect(accounts?.total).toBe(0);
+      const created = await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE "name" = ?')
+        .bind("venditore")
+        .first<{ total: number }>();
+      expect(created?.total).toBe(0);
+    },
+  );
+
+  it.each([true, false])(
+    "applica l'autorizzazione alla registrazione eBay business: %s",
+    async (allowed) => {
+      const email = allowed ? "business@example.invalid" : "business-negato@example.invalid";
+      const accountId = allowed ? "ebay-business-sintetico" : "ebay-business-negato";
+      const send = emailSender();
+      const environment = mailEnv(send, {
+        REGISTRATION_MODE: "approval",
+        REGISTRATION_ALLOWED_EMAILS: allowed ? '["business@example.invalid"]' : "[]",
+      });
+      const start = await createAuth(environment).handler(
+        new Request("http://localhost:5173/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "ebay", callbackURL: "/" }),
+        }),
+      );
+      const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+      const cookie = sessionCookie(start);
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/identity/v1/oauth2/token")) {
+          return Response.json({
+            access_token: "sintetico",
+            token_type: "Bearer",
+            expires_in: 7200,
+          });
+        }
+        return Response.json({
+          userId: accountId,
+          username: "venditore-business",
+          businessAccount: { email },
+        });
+      });
+
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`, {
+          headers: { cookie },
+        }),
+        environment,
+      );
+      // Il profilo si legge da Identity con il token di accesso appena ottenuto.
+      expect(fetchMock).toHaveBeenCalledWith(
+        "https://apiz.ebay.com/commerce/identity/v1/user/",
+        expect.objectContaining({ headers: { Authorization: "Bearer sintetico" } }),
+      );
+      fetchMock.mockRestore();
+
+      expect(response.status).toBe(302);
+      if (!allowed) {
+        expect(response.headers.get("location")).toContain("registration_approval_required");
+        expect(response.headers.getSetCookie().join(";")).not.toContain("session_token");
+        expect(
+          await env.DB.prepare('SELECT id FROM "user" WHERE email = ?').bind(email).first(),
+        ).toBeNull();
+        expect(
+          await env.DB.prepare('SELECT id FROM "account" WHERE "accountId" = ?')
+            .bind(accountId)
+            .first(),
+        ).toBeNull();
+        expect(send).not.toHaveBeenCalled();
+        return;
+      }
+      expect(response.headers.get("location")).toBe("/");
+      const user = await env.DB.prepare(
+        'SELECT u.email, u."emailVerified", a."accountId" FROM "user" u JOIN "account" a ON a."userId" = u.id WHERE a."providerId" = ?',
+      )
+        .bind("ebay")
+        .first<{ email: string; emailVerified: number; accountId: string }>();
+      expect(user).toEqual({
+        email: "business@example.invalid",
+        emailVerified: 0,
+        accountId: "ebay-business-sintetico",
+      });
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      expect(send.mock.calls[0]?.[0]).toMatchObject({ to: "business@example.invalid" });
+      const account = await env.DB.prepare('SELECT id FROM "account" WHERE "accountId" = ?')
+        .bind("ebay-business-sintetico")
+        .first<{ id: string }>();
+      const removal = await createAuth(environment).handler(
+        new Request("http://localhost:5173/api/auth/unlink-account", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            origin: "http://localhost:5173",
+            cookie: sessionCookie(response),
+          },
+          body: JSON.stringify({ accountId: account!.id }),
+        }),
+      );
+      expect(removal.status).toBe(400);
+      expect(await removal.json()).toMatchObject({ code: "FAILED_TO_UNLINK_LAST_ACCOUNT" });
+    },
+  );
+
+  it("chiude il login eBay senza account se Identity non risponde o risponde fuori schema", async () => {
+    const ebayAccounts = () =>
+      env.DB.prepare('SELECT COUNT(*) AS total FROM "account" WHERE "providerId" = ?')
+        .bind("ebay")
+        .first<{ total: number }>();
+    const before = await ebayAccounts();
+    for (const identity of [
+      () => new Response(null, { status: 503 }),
+      () => Response.json({ username: "senza-identificativo" }),
+    ]) {
+      const start = await createAuth(env).handler(
+        new Request("http://localhost:5173/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "ebay", callbackURL: "/" }),
+        }),
+      );
+      const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+      const cookie = sessionCookie(start);
+      const log = vi.spyOn(console, "error").mockImplementation(() => {});
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/identity/v1/oauth2/token")) {
+          return Response.json({
+            access_token: "sintetico",
+            token_type: "Bearer",
+            expires_in: 7200,
+          });
+        }
+        return identity();
+      });
+      try {
+        const response = await handleAuthRequest(
+          new Request(
+            `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`,
+            {
+              headers: { cookie },
+            },
+          ),
+          env,
+        );
+        expect(new URL(response.headers.get("location")!, "http://localhost:5173").pathname).toBe(
+          "/auth/error",
+        );
+        expect(log.mock.calls.map(([line]) => JSON.parse(String(line)))).toContainEqual(
+          expect.objectContaining({ operation: "sign_in", code: "UPSTREAM_UNAVAILABLE" }),
+        );
+      } finally {
+        fetchMock.mockRestore();
+        log.mockRestore();
+      }
+    }
+    expect(await ebayAccounts()).toEqual(before);
+  });
+
+  it.each([
+    "verificata",
+    "non-verificata",
+    "revocata",
+    "assente",
+    "altra",
+    "individuale",
+    "occupato",
+  ])(
+    "collega eBay soltanto alla sessione verificata che ha iniziato il consenso: %s",
+    async (scenario) => {
+      const environment = mailEnv();
+      const auth = createAuth(environment);
+      const post = (path: string, body: Record<string, unknown>, cookie = "") =>
+        auth.handler(
+          new Request(`http://localhost:5173/api/auth/${path}`, {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+              origin: "http://localhost:5173",
+              cookie,
+            },
+            body: JSON.stringify(body),
+          }),
+        );
+      const email = `collegamento-${scenario}@example.invalid`;
+      const ebayId = `identita-ebay-${scenario}`;
+      if (scenario === "occupato") {
+        await env.DB.prepare(
+          'INSERT INTO "account" (id, "accountId", "providerId", "userId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?)',
+        )
+          .bind("account-occupato", ebayId, "ebay", "utente-esistente", Date.now(), Date.now())
+          .run();
+      }
+      const signup = await post("sign-up/email", {
+        name: "Collegamento sintetico",
+        email,
+        password: "Password-sintetica-123!",
+      });
+      const { user } = await signup.clone().json<{ user: { id: string } }>();
+      const signedUpCookie = await passwordSession(env, email, "Password-sintetica-123!");
+      if (scenario !== "non-verificata") {
+        await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
+          .bind(user.id)
+          .run();
+      }
+      const start = await post(
+        "link-social",
+        { provider: "ebay", callbackURL: "/?accesso=ebay-collegato" },
+        signedUpCookie,
+      );
+      expect(start.status).toBe(200);
+      const url = new URL((await start.json<{ url: string }>()).url);
+      expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+      let callbackSession = signedUpCookie;
+      if (scenario === "revocata")
+        await env.DB.prepare('DELETE FROM "session" WHERE "userId" = ?').bind(user.id).run();
+      if (scenario === "assente") callbackSession = "";
+      if (scenario === "altra") {
+        const other = await post("sign-up/email", {
+          name: "Altro",
+          email: "altro@example.invalid",
+          password: "Password-sintetica-123!",
+        });
+        expect(other.ok).toBe(true);
+        callbackSession = await passwordSession(
+          env,
+          "altro@example.invalid",
+          "Password-sintetica-123!",
+        );
+        await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE email = ?')
+          .bind("altro@example.invalid")
+          .run();
+      }
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const target = input instanceof Request ? input.url : String(input);
+        if (target.endsWith("/identity/v1/oauth2/token"))
+          return Response.json({
+            access_token: "access-token-sintetico",
+            refresh_token: "refresh-token-sintetico",
+            token_type: "Bearer",
+            expires_in: 7200,
+          });
+        return Response.json({
+          userId: ebayId,
+          username: "venditore",
+          ...(scenario === "individuale"
+            ? {}
+            : { businessAccount: { email: "diversa@example.invalid" } }),
+        });
+      });
+      try {
+        const callback = () =>
+          handleAuthRequest(
+            new Request(
+              `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${url.searchParams.get("state")}`,
+              { headers: { cookie: `${callbackSession}; ${sessionCookie(start)}` } },
+            ),
+            environment,
+          );
+        const result = await callback();
+        const account = await env.DB.prepare(
+          'SELECT * FROM "account" WHERE "providerId" = ? AND "accountId" = ?',
+        )
+          .bind("ebay", ebayId)
+          .first<{
+            id: string;
+            userId: string;
+            accountId: string;
+            accessToken: string;
+            refreshToken: string;
+          }>();
+        if (scenario !== "verificata") {
+          if (scenario === "occupato") {
+            expect(account?.userId).toBe("utente-esistente");
+            expect(result.headers.get("location")).toContain(
+              "account_already_linked_to_different_user",
+            );
+            return;
+          }
+          expect(account).toBeNull();
+          expect(result.headers.get("location")).toContain(
+            scenario === "individuale" ? "email_not_found" : "unable_to_link_account",
+          );
+          return;
+        }
+        expect(result.headers.get("location")).toBe("/?accesso=ebay-collegato");
+        expect(account).toMatchObject({ userId: user.id, accountId: ebayId });
+        // eBay si aggiunge alla password: il titolare ne riceve avviso.
+        await vi.waitFor(() =>
+          expect(environment.AUTH_EMAIL.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+              to: email,
+              subject: "Nuovo metodo di accesso su FiscalBay",
+              text: expect.stringContaining("eBay"),
+            }),
+          ),
+        );
+        expect(account?.accessToken).not.toBe("access-token-sintetico");
+        expect(account?.refreshToken).not.toBe("refresh-token-sintetico");
+        const localUser = await env.DB.prepare(
+          'SELECT email, "emailVerified" FROM "user" WHERE id = ?',
+        )
+          .bind(user.id)
+          .first();
+        expect(localUser).toEqual({ email, emailVerified: 1 });
+        expect((await callback()).headers.get("location")).toContain("error=");
+        await post("sign-out", {}, signedUpCookie);
+        const login = await post("sign-in/social", { provider: "ebay", callbackURL: "/" });
+        const loginUrl = new URL((await login.json<{ url: string }>()).url);
+        const signedIn = await handleAuthRequest(
+          new Request(
+            `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${loginUrl.searchParams.get("state")}`,
+            { headers: { cookie: sessionCookie(login) } },
+          ),
+          environment,
+        );
+        const current = await auth.api.getSession({
+          headers: new Headers({ cookie: sessionCookie(signedIn) }),
+        });
+        expect(current?.user.id).toBe(user.id);
+        expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM ebay_stores").first()).toEqual({
+          total: 0,
+        });
+        await env.DB.prepare('UPDATE "account" SET "accessTokenExpiresAt" = ? WHERE id = ?')
+          .bind(Date.now() - 60_000, account!.id)
+          .run();
+        const refreshed = await auth.api.getAccessToken({
+          body: { accountId: account!.id },
+          headers: new Headers({ cookie: sessionCookie(signedIn) }),
+        });
+        expect(refreshed.accessToken).toBe("access-token-sintetico");
+        const renewed = await env.DB.prepare(
+          'SELECT "accessTokenExpiresAt" AS expiry FROM "account" WHERE id = ?',
+        )
+          .bind(account!.id)
+          .first<{ expiry: string }>();
+        expect(new Date(renewed!.expiry).getTime()).toBeGreaterThan(Date.now());
+        const unlink = await post(
+          "unlink-account",
+          { accountId: account!.id },
+          sessionCookie(signedIn),
+        );
+        expect(unlink.status).toBe(200);
+        expect(
+          await env.DB.prepare('SELECT id FROM "account" WHERE id = ?').bind(account!.id).first(),
+        ).toBeNull();
+        await post("revoke-sessions", {}, sessionCookie(signedIn));
+        expect(
+          await auth.api.getSession({ headers: new Headers({ cookie: sessionCookie(signedIn) }) }),
+        ).toBeNull();
+      } finally {
+        fetchMock.mockRestore();
+      }
+    },
+  );
+});
+
+describe("Collegamento e modifica dell'identità", () => {
+  const origin = "http://localhost:5173";
+  const withEmail = (send = emailSender()) => mailEnv(send);
+  const post = (environment: Env, path: string, body: Record<string, unknown>, cookie = "") =>
+    createAuth(environment).handler(
+      new Request(`${origin}/api/auth/${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, cookie },
+        body: JSON.stringify(body),
+      }),
+    );
+  const appAction = (cookie: string, fields: Record<string, string>) =>
+    routeResponse(signInAction, "/accesso", { cookie, fields });
+  /** Azione della pagina Sicurezza; chi non può vederla riceve il redirect lanciato. */
+  const securityAction = (cookie: string, fields: Record<string, string>) =>
+    routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", { cookie, fields });
+  const signUp = async (environment: Env, email: string, verified: boolean) => {
+    const response = await post(environment, "sign-up/email", {
+      name: "Identità sintetica",
+      email,
+      password: "Password-sintetica-123!",
+    });
+    const { user } = await response.clone().json<{ user: { id: string } }>();
+    if (verified) {
+      await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
+        .bind(user.id)
+        .run();
+      await completeRegistration(env.DB, {
+        userId: user.id,
+        language: "it",
+        now: new Date(),
+        profile: {
+          firstName: "Identità",
+          lastName: "Sintetica",
+          accountType: "private",
+          companyName: null,
+        },
+        agreement: { marketing: false },
+      });
+    }
+    return {
+      id: user.id,
+      cookie: await passwordSession(environment, email, "Password-sintetica-123!"),
+    };
+  };
+  const googleAccounts = (userId: string) =>
+    env.DB.prepare('SELECT "accountId" FROM "account" WHERE "providerId" = ? AND "userId" = ?')
+      .bind("google", userId)
+      .all<{ accountId: string }>()
+      .then((rows) => rows.results.map((row) => row.accountId));
+
+  /** Completa un consenso Google con il profilo indicato, come lo firmerebbe Google. */
+  async function googleCallback(
+    environment: Env,
+    start: Response,
+    profile: { sub: string; email: string; email_verified: boolean; hd?: string },
+    cookie = "",
+  ) {
+    const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+    const segment = (value: object) => btoa(JSON.stringify(value)).replace(/=+$/u, "");
+    const idToken = `${segment({ alg: "none" })}.${segment({
+      aud: "google-test-client",
+      name: "Titolare sintetico",
+      ...profile,
+    })}.`;
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () =>
+        Response.json({ access_token: "sintetico", id_token: idToken, token_type: "Bearer" }),
+      );
+    try {
+      return await handleAuthRequest(
+        new Request(`${origin}/api/auth/callback/google?code=synthetic&state=${state}`, {
+          headers: { cookie: [cookie, sessionCookie(start)].filter(Boolean).join("; ") },
+        }),
+        environment,
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  }
+
+  it.each([true, false])("applica l'autorizzazione al callback Google: %s", async (allowed) => {
+    const email = `google-approvazione-${allowed}@gmail.com`;
+    const send = emailSender();
+    const environment = mailEnv(send, {
+      REGISTRATION_MODE: "approval",
+      REGISTRATION_ALLOWED_EMAILS: allowed ? JSON.stringify([email.toUpperCase()]) : "[]",
+    });
+    const result = await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: `google-approvazione-${allowed}`, email, email_verified: true },
+    );
+    const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind(email)
+      .first<{ id: string }>();
+    if (allowed) {
+      expect(result.headers.get("location")).toBe("/");
+      expect(user).not.toBeNull();
+      expect(await googleAccounts(user!.id)).toEqual([`google-approvazione-${allowed}`]);
+      // La rimozione dalla lista non impedisce accessi successivi con il metodo già collegato.
+      const closed = { ...environment, REGISTRATION_ALLOWED_EMAILS: "[]" };
+      const again = await googleCallback(
+        closed,
+        await post(closed, "sign-in/social", { provider: "google", callbackURL: "/" }),
+        { sub: `google-approvazione-${allowed}`, email, email_verified: true },
+      );
+      expect(again.headers.get("location")).toBe("/");
+    } else {
+      expect(result.headers.get("location")).toContain("registration_approval_required");
+      expect(result.headers.getSetCookie().join(";")).not.toContain("session_token");
+      expect(user).toBeNull();
+      expect(
+        await env.DB.prepare('SELECT id FROM "account" WHERE "accountId" = ?')
+          .bind(`google-approvazione-${allowed}`)
+          .first(),
+      ).toBeNull();
+      expect(send).not.toHaveBeenCalled();
+    }
+  });
+
+  it("non lascia un metodo proprio a chi registra in anticipo l'email di un altro", async () => {
+    const environment = withEmail();
+    const email = `titolare.anticipato@${gmailDomain}`;
+    const squatter = await signUp(environment, email, false);
+
+    // Il titolare entra con Google: l'utente locale non verificato non viene collegato.
+    const owner = await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: "google-titolare", email, email_verified: true },
+    );
+    expect(owner.headers.get("location")).toContain("account_not_linked");
+
+    // Chi ha creato l'account non può collegare un proprio Google né dall'app né dalla route.
+    const fromApp = await securityAction(squatter.cookie, {
+      intent: "collega-metodo",
+      metodo: "google",
+    });
+    // Senza profilo e Termini decide la pagina di accesso, che chiede ciò che manca.
+    expect(fromApp.headers.get("location")).toBe("/accesso");
+    const direct = await googleCallback(
+      environment,
+      await post(
+        environment,
+        "link-social",
+        { provider: "google", callbackURL: "/" },
+        squatter.cookie,
+      ),
+      { sub: "google-anticipato", email: `altro.anticipato@${gmailDomain}`, email_verified: true },
+      squatter.cookie,
+    );
+    expect(direct.headers.get("location")).toContain("unable_to_link_account");
+    // Il router chiude anche l'avvio del collegamento e il ramo con idToken, che salterebbe i
+    // controlli del callback, e rifiuta un corpo non valido senza errore del server.
+    const linkRoute = (cookie: string, body: string) =>
+      handleAuthRequest(
+        new Request(`${origin}/api/auth/link-social`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin, cookie },
+          body,
+        }),
+        environment,
+      );
+    const idToken = JSON.stringify({ provider: "google", idToken: { token: "sintetico" } });
+    expect((await linkRoute("", idToken)).status).toBe(401);
+    expect((await linkRoute(squatter.cookie, idToken)).status).toBe(403);
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
+      .bind(squatter.id)
+      .run();
+    expect((await linkRoute(squatter.cookie, idToken)).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, "1")).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, "null")).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, "{")).status).toBe(400);
+    expect((await linkRoute(squatter.cookie, JSON.stringify({ provider: "google" }))).status).toBe(
+      200,
+    );
+    expect(await googleAccounts(squatter.id)).toEqual([]);
+    expect(
+      await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE email = ?')
+        .bind(email)
+        .first(),
+    ).toEqual({ total: 1 });
+  });
+
+  it.each([
+    ["Gmail", `gmail@${gmailDomain}`, true, undefined, true],
+    ["Workspace", "persona@azienda.invalid", true, "azienda.invalid", true],
+    ["dominio senza hd", "persona@dominio.invalid", true, undefined, false],
+    ["email non verificata", `nonverificata@${gmailDomain}`, false, undefined, false],
+  ] as const)(
+    "collega Google per email solo se è autorevole: %s",
+    async (_case, email, emailVerified, hd, linked) => {
+      const environment = withEmail();
+      const user = await signUp(environment, email, true);
+      const result = await googleCallback(
+        environment,
+        await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+        { sub: `google-${email}`, email, email_verified: emailVerified, hd },
+      );
+      if (linked) {
+        expect(result.headers.get("location")).toBe("/");
+        expect(await googleAccounts(user.id)).toEqual([`google-${email}`]);
+      } else {
+        expect(result.headers.get("location")).toContain("account_not_linked");
+        expect(await googleAccounts(user.id)).toEqual([]);
+      }
+    },
+  );
+
+  it("chiede la propria conferma a un nuovo utente Google non autorevole", async () => {
+    const send = emailSender();
+    const environment = withEmail(send);
+    const email = "nuovo@dominio-personale.invalid";
+    await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: "google-nuovo-personale", email, email_verified: true },
+    );
+    expect(
+      await env.DB.prepare('SELECT "emailVerified" FROM "user" WHERE email = ?')
+        .bind(email)
+        .first(),
+    ).toEqual({ emailVerified: 0 });
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(send.mock.calls[0]?.[0]).toMatchObject({ to: email });
+    // Il primo metodo di un nuovo utente non è un collegamento da segnalare.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(send).toHaveBeenCalledOnce();
+  });
+
+  it("riconosce Google dal subject anche con email cambiata, senza fondere utenti", async () => {
+    const send = emailSender();
+    const environment = withEmail(send);
+    const first = await signUp(environment, `prima.identita@${gmailDomain}`, true);
+    const second = await signUp(environment, `seconda.identita@${gmailDomain}`, true);
+    // Collegamento esplicito da Sicurezza, anche con un'email diversa da quella dell'account.
+    const linked = await googleCallback(
+      environment,
+      await post(
+        environment,
+        "link-social",
+        { provider: "google", callbackURL: "/" },
+        first.cookie,
+      ),
+      { sub: "google-stabile", email: "google.personale@dominio.invalid", email_verified: true },
+      first.cookie,
+    );
+    expect(linked.headers.get("location")).toBe("/");
+    expect(await googleAccounts(first.id)).toEqual(["google-stabile"]);
+    // Il titolare di un account che aveva già un accesso riceve avviso del nuovo metodo.
+    await vi.waitFor(() =>
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          to: `prima.identita@${gmailDomain}`,
+          subject: "Nuovo metodo di accesso su FiscalBay",
+        }),
+      ),
+    );
+
+    // Su Google l'indirizzo diventa quello del secondo utente: conta il subject.
+    const signedIn = await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: "google-stabile", email: `seconda.identita@${gmailDomain}`, email_verified: true },
+    );
+    const session = await createAuth(environment).api.getSession({
+      headers: new Headers({ cookie: sessionCookie(signedIn) }),
+    });
+    expect(session?.user.id).toBe(first.id);
+    expect(session?.user.email).toBe(`prima.identita@${gmailDomain}`);
+    expect(await googleAccounts(second.id)).toEqual([]);
+
+    // Lo stesso Google non si collega a un secondo utente.
+    const taken = await googleCallback(
+      environment,
+      await post(
+        environment,
+        "link-social",
+        { provider: "google", callbackURL: "/" },
+        second.cookie,
+      ),
+      { sub: "google-stabile", email: `seconda.identita@${gmailDomain}`, email_verified: true },
+      second.cookie,
+    );
+    expect(taken.headers.get("location")).toContain("account_already_linked_to_different_user");
+    expect(await googleAccounts(first.id)).toEqual(["google-stabile"]);
+  });
+
+  it("rimuove un metodo solo se ne resta un altro, anche con richieste concorrenti", async () => {
+    const environment = withEmail();
+    const user = await signUp(environment, "metodi.concorrenti@example.invalid", true);
+    const now = Date.now();
+    await env.DB.batch(
+      ["google", "ebay"].map((provider) =>
+        env.DB.prepare(
+          'INSERT INTO "account" (id, "accountId", "providerId", "userId", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?)',
+        ).bind(`metodo-${provider}`, `soggetto-${provider}`, provider, user.id, now, now),
+      ),
+    );
+    const remove = (metodo: string) =>
+      securityAction(user.cookie, { intent: "rimuovi-metodo", metodo }).then((response) =>
+        new URL(response.headers.get("location")!, origin).searchParams.get("accesso"),
+      );
+    expect(await remove("password")).toBe("metodo-rimosso");
+    expect(await remove("sconosciuto")).toBe("errore");
+
+    const outcomes = await Promise.all([remove("google"), remove("ebay")]);
+    expect(outcomes.filter((outcome) => outcome === "ultimo-metodo")).toHaveLength(1);
+    const remaining = await env.DB.prepare('SELECT "providerId" FROM "account" WHERE "userId" = ?')
+      .bind(user.id)
+      .all();
+    expect(remaining.results).toHaveLength(1);
+
+    // Una passkey è un accesso valido: dopo averla aggiunta l'ultimo account si può rimuovere.
+    await env.DB.prepare(
+      `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+       VALUES ('passkey-metodi', 'synthetic', ?, 'passkey-metodi', 0, 'singleDevice', 0)`,
+    )
+      .bind(user.id)
+      .run();
+    const [{ providerId }] = remaining.results as Array<{ providerId: "google" | "ebay" }>;
+    expect(await remove(providerId)).toBe(
+      providerId === "ebay" ? "ebay-rimosso" : "metodo-rimosso",
+    );
+    expect(
+      (
+        await securityAction(user.cookie, { intent: "passkey-remove", id: "passkey-metodi" })
+      ).headers.get("location"),
+    ).toContain("ultimo-accesso");
+
+    // Una sessione vecchia deve accedere di nuovo; la route diretta di Better Auth è chiusa.
+    await env.DB.prepare('UPDATE "session" SET "createdAt" = ? WHERE "userId" = ?')
+      .bind(now - 2 * 86_400_000, user.id)
+      .run();
+    expect(await remove("google")).toBe("nuovo-accesso");
+    const direct = await handleAuthRequest(
+      new Request(`${origin}/api/auth/unlink-account`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin, cookie: user.cookie },
+        body: JSON.stringify({ accountId: "metodo-google" }),
+      }),
+      environment,
+    );
+    expect(direct.status).toBe(404);
+  });
+
+  it("le email di servizio usano un solo modello in testo e HTML, con il contenuto protetto", () => {
+    const body = accountEmailBody({
+      language: "en",
+      origin: "https://test.fiscalbay.it",
+      url: 'https://test.fiscalbay.it/?a=1&b="2"',
+      email: {
+        subject: "Subject",
+        paragraphs: ['Use <b>"this"</b> & go', "Second paragraph."],
+        button: "Continue",
+        note: "Valid for one hour.",
+      },
+    });
+    expect(body.text).toBe(
+      [
+        'Use <b>"this"</b> & go',
+        "",
+        "Second paragraph.",
+        "",
+        'Continue: https://test.fiscalbay.it/?a=1&b="2"',
+        "",
+        "Valid for one hour.",
+        "",
+        "--",
+        `You are receiving this email because you have a FiscalBay account. For help, reply to this email or write to ${supportEmail}.`,
+      ].join("\n"),
+    );
+    expect(emailLink(body.text)).toBe('https://test.fiscalbay.it/?a=1&b="2"');
+    expect(body.html).toContain('<html lang="en">');
+    // I colori sono soltanto chiari: un client in tema scuro non li inverte a metà.
+    expect(body.html).toContain('<meta name="color-scheme" content="light only">');
+    expect(body.html).not.toContain("dark");
+    // Logo dall'origine dell'ambiente e anteprima nascosta dal primo paragrafo.
+    expect(body.html).toContain('<img src="https://test.fiscalbay.it/apple-touch-icon.png"');
+    expect(body.html).toMatch(/display:none[^>]*>Use &lt;b&gt;/u);
+    expect(body.html).toContain("Use &lt;b&gt;&quot;this&quot;&lt;/b&gt; &amp; go");
+    expect(body.html).toContain("Valid for one hour.");
+    expect(body.html).toContain(
+      "If the button does not work, copy this address into your browser:",
+    );
+    expect(body.html).toContain('href="https://test.fiscalbay.it/?a=1&amp;b=&quot;2&quot;"');
+    expect(body.html).not.toContain("<b>");
+  });
+
+  it("i link di Auth dichiarano la durata che Better Auth applica", async () => {
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    try {
+      const email = "durata.link@example.invalid";
+      await signUp(env, email, true);
+      await vi.waitFor(() => expect(send).toHaveBeenCalled());
+      const verify = send.mock.calls[0]![0] as { subject: string; text: string };
+      expect(verify.subject).toBe("Conferma l’indirizzo email di FiscalBay");
+      expect(verify.text).toContain("Conferma email: ");
+      expect(verify.text).toContain("Il link vale un’ora.");
+      expect(emailVerificationSeconds).toBe(3600);
+      expect(createAuth(env).options.emailAndPassword?.resetPasswordTokenExpiresIn).toBe(
+        emailVerificationSeconds,
+      );
+    } finally {
+      send.mockRestore();
+    }
+  });
+
+  it("imposta di nuovo la password con un link al proprio indirizzo", async () => {
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    try {
+      const email = "password.nuova@example.invalid";
+      const user = await signUp(env, email, true);
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      send.mockClear();
+      await env.DB.prepare(
+        `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+         VALUES ('passkey-password', 'synthetic', ?, 'passkey-password', 0, 'singleDevice', 0)`,
+      )
+        .bind(user.id)
+        .run();
+      const outcome = (fields: Record<string, string>, action = appAction) =>
+        action(user.cookie, fields).then((response) => response.headers.get("location"));
+      expect(
+        await outcome({ intent: "rimuovi-metodo", metodo: "password" }, securityAction),
+      ).toContain("metodo-rimosso");
+      // Il titolare riceve avviso della rimozione, con il collegamento a Sicurezza.
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      expect(send.mock.calls[0]![0]).toMatchObject({
+        from: { email: expect.stringMatching(/^noreply@/u), name: "FiscalBay" },
+        replyTo: supportEmail,
+        to: email,
+        subject: "Metodo di accesso rimosso da FiscalBay",
+        text: expect.stringContaining("/app/impostazioni/sicurezza"),
+        html: expect.stringContaining('<html lang="it">'),
+      });
+      send.mockClear();
+      // Il link per la password è una richiesta di reset: senza verifica Turnstile non parte.
+      expect(await outcome({ intent: "password", [turnstileField]: "" }, securityAction)).toContain(
+        "verifica-non-riuscita",
+      );
+      expect(send).not.toHaveBeenCalled();
+      expect(await outcome({ intent: "password" }, securityAction)).toContain("password-link");
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      const message = send.mock.calls[0]![0] as { to: string; text: string };
+      expect(message.to).toBe(email);
+      const token = new URL(emailLink(message.text)).pathname.split("/").at(-1)!;
+      expect(
+        await outcome({ intent: "reimposta-password", token, password: "Password-reimpostata-1" }),
+      ).toContain("password-reimpostata");
+      await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+      expect(send.mock.calls[1]![0]).toMatchObject({
+        to: email,
+        subject: "La password di FiscalBay è stata reimpostata",
+      });
+      // La password creata dal link ha già il suo avviso, non quello di un nuovo metodo.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      expect(send).toHaveBeenCalledTimes(2);
+      const signIn = await post(env, "sign-in/email", {
+        email,
+        password: "Password-reimpostata-1",
+      });
+      expect(signIn.ok).toBe(true);
+    } finally {
+      send.mockRestore();
+    }
+  });
+
+  it("cambia l'email con la conferma del vecchio e del nuovo indirizzo", async () => {
+    // Le azioni dell'app usano il binding email dell'ambiente del Worker.
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    const environment = env;
+    const user = await signUp(environment, "email.precedente@example.invalid", true);
+    await signUp(environment, "email.occupata@example.invalid", true);
+    send.mockClear();
+    const request = (email: string) =>
+      securityAction(user.cookie, { intent: "cambia-email", email }).then((response) =>
+        response.headers.get("location"),
+      );
+    const link = (index: number) =>
+      emailLink((send.mock.calls[index]![0] as { text: string }).text);
+    const follow = (url: string) =>
+      handleAuthRequest(new Request(url, { headers: { cookie: user.cookie } }), environment);
+    const stored = () =>
+      env.DB.prepare('SELECT email, "emailVerified" FROM "user" WHERE id = ?')
+        .bind(user.id)
+        .first();
+
+    // Un indirizzo già registrato ha la stessa risposta ma nessuna email e nessun cambio.
+    expect(await request("email.occupata@example.invalid")).toContain("email-richiesta");
+    expect(
+      await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
+    ).toMatchObject({ new_email: "email.occupata@example.invalid", stage: "current" });
+    expect(await request("non-valida")).toContain("email-non-valida");
+    expect(send).not.toHaveBeenCalled();
+
+    expect(await request("email.nuova@example.invalid")).toContain("email-richiesta");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(send.mock.calls[0]![0]).toMatchObject({ to: "email.precedente@example.invalid" });
+    expect(await stored()).toEqual({ email: "email.precedente@example.invalid", emailVerified: 1 });
+    expect(
+      await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
+    ).toMatchObject({ new_email: "email.nuova@example.invalid", stage: "current" });
+
+    expect((await follow(link(0))).headers.get("location")).toContain("email-confermata");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls[1]![0]).toMatchObject({ to: "email.nuova@example.invalid" });
+    expect(
+      await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
+    ).toMatchObject({ stage: "new" });
+    expect(await stored()).toEqual({ email: "email.precedente@example.invalid", emailVerified: 1 });
+
+    await follow(link(1));
+    // Stesso utente, quindi stessi spazi, negozi e piani: cambia soltanto l'indirizzo.
+    expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
+    // La conferma elimina subito lo stato temporaneo, prima della pulizia eseguita da un loader.
+    expect(
+      await env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?")
+        .bind(user.id)
+        .first(),
+    ).toBeNull();
+    expect(await pendingEmailChange(env.DB, user.id, "email.nuova@example.invalid")).toBeNull();
+    send.mockClear();
+    expect(await request("email.destinazione@example.invalid")).toContain("email-richiesta");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    // Il nuovo invio del link passa da Turnstile; con Siteverify indisponibile non parte.
+    siteverify.answer = () => new Response(null, { status: 503 });
+    expect(
+      (await securityAction(user.cookie, { intent: "reinvia-email" })).headers.get("location"),
+    ).toContain("verifica-non-disponibile");
+    siteverify.answer = () => Response.json(testingKeyResult);
+    expect(send).toHaveBeenCalledOnce();
+    expect(
+      (
+        await securityAction(user.cookie, {
+          intent: "reinvia-email",
+          email: "email.estranea@example.invalid",
+        })
+      ).headers.get("location"),
+    ).toContain("email-richiesta");
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    expect(send.mock.calls[1]![0]).toMatchObject({ to: "email.nuova@example.invalid" });
+    expect(await pendingEmailChange(env.DB, user.id, "email.nuova@example.invalid")).toMatchObject({
+      new_email: "email.destinazione@example.invalid",
+      stage: "current",
+    });
+    expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
+    await purgeExpiredRecords(env.DB, new Date(Date.now() + 3_600_001));
+    expect(
+      await env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?")
+        .bind(user.id)
+        .first(),
+    ).toBeNull();
+    send.mockRestore();
+  });
+});
+
+describe("Sessioni, revoche e area admin", () => {
+  it("considera recente un accesso sotto le 24 ore e la conferma admin sotto le 12", () => {
+    const at = new Date("2026-10-01T12:00:00.000Z");
+    const session = (hours: number) => ({
+      session: {
+        id: "s",
+        createdAt: new Date(at.getTime() - hours * 3_600_000),
+        passkeyVerified: true,
+      },
+      user: { id: "u", admin: true },
+    });
+    const justUnder = (hours: number) => session(hours - 1 / 3_600_000);
+    expect(recentSignIn(justUnder(24), at)).toBe(true);
+    expect(recentSignIn(session(24), at)).toBe(false);
+    expect(adminAccess(justUnder(12), at)).toBe("granted");
+    expect(adminAccess(session(12), at)).toBe("verify");
+  });
+
+  const origin = "http://localhost:5173";
+  const jsonRequest = async (path: string, cookie: string, body?: unknown) =>
+    handleAuthRequest(
+      new Request(`${origin}/api/auth/${path}`, {
+        method: body === undefined ? "GET" : "POST",
+        headers: { "content-type": "application/json", origin, cookie, "user-agent": userAgent },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      }),
+      env,
+    );
+  const userAgent =
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15";
+  const securityAction = (cookie: string, fields: Record<string, string>) =>
+    routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", { cookie, fields }).then(
+      (response) => response.headers.get("location"),
+    );
+  const home = (cookie: string) => routeData(signInLoader, "/accesso", { cookie });
+  /** Pagina Sicurezza; chi non può vederla torna all'accesso con l'esito ricevuto. */
+  const security = async (cookie: string, path = "/app/impostazioni/sicurezza") => {
+    try {
+      return await routeData(securityLoader, path, { cookie, params: { sezione: "sicurezza" } });
+    } catch (thrown) {
+      if (thrown instanceof Response) return thrown.headers.get("location");
+      throw thrown;
+    }
+  };
+  it("rinomina solo passkey proprie con accesso recente, anche attraverso la route Auth", async () => {
+    const user = await createUser("rinomina.passkey@example.invalid");
+    const other = await createUser("rinomina.estraneo@example.invalid");
+    await env.DB.prepare(`INSERT INTO passkey (id, name, publicKey, userId, credentialID, counter, deviceType, backedUp)
+      VALUES ('rename-owned', 'Originale', 'synthetic', ?, 'rename-owned', 0, 'singleDevice', 0)`)
+      .bind(user.id)
+      .run();
+    expect(
+      await securityAction(user.cookie, {
+        intent: "passkey-rename",
+        id: "rename-owned",
+        name: "  Chiave di riserva  ",
+      }),
+    ).toContain("passkey-rinominata");
+    expect(
+      await env.DB.prepare("SELECT name FROM passkey WHERE id = 'rename-owned'").first(),
+    ).toEqual({ name: "Chiave di riserva" });
+    expect(
+      await securityAction(other.cookie, {
+        intent: "passkey-rename",
+        id: "rename-owned",
+        name: "Estraneo",
+      }),
+    ).toContain("errore");
+    expect(
+      (
+        await jsonRequest("passkey/update-passkey", other.cookie, {
+          id: "rename-owned",
+          name: "Estraneo",
+        })
+      ).ok,
+    ).toBe(false);
+    expect(
+      await securityAction(user.cookie, {
+        intent: "passkey-rename",
+        id: "rename-owned",
+        name: " ",
+      }),
+    ).toContain("passkey-nome-non-valido");
+    expect(
+      (
+        await jsonRequest("passkey/update-passkey", user.cookie, {
+          id: "rename-owned",
+          name: "a".repeat(81),
+        })
+      ).status,
+    ).toBe(400);
+    await env.DB.prepare('UPDATE session SET "createdAt" = ? WHERE "userId" = ?')
+      .bind(new Date(Date.now() - 2 * 86_400_000).toISOString(), user.id)
+      .run();
+    expect(
+      await securityAction(user.cookie, {
+        intent: "passkey-rename",
+        id: "rename-owned",
+        name: "Vecchia sessione",
+      }),
+    ).toContain("nuovo-accesso");
+    expect(
+      (
+        await jsonRequest("passkey/update-passkey", user.cookie, {
+          id: "rename-owned",
+          name: "Vecchia sessione",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      await env.DB.prepare("SELECT name FROM passkey WHERE id = 'rename-owned'").first(),
+    ).toEqual({ name: "Chiave di riserva" });
+  });
+
+  it("esce per riautenticare e torna soltanto a una sezione consentita di Sicurezza", async () => {
+    for (const prefix of ["", "/en"]) {
+      const user = await createUser(`ritorno${prefix.replace("/", "-")}@example.invalid`);
+      const target = `${prefix}/app/impostazioni/sicurezza#security-email`;
+      const area = await routeData(securityLoader, `${prefix}/app/impostazioni/sicurezza`, {
+        cookie: user.cookie,
+        params: { sezione: "sicurezza" },
+      });
+      expect(area.userId).toBe(user.id);
+      const out = await routeResponse(securityRouteAction, `${prefix}/app/impostazioni/sicurezza`, {
+        cookie: user.cookie,
+        fields: { intent: "riautentica", returnTo: target },
+      });
+      const destination = new URL(out.headers.get("location")!, origin);
+      expect(destination.pathname).toBe(`${prefix}/accesso`);
+      expect(destination.searchParams.get("returnTo")).toBe(target);
+      expect(await security(user.cookie)).toBe("/accesso");
+      for (const [returnTo, expected] of [
+        [target, target],
+        ["https://example.invalid", `${prefix}/app/ordini`],
+        [`${prefix}/app/negozi`, `${prefix}/app/ordini`],
+      ]) {
+        const signedIn = await routeResponse(signInAction, `${prefix}/accesso`, {
+          fields: { email: user.email, password: "Password-sintetica-123!", returnTo },
+        });
+        expect(signedIn.headers.get("location")).toBe(expected);
+      }
+    }
+  });
+
+  /** Esito del loader admin: 404 per chi non è admin, altrimenti il livello di accesso. */
+  const admin = async (cookie: string) => {
+    try {
+      const result = await routeData(adminLoader, "/admin", { cookie });
+      return result.access;
+    } catch (error) {
+      return (error as { init?: { status?: number } }).init?.status;
+    }
+  };
+  const signIn = async (email: string) =>
+    sessionCookie(
+      await jsonRequest("sign-in/email", "", { email, password: "Password-sintetica-123!" }),
+    );
+  // La registrazione con password arriva dal modulo con Turnstile: qui direttamente ad Auth.
+  const createUser = async (email: string) => {
+    const response = await createAuth(env).handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({
+          name: "Sessioni sintetiche",
+          email,
+          password: "Password-sintetica-123!",
+        }),
+      }),
+    );
+    const { user } = await response.json<{ user: { id: string } }>();
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?').bind(user.id).run();
+    await completeRegistration(env.DB, {
+      userId: user.id,
+      language: "it",
+      now: new Date(),
+      profile: {
+        firstName: "Utente",
+        lastName: "Sessioni",
+        accountType: "private",
+        companyName: null,
+      },
+      agreement: { marketing: false },
+    });
+    return { id: user.id, email, cookie: await signIn(email) };
+  };
+  const sessionId = async (cookie: string) =>
+    (
+      await jsonRequest("get-session", cookie).then((response) =>
+        response.json<{ session: { id: string } } | null>(),
+      )
+    )?.session.id;
+  /** Sposta indietro la creazione della sessione, come se l'accesso fosse più vecchio. */
+  const age = async (cookie: string, hours: number) => {
+    const id = await sessionId(cookie);
+    const row = await env.DB.prepare('SELECT "createdAt" FROM "session" WHERE id = ?')
+      .bind(id)
+      .first<{ createdAt: string | number }>();
+    const past = new Date(new Date(row!.createdAt).getTime() - hours * 3_600_000);
+    await env.DB.prepare('UPDATE "session" SET "createdAt" = ? WHERE id = ?')
+      .bind(typeof row!.createdAt === "number" ? past.getTime() : past.toISOString(), id)
+      .run();
+  };
+
+  /** Prove con un cookie già revocato: nessuna operazione protetta deve riuscire. */
+  async function expectRevoked(cookie: string) {
+    expect(await jsonRequest("get-session", cookie).then((response) => response.json())).toBeNull();
+    expect((await home(cookie)).authenticated).toBe(false);
+    expect(await security(cookie, "/en/app/impostazioni/sicurezza?accesso=sessione-chiusa")).toBe(
+      "/en/accesso?accesso=sessione-chiusa",
+    );
+    expect(
+      await securityAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),
+    ).toBe("/accesso");
+    expect(await securityAction(cookie, { intent: "esci-altri" })).toBe("/accesso");
+    const link = await routeResponse(storeLinkAction, "/app/negozi/collega", {
+      cookie,
+      fields: {},
+    });
+    expect(link.headers.get("location")).toContain("negozio=accesso");
+    expect((await jsonRequest("passkey/generate-register-options", cookie)).status).toBe(401);
+    expect(await admin(cookie)).toBe(404);
+    // Le API dei dati rileggono la sessione prima di cercare, esportare, scaricare o segnare.
+    const options = (fields: Record<string, string>) => ({
+      cookie,
+      fields,
+      headers: { accept: "application/json" },
+    });
+    const statuses = [
+      await routeResponse(
+        searchAction,
+        "/api/v1/orders/search",
+        options({ q: "RSSMRA80A01H501U" }),
+      ),
+      await routeResponse(exportAction, "/api/v1/orders/export", options({ ordini: "o-a" })),
+      await routeResponse(exportFileLoader, "/api/v1/exports/file", {
+        ...options({}),
+        fields: undefined,
+        params: { file: "file" },
+      }),
+      await routeResponse(notificationsAction, "/api/v1/notifications", options({ ids: "a" })),
+      await routeResponse(
+        unlockAction,
+        "/app/ordini",
+        options({ intent: "unlock", ids: "o-a", skipConfirmation: "true" }),
+      ),
+    ].map((response) => response.status);
+    expect(statuses).toEqual([401, 401, 401, 302, 302]);
+  }
+
+  it("inoltra a Better Auth lo user agent dei moduli e nessun header assente", async () => {
+    await createUser("inoltro@example.invalid");
+    const signIn = (headers: Record<string, string>) =>
+      forwardToAuth(
+        env,
+        new Request(`${origin}/accesso`, { method: "POST", headers }),
+        "/sign-in/email",
+        {
+          email: "inoltro@example.invalid",
+          password: "Password-sintetica-123!",
+        },
+      );
+    const agentOf = async (response: Response) => {
+      const token = decodeURIComponent(sessionCookie(response).split("=")[1]!).split(".")[0];
+      return (
+        await env.DB.prepare('SELECT "userAgent" FROM "session" WHERE "token" = ?')
+          .bind(token)
+          .first<{ userAgent: string | null }>()
+      )?.userAgent;
+    };
+    expect(await agentOf(await signIn({ origin, "user-agent": userAgent }))).toBe(userAgent);
+    expect(await agentOf(await signIn({ origin }))).toBeFalsy();
+  });
+
+  it("rinnova il cookie insieme alla sessione, salvo un cookie già impostato dalla risposta", async () => {
+    const { cookie } = await createUser("rinnovo@example.invalid");
+    const id = await sessionId(cookie);
+    // Accesso di due ore fa: la sessione va rinnovata alla prossima lettura.
+    const due = new Date(Date.now() + 7 * 86_400_000 - 2 * 3_600_000).toISOString();
+    const setDue = () =>
+      env.DB.prepare('UPDATE "session" SET "expiresAt" = ? WHERE id = ?').bind(due, id).run();
+    const page = (response: Response) =>
+      withResponseCookies(async () => {
+        await readSession(env, new Request(`${origin}/app`, { headers: { cookie } }));
+        return response;
+      });
+
+    await setDue();
+    const renewed = (await page(new Response(null))).headers.getSetCookie();
+    expect(renewed).toEqual([expect.stringMatching(/session_token=.*Max-Age=604800/u)]);
+    const row = await env.DB.prepare('SELECT "expiresAt" FROM "session" WHERE id = ?')
+      .bind(id)
+      .first<{ expiresAt: string }>();
+    expect(new Date(row!.expiresAt).getTime()).toBeGreaterThan(new Date(due).getTime());
+
+    await setDue();
+    const cleared = `${renewed[0]!.split("=")[0]}=; Path=/; Max-Age=0`;
+    const signedOut = await page(new Response(null, { headers: { "set-cookie": cleared } }));
+    expect(signedOut.headers.getSetCookie()).toEqual([cleared]);
+  });
+
+  it("elenca le sessioni senza token e chiude una sessione o tutte le altre", async () => {
+    const user = await createUser("sessioni@example.invalid");
+    const second = await signIn("sessioni@example.invalid");
+    const third = await signIn("sessioni@example.invalid");
+    const other = await createUser("sessioni.altro@example.invalid");
+
+    const loaded = await security(user.cookie);
+    if (typeof loaded === "string" || !loaded || !("page" in loaded))
+      throw new Error("sessione attesa");
+    const { sessions } = loaded.page.security;
+    expect(sessions).toHaveLength(3);
+    expect(sessions.every((session) => Number.isFinite(Date.parse(session.createdAt!)))).toBe(true);
+    expect(sessions.filter((session) => session.current)).toEqual([
+      expect.objectContaining({ id: await sessionId(user.cookie), device: "Safari su macOS" }),
+    ]);
+    expect(JSON.stringify(loaded)).not.toMatch(/token/iu);
+    // L'elenco di Better Auth restituirebbe i token delle altre sessioni: non è esposto.
+    expect((await jsonRequest("list-sessions", user.cookie)).status).toBe(404);
+    expect(
+      (await jsonRequest("update-session", user.cookie, { passkeyVerified: true })).status,
+    ).toBe(404);
+
+    // Un id di un altro utente non chiude nulla.
+    expect(
+      await securityAction(other.cookie, {
+        intent: "esci-sessione",
+        id: (await sessionId(second))!,
+      }),
+    ).toContain("sessione-chiusa");
+    expect(await sessionId(second)).toBeDefined();
+
+    expect(
+      await securityAction(user.cookie, {
+        intent: "esci-sessione",
+        id: (await sessionId(second))!,
+      }),
+    ).toContain("sessione-chiusa");
+    await expectRevoked(second);
+    expect(await sessionId(third)).toBeDefined();
+
+    // Le azioni di Sicurezza tornano alla sua pagina.
+    expect(await securityAction(user.cookie, { intent: "esci-altri" })).toBe(
+      "/app/impostazioni/sicurezza?accesso=sessioni-chiuse",
+    );
+    await expectRevoked(third);
+    expect(await sessionId(user.cookie)).toBeDefined();
+    expect(await sessionId(other.cookie)).toBeDefined();
+
+    // Chiudere la sessione corrente dall'elenco equivale al logout.
+    expect(
+      await securityAction(user.cookie, {
+        intent: "esci-sessione",
+        id: (await sessionId(user.cookie))!,
+      }),
+    ).toBe("/");
+    await expectRevoked(user.cookie);
+  });
+
+  it("chiede un accesso recente per le modifiche critiche", async () => {
+    const user = await createUser("recente@example.invalid");
+    await age(user.cookie, 25);
+    for (const fields of [
+      { intent: "cambia-email", email: "recente.nuova@example.invalid" },
+      { intent: "collega-metodo", metodo: "google" },
+      { intent: "rimuovi-metodo", metodo: "password" },
+      { intent: "passkey-remove", id: "qualsiasi" },
+    ] as Record<string, string>[]) {
+      expect(await securityAction(user.cookie, fields)).toContain("nuovo-accesso");
+    }
+    expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
+    // Le altre route non chiedono un accesso recente.
+    expect((await jsonRequest("get-session", user.cookie)).status).toBe(200);
+    expect(await security(user.cookie)).toMatchObject({
+      page: {
+        security: {
+          recent: false,
+          passkeyRestriction: "nuovo-accesso",
+          passkeyBlock: "nuovo-accesso",
+        },
+      },
+    });
+    // Le stesse modifiche chiamate direttamente sulle route Auth seguono la stessa regola.
+    expect(
+      (
+        await jsonRequest("change-email", user.cookie, {
+          newEmail: "recente.diretta@example.invalid",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await jsonRequest("link-social", user.cookie, { provider: "google", callbackURL: "/" }))
+        .status,
+    ).toBe(403);
+    // Chiudere le sessioni resta possibile anche con un accesso non recente.
+    expect(await securityAction(user.cookie, { intent: "esci-altri" })).toContain(
+      "sessioni-chiuse",
+    );
+    expect(
+      await env.DB.prepare('SELECT email FROM "user" WHERE id = ?').bind(user.id).first(),
+    ).toEqual({ email: "recente@example.invalid" });
+  });
+
+  it("concede l'admin solo dal database e lo revoca subito", async () => {
+    const user = await createUser("admin.db@example.invalid");
+    expect(await admin(user.cookie)).toBe(404);
+    // Il campo non si imposta da registrazione o modifica del profilo.
+    await jsonRequest("update-user", user.cookie, { admin: true });
+    const created = await jsonRequest("sign-up/email", "", {
+      name: "Admin sintetico",
+      email: "admin.registrato@example.invalid",
+      password: "Password-sintetica-123!",
+      admin: true,
+    });
+    expect(
+      await env.DB.prepare('SELECT email, "admin" FROM "user" WHERE email IN (?, ?) ORDER BY email')
+        .bind("admin.db@example.invalid", "admin.registrato@example.invalid")
+        .all()
+        .then((rows) => rows.results),
+    ).toEqual(
+      created.ok
+        ? [
+            { email: "admin.db@example.invalid", admin: 0 },
+            { email: "admin.registrato@example.invalid", admin: 0 },
+          ]
+        : [{ email: "admin.db@example.invalid", admin: 0 }],
+    );
+    expect(await admin(user.cookie)).toBe(404);
+
+    await env.DB.prepare('UPDATE "user" SET "admin" = 1 WHERE id = ?').bind(user.id).run();
+    // Password, anche appena inserita, non basta: serve la conferma con passkey.
+    expect(await admin(user.cookie)).toBe("verify");
+    expect((await jsonRequest("passkey/generate-register-options", user.cookie)).status).toBe(403);
+    // La home indica il passaggio giusto: accedere con passkey, non un accesso qualsiasi.
+    expect(await security(user.cookie)).toMatchObject({
+      page: {
+        security: {
+          recent: true,
+          passkeyRestriction: "conferma-passkey",
+          passkeyBlock: "conferma-passkey",
+        },
+      },
+    });
+    await env.DB.prepare('UPDATE "user" SET "admin" = 0 WHERE id = ?').bind(user.id).run();
+    expect(await admin(user.cookie)).toBe(404);
+  });
+
+  /** Autenticatore sintetico P-256 che firma asserzioni WebAuthn come un dispositivo reale. */
+  async function syntheticPasskey(userId: string) {
+    const keys = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ]);
+    const jwk = await crypto.subtle.exportKey("jwk", keys.publicKey);
+    const fromB64url = (value: string) =>
+      Uint8Array.from(atob(value.replaceAll("-", "+").replaceAll("_", "/")), (c) =>
+        c.charCodeAt(0),
+      );
+    const b64url = (bytes: Uint8Array) =>
+      btoa(String.fromCharCode(...bytes))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_")
+        .replace(/=+$/u, "");
+    // Chiave COSE EC2: {1: 2, 3: -7, -1: 1, -2: x, -3: y} in CBOR.
+    const cose = new Uint8Array([
+      0xa5,
+      0x01,
+      0x02,
+      0x03,
+      0x26,
+      0x20,
+      0x01,
+      0x21,
+      0x58,
+      0x20,
+      ...fromB64url(jwk.x!),
+      0x22,
+      0x58,
+      0x20,
+      ...fromB64url(jwk.y!),
+    ]);
+    const credentialId = b64url(crypto.getRandomValues(new Uint8Array(16)));
+    await env.DB.prepare(
+      `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+       VALUES (?, ?, ?, ?, 0, 'multiDevice', 1)`,
+    )
+      .bind(crypto.randomUUID(), btoa(String.fromCharCode(...cose)), userId, credentialId)
+      .run();
+
+    /** Accede con la passkey; `userVerified` indica se il dispositivo ha verificato l'utente. */
+    return async (userVerified: boolean, cookie = "") => {
+      const options = await jsonRequest("passkey/generate-authenticate-options", cookie);
+      const { challenge } = await options.clone().json<{ challenge: string }>();
+      const encoder = new TextEncoder();
+      const clientData = encoder.encode(
+        JSON.stringify({ type: "webauthn.get", challenge, origin, crossOrigin: false }),
+      );
+      const rpIdHash = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", encoder.encode("localhost")),
+      );
+      const authenticatorData = new Uint8Array([
+        ...rpIdHash,
+        userVerified ? 0x05 : 0x01,
+        0,
+        0,
+        0,
+        0,
+      ]);
+      const signed = new Uint8Array([
+        ...authenticatorData,
+        ...new Uint8Array(await crypto.subtle.digest("SHA-256", clientData)),
+      ]);
+      const raw = new Uint8Array(
+        await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, keys.privateKey, signed),
+      );
+      // WebAuthn usa la firma DER, WebCrypto quella r||s.
+      const integer = (bytes: Uint8Array) => {
+        let start = 0;
+        while (start < bytes.length - 1 && bytes[start] === 0) start++;
+        const trimmed = bytes.slice(start);
+        const value = trimmed[0]! & 0x80 ? [0, ...trimmed] : [...trimmed];
+        return [0x02, value.length, ...value];
+      };
+      const body = [...integer(raw.slice(0, 32)), ...integer(raw.slice(32))];
+      const signature = new Uint8Array([0x30, body.length, ...body]);
+      const response = await jsonRequest(
+        "passkey/verify-authentication",
+        [cookie, sessionCookie(options)].filter(Boolean).join("; "),
+        {
+          response: {
+            id: credentialId,
+            rawId: credentialId,
+            type: "public-key",
+            response: {
+              authenticatorData: b64url(authenticatorData),
+              clientDataJSON: b64url(clientData),
+              signature: b64url(signature),
+            },
+            clientExtensionResults: {},
+          },
+        },
+      );
+      expect(response.ok).toBe(true);
+      return sessionCookie(response);
+    };
+  }
+
+  it("apre l'area admin solo con passkey verificata sul dispositivo, per 12 ore", async () => {
+    const user = await createUser("admin.passkey@example.invalid");
+    const signInWithPasskey = await syntheticPasskey(user.id);
+    const passkeyVerified = async (cookie: string) =>
+      (
+        await env.DB.prepare('SELECT "passkeyVerified" FROM "session" WHERE id = ?')
+          .bind(await sessionId(cookie))
+          .first<{ passkeyVerified: number }>()
+      )?.passkeyVerified;
+
+    // Per un utente normale la passkey è un accesso come gli altri: nessuna area admin.
+    const merchant = await signInWithPasskey(true);
+    expect(await passkeyVerified(merchant)).toBe(1);
+    expect(await admin(merchant)).toBe(404);
+
+    await env.DB.prepare('UPDATE "user" SET "admin" = 1 WHERE id = ?').bind(user.id).run();
+    // Passkey senza verifica dell'utente: un solo fattore, la sessione non vale per l'admin.
+    const presenceOnly = await signInWithPasskey(false);
+    expect(await passkeyVerified(presenceOnly)).toBe(0);
+    expect(await admin(presenceOnly)).toBe("verify");
+    // Dopo l'accesso la pagina spiega che manca la verifica, invece di ricaricarsi uguale.
+    const retried = await routeData(adminLoader, "/admin?conferma", { cookie: presenceOnly });
+    expect(retried).toMatchObject({ access: "verify", unverified: true });
+    expect(await admin(user.cookie)).toBe("verify");
+
+    // Conferma dalla sessione con password: nasce una nuova sessione verificata.
+    const verified = await signInWithPasskey(true, user.cookie);
+    expect(await admin(verified)).toBe("granted");
+    expect((await jsonRequest("passkey/generate-register-options", verified)).status).toBe(200);
+    // Le passkey dell'admin non si rimuovono da una sessione senza conferma.
+    expect(
+      await securityAction(user.cookie, { intent: "passkey-remove", id: "qualsiasi" }),
+    ).toContain("conferma-passkey");
+
+    await age(verified, 13);
+    expect(await admin(verified)).toBe("verify");
+    const renewed = await signInWithPasskey(true);
+    expect(await admin(renewed)).toBe("granted");
+
+    // Logout, revoca globale e perdita del ruolo chiudono subito l'area admin.
+    await jsonRequest("sign-out", renewed, {});
+    await expectRevoked(renewed);
+    const again = await signInWithPasskey(true);
+    expect(await securityAction(user.cookie, { intent: "esci-altri" })).toContain(
+      "sessioni-chiuse",
+    );
+    await expectRevoked(again);
+    const last = await signInWithPasskey(true);
+    expect(await admin(last)).toBe("granted");
+    await env.DB.prepare('UPDATE "user" SET "admin" = 0 WHERE id = ?').bind(user.id).run();
+    expect(await admin(last)).toBe(404);
+  });
+});

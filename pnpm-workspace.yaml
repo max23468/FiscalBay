@@ -1,3 +1,7 @@
+packages:
+  - .
+  - placeholder
+
 # `workerd` scarica il binario della piattaforma ed `esbuild` i binding nativi:
 # senza approvazione esplicita pnpm interrompe l'installazione.
 allowBuilds:
@@ -6,11 +10,17 @@ allowBuilds:
 # `exceljs` dichiara `uuid` 8, con vulnerabilità nota; la 11 è compatibile.
 overrides:
   uuid: 11.1.1
-# Installa solo release pubblicate da almeno un giorno e rifiuta i pacchetti
-# che perdono firme o provenance rispetto alle versioni precedenti.
-minimumReleaseAge: 1440
+  # typed-rest-client fissa qs 6.15.1; la patch 6.16.1 corregge i DoS noti.
+  "typed-rest-client>qs": 6.16.1
+# Nessuna attesa dalla pubblicazione: il valore esplicito evita il default di pnpm.
+minimumReleaseAge: 0
+# Rifiuta i pacchetti che perdono firme o provenance rispetto alle versioni precedenti.
 trustPolicy: no-downgrade
 # Backport ufficiale della serie 6, pubblicato dopo le 7.x con provenance;
 # arriva da Babel tramite `@react-router/dev`.
 trustPolicyExclude:
   - semver@6.3.1
+patchedDependencies:
+  # cf include ancora i framework dei pacchetti figli nel rilevamento della radice.
+  # Rimuovere quando il rilevamento limita i risultati al progetto corrente.
+  cf@1.0.0-beta.23: patches/cf@1.0.0-beta.23.patch

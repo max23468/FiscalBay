@@ -2,77 +2,426 @@ name: CI
 
 on:
   pull_request:
+    # `ready_for_review` riavvia le prove browser saltate mentre la PR era in bozza.
+    types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - develop
       - main
+  push:
+    branches:
+      - develop
   workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Commit esatto atteso dopo un merge automatico
+        type: string
+        required: false
+      reviewed_migrations:
+        description: Digest delle migration non additive approvate, se presenti
+        type: string
+        required: false
 
-concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+# Nessuna telemetria della CLI `cf` dalle esecuzioni automatiche.
+env:
+  DO_NOT_TRACK: "1"
+
+# Anche nel container di Playwright, dove la shell predefinita dei passi sarebbe `sh`.
+defaults:
+  run:
+    shell: bash
 
 permissions:
+  actions: read
   contents: read
+  # Corpo della PR: approvazione delle migration non additive.
+  pull-requests: read
 
 jobs:
+  # Gate locale, build e artefatto; le prove browser girano in job propri.
   verify:
-    name: Node 26
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    name: Verify
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    concurrency:
+      group: verify-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    outputs:
+      deploy: ${{ steps.detect.outputs.deploy }}
+      build: ${{ steps.detect.outputs.build }}
+      e2e: ${{ steps.detect.outputs.e2e }}
+      grep: ${{ steps.detect.outputs.grep }}
+      browsers: ${{ steps.detect.outputs.browsers }}
+      reused: ${{ steps.reuse.outputs.run-id != '' }}
+      artifact: build-${{ steps.tree.outputs.tree }}
+      artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
+      playwright: ${{ steps.tree.outputs.playwright }}
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Detect docs-only diff
-        id: detect
+      # `main` riceve soltanto la promozione di `develop` dallo stesso repository.
+      - name: Check promotion source
+        if: github.base_ref == 'main'
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_REF: ${{ github.head_ref }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          if [ "${HEAD_REPO}" != "${REPOSITORY}" ] || [ "${HEAD_REF}" != "develop" ]; then
+            echo "::error::Le PR verso main partono soltanto da develop di ${REPOSITORY}, non da ${HEAD_REPO}:${HEAD_REF}."
+            exit 1
+          fi
+
+      - name: Check dispatched commit
+        if: inputs.expected_sha != ''
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+
+      # Verso `develop` una base avanzata nel frattempo basta che non tocchi file della PR o
+      # globali: il push sul branch riesegue il gate sul tree integrato prima del deploy.
+      - name: Check final qualification base
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/release/release-cycle.mjs qualification-base --ref "${BASE_REF}" --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+      # Sul push il confronto parte dall'ultimo deploy test riuscito, o dalla run verde successiva
+      # senza modifiche da distribuire: una run annullata o un deploy fallito restano nel diff.
+      - name: Find last test deploy
+        id: deployed
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/find-deployed.mjs
+
+      # La PR si confronta attraverso il commit di merge provato: una testa che non contiene la
+      # base non riporta come proprie le modifiche entrate nel frattempo.
+      - name: Classify changes
+        id: detect
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
+        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --github-output
+
+      - name: Identify tree
+        id: tree
+        # La versione di Playwright del manifest sceglie l'immagine dei job browser.
         run: |
-          set -euo pipefail
-          docs_only=false
-          if [ -n "${BASE_SHA}" ] && [ -n "${HEAD_SHA}" ]; then
-            changed="$(git diff --name-only "${BASE_SHA}" "${HEAD_SHA}")"
-            echo "File modificati:"
-            echo "${changed}"
-            if [ -n "${changed}" ]; then
-              docs_only=true
-              while IFS= read -r file; do
-                case "${file}" in
-                  *.md | docs/* | .github/CODEOWNERS | .github/ISSUE_TEMPLATE/*) ;;
-                  *)
-                    docs_only=false
-                    break
-                    ;;
-                esac
-              done <<< "${changed}"
-            fi
-          fi
-          echo "docs_only=${docs_only}" >> "${GITHUB_OUTPUT}"
-          if [ "${docs_only}" = "true" ]; then
-            echo "Diff docs-only: il gate applicativo viene saltato."
-          fi
+          {
+            echo "tree=$(git rev-parse 'HEAD^{tree}')"
+            echo "playwright=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
+          } >> "${GITHUB_OUTPUT}"
 
-      - name: Set up pnpm
-        if: steps.detect.outputs.docs_only != 'true'
-        uses: pnpm/action-setup@v6
+      # Un tree già verificato da una PR di questo repository non ripete il gate:
+      # il deploy distribuisce l'artefatto prodotto da quella verifica.
+      - name: Find verified artifact
+        id: reuse
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.base_ref == 'main' && steps.detect.outputs.promotion-reuse == 'true')) && steps.detect.outputs.build == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: node scripts/find-build.mjs
+
+      # I controlli dei documenti non richiedono le dipendenze.
+      - name: Set up Node and dependencies
+        if: ${{ !steps.reuse.outputs.run-id }}
+        uses: ./.github/actions/setup
         with:
-          version: 12.6.0
+          install: ${{ steps.detect.outputs.gate != 'docs' }}
 
-      - name: Set up Node
-        if: steps.detect.outputs.docs_only != 'true'
-        uses: actions/setup-node@v7
+      # Le migration non additive si approvano nella PR, non dopo il merge sul deploy test.
+      # Il corpo si rilegge dall'API: una nuova esecuzione vede la riga aggiunta dopo l'apertura.
+      - name: Check migration review
+        if: github.event_name == 'pull_request' && github.base_ref == 'develop' && steps.detect.outputs.gate == 'full'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          PR_BODY="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.body // ""')" \
+            node scripts/release/release.mjs review --base "${BASE_SHA}"
+
+      # Con una release candidate in cima al changelog `develop` accetta soltanto correzioni, e
+      # quelle che cambiano ciò che si distribuisce portano la RC successiva. Una nuova sezione
+      # in cima sale di un solo passo dall'ultima versione pubblicata.
+      # Il titolo, che diventa il commit integrato, si rilegge dall'API come il corpo.
+      - name: Check release freeze
+        if: github.event_name == 'pull_request' && github.base_ref == 'develop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          DEPLOY: ${{ steps.detect.outputs.deploy }}
+        run: |
+          PR_TITLE="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.title')" \
+            node scripts/release/release.mjs freeze --base "${BASE_SHA}"
+
+      - name: Run selected CI gate
+        if: steps.reuse.outputs.run-id == ''
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
+        # I browser restano nei rispettivi job; il gate locale usa la stessa sequenza.
+        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run --gate-only
+
+      - name: Record build provenance
+        if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
+        run: node scripts/release/release.mjs manifest --environment test
+
+      - name: Preserve coverage report
+        if: always() && steps.reuse.outputs.run-id == '' && steps.detect.outputs.gate != 'docs'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          node-version: 26.10.0
-          cache: pnpm
+          name: quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/coverage/
+          if-no-files-found: ignore
+          retention-days: 7
 
-      - name: Install dependencies
-        if: steps.detect.outputs.docs_only != 'true'
-        run: pnpm install --frozen-lockfile
+      - name: Upload verified build
+        if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ steps.tree.outputs.tree }}
+          path: .cloudflare/output/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
-      - name: Run local CI gate
-        if: steps.detect.outputs.docs_only != 'true'
-        run: pnpm verify
+  # Prove browser sulla build verificata, divise su otto macchine con quattro worker ciascuna.
+  # L'immagine ufficiale di Playwright contiene browser e librerie di sistema della stessa versione.
+  browser:
+    name: Browser ${{ matrix.shard }}/8
+    needs: verify
+    # Una PR in bozza esegue soltanto `Verify`: le prove complete partono quando è pronta.
+    if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
+    runs-on: ubuntu-26.04
+    container:
+      image: mcr.microsoft.com/playwright:v${{ needs.verify.outputs.playwright }}-noble
+      options: --ipc=host
+    timeout-minutes: 20
+    concurrency:
+      group: browser-${{ github.event.pull_request.number || github.ref }}-${{ matrix.shard }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node and dependencies
+        uses: ./.github/actions/setup
+
+      - name: Download verified build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.verify.outputs.artifact }}
+          path: .cloudflare/output/
+
+      # Una prova che riesce alla ripetizione resta nel report con un avviso; due fallimenti
+      # bloccano ancora il gate.
+      - name: Check browser interactions before deploy
+        env:
+          E2E_PREBUILT: "1"
+          E2E_RETRIES: "1"
+          BROWSER_GREP: ${{ needs.verify.outputs.grep }}
+          BROWSERS: ${{ needs.verify.outputs.browsers }}
+          SHARD: ${{ matrix.shard }}/8
+        run: node scripts/browser-tests.mjs --grep "${BROWSER_GREP}" --browsers "${BROWSERS}" --shard "${SHARD}"
+
+      - name: Upload browser evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 7
+
+  # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
+  gate:
+    name: Node 26
+    needs: [verify, browser]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Recheck final qualification base
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/release/release-cycle.mjs qualification-base --ref "${BASE_REF}" --base "${BASE_SHA}" --head "${HEAD_SHA}"
+
+      - name: Check job results
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Esiti: ${RESULTS}"
+          for result in ${RESULTS}; do
+            case "${result}" in
+              success | skipped) ;;
+              *)
+                echo "::error::Almeno un controllo non è riuscito (${result})."
+                exit 1
+                ;;
+            esac
+          done
+
+  deploy-test:
+    name: Deploy test
+    needs: [verify, gate]
+    # I job browser saltati per il riuso non devono bloccare il deploy.
+    # Gli esiti dei due gate restano obbligatori, anche dopo un fallimento o una cancellazione.
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.gate.result == 'success' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/develop' && vars.TEST_DEPLOY_ENABLED == 'true' && needs.verify.outputs.deploy == 'true' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    environment: test
+    concurrency:
+      group: deploy-test
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout verified commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # L'applicazione non viene ricompilata; Wrangler distribuisce la build verificata.
+      - name: Set up Node and dependencies
+        uses: ./.github/actions/setup
+
+      - name: Download verified build
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.verify.outputs.artifact }}
+          path: .cloudflare/output/
+          run-id: ${{ needs.verify.outputs.artifact-run }}
+          github-token: ${{ github.token }}
+
+      - name: Verify artifact provenance
+        run: node scripts/release/release.mjs verify --environment test
+
+      - name: Check commit still on develop
+        env:
+          VERIFIED_SHA: ${{ github.sha }}
+        run: |
+          current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
+          test "${current_sha}" = "${VERIFIED_SHA}"
+
+      - name: Restore receipt from previous attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/release/release.mjs restore --environment test --receipt-prefix deployed
+
+      # Senza un digest nel dispatch vale quello approvato nella PR integrata.
+      - name: Deploy verified artifact
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          VERIFIED_SHA: ${{ github.sha }}
+        run: |
+          PR_BODY="$(gh api "repos/${REPOSITORY}/commits/${VERIFIED_SHA}/pulls" --jq '.[0].body // ""')" \
+            node scripts/release/release.mjs deploy --environment test --reviewed-migrations "${REVIEWED_MIGRATIONS}"
+
+      - name: Check test endpoint
+        run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
+
+      # Il job distribuisce e può tornare indietro: resta sul runner, con il solo Chromium
+      # installato dall'installer ufficiale di Playwright. Il collaudo remoto vale per ogni
+      # deploy, anche quando il livello del gate non esegue le prove browser della PR.
+      - name: Install Chromium
+        timeout-minutes: 10
+        run: pnpm exec playwright install --with-deps chromium
+
+      # L'account di collaudo torna a uno stato noto prima delle prove autenticate. Se il
+      # ripristino non riesce (permessi del token, D1 non raggiungibile) le prove autenticate
+      # vengono saltate con un avviso: il deploy non torna indietro per un problema del dato.
+      - name: Reset test account
+        id: account
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          E2E_ACCOUNT_PASSWORD: ${{ secrets.E2E_ACCOUNT_PASSWORD }}
+        run: node scripts/reset-test-account.mjs
+
+      - name: Report test account warning
+        if: steps.account.outcome == 'failure'
+        run: echo "::warning::Account di collaudo non ripristinato, prove autenticate saltate."
+
+      - name: Check deployed browser interactions
+        env:
+          E2E_RUN_ID: test-smoke
+          E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
+        run: pnpm test:e2e:smoke
+
+      - name: Check deployed pages
+        env:
+          E2E_RUN_ID: test-pages
+          E2E_MATRIX: single
+          E2E_BASE_URL: https://test.fiscalbay.it
+          E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        # Le pagine sono già provate sullo stesso artefatto prima del merge: qui si visitano soltanto
+        # quelle che provano ambiente, D1, sessione e segreti (@remote).
+        # Le invocazioni del Worker restano nell'evidenza, ripulite, per le richieste lente o fallite.
+        run: |
+          node scripts/watch-invocations.mjs --worker fiscalbay-test \
+            --output test-results/browser/invocations.json -- \
+            node scripts/browser-tests.mjs --pages --grep "@remote"
+
+      # Un deploy con endpoint o interazioni falliti non resta distribuito sul test.
+      - name: Roll back test deploy
+        if: failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          node scripts/release/release.mjs rollback --environment test
+
+      - name: Upload deployed evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deployed-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/browser/
+            reports/release.json
+          retention-days: 7
+
+      # Conferma finale nel job, con i segreti e la rete del runner: ricevuta, collaudo remoto
+      # completo e versione ancora attiva. Un esito negativo non torna indietro: la run fallisce
+      # e `release:cycle` la legge senza accedere al provider dalla sessione.
+      - name: Confirm provider readback
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/release.mjs confirm --environment test

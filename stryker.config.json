@@ -1,0 +1,22 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "vitest",
+  "plugins_comment": "Il pool Cloudflare usa il fallback nativo Stryker per ricreare l'ambiente dei mutanti statici.",
+  "plugins": ["./scripts/mutation-vitest.mjs"],
+  "tsconfigFile_comment": "TypeScript 7 non espone l'API usata per riscrivere il tsconfig nella sandbox; i percorsi del progetto restano interni.",
+  "tsconfigFile": "tsconfig.none.json",
+  "ignorePatterns": [
+    "/.cloudflare",
+    "/.wrangler",
+    "/build",
+    "/test-results",
+    "/reports",
+    "/.claude/worktrees"
+  ],
+  "reporters": ["clear-text", "progress", "json"],
+  "concurrency": 4,
+  "timeoutMS_comment": "Oltre i 15 secondi per test della suite Cloudflare: un test bloccato da un mutante fallisce sempre per il proprio timeout invece di competere con quello di Stryker sotto carico.",
+  "timeoutMS": 20000,
+  "dryRunTimeoutMinutes_comment": "La prova iniziale esegue con la copertura per test tutti i file che importano il modulo: sul runner di GitHub supera i 5 minuti predefiniti, entro i 60 del job.",
+  "dryRunTimeoutMinutes": 20
+}

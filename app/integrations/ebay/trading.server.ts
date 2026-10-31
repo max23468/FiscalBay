@@ -1,0 +1,485 @@
+import { UpstreamError, upstreamText } from "../http.server";
+import type { EbayAccess } from "./environment.server";
+import {
+  orderObservationSchema,
+  type OrderObservation,
+} from "../../domain/order-observation.server";
+import { escapeMarkup } from "../../markup";
+import { parseMinor } from "../../money";
+
+/**
+ * Trading resta circoscritto alle chiamate necessarie: `GetOrders` per gli acquisti prima del
+ * checkout, le identità di riga e i dati fiscali, `GetItem` per l'immagine, `GetStore` e `GetUser`
+ * per il profilo pubblico del negozio. Le risposte passano dal confine HTTP e vengono rifiutate
+ * prima del parsing se troppo grandi, con byte NUL o con dichiarazioni `DOCTYPE`/`ENTITY`.
+ */
+const tradingApiVersion = "1455";
+const tradingSiteId = "101";
+const tradingMaxBytes = 2_097_152;
+
+// Codici eBay del token non più valido e del limite di chiamate raggiunto.
+const credentialErrors = new Set(["931", "932", "17470", "21916984"]);
+const rateLimitErrors = new Set(["518"]);
+
+export type EbayTaxIdentifierObservation = {
+  type: string;
+  issuingCountry: string | null;
+  value: string;
+  source: "ebay_trading_get_orders";
+};
+
+export type TradingTaxIdentifier = {
+  id: string;
+  type: string;
+  attributes?: ReadonlyArray<{ name: string; value: string }>;
+};
+
+const xmlEntities: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+};
+
+function xmlText(value: string): string {
+  return value
+    .replace(
+      /&(?:(amp|lt|gt|quot|apos)|#(\d{1,7})|#x([\da-f]{1,6}));/giu,
+      (entity, name, dec, hex) => {
+        if (name) return xmlEntities[name as string]!;
+        const code = dec ? Number(dec) : Number.parseInt(hex as string, 16);
+        return code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : entity;
+      },
+    )
+    .trim();
+}
+
+function xmlField(block: string, tag: string): string | null {
+  const match = new RegExp(`<${tag}>([^<]*)</${tag}>`, "u").exec(block);
+  return match ? xmlText(match[1]!) : null;
+}
+
+/** Valore di un elemento della richiesta, con anche l'apostrofo. */
+function escapeXml(value: string): string {
+  return escapeMarkup(value, /[&<>"']/gu);
+}
+
+/** Rifiuta una risposta Trading che non si deve neppure analizzare. */
+export function assertSafeTradingXml(xml: string): void {
+  if (xml.length > tradingMaxBytes || xml.includes("\0") || /<!(?:DOCTYPE|ENTITY)/iu.test(xml)) {
+    throw new UpstreamError("invalid_response");
+  }
+}
+
+/**
+ * Esito di una risposta Trading: `Success` e `Warning` sono letture valide; gli errori diventano
+ * credenziali, limite di chiamate, indisponibilità o rifiuto, con il solo codice numerico eBay.
+ */
+export function tradingAck(xml: string): void {
+  assertSafeTradingXml(xml);
+  const ack = xmlField(xml, "Ack");
+  if (ack === "Success" || ack === "Warning") return;
+  if (ack !== "Failure" && ack !== "PartialFailure") throw new UpstreamError("invalid_response");
+  const errors = [...xml.matchAll(/<Errors>([\s\S]*?)<\/Errors>/gu)]
+    .map(([, block]) => ({
+      code: xmlField(block!, "ErrorCode") ?? "",
+      severity: xmlField(block!, "SeverityCode"),
+      system: xmlField(block!, "ErrorClassification") === "SystemError",
+    }))
+    .filter(({ severity }) => severity !== "Warning");
+  // Un esito negativo senza errori leggibili è una risposta malformata.
+  if (errors.length === 0) throw new UpstreamError("invalid_response");
+  const providerCode = errors.find(({ code }) => /^\d{1,12}$/u.test(code))?.code;
+  if (errors.some(({ code }) => credentialErrors.has(code))) {
+    throw new UpstreamError("credentials", { providerCode });
+  }
+  if (errors.some(({ code }) => rateLimitErrors.has(code))) {
+    throw new UpstreamError("rate_limited", { providerCode });
+  }
+  if (errors.some(({ system }) => system)) throw new UpstreamError("unavailable", { providerCode });
+  throw new UpstreamError("rejected", { providerCode });
+}
+
+/** Ogni chiamata Trading ha la propria quota giornaliera: il limite porta il nome della chiamata. */
+async function tradingCall(access: EbayAccess, call: string, fields: string): Promise<string> {
+  try {
+    return await tradingRequest(access, call, fields);
+  } catch (error) {
+    if (error instanceof UpstreamError && error.failure === "rate_limited")
+      throw new UpstreamError("rate_limited", { ...error.details, limit: call });
+    throw error;
+  }
+}
+
+/**
+ * Risposta Trading già verificata con `tradingAck`: i parser ricevono soltanto letture valide e
+ * non ripetono il controllo.
+ */
+async function tradingRequest(access: EbayAccess, call: string, fields: string): Promise<string> {
+  const xml = await upstreamText(
+    access.fetcher,
+    access.configuration.tradingUrl,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "text/xml;charset=UTF-8",
+        "x-ebay-api-call-name": call,
+        "x-ebay-api-siteid": tradingSiteId,
+        "x-ebay-api-compatibility-level": tradingApiVersion,
+        "x-ebay-api-iaf-token": access.accessToken,
+      },
+      body:
+        '<?xml version="1.0" encoding="utf-8"?>' +
+        `<${call}Request xmlns="urn:ebay:apis:eBLBaseComponents">` +
+        `<Version>${tradingApiVersion}</Version>${fields}</${call}Request>`,
+    },
+    { maxBytes: tradingMaxBytes },
+  );
+  tradingAck(xml);
+  return xml;
+}
+
+/** Elenco Trading: include gli acquisti non ancora disponibili in Fulfillment. */
+export async function readTradingOrders(
+  access: EbayAccess,
+  input: { from: string; until: string; page: number },
+): Promise<{ orders: OrderObservation[]; total: number; more: boolean; skipped: number }> {
+  const from = new Date(input.from).toISOString();
+  const until = new Date(input.until).toISOString();
+  if (from > until || !Number.isSafeInteger(input.page) || input.page < 1)
+    throw new UpstreamError("invalid_response");
+  const xml = await tradingCall(
+    access,
+    "GetOrders",
+    `<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>` +
+      `<ModTimeFrom>${from}</ModTimeFrom><ModTimeTo>${until}</ModTimeTo>` +
+      `<Pagination><EntriesPerPage>25</EntriesPerPage><PageNumber>${input.page}</PageNumber></Pagination>`,
+  );
+  return parseTradingOrders(xml);
+}
+
+/** Blocchi `<Order>` di una risposta GetOrders. */
+function orderBlocks(xml: string): string[] {
+  return [...xml.matchAll(/<Order>([\s\S]*?)<\/Order>/gu)].map(([, block]) => block!);
+}
+
+/**
+ * Il blocco senza le transazioni: qui stanno i campi dell'ordine e dell'acquirente, e quelli
+ * delle transazioni non li contaminano.
+ */
+function orderHeader(block: string): string {
+  return block.replace(/<TransactionArray>[\s\S]*?<\/TransactionArray>/gu, "");
+}
+
+function isOrder(block: string, orderId: string): boolean {
+  return xmlField(block, "OrderID") === orderId || xmlField(block, "ExtendedOrderID") === orderId;
+}
+
+/** Data di modifica dell'acquisto, dallo stato del checkout; null se assente. */
+function checkoutModified(block: string): string | null {
+  const checkout = /<CheckoutStatus>([\s\S]*?)<\/CheckoutStatus>/u.exec(block)?.[1];
+  return checkout ? xmlField(checkout, "LastModifiedTime") : null;
+}
+
+/** Identificativi fiscali del blocco, nell'ordine della fonte; null per uno senza ID o tipo. */
+function taxIdentifierEntries(block: string): Array<TradingTaxIdentifier | null> {
+  return [...block.matchAll(/<BuyerTaxIdentifier>([\s\S]*?)<\/BuyerTaxIdentifier>/gu)].map(
+    ([, tax]) => {
+      const id = xmlField(tax!, "ID");
+      const type = xmlField(tax!, "Type");
+      if (!id || !type) return null;
+      const attributes = [...tax!.matchAll(/<Attribute name="([^"]*)">([^<]*)<\/Attribute>/gu)].map(
+        ([, name, value]) => ({ name: xmlText(name!), value: xmlText(value!) }),
+      );
+      return { id, type, attributes };
+    },
+  );
+}
+
+function completeTaxIdentifiers(block: string): TradingTaxIdentifier[] {
+  return taxIdentifierEntries(block).filter((entry) => entry !== null);
+}
+
+export function parseTradingOrders(xml: string) {
+  const totalText = xmlField(xml, "TotalNumberOfEntries");
+  const moreText = xmlField(xml, "HasMoreOrders");
+  if (!totalText || !/^\d+$/u.test(totalText) || !["true", "false"].includes(moreText ?? ""))
+    throw new UpstreamError("invalid_response");
+  const orders: OrderObservation[] = [];
+  let entries = 0;
+  let skipped = 0;
+  for (const block of orderBlocks(xml)) {
+    entries += 1;
+    // Un ordine illeggibile si salta: gli altri della pagina restano acquisibili.
+    try {
+      const transactions =
+        /<TransactionArray>([\s\S]*?)<\/TransactionArray>/u.exec(block)?.[1] ?? "";
+      const header = orderHeader(block);
+      const id = xmlField(header, "OrderID");
+      const status = xmlField(header, "OrderStatus");
+      const total = /<Total currencyID="([A-Z]{3})">([^<]+)<\/Total>/u.exec(header);
+      if (!id || !status || !total) throw new Error("invalid_order");
+      const paid = !!xmlField(header, "PaidTime") || status === "Completed";
+      const shipping = /<ShippingAddress>([\s\S]*?)<\/ShippingAddress>/u.exec(header)?.[1];
+      const items = [...transactions.matchAll(/<Transaction>([\s\S]*?)<\/Transaction>/gu)].map(
+        ([, transaction]) => {
+          const item = /<Item>([\s\S]*?)<\/Item>/u.exec(transaction!)?.[1] ?? "";
+          const itemId = xmlField(item, "ItemID");
+          const transactionId = xmlField(transaction!, "TransactionID");
+          const lineId = xmlField(transaction!, "OrderLineItemID");
+          const stableKey = itemId && transactionId ? `${itemId}-${transactionId}` : lineId;
+          if (lineId && stableKey !== lineId) throw new Error("conflicting_line_identity");
+          const quantity = Number(xmlField(transaction!, "QuantityPurchased"));
+          const price =
+            /<TransactionPrice currencyID="([A-Z]{3})">([^<]+)<\/TransactionPrice>/u.exec(
+              transaction!,
+            );
+          return {
+            lineItemId: lineId ?? stableKey,
+            stableKey,
+            legacyItemId: itemId,
+            title: xmlField(item, "Title") ?? "",
+            sku: xmlField(item, "SKU"),
+            quantity,
+            total: price
+              ? { minor: parseMinor(price[2]!, price[1]!) * quantity, currency: price[1]! }
+              : null,
+          };
+        },
+      );
+      if (!items.length) throw new Error("missing_transactions");
+      const taxEntries = taxIdentifierEntries(header);
+      orders.push(
+        orderObservationSchema.parse({
+          source: "trading",
+          buyerEiasToken: xmlField(header, "EIASToken") || undefined,
+          externalOrderId: id,
+          provisional: !paid,
+          creationTime: xmlField(header, "CreatedTime"),
+          lastModifiedTime: checkoutModified(header),
+          total: { minor: parseMinor(total[2]!, total[1]!), currency: total[1] },
+          paymentStatus: paid
+            ? "PAID"
+            : [
+                  "Active",
+                  "Incomplete",
+                  "InProcess",
+                  "Cancelled",
+                  "Canceled",
+                  "CancelPending",
+                ].includes(status)
+              ? "PENDING"
+              : status,
+          fulfillmentStatus: xmlField(header, "ShippedTime") ? "FULFILLED" : null,
+          cancelStatus:
+            ["Cancelled", "Canceled"].includes(status) ||
+            xmlField(header, "CancelStatus") === "CancelClosedWithRefund"
+              ? "CANCELED"
+              : xmlField(header, "CancelStatus"),
+          buyer: {
+            username: xmlField(header, "BuyerUserID"),
+            shipTo: shipping
+              ? {
+                  name: xmlField(shipping, "Name"),
+                  phone: xmlField(shipping, "Phone"),
+                  address: {
+                    addressLine1: xmlField(shipping, "Street1"),
+                    addressLine2: xmlField(shipping, "Street2"),
+                    city: xmlField(shipping, "CityName"),
+                    postalCode: xmlField(shipping, "PostalCode"),
+                    stateOrProvince: xmlField(shipping, "StateOrProvince"),
+                    countryCode: xmlField(shipping, "Country"),
+                  },
+                }
+              : null,
+          },
+          items,
+          taxIdentifiers: !taxEntries.includes(null)
+            ? {
+                source: "ebay_trading_get_orders",
+                complete: false,
+                availability: taxEntries.length ? "present" : "not_included",
+                values: mapTradingTaxIdentifiers(completeTaxIdentifiers(block)),
+              }
+            : {
+                source: "ebay_trading_get_orders",
+                complete: false,
+                verification: "error",
+                availability: "not_included",
+                values: [],
+              },
+        }),
+      );
+    } catch {
+      skipped += 1;
+    }
+  }
+  if (
+    !Number.isSafeInteger(Number(totalText)) ||
+    Number(totalText) < entries ||
+    new Set(orders.map((order) => order.externalOrderId)).size !== orders.length ||
+    (moreText === "true" && !entries)
+  )
+    throw new UpstreamError("invalid_response");
+  return { orders, total: Number(totalText), more: moreText === "true", skipped };
+}
+
+/** Distingue ordine non restituito e ordine presente senza identificativi. */
+export async function readTradingTaxObservation(access: EbayAccess, orderId: string) {
+  const xml = await tradingCall(
+    access,
+    "GetOrders",
+    "<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
+      `<OrderIDArray><OrderID>${escapeXml(orderId)}</OrderID></OrderIDArray>`,
+  );
+  const matching = orderBlocks(xml).filter((block) => isOrder(block, orderId));
+  if (matching.length > 1) throw new UpstreamError("invalid_response");
+  if (matching.length === 0) return { orderFound: false, lastModifiedTime: undefined, values: [] };
+  const order = matching[0]!;
+  const identifiers = taxIdentifierEntries(order);
+  if (identifiers.includes(null)) throw new UpstreamError("invalid_response");
+  const modified = checkoutModified(order);
+  const parsed =
+    modified === null ? null : orderObservationSchema.shape.lastModifiedTime.safeParse(modified);
+  if (parsed && !parsed.success) throw new UpstreamError("invalid_response");
+  return {
+    orderFound: true,
+    buyerEiasToken: xmlField(orderHeader(order), "EIASToken") || undefined,
+    lastModifiedTime: parsed?.data,
+    values: mapTradingTaxIdentifiers(completeTaxIdentifiers(order)),
+  };
+}
+
+export function mapTradingTaxIdentifiers(
+  identifiers: ReadonlyArray<TradingTaxIdentifier>,
+): EbayTaxIdentifierObservation[] {
+  return identifiers.map(({ id, type, attributes = [] }) => ({
+    type,
+    issuingCountry: attributes.find(({ name }) => name === "IssuingCountry")?.value ?? null,
+    value: id,
+    source: "ebay_trading_get_orders",
+  }));
+}
+
+const imageHosts = new Set(["i.ebayimg.com", "i.ebayimg.sandbox.ebay.com"]);
+
+/**
+ * URL di un'immagine eBay mostrabile così com'è: HTTPS, host delle immagini eBay, nessuna
+ * credenziale o porta e formato raster. Altrimenti null, senza seguire o scaricare nulla.
+ */
+export function qualifiedImageUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  return url.protocol === "https:" &&
+    imageHosts.has(url.hostname) &&
+    !url.port &&
+    !url.username &&
+    !url.password &&
+    /\.(?:jpe?g|png|webp)$/iu.test(url.pathname)
+    ? url.href
+    : null;
+}
+
+/** Prima immagine qualificata dell'inserzione in una risposta `GetItem`. */
+export function parseItemImage(xml: string): string | null {
+  const pictures = /<PictureDetails>([\s\S]*?)<\/PictureDetails>/u.exec(xml)?.[1] ?? "";
+  for (const [, , url] of pictures.matchAll(/<(PictureURL|GalleryURL)>([^<]*)<\/\1>/gu)) {
+    const qualified = qualifiedImageUrl(xmlText(url!));
+    if (qualified) return qualified;
+  }
+  return null;
+}
+
+/** Immagine dell'inserzione da `GetItem` tramite l'ID legacy dell'articolo. */
+export async function readItemImage(
+  access: EbayAccess,
+  legacyItemId: string,
+): Promise<string | null> {
+  return parseItemImage(
+    await tradingCall(access, "GetItem", `<ItemID>${escapeXml(legacyItemId)}</ItemID>`),
+  );
+}
+
+export type StoreProfile = { name: string | null; logoUrl: string | null; url: string | null };
+
+const emptyStoreProfile: StoreProfile = { name: null, logoUrl: null, url: null };
+
+/** Indirizzo HTTPS su un dominio eBay, senza credenziali né porta; altrimenti null. */
+export function qualifiedEbayUrl(value: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return null;
+  }
+  return url.protocol === "https:" &&
+    /^(?:[a-z\d-]+\.)*ebay\.[a-z]{2,3}(?:\.[a-z]{2})?$/u.test(url.hostname) &&
+    !url.port &&
+    !url.username &&
+    !url.password
+    ? url.href
+    : null;
+}
+
+/**
+ * Nome, logo e indirizzo del negozio in una risposta `GetStore`. Categorie, logo e tema hanno
+ * elementi `Name` e `URL` propri: si tolgono prima di leggere quelli del negozio.
+ */
+export function parseStoreProfile(xml: string): StoreProfile {
+  const store = /<Store>([\s\S]*)<\/Store>/u.exec(xml)?.[1] ?? "";
+  const logo = /<Logo>([\s\S]*?)<\/Logo>/u.exec(store)?.[1] ?? "";
+  const own = store.replace(/<(CustomCategories|Logo|Theme)>[\s\S]*?<\/\1>/gu, "");
+  const name = xmlField(own, "Name");
+  const logoUrl = xmlField(logo, "URL");
+  const url = xmlField(own, "URL");
+  return {
+    name: name && name.length <= 200 ? name : null,
+    logoUrl: logoUrl ? qualifiedImageUrl(logoUrl) : null,
+    url: url ? qualifiedEbayUrl(url) : null,
+  };
+}
+
+/**
+ * Negozio eBay dell'utente del token. Chi non ha un negozio riceve un rifiuto da eBay: vale come
+ * profilo vuoto, non come errore della lettura.
+ */
+export async function readStoreProfile(access: EbayAccess): Promise<StoreProfile> {
+  try {
+    return parseStoreProfile(await tradingCall(access, "GetStore", "<LevelLimit>1</LevelLimit>"));
+  } catch (error) {
+    if (error instanceof UpstreamError && error.failure === "rejected") return emptyStoreProfile;
+    throw error;
+  }
+}
+
+export type SellerStanding = {
+  feedbackScore: number | null;
+  positivePercent: number | null;
+  topRated: boolean;
+};
+
+/**
+ * Feedback e stato Top Rated in una risposta `GetUser`. eBay riporta `TopRatedSeller` soltanto
+ * per chi lo è: l'assenza vale come venditore non Top Rated.
+ */
+export function parseSellerStanding(xml: string): SellerStanding {
+  const user = /<User>([\s\S]*)<\/User>/u.exec(xml)?.[1] ?? "";
+  const score = Number(xmlField(user, "FeedbackScore") || Number.NaN);
+  const percent = Number(xmlField(user, "PositiveFeedbackPercent") || Number.NaN);
+  const seller = /<SellerInfo>([\s\S]*?)<\/SellerInfo>/u.exec(user)?.[1] ?? "";
+  return {
+    feedbackScore: Number.isSafeInteger(score) ? score : null,
+    positivePercent: Number.isFinite(percent) && percent >= 0 && percent <= 100 ? percent : null,
+    topRated: xmlField(seller, "TopRatedSeller") === "true",
+  };
+}
+
+/** Feedback e stato Top Rated dell'utente del token. */
+export async function readSellerStanding(access: EbayAccess): Promise<SellerStanding> {
+  return parseSellerStanding(await tradingCall(access, "GetUser", ""));
+}

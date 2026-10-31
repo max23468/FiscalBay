@@ -1,0 +1,44 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git for-each-ref:*)",
+      "Bash(git worktree list:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(pnpm install --frozen-lockfile)",
+      "Bash(pnpm typegen)",
+      "Bash(pnpm typecheck)",
+      "Bash(pnpm lint)",
+      "Bash(pnpm format:check)",
+      "Bash(pnpm quality:knip)",
+      "Bash(pnpm build)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm verify:*)",
+      "Bash(pnpm release:cycle status:*)",
+      "Bash(node scripts/verify-docs.mjs:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/cloud-session.sh",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

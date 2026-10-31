@@ -1,0 +1,834 @@
+import { createHash } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  authLimitWait,
+  forwardToAuth,
+  handleAuthRequest,
+  redirectWithCookies,
+} from "../app/auth-route.server";
+import { limitedHeaders, pageHeaders } from "../app/request-limits.server";
+import { fakeRateLimiters } from "./fixtures/rate-limiter";
+
+const services = vi.hoisted(() => ({
+  handler: vi.fn(),
+  session: vi.fn(),
+  registration: vi.fn(),
+  claim: vi.fn(),
+  complete: vi.fn(),
+  record: vi.fn(),
+  failure: vi.fn(),
+  trace: vi.fn(),
+  background: vi.fn(),
+  notify: vi.fn(),
+  verification: vi.fn(),
+  secure: { value: true },
+}));
+vi.mock("../app/auth.server", () => ({
+  createAuth: () => ({
+    handler: services.handler,
+    api: {
+      getSession: async ({ headers }: { headers: Headers }) => ({
+        headers: new Headers(),
+        response: await services.session({ headers }),
+      }),
+    },
+    $context: Promise.resolve({
+      internalAdapter: { findVerificationValue: services.verification },
+      authCookies: {
+        sessionToken: {
+          name: "fb.session_token",
+          attributes: services.secure.value ? { secure: true } : {},
+        },
+        sessionData: {
+          name: "fb.session_data",
+          attributes: services.secure.value ? { secure: true } : {},
+        },
+        dontRememberToken: {
+          name: "fb.dont_remember",
+          attributes: services.secure.value ? { secure: true } : {},
+        },
+      },
+    }),
+  }),
+  sessionPolicy: { freshAge: 86400 },
+}));
+vi.mock("../app/domain/registration.server", () => ({ registrationStatus: services.registration }));
+vi.mock("../app/integrations/ebay/store-link.server", () => ({
+  claimStoreLinkSession: services.claim,
+  recordStoreLinkOutcome: services.record,
+}));
+vi.mock("../app/domain/store-link.server", () => ({ completeStoreLink: services.complete }));
+vi.mock("../app/errors", () => ({ logFailure: services.failure, tracePhase: services.trace }));
+vi.mock("cloudflare:workers", () => ({ waitUntil: services.background }));
+vi.mock("../app/account-email.server", () => ({
+  notifySecurityEvent: services.notify,
+  linkLanguage: (url: string) =>
+    new URL(url).searchParams.get("callbackURL")?.startsWith("/en/") ? "en" : "it",
+}));
+
+let sqlite: DatabaseSync;
+let environment: Env;
+let limiters: ReturnType<typeof fakeRateLimiters>;
+const now = 1_800_000_000_000;
+const member = (overrides = {}) => ({
+  user: { id: "member", email: "member@example.invalid", emailVerified: true, ...overrides },
+  session: { id: "session", createdAt: new Date(now), passkeyVerified: false },
+});
+const request = (path: string, options: RequestInit = {}) =>
+  new Request(`https://test.fiscalbay.it${path}`, options);
+const handle = async (path: string, options: RequestInit = {}) => {
+  const input = request(path, options);
+  const calls = services.session.mock.calls.length;
+  const response = await handleAuthRequest(input, environment);
+  if (services.session.mock.calls.length > calls)
+    expect(services.session).toHaveBeenLastCalledWith({ headers: input.headers });
+  return response;
+};
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.spyOn(Date, "now").mockReturnValue(now);
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(now);
+  vi.spyOn(Math, "random").mockReturnValue(1);
+  sqlite = new DatabaseSync(":memory:");
+  sqlite.exec(
+    'CREATE TABLE "rateLimit" (id TEXT, key TEXT UNIQUE, count INTEGER, lastRequest INTEGER)',
+  );
+  sqlite.exec(`CREATE TABLE account_email_changes (
+    user_id TEXT PRIMARY KEY, current_email TEXT, new_email TEXT, stage TEXT, expires_at TEXT
+  )`);
+  // La SQL del modulo viene eseguita realmente: soglie, finestre e pulizia non sono simulate.
+  limiters = fakeRateLimiters();
+  environment = {
+    APP_ORIGIN: "https://test.fiscalbay.it",
+    ...limiters,
+    DB: {
+      prepare(sql: string) {
+        const statement = sqlite.prepare(sql);
+        return {
+          bind(...values: Array<string | number>) {
+            return {
+              first: async () => statement.get(...values),
+              run: async () => statement.run(...values),
+            };
+          },
+        };
+      },
+    },
+  } as unknown as Env;
+  services.handler.mockImplementation(async () => new Response("auth", { status: 202 }));
+  services.session.mockResolvedValue(member());
+  services.registration.mockResolvedValue({ profile: true, termsAccepted: true });
+  services.claim.mockResolvedValue(null);
+});
+afterEach(() => {
+  sqlite.close();
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
+
+describe("confine HTTP Auth", () => {
+  it.each([
+    "get-access-token",
+    "refresh-token",
+    "passkey/delete-passkey",
+    "unlink-account",
+    "list-sessions",
+    "update-session",
+    "sign-up/email",
+    "request-password-reset",
+    "send-verification-email",
+  ])("chiude %s anche con slash finali", async (path) => {
+    for (const suffix of ["", "/", "///"]) {
+      const response = await handle(`/api/auth/${path}${suffix}`);
+      expect(response.status).toBe(404);
+      expect(await response.text()).toBe("");
+    }
+    expect(services.handler).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])(
+    "richiede una sessione recente e verificata per link-social (%s)",
+    async (verified) => {
+      services.session.mockResolvedValue(null);
+      expect((await handle("/api/auth/link-social")).status).toBe(401);
+      const session = member({ emailVerified: verified });
+      if (verified) session.session.createdAt = new Date(now - 86400_000);
+      services.session.mockResolvedValue(session);
+      expect((await handle("/api/auth/link-social")).status).toBe(403);
+      expect(services.handler).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["null", "1", '"string"', "invalid", '{"idToken":null}'])(
+    "rifiuta payload link-social %s",
+    async (body) => {
+      expect((await handle("/api/auth/link-social", { method: "POST", body })).status).toBe(400);
+      expect(services.handler).not.toHaveBeenCalled();
+    },
+  );
+
+  it("inoltra il corpo valido senza consumarlo e passa gli header di sessione", async () => {
+    const response = await handle("/api/auth/link-social", {
+      method: "POST",
+      headers: { cookie: "synthetic-session" },
+      body: '{"provider":"google"}',
+    });
+    expect(response.status).toBe(202);
+    expect(services.session).toHaveBeenCalledWith({ headers: expect.any(Headers) });
+    const forwarded = services.handler.mock.calls[0]![0] as Request;
+    expect(forwarded.headers.get("cookie")).toBe("synthetic-session");
+    expect(await forwarded.json()).toEqual({ provider: "google" });
+  });
+
+  it("blocca change-email solo per la sessione presente ma non recente", async () => {
+    services.session.mockResolvedValue({
+      ...member(),
+      session: { createdAt: new Date(now - 86400_000) },
+    });
+    expect((await handle("/api/auth/change-email")).status).toBe(403);
+    services.session.mockResolvedValue(null);
+    expect((await handle("/api/auth/change-email")).status).toBe(202);
+    services.session.mockResolvedValue(member());
+    expect((await handle("/api/auth/change-email")).status).toBe(202);
+  });
+
+  it.each(["generate-register-options", "verify-registration", "update-passkey"])(
+    "protegge l'aggiunta passkey %s",
+    async (path) => {
+      const url = `/api/auth/passkey/${path}`;
+      services.session.mockResolvedValue(null);
+      expect((await handle(url)).status).toBe(401);
+      for (const condition of ["email", "profile", "terms", "fresh", "admin"]) {
+        const session = member({
+          emailVerified: condition !== "email",
+          admin: condition === "admin",
+        });
+        if (condition === "fresh") session.session.createdAt = new Date(now - 86400_000);
+        services.session.mockResolvedValue(session);
+        services.registration.mockResolvedValue({
+          profile: condition !== "profile",
+          termsAccepted: condition !== "terms",
+        });
+        expect((await handle(url)).status).toBe(403);
+      }
+      services.session.mockResolvedValue(member());
+      services.registration.mockResolvedValue({ profile: true, termsAccepted: true });
+      expect((await handle(url)).status).toBe(202);
+      expect(services.registration).toHaveBeenLastCalledWith(environment.DB, "member");
+    },
+  );
+
+  it("registra il cambio email solo dopo una risposta Auth riuscita con sessione e indirizzo", async () => {
+    const row = () => sqlite.prepare("SELECT * FROM account_email_changes").get();
+    for (const body of ["invalid", "null", "1", '"test"', "{}", '{"newEmail":1}']) {
+      expect((await handle("/api/auth/change-email", { method: "POST", body })).status).toBe(202);
+      expect(row()).toBeUndefined();
+    }
+    const options = { method: "POST", body: '{"newEmail":"New@Example.invalid"}' };
+    services.session.mockResolvedValueOnce(null);
+    await handle("/api/auth/change-email", options);
+    expect(row()).toBeUndefined();
+    services.handler.mockResolvedValueOnce(new Response(null, { status: 400 }));
+    await handle("/api/auth/change-email", options);
+    expect(row()).toBeUndefined();
+    await handle("/api/auth/change-email", options);
+    expect(row()).toEqual({
+      user_id: "member",
+      current_email: "member@example.invalid",
+      new_email: "new@example.invalid",
+      stage: "current",
+      expires_at: new Date(now + 3600_000).toISOString(),
+    });
+  });
+
+  it("valida il nome delle passkey senza consumare il corpo o impedire il nome automatico", async () => {
+    const url = "/api/auth/passkey/update-passkey";
+    for (const name of [null, 1, false, "", "   ", "a".repeat(81), ` ${"a".repeat(80)} `]) {
+      const calls = services.handler.mock.calls.length;
+      expect((await handle(url, { method: "POST", body: JSON.stringify({ name }) })).status).toBe(
+        400,
+      );
+      expect(services.handler).toHaveBeenCalledTimes(calls);
+    }
+    for (const body of [
+      "invalid",
+      "null",
+      "1",
+      '"test"',
+      "{}",
+      JSON.stringify({ name: "a".repeat(80) }),
+      JSON.stringify({ name: "  chiave  " }),
+    ]) {
+      expect((await handle(url, { method: "POST", body })).status).toBe(202);
+      const forwarded = services.handler.mock.calls.at(-1)![0] as Request;
+      expect(await forwarded.text()).toBe(body);
+    }
+    expect((await handle(url, { method: "GET" })).status).toBe(202);
+    expect(services.notify).not.toHaveBeenCalled();
+  });
+
+  it("avvisa della nuova passkey solo quando la registrazione riesce", async () => {
+    expect((await handle("/api/auth/passkey/generate-register-options")).status).toBe(202);
+    services.handler.mockResolvedValueOnce(new Response(null, { status: 400 }));
+    expect((await handle("/api/auth/passkey/verify-registration")).status).toBe(400);
+    await handle("/api/auth/sign-in/email", { method: "POST" });
+    expect(services.notify).not.toHaveBeenCalled();
+    expect((await handle("/api/auth/passkey/verify-registration")).status).toBe(202);
+    expect(services.notify.mock.calls).toEqual([
+      [environment, "member", { kind: "passkey-added" }],
+    ]);
+  });
+
+  it("risponde 503 da riprovare quando Auth o il database non rispondono", async () => {
+    const error = new Error("synthetic");
+    services.handler.mockRejectedValue(error);
+    const input = request("/api/auth/session");
+    const response = await handleAuthRequest(input, environment);
+    expect(response.status).toBe(503);
+    expect(Object.fromEntries(response.headers)).toEqual({
+      "cache-control": "no-store",
+      "retry-after": "60",
+    });
+    expect(await response.text()).toBe("");
+    expect(services.failure).toHaveBeenCalledWith({
+      request: input,
+      code: "UPSTREAM_UNAVAILABLE",
+      error,
+      operation: "route",
+    });
+  });
+
+  it.each([499, 500, 503])("registra gli errori solo da 500 (%i)", async (status) => {
+    services.handler.mockResolvedValue(new Response("failure", { status }));
+    const input = request("/api/auth/session");
+    expect((await handleAuthRequest(input, environment)).status).toBe(status);
+    expect(services.session).not.toHaveBeenCalled();
+    expect(services.failure.mock.calls).toEqual(
+      status < 500 ? [] : [[{ request: input, code: "INTERNAL_ERROR", operation: "route" }]],
+    );
+  });
+
+  it("inoltra solo gli header ammessi, metodo POST, origine e corpo", async () => {
+    const headers = {
+      cookie: "cookie",
+      origin: "https://test.fiscalbay.it",
+      "user-agent": "unit",
+      "accept-language": "en",
+      "cf-connecting-ip": "203.0.113.8",
+      authorization: "discard",
+    };
+    await forwardToAuth(environment, request("/app", { headers }), "/sign-in/email", {
+      email: "member@example.invalid",
+    });
+    const forwarded = services.handler.mock.calls[0]![0] as Request;
+    expect(forwarded.url).toBe("https://test.fiscalbay.it/api/auth/sign-in/email");
+    expect(forwarded.method).toBe("POST");
+    expect(Object.fromEntries(forwarded.headers)).toEqual({
+      ...Object.fromEntries(Object.entries(headers).filter(([name]) => name !== "authorization")),
+      "content-type": "application/json",
+    });
+    expect(await forwarded.json()).toEqual({ email: "member@example.invalid" });
+    expect(services.trace.mock.calls.map(([, phase]) => phase)).toEqual([
+      "auth-forward",
+      "auth-response",
+    ]);
+    await forwardToAuth(environment, request("/app"), "/session");
+    expect(Object.fromEntries((services.handler.mock.calls[1]![0] as Request).headers)).toEqual({
+      "content-type": "application/json",
+    });
+    expect(await (services.handler.mock.calls[1]![0] as Request).json()).toEqual({});
+  });
+
+  it("reindirizza con i cookie impostati da Auth e senza cache", () => {
+    const auth = new Response(null, { headers: { "set-cookie": "first=1; Path=/" } });
+    auth.headers.append("set-cookie", "second=2; Path=/");
+    const response = redirectWithCookies("/app/ordini", auth);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/app/ordini");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.getSetCookie()).toEqual(["first=1; Path=/", "second=2; Path=/"]);
+  });
+});
+
+describe("limiti dei tentativi", () => {
+  // Registrazione, recupero e nuovo link arrivano soltanto dai moduli, inoltrati ad Auth.
+  const formOnly = ["/sign-up/email", "/request-password-reset", "/send-verification-email"];
+  const post = (path: string, init: { headers: Record<string, string>; body?: string }) =>
+    formOnly.includes(path)
+      ? forwardToAuth(
+          environment,
+          request("/accesso", { method: "POST", headers: init.headers }),
+          path,
+          init.body ? JSON.parse(init.body) : {},
+        )
+      : handle(`/api/auth${path}`, { method: "POST", ...init });
+  const attempt = (path: string, ip = "203.0.113.1") =>
+    post(path, { headers: { "cf-connecting-ip": ip } });
+
+  it.each([
+    ["/sign-in/email", 10],
+    ["/sign-up/email", 10],
+    ["/change-password", 10],
+    ["/change-email", 10],
+    ["/passkey/verify-authentication", 10],
+    ["/passkey/verify-registration", 10],
+    ["/send-verification-email", 60],
+    ["/request-password-reset", 60],
+    ["/forget-password", 60],
+  ])(
+    "limita %s per IP e riapre la finestra a %i secondi senza scrivere su D1",
+    async (path, seconds) => {
+      for (let count = 0; count < 3; count++) expect((await attempt(path)).status).toBe(202);
+      const response = await attempt(path);
+      expect(response.status).toBe(429);
+      expect(response.headers.get("retry-after")).toBe(String(seconds));
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(await response.json()).toEqual({
+        code: "TOO_MANY_REQUESTS",
+        message: "Too many requests. Try again later.",
+      });
+      expect(services.handler).toHaveBeenCalledTimes(3);
+      expect(sqlite.prepare('SELECT count(*) AS total FROM "rateLimit"').get()?.total).toBe(0);
+      vi.setSystemTime(now + seconds * 1000);
+      expect((await attempt(path)).status).toBe(202);
+    },
+  );
+
+  it("scarta la richiesta oltre il limite prima di sessione, corpo e indirizzo", async () => {
+    const send = () =>
+      handle("/api/auth/change-email", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "203.0.113.9" },
+        body: JSON.stringify({ newEmail: "nuovo@example.invalid" }),
+      });
+    for (let count = 0; count < 3; count++) await send();
+    services.session.mockClear();
+    expect((await send()).status).toBe(429);
+    expect(services.session).not.toHaveBeenCalled();
+  });
+
+  it("non conta due volte un invio già ammesso dal modulo", async () => {
+    const page = request("/accesso", {
+      method: "POST",
+      headers: { "cf-connecting-ip": "203.0.113.7" },
+    });
+    for (let count = 0; count < 3; count++) {
+      expect(await authLimitWait(environment, page, "/sign-up/email")).toBeNull();
+      expect((await forwardToAuth(environment, page, "/sign-up/email", {}, true)).status).toBe(202);
+    }
+    expect(await authLimitWait(environment, page, "/sign-up/email")).toBe(10);
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual(
+      Array(4).fill("auth/sign-up/email|203.0.113.7"),
+    );
+    expect(await authLimitWait(environment, page, "/session")).toBeNull();
+    expect(await authLimitWait(environment, request("/accesso"), "/sign-up/email")).toBeNull();
+  });
+
+  it.each([
+    ["/sign-in/email", 10, 900],
+    ["/request-password-reset", 5, 3600],
+    ["/send-verification-email", 5, 3600],
+    ["/sign-up/email", 5, 3600],
+  ])(
+    "limita %s per indirizzo anche da IP diversi, senza conservare l'email",
+    async (path, max, seconds) => {
+      let ip = 0;
+      const send = (email: string) =>
+        post(path, {
+          headers: { "cf-connecting-ip": `203.0.113.${++ip}` },
+          body: JSON.stringify({ email }),
+        });
+      for (let count = 0; count < max; count++) {
+        expect(
+          (await send(count % 2 ? "Vittima@Example.invalid " : "vittima@example.invalid")).status,
+        ).toBe(202);
+      }
+      const blocked = await send("vittima@example.invalid");
+      expect(blocked.status).toBe(429);
+      expect(blocked.headers.get("retry-after")).toBe(String(seconds));
+      expect((await send("altro@example.invalid")).status).toBe(202);
+      const keys = sqlite.prepare('SELECT key FROM "rateLimit"').all() as Array<{ key: string }>;
+      expect(keys.some(({ key }) => key.includes("example"))).toBe(false);
+      vi.setSystemTime(now + seconds * 1000);
+      expect((await send("vittima@example.invalid")).status).toBe(202);
+    },
+  );
+
+  it("conta l'impronta dell'indirizzo normalizzato, con o senza barra finale", async () => {
+    let ip = 0;
+    const send = (path: string, email: string) =>
+      handle(`/api/auth${path}`, {
+        method: "POST",
+        headers: { "cf-connecting-ip": `198.51.100.${++ip}` },
+        body: JSON.stringify({ email }),
+      });
+    for (let count = 0; count < 10; count++) {
+      const path = count % 2 ? "/sign-in/email/" : "/sign-in/email";
+      expect(
+        (await send(path, count % 2 ? " Vittima@Example.INVALID" : "vittima@example.invalid"))
+          .status,
+      ).toBe(202);
+    }
+    expect((await send("/sign-in/email/", "VITTIMA@example.invalid")).status).toBe(429);
+    const digest = createHash("sha256").update("vittima@example.invalid").digest("hex");
+    expect(
+      sqlite.prepare("SELECT key, count FROM \"rateLimit\" WHERE key LIKE 'email:%'").all(),
+    ).toEqual([{ key: `email:${digest}|/sign-in/email`, count: 11 }]);
+  });
+
+  it("conta per indirizzo solo i percorsi esatti e gli indirizzi validi", async () => {
+    let ip = 0;
+    const send = (path: string, body: string) =>
+      handle(`/api/auth${path}`, {
+        method: "POST",
+        headers: { "cf-connecting-ip": `198.51.100.${++ip}` },
+        body,
+      });
+    const email = JSON.stringify({ email: "vittima@example.invalid" });
+    for (const path of [
+      "/sign-in/email/altro",
+      "/sign-in/altro/sign-in/email",
+      "/request-password-reset/altro",
+      "/sign-up/altro/request-password-reset",
+    ]) {
+      for (let count = 0; count < 11; count++) expect((await send(path, email)).status).toBe(202);
+    }
+    // Indirizzi vuoti, oltre 254 caratteri o fuori da un oggetto JSON non contano.
+    for (const body of [
+      JSON.stringify({ email: "" }),
+      JSON.stringify({ email: `${"a".repeat(244)}@example.it` }),
+      JSON.stringify("vittima@example.invalid"),
+      "{",
+    ]) {
+      for (let count = 0; count < 11; count++) {
+        expect((await send("/sign-in/email", body)).status).toBe(202);
+      }
+    }
+    expect(sqlite.prepare("SELECT key FROM \"rateLimit\" WHERE key LIKE 'email:%'").all()).toEqual(
+      [],
+    );
+
+    // 254 caratteri sono ancora un indirizzo.
+    const longest = JSON.stringify({ email: `${"a".repeat(243)}@example.it` });
+    for (let count = 0; count < 10; count++) {
+      expect((await send("/sign-in/email", longest)).status).toBe(202);
+    }
+    expect((await send("/sign-in/email", longest)).status).toBe(429);
+  });
+
+  it("le pagine trasmettono l'attesa dell'action oltre a no-store", () => {
+    expect(pageHeaders({ actionHeaders: new Headers(limitedHeaders(60)) })).toEqual({
+      "cache-control": "no-store",
+      "retry-after": "60",
+    });
+    expect(pageHeaders({ actionHeaders: new Headers() })).toEqual({ "cache-control": "no-store" });
+  });
+
+  it("ignora GET, origine HTTP, IP assente e percorsi estranei", async () => {
+    await handle("/api/auth/sign-in/email", { headers: { "cf-connecting-ip": "203.0.113.1" } });
+    await handle("/api/auth/sign-in/email", { method: "POST" });
+    await attempt("/session");
+    await attempt("/sign-intruder");
+    await attempt("/other/sign-in");
+    await attempt("/other/passkey/verify-authentication");
+    await attempt("/other/request-password-reset");
+    const email = JSON.stringify({ email: "vittima@example.invalid" });
+    await handleAuthRequest(
+      request("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "203.0.113.1" },
+        body: email,
+      }),
+      { ...environment, APP_ORIGIN: "http://localhost:5173" } as unknown as Env,
+    );
+    await handle("/api/auth/sign-in/email", { method: "PUT", body: email });
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([]);
+    expect(limiters.REQUEST_LIMIT_EMAILS.keys).toEqual([]);
+    expect(sqlite.prepare('SELECT count(*) AS total FROM "rateLimit"').get()?.total).toBe(0);
+  });
+
+  it("isola IP e percorsi, unifica le varianti del percorso e raggruppa IPv6 per /64", async () => {
+    for (let count = 0; count < 3; count++)
+      await attempt("/sign-in/email", "2001:db8:abcd:1234::1");
+    expect((await attempt("/sign-in/email", "2001:db8:abcd:1234:0:0:0:2")).status).toBe(429);
+    expect(
+      (
+        await handle("/API/Auth//Sign-In/Email/", {
+          method: "POST",
+          headers: { "cf-connecting-ip": "2001:db8:abcd:1234::3" },
+        })
+      ).status,
+    ).toBe(429);
+    expect((await attempt("/sign-in/email", "2001:db8:abcd:1235::1")).status).toBe(202);
+    expect((await attempt("/sign-up/email", "2001:db8:abcd:1234::1")).status).toBe(202);
+    expect((await attempt("/sign-in/email", "203.0.113.2")).status).toBe(202);
+    expect((await attempt("/sign-in/email", "::1")).status).toBe(202);
+    expect(new Set(limiters.REQUEST_LIMIT_ATTEMPTS.keys)).toEqual(
+      new Set([
+        "auth/sign-in/email|2001:db8:abcd:1234::/64",
+        "auth/sign-in/email|2001:db8:abcd:1235::/64",
+        "auth/sign-up/email|2001:db8:abcd:1234::/64",
+        "auth/sign-in/email|203.0.113.2",
+        "auth/sign-in/email|0:0:0:0::/64",
+      ]),
+    );
+  });
+
+  it("raggruppa anche IPv6 completi e con compressione iniziale o interna", async () => {
+    await attempt("/sign-in/email", "2001:db8:abcd:1234:0:0:0:1");
+    await attempt("/sign-in/email", "2001::db8:abcd:1234:0:0:1");
+    await attempt("/sign-in/email", "::db8:abcd:1234:0:0:1");
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([
+      "auth/sign-in/email|2001:db8:abcd:1234::/64",
+      "auth/sign-in/email|2001:0:db8:abcd::/64",
+      "auth/sign-in/email|0:0:db8:abcd::/64",
+    ]);
+  });
+
+  it("conserva il percorso quando api/auth non è il prefisso", async () => {
+    await handle("/sign-in/api/auth/email", {
+      method: "POST",
+      headers: { "cf-connecting-ip": "203.0.113.1" },
+    });
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([
+      "auth/sign-in/api/auth/email|203.0.113.1",
+    ]);
+  });
+
+  it("pulisce soltanto le finestre chiuse da oltre un'ora con probabilità del 2%", async () => {
+    sqlite.exec(
+      `INSERT INTO "rateLimit" VALUES ('old', 'old', 1, ${now - 3600_001}), ('edge', 'edge', 1, ${now - 3600_000})`,
+    );
+    const send = () =>
+      post("/sign-in/email", {
+        headers: { "cf-connecting-ip": "203.0.113.1" },
+        body: JSON.stringify({ email: "vittima@example.invalid" }),
+      });
+    vi.spyOn(Math, "random").mockReturnValue(0.02);
+    await send();
+    expect(services.background).not.toHaveBeenCalled();
+    vi.spyOn(Math, "random").mockReturnValue(0.019);
+    await send();
+    expect(services.background).toHaveBeenCalledOnce();
+    const digest = createHash("sha256").update("vittima@example.invalid").digest("hex");
+    expect(
+      sqlite
+        .prepare('SELECT key FROM "rateLimit" ORDER BY key')
+        .all()
+        .map((row) => row.key),
+    ).toEqual(["edge", `email:${digest}|/sign-in/email`]);
+  });
+});
+
+describe("cancellazione dell'account", () => {
+  const link = "/api/auth/delete-user/callback?token=t&callbackURL=/cancellazione-account";
+  const owned = () =>
+    services.verification.mockResolvedValue({ value: "member", expiresAt: new Date(now + 1) });
+
+  it.each(["/api/auth/delete-user", "/API/Auth/Delete-User", "//api//auth//delete-user//"])(
+    "chiude la cancellazione diretta %s",
+    async (path) => {
+      for (const method of ["GET", "POST"]) {
+        const response = await handle(path, { method });
+        expect(response.status).toBe(404);
+        expect(await response.text()).toBe("");
+      }
+      expect(services.handler).not.toHaveBeenCalled();
+    },
+  );
+
+  it("inoltra il link del titolare e toglie i cookie della sessione chiusa", async () => {
+    owned();
+    services.handler.mockResolvedValue(
+      new Response(null, { status: 302, headers: { location: "/cancellazione-account" } }),
+    );
+    for (const path of [link, link.replace("/callback", "/Callback/")]) {
+      const response = await handle(path);
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe("/cancellazione-account");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(response.headers.getSetCookie()).toEqual(
+        ["fb.session_token", "fb.session_data", "fb.dont_remember"].map(
+          (name) => `${name}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax; Secure`,
+        ),
+      );
+    }
+    expect(services.verification).toHaveBeenLastCalledWith("delete-account-t");
+    expect(services.handler).toHaveBeenCalledTimes(2);
+  });
+
+  it("senza attributo sicuro i cookie si tolgono senza Secure", async () => {
+    owned();
+    services.secure.value = false;
+    services.handler.mockResolvedValue(new Response(null, { status: 302 }));
+    const response = await handle(link);
+    services.secure.value = true;
+    expect(response.headers.getSetCookie()[0]).toBe(
+      "fb.session_token=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+    );
+  });
+
+  it("non consuma il link senza token, con un metodo diverso, senza sessione o di un altro", async () => {
+    owned();
+    const location = (language: "" | "/en", error: string) =>
+      `https://test.fiscalbay.it${language}/auth/error?error=${error}`;
+    const check = async (path: string, options: RequestInit = {}, language: "" | "/en" = "") => {
+      const response = await handle(path, options);
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe(location(language, "delete_link"));
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    };
+    await check("/api/auth/delete-user/callback");
+    await check("/api/auth/delete-user/callback?token=");
+    await check(link, { method: "POST" });
+    await check(
+      `${link.replace("/cancellazione-account", "/en/cancellazione-account")}`,
+      {
+        method: "POST",
+      },
+      "/en",
+    );
+    services.session.mockResolvedValue(null);
+    await check(link);
+    services.session.mockResolvedValue(member({ id: "other" }));
+    await check(link);
+    services.session.mockResolvedValue(member());
+    services.verification.mockResolvedValue({ value: "member", expiresAt: new Date(now) });
+    await check(link);
+    services.verification.mockResolvedValue(null);
+    await check(link);
+    expect(services.handler).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [500, "delete_failed"],
+    [503, "delete_failed"],
+    [400, "delete_link"],
+    [200, "delete_link"],
+  ])("una risposta %i di Auth porta a %s", async (status, error) => {
+    owned();
+    services.handler.mockResolvedValue(new Response(null, { status }));
+    const response = await handle(link);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(
+      `https://test.fiscalbay.it/auth/error?error=${error}`,
+    );
+  });
+});
+
+describe("callback eBay", () => {
+  it.each([
+    "",
+    "state=s",
+    "code=c",
+    "state=&code=c",
+    "state=s&state=t&code=c",
+    "state=s&code=",
+    "state=s&error=",
+    "state=s&code=c&code=d",
+    "state=s&error=e&error=f",
+    "state=s&code=c&error=e",
+    `state=${"s".repeat(4097)}&code=c`,
+    `state=s&code=${"c".repeat(1025)}`,
+    `state=s&error=${"e".repeat(257)}`,
+  ])("rifiuta callback ambiguo %s", async (query) => {
+    const response = await handle(`/api/auth/callback/ebay?${query}`);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://test.fiscalbay.it/auth/error");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(services.claim).not.toHaveBeenCalled();
+    expect(services.handler).not.toHaveBeenCalled();
+  });
+
+  it("rifiuta POST ma ammette i limiti esatti di state, code ed error", async () => {
+    expect(
+      (await handle("/api/auth/callback/ebay?state=s&code=c", { method: "POST" })).status,
+    ).toBe(303);
+    for (const query of [
+      `state=${"s".repeat(4096)}&code=${"c".repeat(1024)}`,
+      `state=s&error=${"e".repeat(256)}`,
+    ]) {
+      const response = await handle(`/api/auth/callback/ebay?${query}`);
+      expect(response.status).toBe(202);
+      expect(await response.text()).toBe("auth");
+      expect(response.headers.get("cache-control")).toBe("no-store");
+    }
+  });
+
+  it.each([
+    ["s", "production", "collegato", "/app/ordini?negozio=collegato"],
+    ["en_s", "sandbox", "collegato", "/en/app/ordini?negozio=collegato&environment=sandbox"],
+    ["english", "production", null, "/app/ordini"],
+    ["en_s", "sandbox", null, "/en/app/ordini?environment=sandbox"],
+    // Partito da Negozi torna lì, che elenca tutti gli ambienti.
+    ["it-negozi_s", "sandbox", "negozio-diverso", "/app/negozi?negozio=negozio-diverso"],
+    ["en-negozi_s", "production", "collegato", "/en/app/negozi?negozio=collegato"],
+    ["en-ordini_s", "sandbox", null, "/en/app/ordini?environment=sandbox"],
+  ])(
+    "ripete l'esito del callback per il suo utente (%s, %s, %s)",
+    async (state, ebayEnvironment, outcome, destination) => {
+      services.claim.mockResolvedValue({
+        kind: "duplicate",
+        userId: "member",
+        outcome,
+        ebayEnvironment,
+      });
+      const response = await handle(`/api/auth/callback/ebay?state=${state}&code=c`);
+      expect(response.status).toBe(303);
+      expect(response.headers.get("location")).toBe(`https://test.fiscalbay.it${destination}`);
+      expect(response.headers.get("cache-control")).toBe("no-store");
+      expect(services.claim).toHaveBeenCalledWith(environment.DB, state);
+      expect(services.complete).not.toHaveBeenCalled();
+      expect(services.record).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([null, { user: { id: "other" } }])(
+    "non rivela l'esito di un altro utente",
+    async (session) => {
+      services.session.mockResolvedValue(session);
+      services.claim.mockResolvedValue({
+        kind: "duplicate",
+        userId: "member",
+        outcome: "collegato",
+      });
+      expect((await handle("/api/auth/callback/ebay?state=s&code=c")).headers.get("location")).toBe(
+        "https://test.fiscalbay.it/app/ordini?negozio=errore",
+      );
+    },
+  );
+
+  it.each([false, true])("completa e registra un nuovo collegamento, errore=%s", async (fails) => {
+    const link = { kind: "claimed", userId: "member", ebayEnvironment: "production" };
+    services.claim.mockResolvedValue(link);
+    const error = new Error("synthetic");
+    if (fails) services.complete.mockRejectedValue(error);
+    else services.complete.mockResolvedValue("collegato");
+    const input = request("/api/auth/callback/ebay?state=s&code=c");
+    const fetcher = vi.fn();
+    const response = await handleAuthRequest(input, environment, fetcher);
+    expect(services.session).toHaveBeenLastCalledWith({ headers: input.headers });
+    expect(services.complete).toHaveBeenCalledWith({
+      env: environment,
+      link,
+      sessionUserId: "member",
+      search: new URLSearchParams("state=s&code=c"),
+      fetcher,
+      request: input,
+    });
+    expect(services.record).toHaveBeenCalledWith(
+      environment.DB,
+      "s",
+      fails ? "errore" : "collegato",
+    );
+    expect(response.headers.get("location")).toBe(
+      `https://test.fiscalbay.it/app/ordini?negozio=${fails ? "errore" : "collegato"}`,
+    );
+    expect(services.failure.mock.calls).toEqual(
+      fails ? [[{ request: input, error, operation: "store_link" }]] : [],
+    );
+  });
+});

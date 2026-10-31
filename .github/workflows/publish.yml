@@ -1,0 +1,187 @@
+name: Promuovi
+
+on:
+  # Una modifica del workflow integrata su develop avvia la sola qualifica del candidato.
+  push:
+    branches: [develop]
+    paths: [.github/workflows/publish.yml]
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: SHA completo del candidato, su main oppure develop nella sola prova
+        type: string
+        required: true
+      version:
+        description: Versione 2.x presente nel changelog (facoltativa nella prova)
+        type: string
+        required: false
+      reviewed_migrations:
+        description: Digest delle migration non additive approvate, se presenti
+        type: string
+        required: false
+      prova:
+        description: Prova a vuoto, solo qualifica del candidato senza checkpoint né Production
+        type: boolean
+        default: false
+
+# Nessuna telemetria della CLI `cf` dalle esecuzioni automatiche.
+env:
+  DO_NOT_TRACK: "1"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: publish-production
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Verifica candidato e pianifica
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      mutation: ${{ steps.plan.outputs.mutation }}
+      mutation-matrix: ${{ steps.reuse.outputs.mutation-matrix || steps.plan.outputs.mutation-matrix }}
+      promotion-reuse: ${{ steps.plan.outputs.promotion-reuse }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Check candidate
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
+          VERSION: ${{ inputs.version }}
+          PROVA: ${{ github.event_name == 'push' || inputs.prova }}
+        # La prova qualifica il candidato prima dei checkpoint: salta solo checkpoint e, senza
+        # versione, il changelog; il job che distribuisce non parte.
+        run: |
+          if [ "${PROVA}" = true ]; then
+            test "${GITHUB_REF}" = refs/heads/main || test "${GITHUB_REF}" = refs/heads/develop
+          else
+            test "${GITHUB_REF}" = refs/heads/main
+          fi
+          test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
+          if [ "${PROVA}" != true ]; then node scripts/release/release.mjs readiness; fi
+          if [ "${PROVA}" != true ] || [ -n "${VERSION}" ]; then node scripts/release/release-notes.mjs "${VERSION}"; fi
+      - name: Read last published reference
+        id: base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          base="$(gh release view --json tagName --jq .tagName 2>/dev/null || git rev-list --max-parents=0 HEAD)"
+          echo "ref=${base}" >> "${GITHUB_OUTPUT}"
+      - name: Plan cumulative changes
+        id: plan
+        env:
+          BASE_REF: ${{ steps.base.outputs.ref }}
+        run: |
+          base="${BASE_REF}"
+          node scripts/classify-changes.mjs --base "${base}" --head HEAD --complete --github-output
+      # La prova su `develop` riusa i moduli superati nelle qualifiche e campagne precedenti e non
+      # toccati da allora; `Promuovi` su `main` prova sempre tutto il diff cumulativo.
+      - name: Reuse passed mutation modules
+        id: reuse
+        if: github.ref == 'refs/heads/develop'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX: ${{ steps.plan.outputs.mutation-matrix }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: node scripts/mutation-reuse.mjs
+
+  qualify:
+    name: Qualifica candidato
+    needs: plan
+    uses: ./.github/workflows/qualify.yml
+    with:
+      expected_sha: ${{ inputs.expected_sha || github.sha }}
+      mutation_targets: ${{ needs.plan.outputs.mutation-matrix }}
+      source_reuse: ${{ needs.plan.outputs.promotion-reuse == 'true' }}
+
+  publish:
+    name: Distribuisci e verifica
+    needs: qualify
+    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.prova && github.ref == 'refs/heads/main' && !cancelled() && needs.qualify.result == 'success' }}
+    environment: production
+    runs-on: ubuntu-26.04
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.qualify.outputs.artifact }}
+          path: .cloudflare/output/
+          run-id: ${{ needs.qualify.outputs.artifact-run }}
+          github-token: ${{ github.token }}
+      - name: Restore receipt from previous attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/release/release.mjs restore --environment production --receipt-prefix release-receipt
+
+      - name: Deploy or resume confirmed deployment
+        id: deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
+          OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          VERSION: ${{ inputs.version }}
+          REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
+        run: node scripts/release/release.mjs deploy --environment production --expected-sha "${EXPECTED_SHA}" --reviewed-migrations "${REVIEWED_MIGRATIONS}"
+      # Il job distribuisce e può tornare indietro: resta sul runner, con browser e librerie
+      # installati dall'installer ufficiale di Playwright.
+      - name: Install browsers
+        timeout-minutes: 10
+        run: pnpm exec playwright install --with-deps chromium webkit
+      - name: Check Production public pages and preview exclusion
+        env:
+          E2E_BASE_URL: https://fiscalbay.it
+          E2E_RUN_ID: production-remote
+          E2E_PRODUCTION: "1"
+          E2E_MATRIX: full
+        run: node scripts/browser-tests.mjs --pages --browsers chromium,webkit
+      - name: Rollback compatible deployment
+        if: failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
+          OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release.mjs rollback --environment production --expected-sha "${EXPECTED_SHA}"
+      - name: Create immutable tag and release
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
+          OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release-notes.mjs "${VERSION}" --publish "${EXPECTED_SHA}"
+      - name: Preserve release receipt
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            reports/release.json
+            test-results/browser/
+          retention-days: 30

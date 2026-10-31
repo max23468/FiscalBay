@@ -1,17 +1,24 @@
 .DS_Store
 .env
-/node_modules/
+.env.*
+node_modules/
 *.tsbuildinfo
 
 # React Router
 /.react-router/
 /build/
+/test-results/
+/playwright-report/
 
 # Cloudflare
+.cloudflare
 .mf
 .wrangler
 .dev.vars*
-worker-configuration.d.ts
 
 !.dev.vars.example
 !.env.example
+
+# Mutation test
+/.stryker-tmp/
+/reports/

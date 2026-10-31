@@ -1,0 +1,133 @@
+import { z } from "zod";
+
+import { upstreamJson, UpstreamError, type UpstreamOptions } from "../http.server";
+import type { EbayEnvironment } from "../../view-models";
+
+/** Segreti eBay facoltativi: senza valore Sandbox e verifica delle notifiche restano spente. */
+type OptionalEbaySecrets = {
+  EBAY_SANDBOX_CLIENT_ID?: string;
+  EBAY_SANDBOX_CLIENT_SECRET?: string;
+  EBAY_SANDBOX_RUNAME?: string;
+  EBAY_NOTIFICATION_VERIFICATION_TOKEN?: string;
+};
+
+// Tipizzati su `Env` come opzionali: `bindings.secret()` in `cloudflare.config.ts` li renderebbe
+// obbligatori in ogni ambiente.
+declare global {
+  namespace Cloudflare {
+    interface Env extends OptionalEbaySecrets {}
+  }
+}
+
+type EbayBindings = OptionalEbaySecrets & {
+  APP_ORIGIN: string;
+  EBAY_CLIENT_ID: string;
+  EBAY_CLIENT_SECRET: string;
+  EBAY_RUNAME: string;
+  EBAY_SANDBOX_ENABLED?: string;
+};
+
+export function sandboxAvailable(env: EbayBindings): boolean {
+  return (
+    ["test.fiscalbay.it", "localhost", "127.0.0.1", "[::1]"].includes(
+      new URL(env.APP_ORIGIN).hostname,
+    ) &&
+    env.EBAY_SANDBOX_ENABLED === "true" &&
+    Boolean(env.EBAY_SANDBOX_CLIENT_ID && env.EBAY_SANDBOX_CLIENT_SECRET && env.EBAY_SANDBOX_RUNAME)
+  );
+}
+
+/** Ambiente configurato: Production sempre, la Sandbox soltanto dove è disponibile. */
+export function ebayEnvironmentAvailable(env: EbayBindings, environment: EbayEnvironment) {
+  return environment !== "sandbox" || sandboxAvailable(env);
+}
+
+export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironment) {
+  if (!ebayEnvironmentAvailable(env, environment)) throw new Error("ebay_sandbox_unavailable");
+  const sandbox = environment === "sandbox";
+  const api = sandbox ? "https://api.sandbox.ebay.com" : "https://api.ebay.com";
+  return {
+    clientId: sandbox ? env.EBAY_SANDBOX_CLIENT_ID! : env.EBAY_CLIENT_ID,
+    clientSecret: sandbox ? env.EBAY_SANDBOX_CLIENT_SECRET! : env.EBAY_CLIENT_SECRET,
+    runame: sandbox ? env.EBAY_SANDBOX_RUNAME! : env.EBAY_RUNAME,
+    authorizationUrl: sandbox
+      ? "https://auth.sandbox.ebay.com/oauth2/authorize"
+      : "https://auth.ebay.com/oauth2/authorize",
+    tokenUrl: `${api}/identity/v1/oauth2/token`,
+    identityUrl: sandbox
+      ? "https://apiz.sandbox.ebay.com/commerce/identity/v1/user/"
+      : "https://apiz.ebay.com/commerce/identity/v1/user/",
+    /** Origine delle API seller: solo qui il client invia il token e segue i link del provider. */
+    apiOrigin: api,
+    ordersUrl: `${api}/sell/fulfillment/v1/order`,
+    tradingUrl: `${api}/ws/api.dll`,
+  };
+}
+
+export type EbayConfiguration = ReturnType<typeof ebayConfiguration>;
+
+/** Credenziali dell'applicazione per l'endpoint dei token. */
+export function basicAuthorization(configuration: EbayConfiguration) {
+  return `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`;
+}
+
+/**
+ * Token dell'applicazione (`client_credentials`) per le API che non agiscono per un negozio,
+ * come quote e chiavi delle notifiche.
+ */
+export async function applicationToken(
+  configuration: EbayConfiguration,
+  fetcher: typeof fetch,
+  options: Pick<UpstreamOptions, "timeoutMs"> = {},
+): Promise<string> {
+  const token = await upstreamJson(
+    fetcher,
+    configuration.tokenUrl,
+    z.object({ access_token: z.string().min(1).max(8192) }),
+    {
+      method: "POST",
+      headers: {
+        authorization: basicAuthorization(configuration),
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        scope: "https://api.ebay.com/oauth/api_scope",
+      }),
+    },
+    { ...options, maxBytes: 16_384 },
+  );
+  return token.access_token;
+}
+
+/** Ciò che serve a una chiamata seller: il token viaggia solo verso `configuration.apiOrigin`. */
+export type EbayAccess = {
+  fetcher: typeof fetch;
+  configuration: EbayConfiguration;
+  accessToken: string;
+};
+
+/**
+ * URL restituito da eBay (per esempio il link `next`) accettato solo se HTTPS, sulla stessa
+ * origine API dell'ambiente, senza credenziali e sotto il percorso atteso. Altrimenti la lettura
+ * fallisce chiusa prima di inviare il token.
+ */
+export function ebayApiUrl(configuration: EbayConfiguration, value: string, path: string): URL {
+  let url: URL;
+  try {
+    url = new URL(value, configuration.apiOrigin);
+  } catch {
+    throw new UpstreamError("invalid_response");
+  }
+  if (
+    url.origin !== configuration.apiOrigin ||
+    // Stryker disable next-line ConditionalExpression: l'origine include lo schema, quindi ogni URL non HTTPS è già rifiutato dal confronto con `apiOrigin`.
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    (url.pathname !== path && !url.pathname.startsWith(`${path}/`))
+  ) {
+    throw new UpstreamError("invalid_response");
+  }
+  return url;
+}

@@ -25,8 +25,23 @@ updates:
     labels:
       - dependencies
       - javascript
+    ignore:
+      # Con queste versioni Stryker termina il worker della suite Cloudflare nel dry-run e
+      # nessuna mutation produce un report.
+      - dependency-name: "vitest"
+        versions: ["5.0.4", "5.0.5"]
+      - dependency-name: "@vitest/*"
+        versions: ["5.0.4", "5.0.5"]
     groups:
-      # Un'unica PR per tutti i minor/patch (auto-merge dopo CI). I major restano
+      # Runner dei test e della mutation in una PR propria, fuori dal merge automatico: si
+      # accetta soltanto dopo una mutation riuscita su un modulo della suite Cloudflare.
+      test-runner:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@stryker-mutator/*"
+          - "@cloudflare/vitest-plugin"
+      # Un'unica PR per tutti gli altri minor/patch (auto-merge dopo CI). I major restano
       # PR singole: quelli runtime hanno review manuale.
       javascript-minor-patch:
         patterns:
@@ -36,7 +51,10 @@ updates:
           - patch
 
   - package-ecosystem: github-actions
-    directory: /
+    # Le Action composite del repository dichiarano anch'esse Action esterne.
+    directories:
+      - /
+      - /.github/actions/*
     target-branch: develop
     open-pull-requests-limit: 10
     schedule:
