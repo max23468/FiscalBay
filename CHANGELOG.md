@@ -2,6 +2,21 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio.
 
+## [2.0.1]
+
+### Novità
+
+- **Totale degli ordini letti da eBay Trading.** Il totale non comprende più la tariffa di protezione acquisti che l'acquirente paga a eBay, attiva in Italia per gli acquisti da venditori privati: prima Ordini ed Esportazione potevano mostrare un importo che non incassi.
+
+### What's new
+
+- **Totals of orders read from eBay Trading.** The total no longer includes the buyer protection fee the buyer pays to eBay, active in Italy for purchases from private sellers: Orders and Export could previously show an amount you do not receive.
+
+### Altre modifiche
+
+- Console: gli avvisi commerciali del Control Center Telegram si aprono con il titolare dell'account (nome, ragione sociale, email e metodi di accesso) e «Account cancellato» conserva i dati del titolare salvati alla richiesta. La Privacy indica Telegram anche per gli avvisi interni sull'uso del servizio.
+- La pagina Novità e la campanella si ricavano dalle parti «Novità» e «What's new» di questo changelog; la promozione su `main` scrive il giorno della versione.
+
 ## [2.0.0]
 
 Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce la 1.x. Contiene la `2.0.0-rc.12` provata sul test.

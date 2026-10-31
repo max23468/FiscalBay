@@ -258,6 +258,25 @@ describe("acquisti Trading", () => {
       "<ModTimeFrom>2026-09-01T00:00:00.000Z</ModTimeFrom>",
     );
   });
+  it("toglie dal totale la protezione acquisti pagata a eBay", () => {
+    // Un pagamento al venditore e uno a eBay, come nella risposta documentata.
+    const payments = (payee: string, currency = "EUR") =>
+      xml.replace(
+        '<Total currencyID="EUR">12.50</Total>',
+        `<Total currencyID="EUR">13.70</Total><MonetaryDetails><Payments>
+        <Payment><Payee type="eBayUser">venditore</Payee><PaymentAmount currencyID="EUR">12.50</PaymentAmount></Payment>
+        <Payment>${payee}<PaymentAmount currencyID="${currency}">1.20</PaymentAmount></Payment>
+        </Payments></MonetaryDetails>`,
+      );
+    const total = (body: string) => parseTradingOrders(body).orders[0]!.total;
+    expect(total(payments('<Payee type="eBayUser">eBay</Payee>'))).toEqual({
+      minor: 1250,
+      currency: "EUR",
+    });
+    expect(total(payments('<Payee type="eBayPartner">partner</Payee>')).minor).toBe(1250);
+    expect(total(payments('<Payee type="eBayUser">altro</Payee>')).minor).toBe(1370);
+    expect(total(payments('<Payee type="eBayUser">eBay</Payee>', "GBP")).minor).toBe(1370);
+  });
   it.each([
     xml.replace("<HasMoreOrders>false</HasMoreOrders>", ""),
     xml.replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>9007199254740992<"),
@@ -282,6 +301,10 @@ describe("acquisti Trading", () => {
     xml.replace("<TransactionArray>", "<Broken>"),
     xml.replace("<CreatedTime>2026-09-01T10:00:00Z</CreatedTime>", ""),
     xml.replace("6.25</TransactionPrice>", "6.251</TransactionPrice>"),
+    xml.replace(
+      "</Total>",
+      '</Total><MonetaryDetails><Payments><Payment><Payee>eBay</Payee><PaymentAmount currencyID="EUR">20.00</PaymentAmount></Payment></Payments></MonetaryDetails>',
+    ),
   ])("salta l'ordine incompleto senza scartare la pagina", (body) => {
     const page = body
       .replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>2<")
