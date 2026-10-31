@@ -2,6 +2,10 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio.
 
+## [2.0.0-rc.13]
+
+- Il totale di un ordine letto da eBay Trading non comprende più la tariffa di protezione acquisti che l'acquirente paga a eBay, attiva in Italia per gli acquisti da venditori privati: prima ordini ed export potevano mostrare un importo che il venditore non incassa.
+
 ## [2.0.0-rc.12]
 
 - Le email di FiscalBay restano leggibili nei client in tema scuro, come Mail di Apple: prima il titolo e il testo principale diventavano scuri su sfondo scuro.
