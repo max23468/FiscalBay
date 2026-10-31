@@ -2,6 +2,10 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio.
 
+## [2.0.0-rc.9]
+
+- Nessuna modifica di comportamento: la periodicità degli abbonamenti torna fra le regole provate dal mutation test, in un modulo proprio.
+
 ## [2.0.0-rc.8]
 
 - Promozione Free senza data di fine: dalla console si crea lasciando vuota la fine e resta attiva finché non si termina o non riceve una data. Senza fine home e Prezzi la annunciano per un periodo limitato; con la fine programmata mostrano la data.

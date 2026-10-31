@@ -21,12 +21,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import {
-  baseFreeQuota,
-  lifetimeSlots,
-  openPromotionEnd,
-  subscriptionOffers,
-} from "../app/catalog.ts";
+import { baseFreeQuota, lifetimeSlots, openPromotionEnd } from "../app/catalog.ts";
+import { subscriptionOffers } from "../app/domain/subscription-offers.ts";
 import { d1Query } from "./lib/provider.mjs";
 import { literal, targetOf as databaseOf } from "./recovery.mjs";
 import { checkAccount, cliRequest, report, targetOf as accountOf } from "./stripe-account.mjs";

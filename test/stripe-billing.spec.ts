@@ -9,7 +9,7 @@ import {
   reconcileBilling,
   subscriptionRenews,
 } from "../app/domain/billing.server";
-import { subscriptionOffers } from "../app/catalog";
+import { subscriptionOffers } from "../app/domain/subscription-offers";
 import { checkoutConfigured, purchaseState } from "../app/domain/checkout.server";
 import { orderAllowance, startTrial } from "../app/domain/grants.server";
 import {
