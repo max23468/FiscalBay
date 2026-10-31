@@ -863,9 +863,12 @@ describe("cancellazione dell'account", () => {
       workspaces: 1,
       ebay_stores: 1,
     });
-    expect(
-      await env.DB.prepare("SELECT key, workspace_id FROM owner_notifications").first(),
-    ).toEqual({ key: `account_deleted:${id}`, workspace_id: null });
+    // L'avviso conserva l'email letta alla richiesta, perché l'utente esce prima dell'invio.
+    const notice = await env.DB.prepare(
+      "SELECT key, workspace_id, detail FROM owner_notifications",
+    ).first<{ key: string; workspace_id: string | null; detail: string }>();
+    expect(notice).toMatchObject({ key: `account_deleted:${id}`, workspace_id: null });
+    expect(JSON.parse(notice!.detail)).toMatchObject({ email });
     expect(
       await env.DB.prepare("SELECT workspace_id, customer_id FROM lifetime_allocations").first(),
     ).toEqual({ workspace_id: null, customer_id: "cus_lifetime" });

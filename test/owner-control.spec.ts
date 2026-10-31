@@ -1048,7 +1048,7 @@ describe("avvisi commerciali", () => {
     return api;
   }
 
-  it("ogni fatto commerciale avvisa una volta, anche ripetuto o riletto, senza email né nomi", async () => {
+  it("ogni fatto commerciale avvisa una volta, anche ripetuto o riletto, con il titolare", async () => {
     await register("n-u1", { waitlisted: true });
     await register("n-admin", { admin: true });
     await env.DB.batch(insertWorkspace({ id: "w-n", userId: "n-u1" }));
@@ -1115,9 +1115,14 @@ describe("avvisi commerciali", () => {
     ]);
     expect(second.calls).toEqual([]);
     const text = JSON.stringify(first.calls);
-    expect(text).not.toContain("example.invalid");
-    expect(text).not.toContain("Rossi");
+    // Nome, email e accesso del titolare in ogni avviso, anche prima dello spazio; mai il nome
+    // dello spazio.
+    expect(first.calls.every((call) => JSON.stringify(call).includes("n-u1@example.invalid"))).toBe(
+      true,
+    );
+    expect(text).toContain("Mario Rossi");
     expect(text).not.toContain("Sintetico");
+    expect(text).not.toContain("n-admin");
     expect(text).toContain("4,99\u00a0€");
     expect(text).toContain("Parziale, copertura conservata");
     expect(text).toContain("Totale, copertura revocata");
