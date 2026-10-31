@@ -198,15 +198,12 @@ function useScrollSpy(
     };
   }, [align]);
 
-  // Il menu ha già avviato lo scorrimento; un link dalla pagina no.
-  const onNavigate = useEffectEvent((id: SettingsSection) => {
-    if (!following.current && id !== active) goTo(id, "smooth");
+  // Il menu ha già avviato lo scorrimento; un link dalla pagina no. All'apertura la categoria
+  // dell'indirizzo è già quella attiva.
+  const onNavigate = useEffectEvent(() => {
+    if (opened && opened !== active && !following.current) goTo(opened, "smooth");
   });
-  const previous = useRef(opened);
-  useEffect(() => {
-    if (opened && opened !== previous.current) onNavigate(opened);
-    previous.current = opened;
-  }, [opened]);
+  useEffect(() => onNavigate(), [opened]);
 
   return { sections, active, goTo };
 }
