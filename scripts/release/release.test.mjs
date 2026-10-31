@@ -29,6 +29,11 @@ import {
   assertFreeze,
   assertVersionStep,
   deployTag,
+  datedChangelog,
+  assertPromotionSource,
+  promotionBranch,
+  romeDay,
+  topVersion,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
 
@@ -55,6 +60,61 @@ describe("pubblicazione riprendibile", () => {
     };
     return { io, calls, receipts };
   };
+
+  it("la promozione scrive il giorno della versione e le note restano in italiano", () => {
+    const develop = [
+      "# Changelog",
+      "",
+      "## [2.0.1]",
+      "",
+      "### Novità",
+      "",
+      "- **Esportazione.** Testo.",
+      "",
+      "### What's new",
+      "",
+      "- **Export.** Text.",
+      "",
+      "### Altre modifiche",
+      "",
+      "- Prove nuove.",
+      "",
+      "## [2.0.0] - 2026-10-31",
+      "",
+      "- Prima versione.",
+      "",
+    ].join("\n");
+    const head = datedChangelog(develop, "2.0.1", "2026-11-05");
+    assert.equal(head, develop.replace("## [2.0.1]\n", "## [2.0.1] - 2026-11-05\n"));
+    assert.equal(topVersion(head), "2.0.1");
+    assert.throws(() => datedChangelog(head, "2.0.1", "2026-11-06"), /già il giorno 2026-11-05/u);
+    assert.throws(() => datedChangelog(develop, "2.0.2", "2026-11-05"), /non la 2\.0\.2/u);
+    assert.throws(() => datedChangelog(develop, "2.0.1", "5 novembre"), /Giorno non valido/u);
+    // Il giorno è quello italiano, anche quando in UTC è ancora il precedente.
+    assert.equal(romeDay(new Date("2026-11-04T23:30:00.000Z")), "2026-11-05");
+    assert.equal(promotionBranch("2.0.1"), "promuovi/2.0.1");
+
+    const source = { headRef: "promuovi/2.0.1", files: ["CHANGELOG.md"], develop, head };
+    assert.doesNotThrow(() => assertPromotionSource(source));
+    assert.doesNotThrow(() => assertPromotionSource({ ...source, headRef: "develop", files: [] }));
+    for (const change of [
+      { headRef: "feat/novita" },
+      { headRef: "promuovi/2.0.2" },
+      { files: ["CHANGELOG.md", "app/root.tsx"] },
+      { head: head.replace("Testo.", "Altro.") },
+      { head: develop },
+    ])
+      assert.throws(
+        () => assertPromotionSource({ ...source, ...change }),
+        /promuovi\/<versione>|soltanto per il giorno|non la 2\.0\.2/u,
+      );
+
+    assert.equal(
+      releaseNotes(head, "2.0.1"),
+      "### Novità\n\n- **Esportazione.** Testo.\n\n### Altre modifiche\n\n- Prove nuove.",
+    );
+    assert.equal(releaseNotes(head, "2.0.0"), "- Prima versione.");
+  });
 
   it("non ridistribuisce dopo un'interruzione successiva al deploy", async () => {
     const { io, calls, receipts } = harness();
@@ -553,9 +613,9 @@ describe("comandi della pubblicazione", () => {
   });
 
   it("l'etichetta del deploy porta la versione soltanto dopo la prima 2.x pubblicata", () => {
-    const tag = (version, environment, releasedTags, expected) =>
+    const tag = (version, environment, releasedTags, expected, day = "2026-11-05") =>
       deployTag({
-        changelog: `# Changelog\n\n## [${version}]\n`,
+        changelog: `# Changelog\n\n## [${version}]${day ? ` - ${day}` : ""}\n`,
         environment,
         sha: "a".repeat(40),
         tree: "b".repeat(40),
@@ -568,5 +628,8 @@ describe("comandi della pubblicazione", () => {
     assert.equal(tag("2.0.1", "production", ["v2.0.0"], "2.0.1"), "2.0.1");
     assert.throws(() => tag("2.0.1", "production", ["v2.0.0"], "2.0.2"), /versione 2\.0\.2/u);
     assert.throws(() => tag("2.0.1-rc.1", "production", ["v2.0.0"], "2.0.1-rc.1"), /non la/u);
+    // In Production la versione porta il giorno scritto dalla promozione; sul test no.
+    assert.throws(() => tag("2.0.1", "production", ["v2.0.0"], "2.0.1", ""), /non ha il giorno/u);
+    assert.equal(tag("2.0.1", "test", ["v2.0.0"], undefined, ""), `2.0.1-dev.${"b".repeat(12)}`);
   });
 });

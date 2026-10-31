@@ -98,6 +98,7 @@ export const it = {
     visitSite: "Visita fiscalbay.it",
     whatsNew: "Novità",
     whatsNewTitle: "Novità di FiscalBay",
+    whatsNewUpcoming: "In preparazione",
     signOut: "Esci",
     close: "Chiudi",
   },

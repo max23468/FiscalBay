@@ -62,18 +62,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      # `main` riceve soltanto la promozione di `develop` dallo stesso repository.
+      # `main` riceve soltanto la promozione di `develop` dallo stesso repository, anche con il
+      # giorno della versione aggiunto da `promuovi/<versione>`.
       - name: Check promotion source
         if: github.base_ref == 'main'
         env:
           HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          if [ "${HEAD_REPO}" != "${REPOSITORY}" ] || [ "${HEAD_REF}" != "develop" ]; then
-            echo "::error::Le PR verso main partono soltanto da develop di ${REPOSITORY}, non da ${HEAD_REPO}:${HEAD_REF}."
+          if [ "${HEAD_REPO}" != "${REPOSITORY}" ]; then
+            echo "::error::Le PR verso main partono soltanto da ${REPOSITORY}, non da ${HEAD_REPO}."
             exit 1
           fi
+          node scripts/release/release-cycle.mjs promotion-source --ref "${HEAD_REF}" --head "${HEAD_SHA}"
 
       - name: Check dispatched commit
         if: inputs.expected_sha != ''

@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Coordinamento esplicito del ciclo: status e rc leggono; pr/cleanup/candidate/production hanno
- * effetti; qualification-base controlla nella CI la base di una PR. Il ciclo di una PR pulisce soltanto il proprio branch; i residui di cicli
+ * Coordinamento esplicito del ciclo: status e rc leggono; pr/cleanup/promote/candidate/production
+ * hanno effetti; qualification-base e promotion-source controllano nella CI la base e l'origine di
+ * una PR. Il ciclo di una PR pulisce soltanto il proprio branch; i residui di cicli
  * precedenti si riconciliano a lotti con cleanup e a ogni Production.
  */
 import { createHash } from "node:crypto";
@@ -20,7 +21,15 @@ import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { needsDeploy, plan } from "../classify-changes.mjs";
-import { addedMigrations, candidateVersion, reviewAdded } from "./release.mjs";
+import {
+  addedMigrations,
+  assertPromotionSource,
+  candidateVersion,
+  datedChangelog,
+  promotionBranch,
+  reviewAdded,
+  romeDay,
+} from "./release.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
 import { lastDeployRun } from "../find-deployed.mjs";
 import { gh, ghJson, runJobs } from "../lib/provider.mjs";
@@ -277,6 +286,73 @@ function qualificationBase({ ref, base, head }) {
   git("fetch", "--quiet", "origin", ref);
   assertQualificationBase(ref, base, git("rev-parse", "FETCH_HEAD"), head);
   console.log(`Base della qualifica valida verso ${ref}.`);
+}
+
+/**
+ * Controllo della CI sulle PR verso `main`: `develop`, oppure `promuovi/<versione>` che contiene
+ * `develop` e ne differisce soltanto per il giorno della versione.
+ */
+function promotionSource({ ref, head }) {
+  if (ref === "develop") return console.log("Promozione da develop.");
+  git("fetch", "--quiet", "origin", "develop");
+  const develop = git("rev-parse", "FETCH_HEAD");
+  if (!contains(develop, head)) throw new Error(`${ref} non contiene develop: ricrearlo.`);
+  assertPromotionSource({
+    headRef: ref,
+    files: git("diff", "--name-only", develop, head).split("\n").filter(Boolean),
+    develop: git("show", `${develop}:CHANGELOG.md`),
+    head: git("show", `${head}:CHANGELOG.md`),
+  });
+  console.log(`${ref}: develop con il giorno della versione.`);
+}
+
+/**
+ * Apre l'unica PR di promozione: `promuovi/<versione>` è `develop` con il giorno di oggi
+ * nell'intestazione della versione, che il riallineamento riporta poi su `develop`.
+ */
+async function promoteCycle({ repository, values }) {
+  const version = values.version;
+  if (!/^\d+\.\d+\.\d+$/u.test(version ?? "")) throw new Error("--version <x.y.z> richiesto.");
+  const branch = promotionBranch(version);
+  const day = romeDay();
+  const directory = mkdtempSync(path.join(tmpdir(), "fiscalbay-promuovi-"));
+  try {
+    const develop = localGit(() => {
+      git("fetch", "--quiet", "origin", "develop");
+      const sha = git("rev-parse", "FETCH_HEAD");
+      git("worktree", "add", "--quiet", "--detach", directory, sha);
+      return sha;
+    });
+    const file = path.join(directory, "CHANGELOG.md");
+    writeFileSync(file, datedChangelog(readFileSync(file, "utf8"), version, day));
+    const inside = (...args) => execute("git", args, { cwd: directory });
+    inside("commit", "--quiet", "-m", `chore: giorno della ${version}`, "--", "CHANGELOG.md");
+    // Un branch rimasto da un tentativo precedente si sostituisce soltanto se è ancora suo.
+    inside(
+      "push",
+      "--quiet",
+      `--force-with-lease=refs/heads/${branch}`,
+      "origin",
+      `HEAD:refs/heads/${branch}`,
+    );
+    const pull = ghJson(
+      "api",
+      "-X",
+      "POST",
+      `repos/${repository}/pulls`,
+      "-f",
+      "base=main",
+      "-f",
+      `head=${branch}`,
+      "-f",
+      `title=chore: promuove la ${version}`,
+      "-f",
+      `body=Promozione di \`develop\` (\`${develop}\`) su \`main\` per la \`${version}\`, con il giorno ${day} nel changelog.`,
+    );
+    console.log(`PR di promozione: ${pull.html_url}`);
+  } finally {
+    localGit(() => git("worktree", "remove", "--force", directory));
+  }
 }
 
 /**
@@ -720,14 +796,16 @@ const cycleCommands = [
   "candidate",
   "production",
   "resume",
+  "promote",
   "qualification-base",
+  "promotion-source",
 ];
 
 /** Comando e argomento posizionale; il formato dell'argomento si controlla nel comando. */
 export function cycleCommand([command, number]) {
   if (!cycleCommands.includes(command))
     throw new Error(
-      "Uso: release:cycle status <run> | rc | pr <numero> | cleanup | candidate --sha <sha> | production --sha <sha> --version <versione> | resume <run> | qualification-base --ref <branch> --base <sha> --head <sha>.",
+      "Uso: release:cycle status <run> | rc | pr <numero> | cleanup | candidate --sha <sha> | promote --version <versione> | production --sha <sha> --version <versione> | resume <run> | qualification-base --ref <branch> --base <sha> --head <sha> | promotion-source --ref <branch> --head <sha>.",
     );
   return { command, number };
 }
@@ -1159,6 +1237,7 @@ const cycles = {
   cleanup: cleanupCycle,
   resume: resumeCycle,
   pr: pullRequestCycle,
+  promote: promoteCycle,
   candidate: publishCycle,
   production: publishCycle,
 };
@@ -1178,6 +1257,7 @@ async function main() {
   const { command, number } = cycleCommand(positionals);
   // Gira nei job della CI senza token: nessuna lettura del repository remoto con gh.
   if (command === "qualification-base") return qualificationBase(values);
+  if (command === "promotion-source") return promotionSource(values);
   const repository = ghJson("api", "repos/{owner}/{repo}").full_name;
   // status legge soltanto: nessun checkout pulito né blocco.
   if (command === "status") return statusCycle({ repository, number });

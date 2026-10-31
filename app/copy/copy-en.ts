@@ -85,6 +85,7 @@ export const en: AppCopy = {
     visitSite: "Visit fiscalbay.it",
     whatsNew: "What’s new",
     whatsNewTitle: "What’s new in FiscalBay",
+    whatsNewUpcoming: "Upcoming",
     signOut: "Sign out",
     close: "Close",
   },

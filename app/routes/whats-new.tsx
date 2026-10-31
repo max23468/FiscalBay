@@ -21,7 +21,7 @@ export function headers(): HeadersInit {
 }
 
 /**
- * Novità dell'app (D203): senza voci già uscite la pagina non esiste, come la sua voce nel menu.
+ * Novità dell'app (D203): senza voci da mostrare la pagina non esiste, come la sua voce nel menu.
  */
 export function loader({ request }: Route.LoaderArgs) {
   return areaPage(request, async () => {
@@ -49,9 +49,13 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
             id={`release-${release.version}`}
             className="text-sm font-medium text-muted-foreground"
           >
-            <time dateTime={release.date}>
-              {formatDate(`${release.date}T12:00:00Z`, language, "date", "UTC")}
-            </time>
+            {release.date === null ? (
+              t.shell.whatsNewUpcoming
+            ) : (
+              <time dateTime={release.date}>
+                {formatDate(`${release.date}T12:00:00Z`, language, "date", "UTC")}
+              </time>
+            )}
           </h2>
           <ul className="grid gap-4 border-t pt-4">
             {release.items.map((item) => (

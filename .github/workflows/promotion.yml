@@ -28,8 +28,12 @@ jobs:
         run: |
           set -euo pipefail
           prs="$(gh api "repos/${GH_REPO}/commits/${PROMOTED_SHA}/pulls")"
-          allowed="$(jq -r 'any(.[]; .merged_at != null and .base.ref == "main" and .head.ref == "develop" and .head.repo.full_name == .base.repo.full_name)' <<< "${prs}")"
-          test "${allowed}" = true
+          promotion="$(jq -r 'map(select(.merged_at != null and .base.ref == "main" and (.head.ref == "develop" or (.head.ref | startswith("promuovi/"))) and .head.repo.full_name == .base.repo.full_name))[0].head.ref // empty' <<< "${prs}")"
+          test -n "${promotion}"
+          # Il branch con il giorno della versione è già tutto in `main`.
+          if [ "${promotion}" != develop ]; then
+            gh api -X DELETE "repos/${GH_REPO}/git/refs/heads/${promotion}" > /dev/null 2>&1 || true
+          fi
           before="$(gh api "repos/${GH_REPO}/git/ref/heads/develop" --jq '.object.sha')"
           status="$(gh api "repos/${GH_REPO}/compare/${before}...${PROMOTED_SHA}" --jq '.status')"
           if [ "${status}" = behind ] || [ "${status}" = identical ]; then

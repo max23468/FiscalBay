@@ -159,6 +159,52 @@ export function nextVersions(released) {
 /** Prima versione in cima al changelog: la versione in preparazione o l'ultima pubblicata. */
 export const topVersion = (changelog) => changelog.match(/^## \[?([^\]\s]+)\]?/mu)?.[1];
 
+/** Giorno di calendario in Italia (AAAA-MM-GG): il giorno della pubblicazione di una versione. */
+export const romeDay = (date = new Date()) =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Rome" }).format(date);
+
+/** Intestazione della prima versione: `## [2.0.1]` in preparazione, `## [2.0.1] - AAAA-MM-GG` pubblicata. */
+export function topSection(changelog) {
+  const match = /^## \[?([^\]\s]+)\]?(?: - (\S+))?[ \t]*$/mu.exec(changelog);
+  return match && { header: match[0], version: match[1], day: match[2] };
+}
+
+/**
+ * Changelog della promozione: la versione in cima riceve il giorno della pubblicazione, che
+ * pagina Novità e campanella mostrano in Production.
+ */
+export function datedChangelog(changelog, version, day) {
+  const top = topSection(changelog);
+  if (top?.version !== version)
+    throw new Error(
+      `In cima al changelog c'è la ${top?.version ?? "nessuna versione"}, non la ${version}.`,
+    );
+  if (top.day !== undefined) throw new Error(`La ${version} porta già il giorno ${top.day}.`);
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) throw new Error(`Giorno non valido: ${day}.`);
+  return changelog.replace(top.header, `## [${version}] - ${day}`);
+}
+
+/** Branch della promozione di una versione: `develop` con il solo giorno nel changelog. */
+export const promotionBranch = (version) => `promuovi/${version}`;
+
+/**
+ * Le PR verso `main` partono da `develop` oppure da `promuovi/<versione>`, che differisce da
+ * `develop` soltanto per il giorno della versione in cima al changelog.
+ */
+export function assertPromotionSource({ headRef, files, develop, head }) {
+  if (headRef === "develop") return;
+  const version = /^promuovi\/(\d+\.\d+\.\d+)$/u.exec(headRef)?.[1];
+  if (!version)
+    throw new Error(
+      `Le PR verso main partono da develop o da promuovi/<versione>, non da ${headRef}.`,
+    );
+  const day = topSection(head ?? "")?.day;
+  if (files.join("\n") !== "CHANGELOG.md" || !day || datedChangelog(develop, version, day) !== head)
+    throw new Error(
+      `${headRef} deve differire da develop soltanto per il giorno della ${version}.`,
+    );
+}
+
 const releasedTags = () => git("tag", "--list", "v2.*").split("\n");
 
 const latestReleased = (releasedTags) =>
@@ -212,6 +258,8 @@ export function deployTag({ changelog, environment, sha, tree, releasedTags, exp
   if (environment !== "production") return `${version}-dev.${tree.slice(0, 12)}`;
   if (parsed.rc || expected !== version)
     throw new Error(`In Production si distribuisce la versione ${expected}, non la ${version}.`);
+  if (!topSection(changelog).day)
+    throw new Error(`La ${version} non ha il giorno: la promozione lo scrive nel changelog.`);
   return version;
 }
 

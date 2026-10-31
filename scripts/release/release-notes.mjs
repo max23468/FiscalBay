@@ -16,7 +16,11 @@ export function releaseNotes(changelog, version) {
   );
   if (!section || !section.slice(section.indexOf("\n") + 1).trim())
     throw new Error("Versione assente o vuota nel changelog.");
-  return section.slice(section.indexOf("\n") + 1).trim();
+  // Le Novità in inglese servono soltanto all'app: le note restano in italiano.
+  return section
+    .slice(section.indexOf("\n") + 1)
+    .replace(/^### What's new\n[\s\S]*?(?=^### |(?![\s\S]))/mu, "")
+    .trim();
 }
 
 export function assertBrowserEvidence(browser, sha) {
