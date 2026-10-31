@@ -137,8 +137,82 @@ export function migrationPlan(migrations, applied, reviewed = "", approved) {
 
 /** Release candidate in cima al changelog; `undefined` se la prima versione non è una RC. */
 export function candidateVersion(changelog) {
-  const version = changelog.match(/^## \[?([^\]\s]+)\]?/mu)?.[1];
+  const version = topVersion(changelog);
   return /^2\.\d+\.\d+-rc\.\d+$/u.test(version ?? "") ? version : undefined;
+}
+
+const parseVersion = (version) => {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/u.exec(version ?? "");
+  return match && { core: match.slice(1, 4).map(Number), rc: match[4] && Number(match[4]) };
+};
+const coreOf = ({ core }) => core.join(".");
+const compareCores = (left, right) =>
+  left.core[0] - right.core[0] || left.core[1] - right.core[1] || left.core[2] - right.core[2];
+
+/** Versioni ammesse dopo l'ultima pubblicata: patch, minor o major, sempre di un solo passo. */
+export function nextVersions(released) {
+  if (!released) return ["2.0.0"];
+  const [major, minor, patch] = parseVersion(released).core;
+  return [`${major}.${minor}.${patch + 1}`, `${major}.${minor + 1}.0`, `${major + 1}.0.0`];
+}
+
+/** Prima versione in cima al changelog: la versione in preparazione o l'ultima pubblicata. */
+export const topVersion = (changelog) => changelog.match(/^## \[?([^\]\s]+)\]?/mu)?.[1];
+
+const releasedTags = () => git("tag", "--list", "v2.*").split("\n");
+
+const latestReleased = (releasedTags) =>
+  releasedTags
+    .map((tag) => tag.replace(/^v/u, ""))
+    .map(parseVersion)
+    .filter((version) => version && !version.rc && version.core[0] >= 2)
+    .map(coreOf)
+    .sort((left, right) => compareCores(parseVersion(left), parseVersion(right)))
+    .at(-1);
+
+/**
+ * Il lotto su `develop` porta una sola versione: la prima PR con una modifica visibile apre in
+ * cima al changelog la versione successiva all'ultima pubblicata, di un solo passo; le seguenti la
+ * riusano o ne alzano il livello. Una RC già aperta prosegue soltanto con la successiva o con la
+ * propria versione finale.
+ */
+export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
+  const head = topVersion(changelog);
+  const base = topVersion(baseChangelog);
+  if (head === base) return;
+  const released = latestReleased(releasedTags);
+  const next = parseVersion(head);
+  if (!next) throw new Error(`In cima al changelog serve una versione, non "${head ?? ""}".`);
+  const previous = parseVersion(base);
+  const open = previous && coreOf(previous) !== released ? previous : undefined;
+  if (open?.rc && coreOf(open) === coreOf(next)) {
+    if (next.rc && next.rc !== open.rc + 1)
+      throw new Error(`La ${head} non segue la ${base}: la RC sale di uno.`);
+    return;
+  }
+  if (next.rc) throw new Error(`La ${head} apre una RC: le versioni si preparano senza RC.`);
+  if (!nextVersions(released).includes(coreOf(next)))
+    throw new Error(
+      `La ${head} non è un passo dalla ${released ?? "prima pubblicazione"}: ammesse ${nextVersions(released).join(", ")}.`,
+    );
+  if (open && compareCores(next, open) < 0)
+    throw new Error(`La versione del lotto scende da ${base} a ${head}.`);
+}
+
+/**
+ * Etichetta della versione del Worker. Fino alla prima versione 2.x pubblicata resta il prefisso
+ * del commit; dopo, in Production è la versione pubblicata e sul test la versione in cima al
+ * changelog con `-dev.` e il tree distribuito.
+ */
+export function deployTag({ changelog, environment, sha, tree, releasedTags, expected }) {
+  if (!latestReleased(releasedTags)) return sha.slice(0, 12);
+  const version = topVersion(changelog);
+  const parsed = parseVersion(version);
+  if (!parsed) throw new Error("Nessuna versione in cima al changelog.");
+  if (environment !== "production") return `${version}-dev.${tree.slice(0, 12)}`;
+  if (parsed.rc || expected !== version)
+    throw new Error(`In Production si distribuisce la versione ${expected}, non la ${version}.`);
+  return version;
 }
 
 /**
@@ -635,7 +709,14 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
           target.mode,
           "--no-provision",
           "--tag",
-          manifest.sha.slice(0, 12),
+          deployTag({
+            changelog: readFileSync("CHANGELOG.md", "utf8"),
+            environment: target === targets.production ? "production" : "test",
+            sha: manifest.sha,
+            tree: manifest.tree,
+            releasedTags: releasedTags(),
+            expected: process.env.VERSION,
+          }),
           "--message",
           identity,
         );
@@ -689,12 +770,15 @@ async function main() {
   const command = positionals[0];
   if (command === "review") return reviewMigrations(values.base);
   if (command === "freeze") {
-    const version = assertFreeze(readFileSync("CHANGELOG.md", "utf8"), process.env.PR_TITLE ?? "", {
-      baseChangelog: values.base
-        ? execFileSync("git", ["show", `${values.base}:CHANGELOG.md`], { encoding: "utf8" })
-        : undefined,
+    const changelog = readFileSync("CHANGELOG.md", "utf8");
+    const baseChangelog = values.base
+      ? execFileSync("git", ["show", `${values.base}:CHANGELOG.md`], { encoding: "utf8" })
+      : undefined;
+    const version = assertFreeze(changelog, process.env.PR_TITLE ?? "", {
+      baseChangelog,
       deploy: process.env.DEPLOY === "true",
     });
+    if (baseChangelog !== undefined) assertVersionStep(changelog, baseChangelog, releasedTags());
     console.log(version ? `Correzione ammessa nella ${version}.` : "Nessuna RC congelata.");
     return;
   }

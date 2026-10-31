@@ -141,6 +141,7 @@ jobs:
           PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
           OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
+          VERSION: ${{ inputs.version }}
           REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
         run: node scripts/release/release.mjs deploy --environment production --expected-sha "${EXPECTED_SHA}" --reviewed-migrations "${REVIEWED_MIGRATIONS}"
       # Il job distribuisce e può tornare indietro: resta sul runner, con browser e librerie
