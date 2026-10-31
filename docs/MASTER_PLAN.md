@@ -2026,7 +2026,7 @@ La promozione Free parte al go-live senza fine e si chiude su indicazione dell'o
 
 **Stato:** Da completare · **Prerequisiti:** M8-06 · **Contratto:** [§32](#s32) · [§41](#s41)
 
-Eseguire il solo restore reale isolato sul candidato finale, oppure riusare la prova appena svolta a fine M8. Verificare dati, Auth, diritti, configurazioni e revoche secondo il [drill conclusivo](engineering/RELEASE.md#drill-di-ripristino), sul candidato registrato in [M8-06](#m8-06). Account del drill, acquisto sandbox e cambio password spettano all'owner; sospensione, cattura, ripristino, controlli e riapertura all'agente.
+Eseguire il solo restore reale isolato sul candidato finale, oppure riusare la prova appena svolta a fine M8. Verificare dati, Auth, diritti, configurazioni e revoche secondo il [drill conclusivo](engineering/RELEASE.md#drill-di-ripristino), sul candidato finale: dalla `2.0.0-rc.8`, che porta la promozione senza fine ([D239](DECISION_REGISTER.md)), quello identificato da `release:cycle rc` dopo la sua qualifica, non più la `2.0.0-rc.7` di [M8-06](#m8-06). Account del drill, acquisto sandbox e cambio password spettano all'owner; sospensione, cattura, ripristino, controlli e riapertura all'agente.
 
 **Criterio di completamento:** Un’unica prova conclusiva riuscita: dati/grant/config recuperati, post-snapshot riconciliato e accessi/erasure rispettati, outbound isolato. Può richiamare il drill sullo stesso candidato a fine M8; un fallimento blocca Promuovi finché corretto e riprovato.
 
