@@ -27,6 +27,8 @@ import {
   deployReport,
   candidateVersion,
   assertFreeze,
+  assertVersionStep,
+  deployTag,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
 
@@ -519,5 +521,52 @@ describe("comandi della pubblicazione", () => {
       assertFreeze("## [2.0.0]\n", "fix: copy", { baseChangelog: "## [2.0.0]\n", deploy: true }),
       undefined,
     );
+  });
+
+  it("la versione del lotto sale di un solo passo dall'ultima pubblicata", () => {
+    const section = (version) => `# Changelog\n\n## [${version}]\n\nVoce.\n`;
+    const ok = [
+      // Fino alla 2.0.0 la RC prosegue e la versione finale segue la propria RC.
+      ["2.0.0-rc.12", "2.0.0-rc.13", []],
+      ["2.0.0-rc.12", "2.0.0", []],
+      // Dopo, la prima modifica visibile apre la versione successiva; le altre la alzano.
+      ["2.0.0", "2.0.1", ["v2.0.0", "v1.14.0"]],
+      ["2.0.0", "2.1.0", ["v2.0.0"]],
+      ["2.0.1", "2.1.0", ["v2.0.0"]],
+      ["2.1.0", "2.1.1", ["v2.0.0", "v2.1.0"]],
+    ];
+    for (const [base, head, tags] of ok)
+      assert.doesNotThrow(() => assertVersionStep(section(head), section(base), tags), head);
+    const rejected = [
+      ["2.0.0-rc.12", "2.0.0-rc.14", [], /RC sale di uno/u],
+      ["2.0.0-rc.12", "2.0.1", [], /non è un passo dalla prima pubblicazione/u],
+      ["2.0.0-rc.12", "Novità", [], /serve una versione/u],
+      ["2.0.0", "2.0.2", ["v2.0.0"], /ammesse 2\.0\.1, 2\.1\.0, 3\.0\.0/u],
+      ["2.0.0", "2.0.1-rc.1", ["v2.0.0"], /senza RC/u],
+      ["2.1.0", "2.0.1", ["v2.0.0"], /scende da 2\.1\.0 a 2\.0\.1/u],
+      ["2.0.1", "2.0.0", ["v2.0.0"], /non è un passo dalla 2\.0\.0/u],
+    ];
+    for (const [base, head, tags, message] of rejected)
+      assert.throws(() => assertVersionStep(section(head), section(base), tags), message);
+    // Una sezione invariata in cima non chiede nulla.
+    assert.doesNotThrow(() => assertVersionStep(section("2.0.0"), section("2.0.0"), ["v2.0.0"]));
+  });
+
+  it("l'etichetta del deploy porta la versione soltanto dopo la prima 2.x pubblicata", () => {
+    const tag = (version, environment, releasedTags, expected) =>
+      deployTag({
+        changelog: `# Changelog\n\n## [${version}]\n`,
+        environment,
+        sha: "a".repeat(40),
+        tree: "b".repeat(40),
+        releasedTags,
+        expected,
+      });
+    assert.equal(tag("2.0.0-rc.12", "test", ["v1.14.0", ""]), "a".repeat(12));
+    assert.equal(tag("2.0.0", "production", [], "2.0.0"), "a".repeat(12));
+    assert.equal(tag("2.0.1", "test", ["v2.0.0"]), `2.0.1-dev.${"b".repeat(12)}`);
+    assert.equal(tag("2.0.1", "production", ["v2.0.0"], "2.0.1"), "2.0.1");
+    assert.throws(() => tag("2.0.1", "production", ["v2.0.0"], "2.0.2"), /versione 2\.0\.2/u);
+    assert.throws(() => tag("2.0.1-rc.1", "production", ["v2.0.0"], "2.0.1-rc.1"), /non la/u);
   });
 });

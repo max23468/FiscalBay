@@ -151,7 +151,8 @@ jobs:
             node scripts/release/release.mjs review --base "${BASE_SHA}"
 
       # Con una release candidate in cima al changelog `develop` accetta soltanto correzioni, e
-      # quelle che cambiano ciò che si distribuisce portano la RC successiva.
+      # quelle che cambiano ciò che si distribuisce portano la RC successiva. Una nuova sezione
+      # in cima sale di un solo passo dall'ultima versione pubblicata.
       # Il titolo, che diventa il commit integrato, si rilegge dall'API come il corpo.
       - name: Check release freeze
         if: github.event_name == 'pull_request' && github.base_ref == 'develop'
