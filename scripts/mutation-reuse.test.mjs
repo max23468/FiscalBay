@@ -1,6 +1,70 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { affectedModules, moduleOutcomes, mutationJob, reusePlan } from "./mutation-reuse.mjs";
+import {
+  affectedModules,
+  changedPackages,
+  moduleOutcomes,
+  mutationJob,
+  packageImporters,
+  reusePlan,
+} from "./mutation-reuse.mjs";
+
+/** Lockfile di pnpm con i due documenti, dipendenze del progetto e della pagina provvisoria. */
+function lockfile({ dependencies = "", devDependencies = "", extra = "", settings = "" } = {}) {
+  return `---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies: {}
+
+---
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true${settings}
+
+importers:
+
+  .:
+    dependencies:
+      '@scope/auth':
+        specifier: 1.0.0
+        version: 1.0.0
+${dependencies}    devDependencies:
+      vitest:
+        specifier: 5.0.0
+        version: 5.0.0
+${devDependencies}
+  placeholder:
+    devDependencies:
+      cf:
+        specifier: 1.0.0
+        version: 1.0.0
+
+packages:
+
+  '@scope/auth@1.0.0':
+    resolution: {integrity: sha512-a}
+
+  vitest@5.0.0:
+    resolution: {integrity: sha512-v}
+${extra}
+snapshots:
+
+  '@scope/auth@1.0.0':
+    dependencies:
+      zod: 4.0.0
+
+  vitest@5.0.0: {}
+
+  zod@4.0.0: {}
+`;
+}
+
+const manifest = (dependencies = {}, rest = {}) =>
+  JSON.stringify({ dependencies: { "@scope/auth": "1.0.0", ...dependencies }, ...rest });
 
 describe("mutation incrementale della prova del candidato", () => {
   it("riconosce i job di mutation della qualifica e della campagna", () => {
@@ -79,5 +143,73 @@ describe("mutation incrementale della prova del candidato", () => {
     // Fallito di recente, toccato dal diff, strumenti cambiati o mai provato: si ripete.
     assert.deepEqual(plan.run, ["app/a.ts", "app/b.ts", "app/d.ts", "app/f.ts"]);
     assert.deepEqual(plan.reused, [{ target: "app/c.ts", run: 2, commit: "c2" }]);
+  });
+
+  it("con un pacchetto cambiato ripete soltanto chi lo importa o dipende da lui", () => {
+    const before = { manifest: manifest(), lockfile: lockfile() };
+    const added = {
+      manifest: manifest({ "@scope/dash": "0.4.0" }),
+      lockfile: lockfile({
+        dependencies: "      '@scope/dash':\n        specifier: 0.4.0\n        version: 0.4.0\n",
+        extra: "\n  '@scope/dash@0.4.0':\n    resolution: {integrity: sha512-d}\n",
+      }),
+    };
+    assert.deepEqual([...changedPackages(before, added)], ["@scope/dash"]);
+    // Una dipendenza aggiornata cambia anche il pacchetto che la usa.
+    const zod = lockfile().replace("zod: 4.0.0", "zod: 4.1.0").replace("zod@4.0.0", "zod@4.1.0");
+    assert.deepEqual([...changedPackages(before, { manifest: manifest(), lockfile: zod })].sort(), [
+      "@scope/auth",
+      "zod",
+    ]);
+    // La pagina provvisoria non entra nella mutation.
+    const placeholder = lockfile().replace(
+      "cf:\n        specifier: 1.0.0",
+      "cf:\n        specifier: 1.1.0",
+    );
+    assert.deepEqual(
+      [...changedPackages(before, { manifest: manifest(), lockfile: placeholder })],
+      [],
+    );
+  });
+
+  it("con uno strumento cambiato ripete tutto", () => {
+    const before = { manifest: manifest(), lockfile: lockfile() };
+    for (const after of [
+      { manifest: manifest({}, { scripts: { test: "vitest" } }), lockfile: lockfile() },
+      {
+        manifest: manifest(),
+        lockfile: lockfile({ settings: "\n  excludeLinksFromLockfile: false" }),
+      },
+      {
+        manifest: manifest(),
+        lockfile: lockfile({
+          devDependencies: "      stryker:\n        specifier: 9.0.0\n        version: 9.0.0\n",
+        }),
+      },
+      {
+        manifest: manifest(),
+        lockfile: lockfile().replace(
+          "vitest@5.0.0: {}",
+          "vitest@5.0.0:\n    dependencies:\n      zod: 4.0.0",
+        ),
+      },
+    ])
+      assert.equal(changedPackages(before, after), null);
+  });
+
+  it("riconosce gli import dei pacchetti, anche per percorso, ma non i moduli locali o di piattaforma", () => {
+    const sources = [
+      { path: "app/auth.server.ts", text: 'import { dash } from "@scope/dash/plugins";' },
+      { path: "app/lazy.ts", text: 'const zod = await import("zod");' },
+      {
+        path: "app/local.ts",
+        text: 'import "~/scope/dash";\nimport { env } from "cloudflare:workers";',
+      },
+      { path: "app/other.ts", text: 'import { auth } from "@scope/auth";' },
+    ];
+    assert.deepEqual(packageImporters(sources, new Set(["@scope/dash", "zod"])), [
+      "app/auth.server.ts",
+      "app/lazy.ts",
+    ]);
   });
 });

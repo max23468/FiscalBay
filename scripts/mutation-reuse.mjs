@@ -2,9 +2,11 @@
  * Mutation incrementale della prova del candidato su `develop`: un modulo critico non si ripete
  * se la sua ultima mutation, in una qualifica o in una campagna precedente su un commit antenato,
  * è riuscita in ogni parte e da allora nessun sorgente che importa, anche indirettamente, è
- * cambiato. Un cambio delle dipendenze o della configurazione della mutation fa ripetere tutto; le prove modificate non
- * contano, come nella scelta dei moduli dopo un rilascio, e la campagna settimanale e `Promuovi`
- * restano complete.
+ * cambiato. Un pacchetto di `dependencies` aggiunto, tolto o cambiato, anche fra quelli da cui
+ * dipende, conta come sorgente modificato nei file che lo importano. Un cambio degli strumenti
+ * (`devDependencies`, impostazioni e override di pnpm, configurazione della mutation) fa
+ * ripetere tutto; le prove modificate non contano, come nella scelta dei moduli dopo un
+ * rilascio, e la campagna settimanale e `Promuovi` restano complete.
  * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
  */
 import { execFileSync } from "node:child_process";
@@ -13,16 +15,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { criticalModule } from "./mutation.mjs";
-import { importGraph } from "./verify-repo.mjs";
+import { importGraph, importPattern } from "./verify-repo.mjs";
 import { ghJson, retry } from "./lib/provider.mjs";
 
 /** Workflow le cui mutation valgono come ricevuta. */
 const mutationWorkflows = [".github/workflows/publish.yml", ".github/workflows/mutation.yml"];
 
-/** File che cambiano l'esito di ogni mutation: con uno di questi modificato nulla si riusa. */
+/**
+ * File che cambiano l'esito di ogni mutation: con uno di questi modificato nulla si riusa.
+ * Manifest e lockfile seguono `changedPackages`.
+ */
 const toolFiles = [
-  /^package\.json$/u,
-  /^pnpm-lock\.yaml$/u,
   /^stryker\.config\.json$/u,
   /^vitest(?:\.mutation)?\.config\.ts$/u,
   /^scripts\/mutation(?:-vitest)?\.mjs$/u,
@@ -55,6 +58,120 @@ export function moduleOutcomes(jobs) {
       entry.ran === entry.parts && entry.passed.size === entry.parts ? "passed" : "failed",
     ]),
   );
+}
+
+/** Nome del pacchetto di una chiave del lockfile o di un import, senza versione né percorso. */
+export function packageName(specifier) {
+  const bare = specifier.replace(/^'|'$/gu, "");
+  const parts = bare.split("/");
+  const name = bare.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+  const version = name.indexOf("@", 1);
+  return version > 0 ? name.slice(0, version) : name;
+}
+
+/**
+ * Blocchi del lockfile di pnpm: ogni sezione di primo livello e, in `packages` e `snapshots`,
+ * ogni voce; in `importers` ogni gruppo di dipendenze di ogni importer. I due documenti del file
+ * (dipendenze di configurazione e progetto) si distinguono per posizione.
+ */
+export function lockBlocks(text) {
+  const blocks = new Map();
+  let document = -1;
+  let section = "";
+  let importer = "";
+  let key = "";
+  for (const line of text.split("\n")) {
+    if (line === "---" || document < 0) {
+      document += 1;
+      section = "";
+      if (line === "---") continue;
+    }
+    if (!line.trim()) continue;
+    const indent = line.length - line.trimStart().length;
+    const name = line.trim().replace(/:.*$/u, "");
+    if (indent === 0) {
+      section = name;
+      key = `${document}/${section}`;
+    } else if (indent === 2 && ["packages", "snapshots"].includes(section))
+      key = `${document}/${section}/${line.trim().replace(/:\s*(?:\{\})?$/u, "")}`;
+    else if (indent === 2 && section === "importers") {
+      importer = name;
+      key = `${document}/importers/${importer}`;
+    } else if (indent === 4 && section === "importers")
+      key = `${document}/importers/${importer}/${name}`;
+    blocks.set(key, `${blocks.get(key) ?? ""}${line}\n`);
+  }
+  return blocks;
+}
+
+/** Dipendenze di ogni pacchetto nelle voci `snapshots`, per nome. */
+function snapshotDependencies(blocks) {
+  const dependencies = new Map();
+  for (const [key, text] of blocks) {
+    const entry = /^\d+\/snapshots\/(.+)$/u.exec(key)?.[1];
+    if (!entry) continue;
+    const children = dependencies.get(packageName(entry)) ?? new Set();
+    for (const [, child] of text.matchAll(/^ {6}('?[^\s:']+'?):/gmu))
+      children.add(packageName(child));
+    dependencies.set(packageName(entry), children);
+  }
+  return dependencies;
+}
+
+/**
+ * Pacchetti cambiati fra due versioni di manifest e lockfile: quelli con una voce diversa e
+ * quelli che ne dipendono, anche indirettamente. `null` se cambia uno strumento: fuori da
+ * `dependencies` nel manifest, impostazioni, override o `devDependencies` del progetto nel
+ * lockfile, oppure un pacchetto cambiato fra le `devDependencies`.
+ */
+export function changedPackages(before, after) {
+  const manifest = (text) => {
+    const { dependencies, ...rest } = JSON.parse(text);
+    return { dependencies, rest: JSON.stringify(rest) };
+  };
+  const oldManifest = manifest(before.manifest);
+  const newManifest = manifest(after.manifest);
+  if (oldManifest.rest !== newManifest.rest) return null;
+  const oldBlocks = lockBlocks(before.lockfile);
+  const newBlocks = lockBlocks(after.lockfile);
+  const changed = new Set();
+  for (const key of new Set([...oldBlocks.keys(), ...newBlocks.keys()])) {
+    if (oldBlocks.get(key) === newBlocks.get(key)) continue;
+    const entry = /^\d+\/(?:packages|snapshots)\/(.+)$/u.exec(key)?.[1];
+    if (entry) changed.add(packageName(entry));
+    // Le dipendenze del progetto cambiano anche le voci dei pacchetti, contate sopra; gli altri
+    // importer, come la pagina provvisoria, non entrano nella mutation.
+    else if (!/^1\/importers\/(?:\.\/dependencies|(?!\.\/|\.$)[^/]+(?:\/.*)?)$/u.test(key))
+      return null;
+  }
+  const dependencies = snapshotDependencies(new Map([...oldBlocks, ...newBlocks]));
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const [name, children] of dependencies)
+      if (!changed.has(name) && [...children].some((child) => changed.has(child))) {
+        changed.add(name);
+        grew = true;
+      }
+  }
+  const tools = (blocks) =>
+    [
+      ...(blocks.get("1/importers/./devDependencies") ?? "").matchAll(/^ {6}('?[^\s:']+'?):/gmu),
+    ].map(([, name]) => packageName(name));
+  if ([...tools(oldBlocks), ...tools(newBlocks)].some((name) => changed.has(name))) return null;
+  return changed;
+}
+
+/** Sorgenti che importano direttamente uno dei pacchetti indicati. */
+export function packageImporters(sources, packages) {
+  return sources
+    .filter(({ text }) =>
+      [...text.matchAll(importPattern)].some(([, from, dynamic]) => {
+        const specifier = from ?? dynamic;
+        return !/^(?:[./~]|[\w-]+:)/u.test(specifier) && packages.has(packageName(specifier));
+      }),
+    )
+    .map(({ path: file }) => file);
 }
 
 /** Moduli critici che importano, anche indirettamente, uno dei sorgenti modificati. */
@@ -157,11 +274,23 @@ async function main() {
   const affectedSince = (commit) => {
     if (!cache.has(commit)) {
       const changed = git("diff", "--name-only", commit, "HEAD").split("\n").filter(Boolean);
+      const packages = ["package.json", "pnpm-lock.yaml"].some((file) => changed.includes(file))
+        ? changedPackages(
+            {
+              manifest: git("show", `${commit}:package.json`),
+              lockfile: git("show", `${commit}:pnpm-lock.yaml`),
+            },
+            {
+              manifest: readFileSync("package.json", "utf8"),
+              lockfile: readFileSync("pnpm-lock.yaml", "utf8"),
+            },
+          )
+        : new Set();
       cache.set(
         commit,
-        changed.some((file) => toolFiles.some((pattern) => pattern.test(file)))
+        !packages || changed.some((file) => toolFiles.some((pattern) => pattern.test(file)))
           ? null
-          : affectedModules(changed, graph),
+          : affectedModules([...changed, ...packageImporters(sources, packages)], graph),
       );
     }
     return cache.get(commit);
