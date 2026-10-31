@@ -1,5 +1,5 @@
 /**
- * Cloudflare Web Analytics sulle sole pagine pubbliche (D241): nessun cookie né impronta del
+ * Cloudflare Web Analytics sulle sole pagine pubbliche (D242): nessun cookie né impronta del
  * browser, quindi nessun consenso da chiedere. Il beacon conta il caricamento del documento.
  */
 export const webAnalyticsScript = "https://static.cloudflareinsights.com/beacon.min.js";

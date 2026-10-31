@@ -361,7 +361,7 @@ In locale, nei test e nell'anteprima della build valgono le chiavi di prova di C
 <a id="statistiche-sito"></a>
 ## Statistiche del sito e Search Console
 
-Le pagine pubbliche caricano il beacon di Cloudflare Web Analytics soltanto se il Worker ha il segreto facoltativo `WEB_ANALYTICS_TOKEN` ([D241](../DECISION_REGISTER.md)); l'area dell'account, la console e l'anteprima non lo caricano mai. Il token è pubblico, ma nasce con il sito Web Analytics e si imposta come segreto per non renderlo obbligatorio in locale e nelle prove.
+Le pagine pubbliche caricano il beacon di Cloudflare Web Analytics soltanto se il Worker ha il segreto facoltativo `WEB_ANALYTICS_TOKEN` ([D242](../DECISION_REGISTER.md)); l'area dell'account, la console e l'anteprima non lo caricano mai. Il token è pubblico, ma nasce con il sito Web Analytics e si imposta come segreto per non renderlo obbligatorio in locale e nelle prove.
 
 1. Nella dashboard, Web Analytics, aggiungere un sito per ambiente, `test.fiscalbay.it` e `fiscalbay.it`, con l'installazione manuale del codice: l'inserimento automatico va lasciato spento, perché il Worker sceglie le pagine e la CSP ammette soltanto lo script del beacon. Il token della CLI di progetto non ha il permesso Web Analytics, quindi il sito si crea dall'owner o con un token che lo abbia.
 2. `pnpm exec cf workers secrets update` imposta `WEB_ANALYTICS_TOKEN` sul Worker dell'ambiente, con le stesse cautele dei segreti Turnstile.
