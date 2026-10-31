@@ -240,7 +240,7 @@ function isAncestor(commit) {
 /** Run precedenti con gli esiti per modulo, dalla più recente; gli errori dell'API si ripetono. */
 async function previousRuns(repository, repositoryId) {
   const api = (url) =>
-    retry(() => ghJson("api", url), { attempts: 3, delay: (attempt) => attempt * 5000 });
+    retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
   const runs = [];
   // Per workflow: fra le run di tutto il repository CI e CodeQL spingono fuori le qualifiche.
   const candidates = [];
@@ -285,14 +285,9 @@ async function main() {
   const repositoryId = Number(process.env.REPOSITORY_ID);
   if (!repository || !repositoryId) throw new Error("Repository non identificato.");
   const targets = JSON.parse(process.env.MATRIX ?? '{"target":[]}').target;
-  let runs;
-  try {
-    runs = await previousRuns(repository, repositoryId);
-  } catch (error) {
-    // Senza esiti leggibili non si riusa nulla: la prova esegue tutta la mutation.
-    console.log(`Esiti precedenti non leggibili, mutation completa: ${error.message}`);
-    return;
-  }
+  // Senza esiti leggibili la pianificazione fallisce e si ripete: la mutation completa resta
+  // a `Promuovi` e alla campagna settimanale, mai un ripiego della prova su `develop`.
+  const runs = await previousRuns(repository, repositoryId);
   const sources = git("ls-files")
     .split("\n")
     .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
