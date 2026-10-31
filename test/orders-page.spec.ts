@@ -11,9 +11,9 @@ import { listNotifications } from "../app/domain/notifications.server";
 import { markNotificationsRead } from "../app/domain/notification-reads.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
+import { parseChangelog } from "../app/changelog";
 import {
   hasWhatsNew,
-  parseChangelog,
   whatsNew,
   whatsNewNotifications,
   whatsNewProblems,

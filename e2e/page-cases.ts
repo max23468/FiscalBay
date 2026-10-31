@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+
+import { parseChangelog } from "../app/changelog.ts";
 import { testAccount } from "./test-account.ts";
 
 /** Scenari delle route esistenti: le azioni esterne non vengono inviate dal collaudo. */
@@ -74,6 +77,12 @@ const settings = [
   "privacy",
   "supporto",
 ];
+// Le Novità del changelog che l'ambiente locale e il test mostrano, con il loro giorno o in
+// preparazione.
+const whatsNew = parseChangelog(
+  readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
+).releases.some(({ date }) => date === null || Date.parse(`${date}T00:00:00.000Z`) <= Date.now());
+
 export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
   const make = (path: string, area: string, options: Partial<PageCase> = {}): PageCase => ({
     pattern: `${prefix}${path}` || "/",
@@ -177,8 +186,8 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       }),
     ),
     make("/app/novita", "settings", { redirect: access }),
-    // Senza voci nell'elenco versionato la pagina Novità non esiste (D203).
-    make("/app/novita", "settings", { role: "member", status: 404 }),
+    // Fuori da Production la pagina Novità esiste se il changelog ha voci (D203).
+    make("/app/novita", "settings", { role: "member", status: whatsNew ? 200 : 404 }),
     ...(
       [
         { role: "anonymous", status: 404 },
