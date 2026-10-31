@@ -2,6 +2,11 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio.
 
+## [2.0.0-rc.12]
+
+- Le email di FiscalBay restano leggibili nei client in tema scuro, come Mail di Apple: prima il titolo e il testo principale diventavano scuri su sfondo scuro.
+- Su desktop, «Passa a Premium» dalla sezione Telegram delle Impostazioni porta al piano: prima cambiava l'indirizzo senza scorrere.
+
 ## [2.0.0-rc.11]
 
 - La notifica Telegram di un nuovo ordine arrivato con l'avviso eBay parte subito, insieme alla lettura dell'ordine, invece che con il controllo successivo dei dieci minuti.

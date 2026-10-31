@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react";
-import { useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { useCopy, useLinks } from "~/components/copy-context";
@@ -137,7 +137,8 @@ const spyOffset = 140;
  * Sezione attiva su desktop, dove le categorie formano una sola pagina che scorre: l'indicatore
  * segue la sezione visibile e, durante lo scorrimento avviato dal menu, resta sulla voce scelta.
  * All'apertura, al cambio lingua e al ritorno dal pagamento la pagina torna sulla categoria
- * dell'indirizzo; i clic fra categorie scorrono dal menu con `goTo`.
+ * dell'indirizzo; i clic fra categorie scorrono dal menu con `goTo`, e un link interno a
+ * un'altra categoria, come «Passa a Premium» da Telegram, scorre fino a quella dell'indirizzo.
  */
 function useScrollSpy(
   ids: readonly SettingsSection[],
@@ -196,6 +197,13 @@ function useScrollSpy(
       following.current = false;
     };
   }, [align]);
+
+  // Il menu ha già avviato lo scorrimento; un link dalla pagina no. All'apertura la categoria
+  // dell'indirizzo è già quella attiva.
+  const onNavigate = useEffectEvent(() => {
+    if (opened && opened !== active && !following.current) goTo(opened, "smooth");
+  });
+  useEffect(() => onNavigate(), [opened]);
 
   return { sections, active, goTo };
 }

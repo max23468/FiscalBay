@@ -1407,7 +1407,9 @@ describe("Collegamento e modifica dell'identità", () => {
     );
     expect(emailLink(body.text)).toBe('https://test.fiscalbay.it/?a=1&b="2"');
     expect(body.html).toContain('<html lang="en">');
-    expect(body.html).toContain('<meta name="color-scheme" content="light dark">');
+    // I colori sono soltanto chiari: un client in tema scuro non li inverte a metà.
+    expect(body.html).toContain('<meta name="color-scheme" content="light only">');
+    expect(body.html).not.toContain("dark");
     // Logo dall'origine dell'ambiente e anteprima nascosta dal primo paragrafo.
     expect(body.html).toContain('<img src="https://test.fiscalbay.it/apple-touch-icon.png"');
     expect(body.html).toMatch(/display:none[^>]*>Use &lt;b&gt;/u);
