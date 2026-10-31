@@ -93,10 +93,16 @@ export async function useLocalAccount(
         });
         remember(response);
       }
+      // Una ricarica o una nuova pagina chiude la richiesta mentre il proxy la serve: la
+      // risposta in ritardo non ha più destinatario.
+      const fulfill = (options: Parameters<typeof route.fulfill>[0]) =>
+        route.fulfill(options).catch((error: unknown) => {
+          if (!/Route is already handled/u.test(String(error))) throw error;
+        });
       const location = response.headers().location;
-      if (!location || !request.isNavigationRequest()) return route.fulfill({ response });
+      if (!location || !request.isNavigationRequest()) return fulfill({ response });
       // Ogni redirect del documento ripassa dal proxy e conserva la sessione sintetica.
-      return route.fulfill({
+      return fulfill({
         status: 200,
         headers: { "content-type": "text/html" },
         body: `<script>location.replace(${JSON.stringify(location)})</script>`,
