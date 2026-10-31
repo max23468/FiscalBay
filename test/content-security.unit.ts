@@ -26,7 +26,7 @@ describe("CSP dei documenti", () => {
     // Il solo frame ammesso è il widget Turnstile.
     expect(directives.get("frame-src")).toEqual(["https://challenges.cloudflare.com"]);
     expect(directives.get("default-src")).toEqual(["'self'"]);
-    expect(directives.get("connect-src")).toEqual(["'self'"]);
+    expect(directives.get("connect-src")).toEqual(["'self'", "https://cloudflareinsights.com"]);
     for (const name of ["object-src", "base-uri", "frame-ancestors"])
       expect(directives.get(name), name).toEqual(["'none'"]);
     // Immagini: origine, segnaposto `data:` dell'anteprima e i soli host eBay qualificati.

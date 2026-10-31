@@ -1,9 +1,11 @@
 /**
  * Cloudflare Web Analytics sulle sole pagine pubbliche (D241): nessun cookie né impronta del
- * browser, quindi nessun consenso da chiedere. Il beacon conta il caricamento del documento e
- * invia i dati a `/cdn-cgi/rum` dello stesso dominio, servito dalla rete Cloudflare.
+ * browser, quindi nessun consenso da chiedere. Il beacon conta il caricamento del documento.
  */
 export const webAnalyticsScript = "https://static.cloudflareinsights.com/beacon.min.js";
+
+/** Raccolta dei dati quando il beacon non li invia all'origine, come fuori dalla rete Cloudflare. */
+export const webAnalyticsCollector = "https://cloudflareinsights.com";
 
 /**
  * Configurazione del beacon. Le pagine pubbliche si collegano con link normali, quindi ogni

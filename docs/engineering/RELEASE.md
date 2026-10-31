@@ -365,7 +365,7 @@ Le pagine pubbliche caricano il beacon di Cloudflare Web Analytics soltanto se i
 
 1. Nella dashboard, Web Analytics, aggiungere un sito per ambiente, `test.fiscalbay.it` e `fiscalbay.it`, con l'installazione manuale del codice: l'inserimento automatico va lasciato spento, perché il Worker sceglie le pagine e la CSP ammette soltanto lo script del beacon. Il token della CLI di progetto non ha il permesso Web Analytics, quindi il sito si crea dall'owner o con un token che lo abbia.
 2. `pnpm exec cf workers secrets update` imposta `WEB_ANALYTICS_TOKEN` sul Worker dell'ambiente, con le stesse cautele dei segreti Turnstile.
-3. Readback: una pagina pubblica contiene lo script `https://static.cloudflareinsights.com/beacon.min.js` con `"spa":false`, `/app` e `/accesso` no; la richiesta a `/cdn-cgi/rum` dello stesso dominio riesce e la visita compare nella dashboard dell'ambiente. La CSP ammette lo script soltanto in `script-src`; i dati arrivano all'origine, già ammessa da `connect-src`.
+3. Readback: una pagina pubblica contiene lo script `https://static.cloudflareinsights.com/beacon.min.js` con `"spa":false`, `/app` e `/accesso` no; l'invio a `/cdn-cgi/rum`, sull'origine o su `cloudflareinsights.com`, riesce senza violazioni della CSP e la visita compare nella dashboard dell'ambiente. La CSP ammette lo script in `script-src` e `https://cloudflareinsights.com` in `connect-src`: in locale, fuori dalla rete Cloudflare, il beacon invia lì.
 
 Search Console si verifica sul dominio `fiscalbay.it` con il record TXT proposto da Google, aggiunto nella zona come gli altri record di §24, e riceve `https://fiscalbay.it/sitemap.xml`. Non aggiunge nulla alle pagine.
 
