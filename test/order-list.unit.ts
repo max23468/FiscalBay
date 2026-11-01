@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import features from "../app/components/orders/motion-features";
-import { areaSection } from "../app/components/shell-links";
+import { appCopy } from "../app/app-copy";
+import { areaSection, shellMenu } from "../app/components/shell-links";
 import {
   exportHref,
   exportOrderHref,
@@ -81,6 +82,28 @@ describe("ambito dell'esportazione dagli Ordini", () => {
     const scope = exportScope(new URLSearchParams({ ordini: ids.join(",") }));
     expect(scope?.kind === "orders" && scope.ids.length).toBe(300);
     expect(scope?.kind === "orders" && scope.ids.slice(0, 2)).toEqual(["o-1", "n-0"]);
+  });
+});
+
+describe("menu dell'avatar", () => {
+  const labels = (admin: boolean, verified = true) =>
+    shellMenu({ language: "it", base: "/app" }, appCopy.it, {
+      verified,
+      admin,
+      language: { href: "/accesso", onSelect: () => {} },
+    }).map((group) => group.map(({ label, href }) => `${label} ${href}`));
+
+  it("porta l'admin alla console, fuori dalle route dell'app, e soltanto lui", () => {
+    expect(labels(true)[1]).toEqual(["Console /admin"]);
+    expect(labels(false).flat()).not.toContain("Console /admin");
+    // Prima della conferma dell'email il menu ha soltanto lingua e sito, anche per un admin.
+    expect(labels(true, false).flat()).not.toContain("Console /admin");
+    const consoleItem = shellMenu({ language: "it", base: "/app" }, appCopy.it, {
+      verified: true,
+      admin: true,
+      language: { href: "/accesso", onSelect: () => {} },
+    })[1]![0]!;
+    expect(consoleItem.reloadDocument).toBe(true);
   });
 });
 

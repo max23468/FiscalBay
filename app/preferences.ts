@@ -115,6 +115,8 @@ export interface ShellData {
   notifications: NotificationView[] | null;
   /** Pagina Novità con voci: compare nel menu dell'avatar (D203). */
   whatsNew?: boolean;
+  /** Ruolo admin: il menu dell'avatar porta alla console, che chiede comunque la passkey. */
+  admin?: boolean;
   now: string;
 }
 
