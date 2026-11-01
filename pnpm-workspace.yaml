@@ -1,6 +1,5 @@
 packages:
   - .
-  - placeholder
 
 # `workerd` scarica il binario della piattaforma ed `esbuild` i binding nativi:
 # senza approvazione esplicita pnpm interrompe l'installazione.

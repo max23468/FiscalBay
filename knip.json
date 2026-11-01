@@ -11,9 +11,6 @@
       ],
       "ignoreDependencies": ["cloudflare"],
       "ignoreBinaries": ["stripe"]
-    },
-    "placeholder": {
-      "entry": ["cloudflare.config.ts", "wrangler.config.ts", "worker.js"]
     }
   },
   "ignoreExportsUsedInFile": true

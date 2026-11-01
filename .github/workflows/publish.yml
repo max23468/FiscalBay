@@ -141,7 +141,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
-          OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           VERSION: ${{ inputs.version }}
           REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
@@ -166,7 +165,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
-          OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: node scripts/release/release.mjs rollback --environment production --expected-sha "${EXPECTED_SHA}"
       - name: Create immutable tag and release
@@ -174,7 +172,6 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
-          OWNER_APPROVED_SHA: ${{ vars.OWNER_APPROVED_SHA }}
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           VERSION: ${{ inputs.version }}

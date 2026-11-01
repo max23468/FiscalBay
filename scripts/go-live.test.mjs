@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics.ts";
 import {
+  beaconConfig,
   checkResources,
   checkSurface,
   exportsMaxAge,
@@ -101,7 +103,7 @@ describe("ambiente", () => {
       "fiscalbay-sandbox",
     ]);
     assert.ok(scriptSteps(live).every(({ phase }) => ["prima", "dopo"].includes(phase)));
-    // Prima del deploy la pagina provvisoria non ha Logpush: l'archivio si rilegge dopo.
+    // Il readback dell'archivio richiede il Worker con Logpush, che arriva con il deploy.
     const archive = scriptSteps(live).find(({ args }) => args[0] === "scripts/log-archive.mjs");
     assert.equal(archive.phase, "dopo");
   });
@@ -202,6 +204,14 @@ describe("risorse", () => {
 });
 
 /** Risposte della superficie pubblica come le serve il Worker dell'ambiente. */
+/** Tag del beacon come lo scrive React, con l'attributo codificato. */
+const beaconTag = (token = "abc", { spa = false } = {}) =>
+  `<script defer="" src="${webAnalyticsScript}" data-cf-beacon="${JSON.stringify({ token, spa }).replaceAll('"', "&quot;")}"></script>`;
+
+const policy = {
+  "content-security-policy": `script-src 'self' ${webAnalyticsScript}; connect-src 'self' ${webAnalyticsCollector}`,
+};
+
 function surface(target) {
   const pages = ["/", "/funzionalita", "/prezzi"].flatMap((page) => [
     page,
@@ -223,19 +233,79 @@ function surface(target) {
       body: pages.map((page) => `<url><loc>${target.origin}${page}</loc></url>`).join("\n"),
     },
     pages: {
-      ...Object.fromEntries(pages.map((page) => [page, { status: 200, headers: robots }])),
       ...Object.fromEntries(
-        surfacePaths.legal.map((page) => [page, { status: 200, headers: noindex }]),
+        pages.map((page) => [
+          page,
+          { status: 200, headers: { ...robots, ...policy }, body: beaconTag() },
+        ]),
       ),
       ...Object.fromEntries(
-        surfacePaths.private.map((page) => [page, { status: 302, headers: noindex }]),
+        surfacePaths.legal.map((page) => [
+          page,
+          { status: 200, headers: { ...noindex, ...policy }, body: beaconTag() },
+        ]),
       ),
-      [surfacePaths.preview]: { status: target.live ? 404 : 200, headers: noindex },
+      ...Object.fromEntries(
+        surfacePaths.private.map((page) => [
+          page,
+          { status: 302, headers: noindex, body: "<html></html>" },
+        ]),
+      ),
+      [surfacePaths.preview]: {
+        status: target.live ? 404 : 200,
+        headers: noindex,
+        body: "<html></html>",
+      },
     },
   };
 }
 
 describe("superficie pubblica", () => {
+  it("legge la configurazione del beacon dall'attributo codificato da React", () => {
+    assert.deepEqual(beaconConfig(beaconTag("abc")), { token: "abc", spa: false });
+    assert.equal(beaconConfig('<script src="/app.js"></script>'), null);
+    assert.equal(beaconConfig(undefined), null);
+    assert.equal(
+      beaconConfig('<script src="https://x/beacon.min.js" data-cf-beacon="{rotto"></script>'),
+      null,
+    );
+  });
+
+  it("rifiuta una pagina pubblica senza beacon e un beacon nell'area riservata", () => {
+    const responses = surface(live);
+    responses.pages["/prezzi"].body = "<html></html>";
+    responses.pages["/accesso"].body = beaconTag();
+    assert.deepEqual(failing(checkSurface(live, responses)), [
+      "beacon delle statistiche sulle pagine pubbliche",
+      "nessun beacon in accesso, area riservata e anteprima",
+    ]);
+  });
+
+  it("rifiuta il rilevamento delle navigazioni, il token vuoto e la CSP senza beacon", () => {
+    for (const change of [
+      (page) => (page.body = beaconTag("abc", { spa: true })),
+      (page) => (page.body = beaconTag("")),
+      (page) =>
+        (page.headers = { ...page.headers, "content-security-policy": "default-src 'self'" }),
+    ]) {
+      const responses = surface(test);
+      change(responses.pages["/termini"]);
+      assert.deepEqual(failing(checkSurface(test, responses)), [
+        "beacon delle statistiche sulle pagine pubbliche",
+      ]);
+    }
+  });
+
+  it("non considera privo di beacon un percorso non letto", () => {
+    const responses = surface(live);
+    responses.pages["/app/ordini"] = null;
+    assert.ok(
+      failing(checkSurface(live, responses)).includes(
+        "nessun beacon in accesso, area riservata e anteprima",
+      ),
+    );
+  });
+
   it("legge dalla sitemap soltanto le pagine dell'origine", () => {
     assert.deepEqual(
       sitemapPaths(
@@ -261,9 +331,9 @@ describe("superficie pubblica", () => {
 
   it("rifiuta un noindex in Production, robots chiuso e legali indicizzabili", () => {
     const responses = surface(live);
-    responses.pages["/prezzi"].headers = { "x-robots-tag": "noindex" };
+    responses.pages["/prezzi"].headers = { ...policy, "x-robots-tag": "noindex" };
     responses.robots.body = "User-agent: *\nDisallow: /\n";
-    responses.pages["/privacy"].headers = {};
+    responses.pages["/privacy"].headers = policy;
     responses.pages["/anteprima"].status = 200;
     assert.deepEqual(failing(checkSurface(live, responses)), [
       "robots.txt con aree private e sitemap",
@@ -273,7 +343,7 @@ describe("superficie pubblica", () => {
     ]);
   });
 
-  it("non passa con la pagina provvisoria: niente sitemap, robots o versione", () => {
+  it("non passa con una pagina statica: niente sitemap, robots o versione", () => {
     const placeholder = { status: 200, headers: {} };
     const results = checkSurface(live, {
       robots: { status: 404, body: "" },
@@ -293,6 +363,7 @@ describe("superficie pubblica", () => {
       "Termini e Privacy raggiungibili e noindex",
       "accesso e area riservata noindex",
       "anteprima assente",
+      "beacon delle statistiche sulle pagine pubbliche",
       "versione del Worker dichiarata nelle risposte",
     ]);
   });

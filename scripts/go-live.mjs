@@ -10,7 +10,8 @@
  * `dopo` vale dopo il deploy e prima di aprire le iscrizioni: superficie pubblica (robots,
  * sitemap, pagine indicizzabili e `noindex`), consumer della coda, protezioni della zona sulle
  * risposte reali, archivio dei log, sottoscrizioni eBay, bot Telegram e promozione. Sul test le due fasi si
- * rileggono insieme, perché il Worker è già distribuito.
+ * rileggono insieme, perché il Worker è già distribuito. La superficie comprende il beacon delle
+ * statistiche del sito, sulle sole pagine pubbliche.
  *
  * Il resoconto riporta soltanto nomi ed esiti, mai valori di segreti o dati degli utenti. Esce
  * con 1 se un controllo automatico non passa o non si esegue; le voci dell'owner restano da
@@ -26,6 +27,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics.ts";
 import config, { databases } from "../cloudflare.config.ts";
 import { declaredSecrets, defaultFile, parseRegistry, review } from "./credential-expiries.mjs";
 import { cfJson, ghJson } from "./lib/provider.mjs";
@@ -44,6 +46,7 @@ export function targetOf(mode) {
     live,
     environment,
     worker: worker.name,
+    metrics: worker.env.METRICS_DATASET.value,
     domain: worker.domains[0],
     origin: new URL(worker.env.APP_ORIGIN.value).origin,
     database: databases[environment],
@@ -150,7 +153,7 @@ export const ownerItems = [
   {
     phase: "dopo",
     area: "Alert",
-    item: "primo report DMARC e primo alert dei certificati letti",
+    item: "primo report DMARC letto",
   },
   {
     phase: "dopo",
@@ -168,8 +171,7 @@ const byName = (items, name, key = "name") => items?.find((item) => item?.[key] 
 
 /**
  * Ambiente GitHub del deploy: soltanto il branch dell'ambiente, poi account, token e, in
- * Production, interruttore. Il via sul commit (`OWNER_APPROVED_SHA`) si imposta con `Promuovi`
- * e non si controlla qui.
+ * Production, interruttore.
  */
 export function checkPublication(expected, state) {
   const policy = state?.environment?.deployment_branch_policy;
@@ -307,12 +309,38 @@ export function sitemapPaths(origin, body = "") {
 
 const noindex = (response) => /noindex/iu.test(response?.headers?.["x-robots-tag"] ?? "");
 
+/** Configurazione del beacon nel documento, `null` se il tag manca o non è leggibile. */
+export function beaconConfig(body = "") {
+  const tag = body.match(/<script\b[^>]*beacon\.min\.js[^>]*>/u)?.[0];
+  const value = tag?.match(/data-cf-beacon="([^"]*)"/u)?.[1];
+  if (!value) return null;
+  try {
+    return JSON.parse(value.replaceAll("&quot;", '"').replaceAll("&amp;", "&"));
+  } catch {
+    return null;
+  }
+}
+
+/** Beacon di una pagina pubblica: script esatto, token e nessun rilevamento delle navigazioni. */
+function counted(response) {
+  const beacon = beaconConfig(response?.body);
+  const policy = response?.headers?.["content-security-policy"] ?? "";
+  return (
+    response?.body?.includes(`src="${webAnalyticsScript}"`) &&
+    Boolean(beacon?.token) &&
+    beacon.spa === false &&
+    policy.includes(webAnalyticsScript) &&
+    policy.includes(webAnalyticsCollector)
+  );
+}
+
 /**
  * Superficie pubblica. In Production robots chiude soltanto le aree private e indica la
  * sitemap, le cui pagine, in italiano e in inglese, rispondono senza `noindex`; altrove robots
  * chiude il dominio e ogni pagina è `noindex`. Ovunque Termini e Privacy rispondono `noindex`,
  * accesso e area riservata pure, e le risposte dichiarano la versione del Worker; in Production
- * l'anteprima non esiste.
+ * l'anteprima non esiste. Il beacon compare nelle pagine pubbliche, legali comprese, e mai in
+ * accesso, area riservata e anteprima.
  */
 export function checkSurface(target, responses) {
   const pages = sitemapPaths(target.origin, responses.sitemap?.body);
@@ -366,6 +394,19 @@ export function checkSurface(target, responses) {
     ...(target.live
       ? [{ area: "SEO", item: "anteprima assente", ok: read(surfacePaths.preview)?.status === 404 }]
       : []),
+    {
+      area: "SEO",
+      item: "beacon delle statistiche sulle pagine pubbliche",
+      ok:
+        pages.length > 0 && [...pages, ...surfacePaths.legal].every((page) => counted(read(page))),
+    },
+    {
+      area: "SEO",
+      item: "nessun beacon in accesso, area riservata e anteprima",
+      ok: [...surfacePaths.private, surfacePaths.preview].every(
+        (page) => read(page) && !read(page).body?.includes(webAnalyticsScript),
+      ),
+    },
     {
       area: "Rollback",
       item: "versione del Worker dichiarata nelle risposte",
@@ -519,7 +560,7 @@ async function readSurface(target) {
     surfacePaths.preview,
   ];
   const pages = Object.fromEntries(
-    await Promise.all(all.map(async (page) => [page, await read(`${target.origin}${page}`)])),
+    await Promise.all(all.map(async (page) => [page, await read(`${target.origin}${page}`, true)])),
   );
   return { robots: await read(`${target.origin}/robots.txt`, true), sitemap, pages };
 }

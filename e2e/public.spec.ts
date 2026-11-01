@@ -1,3 +1,4 @@
+import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics";
 import { expect, test } from "./fixtures";
 
 test(
@@ -32,6 +33,31 @@ test(
     expect(await robots.text()).toBe("User-agent: *\nDisallow: /\n");
   },
 );
+
+test("beacon delle statistiche soltanto sulle pagine pubbliche, ammesso dalla CSP", async ({
+  page,
+  browserErrors,
+}) => {
+  test.skip(Boolean(process.env.E2E_BASE_URL), "Il token sintetico esiste soltanto in locale.");
+  const beacon = page.locator(`script[src="${webAnalyticsScript}"]`);
+  const loaded = page.waitForResponse(webAnalyticsScript);
+  await page.goto("/prezzi");
+  expect((await loaded).status()).toBe(200);
+  expect(JSON.parse((await beacon.getAttribute("data-cf-beacon")) ?? "{}")).toEqual({
+    token: "local-web-analytics-token",
+    spa: false,
+  });
+  // Fuori dalla rete Cloudflare il beacon invia alla raccolta, che la CSP deve ammettere.
+  await page.evaluate(
+    (collector) => fetch(`${collector}/cdn-cgi/rum`, { method: "POST", mode: "no-cors" }),
+    webAnalyticsCollector,
+  );
+  expect(browserErrors).toEqual([]);
+  for (const path of ["/accesso", "/anteprima/ordini"]) {
+    await page.goto(path);
+    await expect(beacon).toHaveCount(0);
+  }
+});
 
 test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });

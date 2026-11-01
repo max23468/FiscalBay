@@ -6,6 +6,7 @@
     "playwright.config.ts",
     "e2e/**/*.ts",
     "app/changelog.ts",
+    "app/web-analytics.ts",
     "scripts/local-d1.mjs",
     "scripts/third-party-notices.mjs"
   ],

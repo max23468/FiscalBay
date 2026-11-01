@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
-import { areas, enter, noPageOverflow, open } from "./components";
+import { areas, clickHydrated, enter, noPageOverflow, open } from "./components";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { localPassword, useLocalAccount, writeLocalDatabase } from "./local-account";
 import { bellName } from "./page-cases";
@@ -96,12 +96,10 @@ test.describe("area reale", () => {
     await page.keyboard.press("Escape");
     await page.reload();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
-    // Dopo la ricarica il cambio lingua richiede l'idratazione: un clic precedente andrebbe perso.
-    await networkIdle(page);
 
     // La lingua scelta resta anche aprendo l'area in italiano.
     const appearance = page.locator('section[aria-labelledby="settings-aspetto"]');
-    await appearance.getByRole("button", { name: "English", exact: true }).click();
+    await clickHydrated(appearance.getByRole("button", { name: "English", exact: true }));
     await expect(page).toHaveURL(/\/en\/app\/impostazioni\/aspetto$/u);
     await page.goto("/app/ordini");
     await expect(page).toHaveURL(/\/en\/app\/ordini$/u);
