@@ -225,7 +225,7 @@ export function changedPackages(before, after) {
     const entry = /^\d+\/(?:packages|snapshots)\/(.+)$/u.exec(key)?.[1];
     if (entry) changed.add(packageName(entry));
     // Le dipendenze del progetto cambiano anche le voci dei pacchetti, contate sopra; gli altri
-    // importer, come la pagina provvisoria, non entrano nella mutation.
+    // importer non entrano nella mutation.
     else if (!/^1\/importers\/(?:\.\/dependencies|(?!\.\/|\.$)[^/]+(?:\/.*)?)$/u.test(key))
       return null;
   }

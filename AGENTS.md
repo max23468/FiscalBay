@@ -29,7 +29,7 @@ Le PR verso `develop` richiedono il controllo `Node 26`. Ogni PR porta codice, i
 
 Chiudere ogni merge su `develop` riconciliando PR, commit e readback ed eliminando il branch della PR; i residui di cicli precedenti si puliscono a lotti e in ogni `Promuovi` secondo il [governo](docs/MASTER_PLAN.md#s34). Conservare riferimenti con lavoro non integrato o ancora in uso; una pulizia rimasta sospesa è una questione aperta nel piano.
 
-Cloudflare si gestisce con `pnpm exec cf` alla versione fissata e con `cloudflare.config.ts`: modalità `live` per Production, test negli altri casi; Wrangler soltanto per `tail` e, finché `cf --local` non termina, per D1 locale in `scripts/local-d1.mjs` (D170). Anche la pagina provvisoria usa `cf` da `placeholder/`, con il bundler Wrangler selezionato da `wrangler.config.ts`; la cartella viene rimossa al primo `Promuovi` 2.0.
+Cloudflare si gestisce con `pnpm exec cf` alla versione fissata e con `cloudflare.config.ts`: modalità `live` per Production, test negli altri casi; Wrangler soltanto per `tail` e, finché `cf --local` non termina, per D1 locale in `scripts/local-d1.mjs` (D170).
 
 pnpm, latest stable **qualificata**, pin nei manifest/lockfile. Dipendenze opzionali solo con un uso concreto. Primitive native per HTTP/crypto e servizi scelti per code/retry quando bastano; mantenere deduplica e invarianti applicativi. Entità logiche non impongono altrettante tabelle; nessuna versione dati senza cambiamento utile.
 

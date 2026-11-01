@@ -540,6 +540,64 @@ it("la coda senza webhook chiude le sole sincronizzazioni senza riprovare messag
   expect(send).not.toHaveBeenCalled();
 });
 
+it("un errore fuori dal consumer rimanda il messaggio con l'attesa, senza consumare i tentativi", async () => {
+  const points: AnalyticsEngineDataPoint[] = [];
+  const dataset: AnalyticsEngineDataset = { writeDataPoint: (point) => void points.push(point!) };
+  const down = {
+    ...environment,
+    METRICS: dataset,
+    DB: {
+      prepare: () => {
+        throw new Error("D1_ERROR: internal error");
+      },
+    } as unknown as D1Database,
+  };
+  const task = {
+    body: { task: "telegram", slot: "2026-10-31T11:50:00.000Z" },
+    ack: vi.fn(),
+    retry: vi.fn(),
+    attempts: 2,
+  };
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await expect(
+      worker.queue({ messages: [task] } as unknown as MessageBatch<unknown>, down),
+    ).resolves.toBeUndefined();
+  } finally {
+    logged.mockRestore();
+  }
+  expect(task.retry).toHaveBeenCalledExactlyOnceWith({ delaySeconds: 60 });
+  expect(task.ack).not.toHaveBeenCalled();
+  expect(points.map(({ blobs }) => blobs?.slice(0, 5))).toContainEqual(
+    expect.arrayContaining(["invocation", "queue", "task", "error"]),
+  );
+});
+
+it("un errore dopo la chiusura di un messaggio non lo rimette in coda", async () => {
+  const task = {
+    body: { task: "telegram", slot: "2026-10-31T11:50:00.000Z" },
+    ack: vi.fn(() => {
+      throw new Error("ack non riuscito");
+    }),
+    retry: vi.fn(),
+    attempts: 1,
+  };
+  await env.DB.prepare(
+    `INSERT INTO scheduled_tasks (task, slot, queued_at, done_at) VALUES ('telegram', ?1, ?1, ?1)
+      ON CONFLICT(task) DO UPDATE SET slot = ?1, done_at = ?1, locked_until = NULL`,
+  )
+    .bind(task.body.slot)
+    .run();
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    await worker.queue({ messages: [task] } as unknown as MessageBatch<unknown>, environment);
+  } finally {
+    logged.mockRestore();
+  }
+  expect(task.ack).toHaveBeenCalledOnce();
+  expect(task.retry).not.toHaveBeenCalled();
+});
+
 it("coda, cron e ingresso dei webhook scrivono esito e durata su Analytics Engine", async () => {
   const points: AnalyticsEngineDataPoint[] = [];
   const dataset: AnalyticsEngineDataset = { writeDataPoint: (point) => void points.push(point!) };

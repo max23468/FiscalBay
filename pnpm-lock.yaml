@@ -295,15 +295,6 @@ importers:
         specifier: 4.154.0
         version: 4.154.0(@types/node@26.6.5)
 
-  placeholder:
-    devDependencies:
-      cf:
-        specifier: 1.0.0-beta.23
-        version: 1.0.0-beta.23(patch_hash=51ab5ccdf848da59ea54dcb7e2c3d4a55b79db35ad6a6de93583fba750cd3a86)(@types/node@26.6.5)
-      wrangler:
-        specifier: 4.154.0
-        version: 4.154.0(@types/node@26.6.5)
-
 packages:
 
   '@astrojs/compiler@4.0.0':

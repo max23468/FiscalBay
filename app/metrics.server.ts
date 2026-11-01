@@ -156,8 +156,8 @@ export function pagePoint(input: {
 }
 
 /**
- * Scrive i punti senza mai interrompere l'invocazione: senza dataset (pagina provvisoria,
- * sviluppo) o con un campo fuori elenco il punto non parte.
+ * Scrive i punti senza mai interrompere l'invocazione: senza dataset (sviluppo) o con un campo
+ * fuori elenco il punto non parte.
  */
 export function writePoints(dataset: AnalyticsEngineDataset | undefined, points: MetricPoint[]) {
   if (!dataset) return;

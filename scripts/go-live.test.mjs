@@ -103,7 +103,7 @@ describe("ambiente", () => {
       "fiscalbay-sandbox",
     ]);
     assert.ok(scriptSteps(live).every(({ phase }) => ["prima", "dopo"].includes(phase)));
-    // Prima del deploy la pagina provvisoria non ha Logpush: l'archivio si rilegge dopo.
+    // Il readback dell'archivio richiede il Worker con Logpush, che arriva con il deploy.
     const archive = scriptSteps(live).find(({ args }) => args[0] === "scripts/log-archive.mjs");
     assert.equal(archive.phase, "dopo");
   });
@@ -343,7 +343,7 @@ describe("superficie pubblica", () => {
     ]);
   });
 
-  it("non passa con la pagina provvisoria: niente sitemap, robots o versione", () => {
+  it("non passa con una pagina statica: niente sitemap, robots o versione", () => {
     const placeholder = { status: 200, headers: {} };
     const results = checkSurface(live, {
       robots: { status: 404, body: "" },
