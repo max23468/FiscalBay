@@ -438,24 +438,21 @@ export async function setBotProfile(
 ): Promise<void> {
   await Promise.all(
     (["it", "en"] as const).flatMap((language) =>
-      profileFields.map(async ([method, field]) => {
+      profileFields.map(([method, field]) => {
         const scope = language === "it" ? { language_code: "it" } : {};
         const value = profiles[language][profileKeys[field]];
-        const current = await botApi(
+        // Lettura e scrittura dello stesso campo restano in ordine; i campi vanno in parallelo.
+        return botApi(
           env,
           `getMy${method}`,
           scope,
           z.object({ [field]: z.string() }),
           fetcher,
+        ).then((current) =>
+          current[field] === value
+            ? undefined
+            : botApi(env, `setMy${method}`, { ...scope, [field]: value }, z.literal(true), fetcher),
         );
-        if (current[field] !== value)
-          await botApi(
-            env,
-            `setMy${method}`,
-            { ...scope, [field]: value },
-            z.literal(true),
-            fetcher,
-          );
       }),
     ),
   );
