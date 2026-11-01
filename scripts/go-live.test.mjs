@@ -64,14 +64,7 @@ function resources(target) {
     registry: { rows: [{ name: "EBAY_CLIENT_SECRET", state: "never" }], missing: [] },
     github: {
       environment: {
-        protection_rules: target.live
-          ? [
-              {
-                type: "required_reviewers",
-                reviewers: [{ type: "User", reviewer: { login: "owner" } }],
-              },
-            ]
-          : [],
+        protection_rules: [],
         deployment_branch_policy: { protected_branches: false, custom_branch_policies: true },
       },
       branches: [target.github.branch],
@@ -122,15 +115,14 @@ describe("risorse", () => {
     assert.equal(after.length, checkResources(live, resources(live), "prima").length + 1);
   });
 
-  it("richiede l'ambiente GitHub della pubblicazione con approvazione e interruttore", () => {
+  it("richiede l'ambiente GitHub della pubblicazione con il suo branch e l'interruttore", () => {
     assert.deepEqual(failing(checkResources(test, resources(test), "prima")), []);
     const state = resources(live);
-    state.github.environment.protection_rules = [];
     state.github.branches = ["main", "develop"];
     state.github.variables = [{ name: "PRODUCTION_PUBLISH_ENABLED", value: "false" }];
     const results = checkResources(live, state, "prima").filter(({ area }) => area === "Rollback");
     assert.deepEqual(failing(results), [
-      "ambiente GitHub production soltanto per main con l'approvazione dell'owner",
+      "ambiente GitHub production soltanto per main",
       "account, token e interruttore nell'ambiente production",
     ]);
     assert.equal(results[1].detail, "mancano CLOUDFLARE_ACCOUNT_ID");
