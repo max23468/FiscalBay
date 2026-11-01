@@ -288,7 +288,7 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     browsers,
     promotionReuse: !files.some(
       (file) =>
-        /^scripts\/(?:classify-changes|release\/release(?:-notes)?|find-build|lib\/provider)\.mjs$/u.test(
+        /^scripts\/(?:classify-changes|mutation-reuse|release\/release(?:-notes)?|find-build|lib\/provider)\.mjs$/u.test(
           file,
         ) ||
         /^\.github\/(?:actions\/|workflows\/(?:ci|mutation|publish|qualify|promotion)\.yml$)/u.test(
