@@ -3480,6 +3480,17 @@ describe("comandi e pulsanti del bot", () => {
     await configureBotProfile(environment, aligned.fetcher);
     expect(aligned.methods().filter((method) => method === "setMyName")).toEqual([]);
     expect(aligned.methods().filter((method) => method.startsWith("setMy"))).toHaveLength(4);
+    // Senza il bot dell'ambiente, o con gli invii spenti, il profilo non si tocca.
+    const unconfigured = bot();
+    await configureBotProfile(
+      { ...environment, TELEGRAM_BOT_TOKEN: undefined } as unknown as Env,
+      unconfigured.fetcher,
+    );
+    expect(unconfigured.calls).toEqual([]);
+    await setSwitch(env.DB, "telegram_sends", false, new Date(now));
+    const paused = bot();
+    await configureBotProfile(environment, paused.fetcher);
+    expect(paused.calls).toEqual([]);
   });
 
   /** Testi attesi delle risposte del bot, nelle due lingue. */
