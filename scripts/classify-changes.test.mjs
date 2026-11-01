@@ -18,6 +18,7 @@ import {
   fileImpact,
   fileLevel,
   levelScripts,
+  moduleAreas,
   plan,
   testVariablesOnly,
 } from "./classify-changes.mjs";
@@ -240,6 +241,72 @@ describe("variabili del Worker test", () => {
 });
 
 describe("prove browser per area", () => {
+  it("sceglie l'area dal percorso del modulo, non dagli import transitivi", () => {
+    const files = [
+      { path: "app/domain/orders.server.ts", text: "" },
+      { path: "app/account-area.server.ts", text: 'import { a } from "./domain/orders.server";' },
+      { path: "app/routes/site.tsx", text: 'import { a } from "../account-area.server";' },
+      { path: "app/routes/orders.tsx", text: 'import { a } from "../domain/orders.server";' },
+    ];
+    const selected = plan([files[0].path], files);
+    assert.deepEqual([selected.areas, selected.browsers], [["orders"], "chromium,webkit"]);
+    assert.match(selected.browserGrep, /^app-shell\.spec\|@smoke\|ordini/u);
+    assert.equal(new RegExp(selected.browserGrep).test("public: /privacy"), false);
+    files.push(
+      { path: "app/domain/billing.server.ts", text: "" },
+      { path: "app/components/stores/list.tsx", text: "" },
+    );
+    assert.deepEqual(
+      plan(["app/domain/billing.server.ts", "app/components/stores/list.tsx"], files).areas,
+      ["orders", "public", "settings", "stores"],
+    );
+  });
+
+  it("dichiara aree soltanto per moduli esistenti", () => {
+    const tracked = spawnSync("git", ["ls-files", "app"], { encoding: "utf8" }).stdout.split("\n");
+    for (const [pattern] of moduleAreas)
+      assert.ok(
+        tracked.some((file) => pattern.test(file)),
+        pattern.source,
+      );
+  });
+
+  it("aggiunge l'area di una route che importa direttamente il modulo", () => {
+    const files = [
+      { path: "app/domain/stores.server.ts", text: "" },
+      { path: "app/routes/settings.tsx", text: 'import { a } from "../domain/stores.server";' },
+    ];
+    assert.deepEqual(plan([files[0].path], files).areas, ["settings", "stores"]);
+    files.push({
+      path: "app/routes/new-page.tsx",
+      text: 'import { a } from "../domain/stores.server";',
+    });
+    assert.equal(plan([files[0].path], files).browserGrep, ".");
+  });
+
+  it("prova tutto per shell, copy, componenti comuni e moduli senza area", () => {
+    const files = [
+      "app/components/account-shell.tsx",
+      "app/components/shell-links.ts",
+      "app/copy/copy-it.ts",
+      "app/components/ui/button.tsx",
+      "app/account-area.server.ts",
+      "app/auth.server.ts",
+      "app/preferences.ts",
+      "app/root.tsx",
+      "workers/app.ts",
+      "app/new-module.ts",
+    ].map((path) => ({ path, text: "" }));
+    for (const { path } of files) {
+      assert.equal(plan([path], files).browserGrep, ".", path);
+      assert.equal(plan(["app/domain/orders.server.ts", path], files).browserGrep, ".", path);
+    }
+    assert.equal(plan(["app/domain/orders.server.ts"], []).browserGrep, ".");
+    assert.equal(plan(["app/domain/orders.server.ts"], files, true).browserGrep, ".");
+    for (const file of ["migrations/0100_example.sql", "package.json", "vite.config.ts"])
+      assert.equal(plan(["app/domain/orders.server.ts", file], files).browserGrep, ".", file);
+  });
+
   it("copre sicurezza, isolamento, integrazioni e suite funzionali dai titoli generici", () => {
     const sources = [{ path: "app/routes/stores.tsx", text: "" }];
     const selected = new RegExp(plan([sources[0].path], sources).browserGrep);
@@ -250,25 +317,6 @@ describe("prove browser per area", () => {
     );
     assert.ok(selected.test("stores: /negozi/collega"));
     assert.equal(selected.test("profile: /anteprima/profilo"), false);
-  });
-
-  it("segue i consumatori transitivi e allarga la selezione quando ne arriva uno nuovo", () => {
-    const files = [
-      { path: "app/domain/stores.server.ts", text: "" },
-      {
-        path: "app/routes/store-link.tsx",
-        text: 'import { load } from "../domain/stores.server";',
-      },
-    ];
-    assert.deepEqual(plan([files[0].path], files).areas, ["stores"]);
-    files.push({
-      path: "app/routes/home.tsx",
-      text: 'import { load } from "../domain/stores.server";',
-    });
-    assert.deepEqual(plan([files[0].path], files).areas, ["auth", "orders", "stores"]);
-    files.push({ path: "app/routes/site.tsx", text: "" });
-    assert.deepEqual(plan(["app/routes/site.tsx"], files).areas, ["public"]);
-    assert.equal(plan(["app/new-module.ts"], files).browserGrep, ".");
   });
 
   it("seleziona una route circoscritta ma prova tutto per moduli condivisi o non risolti", () => {
