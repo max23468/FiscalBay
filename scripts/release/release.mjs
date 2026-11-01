@@ -184,6 +184,47 @@ export function datedChangelog(changelog, version, day) {
   return changelog.replace(top.header, `## [${version}] - ${day}`);
 }
 
+/**
+ * Changelog senza il giorno della versione in cima: quello di `develop` da cui nasce la promozione
+ * della versione.
+ */
+export function undatedChangelog(changelog) {
+  const top = topSection(changelog);
+  return top?.day === undefined ? changelog : changelog.replace(top.header, `## [${top.version}]`);
+}
+
+/**
+ * Tree di un commit con il changelog senza il giorno della versione in cima. Per una promozione da
+ * `promuovi/<versione>` è il tree di `develop` già qualificato, perché la differenza è soltanto
+ * quel giorno (D256): la sorgente qualificata si riusa, la build Production no.
+ */
+export function undatedTree(rev = "HEAD") {
+  const tree = git("rev-parse", `${rev}^{tree}`);
+  const changelog = execFileSync("git", ["show", `${rev}:CHANGELOG.md`], { encoding: "utf8" });
+  const undated = undatedChangelog(changelog);
+  if (undated === changelog) return tree;
+  const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], {
+    input: undated,
+    encoding: "utf8",
+  }).trim();
+  const directory = mkdtempSync(path.join(tmpdir(), "undated-tree-"));
+  try {
+    const env = { ...process.env, GIT_INDEX_FILE: path.join(directory, "index") };
+    execFileSync("git", ["read-tree", rev], { env });
+    execFileSync("git", ["update-index", "--cacheinfo", `100644,${blob},CHANGELOG.md`], { env });
+    return execFileSync("git", ["write-tree"], { env, encoding: "utf8" }).trim();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Tree dell'artefatto valido per il commit corrente: lo stesso tree, oppure, per la sola sorgente
+ * di test, il tree senza il giorno della versione da cui nasce la promozione.
+ */
+export const sameSource = (saved, current, environment, undated) =>
+  saved === current || (environment === "test" && saved === undated);
+
 /** Branch della promozione di una versione: `develop` con il solo giorno nel changelog. */
 export const promotionBranch = (version) => `promuovi/${version}`;
 
@@ -427,7 +468,13 @@ function verify(environment) {
     "node",
     "packageManager",
   ])
-    if (saved[key] !== current[key]) throw new Error(`Provenienza non valida: ${key}.`);
+    if (
+      key === "tree"
+        ? saved.tree !== current.tree &&
+          !sameSource(saved.tree, current.tree, environment, undatedTree())
+        : saved[key] !== current[key]
+    )
+      throw new Error(`Provenienza non valida: ${key}.`);
   if (JSON.stringify(saved.migrations) !== JSON.stringify(current.migrations))
     throw new Error("Migration diverse da quelle verificate.");
   // Un merge può cambiare SHA conservando esattamente lo stesso tree verificato.
