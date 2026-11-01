@@ -42,6 +42,8 @@ import {
   retryQualification,
   mergeDecision,
   assertResumableRun,
+  awaitsMigrationReview,
+  assertReviewedDispatch,
   deployedEnvironment,
   existingCandidate,
   identifyCandidate,
@@ -497,6 +499,9 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       assert.throws(() => assertQualificationBase("main", tested, disjoint, head, run), /base/u);
       assert.throws(() => assertQualificationBase("main", disjoint, disjoint, head, run), /base/u);
       assert.doesNotThrow(() => assertQualificationBase("main", tested, tested, head, run));
+      // Run conclusa dopo il merge: `main` ha già il tree provato dalla PR.
+      assert.doesNotThrow(() => assertQualificationBase("main", tested, head, head, run));
+      assert.doesNotThrow(() => assertQualificationBase("main", disjoint, overlap, overlap, run));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -1027,6 +1032,26 @@ describe("comandi del ciclo", () => {
         () => existingCandidate("candidate", run, list),
         /release:cycle resume 9, senza un nuovo dispatch/u,
       );
+  });
+
+  it("rifiuta Production senza il digest delle migration non additive", () => {
+    const required = { names: ["0070_x.sql"], digest: "a".repeat(64) };
+    assert.throws(
+      () => assertReviewedDispatch(required, ""),
+      /0070_x\.sql.*--reviewed-migrations a{64}/u,
+    );
+    assert.doesNotThrow(() => assertReviewedDispatch(required, required.digest));
+    assert.doesNotThrow(() => assertReviewedDispatch(undefined, ""));
+  });
+
+  it("ammette un nuovo dispatch soltanto col digest chiesto da una run senza ricevute", () => {
+    const digest = "a".repeat(64);
+    const log = `job\tstep\t2026-11-01T19:09:36Z Error: Migration da approvare: 0070_x.sql. Digest ${digest}\nfine`;
+    assert.equal(awaitsMigrationReview(digest, log, ["candidato"]), true);
+    assert.equal(awaitsMigrationReview("", log, []), false);
+    assert.equal(awaitsMigrationReview("b".repeat(64), log, []), false);
+    assert.equal(awaitsMigrationReview(digest, `Error: readback fallito ${digest}`, []), false);
+    assert.equal(awaitsMigrationReview(digest, log, ["release-receipt-9-1"]), false);
   });
 
   describe("identità della release candidate", () => {

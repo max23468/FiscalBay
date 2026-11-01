@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { needsDeploy, plan } from "../classify-changes.mjs";
 import {
   addedMigrations,
+  requiredReview,
   assertPromotionSource,
   candidateVersion,
   datedChangelog,
@@ -270,6 +271,8 @@ export function compatibleBase(tested, current, head, run = git) {
  */
 export function assertQualificationBase(ref, tested, current, head, run = git) {
   if (ref === "main") {
+    // Una run conclusa dopo il merge trova su `main` il tree che ha provato: nulla da riqualificare.
+    if (run("rev-parse", `${current}^{tree}`) === run("rev-parse", `${head}^{tree}`)) return;
     assertBase(tested, current);
     if (!contains(tested, head, run)) throw new Error("La promozione non contiene la base.");
     return;
@@ -896,6 +899,27 @@ export function existingCandidate(command, existing, jobs) {
   return command === "production" && publish.conclusion === "success" ? "published" : "qualified";
 }
 
+/**
+ * Una run ferma alla revisione delle migration non ha scritto nulla e i suoi input non cambiano con
+ * resume: ammette un nuovo dispatch soltanto il digest che ha chiesto, senza ricevute salvate.
+ */
+export function awaitsMigrationReview(reviewed, failedLog, artifacts) {
+  return (
+    /^[0-9a-f]{64}$/u.test(reviewed) &&
+    new RegExp(`Error: Migration da approvare: .* Digest ${reviewed}$`, "mu").test(failedLog) &&
+    !artifacts.some((name) => name.startsWith("release-receipt-"))
+  );
+}
+
+/** Production con migration non additive parte col digest, prima dell'ora di qualifica. */
+export function assertReviewedDispatch(required, reviewed) {
+  if (required && !reviewed)
+    throw new Error(
+      `Migration da approvare: ${required.names.join(", ")}. ` +
+        `Dopo l'esame ripetere con --reviewed-migrations ${required.digest}`,
+    );
+}
+
 function statusCycle({ repository, number }) {
   assertRun(number);
   summary(repository, number);
@@ -1193,7 +1217,18 @@ async function publishCycle({ repository, command, values }) {
     "--json",
     "databaseId,headSha,status,conclusion",
   ).find((run) => run.headSha === values.sha);
-  if (existing) {
+  const reviewedDispatch =
+    command === "production" &&
+    existing?.conclusion === "failure" &&
+    awaitsMigrationReview(
+      values["reviewed-migrations"],
+      gh("run", "view", String(existing.databaseId), "--repo", repository, "--log-failed"),
+      ghJson(
+        "api",
+        `repos/${repository}/actions/runs/${existing.databaseId}/artifacts`,
+      ).artifacts.map((artifact) => artifact.name),
+    );
+  if (existing && !reviewedDispatch) {
     const jobs = runJobs(repository, existing.databaseId);
     if (existingCandidate(command, existing, jobs) === "published") {
       const run = summary(repository, existing.databaseId);
@@ -1207,6 +1242,14 @@ async function publishCycle({ repository, command, values }) {
       console.log("Qualifica già riuscita: nessun nuovo dispatch.");
       return;
     }
+  }
+  if (command === "production") {
+    git("fetch", "--quiet", "--tags", "origin");
+    const published = git("describe", "--tags", "--abbrev=0", "--match", "v2.*", values.sha);
+    assertReviewedDispatch(
+      requiredReview(addedMigrations(published, values.sha)),
+      values["reviewed-migrations"],
+    );
   }
   const since = Date.now() - 1000;
   gh(

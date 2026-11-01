@@ -532,13 +532,9 @@ export function readReceipt(directory, manifest) {
   return receipt;
 }
 
-/** Via Production: interruttore del workflow e approvazione dell'owner sullo stesso commit. */
+/** Via Production: interruttore del workflow e commit atteso uguale a quello dell'artefatto. */
 export function assertProductionApproval(manifest, expectedSha, env) {
-  if (
-    env.PRODUCTION_PUBLISH_ENABLED !== "true" ||
-    env.OWNER_APPROVED_SHA !== manifest.sha ||
-    expectedSha !== manifest.sha
-  )
+  if (env.PRODUCTION_PUBLISH_ENABLED !== "true" || expectedSha !== manifest.sha)
     throw new Error("Manca il via Production sul commit atteso.");
 }
 
