@@ -376,10 +376,12 @@ In locale, nei test e nell'anteprima della build valgono le chiavi di prova di C
 Le pagine pubbliche caricano il beacon di Cloudflare Web Analytics soltanto se il Worker ha il segreto facoltativo `WEB_ANALYTICS_TOKEN` ([D242](../DECISION_REGISTER.md)); l'area dell'account, la console e l'anteprima non lo caricano mai. Il token è pubblico, ma nasce con il sito Web Analytics e si imposta come segreto per non renderlo obbligatorio in locale e nelle prove.
 
 1. Il sito Web Analytics `fiscalbay.it` vale anche per `test.fiscalbay.it`, perché Cloudflare accetta i sottodomini dello stesso dominio; nella dashboard le visite si separano per hostname. L'inserimento automatico resta spento (`pnpm exec cf rum site-info list` lo rilegge), perché il Worker sceglie le pagine e la CSP ammette soltanto lo script del beacon.
-2. `pnpm exec cf workers secrets update` imposta su ogni Worker `WEB_ANALYTICS_TOKEN`, il token del sito letto con `cf rum site-info list`, con le stesse cautele dei segreti Turnstile.
-3. Readback: una pagina pubblica contiene lo script `https://static.cloudflareinsights.com/beacon.min.js` con `"spa":false`, `/app` e `/accesso` no; l'invio a `/cdn-cgi/rum`, sull'origine o su `cloudflareinsights.com`, riesce senza violazioni della CSP e la visita compare nella dashboard dell'ambiente. La CSP ammette lo script in `script-src` e `https://cloudflareinsights.com` in `connect-src`: in locale, fuori dalla rete Cloudflare, il beacon invia lì.
+2. `pnpm exec cf workers secrets update` imposta su ogni Worker `WEB_ANALYTICS_TOKEN`, il token del sito letto con `cf rum site-info list`, con le stesse cautele dei segreti Turnstile. Il token non scade: nel [registro](#incidenti) ha `"never"` in entrambi gli ambienti, seguito da `credential-expiries.mjs apply`. La versione creata dal segreto non porta l'identità della release: fino al deploy successivo `release.mjs` non considera compatibile il rollback automatico e vale la correzione in avanti.
+3. Readback: la fase `dopo` della [checklist](#checklist-operativa) verifica che le pagine pubbliche, legali comprese, contengano lo script `https://static.cloudflareinsights.com/beacon.min.js` con il token e `"spa":false` e la CSP che lo ammette, e che accesso, area riservata e anteprima non lo contengano. A vista resta il resto: l'invio a `/cdn-cgi/rum`, sull'origine o su `cloudflareinsights.com`, riesce senza violazioni della CSP. La CSP ammette lo script in `script-src` e `https://cloudflareinsights.com` in `connect-src`: in locale, fuori dalla rete Cloudflare, il beacon invia lì.
 
 Search Console si verifica sul dominio `fiscalbay.it` con il record TXT `google-site-verification`, aggiunto da Google nella zona con l'integrazione Cloudflare il 2026-10-31, e riceve `https://fiscalbay.it/sitemap.xml` dopo il go-live, quando il dominio serve il sito al posto della pagina provvisoria. Non aggiunge nulla alle pagine.
+
+Il collaudo browser non conta come visita: i fixture di Playwright sostituiscono script e raccolta su ogni dominio, compresa la Production di `publish.yml`.
 
 <a id="metriche-release"></a>
 ## Confronto delle metriche fra release test
@@ -480,11 +482,32 @@ Prima del go-live non si vende nulla per prova ([D240](../DECISION_REGISTER.md))
 | Fase | Controlli automatici |
 |---|---|
 | `prima`, prima di `Promuovi` | Worker sul dominio dell'ambiente; segreti dichiarati in `cloudflare.config.ts` e facoltativi di `credential-expiries.mjs`; D1 in UE; coda e coda dei falliti in UE a 14 giorni e bucket dei file in UE senza accesso pubblico con la regola a un giorno, come nell'[ingresso webhook](#webhook); widget Turnstile gestito sul solo dominio; [registro delle scadenze](#incidenti) senza voci scadute, entro 45 giorni o senza data; ambiente GitHub della pubblicazione soltanto per il suo branch, con account, token e, in Production, interruttore; `stripe-account.mjs` |
-| `dopo`, dopo il deploy e prima di aprire le iscrizioni | Consumer della coda con retry e coda dei falliti; robots, sitemap e pagine della sitemap nelle due lingue, indicizzabili soltanto in Production; Termini, Privacy, accesso e area riservata `noindex`; anteprima assente in Production; versione del Worker nelle risposte; `zone-protection.mjs readback`, `log-archive.mjs readback`, che richiede il Worker con Logpush, `ebay-notifications.mjs`, `telegram-bot.mjs` con `TELEGRAM_BOT_TOKEN` nelle variabili del comando, `commercial.mjs preflight` |
+| `dopo`, dopo il deploy e prima di aprire le iscrizioni | Consumer della coda con retry e coda dei falliti; robots, sitemap e pagine della sitemap nelle due lingue, indicizzabili soltanto in Production; Termini, Privacy, accesso e area riservata `noindex`; anteprima assente in Production; beacon delle [statistiche](#statistiche-sito) sulle sole pagine pubbliche; versione del Worker nelle risposte; `zone-protection.mjs readback`, `log-archive.mjs readback`, che richiede il Worker con Logpush, `ebay-notifications.mjs`, `telegram-bot.mjs` con `TELEGRAM_BOT_TOKEN` nelle variabili del comando, `commercial.mjs preflight` |
 
-Le voci che nessuno script attesta compaiono da attestare e non cambiano l'esito: garanzie dei trasferimenti extra UE, obblighi 28 CFR Part 202 del DPA eBay e trattamento dei dati di OpenAI; casella `supporto@` ripulita e notificata; voci a vista della dashboard Stripe live; RuName Production con OAuth attivo; i quattro accessi su `fiscalbay.it`; primo report DMARC e primo alert dei certificati; console Production leggibile; rollback o forward-fix pronti. Senza il profilo live della CLI di Stripe, l'account si rilegge con il connettore come nella [configurazione commerciale](#configurazione-commerciale) e la voce Stripe della fase `prima` si attesta con quel resoconto.
+Le voci che nessuno script attesta compaiono da attestare e non cambiano l'esito: garanzie dei trasferimenti extra UE, obblighi 28 CFR Part 202 del DPA eBay e trattamento dei dati di OpenAI; casella `supporto@` ripulita e notificata; voci a vista della dashboard Stripe live; RuName Production con OAuth attivo; i quattro accessi su `fiscalbay.it`; primo report DMARC; console Production leggibile; rollback o forward-fix pronti. Senza il profilo live della CLI di Stripe, l'account si rilegge con il connettore come nella [configurazione commerciale](#configurazione-commerciale) e la voce Stripe della fase `prima` si attesta con quel resoconto.
 
 Il gate `operativita` dei [gate Production](../MASTER_PLAN.md#pubblicazione-production) diventa `COMPLETATO` quando i controlli automatici di `check --mode live` della fase `prima` passano, quello di Stripe anche con il resoconto del connettore, e le voci della stessa fase sono attestate in [M9-03](../MASTER_PLAN.md#m9-03). La fase `dopo` si ripete in [M9-04](../MASTER_PLAN.md#m9-04) dopo il deploy, prima della promozione e dell'apertura delle iscrizioni; sul test le due fasi si rileggono insieme. Lo script non crea risorse né imposta segreti: code, bucket, archivio dei log, segreti e webhook di Production nascono con le procedure delle rispettive sezioni, nel mandato Production.
+
+<a id="sorveglianza"></a>
+## Sorveglianza iniziale
+
+```bash
+node scripts/surveillance.mjs --mode live --hours 24
+```
+
+La rilettura è di sola lettura, riporta conteggi ed esiti ed esce con 1 se una voce va guardata o non si legge. Le soglie P1 e P2 restano quelle degli [incidenti](#incidenti): lo script legge quelli già valutati e prova che il compito `owner_incidents` stia girando; aggiunge i dati che la console non vede. `--hours` va da 1 a 2.160; senza `--mode live` legge il test.
+
+| Area | Letto dallo script | Altrove |
+|---|---|---|
+| Registrazioni | Account creati e verificati, ammissioni, negozi collegati, cancellazioni | Console, KPI |
+| Letture | Tentativi e falliti al giorno, passaggi degli spazi | Console, Negozi; `metrics-query.mjs` per i tempi |
+| Stripe | Prove, acquisti, disdette, rimborsi, dispute, ricevute in attesa | `commercial.mjs verify` alla prima vendita ([configurazione commerciale](#configurazione-commerciale)); richieste di Stripe e Link in dashboard |
+| Code | Arretrato oltre un turno del cron, coda dei falliti | Consumer nella checklist |
+| Quote | Quote dell'account a 30 giorni, 8 GB del database | [Punti di arresto](#capacita); quote eBay negli incidenti |
+| Errori | Risposte 5xx, invocazioni fallite di coda e cron, messaggi rimessi in coda | [Archivio](#archivio-log) `errors` e `failures` per la causa |
+| Supporto | Richieste del modulo, conservate 24 ore | Casella `supporto@`, all'owner |
+
+Si legge nei primi giorni dal go-live e dopo ogni intervento in Production, senza una durata fissa. Una voce da guardare segue la procedura degli [incidenti](#incidenti); gli esiti e le anomalie reali si riportano in [M9-06](../MASTER_PLAN.md#m9-06), senza un diario delle letture. La sorveglianza finisce quando una lettura non ha P1 o P2 aperte, `go-live.mjs check --mode live --phase dopo` è verde e le statistiche sono attive. Poi vale il normale esercizio: avvisi del bot, console e soglie della [capacità](#capacita), con lo script disponibile per una diagnosi.
 
 ## Promuovi e ripresa
 

@@ -699,10 +699,7 @@ export function squashIntegrated(branchSha, mergeSha, cwd = process.cwd()) {
 export function cleanup(pr, cwd = process.cwd()) {
   const git = (...args) => execute("git", args, { cwd });
   const branch = pr.headRefName;
-  if (
-    ["main", "develop", "legacy/1.x"].includes(branch) ||
-    /(?:^|\/)rollback(?:\/|$)/u.test(branch)
-  )
+  if (["main", "develop"].includes(branch) || /(?:^|\/)rollback(?:\/|$)/u.test(branch))
     throw new Error("Riferimento protetto: conservato.");
   const local = git("for-each-ref", "--format=%(objectname)", `refs/heads/${branch}`);
   // Un branch locale rimasto indietro sulla testa unita, per esempio dopo l'aggiornamento della
@@ -835,7 +832,7 @@ function assertRun(number) {
 export function assertCyclePullRequest(pr, repository) {
   if (pr.baseRefName !== "develop" || pr.headRepository?.nameWithOwner !== repository)
     throw new Error("Il ciclo PR gestisce soltanto branch dello stesso repository verso develop.");
-  if (["main", "develop", "legacy/1.x"].includes(pr.headRefName))
+  if (["main", "develop"].includes(pr.headRefName))
     throw new Error("La PR non parte da un feature branch.");
   if (pr.state === "CLOSED") throw new Error("PR chiusa senza merge.");
 }

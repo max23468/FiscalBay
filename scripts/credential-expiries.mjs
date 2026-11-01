@@ -36,7 +36,8 @@ export const defaultFile = () =>
 
 /**
  * Segreti facoltativi letti dal codice: il deploy non li richiede, ma senza di loro si fermano
- * acquisti, Telegram, notifiche eBay o metriche, quindi anche la loro scadenza va registrata.
+ * acquisti, Telegram, notifiche eBay, metriche o statistiche del sito, quindi anche la loro
+ * scadenza va registrata.
  */
 const optionalSecrets = [
   "ANALYTICS_READ_TOKEN",
@@ -45,6 +46,7 @@ const optionalSecrets = [
   "STRIPE_WEBHOOK_SECRET",
   "TELEGRAM_BOT_TOKEN",
   "TELEGRAM_WEBHOOK_SECRET",
+  "WEB_ANALYTICS_TOKEN",
 ];
 
 /** Keyset Sandbox di eBay: soltanto nel test. */

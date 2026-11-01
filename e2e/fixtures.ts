@@ -1,6 +1,7 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { test as base, type BrowserContext, type Page, type Request } from "@playwright/test";
 
+import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics";
 import { abortedDataRequest } from "./page-cases";
 
 export { expect } from "@playwright/test";
@@ -103,6 +104,11 @@ export const test = base.extend<{ pageErrors: string[]; browserErrors: string[] 
   // Le rotte simulate di una prova non sopravvivono alla chiusura del contesto.
   context: async ({ context }, use) => {
     watchNetwork(context);
+    // Il collaudo dei domini reali non conta come visita nelle statistiche del sito.
+    await context.route(`${webAnalyticsScript}*`, (route) =>
+      route.fulfill({ contentType: "text/javascript", body: "" }),
+    );
+    await context.route(`${webAnalyticsCollector}/**`, (route) => route.fulfill({ status: 204 }));
     await use(context);
     await context.unrouteAll({ behavior: "ignoreErrors" });
   },

@@ -932,7 +932,7 @@ Per eBay gli agenti usano le skill di migrazione e il server MCP ufficiale in so
 <a id="s34"></a>
 ## 34. Git, CI/CD, versioning, Pubblica e Promuovi
 
-Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato Production. Nessun deploy live automatico al merge su `main`. Autodeploy test dopo merge su `develop` con gate e separazione dati; le migrazioni pericolose non diventano innocue per il solo ambiente test. La 1.x congelata vive soltanto nella branch `legacy/1.x`, da cui partono le sue correzioni residue; nessun merge su `develop` o `main` può avviare il deploy 1.x.
+Branch feature→`develop`, integrato su `test.fiscalbay.it`; `main` candidato Production. Nessun deploy live automatico al merge su `main`. Autodeploy test dopo merge su `develop` con gate e separazione dati; le migrazioni pericolose non diventano innocue per il solo ambiente test. La 1.x congelata resta soltanto nella storia Git, raggiungibile da `v2.0.0`; nessun merge su `develop` o `main` può avviare il deploy 1.x.
 
 **Invarianti della pipeline.** Qui restano le regole che cambiano soltanto con una decisione; funzionamento, comandi e criteri tecnici vivono nella [procedura di pubblicazione](engineering/RELEASE.md) e nel codice.
 
@@ -954,7 +954,7 @@ Versioni interne `2.0.0-alpha.N`→`2.0.0-rc.N`→`2.0.0`. Non significano beta 
 
 `Pubblica` e `Promuovi` autorizzano i cicli definiti in `AGENTS.md`, eseguiti secondo il [ciclo operativo](engineering/RELEASE.md#ciclo-operativo); `Promuovi` richiede il via di M9 e i gate Production. Cinque checkpoint owner restano separati dalle normali attività.
 
-`Promuovi` comprende, dopo il readback Production e tag/release riusciti, l'inventario e la pulizia dei branch e worktree temporanei già conclusi, inclusi i residui di cicli precedenti. Il coordinatore verifica per ciascuno PR e contenuto integrato anche quando il merge è squash, stato pulito, commit non pubblicati, file non tracciati e processi o altri lavori che usano il checkout; solo allora elimina branch remoto e locale, libera il worktree e riallinea il checkout principale. Conserva `main`, `develop`, `legacy/1.x`, tag, rollback e ogni lavoro non integrato o ancora in uso. Una pulizia non sicura o un passo fallito conservano ricevuta e riferimento di ripresa e restano nelle questioni aperte, senza dichiarare conclusa la pulizia.
+`Promuovi` comprende, dopo il readback Production e tag/release riusciti, l'inventario e la pulizia dei branch e worktree temporanei già conclusi, inclusi i residui di cicli precedenti. Il coordinatore verifica per ciascuno PR e contenuto integrato anche quando il merge è squash, stato pulito, commit non pubblicati, file non tracciati e processi o altri lavori che usano il checkout; solo allora elimina branch remoto e locale, libera il worktree e riallinea il checkout principale. Conserva `main`, `develop`, tag, rollback e ogni lavoro non integrato o ancora in uso. Una pulizia non sicura o un passo fallito conservano ricevuta e riferimento di ripresa e restano nelle questioni aperte, senza dichiarare conclusa la pulizia.
 
 Migrazioni versionate, testate su schema/dati rappresentativi, forward-only dove sensato, approccio expand/contract se serve compatibilità. Release manifest collega codice, schema, config e artifact immutabile. Rollback codice automatico se sicuro, altrimenti forward-fix; recovery dati separato. Nessun comando di pubblicazione deve contenere token/PII nelle evidenze.
 
@@ -1082,7 +1082,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
 | [M8](#m8) | Completata | RC `2.0.0-rc.7` qualificata e approvabile (D236, D237): test merchant, percorsi reali, verifica browser, correzioni e preflight del restore completati; il drill conclusivo è in [M9-02](#m9-02). |
-| [M9](#m9) | In corso | `2.0.0` pubblicata in Production il 2026-11-01 ([M9-04](#m9-04)), con iscrizioni aperte e promozione Free attiva. 1.x dismessa e bot Production sulla 2.0 ([M9-05](#m9-05)); resta la sorveglianza iniziale. |
+| [M9](#m9) | Completata | `2.0.0` pubblicata in Production il 2026-11-01 ([M9-04](#m9-04)), con iscrizioni aperte e promozione Free attiva. 1.x dismessa e bot Production sulla 2.0 ([M9-05](#m9-05)); sorveglianza iniziale conclusa, branch 1.x eliminata ([M9-06](#m9-06)). |
 | [M10](#m10) | Da completare | Riconoscimento eBay e verifiche esterne: candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](DECISION_REGISTER.md)). |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
@@ -1108,13 +1108,13 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | Login eBay | Prove reali su Production in M8 (D160), con checklist sotto. Un'identità eBay risulta collegata all'utente owner con password e Google, ma la registrazione precedente descriveva un utente separato: non vale come prova di linking. Keyset e RuName da rileggere dal portale Developers. Il passaggio su `fiscalbay.it` dopo la `2.0.1` risulta eseguito, come dichiarato dall'owner il 2026-11-01. |
 | Identità e admin | Passkey fisica Safari/iOS dichiarata positiva dall'owner senza dispositivo e versione; cambio email remoto escluso dall'owner, prove locali conservate. info@fiscalbay.it è l'unico admin del test, con una sola passkey ([D212](DECISION_REGISTER.md)); in Production, dal 2026-11-01, l'unico admin è l'account dell'owner indicato nell'inventario privato, con una passkey sincronizzata: è l'account delle prove live che coinvolgono un admin. |
 | Protezioni della zona | HSTS/header, WAF/rate limit edge, report DMARC e alert certificati configurati per ambiente da `scripts/zone-protection.mjs` (D229): applicati e riletti sul test il 2026-10-29 e in Production il 2026-11-01. Primo report DMARC ricevuto il 2026-11-01, con DMARC, SPF e DKIM superati; primo alert dei certificati ancora da osservare. |
-| Statistiche del sito | Codice e Privacy del 2026-10-31 per D242, spenti finché i Worker non hanno `WEB_ANALYTICS_TOKEN`. Esistono il sito Web Analytics `fiscalbay.it`, valido anche per il test, con l'inserimento automatico spento, e la proprietà Search Console verificata con il TXT. Il resto della [procedura](engineering/RELEASE.md#statistiche-sito) si svolge tutto insieme in [M9-06](#m9-06). |
+| Statistiche del sito | Codice e Privacy del 2026-10-31 per D242. Esistono il sito Web Analytics `fiscalbay.it`, valido anche per il test, con l'inserimento automatico spento, e la proprietà Search Console verificata con il TXT. Attivazione conclusa in [M9-06](#m9-06); il token è su entrambi i Worker dal 2026-11-01, con il beacon riletto. La checklist operativa legge segreto e beacon. |
 | Qualifica legale | Termini e Privacy definitivi ([D230](DECISION_REGISTER.md)). Garanzie dei trasferimenti extra UE, pulizia di `supporto@` oltre 24 mesi, obblighi 28 CFR Part 202 del DPA eBay e trattamento dei dati di OpenAI attestati dall'owner nella checklist di [M9-03](#m9-03). L'assenza dei dati del titolare (D217) è un rischio accettato, da rivedere se cambia la forma dell'attività. La Privacy indica Telegram fra i destinatari degli avvisi interni (D254). Restano all'owner, perché cambiano i testi accettati: Telegram fra i fornitori che trattano i dati degli acquirenti, l'impronta dell'email nel limite dei tentativi, le voci conservate dopo la cancellazione dell'account (cancellazione dei dati Stripe, trasferimenti eseguiti, avviso commerciale), la localizzazione dei log recenti e degli eventi di sicurezza fuori dall'UE. |
 | Piano e costi | Workers Paid continuativo e Cloudflare Email Service (D169); nessun costo variabile (D227), con avvisi di budget da 0,01 USD all'owner. Il cron supera ancora i 10 ms in ogni esecuzione dopo D167. Coda e DLQ del test in UE a 14 giorni (D171); quelle di Production nascono allo stesso modo secondo la [pubblicazione](engineering/RELEASE.md#webhook). Quote condivise e prezzi Observability dal 1° dicembre 2026 ([runbook](engineering/RELEASE.md#capacita)) da rileggere prima dell'apertura. Lo smistamento resta idempotente rispetto alle invocazioni ripetute del cron già osservate ([M3-12](#m3-12)). Le misure M0 non autorizzano capacità pubblica né costi oltre il canone. |
 | CLI Cloudflare | `cf` (D170) qualificata sul test per deploy, migration, ripresa e rollback; il primo deploy Production con `cf` avviene con `Promuovi`. Rimuovere la patch che limita la rilevazione al pacchetto della radice quando una versione qualificata di `cf` corregge i workspace, il collegamento `build/client` in `vite.config.ts` quando plugin Vite 2.x e React Router concordano sulla cartella client, e `scripts/local-d1.mjs` quando `cf --local` termina da solo ([cloudflare/cf#64](https://github.com/cloudflare/cf/issues/64)). Aggiornare `cf` e plugin solo a versioni esatte riprovate. |
 | Cutover provider | OAuth eBay attivo sul RuName Production dal 2026-10-31 ([D247](DECISION_REGISTER.md)): sul test non funzionano più Accedi con eBay né il collegamento di nuovi negozi. Non modificare `botCF 2` (SyncBay) o il callback condiviso con Hub Fatture. Branding finale Checkout ancora da osservare. |
 | Dati e risorse di prova | Ordini reali e account controllati restano nella D1 di test come base per altre prove ([D246](DECISION_REGISTER.md)). Account sintetico di collaudo ammesso solo nel test. Il progetto Better Auth Infrastructure Starter serve la dashboard del solo test (D241): la sua chiave non va sul Worker Production finché non valgono le condizioni di D138. Inventario privato fuori checkout: `FiscalBay/m0-inventory`. |
-| Legacy 1.x | Dismessa il 2026-11-01 ([M9-05](#m9-05)). L'owner conserva l'istanza Oracle `fiscalbay-bot`, ormai senza servizi né dati FiscalBay, il nome DuckDNS `fiscalbay.duckdns.org`, il RuName 1.x `…rsxbj` del keyset `botCF` e il token GitHub del vecchio autodeploy ([D259](DECISION_REGISTER.md)). La branch `legacy/1.x` si elimina dopo la sorveglianza ([M9-06](#m9-06)). |
+| Legacy 1.x | Dismessa il 2026-11-01 ([M9-05](#m9-05)). L'owner conserva l'istanza Oracle `fiscalbay-bot`, ormai senza servizi né dati FiscalBay, il nome DuckDNS `fiscalbay.duckdns.org`, il RuName 1.x `…rsxbj` del keyset `botCF` e il token GitHub del vecchio autodeploy ([D259](DECISION_REGISTER.md)). La branch `legacy/1.x` è eliminata dal 2026-11-01 ([M9-06](#m9-06)). |
 
 <a id="m0"></a>
 
@@ -1232,7 +1232,7 @@ M1 ha reso canonica la 2.0, congelato la 1.x nella branch `legacy/1.x` e costrui
 
 **Stato:** Completato · **Prerequisiti:** M0-14 completata e via owner di fine M0 · **Contratto:** [§33](#s33) · [§34](#s34)
 
-Il repository presenta una sola implementazione e una sola documentazione canonica 2.0; la 1.x resta recuperabile da `legacy/1.x` e nessun merge avvia il deploy legacy. PR: [#163](https://github.com/max23468/FiscalBay/pull/163), [#171](https://github.com/max23468/FiscalBay/pull/171).
+Il repository presenta una sola implementazione e una sola documentazione canonica 2.0; la 1.x resta recuperabile dalla storia Git, con il commit finale raggiungibile da `v2.0.0`, e nessun merge avvia il deploy legacy. PR: [#163](https://github.com/max23468/FiscalBay/pull/163), [#171](https://github.com/max23468/FiscalBay/pull/171).
 
 **Limiti residui:** il cutover del repository non dismette bot, callback e timer 1.x ancora attivi; la dismissione è in [M9-05](#m9-05).
 
@@ -1908,7 +1908,7 @@ I log del Worker, con soli campi ed eventi in allowlist, arrivano con Logpush a 
 
 Le protezioni si applicano per ambiente con `scripts/zone-protection.mjs` ([procedura](engineering/RELEASE.md#protezioni-zona), D229): header e HSTS graduale sugli host dell'ambiente, WAF che esenta i webhook dai controlli da browser e blocca le sonde note, rate limiting della zona su `/api/auth/`, DMARC Management e alert dei certificati a `info@`. Sul test accessi, OAuth, export e webhook validi funzionano con le protezioni attive; il rientro è la rimozione. PR: [#516](https://github.com/max23468/FiscalBay/pull/516).
 
-**Limiti residui:** primo report DMARC da leggere in dashboard e primo alert dei certificati a `info@` ancora da osservare. HSTS resta a un giorno sul test e sale dopo un periodo senza problemi. Passkey e Google su dispositivo reale e consegne eBay reali restano nella matrice di [M8](#m8); la Production si configura con `--mode live` nel suo mandato ([M9-03](#m9-03)).
+**Limiti residui:** primo alert dei certificati a `info@` ancora da osservare, fuori dai requisiti ([M9-06](#m9-06)). HSTS resta a un giorno sul test e sale dopo un periodo senza problemi. Passkey e Google su dispositivo reale e consegne eBay reali restano nella matrice di [M8](#m8); la Production si configura con `--mode live` nel suo mandato ([M9-03](#m9-03)).
 
 <a id="m7-13"></a>
 #### M7-13 · Topic eBay dell'applicazione
@@ -2007,11 +2007,11 @@ Il [drill](engineering/RELEASE.md#drill-di-ripristino) usa Time Travel della D1 
 <a id="m9"></a>
 ### M9 · Go-live
 
-**Prerequisiti:** M0–M8 chiuse, RC, configurazione commerciale e via owner. **Attività:** attivare la promozione globale al go-live, validare checklist unica §41, restore drill unico, Promuovi, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Conclusa la sorveglianza e dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
+**Prerequisiti:** M0–M8 chiuse, RC, configurazione commerciale e via owner. **Attività:** attivare la promozione globale al go-live, validare checklist unica §41, restore drill unico, Promuovi, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
 
 **Output:** `2.0.0` realmente pubblicata e verificata, no claim anticipato. **DoD:** dominio/posta/provider/diritti/job/alert/supporto/SEO operativi; rollback o forward-fix pronto; nessuna vecchia automazione concorrente. Il mantenimento del bot 1.x non è prerequisito: può essere dismesso prima, preservando identità bot/keyset utili e storia Git.
 
-La branch `legacy/1.x` resta disponibile durante il cutover operativo e la sorveglianza iniziale. Eliminarla, sia in locale sia sul remoto, soltanto dopo dismissione e sorveglianza: runtime e automazioni 1.x inattivi, consumatori e callback trasferiti e verificati, nessun intervento o rollback operativo ancora dipendente dal codice 1.x. Prima della cancellazione verificare che il commit finale 1.x sia raggiungibile da un tag Git permanente pubblicato sul remoto; registrare commit, tag e readback nella ricevuta conclusiva. La cancellazione della branch non elimina la storia Git né le identità bot o i keyset condivisi. La dismissione può anticipare il go-live nel mandato, ma M9 si chiude soltanto dopo pubblicazione, sorveglianza e pulizia verificate.
+La branch `legacy/1.x`, disponibile durante il cutover operativo, si elimina sul comando dell'owner, in locale e sul remoto, dopo la dismissione: runtime e automazioni 1.x inattivi, consumatori e callback trasferiti e verificati, nessun intervento o rollback operativo ancora dipendente dal codice 1.x. Prima della cancellazione verificare che il commit finale 1.x sia raggiungibile da un tag Git permanente pubblicato sul remoto; registrare commit, tag e readback nella ricevuta conclusiva. La cancellazione della branch non elimina la storia Git né le identità bot o i keyset condivisi. La dismissione può anticipare il go-live nel mandato, ma M9 si chiude soltanto dopo pubblicazione, sorveglianza e pulizia verificate.
 
 <a id="m9-01"></a>
 #### M9-01 · Preflight commerciale e promo
@@ -2055,7 +2055,7 @@ La `2.0.0` è in Production dal 2026-11-01: release [v2.0.0](https://github.com/
 
 **Criterio di completamento:** Artefatto e servizi attivi corrispondono; branch e worktree temporanei conclusi sono rimossi e il checkout è allineato. Eventuali riferimenti conservati per lavoro in corso o ripresa sono motivati qui. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
 
-**Limiti residui:** il 2026-11-01 l'owner attesta password, Google, passkey e console; «Accedi con eBay» non si prova con il suo account business ([D153](DECISION_REGISTER.md)). Da osservare il primo alert dei certificati. Webhook del bot in [M9-05](#m9-05).
+**Limiti residui:** il 2026-11-01 l'owner attesta password, Google, passkey e console; «Accedi con eBay» non si prova con il suo account business ([D153](DECISION_REGISTER.md)). Primo alert dei certificati fuori dai requisiti ([M9-06](#m9-06)). Webhook del bot in [M9-05](#m9-05).
 
 <a id="m9-05"></a>
 #### M9-05 · Dismissione residui 1.x e handover
@@ -2066,20 +2066,18 @@ Il 2026-11-01 bot, callback e timer 1.x sono rimossi dal VPS con dati, backup, c
 
 **Criterio di completamento:** Nessun processo concorrente o credenziale condivisa eliminata; indici e procedure 2.0 autorevoli, altri progetti invariati. La dismissione può già essere avvenuta prima del go-live.
 
-**Limiti residui:** istanza Oracle, DuckDNS, RuName 1.x e token del vecchio autodeploy restano per scelta dell'owner; il primo messaggio reale al bot lo prova l'owner.
+**Limiti residui:** istanza Oracle, DuckDNS, RuName 1.x e token del vecchio autodeploy restano per scelta dell'owner.
 
 <a id="m9-06"></a>
 #### M9-06 · Sorveglianza iniziale
 
-**Stato:** Da completare · **Prerequisiti:** M9-04 · **Contratto:** [§31](#s31) · [§41](#s41)
+**Stato:** Completato · **Prerequisiti:** M9-04 · **Contratto:** [§31](#s31) · [§41](#s41)
 
-**Per chiudere:** M9-05; passaggio definitivo e rimozione della branch 1.x secondo [§37](#s37).
+Il 2026-11-01 la [rilettura](engineering/RELEASE.md#sorveglianza) di Production non ha P1 o P2 aperte; un 503 webhook isolato, di causa ignota, non lascia residui. Statistiche attive, checklist `dopo` verde, sitemap inviata, icona confermata dall'owner. `legacy/1.x` eliminata: commit finale `508ded87`, raggiungibile dal tag remoto `v2.0.0`.
 
-Nei primi giorni sorvegliare registrazioni, sync, Stripe, code, quote, errori e supporto, usando interventi mirati secondo le procedure.
+**Criterio di completamento:** Esiti e anomalie registrati senza beta pubblica o SLA, normale esercizio predisposto, cancellazione di `legacy/1.x` verificata con il commit conservato da un tag remoto.
 
-Attivare in una volta le [statistiche del sito](engineering/RELEASE.md#statistiche-sito) (D242): `WEB_ANALYTICS_TOKEN` su test e Production, readback del beacon sulle sole pagine pubbliche, sitemap inviata dall'owner in Search Console e icona del sito nei risultati dopo la scansione.
-
-**Criterio di completamento:** Esiti e anomalie registrati senza inventare una nuova beta pubblica o un SLA. Normale esercizio predisposto e nessuna chiusura fittizia delle verifiche. Dopo la prova che nessun percorso operativo dipende dalla 1.x, commit finale conservato tramite tag remoto e cancellazione di `legacy/1.x` verificata in locale e sul remoto; riferimenti registrati qui.
+**Limiti residui:** su decisione dell'owner prima visita Web Analytics e primo alert dei certificati non sono requisiti. Il prossimo `Promuovi` ha il forward-fix, senza rollback automatico: la versione attiva, creata dal segreto, non porta l'identità della release. Coda dei falliti del test con 5 messaggi non esaminati.
 
 <a id="pubblicazione-production"></a>
 ### Gate per la pubblicazione Production

@@ -27,6 +27,8 @@ if (!production) {
     value: "telegram-local-synthetic-webhook-secret",
   };
 }
+// Token sintetico per il beacon delle pagine pubbliche, che i fixture delle prove sostituiscono.
+config.env.WEB_ANALYTICS_TOKEN = { type: "text", value: "local-web-analytics-token" };
 writeFileSync(workerConfig, JSON.stringify(config));
 writeFileSync(
   `${previewRoot}/.dev.vars`,

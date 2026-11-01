@@ -899,7 +899,7 @@ describe("comandi del ciclo", () => {
       const advanced = check("develop", tested, head);
       assert.equal(advanced.status, 1);
       assert.match(advanced.stderr, /file comuni/u);
-      assert.match(check("legacy/1.x", tested, head).stderr, /--ref develop o main/u);
+      assert.match(check("altro/ramo", tested, head).stderr, /--ref develop o main/u);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -935,7 +935,7 @@ describe("comandi del ciclo", () => {
       /stesso repository/u,
     );
     assert.throws(
-      () => assertCyclePullRequest({ ...pr, headRefName: "legacy/1.x" }, "example/project"),
+      () => assertCyclePullRequest({ ...pr, headRefName: "main" }, "example/project"),
       /feature branch/u,
     );
     assert.throws(
