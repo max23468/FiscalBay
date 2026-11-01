@@ -8,21 +8,21 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 #### Funzionalità
 
-- **Pagina Novità.** Scopri a colpo d'occhio cosa c'è di nuovo in FiscalBay: la trovi nel menu del profilo e la campanella ti avvisa a ogni nuova versione.
+- **Pagina Novità.** Raccoglie le funzionalità, i miglioramenti e le correzioni di ogni versione. Si apre dal menu del profilo e la campanella segnala ogni nuova versione.
 
 #### Correzioni
 
-- **Totali degli ordini più precisi.** Ordini ed Esportazione mostrano l'importo che incassi davvero, senza la tariffa di protezione acquisti che l'acquirente paga a eBay.
+- **Totale degli ordini.** Ordini ed Esportazione mostrano l'importo incassato, senza la tariffa di protezione acquisti che l'acquirente paga a eBay.
 
 ### What's new
 
 #### Features
 
-- **What's new page.** See at a glance what's new in FiscalBay: find it in the profile menu, and the bell lets you know about every new version.
+- **What's new page.** It collects the features, improvements and fixes of each version. Open it from the profile menu; the bell announces each new version.
 
 #### Fixes
 
-- **More accurate order totals.** Orders and Export show the amount you actually receive, without the buyer protection fee the buyer pays to eBay.
+- **Order total.** Orders and Export show the amount you receive, without the buyer protection fee the buyer pays to eBay.
 
 ### Altre modifiche
 
@@ -37,25 +37,25 @@ Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce 
 
 #### Funzionalità
 
-- **La nuova FiscalBay.** Un'app tutta nuova, in italiano e in inglese, che usi dal browser su computer e smartphone.
-- **Codici fiscali a portata di mano.** I tuoi ordini eBay arrivano con codice fiscale o partita IVA già controllati, con ricerca e filtri per trovare subito quello che cerchi.
-- **Tutti i tuoi negozi eBay.** Collega uno o più negozi in tutta sicurezza: FiscalBay legge gli ordini senza modificare nulla e ti mostra i nuovi appena arrivano.
-- **Messaggi pronti.** Chiedi il dato fiscale all'acquirente con un messaggio già scritto, in italiano o in inglese.
-- **Esporta in un clic.** Scarica i tuoi ordini in CSV, Excel o ZIP.
-- **Avvisi su Telegram.** Ricevi i nuovi ordini sul telefono e gestisci il tuo account dal bot.
-- **Il piano giusto per te.** Accedi come preferisci, con email, Google, passkey o eBay, e scegli fra Free, prova gratuita e Premium.
+- **Nuova FiscalBay.** Un'app web in italiano e in inglese, da usare nel browser su computer e smartphone.
+- **Ordini e dati fiscali.** Gli ordini eBay arrivano con il codice fiscale o la partita IVA già controllati, con ricerca e filtri.
+- **Negozi eBay.** Colleghi uno o più negozi in sola lettura: FiscalBay legge gli ordini senza modificarli e mostra i nuovi appena arrivano.
+- **Messaggi all'acquirente.** Un messaggio già scritto, in italiano o in inglese, per chiedere il dato fiscale.
+- **Esportazione.** Gli ordini si scaricano in CSV, Excel o ZIP.
+- **Telegram.** Il bot segnala i nuovi ordini e risponde ai comandi del tuo account.
+- **Accesso e piani.** Accedi con email, Google, passkey o eBay; i piani sono Free, prova gratuita e Premium.
 
 ### What's new
 
 #### Features
 
-- **The new FiscalBay.** A brand new app, in Italian and English, that you use from the browser on computer and smartphone.
-- **Tax codes at your fingertips.** Your eBay orders arrive with tax code or VAT number already checked, with search and filters to find what you need right away.
-- **All your eBay stores.** Connect one or more stores safely: FiscalBay reads orders without changing anything and shows new ones as soon as they arrive.
-- **Ready-made messages.** Ask the buyer for tax data with a message already written, in Italian or English.
-- **Export in one click.** Download your orders as CSV, Excel or ZIP.
-- **Telegram alerts.** Get new orders on your phone and manage your account from the bot.
-- **The right plan for you.** Sign in the way you prefer, with email, Google, passkey or eBay, and choose among Free, free trial and Premium.
+- **New FiscalBay.** A web app in Italian and English, to use in the browser on computer and smartphone.
+- **Orders and tax data.** eBay orders arrive with tax code or VAT number already checked, with search and filters.
+- **eBay stores.** Connect one or more stores read-only: FiscalBay reads orders without changing them and shows new ones as soon as they arrive.
+- **Buyer messages.** A ready-made message, in Italian or English, to ask for tax data.
+- **Export.** Orders can be downloaded as CSV, Excel or ZIP.
+- **Telegram.** The bot announces new orders and answers the commands of your account.
+- **Sign-in and plans.** Sign in with email, Google, passkey or eBay; plans are Free, free trial and Premium.
 
 ### Contenuto
 

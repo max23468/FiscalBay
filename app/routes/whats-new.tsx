@@ -87,9 +87,12 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
                     <IconTile icon={kindIcons[kind]} tone="neutral" size="sm" />
                     {whatsNewKinds[kind][language]}
                   </h3>
-                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,18rem),1fr))] gap-x-8 gap-y-3">
+                  <ul className="columns-[18rem] gap-x-8">
                     {items.map((item) => (
-                      <li key={item.title} className="grid content-start gap-0.5 text-sm">
+                      <li
+                        key={item.title}
+                        className="mb-3 grid break-inside-avoid gap-0.5 text-sm last:mb-0"
+                      >
                         <h4 className="font-medium">{item.title}</h4>
                         <p className="leading-relaxed text-pretty text-muted-foreground">
                           {item.body}
