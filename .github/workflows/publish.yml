@@ -85,16 +85,18 @@ jobs:
           base="${BASE_REF}"
           node scripts/classify-changes.mjs --base "${base}" --head HEAD --complete --github-output
       # La prova su `develop` riusa i moduli superati nelle qualifiche e campagne precedenti e non
-      # toccati da allora; `Promuovi` su `main` prova sempre tutto il diff cumulativo.
+      # toccati da allora. Su `main` si riusa soltanto una mutation riuscita su contenuti
+      # identici, e mai se dall'ultima release cambiano classificazione, provenienza o workflow
+      # di pubblicazione: allora si prova tutto il diff cumulativo.
       - name: Reuse passed mutation modules
         id: reuse
-        if: github.ref == 'refs/heads/develop'
+        if: github.ref == 'refs/heads/develop' || steps.plan.outputs.promotion-reuse == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           MATRIX: ${{ steps.plan.outputs.mutation-matrix }}
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
-        run: node scripts/mutation-reuse.mjs
+        run: node scripts/mutation-reuse.mjs ${{ github.ref == 'refs/heads/main' && '--identical' || '' }}
 
   qualify:
     name: Qualifica candidato

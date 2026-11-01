@@ -1,20 +1,26 @@
 /**
- * Mutation incrementale della prova del candidato su `develop`: un modulo critico non si ripete
+ * Mutation incrementale del candidato. Sulla prova di `develop` un modulo critico non si ripete
  * se la sua ultima mutation, in una qualifica o in una campagna precedente su un commit antenato,
  * è riuscita in ogni parte e da allora nessun sorgente che importa, anche indirettamente, è
  * cambiato. Un pacchetto di `dependencies` aggiunto, tolto o cambiato, anche fra quelli da cui
  * dipende, conta come sorgente modificato nei file che lo importano. Un cambio degli strumenti
  * (`devDependencies`, impostazioni e override di pnpm, configurazione della mutation) fa
  * ripetere tutto; le prove modificate non contano, come nella scelta dei moduli dopo un
- * rilascio, e la campagna settimanale e `Promuovi` restano complete.
- * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
+ * rilascio, e la campagna settimanale resta completa.
+ * Con `--identical`, in `Promuovi` su `main`, un modulo si riusa soltanto dall'ultima run riuscita
+ * che l'ha provato su contenuti identici: modulo, test che lo coprono, file che tutti questi
+ * importano anche indirettamente, testi e changelog compresi, file di preparazione dei test,
+ * pacchetti e strumenti. Del changelog non conta il giorno della versione in cima, che la
+ * promozione aggiunge (D256).
+ * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs [--identical]
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { criticalModule } from "./mutation.mjs";
+import { consumerTests, criticalModule } from "./mutation.mjs";
+import { undatedChangelog } from "./release/release.mjs";
 import { importGraph, importPattern } from "./verify-repo.mjs";
 import { ghJson, retry } from "./lib/provider.mjs";
 
@@ -25,12 +31,81 @@ const mutationWorkflows = [".github/workflows/publish.yml", ".github/workflows/m
  * File che cambiano l'esito di ogni mutation: con uno di questi modificato nulla si riusa.
  * Manifest e lockfile seguono `changedPackages`.
  */
-const toolFiles = [
+export const toolFiles = [
   /^stryker\.config\.json$/u,
-  /^vitest(?:\.mutation)?\.config\.ts$/u,
+  /^vitest(?:\.[\w-]+)?\.config\.ts$/u,
   /^scripts\/mutation(?:-vitest)?\.mjs$/u,
   /^\.github\/actions\//u,
 ];
+
+/**
+ * Con `--identical` contano anche ambiente dei test, scelta dei test che coprono il modulo e job
+ * della mutation.
+ */
+export const identicalToolFiles = [
+  ...toolFiles,
+  /^tsconfig[\w.-]*\.json$/u,
+  /^cloudflare\.config\.ts$/u,
+  /^migrations\//u,
+  /^scripts\/verify-repo\.mjs$/u,
+  /^\.github\/workflows\/(?:mutation|qualify)\.yml$/u,
+];
+
+/** File che un modulo, i suoi test o la loro preparazione possono importare, anche come testo. */
+const inputScope = /^(?:(?:app|workers|test)\/.+|CHANGELOG\.md)$/u;
+
+/** File di `test/` che le configurazioni di Vitest caricano prima dei test o al posto di un import. */
+export function vitestRoots(configs) {
+  return [
+    ...new Set(
+      configs.flatMap((text) =>
+        [...text.matchAll(/\.\/(test\/[\w./-]+\.ts)\b/gu)].map(([, file]) => file),
+      ),
+    ),
+  ].sort();
+}
+
+/**
+ * Ingressi della mutation di un modulo: i test che lo coprono e i file raggiunti dal modulo, da
+ * quei test e dai file di preparazione.
+ */
+export function moduleInputs(target, files, roots) {
+  const tests = consumerTests(target, files);
+  const graph = importGraph(files, inputScope);
+  const closure = new Set();
+  const queue = [target, ...tests, ...roots];
+  while (queue.length) {
+    const file = queue.pop();
+    if (closure.has(file)) continue;
+    closure.add(file);
+    queue.push(...(graph.get(file) ?? []));
+  }
+  return { tests, closure };
+}
+
+/**
+ * File cambiati fra due commit, senza il changelog se differisce soltanto per il giorno della
+ * versione in cima.
+ */
+export function contentChanges(changed, changelogs) {
+  return changelogs && undatedChangelog(changelogs.before) === undatedChangelog(changelogs.after)
+    ? changed.filter((file) => file !== "CHANGELOG.md")
+    : changed;
+}
+
+/**
+ * Vero se la mutation del modulo ha gli stessi ingressi nei due commit: stessi test, stessi file
+ * raggiunti e nessuno di questi fra i cambiati, che comprendono chi importa un pacchetto cambiato.
+ */
+export function identicalInputs(target, before, after, changed, roots) {
+  const old = moduleInputs(target, before, roots);
+  const current = moduleInputs(target, after, roots);
+  return (
+    old.tests.join("\n") === current.tests.join("\n") &&
+    old.closure.size === current.closure.size &&
+    [...current.closure].every((file) => old.closure.has(file) && !changed.has(file))
+  );
+}
 
 /** Ultima parte del nome del job: `<modulo> <parte>/<parti>`. */
 export function mutationJob(name) {
@@ -211,13 +286,19 @@ export function affectedModules(changed, graph) {
  * dalla più recente, con gli esiti per modulo; `affectedSince(commit)` restituisce i moduli
  * toccati dal diff fino alla testa, oppure `null` se gli strumenti sono cambiati. Conta soltanto
  * l'ultima run che ha provato il modulo: un fallimento recente non si copre con un successo
- * più vecchio.
+ * più vecchio. Con `identical` conta l'ultima run che l'ha provato su contenuti identici.
  */
-export function reusePlan(targets, runs, affectedSince) {
+export function reusePlan(targets, runs, affectedSince, { identical = false } = {}) {
   const run = [];
   const reused = [];
+  const untouched = (entry, target) => {
+    const affected = affectedSince(entry.commit);
+    return Boolean(affected) && !affected.has(target);
+  };
   for (const target of targets) {
-    const last = runs.find((entry) => entry.outcomes.has(target));
+    const last = runs.find(
+      (entry) => entry.outcomes.has(target) && (!identical || untouched(entry, target)),
+    );
     const affected = last ? affectedSince(last.commit) : null;
     if (last?.outcomes.get(target) === "passed" && affected && !affected.has(target))
       reused.push({ target, run: last.id, commit: last.commit });
@@ -228,9 +309,27 @@ export function reusePlan(targets, runs, affectedSince) {
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
 
-function isAncestor(commit) {
+/**
+ * Esiti che valgono per il riuso su contenuti identici: in una run annullata un modulo superato
+ * non conta, uno fallito resta un fallimento recente. In una run conclusa conta l'esito del
+ * modulo, anche se è fallito un altro job.
+ */
+export function identicalOutcomes(outcomes, conclusion) {
+  return conclusion !== "cancelled"
+    ? outcomes
+    : new Map([...outcomes].filter(([, outcome]) => outcome === "failed"));
+}
+
+/** Commit leggibile nel clone: con `--identical` le run non devono precedere il candidato. */
+function available(commit, identical) {
   try {
-    execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "ignore" });
+    execFileSync(
+      "git",
+      identical
+        ? ["cat-file", "-e", `${commit}^{commit}`]
+        : ["merge-base", "--is-ancestor", commit, "HEAD"],
+      { stdio: "ignore" },
+    );
     return true;
   } catch {
     return false;
@@ -238,7 +337,7 @@ function isAncestor(commit) {
 }
 
 /** Run precedenti con gli esiti per modulo, dalla più recente; gli errori dell'API si ripetono. */
-async function previousRuns(repository, repositoryId) {
+async function previousRuns(repository, repositoryId, identical) {
   const api = (url) =>
     retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
   const runs = [];
@@ -259,7 +358,10 @@ async function previousRuns(repository, repositoryId) {
       candidate.event === "pull_request" ||
       candidate.repository?.id !== repositoryId ||
       candidate.head_repository?.id !== repositoryId ||
-      !isAncestor(candidate.head_sha)
+      // Su contenuti identici valgono soltanto le run dei branch protetti: un avvio manuale da un
+      // altro branch esegue i workflow di quel branch.
+      (identical && !["develop", "main"].includes(candidate.head_branch)) ||
+      !available(candidate.head_sha, identical)
     )
       continue;
     // Pagine piccole: con cento job per pagina l'API risponde 502 per alcune run ripetute.
@@ -271,28 +373,58 @@ async function previousRuns(repository, repositoryId) {
       jobs.push(...batch.jobs);
       if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
     }
+    const outcomes = moduleOutcomes(jobs, candidate.conclusion === "cancelled");
     runs.push({
       id: candidate.id,
       commit: candidate.head_sha,
-      outcomes: moduleOutcomes(jobs, candidate.conclusion === "cancelled"),
+      outcomes: identical ? identicalOutcomes(outcomes, candidate.conclusion) : outcomes,
     });
   }
   return runs;
 }
 
+/** File di `app/`, `workers/`, `test/` e changelog di un commit, letti dal clone. */
+function filesAt(commit) {
+  const paths = git("ls-tree", "-r", "--name-only", commit)
+    .split("\n")
+    .filter((file) => inputScope.test(file));
+  const output = execFileSync("git", ["cat-file", "--batch"], {
+    input: paths.map((file) => `${commit}:${file}\n`).join(""),
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  const files = [];
+  let offset = 0;
+  for (const file of paths) {
+    const header = output.subarray(offset, output.indexOf(10, offset)).toString();
+    const size = Number(header.split(" ")[2]);
+    const start = offset + header.length + 1;
+    files.push({ path: file, text: output.subarray(start, start + size).toString("utf8") });
+    offset = start + size + 1;
+  }
+  return files;
+}
+
 async function main() {
+  const identical = process.argv.includes("--identical");
   const repository = process.env.REPOSITORY;
   const repositoryId = Number(process.env.REPOSITORY_ID);
   if (!repository || !repositoryId) throw new Error("Repository non identificato.");
   const targets = JSON.parse(process.env.MATRIX ?? '{"target":[]}').target;
   // Senza esiti leggibili la pianificazione fallisce e si ripete: la mutation completa resta
-  // a `Promuovi` e alla campagna settimanale, mai un ripiego della prova su `develop`.
-  const runs = await previousRuns(repository, repositoryId);
-  const sources = git("ls-files")
-    .split("\n")
-    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
+  // alla campagna settimanale, mai un ripiego della prova del candidato.
+  const runs = await previousRuns(repository, repositoryId, identical);
+  const listed = git("ls-files").split("\n");
+  const tracked = listed
+    .filter((file) => inputScope.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+  const sources = tracked.filter(({ path: file }) => /^(?:app|workers)\/.+\.tsx?$/u.test(file));
   const graph = importGraph(sources);
+  const tools = identical ? identicalToolFiles : toolFiles;
+  const roots = vitestRoots(
+    listed
+      .filter((file) => /^vitest(?:\.[\w-]+)?\.config\.ts$/u.test(file))
+      .map((file) => readFileSync(file, "utf8")),
+  );
   const cache = new Map();
   const affectedSince = (commit) => {
     if (!cache.has(commit)) {
@@ -309,17 +441,49 @@ async function main() {
             },
           )
         : new Set();
-      cache.set(
-        commit,
-        !packages || changed.some((file) => toolFiles.some((pattern) => pattern.test(file)))
-          ? null
-          : affectedModules([...changed, ...packageImporters(sources, packages)], graph),
-      );
+      let affected = null;
+      if (packages && !changed.some((file) => tools.some((pattern) => pattern.test(file)))) {
+        const importers = packageImporters(identical ? tracked : sources, packages);
+        if (!identical) affected = affectedModules([...changed, ...importers], graph);
+        else {
+          const content = new Set([
+            ...contentChanges(
+              changed,
+              changed.includes("CHANGELOG.md") && {
+                before: git("show", `${commit}:CHANGELOG.md`),
+                after: readFileSync("CHANGELOG.md", "utf8"),
+              },
+            ),
+            ...importers,
+          ]);
+          const before = filesAt(commit);
+          affected = new Set(
+            targets.filter((target) => !identicalInputs(target, before, tracked, content, roots)),
+          );
+        }
+      }
+      cache.set(commit, affected);
     }
     return cache.get(commit);
   };
-  const { run, reused } = reusePlan(targets, runs, affectedSince);
-  const summary = `Mutation incrementale: ${run.length} moduli da provare, ${reused.length} riusati.\n${reused.map(({ target, run: id, commit }) => `- ${target}: run ${id} su ${commit.slice(0, 8)}`).join("\n")}\n`;
+  const { run, reused } = reusePlan(targets, runs, affectedSince, { identical });
+  const list = (entries) => entries.map((entry) => `- ${entry}`).join("\n");
+  const summary = [
+    `Mutation incrementale${identical ? " su contenuti identici" : ""}: ${run.length} moduli da provare, ${reused.length} riusati.`,
+    ...(reused.length
+      ? [
+          "",
+          "Riusati:",
+          list(
+            reused.map(
+              ({ target, run: id, commit }) => `${target}: run ${id} su ${commit.slice(0, 8)}`,
+            ),
+          ),
+        ]
+      : []),
+    ...(run.length ? ["", "Da provare:", list(run)] : []),
+    "",
+  ].join("\n");
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
   if (process.env.GITHUB_OUTPUT)
