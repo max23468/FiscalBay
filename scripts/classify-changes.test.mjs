@@ -388,6 +388,7 @@ describe("mutation e riuso nel candidato", () => {
   it("non riusa la build verificata quando cambia la procedura di promozione", () => {
     for (const file of [
       "scripts/release/release.mjs",
+      "scripts/mutation-reuse.mjs",
       ".github/workflows/publish.yml",
       ".github/workflows/mutation.yml",
       ".github/actions/setup/action.yml",

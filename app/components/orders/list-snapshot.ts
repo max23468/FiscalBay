@@ -1,5 +1,6 @@
-import { useEffect, useEffectEvent, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useState } from "react";
 import {
+  UNSAFE_DataRouterContext,
   useFetchers,
   useLocation,
   useNavigate,
@@ -39,8 +40,17 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
   const fetchers = useFetchers();
   const idle =
     useNavigation().state === "idle" && fetchers.every((fetcher) => fetcher.state === "idle");
+  // Un clic avvia la sua navigazione prima che il render ne mostri lo stato, e la chiusura del
+  // menu che lo riceve può scorrere la pagina: lo stato si rilegge dal router al momento della
+  // sostituzione, che altrimenti annullerebbe la navigazione appena avviata.
+  const router = useContext(UNSAFE_DataRouterContext)?.router;
+  const settled = () =>
+    !router ||
+    (router.state.navigation.state === "idle" &&
+      [...router.state.fetchers.values()].every((fetcher) => fetcher.state === "idle"));
   const shown = `${location.pathname}${location.search}`;
-  const current = () => `${window.location.pathname}${window.location.search}` === shown;
+  const current = () =>
+    settled() && `${window.location.pathname}${window.location.search}` === shown;
   // Lo scorrimento conta quando si ferma: un clic subito dopo avvia prima la sua navigazione,
   // che la sostituzione altrimenti interromperebbe.
   const [away, setAway] = useState(false);

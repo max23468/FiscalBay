@@ -17,6 +17,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 #### Correzioni
 
 - **Totale degli ordini.** Ordini ed Esportazione mostrano l'importo incassato, senza la tariffa di protezione acquisti che l'acquirente paga a eBay.
+- **Navigazione dagli Ordini.** Dalla pagina Ordini, una voce del menu o della navigazione apre sempre la pagina scelta, senza restare sull'elenco.
 
 ### What's new
 
@@ -31,6 +32,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 #### Fixes
 
 - **Order total.** Orders and Export show the amount you receive, without the buyer protection fee the buyer pays to eBay.
+- **Navigation from Orders.** From the Orders page, a menu or navigation item always opens the chosen page instead of staying on the list.
 
 ### Altre modifiche
 
