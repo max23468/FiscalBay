@@ -111,7 +111,8 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && !inputs.prova && github.ref == 'refs/heads/main' && !cancelled() && needs.qualify.result == 'success' }}
     environment: production
     runs-on: ubuntu-26.04
-    timeout-minutes: 45
+    # Il catalogo completo delle pagine in due browser sul sito reale richiede più di mezz'ora.
+    timeout-minutes: 90
     permissions:
       contents: write
       actions: read
