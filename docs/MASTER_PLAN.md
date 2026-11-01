@@ -1092,7 +1092,9 @@ Un task completato conserva intestazione, stato, prerequisiti e contratto, poi d
 <a id="questioni-aperte"></a>
 ### Questioni aperte e ripresa
 
-Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o richiedono di riconciliare un effetto remoto. Chiuderle o rimuoverle con il prossimo intervento pertinente, senza accumulare il diario delle prove riuscite. Il prossimo lavoro è il test merchant di [M8](#m8) sulla RC congelata; le prove eBay reali rinviate da M2/M3 e le qualifiche della pubblicazione non vanno attribuite a un test sintetico.
+Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o richiedono di riconciliare un effetto remoto. Chiuderle o rimuoverle con il prossimo intervento pertinente, senza accumulare il diario delle prove riuscite. Il test merchant e il go-live sono conclusi; le attestazioni dell'owner sui percorsi reali restano distinte dai test sintetici.
+
+La correzione del ripristino aggiunge il blocco atomico degli ingressi D1 e attende le operazioni in corso, comprese quelle in background. Migration `0071` e Worker aggiornato richiedono distribuzione e qualifica del blocco sul test prima dell'uso remoto; il drill storico non dimostra il nuovo protocollo. Il readback del primo deploy verifica blocco, conclusione delle operazioni e riapertura, senza un nuovo Time Travel.
 
 | Ambito | Pendenza e condizione di chiusura |
 |---|---|
@@ -2055,7 +2057,9 @@ La `2.0.0` è in Production dal 2026-11-01: release [v2.0.0](https://github.com/
 
 **Criterio di completamento:** Artefatto e servizi attivi corrispondono; branch e worktree temporanei conclusi sono rimossi e il checkout è allineato. Eventuali riferimenti conservati per lavoro in corso o ripresa sono motivati qui. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
 
-**Limiti residui:** il 2026-11-01 l'owner attesta password, Google, passkey e console; «Accedi con eBay» non si prova con il suo account business ([D153](DECISION_REGISTER.md)). Primo alert dei certificati fuori dai requisiti ([M9-06](#m9-06)). Webhook del bot in [M9-05](#m9-05).
+L'owner attesta password, Google, passkey, console e login eBay Production con un altro account controllato ([D153](DECISION_REGISTER.md)); il login non attesta collegamento o revoca.
+
+**Limiti residui:** primo alert dei certificati fuori dai requisiti ([M9-06](#m9-06)). Webhook del bot in [M9-05](#m9-05).
 
 <a id="m9-05"></a>
 #### M9-05 · Dismissione residui 1.x e handover

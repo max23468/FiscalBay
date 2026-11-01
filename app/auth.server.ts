@@ -8,7 +8,7 @@ import {
   getOAuthState,
 } from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins";
-import { waitUntil } from "cloudflare:workers";
+import { waitUntil } from "./service-activity.server";
 import { z } from "zod";
 
 import {

@@ -2,8 +2,8 @@ import { env } from "cloudflare:workers";
 import { expect, it, vi } from "vitest";
 
 const background = vi.hoisted(() => ({ tasks: [] as Promise<unknown>[] }));
-vi.mock("cloudflare:workers", async (original) => ({
-  ...(await original<typeof import("cloudflare:workers")>()),
+vi.mock("../app/service-activity.server", async (original) => ({
+  ...(await original<typeof import("../app/service-activity.server")>()),
   waitUntil: (task: Promise<unknown>) => background.tasks.push(task),
 }));
 
