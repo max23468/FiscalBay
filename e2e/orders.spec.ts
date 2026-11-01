@@ -884,15 +884,18 @@ for (const language of ["it", "en"] as const) {
       ).toHaveCount(0);
       await page.reload();
       await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
-      // Nel menu della scheda «Apri su eBay» è un collegamento al Seller Hub.
-      await failed
-        .getByRole("button", {
-          name: t("Altre azioni per l’ordine", "More actions for order") + " 19-00001-99999",
-        })
-        .click();
-      await expect(
-        page.getByRole("menuitem", { name: t("Apri su eBay", "Open on eBay") }),
-      ).toHaveAttribute(
+      // Nel menu della scheda «Apri su eBay» è un collegamento al Seller Hub. Dopo il reload il
+      // clic può arrivare prima dell'hydration e andare perso: si ripete finché il menu si apre.
+      const onEbay = page.getByRole("menuitem", { name: t("Apri su eBay", "Open on eBay") });
+      await expect(async () => {
+        await failed
+          .getByRole("button", {
+            name: t("Altre azioni per l’ordine", "More actions for order") + " 19-00001-99999",
+          })
+          .click();
+        await expect(onEbay).toBeVisible({ timeout: 1000 });
+      }).toPass();
+      await expect(onEbay).toHaveAttribute(
         "href",
         /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=19-00001-99999$/,
       );
