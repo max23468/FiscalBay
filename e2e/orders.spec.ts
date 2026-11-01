@@ -1,6 +1,14 @@
 import { readFile } from "node:fs/promises";
 import ExcelJS from "exceljs";
-import { areas, enter, noPageOverflow, open, searched, setScenario } from "./components";
+import {
+  areas,
+  clickHydrated,
+  enter,
+  noPageOverflow,
+  open,
+  searched,
+  setScenario,
+} from "./components";
 import { expect, test, watchNetwork } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
@@ -368,7 +376,7 @@ test.describe("area reale", () => {
         await page.reload();
         await expect(dialog).toBeVisible();
         const direct = await page.evaluate(() => history.length);
-        await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+        await clickHydrated(dialog.getByRole("button", { name: "Chiudi", exact: true }));
         await expect(dialog).toBeHidden();
         await expect(page).toHaveURL(/\/app\/ordini(?:\?vista=[0-9a-z]+)?$/u);
         expect(await page.evaluate(() => history.length)).toBe(direct);
@@ -885,11 +893,11 @@ for (const language of ["it", "en"] as const) {
       await page.reload();
       await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
       // Nel menu della scheda «Apri su eBay» è un collegamento al Seller Hub.
-      await failed
-        .getByRole("button", {
+      await clickHydrated(
+        failed.getByRole("button", {
           name: t("Altre azioni per l’ordine", "More actions for order") + " 19-00001-99999",
-        })
-        .click();
+        }),
+      );
       await expect(
         page.getByRole("menuitem", { name: t("Apri su eBay", "Open on eBay") }),
       ).toHaveAttribute(

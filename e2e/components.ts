@@ -1,4 +1,4 @@
-import type { BrowserContext, Page } from "@playwright/test";
+import type { BrowserContext, Locator, Page } from "@playwright/test";
 import { expect, networkIdle, test } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
@@ -19,6 +19,21 @@ export async function setScenario(page: Page, scenario: string, base = "/antepri
     form: { scenario, redirectTo: `${base}/ordini` },
     maxRedirects: 0,
   });
+}
+
+/**
+ * Clic dopo una ricarica: il controllo è già visibile prima dell'hydration, quando il clic
+ * andrebbe perso. Si attende che React abbia collegato proprio quell'elemento.
+ */
+export async function clickHydrated(target: Locator) {
+  await expect
+    .poll(() =>
+      target.evaluate((element) =>
+        Object.keys(element).some((key) => key.startsWith("__reactProps$")),
+      ),
+    )
+    .toBe(true);
+  await target.click();
 }
 
 export async function open(page: Page, path = "/anteprima/ordini", scenario?: string) {
