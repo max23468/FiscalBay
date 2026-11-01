@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { createHmac } from "node:crypto";
-import type { APIResponse, BrowserContext } from "@playwright/test";
+import { request, type APIResponse, type BrowserContext } from "@playwright/test";
 import { applyLocalMigrations, database } from "../scripts/local-d1.mjs";
 import type { PageRole } from "./page-cases";
 
@@ -29,20 +29,20 @@ export async function writeLocalDatabase(sql: string) {
     throw new Error(
       "Scrittura sintetica soltanto in locale: la prova non vale sul dominio remoto.",
     );
-  const response = await fetch(
-    `${localOrigin}/cdn-cgi/local/explorer/api/d1/database/${database.id}/raw`,
-    {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sql }),
-    },
-  );
-  const result = (await response.json()) as {
-    success: boolean;
-    errors: { message: string }[];
-  };
-  if (!response.ok || !result.success)
-    throw new Error(`Scrittura nella D1 locale non riuscita: ${JSON.stringify(result.errors)}`);
+  // Il client di Playwright prova ogni indirizzo di `localhost`, come il browser: in CI la preview
+  // non ascolta su quello che sceglie `fetch` di Node.
+  const api = await request.newContext();
+  try {
+    const response = await api.post(
+      `${localOrigin}/cdn-cgi/local/explorer/api/d1/database/${database.id}/raw`,
+      { data: { sql } },
+    );
+    const result = (await response.json()) as { success: boolean; errors: { message: string }[] };
+    if (!response.ok() || !result.success)
+      throw new Error(`Scrittura nella D1 locale non riuscita: ${JSON.stringify(result.errors)}`);
+  } finally {
+    await api.dispose();
+  }
 }
 
 export function localCookie(role: PageRole, baseURL: string, token = `pages-${role}`) {
