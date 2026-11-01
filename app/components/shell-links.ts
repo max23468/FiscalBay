@@ -6,7 +6,6 @@ import {
   Languages,
   Megaphone,
   Settings,
-  ShieldCheck,
   Store,
   User,
 } from "lucide-react";
@@ -46,13 +45,12 @@ export function shellDestinations(links: AppLinks, t: AppCopy): NavDestination[]
 }
 
 /**
- * Voci dell'account nel menu dell'avatar: profilo, categorie più cercate delle Impostazioni e
+ * Voci dell'account nel menu dell'avatar: Account, Piano e pagamenti, le Impostazioni e le
  * Novità, soltanto quando la pagina ha voci (D203).
  */
 export function accountMenu(links: AppLinks, t: AppCopy, whatsNew = false): AccountMenuItem[] {
   return [
-    { href: appHref(links, "impostazioni/profilo"), label: t.shell.profile, Icon: User },
-    { href: appHref(links, "impostazioni/sicurezza"), label: t.shell.security, Icon: ShieldCheck },
+    { href: appHref(links, "impostazioni/account"), label: t.shell.account, Icon: User },
     { href: appHref(links, "impostazioni/piano"), label: t.shell.planBilling, Icon: CreditCard },
     { href: appHref(links, "impostazioni"), label: t.shell.settings, Icon: Settings },
     ...(whatsNew

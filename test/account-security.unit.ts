@@ -18,13 +18,13 @@ it("distingue le cause passkey riconoscibili e non indovina quelle ambigue", () 
   for (const value of [
     "//example.invalid",
     "https://example.invalid",
-    "/app/impostazioni/sicurezza?delete=1",
-    "/app/impostazioni/sicurezza#unknown",
-    "/en/app/impostazioni/sicurezza",
+    "/app/impostazioni/account?delete=1",
+    "/app/impostazioni/account#unknown",
+    "/en/app/impostazioni/account",
   ]) {
     expect(securityReturnPath("it", value)).toBeNull();
   }
-  expect(securityReturnPath("en", "/en/app/impostazioni/sicurezza#security-methods")).toBe(
-    "/en/app/impostazioni/sicurezza#security-methods",
+  expect(securityReturnPath("en", "/en/app/impostazioni/account#security-methods")).toBe(
+    "/en/app/impostazioni/account#security-methods",
   );
 });

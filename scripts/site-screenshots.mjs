@@ -58,7 +58,7 @@ const shots = [
   },
   {
     name: "sicurezza",
-    path: "/anteprima/impostazioni/sicurezza",
+    path: "/anteprima/impostazioni/account",
     scenario: "premium",
     viewport: { width: 1000, height: 1600 },
     // Il bordo che separa il gruppo dall'email resta fuori dall'immagine.
@@ -169,15 +169,16 @@ const sheet = {
 };
 const sheetRows = [
   ["40-10001-20002", "27/09/2026 14:57", "Giorgio Neri", "NREGRG80A01G337P", "", "18.40"],
+  ["27-10293-84756", "27/09/2026 14:22", "Maria Rossi", "RSSMRA80A41H501Y", "", "49.90"],
+  ["05-55555-12121", "27/09/2026 12:40", "Luca Bianchi", "BNCLCU75C12F205G", "", "12.00"],
   [
     "12-34567-89012",
-    "27/09/2026 14:22",
+    "27/09/2026 12:00",
     "Società Cooperativa Agricola Val di Non",
     "",
     "01234567897",
     "1259.00",
   ],
-  ["27-10293-84756", "27/09/2026 13:25", "Maria Rossi", "RSSMRA80A41H501Y", "", "49.90"],
   [
     "11-60325-94410",
     "25/09/2026 19:40",
@@ -186,7 +187,6 @@ const sheetRows = [
     "03456789019",
     "212.00",
   ],
-  ["25-30491-88120", "24/09/2026 07:00", "Roberto Ricci", "RCCRRT77B10G702J", "", "30.00"],
 ];
 
 /**
@@ -295,10 +295,13 @@ async function capture(browser, shot, language, scheme) {
   });
   const page = await context.newPage();
   const prefix = language === "it" ? "" : "/en";
-  await page.request.post(`${base}${prefix}/anteprima`, {
+  // Le azioni dell'app rifiutano le richieste senza l'origine del sito, come un browser la invia.
+  const scenario = await page.request.post(`${base}${prefix}/anteprima`, {
     form: { scenario: shot.scenario, redirectTo: `${prefix}/anteprima/ordini` },
+    headers: { origin: new URL(base).origin },
     maxRedirects: 0,
   });
+  if (scenario.status() >= 400) throw new Error(`Scenario ${shot.scenario} rifiutato.`);
   await page.goto(`${base}${prefix}${shot.path}`, { waitUntil: "networkidle" });
   await page.locator("#preview-scenario").waitFor();
   // La barra dell'anteprima non fa parte del prodotto.

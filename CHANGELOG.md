@@ -1,10 +1,71 @@
 # Changelog
 
-Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio.
+Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
-## [2.0.0]
+## [2.0.1] - 2026-11-01
+
+### Novità
+
+#### Funzionalità
+
+- **Pagina Novità.** Raccoglie le funzionalità, i miglioramenti e le correzioni di ogni versione. Si apre dal menu del profilo e la campanella segnala ogni nuova versione.
+
+#### Miglioramenti
+
+- **Impostazioni dell'account.** Dati personali, email, metodi di accesso e sessioni sono riuniti nella sezione Account, che si apre dal menu del profilo.
+
+#### Correzioni
+
+- **Totale degli ordini.** Ordini ed Esportazione mostrano l'importo incassato, senza la tariffa di protezione acquisti che l'acquirente paga a eBay.
+
+### What's new
+
+#### Features
+
+- **What's new page.** It collects the features, improvements and fixes of each version. Open it from the profile menu; the bell announces each new version.
+
+#### Improvements
+
+- **Account settings.** Personal details, email, sign-in methods and sessions are together in the Account section, opened from the profile menu.
+
+#### Fixes
+
+- **Order total.** Orders and Export show the amount you receive, without the buyer protection fee the buyer pays to eBay.
+
+### Altre modifiche
+
+- Console: gli avvisi commerciali del Control Center Telegram si aprono con il titolare dell'account (nome, ragione sociale, email e metodi di accesso) e «Account cancellato» conserva i dati del titolare salvati alla richiesta. La Privacy, nella versione `2026-11-01`, indica Telegram anche per gli avvisi interni sull'uso del servizio.
+- La pagina Novità e la campanella si ricavano dalle parti «Novità» e «What's new» di questo changelog; la promozione su `main` scrive il giorno della versione.
+
+## [2.0.0] - 2026-11-01
 
 Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce la 1.x. Contiene la `2.0.0-rc.12` provata sul test.
+
+### Novità
+
+#### Funzionalità
+
+- **Nuova FiscalBay.** Un'app web in italiano e in inglese, da usare nel browser su computer e smartphone.
+- **Ordini e dati fiscali.** Gli ordini eBay arrivano con il codice fiscale o la partita IVA già controllati, con ricerca e filtri.
+- **Negozi eBay.** Colleghi uno o più negozi in sola lettura: FiscalBay legge gli ordini senza modificarli e mostra i nuovi appena arrivano.
+- **Messaggi all'acquirente.** Un messaggio già scritto, in italiano o in inglese, per chiedere il dato fiscale.
+- **Esportazione.** Gli ordini si scaricano in CSV, Excel o ZIP.
+- **Telegram.** Il bot segnala i nuovi ordini e risponde ai comandi del tuo account.
+- **Accesso e piani.** Accedi con email, Google, passkey o eBay; i piani sono Free, prova gratuita e Premium.
+
+### What's new
+
+#### Features
+
+- **New FiscalBay.** A web app in Italian and English, to use in the browser on computer and smartphone.
+- **Orders and tax data.** eBay orders arrive with tax code or VAT number already checked, with search and filters.
+- **eBay stores.** Connect one or more stores read-only: FiscalBay reads orders without changing them and shows new ones as soon as they arrive.
+- **Buyer messages.** A ready-made message, in Italian or English, to ask for tax data.
+- **Export.** Orders can be downloaded as CSV, Excel or ZIP.
+- **Telegram.** The bot announces new orders and answers the commands of your account.
+- **Sign-in and plans.** Sign in with email, Google, passkey or eBay; plans are Free, free trial and Premium.
+
+### Contenuto
 
 - Account con email e password, Google, passkey e accesso con eBay; sessioni revocabili, verifica dell'email e MFA per l'amministrazione.
 - Collegamento dei negozi eBay in sola lettura, con pausa, ricollegamento e scollegamento; i nuovi ordini arrivano con l'avviso di eBay.

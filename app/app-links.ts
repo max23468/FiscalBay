@@ -63,8 +63,11 @@ export const planPath = `${settingsPath}/piano`;
 /** Notifiche, fra le categorie delle Impostazioni: collegamento e preferenze di Telegram. */
 export const notificationSettingsPath = `${settingsPath}/notifiche`;
 
-/** Sicurezza, fra le categorie delle Impostazioni: riceve anche le sue azioni. */
-export const securityPath = `${settingsPath}/sicurezza`;
+/**
+ * Account, fra le categorie delle Impostazioni: dati personali, email, accessi e sessioni;
+ * riceve anche le azioni di sicurezza.
+ */
+export const securityPath = `${settingsPath}/account`;
 
 /** Supporto, fra le categorie delle Impostazioni: modulo di assistenza e Novità. */
 export const supportSettingsPath = `${settingsPath}/supporto`;
@@ -79,8 +82,8 @@ export const notificationsPath = "/api/v1/notifications";
 export const privacySettingsPath = `${settingsPath}/privacy`;
 
 /**
- * Solo la pagina Sicurezza con i suoi gruppi e Dati e privacy, mai URL esterni o azioni da
- * rieseguire.
+ * Solo la categoria Account con i gruppi di sicurezza e Dati e privacy, mai URL esterni o azioni
+ * da rieseguire.
  */
 export function securityReturnPath(language: Language, value: string | null): string | null {
   const base = localizedPath(language, securityPath);

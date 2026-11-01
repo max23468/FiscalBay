@@ -14,7 +14,7 @@ import { MethodAction, MethodRow } from "./security-rows";
 import { SessionList } from "./security-sessions";
 
 /** Categoria Sicurezza delle Impostazioni, che riceve anche le sue azioni. */
-const securitySection = "impostazioni/sicurezza";
+const securitySection = "impostazioni/account";
 
 /** Azioni che richiedono un accesso recente, oppure la conferma con passkey per un admin. */
 const recentIntents = new Set([

@@ -45,7 +45,11 @@ export default defineConfig({
     // resta sotto il timeout di Stryker (`stryker.config.json`), che vale anche per la mutation.
     testTimeout: 15_000,
     hookTimeout: 20_000,
-    setupFiles: ["./test/apply-migrations.ts", "./test/fixtures/turnstile-fixtures.ts"],
+    setupFiles: [
+      "./test/apply-migrations.ts",
+      "./test/fixtures/turnstile-fixtures.ts",
+      "./test/fixtures/whats-new-fixtures.ts",
+    ],
     diff: "./test/diff-options.ts",
     css: { include: [/app\.css/u] },
   },

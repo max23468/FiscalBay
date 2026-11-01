@@ -111,8 +111,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && !inputs.prova && github.ref == 'refs/heads/main' && !cancelled() && needs.qualify.result == 'success' }}
     environment: production
     runs-on: ubuntu-26.04
-    # Il catalogo completo delle pagine in due browser sul sito reale richiede più di mezz'ora.
-    timeout-minutes: 90
+    timeout-minutes: 45
     permissions:
       contents: write
       actions: read
@@ -150,12 +149,14 @@ jobs:
       - name: Install browsers
         timeout-minutes: 10
         run: pnpm exec playwright install --with-deps chromium webkit
+      # Ogni pagina una volta in due browser: lingue, larghezze e temi sono già provati nella
+      # qualifica sulla stessa build Production; il sito reale aggiunge dominio, zona e dati live.
       - name: Check Production public pages and preview exclusion
         env:
           E2E_BASE_URL: https://fiscalbay.it
           E2E_RUN_ID: production-remote
           E2E_PRODUCTION: "1"
-          E2E_MATRIX: full
+          E2E_MATRIX: single
         run: node scripts/browser-tests.mjs --pages --browsers chromium,webkit
       - name: Rollback compatible deployment
         if: failure()

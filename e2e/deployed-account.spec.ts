@@ -63,10 +63,10 @@ test(
       stores.active,
     );
 
-    // Il vecchio indirizzo del profilo porta alla sua categoria delle Impostazioni.
+    // Il vecchio indirizzo del profilo porta alla categoria Account delle Impostazioni.
     await page.goto("/app/profilo");
-    await expect(page).toHaveURL(/\/app\/impostazioni\/profilo$/u);
-    await expect(page).toHaveTitle("FiscalBay | Profilo | Impostazioni");
+    await expect(page).toHaveURL(/\/app\/impostazioni\/account$/u);
+    await expect(page).toHaveTitle("FiscalBay | Account | Impostazioni");
 
     // Con la sessione la radice porta agli Ordini; «Visita fiscalbay.it» mostra il sito e
     // «Apri l'app» torna agli Ordini, senza uscire.

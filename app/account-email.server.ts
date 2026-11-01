@@ -185,7 +185,7 @@ function authEmail(
             "After you confirm, we sign out every session, stop store reads, notifications and renewals, then erase orders, stores and settings. Deletion cannot be undone.",
           ],
           button: "Delete account",
-          note: `${validity} Open the link in the browser where you are signed in. If it was not you, ignore this email and change your password from Security.`,
+          note: `${validity} Open the link in the browser where you are signed in. If it was not you, ignore this email and change your password from Settings › Account.`,
         };
       case "change-email":
         return {
@@ -224,7 +224,7 @@ function authEmail(
           "Dopo la conferma chiudiamo tutte le sessioni, fermiamo letture dei negozi, notifiche e rinnovi, poi eliminiamo ordini, negozi e impostazioni. La cancellazione non si può annullare.",
         ],
         button: "Elimina l’account",
-        note: `${validity} Apri il link nel browser in cui hai effettuato l’accesso. Se non sei stato tu, ignora questa email e cambia la password da Sicurezza.`,
+        note: `${validity} Apri il link nel browser in cui hai effettuato l’accesso. Se non sei stato tu, ignora questa email e cambia la password da Impostazioni › Account.`,
       };
     case "change-email":
       return {
@@ -319,10 +319,10 @@ const methodNames: Record<Language, Record<"google" | "ebay" | "password", strin
 function securityEmail(event: SecurityEvent, language: Language): AccountEmail {
   const it = language === "it";
   const common = {
-    button: it ? "Apri Sicurezza" : "Open Security",
+    button: it ? "Apri Account" : "Open Account",
     note: it
-      ? "Se non sei stato tu, apri Sicurezza, controlla i metodi di accesso e reimposta la password."
-      : "If it was not you, open Security, check your sign-in methods and reset your password.",
+      ? "Se non sei stato tu, apri Account, controlla i metodi di accesso e reimposta la password."
+      : "If it was not you, open Account, check your sign-in methods and reset your password.",
   };
   switch (event.kind) {
     case "password-reset":

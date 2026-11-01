@@ -804,7 +804,7 @@ describe("cancellazione dell'account nell'anteprima", () => {
     const cookie = await cookieFor("ordinario");
     for (const [returnTo, location] of [
       ["/anteprima/impostazioni/privacy", "/anteprima/impostazioni/privacy"],
-      ["/app/impostazioni/privacy", "/anteprima/impostazioni/sicurezza"],
+      ["/app/impostazioni/privacy", "/anteprima/impostazioni/account"],
     ]) {
       const response = await routeResponse(
         previewSettingsAction,

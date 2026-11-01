@@ -1584,7 +1584,7 @@ test.describe("negozi e impostazioni", () => {
       // Auth o database non disponibili: come l'area reale, la pagina a sé senza la shell, nessun
       // dato e soltanto Riprova, su ogni pagina; resta la barra degli scenari.
       await setScenario(page, "servizio-non-disponibile");
-      for (const section of ["ordini", "negozi", "impostazioni", "impostazioni/profilo"]) {
+      for (const section of ["ordini", "negozi", "impostazioni", "impostazioni/account"]) {
         const response = await page.goto(`${prefix}/anteprima/${section}`);
         expect(response?.status()).toBe(503);
         await expect(

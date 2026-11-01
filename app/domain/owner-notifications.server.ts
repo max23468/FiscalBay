@@ -6,6 +6,7 @@ import { untilStopped } from "../sequence";
 import { formatAmount } from "../i18n";
 import { ownerChatId, telegramConfigured } from "../integrations/telegram.server";
 import { activeCoverageSql } from "./grants.server";
+import { listSignInMethods } from "./sign-in-methods.server";
 import { at, ownerRetryMs, sendPanel, type Panel, type Row } from "./owner-panels.server";
 
 /**
@@ -19,7 +20,9 @@ import { at, ownerRetryMs, sendPanel, type Panel, type Row } from "./owner-panel
  * L'invio è seriale, al più dieci messaggi per turno: ogni avviso si prende con un claim, così
  * due turni sovrapposti non lo inviano due volte. Cinque tentativi con attese crescenti fino a
  * sei ore; il primo invio fallito ferma gli altri fino al turno successivo, come per gli
- * incidenti. Nei messaggi soltanto piano, importi e istanti: lo spazio si apre dalla console.
+ * incidenti. Gli avvisi di un account o di uno spazio riportano nome, email, ragione sociale e
+ * metodi di accesso del titolare, riletti all'invio; la cancellazione dell'account li porta nel
+ * proprio dettaglio, perché l'utente esce prima. Mai dati dei buyer.
  */
 
 export type NotificationKind =
@@ -67,6 +70,9 @@ type Detail = {
   origin?: "webhook" | "support";
   left?: number;
   total?: number;
+  email?: string | null;
+  name?: string | null;
+  company?: string | null;
 };
 
 type NotificationRow = {
@@ -79,8 +85,16 @@ type NotificationRow = {
   claim_token: string;
 };
 
-/** Spazio dell'avviso letto all'invio: niente nomi né email, soltanto stato e conteggi. */
+/** Spazio dell'avviso letto all'invio: stato e conteggi. */
 type Space = { createdAt: string; stores: number; coverage: string | null };
+
+/** Titolare dell'account o dello spazio dell'avviso; i metodi mancano dopo la cancellazione. */
+type Account = {
+  email: string | null;
+  name: string | null;
+  company: string | null;
+  methods: string[] | null;
+};
 
 const t = adminCopy.it;
 const n = copy.notifications;
@@ -225,7 +239,23 @@ function title(kind: NotificationKind, detail: Detail) {
   return n.titles[kind];
 }
 
-export function notificationPanel(env: Env, row: NotificationRow, space: Space | null): Panel {
+function accountRows(account: Account): Row[] {
+  return [
+    [n.labels.name, account.name ?? "n.d."],
+    ...(account.company ? [[n.labels.company, account.company] satisfies Row] : []),
+    [n.labels.email, account.email ?? "n.d."],
+    ...(account.methods
+      ? [[n.labels.access, account.methods.join(", ") || "n.d."] satisfies Row]
+      : []),
+  ];
+}
+
+export function notificationPanel(
+  env: Env,
+  row: NotificationRow,
+  space: Space | null,
+  account: Account | null,
+): Panel {
   const detail = JSON.parse(row.detail) as Detail;
   const href = row.workspace_id
     ? `/admin/spazi/${encodeURIComponent(row.workspace_id)}`
@@ -235,6 +265,7 @@ export function notificationPanel(env: Env, row: NotificationRow, space: Space |
   return {
     title: title(row.kind, detail),
     sections: [
+      ...(account ? [{ title: n.account, rows: accountRows(account) }] : []),
       ...(space
         ? [
             {
@@ -254,6 +285,60 @@ export function notificationPanel(env: Env, row: NotificationRow, space: Space |
     ],
     buttons: [[{ text: copy.openConsole, url: originUrl(env, href) }]],
   };
+}
+
+/**
+ * Titolare e spazio dell'avviso: dalla chiave per registrazione e ammissione, dal ruolo di
+ * titolare per gli avvisi di uno spazio, dal dettaglio per la cancellazione dell'account.
+ */
+async function subjectOf(db: D1Database, row: NotificationRow, now: Date) {
+  if (row.kind === "account_deleted") {
+    const detail = JSON.parse(row.detail) as Detail;
+    const account = detail.email
+      ? { email: detail.email, name: detail.name ?? null, company: detail.company ?? null }
+      : null;
+    return { space: null, account: account && { ...account, methods: null } };
+  }
+  let userId: string | null = null;
+  let workspaceId = row.workspace_id;
+  if (row.kind === "registered" || row.kind === "admitted") {
+    userId = row.key.slice(row.key.indexOf(":") + 1);
+    workspaceId =
+      (
+        await db
+          .prepare(`SELECT workspace_id FROM workspace_members
+            WHERE user_id = ? AND role = 'owner' LIMIT 1`)
+          .bind(userId)
+          .first<{ workspace_id: string }>()
+      )?.workspace_id ?? null;
+  } else if (workspaceId) {
+    userId =
+      (
+        await db
+          .prepare(`SELECT user_id FROM workspace_members
+            WHERE workspace_id = ? AND role = 'owner' LIMIT 1`)
+          .bind(workspaceId)
+          .first<{ user_id: string }>()
+      )?.user_id ?? null;
+  }
+  return { space: await spaceOf(db, workspaceId, now), account: await accountOf(db, userId) };
+}
+
+async function accountOf(db: D1Database, userId: string | null): Promise<Account | null> {
+  if (!userId) return null;
+  const user = await db
+    .prepare(`SELECT u."email" AS email, p.first_name || ' ' || p.last_name AS name,
+        p.company_name AS company
+      FROM "user" u LEFT JOIN user_profiles p ON p.user_id = u."id" WHERE u."id" = ?`)
+    .bind(userId)
+    .first<Omit<Account, "methods">>();
+  if (!user) return null;
+  const { accounts, passkeys } = await listSignInMethods(db, userId);
+  const methods: string[] = (Object.keys(accounts) as Array<keyof typeof accounts>)
+    .filter((method) => accounts[method])
+    .map((method) => n.methods[method]);
+  if (passkeys.length) methods.push(n.methods.passkey);
+  return { ...user, methods };
 }
 
 async function spaceOf(db: D1Database, workspaceId: string | null, now: Date) {
@@ -303,13 +388,8 @@ export async function deliverOwnerNotifications(env: Env, fetcher: typeof fetch,
     const row = await claim(db, now);
     if (!row) return "stop";
     try {
-      await sendPanel(
-        env,
-        chatId,
-        notificationPanel(env, row, await spaceOf(db, row.workspace_id, now)),
-        now,
-        fetcher,
-      );
+      const { space, account } = await subjectOf(db, row, now);
+      await sendPanel(env, chatId, notificationPanel(env, row, space, account), now, fetcher);
     } catch (error) {
       await db
         .prepare(`UPDATE owner_notifications SET status = ?3, retry_at = ?4, claim_token = NULL,
