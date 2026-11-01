@@ -3,7 +3,7 @@ import { stalledEbayDeletions } from "./ebay-account-deletion.server";
 import { auditInProgress } from "./admin-audit.server";
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
 import { minute, stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
-import { storeLabelSql } from "./store-state.server";
+import { listedOrder, storeLabelSql } from "./store-state.server";
 
 /**
  * Stato operativo per la console (§15): lavori periodici, ricevute dei provider, letture dei
@@ -20,6 +20,7 @@ export type AnomalyKind =
   | "ebay_down"
   | "store_reads"
   | "order_details"
+  | "tax_missing"
   | "task_stalled"
   | "receipts_stalled"
   | "telegram_failed"
@@ -63,6 +64,14 @@ export type ReceiptState = {
 
 /** Giorni prima della scadenza di una credenziale in cui l'owner riceve l'avviso (§29). */
 export const credentialWarningDays = 45;
+
+/**
+ * Ordini italiani senza dato fiscale (§31): un negozio li segnala quando, fra gli ordini delle
+ * ultime 48 ore, ne mancano almeno 5 e almeno il 60%. Gli ordini delle ultime 3 ore attendono
+ * la passata Trading, che spesso porta il dato dopo. Indica in anticipo un campo o uno scope che
+ * eBay ha smesso di restituire, non un acquirente che non l'ha indicato.
+ */
+export const taxGap = { orders: 5, percent: 60, windowHours: 48, settleHours: 3 } as const;
 
 /** Oltre questa attesa una riga del registro ancora «in corso» non ha ricevuto l'esito. */
 const unrecordedAuditMs = 10 * minute;
@@ -126,6 +135,11 @@ export async function retryOrderDetails(db: D1Database, storeId: string, now = n
   return result.meta.changes;
 }
 
+/** L'ordine `o`, anche attraverso gli ordini uniti in lui, non ha un dato fiscale presente. */
+const taxMissingSql = `NOT EXISTS (SELECT 1 FROM tax_identifiers t
+  JOIN orders original ON original.id = t.order_id
+  WHERE (original.id = o.id OR original.merged_into = o.id) AND t.removed_at IS NULL)`;
+
 const storeHref = (id: string) => `negozi?q=${encodeURIComponent(id)}`;
 const workspaceHref = (id: string) => `spazi/${encodeURIComponent(id)}`;
 
@@ -143,6 +157,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
     { results: switchedOff },
     { results: unrecorded },
     { results: credentials },
+    { results: taxGaps },
   ] = await db.batch<Record<string, string | number | null>>([
     // Negozi attivi con le ultime due letture fallite, come nella campanella del venditore.
     db
@@ -193,6 +208,23 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         WHERE expires_on IS NULL OR julianday(expires_on) - ?2 <= julianday(?1)
         ORDER BY expires_on IS NULL, expires_on, name`)
       .bind(at, credentialWarningDays),
+    db
+      .prepare(`SELECT id, label, missing AS count, since FROM (
+          SELECT s.id, ${storeLabelSql("s")} AS label, COUNT(*) AS total,
+            SUM(${taxMissingSql}) AS missing,
+            MIN(CASE WHEN ${taxMissingSql} THEN o.creation_time END) AS since
+          FROM ebay_stores s JOIN orders o ON o.store_id = s.id
+            AND o.creation_time >= ?2 AND o.creation_time <= ?3
+          WHERE s.disconnected_at IS NULL AND s.data_deleted_at IS NULL
+            AND ${listedOrder("o", "?1")} AND o.marketplace_id = 'EBAY_IT'
+            AND COALESCE(json_extract(o.buyer_json, '$.billingAddress.countryCode'), 'IT') = 'IT'
+          GROUP BY s.id)
+        WHERE missing >= ${taxGap.orders} AND missing * 100 >= total * ${taxGap.percent}`)
+      .bind(
+        at,
+        new Date(now.getTime() - taxGap.windowHours * 60 * minute).toISOString(),
+        new Date(now.getTime() - taxGap.settleHours * 60 * minute).toISOString(),
+      ),
   ]);
   const active = new Map(
     (activeStores as { environment: string; count: number }[]).map((row) => [
@@ -263,6 +295,16 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       since: at,
       count: details.reduce((total, row) => total + Number(row.count), 0),
       subjects: details.map(subject),
+    });
+
+  if (taxGaps.length > 0)
+    anomalies.push({
+      key: "tax_missing",
+      kind: "tax_missing",
+      severity: "p2",
+      since: taxGaps.map((row) => String(row.since)).sort()[0]!,
+      count: taxGaps.reduce((total, row) => total + Number(row.count), 0),
+      subjects: taxGaps.map(subject),
     });
 
   // Più lavori fermi insieme hanno di solito una sola causa, come il cron che non parte.

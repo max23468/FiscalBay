@@ -99,6 +99,8 @@ export async function startStoreLink(
     state,
     code_challenge: challenge,
     code_challenge_method: "S256",
+    // Senza nuovo accesso eBay riusa la sessione del browser, spesso quella di un altro negozio.
+    prompt: "login",
   }).toString();
   // Senza locale eBay mostra accesso e consenso in inglese anche agli account italiani.
   if (language === "it") url.searchParams.set("locale", "it-IT");
