@@ -305,9 +305,9 @@ export default function Site({ loaderData }: Route.ComponentProps) {
         </a>
       </section>
       <section aria-labelledby="domande" className="border-t">
-        {/* Allineata alle altre sezioni: la larghezza di lettura limita il contenuto, non la colonna. */}
+        {/* Elenco largo quanto le altre sezioni: Funzioni e Piani occupano tutta la colonna. */}
         <div className={cn(siteColumn, "py-14 sm:py-16")}>
-          <div className="grid max-w-3xl gap-6">
+          <div className="grid gap-6">
             <h2 id="domande" className="text-2xl font-semibold sm:text-3xl">
               {t.faqTitle}
             </h2>
