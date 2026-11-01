@@ -312,6 +312,9 @@ function ColumnsField({
   const { t } = useCopy();
   const copy = t.settings.export;
   const [moved, setMoved] = useState("");
+  // Chiuso all'apertura: l'elenco completo occuperebbe gran parte della pagina.
+  const [open, setOpen] = useState(false);
+  const listId = useId();
   if (!premium)
     return (
       <FieldSet>
@@ -333,17 +336,25 @@ function ColumnsField({
     onChange({ ...layout, order });
     setMoved(copy.exportColumnMoved(name(column), index + step + 1, visible.length));
   };
-  // Chiuso all'apertura: l'elenco completo occuperebbe gran parte della pagina.
   return (
-    <details className="group">
-      <summary className="flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-sm text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+    <div className="grid gap-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen(!open)}
+        className="flex w-fit items-center gap-1.5 rounded-sm text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      >
         {copy.exportColumns}
         <ChevronDown
           aria-hidden="true"
-          className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180"
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick)",
+            open && "rotate-180",
+          )}
         />
-      </summary>
-      <FieldSet className="mt-3">
+      </button>
+      <FieldSet id={listId} hidden={!open}>
         <FieldLegend className="sr-only">{copy.exportColumns}</FieldLegend>
         <ol className="grid max-h-96 gap-1 overflow-y-auto rounded-lg border p-2">
           {visible.map((column, index) => (
@@ -391,7 +402,7 @@ function ColumnsField({
           {moved}
         </p>
       </FieldSet>
-    </details>
+    </div>
   );
 }
 
