@@ -429,6 +429,16 @@ function publishedRelease(repository, sha, version) {
         : ref.object.sha;
     if (commit !== sha && !version) continue;
     const found = ghJson("api", `repos/${repository}/releases/tags/${release.tagName}`);
+    // Deploy di sole modifiche interne: la versione resta quella pubblicata su un commit precedente.
+    if (
+      version &&
+      commit !== sha &&
+      !found.draft &&
+      ghJson("api", `repos/${repository}/compare/${commit}...${sha}`).status === "ahead"
+    ) {
+      console.log(`Deploy senza nuova release: ${found.html_url} resta su ${commit.slice(0, 12)}.`);
+      return;
+    }
     const details = { tagName: found.tag_name, isDraft: found.draft, url: found.html_url };
     assertPublishedRelease(details, commit, sha, version ?? release.tagName.slice(1));
     console.log(`Release verificata: ${details.url}.`);
