@@ -161,7 +161,7 @@ const stampTables = [
 const written = { service_settings: [["telegram_sends"]] };
 
 /** Sessioni, verifiche e collegamenti eBay in corso: nessuno torna valido da una copia. */
-const transientTables = ["session", "verification", "ebay_store_link_sessions"];
+const transientTables = ["session", "verification", "ebay_store_link_sessions", "service_activity"];
 
 export const ident = (name) => `"${String(name).replaceAll('"', '""')}"`;
 
@@ -758,7 +758,43 @@ async function expectFreeze(target, expected) {
   });
 }
 
+/** Il blocco D1 chiude gli ingressi anche delle invocazioni con il vecchio ambiente. */
+export async function setRecoveryFence(run, closed) {
+  await run([
+    `INSERT INTO service_settings (name, value, updated_at)
+      VALUES ('recovery_frozen', '${closed}', ${literal(new Date().toISOString())})
+      ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
+  ]);
+}
+
+/** Nessun lavoro può iniziare dopo il blocco; quelli già entrati devono terminare davvero. */
+export async function assertDrained(run) {
+  const [[fence], [active]] = await run([
+    "SELECT value FROM service_settings WHERE name = 'recovery_frozen'",
+    "SELECT COUNT(*) AS count FROM service_activity",
+  ]);
+  if (fence?.value !== "true" || active.count !== 0)
+    throw new Error(
+      `Ripristino bloccato: blocco D1 ${fence?.value === "true" ? "attivo" : "assente"}, operazioni attive ${active.count}.`,
+    );
+}
+
+/**
+ * Dopo Time Travel le attività anteriori alla cattura sono soltanto righe dello snapshot:
+ * la cattura era ammessa solo dopo la loro conclusione. Lavori successivi restano bloccanti.
+ */
+export async function prepareReapply(run, capturedAt) {
+  if (!Number.isFinite(Date.parse(capturedAt))) throw new Error("Istante della cattura assente.");
+  await setRecoveryFence(run, true);
+  await run([
+    `DELETE FROM service_activity WHERE julianday(started_at) < julianday(${literal(capturedAt)})`,
+  ]);
+  await assertDrained(run);
+}
+
 async function freeze(target) {
+  const run = remoteRun(target.database);
+  await setRecoveryFence(run, true);
   cf(
     "workers",
     "secrets",
@@ -773,12 +809,26 @@ async function freeze(target) {
   );
   cf("queues", "edit", queueOf(target).queue_id, "--settings-delivery-paused", "true");
   await expectFreeze(target, "frozen");
+  // Fino a quindici minuti, senza liberare righe per il solo trascorrere del tempo.
+  await retryReadback(() => assertDrained(run), 181, 5000);
 }
 
 /** Ripetibile: una riapertura interrotta riprende dal passo mancante. */
+export async function assertThawSafe(run, secret) {
+  const [[fence]] = await run([
+    "SELECT value FROM service_settings WHERE name = 'recovery_frozen'",
+  ]);
+  // Con il segreto ancora presente, «false» può provenire dallo snapshot non riapplicato:
+  // soltanto una riapertura già arrivata oltre la rimozione del segreto si può riprendere.
+  if (fence?.value !== "false" || secret) await assertDrained(run);
+}
+
 async function thaw(target) {
+  const run = remoteRun(target.database);
+  await assertThawSafe(run, frozenSecret(target));
   if (frozenSecret(target))
     cf("workers", "secrets", "delete", "SERVICE_FROZEN", "--worker", target.worker, "--force");
+  await setRecoveryFence(run, false);
   cf("queues", "edit", queueOf(target).queue_id, "--settings-delivery-paused", "false");
   await expectFreeze(target, "open");
 }
@@ -834,7 +884,11 @@ async function main() {
   const command = positionals[0];
   if (command === "freeze") return freeze(target);
   if (command === "thaw") return thaw(target);
-  if (command === "status") return console.log(await readFreeze(target));
+  if (command === "status") {
+    const state = await readFreeze(target);
+    if (state === "frozen") await assertDrained(run);
+    return console.log(state);
+  }
   if (command === "stripe") {
     if (!Number.isFinite(Date.parse(values.since ?? ""))) throw new Error("--since richiesto.");
     const request = cliRequest({ live: target.live, project: values["project-name"] });
@@ -845,6 +899,7 @@ async function main() {
     const key = recoveryKey(process.env.RECOVERY_KEY);
     const at = restorePoint(values.at);
     await expectFreeze(target, "frozen");
+    await assertDrained(run);
     const { bookmark } = cf(
       "d1",
       "time-travel",
@@ -883,7 +938,10 @@ async function main() {
   }
   if (command === "verify") {
     // Prima della riapertura il servizio deve essere ancora sospeso.
-    if (!values.reconciled) await expectFreeze(target, "frozen");
+    if (!values.reconciled) {
+      await expectFreeze(target, "frozen");
+      await assertDrained(run);
+    }
     const result = await verify(run, payload, { reconciled: values.reconciled });
     // Time Travel non tocca i segreti: un segreto mancante è un altro incidente.
     const { worker } = config({ mode: target.live ? "live" : "development" });
@@ -906,9 +964,11 @@ async function main() {
   if (!["restore", "reapply"].includes(command)) throw new Error("Comando non supportato.");
   await expectFreeze(target, "frozen");
   if (command === "restore") {
+    await assertDrained(run);
     cf("d1", "time-travel", "restore", target.database, "--bookmark", header.bookmark, "--force");
     console.log(`Database ripristinato; per annullare: --bookmark ${header.undo}`);
   }
+  await prepareReapply(run, header.capturedAt);
   report("riapplicato", await reapply(run, payload));
 }
 

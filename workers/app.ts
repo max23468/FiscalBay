@@ -11,6 +11,7 @@ import type { InvocationDetail, InvocationOutcome } from "../app/metrics.server"
 import { withInvocationMetrics, withPhaseTimings } from "../app/observability.server";
 import { withResponseCookies } from "../app/response-cookies.server";
 import { queueRetryDelay } from "../app/domain/work-timing";
+import { duringRequestActivity, duringServiceActivity } from "../app/service-activity.server";
 import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
 import { consumeExportJob, isExportJobMessage } from "../app/domain/export-jobs.server";
 import {
@@ -85,7 +86,7 @@ async function loadRequestHandler() {
  * Messaggi della coda osservati: l'esito è `retry` se il consumer ne rimette in coda almeno uno.
  * Il consumer riceve gli stessi messaggi, con un `retry` che lo annota.
  */
-function observedMessages<T extends Message<unknown>>(messages: T[]) {
+function observedMessages<T extends Message<unknown>>(messages: readonly T[]) {
   let retried = false;
   const settled = new Set<T>();
   const observed = messages.map(
@@ -111,7 +112,7 @@ function observedMessages<T extends Message<unknown>>(messages: T[]) {
   };
 }
 
-export default {
+const handlers = {
   async fetch(request, env, ctx) {
     const metrics = { dataset: env.METRICS, version: env.VERSION_METADATA?.id };
     if (frozen(env)) return frozenResponse(new URL(request.url).pathname);
@@ -235,6 +236,55 @@ export default {
       "dispatch",
       () => dispatchScheduledWork(env, new Date(controller.scheduledTime)),
       { dataset: env.METRICS, version: env.VERSION_METADATA?.id, tracing: ctx?.tracing },
+    );
+  },
+} satisfies ExportedHandler<Env>;
+
+export default {
+  async fetch(request, env, ctx) {
+    const blocked = () => frozenResponse(new URL(request.url).pathname);
+    if (frozen(env)) return blocked();
+    return duringRequestActivity(env, (target) => handlers.fetch(request, target, ctx), blocked);
+  },
+  async queue(batch, env, ctx?: ExecutionContext) {
+    const blocked = () => {
+      for (const message of batch.messages)
+        message.retry({ delaySeconds: frozenQueueDelaySeconds });
+    };
+    if (frozen(env)) return blocked();
+    const { observed, pending } = observedMessages(batch.messages);
+    try {
+      await duringServiceActivity(
+        env.DB,
+        () => handlers.queue({ ...batch, messages: observed }, env, ctx),
+        blocked,
+      );
+    } catch (error) {
+      logFailure({ error, operation: "queue" });
+      // Un errore del registro prima dello smistamento conserva il retry ritardato della coda.
+      await withInvocationMetrics(
+        "queue",
+        "unknown",
+        async () => {
+          throw error;
+        },
+        {
+          dataset: env.METRICS,
+          version: env.VERSION_METADATA?.id,
+          count: batch.messages.length,
+        },
+      ).catch(() => {
+        for (const message of pending())
+          message.retry({ delaySeconds: queueRetryDelay(message.attempts) });
+      });
+    }
+  },
+  async scheduled(controller, env, ctx?: ExecutionContext) {
+    if (frozen(env)) return;
+    return duringServiceActivity(
+      env.DB,
+      () => handlers.scheduled(controller, env, ctx),
+      () => {},
     );
   },
 } satisfies ExportedHandler<Env>;

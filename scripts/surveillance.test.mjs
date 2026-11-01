@@ -74,6 +74,22 @@ describe("dati dell'ambiente", () => {
     assert.deepEqual(failing(checkData(rows({ task }), now)), []);
   });
 
+  it("accetta un turno appena accodato o in esecuzione, ma non un turno abbandonato", () => {
+    const slot = "2026-11-02T10:00:00.000Z";
+    const task = { slot, done_at: null, queued_at: slot, locked_until: null };
+    assert.deepEqual(failing(checkData(rows({ task: [task] }), now)), []);
+    const delayed = new Date("2026-11-02T10:11:00.000Z");
+    assert.deepEqual(failing(checkData(rows({ task: [task] }), delayed)), [
+      "valutazione degli incidenti in corso",
+    ]);
+    const running = { ...task, locked_until: "2026-11-02T10:15:00.000Z" };
+    assert.deepEqual(failing(checkData(rows({ task: [running] }), delayed)), []);
+    assert.deepEqual(
+      failing(checkData(rows({ task: [running] }), new Date("2026-11-02T10:16:00Z"))),
+      ["valutazione degli incidenti in corso"],
+    );
+  });
+
   it("somma lo stesso fatto fra gli stati e segnala gli avvisi non consegnati", () => {
     const events = [
       { kind: "refund", status: "sent", count: 2 },

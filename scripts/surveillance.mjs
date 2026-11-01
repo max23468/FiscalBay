@@ -58,7 +58,7 @@ export function statements(since, now) {
   return [
     `SELECT kind, severity, opened_at FROM owner_incidents WHERE resolved_at IS NULL
       ORDER BY severity, opened_at`,
-    `SELECT slot, done_at FROM scheduled_tasks WHERE task = 'owner_incidents'`,
+    `SELECT slot, done_at, queued_at, locked_until FROM scheduled_tasks WHERE task = 'owner_incidents'`,
     `SELECT COUNT(*) AS accounts, COALESCE(SUM("emailVerified"), 0) AS verified FROM "user"
       WHERE julianday("createdAt") >= julianday(${from})`,
     `SELECT kind, status, COUNT(*) AS count FROM owner_notifications
@@ -107,7 +107,9 @@ export function checkData(rows, now) {
       ok:
         Number.isFinite(lastSlot) &&
         lastSlot + 2 * taskPeriods.owner_incidents >= now.getTime() &&
-        Boolean(task?.done_at),
+        (Boolean(task?.done_at) ||
+          Date.parse(task?.locked_until ?? "") > now.getTime() ||
+          Date.parse(task?.queued_at ?? "") + taskPeriods.owner_incidents >= now.getTime()),
     },
     {
       area: "Registrazioni",

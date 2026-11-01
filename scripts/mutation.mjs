@@ -26,10 +26,11 @@ import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
 
 /**
- * Moduli senza suffisso server con regole dei moduli critici: dati fiscali, orari, lista ordini,
- * coda e periodicità degli abbonamenti.
+ * Regole condivise dei moduli critici: dati fiscali, orari, lista ordini, coda,
+ * sospensione del servizio e periodicità degli abbonamenti.
  */
 const criticalShared = new Set([
+  "app/service-activity.server.ts",
   "app/markup.ts",
   "app/tax-quality.ts",
   "app/time.ts",

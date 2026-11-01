@@ -14,6 +14,11 @@ import {
 } from "../app/domain/ebay-account-deletion.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
 import { setSwitch } from "../app/domain/service-settings.server";
+import {
+  duringRequestActivity,
+  duringServiceActivity,
+  waitUntil,
+} from "../app/service-activity.server";
 import { bulkDataAnomalies, recordBulkDataThreshold } from "../app/domain/ebay-quotas.server";
 import { sealToken } from "../app/integrations/ebay/seller-credentials.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
@@ -569,7 +574,7 @@ it("un errore fuori dal consumer rimanda il messaggio con l'attesa, senza consum
   expect(task.retry).toHaveBeenCalledExactlyOnceWith({ delaySeconds: 60 });
   expect(task.ack).not.toHaveBeenCalled();
   expect(points.map(({ blobs }) => blobs?.slice(0, 5))).toContainEqual(
-    expect.arrayContaining(["invocation", "queue", "task", "error"]),
+    expect.arrayContaining(["invocation", "queue", "unknown", "error"]),
   );
 });
 
@@ -668,6 +673,135 @@ it("durante la sospensione pagine, webhook, coda e cron non toccano i dati", asy
     SERVICE_FROZEN: "false",
   });
   expect(open.status).toBe(405);
+});
+
+it("il blocco D1 impedisce nuovi ingressi anche senza il segreto aggiornato", async () => {
+  await env.DB.prepare(`INSERT INTO service_settings (name, value, updated_at)
+    VALUES ('recovery_frozen', 'true', ?)`)
+    .bind(now.toISOString())
+    .run();
+  router.handle.mockImplementationOnce(async () => {
+    await env.DB.prepare("SELECT 1").first();
+    return new Response("unexpected");
+  });
+  const page = await workerFetch(new Request("https://test.fiscalbay.it/app/ordini"), environment);
+  expect(page.status).toBe(503);
+  const sync = { body: { syncStore: "synthetic-store" }, retry: vi.fn() };
+  await worker.queue({ messages: [sync] } as unknown as MessageBatch<unknown>, environment);
+  expect(sync.retry).toHaveBeenCalledWith({ delaySeconds: 43_200 });
+  await worker.scheduled({ scheduledTime: now.getTime() } as ScheduledController, environment);
+  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
+  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM scheduled_tasks").first("n")).toBe(0);
+});
+
+it("il filtro senza accessi D1 non scrive e le letture successive usano il contesto della richiesta", async () => {
+  const blocked = () => new Response(null, { status: 503 });
+  const response = await duringRequestActivity(
+    environment,
+    async () => new Response(null, { status: 429 }),
+    blocked,
+  );
+  expect(response.status).toBe(429);
+  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
+  const imported: Env[] = [];
+  const databases: D1Database[] = [];
+  for (let index = 0; index < 2; index++) {
+    await duringRequestActivity(
+      environment,
+      async (target) => {
+        imported.push(env);
+        databases.push(target.DB);
+        const a = target.DB.prepare("SELECT 1 AS n");
+        const b = env.DB.prepare("SELECT ? AS n").bind(2);
+        const results = await target.DB.batch<{ n: number }>([a, b]);
+        expect(env.DB).toBe(target.DB);
+        expect(results.map(({ results }) => results[0].n)).toEqual([1, 2]);
+        expect(
+          await target.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n"),
+        ).toBe(1);
+        await target.DB.exec("SELECT 1");
+      },
+      () => {
+        throw new Error("unexpected block");
+      },
+    );
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
+  }
+  expect(imported[0]).toBe(imported[1]);
+  expect(databases[0]).toBe(databases[1]);
+});
+
+it("il ripristino vede un lavoro già entrato fino alla sua conclusione", async () => {
+  let complete!: () => void;
+  let entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const pending = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  const run = duringServiceActivity(
+    env.DB,
+    async () => {
+      entered();
+      await pending;
+    },
+    () => {},
+  );
+  await started;
+  await env.DB.prepare(`INSERT INTO service_settings (name, value, updated_at)
+    VALUES ('recovery_frozen', 'true', ?)`)
+    .bind(now.toISOString())
+    .run();
+  const next = vi.fn(async () => {});
+  await duringServiceActivity(env.DB, next, () => {});
+  expect(next).not.toHaveBeenCalled();
+  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(1);
+  complete();
+  await run;
+  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
+  await expect(
+    duringServiceActivity(
+      env.DB,
+      async () => {
+        throw new Error("not-entered");
+      },
+      () => {},
+    ),
+  ).resolves.toBeUndefined();
+});
+
+it("il lavoro in background mantiene attiva l'operazione dopo la risposta", async () => {
+  let complete!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    complete = resolve;
+  });
+  await duringServiceActivity(
+    env.DB,
+    async () => {
+      waitUntil(pending);
+    },
+    () => {},
+  );
+  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(1);
+  complete();
+  // Il rilascio attende le promise registrate con waitUntil, senza ritardi fissi.
+  await vi.waitFor(async () => {
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
+  });
+});
+
+it("un lavoro fallito libera il proprio ingresso senza nascondere l'errore", async () => {
+  await expect(
+    duringServiceActivity(
+      env.DB,
+      async () => {
+        throw new Error("synthetic");
+      },
+      () => {},
+    ),
+  ).rejects.toThrow("synthetic");
+  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
 });
 
 it("il cron del Worker accoda i turni dell'orario pianificato, anche se eseguito in ritardo", async () => {
