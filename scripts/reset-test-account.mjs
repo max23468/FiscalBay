@@ -165,6 +165,13 @@ async function main() {
     const expires = new Date(Date.now() + 86400000).toISOString();
     statements.push(`INSERT OR REPLACE INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt", admin)
       VALUES ('collaudo-admin', 'Collaudo admin', 'admin@example.invalid', 1, '${now}', '${now}', 1);`);
+    // Registrazione completa come l'account di collaudo: l'admin entra anche nell'area riservata.
+    statements.push(`DELETE FROM user_profiles WHERE user_id = 'collaudo-admin';
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT 'collaudo-admin', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT OR IGNORE INTO terms_acceptances SELECT 'collaudo-admin', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};`);
     for (const role of ["member", "admin-verify", "admin-granted"])
       statements.push(
         `INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt", "passkeyVerified") VALUES ('pages-${role}', 'pages-${role}', '${role === "member" ? testAccount.userId : "collaudo-admin"}', '${expires}', '${now}', '${now}', ${role === "admin-granted" ? 1 : 0});`,
