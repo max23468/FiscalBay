@@ -42,6 +42,7 @@ import {
   retryQualification,
   mergeDecision,
   assertResumableRun,
+  awaitsMigrationReview,
   deployedEnvironment,
   existingCandidate,
   identifyCandidate,
@@ -1027,6 +1028,16 @@ describe("comandi del ciclo", () => {
         () => existingCandidate("candidate", run, list),
         /release:cycle resume 9, senza un nuovo dispatch/u,
       );
+  });
+
+  it("ammette un nuovo dispatch soltanto col digest chiesto da una run senza ricevute", () => {
+    const digest = "a".repeat(64);
+    const log = `job\tstep\t2026-11-01T19:09:36Z Error: Migration da approvare: 0070_x.sql. Digest ${digest}\nfine`;
+    assert.equal(awaitsMigrationReview(digest, log, ["candidato"]), true);
+    assert.equal(awaitsMigrationReview("", log, []), false);
+    assert.equal(awaitsMigrationReview("b".repeat(64), log, []), false);
+    assert.equal(awaitsMigrationReview(digest, `Error: readback fallito ${digest}`, []), false);
+    assert.equal(awaitsMigrationReview(digest, log, ["release-receipt-9-1"]), false);
   });
 
   describe("identità della release candidate", () => {

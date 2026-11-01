@@ -896,6 +896,18 @@ export function existingCandidate(command, existing, jobs) {
   return command === "production" && publish.conclusion === "success" ? "published" : "qualified";
 }
 
+/**
+ * Una run ferma alla revisione delle migration non ha scritto nulla e i suoi input non cambiano con
+ * resume: ammette un nuovo dispatch soltanto il digest che ha chiesto, senza ricevute salvate.
+ */
+export function awaitsMigrationReview(reviewed, failedLog, artifacts) {
+  return (
+    /^[0-9a-f]{64}$/u.test(reviewed) &&
+    new RegExp(`Error: Migration da approvare: .* Digest ${reviewed}$`, "mu").test(failedLog) &&
+    !artifacts.some((name) => name.startsWith("release-receipt-"))
+  );
+}
+
 function statusCycle({ repository, number }) {
   assertRun(number);
   summary(repository, number);
@@ -1193,7 +1205,18 @@ async function publishCycle({ repository, command, values }) {
     "--json",
     "databaseId,headSha,status,conclusion",
   ).find((run) => run.headSha === values.sha);
-  if (existing) {
+  const reviewedDispatch =
+    command === "production" &&
+    existing?.conclusion === "failure" &&
+    awaitsMigrationReview(
+      values["reviewed-migrations"],
+      gh("run", "view", String(existing.databaseId), "--repo", repository, "--log-failed"),
+      ghJson(
+        "api",
+        `repos/${repository}/actions/runs/${existing.databaseId}/artifacts`,
+      ).artifacts.map((artifact) => artifact.name),
+    );
+  if (existing && !reviewedDispatch) {
     const jobs = runJobs(repository, existing.databaseId);
     if (existingCandidate(command, existing, jobs) === "published") {
       const run = summary(repository, existing.databaseId);
