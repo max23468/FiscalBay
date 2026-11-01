@@ -30,6 +30,7 @@ import {
   editMessage,
   sendMessage,
   setBotCommands,
+  setBotProfile,
   telegramConfigured,
   type BotButton,
   type BotMessage,
@@ -49,6 +50,12 @@ import { telegramBotCopy as copy } from "../copy/telegram";
 export async function configureBotCommands(env: Env, fetcher: typeof fetch = fetch) {
   if (!telegramConfigured(env) || !(await serviceSetting(env.DB, "telegram_sends"))) return;
   await setBotCommands(env, { it: copy.it.commands, en: copy.en.commands }, fetcher);
+}
+
+/** Nome e descrizioni del bot dell'ambiente, nelle due lingue: da BotFather resta l'immagine. */
+export async function configureBotProfile(env: Env, fetcher: typeof fetch = fetch) {
+  if (!telegramConfigured(env) || !(await serviceSetting(env.DB, "telegram_sends"))) return;
+  await setBotProfile(env, { it: copy.it.profile, en: copy.en.profile }, fetcher);
 }
 
 /** Ultimi ordini consultabili dal bot e ordini per pagina. */

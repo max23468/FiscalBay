@@ -54,7 +54,7 @@ jobs:
       grep: ${{ steps.detect.outputs.grep }}
       browsers: ${{ steps.detect.outputs.browsers }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
-      artifact: build-${{ steps.tree.outputs.tree }}
+      artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
       playwright: ${{ steps.tree.outputs.playwright }}
 

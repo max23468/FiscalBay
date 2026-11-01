@@ -13,7 +13,7 @@ import { dispatchStoreSyncs } from "./order-sync.server";
 import { configureOwnerCommands } from "./owner-control.server";
 import { reconcileOwnerIncidents } from "./owner-incidents.server";
 import { runOwnerNotifications } from "./owner-notifications.server";
-import { configureBotCommands } from "./telegram-bot.server";
+import { configureBotCommands, configureBotProfile } from "./telegram-bot.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "./token-refresh.server";
@@ -85,17 +85,18 @@ const tasks = {
     period: taskPeriods.telegram,
     run: (env: Env, fetcher: typeof fetch, now: Date) => deliverTelegram(env, fetcher, now),
   },
-  // Menu dei comandi del bot, dei venditori e della chat dell'owner, riallineati ogni giorno:
-  // ripeterlo non cambia nulla. I due menu sono indipendenti: un errore dell'uno non lascia
-  // indietro l'altro e fa ripetere il compito.
+  // Menu dei comandi del bot, dei venditori e della chat dell'owner, e profilo del bot,
+  // riallineati ogni giorno: ripeterlo non cambia nulla. Le tre parti sono indipendenti: un
+  // errore dell'una non lascia indietro le altre e fa ripetere il compito.
   telegram_commands: {
     period: taskPeriods.telegram_commands,
     run: async (env: Env, fetcher: typeof fetch) => {
-      const [sellers, owner] = await Promise.allSettled([
+      const results = await Promise.allSettled([
         configureBotCommands(env, fetcher),
         configureOwnerCommands(env, fetcher),
+        configureBotProfile(env, fetcher),
       ]);
-      for (const result of [sellers, owner]) if (result.status === "rejected") throw result.reason;
+      for (const result of results) if (result.status === "rejected") throw result.reason;
     },
   },
   // Quote delle API eBay rilette ogni ora, come alla visita della console: l'anomalia oltre la

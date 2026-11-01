@@ -56,6 +56,7 @@ import {
   insertCredentials,
   insertEntitlement,
   insertStore,
+  insertTaxIdentifiers,
   insertWorkspace,
   now,
   resetDatabase,
@@ -1731,6 +1732,55 @@ describe("anomalie e lavori", () => {
     const down = await listAnomalies(env.DB, at(later(hour)));
     expect(down.find((a) => a.kind === "ebay_down")).toMatchObject({ severity: "p1", count: 3 });
     expect(down.some((a) => a.kind === "store_reads")).toBe(false);
+  });
+
+  it("segnala i negozi in cui la maggior parte degli ordini italiani recenti non ha CF", async () => {
+    await env.DB.batch(insertWorkspace({ id: "w-a" }));
+    await storeWithRuns("s-gap", "production", [1]);
+    await storeWithRuns("s-few", "production", [1]);
+    const check = at(later(48 * hour));
+    const order = (id: string, store: string, ageHours: number, extra = {}) => {
+      const values = { marketplace: "EBAY_IT", country: "IT", ...extra };
+      return env.DB.prepare(
+        `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,
+           currency, total_minor, marketplace_id, buyer_json, retention_until, purge_after)
+         VALUES (?1, ?2, ?1, ?3, ?3, 'EUR', 1299, ?4, json_object('billingAddress',
+           json_object('countryCode', ?5)), ?6, ?6)`,
+      ).bind(
+        id,
+        store,
+        new Date(check.getTime() - ageHours * hour).toISOString(),
+        values.marketplace,
+        values.country,
+        later(400 * 24 * hour),
+      );
+    };
+    const tax = (orderId: string) =>
+      insertTaxIdentifiers({ id: `t-${orderId}`, orderId, type: "CODICE_FISCALE", value: "X" });
+    await env.DB.batch([
+      // Cinque senza CF su otto: oltre il 60%.
+      ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => order(`gap-${n}`, "s-gap", 4 + n)),
+      tax("gap-6"),
+      tax("gap-7"),
+      tax("gap-8"),
+      // Esclusi: troppo recente, troppo vecchio, estero, altro marketplace.
+      order("gap-new", "s-gap", 1),
+      order("gap-old", "s-gap", 60),
+      order("gap-foreign", "s-gap", 5, { country: "DE" }),
+      order("gap-de", "s-gap", 5, { marketplace: "EBAY_DE" }),
+      // Quattro senza CF su quattro: sotto la soglia di cinque ordini.
+      ...[1, 2, 3, 4].map((n) => order(`few-${n}`, "s-few", 4 + n)),
+    ]);
+    const gap = (await listAnomalies(env.DB, check)).find((a) => a.kind === "tax_missing");
+    expect(gap).toMatchObject({ severity: "p2", count: 5 });
+    expect(gap!.subjects.map((subject) => subject.id)).toEqual(["s-gap"]);
+    // Il CF arrivato su un ordine unito vale per l'ordine che lo contiene: quattro su otto.
+    await env.DB.batch([
+      order("gap-1-part", "s-gap", 60),
+      env.DB.prepare("UPDATE orders SET merged_into = 'gap-1' WHERE id = 'gap-1-part'"),
+      tax("gap-1-part"),
+    ]);
+    expect((await listAnomalies(env.DB, check)).some((a) => a.kind === "tax_missing")).toBe(false);
   });
 
   it("conta in ritardo le ricevute ancora aperte da più di un'ora", async () => {

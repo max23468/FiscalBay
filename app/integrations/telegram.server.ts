@@ -411,6 +411,53 @@ export async function setBotCommands(
   ]);
 }
 
+/** Nome e descrizioni del profilo del bot, nella lingua di chi lo apre. */
+export type BotProfile = { name: string; shortDescription: string; description: string };
+
+const profileFields = [
+  ["Name", "name"],
+  ["ShortDescription", "short_description"],
+  ["Description", "description"],
+] as const;
+
+const profileKeys = {
+  name: "name",
+  short_description: "shortDescription",
+  description: "description",
+} as const;
+
+/**
+ * Profilo del bot: in italiano per chi usa Telegram in italiano, in inglese per gli altri, come
+ * il menu. Ogni campo si scrive soltanto se diverso da quello letto, perché Telegram limita i
+ * cambi di nome. Ripeterlo non cambia nulla.
+ */
+export async function setBotProfile(
+  env: Env,
+  profiles: Record<"it" | "en", BotProfile>,
+  fetcher: typeof fetch = fetch,
+): Promise<void> {
+  await Promise.all(
+    (["it", "en"] as const).flatMap((language) =>
+      profileFields.map(([method, field]) => {
+        const scope = language === "it" ? { language_code: "it" } : {};
+        const value = profiles[language][profileKeys[field]];
+        // Lettura e scrittura dello stesso campo restano in ordine; i campi vanno in parallelo.
+        return botApi(
+          env,
+          `getMy${method}`,
+          scope,
+          z.object({ [field]: z.string() }),
+          fetcher,
+        ).then((current) =>
+          current[field] === value
+            ? undefined
+            : botApi(env, `setMy${method}`, { ...scope, [field]: value }, z.literal(true), fetcher),
+        );
+      }),
+    ),
+  );
+}
+
 /** Messaggio di testo semplice, senza formattazione da sottoporre a escape. */
 export async function sendText(
   env: Env,

@@ -423,6 +423,7 @@ describe("collegamento negozio eBay", () => {
     ]);
     expect(authorize.searchParams.get("code_challenge_method")).toBe("S256");
     expect(authorize.searchParams.get("locale")).toBe("it-IT");
+    expect(authorize.searchParams.get("prompt")).toBe("login");
     const state = authorize.searchParams.get("state")!;
 
     const ebay = syntheticEbay();

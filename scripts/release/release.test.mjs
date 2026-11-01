@@ -34,6 +34,9 @@ import {
   promotionBranch,
   romeDay,
   topVersion,
+  undatedChangelog,
+  undatedTree,
+  sameSource,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
 
@@ -60,6 +63,45 @@ describe("pubblicazione riprendibile", () => {
     };
     return { io, calls, receipts };
   };
+
+  it("la promozione con il giorno riusa la sorgente qualificata su develop, mai la build Production", () => {
+    const develop = "# Changelog\n\n## [2.0.1]\n\n- Voce.\n\n## [2.0.0] - 2026-11-01\n";
+    const promoted = datedChangelog(develop, "2.0.1", "2026-11-05");
+    assert.equal(undatedChangelog(promoted), develop);
+    assert.equal(undatedChangelog(develop), develop);
+    // Una versione già pubblicata in cima resta con il suo giorno nel tree di develop: lo stesso tree.
+    const released = "# Changelog\n\n## [2.0.1] - 2026-11-05\n";
+    assert.notEqual(undatedChangelog(released), released);
+
+    // Su un repository vero il tree senza giorno della promozione è il tree di develop.
+    const repo = mkdtempSync(path.join(tmpdir(), "undated-"));
+    const run = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8" }).stdout.trim();
+    run("init", "-q");
+    run("config", "user.email", "prova@example.invalid");
+    run("config", "user.name", "Prova");
+    writeFileSync(path.join(repo, "CHANGELOG.md"), develop);
+    writeFileSync(path.join(repo, "app.ts"), "export {};\n");
+    run("add", "-A");
+    run("commit", "-qm", "develop");
+    const developTree = run("rev-parse", "HEAD^{tree}");
+    writeFileSync(path.join(repo, "CHANGELOG.md"), promoted);
+    run("commit", "-qam", "giorno");
+    const cwd = process.cwd();
+    process.chdir(repo);
+    try {
+      assert.equal(undatedTree(), developTree);
+      assert.equal(undatedTree("HEAD~1"), developTree);
+    } finally {
+      process.chdir(cwd);
+    }
+
+    // Soltanto la sorgente di test si riusa dal tree senza giorno; la build Production mostra il
+    // giorno e si ricostruisce sempre.
+    assert.equal(sameSource("a", "a", "production", "b"), true);
+    assert.equal(sameSource("b", "a", "test", "b"), true);
+    assert.equal(sameSource("b", "a", "production", "b"), false);
+    assert.equal(sameSource("c", "a", "test", "b"), false);
+  });
 
   it("la promozione scrive il giorno della versione e le note restano in italiano", () => {
     const develop = [
