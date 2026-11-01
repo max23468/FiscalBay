@@ -229,6 +229,17 @@ for (const area of areas)
     await expectOrdersNavigation(page);
   });
 
+test("il menu dell'avatar porta l'admin alla console", async ({ page, context, baseURL }) => {
+  await useLocalAccount(context, "admin-granted", baseURL!);
+  await open(page, "/app/ordini");
+  await page.getByRole("button", { name: "Account" }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem", { name: "Console" })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Console" }).click();
+  await expect(page).toHaveURL(/\/admin$/u);
+  await expect(page.getByRole("main")).toBeVisible();
+});
+
 test("il collegamento diretto al dettaglio regge ricarica e chiusura", async ({ page }) => {
   await open(page, "/anteprima/ordini?fiscale=available");
   const first = page.getByRole("region", { name: "Elenco ordini" }).getByRole("article").first();

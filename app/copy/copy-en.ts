@@ -83,6 +83,7 @@ export const en: AppCopy = {
     security: "Security",
     planBilling: "Plan and billing",
     visitSite: "Visit fiscalbay.it",
+    console: "Console",
     whatsNew: "What’s new",
     whatsNewTitle: "What’s new in FiscalBay",
     signOut: "Sign out",
