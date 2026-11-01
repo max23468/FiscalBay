@@ -52,7 +52,7 @@
   "negozi-mobile": {
     "it": {
       "width": 390,
-      "height": 618
+      "height": 690
     },
     "en": {
       "width": 390,
@@ -62,21 +62,21 @@
   "sicurezza": {
     "it": {
       "width": 670,
-      "height": 749
+      "height": 870
     },
     "en": {
       "width": 670,
-      "height": 749
+      "height": 870
     }
   },
   "sicurezza-mobile": {
     "it": {
       "width": 390,
-      "height": 605
+      "height": 616
     },
     "en": {
       "width": 390,
-      "height": 605
+      "height": 616
     }
   },
   "telegram": {
@@ -101,11 +101,11 @@
   },
   "esportazione-mobile": {
     "it": {
-      "width": 385,
+      "width": 382,
       "height": 192
     },
     "en": {
-      "width": 385,
+      "width": 382,
       "height": 192
     }
   }

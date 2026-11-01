@@ -79,13 +79,13 @@ export const en: AppCopy = {
       termsUpdateBody: "Read and accept them from Settings › Data and privacy.",
     },
     account: "Account",
-    profile: "Profile",
-    security: "Security",
     planBilling: "Plan and billing",
     visitSite: "Visit fiscalbay.it",
     console: "Console",
     whatsNew: "What’s new",
     whatsNewTitle: "What’s new in FiscalBay",
+    whatsNewUpcoming: "Upcoming",
+    whatsNewVersion: (version: string) => `Version ${version}`,
     signOut: "Sign out",
     close: "Close",
   },
@@ -473,11 +473,10 @@ export const en: AppCopy = {
     categories: "Categories",
     groups: { ordini: "Orders", account: "Account", generale: "General" },
     sections: {
-      profilo: { title: "Profile" },
+      account: { title: "Account" },
       piano: { title: "Plan and billing" },
       notifiche: { title: "Notifications" },
       esportazione: { title: "Export" },
-      sicurezza: { title: "Security" },
       aspetto: { title: "Appearance and language" },
       messaggio: { title: "Message template" },
       privacy: { title: "Data and privacy" },
@@ -903,6 +902,7 @@ export const en: AppCopy = {
   profile: {
     name: "Name",
     accountType: "Account type",
+    personal: "Personal details",
     email: "Email",
     emailHint:
       "To change it, confirm with a link sent to your current address, then with one sent to the new one.",
@@ -964,7 +964,7 @@ export const en: AppCopy = {
     },
     accountNotLinked: {
       title: "Email already registered",
-      body: "A FiscalBay account already uses this email address. Sign in with the method you usually use, then link this one from Security.",
+      body: "A FiscalBay account already uses this email address. Sign in with the method you usually use, then link this one from Settings › Account.",
     },
     alreadyLinked: {
       title: "Account already linked",

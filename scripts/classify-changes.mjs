@@ -105,6 +105,8 @@ function maskTestValues(text) {
  * versioni di `cloudflare.config.ts`, quando il confronto le rende disponibili.
  */
 export function fileImpact(file, change) {
+  // Le Novità dell'app si leggono dal changelog alla build: cambia ciò che si distribuisce.
+  if (file === "CHANGELOG.md") return { level: "build", e2e: false, deploy: true };
   if (file.startsWith("docs/archive/") || (file.endsWith(".md") && !governance.test(file)))
     return { level: "docs", e2e: false, deploy: false };
   if (governance.test(file) || tooling.some((pattern) => pattern.test(file)))

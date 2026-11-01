@@ -689,7 +689,7 @@ const seeds: OrderSeed[] = [
   {
     id: "ord-01",
     ebayOrderId: "12-34567-89012",
-    createdAt: minutesAgo(38),
+    createdAt: minutesAgo(180),
     store: "vintage",
     buyerName: "Società Cooperativa Agricola Val di Non e Valle di Sole Soc. Coop.",
     buyerUsername: "coop_valdinon",
@@ -738,7 +738,9 @@ const seeds: OrderSeed[] = [
   {
     id: "ord-02",
     ebayOrderId: "27-10293-84756",
-    createdAt: minutesAgo(95),
+    // La prima riga dell'elenco, e quindi delle immagini del sito, mostra due ordini di un
+    // articolo con il Codice Fiscale; la cooperativa con la Partita IVA segue.
+    createdAt: minutesAgo(38),
     updatedAt: minutesAgo(25),
     store: "vintage",
     buyerName: "Maria Rossi",
@@ -1276,12 +1278,14 @@ const text = {
   expired: storeNote((t) => ({ title: t.expiredTitle, body: t.expiredBody(stores.outlet.name) })),
 };
 
+// Come nell'area reale, ogni sessione riporta il giorno in cui è stata aperta.
 const sessions = (language: Language): SessionView[] => [
   {
     id: "ses-1",
     device: language === "it" ? "Safari su macOS" : "Safari on macOS",
     location: "Trento",
     lastActiveAt: previewNow,
+    createdAt: minutesAgo(4_352),
     current: true,
   },
   {
@@ -1289,6 +1293,7 @@ const sessions = (language: Language): SessionView[] => [
     device: language === "it" ? "Safari su iPhone" : "Safari on iPhone",
     location: "Trento",
     lastActiveAt: minutesAgo(180),
+    createdAt: minutesAgo(20_213),
     current: false,
   },
   {
@@ -1296,6 +1301,7 @@ const sessions = (language: Language): SessionView[] => [
     device: language === "it" ? "Chrome su Windows" : "Chrome on Windows",
     location: "Milano",
     lastActiveAt: minutesAgo(2_900),
+    createdAt: minutesAgo(43_571),
     current: false,
   },
 ];

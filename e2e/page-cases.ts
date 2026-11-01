@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+
+import { parseChangelog } from "../app/changelog.ts";
 import { testAccount } from "./test-account.ts";
 
 /** Scenari delle route esistenti: le azioni esterne non vengono inviate dal collaudo. */
@@ -64,16 +67,34 @@ export function knownPagePath(pathname: string) {
 const missingExportFile = "00000000-0000-4000-8000-000000000000";
 
 const settings = [
-  "profilo",
+  "account",
   "piano",
   "notifiche",
   "esportazione",
-  "sicurezza",
   "aspetto",
   "messaggio",
   "privacy",
   "supporto",
 ];
+// Le Novità del changelog che l'ambiente locale e il test mostrano, con il loro giorno o in
+// preparazione: la pagina, la voce del menu e una voce della campanella per versione degli
+// ultimi trenta giorni, che per la versione in preparazione parte dal deploy.
+const shownReleases = parseChangelog(
+  readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
+).releases.filter(({ date }) => date === null || Date.parse(`${date}T00:00:00.000Z`) <= Date.now());
+export const whatsNew = shownReleases.length > 0;
+export const whatsNewUnread = shownReleases.filter(
+  ({ date }) =>
+    date === null || Date.now() - Date.parse(`${date}T00:00:00.000Z`) < 30 * 24 * 60 * 60 * 1000,
+).length;
+
+/** Nome della campanella con le notifiche dell'area più quelle delle Novità. */
+export const bellName = (language: "it" | "en", unread: number) => {
+  const count = unread + whatsNewUnread;
+  if (count === 0) return language === "it" ? "Notifiche" : "Notifications";
+  return language === "it" ? `Notifiche, ${count} da leggere` : `Notifications, ${count} unread`;
+};
+
 export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
   const make = (path: string, area: string, options: Partial<PageCase> = {}): PageCase => ({
     pattern: `${prefix}${path}` || "/",
@@ -161,13 +182,21 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/app/profilo", "profile", { redirect: access }),
     make("/app/profilo", "profile", {
       role: "member",
-      redirect: `${prefix}/app/impostazioni/profilo`,
+      redirect: `${prefix}/app/impostazioni/account`,
       remote: !prefix,
     }),
     make("/app/impostazioni", "settings", {
       pattern: `${prefix}/app/impostazioni/:sezione?`,
       redirect: access,
     }),
+    // Profilo e Sicurezza sono riunite in Account: i vecchi indirizzi portano lì.
+    ...["profilo", "sicurezza"].map((section) =>
+      make(`/app/impostazioni/${section}`, "settings", {
+        role: "member",
+        pattern: `${prefix}/app/impostazioni/:sezione?`,
+        redirect: `${prefix}/app/impostazioni/account`,
+      }),
+    ),
     ...["", ...settings.map((section) => `/${section}`), "/non-esiste"].map((suffix) =>
       make(`/app/impostazioni${suffix}`, "settings", {
         role: "member",
@@ -177,8 +206,8 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       }),
     ),
     make("/app/novita", "settings", { redirect: access }),
-    // Senza voci nell'elenco versionato la pagina Novità non esiste (D203).
-    make("/app/novita", "settings", { role: "member", status: 404 }),
+    // Fuori da Production la pagina Novità esiste se il changelog ha voci (D203).
+    make("/app/novita", "settings", { role: "member", status: whatsNew ? 200 : 404 }),
     ...(
       [
         { role: "anonymous", status: 404 },

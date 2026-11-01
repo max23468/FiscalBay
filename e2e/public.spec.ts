@@ -18,7 +18,7 @@ test(
         "/app/ordini",
         "/app/negozi",
         "/app/negozi/collega",
-        "/app/impostazioni/profilo",
+        "/app/impostazioni/account",
       ]) {
         const response = await request.get(`${prefix}${path}?redirectTo=https://example.invalid`, {
           maxRedirects: 0,

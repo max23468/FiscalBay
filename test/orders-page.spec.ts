@@ -11,7 +11,15 @@ import { listNotifications } from "../app/domain/notifications.server";
 import { markNotificationsRead } from "../app/domain/notification-reads.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
-import { whatsNew, whatsNewProblems, type WhatsNewRelease } from "../app/whats-new.server";
+import versionedChangelog from "../CHANGELOG.md?raw";
+import { parseChangelog } from "../app/changelog";
+import {
+  hasWhatsNew,
+  whatsNew,
+  whatsNewNotifications,
+  whatsNewProblems,
+  whatsNewView,
+} from "../app/whats-new.server";
 import { ebayOutage, listStores } from "../app/domain/stores.server";
 import { setSwitch } from "../app/domain/service-settings.server";
 import {
@@ -94,6 +102,218 @@ describe("pagina Ordini reale", () => {
       refreshExpiresAt: "2027-09-13T00:00:00.000Z",
     }).run();
   }
+
+  it("ricava le Novità dal changelog e le annuncia nella campanella e nel menu, solo se ci sono", async () => {
+    // Il changelog versionato è ben formato e porta Novità dalla 2.0.0, senza RC.
+    expect(whatsNewProblems()).toEqual([]);
+    const versioned = parseChangelog(versionedChangelog).releases;
+    expect(versioned.every(({ version }) => /^\d+\.\d+\.\d+$/u.test(version))).toBe(true);
+    expect(versioned.some(({ version }) => version === "2.0.0")).toBe(true);
+
+    const changelog = [
+      "# Changelog",
+      "## [2.0.3]",
+      "### Novità",
+      "#### Funzionalità",
+      "- **Filtro per negozio.** Gli Ordini",
+      "  si filtrano per negozio.",
+      "### What's new",
+      "#### Features",
+      "- **Store filter.** Filter Orders by store.",
+      "### Altre modifiche",
+      "- Nessuna modifica di comportamento: prove nuove.",
+      "## [2.0.2] - 2026-11-21",
+      "- Solo lavoro interno.",
+      "## [2.0.1] - 2026-11-10",
+      "### Novità",
+      "#### Miglioramenti",
+      "- **Esportazione.** Testo.",
+      "#### Correzioni",
+      "- **Telegram.** Testo.",
+      "### What's new",
+      "#### Improvements",
+      "- **Export.** Text.",
+      "#### Fixes",
+      "- **Telegram.** Text.",
+      "## [2.0.0]",
+      "- Prima versione.",
+    ].join("\n");
+    const { releases, problems } = parseChangelog(changelog);
+    expect(problems).toEqual([]);
+    expect(releases).toEqual([
+      {
+        version: "2.0.3",
+        date: null,
+        items: [
+          {
+            kind: "features",
+            it: { title: "Filtro per negozio", body: "Gli Ordini si filtrano per negozio." },
+            en: { title: "Store filter", body: "Filter Orders by store." },
+          },
+        ],
+      },
+      {
+        version: "2.0.1",
+        date: "2026-11-10",
+        items: [
+          {
+            kind: "improvements",
+            it: { title: "Esportazione", body: "Testo." },
+            en: { title: "Export", body: "Text." },
+          },
+          {
+            kind: "fixes",
+            it: { title: "Telegram", body: "Testo." },
+            en: { title: "Telegram", body: "Text." },
+          },
+        ],
+      },
+    ]);
+    expect(
+      parseChangelog(
+        [
+          "## [2.0.4]",
+          "### Novità",
+          "#### Correzioni",
+          "- **A.** Testo.",
+          "- Senza titolo.",
+          "### What's new",
+          "#### Fixes",
+          "- **A.** Text.",
+          "- **B.** Text.",
+          "## [2.0.3] - 2026-11-03",
+          "### Novità",
+          "- **A.** Testo fuori dai gruppi.",
+          "#### Sicurezza",
+          "- **B.** Gruppo sconosciuto.",
+          "### What's new",
+          "#### Fixes",
+          "- **A.** Text.",
+          "- **B.** Text.",
+          "## [2.0.2] - 2026-11-02",
+          "### Novità",
+          "#### Correzioni",
+          "- **A.** Testo.",
+          "### What's new",
+          "#### Improvements",
+          "- **A.** Text.",
+          "## [2.0.1] - 2026-13-01",
+          "### Novità",
+          "#### Correzioni",
+          "- **A.** Testo.",
+          "## [2.0.0-rc.13]",
+          "### Novità",
+          "#### Correzioni",
+          "- **A.** Testo.",
+          "### What's new",
+          "#### Fixes",
+          "- **A.** Text.",
+          "## [2.0.1]",
+          "### Novità",
+          "#### Correzioni",
+          "- **A.** Testo.",
+          "### What's new",
+          "#### Fixes",
+          "- **A.** Text.",
+        ].join("\n"),
+      ).problems,
+    ).toEqual([
+      "2.0.4: voce senza titolo o testo",
+      "2.0.3: voce fuori dai gruppi o in gruppi diversi",
+      "2.0.2: voce fuori dai gruppi o in gruppi diversi",
+      "2.0.1: giorno non valido",
+      "2.0.1: voci IT/EN non corrispondenti",
+      "2.0.0-rc.13: Novità fuori dalla 2.x",
+      "2.0.1: versione ripetuta",
+      "2.0.1: giorno mancante",
+    ]);
+
+    // In Production soltanto le versioni con il giorno già arrivato; sul test anche quella in
+    // preparazione, annunciata dal deploy del Worker che la contiene.
+    const at = new Date("2026-11-20T09:00:00.000Z");
+    const production = { production: true, deployedAt: "2026-11-19T15:00:00.000Z" };
+    const test = { production: false, deployedAt: "2026-11-19T15:00:00.000Z" };
+    expect(whatsNewView("en", at, production, releases)).toEqual([
+      {
+        version: "2.0.1",
+        date: "2026-11-10",
+        items: [
+          { kind: "improvements", title: "Export", body: "Text." },
+          { kind: "fixes", title: "Telegram", body: "Text." },
+        ],
+      },
+    ]);
+    expect(whatsNewView("it", at, test, releases).map(({ date }) => date)).toEqual([
+      null,
+      "2026-11-10",
+    ]);
+    expect(whatsNewView("it", new Date("2026-11-09T09:00:00.000Z"), production, releases)).toEqual(
+      [],
+    );
+    // Il giorno è italiano: a mezzanotte e mezza a Roma la versione c'è, anche se in UTC è ieri.
+    expect(
+      whatsNewView("it", new Date("2026-11-09T23:30:00.000Z"), production, releases).map(
+        ({ version }) => version,
+      ),
+    ).toEqual(["2.0.1"]);
+    expect(hasWhatsNew(at, production, [releases[0]])).toBe(false);
+    expect(hasWhatsNew(at, test, [releases[0]])).toBe(true);
+    expect(whatsNewNotifications("it", at, test, releases)).toEqual([
+      {
+        id: "whats-new:2.0.3",
+        tone: "info",
+        title: "Novità di FiscalBay",
+        body: "Filtro per negozio",
+        at: "2026-11-19T15:00:00.000Z",
+        read: false,
+        href: "novita",
+      },
+      {
+        id: "whats-new:2.0.1",
+        tone: "info",
+        title: "Novità di FiscalBay",
+        body: "Esportazione · Telegram",
+        at: "2026-11-10T00:00:00.000Z",
+        read: false,
+        href: "novita",
+      },
+    ]);
+    // Senza l'istante del deploy la versione in preparazione resta fuori dalla campanella.
+    expect(whatsNewNotifications("it", at, { production: false }, [releases[0]])).toEqual([]);
+    expect(
+      whatsNewNotifications("en", new Date("2026-12-11T00:00:00.000Z"), production, releases),
+    ).toEqual([]);
+
+    // Area reale sul test: menu, pagina e campanella seguono le voci, e senza voci spariscono.
+    vi.setSystemTime(at);
+    const { cookie, userId } = await owner();
+    const page = (path: string) => routeResponse(loadWhatsNew, path, { cookie }).catch(() => null);
+    const bell = (language: "it" | "en") =>
+      listNotifications(env.DB, userId, [], language, "Europe/Rome", at);
+    try {
+      expect((await areaShell(cookie)).whatsNew).toBe(false);
+      expect(await page("/app/novita")).toMatchObject({ status: 404 });
+      expect(await bell("it")).toEqual([]);
+      whatsNew.push(...releases);
+      expect((await areaShell(cookie)).whatsNew).toBe(true);
+      expect(
+        (await routeData(loadWhatsNew, "/en/app/novita", { cookie })).releases.map(
+          (release: { version: string; date: string | null }) => [release.version, release.date],
+        ),
+      ).toEqual([
+        ["2.0.3", null],
+        ["2.0.1", "2026-11-10"],
+      ]);
+      const news = (await bell("en")).find(({ id }) => id === "whats-new:2.0.1");
+      expect(news).toMatchObject({ title: "What’s new in FiscalBay", body: "Export · Telegram" });
+      await markNotificationsRead(env.DB, userId, ["whats-new:2.0.1"], at);
+      expect((await bell("it")).find(({ id }) => id === "whats-new:2.0.1")).toMatchObject({
+        read: true,
+      });
+    } finally {
+      whatsNew.length = 0;
+    }
+  });
 
   it("rende gli ordini persistiti nella vista dell'anteprima, con stati, prezzi e contatti", async () => {
     const { cookie } = await owner();
@@ -694,77 +914,6 @@ describe("pagina Ordini reale", () => {
     } finally {
       providers.mockRestore();
     }
-  });
-
-  it("annuncia le Novità di ogni rilascio nella campanella e nel menu, solo se ci sono", async () => {
-    const at = new Date("2026-11-20T09:00:00.000Z");
-    vi.setSystemTime(at);
-    const { cookie, userId } = await owner();
-    const page = (path: string) => routeResponse(loadWhatsNew, path, { cookie }).catch(() => null);
-    const bell = (language: "it" | "en", when = at) =>
-      listNotifications(env.DB, userId, [], language, "Europe/Rome", when);
-    // L'elenco versionato è vuoto e ben formato: nessuna voce, pagina o campanella.
-    expect(whatsNew).toEqual([]);
-    expect(whatsNewProblems()).toEqual([]);
-    expect((await areaShell(cookie)).whatsNew).toBe(false);
-    expect((await routeResponse(loadWhatsNew, "/app/novita", { cookie })).status).toBe(404);
-    expect(await bell("it")).toEqual([]);
-
-    const release = (version: string, date: string): WhatsNewRelease => ({
-      version,
-      date,
-      items: [
-        {
-          it: { title: `Titolo ${version}`, body: "Testo." },
-          en: { title: `Title ${version}`, body: "Text." },
-        },
-      ],
-    });
-    whatsNew.push(release("2.0.1", "2026-10-01"), release("2.0.2", "2026-11-10"));
-    try {
-      expect((await areaShell(cookie)).whatsNew).toBe(true);
-      expect((await routeData(loadWhatsNew, "/en/app/novita", { cookie })).releases).toEqual([
-        { version: "2.0.2", date: "2026-11-10", items: [{ title: "Title 2.0.2", body: "Text." }] },
-        { version: "2.0.1", date: "2026-10-01", items: [{ title: "Title 2.0.1", body: "Text." }] },
-      ]);
-      // Una voce per rilascio negli ultimi trenta giorni, nella lingua dell'utente.
-      expect(await bell("it")).toEqual([
-        {
-          id: "whats-new:2.0.2",
-          tone: "info",
-          title: "Novità di FiscalBay",
-          body: "Titolo 2.0.2",
-          at: "2026-11-10T00:00:00.000Z",
-          read: false,
-          href: "novita",
-        },
-      ]);
-      expect((await bell("en"))[0]).toMatchObject({ title: "What’s new in FiscalBay" });
-      await markNotificationsRead(env.DB, userId, ["whats-new:2.0.2"], at);
-      expect((await bell("it"))[0]).toMatchObject({ read: true });
-      // Un rilascio con data futura non compare prima del suo giorno: né nella campanella né
-      // nella pagina, e senza rilasci già usciti nemmeno la voce del menu.
-      expect(await bell("it", new Date("2026-11-09T09:00:00.000Z"))).toEqual([]);
-      whatsNew.push(release("2.0.3", "2026-11-21"));
-      expect(
-        (await routeData(loadWhatsNew, "/app/novita", { cookie })).releases.map(
-          (item: { version: string }) => item.version,
-        ),
-      ).toEqual(["2.0.2", "2.0.1"]);
-      expect(await bell("it")).toHaveLength(1);
-      whatsNew.splice(0, 2);
-      expect((await areaShell(cookie)).whatsNew).toBe(false);
-      expect(await page("/app/novita")).toMatchObject({ status: 404 });
-      vi.setSystemTime(new Date("2026-11-21T00:00:00.000Z"));
-      expect((await areaShell(cookie)).whatsNew).toBe(true);
-      vi.setSystemTime(at);
-      expect(
-        whatsNewProblems([release("2.0.1", "2026-13-01"), release("2.0.1", "2026-10-01")]),
-      ).toEqual(["2.0.1: giorno non valido", "2.0.1: versione ripetuta"]);
-    } finally {
-      whatsNew.length = 0;
-    }
-    expect(await page("/app/novita")).toMatchObject({ status: 404 });
   });
 
   it("propone il consenso marketing una sola volta, a primi passi conclusi, in ogni lingua", async () => {

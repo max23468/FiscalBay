@@ -35,7 +35,8 @@ jobs:
           private-key: ${{ secrets.ALIGNMENT_APP_PRIVATE_KEY }}
       # La promozione squash ha l'albero di un commit già in `develop`: il merge con la storia di
       # `main` conserva l'albero di `develop`, quindi non può andare in conflitto né cambiare
-      # ciò che `Node 26` ha già provato su `develop`.
+      # ciò che `Node 26` ha già provato su `develop`. Da `promuovi/<versione>` aggiunge soltanto
+      # il giorno della versione nel changelog.
       - name: Merge promotion history into develop
         env:
           GH_TOKEN: ${{ github.token }}
@@ -50,19 +51,36 @@ jobs:
             echo "develop contiene già ${promoted}."
             exit 0
           fi
-          pr="$(gh api "repos/${GH_REPO}/commits/${promoted}/pulls" --jq 'map(select(.merged_at != null and .base.ref == "main" and .head.ref == "develop" and .head.repo.full_name == .base.repo.full_name))[0]')"
+          pr="$(gh api "repos/${GH_REPO}/commits/${promoted}/pulls" --jq 'map(select(.merged_at != null and .base.ref == "main" and (.head.ref == "develop" or (.head.ref | startswith("promuovi/"))) and .head.repo.full_name == .base.repo.full_name))[0]')"
           head="$(jq -r '.head.sha // empty' <<< "${pr}")"
+          ref="$(jq -r '.head.ref // empty' <<< "${pr}")"
           test -n "${head}" || { echo "::error::${promoted} non è una promozione da develop."; exit 1; }
-          git merge-base --is-ancestor "${head}" "${develop}" ||
-            { echo "::error::La testa promossa ${head} non è in develop."; exit 1; }
+          # `promuovi/<versione>` è develop più il commit con il giorno della versione: la parte
+          # già provata è il suo genitore, e su develop arriva soltanto quel commit.
+          git fetch --quiet origin "pull/$(jq -r '.number' <<< "${pr}")/head"
+          source="${head}"
+          if [ "${ref}" != develop ]; then source="$(git rev-parse "${head}^")"; fi
+          git merge-base --is-ancestor "${source}" "${develop}" ||
+            { echo "::error::La testa promossa ${source} non è in develop."; exit 1; }
           test "$(git rev-parse "${promoted}^{tree}")" = "$(git rev-parse "${head}^{tree}")" ||
             { echo "::error::L'albero di main non è quello della testa promossa ${head}."; exit 1; }
+          tree="$(git rev-parse "${develop}^{tree}")"
+          if [ "${ref}" != develop ]; then
+            tree="$(git merge-tree --write-tree --merge-base "${source}" "${develop}" "${head}")" ||
+              { echo "::error::Il giorno della versione va in conflitto con develop."; exit 1; }
+          fi
           merged="$(GIT_AUTHOR_NAME=github-actions GIT_AUTHOR_EMAIL=github-actions@users.noreply.github.com \
             GIT_COMMITTER_NAME=github-actions GIT_COMMITTER_EMAIL=github-actions@users.noreply.github.com \
-            git commit-tree "${develop}^{tree}" -p "${develop}" -p "${promoted}" \
+            git commit-tree "${tree}" -p "${develop}" -p "${promoted}" \
             -m 'chore: riallinea la storia di promozione')"
           # Fast-forward senza forzature: se develop è avanzato nel frattempo, il push fallisce
           # e la run si riprende con l'avvio manuale.
           git push --quiet "https://x-access-token:${APP_TOKEN}@github.com/${GH_REPO}.git" \
             "${merged}:refs/heads/develop"
-          echo "develop avanzato a ${merged}, con la storia di ${promoted} e lo stesso albero."
+          echo "develop avanzato a ${merged}, con la storia di ${promoted}."
+          # Il branch con il giorno della versione è ormai in develop e in main.
+          if [ "${ref}" != develop ]; then
+            curl --silent --show-error --fail -X DELETE -H "Authorization: Bearer ${APP_TOKEN}" \
+              "https://api.github.com/repos/${GH_REPO}/git/refs/heads/${ref}" > /dev/null ||
+              echo "::warning::${ref} non eliminato."
+          fi

@@ -62,6 +62,8 @@ describe("livello del gate dai file modificati", () => {
       "docs/archive/screenshot.png",
     ])
       assert.equal(fileLevel(file), "docs", file);
+    // Il changelog porta le Novità dell'app: prove unitarie, build e deploy, senza browser.
+    assert.deepEqual(fileImpact("CHANGELOG.md"), { level: "build", e2e: false, deploy: true });
     for (const file of [
       "AGENTS.md",
       "docs/MASTER_PLAN.md",

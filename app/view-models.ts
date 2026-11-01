@@ -390,6 +390,7 @@ export interface SessionView {
   device: string;
   location: string;
   lastActiveAt: string;
+  createdAt?: string;
   current: boolean;
 }
 
@@ -420,7 +421,7 @@ export function marketplaceLabel(id: string) {
  */
 export const settingsGroups = [
   { id: "ordini", sections: ["notifiche", "esportazione", "messaggio"] },
-  { id: "account", sections: ["profilo", "piano", "sicurezza", "privacy"] },
+  { id: "account", sections: ["account", "piano", "privacy"] },
   { id: "generale", sections: ["aspetto", "supporto"] },
 ] as const;
 
@@ -429,6 +430,15 @@ export type SettingsSection = (typeof settingsGroups)[number]["sections"][number
 export const settingsSections: readonly SettingsSection[] = settingsGroups.flatMap(
   (group) => group.sections,
 );
+
+/**
+ * Categorie riunite in Account: i loro indirizzi, anche nelle email già inviate, portano alla
+ * categoria che le contiene.
+ */
+export const mergedSettingsSections: Readonly<Record<string, SettingsSection>> = {
+  profilo: "account",
+  sicurezza: "account",
+};
 
 /** Negli ultimi tre giorni la fine della prova si mostra in evidenza. */
 const trialEndingMilliseconds = 3 * dayMilliseconds;

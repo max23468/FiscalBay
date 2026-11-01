@@ -15,8 +15,8 @@ test.describe("area reale", () => {
       const prefix = language === "it" ? "" : "/en";
       const it = language === "it";
       test(`profilo: modifiche, uscita, attesa e salvataggio ${language}`, async ({ page }) => {
-        await open(page, `${prefix}/anteprima/impostazioni/profilo`, "ordinario");
-        const section = page.getByRole("region", { name: it ? "Profilo" : "Profile", exact: true });
+        await open(page, `${prefix}/anteprima/impostazioni/account`, "ordinario");
+        const section = page.getByRole("region", { name: "Account", exact: true });
         const first = section.getByRole("textbox", {
           name: it ? "Nome" : "First name",
           exact: true,
@@ -32,9 +32,9 @@ test.describe("area reale", () => {
         // Fra le categorie delle Impostazioni la bozza resta senza chiedere conferma.
         await page
           .getByRole("navigation", { name: it ? "Categorie" : "Categories" })
-          .getByRole("link", { name: it ? /^Sicurezza/u : /^Security/u })
+          .getByRole("link", { name: it ? /^Piano e pagamenti/u : /^Plan and billing/u })
           .click();
-        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/sicurezza$`));
+        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
         const dialog = page.getByRole("alertdialog");
         await expect(dialog).toHaveCount(0);
         await expect(first).toHaveValue(`${original} modificato`);
@@ -134,12 +134,12 @@ test.describe("area reale", () => {
         });
         const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
         try {
-          await page.goto(`${prefix}/app/impostazioni/profilo`, { waitUntil: "commit" });
+          await page.goto(`${prefix}/app/impostazioni/account`, { waitUntil: "commit" });
           await expect(first).toBeDisabled();
         } finally {
           continueHydration();
         }
-        await page.route("**/app/impostazioni/profilo.data*", async (route) => {
+        await page.route("**/app/impostazioni/account.data*", async (route) => {
           if (route.request().method() !== "POST") return route.continue();
           const form = new URLSearchParams(route.request().postData()!);
           form.set("nome", "");
@@ -147,7 +147,7 @@ test.describe("area reale", () => {
         });
         await first.fill("Valore da conservare");
         await page
-          .getByRole("region", { name: it ? "Profilo" : "Profile", exact: true })
+          .getByRole("region", { name: "Account", exact: true })
           .getByRole("button", { name: it ? "Salva" : "Save", exact: true })
           .click();
         await expect(
@@ -156,14 +156,14 @@ test.describe("area reale", () => {
         await expect(first).toHaveValue("Valore da conservare");
         await expect(
           page
-            .getByRole("region", { name: it ? "Profilo" : "Profile", exact: true })
+            .getByRole("region", { name: "Account", exact: true })
             .getByRole("button", { name: it ? "Salva" : "Save", exact: true }),
         ).toBeEnabled();
-        await page.route("**/app/impostazioni/profilo.data*", (route) =>
+        await page.route("**/app/impostazioni/account.data*", (route) =>
           route.request().method() === "POST" ? route.abort("failed") : route.continue(),
         );
         await page
-          .getByRole("region", { name: it ? "Profilo" : "Profile", exact: true })
+          .getByRole("region", { name: "Account", exact: true })
           .getByRole("button", { name: it ? "Salva" : "Save", exact: true })
           .click();
         await expect(

@@ -790,23 +790,36 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
 
   it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
     const seller = await verifiedSession("profilo@example.invalid");
-    // Il vecchio indirizzo del profilo porta alla sua categoria delle Impostazioni.
+    // Il vecchio indirizzo del profilo porta alla categoria Account delle Impostazioni.
     for (const [path, target] of [
-      ["/app/profilo", "/app/impostazioni/profilo"],
-      ["/en/app/profilo", "/en/app/impostazioni/profilo"],
+      ["/app/profilo", "/app/impostazioni/account"],
+      ["/en/app/profilo", "/en/app/impostazioni/account"],
     ]) {
       const moved = await routeResponse(loadProfile, path);
       expect(moved.status).toBe(302);
       expect(moved.headers.get("location")).toBe(target);
     }
-    const loaded = await routeData(loadSettings, "/en/app/impostazioni/profilo", {
+    // Profilo e Sicurezza sono riunite in Account: i loro indirizzi, anche quelli delle email già
+    // inviate, ci portano conservando la query.
+    for (const [path, target] of [
+      ["/app/impostazioni/profilo", "/app/impostazioni/account"],
+      ["/en/app/impostazioni/sicurezza?accesso=x", "/en/app/impostazioni/account?accesso=x"],
+    ]) {
+      const moved = await routeResponse(loadSettings, path, {
+        cookie: seller.cookie,
+        params: { sezione: path.includes("profilo") ? "profilo" : "sicurezza" },
+      });
+      expect(moved.status).toBe(301);
+      expect(moved.headers.get("location")).toBe(target);
+    }
+    const loaded = await routeData(loadSettings, "/en/app/impostazioni/account", {
       cookie: seller.cookie,
-      params: { sezione: "profilo" },
+      params: { sezione: "account" },
     });
     expect(loaded).toMatchObject({
       language: "en",
       page: {
-        section: "profilo",
+        section: "account",
         account: {
           name: "Utente Sintetico",
           email: "profilo@example.invalid",
@@ -816,7 +829,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     });
 
     const save = (fields: Record<string, string>, origin: string | null = testOrigin) =>
-      callRoute(settingsAction, "/app/impostazioni/profilo", {
+      callRoute(settingsAction, "/app/impostazioni/account", {
         cookie: seller.cookie,
         origin,
         fields: { intent: "profile", ...fields },
@@ -871,9 +884,8 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
         "notifiche",
         "esportazione",
         "messaggio",
-        "profilo",
+        "account",
         "piano",
-        "sicurezza",
         "privacy",
         "aspetto",
         "supporto",
@@ -1383,7 +1395,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
     expect(await revokeSession(env.DB, seller.userId, "inesistente")).toBe(false);
     expect(await ids(other.userId)).toEqual([foreign]);
     const confirm = (precedente: string) =>
-      callRoute(settingsAction, "/app/impostazioni/sicurezza", {
+      callRoute(settingsAction, "/app/impostazioni/account", {
         cookie: seller.cookie,
         fields: { intent: "conferma-accesso", metodo: "passkey", precedente },
       }) as Promise<{ data: { ok: boolean } }>;
@@ -1402,7 +1414,7 @@ describe("pausa, ricollegamento e scollegamento dei negozi", () => {
       .bind(seller.userId)
       .all<{ id: string }>();
     const confirm = (fields: Record<string, string>) =>
-      callRoute(settingsAction, "/app/impostazioni/sicurezza", {
+      callRoute(settingsAction, "/app/impostazioni/account", {
         cookie: seller.cookie,
         fields: { intent: "conferma-accesso", ...fields },
       }) as Promise<{ data: { ok: boolean; notice?: string }; init: ResponseInit }>;
