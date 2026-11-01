@@ -30,7 +30,7 @@ test.describe("area reale", () => {
     await page.goto("/app/impostazioni/aspetto");
     await networkIdle(page);
     const categories = page.getByRole("navigation", { name: "Categorie" });
-    await expect(categories.getByRole("link")).toHaveCount(9);
+    await expect(categories.getByRole("link")).toHaveCount(8);
     await expect(categories.getByRole("link", { name: /Esportazione/u })).toHaveCount(1);
 
     const saved = () =>
@@ -499,8 +499,8 @@ for (const width of [390, 768, 1440]) {
         .toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`support-${locale}.png`) });
 
-      await open(page, `${prefix}/anteprima/impostazioni/profilo`);
-      const profile = page.getByRole("region", { name: it ? "Profilo" : "Profile", exact: true });
+      await open(page, `${prefix}/anteprima/impostazioni/account`);
+      const profile = page.getByRole("region", { name: "Account", exact: true });
       const first = profile.getByRole("textbox", {
         name: it ? "Nome" : "First name",
         exact: true,

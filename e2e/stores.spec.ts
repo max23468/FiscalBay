@@ -330,7 +330,7 @@ test.describe("impostazioni e profilo", () => {
             await label.evaluate((element) => parseFloat(getComputedStyle(element).columnGap)),
           ).toBe(2);
         }
-        await open(page, `${prefix}/anteprima/impostazioni/profilo`);
+        await open(page, `${prefix}/anteprima/impostazioni/account`);
         await expect(
           page.getByRole("textbox", { name: t("Nome", "First name"), exact: true }),
         ).toHaveAttribute("required", "");

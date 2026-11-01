@@ -1,4 +1,4 @@
-import { data, isRouteErrorResponse } from "react-router";
+import { data, isRouteErrorResponse, redirect } from "react-router";
 
 import { SettingsPage } from "~/components/settings/page";
 import { NotFoundState } from "~/components/not-found";
@@ -11,7 +11,7 @@ import {
   simulateAction,
   simulateSecurity,
 } from "../preview/state.server";
-import { settingsSections, type SettingsSection } from "../view-models";
+import { mergedSettingsSections, settingsSections, type SettingsSection } from "../view-models";
 import type { Route } from "./+types/preview-settings";
 
 function isSection(value: string | undefined): value is SettingsSection {
@@ -27,6 +27,11 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
+  const merged = mergedSettingsSections[params.sezione ?? ""];
+  if (merged) {
+    const url = new URL(request.url);
+    throw redirect(`${url.pathname.replace(/[^/]+$/u, merged)}${url.search}`, 301);
+  }
   const current = await verifiedPageScenario(request);
   if (params.sezione !== undefined && !isSection(params.sezione)) {
     throw data(null, { status: 404 });

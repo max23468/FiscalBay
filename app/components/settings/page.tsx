@@ -10,7 +10,6 @@ import {
   MessageSquareText,
   Palette,
   Settings,
-  ShieldCheck,
   User,
 } from "lucide-react";
 import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
@@ -30,6 +29,7 @@ import {
   type TelegramView,
 } from "../../view-models";
 import { AppearanceSection } from "./appearance";
+import { Group } from "./controls";
 import type { ExportConfiguration } from "../../domain/export-configurations.server";
 import type { ExportFileView } from "../../domain/export-jobs.server";
 import type { ExportContext, ExportTally } from "../../orders/export-scope";
@@ -102,11 +102,10 @@ export interface SettingsServices {
 
 /** Icone neutre: le Impostazioni restano sobrie, il colore sta in Ordini e Negozi. */
 const sectionIcons: Record<SettingsSection, React.ComponentType<React.SVGProps<SVGSVGElement>>> = {
-  profilo: User,
+  account: User,
   piano: CreditCard,
   notifiche: Bell,
   esportazione: FileSpreadsheet,
-  sicurezza: ShieldCheck,
   aspetto: Palette,
   messaggio: MessageSquareText,
   privacy: Database,
@@ -239,7 +238,18 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
         ? t.profile.unsaved
         : t.settings.template.unsaved;
   const content = {
-    profilo: <ProfileSection account={data.account} form={profileDraft} />,
+    // Chi sei e come accedi in un'unica categoria: dati personali, email, accessi e sessioni.
+    account: (
+      <>
+        <Group id="account-profile" title={t.profile.personal} separated={false}>
+          <ProfileSection account={data.account} form={profileDraft} />
+        </Group>
+        {/* Il primo gruppo di sicurezza perde la sua linea: la riceve il contenitore. */}
+        <div className="grid gap-6 border-t pt-6">
+          <SecuritySection security={data.security} email={data.account.email} now={data.now} />
+        </div>
+      </>
+    ),
     piano: (
       <PlanSection
         account={data.account}
@@ -268,9 +278,6 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
         now={data.now}
         files={data.exportFiles}
       />
-    ),
-    sicurezza: (
-      <SecuritySection security={data.security} email={data.account.email} now={data.now} />
     ),
     aspetto: (
       <AppearanceSection

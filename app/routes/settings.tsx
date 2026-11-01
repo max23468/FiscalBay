@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { data } from "react-router";
+import { data, redirect } from "react-router";
 
 import { NotFoundState } from "~/components/not-found";
 import { SettingsPage, type SettingsPageData } from "~/components/settings/page";
@@ -30,7 +30,7 @@ import { hasWhatsNew } from "../whats-new.server";
 import { languageFromPath } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction, securityAuthPath } from "../security-actions.server";
-import { settingsSections, type SettingsSection } from "../view-models";
+import { mergedSettingsSections, settingsSections, type SettingsSection } from "../view-models";
 import { listExportConfigurations } from "../domain/export-configurations.server";
 import { listExportFiles } from "../domain/export-jobs.server";
 import type { Route } from "./+types/settings";
@@ -73,6 +73,12 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
 export const headers = pageHeaders;
 
 export function loader(args: Route.LoaderArgs) {
+  // Profilo e Sicurezza stanno in Account: i vecchi indirizzi, anche delle email, portano lì.
+  const merged = mergedSettingsSections[args.params.sezione ?? ""];
+  if (merged) {
+    const url = new URL(args.request.url);
+    throw redirect(`${url.pathname.replace(/[^/]+$/u, merged)}${url.search}`, 301);
+  }
   return areaPage(args.request, () => readSettings(args));
 }
 

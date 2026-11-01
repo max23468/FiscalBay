@@ -10,6 +10,10 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 - **Pagina Novità.** Raccoglie le funzionalità, i miglioramenti e le correzioni di ogni versione. Si apre dal menu del profilo e la campanella segnala ogni nuova versione.
 
+#### Miglioramenti
+
+- **Impostazioni dell'account.** Dati personali, email, metodi di accesso e sessioni sono riuniti nella sezione Account, che si apre dal menu del profilo.
+
 #### Correzioni
 
 - **Totale degli ordini.** Ordini ed Esportazione mostrano l'importo incassato, senza la tariffa di protezione acquisti che l'acquirente paga a eBay.
@@ -19,6 +23,10 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 #### Features
 
 - **What's new page.** It collects the features, improvements and fixes of each version. Open it from the profile menu; the bell announces each new version.
+
+#### Improvements
+
+- **Account settings.** Personal details, email, sign-in methods and sessions are together in the Account section, opened from the profile menu.
 
 #### Fixes
 

@@ -510,14 +510,13 @@ Impostazioni desktop: categorie a sinistra e contenuto a destra; navigazione loc
 | Ordini | Notifiche | Chat Telegram, stato, filtro tutti/solo fiscali, singolo/riepilogo giornaliero, orario/fuso, negozi; consenso marketing separato |
 | Ordini | Export | Ambito/anteprima, CSV/XLSX secondo piano, righe/colonne, configurazioni; non archivio permanente |
 | Ordini | Dati fiscali / modello messaggio | Template IT/EN copiabile, non anagrafica fiscale fittizia del merchant né modifica ordini |
-| Account | Profilo | Nome, cognome, ragione sociale e tipo di account registrato, che il salvataggio non cambia (D191) |
+| Account | Account | Dati personali (nome, cognome, ragione sociale e tipo di account registrato, che il salvataggio non cambia), email, metodi di accesso, passkey, password, sessioni e logout globale (D191) |
 | Account | Piano e pagamenti | Stato effettivo, trial, quote/date, upgrade, periodicità, lifetime, disdetta, concessioni, negozio attivo nel Free, storico pagamenti e documenti tramite il portale del provider, senza elenco interno (D176) |
-| Account | Sicurezza | Metodi login, passkey, password, sessioni, logout globale, verifiche pertinenti |
 | Account | Dati e privacy | Termini e informativa privacy, export account, cancellazione e gestione diritti; i Termini si raggiungono soltanto da qui perché l'area non ha footer (D202) |
 | Generale | Aspetto e lingua | Sistema/chiaro/scuro, IT/EN, fuso del dispositivo come predefinito o scelto (D185) |
 | Generale | Supporto | FAQ/form, contatto, Novità (D203), storico esteso, integrazioni su valutazione |
 
-Profilo come categoria delle Impostazioni: informazioni minime personali, senza email o accessi, che restano in Sicurezza (D191). Fuso in Aspetto e lingua, dati necessari alla vendita nel checkout provider. Menu avatar: nome/email, Profilo, Sicurezza, Piano e pagamenti, Impostazioni, Novità, Visita sito, Esci; Profilo apre la sua categoria. Lingua, tema e fuso scelti valgono in ogni pagina dell'area, anche dopo un nuovo accesso; prima della conferma dell'email, quando le Impostazioni non sono raggiungibili, la lingua si sceglie dal menu dell'avatar. Gli Ordini usano il modello di messaggio nella lingua dell'acquirente. Categorie e descrizioni nominano soltanto i servizi disponibili.
+Account come categoria delle Impostazioni: dati personali minimi, email, accessi e sessioni nello stesso posto (D191). Fuso in Aspetto e lingua, dati necessari alla vendita nel checkout provider. Menu avatar: nome/email, Account, Piano e pagamenti, Impostazioni, Novità, Visita sito, Esci; Account apre la sua categoria. Lingua, tema e fuso scelti valgono in ogni pagina dell'area, anche dopo un nuovo accesso; prima della conferma dell'email, quando le Impostazioni non sono raggiungibili, la lingua si sceglie dal menu dell'avatar. Gli Ordini usano il modello di messaggio nella lingua dell'acquirente. Categorie e descrizioni nominano soltanto i servizi disponibili.
 
 Il profilo abilita Salva soltanto per modifiche pendenti, espone attesa ed esito e conserva i valori in caso di errore. Uscire dalle Impostazioni, ricaricare o chiudere avvisa quando restano modifiche non salvate al profilo o al modello di messaggio; il passaggio fra categorie conserva le bozze.
 

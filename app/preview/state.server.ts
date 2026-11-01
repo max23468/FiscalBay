@@ -166,7 +166,7 @@ export function simulateSecurity(request: Request, form: FormData) {
   if (intent === "conferma-accesso") return data<ActionResult>({ ok: true });
   if (!Object.hasOwn(securityNotices, intent)) return null;
   const language = languageFromPath(new URL(request.url).pathname);
-  const security = localizedPath(language, `${previewSettingsPath}/sicurezza`);
+  const security = localizedPath(language, `${previewSettingsPath}/account`);
   // Uscita e nuovo accesso simulati: si torna alla categoria da cui sono partiti, come dopo
   // il nuovo accesso reale (Sicurezza o Dati e privacy).
   if (intent === "riautentica") {

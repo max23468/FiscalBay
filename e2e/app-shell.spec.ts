@@ -20,23 +20,22 @@ async function expectOrdersNavigation(page: Page) {
   await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
 }
 
-/** Dal menu account si arriva alla Sicurezza dell'area aperta. */
-async function openSecurityFromAccountMenu(page: Page, base: string) {
+/** Dal menu account si arriva alla categoria Account dell'area aperta. */
+async function openAccountFromMenu(page: Page, base: string) {
   await page.getByRole("button", { name: "Account" }).click();
   const menu = page.getByRole("menu");
   // L'anteprima non ha la pagina Novità; l'area reale la mostra quando il changelog ha voci.
   await expect(menu.getByRole("menuitem")).toHaveText([
-    "Profilo",
-    "Sicurezza",
+    "Account",
     "Piano e pagamenti",
     "Impostazioni",
     ...(base === "/app" && whatsNew ? ["Novità"] : []),
     "Visita fiscalbay.it",
     "Esci",
   ]);
-  await menu.getByRole("menuitem", { name: "Sicurezza" }).click();
-  await expect(page).toHaveURL(new RegExp(`${base}/impostazioni/sicurezza$`, "u"));
-  await expect(page.getByRole("heading", { name: "Sicurezza", level: 2 })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Account" }).click();
+  await expect(page).toHaveURL(new RegExp(`${base}/impostazioni/account$`, "u"));
+  await expect(page.getByRole("heading", { name: "Account", level: 2 })).toBeVisible();
 }
 
 /**
@@ -115,7 +114,7 @@ test(
     await page.getByRole("button", { name: "Segna tutte come lette" }).click();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
     await page.keyboard.press("Escape");
-    await openSecurityFromAccountMenu(page, "/anteprima");
+    await openAccountFromMenu(page, "/anteprima");
   },
 );
 
@@ -486,7 +485,7 @@ for (const language of ["it", "en"] as const) {
           await expect(faq).toContainText(
             language === "it" ? "Ogni ordine conta una sola volta" : "Each order counts only once",
           );
-          await open(page, `${base}/impostazioni/sicurezza`);
+          await open(page, `${base}/impostazioni/account`);
           for (const device of language === "it"
             ? ["Safari su macOS", "Safari su iPhone", "Chrome su Windows"]
             : ["Safari on macOS", "Safari on iPhone", "Chrome on Windows"]) {
@@ -867,7 +866,7 @@ test.describe("area reale", () => {
     await expect(bell.getByRole("link", { name: /collaudo-scaduto/u })).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(bell).toBeHidden();
-    await openSecurityFromAccountMenu(page, "/app");
+    await openAccountFromMenu(page, "/app");
   });
 
   test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({ page }) => {

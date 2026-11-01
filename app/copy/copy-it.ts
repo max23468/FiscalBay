@@ -92,8 +92,6 @@ export const it = {
       termsUpdateBody: "Leggili e accettali da Impostazioni › Dati e privacy.",
     },
     account: "Account",
-    profile: "Profilo",
-    security: "Sicurezza",
     planBilling: "Piano e pagamenti",
     visitSite: "Visita fiscalbay.it",
     whatsNew: "Novità",
@@ -493,11 +491,10 @@ export const it = {
     categories: "Categorie",
     groups: { ordini: "Ordini", account: "Account", generale: "Generale" },
     sections: {
-      profilo: { title: "Profilo" },
+      account: { title: "Account" },
       piano: { title: "Piano e pagamenti" },
       notifiche: { title: "Notifiche" },
       esportazione: { title: "Esportazione" },
-      sicurezza: { title: "Sicurezza" },
       aspetto: { title: "Aspetto e lingua" },
       messaggio: { title: "Modello di messaggio" },
       privacy: { title: "Dati e privacy" },
@@ -924,6 +921,7 @@ export const it = {
   profile: {
     name: "Nome",
     accountType: "Tipo di account",
+    personal: "Dati personali",
     email: "Email",
     emailHint: "Per cambiarla confermi con un link all’indirizzo attuale, poi con uno al nuovo.",
     changeEmail: "Cambia email",
@@ -986,7 +984,7 @@ export const it = {
     },
     accountNotLinked: {
       title: "Email già registrata",
-      body: "Esiste già un account FiscalBay con questo indirizzo email. Accedi con il metodo che usi di solito, poi collega questo da Sicurezza.",
+      body: "Esiste già un account FiscalBay con questo indirizzo email. Accedi con il metodo che usi di solito, poi collega questo da Impostazioni › Account.",
     },
     alreadyLinked: {
       title: "Account già collegato",

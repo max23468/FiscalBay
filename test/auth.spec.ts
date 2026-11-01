@@ -443,7 +443,7 @@ describe("Better Auth su Workers e D1", () => {
         .run();
     }
     const remove = (passkeyId: string) =>
-      routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", {
+      routeResponse(securityRouteAction, "/app/impostazioni/account", {
         cookie,
         fields: { intent: "passkey-remove", id: passkeyId },
       });
@@ -1046,7 +1046,7 @@ describe("Collegamento e modifica dell'identità", () => {
     routeResponse(signInAction, "/accesso", { cookie, fields });
   /** Azione della pagina Sicurezza; chi non può vederla riceve il redirect lanciato. */
   const securityAction = (cookie: string, fields: Record<string, string>) =>
-    routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", { cookie, fields });
+    routeResponse(securityRouteAction, "/app/impostazioni/account", { cookie, fields });
   const signUp = async (environment: Env, email: string, verified: boolean) => {
     const response = await post(environment, "sign-up/email", {
       name: "Identità sintetica",
@@ -1466,7 +1466,7 @@ describe("Collegamento e modifica dell'identità", () => {
         replyTo: supportEmail,
         to: email,
         subject: "Metodo di accesso rimosso da FiscalBay",
-        text: expect.stringContaining("/app/impostazioni/sicurezza"),
+        text: expect.stringContaining("/app/impostazioni/account"),
         html: expect.stringContaining('<html lang="it">'),
       });
       send.mockClear();
@@ -1621,14 +1621,14 @@ describe("Sessioni, revoche e area admin", () => {
   const userAgent =
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15";
   const securityAction = (cookie: string, fields: Record<string, string>) =>
-    routeResponse(securityRouteAction, "/app/impostazioni/sicurezza", { cookie, fields }).then(
+    routeResponse(securityRouteAction, "/app/impostazioni/account", { cookie, fields }).then(
       (response) => response.headers.get("location"),
     );
   const home = (cookie: string) => routeData(signInLoader, "/accesso", { cookie });
   /** Pagina Sicurezza; chi non può vederla torna all'accesso con l'esito ricevuto. */
-  const security = async (cookie: string, path = "/app/impostazioni/sicurezza") => {
+  const security = async (cookie: string, path = "/app/impostazioni/account") => {
     try {
-      return await routeData(securityLoader, path, { cookie, params: { sezione: "sicurezza" } });
+      return await routeData(securityLoader, path, { cookie, params: { sezione: "account" } });
     } catch (thrown) {
       if (thrown instanceof Response) return thrown.headers.get("location");
       throw thrown;
@@ -1707,13 +1707,13 @@ describe("Sessioni, revoche e area admin", () => {
   it("esce per riautenticare e torna soltanto a una sezione consentita di Sicurezza", async () => {
     for (const prefix of ["", "/en"]) {
       const user = await createUser(`ritorno${prefix.replace("/", "-")}@example.invalid`);
-      const target = `${prefix}/app/impostazioni/sicurezza#security-email`;
-      const area = await routeData(securityLoader, `${prefix}/app/impostazioni/sicurezza`, {
+      const target = `${prefix}/app/impostazioni/account#security-email`;
+      const area = await routeData(securityLoader, `${prefix}/app/impostazioni/account`, {
         cookie: user.cookie,
-        params: { sezione: "sicurezza" },
+        params: { sezione: "account" },
       });
       expect(area.userId).toBe(user.id);
-      const out = await routeResponse(securityRouteAction, `${prefix}/app/impostazioni/sicurezza`, {
+      const out = await routeResponse(securityRouteAction, `${prefix}/app/impostazioni/account`, {
         cookie: user.cookie,
         fields: { intent: "riautentica", returnTo: target },
       });
@@ -1798,7 +1798,7 @@ describe("Sessioni, revoche e area admin", () => {
   async function expectRevoked(cookie: string) {
     expect(await jsonRequest("get-session", cookie).then((response) => response.json())).toBeNull();
     expect((await home(cookie)).authenticated).toBe(false);
-    expect(await security(cookie, "/en/app/impostazioni/sicurezza?accesso=sessione-chiusa")).toBe(
+    expect(await security(cookie, "/en/app/impostazioni/account?accesso=sessione-chiusa")).toBe(
       "/en/accesso?accesso=sessione-chiusa",
     );
     expect(
@@ -1933,7 +1933,7 @@ describe("Sessioni, revoche e area admin", () => {
 
     // Le azioni di Sicurezza tornano alla sua pagina.
     expect(await securityAction(user.cookie, { intent: "esci-altri" })).toBe(
-      "/app/impostazioni/sicurezza?accesso=sessioni-chiuse",
+      "/app/impostazioni/account?accesso=sessioni-chiuse",
     );
     await expectRevoked(third);
     expect(await sessionId(user.cookie)).toBeDefined();

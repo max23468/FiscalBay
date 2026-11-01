@@ -67,11 +67,10 @@ export function knownPagePath(pathname: string) {
 const missingExportFile = "00000000-0000-4000-8000-000000000000";
 
 const settings = [
-  "profilo",
+  "account",
   "piano",
   "notifiche",
   "esportazione",
-  "sicurezza",
   "aspetto",
   "messaggio",
   "privacy",
@@ -183,13 +182,21 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/app/profilo", "profile", { redirect: access }),
     make("/app/profilo", "profile", {
       role: "member",
-      redirect: `${prefix}/app/impostazioni/profilo`,
+      redirect: `${prefix}/app/impostazioni/account`,
       remote: !prefix,
     }),
     make("/app/impostazioni", "settings", {
       pattern: `${prefix}/app/impostazioni/:sezione?`,
       redirect: access,
     }),
+    // Profilo e Sicurezza sono riunite in Account: i vecchi indirizzi portano lì.
+    ...["profilo", "sicurezza"].map((section) =>
+      make(`/app/impostazioni/${section}`, "settings", {
+        role: "member",
+        pattern: `${prefix}/app/impostazioni/:sezione?`,
+        redirect: `${prefix}/app/impostazioni/account`,
+      }),
+    ),
     ...["", ...settings.map((section) => `/${section}`), "/non-esiste"].map((suffix) =>
       make(`/app/impostazioni${suffix}`, "settings", {
         role: "member",

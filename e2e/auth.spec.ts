@@ -9,12 +9,12 @@ test.describe("area reale", () => {
     "Prove con dati sintetici soltanto sul database locale.",
   );
 
-  // Sicurezza e passkey sono una categoria delle Impostazioni.
+  // Accessi e passkey stanno nella categoria Account delle Impostazioni.
   test.describe("impostazioni", () => {
     for (const language of ["it", "en"] as const) {
       const prefix = language === "it" ? "" : "/en";
       const it = language === "it";
-      test(`nuovo accesso: ritorno a Sicurezza anche dopo password errata ${language}`, async ({
+      test(`nuovo accesso: ritorno ad Account anche dopo password errata ${language}`, async ({
         page,
         context,
         baseURL,
@@ -27,8 +27,8 @@ test.describe("area reale", () => {
             })
           ).ok(),
         ).toBe(true);
-        const target = `${prefix}/app/impostazioni/sicurezza#security-email`;
-        const response = await page.request.post(`${prefix}/app/impostazioni/sicurezza`, {
+        const target = `${prefix}/app/impostazioni/account#security-email`;
+        const response = await page.request.post(`${prefix}/app/impostazioni/account`, {
           headers: { origin: baseURL! },
           form: { intent: "riautentica", returnTo: target },
           maxRedirects: 0,
@@ -42,7 +42,7 @@ test.describe("area reale", () => {
         await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
         await form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
         await expect(page).toHaveURL(
-          new RegExp(`${prefix}/app/impostazioni/sicurezza#security-email$`),
+          new RegExp(`${prefix}/app/impostazioni/account#security-email$`),
         );
         const token = `stale-security-${language}-${testInfo.project.name}`;
         await useLocalAccount(context, "member", baseURL!, token);
@@ -51,9 +51,9 @@ test.describe("area reale", () => {
           exact: true,
         });
         // Con un accesso di più di 24 ore nessun avviso fisso: l'esito arrivato nell'indirizzo sì.
-        await page.goto(`${prefix}/app/impostazioni/sicurezza?accesso=nuovo-accesso`);
+        await page.goto(`${prefix}/app/impostazioni/account?accesso=nuovo-accesso`);
         await expect(signInAgain).toHaveCount(1);
-        await page.goto(`${prefix}/app/impostazioni/sicurezza`);
+        await page.goto(`${prefix}/app/impostazioni/account`);
         await expect(signInAgain).toHaveCount(0);
         // La modifica resta possibile: prima chiede la conferma dell'identità sul posto.
         const change = page.getByRole("button", {
@@ -85,7 +85,7 @@ test.describe("area reale", () => {
         ).toBeVisible();
         await confirm.getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true }).click();
         await expect(confirm).toHaveCount(0);
-        await expect(page).toHaveURL(new RegExp(`${prefix}/app/impostazioni/sicurezza$`));
+        await expect(page).toHaveURL(new RegExp(`${prefix}/app/impostazioni/account$`));
         // Con la password giusta la conferma apre una sessione nuova e la modifica riparte da sola.
         await page
           .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
@@ -130,7 +130,7 @@ test.describe("area reale", () => {
           automaticPresenceSimulation: true,
         },
       });
-      await page.goto("/app/impostazioni/sicurezza");
+      await page.goto("/app/impostazioni/account");
       const methods = page.locator('section[aria-labelledby="security-methods"]');
       await expect(
         methods.getByText("Questo è il tuo unico metodo", { exact: false }),
@@ -180,7 +180,7 @@ test.describe("area reale", () => {
         page.getByRole("button", { name: "Cambia email", exact: true }),
       ];
       try {
-        await page.goto("/app/impostazioni/sicurezza", { waitUntil: "commit" });
+        await page.goto("/app/impostazioni/account", { waitUntil: "commit" });
         for (const opener of openers) await expect(opener).toBeDisabled();
       } finally {
         continueHydration();
@@ -213,7 +213,7 @@ test.describe("area reale", () => {
     });
   });
 
-  // La scheda revocata attraversa anche Sicurezza e profilo nelle Impostazioni.
+  // La scheda revocata attraversa anche la categoria Account delle Impostazioni.
   test.describe("impostazioni e profilo", () => {
     test("passkey non supportata e scheda revocata si aggiornano senza ricarica manuale", async ({
       browser,
@@ -250,14 +250,14 @@ test.describe("area reale", () => {
         await password.fill(localPassword);
         await form.getByRole("button", { name: "Accedi", exact: true }).click();
         await expect(page).toHaveURL(/\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
-        await page.goto("/app/impostazioni/sicurezza");
-        await expect(page.getByRole("heading", { name: "Sicurezza", exact: true })).toBeVisible();
+        await page.goto("/app/impostazioni/account");
+        await expect(page.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
         await expect(page.getByText(/^Sessione aperta il/).first()).toBeVisible();
         const profile = await context.newPage();
-        await profile.goto("/app/impostazioni/profilo");
+        await profile.goto("/app/impostazioni/account");
         const firstName = profile.getByRole("textbox", { name: "Nome", exact: true });
         const save = profile
-          .getByRole("region", { name: "Profilo", exact: true })
+          .getByRole("region", { name: "Account", exact: true })
           .getByRole("button", { name: "Salva", exact: true });
         const originalName = await firstName.inputValue();
         await firstName.fill(`  ${originalName} aggiornato  `);
@@ -272,7 +272,7 @@ test.describe("area reale", () => {
         await expect(firstName).toBeEnabled();
         await firstName.fill("Bozza non salvata");
         const second = await context.newPage();
-        await second.goto("/app/impostazioni/sicurezza");
+        await second.goto("/app/impostazioni/account");
         await second.request.post("/accesso", {
           headers: { origin: baseURL! },
           form: { intent: "esci" },
@@ -466,7 +466,7 @@ for (const language of ["it", "en"] as const) {
   });
 }
 
-// Sicurezza è una categoria delle Impostazioni.
+// Gli accessi stanno nella categoria Account delle Impostazioni.
 test.describe("impostazioni", () => {
   test("sicurezza nell'anteprima senza JavaScript resta simulata", async ({ browser, baseURL }) => {
     const context = await browser.newContext({ baseURL, javaScriptEnabled: false });
@@ -476,19 +476,19 @@ test.describe("impostazioni", () => {
       if (request.method() === "POST") posts.push(new URL(request.url()).pathname);
     });
     try {
-      await page.goto("/anteprima/impostazioni/sicurezza");
+      await page.goto("/anteprima/impostazioni/account");
       await expect(
         page.getByRole("button", { name: "Cambia password", exact: true }),
       ).toBeVisible();
       await expect(page.locator('form[action="/accesso"]')).toHaveCount(0);
       await page.getByRole("button", { name: "Cambia password", exact: true }).click();
       // Il pulsante resta visibile anche prima dell'invio: si attende la richiesta registrata.
-      await expect.poll(() => posts).toEqual(["/anteprima/impostazioni/sicurezza"]);
+      await expect.poll(() => posts).toEqual(["/anteprima/impostazioni/account"]);
       await expect(
         page.getByRole("button", { name: "Cambia password", exact: true }),
       ).toBeVisible();
-      // Come nell'area reale l'esito torna nell'indirizzo della Sicurezza.
-      await expect(page).toHaveURL(/\/anteprima\/impostazioni\/sicurezza\?accesso=password-link$/);
+      // Come nell'area reale l'esito torna nell'indirizzo della categoria Account.
+      await expect(page).toHaveURL(/\/anteprima\/impostazioni\/account\?accesso=password-link$/);
     } finally {
       await context.close();
     }
@@ -512,7 +512,7 @@ test.describe("impostazioni", () => {
             fields: new URLSearchParams(request.postData() ?? ""),
           });
       });
-      await open(page, `${prefix}/anteprima/impostazioni/sicurezza`, "ordinario");
+      await open(page, `${prefix}/anteprima/impostazioni/account`, "ordinario");
       const removeText = it ? "Rimuovi" : "Remove";
       const cancelText = it ? "Annulla" : "Cancel";
       const methods = page.locator('section[aria-labelledby="security-methods"]');
@@ -549,13 +549,13 @@ test.describe("impostazioni", () => {
         await trigger.click();
         await dialog.getByRole("button", { name: removeText, exact: true }).click();
         await expect.poll(() => posts.length).toBe(before + 1);
-        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/sicurezza`);
+        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/account`);
         expect(posts.at(-1)!.fields.get("intent")).toBe(intent);
         expect(posts.at(-1)!.fields.get(field)).toBe(value);
         await expect(dialog).toHaveCount(0);
         await expect(page.getByText(notice!, { exact: true })).toBeVisible();
         // Dopo l'idratazione l'esito esce dall'indirizzo e i pulsanti rispondono di nuovo.
-        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/sicurezza$`));
+        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/account$`));
       }
       const before = posts.length;
       await page
@@ -598,8 +598,8 @@ test.describe("impostazioni", () => {
       // segnala come errore della pagina una richiesta annullata dalla navigazione.
       await networkIdle(page);
 
-      await open(page, `${prefix}/anteprima/impostazioni/profilo`);
-      const profile = page.getByRole("region", { name: it ? "Profilo" : "Profile", exact: true });
+      await open(page, `${prefix}/anteprima/impostazioni/account`);
+      const profile = page.getByRole("region", { name: "Account", exact: true });
       const first = profile.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
       await expect(first).toHaveValue("Laura");
       await expect(first).not.toHaveAttribute("aria-describedby", /profile-name-hint/);
@@ -619,10 +619,10 @@ test.describe("impostazioni", () => {
             : "Optional. Shown in service emails.",
         ),
       ).toHaveCount(0);
-      // Email e accessi restano soltanto in Sicurezza.
+      // Dati personali, email e accessi stanno nella stessa categoria Account.
       await expect(
         profile.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),
-      ).toHaveCount(0);
+      ).toHaveCount(1);
       await first.fill("");
       await profile.getByRole("button", { name: it ? "Salva" : "Save", exact: true }).click();
       await expect(first).toBeFocused();
@@ -637,7 +637,7 @@ test.describe("impostazioni", () => {
   }
 
   test("azioni distruttive con lo stesso aspetto e senza rientro", async ({ page }) => {
-    await open(page, "/anteprima/impostazioni/sicurezza");
+    await open(page, "/anteprima/impostazioni/account");
     const style = (name: string) =>
       page
         .getByRole("button", { name, exact: true })

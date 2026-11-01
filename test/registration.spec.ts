@@ -662,7 +662,7 @@ describe("registrazione e verifica del contatto", () => {
     const previous = env.APP_ORIGIN;
     Object.assign(env, { APP_ORIGIN: deployed });
     const submit = (fields: Record<string, string>) =>
-      routeResponse(securityAction, "/app/impostazioni/sicurezza", {
+      routeResponse(securityAction, "/app/impostazioni/account", {
         origin: deployed,
         headers: { "cf-connecting-ip": "198.51.100.78" },
         fields,
@@ -709,14 +709,14 @@ describe("registrazione e verifica del contatto", () => {
       "https://api.ebay.com/oauth/api_scope",
       "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
     ]);
-    const refused = await securityForm("/en/app/impostazioni/sicurezza", {
+    const refused = await securityForm("/en/app/impostazioni/account", {
       intent: "collega-metodo",
       metodo: "ebay",
     });
     expect(refused.headers.get("location")).toBe("/en/accesso");
     const session = await verifiedSession("link-modulo@example.invalid");
     const allowed = await securityForm(
-      "/app/impostazioni/sicurezza",
+      "/app/impostazioni/account",
       { intent: "collega-metodo", metodo: "ebay" },
       session.cookie,
     );

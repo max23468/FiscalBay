@@ -58,7 +58,7 @@ const shots = [
   },
   {
     name: "sicurezza",
-    path: "/anteprima/impostazioni/sicurezza",
+    path: "/anteprima/impostazioni/account",
     scenario: "premium",
     viewport: { width: 1000, height: 1600 },
     // Il bordo che separa il gruppo dall'email resta fuori dall'immagine.
