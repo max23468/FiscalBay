@@ -96,6 +96,7 @@ export const it = {
     security: "Sicurezza",
     planBilling: "Piano e pagamenti",
     visitSite: "Visita fiscalbay.it",
+    console: "Console",
     whatsNew: "Novità",
     whatsNewTitle: "Novità di FiscalBay",
     signOut: "Esci",

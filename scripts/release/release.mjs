@@ -202,7 +202,8 @@ export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
 /**
  * Etichetta della versione del Worker. Fino alla prima versione 2.x pubblicata resta il prefisso
  * del commit; dopo, in Production è la versione pubblicata e sul test la versione in cima al
- * changelog con `-dev.` e il tree distribuito.
+ * changelog con `-dev.` e il tree distribuito. Un deploy Production di sole modifiche interne,
+ * con la versione già pubblicata, aggiunge il commit: `2.0.0+<commit>`.
  */
 export function deployTag({ changelog, environment, sha, tree, releasedTags, expected }) {
   if (!latestReleased(releasedTags)) return sha.slice(0, 12);
@@ -212,7 +213,7 @@ export function deployTag({ changelog, environment, sha, tree, releasedTags, exp
   if (environment !== "production") return `${version}-dev.${tree.slice(0, 12)}`;
   if (parsed.rc || expected !== version)
     throw new Error(`In Production si distribuisce la versione ${expected}, non la ${version}.`);
-  return version;
+  return latestReleased(releasedTags) === version ? `${version}+${sha.slice(0, 12)}` : version;
 }
 
 /**

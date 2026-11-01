@@ -72,6 +72,7 @@ export function AccountShell({
       menu={shellMenu(links, t, {
         verified: security,
         whatsNew: shell?.whatsNew,
+        admin: shell?.admin,
         language: {
           href: languagePath,
           onSelect: (chosen) =>
