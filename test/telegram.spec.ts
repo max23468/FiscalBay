@@ -47,6 +47,7 @@ import {
 import { consumeWebhooks, receiveWebhook } from "../app/webhooks.server";
 import {
   configureBotCommands,
+  configureBotProfile,
   consumeTelegramUpdate,
   type TelegramReceipt,
 } from "../app/domain/telegram-bot.server";
@@ -3454,6 +3455,31 @@ describe("comandi e pulsanti del bot", () => {
       unconfigured.fetcher,
     );
     expect(unconfigured.calls).toEqual([]);
+  });
+
+  it("allinea nome e descrizioni del bot e non riscrive i campi già uguali", async () => {
+    const api = bot();
+    await configureBotProfile(environment, api.fetcher);
+    const writes = api.calls.filter((call) => call.method.startsWith("setMy"));
+    expect(writes).toHaveLength(6);
+    expect(writes).toContainEqual({
+      method: "setMyShortDescription",
+      params: {
+        language_code: "it",
+        short_description:
+          "Notifiche degli ordini eBay con codice fiscale o partita IVA dell’acquirente.",
+      },
+    });
+    expect(writes).toContainEqual({ method: "setMyName", params: { name: "FiscalBay" } });
+    // Telegram limita i cambi di nome: un campo già uguale non si scrive di nuovo.
+    const aligned = bot((call) =>
+      call.method === "getMyName"
+        ? Response.json({ ok: true, result: { name: "FiscalBay" } })
+        : undefined,
+    );
+    await configureBotProfile(environment, aligned.fetcher);
+    expect(aligned.methods().filter((method) => method === "setMyName")).toEqual([]);
+    expect(aligned.methods().filter((method) => method.startsWith("setMy"))).toHaveLength(4);
   });
 
   /** Testi attesi delle risposte del bot, nelle due lingue. */

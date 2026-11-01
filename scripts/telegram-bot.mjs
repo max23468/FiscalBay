@@ -2,8 +2,9 @@
 /**
  * Rilegge il bot Telegram di un ambiente e lo confronta con il codice: webhook su `APP_ORIGIN`
  * più `/webhooks/telegram` con messaggi e pulsanti, menu dei venditori nelle due lingue e menu
- * della sola chat dell'owner (D198). Con `--apply` registra webhook e menu dell'owner, poi
- * rilegge; il menu dei venditori lo riallinea il compito giornaliero del Worker.
+ * della sola chat dell'owner (D198), nome e descrizioni del bot nelle due lingue. Con `--apply`
+ * registra webhook, menu dell'owner e profilo, poi rilegge; il menu dei venditori lo riallinea
+ * il compito giornaliero del Worker, che riallinea anche il profilo.
  *
  * Token e segreto del webhook arrivano dalle variabili `TELEGRAM_BOT_TOKEN` e
  * `TELEGRAM_WEBHOOK_SECRET` del processo, letti per esempio dal Portachiavi dentro il comando:
@@ -51,6 +52,18 @@ export function ownerMenu() {
   ];
 }
 
+/** Campi del profilo come li legge e li scrive la Bot API, con il testo atteso. */
+export function profileFields(language) {
+  const profile = telegramBotCopy[language].profile;
+  return [
+    ["Name", "name", profile.name],
+    ["ShortDescription", "short_description", profile.shortDescription],
+    ["Description", "description", profile.description],
+  ];
+}
+
+const profileScope = (language) => (language === "it" ? { language_code: "it" } : {});
+
 /** Chiamata alla Bot API; l'errore porta soltanto il metodo, mai l'indirizzo con il token. */
 export function botRequest(token, fetcher = fetch) {
   return async (method, params = {}) => {
@@ -70,7 +83,7 @@ export function botRequest(token, fetcher = fetch) {
   };
 }
 
-/** Registra webhook e menu dell'owner; ripeterlo non cambia nulla. */
+/** Registra webhook, menu dell'owner e profilo; ripeterlo non cambia nulla. */
 export async function applyBot(request, target, secret) {
   await request("setWebhook", {
     url: target.webhookUrl,
@@ -82,6 +95,20 @@ export async function applyBot(request, target, secret) {
     commands: ownerMenu(),
     scope: { type: "chat", chat_id: target.ownerId },
   });
+  for (const language of ["it", "en"])
+    for (const [method, field, value] of profileFields(language))
+      await request(`setMy${method}`, { ...profileScope(language), [field]: value });
+}
+
+/** Il profilo letto coincide con il testo del codice in ogni campo. */
+async function sameProfile(request, language) {
+  const fields = await Promise.all(
+    profileFields(language).map(async ([method, field, value]) => {
+      const current = await request(`getMy${method}`, profileScope(language));
+      return current?.[field] === value;
+    }),
+  );
+  return fields.every(Boolean);
 }
 
 /** Stesso menu, nell'ordine: Telegram restituisce soltanto nome e descrizione dei comandi. */
@@ -92,11 +119,13 @@ const sameMenu = (expected, actual) =>
 
 /** Esito di ogni controllo, senza valori del bot. */
 export async function checkBot(request, target) {
-  const [webhook, owner, italian, english] = await Promise.all([
+  const [webhook, owner, italian, english, italianProfile, englishProfile] = await Promise.all([
     request("getWebhookInfo"),
     request("getMyCommands", { scope: { type: "chat", chat_id: target.ownerId } }),
     request("getMyCommands", { scope: { type: "all_private_chats" }, language_code: "it" }),
     request("getMyCommands", { scope: { type: "all_private_chats" } }),
+    sameProfile(request, "it"),
+    sameProfile(request, "en"),
   ]);
   return [
     { item: "webhook: indirizzo", ok: webhook?.url === target.webhookUrl },
@@ -113,6 +142,8 @@ export async function checkBot(request, target) {
     { item: "menu dell'owner", ok: sameMenu(ownerMenu(), owner) },
     { item: "menu dei venditori in italiano", ok: sameMenu(sellerMenu("it"), italian) },
     { item: "menu dei venditori in inglese", ok: sameMenu(sellerMenu("en"), english) },
+    { item: "profilo in italiano", ok: italianProfile },
+    { item: "profilo in inglese", ok: englishProfile },
   ];
 }
 

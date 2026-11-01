@@ -194,6 +194,12 @@ const it = {
         consequence: "Alcuni ordini restano senza articoli o dati fiscali completi.",
         action: retryDetails.it,
       },
+      tax_missing: {
+        title: "Ordini italiani senza dato fiscale",
+        consequence:
+          "In questi negozi la maggior parte degli ordini recenti non ha codice fiscale né partita IVA: eBay potrebbe aver smesso di restituirli.",
+        action: "Apri il negozio",
+      },
       task_stalled: {
         title: "Lavori periodici fermi",
         consequence: "I lavori non si concludono: pulizia, rinnovi o invii restano indietro.",
@@ -892,6 +898,12 @@ const en: AdminCopy = {
         title: "Order details not read",
         consequence: "Some orders lack items or complete tax data.",
         action: retryDetails.en,
+      },
+      tax_missing: {
+        title: "Italian orders without tax data",
+        consequence:
+          "In these stores most recent orders have no tax code or VAT number: eBay may have stopped returning them.",
+        action: "Open the store",
       },
       task_stalled: {
         title: "Periodic jobs stalled",
