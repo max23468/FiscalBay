@@ -37,7 +37,8 @@ permissions:
   pull-requests: read
 
 jobs:
-  # Gate locale, build e artefatto; le prove browser girano in job propri.
+  # Classificazione, controlli della PR, build e artefatto: le prove browser partono subito dopo,
+  # mentre il gate che comprende la build gira nel job `quality`.
   verify:
     name: Verify
     runs-on: ubuntu-26.04
@@ -47,6 +48,7 @@ jobs:
       cancel-in-progress: true
     outputs:
       deploy: ${{ steps.detect.outputs.deploy }}
+      base: ${{ steps.deployed.outputs.sha }}
       build: ${{ steps.detect.outputs.build }}
       e2e: ${{ steps.detect.outputs.e2e }}
       grep: ${{ steps.detect.outputs.grep }}
@@ -166,26 +168,32 @@ jobs:
           PR_TITLE="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.title')" \
             node scripts/release/release.mjs freeze --base "${BASE_SHA}"
 
+      # Senza build il gate resta qui; con la build gira nel job `quality`.
       - name: Run selected CI gate
-        if: steps.reuse.outputs.run-id == ''
+        if: steps.reuse.outputs.run-id == '' && steps.detect.outputs.build != 'true'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
-        # I browser restano nei rispettivi job; il gate locale usa la stessa sequenza.
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run --gate-only
 
-      - name: Record build provenance
-        if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
-        run: node scripts/release/release.mjs manifest --environment test
-
       - name: Preserve coverage report
-        if: always() && steps.reuse.outputs.run-id == '' && steps.detect.outputs.gate != 'docs'
+        if: always() && steps.reuse.outputs.run-id == '' && steps.detect.outputs.build != 'true' && steps.detect.outputs.gate != 'docs'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: quality-${{ github.run_id }}-${{ github.run_attempt }}
           path: reports/coverage/
           if-no-files-found: ignore
           retention-days: 7
+
+      # La stessa build test che chiude la sequenza del gate; l'artefatto diventa distribuibile
+      # soltanto con `Node 26` verde, che richiede anche il gate.
+      - name: Build test artifact
+        if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
+        run: pnpm build
+
+      - name: Record build provenance
+        if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
+        run: node scripts/release/release.mjs manifest --environment test
 
       - name: Upload verified build
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
@@ -195,6 +203,42 @@ jobs:
           path: .cloudflare/output/
           include-hidden-files: true
           if-no-files-found: error
+          retention-days: 7
+
+  # Gate scelto dal classificatore quando serve la build, in parallelo alle prove browser.
+  quality:
+    name: Gate
+    needs: verify
+    if: needs.verify.outputs.reused != 'true' && needs.verify.outputs.build == 'true'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    concurrency:
+      group: quality-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node and dependencies
+        uses: ./.github/actions/setup
+
+      - name: Run selected CI gate
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || needs.verify.outputs.base }}
+          HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
+        # I browser restano nei rispettivi job; il gate locale usa la stessa sequenza.
+        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run --gate-only
+
+      - name: Preserve coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-${{ github.run_id }}-${{ github.run_attempt }}
+          path: reports/coverage/
+          if-no-files-found: ignore
           retention-days: 7
 
   # Prove browser sulla build verificata, divise su otto macchine con quattro worker ciascuna.
@@ -254,7 +298,7 @@ jobs:
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
     name: Node 26
-    needs: [verify, browser]
+    needs: [verify, quality, browser]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
