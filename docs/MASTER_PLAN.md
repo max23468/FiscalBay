@@ -82,7 +82,7 @@ Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente q
 | M1 | Logo approvato il 2026-09-26, design system il 2026-09-27, prototipo e chiusura M1 il 2026-09-28. Nessuna pubblicazione Production autorizzata. |
 | M5 | 2026-10-26: configurazione dell'account Stripe live secondo [M5-12](#m5-12), cioè impostazioni fiscali, metodi di pagamento, webhook, portale, Smart Retries e contatto di assistenza. Lo stesso giorno l'owner ha completato il checkpoint: segreti del Worker Production e confini degli effetti economici restano al mandato Production; nessuna vendita live di prova prima del go-live ([D240](DECISION_REGISTER.md)). |
 | M8 | 2026-10-30: test merchant sul test con il negozio eBay Production dell'owner, secondo il [manifest](engineering/RELEASE.md#test-merchant): Stripe sandbox, bot del test, Accedi con eBay reale sul test (D234). Nessun deploy o effetto sul Worker Production né incasso live. |
-| M9 | 2026-10-31: pubblicazione commerciale della `2.0.0` in Production con `Promuovi`, sul candidato che l'owner autorizza con `OWNER_APPROVED_SHA`; promozione Free attiva dal go-live senza fine (D239). Nessun nuovo costo, provider o Paddle. |
+| M9 | 2026-10-31: pubblicazione commerciale della `2.0.0` in Production con `Promuovi`, sul candidato promosso, fissato in `OWNER_APPROVED_SHA` ([D250](DECISION_REGISTER.md)); promozione Free attiva dal go-live senza fine (D239). Nessun nuovo costo, provider o Paddle. |
 
 ### 0.3 Una fonte per responsabilità
 
@@ -2083,7 +2083,7 @@ Attivare in una volta le [statistiche del sito](engineering/RELEASE.md#statistic
 <a id="pubblicazione-production"></a>
 ### Gate per la pubblicazione Production
 
-Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti riportano l'esito di [M9-01](#m9-01), [M9-02](#m9-02) e [M9-03](#m9-03); `scripts/release/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e il gate dell'environment restano controlli separati obbligatori.
+Prima di `Promuovi` devono risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti riportano l'esito di [M9-01](#m9-01), [M9-02](#m9-02) e [M9-03](#m9-03); `scripts/release/release.mjs` le legge sia prima del workflow reale sia prima degli effetti Production. Una riga `COMPLETATO` richiede un riferimento alla prova applicabile; righe mancanti, duplicate, prive di prova o con altro stato bloccano il ciclo. Non modificare i nomi dei tre gate senza aggiornare lo script e i suoi test. Il via owner riferito al commit, la variabile di abilitazione e l'environment limitato a `main` restano controlli separati obbligatori ([D250](DECISION_REGISTER.md)).
 
 | Gate | Stato | Prova |
 |---|---|---|

@@ -51,15 +51,10 @@ export function targetOf(mode) {
     exports: worker.env.EXPORT_FILES.name,
     turnstile: worker.name,
     secrets: declaredSecrets(mode),
-    // Ambiente GitHub del deploy: in Production con l'approvazione dell'owner e l'interruttore.
+    // Ambiente GitHub del deploy: in Production anche con l'interruttore.
     github: live
-      ? {
-          environment: "production",
-          branch: "main",
-          reviewers: true,
-          enabled: "PRODUCTION_PUBLISH_ENABLED",
-        }
-      : { environment: "test", branch: "develop", reviewers: false },
+      ? { environment: "production", branch: "main", enabled: "PRODUCTION_PUBLISH_ENABLED" }
+      : { environment: "test", branch: "develop" },
   };
 }
 
@@ -172,13 +167,11 @@ export const ownerItems = [
 const byName = (items, name, key = "name") => items?.find((item) => item?.[key] === name);
 
 /**
- * Ambiente GitHub del deploy: soltanto il branch dell'ambiente, in Production l'approvazione
- * obbligatoria dell'owner, poi account, token e interruttore. Il via sul commit
- * (`OWNER_APPROVED_SHA`) si imposta con `Promuovi` e non si controlla qui.
+ * Ambiente GitHub del deploy: soltanto il branch dell'ambiente, poi account, token e, in
+ * Production, interruttore. Il via sul commit (`OWNER_APPROVED_SHA`) si imposta con `Promuovi`
+ * e non si controlla qui.
  */
 export function checkPublication(expected, state) {
-  const rules = state?.environment?.protection_rules ?? [];
-  const reviewers = rules.find(({ type }) => type === "required_reviewers")?.reviewers ?? [];
   const policy = state?.environment?.deployment_branch_policy;
   const variables = new Map((state?.variables ?? []).map(({ name, value }) => [name, value]));
   const missing = [
@@ -190,11 +183,10 @@ export function checkPublication(expected, state) {
   return [
     {
       area: "Rollback",
-      item: `ambiente GitHub ${expected.environment} soltanto per ${expected.branch}${expected.reviewers ? " con l'approvazione dell'owner" : ""}`,
+      item: `ambiente GitHub ${expected.environment} soltanto per ${expected.branch}`,
       ok:
         policy?.custom_branch_policies === true &&
-        JSON.stringify(state?.branches ?? []) === JSON.stringify([expected.branch]) &&
-        (!expected.reviewers || reviewers.length > 0),
+        JSON.stringify(state?.branches ?? []) === JSON.stringify([expected.branch]),
     },
     {
       area: "Rollback",
