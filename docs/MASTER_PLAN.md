@@ -2054,7 +2054,7 @@ La `2.0.0` è in Production dal 2026-11-01: release [v2.0.0](https://github.com/
 
 **Criterio di completamento:** Artefatto e servizi attivi corrispondono; branch e worktree temporanei conclusi sono rimossi e il checkout è allineato. Eventuali riferimenti conservati per lavoro in corso o ripresa sono motivati qui. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
 
-**Limiti residui:** il 2026-11-01 l'owner attesta password, Google, passkey e console; «Accedi con eBay» non si prova, perché il suo account eBay business non ha un'email utilizzabile ([D153](DECISION_REGISTER.md)). Da osservare il primo alert dei certificati. Webhook del bot in [M9-05](#m9-05).
+**Limiti residui:** il 2026-11-01 l'owner attesta password, Google, passkey e console; «Accedi con eBay» non si prova con il suo account business ([D153](DECISION_REGISTER.md)). Da osservare il primo alert dei certificati. Webhook del bot in [M9-05](#m9-05).
 
 <a id="m9-05"></a>
 #### M9-05 · Dismissione residui 1.x e handover
