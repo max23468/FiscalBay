@@ -26,7 +26,9 @@ export async function seedLocalAccount() {
  */
 export async function writeLocalDatabase(sql: string) {
   if (process.env.E2E_BASE_URL)
-    throw new Error("Scrittura sintetica soltanto in locale: la prova non vale sul dominio remoto.");
+    throw new Error(
+      "Scrittura sintetica soltanto in locale: la prova non vale sul dominio remoto.",
+    );
   const response = await fetch(
     `${localOrigin}/cdn-cgi/local/explorer/api/d1/database/${database.id}/raw`,
     {
