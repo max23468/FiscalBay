@@ -82,7 +82,7 @@ Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente q
 | M1 | Logo approvato il 2026-09-26, design system il 2026-09-27, prototipo e chiusura M1 il 2026-09-28. Nessuna pubblicazione Production autorizzata. |
 | M5 | 2026-10-26: configurazione dell'account Stripe live secondo [M5-12](#m5-12), cioè impostazioni fiscali, metodi di pagamento, webhook, portale, Smart Retries e contatto di assistenza. Lo stesso giorno l'owner ha completato il checkpoint: segreti del Worker Production e confini degli effetti economici restano al mandato Production; nessuna vendita live di prova prima del go-live ([D240](DECISION_REGISTER.md)). |
 | M8 | 2026-10-30: test merchant sul test con il negozio eBay Production dell'owner, secondo il [manifest](engineering/RELEASE.md#test-merchant): Stripe sandbox, bot del test, Accedi con eBay reale sul test (D234). Nessun deploy o effetto sul Worker Production né incasso live. |
-| M9 | 2026-10-31: pubblicazione commerciale della `2.0.0` in Production con `Promuovi`, sul candidato promosso, fissato in `OWNER_APPROVED_SHA` ([D250](DECISION_REGISTER.md)); promozione Free attiva dal go-live senza fine (D239). Nessun nuovo costo, provider o Paddle. |
+| M9 | 2026-10-31: pubblicazione commerciale della `2.0.0` in Production con `Promuovi`, sul candidato promosso ([D250](DECISION_REGISTER.md)); promozione Free attiva dal go-live senza fine (D239). Nessun nuovo costo, provider o Paddle. |
 
 ### 0.3 Una fonte per responsabilità
 

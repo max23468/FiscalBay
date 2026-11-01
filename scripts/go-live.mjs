@@ -168,8 +168,7 @@ const byName = (items, name, key = "name") => items?.find((item) => item?.[key] 
 
 /**
  * Ambiente GitHub del deploy: soltanto il branch dell'ambiente, poi account, token e, in
- * Production, interruttore. Il via sul commit (`OWNER_APPROVED_SHA`) si imposta con `Promuovi`
- * e non si controlla qui.
+ * Production, interruttore.
  */
 export function checkPublication(expected, state) {
   const policy = state?.environment?.deployment_branch_policy;

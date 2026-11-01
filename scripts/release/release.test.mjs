@@ -498,12 +498,11 @@ describe("comandi della pubblicazione", () => {
     assert.match(base.stderr, /Base della PR richiesta/u);
   });
 
-  it("richiede interruttore, approvazione dell'owner e SHA atteso sullo stesso commit", () => {
-    const env = { PRODUCTION_PUBLISH_ENABLED: "true", OWNER_APPROVED_SHA: manifest.sha };
+  it("richiede interruttore e SHA atteso uguale a quello dell'artefatto", () => {
+    const env = { PRODUCTION_PUBLISH_ENABLED: "true" };
     assert.doesNotThrow(() => assertProductionApproval(manifest, manifest.sha, env));
     for (const [expected, changed] of [
       [manifest.sha, { PRODUCTION_PUBLISH_ENABLED: "false" }],
-      [manifest.sha, { OWNER_APPROVED_SHA: "c".repeat(40) }],
       ["c".repeat(40), {}],
       [undefined, {}],
     ])
