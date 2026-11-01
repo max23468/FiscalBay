@@ -2,6 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { areas, enter, open, searched, setScenario } from "./components";
 import { useLocalAccount } from "./local-account";
+import { whatsNew } from "./page-cases";
 import { testAccount } from "./test-account";
 
 /*
@@ -23,11 +24,13 @@ async function expectOrdersNavigation(page: Page) {
 async function openSecurityFromAccountMenu(page: Page, base: string) {
   await page.getByRole("button", { name: "Account" }).click();
   const menu = page.getByRole("menu");
+  // L'anteprima non ha la pagina Novità; l'area reale la mostra quando il changelog ha voci.
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Profilo",
     "Sicurezza",
     "Piano e pagamenti",
     "Impostazioni",
+    ...(base === "/app" && whatsNew ? ["Novità"] : []),
     "Visita fiscalbay.it",
     "Esci",
   ]);

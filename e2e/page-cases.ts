@@ -78,10 +78,23 @@ const settings = [
   "supporto",
 ];
 // Le Novità del changelog che l'ambiente locale e il test mostrano, con il loro giorno o in
-// preparazione.
-const whatsNew = parseChangelog(
+// preparazione: la pagina, la voce del menu e una voce della campanella per versione degli
+// ultimi trenta giorni, che per la versione in preparazione parte dal deploy.
+const shownReleases = parseChangelog(
   readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
-).releases.some(({ date }) => date === null || Date.parse(`${date}T00:00:00.000Z`) <= Date.now());
+).releases.filter(({ date }) => date === null || Date.parse(`${date}T00:00:00.000Z`) <= Date.now());
+export const whatsNew = shownReleases.length > 0;
+export const whatsNewUnread = shownReleases.filter(
+  ({ date }) =>
+    date === null || Date.now() - Date.parse(`${date}T00:00:00.000Z`) < 30 * 24 * 60 * 60 * 1000,
+).length;
+
+/** Nome della campanella con le notifiche dell'area più quelle delle Novità. */
+export const bellName = (language: "it" | "en", unread: number) => {
+  const count = unread + whatsNewUnread;
+  if (count === 0) return language === "it" ? "Notifiche" : "Notifications";
+  return language === "it" ? `Notifiche, ${count} da leggere` : `Notifications, ${count} unread`;
+};
 
 export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
   const make = (path: string, area: string, options: Partial<PageCase> = {}): PageCase => ({

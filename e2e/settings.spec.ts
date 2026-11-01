@@ -5,6 +5,7 @@ import { areas, enter, noPageOverflow, open } from "./components";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
 import { executeLocal } from "../scripts/local-d1.mjs";
 import { localPassword, useLocalAccount } from "./local-account";
+import { bellName } from "./page-cases";
 
 test.describe("area reale", () => {
   test.skip(
@@ -79,14 +80,14 @@ test.describe("area reale", () => {
     await networkIdle(page);
 
     // La campanella segnala il negozio da ricollegare e ricorda la lettura.
-    const bell = page.getByRole("button", { name: "Notifiche, 1 da leggere" });
+    const bell = page.getByRole("button", { name: bellName("it", 1) });
     await bell.click();
     const dialog = page.getByRole("dialog", { name: "Notifiche" });
     await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
     // Una lettura che il server non registra torna da leggere.
     await page.route("**/api/v1/notifications", (route) => route.fulfill({ status: 503 }));
     await dialog.getByRole("button", { name: "Segna tutte come lette" }).click();
-    await expect(page.getByRole("button", { name: "Notifiche, 1 da leggere" })).toBeVisible();
+    await expect(page.getByRole("button", { name: bellName("it", 1) })).toBeVisible();
     await page.unroute("**/api/v1/notifications");
     const read = page.waitForResponse((response) =>
       response.url().endsWith("/api/v1/notifications"),
@@ -811,11 +812,7 @@ test.describe("inattività e ammissione", () => {
       await networkIdle(page);
       const main = page.locator("main");
       await expect(main).toContainText(it ? "In pausa per inattività" : "Paused for inactivity");
-      await expect(
-        page.getByRole("button", {
-          name: it ? "Notifiche, 1 da leggere" : "Notifications, 1 unread",
-        }),
-      ).toBeVisible();
+      await expect(page.getByRole("button", { name: bellName(language, 1) })).toBeVisible();
       await page
         .getByRole("button", { name: it ? "Riprendi le letture" : "Resume reading" })
         .click();
