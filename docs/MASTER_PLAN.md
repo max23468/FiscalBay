@@ -1083,7 +1083,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 | [M6](#m6) | Completata | Export CSV, XLSX e ZIP con file privati su R2, sito pubblico, email e supporto, console admin con KPI e metriche tecniche, Control Center Telegram e cancellazione self-service dell'account. |
 | [M7](#m7) | Completata | Audit di sicurezza, erasure, capacità, monitoraggio, degrado per guasto, recovery readiness, qualifica legale, Rate Limiting, Turnstile, log, protezioni della zona, topic eBay e matrice funzionale chiusi senza P1/P2; i P3 residui si accettano nella RC. |
 | [M8](#m8) | Completata | RC `2.0.0-rc.7` qualificata e approvabile (D236, D237): test merchant, percorsi reali, verifica browser, correzioni e preflight del restore completati; il drill conclusivo è in [M9-02](#m9-02). |
-| [M9](#m9) | In corso | `2.0.0` pubblicata in Production il 2026-11-01 ([M9-04](#m9-04)), con promozione Free attiva e iscrizioni ancora limitate all'elenco ammesso. Restano dismissione 1.x con il webhook del bot Production e sorveglianza iniziale. |
+| [M9](#m9) | In corso | `2.0.0` pubblicata in Production il 2026-11-01 ([M9-04](#m9-04)), con iscrizioni aperte e promozione Free attiva. Restano dismissione 1.x con il webhook del bot Production e sorveglianza iniziale. |
 | [M10](#m10) | Da completare | Riconoscimento eBay e verifiche esterne: candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D251](DECISION_REGISTER.md)). |
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
@@ -2057,7 +2057,7 @@ La `2.0.0` è in Production dal 2026-11-01: release [v2.0.0](https://github.com/
 
 **Criterio di completamento:** Artefatto e servizi attivi corrispondono; branch e worktree temporanei conclusi sono rimossi e il checkout è allineato. Eventuali riferimenti conservati per lavoro in corso o ripresa sono motivati qui. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
 
-**Limiti residui:** iscrizioni limitate all'elenco ammesso, da aprire su indicazione dell'owner; da attestare i quattro accessi, la console con la passkey, il primo report DMARC e il primo alert dei certificati. Webhook del bot in [M9-05](#m9-05).
+**Limiti residui:** da attestare i quattro accessi, la console con la passkey, il primo report DMARC e il primo alert dei certificati. Webhook del bot in [M9-05](#m9-05).
 
 <a id="m9-05"></a>
 #### M9-05 · Dismissione residui 1.x e handover
