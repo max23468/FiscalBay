@@ -143,6 +143,90 @@ function consumers(files, graph) {
   return affected;
 }
 
+/**
+ * Area dei moduli applicativi, dichiarata per percorso: i moduli di dominio si importano a catena
+ * fino a quasi tutte le route, quindi gli import transitivi non distinguono le aree. Shell, copy,
+ * componenti comuni, aggregatori e ogni modulo che non compare qui provano tutto.
+ */
+const billing = ["orders", "public", "settings"];
+export const moduleAreas = [
+  [
+    /^app\/(?:components\/orders\/|orders\/(?!export-)|preview\/order-list\.server\.ts$|domain\/(?:orders|order-(?:view|suggestions|observation))\.server\.ts$)/u,
+    ["orders"],
+  ],
+  [
+    /^app\/(?:orders\/export-|domain\/order-export\.server\.ts$|domain\/(?:export-(?:configurations|files|jobs)|account-export|xlsx)\.server\.ts$|copy\/account-export\.ts$)/u,
+    ["orders", "settings"],
+  ],
+  [
+    /^app\/(?:integrations\/ebay\/|domain\/order-(?:sync|acquisition(?:-context|-details)?|import|events)\.server\.ts$)/u,
+    ["orders", "stores"],
+  ],
+  [/^app\/(?:webhooks\.server|webhook-paths)\.ts$/u, ["orders", "settings", "stores"]],
+  [
+    /^app\/(?:components\/stores\/|domain\/(?:stores|store-(?:link|marks|profile|state|transfer)|free-store|ebay-quotas|ebay-account-deletion|token-refresh|reconnect-notices)\.server\.ts$)/u,
+    ["stores"],
+  ],
+  [
+    /^app\/(?:components\/settings\/|preview\/settings-page\.server\.ts$|settings-actions\.server\.ts$|domain\/(?:notifications|notification-reads|email-change|sessions|sign-in-methods|support|support-requests|preferences)\.server\.ts$)/u,
+    ["settings"],
+  ],
+  [
+    /^app\/(?:catalog\.ts|domain\/subscription-offers\.ts|integrations\/stripe(?:-account)?\.server\.ts|domain\/(?:billing|billing-subscriptions|checkout|lifetime|grants|concessions|refunds|plan-view)\.server\.ts)$/u,
+    billing,
+  ],
+  [
+    /^app\/(?:domain\/telegram(?:-bot|-deliveries|-messages)?\.server\.ts|copy\/(?:owner-)?telegram\.ts|integrations\/telegram\.server\.ts|bot-commands\.ts)$/u,
+    ["auth", "settings"],
+  ],
+  [
+    /^app\/(?:account-email\.server\.ts|domain\/(?:registration|account-deletion|deletion-steps)\.server\.ts)$/u,
+    ["auth", "settings"],
+  ],
+  [
+    /^app\/(?:components\/(?:access|admin)\/|account\/|components\/turnstile\.tsx$|copy\/admin-copy\.ts$|(?:admin-console|auth-route|security-actions|password|turnstile|metrics)\.server\.ts$|turnstile\.ts$|metrics-queries\.ts$|domain\/(?:admin-[a-z]+|owner-[a-z]+|admission(?:-state)?|abuse-review|technical-metrics|product-metrics|maintenance)\.server\.ts$)/u,
+    ["auth"],
+  ],
+  [
+    /^app\/(?:copy\/(?:site-pages|legal-documents)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|site-meta\.ts|contact\.ts)$/u,
+    ["public"],
+  ],
+  [/^app\/components\/language-switch\.tsx$/u, ["auth", "public"]],
+];
+
+/** Aree di una route; `undefined` se il nome non ne indica una. */
+function routeAreas(route) {
+  const areas = [];
+  if (/orders|order-|home|preview\.tsx|preview-search/u.test(route)) areas.push("orders");
+  // Ordini e accesso condividono la pagina; il sito pubblico è `site.tsx`.
+  if (route.endsWith("/home.tsx")) areas.push("auth");
+  if (/stores|store-link/u.test(route)) areas.push("stores");
+  if (/settings|whats-new/u.test(route)) areas.push("settings");
+  if (/profile/u.test(route)) areas.push("profile");
+  if (/security|admin|auth|sign-in/u.test(route)) areas.push("auth");
+  if (/legal|site|robots|support|faq|features|pricing|sitemap/u.test(route)) areas.push("public");
+  return areas.length ? areas : undefined;
+}
+
+/**
+ * Aree di un modulo applicativo modificato: quella dichiarata, o della route stessa, più quelle
+ * delle route che lo importano direttamente. `undefined` se un modulo o una route non ha area.
+ */
+function moduleArea(file, graph) {
+  const own = file.startsWith("app/routes/")
+    ? routeAreas(file)
+    : moduleAreas.find(([pattern]) => pattern.test(file))?.[1];
+  if (!own || !graph.has(file)) return undefined;
+  const areas = [...own];
+  for (const [route, imports] of graph) {
+    if (!route.startsWith("app/routes/") || !imports.has(file)) continue;
+    const direct = routeAreas(route);
+    if (!direct) return undefined;
+    areas.push(...direct);
+  }
+  return areas;
+}
+
 const areaPatterns = {
   orders: "ordini|ordine|orders|idratazione",
   stores: "negozi|negozio|stores",
@@ -172,27 +256,11 @@ export function plan(files, sources = [], complete = false, changes = {}) {
   const specs = files.flatMap((file) => browserSpec.exec(file)?.[1] ?? []);
 
   const graph = importGraph(sources);
-  const affected = consumers(files, graph);
-  const areas = new Set();
-  for (const route of [...affected].filter((file) => file.startsWith("app/routes/"))) {
-    if (/orders|home/u.test(route)) areas.add("orders");
-    // Ordini e accesso condividono la pagina; il sito pubblico è `site.tsx`.
-    if (route.endsWith("/home.tsx")) areas.add("auth");
-    if (/stores|store-link/u.test(route)) areas.add("stores");
-    if (/settings|whats-new/u.test(route)) areas.add("settings");
-    if (/profile/u.test(route)) areas.add("profile");
-    if (/security|admin|auth|sign-in/u.test(route)) areas.add("auth");
-    if (/legal|site|robots|support/u.test(route)) areas.add("public");
-  }
-  // Una selezione per area vale soltanto per moduli applicativi risolti fino alle route; senza
-  // moduli applicativi bastano le spec modificate.
-  const resolved = product.every(
-    (file) =>
-      graph.has(file) &&
-      !/^app\/(?:root\.tsx|routes\.ts|entry\.server|app-copy|app-links|app\.css|components\/(?:ui\/|app-shell|account))/u.test(
-        file,
-      ),
-  );
+  // Una selezione per area vale soltanto se ogni modulo applicativo ha un'area; senza moduli
+  // applicativi bastano le spec modificate.
+  const owned = product.map((file) => moduleArea(file, graph));
+  const areas = new Set(owned.flatMap((area) => area ?? []));
+  const resolved = owned.every(Boolean);
   const targeted =
     e2e && !complete && (product.length ? areas.size > 0 && resolved : specs.length > 0);
   const browserGrep = targeted
@@ -203,15 +271,8 @@ export function plan(files, sources = [], complete = false, changes = {}) {
         ...specs,
       ].join("|")
     : ".";
-  // Una spec modificata gira come nel candidato, in entrambi i browser.
-  const browsers = !e2e
-    ? ""
-    : !targeted ||
-        specs.length > 0 ||
-        areas.has("auth") ||
-        files.some((file) => /i18n|view-models|date|\.tsx$/u.test(file))
-      ? "chromium,webkit"
-      : "chromium";
+  // Ogni selezione gira in entrambi i browser: WebKit prova Safari e iPhone.
+  const browsers = e2e ? "chromium,webkit" : "";
   // Soltanto il candidato esegue mutation: moduli critici modificati e loro consumatori critici.
   // PR e push non ne eseguono; la campagna settimanale prova tutti i moduli critici.
   const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);

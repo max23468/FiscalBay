@@ -626,6 +626,8 @@ describe("comandi della pubblicazione", () => {
     assert.equal(tag("2.0.0", "production", [], "2.0.0"), "a".repeat(12));
     assert.equal(tag("2.0.1", "test", ["v2.0.0"]), `2.0.1-dev.${"b".repeat(12)}`);
     assert.equal(tag("2.0.1", "production", ["v2.0.0"], "2.0.1"), "2.0.1");
+    // Sole modifiche interne dopo la 2.0.0: la versione resta, con il commit distribuito.
+    assert.equal(tag("2.0.0", "production", ["v2.0.0"], "2.0.0"), `2.0.0+${"a".repeat(12)}`);
     assert.throws(() => tag("2.0.1", "production", ["v2.0.0"], "2.0.2"), /versione 2\.0\.2/u);
     assert.throws(() => tag("2.0.1-rc.1", "production", ["v2.0.0"], "2.0.1-rc.1"), /non la/u);
     // In Production la versione porta il giorno scritto dalla promozione; sul test no.

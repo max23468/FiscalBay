@@ -1,5 +1,6 @@
 import {
   ClipboardList,
+  LayoutDashboard,
   CreditCard,
   Globe,
   Languages,
@@ -76,10 +77,13 @@ export function shellMenu(
   {
     verified,
     whatsNew = false,
+    admin = false,
     language,
   }: {
     verified: boolean;
     whatsNew?: boolean;
+    /** Console per chi ha il ruolo admin, fuori dalle route dell'app. */
+    admin?: boolean;
     /** Scelta della lingua prima della conferma: percorso che la riceve e invio. */
     language: { href: string; onSelect: (language: Language) => void };
   },
@@ -87,6 +91,18 @@ export function shellMenu(
   const other: Language = links.language === "it" ? "en" : "it";
   return [
     ...(verified ? [accountMenu(links, t, whatsNew)] : []),
+    ...(verified && admin
+      ? [
+          [
+            {
+              href: "/admin",
+              label: t.shell.console,
+              Icon: LayoutDashboard,
+              reloadDocument: true,
+            },
+          ],
+        ]
+      : []),
     [
       ...(verified
         ? []

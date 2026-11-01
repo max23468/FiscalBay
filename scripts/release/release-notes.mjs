@@ -6,6 +6,15 @@ import { parseArgs } from "node:util";
 
 import { gh, ghJson } from "../lib/provider.mjs";
 
+const isAncestor = (ancestor, descendant) => {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", ancestor, descendant], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export function releaseNotes(changelog, version) {
   if (!/^2\.\d+\.\d+(?:-(?:alpha|rc)\.\d+)?$/u.test(version))
     throw new Error("Versione di pubblicazione non valida.");
@@ -39,12 +48,17 @@ export function assertBrowserEvidence(browser, sha) {
 /**
  * Passo del tag nella ripresa: «done» se tag e release pubblicata esistono già sul commit,
  * «create» se manca la release, anche con il tag già creato da un tentativo interrotto. Un tag
- * su un altro commit non si riscrive.
+ * su un altro commit non si riscrive: se quel commit precede il candidato e la release è
+ * pubblicata, il deploy porta soltanto modifiche interne e resta senza release («internal»).
  */
-export function releaseStep(tagTarget, releases, tag, sha) {
+export function releaseStep(tagTarget, releases, tag, sha, earlier = false) {
   if (tagTarget === undefined) return "create";
-  if (tagTarget !== sha) throw new Error("Tag già pubblicato su un altro commit.");
-  return releases.some((release) => release.tag_name === tag && !release.draft) ? "done" : "create";
+  const published = releases.some((release) => release.tag_name === tag && !release.draft);
+  if (tagTarget !== sha) {
+    if (earlier && published) return "internal";
+    throw new Error("Tag già pubblicato su un altro commit.");
+  }
+  return published ? "done" : "create";
 }
 
 async function main() {
@@ -86,7 +100,11 @@ async function main() {
   const releases = existing
     ? ghJson("api", "--paginate", "--slurp", `repos/${repo}/releases?per_page=100`).flat()
     : [];
-  if (releaseStep(target, releases, tag, sha) === "done") return;
+  const earlier = Boolean(target) && target !== sha && isAncestor(target, sha);
+  const step = releaseStep(target, releases, tag, sha, earlier);
+  if (step === "internal")
+    return console.log(`Deploy senza nuova release: ${tag} resta su ${target.slice(0, 12)}.`);
+  if (step === "done") return;
   gh(
     "release",
     "create",

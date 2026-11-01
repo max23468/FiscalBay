@@ -43,4 +43,17 @@ describe("pubblicazione riprendibile", () => {
     assert.equal(releaseStep(manifest.sha, published, tag, manifest.sha), "done");
     assert.throws(() => releaseStep("b".repeat(40), published, tag, manifest.sha), /altro commit/u);
   });
+
+  it("un deploy di sole modifiche interne lascia la release sul commit precedente", () => {
+    const tag = "v2.0.0";
+    const earlier = "b".repeat(40);
+    const published = [{ tag_name: tag, draft: false }];
+    assert.equal(releaseStep(earlier, published, tag, manifest.sha, true), "internal");
+    // Un tag su un commit che non precede il candidato, o una release in bozza, restano errori.
+    assert.throws(() => releaseStep(earlier, published, tag, manifest.sha, false), /altro commit/u);
+    assert.throws(
+      () => releaseStep(earlier, [{ tag_name: tag, draft: true }], tag, manifest.sha, true),
+      /altro commit/u,
+    );
+  });
 });
