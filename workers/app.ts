@@ -10,6 +10,7 @@ import { correlateResponse, correlationHeader, logFailure, tracePhase } from "..
 import type { InvocationDetail, InvocationOutcome } from "../app/metrics.server";
 import { withInvocationMetrics, withPhaseTimings } from "../app/observability.server";
 import { withResponseCookies } from "../app/response-cookies.server";
+import { queueRetryDelay } from "../app/domain/work-timing";
 import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
 import { consumeExportJob, isExportJobMessage } from "../app/domain/export-jobs.server";
 import {
@@ -86,22 +87,28 @@ async function loadRequestHandler() {
  */
 function observedMessages<T extends Message<unknown>>(messages: T[]) {
   let retried = false;
+  const settled = new Set<T>();
   const observed = messages.map(
     (message) =>
       new Proxy(message, {
         get(target, property) {
           const value = Reflect.get(target, property, target) as unknown;
           if (typeof value !== "function") return value;
-          if (property === "retry")
+          if (property === "retry" || property === "ack")
             return (...args: unknown[]) => {
-              retried = true;
+              settled.add(target);
+              retried ||= property === "retry";
               return (value as (...args: unknown[]) => unknown).apply(target, args);
             };
           return (value as (...args: unknown[]) => unknown).bind(target);
         },
       }),
   );
-  return { observed, outcome: (): InvocationOutcome => (retried ? "retry" : "ok") };
+  return {
+    observed,
+    outcome: (): InvocationOutcome => (retried ? "retry" : "ok"),
+    pending: () => messages.filter((message) => !settled.has(message)),
+  };
 }
 
 export default {
@@ -168,13 +175,19 @@ export default {
       consume: (messages: T[]) => Promise<unknown>,
     ) => {
       if (messages.length === 0) return Promise.resolve();
-      const { observed, outcome } = observedMessages(messages);
+      const { observed, outcome, pending } = observedMessages(messages);
       return withInvocationMetrics("queue", detail, () => consume(observed), {
         dataset: env.METRICS,
         version: env.VERSION_METADATA?.id,
         tracing: ctx?.tracing,
         count: messages.length,
         outcome,
+      }).catch((error: unknown) => {
+        // Un'eccezione fuori dal consumer, come un errore passeggero di D1, farebbe ripetere il
+        // lotto subito: i tentativi finirebbero in pochi secondi nella coda dei falliti.
+        logFailure({ error, operation: "queue" });
+        for (const message of pending())
+          message.retry({ delaySeconds: queueRetryDelay(message.attempts) });
       });
     };
     // Un messaggio di forma sconosciuta non ha un consumer: si riprova fino alla coda dei

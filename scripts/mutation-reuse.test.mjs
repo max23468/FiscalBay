@@ -15,7 +15,7 @@ import {
   vitestRoots,
 } from "./mutation-reuse.mjs";
 
-/** Lockfile di pnpm con i due documenti, dipendenze del progetto e della pagina provvisoria. */
+/** Lockfile di pnpm con i due documenti, dipendenze del progetto e di un altro importer. */
 function lockfile({ dependencies = "", devDependencies = "", extra = "", settings = "" } = {}) {
   return `---
 lockfileVersion: '9.0'
@@ -328,15 +328,12 @@ describe("mutation incrementale della prova del candidato", () => {
       "@scope/auth",
       "zod",
     ]);
-    // La pagina provvisoria non entra nella mutation.
-    const placeholder = lockfile().replace(
+    // Un altro importer non entra nella mutation.
+    const other = lockfile().replace(
       "cf:\n        specifier: 1.0.0",
       "cf:\n        specifier: 1.1.0",
     );
-    assert.deepEqual(
-      [...changedPackages(before, { manifest: manifest(), lockfile: placeholder })],
-      [],
-    );
+    assert.deepEqual([...changedPackages(before, { manifest: manifest(), lockfile: other })], []);
   });
 
   it("con uno strumento cambiato ripete tutto", () => {

@@ -6,7 +6,6 @@
   "scripts": {
     "build": "cf build && node scripts/check-bundle-size.mjs",
     "build:live": "cf build --mode live && node scripts/check-bundle-size.mjs",
-    "build:placeholder": "pnpm --dir placeholder exec cf build --mode live",
     "dev": "react-router dev",
     "doctor:react": "react-doctor --scope full --blocking warning .",
     "format": "oxfmt --write .",
@@ -26,7 +25,7 @@
     "test:scripts": "node --test scripts/",
     "typecheck": "tsc -b",
     "typegen": "cf workers types && react-router typegen",
-    "verify": "pnpm verify:unit && pnpm doctor:react && pnpm build:placeholder && pnpm build:live && pnpm build",
+    "verify": "pnpm verify:unit && pnpm doctor:react && pnpm build:live && pnpm build",
     "verify:build": "pnpm verify:unit && pnpm build",
     "verify:documents": "pnpm verify:copy && pnpm verify:docs",
     "verify:unit": "pnpm verify:tooling && pnpm typecheck && pnpm test:coverage",
