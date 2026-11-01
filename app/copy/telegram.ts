@@ -91,6 +91,12 @@ export const telegramMessageCopy = {
  */
 export const telegramBotCopy = {
   it: {
+    profile: {
+      name: "FiscalBay",
+      shortDescription:
+        "Notifiche degli ordini eBay con codice fiscale o partita IVA dell’acquirente.",
+      description: `Qui ricevi le notifiche dei nuovi ordini eBay, con il codice fiscale o la partita IVA quando eBay li fornisce. Per iniziare collega questa chat da FiscalBay, in ${shared.it.notifications}. Ricerca, sblocco ed esportazione restano sul sito.`,
+    },
     commands: {
       status: "Piano, notifiche e negozi",
       latest: "Ultimi ordini",
@@ -161,6 +167,11 @@ export const telegramBotCopy = {
     },
   },
   en: {
+    profile: {
+      name: "FiscalBay",
+      shortDescription: "eBay order notifications with the buyer’s tax code or VAT number.",
+      description: `Get notifications for new eBay orders here, with the tax code or VAT number when eBay provides it. To start, connect this chat from FiscalBay, in ${shared.en.notifications}. Search, unlocking and export stay on the website.`,
+    },
     commands: {
       status: "Plan, notifications and stores",
       latest: "Latest orders",

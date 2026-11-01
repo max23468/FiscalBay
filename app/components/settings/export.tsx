@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { Link, useRevalidator } from "react-router";
 
@@ -312,6 +312,9 @@ function ColumnsField({
   const { t } = useCopy();
   const copy = t.settings.export;
   const [moved, setMoved] = useState("");
+  // Chiuso all'apertura: l'elenco completo occuperebbe gran parte della pagina.
+  const [open, setOpen] = useState(false);
+  const listId = useId();
   if (!premium)
     return (
       <FieldSet>
@@ -334,54 +337,72 @@ function ColumnsField({
     setMoved(copy.exportColumnMoved(name(column), index + step + 1, visible.length));
   };
   return (
-    <FieldSet>
-      <FieldLegend variant="label">{copy.exportColumns}</FieldLegend>
-      <ol className="grid max-h-96 gap-1 overflow-y-auto rounded-lg border p-2">
-        {visible.map((column, index) => (
-          <li key={column} className="flex items-center gap-2">
-            <div className="min-w-0 flex-1">
-              <CheckboxOption
-                checked={chosen.has(column)}
-                onCheckedChange={(checked) =>
-                  onChange({
-                    ...layout,
-                    chosen: checked
-                      ? [...layout.chosen, column]
-                      : layout.chosen.filter((current) => current !== column),
-                  })
-                }
+    <div className="grid gap-3">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={listId}
+        onClick={() => setOpen(!open)}
+        className="flex w-fit items-center gap-1.5 rounded-sm text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring"
+      >
+        {copy.exportColumns}
+        <ChevronDown
+          aria-hidden="true"
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick)",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      <FieldSet id={listId} hidden={!open}>
+        <FieldLegend className="sr-only">{copy.exportColumns}</FieldLegend>
+        <ol className="grid max-h-96 gap-1 overflow-y-auto rounded-lg border p-2">
+          {visible.map((column, index) => (
+            <li key={column} className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <CheckboxOption
+                  checked={chosen.has(column)}
+                  onCheckedChange={(checked) =>
+                    onChange({
+                      ...layout,
+                      chosen: checked
+                        ? [...layout.chosen, column]
+                        : layout.chosen.filter((current) => current !== column),
+                    })
+                  }
+                >
+                  {name(column)}
+                </CheckboxOption>
+              </div>
+              {/* Agli estremi il pulsante resta raggiungibile: disattivarlo sposterebbe il focus. */}
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="aria-disabled:opacity-40"
+                aria-label={copy.exportMoveUp(name(column))}
+                aria-disabled={index === 0 || undefined}
+                onClick={() => move(column, -1)}
               >
-                {name(column)}
-              </CheckboxOption>
-            </div>
-            {/* Agli estremi il pulsante resta raggiungibile: disattivarlo sposterebbe il focus. */}
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="aria-disabled:opacity-40"
-              aria-label={copy.exportMoveUp(name(column))}
-              aria-disabled={index === 0 || undefined}
-              onClick={() => move(column, -1)}
-            >
-              <ArrowUp aria-hidden />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="aria-disabled:opacity-40"
-              aria-label={copy.exportMoveDown(name(column))}
-              aria-disabled={index === visible.length - 1 || undefined}
-              onClick={() => move(column, 1)}
-            >
-              <ArrowDown aria-hidden />
-            </Button>
-          </li>
-        ))}
-      </ol>
-      <p role="status" className="sr-only">
-        {moved}
-      </p>
-    </FieldSet>
+                <ArrowUp aria-hidden />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="aria-disabled:opacity-40"
+                aria-label={copy.exportMoveDown(name(column))}
+                aria-disabled={index === visible.length - 1 || undefined}
+                onClick={() => move(column, 1)}
+              >
+                <ArrowDown aria-hidden />
+              </Button>
+            </li>
+          ))}
+        </ol>
+        <p role="status" className="sr-only">
+          {moved}
+        </p>
+      </FieldSet>
+    </div>
   );
 }
 

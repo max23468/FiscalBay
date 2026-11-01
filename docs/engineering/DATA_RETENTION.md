@@ -146,9 +146,8 @@ ricollega le righe all'utente eBay. Le copie native del provider (Time Travel pe
 30 giorni) restano fino alla loro scadenza; un restore riapplica le richieste come
 descritto sopra. eBay ritenta finché la consegna non riceve 200, 201, 202 o 204
 ([S23](../SOURCES.md#s23)). Il keyset `botCF`, usato soltanto da FiscalBay, ha un solo
-endpoint per queste notifiche: fino al collaudo era quello della 1.x; il test lo riceve
-ora su `https://test.fiscalbay.it/webhooks/ebay` e Production lo riceverà su
-`https://fiscalbay.it/webhooks/ebay` al passaggio a Production.
+endpoint per queste notifiche: dal 2026-10-28 è `https://fiscalbay.it/webhooks/ebay`
+e il test non le riceve più.
 
 <a id="identita-e-suggerimenti"></a>
 ## Identità e suggerimenti

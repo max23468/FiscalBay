@@ -34,7 +34,16 @@ export function fakeBot(reply?: (call: BotCall) => Response | undefined) {
           allowed_updates: ["message", "callback_query"],
         },
       });
-    if (["answerCallbackQuery", "setMyCommands", "deleteMyCommands"].includes(call.method))
+    const profileField = {
+      getMyName: "name",
+      getMyShortDescription: "short_description",
+      getMyDescription: "description",
+    }[call.method];
+    if (profileField) return Response.json({ ok: true, result: { [profileField]: "" } });
+    if (
+      ["answerCallbackQuery", "setMyCommands", "deleteMyCommands"].includes(call.method) ||
+      /^setMy(Name|ShortDescription|Description)$/u.test(call.method)
+    )
       return Response.json({ ok: true, result: true });
     return Response.json({ ok: true, result: { message_id: calls.length } });
   });

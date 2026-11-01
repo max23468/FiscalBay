@@ -14,7 +14,7 @@ import { databases } from "../cloudflare.config.ts";
 const state = ".cloudflare/state";
 // Il collaudo Production locale serve la build live, legata alla D1 Production: il suo stato
 // locale riceve le stesse migration, senza account sintetici.
-const database = process.env.E2E_PRODUCTION === "1" ? databases.live : databases.test;
+export const database = process.env.E2E_PRODUCTION === "1" ? databases.live : databases.test;
 const config = ".cloudflare/local-d1.json";
 
 /** @param {string[]} args */
@@ -47,6 +47,8 @@ export const applyLocalMigrations = () => wrangler(["d1", "migrations", "apply",
 /**
  * Istruzioni dal file temporaneo: un solo argomento ha un limite di lunghezza (128 KiB su Linux)
  * che gli account sintetici superano. In locale il file non sospende il database come in remoto.
+ * Wrangler apre lo stato da un altro processo: mentre la preview serve le prove si scrive con
+ * `writeLocalDatabase` di `e2e/local-account.ts`.
  * @param {string} sql
  */
 export function executeLocal(sql) {

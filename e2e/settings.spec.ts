@@ -3,8 +3,7 @@ import type { Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 import { areas, enter, noPageOverflow, open } from "./components";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
-import { executeLocal } from "../scripts/local-d1.mjs";
-import { localPassword, useLocalAccount } from "./local-account";
+import { localPassword, useLocalAccount, writeLocalDatabase } from "./local-account";
 import { bellName } from "./page-cases";
 
 test.describe("area reale", () => {
@@ -196,7 +195,7 @@ test.describe("area reale", () => {
       ).not.toHaveCount(0);
       // Link dell'email: lo stesso formato di Better Auth, con un token noto nella D1 locale.
       const token = `${id.replaceAll("-", "")}link`;
-      await writeLocal(`INSERT INTO verification (id, identifier, value, "expiresAt", "createdAt",
+      await writeLocalDatabase(`INSERT INTO verification (id, identifier, value, "expiresAt", "createdAt",
           "updatedAt") VALUES ('${id}-link', 'delete-account-${token}', '${id}',
           '${new Date(Date.now() + 3_600_000).toISOString()}', '${new Date().toISOString()}',
           '${new Date().toISOString()}');`);
@@ -228,12 +227,12 @@ test.describe("area reale", () => {
       const deleteButton = () =>
         page.getByRole("button", { name: it ? "Elimina account" : "Delete account", exact: true });
       // Email da verificare: l'avviso degli Ordini offre la cancellazione.
-      await writeLocal(`UPDATE "user" SET "emailVerified" = 0 WHERE id = '${id}';`);
+      await writeLocalDatabase(`UPDATE "user" SET "emailVerified" = 0 WHERE id = '${id}';`);
       await page.goto(`${prefix}/app/ordini`);
       await networkIdle(page);
       await expect(deleteButton()).toBeVisible();
       // Termini da accettare: la pagina di completamento offre lo stesso flusso.
-      await writeLocal(`DELETE FROM terms_acceptances WHERE user_id = '${id}';`);
+      await writeLocalDatabase(`DELETE FROM terms_acceptances WHERE user_id = '${id}';`);
       await page.goto(`${prefix}/accesso`);
       await networkIdle(page);
       await expect(
@@ -275,10 +274,9 @@ test.describe("area reale", () => {
 });
 
 for (const width of [390, 768, 1440]) {
-  test(`impostazioni e profilo: contesto, documenti e validazione a ${width}px`, async ({
-    page,
-  }, testInfo) => {
-    test.setTimeout(90_000);
+  // Tre prove per larghezza: una sola percorreva tutte le categorie e, sotto il carico della
+  // qualifica, superava il suo limite di tempo.
+  test(`impostazioni: aspetto e lingua a ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await open(page, "/anteprima/impostazioni/aspetto");
@@ -325,7 +323,12 @@ for (const width of [390, 768, 1440]) {
       await expect(page.getByRole("heading", { name: timezone, exact: true })).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`appearance-${locale}.png`) });
     }
+  });
 
+  test(`impostazioni: scenari del piano a ${width}px`, async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     for (const locale of ["it", "en"] as const) {
       const it = locale === "it";
       const prefix = it ? "" : "/en";
@@ -470,7 +473,15 @@ for (const width of [390, 768, 1440]) {
           .first(),
       ).toBeVisible({ timeout: 20_000 });
       await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
+    }
+  });
 
+  test(`impostazioni: supporto e account a ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    for (const locale of ["it", "en"] as const) {
+      const it = locale === "it";
+      const prefix = it ? "" : "/en";
       await open(page, `${prefix}/anteprima/impostazioni/supporto`);
       await page.getByRole("button", { name: it ? "Invia" : "Send", exact: true }).click();
       const message = page.getByRole("textbox", {
@@ -1064,19 +1075,6 @@ async function openNotifications(page: Page, prefix: string, it: boolean) {
   ).toBeEnabled();
 }
 
-/** Scrittura nel database locale condiviso con la preview, ripetuta se lo trova occupato. */
-async function writeLocal(sql: string) {
-  for (let attempt = 1; ; attempt++) {
-    try {
-      executeLocal(sql);
-      return;
-    } catch (error) {
-      if (attempt === 5) throw error;
-      await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
-    }
-  }
-}
-
 test.describe("notifiche Telegram", () => {
   test.skip(
     Boolean(process.env.E2E_BASE_URL),
@@ -1157,9 +1155,8 @@ test.describe("notifiche Telegram", () => {
       ).toHaveAttribute("href", `${prefix}/app/impostazioni/notifiche`);
 
       // Una consegna ferma compare nelle Notifiche, con gli stessi testi dell'anteprima.
-      test.setTimeout(90_000);
       for (const failure of ["blocked", "unreachable"] as const) {
-        await writeLocal(
+        await writeLocalDatabase(
           `UPDATE telegram_links SET delivery_failure = '${failure}' WHERE id = '${id}'`,
         );
         await expect(async () => {
@@ -1178,8 +1175,6 @@ test.describe("notifiche Telegram", () => {
     }, testInfo) => {
       const it = language === "it";
       const prefix = it ? "" : "/en";
-      // Wrangler scrive nel database locale in alcuni secondi, poi la pagina si rilegge.
-      test.setTimeout(90_000);
       const id = `telegram-unlinked-${language}-${browserName}-${testInfo.retry}`;
       await useLocalAccount(context, "member", baseURL!, id);
       // Nessun bot reale: Telegram risponde con una pagina vuota.
@@ -1204,9 +1199,8 @@ test.describe("notifiche Telegram", () => {
             : "Press Start in the bot to finish linking. The link is valid for 15 minutes.",
         ),
       ).toBeVisible();
-      // Al posto del bot, il collegamento che il consumer scrive dopo l'«Avvia». La preview tiene
-      // aperto lo stesso database: una scrittura concorrente può trovarlo occupato e si ripete.
-      await writeLocal(
+      // Al posto del bot, il collegamento che il consumer scrive dopo l'«Avvia».
+      await writeLocalDatabase(
         `INSERT INTO telegram_links (workspace_id, id, chat_id, chat_label, language, linked_at)
           VALUES ('${id}', '${id}', '2', '@nuova_chat', '${language}', '${new Date().toISOString()}')`,
       );
