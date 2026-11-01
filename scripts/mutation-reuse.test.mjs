@@ -141,14 +141,14 @@ describe("mutation riusata su main con contenuti identici", () => {
     assert.deepEqual(contentChanges(["app/x.ts"], false), ["app/x.ts"]);
   });
 
-  it("conta i moduli superati soltanto nelle run riuscite e i fallimenti in tutte", () => {
+  it("in una run annullata conta soltanto i fallimenti, in una conclusa ogni esito", () => {
     const outcomes = new Map([
       ["app/a.ts", "passed"],
       ["app/b.ts", "failed"],
     ]);
-    assert.equal(identicalOutcomes(outcomes, "success"), outcomes);
-    for (const conclusion of ["failure", "cancelled", "timed_out"])
-      assert.deepEqual([...identicalOutcomes(outcomes, conclusion)], [["app/b.ts", "failed"]]);
+    for (const conclusion of ["success", "failure", "timed_out"])
+      assert.equal(identicalOutcomes(outcomes, conclusion), outcomes, conclusion);
+    assert.deepEqual([...identicalOutcomes(outcomes, "cancelled")], [["app/b.ts", "failed"]]);
   });
 
   it("sceglie l'ultima run su contenuti identici e non copre un suo fallimento", () => {

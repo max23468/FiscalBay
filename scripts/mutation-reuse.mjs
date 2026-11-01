@@ -310,11 +310,12 @@ export function reusePlan(targets, runs, affectedSince, { identical = false } = 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
 
 /**
- * Esiti che valgono per il riuso su contenuti identici: in una run non riuscita, anche annullata,
- * un modulo superato non conta, uno fallito resta un fallimento recente.
+ * Esiti che valgono per il riuso su contenuti identici: in una run annullata un modulo superato
+ * non conta, uno fallito resta un fallimento recente. In una run conclusa conta l'esito del
+ * modulo, anche se è fallito un altro job.
  */
 export function identicalOutcomes(outcomes, conclusion) {
-  return conclusion === "success"
+  return conclusion !== "cancelled"
     ? outcomes
     : new Map([...outcomes].filter(([, outcome]) => outcome === "failed"));
 }
@@ -357,6 +358,9 @@ async function previousRuns(repository, repositoryId, identical) {
       candidate.event === "pull_request" ||
       candidate.repository?.id !== repositoryId ||
       candidate.head_repository?.id !== repositoryId ||
+      // Su contenuti identici valgono soltanto le run dei branch protetti: un avvio manuale da un
+      // altro branch esegue i workflow di quel branch.
+      (identical && !["develop", "main"].includes(candidate.head_branch)) ||
       !available(candidate.head_sha, identical)
     )
       continue;
