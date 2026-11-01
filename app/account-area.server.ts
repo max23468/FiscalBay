@@ -165,7 +165,13 @@ export async function shellData(
       area.termsUpdate,
     ),
   );
-  return { display, notifications, whatsNew: hasWhatsNew(now), now: now.toISOString() };
+  return {
+    display,
+    notifications,
+    whatsNew: hasWhatsNew(now),
+    admin: (session.user as { admin?: boolean }).admin === true,
+    now: now.toISOString(),
+  };
 }
 
 /** Le azioni dell'area riservata accettano solo richieste partite dalla propria origine. */
