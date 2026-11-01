@@ -103,6 +103,7 @@ describe("registro delle scadenze", () => {
       assert.ok(!secrets.includes("APP_ORIGIN"));
       // Anche i facoltativi: senza la voce la loro scadenza non aprirebbe un incidente.
       assert.ok(secrets.includes("STRIPE_SECRET_KEY"));
+      assert.ok(secrets.includes("WEB_ANALYTICS_TOKEN"));
       assert.equal(secrets.includes("EBAY_SANDBOX_CLIENT_SECRET"), mode !== "live");
     }
   });

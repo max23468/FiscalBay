@@ -23,7 +23,7 @@ Nei titoli delle pagine del sito usare ` | ` come separatore. Gli em dash (U+201
 
 Controllare stato, branch, diff e istruzioni vicine prima di scrivere. Preservare lavoro altrui; no reset distruttivi o riscritture della storia. Un blocco remoto non ferma le prove locali indipendenti.
 
-Seguire feature branch → `develop`, test dai merge, `main` candidato e Production soltanto con `Promuovi`. La 1.x è dismessa: la branch `legacy/1.x` resta in sola lettura fino alla sua eliminazione dopo la sorveglianza iniziale.
+Seguire feature branch → `develop`, test dai merge, `main` candidato e Production soltanto con `Promuovi`. La 1.x è dismessa e la sua branch eliminata: il commit finale `508ded87` resta raggiungibile da `v2.0.0`.
 
 Le PR verso `develop` richiedono il controllo `Node 26`. Ogni PR porta codice, istruzioni o documentazione di prodotto, mai soltanto readback o chiusura, e dichiara nel template «Impatto sul piano: aggiornato / non necessario, con motivo»: cambi a requisiti, checkpoint, stato dei task, avanzamento significativo o questioni aperte aggiornano il Master Plan nella stessa PR, prima del merge. Le migration non additive si approvano nella PR con la riga `reviewed-migrations`. Il collaudo spetta all'agente, prima del merge: prove locali dell'area, area reale e anteprima, CI. La stessa PR porta il task a «Completato» nella forma breve dell'[avanzamento](docs/MASTER_PLAN.md#stato), che `verify-docs` controlla: prove e collaudi restano nella PR; ciò che solo l'owner può provare si dichiara prima di `Pubblica`. Una modifica chiesta durante una qualifica entra nella PR in corso anche se la CI riparte. Gli altri casi sono nel [contenuto delle PR](docs/engineering/RELEASE.md#contenuto-delle-pr).
 

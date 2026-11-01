@@ -669,7 +669,7 @@ function analyticsToken() {
   }
 }
 
-async function readAccount(days) {
+export async function readAccount(days) {
   const { default: config } = await import("../cloudflare.config.ts");
   const until = new Date();
   const since = new Date(until.getTime() - days * 86_400_000);
