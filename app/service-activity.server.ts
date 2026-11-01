@@ -82,7 +82,7 @@ export function duringRequestActivity<T>(
   run: (target: Env) => Promise<T>,
   blocked: () => T | Promise<T>,
 ) {
-  return activityScope(
+  const operation = activityScope(
     env.DB,
     async () => {
       const target = { ...env, DB: guardedDatabase(env.DB) };
@@ -94,6 +94,15 @@ export function duringRequestActivity<T>(
     },
     blocked,
   );
+  // Il client può annullare la richiesta prima della risposta: conserva anche la pulizia
+  // nel tempo di esecuzione del Worker, senza attendere l'ingresso nel finally.
+  platformWaitUntil(
+    operation.then(
+      () => {},
+      () => {},
+    ),
+  );
+  return operation;
 }
 
 /** Mantiene il binding nativo e le sue istruzioni; il contesto appartiene alla richiesta. */
