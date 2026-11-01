@@ -572,6 +572,8 @@ test.describe("area reale", () => {
       });
       await section.getByRole("radio", { name: "XLSX" }).check();
       await section.getByRole("radio", { name: it ? "Articolo" : "Item", exact: true }).check();
+      // L'elenco delle colonne parte chiuso.
+      await section.locator("summary", { hasText: it ? "Colonne" : "Columns" }).click();
       const columns = section.getByRole("group", { name: it ? "Colonne" : "Columns" });
       // Si tengono numero ordine e altri identificativi, con questi ultimi in testa.
       for (const checkbox of await columns.getByRole("checkbox").all()) await checkbox.uncheck();
@@ -633,10 +635,14 @@ test.describe("area reale", () => {
       const section = page.getByRole("region", {
         name: it ? "Ordini da esportare" : "Orders to export",
       });
+      // L'elenco delle colonne parte chiuso, anche a ogni nuova apertura della pagina.
+      const showColumns = () =>
+        section.locator("summary", { hasText: it ? "Colonne" : "Columns" }).click();
       const columns = section.getByRole("group", { name: it ? "Colonne" : "Columns" });
       // Una forma diversa da quella standard: XLSX, una riga per articolo, una colonna in meno.
       await section.getByRole("radio", { name: "XLSX" }).check();
       await section.getByRole("radio", { name: it ? "Articolo" : "Item", exact: true }).check();
+      await showColumns();
       const dropped = columns.getByRole("checkbox", {
         name: it ? "Numero ordine" : "Order number",
       });
@@ -667,6 +673,8 @@ test.describe("area reale", () => {
       await expect(
         section.getByRole("radio", { name: it ? "Articolo" : "Item", exact: true }),
       ).toBeChecked();
+      await expect(columns).toHaveCount(0);
+      await showColumns();
       await expect(dropped).not.toBeChecked();
       await expect(columns.getByRole("checkbox", { checked: true })).toHaveCount(kept);
       await section
