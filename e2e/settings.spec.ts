@@ -275,10 +275,9 @@ test.describe("area reale", () => {
 });
 
 for (const width of [390, 768, 1440]) {
-  test(`impostazioni e profilo: contesto, documenti e validazione a ${width}px`, async ({
-    page,
-  }, testInfo) => {
-    test.setTimeout(90_000);
+  // Tre prove per larghezza: una sola percorreva tutte le categorie e, sotto il carico della
+  // qualifica, superava il suo limite di tempo.
+  test(`impostazioni: aspetto e lingua a ${width}px`, async ({ page }, testInfo) => {
     await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await open(page, "/anteprima/impostazioni/aspetto");
@@ -325,7 +324,12 @@ for (const width of [390, 768, 1440]) {
       await expect(page.getByRole("heading", { name: timezone, exact: true })).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`appearance-${locale}.png`) });
     }
+  });
 
+  test(`impostazioni: scenari del piano a ${width}px`, async ({ page }, testInfo) => {
+    test.setTimeout(90_000);
+    await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
     for (const locale of ["it", "en"] as const) {
       const it = locale === "it";
       const prefix = it ? "" : "/en";
@@ -470,7 +474,15 @@ for (const width of [390, 768, 1440]) {
           .first(),
       ).toBeVisible({ timeout: 20_000 });
       await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
+    }
+  });
 
+  test(`impostazioni: supporto e account a ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: width === 1440 ? 720 : 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    for (const locale of ["it", "en"] as const) {
+      const it = locale === "it";
+      const prefix = it ? "" : "/en";
       await open(page, `${prefix}/anteprima/impostazioni/supporto`);
       await page.getByRole("button", { name: it ? "Invia" : "Send", exact: true }).click();
       const message = page.getByRole("textbox", {
