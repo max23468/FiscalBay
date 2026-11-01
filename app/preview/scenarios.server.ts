@@ -1278,12 +1278,14 @@ const text = {
   expired: storeNote((t) => ({ title: t.expiredTitle, body: t.expiredBody(stores.outlet.name) })),
 };
 
+// Come nell'area reale, ogni sessione riporta il giorno in cui è stata aperta.
 const sessions = (language: Language): SessionView[] => [
   {
     id: "ses-1",
     device: language === "it" ? "Safari su macOS" : "Safari on macOS",
     location: "Trento",
     lastActiveAt: previewNow,
+    createdAt: minutesAgo(4_352),
     current: true,
   },
   {
@@ -1291,6 +1293,7 @@ const sessions = (language: Language): SessionView[] => [
     device: language === "it" ? "Safari su iPhone" : "Safari on iPhone",
     location: "Trento",
     lastActiveAt: minutesAgo(180),
+    createdAt: minutesAgo(20_213),
     current: false,
   },
   {
@@ -1298,6 +1301,7 @@ const sessions = (language: Language): SessionView[] => [
     device: language === "it" ? "Chrome su Windows" : "Chrome on Windows",
     location: "Milano",
     lastActiveAt: minutesAgo(2_900),
+    createdAt: minutesAgo(43_571),
     current: false,
   },
 ];

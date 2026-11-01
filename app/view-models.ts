@@ -390,6 +390,7 @@ export interface SessionView {
   device: string;
   location: string;
   lastActiveAt: string;
+  createdAt?: string;
   current: boolean;
 }
 

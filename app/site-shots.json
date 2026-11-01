@@ -62,11 +62,11 @@
   "sicurezza": {
     "it": {
       "width": 670,
-      "height": 804
+      "height": 870
     },
     "en": {
       "width": 670,
-      "height": 804
+      "height": 870
     }
   },
   "sicurezza-mobile": {
@@ -101,11 +101,11 @@
   },
   "esportazione-mobile": {
     "it": {
-      "width": 385,
+      "width": 382,
       "height": 192
     },
     "en": {
-      "width": 385,
+      "width": 382,
       "height": 192
     }
   }
