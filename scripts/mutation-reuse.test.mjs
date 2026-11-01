@@ -3,10 +3,16 @@ import { describe, it } from "node:test";
 import {
   affectedModules,
   changedPackages,
+  contentChanges,
+  identicalInputs,
+  identicalOutcomes,
+  identicalToolFiles,
   moduleOutcomes,
   mutationJob,
   packageImporters,
   reusePlan,
+  toolFiles,
+  vitestRoots,
 } from "./mutation-reuse.mjs";
 
 /** Lockfile di pnpm con i due documenti, dipendenze del progetto e della pagina provvisoria. */
@@ -65,6 +71,140 @@ snapshots:
 
 const manifest = (dependencies = {}, rest = {}) =>
   JSON.stringify({ dependencies: { "@scope/auth": "1.0.0", ...dependencies }, ...rest });
+
+describe("mutation riusata su main con contenuti identici", () => {
+  const files = (overrides = {}) =>
+    Object.entries({
+      "app/domain/orders.server.ts": 'import { sql } from "./sql.server";',
+      "app/domain/sql.server.ts": "export const sql = 1;",
+      "app/domain/billing.server.ts": 'import copy from "../copy/copy-it";',
+      "app/copy/copy-it.ts": "export default {};",
+      "app/whats-new.server.ts": 'import changelog from "../CHANGELOG.md?raw";',
+      "test/orders.spec.ts": 'import { helper } from "./helper";\nimport "~/domain/orders.server";',
+      "test/helper.ts": "export const helper = 1;",
+      "test/billing.spec.ts": 'import "~/domain/billing.server";',
+      "test/setup.ts": 'import "~/whats-new.server";',
+      "CHANGELOG.md": "## [2.0.2]\n",
+      ...overrides,
+    })
+      .filter(([, text]) => text !== null)
+      .map(([path, text]) => ({ path, text }));
+  const roots = ["test/setup.ts"];
+  const same = (target, after, changed) =>
+    identicalInputs(target, files(), files(after), new Set(changed), roots);
+
+  it("riusa soltanto con modulo, test, import, testi e preparazione invariati", () => {
+    const orders = "app/domain/orders.server.ts";
+    assert.equal(same(orders, {}, ["docs/x.md", "app/domain/billing.server.ts"]), true);
+    for (const changed of [
+      orders,
+      "app/domain/sql.server.ts",
+      "test/orders.spec.ts",
+      "test/helper.ts",
+      "CHANGELOG.md",
+    ])
+      assert.equal(same(orders, {}, [changed]), false, changed);
+    // Un testo conta anche per chi lo importa, diversamente dalla prova su develop.
+    assert.equal(same("app/domain/billing.server.ts", {}, ["app/copy/copy-it.ts"]), false);
+  });
+
+  it("ripete il modulo se cambiano i test che lo coprono o i file raggiunti", () => {
+    const orders = "app/domain/orders.server.ts";
+    // Un test nuovo, uno che non lo copre più o un import tolto cambiano gli ingressi.
+    assert.equal(
+      same(orders, { "test/other.spec.ts": 'import "~/domain/orders.server";' }, []),
+      false,
+    );
+    assert.equal(
+      same(orders, { "test/orders.spec.ts": 'import "~/domain/sql.server";' }, []),
+      false,
+    );
+    assert.equal(same(orders, { "app/domain/sql.server.ts": null }, []), false);
+  });
+
+  it("del changelog ignora soltanto il giorno della versione in cima", () => {
+    const changed = ["CHANGELOG.md", "app/x.ts"];
+    assert.deepEqual(
+      contentChanges(changed, {
+        before: "## [2.0.2]\n- voce\n",
+        after: "## [2.0.2] - 2026-11-02\n- voce\n",
+      }),
+      ["app/x.ts"],
+    );
+    assert.deepEqual(
+      contentChanges(changed, {
+        before: "## [2.0.2]\n- voce\n",
+        after: "## [2.0.2] - 2026-11-02\n- altra\n",
+      }),
+      changed,
+    );
+    assert.deepEqual(contentChanges(["app/x.ts"], false), ["app/x.ts"]);
+  });
+
+  it("conta i moduli superati soltanto nelle run riuscite e i fallimenti in tutte", () => {
+    const outcomes = new Map([
+      ["app/a.ts", "passed"],
+      ["app/b.ts", "failed"],
+    ]);
+    assert.equal(identicalOutcomes(outcomes, "success"), outcomes);
+    for (const conclusion of ["failure", "cancelled", "timed_out"])
+      assert.deepEqual([...identicalOutcomes(outcomes, conclusion)], [["app/b.ts", "failed"]]);
+  });
+
+  it("sceglie l'ultima run su contenuti identici e non copre un suo fallimento", () => {
+    const outcomes = (entries) => new Map(Object.entries(entries));
+    const runs = [
+      { id: 4, commit: "c4", outcomes: outcomes({ "app/a.ts": "failed", "app/b.ts": "passed" }) },
+      { id: 3, commit: "c3", outcomes: outcomes({ "app/a.ts": "passed", "app/c.ts": "failed" }) },
+      { id: 2, commit: "c2", outcomes: outcomes({ "app/c.ts": "passed", "app/d.ts": "passed" }) },
+    ];
+    const affected = { c4: new Set(["app/a.ts"]), c3: new Set(), c2: null };
+    const plan = reusePlan(
+      ["app/a.ts", "app/b.ts", "app/c.ts", "app/d.ts"],
+      runs,
+      (commit) => affected[commit],
+      { identical: true },
+    );
+    assert.deepEqual(plan.reused, [
+      { target: "app/a.ts", run: 3, commit: "c3" },
+      { target: "app/b.ts", run: 4, commit: "c4" },
+    ]);
+    assert.deepEqual(plan.run, ["app/c.ts", "app/d.ts"]);
+  });
+
+  it("legge i file di preparazione dalle configurazioni e conta l'ambiente dei test", () => {
+    assert.deepEqual(
+      vitestRoots([
+        'setupFiles: ["./test/apply-migrations.ts", "./test/fixtures/x.ts"],\ndiff: "./test/diff-options.ts"',
+        'new URL("./test/worker-context.ts", import.meta.url)',
+      ]),
+      [
+        "test/apply-migrations.ts",
+        "test/diff-options.ts",
+        "test/fixtures/x.ts",
+        "test/worker-context.ts",
+      ],
+    );
+    const tool = (patterns, file) => patterns.some((pattern) => pattern.test(file));
+    for (const file of [
+      "vitest.cloudflare.config.ts",
+      "vitest.unit.config.ts",
+      "stryker.config.json",
+      "scripts/mutation.mjs",
+    ])
+      assert.equal(tool(toolFiles, file), true, file);
+    for (const file of [
+      "cloudflare.config.ts",
+      "migrations/0060_x.sql",
+      "tsconfig.none.json",
+      "scripts/verify-repo.mjs",
+      ".github/workflows/mutation.yml",
+    ]) {
+      assert.equal(tool(identicalToolFiles, file), true, file);
+      assert.equal(tool(toolFiles, file), false, file);
+    }
+  });
+});
 
 describe("mutation incrementale della prova del candidato", () => {
   it("riconosce i job di mutation della qualifica e della campagna", () => {
