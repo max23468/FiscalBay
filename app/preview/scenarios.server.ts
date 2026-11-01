@@ -689,7 +689,7 @@ const seeds: OrderSeed[] = [
   {
     id: "ord-01",
     ebayOrderId: "12-34567-89012",
-    createdAt: minutesAgo(38),
+    createdAt: minutesAgo(180),
     store: "vintage",
     buyerName: "Società Cooperativa Agricola Val di Non e Valle di Sole Soc. Coop.",
     buyerUsername: "coop_valdinon",
@@ -738,7 +738,9 @@ const seeds: OrderSeed[] = [
   {
     id: "ord-02",
     ebayOrderId: "27-10293-84756",
-    createdAt: minutesAgo(95),
+    // La prima riga dell'elenco, e quindi delle immagini del sito, mostra due ordini di un
+    // articolo con il Codice Fiscale; la cooperativa con la Partita IVA segue.
+    createdAt: minutesAgo(38),
     updatedAt: minutesAgo(25),
     store: "vintage",
     buyerName: "Maria Rossi",

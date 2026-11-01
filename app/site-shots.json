@@ -52,7 +52,7 @@
   "negozi-mobile": {
     "it": {
       "width": 390,
-      "height": 618
+      "height": 690
     },
     "en": {
       "width": 390,
@@ -62,21 +62,21 @@
   "sicurezza": {
     "it": {
       "width": 670,
-      "height": 749
+      "height": 804
     },
     "en": {
       "width": 670,
-      "height": 749
+      "height": 804
     }
   },
   "sicurezza-mobile": {
     "it": {
       "width": 390,
-      "height": 605
+      "height": 630
     },
     "en": {
       "width": 390,
-      "height": 605
+      "height": 630
     }
   },
   "telegram": {

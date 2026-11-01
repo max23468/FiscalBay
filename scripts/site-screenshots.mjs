@@ -295,10 +295,13 @@ async function capture(browser, shot, language, scheme) {
   });
   const page = await context.newPage();
   const prefix = language === "it" ? "" : "/en";
-  await page.request.post(`${base}${prefix}/anteprima`, {
+  // Le azioni dell'app rifiutano le richieste senza l'origine del sito, come un browser la invia.
+  const scenario = await page.request.post(`${base}${prefix}/anteprima`, {
     form: { scenario: shot.scenario, redirectTo: `${prefix}/anteprima/ordini` },
+    headers: { origin: new URL(base).origin },
     maxRedirects: 0,
   });
+  if (scenario.status() >= 400) throw new Error(`Scenario ${shot.scenario} rifiutato.`);
   await page.goto(`${base}${prefix}${shot.path}`, { waitUntil: "networkidle" });
   await page.locator("#preview-scenario").waitFor();
   // La barra dell'anteprima non fa parte del prodotto.
