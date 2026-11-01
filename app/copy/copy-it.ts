@@ -441,7 +441,7 @@ export const it = {
     deleteStore: "Elimina negozio",
     disconnectTitle: (name: string) => `Scollegare ${name}?`,
     disconnectBody:
-      "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito.",
+      "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito. Per revocare anche l’autorizzazione su eBay, rimuovi FiscalBay dalle app di terze parti nelle impostazioni di sicurezza del tuo account eBay.",
     disconnectSubscription:
       "Scollegare il negozio non disdice l’abbonamento Premium: gli addebiti previsti restano.",
     disconnectSubscriptionLink: "Gestisci l’abbonamento",
@@ -1166,7 +1166,7 @@ export const it = {
       eliminato: "Negozio eliminato da FiscalBay.",
       negato: "Collegamento annullato su eBay.",
       "negozio-diverso":
-        "Hai scelto un account eBay diverso dal negozio da ricollegare, quindi il consenso non è stato salvato. Se eBay ti fa entrare in automatico con un altro account, esci da eBay e riprova con quello del negozio.",
+        "Hai scelto un account eBay diverso dal negozio da ricollegare, quindi il consenso non è stato salvato. Riprova accedendo con l’account eBay del negozio.",
       "altro-spazio": "Questo negozio eBay è già collegato a un altro account FiscalBay.",
       accesso: "Conferma l’indirizzo email per collegare un negozio.",
       errore: "Collegamento non riuscito. Riprova.",

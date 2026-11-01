@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { applyBot, botRequest, checkBot, ownerMenu, report, targetOf } from "./telegram-bot.mjs";
+import {
+  applyBot,
+  botRequest,
+  checkBot,
+  ownerMenu,
+  profileFields,
+  report,
+  targetOf,
+} from "./telegram-bot.mjs";
 
 const target = { webhookUrl: "https://test.fiscalbay.it/webhooks/telegram", ownerId: "573159993" };
 
@@ -15,6 +23,15 @@ function bot(state) {
     if (method === "setWebhook")
       state.webhook = { url: params.url, allowed_updates: params.allowed_updates };
     if (method === "setMyCommands") state.owner = params.commands;
+    const profileField = Object.keys(params).find((key) => key !== "language_code");
+    const language = params.language_code === "it" ? "it" : "en";
+    if (method.startsWith("setMy") && method !== "setMyCommands")
+      state.profile[language][profileField] = params[profileField];
+    if (method.startsWith("getMy") && method !== "getMyCommands") {
+      const field =
+        { getMyName: "name", getMyShortDescription: "short_description" }[method] ?? "description";
+      return Response.json({ ok: true, result: { [field]: state.profile[language][field] ?? "" } });
+    }
     const result =
       method === "getWebhookInfo"
         ? { pending_update_count: 0, ...state.webhook }
@@ -55,14 +72,32 @@ describe("bot Telegram dell'ambiente", () => {
   });
 
   it("segnala webhook e menu diversi dal codice, poi li allinea", async () => {
-    const api = bot({ webhook: { url: "" }, owner: [], ...sellers });
+    // Il profilo lasciato dalla versione precedente del bot è diverso dal codice.
+    const profile = { it: { name: "FiscalBay", description: "Vecchio testo" }, en: {} };
+    const api = bot({ webhook: { url: "" }, owner: [], ...sellers, profile });
     const before = await checkBot(api.request, target);
     assert.deepEqual(
       before.filter(({ ok }) => !ok).map(({ item }) => item),
-      ["webhook: indirizzo", "webhook: messaggi e pulsanti", "menu dell'owner"],
+      [
+        "webhook: indirizzo",
+        "webhook: messaggi e pulsanti",
+        "menu dell'owner",
+        "profilo in italiano",
+        "profilo in inglese",
+      ],
     );
+    const reads = api.calls.length;
     await applyBot(api.request, target, "s".repeat(32));
-    assert.deepEqual(api.calls.slice(4), [
+    assert.deepEqual(
+      api.calls.slice(reads + 2).map(({ method, params }) => [method, params.language_code]),
+      ["it", "en"].flatMap((language) =>
+        profileFields(language).map(([method]) => [
+          `setMy${method}`,
+          language === "it" ? "it" : undefined,
+        ]),
+      ),
+    );
+    assert.deepEqual(api.calls.slice(reads, reads + 2), [
       {
         method: "setWebhook",
         params: {

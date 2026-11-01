@@ -18,4 +18,4 @@ Non includere dati reali di acquirenti, codici fiscali, token o credenziali: bas
 | Versione | Stato |
 | --- | --- |
 | 2.0, branch `main` | Supportata |
-| 1.x, branch `legacy/1.x` | Solo correzioni residue fino alla dismissione |
+| 1.x, branch `legacy/1.x` | Dismessa, non supportata |

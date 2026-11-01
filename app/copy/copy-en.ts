@@ -423,7 +423,7 @@ export const en: AppCopy = {
     deleteStore: "Delete store",
     disconnectTitle: (name) => `Disconnect ${name}?`,
     disconnectBody:
-      "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later.",
+      "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later. To also revoke the authorization on eBay, remove FiscalBay from third-party apps in your eBay account’s security settings.",
     disconnectSubscription:
       "Disconnecting the store does not cancel the Premium subscription: scheduled charges still apply.",
     disconnectSubscriptionLink: "Manage subscription",
@@ -1140,7 +1140,7 @@ export const en: AppCopy = {
       eliminato: "Store deleted from FiscalBay.",
       negato: "Connection cancelled on eBay.",
       "negozio-diverso":
-        "You selected a different eBay account from the store to reconnect, so the consent was not saved. If eBay signs you in automatically with another account, sign out of eBay and try again with the store’s account.",
+        "You selected a different eBay account from the store to reconnect, so the consent was not saved. Try again and sign in with the store’s eBay account.",
       "altro-spazio": "This eBay store is already connected to another FiscalBay account.",
       accesso: "Confirm your email address to connect a store.",
       errore: "Could not connect the store. Try again.",
