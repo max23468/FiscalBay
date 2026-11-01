@@ -4,8 +4,9 @@ import { localOrigin, localPort } from "./e2e/local-account";
 export default defineConfig({
   testDir: "./e2e",
   outputDir: `./test-results/${process.env.E2E_RUN_ID || (process.env.E2E_BASE_URL ? "deployed" : "local")}`,
-  // Sul dominio test l'account di collaudo è unico; in CI ogni macchina esegue una parte.
-  workers: process.env.E2E_BASE_URL ? 1 : process.env.CI ? 4 : 2,
+  // Sul dominio test l'account di collaudo è unico; in CI ogni macchina esegue una parte. In
+  // Production il collaudo dopo il deploy è anonimo e senza sessioni da condividere.
+  workers: process.env.E2E_BASE_URL ? (process.env.E2E_PRODUCTION ? 4 : 1) : process.env.CI ? 4 : 2,
   fullyParallel: true,
   // Sul dominio remoto una sola ripetizione separa l'instabilità della rete da un difetto:
   // una prova che fallisce due volte fa ancora tornare indietro il deploy. La CI delle PR

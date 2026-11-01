@@ -156,14 +156,22 @@ for (const scenario of scenarios) {
         page.on("pageerror", (error) => {
           if (!abortedDataRequest(error, ownPage.origin)) errors.push(error.message);
         });
+        // WebKit scrive in console anche i precaricamenti rifiutati da Cloudflare, ignorati qui
+        // sotto come risposte: i loro messaggi si scartano alla fine, a risposte raccolte.
+        const refusedPrefetches = new Set<string>();
+        const resourceErrors: Array<{ text: string; url: string }> = [];
         page.on("console", (message) => {
           if (message.type() !== "error") return;
-          if (!expectedPageError(message.text(), message.location().url, expectedStatus, ownPage))
-            errors.push(message.text());
+          const { url } = message.location();
+          if (expectedPageError(message.text(), url, expectedStatus, ownPage)) return;
+          if (message.text().startsWith("Failed to load resource"))
+            resourceErrors.push({ text: message.text(), url });
+          else errors.push(message.text());
         });
         // Tornando su una pagina 404 il router richiede di nuovo i suoi dati con lo stesso esito.
         page.on("response", (response) => {
           const url = new URL(response.url());
+          if (response.headers()["cf-speculation-refused"]) refusedPrefetches.add(response.url());
           if (
             response.request().resourceType() !== "document" &&
             response.status() >= 400 &&
@@ -406,7 +414,12 @@ for (const scenario of scenarios) {
           expect(page.url()).not.toContain(testAccount.taxCodes.locked);
           checked("ricerca sui soli valori autorizzati, query fuori dall'indirizzo");
         }
-        expect(errors).toEqual([]);
+        expect([
+          ...errors,
+          ...resourceErrors
+            .filter(({ url }) => !refusedPrefetches.has(url))
+            .map(({ text }) => text),
+        ]).toEqual([]);
         checked("JavaScript, idratazione e risorse senza errori");
       },
     );
