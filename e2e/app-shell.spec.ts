@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect, networkIdle, test, watchNetwork } from "./fixtures";
-import { areas, enter, open, searched, setScenario } from "./components";
+import { areas, clickHydrated, enter, open, searched, setScenario } from "./components";
 import { useLocalAccount } from "./local-account";
 import { whatsNew } from "./page-cases";
 import { testAccount } from "./test-account";
@@ -254,7 +254,7 @@ test("il collegamento diretto al dettaglio regge ricarica e chiusura", async ({ 
   await page.reload();
   await expect(dialog).toBeVisible();
   const entries = await page.evaluate(() => history.length);
-  await dialog.getByRole("button", { name: "Chiudi", exact: true }).click();
+  await clickHydrated(dialog.getByRole("button", { name: "Chiudi", exact: true }));
   await expect(dialog).toBeHidden();
   await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$/u);
   // Senza una voce dell'elenco il dettaglio è sostituito e il focus va sulla sua scheda.
