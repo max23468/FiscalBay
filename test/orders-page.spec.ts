@@ -12,7 +12,7 @@ import { markNotificationsRead } from "../app/domain/notification-reads.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
 import versionedChangelog from "../CHANGELOG.md?raw";
-import { parseChangelog } from "../app/changelog";
+import { parseChangelog, releaseChangelog } from "../app/changelog";
 import {
   hasWhatsNew,
   whatsNew,
@@ -102,6 +102,18 @@ describe("pagina Ordini reale", () => {
       refreshExpiresAt: "2027-09-13T00:00:00.000Z",
     }).run();
   }
+
+  it("la build della pubblicazione dà il giorno alla sola versione in preparazione in cima", () => {
+    const text = "# Changelog\n\n## [2.0.2]\n\n- Voce.\n\n## [2.0.1] - 2026-11-01\n";
+    const dated = "# Changelog\n\n## [2.0.2] - 2026-11-05\n\n- Voce.\n\n## [2.0.1] - 2026-11-01\n";
+    expect(releaseChangelog(text, "2026-11-05")).toBe(dated);
+    expect(releaseChangelog(dated, "2026-11-09")).toBe(dated);
+    expect(releaseChangelog(text, undefined)).toBe(text);
+    expect(releaseChangelog(text, "")).toBe(text);
+    // Una versione più in basso senza giorno è un errore del changelog: la build non lo copre.
+    const second = "## [2.0.3] - 2026-11-04\n\n## [2.0.2]\n";
+    expect(releaseChangelog(second, "2026-11-05")).toBe(second);
+  });
 
   it("ricava le Novità dal changelog e le annuncia nella campanella e nel menu, solo se ci sono", async () => {
     // Il changelog versionato è ben formato e porta Novità dalla 2.0.0, senza RC.

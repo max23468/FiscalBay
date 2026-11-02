@@ -1,38 +1,38 @@
 #!/usr/bin/env node
 /**
- * Coordinamento esplicito del ciclo: status e rc leggono; pr/cleanup/promote/candidate/production
- * hanno effetti; qualification-base e promotion-source controllano nella CI la base e l'origine di
- * una PR. Il ciclo di una PR pulisce soltanto il proprio branch; i residui di cicli
- * precedenti si riconciliano a lotti con cleanup e a ogni Production.
+ * Coordinamento esplicito del ciclo: status, metrics e preflight leggono;
+ * pr/cleanup/candidate/promote/resume/rollback hanno effetti; qualification-base controlla nella
+ * CI la base di una PR. Il ciclo di una PR pulisce soltanto il proprio branch; i residui di cicli
+ * precedenti si riconciliano a lotti con cleanup e a ogni promozione.
  */
-import { createHash } from "node:crypto";
 import { execFileSync, spawn } from "node:child_process";
 import {
+  appendFileSync,
   mkdirSync,
-  mkdtempSync,
   readFileSync,
   writeFileSync,
   rmSync,
   existsSync,
   statSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { needsDeploy, plan } from "../classify-changes.mjs";
+import { distributes, plan, qualificationChange } from "../classify-changes.mjs";
 import {
   addedMigrations,
+  declaredReview,
+  latestReleased,
+  nextVersions,
   requiredReview,
-  assertPromotionSource,
-  candidateVersion,
-  datedChangelog,
-  promotionBranch,
   reviewAdded,
   romeDay,
+  topVersion,
 } from "./release.mjs";
+import { releaseNotes } from "./release-notes.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
-import { lastDeployRun } from "../find-deployed.mjs";
+import { publishedCommit } from "../find-deployed.mjs";
+import { publicVersion, publicationRecord, downloadRecord } from "./records.mjs";
 import { gh, ghJson, runJobs } from "../lib/provider.mjs";
 
 // Diff e cronologie grandi superano il MiB predefinito di execFileSync.
@@ -150,16 +150,18 @@ const readPullRequest = (repository, number) =>
 
 async function waitChecks(repository, sha) {
   for (;;) {
-    const outcome = checksOutcome(
-      ghJson(
-        "api",
-        "--paginate",
-        "--slurp",
-        `repos/${repository}/commits/${sha}/check-runs?per_page=100`,
-      ).flatMap((page) => page.check_runs),
-    );
+    const checks = ghJson(
+      "api",
+      "--paginate",
+      "--slurp",
+      `repos/${repository}/commits/${sha}/check-runs?per_page=100`,
+    ).flatMap((page) => page.check_runs);
+    const outcome = checksOutcome(checks);
     if (outcome === "failed") throw new Error("Monitoraggio terminato con controlli falliti.");
-    if (outcome === "passed") return;
+    const required = checks
+      .filter((check) => check.name === "Node 26")
+      .sort((a, b) => b.id - a.id)[0];
+    if (outcome === "passed" && required?.conclusion === "success") return;
     await pause(30_000);
   }
 }
@@ -239,17 +241,21 @@ export function assertBase(expected, current) {
 const globalFile =
   /^(?:package\.json|pnpm-(?:lock|workspace)\.yaml|tsconfig[^/]*\.json|[^/]+\.config\.ts|\.github\/|scripts\/(?:classify-changes\.mjs|release\/|lib\/)|e2e\/(?![^/]+\.spec\.ts$))/u;
 
+// Quasi ogni PR aggiorna piano e changelog: due modifiche di questi file si uniscono nel testo,
+// o GitHub segnala il conflitto, e il gate sul tree integrato le rilegge.
+const sharedText = /^(?:CHANGELOG\.md|docs\/.+\.md)$/u;
+
 /**
  * Vero se i commit entrati nella base non richiedono di riqualificare la PR: file disgiunti,
- * nessun file globale da una delle due parti e migration nuove da una parte sola. Il push su
- * `develop` riesegue comunque il gate sul tree integrato prima del deploy test.
+ * documenti esclusi, nessun file globale da una delle due parti e migration nuove da una parte
+ * sola. Il push su `develop` riesegue comunque il gate sul tree integrato prima del deploy test.
  */
 export function independentBase(prFiles, baseFiles) {
   if (!baseFiles.length) return true;
   const own = new Set(prFiles);
   const migrations = (files) => files.some((file) => file.startsWith("migrations/"));
   return !(
-    baseFiles.some((file) => own.has(file)) ||
+    baseFiles.some((file) => own.has(file) && !sharedText.test(file)) ||
     [...prFiles, ...baseFiles].some((file) => globalFile.test(file)) ||
     (migrations(prFiles) && migrations(baseFiles))
   );
@@ -265,97 +271,18 @@ export function compatibleBase(tested, current, head, run = git) {
   return independentBase(files(run("merge-base", tested, head), head), files(tested, current));
 }
 
-/**
- * Base della qualifica finale: `main` riceve soltanto `develop` già aggiornato; verso `develop`
- * basta una base attuale compatibile con quella provata.
- */
-export function assertQualificationBase(ref, tested, current, head, run = git) {
-  if (ref === "main") {
-    // Una run conclusa dopo il merge trova su `main` il tree che ha provato: nulla da riqualificare.
-    if (run("rev-parse", `${current}^{tree}`) === run("rev-parse", `${head}^{tree}`)) return;
-    assertBase(tested, current);
-    if (!contains(tested, head, run)) throw new Error("La promozione non contiene la base.");
-    return;
-  }
+/** Controllo della CI sulla PR: una base avanzata deve restare compatibile con quella provata. */
+export function assertQualificationBase(tested, current, head, run = git) {
   if (!/^[0-9a-f]{40}$/u.test(tested ?? "") || !compatibleBase(tested, current, head, run))
     throw new Error(
       "La base della PR è avanzata su file comuni o globali: aggiornarla e riqualificarla.",
     );
 }
 
-/** Controllo della CI sulla PR: confronta la base provata con quella attuale di `origin`. */
-function qualificationBase({ ref, base, head }) {
-  if (!["develop", "main"].includes(ref)) throw new Error("--ref develop o main richiesto.");
-  git("fetch", "--quiet", "origin", ref);
-  assertQualificationBase(ref, base, git("rev-parse", "FETCH_HEAD"), head);
-  console.log(`Base della qualifica valida verso ${ref}.`);
-}
-
-/**
- * Controllo della CI sulle PR verso `main`: `develop`, oppure `promuovi/<versione>` che contiene
- * `develop` e ne differisce soltanto per il giorno della versione.
- */
-function promotionSource({ ref, head }) {
-  if (ref === "develop") return console.log("Promozione da develop.");
+function qualificationBase({ base, head }) {
   git("fetch", "--quiet", "origin", "develop");
-  const develop = git("rev-parse", "FETCH_HEAD");
-  if (!contains(develop, head)) throw new Error(`${ref} non contiene develop: ricrearlo.`);
-  assertPromotionSource({
-    headRef: ref,
-    files: git("diff", "--name-only", develop, head).split("\n").filter(Boolean),
-    develop: git("show", `${develop}:CHANGELOG.md`),
-    head: git("show", `${head}:CHANGELOG.md`),
-  });
-  console.log(`${ref}: develop con il giorno della versione.`);
-}
-
-/**
- * Apre l'unica PR di promozione: `promuovi/<versione>` è `develop` con il giorno di oggi
- * nell'intestazione della versione, che il riallineamento riporta poi su `develop`.
- */
-async function promoteCycle({ repository, values }) {
-  const version = values.version;
-  if (!/^\d+\.\d+\.\d+$/u.test(version ?? "")) throw new Error("--version <x.y.z> richiesto.");
-  const branch = promotionBranch(version);
-  const day = romeDay();
-  const directory = mkdtempSync(path.join(tmpdir(), "fiscalbay-promuovi-"));
-  try {
-    const develop = localGit(() => {
-      git("fetch", "--quiet", "origin", "develop");
-      const sha = git("rev-parse", "FETCH_HEAD");
-      git("worktree", "add", "--quiet", "--detach", directory, sha);
-      return sha;
-    });
-    const file = path.join(directory, "CHANGELOG.md");
-    writeFileSync(file, datedChangelog(readFileSync(file, "utf8"), version, day));
-    const inside = (...args) => execute("git", args, { cwd: directory });
-    inside("commit", "--quiet", "-m", `chore: giorno della ${version}`, "--", "CHANGELOG.md");
-    // Un branch rimasto da un tentativo precedente si sostituisce soltanto se è ancora suo.
-    inside(
-      "push",
-      "--quiet",
-      `--force-with-lease=refs/heads/${branch}`,
-      "origin",
-      `HEAD:refs/heads/${branch}`,
-    );
-    const pull = ghJson(
-      "api",
-      "-X",
-      "POST",
-      `repos/${repository}/pulls`,
-      "-f",
-      "base=main",
-      "-f",
-      `head=${branch}`,
-      "-f",
-      `title=chore: promuove la ${version}`,
-      "-f",
-      `body=Promozione di \`develop\` (\`${develop}\`) su \`main\` per la \`${version}\`, con il giorno ${day} nel changelog.`,
-    );
-    console.log(`PR di promozione: ${pull.html_url}`);
-  } finally {
-    localGit(() => git("worktree", "remove", "--force", directory));
-  }
+  assertQualificationBase(base, git("rev-parse", "FETCH_HEAD"), head);
+  console.log("Base della qualifica valida verso develop.");
 }
 
 /**
@@ -379,12 +306,6 @@ function contains(base, head, run = git) {
   } catch {
     return false;
   }
-}
-
-export function candidateRef(command, ref = "main") {
-  if (ref !== "main" && !(command === "candidate" && ref === "develop"))
-    throw new Error("Production richiede main; la sola prova ammette anche develop.");
-  return ref;
 }
 
 /** Tempo con almeno un job attivo, distinto da attese e intervalli fra tentativi. */
@@ -430,7 +351,7 @@ export function checkCycleJobs(jobs, deployRequired) {
 // ne legge l'esito con l'API REST, anche da una sessione senza accesso a Cloudflare.
 const confirmation = {
   test: ["Deploy test", "Confirm provider readback"],
-  production: ["Distribuisci e verifica", "Create immutable tag and release"],
+  production: ["Conferma pubblicazione attiva", "Confirm expected version after guard and day"],
 };
 
 export function assertConfirmed(jobs, environment) {
@@ -441,51 +362,43 @@ export function assertConfirmed(jobs, environment) {
 }
 
 /**
- * Deploy test riuscito e collaudato, fallito soltanto alla conferma: la conferma richiede che
- * `develop` sia ancora sul commit distribuito, quindi un merge successivo durante il deploy la
- * rifiuta anche se distribuzione e prove remote sono riuscite. Ogni altro job deve essere
- * riuscito o saltato.
+ * Deploy test superato da un merge successivo: il job ha trovato `develop` già avanzato e ha
+ * lasciato il deploy al commit nuovo, oppure la run è stata sostituita in coda.
  */
-export function readbackSuperseded(jobs) {
+export function deploySuperseded(run, jobs) {
+  if (run.conclusion === "cancelled") return true;
   const deploy = jobs.find((job) => job.name === "Deploy test");
-  if (deploy?.conclusion !== "failure") return false;
-  if (jobs.some((job) => job !== deploy && !["success", "skipped"].includes(job.conclusion)))
-    return false;
-  const step = (name) => deploy.steps?.find((item) => item.name === name)?.conclusion;
-  const failed = (deploy.steps ?? []).filter((item) => item.conclusion === "failure");
+  const step = (name) => deploy?.steps?.find((item) => item.name === name)?.conclusion;
   return (
-    failed.length === 1 &&
-    failed[0].name === "Confirm provider readback" &&
-    [
-      "Deploy verified artifact",
-      "Check deployed browser interactions",
-      "Check deployed pages",
-    ].every((name) => step(name) === "success") &&
-    step("Roll back test deploy") !== "success"
+    deploy?.conclusion === "success" &&
+    step("Check commit still on develop") === "success" &&
+    step("Deploy verified artifact") === "skipped"
   );
 }
 
 /**
- * Run che chiude il ciclo del commit integrato. Se la sua conferma è stata superata da un merge
+ * Run che chiude il ciclo del commit integrato. Se il deploy è stato lasciato a un merge
  * successivo, segue la run della nuova testa di `develop`, che deve contenere il commit e avere
  * deploy test e readback confermati; fino a tre merge successivi. Ogni altro esito si ferma.
  */
 export async function settleMergeRun(merge, deployRequired, io) {
+  const now = io.now ?? Date.now;
+  const deadline = now() + 60 * 60_000;
   let run = await io.wait(merge);
   let jobs = await io.jobs(run);
   let required = deployRequired;
-  for (let hop = 0; run.conclusion !== "success"; hop++) {
-    if (hop === 3 || !readbackSuperseded(jobs))
-      throw new Error(`Run ${run.id} non riuscita: riconciliare prima della ripresa.`);
+  for (let hop = 0; deploySuperseded(run, jobs); hop++) {
     const head = await io.head();
-    if (head === run.head_sha || !(await io.contains(merge, head)))
+    if (now() >= deadline || head === run.head_sha || !(await io.contains(merge, head)))
       throw new Error(`Run ${run.id} non riuscita: riconciliare prima della ripresa.`);
-    console.log("Readback superato da un merge successivo: si segue la run della nuova testa.");
+    console.log("Deploy lasciato a un merge successivo: si segue la run della nuova testa.");
     run = await io.wait(head);
     jobs = await io.jobs(run);
     // La nuova testa distribuisce anche il commit integrato: il deploy confermato è richiesto.
     required = true;
   }
+  if (run.conclusion !== "success")
+    throw new Error(`Run ${run.id} non riuscita: riconciliare prima della ripresa.`);
   return { run, jobs, deployRequired: required };
 }
 
@@ -526,47 +439,6 @@ function publishedRelease(repository, sha, version) {
   throw new Error("Release sul candidato non osservata.");
 }
 
-/**
- * Identità della release candidate: la testa di `develop`, con una RC in cima al changelog,
- * distribuita sul test dall'ultimo deploy confermato. Dopo quel deploy e dopo la sezione della
- * versione non entrano modifiche da distribuire: una correzione distribuita apre la RC successiva.
- * La qualifica completa del tree, richiesta dalla decisione sulla RC, si riporta senza attenderla.
- */
-export async function identifyCandidate(io) {
-  const head = await io.head();
-  const version = candidateVersion(await io.changelog(head));
-  if (!version) throw new Error("Nessuna release candidate in cima al changelog di develop.");
-  const changed = async (base) => base !== head && (await io.needsDeploy(base, head));
-  const deploy = await io.lastDeploy(head);
-  if (!deploy) throw new Error("Nessun deploy test riuscito su un antenato di develop.");
-  checkCycleJobs(deploy.jobs, true);
-  if (await changed(deploy.run.head_sha))
-    throw new Error("Modifiche da distribuire dopo l'ultimo deploy test: attendere il deploy.");
-  if (await changed(await io.introduced(version, head)))
-    throw new Error(
-      `Candidato cambiato dopo la sezione ${version}: aggiungere la RC successiva al changelog.`,
-    );
-  const receipt = await io.receipt(deploy.run);
-  if (receipt.sha !== deploy.run.head_sha || !receipt.readback || receipt.rolledBack)
-    throw new Error("Ricevuta del deploy test non confermata.");
-  if ((await io.liveVersion()) !== receipt.version)
-    throw new Error("La versione attiva sul test non è quella del deploy confermato.");
-  const tree = await io.tree(head);
-  return {
-    version,
-    commit: head,
-    tree,
-    deployedCommit: receipt.sha,
-    artifact: receipt.digest,
-    workerVersion: receipt.version,
-    run: deploy.run.html_url,
-    migrations: receipt.schema.length,
-    lastMigration: receipt.schema.at(-1)?.name ?? null,
-    config: await io.config(head),
-    qualified: await io.certified(tree),
-  };
-}
-
 function candidateAvailable(repository, tree) {
   const repositoryId = ghJson("api", `repos/${repository}`).id;
   const artifacts = ghJson(
@@ -604,10 +476,11 @@ function summary(repository, runId) {
  * annullate da una successiva: il ritorno della PR da bozza a pronta avvia una nuova run che
  * annulla, per concorrenza, quella avviata dalla push.
  */
-export function expectedRun(runs, sha, events, since, cancelled = new Set()) {
+export function expectedRun(runs, sha, events, since, cancelled = new Set(), only) {
   return runs
     .filter(
       (item) =>
+        (only === undefined || item.databaseId === only) &&
         item.headSha === sha &&
         events.includes(item.event) &&
         Date.parse(item.createdAt) >= since &&
@@ -624,6 +497,7 @@ async function waitRun(
   events = ["push", "workflow_dispatch"],
   since = 0,
   accepted = ["success"],
+  only,
 ) {
   const cancelled = new Set();
   for (let attempt = 0; attempt < 12; attempt++) {
@@ -641,7 +515,7 @@ async function waitRun(
       "--json",
       "databaseId,headSha,event,status,conclusion,createdAt",
     );
-    const run = expectedRun(runs, sha, events, since, cancelled);
+    const run = expectedRun(runs, sha, events, since, cancelled, only);
     if (run) {
       if (run.status !== "completed")
         await watch([
@@ -663,7 +537,7 @@ async function waitRun(
         await pause(10000);
         continue;
       }
-      if (result.conclusion === "cancelled") {
+      if (result.conclusion === "cancelled" && !accepted.includes("cancelled")) {
         // Una run successiva sullo stesso commit la sostituisce: si segue quella.
         cancelled.add(run.databaseId);
         attempt = -1;
@@ -800,22 +674,23 @@ function cleanupIntegratedBranches(repository) {
 
 const cycleCommands = [
   "status",
-  "rc",
+  "metrics",
+  "preflight",
   "pr",
   "cleanup",
   "candidate",
-  "production",
-  "resume",
+  "candidate-ready",
   "promote",
+  "resume",
+  "rollback",
   "qualification-base",
-  "promotion-source",
 ];
 
 /** Comando e argomento posizionale; il formato dell'argomento si controlla nel comando. */
 export function cycleCommand([command, number]) {
   if (!cycleCommands.includes(command))
     throw new Error(
-      "Uso: release:cycle status <run> | rc | pr <numero> | cleanup | candidate --sha <sha> | promote --version <versione> | production --sha <sha> --version <versione> | resume <run> | qualification-base --ref <branch> --base <sha> --head <sha> | promotion-source --ref <branch> --head <sha>.",
+      "Uso: release:cycle status <run> | metrics | preflight --sha <sha> [--version <versione>] | pr <numero> | cleanup | candidate | promote [--version <versione>] [--urgente] | resume <run> | rollback | qualification-base --base <sha> --head <sha>.",
     );
   return { command, number };
 }
@@ -863,7 +738,11 @@ export function mergeDecision(round, compatible) {
 /** Run riprendibili: soltanto i workflow del ciclo sui branch di integrazione. */
 export function assertResumableRun(run) {
   if (
-    ![".github/workflows/ci.yml", ".github/workflows/publish.yml"].includes(run.path) ||
+    ![
+      ".github/workflows/ci.yml",
+      ".github/workflows/candidate.yml",
+      ".github/workflows/publish.yml",
+    ].includes(run.path) ||
     !["develop", "main"].includes(run.head_branch) ||
     !["push", "workflow_dispatch"].includes(run.event)
   )
@@ -872,123 +751,128 @@ export function assertResumableRun(run) {
 
 /** Ambiente distribuito dalla run riuscita, `null` se il job di distribuzione non è riuscito. */
 export function deployedEnvironment(run, jobs) {
+  if (run.path.endsWith("candidate.yml")) return null;
   const environment = run.path.endsWith("publish.yml") ? "production" : "test";
   const deploy = environment === "test" ? "Deploy test" : "Distribuisci e verifica";
+  if (deploySuperseded(run, jobs)) return null;
   return jobs.some((job) => job.name === deploy && job.conclusion === "success")
     ? environment
     : null;
 }
 
-/**
- * Run già presente sul candidato: in corso o non riuscita si riconcilia con resume; riuscita vale
- * come Production pubblicata o come qualifica da confermare con l'artefatto candidato.
- */
-export function existingCandidate(command, existing, jobs) {
+/** Pubblicazione già presente sul commit: si riconcilia con resume, senza un nuovo dispatch. */
+export function existingPublication(existing, jobs) {
   const publish = jobs.find((job) => job.name === "Distribuisci e verifica");
   if (
     existing.status !== "completed" ||
     existing.conclusion !== "success" ||
-    !["success", "skipped"].includes(publish?.conclusion)
+    publish?.conclusion !== "success"
   )
     throw new Error(
-      `Candidato già presente: riconciliare con release:cycle resume ${existing.databaseId}, senza un nuovo dispatch.`,
+      `Pubblicazione già presente: riconciliare con release:cycle resume ${existing.databaseId}, senza un nuovo dispatch.`,
     );
-  return command === "production" && publish.conclusion === "success" ? "published" : "qualified";
 }
 
 /**
- * Una run ferma alla revisione delle migration non ha scritto nulla e i suoi input non cambiano con
- * resume: ammette un nuovo dispatch soltanto il digest che ha chiesto, senza ricevute salvate.
+ * Migration non additive del lotto: ogni PR che le aggiunge deve averle approvate con il proprio
+ * digest, che il corpo della PR dichiara e che si ricalcola dal commit integrato. Il digest del
+ * lotto si ricava da lì, senza una seconda approvazione al momento di `Promuovi`.
  */
-export function awaitsMigrationReview(reviewed, failedLog, artifacts) {
-  return (
-    /^[0-9a-f]{64}$/u.test(reviewed) &&
-    new RegExp(`Error: Migration da approvare: .* Digest ${reviewed}$`, "mu").test(failedLog) &&
-    !artifacts.some((name) => name.startsWith("release-receipt-"))
-  );
-}
-
-/** Production con migration non additive parte col digest, prima dell'ora di qualifica. */
-export function assertReviewedDispatch(required, reviewed) {
-  if (required && !reviewed)
+export function lotReview(added, commits, reviewed = "") {
+  const required = requiredReview(added);
+  if (!required) return "";
+  if (reviewed === required.digest) return reviewed;
+  const approved = commits.flatMap((commit) => {
+    const own = requiredReview(commit.added);
+    return own && declaredReview(commit.body) === own.digest ? own.names : [];
+  });
+  const missing = required.names.filter((name) => !approved.includes(name));
+  if (missing.length)
     throw new Error(
-      `Migration da approvare: ${required.names.join(", ")}. ` +
+      `Migration da approvare: ${missing.join(", ")}. ` +
         `Dopo l'esame ripetere con --reviewed-migrations ${required.digest}`,
     );
+  return required.digest;
+}
+
+/** Versione del lotto: quella in cima al changelog, nuova di un passo o già pubblicata. */
+export function assertPromotable(changelog, version, tags) {
+  const top = topVersion(changelog);
+  if (top !== version)
+    throw new Error(`In cima al changelog c'è la ${top ?? "nessuna versione"}, non la ${version}.`);
+  releaseNotes(changelog, version);
+  const released = latestReleased(tags);
+  if (version !== released && !nextVersions(released).includes(version))
+    throw new Error(`La ${version} non è un passo dalla ${released ?? "prima pubblicazione"}.`);
+}
+
+/** Durata e riuscita al primo tentativo delle ultime pubblicazioni, dalla più recente. */
+export function promotionMetrics(runs, receipts = [], jobs = new Map()) {
+  const duration = (from, to) =>
+    Number.isFinite(Date.parse(from)) && Number.isFinite(Date.parse(to))
+      ? Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000))
+      : null;
+  const attempts = new Map();
+  for (const run of runs)
+    attempts.set(run.head_sha, (attempts.get(run.head_sha) ?? 0) + (run.run_attempt ?? 1));
+  const rows = runs.map((run) => ({
+    commit: run.head_sha.slice(0, 12),
+    day: run.created_at.slice(0, 10),
+    minutes: Math.round((Date.parse(run.updated_at) - Date.parse(run.created_at)) / 60_000),
+    attempts: run.run_attempt,
+    conclusion: run.conclusion,
+    candidateAttempts: attempts.get(run.head_sha),
+    ...(() => {
+      const receipt = receipts.find((entry) => entry.run === run.id);
+      if (!receipt) return { evidence: "assente" };
+      const confirmed = receipt.active
+        ? receipt.candidateActive === true &&
+          receipt.guardPassed === true &&
+          Boolean(receipt.completedAt) &&
+          !receipt.rolledBack
+        : receipt.readback === true && Boolean(receipt.version) && !receipt.rolledBack;
+      return {
+        evidence: "ricevuta",
+        confirmed,
+        active: receipt.active?.version ?? receipt.version,
+        withdrawn: receipt.rolledBack === true,
+        falseGreen: run.conclusion === "success" && !confirmed,
+        candidateSeconds: duration(receipt.requestedAt, receipt.certifiedAt),
+        activationSeconds: duration(receipt.requestedAt, receipt.activatedAt),
+        preparationSeconds: duration(receipt.certifiedAt, receipt.activatedAt),
+        guardSeconds: duration(receipt.guardStartedAt, receipt.guardCompletedAt),
+        completionSeconds: duration(receipt.guardCompletedAt, receipt.completedAt),
+        totalSeconds: duration(receipt.requestedAt, receipt.completedAt),
+        rollbackSeconds: duration(
+          receipt.guardStartedAt ?? receipt.startedAt,
+          receipt.rolledBackAt,
+        ),
+        runnerWaitingSeconds: jobs.has(run.id)
+          ? runTimings(run, jobs.get(run.id)).waitingSeconds
+          : null,
+      };
+    })(),
+  }));
+  const successful = rows.filter(({ conclusion }) => conclusion === "success");
+  const done = successful.filter((row) => row.confirmed);
+  const sorted = successful.map(({ minutes }) => minutes).sort((a, b) => a - b);
+  return {
+    rows,
+    runs: rows.length,
+    successfulRuns: successful.length,
+    published: done.length,
+    firstAttempt: done.filter(
+      ({ attempts, candidateAttempts }) => attempts === 1 && candidateAttempts === 1,
+    ).length,
+    falseGreen: rows.filter((row) => row.falseGreen).length,
+    withdrawn: rows.filter((row) => row.withdrawn).length,
+    medianRunMinutes: sorted[Math.floor(sorted.length / 2)] ?? null,
+  };
 }
 
 function statusCycle({ repository, number }) {
   assertRun(number);
   summary(repository, number);
-}
-
-/** Identità della RC sul test, in sola lettura: GitHub, Git e risposta del Worker test. */
-async function candidateCycle({ repository }) {
-  const show = (sha, file) => git("show", `${sha}:${file}`);
-  const identity = await identifyCandidate({
-    head: () => {
-      const head = gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
-      localGit(() => {
-        git("fetch", "--quiet", "origin", "develop");
-        completeHistory();
-      });
-      return head;
-    },
-    // Senza changelog non c'è una RC da identificare.
-    changelog: (sha) =>
-      git("ls-tree", "--name-only", sha, "CHANGELOG.md") ? show(sha, "CHANGELOG.md") : "",
-    introduced: (version, head) =>
-      git(
-        "log",
-        "--reverse",
-        "--format=%H",
-        "--extended-regexp",
-        `-G^## \\[?${version.replaceAll(".", "\\.")}\\]?( |$)`,
-        head,
-        "--",
-        "CHANGELOG.md",
-      ).split("\n")[0],
-    needsDeploy,
-    lastDeploy: (head) =>
-      lastDeployRun(
-        ghJson(
-          "api",
-          `repos/${repository}/actions/workflows/ci.yml/runs?branch=develop&status=completed&per_page=50`,
-        ).workflow_runs,
-        (run) => runJobs(repository, run.id),
-        (sha) => contains(sha, head),
-      ),
-    receipt: (run) => {
-      const directory = mkdtempSync(path.join(tmpdir(), "release-candidate-"));
-      try {
-        gh(
-          "run",
-          "download",
-          String(run.id),
-          "--repo",
-          repository,
-          "--name",
-          `deployed-${run.id}-${run.run_attempt}`,
-          "--dir",
-          directory,
-        );
-        return JSON.parse(readFileSync(path.join(directory, "reports/release.json"), "utf8"));
-      } finally {
-        rmSync(directory, { recursive: true, force: true });
-      }
-    },
-    liveVersion: async () =>
-      (
-        await fetch("https://test.fiscalbay.it/", {
-          headers: { "cache-control": "no-cache" },
-          signal: AbortSignal.timeout(20000),
-        })
-      ).headers.get("x-fiscalbay-version"),
-    tree: (sha) => git("rev-parse", `${sha}^{tree}`),
-    certified: (tree) => candidateAvailable(repository, tree),
-    config: (sha) => createHash("sha256").update(show(sha, "cloudflare.config.ts")).digest("hex"),
-  });
-  console.log(JSON.stringify(identity, null, 2));
 }
 
 function cleanupCycle({ repository }) {
@@ -998,11 +882,9 @@ function cleanupCycle({ repository }) {
 async function resumeCycle({ repository, number, values }) {
   assertRun(number);
   let run = ghJson("api", `repos/${repository}/actions/runs/${number}`);
+  if (values.sha) assertBase(values.sha, run.head_sha);
   assertResumableRun(run);
-  assertBase(
-    run.head_sha,
-    gh("api", `repos/${repository}/git/ref/heads/${run.head_branch}`, "--jq", ".object.sha"),
-  );
+  assertBase(run.head_sha, headOf(repository, run.head_branch));
   if (run.status === "completed" && run.conclusion !== "success")
     gh("run", "rerun", number, "--repo", repository, "--failed");
   if (run.conclusion !== "success")
@@ -1023,8 +905,7 @@ async function resumeCycle({ repository, number, values }) {
   if (environment) {
     assertConfirmed(jobs, environment);
     if (environment === "production") {
-      publishedRelease(repository, run.head_sha, values.version);
-      cleanupIntegrated(repository);
+      await confirmProduction(repository, jobs, run.head_sha, values.version);
     }
   }
   console.log("Run riconciliata; per la pulizia PR riprendere release:cycle pr sul suo numero.");
@@ -1068,8 +949,7 @@ async function mergeOpenPullRequest(repository, number, pr) {
   if (pr.autoMergeRequest)
     gh(...pullRequestAction("disable-auto", repository, number, pr.headRefOid));
   const read = () => readPullRequest(repository, number);
-  const develop = () =>
-    gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha");
+  const develop = () => headOf(repository, "develop");
   const fetchHead = (...refs) => localGit(() => git("fetch", "origin", ...refs, pr.headRefName));
   // Una base avanzata richiede una nuova qualifica soltanto se tocca file della PR o globali.
   const independent = (base) =>
@@ -1128,8 +1008,9 @@ async function mergeOpenPullRequest(repository, number, pr) {
         console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
         return true;
       }
-      enableAutoMerge(repository, number, pr.headRefOid);
+      // Tutti i controlli prima del merge: `Node 26` è il solo richiesto da GitHub.
       await waitChecks(repository, pr.headRefOid);
+      enableAutoMerge(repository, number, pr.headRefOid);
       // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
       for (let attempt = 0; attempt < 180; attempt++) {
         pr = read();
@@ -1149,9 +1030,13 @@ async function settleMergedPullRequest(repository, number, pr) {
   const files = pullRequestFiles(repository, number);
   const { jobs, deployRequired } = await settleMergeRun(pr.mergeCommit.oid, plan(files).deploy, {
     wait: (sha) =>
-      waitRun(repository, "ci.yml", sha, "develop", undefined, undefined, ["success", "failure"]),
+      waitRun(repository, "ci.yml", sha, "develop", undefined, undefined, [
+        "success",
+        "failure",
+        "cancelled",
+      ]),
     jobs: (run) => runJobs(repository, run.id),
-    head: () => gh("api", `repos/${repository}/git/ref/heads/develop`, "--jq", ".object.sha"),
+    head: () => headOf(repository, "develop"),
     contains: (ancestor, head) =>
       localGit(() => {
         git("fetch", "origin", "develop");
@@ -1174,32 +1059,251 @@ async function settleMergedPullRequest(repository, number, pr) {
   console.log("Merge, collaudo CI e pulizia del branch riconciliati.");
 }
 
-async function pullRequestCycle({ repository, number }) {
+async function pullRequestCycle({ repository, number, values }) {
   if (!/^\d+$/u.test(number ?? "")) throw new Error("Numero PR non valido.");
   let pr = readPullRequest(repository, number);
   assertCyclePullRequest(pr, repository);
+  if (values?.sha) assertBase(values.sha, pr.headRefOid);
   if (pr.state === "OPEN") pr = await mergeOpenPullRequest(repository, number, pr);
   if (pr.state !== "MERGED")
     throw new Error("Merge non confermato: ciclo riprendibile dalla stessa PR.");
   await settleMergedPullRequest(repository, number, pr);
 }
 
-function confirmProduction(repository, jobs, sha, version) {
+const headOf = (repository, branch) =>
+  gh("api", `repos/${repository}/git/ref/heads/${branch}`, "--jq", ".object.sha");
+
+/** Commit che aggiungono migration fra base e testa, con il corpo della loro PR. */
+function migrationCommits(repository, base, head) {
+  return git("log", "--first-parent", "--format=%H", `${base}..${head}`, "--", "migrations")
+    .split("\n")
+    .filter(Boolean)
+    .map((sha) => ({
+      added: addedMigrations(`${sha}^`, sha),
+      body: gh("api", `repos/${repository}/commits/${sha}/pulls`, "--jq", '.[0].body // ""'),
+    }));
+}
+
+/**
+ * Controlli che non richiedono provider né browser, prima di ogni attesa: versione, cambiamenti
+ * da distribuire e approvazione delle migration. `Promuovi` li ripete nel job iniziale.
+ */
+async function lotPreflight({ repository, sha, version, reviewed = "" }) {
+  localGit(() => {
+    git("fetch", "--quiet", "--tags", "origin", "develop");
+    completeHistory();
+  });
+  const base = await publishedCommit(repository, (url) => ghJson("api", url));
+  if (!base) throw new Error("Commit attivo in Production non identificato.");
+  const files = git("diff", "--name-only", base, sha).split("\n").filter(Boolean);
+  const lot = {
+    base,
+    deploy: distributes(base, sha),
+    qualify: qualificationChange(files),
+    reviewed: "",
+  };
+  if (!lot.deploy) return { ...lot, version };
+  const changelog = git("show", `${sha}:CHANGELOG.md`);
+  const target = version ?? topVersion(changelog);
+  assertPromotable(changelog, target, git("tag", "--list", "v2.*").split("\n"));
+  const added = addedMigrations(base, sha);
+  return {
+    ...lot,
+    version: target,
+    reviewed: lotReview(added, migrationCommits(repository, base, sha), reviewed),
+  };
+}
+
+async function preflightCycle({ repository, values }) {
+  if (!/^[0-9a-f]{40}$/u.test(values.sha ?? "")) throw new Error("SHA completo richiesto.");
+  const lot = await lotPreflight({
+    repository,
+    sha: values.sha,
+    version: values.version,
+    reviewed: values["reviewed-migrations"],
+  });
+  console.log(JSON.stringify(lot));
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `base=${lot.base}\ndeploy=${lot.deploy}\nreviewed=${lot.reviewed}\nversion=${lot.version ?? ""}\n`,
+    );
+}
+
+/** Qualifica completa della testa di `develop`, senza effetti su `main` né sui provider. */
+async function ensureCandidate(repository, sha) {
+  const tree = ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha;
+  if (candidateAvailable(repository, tree)) return console.log("Candidato già qualificato.");
+  const active = ghJson(
+    "run",
+    "list",
+    "--repo",
+    repository,
+    "--workflow",
+    "candidate.yml",
+    "--branch",
+    "develop",
+    "--limit",
+    "100",
+    "--json",
+    "databaseId,headSha,status,event",
+  ).find(
+    (run) =>
+      run.headSha === sha &&
+      run.status !== "completed" &&
+      (run.event === "workflow_dispatch" ||
+        runJobs(repository, run.databaseId).some(
+          (job) => job.name.startsWith("Qualifica candidato /") && job.conclusion !== "skipped",
+        )),
+  );
+  const started = Boolean(active);
+  const since = started ? 0 : Date.now() - 1000;
+  if (!started)
+    gh(
+      "workflow",
+      "run",
+      "candidate.yml",
+      "--repo",
+      repository,
+      "--ref",
+      "develop",
+      "-f",
+      `expected_sha=${sha}`,
+    );
+  await waitRun(
+    repository,
+    "candidate.yml",
+    sha,
+    "develop",
+    started ? [active.event] : ["workflow_dispatch"],
+    since,
+    undefined,
+    // Una run pianificata successiva sullo stesso commit non qualifica: si segue quella attiva.
+    active?.databaseId,
+  );
+  if (!candidateAvailable(repository, tree)) throw new Error("Candidato non certificato.");
+}
+
+function candidateCycle({ repository }) {
+  return ensureCandidate(repository, headOf(repository, "develop"));
+}
+
+export function candidateReadiness({
+  committedAt,
+  passed,
+  certified,
+  manual,
+  weekly,
+  qualifying = false,
+  now = Date.now(),
+}) {
+  return Boolean(
+    manual ||
+    (passed &&
+      !qualifying &&
+      (weekly || (!certified && now - Date.parse(committedAt) >= 15 * 60_000))),
+  );
+}
+
+function candidateReady({ repository, values }) {
+  const sha = git("rev-parse", "HEAD");
+  if (values.sha !== sha) throw new Error("SHA del candidato diverso dal checkout.");
+  const current = headOf(repository, "develop");
+  const tree = git("rev-parse", "HEAD^{tree}");
+  const checks = ghJson(
+    "api",
+    "--paginate",
+    "--slurp",
+    `repos/${repository}/commits/${sha}/check-runs?per_page=100`,
+  ).flatMap((page) => page.check_runs);
+  const passed =
+    checks.filter((check) => check.name === "Node 26").sort((a, b) => b.id - a.id)[0]
+      ?.conclusion === "success";
+  const running = values.manual
+    ? false
+    : ghJson(
+        "api",
+        `repos/${repository}/actions/workflows/candidate.yml/runs?branch=develop&per_page=100`,
+      ).workflow_runs.some(
+        (run) =>
+          run.head_sha === sha &&
+          run.status !== "completed" &&
+          String(run.id) !== process.env.GITHUB_RUN_ID,
+      );
+  const ready =
+    current === sha &&
+    candidateReadiness({
+      committedAt: git("show", "-s", "--format=%cI", sha),
+      passed,
+      certified: values.manual || values.weekly ? false : candidateAvailable(repository, tree),
+      manual: values.manual,
+      weekly: values.weekly,
+      qualifying: running,
+    });
+  if (!ready && values.manual)
+    throw new Error("La testa di develop è avanzata prima della qualifica.");
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(process.env.GITHUB_OUTPUT, `ready=${ready}\nsha=${sha}\n`);
+  console.log(
+    ready
+      ? "Candidato pronto per la qualifica."
+      : "Nessuna qualifica necessaria o CI/quiete ancora da completare.",
+  );
+}
+
+/** `main` è la testa di `develop` promossa: avanza soltanto in fast-forward. */
+function advanceMain(repository, sha) {
+  gh(
+    "api",
+    "-X",
+    "PATCH",
+    `repos/${repository}/git/refs/heads/main`,
+    "-f",
+    `sha=${sha}`,
+    "-F",
+    "force=false",
+    "--silent",
+  );
+  console.log(`main avanzato a ${sha}.`);
+}
+
+async function confirmProduction(repository, jobs, sha, version) {
   assertConfirmed(jobs, "production");
+  const active = await publicVersion("https://fiscalbay.it");
+  const receipt = publicationRecord(repository, active);
+  if (
+    receipt.active.sha !== sha ||
+    !receipt.guardPassed ||
+    receipt.rolledBack ||
+    !receipt.completedAt
+  )
+    throw new Error("Pubblicazione finale non riconciliata con il provider.");
   publishedRelease(repository, sha, version);
   cleanupIntegrated(repository);
 }
 
-/** Qualifica del candidato o pubblicazione Production con `publish.yml`, senza doppi dispatch. */
-async function publishCycle({ repository, command, values }) {
-  if (!/^[0-9a-f]{40}$/u.test(values.sha ?? "")) throw new Error("SHA completo richiesto.");
-  const ref = candidateRef(command, values.ref);
-  assertBase(
-    values.sha,
-    gh("api", `repos/${repository}/git/ref/heads/${ref}`, "--jq", ".object.sha"),
-  );
-  if (command === "production" && !values.version)
-    throw new Error("Versione Production richiesta.");
+/**
+ * Promuovi: la testa di `develop` con i controlli verdi, già qualificata, diventa `main` e si
+ * distribuisce. Senza modifiche da distribuire basta avanzare `main`. `--urgente` non attende la
+ * qualifica completa, che resta in corso su `develop`: la protezione è la guardia dopo il deploy.
+ */
+async function promoteCycle({ repository, values }) {
+  const requestedAt = values["requested-at"] || new Date().toISOString();
+  const sha = headOf(repository, "develop");
+  if (values.sha) assertBase(values.sha, sha);
+  const lot = await lotPreflight({
+    repository,
+    sha,
+    version: values.version,
+    reviewed: values["reviewed-migrations"],
+  });
+  await waitChecks(repository, sha);
+  if (!lot.deploy) {
+    if (lot.qualify) await ensureCandidate(repository, sha);
+    advanceMain(repository, sha);
+    cleanupIntegrated(repository);
+    return console.log("Nessuna modifica da distribuire: main allineato, nessun deploy.");
+  }
   const existing = ghJson(
     "run",
     "list",
@@ -1208,46 +1312,26 @@ async function publishCycle({ repository, command, values }) {
     "--workflow",
     "publish.yml",
     "--branch",
-    ref,
+    "main",
     "--limit",
     "50",
     "--json",
     "databaseId,headSha,status,conclusion",
-  ).find((run) => run.headSha === values.sha);
-  const reviewedDispatch =
-    command === "production" &&
-    existing?.conclusion === "failure" &&
-    awaitsMigrationReview(
-      values["reviewed-migrations"],
-      gh("run", "view", String(existing.databaseId), "--repo", repository, "--log-failed"),
-      ghJson(
-        "api",
-        `repos/${repository}/actions/runs/${existing.databaseId}/artifacts`,
-      ).artifacts.map((artifact) => artifact.name),
-    );
-  if (existing && !reviewedDispatch) {
+  ).find((run) => run.headSha === sha);
+  if (existing) {
     const jobs = runJobs(repository, existing.databaseId);
-    if (existingCandidate(command, existing, jobs) === "published") {
-      const run = summary(repository, existing.databaseId);
-      confirmProduction(repository, jobs, run.head_sha, values.version);
-      return;
-    }
-    const tree = ghJson("api", `repos/${repository}/git/commits/${values.sha}`).tree.sha;
-    const certified = candidateAvailable(repository, tree);
-    if (command === "candidate" && certified) {
-      summary(repository, existing.databaseId);
-      console.log("Qualifica già riuscita: nessun nuovo dispatch.");
-      return;
-    }
+    existingPublication(existing, jobs);
+    summary(repository, existing.databaseId);
+    return await confirmProduction(repository, jobs, sha, lot.version);
   }
-  if (command === "production") {
-    git("fetch", "--quiet", "--tags", "origin");
-    const published = git("describe", "--tags", "--abbrev=0", "--match", "v2.*", values.sha);
-    assertReviewedDispatch(
-      requiredReview(addedMigrations(published, values.sha)),
-      values["reviewed-migrations"],
-    );
-  }
+  if (values.urgente) {
+    const tree = ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha;
+    if (!candidateAvailable(repository, tree))
+      throw new Error(
+        "Urgenza senza prove valide sul candidato: eseguire release:cycle candidate.",
+      );
+  } else await ensureCandidate(repository, sha);
+  advanceMain(repository, sha);
   const since = Date.now() - 1000;
   gh(
     "workflow",
@@ -1256,31 +1340,191 @@ async function publishCycle({ repository, command, values }) {
     "--repo",
     repository,
     "--ref",
-    ref,
+    "main",
     "-f",
-    `expected_sha=${values.sha}`,
+    `expected_sha=${sha}`,
     "-f",
-    `prova=${command === "candidate"}`,
+    `version=${lot.version}`,
     "-f",
-    `version=${values.version ?? ""}`,
+    `day=${romeDay()}`,
     "-f",
-    `reviewed_migrations=${values["reviewed-migrations"]}`,
+    `reviewed_migrations=${lot.reviewed}`,
+    "-f",
+    `urgente=${Boolean(values.urgente)}`,
+    "-f",
+    `requested_at=${requestedAt}`,
+    "-f",
+    `certified_at=${new Date().toISOString()}`,
   );
-  const run = await waitRun(
+  const run = await waitRun(repository, "publish.yml", sha, "main", ["workflow_dispatch"], since);
+  await confirmProduction(repository, runJobs(repository, run.id), run.head_sha, lot.version);
+  console.log("Pubblicazione conclusa; ricevuta e release disponibili nella run.");
+}
+
+/** Ritiro d'incidente della versione attiva: non ricostruisce e non tocca i dati. */
+async function rollbackCycle({ repository, values }) {
+  const sha = headOf(repository, "main");
+  if (values?.sha) assertBase(values.sha, sha);
+  const since = Date.now() - 1000;
+  gh("workflow", "run", "rollback.yml", "--repo", repository, "--ref", "main");
+  await waitRun(repository, "rollback.yml", sha, "main", ["workflow_dispatch"], since);
+  console.log("Versione precedente attiva: serve una correzione prima della prossima promozione.");
+}
+
+function metricsCycle({ repository }) {
+  const { workflow_runs: runs } = ghJson(
+    "api",
+    `repos/${repository}/actions/workflows/publish.yml/runs?branch=main&status=completed&per_page=20`,
+  );
+  const receipts = [];
+  const jobs = new Map();
+  for (const run of runs) {
+    const { artifacts } = ghJson(
+      "api",
+      `repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`,
+    );
+    const ordered = artifacts.filter((entry) => !entry.expired).sort((a, b) => b.id - a.id);
+    const artifact =
+      ordered.find((entry) => entry.name.startsWith("production-state-")) ??
+      ordered.find((entry) => entry.name.startsWith("release-receipt-"));
+    if (artifact)
+      receipts.push({
+        ...downloadRecord(repository, { ...artifact, workflow_run: { id: run.id } }),
+        run: run.id,
+      });
+    const attempts = [];
+    for (let attempt = 1; attempt <= (run.run_attempt ?? 1); attempt++)
+      attempts.push(...runJobs(repository, run.id, attempt));
+    jobs.set(run.id, attempts);
+  }
+  console.log(JSON.stringify(promotionMetrics(runs, receipts, jobs), null, 2));
+}
+
+/** Oggetto del ciclo nel titolo della run: il comando riaggancia quella attiva. */
+export const coordinatorTitle = (operation, object, sha) => `Ciclo ${operation} ${object} ${sha}`;
+
+const pendingFile = () => git("rev-parse", "--git-path", "publication-pending.json");
+
+/** Il runner non può pulire il Mac. La ricevuta resta nel worktree fino alla riconciliazione locale. */
+function pendingPublications() {
+  return existsSync(pendingFile()) ? JSON.parse(readFileSync(pendingFile(), "utf8")) : [];
+}
+
+function rememberPublication(entry) {
+  const entries = pendingPublications().filter((item) => item.number !== entry.number);
+  writeFileSync(pendingFile(), JSON.stringify([...entries, entry]));
+}
+
+function reconcileLocalPublications(repository) {
+  const retained = [];
+  for (const entry of pendingPublications()) {
+    if (
+      entry.repository !== repository ||
+      !entry.run ||
+      ghJson("api", `repos/${repository}/actions/runs/${entry.run}`).conclusion !== "success"
+    ) {
+      retained.push(entry);
+      continue;
+    }
+    const pr = readPullRequest(repository, entry.number);
+    try {
+      if (pr.state !== "MERGED") throw new Error("Merge non confermato.");
+      localGit(() => {
+        git("fetch", "origin", "develop", `refs/pull/${entry.number}/head`);
+        if (!contains(entry.sha, pr.headRefOid))
+          throw new Error("Testa della PR non riconciliata.");
+        cleanup(pr);
+      });
+      console.log(`Pulizia locale della PR ${entry.number} riconciliata.`);
+    } catch (error) {
+      retained.push(entry);
+      console.log(`Pulizia locale PR ${entry.number} conservata per la ripresa: ${error.message}`);
+    }
+  }
+  writeFileSync(pendingFile(), JSON.stringify(retained));
+}
+
+/** Il ciclo gira in Actions se l'environment ha il token; altrimenti in questa sessione. */
+function coordinatorAvailable(repository) {
+  try {
+    gh("api", `repos/${repository}/environments/publication/secrets/PUBLISH_TOKEN`, "--silent");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Avvia il ciclo nel workflow e lo segue: chiudere la sessione non lo ferma, e rilanciare lo stesso
+ * comando riaggancia la run attiva.
+ */
+async function coordinate({ repository, command, number, values }) {
+  const requestedAt = new Date().toISOString();
+  const object = ["pr", "resume"].includes(command) ? number : (values.version ?? "lotto");
+  const sha =
+    command === "pr"
+      ? readPullRequest(repository, number).headRefOid
+      : command === "resume"
+        ? ghJson("api", `repos/${repository}/actions/runs/${number}`).head_sha
+        : headOf(repository, command === "rollback" ? "main" : "develop");
+  const title = coordinatorTitle(command, object, sha);
+  const list = () =>
+    ghJson(
+      "run",
+      "list",
+      "--repo",
+      repository,
+      "--workflow",
+      "cycle.yml",
+      "--limit",
+      "30",
+      "--json",
+      "databaseId,displayTitle,status,createdAt",
+    ).filter((run) => run.displayTitle === title);
+  let run = list().find((item) => item.status !== "completed");
+  if (!run) {
+    const since = Date.now() - 1000;
+    gh(
+      "workflow",
+      "run",
+      "cycle.yml",
+      "--repo",
+      repository,
+      "--ref",
+      "develop",
+      "-f",
+      `operation=${command}`,
+      "-f",
+      `object=${object}`,
+      "-f",
+      `sha=${sha}`,
+      "-f",
+      `requested_at=${requestedAt}`,
+      "-f",
+      `urgente=${Boolean(values.urgente)}`,
+      "-f",
+      `reviewed_migrations=${values["reviewed-migrations"]}`,
+    );
+    for (let attempt = 0; attempt < 24 && !run; attempt++) {
+      await pause(5000);
+      run = list().find((item) => Date.parse(item.createdAt) >= since);
+    }
+    if (!run) throw new Error("Workflow del ciclo non osservato.");
+  }
+  console.log(`Ciclo in Actions: run ${run.databaseId}.`);
+  if (command === "pr") rememberPublication({ repository, number, sha, run: run.databaseId });
+  await watch([
+    "run",
+    "watch",
+    String(run.databaseId),
+    "--repo",
     repository,
-    "publish.yml",
-    values.sha,
-    ref,
-    ["workflow_dispatch"],
-    since,
-  );
-  if (command === "production")
-    confirmProduction(repository, runJobs(repository, run.id), run.head_sha, values.version);
-  console.log(
-    command === "candidate"
-      ? "Candidato qualificato, senza deploy."
-      : "Workflow Production concluso; ricevuta e release disponibili nella run.",
-  );
+    "--exit-status",
+    "--interval",
+    "30",
+  ]);
+  summary(repository, run.databaseId);
+  if (command === "pr") reconcileLocalPublications(repository);
 }
 
 const cycles = {
@@ -1288,8 +1532,8 @@ const cycles = {
   resume: resumeCycle,
   pr: pullRequestCycle,
   promote: promoteCycle,
-  candidate: publishCycle,
-  production: publishCycle,
+  candidate: candidateCycle,
+  rollback: rollbackCycle,
 };
 
 async function main() {
@@ -1297,21 +1541,44 @@ async function main() {
     allowPositionals: true,
     options: {
       sha: { type: "string" },
-      ref: { type: "string" },
       base: { type: "string" },
       head: { type: "string" },
       version: { type: "string" },
+      urgente: { type: "boolean", default: false },
+      qui: { type: "boolean", default: false },
+      manual: { type: "boolean", default: false },
+      weekly: { type: "boolean", default: false },
+      "requested-at": { type: "string" },
       "reviewed-migrations": { type: "string", default: "" },
     },
   });
   const { command, number } = cycleCommand(positionals);
   // Gira nei job della CI senza token: nessuna lettura del repository remoto con gh.
   if (command === "qualification-base") return qualificationBase(values);
-  if (command === "promotion-source") return promotionSource(values);
   const repository = ghJson("api", "repos/{owner}/{repo}").full_name;
   // status legge soltanto: nessun checkout pulito né blocco.
   if (command === "status") return statusCycle({ repository, number });
-  if (command === "rc") return candidateCycle({ repository });
+  if (command === "metrics") return metricsCycle({ repository });
+  if (command === "preflight") return preflightCycle({ repository, values });
+  if (command === "candidate-ready") return candidateReady({ repository, values });
+  if (
+    !process.env.GITHUB_ACTIONS &&
+    ["pr", "promote", "rollback", "resume", "cleanup"].includes(command)
+  )
+    reconcileLocalPublications(repository);
+  // Il ciclo dura decine di minuti: in Actions sopravvive alla sessione e al Mac spento.
+  if (
+    ["pr", "promote", "rollback", "resume"].includes(command) &&
+    !process.env.GITHUB_ACTIONS &&
+    (!values.qui || command !== "pr")
+  ) {
+    if (coordinatorAvailable(repository))
+      return coordinate({ repository, command, number, values });
+    if (command !== "pr")
+      throw new Error(
+        "Coordinatore remoto non disponibile: riconciliare publication prima di operazioni Production.",
+      );
+  }
   if (git("status", "--porcelain"))
     throw new Error(
       "Il ciclo richiede un checkout pulito; conservare e completare il lavoro locale.",

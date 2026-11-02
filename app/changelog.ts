@@ -3,9 +3,10 @@
  * `### Novità` e `### What's new` di ogni versione di `CHANGELOG.md`: nuove funzioni, cambi
  * visibili e correzioni notate dagli utenti, una voce `- **Titolo.** Testo` per riga sotto i
  * gruppi `####` di `whatsNewKinds`, nello stesso ordine nelle due lingue. Le altre voci della versione restano nel changelog e nella
- * GitHub Release. La promozione su `main` scrive il giorno nell'intestazione
- * (`## [2.0.1] - AAAA-MM-GG`): in Production compaiono soltanto le versioni con il giorno, sul
- * test anche quella in preparazione in cima al changelog. Restano fuori le RC.
+ * GitHub Release. In Production compaiono soltanto le versioni con il giorno
+ * (`## [2.0.1] - AAAA-MM-GG`), sul test anche quella in preparazione in cima al changelog. La
+ * build della pubblicazione riceve il giorno da `VITE_RELEASE_DAY`, senza cambiare il tree
+ * qualificato: `develop` lo scrive subito dopo.
  * Senza voci pagina, voce del menu, collegamento di Supporto e campanella non compaiono.
  */
 /** Gruppi delle voci, nell'ordine della pagina, con il titolo `####` in ciascuna lingua. */
@@ -72,6 +73,14 @@ const entry = (text: string) => {
   const match = /^\*\*(.+?)\*\*\s+(\S.*)$/u.exec(text);
   return match && { title: match[1].replace(/\.$/u, ""), body: match[2] };
 };
+
+/** Changelog della build: la versione in preparazione in cima riceve il giorno, se c'è. */
+export function releaseChangelog(text: string, day: string | undefined) {
+  if (!day) return text;
+  return text.replace(/^## (\[[^\]]+\])[ \t]*$/mu, (header, version: string, offset: number) =>
+    /^## /mu.test(text.slice(0, offset)) ? header : `## ${version} - ${day}`,
+  );
+}
 
 /**
  * Versioni con Novità, dalla più recente, ed errori di forma: intestazione e giorno validi,

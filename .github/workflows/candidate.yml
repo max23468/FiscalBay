@@ -1,0 +1,98 @@
+name: Candidato
+
+# Qualifica completa della testa di `develop`, certificata per tree: `Promuovi` la riusa invece di
+# scoprire i difetti del lotto all'ultimo passo. La pianificazione non occupa un runner in attesa.
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        type: string
+        required: true
+
+env:
+  DO_NOT_TRACK: "1"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  plan:
+    name: Pianifica
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.ready.outputs.sha }}
+      qualify: ${{ steps.ready.outputs.ready == 'true' && (github.event_name == 'workflow_dispatch' || github.event.schedule == '23 3 * * 1' || steps.plan.outputs.qualify == 'true') }}
+      mutation-matrix: ${{ steps.reuse.outputs.mutation-matrix || steps.plan.outputs.mutation-matrix }}
+      skip-pages: ${{ steps.pages.outputs.skip-pages }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.expected_sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Check readiness without waiting on the runner
+        id: ready
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          WEEKLY: ${{ github.event.schedule == '23 3 * * 1' }}
+        run: |
+          options=()
+          if [ "${EVENT}" = workflow_dispatch ]; then options+=(--manual); fi
+          if [ "${WEEKLY}" = true ]; then options+=(--weekly); fi
+          node scripts/release/release-cycle.mjs candidate-ready --sha "$(git rev-parse HEAD)" "${options[@]}"
+      - name: Read commit active in Production
+        id: base
+        if: steps.ready.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: node scripts/find-deployed.mjs --production
+      - name: Plan cumulative changes
+        id: plan
+        if: steps.ready.outputs.ready == 'true'
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head HEAD --complete --github-output
+      # Un modulo superato e non toccato da allora non si ripete.
+      - name: Reuse passed mutation modules
+        id: reuse
+        if: steps.ready.outputs.ready == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MATRIX: ${{ steps.plan.outputs.mutation-matrix }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: node scripts/mutation-reuse.mjs
+      # Le visite di un'area non toccata dall'ultima qualifica completa delle pagine non si ripetono.
+      - name: Reuse qualified page areas
+        id: pages
+        if: steps.ready.outputs.ready == 'true' && github.event.schedule != '23 3 * * 1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+        run: node scripts/pages-reuse.mjs
+
+  qualify:
+    name: Qualifica candidato
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.outputs.qualify == 'true' }}
+    # Una qualifica in corso finisce; dopo di lei parte soltanto l'ultima in attesa.
+    concurrency:
+      group: candidate-qualification
+      cancel-in-progress: false
+    uses: ./.github/workflows/qualify.yml
+    with:
+      expected_sha: ${{ needs.plan.outputs.sha }}
+      mutation_targets: ${{ needs.plan.outputs.mutation-matrix }}
+      skip_pages: ${{ needs.plan.outputs.skip-pages }}
+      force_full: ${{ github.event.schedule == '23 3 * * 1' }}

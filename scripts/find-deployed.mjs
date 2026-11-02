@@ -5,6 +5,7 @@
  * o un deploy fallito restano nel diff della run successiva; le prove e gli strumenti già
  * qualificati da una run verde non si ripetono finché non arriva il deploy seguente.
  * Senza un deploy riuscito antenato di HEAD l'output resta vuoto e il gate completo.
+ * Con `--production` indica il commit attivo in Production, base del lotto da promuovere.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -12,6 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { needsDeploy } from "./classify-changes.mjs";
 import { ghJson } from "./lib/provider.mjs";
+import { publicVersion, publicationRecord, receiptActive } from "./release/records.mjs";
 
 /** Prima run, dalla più recente, con il job di deploy test riuscito su un antenato di HEAD. */
 export function lastDeployRun(runs, jobsOf, isAncestor) {
@@ -19,7 +21,12 @@ export function lastDeployRun(runs, jobsOf, isAncestor) {
     if (!["push", "workflow_dispatch"].includes(run.event)) continue;
     const jobs = jobsOf(run);
     const deploy = jobs.find(({ name }) => name === "Deploy test");
-    if (deploy?.conclusion === "success" && isAncestor(run.head_sha)) return { run, jobs };
+    // Un job superato da un merge successivo riesce senza distribuire.
+    const skipped = deploy?.steps?.some(
+      ({ name, conclusion }) => name === "Deploy verified artifact" && conclusion === "skipped",
+    );
+    if (deploy?.conclusion === "success" && !skipped && isAncestor(run.head_sha))
+      return { run, jobs };
   }
   return undefined;
 }
@@ -43,10 +50,36 @@ export function comparisonBase(runs, jobsOf, isAncestor, needsDeployFrom) {
   return deployed;
 }
 
+/**
+ * La ricevuta della versione osservata identifica il commit, indipendentemente dall'esito
+ * dell'intero workflow e dai ritiri delle versioni successive.
+ */
+export function lastPublished(receipts, version) {
+  return receipts.map((receipt) => receiptActive(receipt, version)).find(Boolean)?.sha;
+}
+
+/** La versione osservata sul dominio sceglie la ricevuta, anche dopo un rollback. */
+export async function publishedCommit(
+  repository,
+  read,
+  versionOf = publicVersion,
+  record = publicationRecord,
+) {
+  const version = await versionOf("https://fiscalbay.it");
+  return record(repository, version, read).active.sha;
+}
+
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const repository = process.env.REPOSITORY;
   if (!repository) throw new Error("Repository non identificato.");
   const api = (url) => ghJson("api", url);
+  if (process.argv.includes("--production")) {
+    const published = await publishedCommit(repository, api);
+    if (!published) throw new Error("Nessuna pubblicazione Production fra le run recenti.");
+    appendFileSync(process.env.GITHUB_OUTPUT, `sha=${published}\n`);
+    console.log(`Commit attivo in Production: ${published}.`);
+    process.exit(0);
+  }
   const runs = api(
     `repos/${repository}/actions/workflows/ci.yml/runs?branch=develop&status=completed&per_page=50`,
   ).workflow_runs.filter(({ id }) => String(id) !== process.env.GITHUB_RUN_ID);

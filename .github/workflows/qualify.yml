@@ -6,10 +6,23 @@ on:
       expected_sha:
         type: string
         required: true
+      # `full` certifica il tree del candidato; `production` prepara e prova la sola build
+      # Production della pubblicazione, con il giorno della versione.
+      scope:
+        type: string
+        default: full
       mutation_targets:
         type: string
-        required: true
-      source_reuse:
+        default: '{"target":[]}'
+      skip_pages:
+        description: Tag delle visite riusate dall'ultima qualifica completa delle pagine
+        type: string
+        default: ""
+      day:
+        description: Giorno della versione, nella sola build che si distribuisce
+        type: string
+        default: ""
+      force_full:
         type: boolean
         default: false
     outputs:
@@ -39,6 +52,7 @@ jobs:
       tree: ${{ steps.tree.outputs.tree }}
       playwright: ${{ steps.tree.outputs.playwright }}
     steps:
+      # Nessun `ref`: si qualifica soltanto il commit della run, confrontato con quello atteso.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -55,6 +69,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
       - name: Find qualified Production candidate
         id: reuse
+        if: inputs.scope == 'full' && !inputs.force_full
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -63,7 +78,7 @@ jobs:
 
   source:
     needs: select
-    if: needs.select.outputs.run-id == ''
+    if: inputs.scope == 'full' && needs.select.outputs.run-id == ''
     runs-on: ubuntu-26.04
     timeout-minutes: 20
     outputs:
@@ -78,7 +93,6 @@ jobs:
       # soltanto senza una sorgente già verificata.
       - name: Find verified source
         id: reuse
-        if: inputs.source_reuse
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -123,6 +137,8 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - run: pnpm build:live
+        env:
+          VITE_RELEASE_DAY: ${{ inputs.day }}
       - run: node scripts/release/release.mjs manifest --environment production
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -135,7 +151,7 @@ jobs:
   # Browser e librerie di sistema dall'immagine ufficiale della versione di Playwright del manifest.
   browser:
     needs: [select, source, production]
-    if: needs.select.outputs.run-id == ''
+    if: ${{ !cancelled() && needs.select.result == 'success' && needs.production.result == 'success' && needs.source.result != 'failure' && needs.select.outputs.run-id == '' }}
     runs-on: ubuntu-26.04
     container:
       image: mcr.microsoft.com/playwright:v${{ needs.select.outputs.playwright }}-noble
@@ -145,7 +161,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        kind: [source, production]
+        kind: ${{ fromJSON(inputs.scope == 'full' && '["source", "production"]' || '["production"]') }}
         shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -170,14 +186,21 @@ jobs:
         env:
           E2E_PREBUILT: "1"
           E2E_MATRIX: full
+          # Come in ogni altra fase, una prova che riesce alla ripetizione resta segnalata.
+          E2E_RETRIES: "1"
           E2E_RUN_ID: ${{ matrix.kind }}-${{ matrix.shard }}
           E2E_PRODUCTION: ${{ matrix.kind == 'production' && '1' || '' }}
+          VITE_RELEASE_DAY: ${{ inputs.day }}
           KIND: ${{ matrix.kind }}
           SHARD: ${{ matrix.shard }}/4
+          SKIP_PAGES: ${{ inputs.skip_pages }}
         run: |
-          pages=()
-          if [ "${KIND}" = production ]; then pages=(--pages); fi
-          node scripts/browser-tests.mjs "${pages[@]}" --browsers chromium,webkit --shard "${SHARD}"
+          selection=()
+          if [ "${KIND}" = production ]; then selection=(--pages); fi
+          if [ -n "${SKIP_PAGES}" ]; then
+            selection+=(--grep-invert "${SKIP_PAGES}")
+          fi
+          node scripts/browser-tests.mjs "${selection[@]}" --browsers chromium,webkit --shard "${SHARD}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -188,19 +211,20 @@ jobs:
   mutation:
     name: Mutation
     needs: select
-    if: needs.select.outputs.run-id == '' && inputs.mutation_targets != '{"target":[]}'
+    if: inputs.scope == 'full' && needs.select.outputs.run-id == '' && inputs.mutation_targets != '{"target":[]}'
     uses: ./.github/workflows/mutation.yml
     with:
       targets: ${{ inputs.mutation_targets }}
+      expected_sha: ${{ inputs.expected_sha }}
 
   certify:
     name: Candidate qualified
     needs: [select, source, production, browser, mutation]
-    if: ${{ !cancelled() && needs.select.result == 'success' && (needs.select.outputs.run-id != '' || (needs.source.result == 'success' && needs.production.result == 'success' && needs.browser.result == 'success' && (needs.mutation.result == 'success' || needs.mutation.result == 'skipped'))) }}
+    if: ${{ !cancelled() && needs.select.result == 'success' && (needs.select.outputs.run-id != '' || ((needs.source.result == 'success' || needs.source.result == 'skipped') && needs.production.result == 'success' && needs.browser.result == 'success' && (needs.mutation.result == 'success' || needs.mutation.result == 'skipped'))) }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
-      artifact: candidate-${{ needs.select.outputs.tree }}
+      artifact: ${{ inputs.scope == 'full' && format('candidate-{0}', needs.select.outputs.tree) || needs.production.outputs.artifact }}
       artifact-run: ${{ needs.select.outputs.run-id || github.run_id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -224,9 +248,36 @@ jobs:
           path: test-results/candidate/
       - name: Check complete browser evidence
         if: needs.select.outputs.run-id == ''
-        run: node scripts/browser-tests.mjs --check-evidence test-results/candidate
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          KINDS: ${{ inputs.scope == 'full' && 'source,production' || 'production' }}
+          SKIP_PAGES: ${{ inputs.skip_pages }}
+          VITE_RELEASE_DAY: ${{ inputs.day }}
+        run: node scripts/browser-tests.mjs --check-evidence test-results/candidate --kinds "${KINDS}" --grep-invert "${SKIP_PAGES}"
+      - name: Preserve unstable tests
         if: needs.select.outputs.run-id == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.scope == 'full' && 'flaky-tests' || 'production-flaky-tests' }}
+          overwrite: true
+          path: test-results/candidate/flaky.json
+          retention-days: 14
+      - name: Record page coverage and dependencies
+        if: inputs.scope == 'full' && needs.select.outputs.run-id == '' && inputs.skip_pages == ''
+        run: node scripts/pages-reuse.mjs --record test-results/candidate/pages-full.json
+      # Senza visite riusate il tree diventa la base del riuso delle pagine per i sette giorni in
+      # cui l'artefatto resta: almeno una volta alla settimana la matrice gira per intero.
+      - name: Mark complete page qualification
+        if: inputs.scope == 'full' && needs.select.outputs.run-id == '' && inputs.skip_pages == ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pages-full
+          overwrite: true
+          path: test-results/candidate/pages-full.json
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: inputs.scope == 'full' && needs.select.outputs.run-id == ''
         with:
           name: candidate-${{ needs.select.outputs.tree }}
           overwrite: true

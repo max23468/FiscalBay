@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, mkdirSync } from "node:fs";
+import { spawnSync, execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync, mkdirSync, cpSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
@@ -11,10 +11,13 @@ import {
   requiredReview,
   reviewAdded,
   publish,
-  productionReadiness,
+  activate,
+  incidentTarget,
+  versionOverride,
   assertResume,
   digestDirectory,
   assertAppliedMigrations,
+  appliedMigrationHistory,
   receiptArtifact,
   readReceipt,
   releaseIdentity,
@@ -25,20 +28,204 @@ import {
   rollbackRequired,
   assertConfirmable,
   deployReport,
-  candidateVersion,
-  assertFreeze,
   assertVersionStep,
   deployTag,
   datedChangelog,
-  assertPromotionSource,
-  promotionBranch,
   romeDay,
   topVersion,
-  undatedChangelog,
-  undatedTree,
-  sameSource,
+  rollbackRelease,
+  reconcileReceipt,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
+
+describe("ciclo reale con provider simulati", () => {
+  it("riconcilia risposte perse, guardia, ritiro, ripresa e giorno fallito senza rete", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "publication-cli-"));
+    const git = (...args) =>
+      execFileSync("git", args, {
+        cwd: directory,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      }).trim();
+    const write = (file, content) => {
+      mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+      writeFileSync(path.join(directory, file), content);
+    };
+    try {
+      for (const file of [
+        "release/release.mjs",
+        "release/records.mjs",
+        "release/guard.mjs",
+        "lib/provider.mjs",
+      ]) {
+        mkdirSync(path.dirname(path.join(directory, "scripts", file)), { recursive: true });
+        cpSync(path.join("scripts", file), path.join(directory, "scripts", file));
+      }
+      write(".gitignore", ".cloudflare/\nreports/\n");
+      write("package.json", JSON.stringify({ type: "module", packageManager: "pnpm@12.15.0" }));
+      write("pnpm-lock.yaml", "lockfileVersion: '9.0'\n");
+      write("cloudflare.config.ts", "export default {};\n");
+      write("migrations/0001_schema.sql", "CREATE TABLE example (id TEXT);\n");
+      write("CHANGELOG.md", "# Changelog\n\n## [2.0.0]\n\n- Voce.\n");
+      git("init", "-q", "--initial-branch", "main");
+      git("config", "user.name", "Test");
+      git("config", "user.email", "test@example.invalid");
+      git("add", ".");
+      git("commit", "-qm", "base");
+      const previousSha = git("rev-parse", "HEAD");
+      write("value.txt", "candidate\n");
+      git("add", ".");
+      git("commit", "-qm", "candidate");
+      const sha = git("rev-parse", "HEAD");
+      git("remote", "add", "origin", directory);
+      write(
+        ".cloudflare/output/v0/config.json",
+        JSON.stringify({ buildContext: { mode: "live" } }),
+      );
+      write(
+        ".cloudflare/output/v0/workers/default/worker.config.json",
+        JSON.stringify({
+          name: "fiscalbay",
+          env: { APP_ORIGIN: { value: "https://fiscalbay.it" }, DB: { id: "database" } },
+        }),
+      );
+      const old = "11111111-1111-1111-1111-111111111111";
+      const next = "22222222-2222-2222-2222-222222222222";
+      const store = path.join(directory, ".git/provider.json");
+      const state = () => JSON.parse(readFileSync(store, "utf8"));
+      const save = (value) => writeFileSync(store, JSON.stringify(value));
+      save({
+        current: { versions: [{ version_id: old, percentage: 100 }] },
+        history: [],
+        calls: [],
+        loss: "upload",
+        incidents: [],
+        versions: {
+          [old]: {
+            id: old,
+            annotations: { "workers/message": `${previousSha}:${"f".repeat(32)}` },
+            bindings: [{ name: "DB", id: "database" }],
+          },
+        },
+      });
+      write(
+        ".git/bin/pnpm",
+        `#!${process.execPath}\nimport fs from 'node:fs';
+const file=process.env.PROVIDER_STATE; const state=JSON.parse(fs.readFileSync(file,'utf8'));
+const args=process.argv.slice(4); const key=args.slice(0,3).join(' '); const value=(name)=>args[args.indexOf(name)+1];
+const persist=()=>fs.writeFileSync(file,JSON.stringify(state)); const out=(value)=>process.stdout.write(JSON.stringify(value));
+state.calls.push(key); let lost=false;
+if(key==='workers deployments list') out({deployments:[state.current,...state.history]});
+else if(key==='workers versions get') out(state.versions[args[3]]);
+else if(key==='workers secrets list') out([]);
+else if(key==='workers versions list') out(Object.values(state.versions).reverse());
+else if(key==='workers versions create') {
+ state.versions['${next}']={id:'${next}',annotations:{'workers/message':value('--message')},bindings:[{name:'DB',id:'database'}]};
+ if(state.loss==='upload'){delete state.loss;lost=true;}
+} else if(key==='workers deployments create') {
+ const body=JSON.parse(value('--body'));state.history.unshift(state.current);state.current={versions:body.versions};
+ if(state.loss==='activation' && body.versions.length===1 && body.versions[0].version_id==='${next}'){delete state.loss;lost=true;}
+} else {throw new Error('Unexpected provider command '+args.join(' '));}
+persist(); if(lost){process.stderr.write('Provider response lost');process.exit(1);}
+`,
+      );
+      execFileSync("chmod", ["700", path.join(directory, ".git/bin/pnpm")]);
+      write(
+        ".git/fetch.mjs",
+        `import fs from 'node:fs';
+globalThis.fetch=async(input,options={})=>{
+ const url=new URL(String(input));const state=JSON.parse(fs.readFileSync(process.env.PROVIDER_STATE,'utf8'));
+ if(url.hostname==='api.cloudflare.com'){
+  const sql=JSON.parse(options.body).sql;
+  const rows=sql.includes('sqlite_master')?[{name:'d1_migrations'}]:sql.includes('owner_incidents')?state.incidents:[{name:'0001_schema.sql'}];
+  return Response.json({success:true,result:[{success:true,results:rows}]});
+ }
+ if(url.hostname!=='fiscalbay.it') throw new Error('Network disabled');
+ const override=options.headers?.['cloudflare-workers-version-overrides']?.match(/="([^"]+)"/)?.[1];
+ const version=override ?? state.current.versions.find(v=>v.percentage===100)?.version_id;
+ return new Response(url.pathname.includes('get-session')?'null':'ok',{headers:{'x-fiscalbay-version':version}});
+};`,
+      );
+      const call = (script, args) =>
+        spawnSync(
+          process.execPath,
+          [
+            "--import",
+            path.join(directory, ".git/fetch.mjs"),
+            `scripts/release/${script}.mjs`,
+            ...args,
+          ],
+          {
+            cwd: directory,
+            encoding: "utf8",
+            timeout: 15_000,
+            env: {
+              ...process.env,
+              PATH: `${path.join(directory, ".git/bin")}${path.delimiter}${process.env.PATH}`,
+              PROVIDER_STATE: store,
+              CLOUDFLARE_API_TOKEN: "synthetic",
+              CLOUDFLARE_ACCOUNT_ID: "synthetic",
+              PRODUCTION_PUBLISH_ENABLED: "true",
+              VERSION: "2.0.0",
+              RELEASE_DAY: "2026-11-02",
+              GITHUB_OUTPUT: "",
+              GITHUB_STEP_SUMMARY: "",
+            },
+          },
+        );
+      const release = (command, extra = []) =>
+        call("release", [command, "--environment", "production", "--expected-sha", sha, ...extra]);
+      const success = (result) => assert.equal(result.status, 0, result.stderr);
+      success(release("manifest"));
+      success(release("deploy"));
+      assert.equal(
+        state().calls.filter((command) => command === "workers versions create").length,
+        1,
+      );
+      success(release("deploy"));
+      assert.equal(
+        state().calls.filter((command) => command === "workers versions create").length,
+        1,
+      );
+      success(release("staged-check"));
+      save({ ...state(), loss: "activation" });
+      success(release("activate"));
+      assert.equal(state().current.versions[0].version_id, next);
+      const guard = () =>
+        call("guard", ["--mode", "live", "--minutes", "0.00001", "--expected-sha", sha]);
+      success(guard());
+      const badDay = call("release", ["date", "--version", "2.0.1", "--day", "2026-11-02"]);
+      assert.notEqual(badDay.status, 0);
+      success(release("record"));
+      assert.equal(
+        JSON.parse(readFileSync(path.join(directory, "reports/release.json"))).active.sha,
+        sha,
+      );
+      success(release("finalize"));
+      // Simula un nuovo periodo di guardia con incidente: il ritiro rimane vincolante in ripresa.
+      const receiptFile = path.join(directory, "reports/release.json");
+      const receipt = JSON.parse(readFileSync(receiptFile));
+      delete receipt.guardPassed;
+      writeFileSync(receiptFile, JSON.stringify(receipt));
+      save({
+        ...state(),
+        incidents: [
+          { key: "new", kind: "failure", severity: "p1", opened_at: new Date().toISOString() },
+        ],
+      });
+      assert.notEqual(guard().status, 0);
+      success(release("incident-rollback"));
+      success(release("record"));
+      assert.equal(state().current.versions[0].version_id, old);
+      assert.notEqual(guard().status, 0);
+      assert.notEqual(release("finalize").status, 0);
+      success(release("incident-rollback"));
+      assert.equal(state().current.versions[0].version_id, old);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
 
 describe("pubblicazione riprendibile", () => {
   const manifest = { sha: "a".repeat(40), tree: "tree", digest: "artifact", environment: "test" };
@@ -54,6 +241,7 @@ describe("pubblicazione riprendibile", () => {
       schema: async () => [],
       current: async () => current,
       canRollback: async () => true,
+      canStage: async () => false,
       deploy: async (identity) => {
         calls.push("deploy");
         current = { version: "new", identity };
@@ -64,46 +252,7 @@ describe("pubblicazione riprendibile", () => {
     return { io, calls, receipts };
   };
 
-  it("la promozione con il giorno riusa la sorgente qualificata su develop, mai la build Production", () => {
-    const develop = "# Changelog\n\n## [2.0.1]\n\n- Voce.\n\n## [2.0.0] - 2026-11-01\n";
-    const promoted = datedChangelog(develop, "2.0.1", "2026-11-05");
-    assert.equal(undatedChangelog(promoted), develop);
-    assert.equal(undatedChangelog(develop), develop);
-    // Una versione già pubblicata in cima resta con il suo giorno nel tree di develop: lo stesso tree.
-    const released = "# Changelog\n\n## [2.0.1] - 2026-11-05\n";
-    assert.notEqual(undatedChangelog(released), released);
-
-    // Su un repository vero il tree senza giorno della promozione è il tree di develop.
-    const repo = mkdtempSync(path.join(tmpdir(), "undated-"));
-    const run = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8" }).stdout.trim();
-    run("init", "-q");
-    run("config", "user.email", "prova@example.invalid");
-    run("config", "user.name", "Prova");
-    writeFileSync(path.join(repo, "CHANGELOG.md"), develop);
-    writeFileSync(path.join(repo, "app.ts"), "export {};\n");
-    run("add", "-A");
-    run("commit", "-qm", "develop");
-    const developTree = run("rev-parse", "HEAD^{tree}");
-    writeFileSync(path.join(repo, "CHANGELOG.md"), promoted);
-    run("commit", "-qam", "giorno");
-    const cwd = process.cwd();
-    process.chdir(repo);
-    try {
-      assert.equal(undatedTree(), developTree);
-      assert.equal(undatedTree("HEAD~1"), developTree);
-    } finally {
-      process.chdir(cwd);
-    }
-
-    // Soltanto la sorgente di test si riusa dal tree senza giorno; la build Production mostra il
-    // giorno e si ricostruisce sempre.
-    assert.equal(sameSource("a", "a", "production", "b"), true);
-    assert.equal(sameSource("b", "a", "test", "b"), true);
-    assert.equal(sameSource("b", "a", "production", "b"), false);
-    assert.equal(sameSource("c", "a", "test", "b"), false);
-  });
-
-  it("la promozione scrive il giorno della versione e le note restano in italiano", () => {
+  it("il giorno arriva dopo la pubblicazione, le note restano in italiano", () => {
     const develop = [
       "# Changelog",
       "",
@@ -129,27 +278,17 @@ describe("pubblicazione riprendibile", () => {
     const head = datedChangelog(develop, "2.0.1", "2026-11-05");
     assert.equal(head, develop.replace("## [2.0.1]\n", "## [2.0.1] - 2026-11-05\n"));
     assert.equal(topVersion(head), "2.0.1");
-    assert.throws(() => datedChangelog(head, "2.0.1", "2026-11-06"), /già il giorno 2026-11-05/u);
-    assert.throws(() => datedChangelog(develop, "2.0.2", "2026-11-05"), /non la 2\.0\.2/u);
+    // La ripresa non cambia il giorno; una versione aperta dopo non sposta quella pubblicata.
+    assert.equal(datedChangelog(head, "2.0.1", "2026-11-06"), head);
+    const later = develop.replace("## [2.0.1]\n", "## [2.0.2]\n\n- Altra.\n\n## [2.0.1]\n");
+    assert.equal(
+      datedChangelog(later, "2.0.1", "2026-11-05"),
+      later.replace("## [2.0.1]\n", "## [2.0.1] - 2026-11-05\n"),
+    );
+    assert.throws(() => datedChangelog(develop, "2.0.2", "2026-11-05"), /non è nel changelog/u);
     assert.throws(() => datedChangelog(develop, "2.0.1", "5 novembre"), /Giorno non valido/u);
     // Il giorno è quello italiano, anche quando in UTC è ancora il precedente.
     assert.equal(romeDay(new Date("2026-11-04T23:30:00.000Z")), "2026-11-05");
-    assert.equal(promotionBranch("2.0.1"), "promuovi/2.0.1");
-
-    const source = { headRef: "promuovi/2.0.1", files: ["CHANGELOG.md"], develop, head };
-    assert.doesNotThrow(() => assertPromotionSource(source));
-    assert.doesNotThrow(() => assertPromotionSource({ ...source, headRef: "develop", files: [] }));
-    for (const change of [
-      { headRef: "feat/novita" },
-      { headRef: "promuovi/2.0.2" },
-      { files: ["CHANGELOG.md", "app/root.tsx"] },
-      { head: head.replace("Testo.", "Altro.") },
-      { head: develop },
-    ])
-      assert.throws(
-        () => assertPromotionSource({ ...source, ...change }),
-        /promuovi\/<versione>|soltanto per il giorno|non la 2\.0\.2/u,
-      );
 
     assert.equal(
       releaseNotes(head, "2.0.1"),
@@ -390,6 +529,39 @@ describe("pubblicazione riprendibile", () => {
     assert.doesNotThrow(() => assertAppliedMigrations(current, previous, []));
   });
 
+  it("riconosce le migration applicate dal tentativo interrotto senza accettare SQL diverso", () => {
+    const old = migrationEntry("schema.sql", Buffer.from("CREATE TABLE example (id TEXT);"));
+    const added = migrationEntry(
+      "new.sql",
+      Buffer.from("ALTER TABLE example ADD COLUMN value TEXT;"),
+    );
+    const plan = migrationPlan([old, added], [old.name]);
+    const receipt = {
+      schemaChanged: true,
+      migrationPlan: {
+        digest: plan.digest,
+        pending: plan.pending.map(({ name, digest }) => ({ name, digest })),
+      },
+    };
+    const names = [old.name, added.name];
+    const read = (name) => (name === old.name ? Buffer.from(old.sql) : undefined);
+    const history = appliedMigrationHistory(names, read, receipt);
+    assert.doesNotThrow(() => assertAppliedMigrations([old, added], history, names));
+    assert.throws(
+      () => assertAppliedMigrations([old, { ...added, digest: "changed" }], history, names),
+      /modificata/u,
+    );
+    assert.throws(() => appliedMigrationHistory(names, read, {}), /senza storia/u);
+    assert.throws(
+      () =>
+        appliedMigrationHistory(names, read, {
+          ...receipt,
+          migrationPlan: { ...receipt.migrationPlan, digest: "changed" },
+        }),
+      /senza storia/u,
+    );
+  });
+
   it("registra un'identità di versione entro il limite del messaggio Cloudflare", () => {
     const identity = releaseIdentity({ sha: "a".repeat(40), digest: "b".repeat(64) });
     assert.ok(identity.length <= 100);
@@ -427,8 +599,7 @@ describe("pubblicazione riprendibile", () => {
     assert.notEqual(digestDirectory(directory), original);
   });
 
-  it("non anticipa i checkpoint e ricava le note dalla versione dichiarata", () => {
-    assert.throws(() => productionReadiness(""), /Checkpoint/u);
+  it("ricava le note dalla versione dichiarata", () => {
     assert.equal(
       releaseNotes(
         "## [2.0.0-rc.1]\n\nCorrezione verificata.\n\n## 2.0.0-alpha.1\nPrima versione.",
@@ -438,46 +609,220 @@ describe("pubblicazione riprendibile", () => {
     );
     assert.throws(() => releaseNotes("## 2.0.0\n", "2.0.0"), /vuota/u);
   });
+});
 
-  it("richiede tutti i gate Production del piano, senza duplicati e con prove", () => {
-    const heading = "### Gate per la pubblicazione Production\n\n";
-    const rows = ["commerciale", "ripristino", "operativita"].map(
-      (gate) => `| ${gate} | COMPLETATO | [Prova](https://example.invalid/prova) |`,
+describe("versione provata prima del traffico", () => {
+  const manifest = { sha: "a".repeat(40), tree: "tree", digest: "artifact", environment: "test" };
+  const harness = () => {
+    const identity = releaseIdentity(manifest);
+    let current = { version: "old", identity: `${"b".repeat(40)}:x` };
+    const calls = [];
+    const receipts = [];
+    const io = {
+      assertCurrent: async () => {},
+      preflight: async () => {},
+      migrations: async () => ({ pending: [], rollbackCompatible: true }),
+      migrate: async () => {},
+      schema: async () => [],
+      current: async () => current,
+      canRollback: async () => true,
+      canStage: async () => true,
+      stage: async (message, previous) => {
+        calls.push(["stage", message, previous]);
+        return "new";
+      },
+      deploy: async () => calls.push(["deploy"]),
+      activate: async (version) => {
+        calls.push(["activate", version]);
+        current = { version, identity };
+      },
+      readback: async (version) => calls.push(["readback", version]),
+      save: async (state) => receipts.push(structuredClone(state)),
+    };
+    return { io, calls, receipts, moved: () => (current = { version: "altra", identity: "x" }) };
+  };
+
+  it("carica al 0% senza distribuire, poi attiva e rilegge", async () => {
+    const { io, calls } = harness();
+    const staged = await publish(manifest, io);
+    assert.deepEqual(calls, [["stage", releaseIdentity(manifest), "old"]]);
+    assert.deepEqual(
+      [staged.staged, staged.stagedVersion, staged.deployed, staged.readback, staged.previous],
+      [true, "new", false, false, "old"],
     );
-    const complete = heading + rows.join("\n") + "\n";
-    assert.doesNotThrow(() => productionReadiness(complete));
-    const pending = complete
-      .replaceAll("COMPLETATO", "DA COMPLETARE")
-      .replaceAll("[Prova](https://example.invalid/prova)", "-");
-    assert.doesNotThrow(() => productionReadiness(pending, false));
-    assert.throws(() => productionReadiness(pending), /Checkpoint/u);
-    for (const invalid of [
-      pending + rows[0],
-      pending.replace("DA COMPLETARE", "SCONOSCIUTO"),
-      complete.replace("[Prova](https://example.invalid/prova)", "-"),
-    ])
-      assert.throws(() => productionReadiness(invalid, false), /Checkpoint/u);
-    for (const row of rows) {
-      for (const invalid of [
-        complete.replace(row, ""),
-        complete.replace(row, row.replace("COMPLETATO", "DA COMPLETARE")),
-        complete.replace(row, row.replace("COMPLETATO", "COMPLETATO PARZIALMENTE")),
-        complete.replace(row, row.replace("[Prova](https://example.invalid/prova)", "")),
-        complete.replace(row, row.replace("[Prova](https://example.invalid/prova)", "-")),
-        complete + row,
-        complete.replace(row, row.slice(0, -1)),
-      ])
-        assert.throws(() => productionReadiness(invalid), /Checkpoint/u);
-    }
-    assert.throws(() => productionReadiness(complete + complete), /Checkpoint/u);
-    assert.throws(() => productionReadiness(rows.join("\n")), /Checkpoint/u);
-    assert.throws(
-      () => productionReadiness(heading + "### Altra sezione\n" + rows.join("\n")),
-      /Checkpoint/u,
+    const active = await activate(manifest, io, staged);
+    assert.deepEqual(calls.slice(1), [
+      ["activate", "new"],
+      ["readback", "new"],
+    ]);
+    assert.deepEqual([active.deployed, active.readback, active.version], [true, true, "new"]);
+  });
+
+  it("con una configurazione diversa il traffico passa subito", async () => {
+    const { io, calls } = harness();
+    io.canStage = async () => false;
+    await assert.rejects(publish(manifest, io), /diversa/u);
+    assert.deepEqual(calls, [["deploy"]]);
+  });
+
+  it("non attiva se nel frattempo è cambiata la versione attiva", async () => {
+    const { io, calls, moved } = harness();
+    const staged = await publish(manifest, io);
+    moved();
+    await assert.rejects(activate(manifest, io, staged), /Stato remoto cambiato/u);
+    assert.equal(
+      calls.some(([name]) => name === "activate"),
+      false,
     );
+  });
+
+  it("una ripresa dopo l'attivazione non attiva due volte", async () => {
+    const { io, calls } = harness();
+    const staged = await publish(manifest, io);
+    await activate(manifest, io, staged);
+    await activate(manifest, io, staged);
+    assert.equal(calls.filter(([name]) => name === "activate").length, 1);
+  });
+
+  it("senza caricamento l'attivazione non fa nulla e rifiuta un altro candidato", async () => {
+    const { io, calls } = harness();
+    const receipt = { tree: "tree", digest: "artifact", environment: "test", staged: false };
+    assert.equal(await activate(manifest, io, receipt), receipt);
+    assert.deepEqual(calls, []);
+    await assert.rejects(activate(manifest, io, { ...receipt, tree: "altro" }), /diverso/u);
+  });
+
+  it("l'header indica il Worker e la versione", () => {
+    assert.equal(versionOverride("fiscalbay", "abc"), 'fiscalbay="abc"');
+  });
+});
+
+describe("rollback d'incidente", () => {
+  it("riconosce un ritiro già applicato e conserva il rifiuto di versioni estranee", async () => {
+    const manifest = {
+      sha: "a".repeat(40),
+      tree: "tree",
+      digest: "d".repeat(64),
+      environment: "test",
+    };
+    const receipt = {
+      ...manifest,
+      staged: true,
+      stagedVersion: "new",
+      previous: "old",
+      deployed: false,
+    };
+    let saved;
+    const remote = {
+      activeDeployment: () => ({ versions: [{ version_id: "old", percentage: 100 }] }),
+      deployment: () => assert.fail("Non deve ridistribuire"),
+      liveReadback: async () => {},
+    };
+    await rollbackRelease(manifest, {}, remote, receipt, (state) => (saved = state));
+    assert.equal(saved.rolledBack, true);
+    await rollbackRelease(manifest, {}, remote, saved, (state) => (saved = state));
+    assert.equal(saved.readback, false);
+    await assert.rejects(
+      rollbackRelease(
+        manifest,
+        {},
+        {
+          ...remote,
+          activeDeployment: () => ({ versions: [{ version_id: "foreign", percentage: 100 }] }),
+        },
+        receipt,
+      ),
+      /Stato remoto cambiato/u,
+    );
+    const exposed = {
+      ...receipt,
+      activationAttempted: true,
+      version: "new",
+      schemaChanged: true,
+      rollbackCompatible: false,
+    };
+    await assert.rejects(
+      rollbackRelease(
+        manifest,
+        {},
+        {
+          ...remote,
+          activeDeployment: () => ({ versions: [{ version_id: "new", percentage: 100 }] }),
+        },
+        exposed,
+      ),
+      /schema modificato/u,
+    );
+  });
+
+  it("rilegge l'identità dopo la guardia e salva lo stato attivo anche nel ritiro", async () => {
+    const receipt = {
+      sha: "a".repeat(40),
+      digest: "d".repeat(64),
+      environment: "production",
+      version: "new",
+      rolledBack: true,
+    };
+    const current = { version: "old", identity: `${"b".repeat(40)}:${"f".repeat(32)}` };
+    let saved;
+    const io = {
+      current: async () => current,
+      readback: async () => {},
+      schema: async () => [{ name: "schema.sql" }],
+      save: async (state) => (saved = state),
+    };
+    await assert.rejects(reconcileReceipt(receipt, io), /non è attivo/u);
+    assert.equal(saved.active.sha, "b".repeat(40));
+    assert.equal(saved.candidateActive, false);
+    const result = await reconcileReceipt(saved, io, false);
+    assert.deepEqual(result.active.schema, [{ name: "schema.sql" }]);
+    const candidate = { ...receipt, rolledBack: false };
+    await reconcileReceipt(candidate, {
+      ...io,
+      current: async () => ({ version: "new", identity: releaseIdentity(candidate) }),
+    });
+    assert.equal(saved.candidateActive, true);
+  });
+  const sha = (letter) => letter.repeat(40);
+  const version = (version_id, percentage = 100) => ({
+    versions: [{ version_id, percentage }],
+  });
+  const identity = { new: `${sha("a")}:x`, old: `${sha("b")}:y`, older: `${sha("c")}:z` };
+  const identityOf = (id) => identity[id];
+
+  it("torna alla prima versione diversa interamente assegnata", () => {
+    const seen = [];
+    const target = incidentTarget(
+      [
+        version("new"),
+        version("new"),
+        { versions: [version("new", 0).versions[0], version("old").versions[0]] },
+        version("old"),
+        version("older"),
+      ],
+      identityOf,
+      (...pair) => seen.push(pair) > 0,
+    );
+    assert.deepEqual(target, { active: "new", previous: "old" });
+    assert.deepEqual(seen, [[sha("b"), sha("a")]]);
+  });
+
+  it("rifiuta versioni incompatibili, sconosciute o assenti", () => {
+    const list = [version("new"), version("old")];
+    assert.throws(() => incidentTarget(list, identityOf, () => false), /correzione in avanti/u);
     assert.throws(
-      () => productionReadiness(heading + '<a id="altro"></a>\n' + rows.join("\n")),
-      /Checkpoint/u,
+      () =>
+        incidentTarget(
+          list,
+          (id) => (id === "old" ? "manuale" : identity.new),
+          () => true,
+        ),
+      /correzione in avanti/u,
+    );
+    assert.throws(() => incidentTarget([version("new")], identityOf, () => true), /precedente/u);
+    assert.throws(
+      () => incidentTarget([version("new", 50)], identityOf, () => true),
+      /non interamente/u,
     );
   });
 });
@@ -542,20 +887,20 @@ describe("comandi della pubblicazione", () => {
     );
   });
 
-  it("conferma soltanto il candidato in testa, distribuito e non ritirato", () => {
+  it("conferma soltanto il candidato valido sul branch, distribuito e non ritirato", () => {
     const receipt = { readback: true, version: "v2" };
     const current = { version: "v2", identity: releaseIdentity(manifest) };
-    assert.doesNotThrow(() => assertConfirmable(manifest, receipt, manifest.sha, current));
-    for (const [changedReceipt, remote, changedCurrent] of [
-      [{}, "c".repeat(40), {}],
-      [{ readback: false }, manifest.sha, {}],
-      [{ rolledBack: true }, manifest.sha, {}],
-      [{}, manifest.sha, { version: "v1" }],
-      [{}, manifest.sha, { identity: `${manifest.sha}:other` }],
+    assert.doesNotThrow(() => assertConfirmable(manifest, receipt, true, current));
+    for (const [changedReceipt, valid, changedCurrent] of [
+      [{}, false, {}],
+      [{ readback: false }, true, {}],
+      [{ rolledBack: true }, true, {}],
+      [{}, true, { version: "v1" }],
+      [{}, true, { identity: `${manifest.sha}:other` }],
     ])
       assert.throws(
         () =>
-          assertConfirmable(manifest, { ...receipt, ...changedReceipt }, remote, {
+          assertConfirmable(manifest, { ...receipt, ...changedReceipt }, valid, {
             ...current,
             ...changedCurrent,
           }),
@@ -566,71 +911,26 @@ describe("comandi della pubblicazione", () => {
   it("scrive gli output del deploy nel formato del workflow", () => {
     const state = { sha: "s", tree: "t", digest: "d", version: "v2", schema: [{}, {}] };
     assert.equal(
-      deployReport({ ...state, rollbackCompatible: true, previous: "v1" }).output,
-      "deployed=true\nversion=v2\nrollback-compatible=true\nprevious=v1\n",
+      deployReport({ ...state, rollbackCompatible: true, previous: "v1" }, "w").output,
+      "deployed=true\nversion=v2\nrollback-compatible=true\nprevious=v1\noverride=\n",
     );
     assert.equal(
-      deployReport(state).output,
-      "deployed=true\nversion=v2\nrollback-compatible=false\nprevious=\n",
+      deployReport(state, "w").output,
+      "deployed=true\nversion=v2\nrollback-compatible=false\nprevious=\noverride=\n",
     );
-    assert.match(deployReport(state).summary, /Commit s; tree t; SHA256 d; versione v2; schema 2/u);
-  });
-
-  it("con una RC in cima al changelog ammette soltanto correzioni su develop", () => {
-    const frozen = "# Changelog\n\n## [2.0.0-rc.2]\n\nCorrezione.\n\n## [2.0.0-rc.1]\n\nRC.\n";
-    assert.equal(candidateVersion(frozen), "2.0.0-rc.2");
-    assert.equal(candidateVersion("## 2.0.0-rc.1 - 2026-10-30\n"), "2.0.0-rc.1");
-    // Una versione stabile o alpha in cima non congela, e nemmeno un changelog senza versioni.
-    for (const open of ["## [2.0.0]\n", "## [2.0.0-alpha.3]\n", "# Changelog\n"])
-      assert.equal(candidateVersion(open), undefined);
-    for (const title of [
-      "fix: corregge il filtro",
-      "fix(ordini): corregge il filtro",
-      "docs: aggiorna il piano",
-      "chore(deps): aggiorna vitest",
-      "ci: rilegge il titolo",
-    ])
-      assert.equal(assertFreeze(frozen, title), "2.0.0-rc.2");
-    for (const title of [
-      "feat: nuova esportazione",
-      "feat(export)!: nuovo formato",
-      "  feat(ordini): filtri",
-      "fix!: cambia il contratto",
-      "refactor(api)!: rinomina",
-    ])
-      assert.throws(() => assertFreeze(frozen, title), /2\.0\.0-rc\.2 congelata/u);
-    assert.equal(assertFreeze("## [2.0.0-alpha.1]\n", "feat: nuova funzione"), undefined);
-  });
-
-  it("una correzione da distribuire porta la RC successiva alla base", () => {
-    const base = "# Changelog\n\n## [2.0.0-rc.2]\n\nCorrezione.\n";
-    const next = `# Changelog\n\n## [2.0.0-rc.3]\n\nAltra.\n\n${base.slice(13)}`;
-    assert.throws(
-      () => assertFreeze(base, "fix: copy", { baseChangelog: base, deploy: true }),
-      /RC successiva alla 2\.0\.0-rc\.2/u,
+    assert.match(
+      deployReport(state, "w").summary,
+      /Commit s; tree t; SHA256 d; versione v2; schema 2/u,
     );
-    assert.equal(
-      assertFreeze(next, "fix: copy", { baseChangelog: base, deploy: true }),
-      "2.0.0-rc.3",
-    );
-    // Documenti e prove non cambiano la RC; senza RC nella base non c'è congelamento da seguire.
-    assert.equal(
-      assertFreeze(base, "docs: piano", { baseChangelog: base, deploy: false }),
-      "2.0.0-rc.2",
-    );
-    assert.equal(
-      assertFreeze("## [2.0.0]\n", "fix: copy", { baseChangelog: "## [2.0.0]\n", deploy: true }),
-      undefined,
-    );
+    const staged = { ...state, staged: true, stagedVersion: "v3" };
+    assert.match(deployReport(staged, "w").output, /version=v3\n[\s\S]*override=w="v3"\n/u);
+    assert.match(deployReport(staged, "w").summary, /versione v3 al 0% del traffico/u);
   });
 
   it("la versione del lotto sale di un solo passo dall'ultima pubblicata", () => {
     const section = (version) => `# Changelog\n\n## [${version}]\n\nVoce.\n`;
     const ok = [
-      // Fino alla 2.0.0 la RC prosegue e la versione finale segue la propria RC.
-      ["2.0.0-rc.12", "2.0.0-rc.13", []],
-      ["2.0.0-rc.12", "2.0.0", []],
-      // Dopo, la prima modifica visibile apre la versione successiva; le altre la alzano.
+      // La prima modifica visibile apre la versione successiva; le altre la alzano.
       ["2.0.0", "2.0.1", ["v2.0.0", "v1.14.0"]],
       ["2.0.0", "2.1.0", ["v2.0.0"]],
       ["2.0.1", "2.1.0", ["v2.0.0"]],
@@ -639,11 +939,10 @@ describe("comandi della pubblicazione", () => {
     for (const [base, head, tags] of ok)
       assert.doesNotThrow(() => assertVersionStep(section(head), section(base), tags), head);
     const rejected = [
-      ["2.0.0-rc.12", "2.0.0-rc.14", [], /RC sale di uno/u],
-      ["2.0.0-rc.12", "2.0.1", [], /non è un passo dalla prima pubblicazione/u],
-      ["2.0.0-rc.12", "Novità", [], /serve una versione/u],
+      ["2.0.0", "2.0.1", [], /non è un passo dalla prima pubblicazione/u],
+      ["2.0.0", "Novità", [], /serve una versione/u],
       ["2.0.0", "2.0.2", ["v2.0.0"], /ammesse 2\.0\.1, 2\.1\.0, 3\.0\.0/u],
-      ["2.0.0", "2.0.1-rc.1", ["v2.0.0"], /senza RC/u],
+      ["2.0.0", "2.0.1-rc.1", ["v2.0.0"], /serve una versione/u],
       ["2.1.0", "2.0.1", ["v2.0.0"], /scende da 2\.1\.0 a 2\.0\.1/u],
       ["2.0.1", "2.0.0", ["v2.0.0"], /non è un passo dalla 2\.0\.0/u],
     ];
@@ -660,7 +959,7 @@ describe("comandi della pubblicazione", () => {
   });
 
   it("l'etichetta del deploy porta la versione soltanto dopo la prima 2.x pubblicata", () => {
-    const tag = (version, environment, releasedTags, expected, day = "2026-11-05") =>
+    const tag = (version, environment, releasedTags, expected, day = "2026-11-05", input) =>
       deployTag({
         changelog: `# Changelog\n\n## [${version}]${day ? ` - ${day}` : ""}\n`,
         environment,
@@ -668,17 +967,18 @@ describe("comandi della pubblicazione", () => {
         tree: "b".repeat(40),
         releasedTags,
         expected,
+        day: input,
       });
-    assert.equal(tag("2.0.0-rc.12", "test", ["v1.14.0", ""]), "a".repeat(12));
+    assert.equal(tag("2.0.0", "test", ["v1.14.0", ""]), "a".repeat(12));
     assert.equal(tag("2.0.0", "production", [], "2.0.0"), "a".repeat(12));
     assert.equal(tag("2.0.1", "test", ["v2.0.0"]), `2.0.1-dev.${"b".repeat(12)}`);
     assert.equal(tag("2.0.1", "production", ["v2.0.0"], "2.0.1"), "2.0.1");
     // Sole modifiche interne dopo la 2.0.0: la versione resta, con il commit distribuito.
     assert.equal(tag("2.0.0", "production", ["v2.0.0"], "2.0.0"), `2.0.0+${"a".repeat(12)}`);
     assert.throws(() => tag("2.0.1", "production", ["v2.0.0"], "2.0.2"), /versione 2\.0\.2/u);
-    assert.throws(() => tag("2.0.1-rc.1", "production", ["v2.0.0"], "2.0.1-rc.1"), /non la/u);
-    // In Production la versione porta il giorno scritto dalla promozione; sul test no.
+    // In Production la versione entra nella build con il giorno; sul test no.
     assert.throws(() => tag("2.0.1", "production", ["v2.0.0"], "2.0.1", ""), /non ha il giorno/u);
+    assert.equal(tag("2.0.1", "production", ["v2.0.0"], "2.0.1", "", "2026-11-05"), "2.0.1");
     assert.equal(tag("2.0.1", "test", ["v2.0.0"], undefined, ""), `2.0.1-dev.${"b".repeat(12)}`);
   });
 });

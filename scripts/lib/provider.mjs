@@ -98,15 +98,36 @@ export function keychain(service) {
   }).trim();
 }
 
-/** CLI `gh` con l'uscita ripulita; gli errori arrivano sullo stderr del processo. */
+/** CLI `gh`: ritenta soltanto letture su errori transitori, mai un effetto con esito incerto. */
 export function gh(...args) {
-  return (
-    execFileSync("gh", args, {
-      encoding: "utf8",
-      maxBuffer,
-      stdio: ["ignore", "pipe", "inherit"],
-    }) ?? ""
-  ).trim();
+  const readOnly =
+    (args[0] === "api" &&
+      !args.some((arg) =>
+        ["-X", "--method", "-f", "-F", "--field", "--raw-field", "--input"].includes(arg),
+      )) ||
+    (args[0] === "run" && ["view", "list"].includes(args[1]));
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return (
+        execFileSync("gh", args, {
+          encoding: "utf8",
+          maxBuffer,
+          stdio: ["ignore", "pipe", "pipe"],
+        }) ?? ""
+      ).trim();
+    } catch (error) {
+      if (
+        !readOnly ||
+        attempt === 4 ||
+        !/HTTP (?:502|503|504)|TLS handshake timeout|connection reset|ECONNRESET/iu.test(
+          String(error.stderr),
+        )
+      )
+        throw error;
+      console.error(`Lettura GitHub temporaneamente non disponibile: tentativo ${attempt}/4.`);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, attempt * 5000);
+    }
+  }
 }
 
 export const ghJson = (...args) => JSON.parse(gh(...args));
