@@ -1,0 +1,92 @@
+name: Ciclo
+
+# `Pubblica` e `Promuovi` girano qui: chiudere la sessione o spegnere il Mac non li ferma. Il titolo
+# della run lega il comando locale alla run da seguire.
+run-name: Ciclo ${{ inputs.operation }} ${{ inputs.object }} ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: pr oppure promote
+        type: choice
+        options: [pr, promote, rollback, resume]
+        required: true
+      object:
+        description: Numero della PR, versione oppure lotto
+        type: string
+        required: true
+      urgente:
+        type: boolean
+        default: false
+      reviewed_migrations:
+        type: string
+        required: false
+      sha:
+        description: Commit esatto autorizzato dal comando locale
+        type: string
+        required: true
+      requested_at:
+        type: string
+        required: true
+
+env:
+  DO_NOT_TRACK: "1"
+
+permissions:
+  contents: read
+
+# Qualifiche CI in parallelo; merge e promozioni del coordinatore sono serializzati anche fra runner.
+# Il ritiro non aspetta un ciclo in corso: `rollback.yml` condivide il gruppo con `publish.yml`.
+concurrency:
+  group: publication-cycle-${{ inputs.operation == 'rollback' && 'rollback' || 'release' }}
+  cancel-in-progress: false
+
+jobs:
+  cycle:
+    name: Coordinatore
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    # Il token dell'owner: con quello del workflow merge e push non avvierebbero la CI.
+    environment: publication
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+          token: ${{ secrets.PUBLISH_TOKEN }}
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Run the cycle
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          OPERATION: ${{ inputs.operation }}
+          OBJECT: ${{ inputs.object }}
+          URGENTE: ${{ inputs.urgente }}
+          REVIEWED: ${{ inputs.reviewed_migrations }}
+          EXPECTED_SHA: ${{ inputs.sha }}
+          REQUESTED_AT: ${{ inputs.requested_at }}
+        run: |
+          if [ "${OPERATION}" = pr ]; then
+            node scripts/release/release-cycle.mjs pr "${OBJECT}" --sha "${EXPECTED_SHA}"
+          elif [ "${OPERATION}" = promote ]; then
+            options=(--reviewed-migrations "${REVIEWED}")
+            if [ "${OBJECT}" != lotto ]; then options+=(--version "${OBJECT}"); fi
+            if [ "${URGENTE}" = true ]; then options+=(--urgente); fi
+            node scripts/release/release-cycle.mjs promote --sha "${EXPECTED_SHA}" --requested-at "${REQUESTED_AT}" "${options[@]}"
+          elif [ "${OPERATION}" = resume ]; then
+            node scripts/release/release-cycle.mjs resume "${OBJECT}" --sha "${EXPECTED_SHA}"
+          else
+            node scripts/release/release-cycle.mjs rollback --sha "${EXPECTED_SHA}"
+          fi
+      - name: Notify owner
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_ID: ${{ vars.TELEGRAM_OWNER_ID }}
+          OUTCOME: ${{ job.status }}
+          TITLE: ${{ inputs.operation }} ${{ inputs.object }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node scripts/release/notify.mjs "FiscalBay ${TITLE}: ${OUTCOME}. ${RUN_URL}"

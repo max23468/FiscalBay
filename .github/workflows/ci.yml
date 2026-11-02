@@ -6,7 +6,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches:
       - develop
-      - main
   push:
     branches:
       - develop
@@ -53,6 +52,9 @@ jobs:
       e2e: ${{ steps.detect.outputs.e2e }}
       grep: ${{ steps.detect.outputs.grep }}
       browsers: ${{ steps.detect.outputs.browsers }}
+      matrix: ${{ steps.detect.outputs.matrix }}
+      browser-matrix: ${{ steps.browser-plan.outputs.browser-matrix }}
+      mutation-lines: ${{ steps.detect.outputs.mutation-lines }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
@@ -64,37 +66,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      # `main` riceve soltanto la promozione di `develop` dallo stesso repository, anche con il
-      # giorno della versione aggiunto da `promuovi/<versione>`.
-      - name: Check promotion source
-        if: github.base_ref == 'main'
-        env:
-          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
-          HEAD_REF: ${{ github.head_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          REPOSITORY: ${{ github.repository }}
-        run: |
-          if [ "${HEAD_REPO}" != "${REPOSITORY}" ]; then
-            echo "::error::Le PR verso main partono soltanto da ${REPOSITORY}, non da ${HEAD_REPO}."
-            exit 1
-          fi
-          node scripts/release/release-cycle.mjs promotion-source --ref "${HEAD_REF}" --head "${HEAD_SHA}"
-
       - name: Check dispatched commit
         if: inputs.expected_sha != ''
         env:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
 
-      # Verso `develop` una base avanzata nel frattempo basta che non tocchi file della PR o
-      # globali: il push sul branch riesegue il gate sul tree integrato prima del deploy.
+      # Una base avanzata nel frattempo basta che non tocchi file della PR o globali: si rilegge
+      # al merge, e il push sul branch riesegue il gate sul tree integrato prima del deploy.
       - name: Check final qualification base
         if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_REF: ${{ github.base_ref }}
-        run: node scripts/release/release-cycle.mjs qualification-base --ref "${BASE_REF}" --base "${BASE_SHA}" --head "${HEAD_SHA}"
+        run: node scripts/release/release-cycle.mjs qualification-base --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       # Sul push il confronto parte dall'ultimo deploy test riuscito, o dalla run verde successiva
       # senza modifiche da distribuire: una run annullata o un deploy fallito restano nel diff.
@@ -128,7 +113,7 @@ jobs:
       # il deploy distribuisce l'artefatto prodotto da quella verifica.
       - name: Find verified artifact
         id: reuse
-        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch' || (github.base_ref == 'main' && steps.detect.outputs.promotion-reuse == 'true')) && steps.detect.outputs.build == 'true'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.detect.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -145,7 +130,7 @@ jobs:
       # Le migration non additive si approvano nella PR, non dopo il merge sul deploy test.
       # Il corpo si rilegge dall'API: una nuova esecuzione vede la riga aggiunta dopo l'apertura.
       - name: Check migration review
-        if: github.event_name == 'pull_request' && github.base_ref == 'develop' && steps.detect.outputs.gate == 'full'
+        if: github.event_name == 'pull_request' && steps.detect.outputs.gate == 'full'
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
@@ -155,21 +140,12 @@ jobs:
           PR_BODY="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.body // ""')" \
             node scripts/release/release.mjs review --base "${BASE_SHA}"
 
-      # Con una release candidate in cima al changelog `develop` accetta soltanto correzioni, e
-      # quelle che cambiano ciò che si distribuisce portano la RC successiva. Una nuova sezione
-      # in cima sale di un solo passo dall'ultima versione pubblicata.
-      # Il titolo, che diventa il commit integrato, si rilegge dall'API come il corpo.
-      - name: Check release freeze
-        if: github.event_name == 'pull_request' && github.base_ref == 'develop'
+      # Una nuova sezione in cima al changelog sale di un solo passo dall'ultima versione pubblicata.
+      - name: Check version step
+        if: github.event_name == 'pull_request'
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPOSITORY: ${{ github.repository }}
-          NUMBER: ${{ github.event.pull_request.number }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          DEPLOY: ${{ steps.detect.outputs.deploy }}
-        run: |
-          PR_TITLE="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.title')" \
-            node scripts/release/release.mjs freeze --base "${BASE_SHA}"
+        run: node scripts/release/release.mjs version-step --base "${BASE_SHA}"
 
       # Senza build il gate resta qui; con la build gira nel job `quality`.
       - name: Run selected CI gate
@@ -177,7 +153,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || steps.deployed.outputs.sha }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
-        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run --gate-only
+        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run
 
       - name: Preserve coverage report
         if: always() && steps.reuse.outputs.run-id == '' && steps.detect.outputs.build != 'true' && steps.detect.outputs.gate != 'docs'
@@ -193,6 +169,15 @@ jobs:
       - name: Build test artifact
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
         run: pnpm build
+
+      - name: Size browser jobs from selected inventory
+        id: browser-plan
+        if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
+        env:
+          BROWSER_GREP: ${{ steps.detect.outputs.grep }}
+          BROWSERS: ${{ steps.detect.outputs.browsers }}
+          E2E_MATRIX: ${{ steps.detect.outputs.matrix }}
+        run: node scripts/browser-tests.mjs --plan --grep "${BROWSER_GREP}" --browsers "${BROWSERS}"
 
       - name: Record build provenance
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
@@ -233,7 +218,7 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha || needs.verify.outputs.base }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
         # I browser restano nei rispettivi job; il gate locale usa la stessa sequenza.
-        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run --gate-only
+        run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run
 
       - name: Preserve coverage report
         if: always()
@@ -247,7 +232,7 @@ jobs:
   # Prove browser sulla build verificata, divise su otto macchine con quattro worker ciascuna.
   # L'immagine ufficiale di Playwright contiene browser e librerie di sistema della stessa versione.
   browser:
-    name: Browser ${{ matrix.shard }}/8
+    name: Browser ${{ matrix.shard }}/${{ matrix.total }}
     needs: verify
     # Una PR in bozza esegue soltanto `Verify`: le prove complete partono quando è pronta.
     if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
@@ -261,8 +246,7 @@ jobs:
       cancel-in-progress: true
     strategy:
       fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+      matrix: ${{ fromJSON(needs.verify.outputs.browser-matrix) }}
 
     steps:
       - name: Checkout
@@ -285,9 +269,10 @@ jobs:
         env:
           E2E_PREBUILT: "1"
           E2E_RETRIES: "1"
+          E2E_MATRIX: ${{ needs.verify.outputs.matrix }}
           BROWSER_GREP: ${{ needs.verify.outputs.grep }}
           BROWSERS: ${{ needs.verify.outputs.browsers }}
-          SHARD: ${{ matrix.shard }}/8
+          SHARD: ${{ matrix.shard }}/${{ matrix.total }}
         run: node scripts/browser-tests.mjs --grep "${BROWSER_GREP}" --browsers "${BROWSERS}" --shard "${SHARD}"
 
       - name: Upload browser evidence
@@ -298,29 +283,44 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  # Righe cambiate dei moduli critici: un mutante sopravvissuto si corregge nella PR, non alla
+  # qualifica del candidato. Il modulo intero resta alla qualifica e alla campagna settimanale.
+  mutation-lines:
+    name: Mutation ${{ matrix.target }}
+    needs: verify
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.verify.outputs.mutation-lines != '{"include":[]}'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 30
+    concurrency:
+      group: mutation-lines-${{ github.event.pull_request.number }}-${{ strategy.job-index }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.verify.outputs.mutation-lines) }}
+    env:
+      MUTATION_TARGET: ${{ matrix.target }}
+      MUTATION_LINES: ${{ matrix.lines }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node and dependencies
+        uses: ./.github/actions/setup
+
+      - name: Check changed lines
+        run: pnpm test:mutation "${MUTATION_TARGET}"
+
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
     name: Node 26
-    needs: [verify, quality, browser]
+    needs: [verify, quality, browser, mutation-lines]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
 
     steps:
-      - name: Checkout
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-
-      - name: Recheck final qualification base
-        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          BASE_REF: ${{ github.base_ref }}
-        run: node scripts/release/release-cycle.mjs qualification-base --ref "${BASE_REF}" --base "${BASE_SHA}" --head "${HEAD_SHA}"
-
       - name: Check job results
         env:
           RESULTS: ${{ join(needs.*.result, ' ') }}
@@ -371,21 +371,32 @@ jobs:
       - name: Verify artifact provenance
         run: node scripts/release/release.mjs verify --environment test
 
+      # Con un merge già arrivato questo deploy è superato: lo lascia a quello del commit nuovo.
       - name: Check commit still on develop
+        id: head
         env:
           VERIFIED_SHA: ${{ github.sha }}
         run: |
           current_sha="$(git ls-remote https://github.com/${{ github.repository }}.git refs/heads/develop | cut -f1)"
-          test "${current_sha}" = "${VERIFIED_SHA}"
+          if [ "${current_sha}" = "${VERIFIED_SHA}" ]; then
+            echo "current=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::notice::develop è già su ${current_sha}: il deploy passa alla sua run."
+            echo "current=false" >> "${GITHUB_OUTPUT}"
+          fi
 
       - name: Restore receipt from previous attempt
+        if: steps.head.outputs.current == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: node scripts/release/release.mjs restore --environment test --receipt-prefix deployed
 
-      # Senza un digest nel dispatch vale quello approvato nella PR integrata.
+      # La versione arriva al 0% del traffico, salvo una configurazione diversa. Senza un digest nel
+      # dispatch vale quello approvato nella PR integrata.
       - name: Deploy verified artifact
+        id: deploy
+        if: steps.head.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -397,13 +408,18 @@ jobs:
           PR_BODY="$(gh api "repos/${REPOSITORY}/commits/${VERIFIED_SHA}/pulls" --jq '.[0].body // ""')" \
             node scripts/release/release.mjs deploy --environment test --reviewed-migrations "${REVIEWED_MIGRATIONS}"
 
-      - name: Check test endpoint
-        run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
+      - name: Check staged version
+        if: steps.head.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/release.mjs staged-check --environment test
 
       # Il job distribuisce e può tornare indietro: resta sul runner, con il solo Chromium
       # installato dall'installer ufficiale di Playwright. Il collaudo remoto vale per ogni
       # deploy, anche quando il livello del gate non esegue le prove browser della PR.
       - name: Install Chromium
+        if: steps.head.outputs.current == 'true'
         timeout-minutes: 10
         run: pnpm exec playwright install --with-deps chromium
 
@@ -412,6 +428,7 @@ jobs:
       # vengono saltate con un avviso: il deploy non torna indietro per un problema del dato.
       - name: Reset test account
         id: account
+        if: steps.head.outputs.current == 'true'
         continue-on-error: true
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -423,17 +440,14 @@ jobs:
         if: steps.account.outcome == 'failure'
         run: echo "::warning::Account di collaudo non ripristinato, prove autenticate saltate."
 
-      - name: Check deployed browser interactions
-        env:
-          E2E_RUN_ID: test-smoke
-          E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
-        run: pnpm test:e2e:smoke
-
       - name: Check deployed pages
+        if: steps.head.outputs.current == 'true'
         env:
           E2E_RUN_ID: test-pages
           E2E_MATRIX: single
           E2E_BASE_URL: https://test.fiscalbay.it
+          E2E_VERSION_OVERRIDE: ${{ steps.deploy.outputs.override }}
+          E2E_EXPECTED_VERSION: ${{ steps.deploy.outputs.version }}
           E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -445,9 +459,28 @@ jobs:
             --output test-results/browser/invocations.json -- \
             node scripts/browser-tests.mjs --pages --grep "@remote"
 
-      # Un deploy con endpoint o interazioni falliti non resta distribuito sul test.
+      - name: Activate tested version
+        if: steps.head.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/release.mjs activate --environment test
+
+      - name: Check test endpoint
+        if: steps.head.outputs.current == 'true'
+        run: curl --fail --silent --show-error --max-time 20 --output /dev/null https://test.fiscalbay.it/
+
+      - name: Check deployed browser interactions
+        if: steps.head.outputs.current == 'true'
+        env:
+          E2E_RUN_ID: test-smoke
+          E2E_ACCOUNT_PASSWORD: ${{ steps.account.outcome == 'success' && secrets.E2E_ACCOUNT_PASSWORD || '' }}
+        run: pnpm test:e2e:smoke
+
+      # Un deploy con endpoint o interazioni falliti non resta distribuito sul test; una versione
+      # caricata e non superata esce dal deployment senza aver visto traffico.
       - name: Roll back test deploy
-        if: failure()
+        if: failure() && steps.head.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -455,7 +488,7 @@ jobs:
           node scripts/release/release.mjs rollback --environment test
 
       - name: Upload deployed evidence
-        if: always()
+        if: always() && steps.head.outputs.current == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: deployed-${{ github.run_id }}-${{ github.run_attempt }}
@@ -465,9 +498,9 @@ jobs:
           retention-days: 7
 
       # Conferma finale nel job, con i segreti e la rete del runner: ricevuta, collaudo remoto
-      # completo e versione ancora attiva. Un esito negativo non torna indietro: la run fallisce
       # e `release:cycle` la legge senza accedere al provider dalla sessione.
       - name: Confirm provider readback
+        if: steps.head.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

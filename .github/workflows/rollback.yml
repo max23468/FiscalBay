@@ -1,0 +1,47 @@
+name: Rollback
+
+# Ritiro d'incidente: torna alla versione precedente senza ricostruire né toccare i dati, soltanto
+# se configurazione e migration coincidono. Si avvia con `release:cycle rollback`.
+on:
+  workflow_dispatch:
+
+env:
+  DO_NOT_TRACK: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Ritira la versione attiva
+    environment: production
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Return to the previous version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/release.mjs incident-rollback --environment production
+      - name: Reconcile active version
+        id: state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/release/release.mjs record --environment production
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.state.outputs.version != ''
+        with:
+          name: production-state-${{ steps.state.outputs.version }}
+          path: reports/release.json
+          if-no-files-found: error
+          retention-days: 90

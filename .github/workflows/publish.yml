@@ -1,28 +1,36 @@
 name: Promuovi
 
+# Avviato su `main` da `release:cycle promote`, dopo che `main` è avanzato in fast-forward sulla
+# testa di `develop` già qualificata.
 on:
-  # Una modifica del workflow integrata su develop avvia la sola qualifica del candidato.
-  push:
-    branches: [develop]
-    paths: [.github/workflows/publish.yml]
   workflow_dispatch:
     inputs:
       expected_sha:
-        description: SHA completo del candidato, su main oppure develop nella sola prova
+        description: SHA completo del candidato su main
         type: string
         required: true
       version:
-        description: Versione 2.x presente nel changelog (facoltativa nella prova)
+        description: Versione 2.x in cima al changelog
         type: string
-        required: false
+        required: true
+      day:
+        description: Giorno italiano della pubblicazione (AAAA-MM-GG)
+        type: string
+        required: true
       reviewed_migrations:
-        description: Digest delle migration non additive approvate, se presenti
+        description: Digest delle migration non additive, ricavato dalle PR del lotto
         type: string
         required: false
-      prova:
-        description: Prova a vuoto, solo qualifica del candidato senza checkpoint né Production
+      urgente:
+        description: Usa soltanto una certificazione già valida sul candidato
         type: boolean
         default: false
+      requested_at:
+        type: string
+        required: false
+      certified_at:
+        type: string
+        required: false
 
 # Nessuna telemetria della CLI `cf` dalle esecuzioni automatiche.
 env:
@@ -38,13 +46,11 @@ concurrency:
 
 jobs:
   plan:
-    name: Verifica candidato e pianifica
+    name: Verifica candidato
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
-      mutation: ${{ steps.plan.outputs.mutation }}
-      mutation-matrix: ${{ steps.reuse.outputs.mutation-matrix || steps.plan.outputs.mutation-matrix }}
-      promotion-reuse: ${{ steps.plan.outputs.promotion-reuse }}
+      reviewed: ${{ steps.lot.outputs.reviewed }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,68 +61,54 @@ jobs:
           install: "false"
       - name: Check candidate
         env:
-          EXPECTED_SHA: ${{ inputs.expected_sha || github.sha }}
-          VERSION: ${{ inputs.version }}
-          PROVA: ${{ github.event_name == 'push' || inputs.prova }}
-        # La prova qualifica il candidato prima dei checkpoint: salta solo checkpoint e, senza
-        # versione, il changelog; il job che distribuisce non parte.
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
-          if [ "${PROVA}" = true ]; then
-            test "${GITHUB_REF}" = refs/heads/main || test "${GITHUB_REF}" = refs/heads/develop
-          else
-            test "${GITHUB_REF}" = refs/heads/main
-          fi
+          test "${GITHUB_REF}" = refs/heads/main
           test "$(git rev-parse HEAD)" = "${EXPECTED_SHA}"
-          if [ "${PROVA}" != true ]; then node scripts/release/release.mjs readiness; fi
-          if [ "${PROVA}" != true ] || [ -n "${VERSION}" ]; then node scripts/release/release-notes.mjs "${VERSION}"; fi
-      - name: Read last published reference
-        id: base
+      # Il riuso legge versione, approvazioni e certificazione prima di ogni job costoso.
+      - name: Check lot
+        id: lot
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          base="$(gh release view --json tagName --jq .tagName 2>/dev/null || git rev-list --max-parents=0 HEAD)"
-          echo "ref=${base}" >> "${GITHUB_OUTPUT}"
-      - name: Plan cumulative changes
-        id: plan
-        env:
-          BASE_REF: ${{ steps.base.outputs.ref }}
-        run: |
-          base="${BASE_REF}"
-          node scripts/classify-changes.mjs --base "${base}" --head HEAD --complete --github-output
-      # La prova su `develop` riusa i moduli superati nelle qualifiche e campagne precedenti e non
-      # toccati da allora. Su `main` si riusa soltanto una mutation riuscita su contenuti
-      # identici, e mai se dall'ultima release cambiano classificazione, provenienza o workflow
-      # di pubblicazione: allora si prova tutto il diff cumulativo.
-      - name: Reuse passed mutation modules
-        id: reuse
-        if: github.ref == 'refs/heads/develop' || steps.plan.outputs.promotion-reuse == 'true'
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          VERSION: ${{ inputs.version }}
+          REVIEWED: ${{ inputs.reviewed_migrations }}
+        run: node scripts/release/release-cycle.mjs preflight --sha "${EXPECTED_SHA}" --version "${VERSION}" --reviewed-migrations "${REVIEWED}"
+      - name: Find certified candidate
+        id: certified
         env:
           GH_TOKEN: ${{ github.token }}
-          MATRIX: ${{ steps.plan.outputs.mutation-matrix }}
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
-        run: node scripts/mutation-reuse.mjs ${{ github.ref == 'refs/heads/main' && '--identical' || '' }}
+        run: node scripts/find-build.mjs --candidate
+      - name: Require certified candidate
+        if: steps.certified.outputs.run-id == ''
+        run: |
+          echo "::error::Tree senza certificazione: release:cycle candidate, poi di nuovo promote."
+          exit 1
 
+  # La sorgente è certificata per tree: si prepara e si prova soltanto la build che si distribuisce.
   qualify:
-    name: Qualifica candidato
+    name: Qualifica Production
     needs: plan
     uses: ./.github/workflows/qualify.yml
     with:
-      expected_sha: ${{ inputs.expected_sha || github.sha }}
-      mutation_targets: ${{ needs.plan.outputs.mutation-matrix }}
-      source_reuse: ${{ needs.plan.outputs.promotion-reuse == 'true' }}
+      expected_sha: ${{ inputs.expected_sha }}
+      scope: production
+      day: ${{ inputs.day }}
 
   publish:
     name: Distribuisci e verifica
-    needs: qualify
-    if: ${{ github.event_name == 'workflow_dispatch' && !inputs.prova && github.ref == 'refs/heads/main' && !cancelled() && needs.qualify.result == 'success' }}
+    needs: [plan, qualify]
+    if: ${{ !cancelled() && needs.qualify.result == 'success' }}
     environment: production
     runs-on: ubuntu-26.04
     timeout-minutes: 45
     permissions:
       contents: write
       actions: read
+    outputs:
+      rollback-compatible: ${{ steps.deploy.outputs.rollback-compatible }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -135,6 +127,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: node scripts/release/release.mjs restore --environment production --receipt-prefix release-receipt
 
+      # La versione arriva al 0% del traffico, salvo una configurazione diversa.
       - name: Deploy or resume confirmed deployment
         id: deploy
         env:
@@ -143,22 +136,42 @@ jobs:
           PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
           VERSION: ${{ inputs.version }}
-          REVIEWED_MIGRATIONS: ${{ inputs.reviewed_migrations }}
+          RELEASE_DAY: ${{ inputs.day }}
+          RELEASE_REQUESTED_AT: ${{ inputs.requested_at }}
+          RELEASE_CERTIFIED_AT: ${{ inputs.certified_at }}
+          REVIEWED_MIGRATIONS: ${{ needs.plan.outputs.reviewed }}
         run: node scripts/release/release.mjs deploy --environment production --expected-sha "${EXPECTED_SHA}" --reviewed-migrations "${REVIEWED_MIGRATIONS}"
+      - name: Check staged version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release.mjs staged-check --environment production --expected-sha "${EXPECTED_SHA}"
       # Il job distribuisce e può tornare indietro: resta sul runner, con browser e librerie
       # installati dall'installer ufficiale di Playwright.
       - name: Install browsers
         timeout-minutes: 10
         run: pnpm exec playwright install --with-deps chromium webkit
-      # Ogni pagina una volta in due browser: lingue, larghezze e temi sono già provati nella
-      # qualifica sulla stessa build Production; il sito reale aggiunge dominio, zona e dati live.
+      # Ogni pagina una volta in due browser, sul dominio reale e prima del traffico: lingue,
+      # larghezze e temi sono già provati nella qualifica sulla stessa build Production.
       - name: Check Production public pages and preview exclusion
         env:
           E2E_BASE_URL: https://fiscalbay.it
           E2E_RUN_ID: production-remote
           E2E_PRODUCTION: "1"
           E2E_MATRIX: single
+          E2E_VERSION_OVERRIDE: ${{ steps.deploy.outputs.override }}
+          E2E_EXPECTED_VERSION: ${{ steps.deploy.outputs.version }}
+          VITE_RELEASE_DAY: ${{ inputs.day }}
         run: node scripts/browser-tests.mjs --pages --browsers chromium,webkit
+      - name: Activate tested version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release.mjs activate --environment production --expected-sha "${EXPECTED_SHA}"
       - name: Rollback compatible deployment
         if: failure()
         env:
@@ -186,3 +199,144 @@ jobs:
             reports/release.json
             test-results/browser/
           retention-days: 30
+
+  # Quindici minuti di osservazione del sito reale: un incidente nuovo o un servizio che non
+  # risponde riportano alla versione precedente, se compatibile, e avvisano l'owner.
+  guard:
+    name: Guardia dopo il deploy
+    needs: publish
+    environment: production
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Restore publication state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release.mjs restore-state --environment production --expected-sha "${EXPECTED_SHA}"
+      - name: Watch the published version
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/guard.mjs --mode live --minutes 15 --expected-sha "${EXPECTED_SHA}"
+      - name: Roll back on incident
+        id: rollback
+        if: failure()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release.mjs incident-rollback --environment production --expected-sha "${EXPECTED_SHA}"
+      - name: Reconcile active provider version
+        id: state
+        if: always()
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release.mjs record --environment production --expected-sha "${EXPECTED_SHA}"
+      - name: Preserve active publication state
+        if: always() && steps.state.outputs.version != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: production-state-${{ steps.state.outputs.version }}
+          overwrite: true
+          path: reports/release.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Notify owner
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_OWNER_ID: ${{ vars.TELEGRAM_OWNER_ID }}
+          OUTCOME: ${{ job.status }}
+          ROLLBACK: ${{ steps.rollback.outcome }}
+          VERSION: ${{ inputs.version }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "${OUTCOME}" = success ]; then text="FiscalBay ${VERSION} pubblicata, guardia superata."
+          elif [ "${ROLLBACK}" = success ]; then text="FiscalBay ${VERSION}: incidente dopo il deploy, versione precedente ripristinata."
+          else text="FiscalBay ${VERSION}: incidente dopo il deploy, rollback non applicabile."
+          fi
+          node scripts/release/notify.mjs "${text} ${RUN_URL}"
+
+  # La build porta già il giorno: `develop` lo riceve dopo la pubblicazione, così il tree promosso
+  # resta quello qualificato. L'app è l'unica eccezione alla protezione di `develop`.
+  day:
+    name: Giorno della versione
+    needs: guard
+    environment: develop-alignment
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.ALIGNMENT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ALIGNMENT_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 1
+          token: ${{ steps.app-token.outputs.token }}
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Write the day on develop
+        env:
+          VERSION: ${{ inputs.version }}
+          DAY: ${{ inputs.day }}
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          for attempt in 1 2 3; do
+            git fetch --quiet --depth=1 origin develop
+            git reset --quiet --hard FETCH_HEAD
+            node scripts/release/release.mjs date --version "${VERSION}" --day "${DAY}"
+            if git diff --quiet; then echo "Il changelog porta già il giorno."; exit 0; fi
+            git commit --quiet -am "chore: giorno della ${VERSION}"
+            if git push --quiet origin HEAD:refs/heads/develop; then exit 0; fi
+            sleep "$((attempt * 10))"
+          done
+          echo "::error::Giorno non scritto: ripetere il job."
+          exit 1
+
+  finalize:
+    name: Conferma pubblicazione attiva
+    needs: [guard, day]
+    environment: production
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+      - name: Restore publication state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release.mjs restore-state --environment production --expected-sha "${EXPECTED_SHA}"
+      - name: Confirm expected version after guard and day
+        id: state
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: node scripts/release/release.mjs finalize --environment production --expected-sha "${EXPECTED_SHA}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: production-state-${{ steps.state.outputs.version }}
+          overwrite: true
+          path: reports/release.json
+          if-no-files-found: error
+          retention-days: 90

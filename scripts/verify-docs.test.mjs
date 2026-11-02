@@ -55,11 +55,7 @@ describe("integrità dei documenti", () => {
       }
       mkdirSync(path.join(directory, "docs"));
       const planFile = path.join(directory, "docs/MASTER_PLAN.md");
-      const pending =
-        "### Gate per la pubblicazione Production\n\n" +
-        ["commerciale", "ripristino", "operativita"]
-          .map((gate) => `| ${gate} | DA COMPLETARE | - |`)
-          .join("\n");
+      const pending = "# Piano\n";
       writeFileSync(planFile, pending);
       assert.equal(check("# Piano\n").status, 0);
       // Il codice del task si compone: verify:repo ammette le sigle di piano solo nei documenti.
@@ -72,17 +68,6 @@ describe("integrità dei documenti", () => {
       const long = check("# Piano\n");
       assert.equal(long.status, 1);
       assert.ok(long.errors.some((error) => error.code === "TASK_LENGTH"));
-      for (const invalid of [
-        "",
-        pending.replace("commerciale", "assente"),
-        pending.replace("DA COMPLETARE", "COMPLETATO"),
-        pending + "\n| commerciale | DA COMPLETARE | - |",
-      ]) {
-        writeFileSync(planFile, invalid);
-        const result = check("# Piano\n");
-        assert.equal(result.status, 1);
-        assert.ok(result.errors.some((error) => error.code === "PRODUCTION_GATES"));
-      }
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

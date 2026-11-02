@@ -81,7 +81,14 @@ for (const scenario of scenarios) {
             (url) => url.origin === origin,
             (route) =>
               route.continue({
-                headers: { ...route.request().headers(), "x-fiscalbay-trace": "1" },
+                headers: {
+                  ...route.request().headers(),
+                  "x-fiscalbay-trace": "1",
+                  // Prima dell'attivazione le visite vanno alla versione caricata senza traffico.
+                  ...(process.env.E2E_VERSION_OVERRIDE
+                    ? { "cloudflare-workers-version-overrides": process.env.E2E_VERSION_OVERRIDE }
+                    : {}),
+                },
               }),
           );
         }
@@ -117,7 +124,15 @@ for (const scenario of scenarios) {
           }
         }
         if (scenario.endpoint) {
-          const response = await context.request.get(scenario.path);
+          const response = await context.request.get(scenario.path, {
+            headers: process.env.E2E_VERSION_OVERRIDE
+              ? { "cloudflare-workers-version-overrides": process.env.E2E_VERSION_OVERRIDE }
+              : {},
+          });
+          if (process.env.E2E_EXPECTED_VERSION)
+            expect(response.headers()["x-fiscalbay-version"]).toBe(
+              process.env.E2E_EXPECTED_VERSION,
+            );
           // L'anteprima non esiste in Production, nemmeno con i suoi endpoint.
           expect(response.status()).toBe(production && scenario.preview ? 404 : scenario.status);
           if (scenario.path.endsWith("/robots.txt")) {
@@ -189,6 +204,8 @@ for (const scenario of scenarios) {
             documents.push(response);
         });
         const response = await page.goto(scenario.path);
+        if (process.env.E2E_EXPECTED_VERSION)
+          expect(response?.headers()["x-fiscalbay-version"]).toBe(process.env.E2E_EXPECTED_VERSION);
         expect(response?.status()).toBe(expectedStatus);
         if (scenario.redirect && !(production && scenario.preview))
           // In locale, con la sessione, il redirect arriva come navigazione del documento.

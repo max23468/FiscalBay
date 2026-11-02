@@ -6,7 +6,12 @@ import { isProduction } from "./app-links";
 import { displayTimeZone } from "./format";
 import { notificationWindowMilliseconds } from "./domain/notification-reads.server";
 import type { Language } from "./i18n";
-import { parseChangelog, type WhatsNewKind, type WhatsNewRelease } from "./changelog";
+import {
+  parseChangelog,
+  releaseChangelog,
+  type WhatsNewKind,
+  type WhatsNewRelease,
+} from "./changelog";
 import type { NotificationView } from "./view-models";
 
 export interface WhatsNewView {
@@ -23,7 +28,9 @@ export interface WhatsNewContext {
 }
 
 /** Novità del changelog versionato, lette alla build. */
-export const whatsNew: WhatsNewRelease[] = parseChangelog(changelog).releases;
+export const whatsNew: WhatsNewRelease[] = parseChangelog(
+  releaseChangelog(changelog, import.meta.env.VITE_RELEASE_DAY),
+).releases;
 
 /** Errori di forma del changelog versionato: il test li richiede vuoti. */
 export const whatsNewProblems = (text = changelog) => parseChangelog(text).problems;
