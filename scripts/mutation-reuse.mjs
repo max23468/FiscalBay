@@ -3,10 +3,8 @@
  * se la sua ultima mutation, in una qualifica o in una campagna precedente su un commit antenato,
  * è riuscita in ogni parte e da allora nessun sorgente che importa, anche indirettamente, è
  * cambiato. Un pacchetto di `dependencies` aggiunto, tolto o cambiato, anche fra quelli da cui
- * dipende, conta come sorgente modificato nei file che lo importano. Un cambio degli strumenti
- * (`devDependencies`, impostazioni e override di pnpm, configurazione della mutation) fa
- * ripetere tutto; le prove modificate non contano, come nella scelta dei moduli dopo un
- * rilascio, e la campagna settimanale resta completa.
+ * dipende, conta come sorgente modificato nei file che lo importano. Strumenti e prove modificate
+ * non fanno ripetere nulla: li copre la campagna settimanale, che resta completa.
  * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
  */
 import { execFileSync } from "node:child_process";
@@ -20,19 +18,6 @@ import { ghJson, retry } from "./lib/provider.mjs";
 
 /** Workflow le cui mutation valgono come ricevuta. */
 const mutationWorkflows = [".github/workflows/candidate.yml", ".github/workflows/mutation.yml"];
-
-/**
- * File che cambiano l'esito di ogni mutation: con uno di questi modificato nulla si riusa.
- * Manifest e lockfile seguono `changedPackages`.
- */
-export const toolFiles = [
-  /^\.github\/workflows\/(?:ci|candidate|qualify|mutation|publish|cycle|rollback)\.yml$/u,
-  /^scripts\/(?:classify-changes|find-build|lib\/provider|release\/.+)\.mjs$/u,
-  /^stryker\.config\.json$/u,
-  /^vitest(?:\.[\w-]+)?\.config\.ts$/u,
-  /^scripts\/mutation(?:-vitest)?\.mjs$/u,
-  /^\.github\/actions\//u,
-];
 
 /** Ultima parte del nome del job: `<modulo> <parte>/<parti>`. */
 export function mutationJob(name) {
@@ -131,19 +116,10 @@ function snapshotDependencies(blocks) {
 }
 
 /**
- * Pacchetti cambiati fra due versioni di manifest e lockfile: quelli con una voce diversa e
- * quelli che ne dipendono, anche indirettamente. `null` se cambia uno strumento: fuori da
- * `dependencies` nel manifest, impostazioni, override o `devDependencies` del progetto nel
- * lockfile, oppure un pacchetto cambiato fra le `devDependencies`.
+ * Pacchetti cambiati fra due versioni del lockfile: quelli con una voce diversa e
+ * quelli che ne dipendono, anche indirettamente. Contano soltanto per chi li importa.
  */
 export function changedPackages(before, after) {
-  const manifest = (text) => {
-    const { dependencies, ...rest } = JSON.parse(text);
-    return { dependencies, rest: JSON.stringify(rest) };
-  };
-  const oldManifest = manifest(before.manifest);
-  const newManifest = manifest(after.manifest);
-  if (oldManifest.rest !== newManifest.rest) return null;
   const oldBlocks = lockBlocks(before.lockfile);
   const newBlocks = lockBlocks(after.lockfile);
   const changed = new Set();
@@ -151,10 +127,6 @@ export function changedPackages(before, after) {
     if (oldBlocks.get(key) === newBlocks.get(key)) continue;
     const entry = /^\d+\/(?:packages|snapshots)\/(.+)$/u.exec(key)?.[1];
     if (entry) changed.add(packageName(entry));
-    // Le dipendenze del progetto cambiano anche le voci dei pacchetti, contate sopra; gli altri
-    // importer non entrano nella mutation.
-    else if (!/^1\/importers\/(?:\.\/dependencies|(?!\.\/|\.$)[^/]+(?:\/.*)?)$/u.test(key))
-      return null;
   }
   const dependencies = snapshotDependencies(new Map([...oldBlocks, ...newBlocks]));
   let grew = true;
@@ -166,11 +138,6 @@ export function changedPackages(before, after) {
         grew = true;
       }
   }
-  const tools = (blocks) =>
-    [
-      ...(blocks.get("1/importers/./devDependencies") ?? "").matchAll(/^ {6}('?[^\s:']+'?):/gmu),
-    ].map(([, name]) => packageName(name));
-  if ([...tools(oldBlocks), ...tools(newBlocks)].some((name) => changed.has(name))) return null;
   return changed;
 }
 
@@ -211,8 +178,7 @@ export function affectedModules(changed, graph) {
 /**
  * Divide i moduli fra da provare e riusati. `runs` sono le run precedenti su commit antenati,
  * dalla più recente, con gli esiti per modulo; `affectedSince(commit)` restituisce i moduli
- * toccati dal diff fino alla testa, oppure `null` se gli strumenti sono cambiati. Conta soltanto
- * l'ultima run che ha provato il modulo: un fallimento recente non si copre con un successo
+ * toccati dal diff fino alla testa. Conta soltanto l'ultima run che ha provato il modulo: un fallimento recente non si copre con un successo
  * più vecchio.
  */
 export function reusePlan(targets, runs, affectedSince) {
@@ -220,8 +186,7 @@ export function reusePlan(targets, runs, affectedSince) {
   const reused = [];
   for (const target of targets) {
     const last = runs.find((entry) => entry.outcomes.has(target));
-    const affected = last ? affectedSince(last.commit) : null;
-    if (last?.outcomes.get(target) === "passed" && affected && !affected.has(target))
+    if (last?.outcomes.get(target) === "passed" && !affectedSince(last.commit).has(target))
       reused.push({ target, run: last.id, commit: last.commit });
     else run.push(target);
   }
@@ -303,20 +268,17 @@ async function main() {
       const packages = ["package.json", "pnpm-lock.yaml"].some((file) => changed.includes(file))
         ? changedPackages(
             {
-              manifest: git("show", `${commit}:package.json`),
               lockfile: git("show", `${commit}:pnpm-lock.yaml`),
             },
             {
-              manifest: readFileSync("package.json", "utf8"),
               lockfile: readFileSync("pnpm-lock.yaml", "utf8"),
             },
           )
         : new Set();
-      const affected =
-        packages && !changed.some((file) => toolFiles.some((pattern) => pattern.test(file)))
-          ? affectedModules([...changed, ...packageImporters(sources, packages)], graph)
-          : null;
-      cache.set(commit, affected);
+      cache.set(
+        commit,
+        affectedModules([...changed, ...packageImporters(sources, packages)], graph),
+      );
     }
     return cache.get(commit);
   };

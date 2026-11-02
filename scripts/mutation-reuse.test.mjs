@@ -7,7 +7,6 @@ import {
   mutationJob,
   packageImporters,
   reusePlan,
-  toolFiles,
 } from "./mutation-reuse.mjs";
 
 /** Lockfile di pnpm con i due documenti, dipendenze del progetto e di un altro importer. */
@@ -155,22 +154,25 @@ describe("mutation incrementale della prova del candidato", () => {
     assert.deepEqual([...affectedModules(["test/orders.spec.ts"], graph)], []);
   });
 
-  it("riusa solo l'ultimo esito riuscito e non toccato, mai con strumenti cambiati", () => {
+  it("riusa solo l'ultimo esito riuscito e non toccato", () => {
     const outcomes = (entries) => new Map(Object.entries(entries));
     const runs = [
       { id: 3, commit: "c3", outcomes: outcomes({ "app/a.ts": "failed", "app/b.ts": "passed" }) },
       { id: 2, commit: "c2", outcomes: outcomes({ "app/a.ts": "passed", "app/c.ts": "passed" }) },
       { id: 1, commit: "c1", outcomes: outcomes({ "app/d.ts": "passed", "app/e.ts": "passed" }) },
     ];
-    const affected = { c3: new Set(["app/b.ts"]), c2: new Set(), c1: null };
+    const affected = { c3: new Set(["app/b.ts"]), c2: new Set(), c1: new Set() };
     const plan = reusePlan(
       ["app/a.ts", "app/b.ts", "app/c.ts", "app/d.ts", "app/f.ts"],
       runs,
       (commit) => affected[commit],
     );
-    // Fallito di recente, toccato dal diff, strumenti cambiati o mai provato: si ripete.
-    assert.deepEqual(plan.run, ["app/a.ts", "app/b.ts", "app/d.ts", "app/f.ts"]);
-    assert.deepEqual(plan.reused, [{ target: "app/c.ts", run: 2, commit: "c2" }]);
+    // Fallito di recente, toccato dal diff o mai provato: si ripete.
+    assert.deepEqual(plan.run, ["app/a.ts", "app/b.ts", "app/f.ts"]);
+    assert.deepEqual(plan.reused, [
+      { target: "app/c.ts", run: 2, commit: "c2" },
+      { target: "app/d.ts", run: 1, commit: "c1" },
+    ]);
   });
 
   it("con un pacchetto cambiato ripete soltanto chi lo importa o dipende da lui", () => {
@@ -197,8 +199,9 @@ describe("mutation incrementale della prova del candidato", () => {
     assert.deepEqual([...changedPackages(before, { manifest: manifest(), lockfile: other })], []);
   });
 
-  it("con uno strumento cambiato ripete tutto", () => {
+  it("uno strumento cambiato non riguarda chi non lo importa", () => {
     const before = { manifest: manifest(), lockfile: lockfile() };
+    const sources = [{ path: "app/a.server.ts", text: 'import { auth } from "@scope/auth";' }];
     for (const after of [
       { manifest: manifest({}, { scripts: { test: "vitest" } }), lockfile: lockfile() },
       {
@@ -219,7 +222,7 @@ describe("mutation incrementale della prova del candidato", () => {
         ),
       },
     ])
-      assert.equal(changedPackages(before, after), null);
+      assert.equal(packageImporters(sources, changedPackages(before, after)).length, 0);
   });
 
   it("riconosce gli import dei pacchetti, anche per percorso, ma non i moduli locali o di piattaforma", () => {
@@ -236,18 +239,5 @@ describe("mutation incrementale della prova del candidato", () => {
       "app/auth.server.ts",
       "app/lazy.ts",
     ]);
-  });
-});
-
-describe("strumenti della mutation", () => {
-  it("riconosce i file che cambiano l'esito di ogni modulo", () => {
-    const tool = (file) => toolFiles.some((pattern) => pattern.test(file));
-    for (const file of [
-      "vitest.cloudflare.config.ts",
-      "stryker.config.json",
-      "scripts/mutation.mjs",
-    ])
-      assert.equal(tool(file), true, file);
-    assert.equal(tool("cloudflare.config.ts"), false);
   });
 });
