@@ -1008,8 +1008,9 @@ async function mergeOpenPullRequest(repository, number, pr) {
         console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
         return true;
       }
-      enableAutoMerge(repository, number, pr.headRefOid);
+      // Tutti i controlli prima del merge: `Node 26` è il solo richiesto da GitHub.
       await waitChecks(repository, pr.headRefOid);
+      enableAutoMerge(repository, number, pr.headRefOid);
       // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
       for (let attempt = 0; attempt < 180; attempt++) {
         pr = read();

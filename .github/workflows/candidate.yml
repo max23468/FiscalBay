@@ -3,10 +3,6 @@ name: Candidato
 # Qualifica completa della testa di `develop`, certificata per tree: `Promuovi` la riusa invece di
 # scoprire i difetti del lotto all'ultimo passo. La pianificazione non occupa un runner in attesa.
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
-    branches: [develop]
   schedule:
     - cron: "*/5 * * * *"
     - cron: "23 3 * * 1"
@@ -26,7 +22,6 @@ permissions:
 jobs:
   plan:
     name: Pianifica
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.event != 'pull_request'
     runs-on: ubuntu-26.04
     timeout-minutes: 10
     outputs:
