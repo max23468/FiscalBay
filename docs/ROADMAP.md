@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.1 Comunicazioni](#s39) | Da completare | Prossima versione. |
+| [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
 Stati: `Da completare`, `In corso`, `Bloccato`, `Completato`. Ogni task ha codice, stato, prerequisiti, contratto e criterio di completamento: `RE-yy` per i riconoscimenti esterni, `2.x-yy` per le versioni. La chiusura richiede comportamento, prove pertinenti e documenti coerenti; le prove restano in PR, CI e ricevute. La PR che avvia, blocca o chiude un task ne aggiorna lo stato nello stesso diff. Un task completato conserva intestazione, stato e contratto, poi una frase sulla capacità consegnata con le decisioni che la motivano e gli eventuali limiti residui. I codici restano in questo file, mai nel codice o nel runtime.
@@ -56,6 +56,47 @@ Chiedere a eBay Italia l'inserimento di FiscalBay nella pagina Solution Provider
 Far verificare a Google il brand della schermata di consenso del client OAuth Production, così che «Accedi con Google» mostri nome e logo FiscalBay. Servono home page, Privacy e Termini pubblicati su fiscalbay.it e il dominio verificato in Search Console; gli scope restano quelli del login, senza ambiti sensibili.
 
 **Criterio di completamento:** verifica approvata e schermata di consenso riletta su Production con nome, logo e link legali di FiscalBay.
+
+<a id="versione-2-1"></a>
+## 2.1 · Comunicazioni
+
+**Prerequisiti:** nessuno. **Attività:** dare alle comunicazioni operative una pagina completa nell'area riservata e un punto pubblico sullo stato del servizio ([D291](decisions/DECISION_REGISTER.md)). Nessun nuovo costo o provider. Retention, Termini e Privacy non cambiano.
+
+<a id="2-1-01"></a>
+#### 2.1-01 · Pagina Notifiche
+
+**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§19](product/EXPERIENCE.md#s19) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30)
+
+Pagina dell'area riservata, raggiunta dalla campanella, con tutte le voci degli ultimi 30 giorni: filtri per categoria e stato di lettura, testo completo e link all'azione. Stessa fonte, stesse letture e stessa retention del popover, che resta com'è.
+
+**Criterio di completamento:** una lettura o «Segna tutte come lette» su una delle due superfici si riflette sull'altra dal server, IT/EN e mobile compresi; nessuna voce oltre i 30 giorni.
+
+<a id="2-1-02"></a>
+#### 2.1-02 · Controlli di stato
+
+**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§20](product/EXPERIENCE.md#s20) · [§31](operations/OPERATIONS.md#s31)
+
+Registrare per FiscalBay, eBay, Telegram, Stripe, accessi ed email l'esito dell'ultimo controllo e la sua ora, dai controlli interni e dalle pagine di stato dei fornitori dove sono leggibili. eBay risulta non disponibile secondo la definizione del [§20](product/EXPERIENCE.md#s20): le ultime letture di tutti i negozi attivi non riescono, mai per un errore isolato. I segnali sono aggregati, senza dati di merchant o negozi, e non si conserva uno storico.
+
+**Criterio di completamento:** ogni servizio ha un esito con ora, provato con un guasto simulato per ciascuno, senza quote di lettura aggiuntive oltre il margine del [runbook di capacità](operations/OPERATIONS.md#capacita).
+
+<a id="2-1-03"></a>
+#### 2.1-03 · Comunicazioni pubbliche
+
+**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15)
+
+Nella console ogni comunicazione di servizio dichiara se è pubblica o riservata agli utenti autenticati, con riservata come valore predefinito. Una comunicazione si scrive una volta sola e compare in campanella e, se pubblica, sulla pagina di stato. Le comunicazioni esistenti restano riservate.
+
+**Criterio di completamento:** una comunicazione riservata non è mai leggibile senza sessione; cambio e ritiro compaiono nel registro della console.
+
+<a id="2-1-04"></a>
+#### 2.1-04 · Pagina pubblica di stato
+
+**Stato:** Da completare · **Prerequisiti:** 2.1-02, 2.1-03 · **Contratto:** [§20](product/EXPERIENCE.md#s20) · [§23](product/EXPERIENCE.md#s23)
+
+Pagina del sito su `/stato` e `/en/stato`, collegata dal piè di pagina: una riga per servizio con stato e ora dell'ultimo controllo, più le comunicazioni pubbliche attive. Niente esito complessivo, storico o percentuali di disponibilità, e nessuna promessa di SLA. Un controllo non recente mostra «Stato non verificato» e mai l'ultimo esito positivo.
+
+**Criterio di completamento:** la pagina funziona senza sessione e resta raggiungibile con il servizio sospeso o con D1 non disponibile, dove mostra «Stato non verificato»; il divieto di semaforo globale del [§20](product/EXPERIENCE.md#s20) resta rispettato.
 
 <a id="s39"></a>
 ## 39. Roadmap successiva e non-promesse
