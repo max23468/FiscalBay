@@ -88,7 +88,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
             items: [
               "li tratta soltanto per leggerli da eBay, mostrarteli, esportarli e notificarteli, secondo le tue impostazioni, e non li usa per fini propri, pubblicità o addestramento di intelligenze artificiali;",
               "li protegge con misure adeguate e ne limita l’accesso a chi gestisce il servizio, vincolato alla riservatezza;",
-              "si avvale di fornitori per hosting e database, rete, invio email e posta di assistenza, vincolati agli stessi obblighi; ti informa di un cambio di fornitore aggiornando l’Informativa privacy e puoi opporti chiudendo l’account;",
+              "si avvale di fornitori per hosting e database, rete, invio email e posta di assistenza, vincolati agli stessi obblighi, e, se attivi le notifiche, usa Telegram per consegnarle nella chat che scegli; ti informa di un cambio di fornitore aggiornando l’Informativa privacy e puoi opporti chiudendo l’account;",
               "ti assiste nelle richieste degli acquirenti e nella notifica di violazioni, che ti comunica senza ingiustificato ritardo;",
               "li cancella alla scadenza della finestra del tuo piano, quando elimini un negozio o l’account, o quando eBay comunica la cancellazione dell’acquirente, salvo le copie di ripristino del database, che scadono entro 30 giorni;",
               "ti assiste negli obblighi di sicurezza e nelle eventuali valutazioni d’impatto;",
@@ -224,7 +224,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "90 giorni",
               ],
               [
-                "Limite dei tentativi di accesso: indirizzo IP (per le reti IPv6 il prefisso) e operazione",
+                "Limite dei tentativi di accesso: indirizzo IP (per le reti IPv6 il prefisso), impronta dell’indirizzo email e operazione",
                 "Impedire tentativi ripetuti (legittimo interesse)",
                 "Poche ore, al più un giorno",
               ],
@@ -253,6 +253,21 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "Sicurezza e tracciabilità degli interventi (legittimo interesse)",
                 "Un anno",
               ],
+              [
+                "Trasferimenti di negozio eseguiti: negozio, spazi coinvolti, autore, motivo e istanti",
+                "Sicurezza e tracciabilità degli interventi (legittimo interesse)",
+                "Un anno dall’esecuzione",
+              ],
+              [
+                "Avvisi interni sull’uso del servizio: nome, ragione sociale, email e metodi di accesso del titolare, senza dati degli acquirenti",
+                "Seguire registrazioni, acquisti e cancellazioni (legittimo interesse)",
+                "30 giorni",
+              ],
+              [
+                "Cancellazione dei dati chiesta a Stripe: riferimento del cliente, origine e istante",
+                "Rispettare la richiesta e non ricreare i dati (legittimo interesse)",
+                "Senza scadenza",
+              ],
               ["File esportati", "Scaricare i tuoi dati", "Al più 24 ore"],
               ["Notifiche nell’app", "Avvisarti nell’app", "30 giorni"],
               [
@@ -262,7 +277,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
             ],
           },
-          "Quando cancelli l’account eliminiamo i dati sopra, salvo quelli per cui la tabella indica una durata propria: l’impronta antiabuso, il registro della console, la prova dell’acquisto a vita e le email di assistenza. Resta inoltre per 30 giorni un’indicazione della cancellazione, che ne impedisce l’annullamento con un ripristino. Le copie di ripristino del database scadono entro 30 giorni.",
+          "Quando cancelli l’account eliminiamo i dati sopra, salvo quelli per cui la tabella indica una durata propria: l’impronta antiabuso, il registro della console, i trasferimenti di negozio eseguiti, gli avvisi interni, la cancellazione chiesta a Stripe, la prova dell’acquisto a vita e le email di assistenza. Resta inoltre per 30 giorni un’indicazione della cancellazione, che ne impedisce l’annullamento con un ripristino. Le copie di ripristino del database scadono entro 30 giorni.",
           "I dati dell’account sono necessari per usare FiscalBay. Il consenso a novità e offerte è facoltativo e non cambia il servizio.",
         ],
       },
@@ -291,7 +306,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Dove sono i dati",
         blocks: [
-          "Ordini, dati fiscali, file esportati e log sono conservati su server nell’Unione Europea. Le richieste transitano dalla rete globale del fornitore di hosting. Pagamenti, assistenza, statistiche del sito, accesso con Google, eBay e Telegram seguono i rispettivi fornitori, che possono trattare dati fuori dall’Unione Europea. In questi casi il trasferimento si basa sulle garanzie previste dal GDPR, come una decisione di adeguatezza o le clausole contrattuali tipo della Commissione europea. Puoi chiederne copia a info@fiscalbay.it.",
+          "Ordini, dati fiscali, file esportati e archivio dei log sono conservati su server nell’Unione Europea; i log tecnici recenti, conservati per sette giorni, e gli eventi di sicurezza possono essere trattati dal fornitore di rete anche fuori dall’Unione Europea, con le garanzie indicate sotto. Le richieste transitano dalla rete globale del fornitore di hosting. Pagamenti, assistenza, statistiche del sito, accesso con Google, eBay e Telegram seguono i rispettivi fornitori, che possono trattare dati fuori dall’Unione Europea. In questi casi il trasferimento si basa sulle garanzie previste dal GDPR, come una decisione di adeguatezza o le clausole contrattuali tipo della Commissione europea. Puoi chiederne copia a info@fiscalbay.it.",
         ],
       },
       {
@@ -389,7 +404,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
             items: [
               "processes it only to read it from eBay, show, export and notify it to you according to your settings, and does not use it for its own purposes, advertising or training artificial intelligence;",
               "protects it with appropriate measures and limits access to those who run the service, bound by confidentiality;",
-              "uses providers for hosting and database, network, email sending and support mail, bound by the same obligations; it informs you of a change of provider by updating the Privacy policy and you can object by closing your account;",
+              "uses providers for hosting and database, network, email sending and support mail, bound by the same obligations, and, if you turn on notifications, uses Telegram to deliver them to the chat you choose; it informs you of a change of provider by updating the Privacy policy and you can object by closing your account;",
               "assists you with buyer requests and with personal data breaches, which it reports to you without undue delay;",
               "deletes it when your plan’s window expires, when you delete a store or your account, or when eBay reports the buyer’s deletion, except for database restore copies, which expire within 30 days;",
               "assists you with security obligations and any impact assessments;",
@@ -525,7 +540,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "90 days",
               ],
               [
-                "Sign-in attempt limit: IP address (the prefix for IPv6 networks) and operation",
+                "Sign-in attempt limit: IP address (the prefix for IPv6 networks), a hash of the email address and operation",
                 "Preventing repeated attempts (legitimate interest)",
                 "A few hours, at most one day",
               ],
@@ -554,6 +569,21 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "Security and traceability of interventions (legitimate interest)",
                 "One year",
               ],
+              [
+                "Completed store transfers: store, workspaces involved, author, reason and times",
+                "Security and traceability of interventions (legitimate interest)",
+                "One year from completion",
+              ],
+              [
+                "Internal alerts about use of the service: the account holder’s name, company name, email and sign-in methods, without buyer data",
+                "Following registrations, purchases and deletions (legitimate interest)",
+                "30 days",
+              ],
+              [
+                "Data deletion requested through Stripe: customer reference, source and time",
+                "Honouring the request and not recreating the data (legitimate interest)",
+                "No expiry",
+              ],
               ["Exported files", "Downloading your data", "At most 24 hours"],
               ["In-app notifications", "Notifying you in the app", "30 days"],
               [
@@ -563,7 +593,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
             ],
           },
-          "When you delete your account we delete the data above, except where the table gives its own retention: the anti-abuse fingerprint, the console log, lifetime proof of purchase and support emails. A record of the deletion also stays for 30 days so that a restore cannot undo it. Database restore copies expire within 30 days.",
+          "When you delete your account we delete the data above, except where the table gives its own retention: the anti-abuse fingerprint, the console log, completed store transfers, internal alerts, deletions requested through Stripe, lifetime proof of purchase and support emails. A record of the deletion also stays for 30 days so that a restore cannot undo it. Database restore copies expire within 30 days.",
           "Account data is needed to use FiscalBay. Consent to news and offers is optional and does not change the service.",
         ],
       },
@@ -592,7 +622,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Where the data is",
         blocks: [
-          "Orders, tax data, exported files and logs are stored on servers in the European Union. Requests pass through the hosting provider’s global network. Payments, support, site statistics, sign-in with Google, eBay and Telegram follow their respective providers, which may process data outside the European Union. In those cases the transfer relies on the safeguards provided by the GDPR, such as an adequacy decision or the European Commission’s standard contractual clauses. You can request a copy at info@fiscalbay.it.",
+          "Orders, tax data, exported files and the log archive are stored on servers in the European Union; recent technical logs, kept for seven days, and security events may also be processed by the network provider outside the European Union, with the safeguards described below. Requests pass through the hosting provider’s global network. Payments, support, site statistics, sign-in with Google, eBay and Telegram follow their respective providers, which may process data outside the European Union. In those cases the transfer relies on the safeguards provided by the GDPR, such as an adequacy decision or the European Commission’s standard contractual clauses. You can request a copy at info@fiscalbay.it.",
         ],
       },
       {

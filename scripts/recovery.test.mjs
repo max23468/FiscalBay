@@ -7,15 +7,19 @@ import { after, describe, it } from "node:test";
 
 import {
   batched,
+  assertDrained,
+  assertThawSafe,
   capture,
   freezeState,
   literal,
+  prepareReapply,
   reapply,
   recoveryKey,
   replayStripe,
   restorePoint,
   schemaOf,
   seal,
+  setRecoveryFence,
   telegramResume,
   unseal,
   verify,
@@ -374,6 +378,50 @@ describe("ripristino senza dati o diritti revocati", () => {
 });
 
 describe("file e controlli del ripristino", () => {
+  it("non riapre uno snapshot non riapplicato e riprende una riapertura interrotta", async () => {
+    const db = database();
+    const run = runner(db);
+    await setRecoveryFence(run, false);
+    await assert.rejects(assertThawSafe(run, true), /blocco D1 assente/u);
+    await setRecoveryFence(run, true);
+    db.exec(`INSERT INTO service_activity VALUES ('current', '${later}')`);
+    for (const secret of [true, false])
+      await assert.rejects(assertThawSafe(run, secret), /operazioni attive 1/u);
+    db.exec("DELETE FROM service_activity");
+    await assertThawSafe(run, true);
+    // Il segreto è stato tolto e D1 riaperta, ma la coda è ancora in pausa.
+    await setRecoveryFence(run, false);
+    await assertThawSafe(run, false);
+    db.close();
+  });
+  it("scarta solo gli ingressi storici dello snapshot, senza cancellare lavori successivi alla cattura", async () => {
+    const db = database();
+    const run = runner(db);
+    db.exec(
+      `INSERT INTO service_activity VALUES ('snapshot', '${before}'), ('current', '${later}')`,
+    );
+    await assert.rejects(prepareReapply(run, undefined), /Istante/u);
+    await assert.rejects(prepareReapply(run, point), /operazioni attive 1/u);
+    assert.deepEqual(rows(db, "SELECT id FROM service_activity"), [{ id: "current" }]);
+    db.exec("DELETE FROM service_activity WHERE id = 'current'");
+    await prepareReapply(run, point);
+    await prepareReapply(run, point);
+    db.close();
+  });
+  it("chiude gli ingressi e rifiuta la cattura finché un lavoro non è concluso", async () => {
+    const db = database();
+    const run = runner(db);
+    await assert.rejects(assertDrained(run), /blocco D1 assente/u);
+    db.exec(`INSERT INTO service_activity VALUES ('in-progress', '${before}')`);
+    await setRecoveryFence(run, true);
+    await assert.rejects(assertDrained(run), /operazioni attive 1/u);
+    // Anche una riga vecchia resta bloccante: non si presume concluso il lavoro.
+    db.exec("DELETE FROM service_activity WHERE id = 'in-progress'");
+    await assertDrained(run);
+    await setRecoveryFence(run, false);
+    await assert.rejects(assertDrained(run), /blocco D1 assente/u);
+    db.close();
+  });
   const key = recoveryKey(Buffer.alloc(32, 7).toString("base64"));
   const header = { format: 1, live: false, database: "db", bookmark: "b", undo: "u" };
 
