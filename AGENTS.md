@@ -39,7 +39,7 @@ Gli artefatti durevoli descrivono prodotto, dominio e comportamento, non il pian
 
 Una richiesta affermativa e inequivocabile di pubblicare la modifica corrente (`Pubblica`) autorizza senza seconda conferma il ciclo verso il test: commit, PR verso `develop` con merge automatico e monitoraggio attivi, CI, deploy test quando il diff distribuisce, readback riferito in chat e pulizia del branch, con `pnpm release:cycle pr <numero>` e senza nuovo sollecito. `Promuovi` autorizza allo stesso modo il ciclo Production del lotto su `develop`: promozione su `main`, workflow `publish.yml` sullo SHA atteso, migration, deploy, readback, tag e release, poi la pulizia di [§34](docs/MASTER_PLAN.md#s34). Domande, ipotesi e negazioni non li autorizzano.
 
-Oggi si lavora soltanto sul test. `Promuovi` resta inattivo finché il via di M9 non è registrato nel [governo](docs/MASTER_PLAN.md#s00) e i gate Production non sono completati: fino ad allora una richiesta di `Promuovi` riceve l'elenco dei prerequisiti mancanti, senza PR verso `main` né avvio del workflow. Nessuno dei due comandi concede checkpoint, Stripe live, Paddle, nuovi costi o provider.
+Una richiesta di `Promuovi` con un gate Production non completato riceve l'elenco dei prerequisiti mancanti, senza PR verso `main` né avvio del workflow. Nessuno dei due comandi concede checkpoint, Stripe live, Paddle, nuovi costi o provider.
 
 ## Verifica, dati e ripresa
 

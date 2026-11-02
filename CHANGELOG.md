@@ -2,6 +2,20 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
+## [2.0.2]
+
+### Novità
+
+#### Miglioramenti
+
+- **Termini e Privacy.** Abbiamo aggiornato le informazioni su dove sono trattati i log, su Telegram, sul limite dei tentativi di accesso e sui dati che restano dopo la cancellazione dell'account.
+
+### What's new
+
+#### Improvements
+
+- **Terms and Privacy.** We updated the information on where logs are processed, on Telegram, on the sign-in attempt limit and on the data kept after account deletion.
+
 ## [2.0.1] - 2026-11-01
 
 ### Novità
