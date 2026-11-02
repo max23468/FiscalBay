@@ -312,7 +312,6 @@ export async function publish(manifest, io, receipt = {}) {
   await io.assertCurrent();
   await io.preflight();
   state.readback = false;
-  state.incidentBaseline ??= await io.incidents?.();
   const migrations = await io.migrations();
   const current = await io.current();
   const identity = releaseIdentity(manifest);
@@ -675,15 +674,8 @@ function provider(target) {
     deployment,
     liveReadback,
     applied,
-    incidents: () =>
-      query("SELECT key, kind, severity, opened_at FROM owner_incidents WHERE resolved_at IS NULL"),
   };
 }
-
-export const releaseProvider = (environment) => {
-  if (!targets[environment]) throw new Error("Ambiente non supportato.");
-  return provider(targets[environment]);
-};
 
 const receiptFile = "reports/release.json";
 export function saveReceipt(state) {
@@ -691,7 +683,7 @@ export function saveReceipt(state) {
   writeFileSync(receiptFile, JSON.stringify(state, null, 2));
 }
 
-/** Readback finale condiviso da guardia, rollback e coordinatore. Salva anche un ritiro. */
+/** Readback finale condiviso da rollback e coordinatore. Salva anche un ritiro. */
 export async function reconcileReceipt(receipt, io, requireCandidate = true) {
   const current = await io.current();
   await io.readback(current.version);
@@ -913,7 +905,6 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
         if (required.some((name) => !bindings.some((binding) => binding.name === name)))
           throw new Error("Segreti runtime richiesti assenti.");
       },
-      incidents: remote.incidents,
       migrations: async () => {
         const names = await applied();
         const previousSha = (await currentVersion()).identity?.split(":")[0];
@@ -1095,8 +1086,6 @@ async function main() {
   if (command === "restore-state") return restoreState(environment, values["expected-sha"]);
   if (command === "record" || command === "finalize") {
     const receipt = JSON.parse(readFileSync(receiptFile, "utf8"));
-    if (command === "finalize" && !receipt.guardPassed)
-      throw new Error("Guardia del candidato non superata.");
     if (values["expected-sha"] && receipt.sha !== values["expected-sha"])
       throw new Error("Ricevuta di un altro candidato.");
     const remote = provider(target);

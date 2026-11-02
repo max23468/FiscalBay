@@ -39,7 +39,7 @@ import {
 import { releaseNotes } from "./release-notes.mjs";
 
 describe("ciclo reale con provider simulati", () => {
-  it("riconcilia risposte perse, guardia, ritiro, ripresa e giorno fallito senza rete", () => {
+  it("riconcilia risposte perse, conferma senza attesa, ritiro, ripresa e giorno fallito senza rete", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "publication-cli-"));
     const git = (...args) =>
       execFileSync("git", args, {
@@ -52,12 +52,7 @@ describe("ciclo reale con provider simulati", () => {
       writeFileSync(path.join(directory, file), content);
     };
     try {
-      for (const file of [
-        "release/release.mjs",
-        "release/records.mjs",
-        "release/guard.mjs",
-        "lib/provider.mjs",
-      ]) {
+      for (const file of ["release/release.mjs", "release/records.mjs", "lib/provider.mjs"]) {
         mkdirSync(path.dirname(path.join(directory, "scripts", file)), { recursive: true });
         cpSync(path.join("scripts", file), path.join(directory, "scripts", file));
       }
@@ -99,7 +94,6 @@ describe("ciclo reale con provider simulati", () => {
         history: [],
         calls: [],
         loss: "upload",
-        incidents: [],
         versions: {
           [old]: {
             id: old,
@@ -137,7 +131,7 @@ globalThis.fetch=async(input,options={})=>{
  const url=new URL(String(input));const state=JSON.parse(fs.readFileSync(process.env.PROVIDER_STATE,'utf8'));
  if(url.hostname==='api.cloudflare.com'){
   const sql=JSON.parse(options.body).sql;
-  const rows=sql.includes('sqlite_master')?[{name:'d1_migrations'}]:sql.includes('owner_incidents')?state.incidents:[{name:'0001_schema.sql'}];
+  const rows=sql.includes('sqlite_master')?[{name:'d1_migrations'}]:[{name:'0001_schema.sql'}];
   return Response.json({success:true,result:[{success:true,results:rows}]});
  }
  if(url.hostname!=='fiscalbay.it') throw new Error('Network disabled');
@@ -191,9 +185,6 @@ globalThis.fetch=async(input,options={})=>{
       save({ ...state(), loss: "activation" });
       success(release("activate"));
       assert.equal(state().current.versions[0].version_id, next);
-      const guard = () =>
-        call("guard", ["--mode", "live", "--minutes", "0.00001", "--expected-sha", sha]);
-      success(guard());
       const badDay = call("release", ["date", "--version", "2.0.1", "--day", "2026-11-02"]);
       assert.notEqual(badDay.status, 0);
       success(release("record"));
@@ -202,22 +193,14 @@ globalThis.fetch=async(input,options={})=>{
         sha,
       );
       success(release("finalize"));
-      // Simula un nuovo periodo di guardia con incidente: il ritiro rimane vincolante in ripresa.
-      const receiptFile = path.join(directory, "reports/release.json");
-      const receipt = JSON.parse(readFileSync(receiptFile));
-      delete receipt.guardPassed;
-      writeFileSync(receiptFile, JSON.stringify(receipt));
-      save({
-        ...state(),
-        incidents: [
-          { key: "new", kind: "failure", severity: "p1", opened_at: new Date().toISOString() },
-        ],
-      });
-      assert.notEqual(guard().status, 0);
+      const confirmed = JSON.parse(readFileSync(path.join(directory, "reports/release.json")));
+      assert.ok(confirmed.completedAt);
+      assert.equal(confirmed.candidateActive, true);
+      assert.equal(confirmed.guardPassed, undefined);
+      // Il ritiro esplicito rimane vincolante anche dopo una conferma riuscita.
       success(release("incident-rollback"));
       success(release("record"));
       assert.equal(state().current.versions[0].version_id, old);
-      assert.notEqual(guard().status, 0);
       assert.notEqual(release("finalize").status, 0);
       success(release("incident-rollback"));
       assert.equal(state().current.versions[0].version_id, old);
@@ -755,7 +738,7 @@ describe("rollback d'incidente", () => {
     );
   });
 
-  it("rilegge l'identità dopo la guardia e salva lo stato attivo anche nel ritiro", async () => {
+  it("rilegge l'identità alla conferma finale e salva lo stato attivo anche nel ritiro", async () => {
     const receipt = {
       sha: "a".repeat(40),
       digest: "d".repeat(64),
