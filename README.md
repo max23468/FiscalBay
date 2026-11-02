@@ -52,10 +52,10 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | [Fonti](docs/SOURCES.md)                       | Documentazione esterna da verificare quando pertinente                   |
 | [Riferimenti brand](docs/brand/REFERENCES.md)  | Concept e immagini originali, non asset finali già approvati             |
 | [Design system](docs/brand/DESIGN_SYSTEM.md)  | Token, componenti, catalogo dei riferimenti e provenienza                |
-| [Audit UI/UX del test](docs/archive/2026-10-03-audit-ui-ux-test-2.0.md) | Problemi rilevati sul test e correzioni verificate |
+| [Audit UI/UX del test](docs/engineering/AUDIT_UI_UX.md) | Problemi rilevati sul test e correzioni verificate |
 
-Questo README è l’unico ingresso/indice generale. `CLAUDE.md` importa AGENTS senza una seconda policy. `docs/archive/` contiene due documenti fuori dai controlli ordinari di `verify-docs`: la procedura di adozione, storica e non più da aggiornare, e l'audit UI/UX del test, che invece si mantiene e registra in §15 ogni correzione verificata; resta nell'archivio perché i suoi identificativi D1-D5 coincidono con i codici delle decisioni. Non serve consegnare la trascrizione del grill: le regole utili sono nel piano e nel registro.
 
+Questo README è l’unico ingresso/indice generale. `CLAUDE.md` importa AGENTS senza una seconda policy. `docs/archive/` contiene la procedura di adozione, storica e fuori dai controlli ordinari di `verify-docs`.
 Controllo ordinario dopo modifiche documentali:
 
 ```sh

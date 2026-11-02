@@ -7,14 +7,13 @@
  * non fanno ripetere nulla: li copre la campagna settimanale, che resta completa.
  * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
  */
-import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { criticalModule } from "./mutation.mjs";
 import { importGraph, importPattern } from "./verify-repo.mjs";
-import { ghJson, retry } from "./lib/provider.mjs";
+import { ghJson, git, isAncestor, retry } from "./lib/provider.mjs";
 
 /** Workflow le cui mutation valgono come ricevuta. */
 const mutationWorkflows = [".github/workflows/candidate.yml", ".github/workflows/mutation.yml"];
@@ -193,18 +192,6 @@ export function reusePlan(targets, runs, affectedSince) {
   return { run, reused };
 }
 
-const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
-
-/** Commit antenato della testa, leggibile nel clone. */
-function available(commit) {
-  try {
-    execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "ignore" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /** Run precedenti con gli esiti per modulo, dalla più recente; gli errori dell'API si ripetono. */
 async function previousRuns(repository, repositoryId) {
   const api = (url) =>
@@ -227,7 +214,7 @@ async function previousRuns(repository, repositoryId) {
       candidate.event === "pull_request" ||
       candidate.repository?.id !== repositoryId ||
       candidate.head_repository?.id !== repositoryId ||
-      !available(candidate.head_sha)
+      !isAncestor(candidate.head_sha)
     )
       continue;
     // Pagine piccole: con cento job per pagina l'API risponde 502 per alcune run ripetute.

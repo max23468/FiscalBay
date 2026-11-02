@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import Stripe from "stripe";
 import { expect, vi } from "vitest";
 import { action as settingsAction } from "../../app/routes/settings";
-import { insertStore, now } from "./database-fixtures";
+import { insertStore, insertWorkspace, now } from "./database-fixtures";
 import { callRoute } from "./route-fixtures";
 
 export const event = {
@@ -84,12 +84,7 @@ export const paths = (request: ReturnType<typeof stripeApi>) =>
 /** Spazio con un negozio collegato; `synced` registra la prima lettura riuscita. */
 export async function workspace(userId: string, { synced = true } = {}) {
   await env.DB.batch([
-    env.DB.prepare(
-      "INSERT INTO workspaces (id, name, created_at) VALUES ('w-a', 'Spazio', ?)",
-    ).bind(now),
-    env.DB.prepare(
-      "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w-a', ?, 'owner')",
-    ).bind(userId),
+    ...insertWorkspace({ id: "w-a", userId, name: "Spazio" }),
     insertStore({ id: "s-a" }),
     ...(synced
       ? [

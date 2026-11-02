@@ -20,13 +20,14 @@ import { parseArgs } from "node:util";
 import { botCommands, ownerCommands } from "../app/bot-commands.ts";
 import { ownerTelegramCopy } from "../app/copy/owner-telegram.ts";
 import { telegramBotCopy } from "../app/copy/telegram.ts";
-import config from "../cloudflare.config.ts";
+import { modeOf } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 
 const allowedUpdates = ["message", "callback_query"];
 
 /** Ambiente letto da `cloudflare.config.ts` con la stessa modalità della build. */
 export function targetOf(mode) {
-  const { env } = config({ mode: mode === "live" ? "live" : "development" }).worker;
+  const { env } = workerOf(mode);
   return {
     webhookUrl: `${new URL(env.APP_ORIGIN.value).origin}/webhooks/telegram`,
     ownerId: env.TELEGRAM_OWNER_ID.value,
@@ -158,7 +159,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       apply: { type: "boolean", default: false },
     },
   });
-  if (!["test", "live"].includes(values.mode)) throw new Error("--mode accetta test o live.");
+  modeOf(values.mode);
   const token = process.env.TELEGRAM_BOT_TOKEN?.trim();
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
   if (!token || (values.apply && !/^[A-Za-z0-9_-]{32,256}$/u.test(secret ?? "")))

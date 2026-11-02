@@ -96,7 +96,7 @@ export function StatusAlert({
   const Icon = icons[tone];
   const quiet = tone !== "danger" && tone !== "warning";
   return (
-    <Alert variant={quiet ? "default" : tone} role={tone === "danger" ? "alert" : "status"}>
+    <Alert variant={quiet ? "default" : tone}>
       <Icon aria-hidden="true" className={quiet ? alertIconColor[tone] : undefined} />
       <AlertTitle>{title}</AlertTitle>
       {children ? <AlertDescription>{children}</AlertDescription> : null}

@@ -27,14 +27,14 @@ import {
   pageCpuQuery,
   samplePath,
 } from "../app/metrics-queries.ts";
-import config from "../cloudflare.config.ts";
-import { cfJson } from "./lib/provider.mjs";
+import { cfJson, modeOf } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 
 export { samplePath };
 
 /** Dataset, Worker e origine dell'ambiente, letti da `cloudflare.config.ts` come nella build. */
 export function targetOf(mode) {
-  const { env } = config({ mode: mode === "live" ? "live" : "development" }).worker;
+  const { env } = workerOf(mode);
   return {
     dataset: env.METRICS_DATASET.value,
     service: env.WORKER_NAME.value,
@@ -110,7 +110,7 @@ async function main() {
     },
   });
   const [name] = positionals;
-  const target = targetOf(values.mode);
+  const target = targetOf(modeOf(values.mode, "test"));
   if (name === "sample") {
     if (values.mode === "live")
       throw new Error("Il campione controllato si invia soltanto al test.");

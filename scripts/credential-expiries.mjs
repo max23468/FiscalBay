@@ -22,8 +22,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import config, { databases } from "../cloudflare.config.ts";
-import { cf } from "./lib/provider.mjs";
+import { databases } from "../cloudflare.config.ts";
+import { cf, modeOf } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 import { executeLocal } from "./local-d1.mjs";
 
 export const warningDays = 45;
@@ -55,7 +56,7 @@ const sandboxSecrets = ["EBAY_SANDBOX_CLIENT_ID", "EBAY_SANDBOX_CLIENT_SECRET"];
 /** Segreti del Worker dell'ambiente: obbligatori in `cloudflare.config.ts` e facoltativi. */
 export function declaredSecrets(mode) {
   const live = mode === "live";
-  const { env } = config({ mode: live ? "live" : "development" }).worker;
+  const { env } = workerOf(mode);
   return [
     ...Object.entries(env)
       .filter(([, binding]) => binding?.type === "secret")
@@ -171,9 +172,9 @@ async function main() {
   });
   const command = positionals[0] ?? "plan";
   if (!["plan", "apply"].includes(command)) throw new Error(`Comando sconosciuto: ${command}`);
-  const environment = values.mode === "live" ? "live" : "test";
+  const environment = modeOf(values.mode, "test");
   const entries = parseRegistry(readFileSync(values.file ?? defaultFile(), "utf8"), environment);
-  const result = review(entries, declaredSecrets(values.mode));
+  const result = review(entries, declaredSecrets(environment));
   console.log(report(environment, result));
   if (command === "plan") return;
   const sql = registrySql(entries, result.missing);

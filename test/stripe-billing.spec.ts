@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import Stripe from "stripe";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyStripeEvent,
   changeSubscriptionPeriod,
@@ -11,7 +11,7 @@ import {
 } from "../app/domain/billing.server";
 import { subscriptionOffers } from "../app/domain/subscription-offers";
 import { checkoutConfigured, purchaseState } from "../app/domain/checkout.server";
-import { orderAllowance, startTrial } from "../app/domain/grants.server";
+import { openSubscriptionSql, orderAllowance, startTrial } from "../app/domain/grants.server";
 import {
   createBoundedStripeClient,
   isMissingObject,
@@ -21,7 +21,12 @@ import {
 import { action as settingsAction, loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { subscriptionView } from "../app/domain/plan-view.server";
-import { insertEntitlement, now, resetDatabase } from "./fixtures/database-fixtures";
+import {
+  insertEntitlement,
+  now,
+  resetDatabase,
+  insertWorkspace,
+} from "./fixtures/database-fixtures";
 import { routePage } from "./fixtures/route-fixtures";
 import {
   catalogPrice,
@@ -36,9 +41,13 @@ import {
 } from "./fixtures/stripe-fixtures";
 
 /** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
+// Chiave sintetica, priva di credenziali Stripe, usata soltanto dal provider finto.
+// react-doctor-disable-next-line react-doctor/no-secrets-in-client-code
 const liveKey = "sk_live_fiscalbay";
 
 describe("Webhook e riconciliazione Stripe", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   let userId: string;
   let cookie: string;
   const at = (iso: string) => new Date(iso);
@@ -78,6 +87,21 @@ describe("Webhook e riconciliazione Stripe", () => {
       `riconciliazione-${crypto.randomUUID()}@example.invalid`,
     ));
     await workspace(userId);
+  });
+
+  it("un abbonamento aperto non blocca gli acquisti nell'altro ambiente Stripe", async () => {
+    const stripe = stripeAccount();
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.created", objectId: "sub_test" },
+      stripe.fetcher,
+      at(now),
+    );
+    const result = await env.DB.prepare(`SELECT
+      ${openSubscriptionSql("'w-a'", "'test'")} AS test,
+      ${openSubscriptionSql("'w-a'", "'live'")} AS live,
+      ${openSubscriptionSql("'w-a'")} AS any_environment`).first();
+    expect(result).toEqual({ test: 1, live: 0, any_environment: 1 });
   });
 
   it("attribuisce una sola copertura per fattura pagata con eventi duplicati o fuori ordine", async () => {
@@ -275,61 +299,58 @@ describe("Webhook e riconciliazione Stripe", () => {
     const stripe = stripeAccount();
     const { cookie } = await verifiedSession("redirect-falso@example.invalid");
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      const result = (await settingsLoader({
-        request: new Request(
-          "http://localhost:5173/app/impostazioni/piano?checkout=processing&session_id=cs_test",
-          { headers: { cookie } },
-        ),
-        params: { sezione: "piano" },
-      } as unknown as Parameters<typeof settingsLoader>[0])) as { page: { account: unknown } };
-      expect(result.page.account).toMatchObject({ plan: "free" });
-      expect(stripe.fetcher).not.toHaveBeenCalled();
 
-      stripe.state.invoices = [firstInvoice];
-      for (const subscription of [
-        { metadata: { workspace_id: "w-a" } },
-        { metadata: {} },
-        { livemode: true },
-      ]) {
-        Object.assign(stripe.state.subscription, subscription);
-        await applyStripeEvent(
-          env,
-          { topic: "customer.subscription.created", objectId: "sub_test" },
-          stripe.fetcher,
-          at(now),
-        );
-        stripe.state.subscription = { status: "active", start: periodStart, end: periodEnd };
-      }
-      // Lo spazio indicato non esiste: nessun abbonamento né copertura.
-      stripe.state.subscription.metadata = {
-        workspace_id: "w-altro",
-        offer: "monthly",
-        price_generation: "2026-09",
-      };
+    const result = (await settingsLoader({
+      request: new Request(
+        "http://localhost:5173/app/impostazioni/piano?checkout=processing&session_id=cs_test",
+        { headers: { cookie } },
+      ),
+      params: { sezione: "piano" },
+    } as unknown as Parameters<typeof settingsLoader>[0])) as { page: { account: unknown } };
+    expect(result.page.account).toMatchObject({ plan: "free" });
+    expect(stripe.fetcher).not.toHaveBeenCalled();
+
+    stripe.state.invoices = [firstInvoice];
+    for (const subscription of [
+      { metadata: { workspace_id: "w-a" } },
+      { metadata: {} },
+      { livemode: true },
+    ]) {
+      Object.assign(stripe.state.subscription, subscription);
       await applyStripeEvent(
         env,
         { topic: "customer.subscription.created", objectId: "sub_test" },
         stripe.fetcher,
         at(now),
       );
-      expect(await coverages()).toEqual([]);
-      expect(
-        (await env.DB.prepare("SELECT COUNT(*) AS n FROM stripe_subscriptions").first())!.n,
-      ).toBe(0);
-      expect(await premium(now)).toBe(false);
-      // I tre abbonamenti senza i nostri riferimenti si segnalano con un'etichetta fissa.
-      expect(logged(errors)).toEqual(
-        Array.from({ length: 3 }, () => ({
-          event: "application_error",
-          code: "INVALID_REQUEST",
-          operation: "billing",
-          failure: "unknown_subscription",
-        })),
-      );
-    } finally {
-      errors.mockRestore();
+      stripe.state.subscription = { status: "active", start: periodStart, end: periodEnd };
     }
+    // Lo spazio indicato non esiste: nessun abbonamento né copertura.
+    stripe.state.subscription.metadata = {
+      workspace_id: "w-altro",
+      offer: "monthly",
+      price_generation: "2026-09",
+    };
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.created", objectId: "sub_test" },
+      stripe.fetcher,
+      at(now),
+    );
+    expect(await coverages()).toEqual([]);
+    expect(
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM stripe_subscriptions").first())!.n,
+    ).toBe(0);
+    expect(await premium(now)).toBe(false);
+    // I tre abbonamenti senza i nostri riferimenti si segnalano con un'etichetta fissa.
+    expect(logged(errors)).toEqual(
+      Array.from({ length: 3 }, () => ({
+        event: "application_error",
+        code: "INVALID_REQUEST",
+        operation: "billing",
+        failure: "unknown_subscription",
+      })),
+    );
   });
 
   it("senza copertura pagata il pagamento resta in attesa e una fattura a zero non attiva", async () => {
@@ -586,59 +607,56 @@ describe("Webhook e riconciliazione Stripe", () => {
       at(now),
     );
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      stripe.state.down = true;
-      await expect(
-        applyStripeEvent(
-          env,
-          { topic: "customer.subscription.updated", objectId: "sub_test" },
-          stripe.fetcher,
-          at("2026-09-20T10:00:00.000Z"),
-        ),
-      ).rejects.toMatchObject({ failure: "unavailable" });
-      await expect(
-        applyStripeEvent(
-          env,
-          { topic: "invoice.paid", objectId: "in_first" },
-          stripe.fetcher,
-          at("2026-09-20T10:00:00.000Z"),
-        ),
-      ).rejects.toMatchObject({ failure: "unavailable" });
-      // L'uso già pagato continua, e finisce con il periodo pagato.
-      expect(await premium("2026-09-20T10:00:00.000Z")).toBe(true);
-      expect(await premium(periodEnd)).toBe(false);
 
-      stripe.state.down = false;
-      stripe.state.missing = true;
-      await applyStripeEvent(
+    stripe.state.down = true;
+    await expect(
+      applyStripeEvent(
         env,
-        { topic: "customer.subscription.deleted", objectId: "sub_test" },
+        { topic: "customer.subscription.updated", objectId: "sub_test" },
         stripe.fetcher,
-        at("2026-09-21T10:00:00.000Z"),
-      );
-      await applyStripeEvent(
+        at("2026-09-20T10:00:00.000Z"),
+      ),
+    ).rejects.toMatchObject({ failure: "unavailable" });
+    await expect(
+      applyStripeEvent(
         env,
         { topic: "invoice.paid", objectId: "in_first" },
         stripe.fetcher,
-        at("2026-09-21T10:00:00.000Z"),
-      );
-      expect((await coverages())[0]).toMatchObject({ revoked_at: null, ends_at: periodEnd });
-      expect(
-        await env.DB.prepare("SELECT unavailable_at FROM stripe_subscriptions").first(),
-      ).toEqual({ unavailable_at: "2026-09-21T10:00:00.000Z" });
-      expect(await premium("2026-09-21T10:00:00.000Z")).toBe(true);
-      // Segnalati entrambi, per l'abbonamento e per la fattura, senza effetti.
-      expect(logged(errors)).toEqual(
-        Array.from({ length: 2 }, () => ({
-          event: "application_error",
-          code: "INVALID_REQUEST",
-          operation: "billing",
-          failure: "rejected",
-        })),
-      );
-    } finally {
-      errors.mockRestore();
-    }
+        at("2026-09-20T10:00:00.000Z"),
+      ),
+    ).rejects.toMatchObject({ failure: "unavailable" });
+    // L'uso già pagato continua, e finisce con il periodo pagato.
+    expect(await premium("2026-09-20T10:00:00.000Z")).toBe(true);
+    expect(await premium(periodEnd)).toBe(false);
+
+    stripe.state.down = false;
+    stripe.state.missing = true;
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.deleted", objectId: "sub_test" },
+      stripe.fetcher,
+      at("2026-09-21T10:00:00.000Z"),
+    );
+    await applyStripeEvent(
+      env,
+      { topic: "invoice.paid", objectId: "in_first" },
+      stripe.fetcher,
+      at("2026-09-21T10:00:00.000Z"),
+    );
+    expect((await coverages())[0]).toMatchObject({ revoked_at: null, ends_at: periodEnd });
+    expect(await env.DB.prepare("SELECT unavailable_at FROM stripe_subscriptions").first()).toEqual(
+      { unavailable_at: "2026-09-21T10:00:00.000Z" },
+    );
+    expect(await premium("2026-09-21T10:00:00.000Z")).toBe(true);
+    // Segnalati entrambi, per l'abbonamento e per la fattura, senza effetti.
+    expect(logged(errors)).toEqual(
+      Array.from({ length: 2 }, () => ({
+        event: "application_error",
+        code: "INVALID_REQUEST",
+        operation: "billing",
+        failure: "rejected",
+      })),
+    );
   });
 
   it("il cron rilegge prima i rinnovi dovuti, poi i pagamenti da confermare, poi gli altri", async () => {
@@ -646,9 +664,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     const hours = (count: number) => new Date(Date.parse(turn) - count * 3_600_000).toISOString();
     // Lo spazio w-c ha una copertura pagata in corso; w-a nessuna, quindi aspetta un pagamento.
     await env.DB.batch([
-      env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES ('w-c', 'C', ?)").bind(
-        now,
-      ),
+      ...insertWorkspace({ id: "w-c", name: "C" }),
       insertEntitlement({
         id: "pagato",
         workspaceId: "w-c",
@@ -784,7 +800,6 @@ describe("Webhook e riconciliazione Stripe", () => {
     await reconcileBilling(env, stripe.fetcher, at("2026-10-13T21:10:00.000Z"));
     expect(stripe.requests).toEqual(["GET /v1/checkout/sessions"]);
     expect(errors).not.toHaveBeenCalled();
-    errors.mockRestore();
   });
 
   it("un passo del cron fallito si registra e non ferma gli altri né torna in testa", async () => {
@@ -797,28 +812,25 @@ describe("Webhook e riconciliazione Stripe", () => {
       at(now),
     );
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      stripe.state.down = true;
-      await reconcileBilling(env, stripe.fetcher, at(periodEnd));
-      expect(stripe.requests.slice(-2)).toEqual([
-        "GET /v1/checkout/sessions",
-        "GET /v1/subscriptions/sub_test",
-      ]);
-      expect(logged(errors)).toEqual(
-        Array.from({ length: 2 }, () => ({
-          event: "application_error",
-          code: "UPSTREAM_UNAVAILABLE",
-          operation: "billing",
-          failure: "unavailable",
-        })),
-      );
-      // Il tentativo fallito conta: il turno seguente non lo ripete subito.
-      stripe.requests.length = 0;
-      await reconcileBilling(env, stripe.fetcher, at("2026-10-13T20:30:00.000Z"));
-      expect(stripe.requests).toEqual(["GET /v1/checkout/sessions"]);
-    } finally {
-      errors.mockRestore();
-    }
+
+    stripe.state.down = true;
+    await reconcileBilling(env, stripe.fetcher, at(periodEnd));
+    expect(stripe.requests.slice(-2)).toEqual([
+      "GET /v1/checkout/sessions",
+      "GET /v1/subscriptions/sub_test",
+    ]);
+    expect(logged(errors)).toEqual(
+      Array.from({ length: 2 }, () => ({
+        event: "application_error",
+        code: "UPSTREAM_UNAVAILABLE",
+        operation: "billing",
+        failure: "unavailable",
+      })),
+    );
+    // Il tentativo fallito conta: il turno seguente non lo ripete subito.
+    stripe.requests.length = 0;
+    await reconcileBilling(env, stripe.fetcher, at("2026-10-13T20:30:00.000Z"));
+    expect(stripe.requests).toEqual(["GET /v1/checkout/sessions"]);
   });
 
   /** Prezzi ricorrenti della generazione indicata, mensile e annuale, con il listino dato. */
@@ -971,6 +983,33 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(stripe.writes).toEqual([]);
   });
 
+  it("una rilettura mancata dopo il cambio di periodicità non lo presenta come fallito", async () => {
+    const stripe = await paidMonthly();
+    vi.setSystemTime(at(now));
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const realPrepare = env.DB.prepare.bind(env.DB);
+    const failedRead = vi.spyOn(env.DB, "prepare").mockImplementation((query) => {
+      if (stripe.writes.length > 0) throw new Error("d1_unavailable");
+      return realPrepare(query);
+    });
+    expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("done");
+    expect(logged(errors)).toEqual([expect.objectContaining({ operation: "billing" })]);
+    expect(JSON.stringify(logged(errors))).not.toContain("d1_unavailable");
+    expect(stripe.writes).toHaveLength(1);
+    expect(stripe.writes[0]!.path).toBe("/v1/subscriptions/sub_test");
+    expect(stripe.writes[0]!.body.get("items[0][price]")).toBe("price_annual_2026-09");
+    failedRead.mockRestore();
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.updated", objectId: "sub_test" },
+      stripe.fetcher,
+      at(now),
+    );
+    expect(await view(now)).toEqual({
+      premium: { period: "monthly", renewsAt: periodEnd, nextPeriod: "annual" },
+    });
+  });
+
   it("cambia periodicità soltanto se Stripe conferma un abbonamento modificabile", async () => {
     const stripe = await paidMonthly();
     vi.setSystemTime(at(now));
@@ -1111,7 +1150,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     ];
     stripe.state.failing = ["/v1/checkout/sessions/cs_lifetime_down"];
     // Anche il passo dei posti fallisce, sul database.
-    const batch = vi.spyOn(env.DB, "batch").mockRejectedValueOnce(new Error("d1_unavailable"));
+    vi.spyOn(env.DB, "batch").mockRejectedValueOnce(new Error("d1_unavailable"));
     // L'abbonamento dovuto si rilegge comunque.
     await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
         customer_id, offer, price_generation, status, current_period_start, current_period_end,
@@ -1126,7 +1165,6 @@ describe("Webhook e riconciliazione Stripe", () => {
       expect.objectContaining({ operation: "billing", code: "INTERNAL_ERROR" }),
     ]);
     expect(stripe.requests).toContain("GET /v1/subscriptions/sub_test");
-    batch.mockRestore();
   });
 
   it("apre il portale di Stripe con il cliente dello spazio e il ritorno al piano", async () => {

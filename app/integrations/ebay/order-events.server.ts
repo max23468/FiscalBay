@@ -3,7 +3,7 @@ import { z } from "zod";
 import { isProduction } from "../../app-links";
 import { measure } from "../../observability.server";
 import type { EbayEnvironment } from "../../view-models";
-import { readUpstream, UpstreamError, type StatusClassifier } from "../http.server";
+import { providerStatus, readUpstream, UpstreamError, type StatusClassifier } from "../http.server";
 import { applicationToken, type EbayAccess, type EbayConfiguration } from "./environment.server";
 
 /**
@@ -129,19 +129,8 @@ async function sellerSubscription(access: EbayAccess): Promise<Subscription | nu
 
 // Sottoscrizione già esistente (409) o consenso senza lo scope delle notifiche (403): esiti
 // attesi, distinti dagli errori del provider.
-const expectedRefusals: StatusClassifier = (response) =>
-  response.status === 409 || response.status === 403 || response.ok
-    ? null
-    : new UpstreamError(
-        response.status === 401
-          ? "credentials"
-          : response.status === 429
-            ? "rate_limited"
-            : response.status >= 500
-              ? "unavailable"
-              : "rejected",
-        { status: response.status },
-      );
+const expectedRefusals: StatusClassifier = (response, text, now) =>
+  response.status === 409 || response.status === 403 ? null : providerStatus(response, text, now);
 
 /**
  * Sottoscrive il venditore all'ingresso dell'ambiente. Una sottoscrizione già esistente si

@@ -434,6 +434,16 @@ describe("acquisti Trading", () => {
       expect.objectContaining({ failure: "rejected", details: { providerCode: undefined } }),
     );
   });
+  it.each([
+    { orderId: "1" },
+    { orderId: "1", pricingSummary: {} },
+    { orderId: "1", pricingSummary: { total: null } },
+  ])("un ordine Fulfillment senza totale è una risposta non valida: %j", (payload) => {
+    expect(() => fulfillmentObservation(payload, "2026-09-01T00:00:00.000Z")).toThrow(
+      expect.objectContaining({ failure: "invalid_response" }),
+    );
+  });
+
   it("un identificativo malformato lascia importabile l'ordine", () => {
     const result = parseTradingOrders(
       xml.replace(

@@ -3,8 +3,7 @@
  * Controlli locali della documentazione. Nessuna dipendenza o richiesta di rete.
  * Non verifica semantica del prodotto, conformità o stato live dei provider.
  * Uso: node scripts/verify-docs.mjs [--assets] [--json] [--root DIRECTORY]
- * docs/archive non partecipa ai controlli ordinari: la procedura di adozione è storica e gli
- * identificativi D1-D5 dell'audit UI/UX, che si mantiene, coincidono con i codici delle decisioni.
+ * docs/archive non partecipa ai controlli ordinari: la procedura di adozione è storica.
  */
 import fs from "node:fs";
 import path from "node:path";

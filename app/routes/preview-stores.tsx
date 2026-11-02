@@ -29,7 +29,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     now: scenario.now,
     ebayDown: scenario.ebayDown ? ["production"] : [],
     ebayMaintenance: scenario.ebayMaintenance,
-    settings: true,
     notificationSettings: true,
     // Come nell'area reale: un abbonamento che addebiterà ancora, anche con il pagamento in
     // attivazione o dopo un periodo rimborsato, non si disdice scollegando.

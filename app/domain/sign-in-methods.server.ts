@@ -69,3 +69,14 @@ export async function removePasskey(db: D1Database, userId: string, id: string):
     .first<{ id: string }>();
   return removed !== null;
 }
+import type { Language } from "../i18n";
+
+/** Destinatario e lingua dell'ultimo consenso, per l'avviso sul metodo di accesso. */
+export function securityRecipient(db: D1Database, userId: string) {
+  return db
+    .prepare(`SELECT u."email", (SELECT t.language FROM terms_acceptances t
+    WHERE t.user_id = u."id" ORDER BY t.accepted_at DESC LIMIT 1) AS language
+    FROM "user" u WHERE u."id" = ?`)
+    .bind(userId)
+    .first<{ email: string; language: Language | null }>();
+}

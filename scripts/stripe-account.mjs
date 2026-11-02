@@ -25,7 +25,8 @@ import {
   stripePortalConfiguration,
   stripeWebhookEvents,
 } from "../app/integrations/stripe-account.server.ts";
-import config from "../cloudflare.config.ts";
+import { modeOf } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 
 const offers = /** @type {const} */ (["monthly", "annual", "lifetime"]);
 const priceVariable = {
@@ -36,7 +37,7 @@ const priceVariable = {
 
 /** Ambiente letto da `cloudflare.config.ts` con la stessa modalità della build. */
 export function targetOf(mode) {
-  const { env } = config({ mode: mode === "live" ? "live" : "development" }).worker;
+  const { env } = workerOf(mode);
   return {
     live: mode === "live",
     origin: env.APP_ORIGIN.value,
@@ -327,7 +328,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       "secret-file": { type: "string" },
     },
   });
-  if (!["test", "live"].includes(values.mode)) throw new Error("--mode accetta test o live.");
+  modeOf(values.mode);
   const target = targetOf(values.mode);
   const request = cliRequest({ live: target.live, project: values["project-name"] });
   if (values.apply)

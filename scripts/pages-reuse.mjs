@@ -21,9 +21,7 @@ import {
   undeclaredModules,
 } from "./classify-changes.mjs";
 import { importGraph } from "./verify-repo.mjs";
-import { ghJson } from "./lib/provider.mjs";
-
-const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
+import { ghJson, git, isAncestor } from "./lib/provider.mjs";
 
 /** Aree riusabili dal piano delle modifiche: tutte tranne quelle toccate, oppure nessuna. */
 export function reusableAreas(selected) {
@@ -134,19 +132,7 @@ function main() {
       run.conclusion === "success"
     );
   };
-  const base = lastFullQualification(
-    artifacts,
-    repositoryId,
-    (commit) => {
-      try {
-        execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "ignore" });
-        return true;
-      } catch {
-        return false;
-      }
-    },
-    qualified,
-  );
+  const base = lastFullQualification(artifacts, repositoryId, isAncestor, qualified);
   let skip = "";
   if (base) {
     const artifact = artifacts.find(

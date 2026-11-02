@@ -21,15 +21,14 @@
  * Uso: node scripts/zone-protection.mjs <plan|validate|apply|readback|remove> [--mode live]
  *      node scripts/zone-protection.mjs readback --burst   (prova anche il rate limiting)
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { webhookPaths } from "../app/webhook-paths.ts";
-import config, { zone } from "../cloudflare.config.ts";
+import { zone } from "../cloudflare.config.ts";
 import * as provider from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 
 /** Indirizzo che riceve gli alert dei certificati: la casella generale dell'owner. */
 export const alertEmail = "info@fiscalbay.it";
@@ -40,7 +39,7 @@ export const zonePlan = "free";
 /**
  * Scala di HSTS: si sale di un gradino soltanto dopo il readback del precedente. Né
  * `includeSubDomains` né `preload`, finché tutti i sottodomini non sono inventariati e provati.
- * Il test parte da un giorno perché il suo host serve soltanto HTTPS dal bootstrap del dominio.
+ * I due ambienti sono all'ultimo gradino, un anno.
  */
 export const hstsStages = [300, 86_400, 604_800, 31_536_000];
 export const hstsStage = { test: 3, live: 3 };
@@ -72,7 +71,7 @@ const set = (values) => `{${values.map(quote).join(" ")}}`;
 /** Zona, host, origine e gradino HSTS dell'ambiente, da `cloudflare.config.ts`. */
 export function targetOf(mode) {
   const live = mode === "live";
-  const { worker } = config({ mode: live ? "live" : "development" });
+  const worker = workerOf(mode);
   const environment = live ? "live" : "test";
   // L'apice porta con sé `www`, che la zona reindirizza all'apice.
   const hosts = worker.domains.flatMap((domain) =>
@@ -396,27 +395,24 @@ const cf = (args, options) => provider.cf([...args, "--zone", zone], options);
 const cfJson = (args, options) => provider.cfJson([...args, "--zone", zone], options);
 
 // Le letture facoltative tacciono gli errori, come per una fase ancora vuota.
-const optional = (args) => {
-  try {
-    return cfJson(args, { stderr: "ignore" });
-  } catch {
+const optional = (args) => provider.optionalJson([...args, "--zone", zone]);
+
+const withBodyFile = (body, run) => provider.withBodyFile(body, run, "zone-protection");
+
+/** Una fase assente si crea; una lettura fallita non autorizza a sostituire regole sconosciute. */
+export function readRuleset(phase, read = provider.cfJson) {
+  const rulesets = read(["rulesets", "list", "--per-page", "50", "--zone", zone]);
+  if (!Array.isArray(rulesets)) throw new Error("Elenco dei ruleset non leggibile.");
+  const existing = rulesets.find((ruleset) => ruleset.phase === phase && ruleset.kind === "zone");
+  if (!existing) {
+    if (rulesets.length >= 50)
+      throw new Error("Elenco dei ruleset incompleto: fase non verificata.");
     return null;
   }
-};
-
-/** Esegue la CLI con il corpo in un file temporaneo. */
-function withBodyFile(body, run) {
-  const directory = mkdtempSync(path.join(tmpdir(), "zone-protection-"));
-  const file = path.join(directory, "body.json");
-  try {
-    writeFileSync(file, JSON.stringify(body), { mode: 0o600 });
-    return run(`@${file}`);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
+  const result = read(["rulesets", "entrypoint", "get", phase, "--zone", zone]);
+  if (!Array.isArray(result?.rules)) throw new Error("Regole della fase non leggibili.");
+  return result;
 }
-
-const readRuleset = (phase) => optional(["rulesets", "entrypoint", "get", phase]);
 
 /** Scrive la fase; con `validate` il provider convalida soltanto (`dry_run=true`). */
 function writeRules(phase, rules, { validate = false } = {}) {
@@ -548,7 +544,7 @@ async function main() {
     options: { mode: { type: "string" }, burst: { type: "boolean", default: false } },
   });
   const [name] = positionals;
-  const target = targetOf(values.mode);
+  const target = targetOf(provider.modeOf(values.mode, "test"));
   if (name === "plan") return print(plan(target));
   if (name === "validate") {
     validate(target);

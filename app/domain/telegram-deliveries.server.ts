@@ -1,6 +1,7 @@
 import { activeEntitlementSql } from "./grants.server";
 import { lockMilliseconds } from "./order-acquisition.server";
 import { listVisibleOrders } from "./orders.server";
+import { maxListedOrders } from "../orders/order-list";
 import { serviceSetting } from "./service-settings.server";
 import { consultableStore, listedOrder, storeLabelSql } from "./store-state.server";
 import { backoffMs, minute } from "./work-timing";
@@ -161,7 +162,7 @@ const changedAtSql = `(SELECT MAX(max(t.observed_at, COALESCE(t.removed_at, t.ob
       WHERE original.id = o.id OR original.merged_into = o.id)`;
 
 /** Ordini consultabili dello spazio con le loro viste, letti come nel sito dall'utente dello spazio. */
-async function noticesOf(
+export async function noticesOf(
   db: D1Database,
   userId: string,
   orders: Array<{ id: string; environment: EbayEnvironment }>,
@@ -172,8 +173,21 @@ async function noticesOf(
     const ids = orders.filter((order) => order.environment === environment).map(({ id }) => id);
     // Stryker disable next-line ConditionalExpression: senza identificativi la lettura non restituisce ordini; il ritorno anticipato evita soltanto la query.
     if (ids.length === 0) return [];
-    const visible = await listVisibleOrders(db, userId, ids.length, environment, now, { ids });
-    return visible.map((order) => [order.id, orderNotice(order, environment)] as const);
+    // La lettura si ferma a `maxListedOrders`: un riepilogo più lungo passa a blocchi.
+    const chunks = ids.reduce<string[][]>((groups, id, index) => {
+      const group = Math.floor(index / maxListedOrders);
+      (groups[group] ??= []).push(id);
+      return groups;
+    }, []);
+    const visible = await Promise.all(
+      chunks.map((chunk) =>
+        listVisibleOrders(db, userId, chunk.length, environment, now, {
+          ids: chunk,
+          suggestions: false,
+        }),
+      ),
+    );
+    return visible.flat().map((order) => [order.id, orderNotice(order, environment)] as const);
   });
   return new Map((await Promise.all(read)).flat());
 }

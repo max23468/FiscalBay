@@ -18,7 +18,7 @@ import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "./token-refresh.server";
 import { sendReconnectNotices } from "./reconnect-notices.server";
-import { recoverWebhookIngress } from "../webhooks.server";
+import { recoverWebhookIngress } from "./webhook-receipts.server";
 import { minute, queueRetryDelay, taskPeriods, type ScheduledTask } from "./work-timing";
 
 export type { ScheduledTask };

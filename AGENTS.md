@@ -2,7 +2,7 @@
 
 ## Ingresso, fonti e autonomia
 
-Operare dopo un mandato esplicito di avvio, secondo il [README](README.md#avvio). Rispettare istruzioni di sessione, ambiente e override applicabili. L’adozione allinea le istruzioni **del progetto** 1.x incompatibili; non modifica regole globali o superiori.
+Operare secondo il [README](README.md#avvio). Rispettare istruzioni di sessione, ambiente e override applicabili.
 
 Master Plan = requisiti; registro = sintesi/motivazioni; codice/test/configurazioni = stato tecnico; readback provider = stato remoto.
 

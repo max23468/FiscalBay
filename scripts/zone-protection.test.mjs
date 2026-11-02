@@ -15,6 +15,7 @@ import {
   plan,
   probeRule,
   removeRules,
+  readRuleset,
   targetOf,
   webhookRule,
   writableRule,
@@ -95,6 +96,39 @@ const configured = () => {
 };
 
 describe("protezioni della zona", () => {
+  it("legge nella stessa zona e conserva regole manuali e dell'altro ambiente", () => {
+    const calls = [];
+    const phase = phases[0];
+    const manual = { ref: "manuale", expression: "true", action: "log" };
+    const other = desiredRules(live)[phase];
+    const existing = readRuleset(phase, (args) => {
+      calls.push(args);
+      return args[1] === "list" ? [{ phase, kind: "zone" }] : { rules: [manual, ...other] };
+    });
+    assert.ok(calls.every((args) => args.slice(-2).join(" ") === "--zone fiscalbay.it"));
+    const merged = mergeRules(existing.rules, desiredRules(target)[phase], target);
+    assert.ok(merged.some((rule) => rule.ref === manual.ref));
+    for (const rule of other) assert.ok(merged.some((item) => item.ref === rule.ref));
+    assert.equal(
+      readRuleset(phase, () => []),
+      null,
+    );
+    assert.throws(
+      () =>
+        readRuleset(phase, () => {
+          throw new Error("lettura fallita");
+        }),
+      /lettura fallita/u,
+    );
+    assert.throws(() => readRuleset(phase, () => null), /non leggibile/u);
+    assert.throws(
+      () =>
+        readRuleset(phase, () =>
+          Array.from({ length: 50 }, () => ({ phase: "altra", kind: "zone" })),
+        ),
+      /incompleto/u,
+    );
+  });
   it("legge zona, host e prefisso delle regole dalla configurazione", () => {
     assert.equal(target.zone, "fiscalbay.it");
     assert.deepEqual(target.hosts, ["test.fiscalbay.it"]);

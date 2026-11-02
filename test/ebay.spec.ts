@@ -305,7 +305,10 @@ describe("sottoscrizione ORDER_CONFIRMATION del venditore", () => {
         const status = state.create ?? 201;
         return status === 201
           ? new Response(null, { status })
-          : Response.json({ errors: [{ errorId: status === 409 ? 195012 : 195011 }] }, { status });
+          : Response.json(
+              { errors: [{ errorId: status === 409 ? 195012 : 195011 }] },
+              { status, headers: { "retry-after": "120" } },
+            );
       }
       if (method === "GET" && url.pathname.endsWith("/subscription"))
         return Response.json({ subscriptions: state.existing ?? [] });
@@ -415,10 +418,10 @@ describe("sottoscrizione ORDER_CONFIRMATION del venditore", () => {
   it("limiti ed errori di eBay restano errori del provider", async () => {
     expect(
       await failure(subscribeOrderEvents(test, notifications({ create: 429 }).access, "test")),
-    ).toEqual({ failure: "rate_limited", status: 429 });
+    ).toEqual({ failure: "rate_limited", status: 429, retryAfter: 120 });
     expect(
       await failure(subscribeOrderEvents(test, notifications({ create: 500 }).access, "test")),
-    ).toEqual({ failure: "unavailable", status: 500 });
+    ).toEqual({ failure: "unavailable", status: 500, retryAfter: 120 });
     expect(
       await failure(subscribeOrderEvents(test, notifications({ create: 401 }).access, "test")),
     ).toEqual({ failure: "credentials", status: 401 });

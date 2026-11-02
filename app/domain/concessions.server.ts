@@ -11,7 +11,9 @@ import { reconcileSubscription } from "./billing.server";
 import { applyWorkspacePlan } from "./free-store.server";
 import { grantLifetime, type LifetimeGrant } from "./lifetime.server";
 import { dayMilliseconds } from "../time";
-import { lifetimeInForceSql } from "./grants.server";
+import { lifetimeInForceSql, renewingSubscriptionStatuses } from "./grants.server";
+import { sqlList } from "./sql.server";
+import { maxGrantDays } from "../limits";
 
 /**
  * Concessioni della console amministrativa (§6.3): Premium temporaneo, estensione gratuita di
@@ -26,7 +28,7 @@ const concession = z.object({
 });
 
 /** Giorni concessi in una volta: oltre l'anno serve una valutazione separata. */
-const maxGrantDays = 366;
+const renewing = `s.status IN (${sqlList(renewingSubscriptionStatuses)})`;
 
 export type PremiumGrant =
   | { result: "done"; startsAt: string; endsAt: string }
@@ -67,11 +69,11 @@ export async function grantPremium(
     const workspace = await env.DB.prepare(`SELECT ${lifetimeInForceSql("w.id")} AS lifetime,
         ${coveredUntilSql} AS covered_until,
         (SELECT s.id FROM stripe_subscriptions s WHERE s.workspace_id = w.id AND s.environment = ?3
-          AND s.unavailable_at IS NULL AND s.status IN ('active', 'trialing')
+          AND s.unavailable_at IS NULL AND ${renewing}
           AND s.cancel_at_period_end = 0
           ORDER BY julianday(s.current_period_start) DESC LIMIT 1) AS subscription,
         (SELECT s.current_period_end FROM stripe_subscriptions s WHERE s.workspace_id = w.id
-          AND s.environment = ?3 AND s.unavailable_at IS NULL AND s.status IN ('active', 'trialing')
+          AND s.environment = ?3 AND s.unavailable_at IS NULL AND ${renewing}
           AND s.cancel_at_period_end = 0
           ORDER BY julianday(s.current_period_start) DESC LIMIT 1) AS renews_at
       FROM workspaces w WHERE w.id = ?1`)

@@ -13,6 +13,7 @@ import type { TechnicalMetrics } from "../../domain/technical-metrics.server";
 import { formatNumber } from "../../format";
 import { SeverityBadge } from "./overview";
 import { ActionForm, DataTable, Disclosure, Panel } from "./kit";
+import { subjectLabel } from "./subject-label";
 import { useAdmin } from "./use-admin";
 
 export function JobsView({ tasks, receipts }: { tasks: TaskState[]; receipts: ReceiptState[] }) {
@@ -143,10 +144,6 @@ function QuotaTable({ rows }: { rows: QuotaRow[] }) {
     />
   );
 }
-
-/** Ambiente, API e chiamata, o ambiente, regione e categoria di dati, separati da punti. */
-const subjectLabel = (subject: string) =>
-  subject.replace("production", "Production").replace("sandbox", "Sandbox").replaceAll(":", " · ");
 
 export function QuotasView({
   quotas,

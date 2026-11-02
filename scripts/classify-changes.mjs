@@ -68,7 +68,7 @@ const tooling = [
   /^\.codex\//u,
   /^\.mcp\.json$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|stripe-account|telegram-bot|metrics-query|log-archive|zone-protection|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/provider)\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|stripe-account|telegram-bot|metrics-query|log-archive|zone-protection|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -246,6 +246,7 @@ export const moduleAreas = [
     /^app\/(?:catalog\.ts|domain\/subscription-offers\.ts|integrations\/stripe(?:-account)?\.server\.ts|domain\/(?:billing|billing-subscriptions|checkout|lifetime|grants|concessions|refunds|plan-view)\.server\.ts)$/u,
     billing,
   ],
+  [/^app\/domain\/billing-incidents\.server\.ts$/u, ["auth", "settings"]],
   [
     /^app\/(?:domain\/telegram(?:-bot|-deliveries|-messages)?\.server\.ts|copy\/(?:owner-)?telegram\.ts|integrations\/telegram\.server\.ts|bot-commands\.ts)$/u,
     ["auth", "settings"],
@@ -255,7 +256,7 @@ export const moduleAreas = [
     ["auth", "settings"],
   ],
   [
-    /^app\/(?:components\/(?:access|admin)\/|account\/|components\/turnstile\.tsx$|copy\/admin-copy\.ts$|(?:admin-console|auth-route|security-actions|password|turnstile|metrics)\.server\.ts$|turnstile\.ts$|metrics-queries\.ts$|domain\/(?:admin-[a-z]+|owner-[a-z]+|admission(?:-state)?|abuse-review|technical-metrics|product-metrics|maintenance)\.server\.ts$)/u,
+    /^app\/(?:components\/(?:access|admin)\/|account\/|components\/turnstile\.tsx$|copy\/admin-copy\.ts$|(?:admin-console|auth-route|security-actions|password|turnstile|metrics)\.server\.ts$|turnstile\.ts$|metrics-queries\.ts$|domain\/(?:admin-[a-z]+|owner-[a-z]+|admission(?:-state)?|auth-attempts|abuse-review|technical-metrics|product-metrics|maintenance)\.server\.ts$)/u,
     ["auth"],
   ],
   [
@@ -264,14 +265,14 @@ export const moduleAreas = [
   ],
   [/^app\/components\/language-switch\.tsx$/u, ["auth", "public"]],
   [
-    /^app\/(?:domain\/(?:scheduled-work|sql)\.server\.ts|domain\/work-timing\.ts|integrations\/http\.server\.ts|log-records\.ts|observability\.server\.ts|page-timing(?:\.server)?\.ts|sequence\.ts|service-activity\.server\.ts|settle\.server\.ts)$/u,
+    /^app\/(?:domain\/(?:scheduled-work|sql|page-timing|webhook-receipts)\.server\.ts|domain\/work-timing\.ts|integrations\/http\.server\.ts|log-records\.ts|observability\.server\.ts|page-timing(?:\.server)?\.ts|sequence\.ts|service-activity\.server\.ts|settle\.server\.ts)$/u,
     [],
   ],
 ];
 
 /** Moduli che ogni pagina attraversa, oppure senza un'area che li contenga: provano tutto. */
 export const sharedModules =
-  /^(?:workers\/app\.ts|app\/(?:components\/|copy\/|app\.css$|routes\.ts$|root\.tsx$|entry\.(?:client|server)\.tsx$|(?:access-notice|app-copy|app-links|changelog|client-action|error-response|errors|format|i18n|limits|markup|money|preferences|request-limits|support|tax-quality|time|view-models|web-analytics)\.ts$|(?:account-area|account-page|area-actions|auth|content-security|request-limits|response-cookies|sealed|whats-new)\.server\.ts$|domain\/(?:history-window|service-notices|service-settings)\.server\.ts$|preview\/(?:scenarios|state)\.server\.ts$))/u;
+  /^(?:workers\/app\.ts|app\/(?:components\/|copy\/|app\.css$|routes\.ts$|root\.tsx$|entry\.(?:client|server)\.tsx$|(?:access-notice|app-copy|app-links|changelog|client-action|error-response|errors|format|i18n|limits|markup|money|preferences|request-limits|support|tax-quality|time|view-models|web-analytics)\.ts$|(?:account-area|account-page|area-actions|auth|content-security|request-limits|response-cookies|sealed|whats-new)\.server\.ts$|domain\/(?:history-window|service-notices|service-settings)\.server\.ts$|preview\/(?:(?:scenarios|scenario-orders|state)\.server|scenario-text)\.ts$))/u;
 
 /** Moduli applicativi senza area dichiarata e fuori da `sharedModules`. */
 export const undeclaredModules = (files) =>
@@ -330,7 +331,7 @@ export const areaTags = Object.keys(areaPatterns);
 /** Cambiare il processo richiede la sua qualifica anche senza distribuire il prodotto. */
 export const qualificationChange = (files) =>
   files.some((file) =>
-    /^(?:\.github\/(?:workflows\/|actions\/)|scripts\/(?:release\/|classify-changes|browser-tests|pages-reuse|find-(?:build|deployed)|mutation(?:-reuse)?|lib\/provider))/u.test(
+    /^(?:\.github\/(?:workflows\/|actions\/)|scripts\/(?:release\/|classify-changes|browser-tests|pages-reuse|find-(?:build|deployed)|mutation(?:-reuse)?|lib\/(?:provider|worker)))/u.test(
       file,
     ),
   );

@@ -146,6 +146,23 @@ function scenario() {
 }
 
 describe("ripristino senza dati o diritti revocati", () => {
+  it("conserva gli incassi senza assegnazione e il loro rientro dopo il punto", async () => {
+    const { current, restored } = scenario();
+    current.exec(`INSERT INTO billing_incidents (session_id, workspace_id, customer_id, environment, opened_at, checked_at, resolved_at)
+      VALUES ('cs_open', 'w-keep', NULL, 'test', '${later}', '${later}', NULL),
+             ('cs_closed', 'w-keep', NULL, 'test', '${before}', '${later}', '${later}');`);
+    restored.exec(`INSERT INTO billing_incidents (session_id, workspace_id, customer_id, environment, opened_at, checked_at)
+      VALUES ('cs_closed', 'w-keep', NULL, 'test', '${before}', '${before}');`);
+    const captured = await capture(runner(current), point);
+    await reapply(runner(restored), captured, new Date(later));
+    assert.deepEqual(
+      rows(restored, "SELECT session_id, resolved_at FROM billing_incidents ORDER BY session_id"),
+      [
+        { session_id: "cs_closed", resolved_at: later },
+        { session_id: "cs_open", resolved_at: null },
+      ],
+    );
+  });
   it("ordina le tabelle dalle figlie alle madri ed esclude quelle interne", async () => {
     const tables = (await schemaOf(runner(database()))).map(({ name }) => name);
     const position = (name) => tables.indexOf(name);

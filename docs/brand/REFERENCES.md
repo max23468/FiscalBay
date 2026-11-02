@@ -66,7 +66,7 @@ Regole d'uso:
 - **Fondi:** su fondi chiari la versione con contorno blu, su fondi scuri la versione con carta bianca, su fotografie o fondi colorati il monocromo nel colore che garantisce contrasto.
 - **Da non fare:** cambiare colori o proporzioni, deformare, aggiungere ombre o effetti, ruotare diversamente la tessera, racchiudere l'icona in una tile al di fuori delle icone per app.
 
-Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 1.1, pacchetto `@fontsource/inter` 5), convertito in tracciati con spaziatura −1,5%; il file del font non è distribuito. Nel logo orizzontale la tessera è alta 1,6 volte le maiuscole (maiuscole al 62% della tessera); distanza dall'icona pari a metà altezza delle maiuscole.
+Wordmark: Inter ExtraBold 4.x (The Inter Project Authors, SIL Open Font License 1.1, pacchetto Inter ExtraBold (origine storica; oggi l'app usa `@fontsource-variable/inter`) 5), convertito in tracciati con spaziatura −1,5%; il file del font non è distribuito. Nel logo orizzontale la tessera è alta 1,6 volte le maiuscole (maiuscole al 62% della tessera); distanza dall'icona pari a metà altezza delle maiuscole.
 
 ## Nove riferimenti frontend
 

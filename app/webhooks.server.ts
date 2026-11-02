@@ -28,10 +28,19 @@ import { consumeTelegramUpdate } from "./domain/telegram-bot.server";
 import { deliverTelegram } from "./domain/telegram-deliveries.server";
 import { isProduction } from "./app-links";
 import { logFailure } from "./errors";
-import { inSequence } from "./sequence";
 import { webhookPaths } from "./webhook-paths";
 import { dayMilliseconds } from "./time";
-import { queueRetryDelay, stalledReceiptMilliseconds } from "./domain/work-timing";
+import { queueRetryDelay } from "./domain/work-timing";
+import {
+  enqueueReceipt,
+  eventStore,
+  recordReceipt,
+  claimReceipt,
+  receiptPending,
+  completeReceipt,
+  releaseReceipt,
+  type Receipt,
+} from "./domain/webhook-receipts.server";
 
 const maxBytes = 262_144;
 const retention = 7 * dayMilliseconds;
@@ -47,23 +56,6 @@ export const isWebhookPath = (path: string) => webhookPaths.includes(path);
 export function isWebhookMessage(body: unknown): body is { receiptId: string } {
   return z.object({ receiptId: z.string() }).safeParse(body).success;
 }
-type Receipt = {
-  id: string;
-  provider: "ebay" | "stripe" | "telegram";
-  environment: string;
-  provider_id: string;
-  topic: string;
-  object_id: string;
-  store_id: string | null;
-  consent_granted_at: string | null;
-  link_token_hash: string | null;
-  command: string | null;
-  callback_id: string | null;
-  message_id: number | null;
-  event_at: string;
-  queued_at: string | null;
-  completed_at: string | null;
-};
 
 class InvalidWebhook extends Error {
   constructor(readonly status: number) {
@@ -306,11 +298,7 @@ export async function receiveWebhook(
       return new Response(null, { status: 204 });
     }
     if (event.provider === "ebay") {
-      const store =
-        await env.DB.prepare(`SELECT s.id, c.granted_at FROM ebay_stores s JOIN ebay_store_credentials c ON c.store_id = s.id
-        WHERE s.ebay_account_id = ? AND s.ebay_environment = ? AND s.disconnected_at IS NULL AND c.rejected_at IS NULL`)
-          .bind(event.store_id, event.environment)
-          .first<{ id: string; granted_at: string }>();
+      const store = await eventStore(env.DB, event.store_id, event.environment);
       // Un evento senza negozio attivo, o precedente al consenso corrente, non ha effetti: la
       // sottoscrizione di un venditore scollegato può consegnare ancora, e un rifiuto farebbe
       // ritentare eBay. La lettura periodica resta la fonte degli ordini.
@@ -327,33 +315,13 @@ export async function receiveWebhook(
     // Una chat che scrive troppo in fretta non accoda altro lavoro: il resto si ignora. Il
     // conteggio e la ricevuta sono la stessa istruzione, così aggiornamenti simultanei non
     // superano il limite.
-    const receipt = await env.DB.prepare(`INSERT INTO webhook_receipts
-      (id, provider, environment, provider_id, topic, object_id, store_id, consent_granted_at,
-        link_token_hash, command, callback_id, message_id, event_at, expires_at)
-      SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14
-      WHERE ?2 <> 'telegram' OR (SELECT count(*) FROM webhook_receipts
-        WHERE provider = 'telegram' AND environment = ?3 AND object_id = ?6 AND event_at > ?15) < ?16
-      ON CONFLICT(provider, environment, provider_id) DO UPDATE SET id = webhook_receipts.id
-      RETURNING *`)
-      .bind(
-        crypto.randomUUID(),
-        event.provider,
-        event.environment,
-        event.provider_id,
-        event.topic,
-        event.object_id,
-        event.store_id,
-        event.consent_granted_at,
-        event.link_token_hash,
-        event.command,
-        event.callback_id,
-        event.message_id,
-        event.event_at,
-        new Date((late ? now.getTime() : Date.parse(event.event_at)) + retention).toISOString(),
-        new Date(now.getTime() - 60_000).toISOString(),
-        chatUpdatesPerMinute,
-      )
-      .first<Receipt>();
+    const receipt = await recordReceipt(
+      env.DB,
+      event,
+      now,
+      new Date((late ? now.getTime() : Date.parse(event.event_at)) + retention).toISOString(),
+      chatUpdatesPerMinute,
+    );
     if (!receipt) {
       // Il tocco ignorato chiude comunque l'attesa del pulsante, senza avviso.
       if (event.callback_id)
@@ -423,57 +391,6 @@ async function consumeNow(env: Env, receiptId: string, fetcher: typeof fetch, no
 /** Aggiornamenti accettati per chat in un minuto: oltre, il bot non risponde. */
 const chatUpdatesPerMinute = 20;
 
-async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
-  await env.WORK_QUEUE.send({ receiptId });
-  await env.DB.prepare("UPDATE webhook_receipts SET queued_at = ? WHERE id = ?")
-    .bind(now.toISOString(), receiptId)
-    .run();
-}
-
-// Una ricevuta accodata da oltre un giorno e non completata ha perso il messaggio: retry e
-// attese del provider si esauriscono prima, e resta la DLQ o la scadenza della coda.
-const lostMilliseconds = dayMilliseconds;
-
-/**
- * Riprende la finestra fra claim D1 e accettazione Queue, anche senza retry provider, e le
- * ricevute accettate il cui messaggio è andato perso. La ricevuta non scaduta è il checkpoint:
- * il consumer rivalida consenso, ambiente e finestra prima di ogni effetto.
- */
-export async function recoverWebhookIngress(env: Env, now = new Date()) {
-  const { results } = await env.DB.prepare(`SELECT id FROM webhook_receipts
-    WHERE completed_at IS NULL AND expires_at > ?1
-      AND (queued_at IS NULL OR queued_at <= ?2) AND (locked_until IS NULL OR locked_until <= ?1)
-    ORDER BY event_at LIMIT 25`)
-    .bind(now.toISOString(), new Date(now.getTime() - lostMilliseconds).toISOString())
-    .all<{ id: string }>();
-  // In sequenza: se Queue non accetta, il recupero si ferma senza altri invii destinati a fallire.
-  await inSequence(results, (receipt) => enqueueReceipt(env, receipt.id, now));
-}
-
-/**
- * Ripresa chiesta dalla console per le ricevute in ritardo di un provider, senza aspettare il
- * giorno del recupero automatico. Come il cron non tocca quelle prese da un consumer e riaccoda
- * al massimo 25 ricevute; restituisce quante ne ha riaccodate.
- */
-export async function resumeStalledReceipts(
-  env: Env,
-  provider: "ebay" | "stripe" | "telegram",
-  now = new Date(),
-) {
-  const { results } = await env.DB.prepare(`SELECT id FROM webhook_receipts
-    WHERE provider = ?3 AND completed_at IS NULL AND expires_at > ?1
-      AND COALESCE(queued_at, event_at) <= ?2 AND (locked_until IS NULL OR locked_until <= ?1)
-    ORDER BY event_at LIMIT 25`)
-    .bind(
-      now.toISOString(),
-      new Date(now.getTime() - stalledReceiptMilliseconds).toISOString(),
-      provider,
-    )
-    .all<{ id: string }>();
-  await inSequence(results, (receipt) => enqueueReceipt(env, receipt.id, now));
-  return results.length;
-}
-
 export async function consumeWebhooks(
   batch: Pick<MessageBatch<unknown>, "messages">,
   env: Env,
@@ -485,23 +402,9 @@ export async function consumeWebhooks(
     const lease = crypto.randomUUID();
     try {
       receiptId = referenceSchema.parse(message.body).receiptId;
-      const receipt = await env.DB.prepare(`UPDATE webhook_receipts SET lease = ?, locked_until = ?
-        WHERE id = ? AND completed_at IS NULL AND expires_at > ? AND (locked_until IS NULL OR locked_until <= ?)
-        RETURNING *`)
-        .bind(
-          lease,
-          new Date(now.getTime() + 15 * 60_000).toISOString(),
-          receiptId,
-          now.toISOString(),
-          now.toISOString(),
-        )
-        .first<Receipt>();
+      const receipt = await claimReceipt(env.DB, receiptId, lease, now);
       if (!receipt) {
-        const pending = await env.DB.prepare(
-          "SELECT 1 FROM webhook_receipts WHERE id = ? AND completed_at IS NULL AND expires_at > ?",
-        )
-          .bind(receiptId, now.toISOString())
-          .first();
+        const pending = await receiptPending(env.DB, receiptId, now);
         if (pending) message.retry({ delaySeconds: 60 });
         else message.ack();
         continue;
@@ -566,22 +469,13 @@ export async function consumeWebhooks(
           now,
         );
       }
-      await env.DB.prepare(
-        "UPDATE webhook_receipts SET completed_at = ?, lease = NULL, locked_until = NULL WHERE id = ? AND lease = ?",
-      )
-        .bind(now.toISOString(), receiptId, lease)
-        .run();
+      await completeReceipt(env.DB, receiptId, lease, now);
       message.ack();
     } catch (error) {
       if (receiptId)
-        await env.DB.prepare(
-          "UPDATE webhook_receipts SET lease = NULL, locked_until = NULL WHERE id = ? AND lease = ?",
-        )
-          .bind(receiptId, lease)
-          .run()
-          .catch((cleanup: unknown) =>
-            logFailure({ error: cleanup, operation: "webhook_consumer" }),
-          );
+        await releaseReceipt(env.DB, receiptId, lease).catch((cleanup: unknown) =>
+          logFailure({ error: cleanup, operation: "webhook_consumer" }),
+        );
       const delay = error instanceof UpstreamError ? error.details.retryAfter : undefined;
       message.retry({
         delaySeconds: Math.min(43_200, delay ?? queueRetryDelay(message.attempts)),

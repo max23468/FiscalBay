@@ -27,7 +27,7 @@ import {
   type ExportRows,
 } from "../orders/export-columns";
 import { visibleOrderTallies } from "../domain/orders.server";
-import { errorResponse } from "../error-response";
+import { errorResponse, postOnly } from "../error-response";
 import { logFailure } from "../errors";
 import { localizedPath } from "../i18n";
 import { measure } from "../observability.server";
@@ -40,10 +40,7 @@ import {
 import type { ActionResult } from "../view-models";
 import type { Route } from "./+types/order-export";
 
-/** Il percorso crea soltanto file: una lettura non ha contenuto. */
-export function loader() {
-  return new Response(null, { status: 405, headers: { allow: "POST" } });
-}
+export const loader = postOnly;
 
 /**
  * File degli ordini, creato soltanto dalla conferma «Crea file». L'ambito arriva

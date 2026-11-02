@@ -53,9 +53,6 @@ const services = (): SettingsPageData["services"] => ({
   billing: checkoutConfigured(env),
   billingPortal: !!stripeSecretKey(env),
   telegram: telegramConfigured(env),
-  accountExport: true,
-  accountDeletion: true,
-  support: true,
 });
 
 function isSection(value: string | undefined): value is SettingsSection {

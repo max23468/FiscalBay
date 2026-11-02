@@ -1,3 +1,4 @@
+import { adminPageSize } from "../limits";
 import { stripeEnvironment } from "../integrations/stripe.server";
 import { vacantLifetimeSeats } from "./lifetime.server";
 import { activeCoverageSql } from "./grants.server";
@@ -10,14 +11,21 @@ import { listWorkspaceStores, pauseReasonSql, type StoreStatus } from "./stores.
  * compaiono soltanto identità, collegamento e conteggi.
  */
 
-const pageSize = 50;
-
 /** Testo cercato: email, nome, ragione sociale, spazio, negozio o account eBay. */
 const searchSql = `(?2 IS NULL OR instr(lower(u.email), ?2) > 0 OR instr(lower(u.name), ?2) > 0
   OR instr(lower(COALESCE(p.company_name, '')), ?2) > 0 OR w.id = ?3
   OR EXISTS (SELECT 1 FROM ebay_stores s WHERE s.workspace_id = w.id
     AND (instr(lower(COALESCE(s.store_name, s.display_name, s.ebay_account_id, '')), ?2) > 0
       OR s.id = ?3)))`;
+
+/** Il registro usa il proprietario corrente del negozio, mai lo spazio indicato dal modulo. */
+export async function storeAuditTarget(db: D1Database, storeId: string) {
+  const store = await db
+    .prepare("SELECT workspace_id FROM ebay_stores WHERE id = ?")
+    .bind(storeId)
+    .first<{ workspace_id: string }>();
+  return store ? `workspace:${store.workspace_id}:store:${storeId}` : `store:${storeId}`;
+}
 
 export type AccountRow = {
   userId: string;
@@ -53,7 +61,7 @@ export async function listAccounts(
       now.toISOString(),
       query,
       options.query?.trim() ?? null,
-      pageSize + 1,
+      adminPageSize + 1,
       options.offset ?? 0,
     )
     .all<
@@ -64,13 +72,13 @@ export async function listAccounts(
       }
     >();
   return {
-    rows: results.slice(0, pageSize).map((row) => ({
+    rows: results.slice(0, adminPageSize).map((row) => ({
       ...row,
       createdAt: new Date(row.createdAt).toISOString(),
       admin: row.admin === 1,
       waitlisted: row.waitlisted === 1,
     })),
-    more: results.length > pageSize,
+    more: results.length > adminPageSize,
   };
 }
 
@@ -110,6 +118,12 @@ export type WorkspaceDetail = {
   /** Posti rimasti senza spazio dopo una cancellazione, che lo spazio può riprendere. */
   vacantSeats: Awaited<ReturnType<typeof vacantLifetimeSeats>>;
   customers: { id: string; erased: { source: string; at: string } | null }[];
+  billingIncidents: {
+    sessionId: string;
+    customerId: string | null;
+    openedAt: string;
+    checkedAt: string;
+  }[];
   cycle: { startsAt: string; endsAt: string; quota: number; used: number } | null;
   freeStore: { storeId: string; kind: string; changedAt: string } | null;
   extensions: {
@@ -120,7 +134,7 @@ export type WorkspaceDetail = {
     grantedAt: string;
     revokedAt: string | null;
   }[];
-  stores: StoreStatus[];
+  stores: (StoreStatus & { detailErrors: number })[];
   /** Negozi dello spazio con i dati eliminati, che restano per l'identità del collegamento. */
   removedStores: { id: string; label: string }[];
 };
@@ -155,6 +169,8 @@ export async function workspaceDetail(
     extensions,
     removed,
     profile,
+    detailErrors,
+    billingIncidents,
   ] = await db.batch<Record<string, unknown>>([
     db
       .prepare(`SELECT wm.user_id AS userId, u.email, u.name, wm.role FROM workspace_members wm
@@ -184,7 +200,9 @@ export async function workspaceDetail(
             SELECT customer_id AS id FROM stripe_subscriptions WHERE workspace_id = ?1
               AND environment = ?2
             UNION SELECT customer_id FROM lifetime_allocations WHERE workspace_id = ?1
-              AND customer_id IS NOT NULL) c
+              AND customer_id IS NOT NULL
+            UNION SELECT customer_id FROM billing_incidents WHERE workspace_id = ?1
+              AND environment = ?2 AND customer_id IS NOT NULL AND resolved_at IS NULL) c
           LEFT JOIN stripe_customer_erasures e ON e.customer_id = c.id`)
       .bind(workspaceId, environment),
     db
@@ -215,9 +233,21 @@ export async function workspaceDetail(
         JOIN user_profiles p ON p.user_id = wm.user_id WHERE wm.workspace_id = ?
         ORDER BY wm.role = 'owner' DESC LIMIT 1`)
       .bind(workspaceId),
+    db
+      .prepare(`SELECT r.store_id AS id, COUNT(*) AS count FROM order_source_refs r
+      JOIN ebay_stores s ON s.id = r.store_id
+      WHERE s.workspace_id = ? AND r.detail_error IS NOT NULL GROUP BY r.store_id`)
+      .bind(workspaceId),
+    db
+      .prepare(`SELECT session_id AS sessionId, customer_id AS customerId, opened_at AS openedAt, checked_at AS checkedAt
+      FROM billing_incidents i WHERE workspace_id = ?1 AND environment = ?2 AND resolved_at IS NULL
+        AND NOT EXISTS (SELECT 1 FROM stripe_customer_erasures e WHERE e.customer_id = i.customer_id)
+      ORDER BY opened_at`)
+      .bind(workspaceId, environment),
   ]);
   return {
     ...workspace,
+    billingIncidents: billingIncidents!.results as WorkspaceDetail["billingIncidents"],
     members: members!.results as WorkspaceDetail["members"],
     profile: (profile!.results[0] as WorkspaceDetail["profile"]) ?? null,
     entitlements: entitlements!.results as Entitlement[],
@@ -239,7 +269,10 @@ export async function workspaceDetail(
     cycle: (cycle!.results[0] as WorkspaceDetail["cycle"]) ?? null,
     freeStore: (freeStore!.results[0] as WorkspaceDetail["freeStore"]) ?? null,
     extensions: extensions!.results as WorkspaceDetail["extensions"],
-    stores: await listWorkspaceStores(db, workspaceId, now),
+    stores: (await listWorkspaceStores(db, workspaceId, now)).map((store) => ({
+      ...store,
+      detailErrors: Number(detailErrors!.results.find((row) => row.id === store.id)?.count ?? 0),
+    })),
     removedStores: removed!.results as WorkspaceDetail["removedStores"],
     vacantSeats: await vacantLifetimeSeats(db),
   };
@@ -301,7 +334,7 @@ export async function listAllStores(
       query,
       options.query?.trim() ?? null,
       options.problems ? 1 : 0,
-      pageSize + 1,
+      adminPageSize + 1,
       options.offset ?? 0,
     )
     .all<
@@ -313,14 +346,14 @@ export async function listAllStores(
       }
     >();
   return {
-    rows: results.slice(0, pageSize).map((row) => ({
+    rows: results.slice(0, adminPageSize).map((row) => ({
       ...row,
       disconnected: row.disconnected === 1,
       removed: row.removed === 1,
       syncing: row.syncing === 1,
       pauses: row.pauses?.split(",").sort() ?? [],
     })),
-    more: results.length > pageSize,
+    more: results.length > adminPageSize,
   };
 }
 

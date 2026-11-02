@@ -15,13 +15,20 @@ import { cancelSubscription } from "./billing-subscriptions.server";
 import { purchasesOpenSql } from "./admission-state.server";
 import {
   entitlementInForce,
+  isRenewingSubscription,
   lifetimeInForceSql,
+  openSubscriptionSql,
   openSubscriptionStatuses,
   storeReadSql,
 } from "./grants.server";
 import { erasedCustomerSql, paymentReversal, reversalStatements } from "./refunds.server";
 import { inSequence } from "../sequence";
 import { sqlList } from "./sql.server";
+import {
+  recordUnallocatedLifetime,
+  resolveBillingIncident,
+  reconcileBillingIncidents,
+} from "./billing-incidents.server";
 
 /**
  * Posti ancora liberi per il sito pubblico: un posto prenotato da un Checkout aperto non è in
@@ -173,7 +180,7 @@ export async function lifetimeContext(
       ? {
           customerId: row.customer_id,
           renewsAt:
-            ["active", "trialing"].includes(row.status) && !row.cancel_at_period_end
+            isRenewingSubscription(row.status) && !row.cancel_at_period_end
               ? row.current_period_end
               : null,
         }
@@ -426,9 +433,17 @@ export async function reconcileLifetime(
     .first<{ revoked_at: string | null }>();
   if (!granted) {
     // Incasso senza posto: lo gestisce l'assistenza, il tetto non cambia.
+    if (!reversal?.revocation)
+      await recordUnallocatedLifetime(
+        env,
+        { sessionId: session.id, workspaceId, customerId: customer },
+        now,
+      );
+    else await resolveBillingIncident(env.DB, session.id, now);
     logFailure({ error: new UnknownLifetimeSession("lifetime_unallocated"), operation: "billing" });
     return;
   }
+  await resolveBillingIncident(env.DB, session.id, now);
   // Rimborsato prima dell'attivazione: l'abbonamento sostituito resta quello in vigore.
   if (!granted.revoked_at) await endReplacedSubscriptions(env, stripe, workspaceId, now);
 }
@@ -483,6 +498,7 @@ const lifetimeChecks = 5;
  * è arrivato. Ogni elemento registra il proprio errore senza fermare gli altri.
  */
 export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, now = new Date()) {
+  await reconcileBillingIncidents(env, stripe, now);
   const at = now.toISOString();
   const [, due, replaced, sold] = await env.DB.batch<Record<string, string>>([
     env.DB.prepare(`DELETE FROM lifetime_allocations WHERE status = 'reserved'
@@ -495,9 +511,7 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
     // all'attivazione non è riuscita.
     env.DB.prepare(`SELECT a.workspace_id FROM lifetime_allocations a
         WHERE a.status = 'active' AND ${lifetimeInForceSql("a.workspace_id")}
-          AND (EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.workspace_id = a.workspace_id
-              AND s.environment = ?1 AND s.unavailable_at IS NULL
-              AND s.status IN (${sqlList(openSubscriptionStatuses)}))
+          AND (${openSubscriptionSql("a.workspace_id", "?1")}
             OR EXISTS (SELECT 1 FROM subscription_checkouts c WHERE c.workspace_id = a.workspace_id
               AND c.session_id IS NOT NULL AND julianday(c.expires_at) > julianday(?2)))`).bind(
       stripeEnvironment(env),

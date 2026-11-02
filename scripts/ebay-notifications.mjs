@@ -19,9 +19,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import config from "../cloudflare.config.ts";
 import { keychainItems } from "./ebay-mcp.mjs";
-import { keychain } from "./lib/provider.mjs";
+import { keychain, modeOf } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 
 const api = "https://api.ebay.com";
 const notificationApi = `${api}/commerce/notification/v1`;
@@ -40,7 +40,7 @@ const payload = (schemaVersion) => ({ format: "JSON", schemaVersion, deliveryPro
 
 /** Ingresso eBay Production dell'ambiente, da `cloudflare.config.ts` con la modalità della build. */
 export function endpointOf(mode) {
-  const { env } = config({ mode: mode === "live" ? "live" : "development" }).worker;
+  const { env } = workerOf(mode);
   return `${new URL(env.APP_ORIGIN.value).origin}/webhooks/ebay`;
 }
 
@@ -199,7 +199,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       test: { type: "boolean", default: false },
     },
   });
-  if (!["test", "live"].includes(values.mode)) throw new Error("--mode accetta test o live.");
+  modeOf(values.mode);
   const endpoint = endpointOf(values.mode);
   const request = notificationRequest(
     await applicationToken({

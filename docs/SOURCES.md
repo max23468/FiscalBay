@@ -12,13 +12,6 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 
 **Verifica pertinente:** G-STRIPE; prezzi in EUR con eventuale conversione provider, acquisto durante trial, checkout compatibile e ambiti non supportati.
 
-<a id="s02"></a>
-### S02 · Supabase · Database backups
-
-- [Documentazione ufficiale 1](https://supabase.com/docs/guides/platform/backups)
-
-**Verifica pertinente:** G-RECOVERY; compatibilità con sole protezioni native e unico restore drill prima del go-live.
-
 <a id="s03"></a>
 ### S03 · Stripe · Managed Payments: tax compliance
 
@@ -26,20 +19,6 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 - [Documentazione ufficiale 2](https://docs.stripe.com/payments/managed-payments/eligibility)
 
 **Verifica pertinente:** G-STRIPE/G-LEGAL; Paesi, categorie e acquirenti coperti, esclusione di operazioni che lascino a Temisfera la fiscalità della singola vendita.
-
-<a id="s04"></a>
-### S04 · Supabase · Passkeys
-
-- [Documentazione ufficiale 1](https://supabase.com/docs/guides/auth/passkeys)
-
-**Verifica pertinente:** G-AUTH; tutti e quattro gli accessi, enrollment, recupero, revoche e distinzione login/MFA.
-
-<a id="s05"></a>
-### S05 · Supabase · Provider OAuth personalizzati
-
-- [Documentazione ufficiale 1](https://supabase.com/docs/guides/auth/custom-oauth-providers)
-
-**Verifica pertinente:** G-AUTH/G-EBAY; qualifica eBay login separato da consenso seller.
 
 <a id="s06"></a>
 ### S06 · eBay · Fulfillment, Trading e contratti ufficiali delle fonti
@@ -102,10 +81,9 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 **Verifica pertinente:** G-LEGAL; listino canonico netto ma informazione chiara sul totale per i consumatori.
 
 <a id="s12"></a>
-### S12 · Email · iCloud+ dominio personalizzato e Supabase SMTP
+### S12 · Email · iCloud+ dominio personalizzato
 
 - [Documentazione ufficiale 1](https://support.apple.com/it-it/guide/icloud/mme8ed800b5d/icloud)
-- [Documentazione ufficiale 2](https://supabase.com/docs/guides/auth/auth-smtp)
 
 **Verifica pertinente:** G-INFRA/G-AUTH; info/supporto su iCloud+, noreply transazionale separato, test di ricezione/risposta e consegna.
 
@@ -134,10 +112,9 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 **Verifica pertinente:** G-UX/G-STACK; registry, CLI, provenienza del codice e coerenza del sistema visivo.
 
 <a id="s16"></a>
-### S16 · Cloudflare e Supabase · MCP ufficiali
+### S16 · Cloudflare · MCP ufficiali
 
 - [Documentazione ufficiale 1](https://developers.cloudflare.com/agents/model-context-protocol/cloudflare/servers-for-cloudflare/)
-- [Documentazione ufficiale 2](https://supabase.com/docs/guides/ai-tools/mcp)
 
 **Verifica pertinente:** G-INFRA/G-STACK; tool rilevanti per progetto, inventario dei permessi, smoke e revoca.
 
@@ -157,28 +134,6 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 **Osservato nella revisione:** il cliente vede Link come venditore, con condizioni di pagamento nel checkout, assistenza e rimborsi tramite Link (in alcuni casi entro 60 giorni) e addebito `LINK.COM*` seguito dal descriptor (riletto il 2026-10-29 per D230); vincoli di Checkout e dominio personalizzato; ruolo Link/Portal e contatti di supporto; cancellazione finanziaria tramite Link che può annullare abbonamenti e rimuovere oggetti nell’account del fornitore. Le prove di acquisti visibili in Link e invio ricevute non sono equivalenti tra sandbox e live.
 
 **Uso:** §6.5–6.6, §36.2; M0-08, M5-03/06/08/12, M9-01. Verificare nell’account effettivo; nessuna capability live certificata dalla lettura.
-
-<a id="s19"></a>
-### S19 · Supabase · Auth server-side e helper SSR
-
-- [Server-side rendering](https://supabase.com/docs/guides/auth/server-side)
-
-**Uso:** §7.1, §26; M0-04/11. Qualificare versione/stabilità e integrazione con React Router prima di selezionare il percorso.
-
-<a id="s20"></a>
-### S20 · Supabase · Sessioni e revoca
-
-- [User sessions](https://supabase.com/docs/guides/auth/sessions)
-
-**Uso:** §7.1 e §29.1; test di riuso del token dopo logout/cancellazione su tutti i percorsi realmente esposti. La lettura non dimostra che FiscalBay abbia già implementato una revoca immediata.
-
-<a id="s21"></a>
-### S21 · Supabase · Policy, viste, funzioni e storage
-
-- [Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
-- [Storage access control](https://supabase.com/docs/guides/storage/security/access-control)
-
-**Uso:** §25/29; M1-03, M2-04, M7-01. RLS è una difesa da configurare e testare, non una garanzia automatica di isolamento o degli sblocchi.
 
 <a id="s22"></a>
 ### S22 · Cloudflare R2 · URL firmati

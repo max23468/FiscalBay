@@ -174,11 +174,13 @@ export async function shellData(
   };
 }
 
+/** Richiesta partita dalla propria origine. */
+export const isSameOrigin = (request: Request) =>
+  request.headers.get("origin") === new URL(env.APP_ORIGIN).origin;
+
 /** Le azioni dell'area riservata accettano solo richieste partite dalla propria origine. */
 export function assertSameOrigin(request: Request) {
-  if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
-    throw errorResponse(request, "FORBIDDEN");
-  }
+  if (!isSameOrigin(request)) throw errorResponse(request, "FORBIDDEN");
 }
 
 /** Ambiente eBay richiesto dall'indirizzo; la Sandbox esiste soltanto dove è abilitata. */

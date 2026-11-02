@@ -9,6 +9,7 @@ import { parseMinor } from "../../money";
 import { dayMilliseconds } from "../../time";
 import { upstreamJson } from "../http.server";
 import { ebayApiUrl, type EbayAccess } from "./environment.server";
+import { UpstreamError } from "../http.server";
 
 type Amount = { value: string; currency: string };
 type Contact = {
@@ -83,12 +84,19 @@ function maskedFields(
   );
 }
 
+/** Campi senza i quali un ordine non diventa un'osservazione. */
+const observableOrderSchema = z.looseObject({
+  pricingSummary: z.looseObject({ total: z.looseObject({}) }),
+});
+
 /**
  * Lettura Fulfillment come osservazione validata del modello ordini, con importi esatti. I campi
  * non previsti, inclusi i dati fiscali, non entrano nell'osservazione. `observedAt` distingue
  * i campi mascherati per l'età dell'ordine da quelli assenti.
  */
 export function fulfillmentObservation(payload: unknown, observedAt: string): OrderObservation {
+  if (!observableOrderSchema.safeParse(payload).success)
+    throw new UpstreamError("invalid_response");
   const order = payload as FulfillmentOrderDetail;
   const lineItems = order.lineItems ?? [];
   const registration = order.buyer?.buyerRegistrationAddress;

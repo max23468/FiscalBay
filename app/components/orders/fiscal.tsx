@@ -4,7 +4,7 @@ import { useId, useRef, useState } from "react";
 import { useAction } from "~/components/action";
 import { UnlockIcon } from "~/components/icons";
 import { StatusBadge, StatusIcon } from "~/components/status";
-import { TaxCode } from "~/components/tax-code";
+import { TaxCode, useCopyFeedback } from "~/components/tax-code";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -30,7 +30,7 @@ import { Textarea } from "~/components/ui/textarea";
 import { cn } from "cn";
 import { supportEmail, type AppCopy } from "../../app-copy";
 import { mailtoHref } from "../../contact";
-import { languages, languageNames, type Language } from "../../i18n";
+import { isLanguage, languages, languageNames, type Language } from "../../i18n";
 import { defaultTemplate, requestEmailSubject } from "../../preferences";
 import { displayTaxValue } from "../../tax-quality";
 import {
@@ -457,7 +457,7 @@ export function MissingOrderHelp({
   const defaultMessage = (code: Language) =>
     (templates?.[code] ?? defaultTemplate(code)).replaceAll("{ordine}", order.ebayOrderId);
   const [message, setMessage] = useState(() => defaultMessage(initial));
-  const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
+  const { state: copied, copy, reset } = useCopyFeedback();
   const fieldId = useId();
   // Un alias eBay passa dalla messaggistica eBay, dove non si chiedono dati personali.
   const { email } = order.contacts;
@@ -520,10 +520,10 @@ export function MissingOrderHelp({
           items={messageLanguages}
           value={messageLanguage}
           onValueChange={(code) => {
-            if (code !== "it" && code !== "en") return;
+            if (!code || !isLanguage(code)) return;
             setMessageLanguage(code);
             setMessage(defaultMessage(code));
-            setCopied("idle");
+            reset();
           }}
         >
           <SelectTrigger id={`${fieldId}-language`} className="w-full min-w-0">
@@ -547,7 +547,7 @@ export function MissingOrderHelp({
           lang={messageLanguage}
           onChange={(event) => {
             setMessage(event.target.value);
-            setCopied("idle");
+            reset();
           }}
         />
       </Field>
@@ -555,14 +555,7 @@ export function MissingOrderHelp({
         variant="outline"
         className="h-auto min-h-9 w-fit max-w-full whitespace-normal"
         disabled={!message.trim()}
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(message);
-            setCopied("copied");
-          } catch {
-            setCopied("failed");
-          }
-        }}
+        onClick={() => copy(message)}
       >
         <MessageSquareText aria-hidden="true" data-icon="inline-start" />
         {t.orders.requestMessage}

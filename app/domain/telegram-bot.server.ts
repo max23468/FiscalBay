@@ -496,6 +496,8 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
         (
           await listVisibleOrders(env.DB, link.userId, latestLimit, store.environment, now, {
             criteria: { storeId: store.id },
+            // Stryker disable next-line BooleanLiteral: il bot non usa i suggerimenti; false evita soltanto letture aggiuntive, senza cambiare il messaggio.
+            suggestions: false,
           })
         ).map((order) => ({ order, environment: store.environment })),
       ),

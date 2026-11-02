@@ -91,6 +91,28 @@ const copyTones = {
   neutral: "text-muted-foreground hover:bg-muted hover:text-foreground",
 };
 
+/** Copia negli appunti con l'esito che torna neutro dopo poco. */
+export function useCopyFeedback() {
+  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const reset = () => {
+    clearTimeout(timer.current);
+    setState("idle");
+  };
+  async function copy(value: string) {
+    clearTimeout(timer.current);
+    try {
+      await navigator.clipboard.writeText(value);
+      setState("copied");
+      timer.current = setTimeout(() => setState("idle"), 1600);
+    } catch {
+      setState("failed");
+    }
+  }
+  return { state, copy, reset };
+}
+
 /** Copia del valore con conferma breve; `neutral` per i dati non fiscali, come i contatti. */
 export function CopyButton({
   value,
@@ -104,21 +126,7 @@ export function CopyButton({
   /** Testo visibile per le azioni di copia di un blocco di dati. */
   text?: string;
 }) {
-  const [state, setState] = useState<"idle" | "copied" | "failed">("idle");
-  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  async function copy() {
-    clearTimeout(timer.current);
-    try {
-      await navigator.clipboard.writeText(value);
-      setState("copied");
-      timer.current = setTimeout(() => setState("idle"), 1600);
-    } catch {
-      setState("failed");
-    }
-  }
-
+  const { state, copy } = useCopyFeedback();
   const label =
     state === "copied" ? labels.copied : state === "failed" ? labels.copyFailed : labels.copy;
   return (
@@ -129,7 +137,7 @@ export function CopyButton({
         size={text ? "sm" : "icon-sm"}
         aria-label={labels.copy}
         data-state={state}
-        onClick={copy}
+        onClick={() => copy(value)}
         className={cn("group/copy", copyTones[tone])}
       >
         <span className="relative size-4">

@@ -97,7 +97,7 @@ Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente q
 
 Non ripetere la stessa prescrizione per esteso in più fonti. Nel piano si mantiene il requisito, nella PR la prova dell'intervento e nel registro il perché. La granularità ordinaria è la milestone o una capacità significativa; i passi tecnici restano nella PR. Aggiornare questo piano soltanto per cambi di requisito, checkpoint, avanzamento significativo o questioni aperte, nella stessa PR dell'implementazione e prima del merge. Fix ordinari, refactoring e miglioramenti dei test non richiedono una modifica documentale fittizia. Il template PR dichiara l'impatto sul piano e il motivo. I test verificano una regola, non la ridefiniscono. Documenti separati solo con contenuto sostanziale e riusato; niente catalogo di file vuoti o API descritte a mano due volte se lo schema eseguibile è già sufficiente.
 
-In `docs/archive/` la procedura di adozione è storica e non è una lettura ordinaria; l'audit UI/UX del test si mantiene, registrando ogni correzione verificata. Nessuno dei due è un vincolo di CI. Nuove sezioni, file accorpati e identificativi non consecutivi sono ammessi se i riferimenti e i requisiti restano coerenti.
+In `docs/archive/` la procedura di adozione è storica e non è una lettura ordinaria; l'[audit UI/UX del test](engineering/AUDIT_UI_UX.md) si mantiene, registrando ogni correzione verificata. Nuove sezioni, file accorpati e identificativi non consecutivi sono ammessi se i riferimenti e i requisiti restano coerenti.
 
 ### 0.4 Completezza e prove
 
@@ -259,7 +259,7 @@ I confini di ciclo, trial e periodo si confrontano sull'istante UTC e sul fuso d
 <a id="s07"></a>
 ## 7. Autenticazione, identità e sessioni
 
-Quattro metodi obbligatori nella 2.0: **email/password, Google, Sign in with eBay e passkey**. Non due sistemi Auth sovrapposti. Cloudflare-only: Better Auth candidato; con Supabase valutare Auth nativa senza Better Auth. M0 qualifica inclusi recupero, collegamento identità, revoca e supporto runtime; per decisione owner del 2026-09-23 la sola qualifica di Sign in with eBay, bloccata dal diritto eBay sull'email Identity, passa a M2 secondo [§36.2](#s36), senza dichiararla collaudata; per decisione owner del 2026-10-06 le [prove reali](#prove-ebay) si eseguono in M8 sull'ambiente Production (D160). Dopo il diniego eBay di quel diritto, Sign in with eBay vale per gli account eBay che espongono un'email business; per gli altri il login si ferma su un avviso che indirizza agli altri tre metodi (D153). Un limite del provider non autorizza a togliere un login. Passkey Supabase sperimentali: rischio esplicito del gate; niente dichiarazione preventiva di stabilità. [S04](SOURCES.md#s04) [S05](SOURCES.md#s05)
+Quattro metodi obbligatori nella 2.0: **email/password, Google, Sign in with eBay e passkey**. Non due sistemi Auth sovrapposti. Il sistema è Better Auth. M0 ha qualificato inclusi recupero, collegamento identità, revoca e supporto runtime; per decisione owner del 2026-09-23 la sola qualifica di Sign in with eBay, bloccata dal diritto eBay sull'email Identity, passa a M2 secondo [§36.2](#s36), senza dichiararla collaudata; per decisione owner del 2026-10-06 le [prove reali](#prove-ebay) si eseguono in M8 sull'ambiente Production (D160). Dopo il diniego eBay di quel diritto, Sign in with eBay vale per gli account eBay che espongono un'email business; per gli altri il login si ferma su un avviso che indirizza agli altri tre metodi (D153). Un limite del provider non autorizza a togliere un login.
 
 Registrazione essenziale: email di contatto verificata, nome e cognome obbligatori, tipo di account privato o azienda; per l'azienda la ragione sociale è obbligatoria (D151). Nessuna P.IVA né altro dato fiscale in registrazione; il tipo di account non cambia piano, quote o limiti. Verifica prima di collegare eBay, riutilizzando la verifica affidabile del provider. La registrazione con email e password non apre la sessione e risponde allo stesso modo per un indirizzo già registrato, il cui titolare riceve un avviso: la sessione nasce dal link di conferma, così la registrazione non rivela chi usa FiscalBay. Chi accede con la password prima della conferma esplora, ma non collega negozi. Se eBay non prova un'email utilizzabile, richiedere verifica nel prodotto senza inventare l'attributo. Passkey può essere aggiunta dopo account confermato: non implica necessariamente signup passkey-first.
 
@@ -279,11 +279,11 @@ Sessioni persistenti con scadenze/rotazione gestite dal sistema Auth; elenco ses
 
 ### 7.1 Sessione server, revoca e ambienti
 
-Il server valida identità, sessione e livello di autenticazione con le primitive del sistema scelto; non si fida di dati utente letti soltanto dallo storage del browser. Con Supabase qualificare l’integrazione SSR/PKCE, compreso l’eventuale `@supabase/ssr`, senza introdurre un secondo Auth. La documentazione SSR segnala attualmente quel helper come beta: valutarlo esplicitamente nel gate, non installarlo come eccezione tacita alla policy latest stable. [S19](SOURCES.md#s19)
+Il server valida identità, sessione e livello di autenticazione con le primitive del sistema scelto; non si fida di dati utente letti soltanto dallo storage del browser.
 
-Il logout/revoca deve impedire le successive operazioni protette. Un JWT già emesso può restare crittograficamente valido fino alla sua scadenza: rimuovere la sessione dal client non basta. Il percorso applicativo e gli eventuali accessi diretti a Data API/RPC/Storage devono verificare revoca e autorizzazione corrente secondo il contratto qualificato. Non richiedere un sistema parallelo di sessioni: usare lo stato autorevole del provider o controlli applicativi minimi motivati. Provare il riuso di un token precedente dopo logout, revoca, cancellazione e perdita del ruolo admin. [S20](SOURCES.md#s20)
+Il logout/revoca deve impedire le successive operazioni protette. Un JWT già emesso può restare crittograficamente valido fino alla sua scadenza: rimuovere la sessione dal client non basta. Il percorso applicativo e gli eventuali accessi diretti a Data API/RPC/Storage devono verificare revoca e autorizzazione corrente secondo il contratto qualificato. Non richiedere un sistema parallelo di sessioni: usare lo stato autorevole del provider o controlli applicativi minimi motivati. Provare il riuso di un token precedente dopo logout, revoca, cancellazione e perdita del ruolo admin.
 
-Cookie, callback e origini sono separati tra test e Production. Il test delle passkey non deve creare credenziali valide sul dominio Production né interferire con utenti reali. Definire RP ID e origini prima dell’enrollment, senza presumere che il solo diverso sottodominio isoli credenziali configurate sul dominio padre. Sessione necessaria al rendering server e refresh del client devono seguire un modello coerente: non imporre contemporaneamente cookie inaccessibili al client e un SDK che ne richieda l’accesso senza progettare il flusso. [S04](SOURCES.md#s04)
+Cookie, callback e origini sono separati tra test e Production. Il test delle passkey non deve creare credenziali valide sul dominio Production né interferire con utenti reali. Definire RP ID e origini prima dell’enrollment, senza presumere che il solo diverso sottodominio isoli credenziali configurate sul dominio padre. Sessione necessaria al rendering server e refresh del client devono seguire un modello coerente: non imporre contemporaneamente cookie inaccessibili al client e un SDK che ne richieda l’accesso senza progettare il flusso.
 
 <a id="s08"></a>
 ## 8. Negozi, collegamenti e stati
@@ -440,6 +440,8 @@ Opt-in **facoltativo non preselezionato** in registrazione e proposta separata d
 
 <a id="s15"></a>
 ## 15. Console amministrativa
+
+Un pagamento lifetime confermato senza diritto assegnato apre una segnalazione P1, deduplicata per Checkout e collegata allo spazio. La rilettura giornaliera chiude il caso soltanto dopo l'assegnazione osservata o un rimborso totale o una disputa persa confermati da Stripe; non assegna posti né avvia rimborsi. I riferimenti minimi restano finché il caso è aperto e per 90 giorni dopo la risoluzione, vengono eliminati con lo spazio o con la cancellazione finanziaria e seguono il protocollo di ripristino.
 
 I problemi operativi mostrano gravità, causa comprensibile, conseguenza, stato osservato e azione pertinente con collegamento al contesto. Raggruppare occorrenze della stessa anomalia; rileggere stato e permessi prima dell'azione, registrare esito e rientro senza chiusure apparenti. Un errore circoscritto a un negozio non blocca quelli estranei. Un negozio in cui, fra gli ordini italiani delle ultime 48 ore e più vecchi di 3 ore, almeno 5 e almeno il 60% non hanno dato fiscale apre un'anomalia P2: segnala in anticipo un campo o uno scope che eBay ha smesso di restituire ([D260](DECISION_REGISTER.md)). Nessun payload fiscale nei riepiloghi ordinari.
 
@@ -636,17 +638,15 @@ React Router / job / endpoint necessari
        Cloudflare: Workers / D1 / Queues
 ```
 
-Dominio privo di accessi provider disseminati; modulo dedicato per eBay, Stripe, Telegram, email e persistenza. Dopo M0 implementare **soltanto il candidato scelto**. Un’interfaccia serve se rende un confine testabile, non come framework universale di portabilità. Non nascondere differenze reali tra D1 e PostgreSQL dietro un repository generico; transazioni e invarianti sono qualificati sul motore effettivo.
+Dominio privo di accessi provider disseminati; modulo dedicato per eBay, Stripe, Telegram, email e persistenza. L'assetto è quello scelto in M0; le alternative scartate stanno nel [registro](DECISION_REGISTER.md). Un’interfaccia serve se rende un confine testabile, non come framework universale di portabilità. Non nascondere differenze reali tra D1 e PostgreSQL dietro un repository generico; transazioni e invarianti sono qualificati sul motore effettivo.
 
-| Famiglia ammessa in M0 | Ripartizione candidata | Verifiche decisive |
+| Assetto | Ripartizione | Verifiche decisive |
 |---|---|---|
-| Cloudflare senza Supabase | Workers web/job, D1, R2 se utile, Queues/Cron, Better Auth | Quattro login, atomicità, limiti runtime, export e recovery nativa |
-| Cloudflare + Supabase | Workers web/core/job; Auth/Postgres Supabase e storage dove conveniente | Nessuna Auth doppia, RLS/RPC, connessioni, costi e recuperabilità |
-| Supabase più centrale | Auth/Postgres/job/functions; Cloudflare per DNS/frontend se necessario | Hosting frontend reale compatibile con React Router, non Storage usato impropriamente come app host |
+| Cloudflare | Workers web/job, D1, R2, Queues/Cron, Better Auth | Quattro login, atomicità, limiti runtime, export e recovery nativa |
 
-Valutare Free/Paid per servizio e ambiente sulla **capacità residua** degli account condivisi, non sulle sole quote nominali. Supabase non è obbligatorio. VPS, Vercel, Netlify e Appwrite sono fuori dalla selezione attiva; pagamenti, iCloud, GitHub e trasporto email non estendono questo perimetro compute.
+Valutare Free/Paid per servizio e ambiente sulla **capacità residua** degli account condivisi, non sulle sole quote nominali. VPS, Vercel, Netlify e Appwrite sono fuori dalla selezione attiva; pagamenti, iCloud, GitHub e trasporto email non estendono questo perimetro compute.
 
-Una sola fonte autorevole per responsabilità: niente D1+Postgres per duplicare gli stessi dati, due Auth o due code per lo stesso flusso. Con Supabase, RLS non protegge automaticamente i CF ancora bloccati: valgono anche [§29](#s29) e la revoca [§7](#s07). Service role mai nel browser.
+Una sola fonte autorevole per responsabilità: niente due database per gli stessi dati, due Auth o due code per lo stesso flusso. Valgono anche [§29](#s29) e la revoca [§7](#s07).
 
 Inventario read-only delle risorse condivise in M0; nessuna migrazione di altri prodotti o modifica di keyset comuni senza mandato. Scelta e costi al checkpoint di fine M0. Le alternative scartate restano motivazioni nel registro, non implementazioni di riserva da manutenere.
 
@@ -678,7 +678,7 @@ Non adottati: KV, perché le letture possono restare non aggiornate mentre revoc
 <a id="s26"></a>
 ## 26. Toolchain, dipendenze e policy latest
 
-**Latest stable qualificata** al momento della milestone/upgrade, non preferenza automatica per LTS vecchie. Node 26 e TypeScript 7 sono le direzioni esplicitamente richieste, salvo incompatibilità dimostrata; verificare catalogo ufficiale e pacchetti reali. Node locale/CI non è la versione del runtime Workers o delle funzioni Supabase. Beta/RC/canary non baseline generica; passkey sperimentali sono un rischio specifico da qualificare/accettare, non un lasciapassare per tutto. [S08](SOURCES.md#s08) [S09](SOURCES.md#s09)
+**Latest stable qualificata** al momento della milestone/upgrade, non preferenza automatica per LTS vecchie. Node 26 e TypeScript 7 sono le direzioni esplicitamente richieste, salvo incompatibilità dimostrata; verificare catalogo ufficiale e pacchetti reali. Node locale/CI non è la versione del runtime Workers. Beta/RC/canary non baseline generica; passkey sperimentali sono un rischio specifico da qualificare/accettare, non un lasciapassare per tutto. [S08](SOURCES.md#s08) [S09](SOURCES.md#s09)
 
 Pin esatti dei pacchetti diretti dove appropriato, lockfile unico e install riproducibile; versione pnpm nel manifest. Niente `latest` non risolto a ogni build. Aggiornamenti regolari: patch/minor accorpabili con test, major review dedicata; runtime/compiler qualification gate e rollback sicuro. Nessuna dipendenza nuova solo perché presente in uno starter.
 
@@ -690,7 +690,7 @@ Dal 2026-10-08, su indicazione dell'owner, nessuna attesa minima di 24 ore dalla
 | Linguaggio | TypeScript strict, ESM; typecheck indipendente dalla build |
 | Web | React + React Router Framework Mode + Vite |
 | CSS | Tailwind; token semantici e CSS native |
-| Componenti | shadcn/ui e primitive necessarie (Base UI candidato), selezione dagli altri riferimenti |
+| Componenti | shadcn/ui e primitive necessarie (Base UI), selezione dagli altri riferimenti |
 | Icone | Lucide |
 | Schemi runtime | Zod, usato ai confini dati/contratti |
 | Localizzazione | Dizionari IT/EN tipizzati nel codice (`app/app-copy.ts`) e formatter `Intl` nativi, senza libreria di localizzazione (D149) |
@@ -700,7 +700,7 @@ Dal 2026-10-08, su indicazione dell'owner, nessuna attesa minima di 24 ore dalla
 | Qualità | Oxlint, Oxfmt, React Doctor bloccante dai warning, typecheck compiler, CI e sicurezza dipendenze |
 | CLI di piattaforma | `cf` a versione esatta per Workers, D1 e risorse Cloudflare, configurazione in `cloudflare.config.ts`; Wrangler solo per `tail` e D1 locale temporaneo (D170) |
 
-**Opzionali, non negati:** helper Auth/SSR del provider scelto (incluso `@supabase/ssr` se qualificato), Drizzle/driver SQL o Data API/RPC; React Hook Form/resolver; date-fns/timezone; Motion; TanStack Table; MSW; grammY; client OAuth/Notification eBay; generatore client OAS; libreria XLSX/ZIP; coverage; query cache; Storybook; monitoring esterno. Si aggiungono se eliminano più complessità di quanta ne introducono. XLSX e ZIP restano requisiti: opzionale è la dipendenza che li realizza. i18n e Lucide restano confermati.
+**Opzionali, non negati:** Drizzle/driver SQL; React Hook Form/resolver; date-fns/timezone; TanStack Table; MSW; grammY; client OAuth/Notification eBay; generatore client OAS; libreria XLSX/ZIP; query cache; Storybook; monitoring esterno. Si aggiungono se eliminano più complessità di quanta ne introducono. XLSX e ZIP restano requisiti: opzionale è la dipendenza che li realizza. i18n e Lucide restano confermati.
 
 Non baseline: Axios, Redux/Zustand, Prisma, Next.js/Express/Hono, Redis, GraphQL/tRPC applicativo, Expo nel runtime 2.0, grafici prima della 2.x. Non divieti religiosi: un'incompatibilità concreta va documentata; un cambio strutturale richiede owner, non un'aggiunta di nascosto.
 
@@ -804,7 +804,7 @@ Inventario privato con owner/account/ambiente/nome logico segreto, custodia/rota
 
 Le credenziali privilegiate dei servizi server non sostituiscono il controllo dello spazio e del diritto all’ordine. Il client non può assegnarsi piano, grant, quota, appartenenza o ruolo modificando metadata personali o parametri della richiesta. Gli stessi vincoli valgono per ricerca, conteggi, snapshot, suggerimenti, export, RPC e dati di sincronizzazione.
 
-Con PostgreSQL/Supabase, qualificare RLS insieme a permessi di tabella/colonna, viste e funzioni. Una vista o una funzione con privilegi del proprietario può aggirare policy che sembrano corrette sulle tabelle. Usare ruoli minimi, schemi esposti limitati, permessi di esecuzione espliciti e `search_path` sicuro nelle funzioni privilegiate; non rendere pubblici gli helper amministrativi. La policy deve verificare anche revoca sessione/diritto corrente dove richiesto, non soltanto un tenant nel JWT. Con D1 gli stessi invarianti sono applicati nel servizio e nelle operazioni atomiche qualificate. [S21](SOURCES.md#s21)
+Con D1 gli invarianti di tenant, revoca di sessione e diritto corrente sono applicati nel servizio e nelle operazioni atomiche qualificate.
 
 Il gate include prove negative attraverso **ogni percorso effettivamente esposto**, non solo il frontend: leggere un CF bloccato con la Data API diretta, usare una sessione revocata, alterare un workspace ID, scrivere direttamente un grant o scaricare un file altrui deve fallire. Non introdurre nuove API pubbliche per realizzare questi test.
 
@@ -896,7 +896,7 @@ Metrica primaria prodotto: merchant con collegamento e sync funzionanti; paganti
 
 Solo backup/protezioni **native** come requisito 2.0, non copie indipendenti obbligatorie. RPO senza numero fisso, perdita minimizzata ragionevolmente con costo/provider; RTO interno obiettivo ≤24 ore, non SLA pubblico. Un solo restore drill reale in ambiente isolato **immediatamente prima del go-live**, sul candidato finale; nessuna periodicità obbligatoria successiva.
 
-Supabase Free non offre automaticamente il percorso di backup giornaliero documentato per i piani paganti. M0 non può qualificare un database critico senza recupero nativo solo perché entra nei 500 MB: scartare la combinazione o ottenere deroga esplicita. D1 Time Travel è candidato nativo da qualificare. File, segreti, configurazioni, account, diritti e cancellazioni richiedono verifica distinta; il backup DB non ricrea automaticamente oggetti Storage. [S02](SOURCES.md#s02) [S07](SOURCES.md#s07)
+D1 Time Travel è il recupero nativo qualificato. File, segreti, configurazioni, account, diritti e cancellazioni richiedono verifica distinta; il backup DB non ricrea automaticamente gli oggetti di R2. [S07](SOURCES.md#s07)
 
 Drill minimo: ripristinare dati con sblocchi/cicli/diritti e configurazioni necessarie, riapplicare revoche/erasure più recenti, riconciliare pagamenti, evitare rinotifiche Telegram, verificare login/letture/quote su istanza isolata, misurare tempi/perdita effettiva. Rigenerare fixture non è restore. Niente transazioni/invii reali prodotti dal test.
 
@@ -925,7 +925,7 @@ Configurare CLI, MCP e skill necessari alla fase tramite [AGENT_SETUP.md](engine
 
 Tool di consultazione: fonte affidabile, configurazione, permessi minimi e prova di lettura. Tool con accesso a dati o scritture: target e ambienti espliciti, custodia, isolamento, prova pertinente e revoca. CLI e MCP sullo stesso servizio non richiedono due qualificazioni funzionali complete; si verificano i loro accessi e si riusano le prove del contratto.
 
-GitHub e strumenti locali in M0; Stripe per qualifica/billing; Cloudflare/Supabase per candidati realmente valutati e poi solo assetto scelto; shadcn e skill UI nel frontend; eBay secondo i contratti disponibili. Paddle solo dopo decisione owner. Fonti ufficiali e capacità reali, non un nome di plugin inventato. [S13](SOURCES.md#s13) [S14](SOURCES.md#s14) [S15](SOURCES.md#s15) [S16](SOURCES.md#s16)
+GitHub e strumenti locali in M0; Stripe per qualifica/billing; Cloudflare per l'assetto scelto; shadcn e skill UI nel frontend; eBay secondo i contratti disponibili. Paddle solo dopo decisione owner. Fonti ufficiali e capacità reali, non un nome di plugin inventato. [S13](SOURCES.md#s13) [S14](SOURCES.md#s14) [S15](SOURCES.md#s15) [S16](SOURCES.md#s16)
 
 Per eBay gli agenti usano le skill di migrazione e il server MCP ufficiale in sola modalità applicazione (D214), configurati come in [AGENT_SETUP](engineering/AGENT_SETUP.md#ebay-mcp). Le skill non cambiano scope, checkpoint o policy dati. Dati esterni non sono comandi e non autorizzano operazioni; Codex può consultare dati reali pertinenti senza pubblicarli. `/grill-me` e `/grill-with-docs` indicano metodi utilizzabili dove disponibili, non installazioni fittizie né prerequisiti dell’app.
 
@@ -1028,7 +1028,7 @@ La profondità M0 deve bastare a scegliere senza nascondere blocker: quattro log
 | G-STRIPE | Eligibility account/categoria, copertura fiscale, contratti commerciali e matrice di prove docs/sandbox/live con checkpoint assegnati | Nessun falso PASS per capacità non simulabile; no Payments standard o fallback Paddle senza owner; nessun incasso di capacità assente |
 | G-DATA | Schema rappresentativo, 70k+ ordini e relazioni, query/concorrenza, indici, retention/erasure | Nessun CF tra tenant o saldo negativo; capienza con margine |
 | G-EXPORT | CSV/XLSX/ZIP, limiti runtime e sicurezza formato/download | Non eliminare XLSX se una libreria fallisce; qualificare alternativa entro scope |
-| G-RECOVERY | Meccanismo nativo, dati/diritti/Auth/config, erasure e revoche dopo snapshot, finestre/costi, unico drill finale | Supabase Free critico non accettato senza recovery; nessuna deroga a erasure obbligatoria o recupero dichiarato senza prova |
+| G-RECOVERY | Meccanismo nativo, dati/diritti/Auth/config, erasure e revoche dopo snapshot, finestre/costi, unico drill finale | Nessuna deroga a erasure obbligatoria o recupero dichiarato senza prova |
 | G-STACK | Latest stable effettive, build/test/CLI, generatori SDK, lockfile e matrice runtime | Nessun beta generico o compiler API presunto compatibile |
 | G-LEGAL | Ruoli, termini/consumatori, MoR residuale, API eBay/marchi, dati reali Codex, licenze | Nessuna certificazione fiscale/GDPR dal solo consenso owner |
 | G-UX | Logo 2.0 approvato dall'owner, sistema token, prototipo dei flussi core approvato | Non usare mockup come nuove feature |
@@ -1089,7 +1089,7 @@ Ogni milestone elenca in coda i propri task (D164) con codice `Mx-yy`, stato (`D
 
 Una milestone chiusa non riceve nuovi compiti o criteri di completamento. Integrazioni e verifiche successive si assegnano a milestone ancora aperte; i riferimenti a task chiusi indicano soltanto capacità già disponibili come prerequisiti, senza riaprirli o modificarne il perimetro concluso.
 
-Un task completato conserva intestazione, stato, prerequisiti e contratto, poi da una a tre frasi sulla capacità consegnata con le decisioni che la motivano, i link alle PR principali e gli eventuali limiti residui. Requisiti e scelte dell'owner stanno nei contratti di §0-§36 o nel registro; implementazione, prove e collaudi restano nel codice, nella PR e nella CI. Una riga della tabella qui sopra riassume la capacità e il limite, senza elenchi di PR.
+Un task completato conserva intestazione, stato e contratto, poi una frase sulla capacità consegnata con le decisioni che la motivano e gli eventuali limiti residui. Requisiti e scelte dell'owner stanno nei contratti di §0-§36 o nel registro; implementazione, prove e collaudi restano nel codice, nella PR e nella CI. Una riga della tabella qui sopra riassume la capacità e il limite, senza elenchi di PR.
 
 <a id="questioni-aperte"></a>
 ### Questioni aperte e ripresa
@@ -1124,827 +1124,821 @@ Il blocco atomico degli ingressi D1 e il registro delle operazioni, introdotti c
 
 ### M0 · Qualificazione tecnica e transizione delle fondamenta
 
-M0 ha qualificato le fondamenta secondo i gate di [§36](#s36) e si è chiusa con il via owner del 2026-09-23 ([§0](#s00)). Assetto approvato: Workers, una D1 UE, Queues e Better Auth; Supabase escluso, Pro per budget e Free per continuità insufficiente, senza adapter alternativi mantenuti. La recovery usa la sola protezione nativa Time Travel con riapertura fail-closed secondo [§32](#s32).
+M0 ha qualificato le fondamenta secondo i gate di [§36](#s36) e si è chiusa con il via owner del 2026-09-23 ([§0](#s00)).
 
 <a id="m0-01"></a>
 #### M0-01 · Inventario della baseline e conflitti legacy
 
-**Stato:** Completato · **Prerequisiti:** Avvio autorizzato · **Contratto:** [§0](#s00) · [§2](#s02) · [§34](#s34)
+**Stato:** Completato · **Contratto:** [§0](#s00) · [§2](#s02) · [§34](#s34)
 
 Adozione 2.0 verificata secondo la [procedura archiviata](archive/2026-09-adozione-2.0.md), con inventario dei trigger legacy e blocco degli effetti remoti non qualificati.
 
 <a id="m0-02"></a>
 #### M0-02 · Bootstrap delle prove, agenti e custodia privata
 
-**Stato:** Completato · **Prerequisiti:** M0-01, M0-11 · **Contratto:** [§33](#s33)
+**Stato:** Completato · **Contratto:** [§33](#s33)
 
 Accessi minimi, inventario privato, endpoint HTTPS di test e trasporto email Auth predisposti per le sole prove di qualifica, senza spese né scritture su risorse estranee.
 
 <a id="m0-03"></a>
-#### M0-03 · Inventario risorse Cloudflare/Supabase
+#### M0-03 · Inventario risorse dei provider
 
-**Stato:** Completato · **Prerequisiti:** M0-01; accessi di lettura pertinenti (non callback/email) · **Contratto:** [§25](#s25) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§25](#s25) · [§36](#s36)
 
 Piani, quote e consumi degli account condivisi letti separando capacità nominale e residua (D101), base della scelta dei costi a fine M0.
 
 <a id="m0-04"></a>
 #### M0-04 · Qualifica dei quattro accessi
 
-**Stato:** Completato · **Prerequisiti:** M0-02, M0-11 · **Contratto:** [§7](#s07) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§7](#s07) · [§36](#s36)
 
-Better Auth qualificato per email/password, Google e passkey con linking, recupero e revoca, e MFA amministrativa senza TOTP (D136). La qualifica di Sign in with eBay è passata a [M2-09](#m2-09).
+Better Auth qualificato per email/password, Google e passkey con linking, recupero e revoca, e MFA amministrativa senza TOTP (D136).
 
 <a id="m0-05"></a>
 #### M0-05 · Qualifica fonti eBay e keyset
 
-**Stato:** Completato · **Prerequisiti:** M0-02, M0-11 · **Contratto:** [§9](#s09) · [§11](#s11) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§9](#s09) · [§11](#s11) · [§36](#s36)
 
 Matrice di fonti, campi, età e stati eBay qualificata con scope, identità stabile e quote del keyset, su fixture sanitizzate e letture autorizzate.
 
 <a id="m0-06"></a>
 #### M0-06 · Qualifica eventi, polling e lavoro API
 
-**Stato:** Completato · **Prerequisiti:** M0-05 · **Contratto:** [§11](#s11) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§11](#s11) · [§36](#s36)
 
 Budget di chiamate e messaggi per polling 10/30 minuti, manuale, eventi e backfill stimato con margine e senza invadere le quote dei progetti vicini.
 
 <a id="m0-07"></a>
 #### M0-07 · Schema rappresentativo e concorrenza
 
-**Stato:** Completato · **Prerequisiti:** M0-03, M0-05, M0-11 · **Contratto:** [§27](#s27) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§27](#s27) · [§36](#s36)
 
 D1 qualificata su un dataset sintetico di oltre 70.000 ordini con articoli, identificativi e grant: spazio, query, isolamento e consumo atomico misurati senza record reali.
 
 <a id="m0-08"></a>
 #### M0-08 · Qualifica Stripe Managed Payments
 
-**Stato:** Completato · **Prerequisiti:** M0-02, M0-11 · **Contratto:** [§6](#s06) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§6](#s06) · [§36](#s36)
 
 Eligibility, copertura fiscale e casi commerciali di Managed Payments qualificati su documentazione e sandbox, con le prove non simulabili assegnate al gate finale ([§36.2](#s36)).
 
 <a id="m0-09"></a>
 #### M0-09 · Recovery nativa e limiti
 
-**Stato:** Completato · **Prerequisiti:** M0-03, M0-04, M0-07 · **Contratto:** [§32](#s32) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§32](#s32) · [§36](#s36)
 
 Time Travel su una sola D1 qualificato con percorso fail-closed (D137); il drill conclusivo è riuscito prima del go-live ([M9-02](#m9-02)).
 
 <a id="m0-10"></a>
 #### M0-10 · Qualifica export e runtime
 
-**Stato:** Completato · **Prerequisiti:** M0-07 · **Contratto:** [§12](#s12) · [§26](#s26)
+**Stato:** Completato · **Contratto:** [§12](#s12) · [§26](#s26)
 
 Percorso CSV, XLSX e ZIP dimostrato nel runtime Workers con librerie a licenza compatibile.
 
 <a id="m0-11"></a>
 #### M0-11 · Toolchain latest stable riproducibile
 
-**Stato:** Completato · **Prerequisiti:** M0-01 · **Contratto:** [§26](#s26) · [§34](#s34)
+**Stato:** Completato · **Contratto:** [§26](#s26) · [§34](#s34)
 
-Toolchain latest stable qualificata con pin riproducibili e baseline che installa, compila e supera i test. PR: [#163](https://github.com/max23468/FiscalBay/pull/163).
+Toolchain latest stable qualificata con pin riproducibili e baseline che installa, compila e supera i test.
 
 **Limiti residui:** nessun generatore OAS finché TypeScript 7 non espone un'API compatibile senza secondo compilatore; nel frattempo schemi Zod mirati per Identity e Fulfillment, parser Trading e SDK Stripe ufficiale.
 
 <a id="m0-12"></a>
 #### M0-12 · Consolidamento dei vincoli legali preliminari
 
-**Stato:** Completato · **Prerequisiti:** M0-04, M0-05, M0-08 · **Contratto:** [§29](#s29) · [§30](#s30)
+**Stato:** Completato · **Contratto:** [§29](#s29) · [§30](#s30)
 
 Ruoli dati, uso degli strumenti agentici, copertura MoR, obblighi residui, marchi e retention eBay e licenze legacy mappati prima dei dati reali, con chiusura assegnata al gate legale finale.
 
 <a id="m0-13"></a>
 #### M0-13 · Vertical slice end-to-end
 
-**Stato:** Completato · **Prerequisiti:** M0-04, M0-05, M0-07, M0-11, M0-12 · **Contratto:** [§36](#s36)
+**Stato:** Completato · **Contratto:** [§36](#s36)
 
-Slice login, collegamento seller, ordine, D1 e pagina minima osservata sul candidato scelto, con permessi coerenti e nessun segreto nel client. PR: [#163](https://github.com/max23468/FiscalBay/pull/163).
+Slice login, collegamento seller, ordine, D1 e pagina minima osservata sul candidato scelto, con permessi coerenti e nessun segreto nel client.
 
 <a id="m0-14"></a>
 #### M0-14 · Memo di scelta e via owner
 
-**Stato:** Completato · **Prerequisiti:** M0-03..M0-13 · **Contratto:** [§25](#s25) · [§36](#s36) · [§37](#s37)
+**Stato:** Completato · **Contratto:** [§25](#s25) · [§36](#s36) · [§37](#s37)
 
-Assetto, costi e rischi approvati dall'owner il 2026-09-23, con le prove residue assegnate alle milestone competenti; Better Auth Infrastructure è poi uscito dal runtime (D152) ed è tornato sul solo test (D241). PR: [#163](https://github.com/max23468/FiscalBay/pull/163).
+Assetto, costi e rischi approvati dall'owner il 2026-09-23, con le prove residue assegnate alle milestone competenti.
 
 <a id="m1"></a>
 ### M1 · Fondazioni applicative e design
 
-M1 ha reso canonica la 2.0, congelato la 1.x nella branch `legacy/1.x` e costruito fondazioni applicative, ambienti, DNS e posta, logo, design system e prototipo approvati dall'owner ([§0](#s00)). I componenti 1.x ancora attivi sono stati dismessi in [M9-05](#m9-05).
+M1 ha reso canonica la 2.0, congelato la 1.x nella branch `legacy/1.x` e costruito fondazioni applicative, ambienti, DNS e posta, logo, design system e prototipo approvati dall'owner ([§0](#s00)).
 
 <a id="m1-00"></a>
 #### M1-00 · Cutover repository 1.x → 2.0
 
-**Stato:** Completato · **Prerequisiti:** M0-14 completata e via owner di fine M0 · **Contratto:** [§33](#s33) · [§34](#s34)
+**Stato:** Completato · **Contratto:** [§33](#s33) · [§34](#s34)
 
-Il repository presenta una sola implementazione e una sola documentazione canonica 2.0; la 1.x resta recuperabile dalla storia Git, con il commit finale raggiungibile da `v2.0.0`, e nessun merge avvia il deploy legacy. PR: [#163](https://github.com/max23468/FiscalBay/pull/163), [#171](https://github.com/max23468/FiscalBay/pull/171).
+Il repository presenta una sola implementazione e una sola documentazione canonica 2.0; la 1.x resta recuperabile dalla storia Git, con il commit finale raggiungibile da `v2.0.0`, e nessun merge avvia il deploy legacy.
 
 **Limiti residui:** il cutover del repository non dismette bot, callback e timer 1.x ancora attivi; la dismissione è in [M9-05](#m9-05).
 
 <a id="m1-01"></a>
 #### M1-01 · Bootstrap monorepo e comandi comuni
 
-**Stato:** Completato · **Prerequisiti:** M1-00 · **Contratto:** [§25](#s25) · [§26](#s26) · [§33](#s33)
+**Stato:** Completato · **Contratto:** [§25](#s25) · [§26](#s26) · [§33](#s33)
 
-Un'applicazione TypeScript modulare in un repository pnpm con lockfile unico e comandi comuni di verifica, senza backend Python. PR: [#163](https://github.com/max23468/FiscalBay/pull/163), [#165](https://github.com/max23468/FiscalBay/pull/165).
+Un'applicazione TypeScript modulare in un repository pnpm con lockfile unico e comandi comuni di verifica, senza backend Python.
 
 <a id="m1-02"></a>
 #### M1-02 · Ambienti e CI fondamentale
 
-**Stato:** Completato · **Prerequisiti:** M1-01 · **Contratto:** [§34](#s34)
+**Stato:** Completato · **Contratto:** [§34](#s34)
 
-CI delle PR senza segreti e deploy test controllato da `develop`, con segreti separati per ambiente; il merge su `main` da solo non pubblica. PR: [#168](https://github.com/max23468/FiscalBay/pull/168), [#170](https://github.com/max23468/FiscalBay/pull/170).
+CI delle PR senza segreti e deploy test controllato da `develop`, con segreti separati per ambiente; il merge su `main` da solo non pubblica.
 
 <a id="m1-03"></a>
 #### M1-03 · Fondazioni DB, tenant e grant
 
-**Stato:** Completato · **Prerequisiti:** M0, M1-01 · **Contratto:** [§27](#s27) · [§29](#s29)
+**Stato:** Completato · **Contratto:** [§27](#s27) · [§29](#s29)
 
-Schema D1 iniziale con confine tenant e grant per ordine: le richieste fra spazi sono negate, ogni grant richiede il dato fiscale e ultimi sblocchi e lifetime non si duplicano. PR: [#173](https://github.com/max23468/FiscalBay/pull/173), [#175](https://github.com/max23468/FiscalBay/pull/175).
+Schema D1 iniziale con confine tenant e grant per ordine: le richieste fra spazi sono negate, ogni grant richiede il dato fiscale e ultimi sblocchi e lifetime non si duplicano.
 
 <a id="m1-04"></a>
 #### M1-04 · Errori, log e localizzazione
 
-**Stato:** Completato · **Prerequisiti:** M1-01 · **Contratto:** [§26](#s26) · [§28](#s28) · [§31](#s31)
+**Stato:** Completato · **Contratto:** [§26](#s26) · [§28](#s28) · [§31](#s31)
 
-Errori tipizzati con correlation ID e testi IT/EN, log redatti senza CF né token e testi dell'interfaccia in dizionari tipizzati (D149). PR: [#177](https://github.com/max23468/FiscalBay/pull/177), [#213](https://github.com/max23468/FiscalBay/pull/213).
+Errori tipizzati con correlation ID e testi IT/EN, log redatti senza CF né token e testi dell'interfaccia in dizionari tipizzati (D149).
 
 <a id="m1-05"></a>
 #### M1-05 · Logo 2.0
 
-**Stato:** Completato · **Prerequisiti:** M0-01; mandato owner · **Contratto:** [§21](#s21)
+**Stato:** Completato · **Contratto:** [§21](#s21)
 
-Logo 2.0 derivato dal Concept 4 (D141) e approvato dall'owner, con wordmark, varianti chiaro, scuro e monocromo, favicon e avatar Telegram, in uso su app, sito e superfici dei provider. PR: [#181](https://github.com/max23468/FiscalBay/pull/181), [#183](https://github.com/max23468/FiscalBay/pull/183).
+Logo 2.0 derivato dal Concept 4 (D141) e approvato dall'owner, con wordmark, varianti chiaro, scuro e monocromo, favicon e avatar Telegram, in uso su app, sito e superfici dei provider.
 
 <a id="m1-06"></a>
 #### M1-06 · Design system e catalogo candidati
 
-**Stato:** Completato · **Prerequisiti:** M0, M1-05 · **Contratto:** [§22](#s22)
+**Stato:** Completato · **Contratto:** [§22](#s22)
 
-[Design system](brand/DESIGN_SYSTEM.md) approvato dall'owner, con token, stati, form, icone, tipografia e registro di provenienza dei componenti. PR: [#184](https://github.com/max23468/FiscalBay/pull/184), [#192](https://github.com/max23468/FiscalBay/pull/192).
+[Design system](brand/DESIGN_SYSTEM.md) approvato dall'owner, con token, stati, form, icone, tipografia e registro di provenienza dei componenti.
 
 <a id="m1-07"></a>
 #### M1-07 · Shell e prototipo delle tre sezioni
 
-**Stato:** Completato · **Prerequisiti:** M1-06 · **Contratto:** [§16](#s16) · [§17](#s17) · [§18](#s18) · [§19](#s19)
+**Stato:** Completato · **Contratto:** [§16](#s16) · [§17](#s17) · [§18](#s18) · [§19](#s19)
 
-Shell con navigazione superiore e inferiore e anteprima approvata di Ordini, Negozi e Impostazioni con scenari sintetici di errore, quota e dati mancanti. PR: [#194](https://github.com/max23468/FiscalBay/pull/194), [#203](https://github.com/max23468/FiscalBay/pull/203).
+Shell con navigazione superiore e inferiore e anteprima approvata di Ordini, Negozi e Impostazioni con scenari sintetici di errore, quota e dati mancanti.
 
 <a id="m1-08"></a>
 #### M1-08 · Completamento DNS, ambienti e posta
 
-**Stato:** Completato · **Prerequisiti:** M0 · **Contratto:** [§24](#s24)
+**Stato:** Completato · **Contratto:** [§24](#s24)
 
-DNS e TLS su Cloudflare per Production e test, posta umana iCloud e mittente Auth con SPF, DKIM e DMARC coerenti, contatti dei provider allineati a [§14](#s14). PR: [#181](https://github.com/max23468/FiscalBay/pull/181), [#221](https://github.com/max23468/FiscalBay/pull/221).
+DNS e TLS su Cloudflare per Production e test, posta umana iCloud e mittente Auth con SPF, DKIM e DMARC coerenti, contatti dei provider allineati a [§14](#s14).
 
 <a id="m1-09"></a>
 #### M1-09 · Guardrail della pipeline e del repository
 
-**Stato:** Completato · **Prerequisiti:** M1-02 · **Contratto:** [§34](#s34) · [§37](#s37)
+**Stato:** Completato · **Contratto:** [§34](#s34) · [§37](#s37)
 
-Guardrail di [§34](#s34) attivi: Action pinnate a SHA, `main` soltanto da `develop`, gate completo per i file non classificati e test di repository con casi negativi (D143). PR: [#199](https://github.com/max23468/FiscalBay/pull/199).
+Guardrail di [§34](#s34) attivi: Action pinnate a SHA, `main` soltanto da `develop`, gate completo per i file non classificati e test di repository con casi negativi (D143).
 
 <a id="m1-10"></a>
 #### M1-10 · Budget di prestazioni e capacità al deploy
 
-**Stato:** Completato · **Prerequisiti:** M1-02 · **Contratto:** [§22](#s22) · [§31](#s31) · [§37](#s37)
+**Stato:** Completato · **Contratto:** [§22](#s22) · [§31](#s31) · [§37](#s37)
 
-La build fallisce oltre il budget del JavaScript iniziale per pagina (D182); il controllo CPU al deploy test è stato rimosso (D158). PR: [#207](https://github.com/max23468/FiscalBay/pull/207), [#291](https://github.com/max23468/FiscalBay/pull/291).
+La build fallisce oltre il budget del JavaScript iniziale per pagina (D182); il controllo CPU al deploy test è stato rimosso (D158).
 
 <a id="m2"></a>
 ### M2 · Account, Auth e Negozi eBay
 
-M2 ha consegnato registrazione e quattro accessi, linking, sessioni e MFA admin, collegamento seller con token cifrati, stati dei negozi, Negozi, Profilo e routing pubblico autenticato. Le prove reali di Accedi con eBay sono in M8 (D160) e la cancellazione dell'account in M6 (D163).
+M2 ha consegnato registrazione e quattro accessi, linking, sessioni e MFA admin, collegamento seller con token cifrati, stati dei negozi, Negozi, Profilo e routing pubblico autenticato.
 
 <a id="m2-01"></a>
 #### M2-01 · Signup e verifica contatto
 
-**Stato:** Completato · **Prerequisiti:** M1, G-AUTH · **Contratto:** [§7](#s07) · [§14](#s14)
+**Stato:** Completato · **Contratto:** [§7](#s07) · [§14](#s14)
 
-Registrazione con email e Google, verifica del contatto prima del collegamento seller, Termini versionati e limite dei tentativi (D150, D151). PR: [#215](https://github.com/max23468/FiscalBay/pull/215), [#217](https://github.com/max23468/FiscalBay/pull/217), [#221](https://github.com/max23468/FiscalBay/pull/221).
+Registrazione con email e Google, verifica del contatto prima del collegamento seller, Termini versionati e limite dei tentativi (D150, D151).
 
 <a id="m2-02"></a>
 #### M2-02 · Passkey
 
-**Stato:** Completato · **Prerequisiti:** M2-01 · **Contratto:** [§7](#s07)
+**Stato:** Completato · **Contratto:** [§7](#s07)
 
-Accesso con passkey, registrazione, recupero e revoca dalla pagina Sicurezza. PR: [#229](https://github.com/max23468/FiscalBay/pull/229), [#231](https://github.com/max23468/FiscalBay/pull/231).
+Accesso con passkey, registrazione, recupero e revoca dalla pagina Sicurezza.
 
 <a id="m2-03"></a>
 #### M2-03 · Linking e modifica identità
 
-**Stato:** Completato · **Prerequisiti:** M2-01, M2-02 · **Contratto:** [§7](#s07) · [§29](#s29)
+**Stato:** Completato · **Contratto:** [§7](#s07) · [§29](#s29)
 
-Collegamento automatico soltanto con email verificata e attendibile, aggiunta e rimozione dei metodi con almeno un accesso valido e cambio email protetto. PR: [#241](https://github.com/max23468/FiscalBay/pull/241).
+Collegamento automatico soltanto con email verificata e attendibile, aggiunta e rimozione dei metodi con almeno un accesso valido e cambio email protetto.
 
 <a id="m2-04"></a>
 #### M2-04 · Sessioni e admin MFA
 
-**Stato:** Completato · **Prerequisiti:** M2-03 · **Contratto:** [§7](#s07) · [§15](#s15)
+**Stato:** Completato · **Contratto:** [§7](#s07) · [§15](#s15)
 
-Sessioni elencate e revocabili, logout singolo e globale, nuova autenticazione per le azioni sensibili e MFA admin con passkey verificata sul dispositivo (D136). PR: [#245](https://github.com/max23468/FiscalBay/pull/245), [#247](https://github.com/max23468/FiscalBay/pull/247).
+Sessioni elencate e revocabili, logout singolo e globale, nuova autenticazione per le azioni sensibili e MFA admin con passkey verificata sul dispositivo (D136).
 
 <a id="m2-05"></a>
 #### M2-05 · OAuth negozi e identità stabile
 
-**Stato:** Completato · **Prerequisiti:** M2-01, G-EBAY · **Contratto:** [§8](#s08) · [§29](#s29)
+**Stato:** Completato · **Contratto:** [§8](#s08) · [§29](#s29)
 
-Collegamento seller con callback protetta, token cifrati e identità eBay stabile: un negozio appartiene a un solo spazio e un cambio di nome non lo duplica. Il confine HTTP di [§28](#s28) nasce qui. PR: [#268](https://github.com/max23468/FiscalBay/pull/268), [#269](https://github.com/max23468/FiscalBay/pull/269).
+Collegamento seller con callback protetta, token cifrati e identità eBay stabile: un negozio appartiene a un solo spazio e un cambio di nome non lo duplica.
 
 <a id="m2-06"></a>
 #### M2-06 · Reconnect, pause e disconnessioni
 
-**Stato:** Completato · **Prerequisiti:** M2-05 · **Contratto:** [§8](#s08)
+**Stato:** Completato · **Contratto:** [§8](#s08)
 
-Pausa, reconnect, reminder e scollegamento separati dallo stato della sincronizzazione, senza reset di quota o diritti e senza disdetta dell'abbonamento. PR: [#270](https://github.com/max23468/FiscalBay/pull/270).
+Pausa, reconnect, reminder e scollegamento separati dallo stato della sincronizzazione, senza reset di quota o diritti e senza disdetta dell'abbonamento.
 
 <a id="m2-07"></a>
 #### M2-07 · Schermata negozi e profilo
 
-**Stato:** Completato · **Prerequisiti:** M2-04, M2-06 · **Contratto:** [§18](#s18) · [§19](#s19)
+**Stato:** Completato · **Contratto:** [§18](#s18) · [§19](#s19)
 
-Pagina Negozi con elenco e pannello raggiungibili da link diretto e Profilo reale, con il piano mostrato come proprietà dello spazio. PR: [#274](https://github.com/max23468/FiscalBay/pull/274).
+Pagina Negozi con elenco e pannello raggiungibili da link diretto e Profilo reale, con il piano mostrato come proprietà dello spazio.
 
 <a id="m2-08"></a>
 #### M2-08 · Routing pubblico autenticato
 
-**Stato:** Completato · **Prerequisiti:** M2-01 · **Contratto:** [§16](#s16) · [§23](#s23)
+**Stato:** Completato · **Contratto:** [§16](#s16) · [§23](#s23)
 
-Area riservata sotto `/app`, root che porta l'utente autenticato all'app e visita del sito senza logout né loop, con area privata e test non indicizzati. PR: [#296](https://github.com/max23468/FiscalBay/pull/296).
+Area riservata sotto `/app`, root che porta l'utente autenticato all'app e visita del sito senza logout né loop, con area privata e test non indicizzati.
 
 <a id="m2-09"></a>
 #### M2-09 · Qualifica e integrazione Sign in with eBay
 
-**Stato:** Completato · **Prerequisiti:** M2-01; account eBay business controllato per la prova reale · **Contratto:** [§7](#s07) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§7](#s07) · [§36](#s36)
 
-Accedi con eBay e linking integrati con lo scope Identity base per gli account business (D153), distinti dal consenso seller (D048) e provati con risposte eBay sintetiche. PR: [#227](https://github.com/max23468/FiscalBay/pull/227), [#230](https://github.com/max23468/FiscalBay/pull/230).
+Accedi con eBay e linking integrati con lo scope Identity base per gli account business (D153), distinti dal consenso seller (D048) e provati con risposte eBay sintetiche.
 
 **Limiti residui:** le prove reali sono in [M8-03](#m8-03) (D160).
 
 <a id="m3"></a>
 ### M3 · Sincronizzazione, ordini e modello fiscale
 
-M3 consegna il modello ordini, la lettura eBay riprendibile (recenti, storico, dettaglio fiscale separato, eventi e smistamento in coda), lo sblocco atomico per ordine con i diritti acquisiti, la retention operativa, i suggerimenti e il consolidamento degli ordini combinati. I requisiti sono in [§9](#s09), [§10](#s10), [§11](#s11), [§25](#s25) e [§30](#s30). Ordini combinati reali e consegna attribuita di `ORDER_CONFIRMATION` di un negozio Production si provano con il test merchant di [M8](#m8).
+M3 consegna il modello ordini, la lettura eBay riprendibile (recenti, storico, dettaglio fiscale separato, eventi e smistamento in coda), lo sblocco atomico per ordine con i diritti acquisiti, la retention operativa, i suggerimenti e il consolidamento degli ordini combinati.
 
 <a id="m3-01"></a>
 #### M3-01 · Modello ordini, articoli e buyer
 
-**Stato:** Completato · **Prerequisiti:** M2, G-DATA · **Contratto:** [§9](#s09) · [§27](#s27)
+**Stato:** Completato · **Contratto:** [§9](#s09) · [§27](#s27)
 
-Ogni ordine ha un UUID stabile, stato corrente e snapshot di articoli e buyer legati all'ordine, importi esatti, date UTC e lo storico delle sole variazioni fiscali effettive: importazioni ripetute non duplicano ordini o versioni e l'anagrafica corrente non riscrive lo storico. Le identità di riga collegano Trading e Fulfillment anche con arrivo invertito, senza unire negozi diversi e con l'ambiguità resa esplicita. PR: [#304](https://github.com/max23468/FiscalBay/pull/304).
+Ogni ordine ha un UUID stabile, stato corrente e snapshot di articoli e buyer legati all'ordine, importi esatti, date UTC e lo storico delle sole variazioni fiscali effettive: importazioni ripetute non duplicano ordini o versioni e l'anagrafica corrente non riscrive lo storico.
 
-**Limiti residui:** l'identità stabile ricavata da Fulfillment (articolo e riga) ha la forma di `OrderLineItemID` Trading ma non è provata su ordini combinati reali: senza coincidenza o un riferimento Trading dello stesso definitivo gli ordini restano distinti, mai uniti. La rimozione autorevole di un identificativo si applica solo quando la fonte la dichiara, e la lettura Trading al collegamento non lo fa ancora ([M3-05](#m3-05)).
+**Limiti residui:** l'identità stabile ricavata da Fulfillment (articolo e riga) ha la forma di `OrderLineItemID` Trading ma non è provata su ordini combinati reali: senza coincidenza o un riferimento Trading dello stesso definitivo gli ordini restano distinti, mai uniti.
 
 <a id="m3-02"></a>
 #### M3-02 · Client eBay e normalizzazione
 
-**Stato:** Completato · **Prerequisiti:** M3-01, G-EBAY · **Contratto:** [§11](#s11) · [§28](#s28)
+**Stato:** Completato · **Contratto:** [§11](#s11) · [§28](#s28)
 
-Gli adapter Fulfillment e Trading restituiscono stati normalizzati, errori tipizzati e provenienza dei campi, classificano ordini pagati, non pagati e mascherati senza inventare stati sconosciuti e separano acquirente, destinatario e `c/o` senza correggere l'intestatario fiscale. Le risposte ostili del provider falliscono chiuse prima di inviare il token, secondo [§29](#s29); la lettura conserva il marketplace dell'inserzione per [M3-10](#m3-10) e le immagini arrivano da Trading `GetItem`. PR: [#310](https://github.com/max23468/FiscalBay/pull/310).
+Gli adapter Fulfillment e Trading restituiscono stati normalizzati, errori tipizzati e provenienza dei campi, classificano ordini pagati, non pagati e mascherati senza inventare stati sconosciuti e separano acquirente, destinatario e `c/o` senza correggere l'intestatario fiscale.
 
-**Limiti residui:** codici d'errore Trading, risposta di `GetItem` e soglie di mascheramento (email 14 giorni; nome, telefono e prima riga dell'indirizzo 90) seguono la documentazione eBay e fixture sintetiche, senza una lettura reale. Nessun generatore OAS finché TypeScript 7 non espone un'API compatibile ([M0-11](#m0-11)).
+**Limiti residui:** codici d'errore Trading, risposta di `GetItem` e soglie di mascheramento (email 14 giorni; nome, telefono e prima riga dell'indirizzo 90) seguono la documentazione eBay e fixture sintetiche, senza una lettura reale.
 
 <a id="m3-03"></a>
 #### M3-03 · Import recenti e backfill
 
-**Stato:** Completato · **Prerequisiti:** M3-02 · **Contratto:** [§11](#s11)
+**Stato:** Completato · **Contratto:** [§11](#s11)
 
-Un'unica acquisizione per negozio serve collegamento, lettura periodica, «Sincronizza» e «Reimporta»: prima i recenti per data di modifica con sovrapposizione, poi lo storico nella finestra del piano, infine il dettaglio di ogni versione non ancora letta, con il lavoro fiscale separato. Le interruzioni fra pagine riprendono senza duplicati o salti, lo storico non ritarda i nuovi ordini e la quota esaurita di una chiamata Trading sospende solo quella chiamata, senza impedire il salvataggio dell'ordine (D177). La schermata Negozi mostra finestra dello storico e stato dell'importazione. PR: [#309](https://github.com/max23468/FiscalBay/pull/309), [#312](https://github.com/max23468/FiscalBay/pull/312).
+Un'unica acquisizione per negozio serve collegamento, lettura periodica, «Sincronizza» e «Reimporta»: prima i recenti per data di modifica con sovrapposizione, poi lo storico nella finestra del piano, infine il dettaglio di ogni versione non ancora letta, con il lavoro fiscale separato.
 
-**Limiti residui:** filtri, paginazione con `next`/`total` e `getOrder` seguono la documentazione eBay e fixture sintetiche, senza lettura reale. Ogni lettura ha un budget di 12 chiamate eBay e 3 pagine; il resto prosegue nella lettura periodica.
+**Limiti residui:** filtri, paginazione con `next`/`total` e `getOrder` seguono la documentazione eBay e fixture sintetiche, senza lettura reale.
 
 <a id="m3-04"></a>
 #### M3-04 · Scheduler, eventi e manuale
 
-**Stato:** Completato · **Prerequisiti:** M3-03 · **Contratto:** [§11](#s11)
+**Stato:** Completato · **Contratto:** [§11](#s11)
 
-Ogni negozio si legge con la cadenza del piano, Premium 10 e Free 30 minuti; sotto carico passano prima i dovuti Premium, poi i Free, poi gli arretrati, e a parità la richiesta manuale e il negozio letto meno di recente. «Sincronizza» e «Reimporta» ripetuti confluiscono in una lettura, `ORDER_CONFIRMATION` non dipende da piano né cadenza e un `429` sospende le letture della stessa origine API per il `Retry-After`, mostrato nella schermata Negozi senza countdown inventati. PR: [#325](https://github.com/max23468/FiscalBay/pull/325), [#328](https://github.com/max23468/FiscalBay/pull/328).
+Ogni negozio si legge con la cadenza del piano, Premium 10 e Free 30 minuti; sotto carico passano prima i dovuti Premium, poi i Free, poi gli arretrati, e a parità la richiesta manuale e il negozio letto meno di recente.
 
-**Limiti residui:** priorità Premium provata sull'ordinamento, non sotto carico reale. Il limite di frequenza è prudenzialmente per origine API, non per singola API o negozio, e un `429` reale di eBay non è ancora stato osservato. Sottoscrizione e consegna attribuita di `ORDER_CONFIRMATION` Production in [M8-03](#m8-03).
+**Limiti residui:** priorità Premium provata sull'ordinamento, non sotto carico reale.
 
 <a id="m3-05"></a>
 #### M3-05 · Controllo fiscale e aggiornamenti
 
-**Stato:** Completato · **Prerequisiti:** M3-02 · **Contratto:** [§9](#s09)
+**Stato:** Completato · **Contratto:** [§9](#s09)
 
-L'ordine compare subito e la lettura fiscale procede in un lavoro separato: errore, campo malformato, mascheramento o assenza non bloccano l'ordine né rimuovono valori già acquisiti, e una risposta tardiva non sovrascrive una versione più recente. Ogni identificativo porta tipo, Paese, fonte, qualità formale CF/P.IVA e istante di prima disponibilità; riletture invariate non creano versioni. Vista reale e anteprima condividono stati e regole. PR: [#347](https://github.com/max23468/FiscalBay/pull/347).
+L'ordine compare subito e la lettura fiscale procede in un lavoro separato: errore, campo malformato, mascheramento o assenza non bloccano l'ordine né rimuovono valori già acquisiti, e una risposta tardiva non sovrascrive una versione più recente.
 
-**Limiti residui:** prove sintetiche, nessuna lettura con ordini eBay reali. Le date delle due API non si confrontano fra loro; una risposta fiscale senza versione della propria fonte non sovrascrive una già autorevole. Il mascheramento fiscale esplicito è gestito, ma non dedotto dall'età o dall'assenza di un campo eBay.
+**Limiti residui:** prove sintetiche, nessuna lettura con ordini eBay reali.
 
 <a id="m3-06"></a>
 #### M3-06 · Sblocco per ordine e diritti acquisiti
 
-**Stato:** Completato · **Prerequisiti:** M3-05, M1-03 · **Contratto:** [§5](#s05) · [§6](#s06) · [§9](#s09)
+**Stato:** Completato · **Contratto:** [§5](#s05) · [§6](#s06) · [§9](#s09)
 
-Lo sblocco singolo e multiplo verifica quota, appartenenza, finestra e dato nello stesso commit, nei cicli personali ancorati al primo collegamento. I diritti acquisiti restano dopo scadenza, downgrade e consolidamento anche su ordini mai aperti, e un cambio di identificativo eBay non consuma nuova quota né ripete la notifica; la conferma dello sblocco singolo offre «Non chiedermelo più», ripristinabile in Impostazioni (D176). Mutation test mirati su ultimo credito, isolamento e grant girano nella campagna settimanale e nel candidato Production ([D190](DECISION_REGISTER.md)). PR: [#355](https://github.com/max23468/FiscalBay/pull/355).
+Lo sblocco singolo e multiplo verifica quota, appartenenza, finestra e dato nello stesso commit, nei cicli personali ancorati al primo collegamento.
 
 <a id="m3-07"></a>
 #### M3-07 · Suggerimenti e template mancanti
 
-**Stato:** Completato · **Prerequisiti:** M3-01, M3-05 · **Contratto:** [§10](#s10)
+**Stato:** Completato · **Contratto:** [§10](#s10)
 
-I suggerimenti Premium propongono il dato più recente da ordini autorizzati ancora conservati dello stesso spazio e ambiente eBay, collegati soltanto dall'identità stabile dell'ordine Trading, con provenienza, conflitti omogenei e ambiguità visibili e senza copie fiscali persistenti. Dettaglio reale e anteprima offrono il modello IT/EN modificabile e copiabile, senza modificare l'ordine né scrivere all'acquirente; conservazione nel [modello](engineering/DATA_RETENTION.md#identita-e-suggerimenti). PR: [#357](https://github.com/max23468/FiscalBay/pull/357).
+I suggerimenti Premium propongono il dato più recente da ordini autorizzati ancora conservati dello stesso spazio e ambiente eBay, collegati soltanto dall'identità stabile dell'ordine Trading, con provenienza, conflitti omogenei e ambiguità visibili e senza copie fiscali persistenti.
 
 <a id="m3-08"></a>
 #### M3-08 · Retention operativa e anti-resurrezione
 
-**Stato:** Completato · **Prerequisiti:** M3-01, M3-04 · **Contratto:** [§30](#s30)
+**Stato:** Completato · **Contratto:** [§30](#s30)
 
-Accesso e pulizia hanno termini separati: elenco, dettaglio e conteggi rispettano subito scadenza e revoca anche con pulizia sospesa, la pulizia giornaliera elimina le copie dipendenti e i marker su ID e identità di riga impediscono a import, dettagli pendenti e ricevute di riattivare dati eliminati. L'eliminazione del negozio prevale sulla grace e resta anche al ricollegamento, senza restituire quota; nessun dato grezzo è persistito. Inventario e scadenze nel [contratto di conservazione](engineering/DATA_RETENTION.md). PR: [#353](https://github.com/max23468/FiscalBay/pull/353).
+Accesso e pulizia hanno termini separati: elenco, dettaglio e conteggi rispettano subito scadenza e revoca anche con pulizia sospesa, la pulizia giornaliera elimina le copie dipendenti e i marker su ID e identità di riga impediscono a import, dettagli pendenti e ricevute di riattivare dati eliminati.
 
 <a id="m3-09"></a>
 #### M3-09 · Ordini combinati e identità di riga
 
-**Stato:** Completato · **Prerequisiti:** M3-02 · **Contratto:** [§9](#s09) · [§35](#s35)
+**Stato:** Completato · **Contratto:** [§9](#s09) · [§35](#s35)
 
-Gli acquisti Trading visti prima del checkout si collegano all'ordine definitivo tramite l'identità stabile di riga e vengono assorbiti solo se tutte le righe di ogni provvisorio appartengono allo stesso definitivo, che conserva UUID, storico e grant senza una seconda quota (D174). Sovrapposizioni parziali, righe senza identità o più candidati compaiono come «Ordine da verificare» sugli ordini definitivi (D178, D180). La passata Trading dei modificati ha checkpoint propri e un suo errore non ferma recenti, storico e dettaglio. PR: [#345](https://github.com/max23468/FiscalBay/pull/345), [#359](https://github.com/max23468/FiscalBay/pull/359).
+Gli acquisti Trading visti prima del checkout si collegano all'ordine definitivo tramite l'identità stabile di riga e vengono assorbiti solo se tutte le righe di ogni provvisorio appartengono allo stesso definitivo, che conserva UUID, storico e grant senza una seconda quota (D174).
 
-**Limiti residui:** chiusura accettata dall'owner su fixture sintetiche; il 2026-11-02 un ordine combinato reale in Production e sette sul test confermano consolidamento e riferimenti, senza sblocchi sugli ordini fusi. Lo sblocco prima della fusione resta provato soltanto sulle fixture. `GetSellerTransactions` non è un fallback per il CF ([dettaglio](engineering/EBAY_TAX_COMPARISON.md#seller-transactions)).
+**Limiti residui:** chiusura accettata dall'owner su fixture sintetiche; il 2026-11-02 un ordine combinato reale in Production e sette sul test confermano consolidamento e riferimenti, senza sblocchi sugli ordini fusi.
 
 <a id="m3-10"></a>
 #### M3-10 · Riqualifica della lettura fiscale Fulfillment
 
-**Stato:** Completato · **Prerequisiti:** M3-02 · **Contratto:** [§9](#s09) · [§11](#s11)
+**Stato:** Completato · **Contratto:** [§9](#s09) · [§11](#s11)
 
-Con l'header del marketplace dell'inserzione e `TAX_BREAKDOWN`, Fulfillment è la prima lettura del CF italiano Production e Trading resta il fallback, con storico preservato (D135). Il campione Production di 18 ordini `EBAY_IT` mostra la coincidenza dei CF presenti, non l'equivalenza sulle assenze; matrice, limiti di età e quote sono nella [procedura di confronto](engineering/EBAY_TAX_COMPARISON.md#qualifica-production-del-2026-10-10). PR: [#317](https://github.com/max23468/FiscalBay/pull/317), [#318](https://github.com/max23468/FiscalBay/pull/318).
+Con l'header del marketplace dell'inserzione e `TAX_BREAKDOWN`, Fulfillment è la prima lettura del CF italiano Production e Trading resta il fallback, con storico preservato (D135).
 
-**Limiti residui:** oltre 90 giorni il dato fiscale dipende dalla sola lettura Fulfillment qualificata sul campione, perché Trading non restituisce quegli ordini. Altri Paesi, marketplace e tipi fiscali non sono provati.
+**Limiti residui:** oltre 90 giorni il dato fiscale dipende dalla sola lettura Fulfillment qualificata sul campione, perché Trading non restituisce quegli ordini.
 
 <a id="m3-11"></a>
 #### M3-11 · Ingresso Worker per webhook e callback
 
-**Stato:** Completato · **Prerequisiti:** M3-03 · **Contratto:** [§25](#s25) · [§11](#s11)
+**Stato:** Completato · **Contratto:** [§25](#s25) · [§11](#s11)
 
-I webhook eBay e Stripe passano dall'ingresso Worker prima di React Router: metodo, dimensione e firma sul corpo grezzo, ricevuta idempotente in D1 con soli riferimenti, ACK soltanto dopo l'accettazione della coda, retry e DLQ nativi per ambiente; il cron riprende le ricevute non accodate. `ORDER_CONFIRMATION` rilegge soltanto l'ordine indicato e non avanza il watermark del polling; Stripe, Telegram e cancellazione account riusano lo stesso ingresso. Procedure nella [pubblicazione](engineering/OPERATIONS.md#webhook). PR: [#320](https://github.com/max23468/FiscalBay/pull/320), [#322](https://github.com/max23468/FiscalBay/pull/322).
+I webhook eBay e Stripe passano dall'ingresso Worker prima di React Router: metodo, dimensione e firma sul corpo grezzo, ricevuta idempotente in D1 con soli riferimenti, ACK soltanto dopo l'accettazione della coda, retry e DLQ nativi per ambiente; il cron riprende le ricevute non accodate.
 
 **Limiti residui:** la consegna Sandbox di prova non porta `data.user` e non prova l'attribuzione a un negozio: sottoscrizione e consegna attribuita Production restano in [M8-03](#m8-03).
 
 <a id="m3-12"></a>
 #### M3-12 · Smistamento del lavoro pianificato
 
-**Stato:** Completato · **Prerequisiti:** M3-03, M3-11 · **Contratto:** [§31](#s31) · [§11](#s11)
+**Stato:** Completato · **Contratto:** [§31](#s31) · [§11](#s11)
 
-Un solo Cron Trigger ogni 10 minuti per ambiente non chiama eBay: accoda i compiti periodici con un turno per periodo, riprende le ricevute webhook e accoda le letture dei negozi dovuti nell'ordine di [M3-04](#m3-04), mentre il consumer legge un negozio per invocazione entro il budget della lettura. Trigger ripetuti, sovrapposti o saltati non duplicano né perdono i compiti giornalieri, e i messaggi accettati e poi scaduti o finiti nella DLQ si riprendono dal checkpoint D1. Un terzo trigger non serve: le misure sul test non mostrano limiti di durata o di CPU ([§31](#s31)). PR: [#331](https://github.com/max23468/FiscalBay/pull/331).
+Un solo Cron Trigger ogni 10 minuti per ambiente non chiama eBay: accoda i compiti periodici con un turno per periodo, riprende le ricevute webhook e accoda le letture dei negozi dovuti nell'ordine di [M3-04](#m3-04), mentre il consumer legge un negozio per invocazione entro il budget della lettura.
 
 **Limiti residui:** Production non ha ancora ricevuto il deploy; il carico con spazi Premium reali è misurato soltanto in [M7-03](#m7-03).
 
 <a id="m4"></a>
 ### M4 · UX completa Ordini, Negozi e Impostazioni
 
-M4 porta nell'app reale Ordini, Negozi, Impostazioni e campanella sugli stessi componenti dell'anteprima, con onboarding, stati degradati e baseline visiva e di accessibilità ([§17](#s17)-[§22](#s22), [§35](#s35)). Fatturazione, Telegram ed export funzionanti appartengono a [M5](#m5) e [M6](#m6); [M7-08](#m7-08) chiude gli stessi flussi end-to-end prima della RC, senza dismettere l'anteprima.
+M4 porta nell'app reale Ordini, Negozi, Impostazioni e campanella sugli stessi componenti dell'anteprima, con onboarding, stati degradati e baseline visiva e di accessibilità ([§17](#s17)-[§22](#s22), [§35](#s35)).
 
 <a id="m4-01"></a>
 #### M4-01 · Pagina Ordini definitiva
 
-**Stato:** Completato · **Prerequisiti:** M1-07, M3 · **Contratto:** [§17](#s17)
+**Stato:** Completato · **Contratto:** [§17](#s17)
 
-Area reale e anteprima rendono la pagina Ordini con gli stessi componenti; l'accesso ha una pagina propria e gli Ordini mostrano soltanto ordini persistiti e autorizzati, con il dettaglio su un indirizzo proprio, il vocabolario del [§9](#s09) (D176) e il prezzo di riga di D165. CF e P.IVA italiani compaiono e si copiano nella forma derivata, senza spazi e in maiuscolo, con l'originale conservato; un ordine in verifica mostra subito l'ultimo stato salvato e poi quello confermato ([§22](#s22)), e Auth, D1, eBay e rendering hanno misure per fase. PR: [#370](https://github.com/max23468/FiscalBay/pull/370).
+Area reale e anteprima rendono la pagina Ordini con gli stessi componenti; l'accesso ha una pagina propria e gli Ordini mostrano soltanto ordini persistiti e autorizzati, con il dettaglio su un indirizzo proprio, il vocabolario del [§9](#s09) (D176) e il prezzo di riga di D165.
 
 **Limiti residui:** «Apri su eBay» compare soltanto per i negozi eBay reali, perché per la Sandbox non esiste un indirizzo verificato della pagina dell'ordine.
 
 <a id="m4-02"></a>
 #### M4-02 · Ricerca e filtri
 
-**Stato:** Completato · **Prerequisiti:** M4-01 · **Contratto:** [§17](#s17) · [§28](#s28)
+**Stato:** Completato · **Contratto:** [§17](#s17) · [§28](#s28)
 
-La barra superiore propone i primi ordini con lo stesso filtro server della pagina, e «Vedi tutti» apre l'elenco filtrato; la query resta fuori da indirizzo, referrer e log e i valori fiscali si confrontano soltanto se autorizzati, quindi elenco, conteggi e suggerimenti non rivelano dati bloccati. Filtri per negozio, periodo, pagamento, spedizione e situazione fiscale, con l'acquirente estero distinto dal dato non riportato da eBay e senza marketplace (D183); «Non pagato» mostra anche gli acquisti provvisori, esclusi dalle viste predefinite (D180, D174). PR: [#376](https://github.com/max23468/FiscalBay/pull/376), [#386](https://github.com/max23468/FiscalBay/pull/386).
+La barra superiore propone i primi ordini con lo stesso filtro server della pagina, e «Vedi tutti» apre l'elenco filtrato; la query resta fuori da indirizzo, referrer e log e i valori fiscali si confrontano soltanto se autorizzati, quindi elenco, conteggi e suggerimenti non rivelano dati bloccati.
 
 **Limiti residui:** i suggerimenti partono da due caratteri e, come «Vedi tutti», considerano la sola ricerca senza i filtri attivi.
 
 <a id="m4-03"></a>
 #### M4-03 · Carica altri e contesto
 
-**Stato:** Completato · **Prerequisiti:** M4-02 · **Contratto:** [§17](#s17)
+**Stato:** Completato · **Contratto:** [§17](#s17)
 
-Ogni elenco ha un'istantanea, così «Carica altri», dettaglio, Indietro e ricarica ritrovano gli stessi ordini nello stesso ordine; i nuovi ordini entrano soltanto in cima o compaiono con l'indicatore «Mostra». Il negozio scelto nei filtri si ricorda fra le sessioni, l'ordinamento è unico e la selezione conta soltanto gli ordini ancora nell'elenco, con quota e diritti riletti dal server (D082). PR: [#381](https://github.com/max23468/FiscalBay/pull/381), [#474](https://github.com/max23468/FiscalBay/pull/474).
+Ogni elenco ha un'istantanea, così «Carica altri», dettaglio, Indietro e ricarica ritrovano gli stessi ordini nello stesso ordine; i nuovi ordini entrano soltanto in cima o compaiono con l'indicatore «Mostra».
 
-**Limiti residui:** una richiesta legge al massimo 300 ordini dall'inizio dell'elenco; oltre, l'elenco invita a usare ricerca o filtri invece di dichiarare finiti gli ordini. Un ordine che cambia situazione fiscale o stato mentre un filtro è attivo può entrare o uscire da quell'elenco filtrato alla lettura successiva. Durante l'importazione dello storico gli ordini recuperati dopo l'apertura compaiono con l'indicatore, non in fondo all'elenco.
+**Limiti residui:** una richiesta legge al massimo 300 ordini dall'inizio dell'elenco; oltre, l'elenco invita a usare ricerca o filtri invece di dichiarare finiti gli ordini.
 
 <a id="m4-04"></a>
 #### M4-04 · Drawer e articoli
 
-**Stato:** Completato · **Prerequisiti:** M4-01 · **Contratto:** [§17](#s17)
+**Stato:** Completato · **Contratto:** [§17](#s17)
 
-Il dettaglio è un pannello con indirizzo proprio, a tutto schermo su smartphone, con le schede Dettagli e Articoli e senza cronologia; collegamento diretto, chiusura, Indietro e ricarica conservano ricerca, filtri, posizione e selezione, con il focus che torna alla scheda dell'ordine. PR: [#383](https://github.com/max23468/FiscalBay/pull/383).
+Il dettaglio è un pannello con indirizzo proprio, a tutto schermo su smartphone, con le schede Dettagli e Articoli e senza cronologia; collegamento diretto, chiusura, Indietro e ricarica conservano ricerca, filtri, posizione e selezione, con il focus che torna alla scheda dell'ordine.
 
 **Limiti residui:** un ordine aperto con un collegamento diretto ma fuori dalle pagine caricate non ha una scheda su cui riportare il focus, che segue il comportamento predefinito del dialogo.
 
 <a id="m4-09"></a>
 #### M4-09 · Contatti dell'acquirente
 
-**Stato:** Completato · **Prerequisiti:** M4-01 · **Contratto:** [§17](#s17) · [D181](DECISION_REGISTER.md)
+**Stato:** Completato · **Contratto:** [§17](#s17) · [D181](DECISION_REGISTER.md)
 
-Telefono, email e indirizzo di fatturazione compaiono nella forma derivata di D181, con l'originale eBay invariato; telefono ed email sono collegamenti, i tre dati si copiano dal dettaglio e la richiesta del Codice Fiscale si apre come email compilata soltanto verso un indirizzo reale. PR: [#377](https://github.com/max23468/FiscalBay/pull/377), [#385](https://github.com/max23468/FiscalBay/pull/385).
+Telefono, email e indirizzo di fatturazione compaiono nella forma derivata di D181, con l'originale eBay invariato; telefono ed email sono collegamenti, i tre dati si copiano dal dettaglio e la richiesta del Codice Fiscale si apre come email compilata soltanto verso un indirizzo reale.
 
-**Limiti residui:** i gruppi del telefono sono calcolati soltanto per i cellulari italiani; gli altri numeri senza separatori mostrano prefisso e numero nazionale. Il prefisso dedotto dal Paese copre i Paesi europei più frequenti, Stati Uniti, Canada e Australia; per gli altri un numero senza prefisso resta testo.
+**Limiti residui:** i gruppi del telefono sono calcolati soltanto per i cellulari italiani; gli altri numeri senza separatori mostrano prefisso e numero nazionale.
 
 <a id="m4-05"></a>
 #### M4-05 · Multiselezione ed export entrypoint
 
-**Stato:** Completato · **Prerequisiti:** M4-03 · **Contratto:** [§12](#s12) · [§17](#s17)
+**Stato:** Completato · **Contratto:** [§12](#s12) · [§17](#s17)
 
-«Seleziona» apre la barra contestuale con selezionati e ordini da sbloccare; lo sblocco multiplo chiede sempre conferma ed è tutto o niente, senza consumi per gli ordini già sbloccati. Esporta porta nelle Impostazioni selezione, filtri e ricerca degli Ordini, o il singolo ordine, con ambito e numero espliciti e nessun file prima di «Crea file» ([§12](#s12)). PR: [#384](https://github.com/max23468/FiscalBay/pull/384).
+«Seleziona» apre la barra contestuale con selezionati e ordini da sbloccare; lo sblocco multiplo chiede sempre conferma ed è tutto o niente, senza consumi per gli ordini già sbloccati.
 
 **Limiti residui:** la selezione esportata si ritrova soltanto nella stessa scheda del browser e per lo stesso elenco, istantanea compresa.
 
 <a id="m4-06"></a>
 #### M4-06 · Impostazioni e campanella
 
-**Stato:** Completato · **Prerequisiti:** M2, M1-07 · **Contratto:** [§19](#s19)
+**Stato:** Completato · **Contratto:** [§19](#s19)
 
-Le Impostazioni reali usano il componente dell'anteprima, con una sola fonte persistente per ogni preferenza e i dati effettivi di Sicurezza; lingua, tema e fuso valgono in tutta l'area anche dopo un nuovo accesso, e salvataggi automatici, Salva e modifiche non salvate seguono il [§19](#s19). La campanella riporta i problemi dei negozi e dei consensi degli ultimi 30 giorni, con le letture registrate sul server. PR: [#394](https://github.com/max23468/FiscalBay/pull/394), [#396](https://github.com/max23468/FiscalBay/pull/396).
+Le Impostazioni reali usano il componente dell'anteprima, con una sola fonte persistente per ogni preferenza e i dati effettivi di Sicurezza; lingua, tema e fuso valgono in tutta l'area anche dopo un nuovo accesso, e salvataggi automatici, Salva e modifiche non salvate seguono il [§19](#s19).
 
 **Limiti residui:** la pagina del collegamento eBay applica tema e fuso ma non reindirizza alla lingua scelta.
 
 <a id="m4-07"></a>
 #### M4-07 · Onboarding e degradazione
 
-**Stato:** Completato · **Prerequisiti:** M4-01, M2 · **Contratto:** [§20](#s20)
+**Stato:** Completato · **Contratto:** [§20](#s20)
 
-Ordini e Negozi ricavano lo stato delle letture dai dati salvati: eBay non disponibile, letture ferme di un negozio, primi passi durante la prima sincronizzazione, negozio senza ordini con il periodo letto e servizio non disponibile seguono la tabella del [§20](#s20), sospendendo anche sul server soltanto le azioni che chiamano eBay. L'anteprima ha gli stessi stati come scenari, con gli stessi componenti e testi. PR: [#397](https://github.com/max23468/FiscalBay/pull/397).
+Ordini e Negozi ricavano lo stato delle letture dai dati salvati: eBay non disponibile, letture ferme di un negozio, primi passi durante la prima sincronizzazione, negozio senza ordini con il periodo letto e servizio non disponibile seguono la tabella del [§20](#s20), sospendendo anche sul server soltanto le azioni che chiamano eBay.
 
-**Limiti residui:** con un solo negozio attivo l'indisponibilità di eBay e un problema del negozio non si distinguono. Lo scheletro compare nelle navigazioni dentro l'app: il primo caricamento del documento attende i dati dal server.
+**Limiti residui:** con un solo negozio attivo l'indisponibilità di eBay e un problema del negozio non si distinguono.
 
 <a id="m4-08"></a>
 #### M4-08 · Review visiva e a11y baseline
 
-**Stato:** Completato · **Prerequisiti:** M4-01..M4-07, M4-09 · **Contratto:** [§22](#s22) · [§35](#s35)
+**Stato:** Completato · **Contratto:** [§22](#s22) · [§35](#s35)
 
-Il catalogo delle pagine prova route reali e anteprima in IT/EN, chiaro e scuro, su smartphone, tablet e desktop, con focus visibile, movimento ridotto e controlli automatici WCAG 2.2 A/AA; le prove funzionali dell'anteprima girano anche sull'area reale, e le divergenze trovate fra le due aree sono state corrette. PR: [#399](https://github.com/max23468/FiscalBay/pull/399), [#401](https://github.com/max23468/FiscalBay/pull/401).
+Il catalogo delle pagine prova route reali e anteprima in IT/EN, chiaro e scuro, su smartphone, tablet e desktop, con focus visibile, movimento ridotto e controlli automatici WCAG 2.2 A/AA; le prove funzionali dell'anteprima girano anche sull'area reale, e le divergenze trovate fra le due aree sono state corrette.
 
-**Limiti residui:** restano solo nell'anteprima gli stati che l'account locale non raggiunge e le prove che modificherebbero le fixture condivise, come pausa ed eliminazione reale di un negozio. Safari reale non è stato controllato con l'account del test: vale la verifica su WebKit. Dispositivi fisici, Safari/iOS e lettori di schermo restano ai gate competenti; billing, Telegram ed export si ricontrollano sulle implementazioni reali in [M7-08](#m7-08).
+**Limiti residui:** restano solo nell'anteprima gli stati che l'account locale non raggiunge e le prove che modificherebbero le fixture condivise, come pausa ed eliminazione reale di un negozio.
 
 <a id="m5"></a>
 ### M5 · Free/Premium, Stripe e Telegram
 
-Free con cicli e promozione, prova Premium, Hosted Checkout Managed Payments con webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato. I casi riproducibili soltanto nel live non si provano prima del go-live ([D240](DECISION_REGISTER.md)), senza copertura fittizia; Paddle resta inattivo salvo via dell'owner.
+Free con cicli e promozione, prova Premium, Hosted Checkout Managed Payments con webhook e riconciliazione, cambi piano, lifetime e concessioni, rimborsi e dispute, Telegram, inattività e lista d'attesa, storico Premium e account Stripe live configurato.
 
 <a id="m5-01"></a>
 #### M5-01 · Cicli, promo e quota Free
 
-**Stato:** Completato · **Prerequisiti:** M3-06 · **Contratto:** [§5](#s05)
+**Stato:** Completato · **Contratto:** [§5](#s05)
 
-I cicli Free durano 7×24 ore sull'istante UTC dal primo collegamento e non si spostano né si azzerano. La promozione globale si configura senza deploy e ogni ciclo conserva la quota della promozione come era al suo inizio, anche se la promozione termina o viene accorciata. Il sito annuncia la promozione con la data finale; il Piano indica la quota del ciclo e quella diversa del ciclo seguente. PR: [#406](https://github.com/max23468/FiscalBay/pull/406), [#459](https://github.com/max23468/FiscalBay/pull/459).
+I cicli Free durano 7×24 ore sull'istante UTC dal primo collegamento e non si spostano né si azzerano.
 
 **Limiti residui:** quota base e promozioni si programmano dalla console soltanto per i cicli futuri ([D211](DECISION_REGISTER.md)); la promozione parte senza fine al go-live ([D239](DECISION_REGISTER.md)).
 
 <a id="m5-02"></a>
 #### M5-02 · Trial e grant accesso
 
-**Stato:** Completato · **Prerequisiti:** M5-01 · **Contratto:** [§6](#s06)
+**Stato:** Completato · **Contratto:** [§6](#s06)
 
-La prova di 14×24 ore si attiva volontariamente dopo la prima lettura riuscita di un negozio, anche senza ordini, una sola volta per spazio, senza abbonamento né pagamento; non si ferma e continua anche scollegando il negozio. I dati arrivati durante la prova restano leggibili dopo la fine anche se mai aperti (Q568). Ordini e Piano propongono la prova con un'azione discreta e mostrano i giorni rimasti, con un avviso negli ultimi giorni. PR: [#409](https://github.com/max23468/FiscalBay/pull/409).
+La prova di 14×24 ore si attiva volontariamente dopo la prima lettura riuscita di un negozio, anche senza ordini, una sola volta per spazio, senza abbonamento né pagamento; non si ferma e continua anche scollegando il negozio.
 
-**Limiti residui:** uno spazio che ha avuto soltanto coperture pagate o concesse, ora terminate, può ancora attivare la prova. La campanella non segnala la fine della prova.
+**Limiti residui:** uno spazio che ha avuto soltanto coperture pagate o concesse, ora terminate, può ancora attivare la prova.
 
 <a id="m5-03"></a>
 #### M5-03 · Catalogo e Hosted Checkout
 
-**Stato:** Completato · **Prerequisiti:** G-STRIPE, M5-02 · **Contratto:** [§4](#s04) · [§6](#s06)
+**Stato:** Completato · **Contratto:** [§4](#s04) · [§6](#s06)
 
-Il Piano mostra il listino netto della generazione corrente con la nota sul totale calcolato da Stripe e apre l'Hosted Checkout Managed Payments dopo la prima lettura riuscita di un negozio. Il server rilegge il prezzo su Stripe e ferma la vendita se non è conforme; una sessione non Managed Payments si chiude subito. Uno spazio ha una sola sessione che può incassare e il ritorno da Stripe non attribuisce diritti. Metodi e costi qualificati in [D193](DECISION_REGISTER.md). PR: [#410](https://github.com/max23468/FiscalBay/pull/410), [#414](https://github.com/max23468/FiscalBay/pull/414).
+Il Piano mostra il listino netto della generazione corrente con la nota sul totale calcolato da Stripe e apre l'Hosted Checkout Managed Payments dopo la prima lettura riuscita di un negozio.
 
 **Limiti residui:** le stime di costo usano le tariffe pubbliche del 2026-10-24 senza un incasso reale: le commissioni effettive si rileggono sulle prime vendite reali ([D240](DECISION_REGISTER.md)).
 
 <a id="m5-04"></a>
 #### M5-04 · Acquisto durante la prova
 
-**Stato:** Completato · **Prerequisiti:** M5-03 · **Contratto:** [§6](#s06)
+**Stato:** Completato · **Contratto:** [§6](#s06)
 
-Durante la prova mensile e annuale si scelgono senza pagare: l'abbonamento parte con i giorni residui e il primo addebito arriva alla fine della prova, da cui decorrono i rinnovi; negli ultimi due giorni, che il Checkout non accetta come prova, l'addebito è immediato ([D194](DECISION_REGISTER.md)). Il Piano indica l'abbonamento scelto e la data del primo addebito, senza un secondo acquisto. Giorni di prova contati interi come nel Checkout. PR: [#418](https://github.com/max23468/FiscalBay/pull/418), [#419](https://github.com/max23468/FiscalBay/pull/419).
+Durante la prova mensile e annuale si scelgono senza pagare: l'abbonamento parte con i giorni residui e il primo addebito arriva alla fine della prova, da cui decorrono i rinnovi; negli ultimi due giorni, che il Checkout non accetta come prova, l'addebito è immediato ([D194](DECISION_REGISTER.md)).
 
 **Limiti residui:** l'app Link non mostra gli acquisti di prova: la sua rappresentazione non è osservata prima del go-live ([D240](DECISION_REGISTER.md)).
 
 <a id="m5-05"></a>
 #### M5-05 · Webhook e riconciliazione
 
-**Stato:** Completato · **Prerequisiti:** M5-03 · **Contratto:** [§6](#s06) · [§28](#s28)
+**Stato:** Completato · **Contratto:** [§6](#s06) · [§28](#s28)
 
-I webhook Stripe entrano dall'ingresso condiviso e portano a rileggere da Stripe lo stato corrente, così duplicati e arrivi fuori ordine hanno lo stesso effetto; un redirect non attiva Premium. Ogni copertura è legata alla fattura pagata e dura il periodo pagato. Un rinnovo non pagato riporta subito al Free, la regolarizzazione entro sette giorni conserva il prezzo e alla fine della tutela l'abbonamento si chiude ([D207](DECISION_REGISTER.md)). Il cron riconcilia senza browser; un oggetto sparito o Stripe irraggiungibile non producono revoche né proroghe. PR: [#416](https://github.com/max23468/FiscalBay/pull/416), [#464](https://github.com/max23468/FiscalBay/pull/464).
+I webhook Stripe entrano dall'ingresso condiviso e portano a rileggere da Stripe lo stato corrente, così duplicati e arrivi fuori ordine hanno lo stesso effetto; un redirect non attiva Premium.
 
-**Limiti residui:** la chiusura alla fine della tutela è provata sul dominio, non sul test. Durante l'ora che Stripe impiega a incassare un rinnovo il piano indica l'attivazione in corso.
+**Limiti residui:** la chiusura alla fine della tutela è provata sul dominio, non sul test.
 
 <a id="m5-06"></a>
 #### M5-06 · Cambi piano e Portal/Link
 
-**Stato:** Completato · **Prerequisiti:** M5-05 · **Contratto:** [§6](#s06)
+**Stato:** Completato · **Contratto:** [§6](#s06)
 
-Nel Free lo spazio ha un solo negozio attivo, scelto in Piano ogni 90 giorni o il primo ancora collegato (D155); gli altri sono in pausa per il piano e il downgrade applica la conservazione del [downgrade](engineering/DATA_RETENTION.md#downgrade). Il cambio di periodicità parte dal Piano, vale dal rinnovo senza conguaglio e conserva i prezzi della generazione dell'abbonamento. Il Portal gestisce disdetta, metodo di pagamento e documenti; scollegare l'ultimo negozio avvisa che l'abbonamento continua. PR: [#421](https://github.com/max23468/FiscalBay/pull/421), [#423](https://github.com/max23468/FiscalBay/pull/423).
+Nel Free lo spazio ha un solo negozio attivo, scelto in Piano ogni 90 giorni o il primo ancora collegato (D155); gli altri sono in pausa per il piano e il downgrade applica la conservazione del [downgrade](engineering/DATA_RETENTION.md#downgrade).
 
-**Limiti residui:** su un abbonamento Managed Payments pagato cambio di periodicità e metodo non sono osservati prima del go-live ([D196](DECISION_REGISTER.md), [D240](DECISION_REGISTER.md)). I prezzi di una generazione precedente restano attivi su Stripe finché esistono abbonamenti che la usano.
+**Limiti residui:** su un abbonamento Managed Payments pagato cambio di periodicità e metodo non sono osservati prima del go-live ([D196](DECISION_REGISTER.md), [D240](DECISION_REGISTER.md)).
 
 <a id="m5-07"></a>
 #### M5-07 · Lifetime e concessioni
 
-**Stato:** Completato · **Prerequisiti:** M5-05 · **Contratto:** [§6](#s06) · [§15](#s15)
+**Stato:** Completato · **Contratto:** [§6](#s06) · [§15](#s15)
 
-I venti posti lifetime si prenotano atomicamente prima del checkout e si liberano soltanto quando Stripe conferma la sessione scaduta o il pagamento fallito. Il lifetime si compra anche durante la prova o con un abbonamento, che si chiude subito; il periodo pagato non usato si detrae come «Periodo pagato non usato» ([D208](DECISION_REGISTER.md)). Premium concesso e lifetime in omaggio richiedono autore e motivo e rinviano il rinnovo senza incasso. PR: [#424](https://github.com/max23468/FiscalBay/pull/424), [#426](https://github.com/max23468/FiscalBay/pull/426).
+I venti posti lifetime si prenotano atomicamente prima del checkout e si liberano soltanto quando Stripe conferma la sessione scaduta o il pagamento fallito.
 
-**Limiti residui:** la detrazione è provata in sandbox e sul dominio, non con un acquisto dall'app. Un lifetime rimborsato tiene occupato il posto ([D209](DECISION_REGISTER.md)). Una nuova generazione del listino deve conservare nel catalogo quella precedente, altrimenti il passaggio a vita di chi la usa non si propone.
+**Limiti residui:** la detrazione è provata in sandbox e sul dominio, non con un acquisto dall'app.
 
 <a id="m5-08"></a>
 #### M5-08 · Rimborsi, dispute e recovery commerciale
 
-**Stato:** Completato · **Prerequisiti:** M5-06, M5-07 · **Contratto:** [§6](#s06) · [§30](#s30)
+**Stato:** Completato · **Contratto:** [§6](#s06) · [§30](#s30)
 
-Un rimborso totale o una disputa persa revocano soltanto la copertura che il pagamento aveva creato; rimborso parziale, in corso o fallito e disputa aperta o vinta non revocano e arrivano all'assistenza. Dopo la revoca il Piano spiega il ritorno al Free con «Pagamento rimborsato»; la prova residua torna in vigore ([D197](DECISION_REGISTER.md)). La cancellazione dei dati finanziari tramite Link si registra senza revoche né nuovi clienti, e lo stop dei rinnovi serve la cancellazione dell'account. PR: [#428](https://github.com/max23468/FiscalBay/pull/428), [#432](https://github.com/max23468/FiscalBay/pull/432).
+Un rimborso totale o una disputa persa revocano soltanto la copertura che il pagamento aveva creato; rimborso parziale, in corso o fallito e disputa aperta o vinta non revocano e arrivano all'assistenza.
 
-**Limiti residui:** un rimborso su un abbonamento già chiuso, senza webhook, dipende dai tentativi della coda: il cron rilegge soltanto abbonamenti aperti e lifetime. Il segnale reale di una cancellazione tramite Link non è riproducibile nella sandbox.
+**Limiti residui:** un rimborso su un abbonamento già chiuso, senza webhook, dipende dai tentativi della coda: il cron rilegge soltanto abbonamenti aperti e lifetime.
 
 <a id="m5-09"></a>
 #### M5-09 · Telegram link e preferenze
 
-**Stato:** Completato · **Prerequisiti:** M3, M2, M5-02 · **Contratto:** [§13](#s13)
+**Stato:** Completato · **Contratto:** [§13](#s13)
 
-Con Premium, prova o lifetime «Collega Telegram» apre un deep link monouso e breve, legato a spazio, utente e sessione; l'«Avvia» del bot collega la chat privata, che sostituisce la precedente. Notifiche mostra preferenze salvate a ogni scelta e Negozi lo stato per negozio. All'invio si rileggono Premium, chat, preferenze e negozio. Ogni ambiente ha il proprio bot ([D198](DECISION_REGISTER.md)). PR: [#434](https://github.com/max23468/FiscalBay/pull/434).
+Con Premium, prova o lifetime «Collega Telegram» apre un deep link monouso e breve, legato a spazio, utente e sessione; l'«Avvia» del bot collega la chat privata, che sostituisce la precedente.
 
-**Limiti residui:** il fuso del riepilogo è quello dell'account all'ultima scelta di frequenza o orario: cambiarlo in Aspetto non lo sposta. Nelle Impostazioni la disattivazione è lo switch delle notifiche: la chat si scollega dal bot ([M5-10](#m5-10)), con un cambio di chat o con la cancellazione dello spazio.
+**Limiti residui:** il fuso del riepilogo è quello dell'account all'ultima scelta di frequenza o orario: cambiarlo in Aspetto non lo sposta.
 
 <a id="m5-10"></a>
 #### M5-10 · Telegram invii e arretrati
 
-**Stato:** Completato · **Prerequisiti:** M5-09, M3-05 · **Contratto:** [§13](#s13)
+**Stato:** Completato · **Contratto:** [§13](#s13)
 
-Il bot invia notifiche dei nuovi ordini definitivi, dati arrivati dopo, correzioni e rimozioni, un riepilogo per importazione e il riepilogo giornaliero, con CF e P.IVA nella forma di [M4-01](#m4-01) e senza contatti dell'acquirente. Esiti incerti si ritentano, il bot bloccato ferma gli invii senza arretrato. Comandi, pulsanti e formato dei messaggi seguono [D199](DECISION_REGISTER.md) e il [§13](#s13). PR: [#444](https://github.com/max23468/FiscalBay/pull/444), [#447](https://github.com/max23468/FiscalBay/pull/447), [#448](https://github.com/max23468/FiscalBay/pull/448).
+Il bot invia notifiche dei nuovi ordini definitivi, dati arrivati dopo, correzioni e rimozioni, un riepilogo per importazione e il riepilogo giornaliero, con CF e P.IVA nella forma di [M4-01](#m4-01) e senza contatti dell'acquirente.
 
-**Limiti residui:** «Apri gli ordini» del riepilogo usa il filtro dei sette giorni, l'unico periodo dell'elenco che lo comprende per intero. Più spazi sulla stessa chat ricevono una risposta per spazio a ogni comando.
+**Limiti residui:** «Apri gli ordini» del riepilogo usa il filtro dei sette giorni, l'unico periodo dell'elenco che lo comprende per intero.
 
 <a id="m5-11"></a>
 #### M5-11 · Ammissione, inattività e costo
 
-**Stato:** Completato · **Prerequisiti:** M5-01, M5-03 · **Contratto:** [§5](#s05)
+**Stato:** Completato · **Contratto:** [§5](#s05)
 
-Dopo 30 giorni senza attività umana lo spazio Free riceve un'email di preavviso e dopo altri 7 i negozi entrano in pausa per inattività; «Riprendi le letture» li riprende senza toccare quota, ciclo, prova o promozione, e una copertura non va mai in pausa. La lista d'attesa vale per chi si registra mentre è attiva (Q569, [D201](DECISION_REGISTER.md)) e con gli acquisti chiusi si fermano checkout e prova. Un negozio eBay resta legato al suo spazio, così la prova non si ripete con un account nuovo. PR: [#445](https://github.com/max23468/FiscalBay/pull/445).
+Dopo 30 giorni senza attività umana lo spazio Free riceve un'email di preavviso e dopo altri 7 i negozi entrano in pausa per inattività.
 
 **Limiti residui:** chi viene ammesso non riceve un'email: lo vede al prossimo accesso.
 
 <a id="m5-12"></a>
 #### M5-12 · Configurazione live sotto checkpoint
 
-**Stato:** Completato · **Prerequisiti:** M5-03..M5-11 · **Contratto:** [§33](#s33) · [§37](#s37)
+**Stato:** Completato · **Contratto:** [§33](#s33) · [§37](#s37)
 
-La configurazione attesa dell'account Stripe di ogni ambiente sta nel codice e `scripts/stripe-account.mjs` la rilegge e la allinea senza esporre valori ([RELEASE](engineering/RELEASE.md)). Ogni Worker accetta soltanto le chiavi del proprio ambiente ([D206](DECISION_REGISTER.md)). L'account live ha profilo, listino, imposte, endpoint del webhook, portale, Smart Retries e contatto `supporto@fiscalbay.it` allineati. PR: [#452](https://github.com/max23468/FiscalBay/pull/452), [#457](https://github.com/max23468/FiscalBay/pull/457).
+La configurazione attesa dell'account Stripe di ogni ambiente sta nel codice e `scripts/stripe-account.mjs` la rilegge e la allinea senza esporre valori ([RELEASE](engineering/RELEASE.md)).
 
-**Limiti residui:** chiave live e segreto del webhook live vanno sul Worker Production soltanto nel mandato Production, prima del go-live: fino ad allora `/webhooks/stripe` risponde 404 in Production. Il bot Production si aggancia a 1.x spenta. L'indirizzo di assistenza della sandbox è ancora quello fittizio di Stripe.
+**Limiti residui:** chiave live e segreto del webhook live vanno sul Worker Production soltanto nel mandato Production, prima del go-live: fino ad allora `/webhooks/stripe` risponde 404 in Production.
 
 <a id="m5-13"></a>
 #### M5-13 · Storico e conservazione Premium
 
-**Stato:** Completato · **Prerequisiti:** M3-03, M3-08, M5-02 · **Contratto:** [§4](#s04) · [§11](#s11) · [§30](#s30)
+**Stato:** Completato · **Contratto:** [§4](#s04) · [§11](#s11) · [§30](#s30)
 
-Una sola finestra dello spazio decide importazione, consultazione e conservazione: 30 giorni nel Free, un anno con una copertura o l'estensione concessa, fino a due anni. All'attivazione la lettura recupera il periodo più vecchio dopo i recenti e Negozi mostra i giorni della finestra; un ordine eliminato non torna. Ordini ed export offrono «Ultimi 6 mesi» e «Ultimi 12 mesi» soltanto con Premium. Contratto nel [contratto di conservazione](engineering/DATA_RETENTION.md). PR: [#456](https://github.com/max23468/FiscalBay/pull/456), [#458](https://github.com/max23468/FiscalBay/pull/458).
+Una sola finestra dello spazio decide importazione, consultazione e conservazione: 30 giorni nel Free, un anno con una copertura o l'estensione concessa, fino a due anni.
 
-**Limiti residui:** l'app non incassa estensioni. Oltre 90 giorni il dato fiscale dipende dalla sola lettura Fulfillment del campione di [M3-10](#m3-10): Piano e sito promettono un anno di ordini, non di Codici Fiscali. Gli ordini eliminati nel Free prima dell'attivazione mancano nell'anno importato. La fine dello storico esteso non manda un messaggio Telegram.
+**Limiti residui:** l'app non incassa estensioni.
 
 <a id="m6"></a>
 ### M6 · Export, admin e supporto
 
-M6 consegna i percorsi self-service e il controllo operativo senza accesso ordinario al database: export CSV/XLSX e ZIP dell'account su file privati ([§12](#s12)), cancellazione dell'account ([§30](#s30)), console admin, interruttori e Control Center ([§15](#s15)), email, supporto e consenso ([§14](#s14)), sito pubblico ([§23](#s23)), KPI e metriche tecniche ([§31](#s31)). Le verifiche trasversali di erasure, legali e di degrado restano in [M7](#m7).
+M6 consegna i percorsi self-service e il controllo operativo senza accesso ordinario al database: export CSV/XLSX e ZIP dell'account su file privati ([§12](#s12)), cancellazione dell'account ([§30](#s30)), console admin, interruttori e Control Center ([§15](#s15)), email, supporto e consenso ([§14](#s14)), sito pubblico ([§23](#s23)), KPI e metriche tecniche ([§31](#s31)).
 
 <a id="m6-01"></a>
 #### M6-01 · CSV e opzioni standard
 
-**Stato:** Completato · **Prerequisiti:** M3-06, G-EXPORT · **Contratto:** [§12](#s12)
+**Stato:** Completato · **Contratto:** [§12](#s12)
 
-Esporta è attivo dagli Ordini su selezione, elenco filtrato e singolo ordine; la sezione Esportazione conta l'ambito come l'elenco e offre «Tutti» o «Solo con dati fiscali disponibili». Il CSV ha uno schema stabile per ordine o per articolo, soli ordini definitivi salvo «Non pagato» (D180), identificativi senza doppioni né totali ripetuti, dati bloccati assenti con il motivo, formule neutralizzate e istruzioni per l'import come testo. Il server rilegge sessione, negozi, conservazione e diritti a ogni richiesta. PR: [#468](https://github.com/max23468/FiscalBay/pull/468), [#495](https://github.com/max23468/FiscalBay/pull/495).
+Esporta è attivo dagli Ordini su selezione, elenco filtrato e singolo ordine; la sezione Esportazione conta l'ambito come l'elenco e offre «Tutti» o «Solo con dati fiscali disponibili».
 
 <a id="m6-02"></a>
 #### M6-02 · XLSX e configurazioni Premium
 
-**Stato:** Completato · **Prerequisiti:** M6-01 · **Contratto:** [§12](#s12)
+**Stato:** Completato · **Contratto:** [§12](#s12)
 
-Con Premium l'export offre XLSX, colonne scelte e ordinate e configurazioni salvate per nome; nel Free le funzioni restano visibili con la corona. L'XLSX tipizza come testo CF, Partita IVA, SKU, CAP e telefono, scrive importi e date come valori, non contiene formule, macro o collegamenti e conta il totale una volta per ordine. Il server rifiuta le scelte Premium senza copertura all'istante della richiesta. Tempi, memoria e bundle sono misurati nel [benchmark](engineering/RELEASE.md). PR: [#478](https://github.com/max23468/FiscalBay/pull/478), [#495](https://github.com/max23468/FiscalBay/pull/495).
+Con Premium l'export offre XLSX, colonne scelte e ordinate e configurazioni salvate per nome; nel Free le funzioni restano visibili con la corona.
 
-**Limiti residui:** l'apertura in Excel non è automatizzata in CI, dove resta un lettore indipendente. Una cella oltre 32.767 caratteri, il limite di Excel, non si tronca.
+**Limiti residui:** l'apertura in Excel non è automatizzata in CI, dove resta un lettore indipendente.
 
 <a id="m6-03"></a>
 #### M6-03 · Job export e portabilità
 
-**Stato:** Completato · **Prerequisiti:** M6-01, M6-02, M6-10 · **Contratto:** [§12](#s12) · [§30](#s30)
+**Stato:** Completato · **Contratto:** [§12](#s12) · [§30](#s30)
 
-Oltre 2.000 ordini il file si prepara dalla coda: il lavoro rilegge revisione dello spazio, diritti e ambito all'avvio e pubblica soltanto con la revisione della richiesta, e ogni file vale al più fino al primo termine di copertura, conservazione o sblocco, anche con la pulizia sospesa. La campanella e «File creati» annunciano file pronti e lavori non riusciti. Dati e privacy offre a tutti i piani lo ZIP JSON/CSV dell'account, senza segreti, pagamenti né ordini. PR: [#483](https://github.com/max23468/FiscalBay/pull/483), [#495](https://github.com/max23468/FiscalBay/pull/495).
+Oltre 2.000 ordini il file si prepara dalla coda: il lavoro rilegge revisione dello spazio, diritti e ambito all'avvio e pubblica soltanto con la revisione della richiesta, e ogni file vale al più fino al primo termine di copertura, conservazione o sblocco, anche con la pulizia sospesa.
 
 **Limiti residui:** nessuna email al file pronto: la notifica è nella campanella, come consente §12.2.
 
 <a id="m6-04"></a>
 #### M6-04 · Console admin
 
-**Stato:** Completato · **Prerequisiti:** M2-04, M5 · **Contratto:** [§15](#s15)
+**Stato:** Completato · **Contratto:** [§15](#s15)
 
-`/admin` richiede ruolo e passkey verificata ([D212](DECISION_REGISTER.md)), o il token tecnico dell'agente ([D213](DECISION_REGISTER.md)), e copre spazi, negozi, lavori, quote eBay, commerciale, antiabuso, comunicazioni della campanella e registro. Le operazioni sono un elenco chiuso con motivo, stato riletto e audit scritto prima di agire; comprendono concessioni e lifetime riconcesso ([D209](DECISION_REGISTER.md)), quota e promozioni future ([D211](DECISION_REGISTER.md)), sospensione antiabuso ([D210](DECISION_REGISTER.md), [D224](DECISION_REGISTER.md)) e trasferimento del negozio con il suo segno ([D221](DECISION_REGISTER.md)). Le anomalie sono raggruppate per causa con gravità, conseguenza e azione. PR: [#469](https://github.com/max23468/FiscalBay/pull/469), [#473](https://github.com/max23468/FiscalBay/pull/473), [#495](https://github.com/max23468/FiscalBay/pull/495).
+`/admin` richiede ruolo e passkey verificata ([D212](DECISION_REGISTER.md)), o il token tecnico dell'agente ([D213](DECISION_REGISTER.md)), e copre spazi, negozi, lavori, quote eBay, commerciale, antiabuso, comunicazioni della campanella e registro.
 
-**Limiti residui:** una prova già in corso quando arriva la sospensione antiabuso prosegue fino alla sua fine. Il listino si cambia con lo script e una nuova generazione ([D211](DECISION_REGISTER.md)).
+**Limiti residui:** una prova già in corso quando arriva la sospensione antiabuso prosegue fino alla sua fine.
 
 <a id="m6-05"></a>
 #### M6-05 · Flag e ammissione manuale
 
-**Stato:** Completato · **Prerequisiti:** M6-04 · **Contratto:** [§15](#s15) · [§32](#s32)
+**Stato:** Completato · **Contratto:** [§15](#s15) · [§32](#s32)
 
-La sezione Interruttori della console spegne e riaccende chiamate eBay, invii Telegram, acquisti e prove e la lista d'attesa del Free, e regola la soglia delle quote eBay; ogni cambio chiede il motivo, vale dalla conferma e resta nel registro. Un'impostazione assente o non valida vale il comportamento normale. Con eBay spento le letture si fermano e riprendono dal punto raggiunto, con Ordini e Negozi che lo dichiarano; con Telegram spento le consegne attendono la riaccensione. Prezzi, cicli e diritti non dipendono da queste impostazioni. PR: [#480](https://github.com/max23468/FiscalBay/pull/480), [#495](https://github.com/max23468/FiscalBay/pull/495).
+La sezione Interruttori della console spegne e riaccende chiamate eBay, invii Telegram, acquisti e prove e la lista d'attesa del Free, e regola la soglia delle quote eBay; ogni cambio chiede il motivo, vale dalla conferma e resta nel registro.
 
-**Limiti residui:** la prova delle simulazioni di guasto e del degrado resta in [M7-05](#m7-05). Chi viene ammesso non riceve un'email, come in M5-11.
+**Limiti residui:** la prova delle simulazioni di guasto e del degrado resta in [M7-05](#m7-05).
 
 <a id="m6-06"></a>
 #### M6-06 · Email, supporto e consenso
 
-**Stato:** Completato · **Prerequisiti:** M1-08, M4-06 · **Contratto:** [§14](#s14) · [§24](#s24)
+**Stato:** Completato · **Contratto:** [§14](#s14) · [§24](#s24)
 
-Le email di servizio partono da `noreply@` con Cloudflare Email Service (D169), un modello IT/EN e Reply-To su `supporto@`; recapito, SPF/DKIM/DMARC allineati, rimbalzi e soppressione limitata al dominio sono qualificati. Il modulo di assistenza dell'area invia il riepilogo diagnostico allowlistato e parte anche senza; `/supporto` IT/EN ha FAQ e indirizzo. Dopo la prima lettura riuscita gli Ordini propongono una volta il consenso marketing, con prova della scelta. La pagina Novità segue D203. PR: [#470](https://github.com/max23468/FiscalBay/pull/470), [#471](https://github.com/max23468/FiscalBay/pull/471), [#495](https://github.com/max23468/FiscalBay/pull/495).
+Le email di servizio partono da `noreply@` con Cloudflare Email Service (D169), un modello IT/EN e Reply-To su `supporto@`; recapito, SPF/DKIM/DMARC allineati, rimbalzi e soppressione limitata al dominio sono qualificati.
 
-**Limiti residui:** il reclamo non è provato, perché Gmail non lo segnala al mittente: l'owner l'ha accettato come limite. Il Rate Limiting del modulo arriva con [M7-09](#m7-09).
+**Limiti residui:** il reclamo non è provato, perché Gmail non lo segnala al mittente: l'owner l'ha accettato come limite.
 
 <a id="m6-07"></a>
 #### M6-07 · Sito pubblico e SEO
 
-**Stato:** Completato · **Prerequisiti:** M1-06 · **Contratto:** [§23](#s23)
+**Stato:** Completato · **Contratto:** [§23](#s23)
 
-Home, Funzionalità, Prezzi, Sicurezza, FAQ, Supporto e legali IT/EN condividono barra e footer di D202, rispondono `no-store` e mostrano il prodotto con schermate reali dell'anteprima. Prezzi confronta Free e le tre modalità Premium dal catalogo, con il totale IVA accanto al netto e i posti lifetime residui o «Esaurito» (D218); il Piano dell'app riporta gli stessi totali. Temisfera compare soltanto nei legali (D204, D217). Canonical, hreflang, Open Graph, dati strutturati, sitemap e robots sono completi. PR: [#482](https://github.com/max23468/FiscalBay/pull/482), [#486](https://github.com/max23468/FiscalBay/pull/486), [#495](https://github.com/max23468/FiscalBay/pull/495).
+Home, Funzionalità, Prezzi, Sicurezza, FAQ, Supporto e legali IT/EN condividono barra e footer di D202, rispondono `no-store` e mostrano il prodotto con schermate reali dell'anteprima.
 
 <a id="m6-08"></a>
 #### M6-08 · KPI e misure minime
 
-**Stato:** Completato · **Prerequisiti:** M3 · **Contratto:** [§31](#s31)
+**Stato:** Completato · **Contratto:** [§31](#s31)
 
-I primi passaggi di ogni spazio, dal negozio collegato al primo acquisto, sono registrati una volta in D1, senza doppioni da retry, schede o ricollegamenti e senza toccare l'attività umana. La sezione Metriche della console, a 7, 30 o 90 giorni, mostra funnel con basi esplicite, paganti e ricavo ricorrente senza lifetime, merchant operativi, letture non riuscite, ritardo e capacità. I report del browser valgono soltanto con un biglietto firmato monouso. PR: [#488](https://github.com/max23468/FiscalBay/pull/488), [#495](https://github.com/max23468/FiscalBay/pull/495).
+I primi passaggi di ogni spazio, dal negozio collegato al primo acquisto, sono registrati una volta in D1, senza doppioni da retry, schede o ricollegamenti e senza toccare l'attività umana.
 
-**Limiti residui:** il funnel parte dalla registrazione, perché Better Auth non conserva l'istante della verifica dell'email; i passaggi ricostruiti dalla migration hanno gli istanti più vecchi ancora presenti. Il report del browser non ha un limite di frequenza all'edge: la zona limita soltanto `/api/auth/` ([M7-12](#m7-12)).
+**Limiti residui:** il funnel parte dalla registrazione, perché Better Auth non conserva l'istante della verifica dell'email; i passaggi ricostruiti dalla migration hanno gli istanti più vecchi ancora presenti.
 
 <a id="m6-09"></a>
 #### M6-09 · Control Center Telegram dell'owner
 
-**Stato:** Completato · **Prerequisiti:** M6-04, M6-08, M5-09 · **Contratto:** [§15](#s15) · [§31](#s31)
+**Stato:** Completato · **Contratto:** [§15](#s15) · [§31](#s31)
 
-Il bot dell'ambiente riconosce l'owner per chat privata e mittente e gli offre i nove comandi di sola lettura di [D219](DECISION_REGISTER.md) sulle stesse funzioni della console, con pulsanti che riscrivono lo stesso messaggio e rimandano alla sezione; altre chat e utenti non ricevono risposta. Le anomalie P1 e P2 diventano avvisi deduplicati all'apertura, all'aggravamento e al rientro, comprese quote e soglie Bulk Data Transfer. Il menu dell'owner si allinea separato da quello dei venditori ([RELEASE](engineering/RELEASE.md)). PR: [#492](https://github.com/max23468/FiscalBay/pull/492), [#495](https://github.com/max23468/FiscalBay/pull/495).
+Il bot dell'ambiente riconosce l'owner per chat privata e mittente e gli offre i nove comandi di sola lettura di [D219](DECISION_REGISTER.md) sulle stesse funzioni della console, con pulsanti che riscrivono lo stesso messaggio e rimandano alla sezione; altre chat e utenti non ricevono risposta.
 
 <a id="m6-10"></a>
 #### M6-10 · Storage R2 dei file temporanei
 
-**Stato:** Completato · **Prerequisiti:** M1-02 · **Contratto:** [§12](#s12) · [§25](#s25) · [§30](#s30)
+**Stato:** Completato · **Contratto:** [§12](#s12) · [§25](#s25) · [§30](#s30)
 
-Un bucket R2 UE per ambiente, raggiungibile soltanto dal binding del Worker, conserva i file con chiave casuale (D166). Il file nasce soltanto se la revisione dello spazio è invariata e si scarica dal Worker dopo sessione, proprietà, scadenza e revisione, senza URL bearer; eliminazioni, trasferimenti, esclusioni dal piano e revoche invalidano i file dello spazio, e la pulizia oraria elimina oggetti scaduti o revocati. Procedura e readback del bucket in [RELEASE](engineering/RELEASE.md). PR: [#481](https://github.com/max23468/FiscalBay/pull/481).
+Un bucket R2 UE per ambiente, raggiungibile soltanto dal binding del Worker, conserva i file con chiave casuale (D166).
 
 **Limiti residui:** `fiscalbay-exports` di Production nasce con la stessa procedura nel mandato Production.
 
 <a id="m6-11"></a>
 #### M6-11 · Metriche tecniche su Analytics Engine
 
-**Stato:** Completato · **Prerequisiti:** M1-04 · **Contratto:** [§31](#s31)
+**Stato:** Completato · **Contratto:** [§31](#s31)
 
-Ogni richiesta, gruppo di messaggi della coda e smistamento del cron scrive su Analytics Engine esito, durata e fasi Auth, D1 ed eBay, con campi da elenchi chiusi e nessun dato personale (D166); i report del browser diventano punti, non log. Il rendering si legge come tempo CPU delle pagine dai Workers Logs, perché l'orologio del Worker resta fermo durante il calcolo; le tracce restano spente (D225). La sezione Prestazioni della console mostra stime pesate con `_sample_interval`, confrontate con un campione controllato. PR: [#490](https://github.com/max23468/FiscalBay/pull/490), [#491](https://github.com/max23468/FiscalBay/pull/491), [#495](https://github.com/max23468/FiscalBay/pull/495).
+Ogni richiesta, gruppo di messaggi della coda e smistamento del cron scrive su Analytics Engine esito, durata e fasi Auth, D1 ed eBay, con campi da elenchi chiusi e nessun dato personale (D166); i report del browser diventano punti, non log.
 
 **Limiti residui:** il token di lettura di Production si crea con la procedura di [RELEASE](engineering/RELEASE.md) nel mandato Production; senza segreto la sezione resta non configurata.
 
 <a id="m6-12"></a>
 #### M6-12 · Cancellazione dell'account
 
-**Stato:** Completato · **Prerequisiti:** M6-03, M5-05 · **Contratto:** [§30](#s30) · [§32](#s32)
+**Stato:** Completato · **Contratto:** [§30](#s30) · [§32](#s32)
 
-«Elimina account» propone ZIP ed export, chiede l'indirizzo e un accesso recente e invia un link monouso; la conferma chiude sessioni, credenziali eBay e Telegram e avvia un lavoro riprendibile che ferma i rinnovi Stripe prima di eliminare i dati e per ultimo l'utente (D163). Durante la cancellazione nessun accesso apre una sessione; se Stripe non conferma restano soltanto i riferimenti minimi, con anomalia P1. Il segno del negozio impedisce una nuova prova ([D220](DECISION_REGISTER.md), [D222](DECISION_REGISTER.md)); vale anche a registrazione incompleta ([D223](DECISION_REGISTER.md)). PR: [#493](https://github.com/max23468/FiscalBay/pull/493), [#495](https://github.com/max23468/FiscalBay/pull/495).
+«Elimina account» propone ZIP ed export, chiede l'indirizzo e un accesso recente e invia un link monouso; la conferma chiude sessioni, credenziali eBay e Telegram e avvia un lavoro riprendibile che ferma i rinnovi Stripe prima di eliminare i dati e per ultimo l'utente (D163).
 
-**Limiti residui:** i segni del test calcolati prima dell'HMAC restano senza effetto fino alla loro scadenza. Lo stop dei rinnovi reale su Stripe si rilegge sul test dopo il deploy; una prenotazione lifetime con il pagamento in conferma lascia la richiesta in attesa finché Stripe non la conclude.
+**Limiti residui:** i segni del test calcolati prima dell'HMAC restano senza effetto fino alla loro scadenza.
 
 <a id="m7"></a>
 ### M7 · Hardening, privacy, performance e recovery readiness
 
-**Prerequisiti:** implementazioni pertinenti disponibili per avviare i task; funzionalità complete per audit conclusivo e chiusura della milestone. **Attività:** audit contratti/sicurezza/dipendenze/licenze, retention/deletion/supply chain, carico/margine/costi residui, incidenti/kill switch/forward-fix, monitoraggio e runbook; protezioni della zona e report posta di §24; revisione legale e marchi; preparazione restore, **non aggiunta di drill periodici**.
+**Prerequisiti:** implementazioni pertinenti disponibili per avviare i task; funzionalità complete per audit conclusivo e chiusura della milestone.
 
-**Output:** candidato senza P1/P2, rischi residui espliciti, runbook e capacità misurata. **DoD:** test isolamento/concorrenza/pagamenti/erasure/limiti verdi; nessun segreto/PII pubblici; provider produzione conformi al progetto; G-LEGAL chiuso per go-live.
+**Verifica conclusiva:** threat model §29, CSP, licenze/notices e marchi eBay; inventario dei trattamenti/trasferimenti e condizioni IT/EN, consumatore, versioni/accettazioni e copertura effettiva Temisfera/MoR. Verificare piano/account e trattamento OpenAI prima di un uso sistematico di Codex su dati reali; nessun training o riuso estraneo di dati eBay.
 
-**Verifica conclusiva:** threat model §29, CSP, licenze/notices e marchi eBay; inventario dei trattamenti/trasferimenti e condizioni IT/EN, consumatore, versioni/accettazioni e copertura effettiva Temisfera/MoR. Verificare piano/account e trattamento OpenAI prima di un uso sistematico di Codex su dati reali; nessun training o riuso estraneo di dati eBay. Account-deletion eBay senza esenzione per dati persistiti: callback 2.0 condiviso con l'ingresso eventi, firma, retry e budget/cache delle chiavi, cutover coordinato con Hub Fatture prima di readiness. Eliminazione attraversa Auth, ordini, raw, code, suggerimenti, export e billing, anche con pulizia sospesa; recupero lifetime non ripristina dati o trial consumati (§30, §32).
-
-Carico su almeno 70.000 ordini, multistore, picchi, code/export/log, separando Auth/D1/eBay/browser e consumi dell'account condiviso; quote e stop point nel runbook, nessun controllo CPU automatico al deploy reintrodotto (D158). Alert/rientro P1–P3 senza PII, query di diagnosi, campionamento e scadenze credenziali con avviso a 45 giorni (§29, §31). Qualificare pubblicazione e ripresa sul provider: diff cumulativo, artefatto Production distinto, rollback/forward-fix, candidato superato, interruzioni migration/deploy/tag e readback coerente. Riuso dei gate/promozione e riallineamento di `develop` secondo §34 e RELEASE; nessun restore periodico. Matrice interna di tutte le funzioni e rinvii, P3 espliciti, zero P1/P2; prove solo-live finali assegnate al preflight M9. La conformità dei provider Production si rilegge nella checklist di [M9-03](#m9-03).
+Carico su almeno 70.000 ordini, multistore, picchi, code/export/log, separando Auth/D1/eBay/browser e consumi dell'account condiviso; quote e stop point nel runbook, nessun controllo CPU automatico al deploy reintrodotto (D158).
 
 <a id="m7-01"></a>
 #### M7-01 · Audit sicurezza e licenze
 
-**Stato:** Completato · **Prerequisiti:** M2..M6 · **Contratto:** [§29](#s29) · [§30](#s30) · [§35](#s35)
+**Stato:** Completato · **Contratto:** [§29](#s29) · [§30](#s30) · [§35](#s35)
 
-Threat model del [§29](#s29) verificato sul candidato, senza P1 o P2: CSP con nonce per risposta su ogni documento, origine estranea o assente rifiutata da ogni action che scrive, avvisi delle licenze terze in `/third-party-notices.txt`. Tracce Workers spente perché registravano il token del bot Telegram (D225). PR: [#500](https://github.com/max23468/FiscalBay/pull/500).
+Threat model del [§29](#s29) verificato sul candidato, senza P1 o P2.
 
-**Limiti residui:** P3 accettati: sessione admin di 12 ore e token tecnico della console senza scadenza (D213); con callback eBay concorrenti dello stesso negozio vale l'ultimo consenso; notifiche false con chiavi casuali esauriscono il budget delle chiavi eBay per isolate e rinviano con 429 quelle legittime; gli invocation log conservano `code` e `state` monouso del callback OAuth (D225). Segreti facoltativi riletti alla pubblicazione in M9; 28 CFR Part 202 e OpenAI per Codex in [M9-03](#m9-03).
+**Limiti residui:** P3 accettati: sessione admin di 12 ore e token tecnico della console senza scadenza (D213); con callback eBay concorrenti dello stesso negozio vale l'ultimo consenso; notifiche false con chiavi casuali esauriscono il budget delle chiavi eBay per isolate e rinviano con 429 quelle legittime; gli invocation log conservano `code` e `state` monouso del callback OAuth (D225).
 
 <a id="m7-02"></a>
 #### M7-02 · Erasure e retention end-to-end
 
-**Stato:** Completato · **Prerequisiti:** M7-01 · **Contratto:** [§30](#s30) · [§32](#s32)
+**Stato:** Completato · **Contratto:** [§30](#s30) · [§32](#s32)
 
-La notifica eBay di cancellazione dell'account elimina senza esenzione i dati del venditore o dell'acquirente nell'ambiente, lascia soltanto i diritti commerciali minimi senza identità eBay e si riapplica dopo un restore; con la pulizia sospesa le letture negano subito scadenza e cancellazione ([modello di conservazione](engineering/DATA_RETENTION.md#cancellazione-ebay)). Il cliente che torna con un nuovo account riprende dalla console il suo posto lifetime ([D226](DECISION_REGISTER.md)). PR: [#501](https://github.com/max23468/FiscalBay/pull/501), [#502](https://github.com/max23468/FiscalBay/pull/502).
+La notifica eBay di cancellazione dell'account elimina senza esenzione i dati del venditore o dell'acquirente nell'ambiente, lascia soltanto i diritti commerciali minimi senza identità eBay e si riapplica dopo un restore; con la pulizia sospesa le letture negano subito scadenza e cancellazione ([modello di conservazione](engineering/DATA_RETENTION.md#cancellazione-ebay)).
 
-**Limiti residui:** il keyset `botCF` ha un solo endpoint per queste notifiche, oggi quello del test: al passaggio a Production diventa quello del dominio Production ([M9](#m9)). P3 da accettare nella RC: la revisione antiabuso dei nomi di negozio conserva un'impronta non salata del nome dopo la cancellazione. Il posto lifetime di una vendita rimborsata non si riprende più dalla console ([M8-05](#m8-05)).
+**Limiti residui:** il keyset `botCF` ha un solo endpoint per queste notifiche, oggi quello del test: al passaggio a Production diventa quello del dominio Production ([M9](#m9)).
 
 <a id="m7-03"></a>
 #### M7-03 · Stress capacità e costi residui
 
-**Stato:** Completato · **Prerequisiti:** M0, M3, M5, M6 · **Contratto:** [§36](#s36)
+**Stato:** Completato · **Contratto:** [§36](#s36)
 
-Capacità misurata con oltre 70.000 ordini in più negozi, separando Auth, D1, eBay e rendering: il caso di riferimento resta entro le quote incluse dell'account condiviso, con punti di arresto e proiezione nel [runbook](engineering/OPERATIONS.md#capacita). Configurazione approvata dall'owner con D227: nessun costo variabile e letture periodiche a gruppi di dieci negozi per messaggio. PR: [#504](https://github.com/max23468/FiscalBay/pull/504).
+Capacità misurata con oltre 70.000 ordini in più negozi, separando Auth, D1, eBay e rendering: il caso di riferimento resta entro le quote incluse dell'account condiviso, con punti di arresto e proiezione nel [runbook](engineering/OPERATIONS.md#capacita).
 
-**Limiti residui:** con il profilo misurato `GetOrders` raggiunge il 70% dell'Application Growth Check verso i 230 negozi e la CPU l'80% dell'incluso verso i 430. Con circa 16 righe lette per ordine dello spazio, un venditore con 100.000 ordini va rimisurato. Le richieste contemporanee di uno spazio grande si mettono in fila sulla D1 unica. Il cron a gruppi e le nuove letture dei termini e della pulizia si confermano al readback del deploy test.
+**Limiti residui:** con il profilo misurato `GetOrders` raggiunge il 70% dell'Application Growth Check verso i 230 negozi e la CPU l'80% dell'incluso verso i 430.
 
 <a id="m7-04"></a>
 #### M7-04 · Monitoraggio e incidenti
 
-**Stato:** Completato · **Prerequisiti:** M6-04, M6-08 · **Contratto:** [§31](#s31) · [§32](#s32)
+**Stato:** Completato · **Contratto:** [§31](#s31) · [§32](#s32)
 
-Gli avvisi commerciali del [§15](#s15) arrivano sul Control Center una volta per fatto, con il titolare e senza dati dei buyer (D254); un incidente P1 o P2 che Telegram non consegna parte per email a `info@`, e la console apre gli incidenti delle credenziali in scadenza a 45 giorni dal registro privato. Severità, soglie, diagnosi, escalation del MoR, incidenti con dati personali e avvisi dei provider della zona sono nel [runbook](engineering/OPERATIONS.md#incidenti); query della zona e confronto fra release nella [dashboard test](engineering/OPERATIONS.md#dashboard-test). PR: [#518](https://github.com/max23468/FiscalBay/pull/518), [#519](https://github.com/max23468/FiscalBay/pull/519).
+Gli avvisi commerciali del [§15](#s15) arrivano sul Control Center una volta per fatto, con il titolare e senza dati dei buyer (D254); un incidente P1 o P2 che Telegram non consegna parte per email a `info@`, e la console apre gli incidenti delle credenziali in scadenza a 45 giorni dal registro privato.
 
-**Limiti residui:** il readback del deploy test rilegge un avviso commerciale reale e l'assenza di anomalie delle scadenze. Cron, coda o database fermi e segreti Telegram assenti fermano anche gli avvisi ([runbook](engineering/OPERATIONS.md#incidenti)).
+**Limiti residui:** il readback del deploy test rilegge un avviso commerciale reale e l'assenza di anomalie delle scadenze.
 
 <a id="m7-05"></a>
 #### M7-05 · Kill switch e modalità degrade
 
-**Stato:** Completato · **Prerequisiti:** M7-04 · **Contratto:** [§20](#s20) · [§32](#s32)
+**Stato:** Completato · **Contratto:** [§20](#s20) · [§32](#s32)
 
-Gli interruttori di [M6-05](#m6-05) e i guasti di eBay, Telegram e Stripe fermano soltanto le operazioni che ne dipendono: diritti locali, consultazione, sblocchi e webhook continuano. Con Auth o database non disponibili area, accesso, collegamento del negozio, console, Home e Prezzi rispondono 503 senza dati, con la stessa pagina nell'anteprima; le pagine informative restano consultabili senza sessione e i log ricevono il solo codice. Tabella nel [runbook](engineering/OPERATIONS.md#incidenti). PR: [#522](https://github.com/max23468/FiscalBay/pull/522).
+Gli interruttori di [M6-05](#m6-05) e i guasti di eBay, Telegram e Stripe fermano soltanto le operazioni che ne dipendono: diritti locali, consultazione, sblocchi e webhook continuano.
 
-**Criterio di completamento:** Simulazioni di guasto limitano soltanto le operazioni pertinenti; nessuna promessa di consultazione quando manca il database o l’autenticazione.
-
-**Limiti residui:** `/api/auth/get-session` con il database guasto risponde con il 500 di Better Auth. Il database guasto non si simula sul test: il readback spegne e riaccende i tre interruttori e rilegge Ordini.
+**Limiti residui:** `/api/auth/get-session` con il database guasto risponde con il 500 di Better Auth.
 
 <a id="m7-06"></a>
 #### M7-06 · Release, migration e recovery readiness
 
-**Stato:** Completato · **Prerequisiti:** M7-01, M7-02 · **Contratto:** [§32](#s32) · [§34](#s34)
+**Stato:** Completato · **Contratto:** [§32](#s32) · [§34](#s34)
 
-Il [ripristino dei dati](engineering/OPERATIONS.md#ripristino-dei-dati) è un percorso unico a servizio sospeso: cattura di chiavi, marker e revoche correnti in un file cifrato temporaneo, ripristino Time Travel, poi nuova eliminazione di ciò che non esisteva più, revoche e password riapplicate, sessioni chiuse, Telegram spento fino alla rilettura degli ordini e pagamenti riconciliati con il reinvio degli eventi Stripe ([D228](DECISION_REGISTER.md)). Provato sul test con dati sintetici. `Promuovi` riprende in modo idempotente dopo un tag creato e una release mancante. PR: [#505](https://github.com/max23468/FiscalBay/pull/505).
+Il [ripristino dei dati](engineering/OPERATIONS.md#ripristino-dei-dati) è un percorso unico a servizio sospeso: cattura di chiavi, marker e revoche correnti in un file cifrato temporaneo, ripristino Time Travel, poi nuova eliminazione di ciò che non esisteva più, revoche e password riapplicate, sessioni chiuse, Telegram spento fino alla rilettura degli ordini e pagamenti riconciliati con il reinvio degli eventi Stripe ([D228](DECISION_REGISTER.md)).
 
-**Limiti residui:** gli aggiornamenti dopo il punto non riapplicati dal [ripristino](engineering/OPERATIONS.md#ripristino-dei-dati) tornano al valore del punto, e gli ordini arrivati con Telegram spento non hanno la notifica singola. `CHANGELOG.md` va creato prima della pubblicazione reale ([M9](#m9)); il drill conclusivo è riuscito in [M9-02](#m9-02).
+**Limiti residui:** gli aggiornamenti dopo il punto non riapplicati dal [ripristino](engineering/OPERATIONS.md#ripristino-dei-dati) tornano al valore del punto, e gli ordini arrivati con Telegram spento non hanno la notifica singola.
 
 <a id="m7-07"></a>
 #### M7-07 · Qualifica legale e commerciale finale
 
-**Stato:** Completato · **Prerequisiti:** M6-06, M6-07, M5-12 · **Contratto:** [§30](#s30) · [§36](#s36)
+**Stato:** Completato · **Contratto:** [§30](#s30) · [§36](#s36)
 
-Termini e Privacy IT/EN definitivi alla versione `2026-10-29` con le scelte dell'owner di [D230](DECISION_REGISTER.md): Stripe venditore degli acquisti, Temisfera operatore e responsabile per i dati degli acquirenti, ogni trattamento con dati, finalità, base giuridica e conservazione, compresi eventi WAF e report DMARC. Una nuova versione dei Termini si accetta dalle Impostazioni senza bloccare funzioni ([D232](DECISION_REGISTER.md)); Sicurezza, FAQ e Prezzi sono allineati ai testi. I Termini dichiarano l'indipendenza da eBay e il suo marchio. PR: [#517](https://github.com/max23468/FiscalBay/pull/517).
+Termini e Privacy IT/EN definitivi alla versione `2026-10-29` con le scelte dell'owner di [D230](DECISION_REGISTER.md).
 
 **Limiti residui:** l'assenza di nome, sede e P.IVA (D217) resta un rischio accettato dall'owner rispetto all'art. 7 del D.Lgs. 70/2003; la garanzia dei trasferimenti extra UE si verifica fornitore per fornitore prima del go-live; i testi non costituiscono un parere legale.
 
 <a id="m7-09"></a>
 #### M7-09 · Rate Limiting nativo
 
-**Stato:** Completato · **Prerequisiti:** M2-01 · **Contratto:** [§29](#s29)
+**Stato:** Completato · **Contratto:** [§29](#s29)
 
-Tre binding Rate Limiting per ambiente, con namespace separati, filtrano per IP, rete IPv6 /64 e operazione accessi con password o passkey, invii di email e lavori costosi, prima di sessione, Turnstile e database, con 429, `Retry-After` e `no-store` senza dati dell'account nella chiave. Sostituiscono i contatori D1 per IP, mentre restano su D1 quelli per indirizzo email e il limite giornaliero dell'assistenza, coerenti fra data center (D166). Soglie e readback in [RELEASE](engineering/OPERATIONS.md#rate-limiting). PR: [#524](https://github.com/max23468/FiscalBay/pull/524).
+Tre binding Rate Limiting per ambiente, con namespace separati, filtrano per IP, rete IPv6 /64 e operazione accessi con password o passkey, invii di email e lavori costosi, prima di sessione, Turnstile e database, con 429, `Retry-After` e `no-store` senza dati dell'account nella chiave.
 
-**Limiti residui:** il readback sul test si esegue dopo il deploy; la Production riceve i propri namespace con il primo deploy di [M9](#m9). Il contatore del binding è del data center e approssimato, per scelta di D166.
+**Limiti residui:** il readback sul test si esegue dopo il deploy; la Production riceve i propri namespace con il primo deploy di [M9](#m9).
 
 <a id="m7-10"></a>
 #### M7-10 · Turnstile sugli ingressi pubblici
 
-**Stato:** Completato · **Prerequisiti:** M2-01 · **Contratto:** [§29](#s29) · [§30](#s30)
+**Stato:** Completato · **Contratto:** [§29](#s29) · [§30](#s30)
 
-Registrazione con password, recupero della password, nuovo link email e assistenza verificano un token Turnstile con Siteverify prima del limite e dell'invio, con hostname dell'ambiente e azione del modulo; passkey, Google ed eBay restano senza verifica ([D231](DECISION_REGISTER.md)). Widget separati per ambiente, CSP e Privacy aggiornate secondo la [procedura](engineering/OPERATIONS.md#turnstile). PR: [#520](https://github.com/max23468/FiscalBay/pull/520).
+Registrazione con password, recupero della password, nuovo link email e assistenza verificano un token Turnstile con Siteverify prima del limite e dell'invio, con hostname dell'ambiente e azione del modulo; passkey, Google ed eBay restano senza verifica ([D231](DECISION_REGISTER.md)).
 
 **Limiti residui:** il widget reale si rilegge sul test dopo il deploy; le chiavi Production si impostano con gli altri segreti alla pubblicazione in [M9](#m9).
 
 <a id="m7-11"></a>
 #### M7-11 · Conservazione di log e audit
 
-**Stato:** Completato · **Prerequisiti:** M1-02, M1-04 · **Contratto:** [§30](#s30) · [§31](#s31)
+**Stato:** Completato · **Contratto:** [§30](#s30) · [§31](#s31)
 
-I log del Worker, con soli campi ed eventi in allowlist, arrivano con Logpush a un bucket R2 UE dedicato con lifecycle a 90 giorni e credenziali limitate al bucket, interrogabile con le query di diagnosi del runbook ([RELEASE](engineering/OPERATIONS.md#archivio-log)); l'audit a un anno resta in D1 con la pulizia giornaliera di [M3-12](#m3-12). Le invocazioni esportate restano entro l'incluso di Logpush (D227). PR: [#514](https://github.com/max23468/FiscalBay/pull/514), [#515](https://github.com/max23468/FiscalBay/pull/515).
+I log del Worker, con soli campi ed eventi in allowlist, arrivano con Logpush a un bucket R2 UE dedicato con lifecycle a 90 giorni e credenziali limitate al bucket, interrogabile con le query di diagnosi del runbook ([RELEASE](engineering/OPERATIONS.md#archivio-log)); l'audit a un anno resta in D1 con la pulizia giornaliera di [M3-12](#m3-12).
 
-**Limiti residui:** la scomparsa degli oggetti scaduti si osserva sul primo oggetto oltre i 90 giorni; la regola è riletta e R2 la applica normalmente entro 24 ore. La Production segue la stessa procedura nel suo mandato.
+**Limiti residui:** la scomparsa degli oggetti scaduti si osserva sul primo oggetto oltre i 90 giorni; la regola è riletta e R2 la applica normalmente entro 24 ore.
 
 <a id="m7-12"></a>
 #### M7-12 · Protezioni della zona e della posta
 
-**Stato:** Completato · **Prerequisiti:** M1-08, M3-11 · **Contratto:** [§24](#s24) · [§29](#s29) · [§30](#s30) · [§31](#s31)
+**Stato:** Completato · **Contratto:** [§24](#s24) · [§29](#s29) · [§30](#s30) · [§31](#s31)
 
-Le protezioni si applicano per ambiente con `scripts/zone-protection.mjs` ([procedura](engineering/OPERATIONS.md#protezioni-zona), D229): header e HSTS graduale sugli host dell'ambiente, WAF che esenta i webhook dai controlli da browser e blocca le sonde note, rate limiting della zona su `/api/auth/`, DMARC Management e alert dei certificati a `info@`. Sul test accessi, OAuth, export e webhook validi funzionano con le protezioni attive; il rientro è la rimozione. PR: [#516](https://github.com/max23468/FiscalBay/pull/516).
+Le protezioni si applicano per ambiente con `scripts/zone-protection.mjs` ([procedura](engineering/OPERATIONS.md#protezioni-zona), D229): header e HSTS graduale sugli host dell'ambiente, WAF che esenta i webhook dai controlli da browser e blocca le sonde note, rate limiting della zona su `/api/auth/`, DMARC Management e alert dei certificati a `info@`.
 
-**Limiti residui:** primo alert dei certificati a `info@` ancora da osservare, fuori dai requisiti ([M9-06](#m9-06)). HSTS è a un anno sui due ambienti. Passkey e Google su dispositivo reale e consegne eBay reali restano nella matrice di [M8](#m8); la Production si configura con `--mode live` nel suo mandato ([M9-03](#m9-03)).
+**Limiti residui:** primo alert dei certificati a `info@` ancora da osservare, fuori dai requisiti ([M9-06](#m9-06)).
 
 <a id="m7-13"></a>
 #### M7-13 · Topic eBay dell'applicazione
 
-**Stato:** Completato · **Prerequisiti:** M3-11, M6-04 · **Contratto:** [§8](#s08) · [§15](#s15)
+**Stato:** Completato · **Contratto:** [§8](#s08) · [§15](#s15)
 
-L'ingresso eBay riceve due topic dell'applicazione senza scope aggiuntivi dei venditori (D215). `AUTHORIZATION_REVOCATION` porta il negozio in «da ricollegare» senza cancellare dati, salvo revoche anteriori al consenso corrente o di negozi non attivi o di prova. `BULK_DATA_TRANSFER_THRESHOLD` apre un'anomalia della console per ambiente, regione, categoria e finestra, visibile in «Quote eBay» e in `/quote`, che si chiude alla fine della finestra perché eBay non notifica il rientro. PR: [#476](https://github.com/max23468/FiscalBay/pull/476), [#503](https://github.com/max23468/FiscalBay/pull/503).
+L'ingresso eBay riceve due topic dell'applicazione senza scope aggiuntivi dei venditori (D215).
 
 **Limiti residui:** nessuna consegna reale osservata: la sottoscrizione dei due topic sul keyset e il readback di una consegna di prova appartengono a [M8-03](#m8-03).
 
 <a id="m7-08"></a>
 #### M7-08 · Verifica interna della matrice funzionale
 
-**Stato:** Completato · **Prerequisiti:** M7-01..M7-07, M7-09..M7-13 · **Contratto:** [§35](#s35) · [§41](#s41)
+**Stato:** Completato · **Contratto:** [§35](#s35) · [§41](#s41)
 
-Il riesame di funzioni, route, anteprima e prove rispetto al piano non lascia P1/P2 né funzioni dei concept. L'Esportazione mostra le prime righe del file con i soli valori autorizzati; l'anteprima usa avvisi, caricamento e shell dell'area reale e aggiunge l'email da confermare; le prove reali coprono sessione revocata sulle API dei dati, sblocco con risposta persa e Supporto. PR: [#527](https://github.com/max23468/FiscalBay/pull/527).
+Il riesame di funzioni, route, anteprima e prove rispetto al piano non lascia P1/P2 né funzioni dei concept.
 
-**Limiti residui:** P3 da accettare nella RC di [M8](#m8): campanella senza voci di billing, affidate a Stripe dal [§14](#s14); portale Stripe solo con un abbonamento o un rinnovo da regolarizzare; «storico esteso» senza un argomento proprio nel Supporto; Novità con voci fuori da catalogo e anteprima; CSV da aprire a mano in un foglio; righe dell'Esportazione nell'anteprima calcolate a parte. Prove solo live escluse ([D240](DECISION_REGISTER.md)).
+**Limiti residui:** P3 da accettare nella RC di [M8](#m8): campanella senza voci di billing, affidate a Stripe dal [§14](#s14); portale Stripe solo con un abbonamento o un rinnovo da regolarizzare.
 
 <a id="m8"></a>
 ### M8 · Release Candidate e merchant di fiducia
 
-**Prerequisiti:** M7 e via owner al test reale. **Attività:** freeze feature, RC tracciata su test; un merchant, scenari guidati e dati autorizzati, quattro login e percorsi reali pertinenti, mobile/IT-EN/dark; correction-only. Test senza durata arbitraria ma con criteri osservabili. Manifest di ambiente/risorse/dati del merchant esplicito: credenziali e passkey test non diventano Production, oggetti Stripe sandbox non attestano diritti live, bot e messaggi di test rimangono separati. Nessuna migrazione test→Production o riuso di dati personali per default.
+**Prerequisiti:** M7 e via owner al test reale.
 
-**Output:** evidenza test e RC approvabile. **DoD:** scenari core riusciti, nessun P1/P2, P3 accettati; test non generalizzato come prova statistica; reali effetti e condizioni registrati. Restore unico svolto sul candidato finale a fine M8 o nel preflight M9, immediatamente prima del live.
-
-Il manifest approvato identifica candidato, artefatto, schema/config, account, dati, credenziali, bot ed effetti live; nessuna attivazione implicita di Production. Provare registrazione, quattro login, seller, sync, dati fiscali/copia, export, Telegram, preferenze e billing pertinente; dispositivi/browser effettivi distinti dai motori sintetici. Una correzione cambia la RC e richiede i controlli pertinenti. Il preflight prepara target isolato e marker per il solo drill conclusivo di M9.
+Il manifest approvato identifica candidato, artefatto, schema/config, account, dati, credenziali, bot ed effetti live; nessuna attivazione implicita di Production.
 
 <a id="prove-ebay"></a>
 #### Prove reali di Sign in with eBay su Production
 
-Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effetti autorizzati del checkpoint M8; non autorizza di per sé deploy o go-live. In M8 si svolge sul test con identità eBay Production e il passo 2 si ripete su `fiscalbay.it` dopo `Promuovi` (D234):
+Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effetti autorizzati del checkpoint M8; non autorizza di per sé deploy o go-live.
 
 1. Registrare esito/data del riferimento `260920-000007` e rileggere sul keyset `botCF` il diritto effettivo, senza cambiare scope, RuName o callback legacy.
 2. Verificare consenso con soli scope base e `commerce.identity.readonly`, RuName FiscalBay attivo e candidato esatto distribuito sul Worker Production dopo gate e autorizzazioni applicabili.
@@ -1957,135 +1951,114 @@ Checklist rinviata da M2 con D160, eseguibile soltanto nel manifest e negli effe
 <a id="m8-01"></a>
 #### M8-01 · Congelamento RC
 
-**Stato:** Completato · **Prerequisiti:** M7 · **Contratto:** [§34](#s34) · [§37](#s37)
+**Stato:** Completato · **Contratto:** [§34](#s34) · [§37](#s37)
 
-La versione `2.0.0-rc.1` in cima a `CHANGELOG.md` congela `develop` alle sole correzioni: la CI rifiuta titoli `feat` e modifiche incompatibili, e una correzione distribuita apre la RC successiva (D233). `release:cycle rc` identifica in sola lettura commit, artefatto, versione del Worker, schema e configurazione della RC sul test, e la rifiuta senza gate, deploy e readback confermati; la qualifica completa del tree precede la decisione sulla RC ([procedura](engineering/RELEASE.md#versioni-dopo-la-2-0-0)). La RC non crea tag né release stabili. PR: [#532](https://github.com/max23468/FiscalBay/pull/532).
+La versione `2.0.0-rc.1` in cima a `CHANGELOG.md` congela `develop` alle sole correzioni: la CI rifiuta titoli `feat` e modifiche incompatibili, e una correzione distribuita apre la RC successiva (D233).
 
 <a id="m8-02"></a>
 #### M8-02 · Preparazione test merchant
 
-**Stato:** Completato · **Prerequisiti:** M8-01 e via owner · **Contratto:** [§30](#s30) · [§35](#s35)
+**Stato:** Completato · **Contratto:** [§30](#s30) · [§35](#s35)
 
-Il [manifest](engineering/OPERATIONS.md#test-merchant) approvato fissa candidato, ambiente, account, dati, credenziali, bot, effetti live e condizioni di uscita: l'owner fa da merchant con il proprio negozio eBay Production sul test, Stripe sandbox e bot del test, e Accedi con eBay reale si prova sul test (D234). Le prove reali già registrate valgono se il percorso non è cambiato; nulla del test passa in Production.
+Il [manifest](engineering/OPERATIONS.md#test-merchant) approvato fissa candidato, ambiente, account, dati, credenziali, bot, effetti live e condizioni di uscita: l'owner fa da merchant con il proprio negozio eBay Production sul test, Stripe sandbox e bot del test, e Accedi con eBay reale si prova sul test (D234).
 
 <a id="m8-03"></a>
 #### M8-03 · Esecuzione percorsi reali
 
-**Stato:** Completato · **Prerequisiti:** M8-02 · **Contratto:** [§35](#s35)
+**Stato:** Completato · **Contratto:** [§35](#s35)
 
-Il 2026-10-30 la RC.5 supera quattro login, collegamento/lettura, bot e consegne eBay di prova (D235, D236). Prove funzionali: [M3-10](#m3-10), [M5-07](#m5-07), [M8-04](#m8-04). PR: [#537](https://github.com/max23468/FiscalBay/pull/537), [#538](https://github.com/max23468/FiscalBay/pull/538), [#539](https://github.com/max23468/FiscalBay/pull/539).
+Il 2026-10-30 la RC.5 supera quattro login, collegamento/lettura, bot e consegne eBay di prova (D235, D236).
 
-Il 2026-10-31, Worker `7800ac47`: secondo account verificato, negozio trasferito e letto, Checkout mensile pagato con `livemode=false`, abbonamento attivo e Premium confermati in D1. Safari avvia, Chrome conclude; rilettura nella seconda sessione Safari: Premium mensile, rinnovo il 30 novembre, gestione Stripe disponibile. L'eBay personale autenticato torna con `email_not_found`: D1 senza identità corrispondente né utenti successivi ai tentativi; callback verificato prima della creazione. Email business già registrata confermata dall'owner.
-
-**Limiti residui:** l'owner accetta l'assenza del nuovo collaudo reale dell'avvio volontario ([D257](DECISION_REGISTER.md)): il negozio conserva la prova usata. [Prove eBay](#prove-ebay): passi 1, 3 e 6 riscontrati su `fiscalbay.it`. Versione e ricevute correnti: [M9-03](#m9-03); la 2.0.0 sostituisce il candidato RC.
+**Limiti residui:** l'owner accetta l'assenza del nuovo collaudo reale dell'avvio volontario ([D257](DECISION_REGISTER.md)): il negozio conserva la prova usata.
 
 <a id="m8-04"></a>
 #### M8-04 · Verifica browser e presentazione
 
-**Stato:** Completato · **Prerequisiti:** M8-01 · **Contratto:** [§22](#s22) · [§35](#s35)
+**Stato:** Completato · **Contratto:** [§22](#s22) · [§35](#s35)
 
-Verificare Chromium/WebKit, viewport, touch/tastiera, IT/EN, scuro e testi lunghi. Usare screenshot reali solo nei contesti approvati.
-
-**Criterio di completamento:** Layout e funzioni coerenti; mockup non sostituisce prova del software. Nessuna funzione assente viene annunciata come già attiva.
-
-Avanzamento: il 2026-10-30 la matrice completa delle pagine sul codice della RC passa in Chromium e WebKit, IT/EN, 390, 768 e 1280 px e nei due temi, con tastiera, overflow e axe (2132 prove), testi lunghi nello scenario «ordinario» e tocco nelle prove di shell e Ordini; le schermate di sito, Ordini, Negozi e Impostazioni non mostrano difetti e il sito annuncia soltanto funzioni presenti. Lo stesso giorno l'owner dichiara riuscita la verifica su un proprio dispositivo reale.
+Verificare Chromium/WebKit, viewport, touch/tastiera, IT/EN, scuro e testi lunghi.
 
 <a id="m8-05"></a>
 #### M8-05 · Correzioni e decisione RC
 
-**Stato:** Completato · **Prerequisiti:** M8-03, M8-04 · **Contratto:** [§34](#s34) · [§41](#s41)
+**Stato:** Completato · **Contratto:** [§34](#s34) · [§41](#s41)
 
-Il riesame della RC sul test (D1, log, incidenti) non trova P1/P2. Il lifetime rimborsato ripreso dalla console è corretto (`2.0.0-rc.6`); l'owner accetta i P3 residui ([D236](DECISION_REGISTER.md)). La qualifica della `2.0.0-rc.6` cade soltanto in due mutation, corrette nella `2.0.0-rc.7`, qualificata con la mutation incrementale ([D237](DECISION_REGISTER.md)): build e browser nella [qualifica](https://github.com/max23468/FiscalBay/actions/runs/41127625188), i nove moduli toccati nelle campagne [41130825116](https://github.com/max23468/FiscalBay/actions/runs/41130825116) e [41130830080](https://github.com/max23468/FiscalBay/actions/runs/41130830080), gli altri dalla [qualifica della rc.6](https://github.com/max23468/FiscalBay/actions/runs/41113750994). Checkout, diritti e decorrenze senza regressioni. PR: [#541](https://github.com/max23468/FiscalBay/pull/541), [#542](https://github.com/max23468/FiscalBay/pull/542).
+Il riesame della RC sul test (D1, log, incidenti) non trova P1/P2.
 
-**Limiti residui:** la `2.0.0-rc.7` non ha l'artefatto `candidate-<tree>` di un'unica run. La [prova sulla testa](https://github.com/max23468/FiscalBay/actions/runs/41135039997) è caduta su un'esclusione WebKit senza «Non applicabile:», che rende parziale la partizione: corretta con [M8-06](#m8-06) e rifiutata dal gate locale. `Promuovi` qualifica di nuovo tutto il diff cumulativo.
+**Limiti residui:** la `2.0.0-rc.7` non ha l'artefatto `candidate-<tree>` di un'unica run.
 
 <a id="m8-06"></a>
 #### M8-06 · Preflight restore unico
 
-**Stato:** Completato · **Prerequisiti:** M8-05 · **Contratto:** [§32](#s32) · [§41](#s41)
+**Stato:** Completato · **Contratto:** [§32](#s32) · [§41](#s41)
 
-Il [drill](engineering/OPERATIONS.md#drill-di-ripristino) usa Time Travel della D1 `fiscalbay-test` con il candidato distribuito, isola l'uscita con sospensione, interruttori mantenuti e Stripe sandbox ([D238](DECISION_REGISTER.md)) e fissa i dati controllati, un evento successivo al punto per ogni controllo. `recovery.mjs verify` controlla schema, eliminazioni, marker, revoche, ruoli, password e sessioni prima della riapertura, diritti e decorrenze dopo la riconciliazione, e misura la perdita; il ripristino mantiene interruttori, ammissione e prove Premium successivi al punto. Candidato: `2.0.0-rc.7` (`545a1878`, Worker `4650f852`, 69 migration fino a `0069_store_order_events.sql`), qualificato in [M8-05](#m8-05). Il drill spetta a [M9-02](#m9-02), non è stato eseguito.
-
-**Criterio di completamento:** Unico drill conclusivo assegnato a M9-02 con candidato/schema/procedura identificati; eseguibile a fine M8 richiamando la stessa evidenza, senza duplicazione né periodicità obbligatoria. Non dichiararlo riuscito prima della prova.
+Il [drill](engineering/OPERATIONS.md#drill-di-ripristino) usa Time Travel della D1 `fiscalbay-test` con il candidato distribuito, isola l'uscita con sospensione, interruttori mantenuti e Stripe sandbox ([D238](DECISION_REGISTER.md)) e fissa i dati controllati, un evento successivo al punto per ogni controllo.
 
 <a id="m9"></a>
 ### M9 · Go-live
 
-**Prerequisiti:** M0–M8 chiuse, RC, configurazione commerciale e via owner. **Attività:** attivare la promozione globale al go-live, validare checklist unica §41, restore drill unico, Promuovi, readback, tag/release/changelog; aprire iscrizioni con ammissione corretta, sorveglianza rafforzata iniziale senza beta pubblica. Dismessa la 1.x, chiudere il passaggio definitivo alla 2.x eliminando `legacy/1.x` secondo il criterio sotto.
+**Prerequisiti:** M0–M8 chiuse, RC, configurazione commerciale e via owner.
 
-**Output:** `2.0.0` realmente pubblicata e verificata, no claim anticipato. **DoD:** dominio/posta/provider/diritti/job/alert/supporto/SEO operativi; rollback o forward-fix pronto; nessuna vecchia automazione concorrente. Il mantenimento del bot 1.x non è prerequisito: può essere dismesso prima, preservando identità bot/keyset utili e storia Git.
-
-La branch `legacy/1.x`, disponibile durante il cutover operativo, si elimina sul comando dell'owner, in locale e sul remoto, dopo la dismissione: runtime e automazioni 1.x inattivi, consumatori e callback trasferiti e verificati, nessun intervento o rollback operativo ancora dipendente dal codice 1.x. Prima della cancellazione verificare che il commit finale 1.x sia raggiungibile da un tag Git permanente pubblicato sul remoto; registrare commit, tag e readback nella ricevuta conclusiva. La cancellazione della branch non elimina la storia Git né le identità bot o i keyset condivisi. La dismissione può anticipare il go-live nel mandato, ma M9 si chiude soltanto dopo pubblicazione, sorveglianza e pulizia verificate.
+La branch `legacy/1.x`, disponibile durante il cutover operativo, si elimina sul comando dell'owner, in locale e sul remoto, dopo la dismissione: runtime e automazioni 1.x inattivi, consumatori e callback trasferiti e verificati, nessun intervento o rollback operativo ancora dipendente dal codice 1.x.
 
 <a id="m9-01"></a>
 #### M9-01 · Preflight commerciale e promo
 
-**Stato:** Completato · **Prerequisiti:** M8 · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
+**Stato:** Completato · **Contratto:** [§4](#s04) · [§5](#s05) · [§6](#s06)
 
-La promozione Free parte al go-live senza fine e si chiude su indicazione dell'owner; sito e console la gestiscono senza data ([D239](DECISION_REGISTER.md)). Nessuna vendita live di prova ([D240](DECISION_REGISTER.md)): l'account live, riletto il 2026-10-31 con il connettore Stripe, ha listino, imposte, webhook e portale allineati. `scripts/commercial.mjs` rilegge configurazione e vendite reali ([procedura](engineering/OPERATIONS.md#configurazione-commerciale)); Paddle non ha codice. PR: [#546](https://github.com/max23468/FiscalBay/pull/546).
+La promozione Free parte al go-live senza fine e si chiude su indicazione dell'owner; sito e console la gestiscono senza data ([D239](DECISION_REGISTER.md)).
 
-**Criterio di completamento:** Nessun caso commerciale necessario rimane solo documentato/simulato senza prova consentita o decisione esplicita sul limite. Configurazione database/Stripe/UI allineata, nessun acquisto di capacità assente, Paddle inattivo salvo owner.
-
-**Limiti residui:** non osservati prima del go-live commissioni effettive, cambi su un abbonamento pagato, app Link e ricevute live. Il profilo pubblico, che il connettore non legge, resta quello di [M5-12](#m5-12). La promozione si crea al go-live ([M9-04](#m9-04)).
+**Limiti residui:** non osservati prima del go-live commissioni effettive, cambi su un abbonamento pagato, app Link e ricevute live.
 
 <a id="m9-02"></a>
 #### M9-02 · Restore drill pre-go-live
 
-**Stato:** Completato · **Prerequisiti:** M8-06 · **Contratto:** [§32](#s32) · [§41](#s41)
+**Stato:** Completato · **Contratto:** [§32](#s32) · [§41](#s41)
 
-Il [drill conclusivo](engineering/OPERATIONS.md#drill-di-ripristino) è riuscito il 2026-10-31 sulla `2.0.0-rc.12` (`be5b4a6a`, Worker `3e916331`, [qualifica](https://github.com/max23468/FiscalBay/actions/runs/41226673717)): sospensione di 5 minuti, entrambi i `verify` verdi, cancellazione, password, notifiche e accessi confermati dall'owner, nessun invio estraneo. Correzioni nelle RC.11/RC.12; prove e perdita per tabella nella PR.
+Il [drill conclusivo](engineering/OPERATIONS.md#drill-di-ripristino) è riuscito il 2026-10-31 sulla `2.0.0-rc.12` (`be5b4a6a`, Worker `3e916331`, [qualifica](https://github.com/max23468/FiscalBay/actions/runs/41226673717)): sospensione di 5 minuti, entrambi i `verify` verdi, cancellazione, password, notifiche e accessi confermati dall'owner, nessun invio estraneo.
 
-**Criterio di completamento:** Un’unica prova conclusiva riuscita: dati/grant/config recuperati, post-snapshot riconciliato e accessi/erasure rispettati, outbound isolato. Può richiamare il drill sullo stesso candidato a fine M8; un fallimento blocca Promuovi finché corretto e riprovato.
-
-**Limiti residui:** nessun acquisto dopo il punto e 0 eventi Stripe reinviati: il recupero di un acquisto successivo è provato soltanto nei test, come la revoca del token, precedente al bookmark. Limite accettato dall'owner. `email_not_found` riprodotto con eBay personale, coerente con il limite previsto.
+**Limiti residui:** nessun acquisto dopo il punto e 0 eventi Stripe reinviati: il recupero di un acquisto successivo è provato soltanto nei test, come la revoca del token, precedente al bookmark. Limite accettato dall'owner.
 
 <a id="m9-03"></a>
 #### M9-03 · Checklist pubblica e operativa
 
-**Stato:** Completato · **Prerequisiti:** M9-01, M9-02 · **Contratto:** [§41](#s41)
+**Stato:** Completato · **Contratto:** [§41](#s41)
 
-La [checklist operativa](engineering/OPERATIONS.md#checklist-operativa) rilegge risorse, superficie pubblica, readback e voci dell'owner prima di `Promuovi` e dopo il deploy. Il 2026-10-31 il test supera entrambe le fasi e la Production la fase `prima`, dopo la creazione di code, bucket, archivio dei log, segreti ed endpoint Stripe e la correzione di rimborsi e Google Pay su Stripe; Bancontact resta fuori ([D245](DECISION_REGISTER.md)), i dati del test restano ([D246](DECISION_REGISTER.md)) e OAuth eBay passa al RuName Production ([D247](DECISION_REGISTER.md)). L'`email_not_found` di M9-02 è un profilo eBay senza email business ([D153](DECISION_REGISTER.md)). PR: [#561](https://github.com/max23468/FiscalBay/pull/561), [#562](https://github.com/max23468/FiscalBay/pull/562).
-
-**Criterio di completamento:** Gate effettivamente superati, zero P1/P2 e go-live pronto per l’owner. Nessun evento o target non verificato indicato come riuscito.
+La [checklist operativa](engineering/OPERATIONS.md#checklist-operativa) rilegge risorse, superficie pubblica, readback e voci dell'owner prima di `Promuovi` e dopo il deploy.
 
 **Limiti residui:** la fase `dopo`, archivio dei log compreso, si rilegge in [M9-04](#m9-04); il webhook di `fiscalbay_bot` si registra a 1.x spenta.
 
 <a id="m9-04"></a>
 #### M9-04 · Promuovi 2.0.0
 
-**Stato:** Completato · **Prerequisiti:** M9-03 e comando owner · **Contratto:** [§34](#s34)
+**Stato:** Completato · **Contratto:** [§34](#s34)
 
-La `2.0.0` è in Production dal 2026-11-01: release [v2.0.0](https://github.com/max23468/FiscalBay/releases/tag/v2.0.0) su `db94df36`, 69 migration, collaudo completo delle pagine ([run](https://github.com/max23468/FiscalBay/actions/runs/41261940910)). La prima run ha distribuito, ma il collaudo WebKit è caduto sui precaricamenti rifiutati da Cloudflare, corretti in [#569](https://github.com/max23468/FiscalBay/pull/569). Poi zona, sottoscrizioni eBay, promozione Free senza fine e preflight commerciale. PR: [#565](https://github.com/max23468/FiscalBay/pull/565), [#566](https://github.com/max23468/FiscalBay/pull/566), [#568](https://github.com/max23468/FiscalBay/pull/568), [#571](https://github.com/max23468/FiscalBay/pull/571).
-
-**Criterio di completamento:** Artefatto e servizi attivi corrispondono; branch e worktree temporanei conclusi sono rimossi e il checkout è allineato. Eventuali riferimenti conservati per lavoro in corso o ripresa sono motivati qui. Dichiarazione di pubblicazione soltanto dopo conclusione del ciclo applicabile.
+La `2.0.0` è in Production dal 2026-11-01: release [v2.0.0](https://github.com/max23468/FiscalBay/releases/tag/v2.0.0) su `db94df36`, 69 migration, collaudo completo delle pagine ([run](https://github.com/max23468/FiscalBay/actions/runs/41261940910)).
 
 L'owner attesta password, Google, passkey, console e login eBay Production con un altro account controllato ([D153](DECISION_REGISTER.md)); il login non attesta collegamento o revoca.
 
-**Limiti residui:** primo alert dei certificati fuori dai requisiti ([M9-06](#m9-06)). Webhook del bot in [M9-05](#m9-05).
+**Limiti residui:** primo alert dei certificati fuori dai requisiti ([M9-06](#m9-06)).
 
 <a id="m9-05"></a>
 #### M9-05 · Dismissione residui 1.x e handover
 
-**Stato:** Completato · **Prerequisiti:** M0-01; dismissione anticipata consentita nel mandato · **Contratto:** [§2](#s02) · [§33](#s33)
+**Stato:** Completato · **Contratto:** [§2](#s02) · [§33](#s33)
 
-Il 2026-11-01 bot, callback e timer 1.x sono rimossi dal VPS con dati, backup, certificato e segreti GitHub del deploy ([D259](DECISION_REGISTER.md)); `fiscalbay_bot` riceve il webhook della 2.0. Dalla 1.x passano nella 2.x l'anomalia degli ordini senza dato fiscale, il nuovo accesso eBay a ogni collegamento di negozio, il profilo del bot e l'indicazione per revocare il consenso su eBay ([D260](DECISION_REGISTER.md)).
-
-**Criterio di completamento:** Nessun processo concorrente o credenziale condivisa eliminata; indici e procedure 2.0 autorevoli, altri progetti invariati. La dismissione può già essere avvenuta prima del go-live.
+Il 2026-11-01 bot, callback e timer 1.x sono rimossi dal VPS con dati, backup, certificato e segreti GitHub del deploy ([D259](DECISION_REGISTER.md)).
 
 **Limiti residui:** istanza Oracle, DuckDNS, RuName 1.x e token del vecchio autodeploy restano per scelta dell'owner.
 
 <a id="m9-06"></a>
 #### M9-06 · Sorveglianza iniziale
 
-**Stato:** Completato · **Prerequisiti:** M9-04 · **Contratto:** [§31](#s31) · [§41](#s41)
+**Stato:** Completato · **Contratto:** [§31](#s31) · [§41](#s41)
 
-Il 2026-11-01 la [rilettura](engineering/OPERATIONS.md#sorveglianza) di Production non ha P1 o P2 aperte; un 503 webhook isolato, di causa ignota, non lascia residui. Statistiche attive, checklist `dopo` verde, sitemap inviata, icona confermata dall'owner. `legacy/1.x` eliminata: commit finale `508ded87`, raggiungibile dal tag remoto `v2.0.0`.
+Il 2026-11-01 la [rilettura](engineering/OPERATIONS.md#sorveglianza) di Production non ha P1 o P2 aperte; un 503 webhook isolato, di causa ignota, non lascia residui.
 
-**Criterio di completamento:** Esiti e anomalie registrati senza beta pubblica o SLA, normale esercizio predisposto, cancellazione di `legacy/1.x` verificata con il commit conservato da un tag remoto.
-
-**Limiti residui:** su decisione dell'owner prima visita Web Analytics e primo alert dei certificati non sono requisiti. Il prossimo `Promuovi` ha il forward-fix, senza rollback automatico: la versione attiva, creata dal segreto, non porta l'identità della release. I 5 messaggi falliti del test, da un errore D1 del 31 ottobre, sono recuperati e scadono da soli.
+**Limiti residui:** su decisione dell'owner prima visita Web Analytics e primo alert dei certificati non sono requisiti.
 
 <a id="pubblicazione-production"></a>
+
 ### Gate della prima pubblicazione Production
 
 Prima della prima pubblicazione dovevano risultare chiusi preflight commerciale, restore conclusivo e checklist operativa sul candidato. Le righe seguenti conservano gli esiti di [M9-01](#m9-01), [M9-02](#m9-02) e [M9-03](#m9-03); dopo il go-live gli script non le rileggono a ogni promozione ([D284](DECISION_REGISTER.md)). `Promuovi` vale come via dell'owner; SHA atteso, provenienza dell'artefatto, certificazione, interruttore di abilitazione, environment limitato a `main` e conferma finale restano i controlli del ciclo ([D250](DECISION_REGISTER.md), [D285](DECISION_REGISTER.md)).

@@ -10,7 +10,7 @@ import { formatDate } from "../app/format";
 import { loader as loadAccess } from "../app/routes/sign-in";
 
 import { loadedHere, timingValue } from "../app/page-timing";
-import { issueTimingTicket } from "../app/page-timing.server";
+import { issueTimingTicket } from "../app/domain/page-timing.server";
 import { loader as pageTimingRead, action as pageTiming } from "../app/routes/page-timing";
 import { invocationPoint, writePoints } from "../app/metrics.server";
 import {

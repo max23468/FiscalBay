@@ -1,3 +1,4 @@
+import { postOnly } from "../error-response";
 import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
@@ -15,10 +16,9 @@ import {
 } from "../preview/state.server";
 import type { Route } from "./+types/preview-search";
 
-/** Il percorso riceve soltanto ricerche: una lettura non ha contenuto. */
 export function loader() {
   assertPreviewAvailable();
-  return new Response(null, { status: 405, headers: { allow: "POST" } });
+  return postOnly();
 }
 
 /**

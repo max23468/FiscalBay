@@ -50,3 +50,6 @@ export function unavailableData() {
     headers: { "cache-control": "no-store", "retry-after": "60" },
   });
 }
+
+/** Percorso che riceve soltanto invii: una lettura non ha contenuto. */
+export const postOnly = () => new Response(null, { status: 405, headers: { allow: "POST" } });
