@@ -256,13 +256,11 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_OWNER_ID: ${{ vars.TELEGRAM_OWNER_ID }}
-          OUTCOME: ${{ job.status }}
           ROLLBACK: ${{ steps.rollback.outcome }}
           VERSION: ${{ inputs.version }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          if [ "${OUTCOME}" = success ]; then text="FiscalBay ${VERSION} pubblicata, guardia superata."
-          elif [ "${ROLLBACK}" = success ]; then text="FiscalBay ${VERSION}: incidente dopo il deploy, versione precedente ripristinata."
+          if [ "${ROLLBACK}" = success ]; then text="FiscalBay ${VERSION}: incidente dopo il deploy, versione precedente ripristinata."
           else text="FiscalBay ${VERSION}: incidente dopo il deploy, rollback non applicabile."
           fi
           node scripts/release/notify.mjs "${text} ${RUN_URL}"
