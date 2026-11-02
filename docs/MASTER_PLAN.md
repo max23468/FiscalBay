@@ -1094,7 +1094,7 @@ Un task completato conserva intestazione, stato, prerequisiti e contratto, poi d
 
 Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o richiedono di riconciliare un effetto remoto. Chiuderle o rimuoverle con il prossimo intervento pertinente, senza accumulare il diario delle prove riuscite. Il test merchant e il go-live sono conclusi; le attestazioni dell'owner sui percorsi reali restano distinte dai test sintetici.
 
-Il blocco atomico degli ingressi D1 e il registro delle operazioni, introdotti con la migration `0071` in [#600](https://github.com/max23468/FiscalBay/pull/600), richiedono la qualifica sul test prima dell'uso remoto. Il primo readback ha trovato sei richieste annullate dai browser già terminate sul provider ma ancora nel registro: la richiesta deve restare legata a `waitUntil` prima della risposta, fino alla pulizia. Il collaudo della correzione verifica assenza di nuovi residui, riconciliazione delle sole righe con terminazione provata e blocco/riapertura senza un nuovo Time Travel; il drill storico resta distinto. La pendenza si chiude con la `0071` in Production: fino ad allora un ripristino reale usa il protocollo precedente.
+Il blocco atomico degli ingressi D1 e il registro delle operazioni, introdotti con la migration `0071` in [#600](https://github.com/max23468/FiscalBay/pull/600), sono qualificati sul test: il 2026-11-02 blocco e riapertura riescono sul provider senza un nuovo Time Travel, con il registro vuoto; il drill storico resta distinto. Entrano in Production con la `2.0.2`: fino ad allora un ripristino reale usa il protocollo precedente.
 
 | Ambito | Pendenza e condizione di chiusura |
 |---|---|
