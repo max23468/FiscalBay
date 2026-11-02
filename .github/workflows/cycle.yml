@@ -81,7 +81,7 @@ jobs:
             node scripts/release/release-cycle.mjs rollback --sha "${EXPECTED_SHA}"
           fi
       - name: Notify owner
-        if: always()
+        if: always() && contains(fromJSON('["promote", "rollback"]'), inputs.operation)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_OWNER_ID: ${{ vars.TELEGRAM_OWNER_ID }}
