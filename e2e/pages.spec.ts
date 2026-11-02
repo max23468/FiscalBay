@@ -358,8 +358,11 @@ for (const scenario of scenarios) {
           url.pathname === new URL(home, baseURL!).pathname &&
           [...url.searchParams.keys()].every((key) => key === "vista");
         if (!modal && (await homeLink.isVisible()) && new URL(before).pathname !== home) {
-          await homeLink.click();
-          await expect(page).toHaveURL(atHome);
+          // Un clic arrivato dopo la ricarica ma prima dell'idratazione si perde: si ripete.
+          await expect(async () => {
+            await homeLink.click();
+            await expect(page).toHaveURL(atHome, { timeout: 2_000 });
+          }).toPass();
           await networkIdle(page);
           await page.goBack();
           await expect(page).toHaveURL(before);
