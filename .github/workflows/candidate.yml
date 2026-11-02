@@ -1,19 +1,24 @@
 name: Candidato
 
 # Qualifica completa di un commit di `develop`, certificata per tree: `Promuovi` la riusa invece di
-# scoprire i difetti del lotto all'ultimo passo. La pianificazione non occupa un runner in attesa.
+# scoprire i difetti del lotto all'ultimo passo. La avvia la CI su `develop`: la pianificazione di
+# GitHub può tardare di ore e resta soltanto una riserva.
 # Il titolo lega il ciclo al commit qualificato, anche se nel frattempo `develop` avanza.
 run-name: Candidato ${{ inputs.expected_sha || github.sha }}
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "11 * * * *"
     - cron: "23 3 * * 1"
   workflow_dispatch:
     inputs:
       expected_sha:
         type: string
         required: true
+      automatic:
+        description: Avviata dalla CI, qualifica soltanto se serve
+        type: boolean
+        default: false
 
 env:
   DO_NOT_TRACK: "1"
@@ -29,7 +34,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       sha: ${{ steps.ready.outputs.sha }}
-      qualify: ${{ steps.ready.outputs.ready == 'true' && (github.event_name == 'workflow_dispatch' || github.event.schedule == '23 3 * * 1' || steps.plan.outputs.qualify == 'true') }}
+      qualify: ${{ steps.ready.outputs.ready == 'true' && ((github.event_name == 'workflow_dispatch' && !inputs.automatic) || github.event.schedule == '23 3 * * 1' || steps.plan.outputs.qualify == 'true') }}
       mutation-matrix: ${{ steps.reuse.outputs.mutation-matrix || steps.plan.outputs.mutation-matrix }}
       skip-pages: ${{ steps.pages.outputs.skip-pages }}
     steps:
@@ -45,11 +50,11 @@ jobs:
         id: ready
         env:
           GH_TOKEN: ${{ github.token }}
-          EVENT: ${{ github.event_name }}
+          MANUAL: ${{ github.event_name == 'workflow_dispatch' && !inputs.automatic }}
           WEEKLY: ${{ github.event.schedule == '23 3 * * 1' }}
         run: |
           options=()
-          if [ "${EVENT}" = workflow_dispatch ]; then options+=(--manual); fi
+          if [ "${MANUAL}" = true ]; then options+=(--manual); fi
           if [ "${WEEKLY}" = true ]; then options+=(--weekly); fi
           node scripts/release/release-cycle.mjs candidate-ready --sha "$(git rev-parse HEAD)" "${options[@]}"
       - name: Read commit active in Production
