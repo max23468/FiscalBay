@@ -599,11 +599,11 @@ async function prepareFiscalWrites(input: {
        FROM tax_identifiers WHERE order_id = ?4 AND removed_at IS NULL AND ${orderExists}`,
     )
     .bind(...scope, null, orderId);
-  let taxSnapshots: { before: number; after: number } | null = null;
+  let taxSnapshots: { after: number } | null = null;
   if (tax) {
-    const before = add(taxSnapshot);
+    add(taxSnapshot);
     add(...(await taxStatements(db, scope, orderId, absorbedIds, observation, matched, guards)));
-    taxSnapshots = { before, after: add(taxSnapshot) };
+    taxSnapshots = { after: add(taxSnapshot) };
     add(
       db
         .prepare(
@@ -739,7 +739,7 @@ export async function recordOrderObservation(
   const fiscalOffset = add(...fiscal.statements);
   const taxSnapshots = fiscal.taxSnapshots
     ? {
-        before: fiscalOffset + fiscal.taxSnapshots.before,
+        before: fiscalOffset,
         after: fiscalOffset + fiscal.taxSnapshots.after,
       }
     : null;

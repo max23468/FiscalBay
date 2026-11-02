@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -360,9 +361,13 @@ describe("prove browser per area", () => {
   });
 
   it("dichiara ogni modulo: un'area, nessuna pagina o la suite completa", () => {
-    const tracked = spawnSync("git", ["ls-files", "app", "workers"], { encoding: "utf8" })
+    const tracked = spawnSync(
+      "git",
+      ["ls-files", "--cached", "--others", "--exclude-standard", "app", "workers"],
+      { encoding: "utf8" },
+    )
       .stdout.split("\n")
-      .filter((file) => /\.(?:tsx?|css)$/u.test(file));
+      .filter((file) => /\.(?:tsx?|css)$/u.test(file) && existsSync(file));
     assert.deepEqual(undeclaredModules(tracked), []);
     assert.deepEqual(undeclaredModules(["app/new-module.ts", "app/domain/nuovo.server.ts"]), [
       "app/new-module.ts",

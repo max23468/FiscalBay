@@ -6,6 +6,7 @@ import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { setSwitch } from "../app/domain/service-settings.server";
 import { noticesOf } from "../app/domain/telegram-deliveries.server";
 import type { VisibleOrder } from "../app/domain/orders.server";
+import * as orderReads from "../app/domain/orders.server";
 import {
   copyButtons,
   digestMessage,
@@ -551,13 +552,29 @@ describe("riepiloghi lunghi", () => {
       await env.DB.batch(
         ids.slice(start, start + 50).flatMap((id) => insertOrder(id, { storeId: "s-lungo" })),
       );
-    const notices = await noticesOf(
-      env.DB,
-      userId,
-      ids.map((id) => ({ id, environment: "production" })),
-      new Date(now),
-    );
-    expect(notices.size).toBe(301);
+    const list = orderReads.listVisibleOrders;
+    const reads = vi.spyOn(orderReads, "listVisibleOrders").mockImplementation((...args) => {
+      expect(reads.mock.calls.length).toBeLessThanOrEqual(2);
+      const filter = args[5]!;
+      expect(filter.ids!.length).toBeGreaterThan(0);
+      expect(filter.ids!.length).toBeLessThanOrEqual(300);
+      expect(filter.suggestions).toBe(false);
+      return list(...args);
+    });
+    try {
+      const notices = await noticesOf(
+        env.DB,
+        userId,
+        ids.map((id) => ({ id, environment: "production" })),
+        new Date(now),
+      );
+      expect(notices.size).toBe(301);
+      expect(reads).toHaveBeenCalledTimes(2);
+      expect(reads.mock.calls.map((args) => args[5]!.ids!.length)).toEqual([300, 1]);
+      expect(reads.mock.calls.flatMap((args) => args[5]!.ids!).sort()).toEqual(ids.sort());
+    } finally {
+      reads.mockRestore();
+    }
   });
 });
 

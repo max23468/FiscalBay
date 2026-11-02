@@ -62,7 +62,9 @@ export async function reconcileBillingIncidents(env: Env, stripe: Stripe, now: D
           expand: ["payment_intent.latest_charge"],
         }),
       );
+      // Stryker disable next-line ConditionalExpression: un ID stringa al posto di null non ha latest_charge; la scelta opposta sul dato espanso è coperta dal rimborso.
       const intent = typeof session.payment_intent === "object" ? session.payment_intent : null;
+      // Stryker disable next-line ConditionalExpression: un ID non espanso non contiene importo, rimborsi o disputa e non può confermare una revoca; il dato espanso è coperto dal rimborso.
       const charge = typeof intent?.latest_charge === "object" ? intent.latest_charge : null;
       if (session.livemode !== (stripeEnvironment(env) === "live")) return;
       if (

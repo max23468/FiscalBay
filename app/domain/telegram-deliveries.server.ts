@@ -174,9 +174,11 @@ export async function noticesOf(
     // Stryker disable next-line ConditionalExpression: senza identificativi la lettura non restituisce ordini; il ritorno anticipato evita soltanto la query.
     if (ids.length === 0) return [];
     // La lettura si ferma a `maxListedOrders`: un riepilogo più lungo passa a blocchi.
-    const chunks = Array.from({ length: Math.ceil(ids.length / maxListedOrders) }, (_, index) =>
-      ids.slice(index * maxListedOrders, (index + 1) * maxListedOrders),
-    );
+    const chunks = ids.reduce<string[][]>((groups, id, index) => {
+      const group = Math.floor(index / maxListedOrders);
+      (groups[group] ??= []).push(id);
+      return groups;
+    }, []);
     const visible = await Promise.all(
       chunks.map((chunk) =>
         listVisibleOrders(db, userId, chunk.length, environment, now, {

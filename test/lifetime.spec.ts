@@ -115,7 +115,17 @@ describe("Lifetime e concessioni", () => {
     stripe.settle("cs_incidente", "paid");
     const input = { sessionId: "cs_incidente", workspaceId: "w-a", customerId: null };
     await recordUnallocatedLifetime(env, input, new Date(now));
-    const client = await createBoundedStripeClient("sk_test_fiscalbay", stripe.fetcher);
+    const fetcher: typeof fetch = async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/v1/checkout/sessions/cs_incidente")
+        expect(
+          [...url.searchParams.entries()]
+            .filter(([key]) => key.startsWith("expand"))
+            .map(([, value]) => value),
+        ).toEqual(["payment_intent.latest_charge"]);
+      return stripe.fetcher(input, init);
+    };
+    const client = await createBoundedStripeClient("sk_test_fiscalbay", fetcher);
     const tomorrow = new Date(Date.parse(now) + 86_400_000);
     await reconcileBillingIncidents(env, client, tomorrow);
     expect(
@@ -131,6 +141,108 @@ describe("Lifetime e concessioni", () => {
       await env.DB.prepare("SELECT resolved_at FROM billing_incidents").first("resolved_at"),
     ).not.toBeNull();
   });
+  it("chiude un incidente già assegnato senza interrogare Stripe", async () => {
+    const input = { sessionId: "cs_assegnata", workspaceId: "w-a", customerId: null };
+    await recordUnallocatedLifetime(env, input, new Date(now));
+    await env.DB.prepare(`INSERT INTO lifetime_allocations
+      (slot, workspace_id, status, kind, provider_reference, activated_at, created_at)
+      VALUES (1, 'w-a', 'active', 'sale', ?1, ?2, ?2)`)
+      .bind(input.sessionId, now)
+      .run();
+    await insertEntitlement({ source: "lifetime", stripeCheckoutSessionId: input.sessionId }).run();
+    const stripe = stripeAccount();
+    const client = await createBoundedStripeClient("sk_test_fiscalbay", stripe.fetcher);
+    await reconcileBillingIncidents(env, client, new Date(Date.parse(now) + 86_400_000));
+    expect(
+      await env.DB.prepare("SELECT resolved_at FROM billing_incidents").first("resolved_at"),
+    ).not.toBeNull();
+    expect(stripe.fetcher).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { label: "altro ambiente", session: { livemode: true }, live: false, closed: false },
+    { label: "ambiente live", session: { livemode: true }, live: true, closed: true },
+    { label: "test su live", session: { livemode: false }, live: true, closed: false },
+    { label: "altra modalità", session: { mode: "subscription" }, live: false, closed: false },
+    {
+      label: "altra offerta",
+      session: { metadata: { offer: "monthly", workspace_id: "w-a" } },
+      live: false,
+      closed: false,
+    },
+    {
+      label: "altro spazio",
+      session: { metadata: { offer: "lifetime", workspace_id: "w-b" } },
+      live: false,
+      closed: false,
+    },
+    { label: "metadata assenti", session: { metadata: null }, live: false, closed: false },
+    { label: "pagamento assente", session: { payment_intent: null }, live: false, closed: false },
+    {
+      label: "pagamento non espanso",
+      session: { payment_intent: "pi_pending" },
+      live: false,
+      closed: false,
+    },
+    {
+      label: "addebito non espanso",
+      session: { payment_intent: { latest_charge: "ch_pending" } },
+      live: false,
+      closed: false,
+    },
+  ])(
+    "un incidente rispetta i riferimenti della rilettura: $label",
+    async ({ session, live, closed }) => {
+      const target: Env = live ? { ...env, APP_ORIGIN: "https://fiscalbay.it" } : env;
+      const stripe = stripeAccount();
+      stripe.state.sessions.push({
+        id: "cs_incidente",
+        mode: "payment",
+        subscription: null,
+        livemode: false,
+        metadata: { offer: "lifetime", workspace_id: "w-a" },
+      });
+      stripe.settle("cs_incidente", "paid");
+      stripe.state.charges[0]!.refunds.push({ amount: 18178, status: "succeeded" });
+      Object.assign(stripe.state.sessions[0]!, session);
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      await recordUnallocatedLifetime(
+        target,
+        { sessionId: "cs_incidente", workspaceId: "w-a", customerId: null },
+        new Date(now),
+      );
+      const client = await createBoundedStripeClient("sk_test_fiscalbay", stripe.fetcher);
+      await reconcileBillingIncidents(target, client, new Date(Date.parse(now) + 86_400_000));
+      expect(
+        Boolean(
+          await env.DB.prepare("SELECT resolved_at FROM billing_incidents").first("resolved_at"),
+        ),
+      ).toBe(closed);
+      expect(errors).not.toHaveBeenCalled();
+      expect(stripe.writes).toEqual([]);
+    },
+  );
+
+  it("una rilettura fallita lascia l'incidente aperto e registra soltanto l'errore tecnico", async () => {
+    const stripe = stripeAccount();
+    stripe.state.failing.push("/v1/checkout/sessions/cs_incidente");
+    await recordUnallocatedLifetime(
+      env,
+      { sessionId: "cs_incidente", workspaceId: "w-a", customerId: null },
+      new Date(now),
+    );
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const client = await createBoundedStripeClient("sk_test_fiscalbay", stripe.fetcher);
+    await reconcileBillingIncidents(env, client, new Date(Date.parse(now) + 86_400_000));
+    expect(
+      await env.DB.prepare("SELECT resolved_at FROM billing_incidents").first("resolved_at"),
+    ).toBeNull();
+    expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+      expect.objectContaining({ operation: "billing" }),
+    ]);
+    expect(JSON.stringify(errors.mock.calls)).not.toContain("cs_incidente");
+  });
+
   let userId: string;
   let cookie: string;
   const at = (iso: string) => new Date(iso);

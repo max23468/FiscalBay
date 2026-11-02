@@ -8,7 +8,10 @@ import { expect, it, vi } from "vitest";
 
 import { receiveWebhook, consumeWebhooks } from "../app/webhooks.server";
 
-import { recoverWebhookIngress } from "../app/domain/webhook-receipts.server";
+import {
+  recoverWebhookIngress,
+  resumeStalledReceipts,
+} from "../app/domain/webhook-receipts.server";
 
 import { verifyEbayNotification } from "../app/integrations/ebay/notifications.server";
 
@@ -432,6 +435,52 @@ it("riprende un claim se Queue fallisce, anche senza altre consegne del provider
   expect(send).toHaveBeenCalledTimes(3);
   await recoverWebhookIngress(environment, new Date(now.getTime() + 8 * day));
   expect(send).toHaveBeenCalledTimes(3);
+});
+
+it("la ripresa manuale riaccoda al massimo 25 ricevute ferme del solo provider richiesto", async () => {
+  const at = now.toISOString();
+  const old = new Date(now.getTime() - 3_600_000).toISOString();
+  const future = new Date(now.getTime() + 86_400_000).toISOString();
+  const pending = Array.from({ length: 27 }, (_, index) => `resume-${index}`);
+  const rows = [
+    ...pending.map((id) => [id, "ebay", old, future, null, null, null]),
+    ["other-provider", "stripe", old, future, null, null, null],
+    ["expired", "ebay", old, at, null, null, null],
+    ["completed", "ebay", old, future, null, at, null],
+    ["locked", "ebay", old, future, null, null, future],
+    ["recent-event", "ebay", at, future, null, null, null],
+    ["recent-queue", "ebay", old, future, at, null, null],
+  ];
+  await env.DB.batch(
+    rows.map(([id, provider, event, expiry, queued, completed, locked]) =>
+      env.DB.prepare(`INSERT INTO webhook_receipts
+        (id, provider, environment, provider_id, topic, object_id,
+          event_at, expires_at, queued_at, completed_at, locked_until)
+        VALUES (?1, ?2, 'production', ?1, 'notification', 'order', ?3, ?4, ?5, ?6, ?7)`).bind(
+        id,
+        provider,
+        event,
+        expiry,
+        queued,
+        completed,
+        locked,
+      ),
+    ),
+  );
+  expect(await resumeStalledReceipts(environment, "ebay", now)).toBe(25);
+  expect(send).toHaveBeenCalledTimes(25);
+  expect(await resumeStalledReceipts(environment, "ebay", now)).toBe(2);
+  expect(await resumeStalledReceipts(environment, "ebay", now)).toBe(0);
+  expect(send).toHaveBeenCalledTimes(27);
+  expect(send.mock.calls).toEqual(
+    expect.arrayContaining(pending.map((receiptId) => [{ receiptId }])),
+  );
+  const { results } = await env.DB.prepare(
+    "SELECT id FROM webhook_receipts WHERE queued_at = ? ORDER BY id",
+  )
+    .bind(at)
+    .all<{ id: string }>();
+  expect(results.map(({ id }) => id)).toEqual([...pending, "recent-queue"].sort());
 });
 
 it("il consumer importa solo l'ordine del negozio verificato e non ripete gli effetti", async () => {

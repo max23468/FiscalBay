@@ -11,7 +11,7 @@ import {
 } from "../app/domain/billing.server";
 import { subscriptionOffers } from "../app/domain/subscription-offers";
 import { checkoutConfigured, purchaseState } from "../app/domain/checkout.server";
-import { orderAllowance, startTrial } from "../app/domain/grants.server";
+import { openSubscriptionSql, orderAllowance, startTrial } from "../app/domain/grants.server";
 import {
   createBoundedStripeClient,
   isMissingObject,
@@ -87,6 +87,21 @@ describe("Webhook e riconciliazione Stripe", () => {
       `riconciliazione-${crypto.randomUUID()}@example.invalid`,
     ));
     await workspace(userId);
+  });
+
+  it("un abbonamento aperto non blocca gli acquisti nell'altro ambiente Stripe", async () => {
+    const stripe = stripeAccount();
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.created", objectId: "sub_test" },
+      stripe.fetcher,
+      at(now),
+    );
+    const result = await env.DB.prepare(`SELECT
+      ${openSubscriptionSql("'w-a'", "'test'")} AS test,
+      ${openSubscriptionSql("'w-a'", "'live'")} AS live,
+      ${openSubscriptionSql("'w-a'")} AS any_environment`).first();
+    expect(result).toEqual({ test: 1, live: 0, any_environment: 1 });
   });
 
   it("attribuisce una sola copertura per fattura pagata con eventi duplicati o fuori ordine", async () => {
@@ -971,13 +986,15 @@ describe("Webhook e riconciliazione Stripe", () => {
   it("una rilettura mancata dopo il cambio di periodicità non lo presenta come fallito", async () => {
     const stripe = await paidMonthly();
     vi.setSystemTime(at(now));
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const realPrepare = env.DB.prepare.bind(env.DB);
     const failedRead = vi.spyOn(env.DB, "prepare").mockImplementation((query) => {
       if (stripe.writes.length > 0) throw new Error("d1_unavailable");
       return realPrepare(query);
     });
     expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("done");
+    expect(logged(errors)).toEqual([expect.objectContaining({ operation: "billing" })]);
+    expect(JSON.stringify(logged(errors))).not.toContain("d1_unavailable");
     expect(stripe.writes).toHaveLength(1);
     expect(stripe.writes[0]!.path).toBe("/v1/subscriptions/sub_test");
     expect(stripe.writes[0]!.body.get("items[0][price]")).toBe("price_annual_2026-09");

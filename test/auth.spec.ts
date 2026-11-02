@@ -24,6 +24,7 @@ async function drainBackground() {
 afterEach(drainBackground);
 
 import { handleAuthRequest } from "../app/auth-route.server";
+import { countAuthAttempt, purgeAuthAttempts } from "../app/domain/auth-attempts.server";
 
 import { createAuth, createAuthOptions } from "../app/auth.server";
 
@@ -42,6 +43,39 @@ import { hashPassword, verifyPassword } from "../app/password.server";
 import { emailSender, mailEnv, sessionCookie, verifiedSession } from "./fixtures/account-fixtures";
 
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
+
+it("i tentativi di accesso rispettano soglia, secondi di attesa e riapertura della finestra", async () => {
+  const at = Date.parse("2026-09-01T12:00:00.000Z");
+  const key = `limit-${crypto.randomUUID()}`;
+  const rule = { window: 60, max: 2 };
+  expect(await countAuthAttempt(env.DB, key, rule, at)).toBeNull();
+  expect(await countAuthAttempt(env.DB, key, rule, at + 1)).toBeNull();
+  expect(await countAuthAttempt(env.DB, key, rule, at + 1_001)).toBe(59);
+  expect(await countAuthAttempt(env.DB, key, rule, at + 59_999)).toBe(1);
+  expect(await countAuthAttempt(env.DB, key, rule, at + 60_000)).toBeNull();
+  expect(await countAuthAttempt(env.DB, key, rule, at + 60_001)).toBeNull();
+  expect(await countAuthAttempt(env.DB, key, rule, at + 60_002)).toBe(60);
+  expect(await countAuthAttempt(env.DB, `${key}-deny`, { window: 0, max: 0 }, at)).toBe(1);
+});
+
+it("la pulizia dei tentativi conserva il confine esatto di un'ora", async () => {
+  const at = Date.parse("2026-09-01T12:00:00.000Z");
+  const prefix = `purge-${crypto.randomUUID()}`;
+  for (const offset of [-1, 0, 1])
+    await countAuthAttempt(
+      env.DB,
+      `${prefix}-${offset}`,
+      { window: 60, max: 2 },
+      at - 3_600_000 + offset,
+    );
+  await purgeAuthAttempts(env.DB, at);
+  const { results } = await env.DB.prepare(
+    'SELECT "key" FROM "rateLimit" WHERE "key" LIKE ? ORDER BY "key"',
+  )
+    .bind(`${prefix}%`)
+    .all<{ key: string }>();
+  expect(results.map(({ key }) => key)).toEqual([`${prefix}-0`, `${prefix}-1`]);
+});
 
 it("salva le password con il costo ridotto e rifiuta il formato predefinito di Better Auth", async () => {
   const hash = await hashPassword("password-di-prova-lunga");
