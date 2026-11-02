@@ -80,13 +80,3 @@ jobs:
           else
             node scripts/release/release-cycle.mjs rollback --sha "${EXPECTED_SHA}"
           fi
-      - name: Notify owner
-        if: always() && contains(fromJSON('["promote", "rollback"]'), inputs.operation)
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_OWNER_ID: ${{ vars.TELEGRAM_OWNER_ID }}
-          OUTCOME: ${{ job.status }}
-          TITLE: ${{ inputs.operation }} ${{ inputs.object }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          node scripts/release/notify.mjs "FiscalBay ${TITLE}: ${OUTCOME}. ${RUN_URL}"
