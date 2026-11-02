@@ -268,6 +268,9 @@ export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
   const base = topVersion(baseChangelog);
   if (head === base) return;
   const released = latestReleased(releasedTags);
+  // Una versione promossa e ritirata perde il tag e la sezione: torna l'ultima pubblicata.
+  if (head === released && topSection(baseChangelog)?.day && !releasedTags.includes(`v${base}`))
+    return;
   const next = parseVersion(head);
   if (!next) throw new Error(`In cima al changelog serve una versione, non "${head ?? ""}".`);
   const previous = parseVersion(base);
