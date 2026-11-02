@@ -22,7 +22,7 @@ describe("riuso delle visite del catalogo", () => {
   });
 
   it("riusa tutte le aree se cambia ciò che nessuna pagina mostra o soltanto documenti", () => {
-    for (const file of ["app/domain/scheduled-work.server.ts", "docs/MASTER_PLAN.md"])
+    for (const file of ["app/domain/scheduled-work.server.ts", "docs/ROADMAP.md"])
       assert.equal(reusableAreas(plan([file], sources)).length, 6, file);
   });
 

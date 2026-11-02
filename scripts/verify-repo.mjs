@@ -45,7 +45,7 @@ const fixtureHosts = new Set([
 const isDocumentation = (file) => file.endsWith(".md") || file.startsWith("docs/");
 const isAsset = (file) => /\.(?:svg|png|jpe?g|ico|webp|woff2?)$/u.test(file);
 
-/** Sigle di milestone, task e gate ammesse soltanto nella documentazione di piano. */
+/** Sigle di milestone, task e gate ammesse soltanto nella documentazione. */
 export function checkPlanCodes(files) {
   const errors = [];
   const code = /\b(?:M\d{1,2}(?:-\d{2})?|G-[A-Z]{3,})\b/u;

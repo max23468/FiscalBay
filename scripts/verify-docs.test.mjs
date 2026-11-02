@@ -54,20 +54,31 @@ describe("integrità dei documenti", () => {
         assert.ok(result.errors.some((error) => error.code === code));
       }
       mkdirSync(path.join(directory, "docs"));
-      const planFile = path.join(directory, "docs/MASTER_PLAN.md");
-      const pending = "# Piano\n";
-      writeFileSync(planFile, pending);
-      assert.equal(check("# Piano\n").status, 0);
-      // Il codice del task si compone: verify:repo ammette le sigle di piano solo nei documenti.
-      const code = "M" + "1-01";
+      const roadmapFile = path.join(directory, "docs/ROADMAP.md");
+      const pending = "# Roadmap\n";
+      writeFileSync(roadmapFile, pending);
+      assert.equal(check("# Roadmap\n").status, 0);
+      const code = "2.1-01";
       const task = (status, words) =>
         `\n\n#### ${code} · Prova\n\n**Stato:** ${status}\n\n${"parola ".repeat(words)}\n`;
-      writeFileSync(planFile, pending + task("Completato", 100) + task("Da completare", 400));
-      assert.equal(check("# Piano\n").status, 0);
-      writeFileSync(planFile, pending + task("Completato", 400));
-      const long = check("# Piano\n");
+      writeFileSync(roadmapFile, pending + task("Completato", 100) + task("Da completare", 400));
+      assert.equal(check("# Roadmap\n").status, 0);
+      writeFileSync(roadmapFile, pending + task("Completato", 400));
+      const long = check("# Roadmap\n");
       assert.equal(long.status, 1);
       assert.ok(long.errors.some((error) => error.code === "TASK_LENGTH"));
+      writeFileSync(roadmapFile, pending);
+      // La sigla si compone: verify:repo la rifiuta anche nei test.
+      const milestone = "M" + "9-02";
+      const leaked = check(`Riferimento a ${milestone}.\n`);
+      assert.equal(leaked.status, 1);
+      assert.ok(leaked.errors.some((error) => error.code === "MILESTONE_CODE"));
+      mkdirSync(path.join(directory, "docs/decisions"));
+      writeFileSync(
+        path.join(directory, "docs/decisions/DECISION_REGISTER.md"),
+        `Provenienza: ${milestone}.\n`,
+      );
+      assert.equal(check("# Roadmap\n").status, 0);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

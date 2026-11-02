@@ -1,14 +1,14 @@
 # FiscalBay 2.0 · Avvio, ripresa e documenti
 
-FiscalBay 2.0 usa Workers/D1/Better Auth. Il [Master Plan](docs/MASTER_PLAN.md) contiene requisiti e roadmap, [avanzamento e questioni aperte](docs/MASTER_PLAN.md#stato); i via effettivi sono nel suo [governo](docs/MASTER_PLAN.md#s00). Codice/test/configurazioni attestano l'implementazione, PR/CI le verifiche e ricevute/readback lo stato remoto. Segreti e inventari privati restano fuori dal repository.
+FiscalBay 2.0 usa Workers/D1/Better Auth. I requisiti stanno nei [documenti di prodotto](docs/product/PRODUCT.md) e di [engineering](docs/engineering/ARCHITECTURE.md), il lavoro futuro nella [roadmap](docs/ROADMAP.md). Codice/test/configurazioni attestano l'implementazione, PR/CI le verifiche e ricevute/readback lo stato remoto. Segreti e inventari privati restano fuori dal repository.
 
 <a id="avvio"></a>
 
 ## 1. Avvio e ambiente di lavoro
 
-Il checkout è già adottato: lo stato dei lavori è soltanto nell'[avanzamento](docs/MASTER_PLAN.md#stato), mentre la procedura di adozione iniziale dello ZIP 2.0 è archiviata in [docs/archive](docs/archive/2026-09-adozione-2.0.md) per eventuali ricostruzioni storiche. Ogni nuova sessione segue la [ripresa](#ripresa).
+Il checkout è già adottato: lo stato dei lavori è soltanto nella [roadmap](docs/ROADMAP.md#stato), mentre la procedura di adozione iniziale dello ZIP 2.0 è archiviata in [docs/archive](docs/archive/2026-09-adozione-2.0.md) per eventuali ricostruzioni storiche. Ogni nuova sessione segue la [ripresa](#ripresa).
 
-Si lavora con Claude Code: sul Mac nel checkout locale, eventualmente in worktree sotto `.claude/worktrees/`, nelle sessioni cloud e nei thread del progetto Claude. Le regole operative sono in [AGENTS.md](AGENTS.md), che `CLAUDE.md` importa; la base di lavoro è `develop`. Preparazione e limiti delle sessioni cloud sono nel [ciclo operativo](docs/engineering/RELEASE.md#ciclo-operativo).
+Si lavora con Claude Code: sul Mac nel checkout locale, eventualmente in worktree sotto `.claude/worktrees/`, nelle sessioni cloud e nei thread del progetto Claude. Le regole operative sono in [AGENTS.md](AGENTS.md), che `CLAUDE.md` importa; la base di lavoro è `develop`. Preparazione e limiti delle sessioni cloud sono nel [ciclo operativo](docs/operations/RELEASE.md#ciclo-operativo).
 
 ### Eseguire il candidato locale
 
@@ -27,9 +27,9 @@ Per provare gli endpoint Auth con account controllati, copiare `.dev.vars.exampl
 
 ## 2. Riprendere nelle sessioni successive
 
-Leggere `AGENTS.md`, [avanzamento e questioni aperte](docs/MASTER_PLAN.md#stato), checkpoint e milestone pertinente, poi le sole sezioni della [matrice di lettura](docs/engineering/AGENT_SETUP.md#lettura) necessarie. Verificare Git, PR/CI e ricevute degli ultimi effetti remoti prima di ripetere operazioni; una sessione interrotta non prova che una scrittura sia fallita.
+Leggere `AGENTS.md`, [roadmap e questioni aperte](docs/ROADMAP.md#stato), poi le sole sezioni della [matrice di lettura](docs/operations/AGENT_SETUP.md#lettura) necessarie. Verificare Git, PR/CI e ricevute degli ultimi effetti remoti prima di ripetere operazioni; una sessione interrotta non prova che una scrittura sia fallita.
 
-Quando una PR aggiorna il piano lo dicono `AGENTS.md` e il [contenuto delle PR](docs/engineering/RELEASE.md#contenuto-delle-pr). Non mantenere un secondo stato, diario o tracker; la cronologia è in Git. Chat e audit vecchi non sono prerequisiti per lavorare.
+Quando una PR aggiorna i documenti lo dicono `AGENTS.md` e il [contenuto delle PR](docs/operations/RELEASE.md#contenuto-delle-pr). Non mantenere un secondo stato, diario o tracker; la cronologia è in Git. Chat e audit vecchi non sono prerequisiti per lavorare.
 
 <a id="documenti"></a>
 
@@ -45,21 +45,27 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | Documento                                      | Consultarlo per                                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------------ |
 | [AGENTS.md](AGENTS.md)                         | Regole operative e confini del mandato                                   |
-| [Master Plan](docs/MASTER_PLAN.md)             | Requisiti, gate, roadmap, avanzamento sintetico, checkpoint e questioni aperte |
+| [Roadmap](docs/ROADMAP.md)                     | Versioni 2.x, riconoscimenti esterni, stato, questioni aperte e rischi   |
+| [Glossario](GLOSSARY.md)                       | Linguaggio vincolante del prodotto                                       |
+| [Prodotto](docs/product/PRODUCT.md), [piani](docs/product/PLANS_AND_BILLING.md), [account](docs/product/ACCOUNTS_AND_STORES.md), [ordini](docs/product/ORDERS_AND_SYNC.md), [canali](docs/product/CHANNELS_AND_ADMIN.md), [esperienza](docs/product/EXPERIENCE.md) | Requisiti del prodotto per dominio |
+| [Architettura](docs/engineering/ARCHITECTURE.md), [sicurezza e privacy](docs/engineering/SECURITY_AND_PRIVACY.md), [conservazione](docs/engineering/DATA_RETENTION.md), [test](docs/engineering/TESTING.md) | Requisiti tecnici |
+| [Operazioni](docs/operations/OPERATIONS.md), [pubblicazione](docs/operations/RELEASE.md) | Runbook, stato dei servizi, Git, CI e rilascio |
 | PR, CI e ricevute di pubblicazione            | Modifiche/verifiche dell'intervento e stato remoto osservato |
-| [Decision Register](docs/DECISION_REGISTER.md) | Scelte sintetiche, motivazioni e alternative superate                    |
-| [Agent Setup](docs/engineering/AGENT_SETUP.md) | Strumenti, input, ambienti, custodia e responsabilità documentali        |
-| [Fonti](docs/SOURCES.md)                       | Documentazione esterna da verificare quando pertinente                   |
+| [Decision Register](docs/decisions/DECISION_REGISTER.md) | Scelte sintetiche, motivazioni e alternative superate                    |
+| [Agent Setup](docs/operations/AGENT_SETUP.md) | Strumenti, input, ambienti, custodia e responsabilità documentali        |
+| [Fonti](docs/reference/SOURCES.md)                       | Documentazione esterna da verificare quando pertinente                   |
 | [Riferimenti brand](docs/brand/REFERENCES.md)  | Concept e immagini originali, non asset finali già approvati             |
 | [Design system](docs/brand/DESIGN_SYSTEM.md)  | Token, componenti, catalogo dei riferimenti e provenienza                |
-| [Audit UI/UX del test](docs/engineering/AUDIT_UI_UX.md) | Problemi rilevati sul test e correzioni verificate |
+| [Audit UI/UX del test](docs/audits/AUDIT_UI_UX.md) | Problemi rilevati sul test e correzioni verificate |
 
 
-Questo README è l’unico ingresso/indice generale. `CLAUDE.md` importa AGENTS senza una seconda policy. `docs/archive/` contiene la procedura di adozione, storica e fuori dai controlli ordinari di `verify-docs`.
+Questo README è l’unico ingresso/indice generale. `CLAUDE.md` importa AGENTS senza una seconda policy. `docs/archive/` contiene la procedura di adozione e il Master Plan della 2.0, con milestone e gate: sono storici, non requisiti, e stanno fuori dai controlli ordinari di `verify-docs`.
+
+Per il prodotto prevale l’ultima decisione esplicita dell’owner, da riportare nel piano. Contratti esterni e condizioni applicabili vanno verificati sulle fonti ufficiali correnti; codice/test/configurazioni attestano ciò che esiste, readback del provider ciò che è attivo. Una discordanza richiede una correzione o una decisione dell’owner, non un cambio tacito dello scope. `AGENTS.md` governa l’esecuzione, non modifica i requisiti.
 Controllo ordinario dopo modifiche documentali:
 
 ```sh
 node scripts/verify-docs.mjs
 ```
 
-Il controllo rileva link e ancore interni rotti, tabelle incoerenti e decisioni duplicate/inesistenti. Gli stati aperti sono ammessi nel piano; autorizzazioni e prerequisiti applicabili si verificano secondo `AGENTS.md` e il ciclo di pubblicazione, senza rileggere i gate storici del go-live a ogni promozione. Non impone un tracker separato, un grafo dei task verificato dallo script o ID consecutivi. `--assets` aggiunge la verifica degli originali secondo il manifest. Comandi e gate attuali sono in `package.json` e [Agent Setup](docs/engineering/AGENT_SETUP.md); il percorso di pubblicazione è in [RELEASE](docs/engineering/RELEASE.md).
+Il controllo rileva link e ancore interni rotti, tabelle incoerenti e decisioni duplicate/inesistenti. Gli stati aperti sono ammessi nella roadmap; autorizzazioni e prerequisiti applicabili si verificano secondo `AGENTS.md` e il ciclo di pubblicazione, senza rileggere i gate storici del go-live a ogni promozione. Rifiuta le sigle delle milestone fuori da archivio e registro. Non impone un tracker separato, un grafo dei task verificato dallo script o ID consecutivi. `--assets` aggiunge la verifica degli originali secondo il manifest. Comandi e gate attuali sono in `package.json` e [Agent Setup](docs/operations/AGENT_SETUP.md); il percorso di pubblicazione è in [RELEASE](docs/operations/RELEASE.md).

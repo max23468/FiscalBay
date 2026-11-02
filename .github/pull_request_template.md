@@ -4,10 +4,10 @@ Descrivi il problema e il comportamento risultante.
 
 Riporta i controlli pertinenti, il loro esito e gli eventuali limiti.
 
-## Impatto sul piano
+## Impatto sui documenti
 
-Aggiornato / non necessario, con motivo. Aggiorna il Master Plan nella stessa PR
-se cambiano requisiti, checkpoint, stato dei task, avanzamento significativo o questioni aperte.
+Aggiornato / non necessario, con motivo. Aggiorna requisiti e roadmap nella stessa PR
+se cambiano requisiti, stato dei task o questioni aperte.
 Le prove dell'intervento restano nella PR, nella CI e nelle ricevute applicabili.
 
 Se la PR aggiunge migration non additive, dopo l'esame aggiungi qui la riga

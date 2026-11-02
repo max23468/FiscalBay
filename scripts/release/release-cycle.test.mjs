@@ -487,8 +487,8 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     assert.equal(independentBase(["e2e/stores.spec.ts"], ["e2e/orders.spec.ts"]), true);
   });
 
-  it("non considera sovrapposti piano, registro e changelog", () => {
-    const shared = ["docs/MASTER_PLAN.md", "docs/DECISION_REGISTER.md", "CHANGELOG.md"];
+  it("non considera sovrapposti roadmap, registro e changelog", () => {
+    const shared = ["docs/ROADMAP.md", "docs/decisions/DECISION_REGISTER.md", "CHANGELOG.md"];
     assert.equal(independentBase(["app/a.ts", ...shared], ["app/b.ts", ...shared]), true);
     assert.equal(independentBase(["app/a.ts", ...shared], ["app/a.ts", ...shared]), false);
     assert.equal(independentBase(["AGENTS.md"], ["AGENTS.md"]), false);
