@@ -98,7 +98,7 @@ describe("esito dei mutation test", () => {
 
   it("assegna a ogni modulo una parte per intervallo", async () => {
     const parts = { "app/a.server.ts": 1, "app/b.server.ts": 2 };
-    const shardsOf = async (file) => Array.from({ length: parts[file] }, () => ({}));
+    const shardsOf = async (file) => Array.from({ length: parts[file] }, () => ({ mutants: 1 }));
     assert.deepEqual(await mutationJobs(Object.keys(parts), shardsOf), {
       include: [
         { target: "app/a.server.ts", shard: "1/1" },
@@ -107,6 +107,21 @@ describe("esito dei mutation test", () => {
       ],
     });
     assert.deepEqual(await mutationJobs([], shardsOf), { include: [] });
+  });
+
+  it("avvia per prime le parti con più mutanti per test", async () => {
+    const mutants = { "app/a.server.ts": [90], "app/b.server.ts": [10, 150] };
+    const tests = { "app/a.server.ts": 2, "app/b.server.ts": 20 };
+    const { include } = await mutationJobs(
+      Object.keys(mutants),
+      async (file) => mutants[file].map((count) => ({ mutants: count })),
+      (file) => tests[file],
+    );
+    assert.deepEqual(include, [
+      { target: "app/b.server.ts", shard: "2/2" },
+      { target: "app/b.server.ts", shard: "1/2" },
+      { target: "app/a.server.ts", shard: "1/1" },
+    ]);
   });
 
   it("prova ogni modulo con i test che lo importano, anche indirettamente", () => {

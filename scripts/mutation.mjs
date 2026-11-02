@@ -248,21 +248,36 @@ export function shardRanges(mutants, shards, lastLine) {
 export async function moduleShards(file) {
   const mutants = await mutantLines(file);
   const lastLine = readFileSync(file, "utf8").split("\n").length;
-  return shardRanges(mutants, Math.max(1, Math.ceil(mutants.length / mutantsPerShard)), lastLine);
+  return shardRanges(
+    mutants,
+    Math.max(1, Math.ceil(mutants.length / mutantsPerShard)),
+    lastLine,
+  ).map((range) => ({
+    ...range,
+    mutants: mutants.filter(({ start, end }) => start >= range.start && end <= range.end).length,
+  }));
 }
 
-/** Job della matrice: una parte per intervallo di ogni modulo. */
-export async function mutationJobs(targets, shardsOf = moduleShards) {
+/**
+ * Job della matrice, una parte per intervallo di ogni modulo. GitHub li avvia in quest'ordine:
+ * i più pesanti, mutanti per test che coprono il modulo, entrano per primi nei posti disponibili.
+ */
+export async function mutationJobs(targets, shardsOf = moduleShards, testsOf = () => 1) {
   const jobs = await Promise.all(
     targets.map(async (target) => {
-      const shards = (await shardsOf(target)).length;
-      return Array.from({ length: shards }, (_, index) => ({
-        target,
-        shard: `${index + 1}/${shards}`,
+      const shards = await shardsOf(target);
+      return shards.map(({ mutants }, index) => ({
+        job: { target, shard: `${index + 1}/${shards.length}` },
+        weight: mutants * testsOf(target),
       }));
     }),
   );
-  return { include: jobs.flat() };
+  return {
+    include: jobs
+      .flat()
+      .sort((first, second) => second.weight - first.weight)
+      .map(({ job }) => job),
+  };
 }
 
 /** Matrice dei job: JSON già pronto, file indicati o tutti i moduli critici. */
@@ -362,7 +377,11 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       files.map(({ path: file }) => file),
     );
     console.log(`Moduli critici: ${matrix.target.join(", ") || "nessuno"}.`);
-    const jobs = await mutationJobs(matrix.target);
+    const jobs = await mutationJobs(
+      matrix.target,
+      moduleShards,
+      (target) => consumerTests(target, files).length,
+    );
     console.log(
       `Job: ${jobs.include.map(({ target, shard }) => `${target} ${shard}`).join(", ")}.`,
     );
