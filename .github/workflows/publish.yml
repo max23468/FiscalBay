@@ -153,8 +153,8 @@ jobs:
       - name: Install browsers
         timeout-minutes: 10
         run: pnpm exec playwright install --with-deps chromium webkit
-      # Ogni pagina una volta in due browser, sul dominio reale e prima del traffico: lingue,
-      # larghezze e temi sono già provati nella qualifica sulla stessa build Production.
+      # Ogni pagina una volta in due browser, sul dominio reale e prima del traffico: il resto è
+      # già certificato sul tree, e questa build differisce soltanto per il giorno.
       - name: Check Production public pages and preview exclusion
         env:
           E2E_BASE_URL: https://fiscalbay.it

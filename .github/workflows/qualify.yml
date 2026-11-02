@@ -151,18 +151,27 @@ jobs:
   # Browser e librerie di sistema dall'immagine ufficiale della versione di Playwright del manifest.
   browser:
     needs: [select, source, production]
-    if: ${{ !cancelled() && needs.select.result == 'success' && needs.production.result == 'success' && needs.source.result != 'failure' && needs.select.outputs.run-id == '' }}
+    if: ${{ !cancelled() && inputs.scope == 'full' && needs.select.result == 'success' && needs.production.result == 'success' && needs.source.result != 'failure' && needs.select.outputs.run-id == '' }}
     runs-on: ubuntu-26.04
     container:
       image: mcr.microsoft.com/playwright:v${{ needs.select.outputs.playwright }}-noble
       options: --ipc=host
-    # Una partizione della sorgente arriva a circa venti minuti sul runner.
+    # La sorgente prova tutto in otto partizioni. La build Production, senza dati di prova, apre
+    # una volta le pagine pubbliche: la sua configurazione non dipende da lingua, tema o larghezza.
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        kind: ${{ fromJSON(inputs.scope == 'full' && '["source", "production"]' || '["production"]') }}
-        shard: [1, 2, 3, 4]
+        kind: [source, production]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
+        exclude:
+          - { kind: production, shard: 2 }
+          - { kind: production, shard: 3 }
+          - { kind: production, shard: 4 }
+          - { kind: production, shard: 5 }
+          - { kind: production, shard: 6 }
+          - { kind: production, shard: 7 }
+          - { kind: production, shard: 8 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -185,14 +194,14 @@ jobs:
       - name: Qualify all selected pages and interactions
         env:
           E2E_PREBUILT: "1"
-          E2E_MATRIX: full
+          E2E_MATRIX: ${{ matrix.kind == 'source' && 'full' || 'single' }}
           # Come in ogni altra fase, una prova che riesce alla ripetizione resta segnalata.
           E2E_RETRIES: "1"
           E2E_RUN_ID: ${{ matrix.kind }}-${{ matrix.shard }}
           E2E_PRODUCTION: ${{ matrix.kind == 'production' && '1' || '' }}
           VITE_RELEASE_DAY: ${{ inputs.day }}
           KIND: ${{ matrix.kind }}
-          SHARD: ${{ matrix.shard }}/4
+          SHARD: ${{ matrix.shard }}/${{ matrix.kind == 'source' && 8 || 1 }}
           SKIP_PAGES: ${{ inputs.skip_pages }}
         run: |
           selection=()
@@ -220,7 +229,7 @@ jobs:
   certify:
     name: Candidate qualified
     needs: [select, source, production, browser, mutation]
-    if: ${{ !cancelled() && needs.select.result == 'success' && (needs.select.outputs.run-id != '' || ((needs.source.result == 'success' || needs.source.result == 'skipped') && needs.production.result == 'success' && needs.browser.result == 'success' && (needs.mutation.result == 'success' || needs.mutation.result == 'skipped'))) }}
+    if: ${{ !cancelled() && needs.select.result == 'success' && (needs.select.outputs.run-id != '' || ((needs.source.result == 'success' || needs.source.result == 'skipped') && needs.production.result == 'success' && (needs.browser.result == 'success' || inputs.scope != 'full') && (needs.mutation.result == 'success' || needs.mutation.result == 'skipped'))) }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     outputs:
@@ -242,24 +251,23 @@ jobs:
           github-token: ${{ github.token }}
       - run: node scripts/release/release.mjs verify --environment production
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: needs.select.outputs.run-id == ''
+        if: inputs.scope == 'full' && needs.select.outputs.run-id == ''
         with:
           pattern: candidate-browser-${{ github.run_id }}-*
           path: test-results/candidate/
       - name: Check complete browser evidence
-        if: needs.select.outputs.run-id == ''
+        if: inputs.scope == 'full' && needs.select.outputs.run-id == ''
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          KINDS: ${{ inputs.scope == 'full' && 'source,production' || 'production' }}
           SKIP_PAGES: ${{ inputs.skip_pages }}
           VITE_RELEASE_DAY: ${{ inputs.day }}
-        run: node scripts/browser-tests.mjs --check-evidence test-results/candidate --kinds "${KINDS}" --grep-invert "${SKIP_PAGES}"
+        run: node scripts/browser-tests.mjs --check-evidence test-results/candidate --grep-invert "${SKIP_PAGES}"
       - name: Preserve unstable tests
-        if: needs.select.outputs.run-id == ''
+        if: inputs.scope == 'full' && needs.select.outputs.run-id == ''
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ${{ inputs.scope == 'full' && 'flaky-tests' || 'production-flaky-tests' }}
+          name: flaky-tests
           overwrite: true
           path: test-results/candidate/flaky.json
           retention-days: 14
