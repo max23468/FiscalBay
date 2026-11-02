@@ -1,7 +1,10 @@
 name: Candidato
 
-# Qualifica completa della testa di `develop`, certificata per tree: `Promuovi` la riusa invece di
+# Qualifica completa di un commit di `develop`, certificata per tree: `Promuovi` la riusa invece di
 # scoprire i difetti del lotto all'ultimo passo. La pianificazione non occupa un runner in attesa.
+# Il titolo lega il ciclo al commit qualificato, anche se nel frattempo `develop` avanza.
+run-name: Candidato ${{ inputs.expected_sha || github.sha }}
+
 on:
   schedule:
     - cron: "*/5 * * * *"

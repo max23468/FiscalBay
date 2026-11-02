@@ -36,10 +36,11 @@ env:
 permissions:
   contents: read
 
-# Qualifiche CI in parallelo; merge e promozioni del coordinatore sono serializzati anche fra runner.
+# Qualifiche CI in parallelo; ciascun tipo di ciclo è serializzato anche fra runner. I merge verso
+# il test non aspettano una promozione, vincolata al proprio SHA.
 # Il ritiro non aspetta un ciclo in corso: `rollback.yml` condivide il gruppo con `publish.yml`.
 concurrency:
-  group: publication-cycle-${{ inputs.operation == 'rollback' && 'rollback' || 'release' }}
+  group: publication-cycle-${{ inputs.operation == 'rollback' && 'rollback' || inputs.operation == 'pr' && 'test' || 'release' }}
   cancel-in-progress: false
 
 jobs:
