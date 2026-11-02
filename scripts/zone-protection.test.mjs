@@ -113,7 +113,7 @@ describe("protezioni della zona", () => {
     assert.doesNotMatch(hsts, /includeSubDomains|preload/u);
     assert.equal(
       headerRule(live).action_parameters.headers["strict-transport-security"].value,
-      "max-age=300",
+      "max-age=86400",
     );
     assert.equal(rule.action_parameters.headers["x-frame-options"].value, "DENY");
     assert.ok(!("content-security-policy" in rule.action_parameters.headers));
@@ -243,7 +243,7 @@ describe("protezioni della zona", () => {
       ),
     };
     for (const name of ["page", "asset", "missing"])
-      liveState.responses[name].headers["strict-transport-security"] = "max-age=300";
+      liveState.responses[name].headers["strict-transport-security"] = "max-age=86400";
     const result = checkReadback(live, liveState);
     assert.equal(result.ok, true, JSON.stringify(result.checks));
     liveState.responses.www.headers.location = "https://fiscalbay.it/";

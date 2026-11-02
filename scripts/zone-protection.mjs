@@ -43,7 +43,7 @@ export const zonePlan = "free";
  * Il test parte da un giorno perché il suo host serve soltanto HTTPS dal bootstrap del dominio.
  */
 export const hstsStages = [300, 86_400, 604_800, 31_536_000];
-export const hstsStage = { test: 1, live: 0 };
+export const hstsStage = { test: 1, live: 1 };
 
 /** Header statici di ogni risposta degli host dell'ambiente; la CSP resta del Worker. */
 export const staticHeaders = {
