@@ -27,6 +27,8 @@ import {
 } from "./fixtures/stripe-fixtures";
 
 /** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
+// Chiave sintetica, priva di credenziali Stripe, usata soltanto dal provider finto.
+// react-doctor-disable-next-line react-doctor/no-secrets-in-client-code
 const liveKey = "sk_live_fiscalbay";
 
 describe("Rimborsi, dispute e cancellazioni finanziarie", () => {

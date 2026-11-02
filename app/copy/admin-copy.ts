@@ -200,6 +200,12 @@ const it = {
           "In questi negozi la maggior parte degli ordini recenti non ha codice fiscale né partita IVA: eBay potrebbe aver smesso di restituirli.",
         action: "Apri il negozio",
       },
+      lifetime_unallocated: {
+        title: "Lifetime pagato senza assegnazione",
+        consequence:
+          "Un pagamento richiede l'intervento dell'assistenza: il diritto non è stato assegnato.",
+        action: "Apri lo spazio",
+      },
       task_stalled: {
         title: "Lavori periodici fermi",
         consequence: "I lavori non si concludono: pulizia, rinnovi o invii restano indietro.",
@@ -272,6 +278,7 @@ const it = {
   workspace: {
     title: "Spazio",
     members: "Membri",
+    roles: { owner: "proprietario" } as Record<string, string>,
     profile: "Profilo",
     private: "Privato",
     business: "Azienda",
@@ -905,6 +912,11 @@ const en: AdminCopy = {
           "In these stores most recent orders have no tax code or VAT number: eBay may have stopped returning them.",
         action: "Open the store",
       },
+      lifetime_unallocated: {
+        title: "Lifetime payment without allocation",
+        consequence: "A payment needs support: access has not been granted.",
+        action: "Open the workspace",
+      },
       task_stalled: {
         title: "Periodic jobs stalled",
         consequence: "The jobs are not completing: cleanup, renewals or deliveries fall behind.",
@@ -978,6 +990,7 @@ const en: AdminCopy = {
   workspace: {
     title: "Space",
     members: "Members",
+    roles: { owner: "owner" } as Record<string, string>,
     profile: "Profile",
     private: "Private",
     business: "Business",

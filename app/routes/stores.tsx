@@ -30,7 +30,7 @@ import type { ActionResult, EbayEnvironment, StoreView } from "../view-models";
 import { serviceSetting } from "../domain/service-settings.server";
 import { logFailure } from "../errors";
 import { describeRequest, measure } from "../observability.server";
-import { issueTimingTicket } from "../page-timing.server";
+import { issueTimingTicket } from "../domain/page-timing.server";
 import { settle } from "../settle.server";
 import type { Route } from "./+types/stores";
 import { pageHeaders } from "../request-limits.server";
@@ -131,8 +131,6 @@ async function readStores({ request, params }: Route.LoaderArgs) {
       ebayDown: ebayCalls ? [...ebayOutages(statuses).keys()] : ebayEnvironments,
       ebayMaintenance: !ebayCalls,
       connectHref: localizedPath(language, storeLinkPath),
-      // Il modulo di assistenza esiste: la scorciatoia verso Supporto ha una meta.
-      settings: true,
       notificationSettings: telegram,
       subscriptionRenews: renews,
     },

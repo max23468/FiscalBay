@@ -21,7 +21,7 @@ import { taskPeriods } from "../app/domain/work-timing.ts";
 import { maxWindowHours, metricSql } from "../app/metrics-queries.ts";
 import { readAccount } from "./capacity.mjs";
 import { report, targetOf } from "./go-live.mjs";
-import { cfJson, d1Query } from "./lib/provider.mjs";
+import { cfJson, d1Query, modeOf } from "./lib/provider.mjs";
 import { literal } from "./recovery.mjs";
 
 /** Soglia di attenzione delle quote mensili incluse (§31). */
@@ -278,7 +278,7 @@ async function main() {
       hours: { type: "string", default: "24" },
     },
   });
-  if (!["test", "live"].includes(values.mode)) throw new Error("--mode accetta test o live.");
+  modeOf(values.mode);
   const hours = Number(values.hours);
   if (!Number.isInteger(hours) || hours < 1 || hours > maxWindowHours)
     throw new Error(`--hours fra 1 e ${maxWindowHours}`);

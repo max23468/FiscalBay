@@ -178,6 +178,7 @@ export async function recordErasure(
     SELECT ?1, ?2, ?4, ?3, ?5, ?6
     WHERE EXISTS (SELECT 1 FROM stripe_subscriptions WHERE customer_id = ?1 AND environment = ?2)
       OR EXISTS (SELECT 1 FROM lifetime_allocations WHERE customer_id = ?1)
+      OR EXISTS (SELECT 1 FROM billing_incidents WHERE customer_id = ?1 AND environment = ?2)
     ON CONFLICT DO NOTHING`)
     .bind(
       customerId,

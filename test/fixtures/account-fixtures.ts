@@ -73,3 +73,15 @@ export function emailLink(text: string): string {
 export function mailEnv(send = emailSender(), overrides: Partial<Env> = {}): Env {
   return { ...env, ...overrides, AUTH_EMAIL: { send } as SendEmail };
 }
+
+/** Sessione con password per gli account controllati dai test Auth. */
+export async function passwordSession(environment: Env, email: string, password: string) {
+  const response = await createAuth(environment).handler(
+    new Request("http://localhost:5173/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost:5173" },
+      body: JSON.stringify({ email, password }),
+    }),
+  );
+  return sessionCookie(response);
+}

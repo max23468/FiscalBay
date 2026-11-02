@@ -4,6 +4,7 @@ import {
   applyStripeEvent,
   openBillingPortal,
   reconcileBilling,
+  recordSupportErasure,
   stopRenewals,
 } from "../app/domain/billing.server";
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
@@ -12,7 +13,22 @@ import { accountCoverage, orderAllowance, startTrial } from "../app/domain/grant
 import { lifetimeContext, refundedShare, unusedCredit } from "../app/domain/lifetime.server";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { subscriptionView } from "../app/domain/plan-view.server";
-import { insertEntitlement, insertStore, now, resetDatabase } from "./fixtures/database-fixtures";
+import { listAnomalies } from "../app/domain/admin-operations.server";
+import { workspaceDetail } from "../app/domain/admin-directory.server";
+import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import {
+  recordUnallocatedLifetime,
+  resolveBillingIncident,
+  reconcileBillingIncidents,
+} from "../app/domain/billing-incidents.server";
+import { createBoundedStripeClient } from "../app/integrations/stripe.server";
+import {
+  insertEntitlement,
+  insertStore,
+  now,
+  resetDatabase,
+  insertWorkspace,
+} from "./fixtures/database-fixtures";
 import {
   workspace,
   buy,
@@ -24,6 +40,97 @@ import {
 } from "./fixtures/stripe-fixtures";
 
 describe("Lifetime e concessioni", () => {
+  it("deduplica gli incassi senza assegnazione, li mostra in console e rispetta cancellazione e retention", async () => {
+    const input = { sessionId: "cs_incidente", workspaceId: "w-a", customerId: "cus_incidente" };
+    await recordUnallocatedLifetime(env, input, new Date(now));
+    await recordUnallocatedLifetime(env, input, new Date(now));
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM billing_incidents").first("n")).toBe(1);
+    expect((await workspaceDetail(env, "w-a", new Date(now)))?.billingIncidents).toEqual([
+      { sessionId: "cs_incidente", customerId: "cus_incidente", openedAt: now, checkedAt: now },
+    ]);
+    expect(await workspaceDetail(env, "spazio-estraneo", new Date(now))).toBeNull();
+    await purgeExpiredRecords(env.DB, new Date(Date.parse(now) + 91 * 86_400_000));
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM billing_incidents").first("n")).toBe(1);
+    expect(
+      (await listAnomalies(env.DB, new Date(now))).find(
+        (row) => row.kind === "lifetime_unallocated",
+      ),
+    ).toMatchObject({ severity: "p1", count: 1, subjects: [{ id: "w-a", href: "spazi/w-a" }] });
+    await resolveBillingIncident(env.DB, input.sessionId, new Date(now));
+    expect(
+      (await listAnomalies(env.DB, new Date(now))).some(
+        (row) => row.kind === "lifetime_unallocated",
+      ),
+    ).toBe(false);
+    await purgeExpiredRecords(env.DB, new Date(Date.parse(now) + 91 * 86_400_000));
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM billing_incidents").first("n")).toBe(0);
+    await recordUnallocatedLifetime(env, input, new Date(now));
+    const stripe = stripeAccount();
+    stripe.state.deletedCustomers.push("cus_incidente");
+    expect(
+      await recordSupportErasure(
+        env,
+        {
+          workspaceId: "spazio-estraneo",
+          customerId: "cus_incidente",
+          actor: userId,
+          reason: "Richiesta verificata",
+        },
+        stripe.fetcher,
+        new Date(now),
+      ),
+    ).toBe("not_found");
+    expect(
+      await recordSupportErasure(
+        env,
+        {
+          workspaceId: "w-a",
+          customerId: "cus_incidente",
+          actor: userId,
+          reason: "Richiesta verificata",
+        },
+        stripe.fetcher,
+        new Date(now),
+      ),
+    ).toBe("done");
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM billing_incidents").first("n")).toBe(0);
+    await recordUnallocatedLifetime(env, input, new Date(now));
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM billing_incidents").first("n")).toBe(0);
+    await recordUnallocatedLifetime(env, { ...input, customerId: null }, new Date(now));
+    await env.DB.prepare("DELETE FROM workspaces WHERE id = 'w-a'").run();
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM billing_incidents").first("n")).toBe(0);
+  });
+
+  it("rilegge un incidente senza assegnare posti e lo chiude dopo il rimborso confermato", async () => {
+    const stripe = stripeAccount();
+    stripe.state.sessions.push({
+      id: "cs_incidente",
+      mode: "payment",
+      subscription: null,
+      status: "complete",
+      payment_status: "paid",
+      livemode: false,
+      metadata: { offer: "lifetime", workspace_id: "w-a" },
+    });
+    stripe.settle("cs_incidente", "paid");
+    const input = { sessionId: "cs_incidente", workspaceId: "w-a", customerId: null };
+    await recordUnallocatedLifetime(env, input, new Date(now));
+    const client = await createBoundedStripeClient("sk_test_fiscalbay", stripe.fetcher);
+    const tomorrow = new Date(Date.parse(now) + 86_400_000);
+    await reconcileBillingIncidents(env, client, tomorrow);
+    expect(
+      await env.DB.prepare("SELECT resolved_at FROM billing_incidents").first("resolved_at"),
+    ).toBeNull();
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM lifetime_allocations").first("n")).toBe(
+      0,
+    );
+    expect(stripe.writes).toEqual([]);
+    stripe.state.charges[0]!.refunds.push({ amount: 18178, status: "succeeded" });
+    await reconcileBillingIncidents(env, client, new Date(tomorrow.getTime() + 86_400_000));
+    expect(
+      await env.DB.prepare("SELECT resolved_at FROM billing_incidents").first("resolved_at"),
+    ).not.toBeNull();
+  });
   let userId: string;
   let cookie: string;
   const at = (iso: string) => new Date(iso);
@@ -222,12 +329,7 @@ describe("Lifetime e concessioni", () => {
     const stripe = stripeAccount();
     const other = await verifiedSession("lifetime-concorrente@example.invalid");
     await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-b', 'Altro', ?)",
-      ).bind(now),
-      env.DB.prepare(
-        "INSERT INTO workspace_members (workspace_id, user_id, role) VALUES ('w-b', ?, 'owner')",
-      ).bind(other.userId),
+      ...insertWorkspace({ id: "w-b", userId: other.userId, name: "Altro" }),
       insertStore({ id: "s-b", workspaceId: "w-b" }),
       env.DB.prepare(
         "INSERT INTO sync_state (store_id, last_success_at, updated_at) VALUES ('s-b', ?1, ?1)",
@@ -527,11 +629,7 @@ describe("Lifetime e concessioni", () => {
     stripe.settle("cs_lifetime_1", "paid");
     await event(stripe, "checkout.session.completed", "cs_lifetime_1");
     // Un omaggio di un altro spazio non dipende da questo pagamento.
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-b', 'Altro', ?)",
-      ).bind(now),
-    ]);
+    await env.DB.batch([...insertWorkspace({ id: "w-b", name: "Altro" })]);
     expect(
       await grantLifetimeConcession(env, {
         workspaceId: "w-b",
@@ -875,9 +973,7 @@ describe("Lifetime e concessioni", () => {
     });
     // A posti finiti l'omaggio non supera il tetto.
     await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-b', 'Altro', ?)",
-      ).bind(now),
+      ...insertWorkspace({ id: "w-b", name: "Altro" }),
       ...Array.from({ length: 19 }, (_, index) =>
         env.DB.prepare(`INSERT INTO lifetime_allocations (slot, status, activated_at, created_at)
           VALUES (?1, 'active', ?2, ?2)`).bind(index + 2, now),
@@ -890,9 +986,7 @@ describe("Lifetime e concessioni", () => {
     const stripe = stripeAccount();
     vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
     await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-b', 'Altro', ?)",
-      ).bind(now),
+      ...insertWorkspace({ id: "w-b", name: "Altro" }),
       env.DB.prepare(`INSERT INTO lifetime_allocations (slot, status, provider_reference,
           activated_at, created_at) VALUES (1, 'active', 'cs_sparita', ?1, ?1),
           (2, 'active', NULL, ?1, ?1)`).bind(now),

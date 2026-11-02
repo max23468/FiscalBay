@@ -1,5 +1,5 @@
-import { base64Url, derivedKey } from "./sealed.server";
-import type { TimedPage } from "./page-timing";
+import { base64Url, derivedKey } from "../sealed.server";
+import type { TimedPage } from "../page-timing";
 
 /**
  * Biglietti dei report del browser: la pagina misurata ne riceve uno dal proprio loader, firmato

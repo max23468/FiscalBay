@@ -22,8 +22,10 @@ import { recordDisputeOpened } from "./owner-notifications.server";
 import {
   closedSubscriptionStatuses,
   entitlementInForce,
+  isRenewingSubscription,
   lifetimeInForceSql,
   openSubscriptionStatuses,
+  renewingSubscriptionStatuses,
 } from "./grants.server";
 import {
   isLifetimeSession,
@@ -447,16 +449,19 @@ const pendingSql = `NOT EXISTS (SELECT 1 FROM workspace_entitlements e
   WHERE e.workspace_id = s.workspace_id AND julianday(e.starts_at) <= julianday(?1)
     AND (e.ends_at IS NULL OR julianday(?1) < julianday(e.ends_at)))`;
 
+/** Abbonamento dell'utente nell'ambiente che addebiterà ancora, salvo disdetta. */
+const renewableSubscriptionSql = `stripe_subscriptions s
+      JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
+      WHERE wm.user_id = ?1 AND s.environment = ?2 AND s.unavailable_at IS NULL
+        AND s.status IN (${sqlList(renewingSubscriptionStatuses)}) AND s.cancel_at_period_end = 0`;
+
 /**
  * Abbonamento rinnovabile dello spazio: periodo pagato in corso, o concessione che ne ha
  * rinviato il rinnovo, e nessuna disdetta.
  */
 async function renewingSubscription(db: D1Database, env: Env, userId: string, now: Date) {
   return db
-    .prepare(`SELECT s.id, s.workspace_id, s.price_generation FROM stripe_subscriptions s
-      JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
-      WHERE wm.user_id = ?1 AND s.environment = ?2 AND s.unavailable_at IS NULL
-        AND s.status IN ('active', 'trialing') AND s.cancel_at_period_end = 0
+    .prepare(`SELECT s.id, s.workspace_id, s.price_generation FROM ${renewableSubscriptionSql}
         AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = s.workspace_id
           AND e.source IN ('premium', 'admin') AND ${entitlementInForce("e", "?3")})
       ORDER BY julianday(s.current_period_start) DESC LIMIT 1`)
@@ -471,10 +476,7 @@ async function renewingSubscription(db: D1Database, env: Env, userId: string, no
  */
 export async function subscriptionRenews(db: D1Database, env: Env, userId: string) {
   const row = await db
-    .prepare(`SELECT 1 FROM stripe_subscriptions s
-      JOIN workspace_members wm ON wm.workspace_id = s.workspace_id
-      WHERE wm.user_id = ?1 AND s.environment = ?2 AND s.unavailable_at IS NULL
-        AND s.status IN ('active', 'trialing') AND s.cancel_at_period_end = 0 LIMIT 1`)
+    .prepare(`SELECT 1 FROM ${renewableSubscriptionSql} LIMIT 1`)
     .bind(userId, stripeEnvironment(env))
     .first();
   return !!row;
@@ -539,7 +541,7 @@ export async function changeSubscriptionPeriod(
       !owner.success ||
       owner.data.workspace_id !== local.workspace_id ||
       !item ||
-      !["active", "trialing"].includes(subscription.status) ||
+      !isRenewingSubscription(subscription.status) ||
       subscription.cancel_at_period_end ||
       subscription.cancel_at ||
       subscription.schedule
@@ -565,7 +567,12 @@ export async function changeSubscriptionPeriod(
         metadata: { ...subscription.metadata, offer: offers.offer },
       }),
     );
-    await reconcileSubscription(env, stripe, subscription.id, now);
+    // Il cambio su Stripe è avvenuto: una rilettura mancata la recuperano webhook e cron.
+    try {
+      await reconcileSubscription(env, stripe, subscription.id, now);
+    } catch (error) {
+      logFailure({ error, operation: "billing" });
+    }
     return "done";
   } catch (error) {
     logFailure({ error, operation: "billing" });
@@ -714,7 +721,8 @@ export async function recordSupportErasure(
   const customer = await env.DB.prepare(`SELECT ${erasedCustomerSql("?3")} AS erased
     WHERE EXISTS (SELECT 1 FROM stripe_subscriptions WHERE workspace_id = ?1
         AND environment = ?2 AND customer_id = ?3)
-      OR EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1 AND customer_id = ?3)`)
+      OR EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1 AND customer_id = ?3)
+      OR EXISTS (SELECT 1 FROM billing_incidents WHERE workspace_id = ?1 AND environment = ?2 AND customer_id = ?3)`)
     .bind(input.workspaceId, stripeEnvironment(env), input.customerId)
     .first<{ erased: number }>();
   if (!customer) return "not_found";

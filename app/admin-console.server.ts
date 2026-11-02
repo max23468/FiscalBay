@@ -72,8 +72,10 @@ import { logFailure } from "./errors";
 import { displayTimeZone, formatDate } from "./format";
 import type { Language } from "./i18n";
 import { sha256Hex } from "./sealed.server";
+import { agentTokenLabel } from "./domain/sessions.server";
+import { storeAuditTarget } from "./domain/admin-directory.server";
 import { wallInstant } from "./time";
-import { resumeStalledReceipts } from "./webhooks.server";
+import { resumeStalledReceipts } from "./domain/webhook-receipts.server";
 
 /**
  * Console amministrativa (§15): sezioni, letture e operazioni. Ogni richiesta rilegge la
@@ -117,11 +119,7 @@ async function agentAccess(request: Request, now: Date) {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith(`Bearer ${agentTokenPrefix}`) ? header.slice(7) : null;
   if (!token || token.length > 128) return null;
-  const row = await env.DB.prepare(`UPDATE admin_agent_tokens SET used_at = ?2
-      WHERE token_hash = ?1 AND revoked_at IS NULL RETURNING label`)
-    .bind(await sha256Hex(token), now.toISOString())
-    .first<{ label: string }>();
-  return row?.label ?? null;
+  return agentTokenLabel(env.DB, await sha256Hex(token), now);
 }
 
 /**
@@ -265,10 +263,7 @@ type Field = (name: string) => string;
  * adesso, riletto dal database, non quello indicato dal modulo.
  */
 async function storeTarget(storeId: string) {
-  const store = await env.DB.prepare("SELECT workspace_id FROM ebay_stores WHERE id = ?")
-    .bind(storeId)
-    .first<{ workspace_id: string }>();
-  return store ? `workspace:${store.workspace_id}:store:${storeId}` : `store:${storeId}`;
+  return storeAuditTarget(env.DB, storeId);
 }
 
 /** Campi del modulo che indicano l'oggetto dell'operazione, con il prefisso del registro. */

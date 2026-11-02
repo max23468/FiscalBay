@@ -1,10 +1,12 @@
 import { env } from "cloudflare:workers";
 import { z } from "zod";
 
+import { isSameOrigin } from "../account-area.server";
+import { postOnly } from "../error-response";
 import { readBounded } from "../integrations/http.server";
 import { pagePoint, writePoints } from "../metrics.server";
 import { maxTimingMs, serverPhases, timedPages } from "../page-timing";
-import { redeemTimingTicket } from "../page-timing.server";
+import { redeemTimingTicket } from "../domain/page-timing.server";
 import type { Route } from "./+types/page-timing";
 
 const duration = z.number().int().min(0).max(maxTimingMs);
@@ -23,10 +25,7 @@ const pageTimingSchema = z.strictObject({
 /** Un report valido occupa poche centinaia di byte. */
 const maxBytes = 1024;
 
-/** Il percorso riceve soltanto report: una lettura non ha contenuto. */
-export function loader() {
-  return new Response(null, { status: 405, headers: { allow: "POST" } });
-}
+export const loader = postOnly;
 
 /**
  * Misure del caricamento delle pagine dell'app inviate dal browser: scritte su Analytics Engine
@@ -35,8 +34,7 @@ export function loader() {
  * lasciano traccia.
  */
 export async function action({ request }: Route.ActionArgs) {
-  if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin)
-    return new Response(null, { status: 403 });
+  if (!isSameOrigin(request)) return new Response(null, { status: 403 });
   // Il limite vale anche per un invio a blocchi, senza lunghezza dichiarata.
   const body = await readBounded(request, maxBytes);
   if (!body) return new Response(null, { status: 413 });

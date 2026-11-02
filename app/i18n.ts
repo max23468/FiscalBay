@@ -3,6 +3,10 @@ import { currencyExponent } from "./money";
 export const languages = ["it", "en"] as const;
 export type Language = (typeof languages)[number];
 
+export function isLanguage(value: string): value is Language {
+  return (languages as readonly string[]).includes(value);
+}
+
 /** Formati di date, numeri e Paesi: l'inglese è britannico, come il copy. */
 export const locales: Record<Language, string> = { it: "it-IT", en: "en-GB" };
 

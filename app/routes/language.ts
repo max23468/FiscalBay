@@ -4,14 +4,11 @@ import { redirect } from "react-router";
 import { assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appBase, ordersPath } from "../app-links";
 import { parsePreference, savePreference } from "../domain/preferences.server";
-import { errorResponse } from "../error-response";
+import { errorResponse, postOnly } from "../error-response";
 import { localizedPath } from "../i18n";
 import type { Route } from "./+types/language";
 
-/** Il percorso riceve soltanto la scelta della lingua: una lettura non ha contenuto. */
-export function loader() {
-  return new Response(null, { status: 405, headers: { allow: "POST" } });
-}
+export const loader = postOnly;
 
 /**
  * Lingua dell'account: la scelta resta per le pagine successive e per i nuovi accessi, poi la

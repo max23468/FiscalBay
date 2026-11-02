@@ -7,12 +7,11 @@
  * Senza un deploy riuscito antenato di HEAD l'output resta vuoto e il gate completo.
  * Con `--production` indica il commit attivo in Production, base del lotto da promuovere.
  */
-import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { needsDeploy } from "./classify-changes.mjs";
-import { ghJson } from "./lib/provider.mjs";
+import { ghJson, isAncestor } from "./lib/provider.mjs";
 import { publicVersion, publicationRecord, receiptActive } from "./release/records.mjs";
 
 /** Prima run, dalla più recente, con il job di deploy test riuscito su un antenato di HEAD. */
@@ -86,14 +85,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const sha = comparisonBase(
     runs,
     (run) => api(`repos/${repository}/actions/runs/${run.id}/jobs?per_page=50`).jobs,
-    (commit) => {
-      try {
-        execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"]);
-        return true;
-      } catch {
-        return false;
-      }
-    },
+    isAncestor,
     needsDeploy,
   );
   if (sha) {

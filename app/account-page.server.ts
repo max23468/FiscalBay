@@ -21,6 +21,8 @@ import {
 } from "./security-actions.server";
 import { tooManyRequests } from "./area-actions.server";
 import { errorResponse, unavailableData } from "./error-response";
+import { isSameOrigin } from "./account-area.server";
+import { registeredUserExists } from "./domain/registration.server";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
 import { turnstileActions, turnstileField } from "./turnstile";
@@ -108,7 +110,7 @@ export async function accessAction(request: Request) {
   // se il caso non è il suo, conservando l'esito.
   const base = localizedPath(language, ordersPath);
   const access = localizedPath(language, accessPath);
-  if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
+  if (!isSameOrigin(request)) {
     return errorResponse(request, "FORBIDDEN");
   }
   const form = await request.formData();
@@ -231,9 +233,7 @@ export async function accessAction(request: Request) {
     // sessione: profilo e Termini si salvano solo per l'account appena creato. La sessione
     // nasce dal link di conferma, quindi la risposta è la stessa nei due casi.
     const { user } = await response.clone().json<{ user: { id: string } }>();
-    const created = await env.DB.prepare('SELECT 1 FROM "user" WHERE "id" = ?')
-      .bind(user.id)
-      .first();
+    const created = await registeredUserExists(env.DB, user.id);
     if (created) {
       await completeRegistration(env.DB, {
         userId: user.id,

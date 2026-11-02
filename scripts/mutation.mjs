@@ -38,6 +38,9 @@ const criticalShared = new Set([
   "app/orders/order-list.ts",
   "app/domain/work-timing.ts",
   "app/domain/subscription-offers.ts",
+  "app/domain/auth-attempts.server.ts",
+  "app/domain/deletion-steps.server.ts",
+  "app/domain/webhook-receipts.server.ts",
 ]);
 
 /**

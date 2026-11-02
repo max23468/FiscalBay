@@ -557,6 +557,7 @@ test.describe("abbonamento nel piano", () => {
         await open(previewPage, `${prefix}/anteprima/negozi/neg-vintage`, "cambio-rinnovo");
         await check(previewPage);
       } finally {
+        await preview.unrouteAll({ behavior: "wait" });
         await preview.close();
       }
     });

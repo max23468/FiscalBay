@@ -287,6 +287,7 @@ test.describe("area reale", () => {
         await profile.evaluate(() => window.dispatchEvent(new Event("focus")));
         await expect(profile).toHaveURL(/\/accesso$/);
       } finally {
+        await context.unrouteAll({ behavior: "wait" });
         await context.close();
       }
     });
@@ -490,6 +491,7 @@ test.describe("impostazioni", () => {
       // Come nell'area reale l'esito torna nell'indirizzo della categoria Account.
       await expect(page).toHaveURL(/\/anteprima\/impostazioni\/account\?accesso=password-link$/);
     } finally {
+      await context.unrouteAll({ behavior: "wait" });
       await context.close();
     }
   });
@@ -765,6 +767,7 @@ for (const language of ["it", "en"] as const) {
             .locator('input[name="email"]'),
         ).toBeVisible();
       } finally {
+        await context.unrouteAll({ behavior: "wait" });
         await context.close();
       }
     });

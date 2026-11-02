@@ -10,10 +10,10 @@ import { stopRenewals } from "./billing.server";
 import {
   consumeStepJob,
   deleteOrders,
-  lockUntil,
   orderBudget,
   resumeBatch,
   runToEnd,
+  claimStepJob,
 } from "./deletion-steps.server";
 import { deleteExportFiles } from "./export-files.server";
 import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.server";
@@ -230,36 +230,24 @@ export async function runAccountDeletion(
   budget = orderBudget,
 ): Promise<DeletionOutcome> {
   const at = now.toISOString();
-  const lock = lockUntil(now);
-  const job = await env.DB.prepare(
-    `UPDATE account_deletions SET locked_until = ?2
-      WHERE id = ?1 AND completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?3)
-      RETURNING user_id, workspace_id, requested_at, notice_sealed, notice_attempts,
-        renewals_stopped_at, renewals_blocked_at`,
-  )
-    .bind(id, lock, at)
-    .first<{
-      user_id: string;
-      workspace_id: string | null;
-      requested_at: string;
-      notice_sealed: string | null;
-      notice_attempts: number;
-      renewals_stopped_at: string | null;
-      renewals_blocked_at: string | null;
-    }>();
-  if (!job) {
-    const row = await env.DB.prepare("SELECT completed_at FROM account_deletions WHERE id = ?")
-      .bind(id)
-      .first<{ completed_at: string | null }>();
-    return !row ? "missing" : row.completed_at ? "done" : "busy";
-  }
-  // Rilascio e proroga valgono soltanto per il blocco ancora preso da questo passo.
-  const release = () =>
-    env.DB.prepare(
-      "UPDATE account_deletions SET locked_until = NULL WHERE id = ?1 AND locked_until = ?2",
-    )
-      .bind(id, lock)
-      .run();
+  const claim = await claimStepJob<{
+    user_id: string;
+    workspace_id: string | null;
+    requested_at: string;
+    notice_sealed: string | null;
+    notice_attempts: number;
+    renewals_stopped_at: string | null;
+    renewals_blocked_at: string | null;
+  }>(
+    env.DB,
+    "account_deletions",
+    `user_id, workspace_id, requested_at, notice_sealed, notice_attempts,
+      renewals_stopped_at, renewals_blocked_at`,
+    id,
+    now,
+  );
+  if ("outcome" in claim) return claim.outcome;
+  const { job, lock, release } = claim;
   // In attesa di Stripe o dell'email finale: il blocco resta fino al prossimo tentativo.
   const postpone = () =>
     env.DB.prepare(

@@ -15,7 +15,7 @@ import type { Route } from "./+types/whats-new";
 
 const kinds = Object.keys(whatsNewKinds) as WhatsNewKind[];
 
-// Il Supporto segue le Impostazioni: tessere neutre, l'icona distingue il gruppo.
+// Tessere neutre: l'icona distingue il tipo di novità.
 const kindIcons: Record<WhatsNewKind, typeof Sparkles> = {
   features: Sparkles,
   improvements: TrendingUp,

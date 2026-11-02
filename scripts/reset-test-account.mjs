@@ -30,6 +30,24 @@ function row(values) {
   return `(${values.map(quote).join(", ")})`;
 }
 
+/** Account sintetico con profilo, Termini, sessione, spazio e negozio, ricreato da zero. */
+function syntheticAccount(id, expires, now, workspace, store) {
+  return `DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
+      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
+      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
+        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
+        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
+        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
+      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
+      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', '${workspace}', '${now}');
+      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
+      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
+        VALUES ('${id}', '${id}', '${id}', '${now}', '${store}');`;
+}
+
 export async function resetStatements(password, now = new Date()) {
   const at = (offset) => new Date(now.getTime() + offset).toISOString();
   const iso = at(0);
@@ -224,20 +242,7 @@ async function main() {
       "stores-premium",
     ]) {
       const value = `VALORE-SINTETICO-${id.split("-")[1]}`;
-      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
-      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
-        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
-        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
-        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
-      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
-        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
-      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
-        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
-      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo sblocco', '${now}');
-      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
-      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
-        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio sblocco');
+      statements.push(`${syntheticAccount(id, expires, now, "Collaudo sblocco", "Negozio sblocco")}
       INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
         SELECT '${id}' || suffix, '${id}', '${id}' || suffix, '${now}', '${now}', 'EUR', 100
         FROM (SELECT '' AS suffix UNION ALL SELECT '-2' UNION ALL SELECT '-3' UNION ALL SELECT '-4');
@@ -368,20 +373,7 @@ async function main() {
       const id = `subscription-${state}`;
       const start = new Date(Date.now() + subscription.start).toISOString();
       const end = new Date(Date.now() + subscription.start + period).toISOString();
-      statements.push(`DELETE FROM workspaces WHERE id = '${id}'; DELETE FROM "user" WHERE id = '${id}';
-      INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
-        SELECT '${id}', name, '${id}@example.invalid', 1, "createdAt", "updatedAt" FROM "user" WHERE id = ${quote(testAccount.userId)};
-      INSERT INTO user_profiles (user_id, first_name, last_name, account_type, company_name, updated_at)
-        SELECT '${id}', first_name, last_name, account_type, company_name, updated_at
-        FROM user_profiles WHERE user_id = ${quote(testAccount.userId)};
-      INSERT INTO terms_acceptances SELECT '${id}', terms_version, privacy_version, language, accepted_at
-        FROM terms_acceptances WHERE user_id = ${quote(testAccount.userId)};
-      INSERT INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
-        VALUES ('${id}', '${id}', '${id}', '${expires}', '${now}', '${now}');
-      INSERT INTO workspaces (id, name, created_at) VALUES ('${id}', 'Collaudo abbonamento', '${now}');
-      INSERT INTO workspace_members VALUES ('${id}', '${id}', 'owner');
-      INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at, display_name)
-        VALUES ('${id}', '${id}', '${id}', '${now}', 'Negozio abbonamento');
+      statements.push(`${syntheticAccount(id, expires, now, "Collaudo abbonamento", "Negozio abbonamento")}
       INSERT INTO sync_state (store_id, polled_at, last_success_at, updated_at)
         VALUES ('${id}', '${now}', '${now}', '${now}');
       INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id, offer,

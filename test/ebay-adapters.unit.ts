@@ -1,3 +1,4 @@
+import { UpstreamError } from "../app/integrations/http.server";
 import { describe, expect, it, vi } from "vitest";
 import { escapeMarkup } from "../app/markup";
 import {
@@ -434,6 +435,12 @@ describe("acquisti Trading", () => {
       expect.objectContaining({ failure: "rejected", details: { providerCode: undefined } }),
     );
   });
+  it("un ordine Fulfillment senza totale è una risposta non valida", () => {
+    expect(() => fulfillmentObservation({ orderId: "1" }, "2026-09-01T00:00:00.000Z")).toThrow(
+      UpstreamError,
+    );
+  });
+
   it("un identificativo malformato lascia importabile l'ordine", () => {
     const result = parseTradingOrders(
       xml.replace(

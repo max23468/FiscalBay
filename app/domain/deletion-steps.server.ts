@@ -17,6 +17,45 @@ const lockMilliseconds = 15 * 60_000;
  */
 export const lockUntil = (now: Date) => new Date(now.getTime() + lockMilliseconds).toISOString();
 
+/** Tabelle delle richieste a passi, con le colonne `completed_at` e `locked_until`. */
+type StepTable = "account_deletions" | "ebay_account_deletions";
+
+/**
+ * Prende il blocco di una richiesta non conclusa e ne restituisce le `columns`, oppure
+ * l'esito se non è lavorabile. Il rilascio vale soltanto per il blocco ancora preso da questo passo.
+ */
+export async function claimStepJob<Job>(
+  db: D1Database,
+  table: StepTable,
+  columns: string,
+  id: string,
+  now: Date,
+): Promise<
+  | { outcome: "missing" | "done" | "busy" }
+  | { job: Job; lock: string; release: () => Promise<unknown> }
+> {
+  const lock = lockUntil(now);
+  const job = await db
+    .prepare(`UPDATE ${table} SET locked_until = ?2
+      WHERE id = ?1 AND completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?3)
+      RETURNING ${columns}`)
+    .bind(id, lock, now.toISOString())
+    .first<Job>();
+  if (!job) {
+    const row = await db
+      .prepare(`SELECT completed_at FROM ${table} WHERE id = ?`)
+      .bind(id)
+      .first<{ completed_at: string | null }>();
+    return { outcome: !row ? "missing" : row.completed_at ? "done" : "busy" };
+  }
+  const release = () =>
+    db
+      .prepare(`UPDATE ${table} SET locked_until = NULL WHERE id = ?1 AND locked_until = ?2`)
+      .bind(id, lock)
+      .run();
+  return { job, lock, release };
+}
+
 /** Ordini eliminati per istruzione e istruzioni per giro, poi il lavoro riparte dalla coda. */
 export const orderBudget = { batch: 200, batches: 25 };
 

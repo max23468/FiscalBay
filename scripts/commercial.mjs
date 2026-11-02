@@ -23,7 +23,7 @@ import { parseArgs } from "node:util";
 
 import { baseFreeQuota, lifetimeSlots, openPromotionEnd } from "../app/catalog.ts";
 import { subscriptionOffers } from "../app/domain/subscription-offers.ts";
-import { d1Query } from "./lib/provider.mjs";
+import { d1Query, modeOf } from "./lib/provider.mjs";
 import { literal, targetOf as databaseOf } from "./recovery.mjs";
 import { checkAccount, cliRequest, report, targetOf as accountOf } from "./stripe-account.mjs";
 
@@ -415,7 +415,7 @@ async function main() {
       "project-name": { type: "string" },
     },
   });
-  if (!["test", "live"].includes(values.mode)) throw new Error("--mode accetta test o live.");
+  modeOf(values.mode);
   const account = accountOf(values.mode);
   const { database } = databaseOf(values.mode);
   const request = cliRequest({ live: account.live, project: values["project-name"] });

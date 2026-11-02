@@ -10,6 +10,16 @@ export interface AuthSession {
   user: { id: string; admin?: boolean };
 }
 
+/** Token tecnico della console: l'etichetta esiste soltanto se il token non è revocato. */
+export async function agentTokenLabel(db: D1Database, tokenHash: string, now: Date) {
+  const row = await db
+    .prepare(`UPDATE admin_agent_tokens SET used_at = ?2
+    WHERE token_hash = ?1 AND revoked_at IS NULL RETURNING label`)
+    .bind(tokenHash, now.toISOString())
+    .first<{ label: string }>();
+  return row?.label ?? null;
+}
+
 /**
  * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il
  * browser con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.

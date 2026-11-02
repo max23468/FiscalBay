@@ -8,7 +8,7 @@ import {
   priceGeneration,
   type PremiumOffer,
 } from "./catalog";
-import { purchasesOpenSql } from "./domain/admission-state.server";
+import { readPurchasesOpen } from "./domain/admission-state.server";
 import { currentFreePromotion } from "./domain/grants.server";
 import { readSession } from "./domain/sessions.server";
 import { logFailure, tracePhase } from "./errors";
@@ -45,7 +45,7 @@ export async function publicPage(request: Request) {
  */
 export async function siteListing(language: Language) {
   const [admission, freePromotion] = await Promise.all([
-    env.DB.prepare(`SELECT ${purchasesOpenSql} AS open`).first<{ open: number }>(),
+    readPurchasesOpen(env.DB),
     currentFreePromotion(env.DB),
   ]);
   const prices = Object.fromEntries(

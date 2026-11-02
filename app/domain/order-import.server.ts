@@ -448,75 +448,34 @@ async function taxStatements(
   ];
 }
 
-/**
- * Registra una lettura dell'ordine nello stesso negozio, con un UUID interno stabile.
- *
- * L'ordine si riconosce dall'identificativo esterno già visto (qualunque fonte) oppure, se è
- * nuovo, dalle identità stabili delle righe. Più provvisori con righe disgiunte interamente
- * contenute nel definitivo confluiscono nello stesso UUID; gli originali conservano storico
- * e grant. Un provvisorio tardivo interamente contenuto si aggancia al definitivo. Identità
- * mancanti, sovrapposizioni parziali e candidati concorrenti restano anomalie esplicite.
- *
- * I campi dell'ordine appartengono a Fulfillment quando l'ha letto; un provvisorio non
- * sovrascrive mai un definitivo. Gli identificativi fiscali conservano la propria fonte e
- * ogni variazione effettiva resta nello storico. Una lettura più vecchia di quella già
- * applicata per la stessa fonte viene scartata prima di ogni scrittura.
- */
-export async function recordOrderObservation(
-  db: D1Database,
-  target: { storeId: string; consentGrantedAt: string; observedAt: string },
-  input: OrderObservation,
-): Promise<OrderObservationResult> {
-  const observation = orderObservationSchema.parse(input);
-  const observedAt = utc.parse(target.observedAt);
-  if (
-    new Set(observation.items.map((item) => item.lineItemId)).size !== observation.items.length ||
-    new Set(observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []))).size !==
-      observation.items.filter((item) => item.stableKey).length
-  )
-    throw new DuplicateLineIdentity();
-  const scope = [target.storeId, target.consentGrantedAt] as const;
-
-  const direct = await findDirect(db, target.storeId, observation);
-  if (direct?.source_modified && observation.lastModifiedTime < direct.source_modified) {
-    return staleObservation();
-  }
-  const { matched, absorbed, related, overlappingIds } = await matchOrder(
+/** Istruzioni di ordine, articoli e assorbimenti, senza eseguirle fuori dal batch autorizzato. */
+function prepareOrderWrites(input: {
+  db: D1Database;
+  scope: readonly [string, string];
+  orderId: string;
+  observation: Observation;
+  matched: StoredOrder | null;
+  absorbed: StoredOrder[];
+  ownsFields: boolean;
+  takeover: boolean;
+  stored: StoredItem[];
+  guards: { guarded: string; orderExists: string };
+  checkAt: string;
+}) {
+  const {
     db,
-    target.storeId,
-    observation,
-    direct,
-  );
-  const absorbedIds = absorbed.map((order) => order.id);
-  const orderId = matched?.id ?? crypto.randomUUID();
-  const { takeover, ownsFields } = fieldOwnership(observation, matched);
-  // La sincronizzazione serializza gli articoli del negozio; questa è l'ultima lettura
-  // preparatoria, prima di fissare l'istante con cui autorizzare le scritture.
-  const { results: stored } =
-    ownsFields && matched
-      ? await db
-          .prepare(
-            `SELECT id, line_item_id, stable_key, sku, title, quantity, total_minor, currency,
-                  image_url
-             FROM order_items WHERE order_id = ?`,
-          )
-          .bind(orderId)
-          .all<StoredItem>()
-      : { results: [] as StoredItem[] };
-  const tax = observation.taxIdentifiers;
-  const taxModified = taxVersion(observation);
-  const checkAt = deadlineCheckAt(observedAt);
-  const guarded = writeGuard({
-    observation,
+    scope,
     orderId,
-    absorbedIds,
-    overlappingIds,
-    taxModified,
-    observedAt,
-    at: checkAt,
-  });
-  const orderExists = `${guarded} AND EXISTS (SELECT 1 FROM orders WHERE id = ?4)`;
-  const guards = { guarded, orderExists };
+    observation,
+    matched,
+    absorbed,
+    ownsFields,
+    takeover,
+    stored,
+    guards,
+    checkAt,
+  } = input;
+  const { guarded, orderExists } = guards;
   const buyer = keepMaskedValues(observation.buyer, matched?.buyer_json ?? null);
   const orderValues = [
     observation.externalOrderId,
@@ -613,23 +572,27 @@ export async function recordOrderObservation(
   }
   if (ownsFields) add(...itemStatements(db, scope, orderId, observation.items, stored, guards));
   const orderWritesEnd = statements.length;
-  if (ownsFields) {
-    // Testo cercabile dagli stessi campi appena scritti: derivato, non è una variazione.
-    const searchText = orderSearchText({
-      ebayOrderId: observation.externalOrderId,
-      buyerName: buyer.name,
-      buyerUsername: buyer.username,
-      items: observation.items,
-    });
-    add(
-      db
-        .prepare(`UPDATE orders SET search_text = ?3 WHERE id = ?4
-      AND search_text IS NOT ?3 AND ${orderExists}`)
-        .bind(...scope, searchText, orderId),
-    );
-  }
+  return { statements, buyer, consentCheck, guardCheck, orderWrites, orderWritesEnd };
+}
 
-  // Identificativi correnti prima e dopo le variazioni, per contare quelle effettive.
+/** Snapshot e scritture fiscali entrano nello stesso batch dell'ordine. */
+async function prepareFiscalWrites(input: {
+  db: D1Database;
+  scope: readonly [string, string];
+  orderId: string;
+  absorbedIds: string[];
+  observation: Observation;
+  matched: StoredOrder | null;
+  guards: { guarded: string; orderExists: string };
+  observedAt: string;
+  taxModified: string | null;
+}) {
+  const { db, scope, orderId, absorbedIds, observation, matched, guards, observedAt, taxModified } =
+    input;
+  const { orderExists } = guards;
+  const tax = observation.taxIdentifiers;
+  const statements: D1PreparedStatement[] = [];
+  const add = (...added: D1PreparedStatement[]) => statements.push(...added) - added.length;
   const taxSnapshot = db
     .prepare(
       `SELECT identifier_type AS type, issuing_country AS issuingCountry, value
@@ -660,6 +623,127 @@ export async function recordOrderObservation(
         ),
     );
   }
+  return { statements, taxSnapshots };
+}
+
+/**
+ * Registra una lettura dell'ordine nello stesso negozio, con un UUID interno stabile.
+ *
+ * L'ordine si riconosce dall'identificativo esterno già visto (qualunque fonte) oppure, se è
+ * nuovo, dalle identità stabili delle righe. Più provvisori con righe disgiunte interamente
+ * contenute nel definitivo confluiscono nello stesso UUID; gli originali conservano storico
+ * e grant. Un provvisorio tardivo interamente contenuto si aggancia al definitivo. Identità
+ * mancanti, sovrapposizioni parziali e candidati concorrenti restano anomalie esplicite.
+ *
+ * I campi dell'ordine appartengono a Fulfillment quando l'ha letto; un provvisorio non
+ * sovrascrive mai un definitivo. Gli identificativi fiscali conservano la propria fonte e
+ * ogni variazione effettiva resta nello storico. Una lettura più vecchia di quella già
+ * applicata per la stessa fonte viene scartata prima di ogni scrittura.
+ */
+export async function recordOrderObservation(
+  db: D1Database,
+  target: { storeId: string; consentGrantedAt: string; observedAt: string },
+  input: OrderObservation,
+): Promise<OrderObservationResult> {
+  const observation = orderObservationSchema.parse(input);
+  const observedAt = utc.parse(target.observedAt);
+  if (
+    new Set(observation.items.map((item) => item.lineItemId)).size !== observation.items.length ||
+    new Set(observation.items.flatMap((item) => (item.stableKey ? [item.stableKey] : []))).size !==
+      observation.items.filter((item) => item.stableKey).length
+  )
+    throw new DuplicateLineIdentity();
+  const scope = [target.storeId, target.consentGrantedAt] as const;
+
+  const direct = await findDirect(db, target.storeId, observation);
+  if (direct?.source_modified && observation.lastModifiedTime < direct.source_modified) {
+    return staleObservation();
+  }
+  const { matched, absorbed, related, overlappingIds } = await matchOrder(
+    db,
+    target.storeId,
+    observation,
+    direct,
+  );
+  const absorbedIds = absorbed.map((order) => order.id);
+  const orderId = matched?.id ?? crypto.randomUUID();
+  const { takeover, ownsFields } = fieldOwnership(observation, matched);
+  // La sincronizzazione serializza gli articoli del negozio; questa è l'ultima lettura
+  // preparatoria, prima di fissare l'istante con cui autorizzare le scritture.
+  const { results: stored } =
+    ownsFields && matched
+      ? await db
+          .prepare(
+            `SELECT id, line_item_id, stable_key, sku, title, quantity, total_minor, currency,
+                  image_url
+             FROM order_items WHERE order_id = ?`,
+          )
+          .bind(orderId)
+          .all<StoredItem>()
+      : { results: [] as StoredItem[] };
+  const taxModified = taxVersion(observation);
+  const checkAt = deadlineCheckAt(observedAt);
+  const guarded = writeGuard({
+    observation,
+    orderId,
+    absorbedIds,
+    overlappingIds,
+    taxModified,
+    observedAt,
+    at: checkAt,
+  });
+  const orderExists = `${guarded} AND EXISTS (SELECT 1 FROM orders WHERE id = ?4)`;
+  const guards = { guarded, orderExists };
+  const { statements, buyer, consentCheck, guardCheck, orderWrites, orderWritesEnd } =
+    prepareOrderWrites({
+      db,
+      scope,
+      orderId,
+      observation,
+      matched,
+      absorbed,
+      ownsFields,
+      takeover,
+      stored,
+      guards,
+      checkAt,
+    });
+  const add = (...added: D1PreparedStatement[]) => statements.push(...added) - added.length;
+  if (ownsFields) {
+    // Testo cercabile dagli stessi campi appena scritti: derivato, non è una variazione.
+    const searchText = orderSearchText({
+      ebayOrderId: observation.externalOrderId,
+      buyerName: buyer.name,
+      buyerUsername: buyer.username,
+      items: observation.items,
+    });
+    add(
+      db
+        .prepare(`UPDATE orders SET search_text = ?3 WHERE id = ?4
+      AND search_text IS NOT ?3 AND ${orderExists}`)
+        .bind(...scope, searchText, orderId),
+    );
+  }
+
+  const fiscal = await prepareFiscalWrites({
+    db,
+    scope,
+    orderId,
+    absorbedIds,
+    observation,
+    matched,
+    guards,
+    observedAt,
+    taxModified,
+  });
+  const fiscalOffset = add(...fiscal.statements);
+  const taxSnapshots = fiscal.taxSnapshots
+    ? {
+        before: fiscalOffset + fiscal.taxSnapshots.before,
+        after: fiscalOffset + fiscal.taxSnapshots.after,
+      }
+    : null;
+
   if (
     observation.source === "trading" &&
     (ownsFields ||

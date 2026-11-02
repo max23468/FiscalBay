@@ -383,7 +383,7 @@ describe("cancellazione dell'account", () => {
       params: { sezione: "privacy" },
     });
     expect(page).toMatchObject({
-      page: { services: { accountDeletion: true }, security: { deletionReady: true } },
+      page: { security: { deletionReady: true } },
     });
     expect(await request("altro@example.invalid")).toMatchObject({
       data: { ok: false, notice: "L’indirizzo non corrisponde a quello dell’account." },
@@ -798,7 +798,7 @@ describe("cancellazione dell'account", () => {
     expect(await leftovers(userId)).toMatchObject({ user: 1, sessions: 1, profile: 1 });
     expect(
       await routeData(settingsLoader, privacy, { cookie, params: { sezione: "privacy" } }),
-    ).toMatchObject({ page: { services: { accountDeletion: true } } });
+    ).toMatchObject({ page: { security: {} } });
     // Il link è consumato: anche con una sessione nuova e valida dello stesso utente non vale.
     const signIn = await handleAuthRequest(
       new Request(`${testOrigin}/api/auth/sign-in/email`, {

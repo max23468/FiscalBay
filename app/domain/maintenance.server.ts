@@ -22,6 +22,11 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     // scaduti dall'indice di `purge_after`.
     db.prepare("DELETE FROM orders WHERE +merged_into IS NULL AND purge_after <= ?").bind(at),
     db.prepare("DELETE FROM webhook_receipts WHERE expires_at <= ?").bind(at),
+    db
+      .prepare(
+        "DELETE FROM billing_incidents WHERE (resolved_at IS NOT NULL AND julianday(resolved_at) < julianday(?, '-90 days')) OR customer_id IN (SELECT customer_id FROM stripe_customer_erasures)",
+      )
+      .bind(at),
     db.prepare('DELETE FROM "session" WHERE "expiresAt" <= ?').bind(at),
     db.prepare('DELETE FROM "verification" WHERE "expiresAt" <= ?').bind(at),
     // Le finestre più lunghe durano un'ora.

@@ -323,6 +323,20 @@ describe("superficie pubblica", () => {
     assert.ok(results.some(({ item }) => item === "anteprima assente"));
   });
 
+  it("rifiuta una sitemap con le sole home o priva delle pagine di una lingua", () => {
+    for (const paths of [
+      ["/", "/en"],
+      ["/", "/en", "/prezzi"],
+      ["/", "/en", "/en/pricing"],
+    ]) {
+      const responses = surface(live);
+      responses.sitemap.body = paths.map((path) => `<loc>${live.origin}${path}</loc>`).join("");
+      assert.ok(
+        failing(checkSurface(live, responses)).includes("sitemap con home e pagine in due lingue"),
+      );
+    }
+  });
+
   it("passa sul test con dominio chiuso e pagine noindex", () => {
     const results = checkSurface(test, surface(test));
     assert.deepEqual(failing(results), []);

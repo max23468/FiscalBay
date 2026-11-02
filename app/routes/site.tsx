@@ -79,9 +79,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     language,
     signedIn: Boolean(session),
     origin,
-    baseFreeQuota,
-    freePromotion,
-    purchasesOpen,
     copy: {
       ...copy,
       // Come in Prezzi: importo grande, periodo con l'IVA esclusa sotto e l'annuale in evidenza.

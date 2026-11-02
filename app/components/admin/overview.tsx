@@ -8,6 +8,7 @@ import type { AdminCopy } from "../../copy/admin-copy";
 import type { Anomaly, Severity } from "../../domain/admin-operations.server";
 import { AuditList } from "./governance";
 import { ActionForm, Panel, Stat, StatGrid } from "./kit";
+import { subjectLabel } from "./subject-label";
 import { useAdmin } from "./use-admin";
 
 const severityTone: Record<Severity, "danger" | "warning" | "neutral"> = {
@@ -27,11 +28,7 @@ function subjectName(id: string, kind: Anomaly["kind"], t: AdminCopy) {
     return t.labels.tasks[id as keyof AdminCopy["labels"]["tasks"]] ?? id;
   if (kind === "receipts_stalled")
     return t.labels.providers[id as keyof AdminCopy["labels"]["providers"]] ?? id;
-  if (kind === "ebay_quota" || kind === "ebay_down")
-    return id
-      .replace("production", "Production")
-      .replace("sandbox", "Sandbox")
-      .replaceAll(":", " · ");
+  if (kind === "ebay_quota" || kind === "ebay_down") return subjectLabel(id);
   if (kind === "service_off")
     return t.switches.names[id as keyof AdminCopy["switches"]["names"]] ?? id;
   if (kind === "audit_unrecorded") return t.labels.operations[id] ?? id;

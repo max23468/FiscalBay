@@ -1,8 +1,7 @@
 # Audit UI/UX di FiscalBay 2.0 sul dominio test
 
 **Stato:** documento mantenuto: ogni correzione si registra in [§15](#15-correzioni-verificate)
-dopo la verifica su Chrome live. Resta in `docs/archive/` perché `verify-docs` esclude la
-cartella: gli identificativi D1-D5 dei problemi coincidono con i codici delle decisioni
+dopo la verifica su Chrome live.
 **Data:** 3 ottobre 2026
 **Ambiente:** Worker `fiscalbay-test` su `test.fiscalbay.it`, codice di `develop`
 a `de1fcab`; la diagnostica dell'anteprima riporta `2.0.0 (anteprima)`
@@ -40,7 +39,7 @@ raccolte. **Positivo** segnala comportamenti verificati e corretti.
 ## Verifica di implementazione del 4 ottobre 2026
 
 La colonna aggiunta fotografa le prove di questa ripresa; i findings originali
-restano invariati. Non sostituisce lo stato canonico di `BACKLOG.md`.
+restano invariati. Non sostituisce l'[avanzamento](../MASTER_PLAN.md#stato).
 Codice consultato: `develop dc0a884`; confrontati i cambiamenti da `de1fcab`
 e le convenzioni del design system. La run «Push on develop» sullo stesso
 commit risulta riuscita; questo dato non sostituisce il readback provider.
@@ -117,7 +116,7 @@ al rapporto. Scenario riportato a Free, uso ordinario, e tema a Sistema.
 
 ### 4.1 Ordini e Sicurezza
 
-Stato aggiornato dopo l'implementazione `0b8a47c` e il mandato di pubblicazione del 4 ottobre 2026. Prove locali su build e dati sintetici: `pnpm verify` verde con 153 test applicativi, 85/85 E2E Chromium e collaudo dell'area reale IT/EN a 330 e 1280 px. Il collaudo successivo al deploy test viene riferito in chat, senza anticiparlo in questa tabella. Stato operativo e limiti di ripresa nel [backlog](../../BACKLOG.md#stato).
+Stato aggiornato dopo l'implementazione `0b8a47c` e il mandato di pubblicazione del 4 ottobre 2026. Prove locali su build e dati sintetici: `pnpm verify` verde con 153 test applicativi, 85/85 E2E Chromium e collaudo dell'area reale IT/EN a 330 e 1280 px. Il collaudo successivo al deploy test viene riferito in chat, senza anticiparlo in questa tabella. Stato operativo e limiti di ripresa nel [avanzamento](../MASTER_PLAN.md#stato).
 
 | ID | Problema | Severità | Confidenza | Verifica implementazione · 4 ottobre 2026 |
 | --- | --- | --- | --- | --- |
@@ -206,11 +205,11 @@ Prove finali: `pnpm verify` verde, 156 test applicativi e 24 test degli script; 
 
 | ID | Problema | Severità | Confidenza | Verifica implementazione · 4 ottobre 2026 |
 | --- | --- | --- | --- | --- |
-| D1 | Intestazione e schede non restano fisse: scorrendo resta solo la X | Bassa | Alta | Implementato e verificato localmente: intestazione fuori dall’area scorrevole e schede sticky nel contenuto. |
-| D2 | Sezione "Acquirente" con prima etichetta "Acquirente"; "Destinatario" su una riga, indirizzo di fatturazione su due | Bassa | Alta | Implementato e verificato localmente: prima etichetta Nome e destinatario con nome e località su righe distinte. |
-| D3 | Scheda Articoli senza miniature; "Prezzo: 524,50 €" non dice se è unitario. Con quantità e prezzi di esempio la somma (1292 €) supera il totale (1249 €) | Bassa | Media | Implementato e verificato localmente: miniatura per l’ordine a singolo articolo, segnaposto per gli articoli senza immagine propria; Prezzo unitario esplicito. Nell’esempio multiarticolo quantità × prezzi = 1249 EUR, senza alterare dati reali. |
-| D4 | Aperto da URL, il pannello mostra un contorno di focus blu di 1 px su tutto il contenitore (`outline: auto`), in desktop e a 500 px | Bassa | Alta | Implementato e verificato localmente: focus iniziale sul pannello senza outline del contenitore; focus visibile conservato sui controlli. |
-| D5 | "Apri su eBay" ed "Esporta ordine" esistono solo nel menu della card, non nel dettaglio | Bassa | Media | Implementato e verificato localmente: Apri su eBay ed Esporta ordine disponibili anche nel dettaglio, tramite le stesse azioni della card. |
+| DT1 | Intestazione e schede non restano fisse: scorrendo resta solo la X | Bassa | Alta | Implementato e verificato localmente: intestazione fuori dall’area scorrevole e schede sticky nel contenuto. |
+| DT2 | Sezione "Acquirente" con prima etichetta "Acquirente"; "Destinatario" su una riga, indirizzo di fatturazione su due | Bassa | Alta | Implementato e verificato localmente: prima etichetta Nome e destinatario con nome e località su righe distinte. |
+| DT3 | Scheda Articoli senza miniature; "Prezzo: 524,50 €" non dice se è unitario. Con quantità e prezzi di esempio la somma (1292 €) supera il totale (1249 €) | Bassa | Media | Implementato e verificato localmente: miniatura per l’ordine a singolo articolo, segnaposto per gli articoli senza immagine propria; Prezzo unitario esplicito. Nell’esempio multiarticolo quantità × prezzi = 1249 EUR, senza alterare dati reali. |
+| DT4 | Aperto da URL, il pannello mostra un contorno di focus blu di 1 px su tutto il contenitore (`outline: auto`), in desktop e a 500 px | Bassa | Alta | Implementato e verificato localmente: focus iniziale sul pannello senza outline del contenitore; focus visibile conservato sui controlli. |
+| DT5 | "Apri su eBay" ed "Esporta ordine" esistono solo nel menu della card, non nel dettaglio | Bassa | Media | Implementato e verificato localmente: Apri su eBay ed Esporta ordine disponibili anche nel dettaglio, tramite le stesse azioni della card. |
 
 ## 6. Anteprima: Negozi eBay
 
@@ -306,7 +305,7 @@ PR #263.
 - Il toast è chiaro in scuro e blu notte in chiaro: inversione coerente.
 - In scuro i tile chiari delle miniature di esempio abbagliano (O7).
 - In chiaro la barra dell'anteprima si distingue poco dallo sfondo.
-- I problemi specifici di tema sono A3, D4 e O7.
+- I problemi specifici di tema sono A3, DT4 e O7.
 
 ## 13. Stato dopo i test
 

@@ -191,18 +191,18 @@ export function insertWorkspace({
   userId,
   name = "Sintetico",
   createdAt = now,
+  activeAt = null,
 }: {
   id: string;
   userId?: string;
   name?: string;
   createdAt?: string;
+  activeAt?: string | null;
 }) {
   return [
-    env.DB.prepare("INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)").bind(
-      id,
-      name,
-      createdAt,
-    ),
+    env.DB.prepare(
+      "INSERT INTO workspaces (id, name, created_at, active_at) VALUES (?, ?, ?, ?)",
+    ).bind(id, name, createdAt, activeAt),
     ...(userId
       ? [
           env.DB.prepare(
@@ -225,37 +225,65 @@ export function insertOrder(
     buyer,
     mergedInto = null,
     retentionUntil = null,
+    externalId = `ebay-${id}`,
+    createdAt = now,
+    modifiedAt = createdAt,
+    totalMinor = 1299,
+    buyerJson,
+    listedAt = null,
+    withItem = true,
+    withTax = true,
   }: {
     storeId?: string;
     buyer?: { eias: string | null; username: string };
     mergedInto?: string | null;
     retentionUntil?: string | null;
+    externalId?: string;
+    createdAt?: string;
+    modifiedAt?: string;
+    totalMinor?: number;
+    buyerJson?: string | null;
+    listedAt?: string | null;
+    withItem?: boolean;
+    withTax?: boolean;
   } = {},
 ) {
   return [
     env.DB.prepare(
       `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,
          currency, total_minor, buyer_json, buyer_eias_token, merged_into, retention_until,
-         purge_after)
-       VALUES (?1, ?2, ?3, ?4, ?4, 'EUR', 1299, ?5, ?6, ?7, ?8, ?8)`,
+         purge_after, listed_at)
+       VALUES (?1, ?2, ?3, ?4, ?9, 'EUR', ?10, ?5, ?6, ?7, ?8, ?8, ?11)`,
     ).bind(
       id,
       storeId,
-      `ebay-${id}`,
-      now,
-      buyer ? JSON.stringify({ username: buyer.username, name: "Mario Rossi" }) : null,
+      externalId,
+      createdAt,
+      buyerJson ??
+        (buyer ? JSON.stringify({ username: buyer.username, name: "Mario Rossi" }) : null),
       buyer?.eias ?? null,
       mergedInto,
       retentionUntil,
+      modifiedAt,
+      totalMinor,
+      listedAt,
     ),
-    env.DB.prepare(
-      `INSERT INTO order_items (id, order_id, line_item_id, title, quantity, total_minor, currency)
-       VALUES (?1, ?2, ?3, 'Articolo', 1, 1299, 'EUR')`,
-    ).bind(`i-${id}`, id, `line-${id}`),
-    env.DB.prepare(
-      `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source,
+    ...(withItem
+      ? [
+          env.DB.prepare(
+            `INSERT INTO order_items (id, order_id, line_item_id, title, quantity, total_minor, currency)
+       VALUES (?1, ?2, ?3, 'Articolo', 1, ?4, 'EUR')`,
+          ).bind(`i-${id}`, id, `line-${id}`, totalMinor),
+        ]
+      : []),
+    ...(withTax
+      ? [
+          env.DB.prepare(
+            `INSERT INTO tax_identifiers (id, order_id, identifier_type, issuing_country, value, source,
          observed_at) VALUES (?1, ?2, 'CODICE_FISCALE', 'IT', 'RSSMRA80A01H501U', 'synthetic_fixture', ?3)`,
-    ).bind(`t-${id}`, id, now),
+          ).bind(`t-${id}`, id, createdAt),
+        ]
+      : []),
   ];
 }
 

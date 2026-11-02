@@ -31,8 +31,9 @@ import { parseArgs } from "node:util";
 import { gunzipSync, gzipSync } from "node:zlib";
 
 import { stripeWebhookEvents } from "../app/integrations/stripe-account.server.ts";
-import config, { databases } from "../cloudflare.config.ts";
-import { cfJson, d1Query } from "./lib/provider.mjs";
+import { databases } from "../cloudflare.config.ts";
+import { cfJson, d1Query, modeOf } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 import { retryReadback } from "./release/release.mjs";
 import { cliRequest } from "./stripe-account.mjs";
 
@@ -64,6 +65,13 @@ const markerTables = [
   { table: "account_deletions", conflict: "REPLACE" },
   { table: "ebay_account_deletions", conflict: "REPLACE" },
   { table: "stripe_customer_erasures", conflict: "IGNORE" },
+  {
+    table: "billing_incidents",
+    conflict: "REPLACE",
+    where:
+      "customer_id IS NULL OR NOT EXISTS (SELECT 1 FROM stripe_customer_erasures e WHERE e.customer_id = billing_incidents.customer_id)",
+    parent: { column: "workspace_id", table: "workspaces", key: "id" },
+  },
   { table: "store_identity_marks", conflict: "REPLACE" },
   {
     table: "deleted_order_keys",
@@ -689,7 +697,7 @@ export function freezeState({ secret, paused, status, marked }) {
 
 /** Ambiente letto da `cloudflare.config.ts` con la stessa modalità della build. */
 export function targetOf(mode) {
-  const { worker } = config({ mode: mode === "live" ? "live" : "development" });
+  const worker = workerOf(mode);
   return {
     live: mode === "live",
     worker: worker.name,
@@ -878,7 +886,7 @@ async function main() {
       reconciled: { type: "boolean", default: false },
     },
   });
-  if (!["test", "live"].includes(values.mode)) throw new Error("--mode accetta test o live.");
+  modeOf(values.mode);
   const target = targetOf(values.mode);
   const run = remoteRun(target.database);
   const command = positionals[0];
@@ -944,7 +952,7 @@ async function main() {
     }
     const result = await verify(run, payload, { reconciled: values.reconciled });
     // Time Travel non tocca i segreti: un segreto mancante è un altro incidente.
-    const { worker } = config({ mode: target.live ? "live" : "development" });
+    const worker = workerOf(target.live ? "live" : "test");
     const names = new Set(
       cf("workers", "secrets", "list", "--worker", target.worker).map(({ name }) => name),
     );

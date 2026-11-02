@@ -1,3 +1,4 @@
+import { countAuthAttempt, purgeAuthAttempts } from "./domain/auth-attempts.server";
 import { waitUntil } from "./service-activity.server";
 import { redirect } from "react-router";
 import { z } from "zod";
@@ -128,30 +129,6 @@ const addressLimits = [
 ];
 
 /**
- * Conta il tentativo su D1 con una sola istruzione, che apre o incrementa la finestra, e
- * restituisce i secondi di attesa oltre il limite.
- */
-async function countAttempt(
-  env: Env,
-  key: string,
-  rule: { window: number; max: number },
-  now: number,
-): Promise<number | null> {
-  const windowMs = rule.window * 1000;
-  const row = await env.DB.prepare(
-    `INSERT INTO "rateLimit" ("id", "key", "count", "lastRequest") VALUES (?1, ?2, 1, ?3)
-     ON CONFLICT ("key") DO UPDATE SET
-       "count" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN 1 ELSE "count" + 1 END,
-       "lastRequest" = CASE WHEN ?3 - "lastRequest" >= ?4 THEN ?3 ELSE "lastRequest" END
-     RETURNING "count", "lastRequest"`,
-  )
-    .bind(crypto.randomUUID(), key, now, windowMs)
-    .first<{ count: number; lastRequest: number }>();
-  if (!row || row.count <= rule.max) return null;
-  return Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000));
-}
-
-/**
  * Esito della validazione del corpo JSON, letto da una copia che lascia l'originale ad Auth. Un
  * corpo assente o non JSON vale undefined.
  */
@@ -206,13 +183,9 @@ async function addressWait(request: Request, env: Env): Promise<number | null> {
   const now = Date.now();
   // Pulizia occasionale delle finestre chiuse da oltre un'ora, fuori dal percorso della risposta.
   if (Math.random() < 0.02) {
-    waitUntil(
-      env.DB.prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?')
-        .bind(now - 3_600_000)
-        .run(),
-    );
+    waitUntil(purgeAuthAttempts(env.DB, now));
   }
-  return countAttempt(env, `${address}|${path}`, rule, now);
+  return countAuthAttempt(env.DB, `${address}|${path}`, rule, now);
 }
 
 async function authResponse(request: Request, env: Env, admitted = false): Promise<Response> {

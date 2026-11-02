@@ -8,7 +8,7 @@ import { NotFoundState } from "~/components/not-found";
 import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
 import { accessNotice, isStoreNotice } from "../access-notice";
 import { deletionAccess } from "../account-page.server";
-import { issueTimingTicket } from "../page-timing.server";
+import { issueTimingTicket } from "../domain/page-timing.server";
 import { unconfirmedOnFailure } from "../client-action";
 import {
   areaPage,

@@ -21,6 +21,7 @@ export type AnomalyKind =
   | "store_reads"
   | "order_details"
   | "tax_missing"
+  | "lifetime_unallocated"
   | "task_stalled"
   | "receipts_stalled"
   | "telegram_failed"
@@ -145,9 +146,8 @@ const workspaceHref = (id: string) => `spazi/${encodeURIComponent(id)}`;
 
 const severityOrder: Record<Severity, number> = { p1: 0, p2: 1, p3: 2 };
 
-/** Anomalie aperte, dalla più grave e poi dalla più vecchia. */
-export async function listAnomalies(db: D1Database, now = new Date()): Promise<Anomaly[]> {
-  const at = now.toISOString();
+/** Segnali della console letti in una sola istantanea della base dati. */
+async function readSignals(db: D1Database, now: Date, at: string) {
   const [
     { results: failing },
     { results: details },
@@ -158,6 +158,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
     { results: unrecorded },
     { results: credentials },
     { results: taxGaps },
+    { results: unallocated },
   ] = await db.batch<Record<string, string | number | null>>([
     // Negozi attivi con le ultime due letture fallite, come nella campanella del venditore.
     db
@@ -225,7 +226,43 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         new Date(now.getTime() - taxGap.windowHours * 60 * minute).toISOString(),
         new Date(now.getTime() - taxGap.settleHours * 60 * minute).toISOString(),
       ),
+    db.prepare(`SELECT w.id, w.name AS label, MIN(i.opened_at) AS since, COUNT(*) AS count
+      FROM billing_incidents i JOIN workspaces w ON w.id = i.workspace_id
+      WHERE i.resolved_at IS NULL AND NOT EXISTS (SELECT 1 FROM stripe_customer_erasures e WHERE e.customer_id = i.customer_id) GROUP BY w.id`),
   ]);
+  return {
+    failing,
+    details,
+    telegram,
+    limits,
+    activeStores,
+    switchedOff,
+    unrecorded,
+    credentials,
+    taxGaps,
+    unallocated,
+  };
+}
+
+/** Primo istante fra le righe. */
+const earliest = (values: (string | number | null | undefined)[]) => values.map(String).sort()[0]!;
+
+/** Somma dei conteggi delle righe. */
+const totalCount = (rows: { count?: string | number | null }[]) =>
+  rows.reduce((total, row) => total + Number(row.count), 0);
+
+type Signals = Awaited<ReturnType<typeof readSignals>>;
+
+/** Letture e dati fiscali dei negozi: costruzione pura dai segnali dello stesso batch. */
+function storeReadAnomalies(
+  {
+    failing,
+    activeStores,
+    details,
+    taxGaps,
+  }: Pick<Signals, "failing" | "activeStores" | "details" | "taxGaps">,
+  at: string,
+): Anomaly[] {
   const active = new Map(
     (activeStores as { environment: string; count: number }[]).map((row) => [
       row.environment,
@@ -238,34 +275,12 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
     label: String(row.label),
     href: storeHref(String(row.id)),
   });
-
-  for (const quota of await quotaAnomalies(db, now))
-    if (!quota.resolvedAt)
-      anomalies.push({
-        key: quota.key,
-        kind: "ebay_quota",
-        severity: quota.severity,
-        since: quota.openedAt,
-        count: 1,
-        subjects: [{ id: quota.subject, label: quota.subject, href: "quote" }],
-      });
-
-  for (const bulk of await bulkDataAnomalies(db, now))
-    anomalies.push({
-      key: bulk.key,
-      kind: "ebay_bulk_data",
-      severity: bulk.severity,
-      since: bulk.openedAt,
-      count: 1,
-      subjects: [{ id: bulk.subject, label: bulk.subject, href: "quote" }],
-    });
-
   // Tutti i negozi attivi di un ambiente non si leggono: è eBay, un solo problema.
   for (const environment of ["production", "sandbox"]) {
     const stores = failing.filter((row) => row.environment === environment);
     const total = active.get(environment) ?? 0;
     if (stores.length === 0) continue;
-    const since = stores.map((row) => String(row.since)).sort()[0]!;
+    const since = earliest(stores.map((row) => row.since));
     anomalies.push(
       stores.length === total && total > 1
         ? {
@@ -293,7 +308,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       kind: "order_details",
       severity: "p3",
       since: at,
-      count: details.reduce((total, row) => total + Number(row.count), 0),
+      count: totalCount(details),
       subjects: details.map(subject),
     });
 
@@ -302,10 +317,103 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       key: "tax_missing",
       kind: "tax_missing",
       severity: "p2",
-      since: taxGaps.map((row) => String(row.since)).sort()[0]!,
-      count: taxGaps.reduce((total, row) => total + Number(row.count), 0),
+      since: earliest(taxGaps.map((row) => row.since)),
+      count: totalCount(taxGaps),
       subjects: taxGaps.map(subject),
     });
+
+  return anomalies;
+}
+
+/** Scadenze e date mancanti del registro, senza altre letture. */
+function credentialAnomalies(credentials: Signals["credentials"]): Anomaly[] {
+  const anomalies: Anomaly[] = [];
+  // Una credenziale scaduta ferma la funzione che la usa; una in scadenza va rinnovata.
+  const expiring = credentials.filter((row) => row.expires !== null);
+  if (expiring.length > 0)
+    anomalies.push({
+      key: "credential_expiry",
+      kind: "credential_expiry",
+      severity: expiring.some((row) => row.expired) ? "p1" : "p2",
+      since: new Date(
+        Date.parse(`${String(expiring[0]!.expires)}T00:00:00.000Z`) -
+          credentialWarningDays * 24 * 60 * minute,
+      ).toISOString(),
+      count: expiring.length,
+      subjects: expiring.map((row) => ({
+        id: String(row.id),
+        label: `${String(row.id)} · ${String(row.expires)}`,
+        href: "",
+      })),
+    });
+
+  const undated = credentials.filter((row) => row.expires === null);
+  if (undated.length > 0)
+    anomalies.push({
+      key: "credential_undated",
+      kind: "credential_undated",
+      severity: "p3",
+      since: earliest(undated.map((row) => row.recorded)),
+      count: undated.length,
+      subjects: undated.map((row) => ({ id: String(row.id), label: String(row.id), href: "" })),
+    });
+
+  return anomalies;
+}
+
+/** Anomalie aperte, dalla più grave e poi dalla più vecchia. */
+export async function listAnomalies(db: D1Database, now = new Date()): Promise<Anomaly[]> {
+  const at = now.toISOString();
+  const {
+    failing,
+    details,
+    telegram,
+    limits,
+    activeStores,
+    switchedOff,
+    unrecorded,
+    credentials,
+    taxGaps,
+    unallocated,
+  } = await readSignals(db, now, at);
+  const anomalies: Anomaly[] = [];
+
+  if (unallocated.length > 0)
+    anomalies.push({
+      key: "lifetime_unallocated",
+      kind: "lifetime_unallocated",
+      severity: "p1",
+      since: earliest(unallocated.map((row) => row.since)),
+      count: totalCount(unallocated),
+      subjects: unallocated.map((row) => ({
+        id: String(row.id),
+        label: String(row.label),
+        href: workspaceHref(String(row.id)),
+      })),
+    });
+
+  for (const quota of await quotaAnomalies(db, now))
+    if (!quota.resolvedAt)
+      anomalies.push({
+        key: quota.key,
+        kind: "ebay_quota",
+        severity: quota.severity,
+        since: quota.openedAt,
+        count: 1,
+        subjects: [{ id: quota.subject, label: quota.subject, href: "quote" }],
+      });
+
+  for (const bulk of await bulkDataAnomalies(db, now))
+    anomalies.push({
+      key: bulk.key,
+      kind: "ebay_bulk_data",
+      severity: bulk.severity,
+      since: bulk.openedAt,
+      count: 1,
+      subjects: [{ id: bulk.subject, label: bulk.subject, href: "quote" }],
+    });
+
+  anomalies.push(...storeReadAnomalies({ failing, activeStores, details, taxGaps }, at));
 
   // Più lavori fermi insieme hanno di solito una sola causa, come il cron che non parte.
   const stalled = (await taskStates(db, now)).filter((task) => task.stalled);
@@ -341,8 +449,8 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       key: "telegram_failed",
       kind: "telegram_failed",
       severity: "p3",
-      since: telegram.map((row) => String(row.since)).sort()[0]!,
-      count: telegram.reduce((total, row) => total + Number(row.count), 0),
+      since: earliest(telegram.map((row) => row.since)),
+      count: totalCount(telegram),
       subjects: telegram.map((row) => ({
         id: String(row.id),
         label: String(row.id),
@@ -369,7 +477,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       key: "service_off",
       kind: "service_off",
       severity: "p2",
-      since: switchedOff.map((row) => String(row.since)).sort()[0]!,
+      since: earliest(switchedOff.map((row) => row.since)),
       count: switchedOff.length,
       subjects: switchedOff.map((row) => ({
         id: String(row.id),
@@ -410,8 +518,8 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       key: "audit_unrecorded",
       kind: "audit_unrecorded",
       severity: "p3",
-      since: unrecorded.map((row) => String(row.since)).sort()[0]!,
-      count: unrecorded.reduce((total, row) => total + Number(row.count), 0),
+      since: earliest(unrecorded.map((row) => row.since)),
+      count: totalCount(unrecorded),
       subjects: unrecorded.map((row) => ({
         id: String(row.id),
         label: String(row.id),
@@ -419,35 +527,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       })),
     });
 
-  // Una credenziale scaduta ferma la funzione che la usa; una in scadenza va rinnovata.
-  const expiring = credentials.filter((row) => row.expires !== null);
-  if (expiring.length > 0)
-    anomalies.push({
-      key: "credential_expiry",
-      kind: "credential_expiry",
-      severity: expiring.some((row) => row.expired) ? "p1" : "p2",
-      since: new Date(
-        Date.parse(`${String(expiring[0]!.expires)}T00:00:00.000Z`) -
-          credentialWarningDays * 24 * 60 * minute,
-      ).toISOString(),
-      count: expiring.length,
-      subjects: expiring.map((row) => ({
-        id: String(row.id),
-        label: `${String(row.id)} · ${String(row.expires)}`,
-        href: "",
-      })),
-    });
-
-  const undated = credentials.filter((row) => row.expires === null);
-  if (undated.length > 0)
-    anomalies.push({
-      key: "credential_undated",
-      kind: "credential_undated",
-      severity: "p3",
-      since: undated.map((row) => String(row.recorded)).sort()[0]!,
-      count: undated.length,
-      subjects: undated.map((row) => ({ id: String(row.id), label: String(row.id), href: "" })),
-    });
+  anomalies.push(...credentialAnomalies(credentials));
 
   return anomalies.sort(
     (a, b) =>

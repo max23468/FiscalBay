@@ -1,4 +1,5 @@
 import { waitUntil } from "./service-activity.server";
+import { securityRecipient } from "./domain/sign-in-methods.server";
 
 import { supportEmail } from "./app-copy";
 import { accessPath, securityPath, storesPath } from "./app-links";
@@ -398,14 +399,7 @@ function securityEmail(event: SecurityEvent, language: Language): AccountEmail {
 export function notifySecurityEvent(env: Env, userId: string, event: SecurityEvent): void {
   waitUntil(
     (async () => {
-      const user = await env.DB.prepare(
-        `SELECT u."email",
-                (SELECT t.language FROM terms_acceptances t WHERE t.user_id = u."id"
-                  ORDER BY t.accepted_at DESC LIMIT 1) AS language
-           FROM "user" u WHERE u."id" = ?`,
-      )
-        .bind(userId)
-        .first<{ email: string; language: Language | null }>();
+      const user = await securityRecipient(env.DB, userId);
       if (!user) return;
       const language = user.language === "en" ? "en" : "it";
       await sendAccountEmail(env, {

@@ -7,7 +7,7 @@ import {
   productMetrics,
   syncDailyRetentionDays,
 } from "../app/domain/product-metrics.server";
-import { issueTimingTicket, redeemTimingTicket } from "../app/page-timing.server";
+import { issueTimingTicket, redeemTimingTicket } from "../app/domain/page-timing.server";
 import { action as pageTiming } from "../app/routes/page-timing";
 import { loader as adminLoader } from "../app/routes/admin";
 import { verifiedSession } from "./fixtures/account-fixtures";

@@ -4,6 +4,9 @@
  * `--zone` e flussi d'uscita.
  */
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 
 // Elenchi di oggetti R2, eventi e risposte di gh superano il MiB predefinito di execFileSync.
@@ -50,6 +53,46 @@ export function jsonOutput(output) {
 }
 
 export const cfJson = (args, options) => jsonOutput(cf(args, options));
+
+/** Lettura facoltativa della CLI: `null` come per una risorsa non ancora creata. */
+export function optionalJson(args, options) {
+  try {
+    return cfJson(args, { ...options, stderr: "ignore" });
+  } catch {
+    return null;
+  }
+}
+
+/** Esegue la CLI con il corpo in un file temporaneo leggibile soltanto dall'utente. */
+export function withBodyFile(body, run, prefix) {
+  const directory = mkdtempSync(path.join(tmpdir(), `${prefix}-`));
+  const file = path.join(directory, "body.json");
+  try {
+    writeFileSync(file, JSON.stringify(body), { mode: 0o600 });
+    return run(`@${file}`);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+/** Ambiente di `--mode`: un refuso si ferma qui invece di agire sul test. */
+export function modeOf(value, fallback) {
+  const mode = value ?? fallback;
+  if (mode !== "test" && mode !== "live") throw new Error("--mode accetta test o live.");
+  return mode;
+}
+
+/** Commit antenato della testa, leggibile nel clone. */
+export function isAncestor(commit) {
+  try {
+    execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const git = (...args) => execFileSync("git", args, { encoding: "utf8" });
 
 /** Ripete `task` fino a `attempts` volte, attendendo `delay(attempt)` millisecondi fra i tentativi. */
 export async function retry(task, { attempts, delay }) {

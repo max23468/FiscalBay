@@ -389,7 +389,8 @@ export async function setAdminPause(
     .prepare("SELECT 1 FROM ebay_stores WHERE id = ? AND data_deleted_at IS NULL")
     .bind(storeId)
     .first();
-  return store ? "invalid" : "not_found";
+  // Già in pausa dall'amministrazione: l'esito voluto c'è, nulla da cambiare.
+  return !store ? "not_found" : paused ? "done" : "invalid";
 }
 
 /** Scollegamento del negozio dell'utente; l'ultima istruzione tocca zero righe se non è suo. */

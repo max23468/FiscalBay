@@ -130,7 +130,11 @@ export type StatusClassifier = (
 ) => UpstreamError | null;
 
 /** Classificazione comune: 2xx riuscita, 401 e 403 credenziali, 429 e 5xx con l'attesa. */
-function providerStatus(response: Response, text: string, now?: number): UpstreamError | null {
+export function providerStatus(
+  response: Response,
+  text: string,
+  now?: number,
+): UpstreamError | null {
   const { status } = response;
   if (status >= 200 && status < 300) return null;
   const retryAfter = retryAfterSeconds(response.headers.get("retry-after"), now) ?? undefined;

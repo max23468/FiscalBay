@@ -13,6 +13,7 @@ import { readSession } from "../domain/sessions.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
 import { ebayOutages, listStores } from "../domain/stores.server";
 import { errorResponse } from "../error-response";
+import { isSameOrigin } from "../account-area.server";
 import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { storeLinkAdmitted } from "../domain/admission.server";
@@ -112,7 +113,7 @@ export function action({ request }: Route.ActionArgs) {
 async function start(request: Request) {
   const language = languageFromPath(new URL(request.url).pathname);
   const base = localizedPath(language, ordersPath);
-  if (request.headers.get("origin") !== new URL(env.APP_ORIGIN).origin) {
+  if (!isSameOrigin(request)) {
     return errorResponse(request, "FORBIDDEN");
   }
   const status = await eligibility(request);

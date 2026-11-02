@@ -95,9 +95,6 @@ export interface SettingsServices {
   billing: boolean;
   billingPortal: boolean;
   telegram: boolean;
-  accountExport: boolean;
-  accountDeletion: boolean;
-  support: boolean;
 }
 
 /** Icone neutre: le Impostazioni restano sobrie, il colore sta in Ordini e Negozi. */
@@ -289,8 +286,6 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
     messaggio: <TemplateSection form={templateDraft} />,
     privacy: (
       <PrivacySection
-        accountExport={data.services.accountExport}
-        accountDeletion={data.services.accountDeletion}
         termsUpdate={data.termsUpdate}
         email={data.account.email}
         security={data.security}
@@ -298,7 +293,6 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
     ),
     supporto: (
       <SupportSection
-        support={data.services.support}
         diagnostics={data.diagnostics}
         email={data.account.email}
         whatsNew={data.whatsNew ? appHref(links, "novita") : undefined}

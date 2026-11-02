@@ -1,5 +1,10 @@
 import { lapsedStatuses, pricePromiseMs } from "./billing.server";
-import { accountCoverage, openSubscriptionStatuses, type orderAllowance } from "./grants.server";
+import {
+  accountCoverage,
+  isRenewingSubscription,
+  openSubscriptionStatuses,
+  type orderAllowance,
+} from "./grants.server";
 import { sqlList } from "./sql.server";
 import { stripeEnvironment } from "../integrations/stripe.server";
 import type { AccountView } from "../view-models";
@@ -121,7 +126,7 @@ export async function subscriptionView(
           ORDER BY source = 'lifetime' LIMIT 1`)
         .bind(workspaceId, now.toISOString())
         .first<{ source: string }>();
-  const renewing = !!row && ["active", "trialing"].includes(row.status);
+  const renewing = !!row && isRenewingSubscription(row.status);
   if (refunded && (!row || (renewing && refunded.source !== "lifetime")))
     return {
       payment: {
@@ -137,7 +142,7 @@ export async function subscriptionView(
   // Una concessione a un abbonamento che si rinnova ne ha rinviato il rinnovo alla sua fine.
   if (
     coverage?.source === "premium" ||
-    (coverage?.source === "admin" && ["active", "trialing"].includes(row.status))
+    (coverage?.source === "admin" && isRenewingSubscription(row.status))
   ) {
     if (!row.cancel_at_period_end)
       return {

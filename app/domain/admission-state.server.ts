@@ -10,6 +10,10 @@ export const waitlistOnSql = "EXISTS (SELECT 1 FROM admission_settings WHERE fre
 export const purchasesOpenSql =
   "NOT EXISTS (SELECT 1 FROM admission_settings WHERE purchases_open = 0)";
 
+export function readPurchasesOpen(db: D1Database) {
+  return db.prepare(`SELECT ${purchasesOpenSql} AS open`).first<{ open: number }>();
+}
+
 /** Spazio in lista d'attesa: un suo membro non è ancora stato ammesso. */
 export function waitingSql(workspace: string) {
   return `EXISTS (SELECT 1 FROM workspace_members m JOIN user_profiles p ON p.user_id = m.user_id

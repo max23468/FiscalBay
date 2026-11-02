@@ -496,6 +496,7 @@ async function latestMessage(env: Env, link: Link, offset: number, now: Date): P
         (
           await listVisibleOrders(env.DB, link.userId, latestLimit, store.environment, now, {
             criteria: { storeId: store.id },
+            suggestions: false,
           })
         ).map((order) => ({ order, environment: store.environment })),
       ),

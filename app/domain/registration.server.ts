@@ -108,6 +108,11 @@ export function registrationComplete(
   return status.termsAccepted && status.profile !== null;
 }
 
+/** Better Auth restituisce un ID fittizio per una registrazione già esistente. */
+export function registeredUserExists(db: D1Database, userId: string) {
+  return db.prepare('SELECT 1 FROM "user" WHERE "id" = ?').bind(userId).first();
+}
+
 /**
  * Salva in una transazione ciò che la registrazione ha raccolto: il profilo, e
  * l'accettazione dei Termini con la scelta marketing, tenute in tabelle distinte. La scelta

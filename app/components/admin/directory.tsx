@@ -9,6 +9,8 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import type { AccountRow, StoreRow } from "../../domain/admin-directory.server";
 import { ActionForm, DataTable } from "./kit";
+import { adminPageSize } from "../../limits";
+import { storeActions } from "./store-actions";
 import { useAdmin } from "./use-admin";
 
 /** Ricerca nella sezione, con il filtro facoltativo dei soli problemi. */
@@ -53,7 +55,10 @@ function More({
 }) {
   const { t } = useAdmin();
   if (!more) return null;
-  const search = new URLSearchParams({ ...(query ? { q: query } : {}), da: String(offset + 50) });
+  const search = new URLSearchParams({
+    ...(query ? { q: query } : {}),
+    da: String(offset + adminPageSize),
+  });
   if (problems) search.set("problemi", "1");
   return (
     <Link
@@ -197,12 +202,15 @@ export function StoresView({
             ),
             row.removed || row.disconnected ? null : (
               <div key="actions" className="flex flex-wrap gap-2">
-                <ActionForm
-                  intent="store-sync"
-                  fields={{ negozio: row.id, spazio: row.workspaceId }}
-                  submit={t.workspace.store.sync}
-                />
-                {row.detailErrors > 0 ? (
+                {storeActions(row.consent === "valid", row.pauses, row.detailErrors).sync ? (
+                  <ActionForm
+                    intent="store-sync"
+                    fields={{ negozio: row.id, spazio: row.workspaceId }}
+                    submit={t.workspace.store.sync}
+                  />
+                ) : null}
+                {storeActions(row.consent === "valid", row.pauses, row.detailErrors)
+                  .retryDetails ? (
                   <ActionForm
                     intent="retry-details"
                     fields={{ negozio: row.id, spazio: row.workspaceId }}

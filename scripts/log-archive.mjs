@@ -14,16 +14,16 @@
  *      node scripts/log-archive.mjs <errors|webhooks|failures> [--days 1] [--mode live]
  *      node scripts/log-archive.mjs correlation --id <correlation ID> [--days 1] [--mode live]
  */
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { gunzipSync } from "node:zlib";
 
 import { logEvents, logKeys } from "../app/log-records.ts";
-import config, { logArchives } from "../cloudflare.config.ts";
-import { cf, cfJson, keychain } from "./lib/provider.mjs";
+import { logArchives } from "../cloudflare.config.ts";
+import * as provider from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
+import { cf, cfJson, keychain, modeOf } from "./lib/provider.mjs";
 
 export const retentionDays = 90;
 export const dataset = "workers_trace_events";
@@ -50,7 +50,7 @@ export const webhookOperations = ["webhook_ingress", "webhook_consumer", "stripe
 /** Worker, account, bucket e voci del Portachiavi dell'ambiente, da `cloudflare.config.ts`. */
 export function targetOf(mode) {
   const live = mode === "live";
-  const { worker } = config({ mode: live ? "live" : "development" });
+  const worker = workerOf(mode);
   const environment = live ? "live" : "test";
   return {
     worker: worker.name,
@@ -427,17 +427,7 @@ function credentialsOf(target) {
   };
 }
 
-/** Esegue la CLI con il corpo in un file temporaneo leggibile soltanto dall'utente. */
-function withBodyFile(body, run) {
-  const directory = mkdtempSync(path.join(tmpdir(), "log-archive-"));
-  const file = path.join(directory, "body.json");
-  try {
-    writeFileSync(file, JSON.stringify(body), { mode: 0o600 });
-    return run(`@${file}`);
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-}
+const withBodyFile = (body, run) => provider.withBodyFile(body, run, "log-archive");
 
 function apply(target) {
   const state = readState(target);
@@ -507,7 +497,7 @@ async function main() {
     },
   });
   const [name] = positionals;
-  const target = targetOf(values.mode);
+  const target = targetOf(modeOf(values.mode, "test"));
   if (name === "plan") return print(plan(target));
   if (name === "apply") apply(target);
   if (name === "apply" || name === "readback") {

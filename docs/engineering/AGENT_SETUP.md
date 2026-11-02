@@ -23,7 +23,7 @@ Claude Code lavora sul Mac con file e CLI locali, nelle sessioni cloud e nei thr
 | `pnpm benchmark`, `pnpm test:mutation <file>...` | Comandi a richiesta: misure sintetiche e mutation dei moduli critici ([mutation](RELEASE.md#mutation-test)). |
 | `pnpm release:cycle` | Cicli autorizzati di `Pubblica` e `Promuovi`, candidato, ripresa, rollback, stato delle run, metriche e controllo della base delle PR nella CI ([ciclo operativo](RELEASE.md#ciclo-operativo)). |
 
-La tabella descrive i comandi presenti e le loro responsabilità; prove in PR/CI e ricevute, qualifiche mancanti nelle [questioni aperte](../MASTER_PLAN.md#questioni-aperte). Node locale/CI non è il runtime Workers o Supabase. Librerie opzionali non si installano per riempire un catalogo.
+La tabella descrive i comandi presenti e le loro responsabilità; prove in PR/CI e ricevute, qualifiche mancanti nelle [questioni aperte](../MASTER_PLAN.md#questioni-aperte). Node locale/CI non è il runtime Workers. Librerie opzionali non si installano per riempire un catalogo.
 
 ## 2. Due livelli di verifica dei tool
 
@@ -64,10 +64,10 @@ Leggere AGENTS, avanzamento e questioni aperte nel piano, poi la capacità inter
 
 | Attività | Sezioni canoniche |
 |---|---|
-| Adozione/M0 | [Governo](../MASTER_PLAN.md#s00), [scope](../MASTER_PLAN.md#s02), [architettura](../MASTER_PLAN.md#s25), [stack](../MASTER_PLAN.md#s26), [gate](../MASTER_PLAN.md#s36), [superati](../MASTER_PLAN.md#s40) |
+| Architettura | [Scope](../MASTER_PLAN.md#s02), [architettura](../MASTER_PLAN.md#s25), [stack](../MASTER_PLAN.md#s26), [gate](../MASTER_PLAN.md#s36), [superati](../MASTER_PLAN.md#s40) |
 | Auth/account/negozi | [Auth](../MASTER_PLAN.md#s07), [negozi](../MASTER_PLAN.md#s08), [sicurezza](../MASTER_PLAN.md#s29), [privacy](../MASTER_PLAN.md#s30) |
 | Ordini/sync | [Ordini](../MASTER_PLAN.md#s09), [suggerimenti](../MASTER_PLAN.md#s10), [sync](../MASTER_PLAN.md#s11), [dati](../MASTER_PLAN.md#s27), [servizi](../MASTER_PLAN.md#s28) |
-| UI/brand/sito | [Navigazione](../MASTER_PLAN.md#s16)–[onboarding](../MASTER_PLAN.md#s20), [brand](../MASTER_PLAN.md#s21), [design](../MASTER_PLAN.md#s22), [SEO](../MASTER_PLAN.md#s23), [reference](../brand/REFERENCES.md), [audit UI/UX](../archive/2026-10-03-audit-ui-ux-test-2.0.md) |
+| UI/brand/sito | [Navigazione](../MASTER_PLAN.md#s16)–[onboarding](../MASTER_PLAN.md#s20), [brand](../MASTER_PLAN.md#s21), [design](../MASTER_PLAN.md#s22), [SEO](../MASTER_PLAN.md#s23), [reference](../brand/REFERENCES.md), [audit UI/UX](AUDIT_UI_UX.md) |
 | Piani/Stripe | [Piani](../MASTER_PLAN.md#s04), [Free](../MASTER_PLAN.md#s05), [billing](../MASTER_PLAN.md#s06), [fonti Stripe](../SOURCES.md#s01) |
 | Export/comunicazioni/admin | [Export](../MASTER_PLAN.md#s12), [Telegram](../MASTER_PLAN.md#s13), [email](../MASTER_PLAN.md#s14), [admin](../MASTER_PLAN.md#s15), [dominio](../MASTER_PLAN.md#s24) |
 | Operations/test/release | [Sicurezza](../MASTER_PLAN.md#s29)–[recovery](../MASTER_PLAN.md#s32), [Git/release](../MASTER_PLAN.md#s34), [test](../MASTER_PLAN.md#s35), [milestone](../MASTER_PLAN.md#s37), [rischi](../MASTER_PLAN.md#s38), [DoD](../MASTER_PLAN.md#s41) |
@@ -76,31 +76,7 @@ Leggere AGENTS, avanzamento e questioni aperte nel piano, poi la capacità inter
 <a id="input"></a>
 ## 4. Input esterni
 
-Prima di chiedere un input controllare checkout, tool autorizzati e inventario privato. I seguenti sono prerequisiti da acquisire, non dati già forniti o risorse già esistenti. Richiedere solo l’input necessario attraverso un canale adatto, senza dump di credenziali o ritorno alla chat di progettazione.
-
-| ID | Input / responsabilità | Quando e acquisizione | Se manca |
-|---|---|---|---|
-| IN-01 | Mandato di adozione/avvio e checkout corretto | Avvio owner, remote/branch/commit verificati nell'adozione M0 | Sola lettura/preparazione; nessuna M0 dichiarata iniziata. |
-| IN-02 | Istruzioni applicabili, stato locale e automazioni legacy | Lettura del checkout e scope autorizzato; inventario iniziale M0 | Isolare le modifiche; bloccare solo push/deploy rischiosi. |
-| IN-03 | Accesso GitHub al repository e ambiente CI | Tool/CLI esistenti, autorizzazione repo-scoped e setup mirato M0 | Proseguire localmente; nessun check remoto fittizio. |
-| IN-04 | Account Cloudflare, zona fiscalbay.it, quote condivise | Enumerazione autorizzata e selezione risorsa M0; no token globali superflui | Qualifica documentale/sintetica soltanto, scelta non conclusa. |
-| IN-05 | Account/progetti Supabase da valutare, piani e limiti | Solo se candidati M0, letture e prove isolate approvate | Nessuna obbligatorietà Supabase introdotta per mancanza di accesso. |
-| IN-06 | Keyset eBay, ambiente, RuName/callback, scope, account controllato | Canale sicuro per qualifica eBay M0; inventario delle condivisioni con altri progetti; consenso seller quando necessario | Mock/documentazione; blocco della qualifica live pertinente, nessuna credenziale presa da un altro progetto senza mandato. |
-| IN-07 | Configurazione login Google e identità eBay | Qualifica Auth M0, console/account appropriati e redirect test; passkey origin/RP ID secondo host reale | Non eliminare un metodo richiesto: registrare il blocco del gate Auth. |
-| IN-08 | Account Stripe, Managed Payments eligibility, contesti test/live | Scoperta account autorizzata M0; prodotti/config live soltanto M5 sotto checkpoint | Nessun fallback Payments standard o Paddle autonomo. |
-| IN-09 | Identità bot Telegram esistente e bot di test separato | Metadati/token protetti M0/M2/M5; chat controllata, webhook/poller inventariati | Nessun invio a chat sconosciute; il bot operativo non viene riutilizzato come test. |
-| IN-10 | Registrar Register.it e controllo DNS | M0 per callback minimo, completamento M1; registrar solo ciò che non può essere svolto altrove | Non inventare records/password; niente Dynu o host alternativi esclusi. |
-| IN-11 | Abbonamento iCloud+ e dominio posta, account destinatario controllato | Owner/sessione sicura M1; info@ e supporto@, terzo indirizzo libero | Preparare record e procedura, non dichiarare ricezione/risposta verificate. |
-| IN-12 | Trasporto email Auth/transazionale e relativo mittente | Prova controllata e scelta nei costi di M0; configurazione finale M1/M6 | Endpoint Auth email non qualificato; non usare iCloud come sistema di invio automatico massivo. |
-| IN-13 | Canale amministrativo privato e fallback email | Owner o inventario privato M0/M7; destinatari confermati | Allarmi di test su destinatario controllato; readiness alert non chiusa. |
-| IN-14 | Dati legali Temisfera e rapporto contabile con il MoR | Dati effettivi dell'operatore nella qualifica preliminare M0 e finale M7, fonti e condizioni applicabili | Non usare generalità/P.IVA inventate; blocco della sola pubblicazione legale/commerciale dipendente. |
-| IN-15 | Budget/prove a pagamento e piani iniziali | Proposta con costi in M0; autorizzazione prima di sostenere la spesa, scelta finale al checkpoint | Eseguire prove gratuite possibili; nessuna spesa retroattivamente autorizzata. |
-| IN-16 | Asset originali e scelte visuali approvate | Già nello ZIP: manifest e quattro PNG; rifiniture logo/prototipo M1 sottoposte all'owner | Verificare checksum, non sostituire con immagini omonime rigenerate. |
-| IN-17 | Merchant di fiducia, consenso al test e dati/ambiente | Acquisizione nel checkpoint M8, non requisito per partire con M0 | Test automatici proseguibili; test reale non inventato. |
-| IN-18 | Chiusura della promozione globale | Owner, quando decide di chiuderla: la promozione parte al go-live senza fine (D239) | Nessuna data fittizia o countdown pubblico; la fine si programma soltanto su sua indicazione. |
-| IN-19 | Custodia delle chiavi e percorso di recupero nativo | Assetto selezionato M0 e readiness M7, accesso privato realmente disponibile | Gate recovery aperto; non introdurre automaticamente backup esterni o test periodici. |
-
-Nel contesto privato segnare disponibilità, owner, fonte e blocco; nelle questioni aperte del piano soltanto il nome logico e la capacità dipendente. IN-17/18 non bloccano M0. Un token valido non sostituisce la qualifica del contratto. Dove non si può completare una prova, continuare le attività indipendenti e riportare il limite.
+Accessi, dati legali, account e asset sono stati acquisiti durante la realizzazione: l'elenco reale sta nell'inventario privato ([custodia](#custodia)). Prima di chiedere un input controllare checkout, tool autorizzati e inventario. Restano all'owner la chiusura della promozione globale (D239) e l'attivazione di Paddle.
 
 ### Ambienti
 
@@ -130,15 +106,5 @@ Per sostenibilità misurare ordini, negozi multipli, storico, retry, export, log
 Questa è una mappa di **contenuti e responsabilità**, non un elenco di file obbligatori. Prima usare codice, schema, configurazione e test come contratti eseguibili. Creare un documento separato quando spiega un comportamento sostanziale condiviso, una scelta costosa da invertire o una procedura operativa reale. Accorpare elementi brevi; nessuno scaffolding documentale vuoto.
 
 Per creare o aggiornare una PR, passare la descrizione direttamente allo strumento, senza creare file `.md` temporanei per il testo: sul Mac `gh pr create --body-file -` o `gh pr edit --body-file -` con input standard; nel cloud, dove `gh pr` è rifiutato, il connettore GitHub o `pnpm release:cycle`.
-
-| Quando / responsabile | Informazione che deve risultare verificabile | Collocazione più semplice |
-|---|---|---|
-| Adozione e qualifica M0 | Mandato, trigger legacy, toolchain/accessi; confronto progressivo e decisione del candidato, capacità/costi, Auth/eBay/Stripe/export/recovery | Governo e roadmap del piano; manifest/lockfile/config e prove collegate alla PR; ADR solo per scelte durevoli, dettagli privati fuori repo |
-| M1 e frontend | Asset rifiniti, token, origine/licenza/modifiche dei componenti, approvazione grafica | Brand foundation + asset e registro delle sole risorse integrate |
-| M2/M3 | Identità, isolamento, unità dello sblocco, quota, versioni fiscali, permessi, fonti/cursori e budget eBay | Schema/migrazioni/test e contratto breve eBay/Auth soltanto dove serve spiegazione oltre il codice |
-| M5 | Incasso/periodi/grant, lifetime, callback e riconciliazione; Telegram/opt-out/arretrati | Contratto billing utile per i casi incrociati, adapter e test; Telegram vicino al codice salvo complessità reale |
-| M6 | CSV/XLSX/ZIP, accesso/scadenza file; email, consenso, supporto e KPI | Tipi/schema/test, template e definizioni riusate; nessun catalogo API manuale duplicato |
-| M7/M8 | Cancellazione e restore, escalation, rilascio interrotto, rollback/forward-fix, evidenze RC | Runbook reali di release, incidenti e recovery, eventualmente accorpati; prove brevi collegate |
-| M9 | Date/prezzi/promo, readiness, unico restore riuscito, mandato Promuovi, readback e dismissione 1.x | Gate e checkpoint nel piano; checklist unica e ricevuta conclusiva proporzionata |
 
 Se un'informazione richiesta manca, l'intervento competente la produce prima di dichiarare chiusa la capacità; l'assenza di un file con un nome ipotetico non è da sola un blocco. Una lettura approvata non inventa un'API o una condizione legale: i vincoli esterni rimangono da qualificare. Gli audit storici non sono contratti da mantenere in parallelo.

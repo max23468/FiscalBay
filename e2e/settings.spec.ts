@@ -991,6 +991,7 @@ test.describe("abbonamento nel piano", () => {
             await open(previewPage, `${prefix}/anteprima/impostazioni/piano`, scenario);
             await check(previewPage, "preview");
           } finally {
+            await preview.unrouteAll({ behavior: "wait" });
             await preview.close();
           }
         });
@@ -1043,6 +1044,7 @@ test.describe("abbonamento nel piano", () => {
         await open(previewPage, `${prefix}/anteprima/impostazioni/piano`, "lifetime-rimborsato");
         await check(previewPage, "preview");
       } finally {
+        await preview.unrouteAll({ behavior: "wait" });
         await preview.close();
       }
     });

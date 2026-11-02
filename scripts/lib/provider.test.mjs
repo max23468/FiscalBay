@@ -4,7 +4,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 
-import { cf, cfJson, d1Query, gh, ghJson, jsonOutput, keychain, retry } from "./provider.mjs";
+import {
+  cf,
+  cfJson,
+  d1Query,
+  gh,
+  ghJson,
+  jsonOutput,
+  keychain,
+  modeOf,
+  retry,
+  withBodyFile,
+} from "./provider.mjs";
 
 describe("uscita JSON della CLI", () => {
   it("salta il preambolo, anche con parentesi, e toglie l'involucro result", () => {
@@ -16,6 +27,31 @@ describe("uscita JSON della CLI", () => {
   it("restituisce null senza JSON e fallisce su un documento troncato", () => {
     assert.equal(jsonOutput("Segreto eliminato.\n"), null);
     assert.throws(() => jsonOutput('{"result": ['), /non leggibile/u);
+  });
+});
+
+describe("modalità degli script", () => {
+  it("accetta test e live, con il valore predefinito soltanto se dichiarato", () => {
+    assert.equal(modeOf("live"), "live");
+    assert.equal(modeOf(undefined, "test"), "test");
+    assert.throws(() => modeOf(undefined), /--mode accetta/u);
+    assert.throws(() => modeOf("Live", "test"), /--mode accetta/u);
+  });
+});
+
+describe("corpo della CLI in un file", () => {
+  it("passa il file con il prefisso @ e lo rimuove", () => {
+    let seen;
+    const output = withBodyFile(
+      { a: 1 },
+      (reference) => {
+        seen = reference.slice(1);
+        return readFileSync(seen, "utf8");
+      },
+      "prova",
+    );
+    assert.equal(output, '{"a":1}');
+    assert.throws(() => readFileSync(seen));
   });
 });
 

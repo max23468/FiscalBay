@@ -28,9 +28,10 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics.ts";
-import config, { databases } from "../cloudflare.config.ts";
+import { databases } from "../cloudflare.config.ts";
 import { declaredSecrets, defaultFile, parseRegistry, review } from "./credential-expiries.mjs";
-import { cfJson, ghJson } from "./lib/provider.mjs";
+import { ghJson, modeOf, optionalJson } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 
 /** Retention delle code e regola dei file esportati, come in RELEASE. */
 export const queueRetention = 14 * 86_400;
@@ -39,7 +40,7 @@ export const exportsMaxAge = 86_400;
 /** Ambiente letto da `cloudflare.config.ts` con la stessa modalità della build. */
 export function targetOf(mode) {
   const live = mode === "live";
-  const { worker } = config({ mode: live ? "live" : "development" });
+  const worker = workerOf(mode);
   const environment = live ? "live" : "test";
   const queue = worker.triggers.find(({ type }) => type === "queue");
   return {
@@ -367,6 +368,8 @@ export function checkSurface(target, responses) {
         responses.sitemap?.status === 200 &&
         pages.includes("/") &&
         pages.includes("/en") &&
+        pages.some((page) => page.startsWith("/en/")) &&
+        pages.some((page) => page !== "/" && page !== "/en" && !page.startsWith("/en/")) &&
         pages.every((page) => !surfacePaths.legal.includes(page)),
     },
     {
@@ -463,14 +466,7 @@ export function plan(target) {
   return lines.join("\n");
 }
 
-// Le letture facoltative tacciono gli errori, come per una risorsa non ancora creata.
-function optional(args) {
-  try {
-    return cfJson(args, { stderr: "ignore" });
-  } catch {
-    return null;
-  }
-}
+const optional = (args) => optionalJson(args);
 
 const jurisdiction = ["--cf-r2-jurisdiction", "eu"];
 
@@ -537,10 +533,10 @@ function readPublication({ environment }) {
   };
 }
 
-async function read(url, body = false) {
+async function read(url) {
   try {
     const response = await fetch(url, { redirect: "manual" });
-    const text = body ? await response.text() : (await response.body?.cancel(), undefined);
+    const text = await response.text();
     return {
       status: response.status,
       headers: Object.fromEntries(response.headers),
@@ -552,7 +548,7 @@ async function read(url, body = false) {
 }
 
 async function readSurface(target) {
-  const sitemap = await read(`${target.origin}/sitemap.xml`, true);
+  const sitemap = await read(`${target.origin}/sitemap.xml`);
   const all = [
     ...sitemapPaths(target.origin, sitemap?.body),
     ...surfacePaths.legal,
@@ -560,9 +556,9 @@ async function readSurface(target) {
     surfacePaths.preview,
   ];
   const pages = Object.fromEntries(
-    await Promise.all(all.map(async (page) => [page, await read(`${target.origin}${page}`, true)])),
+    await Promise.all(all.map(async (page) => [page, await read(`${target.origin}${page}`)])),
   );
-  return { robots: await read(`${target.origin}/robots.txt`, true), sitemap, pages };
+  return { robots: await read(`${target.origin}/robots.txt`), sitemap, pages };
 }
 
 async function main() {
@@ -570,7 +566,7 @@ async function main() {
     allowPositionals: true,
     options: { mode: { type: "string", default: "test" }, phase: { type: "string" } },
   });
-  if (!["test", "live"].includes(values.mode)) throw new Error("--mode accetta test o live.");
+  modeOf(values.mode);
   const target = targetOf(values.mode);
   const command = positionals[0] ?? "check";
   if (command === "plan") return console.log(plan(target));

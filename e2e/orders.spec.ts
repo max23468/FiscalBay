@@ -1108,6 +1108,7 @@ for (const locale of ["it", "en"] as const) {
       await expect.poll(() => noPageOverflow(page)).toBe(true);
       await expect(page.locator("html")).toHaveAttribute("lang", locale);
     } finally {
+      await context.unrouteAll({ behavior: "wait" });
       await context.close();
     }
   });
@@ -1541,6 +1542,7 @@ test.describe("negozi e impostazioni", () => {
           ).toBeVisible();
           expect(errors, `${route}, notifiche`).toEqual([]);
         } finally {
+          await context.unrouteAll({ behavior: "wait" });
           await context.close();
         }
       }

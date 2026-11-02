@@ -29,16 +29,10 @@ function useAccountExport() {
 }
 
 export function PrivacySection({
-  accountExport,
-  accountDeletion,
   termsUpdate,
   email,
   security,
 }: {
-  /** Esportazione dei dati dell'account disponibile. */
-  accountExport: boolean;
-  /** Cancellazione dell'account disponibile. */
-  accountDeletion: boolean;
   /** Versione corrente dei Termini ancora da accettare. */
   termsUpdate: boolean;
   email: string;
@@ -64,16 +58,14 @@ export function PrivacySection({
       action: t.settings.privacy.readPolicy,
     },
   ];
-  const rows = accountExport
-    ? [
-        {
-          intent: "account-export",
-          title: t.settings.privacy.accountExport,
-          body: t.settings.privacy.accountExportBody,
-          action: t.settings.privacy.accountExportAction,
-        },
-      ]
-    : [];
+  const rows = [
+    {
+      intent: "account-export",
+      title: t.settings.privacy.accountExport,
+      body: t.settings.privacy.accountExportBody,
+      action: t.settings.privacy.accountExportAction,
+    },
+  ];
   return (
     <div className="grid gap-4">
       <ul className="grid divide-y border-y">
@@ -119,24 +111,14 @@ export function PrivacySection({
             </Button>
           </li>
         ))}
-        {accountDeletion ? (
-          <DeleteAccountRow email={email} security={security} accountExport={accountExport} />
-        ) : null}
+        <DeleteAccountRow email={email} security={security} />
       </ul>
     </div>
   );
 }
 
 /** Cancellazione dell'account dalle Impostazioni, con l'esportazione proposta senza obbligo. */
-function DeleteAccountRow({
-  email,
-  security,
-  accountExport,
-}: {
-  email: string;
-  security: SecurityData;
-  accountExport: boolean;
-}) {
+function DeleteAccountRow({ email, security }: { email: string; security: SecurityData }) {
   const { t } = useCopy();
   const { links } = useLinks();
   const exporter = useAccountExport();
@@ -154,16 +136,14 @@ function DeleteAccountRow({
           <div className="grid gap-3 text-sm">
             <p className="text-muted-foreground">{t.settings.privacy.deleteAccountExport}</p>
             <div className="flex flex-wrap gap-2">
-              {accountExport ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={exporter.pending}
-                  onClick={() => exporter.run("account-export")}
-                >
-                  {t.settings.privacy.accountExport}
-                </Button>
-              ) : null}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={exporter.pending}
+                onClick={() => exporter.run("account-export")}
+              >
+                {t.settings.privacy.accountExport}
+              </Button>
               <Link
                 to={appHref(links, "impostazioni/esportazione")}
                 {...buttonLink({ variant: "outline", size: "sm" })}

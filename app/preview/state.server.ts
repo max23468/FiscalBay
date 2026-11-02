@@ -133,7 +133,6 @@ const notices: Record<string, (t: AppCopy) => string | undefined> = {
   "export-download": (t) => t.settings.export.exportCreated,
   "export-save": (t) => t.settings.export.exportConfigSimulated,
   "export-delete": (t) => t.settings.export.exportConfigSimulated,
-  retry: (t) => t.orders.retried,
   profile: (t) => t.profile.saved,
   template: () => undefined,
   support: () => undefined,
@@ -290,6 +289,6 @@ export async function simulateAction(request: Request, form: FormData) {
   // Come il ritorno da eBay nell'area reale: l'esito «già collegato altrove» arriva in Negozi.
   if ((intent === "store-connect" || intent === "store-fix") && scenario.elsewhere)
     return redirect(`${localizedPath(language, previewStoresPath)}?negozio=altro-spazio`, 303);
-  const notice = notices[intent] ? notices[intent](t) : t.preview.simulated;
+  const notice = Object.hasOwn(notices, intent) ? notices[intent]!(t) : t.preview.simulated;
   return { ok: true, notice } satisfies ActionResult;
 }

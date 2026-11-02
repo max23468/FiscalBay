@@ -10,17 +10,14 @@ import {
 } from "../account-area.server";
 import { ordersPath } from "../app-links";
 import { searchVisibleOrders } from "../domain/orders.server";
-import { errorResponse } from "../error-response";
+import { errorResponse, postOnly } from "../error-response";
 import { localizedPath } from "../i18n";
 import { measure } from "../observability.server";
 import { searchQuery, searchTokens } from "../orders/order-search";
 import { accountSearchScope, searchHref } from "../orders/order-search.server";
 import type { Route } from "./+types/order-search";
 
-/** Il percorso riceve soltanto ricerche: una lettura non ha contenuto. */
-export function loader() {
-  return new Response(null, { status: 405, headers: { allow: "POST" } });
-}
+export const loader = postOnly;
 
 /**
  * Ricerca ordini della barra superiore, con lo stesso filtro della pagina Ordini. La query

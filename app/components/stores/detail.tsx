@@ -121,7 +121,7 @@ function StoreDetail({ store, data }: { store: StoreView; data: StoresPageData }
           data={data}
         >
           {t.stores.issue[store.issue].body}
-          {store.issue === "unverifiable" && data.settings ? (
+          {store.issue === "unverifiable" ? (
             <Link to={appHref(links, "impostazioni/supporto")} className="link-underline">
               {t.common.contactSupport}
             </Link>

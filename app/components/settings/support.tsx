@@ -25,13 +25,10 @@ import { CheckboxOption } from "~/components/checkbox-option";
 import { Group, SimpleSelect } from "./controls";
 
 export function SupportSection({
-  support,
   diagnostics,
   email,
   whatsNew,
 }: {
-  /** Modulo di assistenza disponibile. */
-  support: boolean;
   /** Dati tecnici allegabili alla richiesta; null se non è stato possibile leggerli. */
   diagnostics: DiagnosticsView | null;
   email: string;
@@ -67,19 +64,7 @@ export function SupportSection({
           ))}
         </div>
       </Group>
-      {support ? (
-        <SupportForm email={email} diagnostics={diagnostics} />
-      ) : (
-        <Group title={t.settings.support.contact} separated={false}>
-          <p className="text-sm text-muted-foreground">
-            {t.settings.support.supportWrite}{" "}
-            <a href={`mailto:${supportEmail}`} className="link-underline">
-              {supportEmail}
-            </a>
-            .
-          </p>
-        </Group>
-      )}
+      <SupportForm email={email} diagnostics={diagnostics} />
     </>
   );
 }

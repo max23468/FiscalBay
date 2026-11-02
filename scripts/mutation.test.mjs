@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
   consumerTests,
@@ -175,7 +175,7 @@ describe("esito dei mutation test", () => {
       encoding: "utf8",
     })
       .split("\n")
-      .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file))
+      .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
       .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
     assert.deepEqual(mutationCoverageGaps(files), []);
     const extracted = [

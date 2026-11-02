@@ -16,3 +16,9 @@ export const maxAuditReason = 500;
 /** Password dell'account, come la verifica di Better Auth. */
 export const minPasswordLength = 8;
 export const maxPasswordLength = 128;
+
+/** Righe per pagina negli elenchi della console. */
+export const adminPageSize = 50;
+
+/** Giorni di Premium concessi con una sola operazione della console. */
+export const maxGrantDays = 366;

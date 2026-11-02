@@ -548,6 +548,7 @@ for (const language of ["it", "en"] as const) {
             ),
           ).toBeVisible();
         } finally {
+          await context.unrouteAll({ behavior: "wait" });
           await context.close();
         }
       });
@@ -707,8 +708,11 @@ for (const area of areas)
         await bottom
           .getByRole("link", { name: locale === "it" ? "Negozi eBay" : "eBay stores" })
           .tap();
+        await expect(page).toHaveURL(new RegExp(`${prefix}${area.base}/negozi$`, "u"));
+        await networkIdle(page);
         await expect.poll(noOverflow).toBe(true);
       } finally {
+        await context.unrouteAll({ behavior: "wait" });
         await context.close();
       }
     });

@@ -3,18 +3,25 @@ import { CirclePause } from "lucide-react";
 import { StatusBadge } from "~/components/status";
 import type { AuditRow } from "../../domain/admin-audit.server";
 import type { WorkspaceDetail } from "../../domain/admin-directory.server";
-import type { StoreStatus } from "../../domain/stores.server";
 import { AuditTable } from "./governance";
 import { ActionForm, DataTable, Disclosure, Facts, Panel, Stat, StatGrid, TextField } from "./kit";
+import { lifetimeSlots } from "../../catalog";
+import { maxGrantDays } from "../../limits";
+import { storeActions } from "./store-actions";
 import { useAdmin } from "./use-admin";
 
 function Stores({ workspace }: { workspace: WorkspaceDetail }) {
   const { t, date } = useAdmin();
   const w = t.workspace;
   const free = !workspace.coverage;
-  const store = (item: StoreStatus) => {
+  const store = (item: WorkspaceDetail["stores"][number]) => {
     const fields = { negozio: item.id, spazio: workspace.id };
     const adminPaused = item.pauseReasons.includes("admin");
+    const actions = storeActions(
+      item.connection === "active",
+      item.pauseReasons,
+      item.detailErrors,
+    );
     return (
       <li key={item.id} className="grid gap-3 rounded-lg border p-3">
         <div className="flex flex-wrap items-center gap-2">
@@ -58,10 +65,12 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
           ]}
         />
         <div className="flex flex-wrap gap-3">
-          {item.connection === "active" ? (
+          {actions.sync ? (
             <ActionForm intent="store-sync" fields={fields} submit={w.store.sync} />
           ) : null}
-          <ActionForm intent="retry-details" fields={fields} submit={w.store.retryDetails} />
+          {actions.retryDetails ? (
+            <ActionForm intent="retry-details" fields={fields} submit={w.store.retryDetails} />
+          ) : null}
         </div>
         <div className="grid gap-2">
           <Disclosure
@@ -233,6 +242,18 @@ export function WorkspaceView({
 
       <Stores workspace={workspace} />
 
+      {workspace.billingIncidents.length > 0 ? (
+        <Panel title={t.overview.kinds.lifetime_unallocated.title}>
+          <DataTable
+            head={["Checkout", w.customer, t.accounts.created]}
+            rows={workspace.billingIncidents.map((incident) => ({
+              key: incident.sessionId,
+              cells: [incident.sessionId, incident.customerId ?? "", date(incident.openedAt)],
+            }))}
+          />
+        </Panel>
+      ) : null}
+
       <Panel title={w.entitlements}>
         <DataTable
           head={[w.source, w.period, w.paid, w.revoked, w.grantedBy]}
@@ -258,7 +279,14 @@ export function WorkspaceView({
         <div className="grid gap-2">
           <Disclosure label={w.grantPremium} destructive>
             <ActionForm intent="grant-premium" fields={fields} submit={w.grantPremium} reason>
-              <TextField label={w.days} name="giorni" type="number" min={1} max={366} required />
+              <TextField
+                label={w.days}
+                name="giorni"
+                type="number"
+                min={1}
+                max={maxGrantDays}
+                required
+              />
             </ActionForm>
           </Disclosure>
           <Disclosure label={w.grantLifetime} destructive>
@@ -284,7 +312,7 @@ export function WorkspaceView({
                     name="posto"
                     type="number"
                     min={1}
-                    max={20}
+                    max={lifetimeSlots}
                     aria-describedby={undefined}
                   />
                   <p className="text-sm text-muted-foreground">{w.vacantSeatHint}</p>
@@ -375,10 +403,11 @@ export function WorkspaceView({
           items={[
             ["ID", workspace.id],
             [t.accounts.created, date(workspace.createdAt, "date")],
-            [t.accounts.plan, t.coverage[workspace.coverage ?? "free"]],
             [
               w.members,
-              workspace.members.map((member) => `${member.email} (${member.role})`).join(", "),
+              workspace.members
+                .map((member) => `${member.email} (${w.roles[member.role] ?? member.role})`)
+                .join(", "),
             ],
             ...(workspace.profile
               ? ([
@@ -395,18 +424,6 @@ export function WorkspaceView({
                   string,
                   string,
                 ][])
-              : []),
-            ...(workspace.cycle && !workspace.coverage
-              ? ([
-                  [
-                    w.cycle,
-                    w.cycleValue(
-                      workspace.cycle.used,
-                      workspace.cycle.quota,
-                      date(workspace.cycle.endsAt),
-                    ),
-                  ],
-                ] as [string, string][])
               : []),
           ]}
         />

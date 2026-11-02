@@ -25,7 +25,7 @@ import { legalVersions } from "../app/domain/registration.server";
 import { freeHistoryDays } from "../app/domain/history-window.server";
 import { formatDate } from "../app/format";
 import { siteMeta } from "../app/site-meta";
-import { resetDatabase } from "./fixtures/database-fixtures";
+import { resetDatabase, insertWorkspace } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
 import { callRoute } from "./fixtures/route-fixtures";
@@ -45,8 +45,6 @@ describe("radice pubblica e area riservata", () => {
       language: "it",
       signedIn: false,
       origin: "http://localhost:5173",
-      baseFreeQuota: 5,
-      freePromotion: null,
       copy: { quota: "Con il piano Free sblocchi 5 ordini ogni 7 giorni." },
     });
     expect(await root("/en")).toMatchObject({ language: "en", signedIn: false });
@@ -72,13 +70,13 @@ describe("radice pubblica e area riservata", () => {
     // La fine della promozione è un giorno, senza l'orario, in home come in Prezzi.
     const line =
       "Promozione Free: 10 ordini da sbloccare ogni 7 giorni nei cicli che iniziano entro il 1 nov 2026, poi 5.";
-    expect(await root("/")).toMatchObject({ freePromotion: promotion, copy: { quota: line } });
+    expect(await root("/")).toMatchObject({ copy: { quota: line } });
     expect((await callRoute(loadPricing, "/prezzi")).copy.promotion).toBe(line);
     expect(sitePages.it.home.freePromotion(10, formatDate(promotion.endsAt, "it", "date"), 5)).toBe(
       line,
     );
     vi.setSystemTime(new Date(promotion.endsAt));
-    expect(await root("/en")).toMatchObject({ baseFreeQuota: 5, freePromotion: null });
+    expect(await root("/en")).toMatchObject({ copy: { quota: expect.stringContaining("5") } });
   });
 
   it("annuncia una promozione senza fine come un periodo limitato", async () => {
@@ -91,7 +89,6 @@ describe("radice pubblica e area riservata", () => {
     const line =
       "Promozione Free per un periodo limitato: 10 ordini da sbloccare ogni 7 giorni invece di 5.";
     expect(await root("/")).toMatchObject({
-      freePromotion: { quota: 10, endsAt: null },
       copy: { quota: line },
     });
     expect((await callRoute(loadPricing, "/prezzi")).copy.promotion).toBe(line);
@@ -503,9 +500,7 @@ describe("pagine del sito pubblico", () => {
     });
     const at = new Date().toISOString();
     await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO workspaces (id, name, created_at) VALUES ('w-prezzi', 'Spazio', ?1)",
-      ).bind(at),
+      ...insertWorkspace({ id: "w-prezzi", name: "Spazio", createdAt: at }),
       // Un posto prenotato da un Checkout aperto non è in vendita.
       env.DB.prepare(
         `INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at)
@@ -549,9 +544,7 @@ describe("pagine del sito pubblico", () => {
     // Venti prenotazioni di spazi diversi bastano a esaurire l'offerta.
     await env.DB.batch(
       Array.from({ length: 20 }, (_, index) => [
-        env.DB.prepare(
-          "INSERT INTO workspaces (id, name, created_at) VALUES (?1, 'Spazio', ?2)",
-        ).bind(`w-${index}`, at),
+        ...insertWorkspace({ id: `w-${index}`, name: "Spazio", createdAt: at }),
         env.DB.prepare(
           `INSERT INTO lifetime_allocations (slot, workspace_id, status, expires_at, created_at)
            VALUES (?1, ?2, 'reserved', ?3, ?3)`,

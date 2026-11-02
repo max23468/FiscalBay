@@ -7,10 +7,10 @@ import { deletionMarkerDays } from "./account-deletion.server";
 import {
   consumeStepJob,
   deleteOrders,
-  lockUntil,
   orderBudget,
   resumeBatch,
   runToEnd,
+  claimStepJob,
 } from "./deletion-steps.server";
 import { storeIdentityHash } from "./store-marks.server";
 
@@ -159,33 +159,14 @@ export async function runEbayAccountDeletion(
 ): Promise<EbayDeletionOutcome> {
   const at = now.toISOString();
   const db = env.DB;
-  const lock = lockUntil(now);
-  const job = await db
-    .prepare(`UPDATE ebay_account_deletions SET locked_until = ?2
-      WHERE id = ?1 AND completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?3)
-      RETURNING ebay_environment, ebay_user_id, eias_token, username`)
-    .bind(id, lock, at)
-    .first<{
-      ebay_environment: EbayEnvironment;
-      ebay_user_id: string;
-      eias_token: string | null;
-      username: string | null;
-    }>();
-  if (!job) {
-    const row = await db
-      .prepare("SELECT completed_at FROM ebay_account_deletions WHERE id = ?")
-      .bind(id)
-      .first<{ completed_at: string | null }>();
-    return !row ? "missing" : row.completed_at ? "done" : "busy";
-  }
-  // Il rilascio vale soltanto per il blocco ancora preso da questo passo.
-  const release = () =>
-    db
-      .prepare(
-        "UPDATE ebay_account_deletions SET locked_until = NULL WHERE id = ?1 AND locked_until = ?2",
-      )
-      .bind(id, lock)
-      .run();
+  const claim = await claimStepJob<{
+    ebay_environment: EbayEnvironment;
+    ebay_user_id: string;
+    eias_token: string | null;
+    username: string | null;
+  }>(db, "ebay_account_deletions", "ebay_environment, ebay_user_id, eias_token, username", id, now);
+  if ("outcome" in claim) return claim.outcome;
+  const { job, release } = claim;
   try {
     const { results: stores } = await db
       .prepare("SELECT id FROM ebay_stores WHERE ebay_environment = ? AND ebay_account_id = ?")
