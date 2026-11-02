@@ -4,6 +4,7 @@ import {
   checkActionPins,
   checkCopy,
   checkFixtures,
+  checkGateJobs,
   checkImports,
   checkPlanCodes,
   checkToolPins,
@@ -141,6 +142,27 @@ describe("em dash", () => {
   it("ammette trattino, en dash e separatore dei titoli", () => {
     assert.deepEqual(
       checkCopy([{ path: "app/root.tsx", text: "Ordini | FiscalBay - 2026\u2013" }]),
+      [],
+    );
+  });
+});
+
+describe("job dopo Node 26", () => {
+  const ci = (condition) => [
+    {
+      path: ".github/workflows/ci.yml",
+      text: `name: CI\n\njobs:\n  gate:\n    name: Node 26\n    needs: verify\n  after:\n    needs: [verify, gate]\n    ${condition}\n`,
+    },
+  ];
+
+  it("rifiuta un job che GitHub salterebbe con un job saltato a monte", () => {
+    assert.equal(checkGateJobs(ci("if: needs.gate.result == 'success'")).length, 1);
+    assert.match(checkGateJobs(ci("runs-on: ubuntu"))[0], /«after»/u);
+  });
+
+  it("accetta la condizione esplicita", () => {
+    assert.deepEqual(
+      checkGateJobs(ci("if: ${{ !cancelled() && needs.gate.result == 'success' }}")),
       [],
     );
   });

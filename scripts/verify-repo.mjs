@@ -211,12 +211,26 @@ export function checkCopy(files) {
   return errors;
 }
 
+/**
+ * Con un diff piccolo alcuni job della CI si saltano, e GitHub salta anche chi dipende da loro
+ * salvo una condizione esplicita: i job dopo `Node 26` non devono sparire in silenzio.
+ */
+export function checkGateJobs(files) {
+  const ci = files.find(({ path: file }) => file === ".github/workflows/ci.yml");
+  if (!ci) return [];
+  const jobs = ci.text.slice(ci.text.indexOf("\njobs:\n")).split(/^(?=  [\w-]+:$)/mu);
+  return jobs
+    .filter((job) => /^    needs:.*\bgate\b/mu.test(job) && !/^    if:.*!cancelled\(\)/mu.test(job))
+    .map((job) => `${ci.path}: «${job.trim().split(":")[0]}» dopo gate senza !cancelled()`);
+}
+
 export const checks = {
   "sigle di piano": checkPlanCodes,
   fixture: checkFixtures,
   "moduli server raggiungibili": (files) => checkImports(files),
   "versioni degli strumenti": checkToolPins,
   "Action fissate": checkActionPins,
+  "job dopo Node 26": checkGateJobs,
 };
 
 function readRepository(root) {
