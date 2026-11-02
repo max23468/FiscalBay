@@ -649,6 +649,12 @@ describe("comandi della pubblicazione", () => {
     ];
     for (const [base, head, tags, message] of rejected)
       assert.throws(() => assertVersionStep(section(head), section(base), tags), message);
+    const dated = (version) => `## [${version}] - 2026-11-02\n`;
+    assert.doesNotThrow(() => assertVersionStep(section("2.0.1"), dated("2.0.2"), ["v2.0.1"]));
+    assert.throws(
+      () => assertVersionStep(section("2.0.1"), dated("2.0.2"), ["v2.0.1", "v2.0.2"]),
+      /non è un passo dalla 2\.0\.2/u,
+    );
     // Una sezione invariata in cima non chiede nulla.
     assert.doesNotThrow(() => assertVersionStep(section("2.0.0"), section("2.0.0"), ["v2.0.0"]));
   });

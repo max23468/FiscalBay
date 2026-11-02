@@ -109,11 +109,11 @@ describe("protezioni della zona", () => {
     const rule = headerRule(target);
     assert.equal(rule.expression, 'http.host in {"test.fiscalbay.it"}');
     const hsts = rule.action_parameters.headers["strict-transport-security"].value;
-    assert.equal(hsts, "max-age=86400");
+    assert.equal(hsts, "max-age=604800");
     assert.doesNotMatch(hsts, /includeSubDomains|preload/u);
     assert.equal(
       headerRule(live).action_parameters.headers["strict-transport-security"].value,
-      "max-age=86400",
+      "max-age=604800",
     );
     assert.equal(rule.action_parameters.headers["x-frame-options"].value, "DENY");
     assert.ok(!("content-security-policy" in rule.action_parameters.headers));
@@ -220,7 +220,7 @@ describe("protezioni della zona", () => {
     const described = plan(target);
     assert.deepEqual(described.ctAlerting, { enabled: true, emails: [alertEmail] });
     assert.deepEqual(Object.keys(described.rules), phases);
-    assert.equal(described.hsts.current, 86_400);
+    assert.equal(described.hsts.current, 604_800);
   });
 
   it("accetta il readback configurato", () => {
@@ -243,7 +243,7 @@ describe("protezioni della zona", () => {
       ),
     };
     for (const name of ["page", "asset", "missing"])
-      liveState.responses[name].headers["strict-transport-security"] = "max-age=86400";
+      liveState.responses[name].headers["strict-transport-security"] = "max-age=604800";
     const result = checkReadback(live, liveState);
     assert.equal(result.ok, true, JSON.stringify(result.checks));
     liveState.responses.www.headers.location = "https://fiscalbay.it/";
