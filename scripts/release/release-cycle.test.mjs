@@ -1204,15 +1204,11 @@ process.stdout.write(JSON.stringify(result));`,
     );
   });
 
-  it("non occupa un runner durante la quiete e forza la campagna settimanale", () => {
-    const base = {
-      now: Date.parse("2026-11-02T10:20:00Z"),
-      committedAt: "2026-11-02T10:00:00Z",
-      passed: true,
-      certified: false,
-    };
+  it("qualifica dopo ogni merge verde e forza la campagna settimanale", () => {
+    const base = { passed: true, certified: false };
     assert.equal(candidateReadiness(base), true);
-    assert.equal(candidateReadiness({ ...base, committedAt: "2026-11-02T10:10:00Z" }), false);
+    assert.equal(candidateReadiness({ ...base, passed: false }), false);
+    assert.equal(candidateReadiness({ ...base, qualifying: true }), false);
     assert.equal(candidateReadiness({ ...base, certified: true }), false);
     assert.equal(candidateReadiness({ ...base, weekly: true, certified: true }), true);
     assert.equal(candidateReadiness({ ...base, passed: false, weekly: true }), false);

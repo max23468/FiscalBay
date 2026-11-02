@@ -336,6 +336,23 @@ jobs:
             esac
           done
 
+  # L'attesa di `Promuovi` si consuma qui: la qualifica parte dopo ogni merge, e i merge ravvicinati
+  # si accorpano nella coda di `candidate-qualification`.
+  candidate:
+    name: Avvia qualifica
+    needs: gate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop' && needs.gate.result == 'success'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      actions: write
+    steps:
+      - name: Start candidate qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: gh workflow run candidate.yml --repo "${GITHUB_REPOSITORY}" --ref develop -f automatic=true -f expected_sha="${SHA}"
+
   deploy-test:
     name: Deploy test
     needs: [verify, gate]

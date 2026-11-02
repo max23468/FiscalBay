@@ -200,7 +200,7 @@ jobs:
             test-results/browser/
           retention-days: 30
 
-  # Quindici minuti di osservazione del sito reale: un incidente nuovo o un servizio che non
+  # Cinque minuti di osservazione del sito reale: un incidente nuovo o un servizio che non
   # risponde riportano alla versione precedente, se compatibile, e avvisano l'owner.
   guard:
     name: Guardia dopo il deploy
@@ -225,7 +225,7 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: node scripts/release/guard.mjs --mode live --minutes 15 --expected-sha "${EXPECTED_SHA}"
+        run: node scripts/release/guard.mjs --mode live --minutes 5 --expected-sha "${EXPECTED_SHA}"
       - name: Roll back on incident
         id: rollback
         if: failure()

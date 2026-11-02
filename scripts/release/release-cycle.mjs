@@ -1178,10 +1178,9 @@ async function ensureCandidate(repository, sha) {
     (run) =>
       run.displayTitle === `Candidato ${sha}` &&
       run.status !== "completed" &&
-      (run.event === "workflow_dispatch" ||
-        runJobs(repository, run.databaseId).some(
-          (job) => job.name.startsWith("Qualifica candidato /") && job.conclusion !== "skipped",
-        )),
+      runJobs(repository, run.databaseId).some(
+        (job) => job.name.startsWith("Qualifica candidato /") && job.conclusion !== "skipped",
+      ),
   );
   if (!active) {
     const since = Date.now() - 1000;
@@ -1220,21 +1219,8 @@ function candidateCycle({ repository }) {
   return ensureCandidate(repository, headOf(repository, "develop"));
 }
 
-export function candidateReadiness({
-  committedAt,
-  passed,
-  certified,
-  manual,
-  weekly,
-  qualifying = false,
-  now = Date.now(),
-}) {
-  return Boolean(
-    manual ||
-    (passed &&
-      !qualifying &&
-      (weekly || (!certified && now - Date.parse(committedAt) >= 15 * 60_000))),
-  );
+export function candidateReadiness({ passed, certified, manual, weekly, qualifying = false }) {
+  return Boolean(manual || (passed && !qualifying && (weekly || !certified)));
 }
 
 function candidateReady({ repository, values }) {
@@ -1270,7 +1256,6 @@ function candidateReady({ repository, values }) {
   const ready =
     (current === sha || pinned) &&
     candidateReadiness({
-      committedAt: git("show", "-s", "--format=%cI", sha),
       passed,
       certified: values.manual || values.weekly ? false : candidateAvailable(repository, tree),
       manual: values.manual,
@@ -1284,7 +1269,7 @@ function candidateReady({ repository, values }) {
   console.log(
     ready
       ? "Candidato pronto per la qualifica."
-      : "Nessuna qualifica necessaria o CI/quiete ancora da completare.",
+      : "Nessuna qualifica necessaria o CI ancora da completare.",
   );
 }
 

@@ -3,7 +3,7 @@
  * Guardia dopo un deploy: per i minuti indicati legge il sito reale e gli incidenti della console.
  * Fallisce per un incidente P1 aperto dopo l'avvio o per tre letture di fila senza risposta valida:
  * il workflow torna allora alla versione precedente, se compatibile, e avvisa l'owner.
- * Uso: node scripts/release/guard.mjs --mode live --minutes 15
+ * Uso: node scripts/release/guard.mjs --mode live --minutes 5
  */
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -73,7 +73,7 @@ async function main() {
   const { values } = parseArgs({
     options: {
       mode: { type: "string" },
-      minutes: { type: "string", default: "15" },
+      minutes: { type: "string", default: "5" },
       "expected-sha": { type: "string" },
     },
   });
