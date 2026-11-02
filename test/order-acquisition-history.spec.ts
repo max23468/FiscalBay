@@ -647,6 +647,7 @@ it("distingue gli errori del dettaglio che fermano l'esecuzione da quelli dell'o
   for (const [fail, error] of [
     [single(() => new Response(null, { status: 404 })), "rejected"],
     [single(() => Response.json({ orderId: "12-34567-89012" })), "invalid_response"],
+    [single(() => Response.json(order({ creationDate: "not-a-date" }))), "invalid_response"],
     [
       single(() => Response.json(order({ lastModifiedDate: "2026-09-01T08:30:00.000Z" }))),
       "invalid_response",

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 import { handleAuthRequest } from "../app/auth-route.server";
+import { consumeStepJob, lockUntil, runToEnd } from "../app/domain/deletion-steps.server";
 import { createAuth } from "../app/auth.server";
 import {
   consumeAccountDeletion,
@@ -347,6 +348,66 @@ function sentTo(send: MockInstance<SendEmail["send"]>, email: string) {
     .map(([message]) => message as { to: string; subject: string; text: string })
     .filter((message) => message.to === email);
 }
+
+it("il blocco delle cancellazioni dura quindici minuti", () => {
+  expect(lockUntil(new Date("2026-09-01T12:00:00.000Z"))).toBe("2026-09-01T12:15:00.000Z");
+});
+
+it.each(["more", "done", "busy", "missing"])(
+  "la coda delle cancellazioni riaccoda soltanto il lavoro ancora incompleto: %s",
+  async (outcome) => {
+    const message = queueMessage({});
+    const requeue = vi.fn(async () => {});
+    await consumeStepJob(message, async () => outcome, requeue, "account_deletion");
+    expect(requeue).toHaveBeenCalledTimes(outcome === "more" ? 1 : 0);
+    expect(message.ack).toHaveBeenCalledTimes(1);
+    expect(message.retry).not.toHaveBeenCalled();
+  },
+);
+
+it.each([3, 4])(
+  "un errore di cancellazione rispetta l'ultimo retry e registra l'operazione: %i",
+  async (attempts) => {
+    const message = queueMessage({}, attempts);
+    const requeue = vi.fn(async () => {});
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await consumeStepJob(
+        message,
+        async () => {
+          throw new Error("dettaglio riservato");
+        },
+        requeue,
+        "account_deletion",
+      );
+      expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)))).toEqual([
+        expect.objectContaining({ operation: "account_deletion" }),
+      ]);
+      expect(JSON.stringify(errors.mock.calls)).not.toContain("dettaglio riservato");
+      expect(requeue).not.toHaveBeenCalled();
+      if (attempts === 3) {
+        expect(message.retry).toHaveBeenCalledWith({ delaySeconds: 120 });
+        expect(message.ack).not.toHaveBeenCalled();
+      } else {
+        expect(message.ack).toHaveBeenCalledTimes(1);
+        expect(message.retry).not.toHaveBeenCalled();
+      }
+    } finally {
+      errors.mockRestore();
+    }
+  },
+);
+
+it("il compito delle cancellazioni continua con more e si ferma al primo esito conclusivo", async () => {
+  const run = vi
+    .fn<() => Promise<string>>()
+    .mockResolvedValueOnce("more")
+    .mockResolvedValueOnce("more")
+    .mockResolvedValueOnce("done")
+    .mockRejectedValue(new Error("il lavoro concluso non si ripete"));
+  await runToEnd(run);
+  expect(run).toHaveBeenCalledTimes(3);
+});
 
 describe("cancellazione dell'account", () => {
   let send: MockInstance<SendEmail["send"]>;

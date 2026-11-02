@@ -41,9 +41,11 @@ declare global {
 // le email, oggi attese perché un invio fallito arrivi all'utente.
 const durableBackground: BetterAuthPlugin = {
   id: "durable-background",
-  init: () => ({
-    context: { runInBackground: (task) => waitUntil(Promise.resolve(task).catch(() => {})) },
-  }),
+  init() {
+    return {
+      context: { runInBackground: (task) => waitUntil(Promise.resolve(task).catch(() => {})) },
+    };
+  },
 };
 
 // Con `commerce.identity.readonly` eBay restituisce l'email soltanto per gli account business.
