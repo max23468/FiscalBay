@@ -52,9 +52,9 @@ jobs:
       tree: ${{ steps.tree.outputs.tree }}
       playwright: ${{ steps.tree.outputs.playwright }}
     steps:
+      # Nessun `ref`: si qualifica soltanto il commit della run, confrontato con quello atteso.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.expected_sha }}
           fetch-depth: 0
           persist-credentials: false
       - name: Check expected commit and tree
@@ -87,7 +87,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.expected_sha }}
           fetch-depth: 0
           persist-credentials: false
       # Come in `select`, la ricerca usa il Node del runner: installazione e cache servono
@@ -134,7 +133,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.expected_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup
@@ -168,7 +166,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.expected_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup
@@ -232,7 +229,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.expected_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: ./.github/actions/setup
