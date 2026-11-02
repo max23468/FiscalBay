@@ -237,6 +237,15 @@ export function assertBase(expected, current) {
     throw new Error("La base della PR è avanzata: aggiornarla prima della qualifica finale.");
 }
 
+/** La promozione resta sullo SHA autorizzato: i merge entrati dopo aspettano il lotto successivo. */
+export function assertContained(expected, status) {
+  if (!/^[0-9a-f]{40}$/u.test(expected ?? "") || !["ahead", "identical"].includes(status))
+    throw new Error("La testa di develop non contiene il commit autorizzato.");
+}
+
+const compareStatus = (repository, base, head) =>
+  ghJson("api", `repos/${repository}/compare/${base}...${head}`).status;
+
 // File che valgono per tutto il prodotto o per la procedura di qualifica: se cambiano da una
 // delle due parti, la PR si riqualifica sulla base attuale.
 const globalFile =
@@ -1131,35 +1140,51 @@ async function preflightCycle({ repository, values }) {
     );
 }
 
-/** Qualifica completa della testa di `develop`, senza effetti su `main` né sui provider. */
+/**
+ * Run del candidato richiesto: il titolo porta il commit qualificato, mentre `headSha` è la testa
+ * di `develop` all'avvio e può essere già avanzata da un merge.
+ */
+export function candidateRun(runs, sha, since) {
+  return runs
+    .filter(
+      (run) =>
+        run.displayTitle === `Candidato ${sha}` &&
+        run.event === "workflow_dispatch" &&
+        Date.parse(run.createdAt) >= since,
+    )
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+}
+
+/** Qualifica completa di un commit di `develop`, senza effetti su `main` né sui provider. */
 async function ensureCandidate(repository, sha) {
   const tree = ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha;
   if (candidateAvailable(repository, tree)) return console.log("Candidato già qualificato.");
-  const active = ghJson(
-    "run",
-    "list",
-    "--repo",
-    repository,
-    "--workflow",
-    "candidate.yml",
-    "--branch",
-    "develop",
-    "--limit",
-    "100",
-    "--json",
-    "databaseId,headSha,status,event",
-  ).find(
+  const runs = () =>
+    ghJson(
+      "run",
+      "list",
+      "--repo",
+      repository,
+      "--workflow",
+      "candidate.yml",
+      "--branch",
+      "develop",
+      "--limit",
+      "100",
+      "--json",
+      "databaseId,displayTitle,headSha,status,event,createdAt",
+    );
+  let active = runs().find(
     (run) =>
-      run.headSha === sha &&
+      run.displayTitle === `Candidato ${sha}` &&
       run.status !== "completed" &&
       (run.event === "workflow_dispatch" ||
         runJobs(repository, run.databaseId).some(
           (job) => job.name.startsWith("Qualifica candidato /") && job.conclusion !== "skipped",
         )),
   );
-  const started = Boolean(active);
-  const since = started ? 0 : Date.now() - 1000;
-  if (!started)
+  if (!active) {
+    const since = Date.now() - 1000;
     gh(
       "workflow",
       "run",
@@ -1171,16 +1196,22 @@ async function ensureCandidate(repository, sha) {
       "-f",
       `expected_sha=${sha}`,
     );
+    for (let attempt = 0; attempt < 24 && !active; attempt++) {
+      await pause(5000);
+      active = candidateRun(runs(), sha, since);
+    }
+    if (!active) throw new Error("Run del candidato non trovata.");
+  }
   await waitRun(
     repository,
     "candidate.yml",
-    sha,
+    active.headSha,
     "develop",
-    started ? [active.event] : ["workflow_dispatch"],
-    since,
+    [active.event],
+    0,
     undefined,
     // Una run pianificata successiva sullo stesso commit non qualifica: si segue quella attiva.
-    active?.databaseId,
+    active.databaseId,
   );
   if (!candidateAvailable(repository, tree)) throw new Error("Candidato non certificato.");
 }
@@ -1231,8 +1262,13 @@ function candidateReady({ repository, values }) {
           run.status !== "completed" &&
           String(run.id) !== process.env.GITHUB_RUN_ID,
       );
+  // La qualifica richiesta da `Promuovi` riguarda il commit autorizzato, anche se poi entrano PR.
+  const pinned =
+    values.manual &&
+    current !== sha &&
+    ["ahead", "identical"].includes(compareStatus(repository, sha, current));
   const ready =
-    current === sha &&
+    (current === sha || pinned) &&
     candidateReadiness({
       committedAt: git("show", "-s", "--format=%cI", sha),
       passed,
@@ -1242,7 +1278,7 @@ function candidateReady({ repository, values }) {
       qualifying: running,
     });
   if (!ready && values.manual)
-    throw new Error("La testa di develop è avanzata prima della qualifica.");
+    throw new Error("La testa di develop non contiene il candidato richiesto.");
   if (process.env.GITHUB_OUTPUT)
     appendFileSync(process.env.GITHUB_OUTPUT, `ready=${ready}\nsha=${sha}\n`);
   console.log(
@@ -1290,8 +1326,9 @@ async function confirmProduction(repository, jobs, sha, version) {
  */
 async function promoteCycle({ repository, values }) {
   const requestedAt = values["requested-at"] || new Date().toISOString();
-  const sha = headOf(repository, "develop");
-  if (values.sha) assertBase(values.sha, sha);
+  const head = headOf(repository, "develop");
+  const sha = values.sha ?? head;
+  if (values.sha) assertContained(sha, compareStatus(repository, sha, head));
   const lot = await lotPreflight({
     repository,
     sha,

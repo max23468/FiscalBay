@@ -17,6 +17,8 @@ import { describe, it } from "node:test";
 import { requiredReview } from "./release.mjs";
 import {
   assertBase,
+  assertContained,
+  candidateRun,
   assertQualificationBase,
   independentBase,
   waitUpdatedHead,
@@ -436,6 +438,35 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     assert.doesNotThrow(() => assertBase(sha, sha));
     assert.throws(() => assertBase(sha, "b".repeat(40)), /base/u);
     assert.throws(() => assertBase("", ""), /base/u);
+  });
+
+  it("promuove il commit autorizzato anche se develop avanza, mai uno estraneo", () => {
+    const sha = "a".repeat(40);
+    assert.doesNotThrow(() => assertContained(sha, "identical"));
+    assert.doesNotThrow(() => assertContained(sha, "ahead"));
+    assert.throws(() => assertContained(sha, "diverged"), /autorizzato/u);
+    assert.throws(() => assertContained(sha, "behind"), /autorizzato/u);
+    assert.throws(() => assertContained("", "ahead"), /autorizzato/u);
+  });
+
+  it("segue il candidato dal titolo quando develop è già avanzato", () => {
+    const sha = "a".repeat(40);
+    const since = Date.parse("2026-11-02T10:00:00Z");
+    const run = (databaseId, displayTitle, createdAt, event = "workflow_dispatch") => ({
+      databaseId,
+      displayTitle,
+      createdAt,
+      event,
+      headSha: "b".repeat(40),
+    });
+    const runs = [
+      run(1, `Candidato ${sha}`, "2026-11-02T09:00:00Z"),
+      run(2, `Candidato ${sha}`, "2026-11-02T10:01:00Z"),
+      run(3, `Candidato ${sha}`, "2026-11-02T10:02:00Z", "schedule"),
+      run(4, `Candidato ${"c".repeat(40)}`, "2026-11-02T10:03:00Z"),
+    ];
+    assert.equal(candidateRun(runs, sha, since)?.databaseId, 2);
+    assert.equal(candidateRun(runs.slice(2), sha, since), undefined);
   });
 
   it("non riqualifica per una base avanzata su file disgiunti e non globali", () => {
@@ -875,6 +906,7 @@ const args=process.argv.slice(2);fs.appendFileSync(process.env.CYCLE_LOG,JSON.st
 const url=args[1];let result;
 if(url==='repos/{owner}/{repo}') result={full_name:'example/project'};
 else if(url.includes('/git/ref/heads/')) result={object:{sha:'${"b".repeat(40)}'}};
+else if(url.includes('/compare/')) result={status:'diverged'};
 else if(url==='repos/example/project/pulls/12') result={state:'open',draft:false,head:{ref:'feature',sha:'${"b".repeat(40)}',repo:{full_name:'example/project'}},base:{ref:'develop',sha:'${"c".repeat(40)}'}};
 else throw new Error('Unexpected GitHub operation '+args.join(' '));
 process.stdout.write(JSON.stringify(result));`,
@@ -898,7 +930,7 @@ process.stdout.write(JSON.stringify(result));`,
           },
         );
         assert.equal(result.status, 1, result.stderr);
-        assert.match(result.stderr, /base della PR è avanzata/u);
+        assert.match(result.stderr, /base della PR è avanzata|non contiene il commit autorizzato/u);
         const calls = readFileSync(log, "utf8")
           .trim()
           .split("\n")
