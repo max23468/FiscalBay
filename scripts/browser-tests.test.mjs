@@ -11,8 +11,9 @@ import {
 
 describe("coordinamento e provenienza della pubblicazione", () => {
   it("certifica tutte le partizioni browser solo con prove coerenti e complete", () => {
+    const shards = { source: [1, 2, 3, 4, 5, 6, 7, 8], production: [1] };
     const parts = ["source", "production"].flatMap((kind) =>
-      [1, 2, 3, 4].map((shard) => ({
+      shards[kind].map((shard) => ({
         kind,
         shard,
         attempt: 1,
@@ -31,7 +32,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     const expected = Object.fromEntries(
       ["source", "production"].map((kind) => [
         kind,
-        [1, 2, 3, 4].map((shard) => `${kind}-${shard}`),
+        shards[kind].map((shard) => `${kind}-${shard}`),
       ]),
     );
     assert.doesNotThrow(() => assertCandidateReports(parts, "commit", expected));
@@ -168,17 +169,12 @@ describe("prove browser divise fra macchine", () => {
     ],
   };
 
-  it("assegna le prove a turno, ciascuna a un solo shard", () => {
-    assert.deepEqual(shardTests(listing, 1, 2), [
-      "[chromium] › lente.spec.ts › a",
-      "[chromium] › lente.spec.ts › c",
-      "[chromium] › rapide.spec.ts › e",
-    ]);
-    assert.deepEqual(shardTests(listing, 2, 2), [
-      "[chromium] › lente.spec.ts › b",
-      "[webkit] › lente.spec.ts › gruppo › d",
-      "[chromium] › rapide.spec.ts › f",
-    ]);
+  it("assegna ogni prova a un solo shard, in modo stabile e senza seguire l'elenco", () => {
+    const parts = [1, 2].map((shard) => shardTests(listing, shard, 2));
+    assert.equal(new Set(parts.flat()).size, 6);
+    assert.equal(parts.flat().length, 6);
+    assert.deepEqual(shardTests(listing, 1, 2), parts[0]);
+    assert.ok(parts.every((part) => part.length === 3));
   });
 
   it("ricava le identità dall'inventario JSON Playwright anche nei gruppi annidati", () => {
