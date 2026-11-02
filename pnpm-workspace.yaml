@@ -22,4 +22,4 @@ trustPolicyExclude:
 patchedDependencies:
   # cf include ancora i framework dei pacchetti figli nel rilevamento della radice.
   # Rimuovere quando il rilevamento limita i risultati al progetto corrente.
-  cf@1.0.0-beta.23: patches/cf@1.0.0-beta.23.patch
+  cf@1.0.0-beta.26: patches/cf@1.0.0-beta.26.patch
