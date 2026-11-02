@@ -2789,7 +2789,7 @@ describe("file degli ordini", () => {
       env.DB.prepare(
         `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
            stripe_invoice_id, amount_paid, currency, paid_at)
-         VALUES ('e-paid', 'w-a', 'premium', ?1, ?2, 'in_segreta', 4321, 'EUR', ?1)`,
+         VALUES ('e-paid', 'w-a', 'premium', ?1, ?2, 'in_segreta', 73914286, 'EUR', ?1)`,
       ).bind(now, hours(24 * 30)),
     ]);
     const result = (await callRoute(settingsAction, "/en/app/impostazioni/esportazione", {
@@ -2817,7 +2817,14 @@ describe("file degli ordini", () => {
     const text = Object.values(files)
       .map((bytes) => strFromU8(bytes))
       .join("\n");
-    for (const secret of ["cus_segreto", "sub_segreto", "in_segreta", "4321", "43.21", "g-segreta"])
+    for (const secret of [
+      "cus_segreto",
+      "sub_segreto",
+      "in_segreta",
+      "73914286",
+      "739142.86",
+      "g-segreta",
+    ])
       expect(text).not.toContain(secret);
     // Le 20:00 UTC sono le 16:00 a New York; il JSON resta in UTC.
     const plan = strFromU8(files["plan.csv"]!);
