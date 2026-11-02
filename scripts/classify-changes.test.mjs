@@ -63,7 +63,7 @@ describe("livello del gate dai file modificati", () => {
   it("assegna documenti, strumenti, test, build e prodotto ai cinque livelli", () => {
     for (const file of [
       "README.md",
-      "docs/DECISION_REGISTER.md",
+      "docs/decisions/DECISION_REGISTER.md",
       "docs/brand/README.md",
       "docs/archive/screenshot.png",
     ])
@@ -72,8 +72,10 @@ describe("livello del gate dai file modificati", () => {
     assert.deepEqual(fileImpact("CHANGELOG.md"), { level: "build", e2e: false, deploy: true });
     for (const file of [
       "AGENTS.md",
-      "docs/MASTER_PLAN.md",
-      "docs/engineering/RELEASE.md",
+      "docs/ROADMAP.md",
+      "docs/product/PRODUCT.md",
+      "docs/engineering/ARCHITECTURE.md",
+      "docs/operations/RELEASE.md",
       "scripts/classify-changes.mjs",
       "scripts/classify-changes.test.mjs",
       "scripts/release/release.mjs",
@@ -111,7 +113,7 @@ describe("livello del gate dai file modificati", () => {
   });
 
   it("sceglie il livello più alto del diff e il completo senza confronto o nel candidato", () => {
-    assert.equal(plan(["README.md", "docs/DECISION_REGISTER.md"]).gate, "docs");
+    assert.equal(plan(["README.md", "docs/decisions/DECISION_REGISTER.md"]).gate, "docs");
     assert.equal(plan(["README.md", "AGENTS.md"]).gate, "tooling");
     assert.equal(plan(["AGENTS.md", "app/root.tsx"]).gate, "full");
     assert.equal(plan([]).gate, "full");

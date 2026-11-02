@@ -18,8 +18,8 @@ describe("sigle di piano", () => {
   it("ammette le sigle nella documentazione e nelle migration già applicate", () => {
     assert.deepEqual(
       checkPlanCodes([
-        { path: "docs/MASTER_PLAN.md", text: task },
-        { path: "docs/MASTER_PLAN.md", text: gate },
+        { path: "docs/decisions/DECISION_REGISTER.md", text: task },
+        { path: "docs/decisions/DECISION_REGISTER.md", text: gate },
         { path: "migrations/0001_m0_slice.sql", text: "create table orders (id text);" },
       ]),
       [],

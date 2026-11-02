@@ -2,7 +2,7 @@
 
 **Stato:** concept direzionali approvati, non asset definitivi né specifica pixel-perfect. Gli originali sono identificati nel [manifest](references/manifest.json); verificarli con `node scripts/verify-docs.mjs --assets`. Produrre le rifiniture in file separati, senza sovrascriverli.
 
-Il Master Plan prevale per contenuti, piani, date, stati, funzioni e navigazione. Un testo comparso in un concept non introduce un requisito: niente cronologia ordini, fatturazione eBay, app native 2.0, layout a schede in tutte le sezioni o paginazione numerata soltanto perché apparsi nell’immagine.
+I [documenti di prodotto](../product/PRODUCT.md) prevalgono per contenuti, piani, date, stati, funzioni e navigazione. Un testo comparso in un concept non introduce un requisito: niente cronologia ordini, fatturazione eBay, app native 2.0, layout a schede in tutte le sezioni o paginazione numerata soltanto perché apparsi nell’immagine.
 
 ## Riferimenti approvati
 
@@ -38,7 +38,7 @@ Categorie a sinistra e contenuto a destra, mobile elenco→dettaglio. Export è 
 
 Origine: `impostazioni_fiscalbay_desktop_e_mobile.png`.
 
-## Logo 2.0 · M1
+## Logo 2.0
 
 Su indicazione owner (D141) il logo evolve dal Concept 4 senza esserne vincolato: si possono migliorare forma, proporzioni, inclinazione e dettagli per chiarezza e resa piccola. L'icona è generica, cioè il simbolo su fondo trasparente, non una tile in stile iOS o di altre piattaforme. Il segno resta autonomo e non deve far credere a un prodotto ufficiale eBay; il marchio resta FiscalBay e `FB` è solo interno.
 
@@ -46,7 +46,7 @@ Prima si approva l'icona base; wordmark, logo orizzontale, chiaro/scuro, monocro
 
 ### Asset approvati
 
-Sorgenti in [`logo/`](logo/), esportazioni PNG e `favicon.ico` in [`logo/exports/`](logo/exports/).
+Sorgenti in [`logo/`](logo), esportazioni PNG e `favicon.ico` in [`logo/exports/`](logo/exports).
 
 | File | Uso |
 |---|---|

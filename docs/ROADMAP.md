@@ -1,0 +1,120 @@
+# FiscalBay · Roadmap
+
+Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua storia, con i task conclusi, è [archiviata](archive/2026-11-master-plan-2.0.md). I requisiti stanno nei [documenti di prodotto](product/PRODUCT.md) e di [engineering](engineering/ARCHITECTURE.md); le motivazioni nel [registro](decisions/DECISION_REGISTER.md).
+
+<a id="stato"></a>
+## Stato
+
+| Filone | Stato | Contenuto |
+|---|---|---|
+| [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
+| [2.1 Comunicazioni](#s39) | Da completare | Prossima versione. |
+| [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
+
+Stati: `Da completare`, `In corso`, `Bloccato`, `Completato`. Ogni task ha codice, stato, prerequisiti, contratto e criterio di completamento: `RE-yy` per i riconoscimenti esterni, `2.x-yy` per le versioni. La chiusura richiede comportamento, prove pertinenti e documenti coerenti; le prove restano in PR, CI e ricevute. La PR che avvia, blocca o chiude un task ne aggiorna lo stato nello stesso diff. Un task completato conserva intestazione, stato e contratto, poi una frase sulla capacità consegnata con le decisioni che la motivano e gli eventuali limiti residui. I codici restano in questo file, mai nel codice o nel runtime.
+
+Decidono soltanto l'owner: requisiti non realizzabili, conflitti di diritti, nuovi costi o provider, variazioni sostanziali di UX, privacy o scope, Stripe live e Paddle.
+
+## Riconoscimenti esterni
+
+**Prerequisiti:** nessuno per la candidatura al Partner Program, che ha una scadenza propria; `2.0.0` in Production, già raggiunta, per i task che richiedono la Production. **Attività:** ottenere da eBay e Google il riconoscimento di FiscalBay come strumento per i venditori: programma partner, limiti API adeguati, presenza nel Seller Center italiano, schermata di consenso Google con il marchio.
+
+**Output:** candidature inviate, esiti registrati e readback delle verifiche ottenute. **DoD:** nessuno scope eBay in scrittura, funzione di inserzione o spedizione, nuovo costo o provider introdotto per ottenere un riconoscimento ([D255](decisions/DECISION_REGISTER.md)); sito, badge e copy citano un riconoscimento soltanto dopo l'esito scritto e nei limiti d'uso del titolare. I moduli riportano numeri e capacità reali, mai stime presentate come risultati.
+
+<a id="re-01"></a>
+#### RE-01 · Application Growth Check
+
+**Stato:** Da completare · **Prerequisiti:** `2.0.0` in Production, raggiunta · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§15](product/CHANNELS_AND_ADMIN.md#s15)
+
+Completare l'Application Growth Check sull'applicazione Production per i limiti delle chiamate di lettura degli ordini, senza attendere che l'anomalia della soglia del 70% ([D188](decisions/DECISION_REGISTER.md)) lo imponga. Il keyset è condiviso con altri progetti: la richiesta riguarda le sole chiamate di FiscalBay e non cambia impostazioni, RuName o notifiche altrui.
+
+**Criterio di completamento:** esito di eBay registrato e nuovi limiti riletti nelle quote della console; con un rifiuto, motivazione registrata e soglia del 70% invariata.
+
+<a id="re-02"></a>
+#### RE-02 · eBay Partner Program 2027
+
+**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§1](product/PRODUCT.md#s01) · [§11](product/ORDERS_AND_SYNC.md#s11)
+
+Candidatura alla coorte 2027 del [programma](https://developer.ebay.com/grow/ebay-partner-program) entro il 31 dicembre 2026, con il [modulo](https://www.ebay.com/sml/apply-partner-program-2027) inviato dall'owner perché contiene dati aziendali e di contatto. L'agente prepara le risposte da piano e codice: mercato IT, flussi «Order management», «Reporting and analytics» e «Regulatory compliance», segmenti SMB e C2C, abbonamento a piani fissi, integrazione Fulfillment e Trading con controllo di quote e anomalie. L'owner legge i requisiti tecnici minimi come non cumulativi; se eBay li conferma cumulativi la candidatura si chiude senza ammissione, senza aggiungere funzioni per rientrarvi. Gli impegni del livello Gold, cioè Joint Business Plan e iniziative congiunte di acquisizione, richiedono una scelta dell'owner al momento dell'esito.
+
+**Criterio di completamento:** candidatura inviata entro la scadenza ed esito della coorte, atteso nel primo trimestre 2027, registrato con il livello assegnato; un badge ottenuto si usa secondo le Badge Usage Terms.
+
+<a id="re-03"></a>
+#### RE-03 · Pagina Solution Provider di eBay Italia
+
+**Stato:** Da completare · **Prerequisiti:** `2.0.0` in Production, raggiunta · **Contratto:** [§1](product/PRODUCT.md#s01) · [§23](product/EXPERIENCE.md#s23)
+
+Chiedere a eBay Italia l'inserimento di FiscalBay nella pagina Solution Provider del Seller Center come strumento per gli adempimenti fiscali dei venditori italiani. Il programma la riserva ai livelli Gold e Silver: la richiesta verifica anche se esiste un percorso per gli strumenti di conformità fuori dal programma, e si ripete dopo l'esito di [RE-02](#re-02) se il livello assegnato la include.
+
+**Criterio di completamento:** richiesta inviata e risposta registrata; con l'inserimento, scheda riletta con nome, descrizione e link a fiscalbay.it corretti.
+
+<a id="re-04"></a>
+#### RE-04 · Verifica del brand Google
+
+**Stato:** Da completare · **Prerequisiti:** `2.0.0` in Production, raggiunta · **Contratto:** [§7](product/ACCOUNTS_AND_STORES.md#s07) · [§21](product/EXPERIENCE.md#s21)
+
+Far verificare a Google il brand della schermata di consenso del client OAuth Production, così che «Accedi con Google» mostri nome e logo FiscalBay. Servono home page, Privacy e Termini pubblicati su fiscalbay.it e il dominio verificato in Search Console; gli scope restano quelli del login, senza ambiti sensibili.
+
+**Criterio di completamento:** verifica approvata e schermata di consenso riletta su Production con nome, logo e link legali di FiscalBay.
+
+<a id="s39"></a>
+## 39. Roadmap successiva e non-promesse
+
+Elenco delle funzioni previste per la 2.x, approvato dall'owner il 2026-10-31, non calendario pubblico. Ogni versione raccoglie un contesto; una versione `2.y.0` contiene soltanto funzioni di questo elenco e aggiunte o spostamenti richiedono l'owner ([D248](decisions/DECISION_REGISTER.md), [D249](decisions/DECISION_REGISTER.md)):
+
+| Versione | Contesto | Funzioni |
+|---|---|---|
+| 2.1 | Comunicazioni | Pagina Notifiche completa; pagina pubblica dello stato di FiscalBay e dei servizi da cui dipende (eBay, Telegram, Stripe, accessi ed email), dai controlli interni e dalle pagine di stato dei fornitori dove esistono |
+| 2.2 | Ordini | Filtri salvati e personalizzazione delle schede Premium; elenco degli ordini senza codice fiscale da richiedere, con la data in cui il merchant ha copiato il messaggio, senza invii all'acquirente |
+| 2.3 | Dati | Analisi Premium su ordini, presenza del CF, andamento, negozi e marketplace; metriche di prodotto per l'owner, con l'aggiornamento della Privacy |
+| 2.4 | Crescita | Coupon; invito di un collega con premio e regole antiabuso decisi sui numeri delle metriche |
+| 2.5 | Team | Collaboratori nello stesso spazio |
+| 3.x | App native | iOS/Android nativi con React Native/Expo e riuso ragionato; Apple login da riesaminare, offline solo eventuale |
+
+L'accessibilità entra nelle correzioni `2.2.x`, dopo i cambi della pagina Ordini: prove manuali con VoiceOver e NVDA sui percorsi principali e correzioni conseguenti, senza dichiarazione di accessibilità pubblicata. Restano fuori dalla 2.x le integrazioni con altri servizi e l'accesso con codice via email o con conferma Telegram. Le dismissioni delle API Trading annunciate da eBay si coprono con le sostitute moderne in una versione di correzione appena eBay fissa la data; se una funzione visibile si riduce o sparisce decide l'owner prima della pubblicazione.
+
+La disponibilità PayPal **come pagamento** può entrare in 2.0 solo se supportata dal MoR scelto, senza account PayPal personale separato e con costo accettabile; non è garanzia di roadmap o collegamento login. Niente Microsoft login, nessuna app desktop promessa.
+
+Nella 2.0 FiscalBay non invia né legge messaggi eBay (Message API, `NEW_MESSAGE`), non mostra le linee guida normative di `REGULATORY_GUIDELINE` e non sottoscrive topic con scope propri per spedizioni, annullamenti, resi o preventivi, già coperti dalla lettura periodica (D215, D216). La candidatura all'eBay Partner Program presenta FiscalBay per gestione degli ordini, analisi e conformità fiscale, senza aggiungere gestione di inserzioni o spedizioni ([D255](decisions/DECISION_REGISTER.md), [RE-02](#re-02)). Restano fuori anche le novità eBay estranee agli ordini: Inventory Mapping, garanzia di durabilità UE, taglie moda, condizione delle monete, resi facilitati in Germania, Media API e video, API Buy, annunci video del Marketing, VeRO ed eDIS.
+
+API pubblica fuori dalla roadmap: si valuta caso per caso soltanto per chi ne ha un bisogno concreto, mantenendo servizi e contratti riusabili; endpoint solo quando necessari a un client reale. Analisi non diventa una suite e-commerce generale. Lifetime mantiene livello equivalente e riceve tutte le funzioni Premium della 2.x, team compreso (conferma dell'owner del 2026-10-31); non dà licenza di cambiare indiscriminatamente l'offerta già acquistata.
+
+<a id="questioni-aperte"></a>
+## Questioni aperte
+
+Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o richiedono di riconciliare un effetto remoto. Chiuderle o rimuoverle con il prossimo intervento pertinente, senza accumulare il diario delle prove riuscite. I fatti stabili sui servizi stanno nello [stato dei servizi](operations/OPERATIONS.md#stato-dei-servizi).
+
+| Ambito | Pendenza e condizione di chiusura |
+|---|---|
+| Dipendenze dei tool | `pnpm audit --prod` non segnala avvisi. Nello sviluppo restano `deepmerge`, da shadcn, senza versione corretta indicata ([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)), e `minimatch` sotto 11.0.1, da Stryker. Chiudere con release corrette e qualificate delle catene, senza sopprimere gli avvisi nell'audit. `vitest` e `@vitest/coverage-istanbul` restano a 5.0.3: con 5.0.4 e 5.0.5 il worker del pool Cloudflare termina nel dry-run di Stryker anche con Stryker 10.1.1 e, dal 2026-11-02, con `@cloudflare/vitest-plugin` 1.4.12, che con la 5.0.3 supera la mutation. Dependabot ignora quelle versioni e propone runner e mutation in una PR propria, senza merge automatico; aggiornarli soltanto a una versione che superi la mutation di un file Cloudflare, avviata a mano sul branch della PR. |
+| Qualifica del ciclo | D172 e D173 qualificate; D265-D288 implementate. Il primo `Promuovi` del 2026-11-02 ha provato coordinatore remoto, upload al 0%, override, avanzamento protetto di `main` e conferma finale. La guardia a tempo è rimossa dal ciclo ([D288](decisions/DECISION_REGISTER.md)). Restano da osservare un merge durante una promozione, qualifica automatica, scrittura del giorno su una versione nuova, ritiro per collaudo fallito e `rollback`. `publication` è limitato a `develop` con `PUBLISH_TOKEN`; la protezione di `main` richiede `Node 26`. |
+| CI alleggerita | D190 e [D200](decisions/DECISION_REGISTER.md): browser nel container ufficiale di Playwright, campagna mutation settimanale e avvio manuale su `develop`; i moduli con più di 150 mutanti si dividono in parti parallele ([pubblicazione](operations/RELEASE.md#mutation-test)). Chiudere con la prima campagna settimanale riuscita. |
+| Prima vendita reale | `commercial.mjs verify` del 2026-11-02 non trova vendite: si ripete alla prima vendita reale. |
+| Sandbox e dati fiscali | Sul test la Sandbox è spenta su richiesta dell'owner (`EBAY_SANDBOX_ENABLED` a `false`) e si riattiva soltanto su sua indicazione. I pagamenti Sandbox non riescono (`CashOnPickup` rimosso per managed payments, acquisto confermato non pagato e assente da Fulfillment) e Buy API è esclusa dall'owner: serve un pagamento Sandbox riuscito con importazione, oppure una soluzione concordata. La consultazione Production autorizzata della lettura fiscale non prova il pagamento o l'import Sandbox. Nessun permesso implicito di modificare ordini Production o introdurre import Trading. |
+| Protezioni della zona | HSTS/header, WAF/rate limit edge, report DMARC e alert certificati configurati per ambiente da `scripts/zone-protection.mjs` (D229): applicati e riletti sul test il 2026-10-29 e in Production il 2026-11-01. HSTS è a un anno sui due ambienti dal 2026-11-02, su indicazione dell'owner, senza `includeSubDomains` né `preload`. Primo report DMARC ricevuto il 2026-11-01, con DMARC, SPF e DKIM superati; primo alert dei certificati ancora da osservare. |
+| Piano e costi | Workers Paid continuativo e Cloudflare Email Service (D169); nessun costo variabile (D227), con avvisi di budget da 0,01 USD all'owner. Il cron supera ancora i 10 ms in ogni esecuzione dopo D167. Coda e DLQ del test in UE a 14 giorni (D171); quelle di Production nascono allo stesso modo secondo la [pubblicazione](operations/OPERATIONS.md#webhook). Prezzi Observability dal 1° dicembre 2026 riletti il 2026-11-02 ([runbook](operations/OPERATIONS.md#capacita)): consumo stimato ben sotto i 50 GB inclusi, da confermare con il volume reale alla prima fattura successiva. Lo smistamento resta idempotente rispetto alle invocazioni ripetute del cron già osservate. Le misure della qualifica iniziale non autorizzano capacità pubblica né costi oltre il canone. |
+| CLI Cloudflare | `cf` (D170) qualificata sul test per deploy, migration, ripresa e rollback; il primo deploy Production con `cf` avviene con `Promuovi`. Rimuovere la patch che limita la rilevazione al pacchetto della radice quando una versione qualificata di `cf` corregge i workspace, il collegamento `build/client` in `vite.config.ts` quando plugin Vite 2.x e React Router concordano sulla cartella client, e `scripts/local-d1.mjs` quando `cf --local` termina da solo ([cloudflare/cf#64](https://github.com/cloudflare/cf/issues/64)). Aggiornare `cf` e plugin solo a versioni esatte riprovate. |
+| Cutover provider | OAuth eBay attivo sul RuName Production dal 2026-10-31 ([D247](decisions/DECISION_REGISTER.md)): sul test non funzionano più Accedi con eBay né il collegamento di nuovi negozi. Non modificare `botCF 2` (SyncBay) o il callback condiviso con Hub Fatture. Branding finale Checkout ancora da osservare. |
+
+<a id="s38"></a>
+## 38. Registro rischi operativo
+
+| Rischio prioritario | Trigger / rilevazione | Mitigazione / prova richiesta | Responsabile |
+|---|---|---|---|
+| Cambi/quote API eBay | 429, deprecazioni, fonte fiscale diversa | Quota condivisa, adapter/test, riconciliazione; stop polling interessato | Agente tecnico, owner eccezioni |
+| Dato fiscale assente/mascherato | Copertura per età/stato non uniforme | Matrice campo/fonte, claim prudenti, stati non ambigui | Agente/prodotto |
+| Isolamento tenant/CF locked | Accesso a ID o inferenza tramite search/export | Test negativi server/DB/cache, P1 e containment | Agente/owner |
+| Billing/entitlement divergenti | Webhook perso, refund/periodo errati | Reconciliation, grant separati, esempi calendario/test clock | Agente/Stripe |
+| Costi/saturazione free tier | Limiti per richiesta/account/test vicini | Capacità residua e margine; alert/ammissione; costo nuovo approvato | Owner |
+| Auth sperimentale/identity linking | API instabile, claim email debole | Quattro login qualificati e recovery; no doppio Auth improvvisato | Agente/owner |
+| Backup nativo insufficiente | Stato critico non ripristinabile | Drill unico reale; combinazione non qualificata esclusa | Agente/owner |
+| Abuso Free/trial | Multi-account ripetuti, reset apparenti | Segnali minimizzati e revisione, nessun blocco da solo IP | Owner/admin |
+| Lifetime oneroso | Troppe concessioni/costi di lungo periodo | Tetto20 atomico inclusi omaggi, modello cassa/ricorrenza distinto | Owner |
+| Cancellazione incompleta | Reimport/job/restore ripristinano dati | Tombstone e sweep, invalidazione suggerimenti/export, test ripristino | Agente |
+| Token o segreti compromessi | Alert/log/supply chain | Secret store/rotazione, scope minimi, P1 e revoca mirata | Owner/Codex |
+| Shared resources danneggiate | Modifica keyset/DNS/quote altrui | Manifest target e isolamento, no cleanup indiscriminato 1.x | Agente |
+| Fiscalità vendite non coperta | Checkout fuori copertura MoR | Restrizione acquisto coerente, no fallback Payments | Owner |
+| Pubblico confonde FB con eBay/fatturazione | Copy/logo ambigui | Gate marchi/disclaimer, no promesse emissione fatture | Owner |
+| Tool AI esfiltra o esegue contenuti | Istruzioni in payload/tool result | Context autorizzato, dati come input non comandi, target/permessi | Agente |
+
+Ogni rischio chiuso collega prova o decisione di accettazione; nessuna tabella rischi compilata vale come mitigazione effettuata. Budget e consumi reali si registrano privatamente. Nessun incidente obbliga a cambiare provider senza decisione owner.

@@ -1,6 +1,6 @@
 # Design system
 
-Fondazione visiva di sito e app, circoscritta al prodotto ([§22](../MASTER_PLAN.md#s22)). Il codice è la fonte dei valori: token e ruoli di movimento in [`app/app.css`](../../app/app.css), primitive in [`app/components/ui/`](../../app/components/ui/), componenti di marchio e dominio in [`app/components/`](../../app/components/). I componenti si vedono in uso nell'anteprima dell'app (`/anteprima`, vedi sotto). Il campione `/design` è stato rimosso il 2026-09-28, dopo l'approvazione owner delle schermate: i componenti restano nel codice e le sue prove sono passate alle schermate reali.
+Fondazione visiva di sito e app, circoscritta al prodotto ([§22](../product/EXPERIENCE.md#s22)). Il codice è la fonte dei valori: token e ruoli di movimento in [`app/app.css`](../../app/app.css), primitive in [`app/components/ui/`](../../app/components/ui), componenti di marchio e dominio in [`app/components/`](../../app/components). I componenti si vedono in uso nell'anteprima dell'app (`/anteprima`, vedi sotto). Il campione `/design` è stato rimosso il 2026-09-28, dopo l'approvazione owner delle schermate: i componenti restano nel codice e le sue prove sono passate alle schermate reali.
 
 ## Principi
 
@@ -10,13 +10,13 @@ Personalità scelta dall'owner il 2026-09-27: **precisa e sobria**, uno strument
 2. **Colore misurato e con un significato.** Il blu pieno indica l'azione principale; la superficie colorata piena segnala solo uno stato che chiede un'azione. Su indicazione owner del 2026-09-28 Ordini e Negozi hanno più colore (etichette di stato tinte, tinta per negozio, tessere nella tinta della sezione), mentre Impostazioni e Profilo restano sobri con icone monocromatiche; nessuna superficie piena decorativa.
 3. **Identità nei dettagli, non nelle decorazioni.** La tessera del logo entra nell'interfaccia dove comunica qualcosa: sincronizzazione, stati vuoti.
 4. **Movimento che spiega.** Ogni animazione mostra da dove arriva o dove va qualcosa, entro 250 ms per le aperture; niente movimento decorativo nell'app.
-5. **Tono del prodotto** ([§21](../MASTER_PLAN.md#s21)): diretto, senza toni rassicuranti o promesse assolute; dire cosa FiscalBay fa per chi vende, non cosa evita di fare. Criteri in [Cosa fa e cosa non fa](#cosa-fa-e-cosa-non-fa).
+5. **Tono del prodotto** ([§21](../product/EXPERIENCE.md#s21)): diretto, senza toni rassicuranti o promesse assolute; dire cosa FiscalBay fa per chi vende, non cosa evita di fare. Criteri in [Cosa fa e cosa non fa](#cosa-fa-e-cosa-non-fa).
 
 ## Base tecnica
 
 | Scelta | Versione | Licenza | Motivo |
 |---|---|---|---|
-| Tailwind CSS + `@tailwindcss/vite` | 4.3.3 | MIT | CSS previsto dallo stack ([§26](../MASTER_PLAN.md#s26)) |
+| Tailwind CSS + `@tailwindcss/vite` | 4.3.3 | MIT | CSS previsto dallo stack ([§26](../engineering/ARCHITECTURE.md#s26)) |
 | shadcn/ui, stile `base-nova` | CLI 4.21.0 | MIT | Sorgenti copiati e posseduti, base personalizzabile |
 | Base UI (`@base-ui/react`) | 1.8.0 | MIT | Primitive accessibili (focus, tastiera, ARIA); un solo kit al posto di Radix |
 | Motion (`motion`) | 14.0.0 | MIT | Solo dove il CSS non basta: ingresso e riordino animato delle liste; caricato con `LazyMotion` |
@@ -110,7 +110,7 @@ Il copy si rivolge a chi gestisce gli ordini: «Sblocca ordine», «Riprova», �
 
 ### Cosa fa e cosa non fa
 
-Su indicazione owner del 2026-09-29 (D154) il copy presenta FiscalBay per ciò che fa: importa gli ordini, mostra e rende copiabile il Codice Fiscale, esporta, notifica. I vincoli del prodotto (sola lettura su eBay, nessun contatto con l'acquirente, dati minimi in registrazione, protezione dei dati) restano requisiti del [Master Plan](../MASTER_PLAN.md#s02), non argomenti da ripetere nell'interfaccia.
+Su indicazione owner del 2026-09-29 (D154) il copy presenta FiscalBay per ciò che fa: importa gli ordini, mostra e rende copiabile il Codice Fiscale, esporta, notifica. I vincoli del prodotto (sola lettura su eBay, nessun contatto con l'acquirente, dati minimi in registrazione, protezione dei dati) restano requisiti del [Master Plan](../product/PRODUCT.md#s02), non argomenti da ripetere nell'interfaccia.
 
 - **Forma affermativa.** Si scrive il risultato o il passo successivo: «Conferma l'indirizzo email per collegare un negozio», non «Verifica l'email prima di collegare»; «Piani e funzioni sono gli stessi per privati e aziende», non «Il tipo di account non cambia piano né limiti».
 - **Una negazione serve solo se cambia ciò che la persona fa.** Ammessa quando c'è una conseguenza da conoscere prima di agire (un'eliminazione che non si annulla, un piano che mette in pausa i negozi), un'eccezione da spiegare (eBay non riporta il dato), o la risposta a una domanda reale, per esempio nelle domande frequenti. Si dice una volta, nel punto in cui serve.
@@ -174,7 +174,7 @@ Componenti presenti: pulsante, campo, area di testo, select, checkbox, switch, r
 
 ## Shell e anteprima dell'app
 
-L'anteprima resta sul test per verificare graficamente anche stati rari, errori e superfici non raggiungibili con l'account corrente, secondo il [§35 del piano](../MASTER_PLAN.md#s35). Usa gli stessi componenti di prodotto dell'app reale con scenari sintetici selezionabili e separati dai dati effettivi; rimane esclusa dalla Production. Le prove dei servizi, dei permessi e della persistenza attraversano le route reali. L'integrazione elimina viste provvisorie, duplicazioni ed elementi fuori scope, conservando gli scenari grafici e le prove utili.
+L'anteprima resta sul test per verificare graficamente anche stati rari, errori e superfici non raggiungibili con l'account corrente, secondo il [§35](../engineering/TESTING.md#s35). Usa gli stessi componenti di prodotto dell'app reale con scenari sintetici selezionabili e separati dai dati effettivi; rimane esclusa dalla Production. Le prove dei servizi, dei permessi e della persistenza attraversano le route reali. L'integrazione elimina viste provvisorie, duplicazioni ed elementi fuori scope, conservando gli scenari grafici e le prove utili.
 
 La shell ([`app-shell.tsx`](../../app/components/app-shell.tsx)) ha tre destinazioni: Ordini, Negozi eBay, Impostazioni. Su desktop c'è una top navigation, con le stesse icone della bottom navigation accanto alle etichette, ricerca ordini, campanella e avatar; il campo di ricerca compare da 1024 px, sotto diventa un'icona che apre il pannello, perché a 768 px la barra non contiene tutto. Su mobile ci sono una top bar compatta, con la ricerca in un pannello, e una bottom navigation fissa sopra l'area sicura. Le schermate ([`orders/`](../../app/components/orders/page.tsx), [`stores/`](../../app/components/stores/page.tsx), [`settings/`](../../app/components/settings/page.tsx)) ricevono dati tipizzati da [`view-models.ts`](../../app/view-models.ts) e testi IT/EN da [`app-copy.ts`](../../app/app-copy.ts): le route reali dell'app riusano gli stessi componenti.
 
@@ -215,4 +215,4 @@ Componenti copiati nel repository, anche se non compaiono in `package.json`.
 
 Ulteriori adattamenti delle primitive: `SelectItem` permette il wrapping dei nomi; `SheetContent` separa il contenuto scorrevole dalla chiusura e `SheetHeader` le riserva spazio; `Tabs` trasmette l'orientamento alla primitiva. Le card ordinarie ora sono senza ombra; dialog, alert dialog e pannelli condividono l'ombra `md`. Queste modifiche vanno conservate negli aggiornamenti dei sorgenti.
 
-`app/components/brand.tsx`, `tax-code.tsx`, `empty-state.tsx` e `status.tsx` sono codice originale FiscalBay. Per aggiornare un componente shadcn usare la stessa CLI (`pnpm dlx shadcn@<versione> add <nome>`), senza sovrascrivere i file modificati, poi riapplicare le modifiche elencate e aggiornare questa tabella. Notice e attribuzioni distributive restano nel gate licenze di M7.
+`app/components/brand.tsx`, `tax-code.tsx`, `empty-state.tsx` e `status.tsx` sono codice originale FiscalBay. Per aggiornare un componente shadcn usare la stessa CLI (`pnpm dlx shadcn@<versione> add <nome>`), senza sovrascrivere i file modificati, poi riapplicare le modifiche elencate e aggiornare questa tabella. Notice e attribuzioni distributive restano nel controllo delle licenze.

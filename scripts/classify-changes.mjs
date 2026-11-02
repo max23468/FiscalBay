@@ -58,7 +58,8 @@ const buildTool =
   /^(?:vite|vite-.+|@vitejs\/.+|@cloudflare\/(?:vite-plugin|workers-types)|@react-router\/.+|react-router|tailwindcss|@tailwindcss\/.+|typescript|lightningcss|@playwright\/test)$/u;
 
 // Il governo contiene i gate Production letti dagli script: richiede anche i loro test.
-const governance = /^(?:AGENTS\.md|CLAUDE\.md|docs\/MASTER_PLAN\.md|docs\/engineering\/.+)$/u;
+const governance =
+  /^(?:AGENTS\.md|CLAUDE\.md|docs\/ROADMAP\.md|docs\/(?:product|engineering|operations)\/.+)$/u;
 
 // Strumenti che non entrano nella build, nei test applicativi o nelle prove browser.
 const tooling = [
