@@ -99,9 +99,10 @@ export function pullRequestAction(action, repository, number, head, env = proces
 
 export function checksOutcome(checkRuns) {
   // Come GitHub, conta soltanto l'ultima esecuzione di ogni controllo: una run annullata da
-  // quella successiva non fa fallire la PR.
+  // quella successiva non fa fallire la PR. Il coordinatore gira sul commit che controlla: non
+  // aspetta sé stesso.
   const latest = new Map();
-  for (const check of checkRuns)
+  for (const check of checkRuns.filter(({ name }) => name !== "Coordinatore"))
     if (!latest.has(check.name) || latest.get(check.name).id < check.id)
       latest.set(check.name, check);
   const current = [...latest.values()];
