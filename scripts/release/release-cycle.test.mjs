@@ -821,6 +821,13 @@ describe("PR tramite API REST", () => {
       "passed",
     );
     assert.equal(
+      checksOutcome([
+        check(1, "a", "completed", "success"),
+        check(2, "Coordinatore", "in_progress", null),
+      ]),
+      "passed",
+    );
+    assert.equal(
       checksOutcome([check(1, "a", "completed", "success"), check(2, "b", "in_progress", null)]),
       "pending",
     );
