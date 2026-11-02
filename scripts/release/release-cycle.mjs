@@ -361,13 +361,18 @@ export function checkCycleJobs(jobs, deployRequired) {
 // ne legge l'esito con l'API REST, anche da una sessione senza accesso a Cloudflare.
 const confirmation = {
   test: ["Deploy test", "Confirm provider readback"],
-  production: ["Conferma pubblicazione attiva", "Confirm expected version after guard and day"],
+  production: [
+    "Conferma pubblicazione attiva",
+    "Confirm expected version after day",
+    // La ripresa può ancora leggere una run avviata con il workflow precedente.
+    "Confirm expected version after guard and day",
+  ],
 };
 
 export function assertConfirmed(jobs, environment) {
-  const [jobName, stepName] = confirmation[environment];
+  const [jobName, ...stepNames] = confirmation[environment];
   const job = jobs.find((item) => item.name === jobName);
-  if (job?.steps?.find((step) => step.name === stepName)?.conclusion !== "success")
+  if (!job?.steps?.some((step) => stepNames.includes(step.name) && step.conclusion === "success"))
     throw new Error(`Readback provider non confermato nella run: ${environment}.`);
 }
 
@@ -836,10 +841,7 @@ export function promotionMetrics(runs, receipts = [], jobs = new Map()) {
       const receipt = receipts.find((entry) => entry.run === run.id);
       if (!receipt) return { evidence: "assente" };
       const confirmed = receipt.active
-        ? receipt.candidateActive === true &&
-          receipt.guardPassed === true &&
-          Boolean(receipt.completedAt) &&
-          !receipt.rolledBack
+        ? receipt.candidateActive === true && Boolean(receipt.completedAt) && !receipt.rolledBack
         : receipt.readback === true && Boolean(receipt.version) && !receipt.rolledBack;
       return {
         evidence: "ricevuta",
@@ -850,13 +852,9 @@ export function promotionMetrics(runs, receipts = [], jobs = new Map()) {
         candidateSeconds: duration(receipt.requestedAt, receipt.certifiedAt),
         activationSeconds: duration(receipt.requestedAt, receipt.activatedAt),
         preparationSeconds: duration(receipt.certifiedAt, receipt.activatedAt),
-        guardSeconds: duration(receipt.guardStartedAt, receipt.guardCompletedAt),
-        completionSeconds: duration(receipt.guardCompletedAt, receipt.completedAt),
+        completionSeconds: duration(receipt.activatedAt, receipt.completedAt),
         totalSeconds: duration(receipt.requestedAt, receipt.completedAt),
-        rollbackSeconds: duration(
-          receipt.guardStartedAt ?? receipt.startedAt,
-          receipt.rolledBackAt,
-        ),
+        rollbackSeconds: duration(receipt.startedAt, receipt.rolledBackAt),
         runnerWaitingSeconds: jobs.has(run.id)
           ? runTimings(run, jobs.get(run.id)).waitingSeconds
           : null,
@@ -1293,12 +1291,7 @@ async function confirmProduction(repository, jobs, sha, version) {
   assertConfirmed(jobs, "production");
   const active = await publicVersion("https://fiscalbay.it");
   const receipt = publicationRecord(repository, active);
-  if (
-    receipt.active.sha !== sha ||
-    !receipt.guardPassed ||
-    receipt.rolledBack ||
-    !receipt.completedAt
-  )
+  if (receipt.active.sha !== sha || receipt.rolledBack || !receipt.completedAt)
     throw new Error("Pubblicazione finale non riconciliata con il provider.");
   publishedRelease(repository, sha, version);
   cleanupIntegrated(repository);
@@ -1307,7 +1300,7 @@ async function confirmProduction(repository, jobs, sha, version) {
 /**
  * Promuovi: la testa di `develop` con i controlli verdi, già qualificata, diventa `main` e si
  * distribuisce. Senza modifiche da distribuire basta avanzare `main`. `--urgente` non attende la
- * qualifica completa, che resta in corso su `develop`: la protezione è la guardia dopo il deploy.
+ * produzione di nuove prove: riusa soltanto una certificazione già valida sul tree.
  */
 async function promoteCycle({ repository, values }) {
   const requestedAt = values["requested-at"] || new Date().toISOString();

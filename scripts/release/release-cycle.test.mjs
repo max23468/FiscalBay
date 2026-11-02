@@ -760,15 +760,18 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     }
   });
 
-  it("richiede la conferma Production successiva a guardia e giorno", () => {
+  it("richiede la conferma Production successiva al giorno", () => {
     const job = (conclusion) => ({
       name: "Conferma pubblicazione attiva",
       conclusion: "success",
-      steps: [{ name: "Confirm expected version after guard and day", conclusion }],
+      steps: [{ name: "Confirm expected version after day", conclusion }],
     });
     assert.doesNotThrow(() => assertConfirmed([job("success")], "production"));
     assert.throws(() => assertConfirmed([job("failure")], "production"), /production/u);
     assert.throws(() => assertConfirmed([job("success")], "test"), /test/u);
+    const previous = job("success");
+    previous.steps[0].name = "Confirm expected version after guard and day";
+    assert.doesNotThrow(() => assertConfirmed([previous], "production"));
   });
 });
 
@@ -1241,8 +1244,6 @@ process.stdout.write(JSON.stringify(result));`,
       requestedAt: at(0),
       certifiedAt: at(2),
       activatedAt: at(10),
-      guardStartedAt: at(11),
-      guardCompletedAt: at(26),
       completedAt: at(27),
       candidateActive: false,
       rolledBack: true,
@@ -1252,7 +1253,14 @@ process.stdout.write(JSON.stringify(result));`,
     assert.equal(metrics.falseGreen, 1);
     assert.equal(metrics.published, 0);
     assert.equal(metrics.rows[0].activationSeconds, 600);
-    assert.equal(metrics.rows[0].guardSeconds, 900);
-    assert.equal(metrics.rows[0].completionSeconds, 60);
+    assert.equal(metrics.rows[0].completionSeconds, 1020);
+    const active = {
+      ...receipt,
+      active: { version: "provider-version" },
+      candidateActive: true,
+      rolledBack: false,
+    };
+    assert.equal(promotionMetrics(runs, [active]).published, 1);
+    assert.equal(promotionMetrics(runs, [{ ...active, completedAt: undefined }]).published, 0);
   });
 });
