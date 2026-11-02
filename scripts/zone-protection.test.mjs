@@ -109,11 +109,11 @@ describe("protezioni della zona", () => {
     const rule = headerRule(target);
     assert.equal(rule.expression, 'http.host in {"test.fiscalbay.it"}');
     const hsts = rule.action_parameters.headers["strict-transport-security"].value;
-    assert.equal(hsts, "max-age=604800");
+    assert.equal(hsts, "max-age=31536000");
     assert.doesNotMatch(hsts, /includeSubDomains|preload/u);
     assert.equal(
       headerRule(live).action_parameters.headers["strict-transport-security"].value,
-      "max-age=604800",
+      "max-age=31536000",
     );
     assert.equal(rule.action_parameters.headers["x-frame-options"].value, "DENY");
     assert.ok(!("content-security-policy" in rule.action_parameters.headers));
@@ -220,7 +220,7 @@ describe("protezioni della zona", () => {
     const described = plan(target);
     assert.deepEqual(described.ctAlerting, { enabled: true, emails: [alertEmail] });
     assert.deepEqual(Object.keys(described.rules), phases);
-    assert.equal(described.hsts.current, 604_800);
+    assert.equal(described.hsts.current, 31_536_000);
   });
 
   it("accetta il readback configurato", () => {
@@ -243,7 +243,7 @@ describe("protezioni della zona", () => {
       ),
     };
     for (const name of ["page", "asset", "missing"])
-      liveState.responses[name].headers["strict-transport-security"] = "max-age=604800";
+      liveState.responses[name].headers["strict-transport-security"] = "max-age=31536000";
     const result = checkReadback(live, liveState);
     assert.equal(result.ok, true, JSON.stringify(result.checks));
     liveState.responses.www.headers.location = "https://fiscalbay.it/";
@@ -291,7 +291,7 @@ describe("protezioni della zona", () => {
       "pagina con header e CSP": (state) =>
         delete state.responses.page.headers["content-security-policy"],
       "asset con header": (state) =>
-        (state.responses.asset.headers["strict-transport-security"] = "max-age=31536000"),
+        (state.responses.asset.headers["strict-transport-security"] = "max-age=300"),
       "pagina assente con header": (state) =>
         delete state.responses.missing.headers["x-frame-options"],
       "sonda bloccata dalla zona": (state) => (state.responses.probe.status = 404),
