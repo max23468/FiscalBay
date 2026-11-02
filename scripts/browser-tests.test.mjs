@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import { shardTests, listedTestIds, assertCandidateReports } from "./browser-tests.mjs";
+import {
+  shardTests,
+  listedTestIds,
+  assertCandidateReports,
+  browserShards,
+} from "./browser-tests.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
   it("certifica tutte le partizioni browser solo con prove coerenti e complete", () => {
@@ -95,6 +100,12 @@ describe("coordinamento e provenienza della pubblicazione", () => {
 });
 
 describe("prove browser divise fra macchine", () => {
+  it("dimensiona i runner sulla selezione senza shard vuoti", () => {
+    assert.deepEqual(browserShards(4), { include: [{ shard: 1, total: 1 }] });
+    assert.equal(browserShards(164).include.length, 2);
+    assert.equal(browserShards(1136).include.length, 8);
+    assert.throws(() => browserShards(0), /vuoto/u);
+  });
   it("raccoglie ogni scenario funzionale in Chromium e WebKit", () => {
     const result = spawnSync(
       "pnpm",

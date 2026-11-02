@@ -9,20 +9,21 @@ import {
   readFileSync,
   existsSync,
   utimesSync,
+  cpSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { requiredReview } from "./release.mjs";
 import {
   assertBase,
   assertQualificationBase,
   independentBase,
   waitUpdatedHead,
   expectedRun,
-  candidateRef,
   runTimings,
   checkCycleJobs,
-  readbackSuperseded,
+  deploySuperseded,
   settleMergeRun,
   assertConfirmed,
   assertPublishedRelease,
@@ -42,11 +43,13 @@ import {
   retryQualification,
   mergeDecision,
   assertResumableRun,
-  awaitsMigrationReview,
-  assertReviewedDispatch,
+  assertPromotable,
+  coordinatorTitle,
   deployedEnvironment,
-  existingCandidate,
-  identifyCandidate,
+  existingPublication,
+  lotReview,
+  promotionMetrics,
+  candidateReadiness,
 } from "./release-cycle.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
@@ -330,16 +333,6 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     ]);
   });
 
-  it("ammette develop soltanto per la qualifica senza deploy", () => {
-    assert.equal(candidateRef("candidate", "develop"), "develop");
-    assert.equal(candidateRef("candidate"), "main");
-    assert.equal(candidateRef("production"), "main");
-    assert.throws(() => candidateRef("production", "develop"), /Production richiede main/u);
-    assert.throws(() => candidateRef("candidate", "feature"), /sola prova/u);
-    const workflow = readFileSync(".github/workflows/publish.yml", "utf8");
-    assert.match(workflow, /!inputs\.prova && github\.ref == 'refs\/heads\/main'/u);
-  });
-
   it("esegue status in sola lettura, conserva modifiche e riconcilia una qualifica riusata", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "cycle-cli-"));
     const calls = path.join(directory, "calls");
@@ -386,7 +379,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       writeFileSync(path.join(checkout, "pending"), "owner work");
       const pr = spawnSync(
         process.execPath,
-        [path.resolve("scripts/release/release-cycle.mjs"), "pr", "123"],
+        [path.resolve("scripts/release/release-cycle.mjs"), "pr", "123", "--qui"],
         { encoding: "utf8", env, cwd: checkout },
       );
       assert.notEqual(pr.status, 0);
@@ -414,13 +407,13 @@ describe("coordinamento e provenienza della pubblicazione", () => {
           { name: "Qualifica candidato / Candidate qualified", conclusion: "success" },
         ],
       };
-      const candidateGh = `#!${process.execPath}\nconst fs=require("node:fs");const a=process.argv.slice(2);fs.appendFileSync(process.env.CYCLE_CALLS,JSON.stringify(a)+"\\n");let value;if(a[1]==="repos/{owner}/{repo}")value={full_name:"example/project"};else if(a[0]==="run")value=[{databaseId:124,headSha:${JSON.stringify(sha)},status:"completed",conclusion:"success"}];else if(a[0]==="workflow")process.exit(99);else if(a.includes("--slurp"))value=a.at(-1).includes("/attempts/")?${JSON.stringify([jobs])}:${JSON.stringify([cycleJobs])};else if(a[1].includes("git/ref/")){console.log(${JSON.stringify(sha)});process.exit(0);}else if(a[1].includes("git/commits/"))value={tree:{sha:${JSON.stringify(tree)}}};else if(a[1].includes("/artifacts?"))value={artifacts:[{...${JSON.stringify(proof)},expired:process.env.CANDIDATE_EXPIRED==="1"}]};else if(a[1].includes("/actions/runs/"))value={...${JSON.stringify(run)},path:".github/workflows/publish.yml"};else value={id:1};console.log(JSON.stringify(value));\n`;
+      const candidateGh = `#!${process.execPath}\nconst fs=require("node:fs");const a=process.argv.slice(2);fs.appendFileSync(process.env.CYCLE_CALLS,JSON.stringify(a)+"\\n");let value;if(a[1]==="repos/{owner}/{repo}")value={full_name:"example/project"};else if(a[0]==="run")value=[{databaseId:124,headSha:${JSON.stringify(sha)},status:"completed",conclusion:"success"}];else if(a[0]==="workflow")process.exit(99);else if(a.includes("--slurp"))value=a.at(-1).includes("/attempts/")?${JSON.stringify([jobs])}:${JSON.stringify([cycleJobs])};else if(a[1].includes("git/ref/")){console.log(${JSON.stringify(sha)});process.exit(0);}else if(a[1].includes("git/commits/"))value={tree:{sha:${JSON.stringify(tree)}}};else if(a[1].includes("/artifacts?"))value={artifacts:[{...${JSON.stringify(proof)},expired:process.env.CANDIDATE_EXPIRED==="1"}]};else if(a[1].includes("/actions/runs/"))value={...${JSON.stringify(run)},path:".github/workflows/candidate.yml"};else value={id:1};console.log(JSON.stringify(value));\n`;
       writeFileSync(path.join(directory, "gh"), candidateGh, { mode: 0o700 });
       writeFileSync(calls, "");
       const candidate = (expired) =>
         spawnSync(
           process.execPath,
-          [path.resolve("scripts/release/release-cycle.mjs"), "candidate", "--sha", sha],
+          [path.resolve("scripts/release/release-cycle.mjs"), "candidate"],
           {
             encoding: "utf8",
             cwd: checkout,
@@ -429,10 +422,10 @@ describe("coordinamento e provenienza della pubblicazione", () => {
         );
       const reused = candidate(false);
       assert.equal(reused.status, 0, reused.stderr);
-      assert.match(reused.stdout, /nessun nuovo dispatch/u);
+      assert.match(reused.stdout, /Candidato già qualificato/u);
       assert.equal(readFileSync(calls, "utf8").includes('"workflow"'), false);
       assert.equal(candidate(true).status, 1);
-      assert.ok(readFileSync(calls, "utf8").includes('"workflow","run","publish.yml"'));
+      assert.ok(readFileSync(calls, "utf8").includes('"workflow","run","candidate.yml"'));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -463,7 +456,14 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     assert.equal(independentBase(["e2e/stores.spec.ts"], ["e2e/orders.spec.ts"]), true);
   });
 
-  it("ammette verso develop una base attuale compatibile, verso main soltanto quella provata", () => {
+  it("non considera sovrapposti piano, registro e changelog", () => {
+    const shared = ["docs/MASTER_PLAN.md", "docs/DECISION_REGISTER.md", "CHANGELOG.md"];
+    assert.equal(independentBase(["app/a.ts", ...shared], ["app/b.ts", ...shared]), true);
+    assert.equal(independentBase(["app/a.ts", ...shared], ["app/a.ts", ...shared]), false);
+    assert.equal(independentBase(["AGENTS.md"], ["AGENTS.md"]), false);
+  });
+
+  it("ammette una base attuale compatibile con quella provata", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "qualification-base-"));
     const git = (...args) =>
       (spawnSync("git", args, { cwd: directory, encoding: "utf8" }).stdout ?? "").trim();
@@ -488,20 +488,11 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       const head = commit("app/c.ts", "c\n");
       git("switch", "--quiet", "-c", "overlap", tested);
       const overlap = commit("app/b.ts", "b2\n");
-      assert.doesNotThrow(() => assertQualificationBase("develop", tested, tested, head, run));
-      assert.doesNotThrow(() => assertQualificationBase("develop", tested, disjoint, head, run));
-      assert.throws(
-        () => assertQualificationBase("develop", tested, disjoint, overlap, run),
-        /file comuni/u,
-      );
-      assert.doesNotThrow(() => assertQualificationBase("develop", disjoint, shared, head, run));
-      assert.throws(() => assertQualificationBase("develop", "", tested, head, run), /base/u);
-      assert.throws(() => assertQualificationBase("main", tested, disjoint, head, run), /base/u);
-      assert.throws(() => assertQualificationBase("main", disjoint, disjoint, head, run), /base/u);
-      assert.doesNotThrow(() => assertQualificationBase("main", tested, tested, head, run));
-      // Run conclusa dopo il merge: `main` ha già il tree provato dalla PR.
-      assert.doesNotThrow(() => assertQualificationBase("main", tested, head, head, run));
-      assert.doesNotThrow(() => assertQualificationBase("main", disjoint, overlap, overlap, run));
+      assert.doesNotThrow(() => assertQualificationBase(tested, tested, head, run));
+      assert.doesNotThrow(() => assertQualificationBase(tested, disjoint, head, run));
+      assert.throws(() => assertQualificationBase(tested, disjoint, overlap, run), /file comuni/u);
+      assert.doesNotThrow(() => assertQualificationBase(disjoint, shared, head, run));
+      assert.throws(() => assertQualificationBase("", tested, head, run), /base/u);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -528,6 +519,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     assert.equal(expectedRun(runs, sha, ["pull_request"], since)?.databaseId, 2);
     assert.equal(expectedRun(runs, sha, ["pull_request"], since, new Set([2]))?.databaseId, 1);
     assert.equal(expectedRun(runs, sha, ["pull_request"], since, new Set([1, 2])), undefined);
+    assert.equal(expectedRun(runs, sha, ["pull_request"], since, new Set(), 1)?.databaseId, 1);
   });
 
   it("dopo l'aggiornamento della base attende la nuova testa della PR", async () => {
@@ -616,54 +608,37 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     );
   });
 
-  /** Job di una run di `develop`: gate, browser e deploy test con l'esito dei suoi passi. */
-  const developJobs = (readback, overrides = {}) => [
+  /** Job di una run di `develop`: gate e deploy test con l'esito dei suoi passi. */
+  const developJobs = (deployed, conclusion = "success") => [
     { name: "Node 26", conclusion: "success" },
-    { name: "Browser 1/8", conclusion: "success" },
     {
       name: "Deploy test",
-      conclusion: readback === "success" ? "success" : "failure",
+      conclusion,
       steps: [
-        { name: "Deploy verified artifact", conclusion: "success" },
-        { name: "Check deployed browser interactions", conclusion: "success" },
-        { name: "Check deployed pages", conclusion: "success" },
-        { name: "Roll back test deploy", conclusion: "skipped" },
-        { name: "Confirm provider readback", conclusion: readback },
-        ...(overrides.steps ?? []),
-      ].map((step) => ({ ...step, ...overrides[step.name] })),
+        { name: "Check commit still on develop", conclusion: "success" },
+        { name: "Deploy verified artifact", conclusion: deployed },
+        { name: "Confirm provider readback", conclusion: deployed },
+      ],
     },
   ];
 
-  it("riconosce un readback superato da un merge successivo e nessun altro fallimento", () => {
-    assert.equal(readbackSuperseded(developJobs("failure")), true);
-    assert.equal(readbackSuperseded(developJobs("success")), false);
-    for (const name of [
-      "Deploy verified artifact",
-      "Check deployed browser interactions",
-      "Check deployed pages",
-    ])
-      assert.equal(
-        readbackSuperseded(developJobs("failure", { [name]: { conclusion: "failure" } })),
-        false,
-        name,
-      );
-    // Un rollback eseguito o un altro job fallito non sono un readback superato.
+  it("riconosce un deploy lasciato a un merge successivo e nessun altro esito", () => {
+    const run = { conclusion: "success" };
+    assert.equal(deploySuperseded(run, developJobs("skipped")), true);
+    assert.equal(deploySuperseded({ conclusion: "cancelled" }, []), true);
+    assert.equal(deploySuperseded(run, developJobs("success")), false);
     assert.equal(
-      readbackSuperseded(
-        developJobs("failure", { "Roll back test deploy": { conclusion: "success" } }),
-      ),
+      deploySuperseded({ conclusion: "failure" }, developJobs("failure", "failure")),
       false,
     );
-    const [gate, ...rest] = developJobs("failure");
-    assert.equal(readbackSuperseded([{ ...gate, conclusion: "failure" }, ...rest]), false);
-    assert.equal(readbackSuperseded([gate]), false);
+    assert.equal(deploySuperseded(run, [{ name: "Node 26", conclusion: "success" }]), false);
   });
 
   it("chiude il ciclo con la run della nuova testa che contiene il merge e ne conferma il deploy", async () => {
     const merge = "a".repeat(40);
     const later = "b".repeat(40);
     const runs = {
-      [merge]: { id: 1, head_sha: merge, conclusion: "failure", jobs: developJobs("failure") },
+      [merge]: { id: 1, head_sha: merge, conclusion: "success", jobs: developJobs("skipped") },
       [later]: { id: 2, head_sha: later, conclusion: "success", jobs: developJobs("success") },
     };
     const io = (overrides = {}) => ({
@@ -686,17 +661,14 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       runs[later] = {
         ...runs[later],
         conclusion: "failure",
-        jobs: developJobs("success", {
-          "Check deployed pages": { conclusion: "failure" },
-        }),
+        jobs: developJobs("failure", "failure"),
       };
       await assert.rejects(settleMergeRun(merge, false, io()), /Run 2/u);
-      // Un altro fallimento della run del merge non segue nessuna run successiva.
+      // Un fallimento della run del merge non segue nessuna run successiva.
       runs[merge] = {
         ...runs[merge],
-        jobs: developJobs("failure", {
-          "Check deployed pages": { conclusion: "failure" },
-        }),
+        conclusion: "failure",
+        jobs: developJobs("failure", "failure"),
       };
       let followed = false;
       await assert.rejects(
@@ -716,16 +688,21 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     }
   });
 
-  it("segue al più tre merge successivi", async () => {
+  it("segue i merge fino alla scadenza complessiva", async () => {
     const shas = ["1", "2", "3", "4", "5"].map((digit) => digit.repeat(40));
     let current = 0;
+    let time = 0;
     const io = {
-      wait: async (sha) => ({
-        id: shas.indexOf(sha) + 1,
-        head_sha: sha,
-        conclusion: "failure",
-        jobs: developJobs("failure"),
-      }),
+      now: () => time,
+      wait: async (sha) => {
+        time += 20 * 60_000;
+        return {
+          id: shas.indexOf(sha) + 1,
+          head_sha: sha,
+          conclusion: "cancelled",
+          jobs: [],
+        };
+      },
       jobs: (run) => run.jobs,
       head: () => shas[++current],
       contains: () => true,
@@ -733,18 +710,30 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     const log = console.log;
     console.log = () => {};
     try {
-      await assert.rejects(settleMergeRun(shas[0], true, io), /Run 4/u);
+      await assert.rejects(settleMergeRun(shas[0], true, io), /Run 3/u);
       assert.equal(current, 3);
+      current = 0;
+      time = 0;
+      const settled = await settleMergeRun(shas[0], true, {
+        ...io,
+        wait: async (sha) => ({
+          id: shas.indexOf(sha) + 1,
+          head_sha: sha,
+          conclusion: sha === shas[4] ? "success" : "cancelled",
+          jobs: [],
+        }),
+      });
+      assert.equal(settled.run.id, 5);
     } finally {
       console.log = log;
     }
   });
 
-  it("legge la conferma Production dal passo che precede il tag", () => {
+  it("richiede la conferma Production successiva a guardia e giorno", () => {
     const job = (conclusion) => ({
-      name: "Distribuisci e verifica",
+      name: "Conferma pubblicazione attiva",
       conclusion: "success",
-      steps: [{ name: "Create immutable tag and release", conclusion }],
+      steps: [{ name: "Confirm expected version after guard and day", conclusion }],
     });
     assert.doesNotThrow(() => assertConfirmed([job("success")], "production"));
     assert.throws(() => assertConfirmed([job("failure")], "production"), /production/u);
@@ -850,6 +839,69 @@ describe("PR tramite API REST", () => {
 });
 
 describe("comandi del ciclo", () => {
+  it("gli entrypoint con SHA diverso si fermano prima di merge, push o dispatch", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "cycle-cli-"));
+    try {
+      cpSync("scripts", path.join(directory, "scripts"), { recursive: true });
+      const git = (...args) => {
+        const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
+        assert.equal(result.status, 0, result.stderr);
+      };
+      git("init", "-q");
+      git("add", ".");
+      git(
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.invalid",
+        "commit",
+        "-qm",
+        "fixture",
+      );
+      const bin = path.join(directory, ".git/bin");
+      mkdirSync(bin);
+      const log = path.join(directory, ".git/commands");
+      writeFileSync(
+        path.join(bin, "gh"),
+        `#!${process.execPath}\nconst fs=require('node:fs');
+const args=process.argv.slice(2);fs.appendFileSync(process.env.CYCLE_LOG,JSON.stringify(args)+'\\n');
+const url=args[1];let result;
+if(url==='repos/{owner}/{repo}') result={full_name:'example/project'};
+else if(url.includes('/git/ref/heads/')) result={object:{sha:'${"b".repeat(40)}'}};
+else if(url==='repos/example/project/pulls/12') result={state:'open',draft:false,head:{ref:'feature',sha:'${"b".repeat(40)}',repo:{full_name:'example/project'}},base:{ref:'develop',sha:'${"c".repeat(40)}'}};
+else throw new Error('Unexpected GitHub operation '+args.join(' '));
+process.stdout.write(JSON.stringify(result));`,
+        { mode: 0o700 },
+      );
+      for (const args of [["promote"], ["pr", "12"], ["rollback"]]) {
+        writeFileSync(log, "");
+        const result = spawnSync(
+          process.execPath,
+          ["scripts/release/release-cycle.mjs", ...args, "--sha", "a".repeat(40)],
+          {
+            cwd: directory,
+            encoding: "utf8",
+            timeout: 10_000,
+            env: {
+              ...process.env,
+              PATH: `${bin}${path.delimiter}${process.env.PATH}`,
+              GITHUB_ACTIONS: "true",
+              CYCLE_LOG: log,
+            },
+          },
+        );
+        assert.equal(result.status, 1, result.stderr);
+        assert.match(result.stderr, /base della PR è avanzata/u);
+        const calls = readFileSync(log, "utf8")
+          .trim()
+          .split("\n")
+          .map((line) => JSON.parse(line));
+        assert.ok(calls.every((call) => call[0] === "api" && !call.includes("-X")));
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
   it("accetta soltanto i comandi noti e blocca per oggetto", () => {
     assert.deepEqual(cycleCommand(["pr", "12"]), { command: "pr", number: "12" });
     assert.deepEqual(cycleCommand(["cleanup"]), { command: "cleanup", number: undefined });
@@ -857,7 +909,9 @@ describe("comandi del ciclo", () => {
       assert.throws(() => cycleCommand(positionals), /^Error: Uso: release:cycle/u);
     assert.equal(lockObject("pr", "12"), "pr-12");
     assert.equal(lockObject("resume", "34"), "run-34");
-    assert.equal(lockObject("production", undefined), "production");
+    assert.equal(lockObject("promote", undefined), "promote");
+    for (const command of ["rc", "production", "promotion-source"])
+      assert.throws(() => cycleCommand([command]), /^Error: Uso: release:cycle/u);
   });
 
   it("controlla dalla CLI la base della PR rispetto a quella attuale di origin", () => {
@@ -872,14 +926,12 @@ describe("comandi del ciclo", () => {
       git(cwd, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", file);
       return git(cwd, "rev-parse", "HEAD");
     };
-    const check = (ref, base, head) =>
+    const check = (base, head) =>
       spawnSync(
         process.execPath,
         [
           new URL("./release-cycle.mjs", import.meta.url).pathname,
           "qualification-base",
-          "--ref",
-          ref,
           "--base",
           base,
           "--head",
@@ -894,12 +946,11 @@ describe("comandi del ciclo", () => {
       git(directory, "clone", "--quiet", upstream, clone);
       git(clone, "switch", "--quiet", "-c", "feature");
       const head = commit(clone, "b.ts", "b\n");
-      assert.equal(check("develop", tested, head).status, 0);
+      assert.equal(check(tested, head).status, 0);
       commit(upstream, "b.ts", "b2\n");
-      const advanced = check("develop", tested, head);
+      const advanced = check(tested, head);
       assert.equal(advanced.status, 1);
       assert.match(advanced.stderr, /file comuni/u);
-      assert.match(check("altro/ramo", tested, head).stderr, /--ref develop o main/u);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -998,6 +1049,9 @@ describe("comandi del ciclo", () => {
         event: "workflow_dispatch",
       }),
     );
+    assert.doesNotThrow(() =>
+      assertResumableRun({ ...run, path: ".github/workflows/candidate.yml" }),
+    );
     for (const other of [
       { path: ".github/workflows/qualify.yml" },
       { head_branch: "feature" },
@@ -1008,6 +1062,10 @@ describe("comandi del ciclo", () => {
     assert.equal(deployedEnvironment(run, [job("Deploy test", "success")]), "test");
     assert.equal(deployedEnvironment(run, [job("Deploy test", "skipped")]), null);
     assert.equal(deployedEnvironment(run, [job("Distribuisci e verifica", "success")]), null);
+    assert.equal(
+      deployedEnvironment({ ...run, path: ".github/workflows/candidate.yml" }, []),
+      null,
+    );
     const publish = { ...run, path: ".github/workflows/publish.yml" };
     assert.equal(
       deployedEnvironment(publish, [job("Distribuisci e verifica", "success")]),
@@ -1015,13 +1073,10 @@ describe("comandi del ciclo", () => {
     );
   });
 
-  it("non ripete il dispatch di un candidato già presente", () => {
+  it("non ripete il dispatch di una pubblicazione già presente", () => {
     const existing = { databaseId: 9, status: "completed", conclusion: "success" };
     const jobs = (conclusion) => [{ name: "Distribuisci e verifica", conclusion }];
-    assert.equal(existingCandidate("production", existing, jobs("success")), "published");
-    assert.equal(existingCandidate("production", existing, jobs("skipped")), "qualified");
-    assert.equal(existingCandidate("candidate", existing, jobs("success")), "qualified");
-    assert.equal(existingCandidate("candidate", existing, jobs("skipped")), "qualified");
+    assert.doesNotThrow(() => existingPublication(existing, jobs("success")));
     for (const [run, list] of [
       [{ ...existing, status: "in_progress" }, jobs("success")],
       [{ ...existing, conclusion: "failure" }, jobs("skipped")],
@@ -1029,110 +1084,140 @@ describe("comandi del ciclo", () => {
       [existing, []],
     ])
       assert.throws(
-        () => existingCandidate("candidate", run, list),
+        () => existingPublication(run, list),
         /release:cycle resume 9, senza un nuovo dispatch/u,
       );
   });
 
-  it("rifiuta Production senza il digest delle migration non additive", () => {
-    const required = { names: ["0070_x.sql"], digest: "a".repeat(64) };
+  it("ricava il digest del lotto dalle approvazioni delle PR", () => {
+    const entry = (name, sql) => ({ name, digest: name, sql });
+    const safe = entry("0070_a.sql", "CREATE TABLE a (id TEXT);");
+    const first = entry("0071_b.sql", "DROP TABLE b;");
+    const second = entry("0072_c.sql", "UPDATE c SET a = 1;");
+    const added = [safe, first, second];
+    const lot = requiredReview(added).digest;
+    const approval = (migrations) => `reviewed-migrations: ${requiredReview(migrations).digest}\n`;
+    const commits = [
+      { added: [safe], body: "" },
+      { added: [first], body: approval([first]) },
+      { added: [second], body: approval([second]) },
+    ];
+    assert.equal(lotReview([safe], [{ added: [safe], body: "" }]), "");
+    assert.equal(lotReview(added, commits), lot);
     assert.throws(
-      () => assertReviewedDispatch(required, ""),
-      /0070_x\.sql.*--reviewed-migrations a{64}/u,
+      () => lotReview(added, commits.slice(0, 2)),
+      new RegExp(`0072_c\\.sql.*--reviewed-migrations ${lot}`, "u"),
     );
-    assert.doesNotThrow(() => assertReviewedDispatch(required, required.digest));
-    assert.doesNotThrow(() => assertReviewedDispatch(undefined, ""));
+    // Una PR con il digest di un'altra versione della migration non vale come approvazione.
+    assert.throws(
+      () =>
+        lotReview(added, [commits[0], { added: [first], body: approval([second]) }, commits[2]]),
+      /0071_b\.sql/u,
+    );
+    assert.equal(lotReview(added, [], lot), lot);
+    assert.throws(() => lotReview(added, [], "b".repeat(64)), /Migration da approvare/u);
   });
 
-  it("ammette un nuovo dispatch soltanto col digest chiesto da una run senza ricevute", () => {
-    const digest = "a".repeat(64);
-    const log = `job\tstep\t2026-11-01T19:09:36Z Error: Migration da approvare: 0070_x.sql. Digest ${digest}\nfine`;
-    assert.equal(awaitsMigrationReview(digest, log, ["candidato"]), true);
-    assert.equal(awaitsMigrationReview("", log, []), false);
-    assert.equal(awaitsMigrationReview("b".repeat(64), log, []), false);
-    assert.equal(awaitsMigrationReview(digest, `Error: readback fallito ${digest}`, []), false);
-    assert.equal(awaitsMigrationReview(digest, log, ["release-receipt-9-1"]), false);
+  it("promuove la versione in cima al changelog, nuova di un passo o già pubblicata", () => {
+    const changelog =
+      "# Changelog\n\n## [2.0.2]\n\n- Voce.\n\n## [2.0.1] - 2026-11-01\n\n- Prima.\n";
+    assert.doesNotThrow(() => assertPromotable(changelog, "2.0.2", ["v2.0.1"]));
+    assert.doesNotThrow(() => assertPromotable(changelog, "2.0.2", ["v2.0.2", "v2.0.1"]));
+    assert.throws(() => assertPromotable(changelog, "2.0.3", ["v2.0.1"]), /non la 2\.0\.3/u);
+    assert.throws(() => assertPromotable(changelog, "2.0.2", ["v2.0.0"]), /non è un passo/u);
+    assert.throws(() => assertPromotable("## [2.0.2]\n", "2.0.2", ["v2.0.1"]), /vuota/u);
   });
 
-  describe("identità della release candidate", () => {
-    const deployed = {
-      run: { id: 7, run_attempt: 1, head_sha: "deploy", html_url: "https://example.invalid/run/7" },
-      jobs: [
-        { name: "Node 26", conclusion: "success" },
-        {
-          name: "Deploy test",
-          conclusion: "success",
-          steps: [{ name: "Confirm provider readback", conclusion: "success" }],
-        },
+  it("misura durata e riuscita al primo tentativo delle pubblicazioni", () => {
+    const run = (conclusion, run_attempt, minutes) => ({
+      head_sha: "a".repeat(40),
+      conclusion,
+      run_attempt,
+      created_at: "2026-11-02T10:00:00Z",
+      updated_at: new Date(Date.parse("2026-11-02T10:00:00Z") + minutes * 60_000).toISOString(),
+    });
+    const metrics = promotionMetrics([
+      run("success", 1, 12),
+      run("failure", 1, 30),
+      run("success", 2, 40),
+      run("success", 1, 14),
+    ]);
+    assert.deepEqual(
+      [
+        metrics.runs,
+        metrics.successfulRuns,
+        metrics.published,
+        metrics.firstAttempt,
+        metrics.medianRunMinutes,
       ],
+      [4, 3, 0, 0, 14],
+    );
+    assert.equal(metrics.rows[0].day, "2026-11-02");
+    assert.equal(promotionMetrics([]).medianRunMinutes, null);
+  });
+
+  it("lega il comando alla run del ciclo con il titolo", () => {
+    assert.equal(coordinatorTitle("pr", "12", "a".repeat(40)), `Ciclo pr 12 ${"a".repeat(40)}`);
+    const workflow = readFileSync(".github/workflows/cycle.yml", "utf8");
+    assert.match(
+      workflow,
+      /run-name: Ciclo \$\{\{ inputs\.operation \}\} \$\{\{ inputs\.object \}\}/u,
+    );
+  });
+
+  it("non occupa un runner durante la quiete e forza la campagna settimanale", () => {
+    const base = {
+      now: Date.parse("2026-11-02T10:20:00Z"),
+      committedAt: "2026-11-02T10:00:00Z",
+      passed: true,
+      certified: false,
     };
+    assert.equal(candidateReadiness(base), true);
+    assert.equal(candidateReadiness({ ...base, committedAt: "2026-11-02T10:10:00Z" }), false);
+    assert.equal(candidateReadiness({ ...base, certified: true }), false);
+    assert.equal(candidateReadiness({ ...base, weekly: true, certified: true }), true);
+    assert.equal(candidateReadiness({ ...base, passed: false, weekly: true }), false);
+    assert.equal(candidateReadiness({ ...base, manual: true }), true);
+  });
+
+  it("misura le fasi, le nuove run sullo stesso candidato e i falsi verdi", () => {
+    const at = (minutes) =>
+      new Date(Date.parse("2026-11-02T10:00:00Z") + minutes * 60_000).toISOString();
+    const runs = [
+      {
+        id: 2,
+        head_sha: "a".repeat(40),
+        conclusion: "success",
+        run_attempt: 1,
+        created_at: at(0),
+        updated_at: at(30),
+      },
+      {
+        id: 1,
+        head_sha: "a".repeat(40),
+        conclusion: "failure",
+        run_attempt: 1,
+        created_at: at(0),
+        updated_at: at(10),
+      },
+    ];
     const receipt = {
-      sha: "deploy",
-      tree: "deploy-tree",
-      digest: "artifact",
-      version: "worker-v1",
-      readback: true,
-      schema: [{ name: "0001_init.sql" }, { name: "0002_orders.sql" }],
+      run: 2,
+      requestedAt: at(0),
+      certifiedAt: at(2),
+      activatedAt: at(10),
+      guardStartedAt: at(11),
+      guardCompletedAt: at(26),
+      completedAt: at(27),
+      candidateActive: false,
+      rolledBack: true,
     };
-    // Testa con soli documenti dopo il deploy, che contiene anche la sezione della RC.
-    const io = (overrides = {}) => ({
-      head: () => "head",
-      changelog: () => "## [2.0.0-rc.1]\n\nRC.\n",
-      introduced: () => "deploy",
-      needsDeploy: () => false,
-      lastDeploy: () => deployed,
-      receipt: () => receipt,
-      liveVersion: async () => "worker-v1",
-      tree: () => "head-tree",
-      certified: () => true,
-      config: () => "config-hash",
-      ...overrides,
-    });
-
-    it("lega versione, testa, artefatto distribuito, schema e configurazione", async () => {
-      assert.deepEqual(await identifyCandidate(io()), {
-        version: "2.0.0-rc.1",
-        commit: "head",
-        tree: "head-tree",
-        deployedCommit: "deploy",
-        artifact: "artifact",
-        workerVersion: "worker-v1",
-        run: "https://example.invalid/run/7",
-        migrations: 2,
-        lastMigration: "0002_orders.sql",
-        config: "config-hash",
-        qualified: true,
-      });
-      // La qualifica completa assente si riporta, senza rifiutare l'identità.
-      assert.equal((await identifyCandidate(io({ certified: () => false }))).qualified, false);
-      // Lo stesso commit come testa, deploy e sezione: un confronto vuoto non è una modifica.
-      const same = await identifyCandidate(
-        io({ head: () => "deploy", introduced: () => "deploy", needsDeploy: () => true }),
-      );
-      assert.equal(same.commit, "deploy");
-    });
-
-    it("rifiuta un candidato non congelato, non distribuito o cambiato dopo la RC", async () => {
-      const rejects = (overrides, pattern) =>
-        assert.rejects(identifyCandidate(io(overrides)), pattern);
-      await rejects({ changelog: () => "## [2.0.0]\n" }, /Nessuna release candidate/u);
-      await rejects({ lastDeploy: () => undefined }, /Nessun deploy test/u);
-      await rejects(
-        { lastDeploy: () => ({ ...deployed, jobs: [{ name: "Node 26", conclusion: "failure" }] }) },
-        /Gate/u,
-      );
-      await rejects(
-        { needsDeploy: (base) => base === "deploy", introduced: () => "section" },
-        /attendere il deploy/u,
-      );
-      // Una correzione distribuita dopo la sezione della RC richiede la RC successiva.
-      await rejects(
-        { introduced: () => "section", needsDeploy: (base) => base === "section" },
-        /aggiungere la RC successiva/u,
-      );
-      await rejects({ receipt: () => ({ ...receipt, rolledBack: true }) }, /Ricevuta/u);
-      await rejects({ receipt: () => ({ ...receipt, sha: "other" }) }, /Ricevuta/u);
-      await rejects({ liveVersion: async () => "worker-v2" }, /versione attiva/u);
-    });
+    const metrics = promotionMetrics(runs, [receipt]);
+    assert.equal(metrics.firstAttempt, 0);
+    assert.equal(metrics.falseGreen, 1);
+    assert.equal(metrics.published, 0);
+    assert.equal(metrics.rows[0].activationSeconds, 600);
+    assert.equal(metrics.rows[0].guardSeconds, 900);
+    assert.equal(metrics.rows[0].completionSeconds, 60);
   });
 });

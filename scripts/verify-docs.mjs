@@ -11,7 +11,6 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { productionReadiness } from "./release/release.mjs";
 
 let options;
 try {
@@ -213,14 +212,6 @@ function main() {
       const words = task.split(/\s+/).filter(Boolean).length;
       if (words > COMPLETED_TASK_WORDS)
         error("TASK_LENGTH", `${title[1]}: ${words} parole, al massimo ${COMPLETED_TASK_WORDS}`);
-    }
-    try {
-      productionReadiness(masterPlan, false);
-    } catch {
-      error(
-        "PRODUCTION_GATES",
-        "Gate Production mancanti, duplicati o non validi nel Master Plan.",
-      );
     }
   }
   for (const [file, text] of documents) {

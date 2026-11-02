@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -128,5 +128,25 @@ describe("comandi esterni", () => {
     assert.equal(gh("run", "list"), '["run","list"]');
     assert.equal(keychain("voce"), "segreto");
     assert.throws(() => keychain("assente"));
+  });
+
+  it("ripete letture GitHub temporaneamente fallite, senza duplicare un dispatch", () => {
+    const counter = path.join(directory, "counter");
+    writeFileSync(
+      path.join(directory, "gh"),
+      `#!${process.execPath}\nconst fs=require('node:fs');
+const file=${JSON.stringify(counter)};const count=fs.existsSync(file)?Number(fs.readFileSync(file))+1:1;
+fs.writeFileSync(file,String(count));if(count<=2){process.stderr.write('gh: Bad Gateway (HTTP 502)');process.exit(1);}process.stdout.write('ok');`,
+      { mode: 0o700 },
+    );
+    try {
+      assert.equal(gh("api", "repos/example/project"), "ok");
+      assert.equal(readFileSync(counter, "utf8"), "3");
+      writeFileSync(counter, "0");
+      assert.throws(() => gh("workflow", "run", "publish.yml"), /Command failed/u);
+      assert.equal(readFileSync(counter, "utf8"), "1");
+    } finally {
+      fake("gh", `node -e 'console.log(JSON.stringify(process.argv.slice(1)))' -- "$@"`);
+    }
   });
 });

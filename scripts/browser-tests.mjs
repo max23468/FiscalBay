@@ -30,8 +30,83 @@ export function listedTestIds(listing) {
   return visit(listing);
 }
 
-export function assertCandidateReports(parts, sha, expected) {
-  for (const kind of ["source", "production"]) {
+/** Un centinaio di prove per runner, fino a otto macchine; nessuna partizione vuota. */
+export function browserShards(count) {
+  if (!Number.isSafeInteger(count) || count <= 0)
+    throw new Error("Inventario browser vuoto o non valido.");
+  const total = Math.min(8, Math.ceil(count / 100));
+  return { include: Array.from({ length: total }, (_, index) => ({ shard: index + 1, total })) };
+}
+
+/** Pagine riuscite soltanto alla ripetizione, dalle otto partizioni. */
+export function flakyTests(parts) {
+  return [
+    ...new Set(
+      parts.flatMap(({ report }) =>
+        (report?.rows ?? [])
+          .filter(({ status, retry }) => status === "passed" && retry > 0)
+          .map(({ project, page }) => `${project}: ${page}`),
+      ),
+    ),
+  ].sort();
+}
+
+/**
+ * Prove instabili anche ora e in almeno `limit` qualifiche recenti: oltre due volte l'instabilità
+ * è un difetto, che ferma la certificazione finché la prova non si corregge.
+ */
+export function repeatedFlaky(current, history, limit = 2) {
+  return current.filter((test) => history.filter((run) => run.includes(test)).length >= limit);
+}
+
+/** Elenchi delle prove instabili delle ultime qualifiche, dagli artefatti delle run. */
+function flakyHistory(directory, kinds) {
+  const repository = process.env.GH_REPO;
+  if (!repository) return [];
+  const name = kinds.includes("source") ? "flaky-tests" : "production-flaky-tests";
+  const { artifacts } = JSON.parse(
+    execFileSync("gh", ["api", `repos/${repository}/actions/artifacts?name=${name}&per_page=30`], {
+      encoding: "utf8",
+    }),
+  );
+  const repositoryId = JSON.parse(
+    execFileSync("gh", ["api", `repos/${repository}`], { encoding: "utf8" }),
+  ).id;
+  const seen = new Set();
+  return artifacts
+    .filter(({ expired, workflow_run: run }) => {
+      if (
+        expired ||
+        run?.repository_id !== repositoryId ||
+        run.head_repository_id !== repositoryId ||
+        String(run.id) === process.env.GITHUB_RUN_ID ||
+        seen.has(run.id)
+      )
+        return false;
+      seen.add(run.id);
+      const origin = JSON.parse(
+        execFileSync("gh", ["api", `repos/${repository}/actions/runs/${run.id}`], {
+          encoding: "utf8",
+        }),
+      );
+      return kinds.includes("source")
+        ? origin.path === ".github/workflows/candidate.yml" && origin.conclusion === "success"
+        : origin.path === ".github/workflows/publish.yml" && origin.head_branch === "main";
+    })
+    .slice(0, 5)
+    .map(({ id, workflow_run: { id: run } }) => {
+      const target = path.join(directory, "history", String(id));
+      execFileSync(
+        "gh",
+        ["run", "download", String(run), "--repo", repository, "--name", name, "--dir", target],
+        { stdio: "inherit" },
+      );
+      return JSON.parse(readFileSync(path.join(target, "flaky.json"), "utf8"));
+    });
+}
+
+export function assertCandidateReports(parts, sha, expected, kinds = ["source", "production"]) {
+  for (const kind of kinds) {
     const inventory = new Set(expected?.[kind]);
     if (!inventory.size || inventory.has(undefined) || inventory.size !== expected[kind].length)
       throw new Error(`Qualifica browser senza inventario valido: ${kind}.`);
@@ -79,8 +154,11 @@ function main() {
   const { values } = parseArgs({
     options: {
       grep: { type: "string", default: "." },
+      "grep-invert": { type: "string", default: "" },
+      kinds: { type: "string", default: "source,production" },
       browsers: { type: "string", default: "chromium" },
       pages: { type: "boolean", default: false },
+      plan: { type: "boolean", default: false },
       shard: { type: "string" },
       "check-evidence": { type: "string" },
     },
@@ -103,8 +181,10 @@ function main() {
         : [];
     });
     const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    const kinds = values.kinds.split(",");
+    const invert = values["grep-invert"] ? ["--grep-invert", values["grep-invert"]] : [];
     const expected = Object.fromEntries(
-      ["source", "production"].map((kind) => [
+      kinds.map((kind) => [
         kind,
         listedTestIds(
           JSON.parse(
@@ -114,7 +194,7 @@ function main() {
                 "exec",
                 "playwright",
                 "test",
-                ...(kind === "production" ? ["e2e/pages.spec.ts"] : []),
+                ...(kind === "production" ? ["e2e/pages.spec.ts", ...invert] : invert),
                 "--list",
                 "--reporter",
                 "json",
@@ -139,8 +219,12 @@ function main() {
         ),
       ]),
     );
-    assertCandidateReports(parts, sha, expected);
-    console.log("Qualifica completa: otto partizioni browser coerenti, senza prove parziali.");
+    assertCandidateReports(parts, sha, expected, kinds);
+    const flaky = flakyTests(parts);
+    const repeated = repeatedFlaky(flaky, flakyHistory(directory, kinds));
+    writeFileSync(path.join(directory, "flaky.json"), JSON.stringify(flaky));
+    if (repeated.length) throw new Error(`Prove instabili da correggere: ${repeated.join("; ")}.`);
+    console.log("Qualifica completa: partizioni browser coerenti, senza prove parziali.");
     return;
   }
   const browsers = values.browsers.split(",");
@@ -150,10 +234,25 @@ function main() {
     ...(values.pages ? ["e2e/pages.spec.ts"] : []),
     "--grep",
     values.grep,
+    ...(values["grep-invert"] ? ["--grep-invert", values["grep-invert"]] : []),
     ...browsers.flatMap((browser) => ["--project", browser]),
   ];
   const playwright = (args, options) =>
     execFileSync("pnpm", ["exec", "playwright", "test", ...args, ...selection], options);
+  if (values.plan) {
+    const listing = JSON.parse(
+      playwright(["--list", "--reporter", "json"], {
+        encoding: "utf8",
+        maxBuffer: 64 * 1024 * 1024,
+      }),
+    );
+    const count = listedTestIds(listing).length;
+    const matrix = browserShards(count);
+    const result = `browser-matrix=${JSON.stringify(matrix)}\nbrowser-count=${count}\n`;
+    if (process.env.GITHUB_OUTPUT) writeFileSync(process.env.GITHUB_OUTPUT, result, { flag: "a" });
+    console.log(`Browser: ${count} prove, ${matrix.include.length} runner.`);
+    return;
+  }
   if (!values.shard) return void playwright([], { stdio: "inherit" });
 
   const [current, total] = values.shard.split("/").map(Number);

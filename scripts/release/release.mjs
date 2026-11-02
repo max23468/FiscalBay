@@ -18,6 +18,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
+import { downloadRecord, observedRelease } from "./records.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
@@ -135,15 +136,9 @@ export function migrationPlan(migrations, applied, reviewed = "", approved) {
   return { pending, digest, rollbackCompatible: pending.length === 0 };
 }
 
-/** Release candidate in cima al changelog; `undefined` se la prima versione non è una RC. */
-export function candidateVersion(changelog) {
-  const version = topVersion(changelog);
-  return /^2\.\d+\.\d+-rc\.\d+$/u.test(version ?? "") ? version : undefined;
-}
-
 const parseVersion = (version) => {
-  const match = /^(\d+)\.(\d+)\.(\d+)(?:-rc\.(\d+))?$/u.exec(version ?? "");
-  return match && { core: match.slice(1, 4).map(Number), rc: match[4] && Number(match[4]) };
+  const match = /^(\d+)\.(\d+)\.(\d+)$/u.exec(version ?? "");
+  return match && { core: match.slice(1, 4).map(Number) };
 };
 const coreOf = ({ core }) => core.join(".");
 const compareCores = (left, right) =>
@@ -170,89 +165,25 @@ export function topSection(changelog) {
 }
 
 /**
- * Changelog della promozione: la versione in cima riceve il giorno della pubblicazione, che
- * pagina Novità e campanella mostrano in Production.
+ * Changelog dopo una pubblicazione: la versione riceve il giorno, ovunque si trovi, perché nel
+ * frattempo può esserne stata aperta un'altra. Una versione che ha già il giorno resta com'è.
  */
 export function datedChangelog(changelog, version, day) {
-  const top = topSection(changelog);
-  if (top?.version !== version)
-    throw new Error(
-      `In cima al changelog c'è la ${top?.version ?? "nessuna versione"}, non la ${version}.`,
-    );
-  if (top.day !== undefined) throw new Error(`La ${version} porta già il giorno ${top.day}.`);
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(day)) throw new Error(`Giorno non valido: ${day}.`);
-  return changelog.replace(top.header, `## [${version}] - ${day}`);
-}
-
-/**
- * Changelog senza il giorno della versione in cima: quello di `develop` da cui nasce la promozione
- * della versione.
- */
-export function undatedChangelog(changelog) {
-  const top = topSection(changelog);
-  return top?.day === undefined ? changelog : changelog.replace(top.header, `## [${top.version}]`);
-}
-
-/**
- * Tree di un commit con il changelog senza il giorno della versione in cima. Per una promozione da
- * `promuovi/<versione>` è il tree di `develop` già qualificato, perché la differenza è soltanto
- * quel giorno (D256): la sorgente qualificata si riusa, la build Production no.
- */
-export function undatedTree(rev = "HEAD") {
-  const tree = git("rev-parse", `${rev}^{tree}`);
-  const changelog = execFileSync("git", ["show", `${rev}:CHANGELOG.md`], { encoding: "utf8" });
-  const undated = undatedChangelog(changelog);
-  if (undated === changelog) return tree;
-  const blob = execFileSync("git", ["hash-object", "-w", "--stdin"], {
-    input: undated,
-    encoding: "utf8",
-  }).trim();
-  const directory = mkdtempSync(path.join(tmpdir(), "undated-tree-"));
-  try {
-    const env = { ...process.env, GIT_INDEX_FILE: path.join(directory, "index") };
-    execFileSync("git", ["read-tree", rev], { env });
-    execFileSync("git", ["update-index", "--cacheinfo", `100644,${blob},CHANGELOG.md`], { env });
-    return execFileSync("git", ["write-tree"], { env, encoding: "utf8" }).trim();
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
-  }
-}
-
-/**
- * Tree dell'artefatto valido per il commit corrente: lo stesso tree, oppure, per la sola sorgente
- * di test, il tree senza il giorno della versione da cui nasce la promozione.
- */
-export const sameSource = (saved, current, environment, undated) =>
-  saved === current || (environment === "test" && saved === undated);
-
-/** Branch della promozione di una versione: `develop` con il solo giorno nel changelog. */
-export const promotionBranch = (version) => `promuovi/${version}`;
-
-/**
- * Le PR verso `main` partono da `develop` oppure da `promuovi/<versione>`, che differisce da
- * `develop` soltanto per il giorno della versione in cima al changelog.
- */
-export function assertPromotionSource({ headRef, files, develop, head }) {
-  if (headRef === "develop") return;
-  const version = /^promuovi\/(\d+\.\d+\.\d+)$/u.exec(headRef)?.[1];
-  if (!version)
-    throw new Error(
-      `Le PR verso main partono da develop o da promuovi/<versione>, non da ${headRef}.`,
-    );
-  const day = topSection(head ?? "")?.day;
-  if (files.join("\n") !== "CHANGELOG.md" || !day || datedChangelog(develop, version, day) !== head)
-    throw new Error(
-      `${headRef} deve differire da develop soltanto per il giorno della ${version}.`,
-    );
+  const escaped = version.replaceAll(".", "\\.");
+  const header = new RegExp(`^## \\[?${escaped}\\]?(?: - \\S+)?[ \\t]*$`, "mu");
+  const found = header.exec(changelog)?.[0];
+  if (!found) throw new Error(`La ${version} non è nel changelog.`);
+  return found.includes(" - ") ? changelog : changelog.replace(found, `## [${version}] - ${day}`);
 }
 
 const releasedTags = () => git("tag", "--list", "v2.*").split("\n");
 
-const latestReleased = (releasedTags) =>
+export const latestReleased = (releasedTags) =>
   releasedTags
     .map((tag) => tag.replace(/^v/u, ""))
     .map(parseVersion)
-    .filter((version) => version && !version.rc && version.core[0] >= 2)
+    .filter((version) => version && version.core[0] >= 2)
     .map(coreOf)
     .sort((left, right) => compareCores(parseVersion(left), parseVersion(right)))
     .at(-1);
@@ -260,8 +191,7 @@ const latestReleased = (releasedTags) =>
 /**
  * Il lotto su `develop` porta una sola versione: la prima PR con una modifica visibile apre in
  * cima al changelog la versione successiva all'ultima pubblicata, di un solo passo; le seguenti la
- * riusano o ne alzano il livello. Una RC già aperta prosegue soltanto con la successiva o con la
- * propria versione finale.
+ * riusano o ne alzano il livello.
  */
 export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
   const head = topVersion(changelog);
@@ -275,12 +205,6 @@ export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
   if (!next) throw new Error(`In cima al changelog serve una versione, non "${head ?? ""}".`);
   const previous = parseVersion(base);
   const open = previous && coreOf(previous) !== released ? previous : undefined;
-  if (open?.rc && coreOf(open) === coreOf(next)) {
-    if (next.rc && next.rc !== open.rc + 1)
-      throw new Error(`La ${head} non segue la ${base}: la RC sale di uno.`);
-    return;
-  }
-  if (next.rc) throw new Error(`La ${head} apre una RC: le versioni si preparano senza RC.`);
   if (!nextVersions(released).includes(coreOf(next)))
     throw new Error(
       `La ${head} non è un passo dalla ${released ?? "prima pubblicazione"}: ammesse ${nextVersions(released).join(", ")}.`,
@@ -295,38 +219,19 @@ export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
  * changelog con `-dev.` e il tree distribuito. Un deploy Production di sole modifiche interne,
  * con la versione già pubblicata, aggiunge il commit: `2.0.0+<commit>`.
  */
-export function deployTag({ changelog, environment, sha, tree, releasedTags, expected }) {
+export function deployTag({ changelog, environment, sha, tree, releasedTags, expected, day }) {
   if (!latestReleased(releasedTags)) return sha.slice(0, 12);
   const version = topVersion(changelog);
   const parsed = parseVersion(version);
   if (!parsed) throw new Error("Nessuna versione in cima al changelog.");
   if (environment !== "production") return `${version}-dev.${tree.slice(0, 12)}`;
-  if (parsed.rc || expected !== version)
+  if (expected !== version)
     throw new Error(`In Production si distribuisce la versione ${expected}, non la ${version}.`);
-  // Un lotto di sole modifiche interne riusa la versione pubblicata; una versione nuova porta il
-  // giorno che la promozione scrive nel changelog.
+  // Un lotto di sole modifiche interne riusa la versione pubblicata; una versione nuova entra
+  // nella build con il giorno della pubblicazione.
   if (latestReleased(releasedTags) === version) return `${version}+${sha.slice(0, 12)}`;
-  if (!topSection(changelog).day)
-    throw new Error(`La ${version} non ha il giorno: la promozione lo scrive nel changelog.`);
-  return version;
-}
-
-/**
- * Con una RC in cima al changelog `develop` accetta soltanto correzioni: il titolo della PR, che
- * diventa il commit integrato, non può annunciare una funzione o una modifica incompatibile. Una
- * correzione che cambia ciò che si distribuisce porta la RC successiva rispetto alla base.
- */
-export function assertFreeze(changelog, title, { baseChangelog, deploy = false } = {}) {
-  const version = candidateVersion(changelog);
-  if (version && /^(?:feat\b|[a-z]+(?:\([a-z0-9._-]+\))?!:)/u.test(title.trim()))
-    throw new Error(
-      `Release candidate ${version} congelata: su develop entrano soltanto correzioni, non "${title.trim()}".`,
-    );
-  const base = baseChangelog === undefined ? undefined : candidateVersion(baseChangelog);
-  if (deploy && base && version === base)
-    throw new Error(
-      `La PR cambia ciò che si distribuisce: aggiungere in cima a CHANGELOG.md la RC successiva alla ${base}.`,
-    );
+  if (!topSection(changelog).day && !day)
+    throw new Error(`La ${version} non ha il giorno della pubblicazione.`);
   return version;
 }
 
@@ -363,23 +268,51 @@ export function assertAppliedMigrations(migrations, previous, applied) {
   }
 }
 
+/** SQL precedente oppure piano salvato prima dell'effetto D1, per una ripresa parziale. */
+export function appliedMigrationHistory(applied, readPrevious, receipt) {
+  const saved = receipt.schemaChanged && receipt.migrationPlan;
+  const approved =
+    saved && hash(JSON.stringify(saved.pending)) === saved.digest ? saved.pending : [];
+  return applied.map((name) => {
+    const bytes = readPrevious(name);
+    if (bytes !== undefined) return { name, digest: hash(bytes) };
+    const pending = approved.find((entry) => entry.name === name);
+    if (!pending) throw new Error(`Migration applicata senza storia o piano di ripresa: ${name}.`);
+    return pending;
+  });
+}
+
 /** Identità registrata nel messaggio della versione Cloudflare, entro 100 caratteri. */
 export const releaseIdentity = (manifest) => `${manifest.sha}:${manifest.digest.slice(0, 32)}`;
 
-/** Passi riprendibili: la fonte dell'esito remoto viene riletta anche dopo un'interruzione. */
+/** Header che manda una richiesta alla versione caricata, ancora senza traffico. */
+export const versionOverride = (worker, version) => `${worker}="${version}"`;
+
+/**
+ * Passi riprendibili: la fonte dell'esito remoto viene riletta anche dopo un'interruzione. La
+ * versione si carica al 0% del traffico quando la configurazione non cambia: il collaudo la prova
+ * sul dominio reale e `activate` la porta al 100%. Con una configurazione diversa, che soltanto
+ * un deploy applica a route e cron, il traffico passa subito.
+ */
 export async function publish(manifest, io, receipt = {}) {
   assertResume(Object.keys(receipt).length ? receipt : null, manifest);
+  if (receipt.rolledBack)
+    throw new Error("Candidato ritirato: serve una nuova correzione, non una ripresa del deploy.");
   const state = {
     ...receipt,
     sha: manifest.sha,
     tree: manifest.tree,
     digest: manifest.digest,
     environment: manifest.environment,
+    requestedAt:
+      receipt.requestedAt ?? process.env.RELEASE_REQUESTED_AT ?? new Date().toISOString(),
+    startedAt: receipt.startedAt ?? new Date().toISOString(),
+    certifiedAt: receipt.certifiedAt ?? process.env.RELEASE_CERTIFIED_AT,
   };
   await io.assertCurrent();
   await io.preflight();
   state.readback = false;
-  delete state.rolledBack;
+  state.incidentBaseline ??= await io.incidents?.();
   const migrations = await io.migrations();
   const current = await io.current();
   const identity = releaseIdentity(manifest);
@@ -406,11 +339,19 @@ export async function publish(manifest, io, receipt = {}) {
   if (current.identity !== identity) {
     await io.assertCurrent();
     state.previous = current.version;
+    state.previousIdentity = current.identity;
     state.rollbackCompatible =
       migrations.rollbackCompatible && !state.schemaChanged && (await io.canRollback(current));
     state.deployAttempted = true;
+    state.activationStartedAt ??= new Date().toISOString();
     state.deployed = false;
+    state.staged = await io.canStage(current);
     await io.save(state);
+    if (state.staged) {
+      state.stagedVersion = await io.stage(identity, current.version);
+      await io.save(state);
+      return state;
+    }
     try {
       await io.deploy(identity);
     } catch (error) {
@@ -422,9 +363,42 @@ export async function publish(manifest, io, receipt = {}) {
     throw new Error("Versione distribuita diversa dall'artefatto atteso.");
   state.version = deployed.version;
   state.deployed = true;
+  state.activatedAt ??= new Date().toISOString();
   await io.save(state);
   if (deployError) throw deployError;
   await io.readback(deployed.version);
+  state.readback = true;
+  await io.save(state);
+  return state;
+}
+
+/** Porta al 100% la versione provata senza traffico, solo se nel frattempo nulla è cambiato. */
+export async function activate(manifest, io, receipt) {
+  assertResume(receipt, manifest);
+  if (receipt.rolledBack) throw new Error("Candidato ritirato: attivazione rifiutata.");
+  if (!receipt.staged) return receipt;
+  const identity = releaseIdentity(manifest);
+  const state = { ...receipt };
+  const current = await io.current();
+  if (current.identity !== identity) {
+    if (current.version !== receipt.previous)
+      throw new Error("Stato remoto cambiato: attivazione rifiutata.");
+    state.activationAttempted = true;
+    state.version = receipt.stagedVersion;
+    await io.save(state);
+    try {
+      await io.activate(receipt.stagedVersion);
+    } catch (error) {
+      if ((await io.current()).identity !== identity) throw error;
+    }
+  }
+  const active = await io.current();
+  if (active.identity !== identity) throw new Error("Attivazione non confermata.");
+  state.version = active.version;
+  state.deployed = true;
+  state.activatedAt ??= new Date().toISOString();
+  await io.save(state);
+  await io.readback(active.version);
   state.readback = true;
   await io.save(state);
   return state;
@@ -471,13 +445,7 @@ function verify(environment) {
     "node",
     "packageManager",
   ])
-    if (
-      key === "tree"
-        ? saved.tree !== current.tree &&
-          !sameSource(saved.tree, current.tree, environment, undatedTree())
-        : saved[key] !== current[key]
-    )
-      throw new Error(`Provenienza non valida: ${key}.`);
+    if (saved[key] !== current[key]) throw new Error(`Provenienza non valida: ${key}.`);
   if (JSON.stringify(saved.migrations) !== JSON.stringify(current.migrations))
     throw new Error("Migration diverse da quelle verificate.");
   // Un merge può cambiare SHA conservando esattamente lo stesso tree verificato.
@@ -490,32 +458,6 @@ function verify(environment) {
  */
 export const retryReadback = (check, attempts = 12, delayMs = 5000) =>
   retry(check, { attempts, delay: () => delayMs });
-
-export function productionReadiness(plan, requireCompleted = true) {
-  const sections = plan.split(/^### Gate per la pubblicazione Production\s*$/mu);
-  const section = sections.length === 2 ? sections[1].split(/^#{1,3} |^<a id=/mu)[0] : "";
-  const rows = section
-    .split("\n")
-    .filter((line) => line.trim().startsWith("|"))
-    .map((line) =>
-      line
-        .trim()
-        .split("|")
-        .map((cell) => cell.trim()),
-    );
-  for (const gate of ["commerciale", "ripristino", "operativita"]) {
-    const matches = rows.filter((row) => row[1] === gate);
-    if (
-      matches.length !== 1 ||
-      matches[0].length !== 5 ||
-      matches[0][4] !== "" ||
-      !["COMPLETATO", "DA COMPLETARE"].includes(matches[0][2]) ||
-      (requireCompleted && matches[0][2] !== "COMPLETATO") ||
-      (matches[0][2] === "COMPLETATO" && (!matches[0][3] || matches[0][3] === "-"))
-    )
-      throw new Error("Checkpoint Production non chiusi nel Master Plan.");
-  }
-}
 
 export function receiptArtifact(artifacts, prefix, runId, attempt) {
   const start = `${prefix}-${runId}-`;
@@ -560,10 +502,14 @@ export function rollbackRequired(receipt) {
   return true;
 }
 
-/** La conferma vale soltanto per il candidato ancora in testa e ancora distribuito. */
-export function assertConfirmable(manifest, receipt, remote, current) {
+/**
+ * La conferma vale soltanto per il candidato ancora distribuito. `onBranch` dice se il candidato è
+ * ancora quello atteso: in Production la testa di `main`, sul test un commit di `develop`, perché
+ * un merge successivo si distribuisce con il proprio deploy.
+ */
+export function assertConfirmable(manifest, receipt, onBranch, current) {
   if (
-    remote !== manifest.sha ||
+    !onBranch ||
     !receipt.readback ||
     receipt.rolledBack ||
     current.version !== receipt.version ||
@@ -573,10 +519,11 @@ export function assertConfirmable(manifest, receipt, remote, current) {
 }
 
 /** Righe per `GITHUB_OUTPUT` e riepilogo del passo dopo un deploy riuscito. */
-export function deployReport(state) {
+export function deployReport(state, worker) {
+  const version = state.staged ? state.stagedVersion : state.version;
   return {
-    output: `deployed=true\nversion=${state.version}\nrollback-compatible=${state.rollbackCompatible === true}\nprevious=${state.previous || ""}\n`,
-    summary: `\n### Distribuzione e readback\n\nCommit ${state.sha}; tree ${state.tree}; SHA256 ${state.digest}; versione ${state.version}; schema ${state.schema.length} migration. Collaudo browser nel passo successivo.\n`,
+    output: `deployed=true\nversion=${version}\nrollback-compatible=${state.rollbackCompatible === true}\nprevious=${state.previous || ""}\noverride=${state.staged ? versionOverride(worker, version) : ""}\n`,
+    summary: `\n### Distribuzione e readback\n\nCommit ${state.sha}; tree ${state.tree}; SHA256 ${state.digest}; versione ${version}${state.staged ? " al 0% del traffico" : ""}; schema ${state.schema.length} migration. Collaudo browser nel passo successivo.\n`,
   };
 }
 
@@ -590,8 +537,6 @@ function reviewMigrations(base) {
       : "Nessuna migration non additiva aggiunta.",
   );
 }
-
-const readPlan = () => readFileSync("docs/MASTER_PLAN.md", "utf8");
 
 function writeManifest(environment) {
   writeFileSync(`${output}/release-manifest.json`, JSON.stringify(manifests(environment), null, 2));
@@ -645,8 +590,9 @@ function restoreReceipt(manifest, prefix) {
 function provider(target) {
   const cf = (...args) => cfCli(args, { ci: true });
   const json = (...args) => cfJson(args, { ci: true });
-  const { worker: config } = readOutput();
-  const database = config.env.DB;
+  // Il rollback d'incidente non ha un artefatto: legge soltanto il Worker.
+  const config = existsSync(`${output}/v0/config.json`) ? readOutput().worker : undefined;
+  let database = config?.env.DB;
   // Il primo deployment dell'elenco è quello che serve il traffico.
   const activeDeployment = () =>
     json("workers", "deployments", "list", "--worker", target.worker, "--per-page", "1")
@@ -659,6 +605,20 @@ function provider(target) {
     const metadata = json("workers", "versions", "get", version, "--worker-id", target.worker);
     return { version, identity: metadata.annotations?.["workers/message"] };
   };
+  const deployment = (versions, message) =>
+    cf(
+      "workers",
+      "deployments",
+      "create",
+      "--worker",
+      target.worker,
+      "--body",
+      JSON.stringify({
+        strategy: "percentage",
+        versions,
+        annotations: { "workers/message": message },
+      }),
+    );
   const liveReadback = (version) =>
     retryReadback(async () => {
       for (const pathname of ["/", "/en", "/api/auth/get-session"]) {
@@ -673,6 +633,13 @@ function provider(target) {
       }
     });
   const query = async (sql, params = []) => {
+    if (!database) {
+      const { version } = await currentVersion();
+      const metadata = json("workers", "versions", "get", version, "--worker-id", target.worker);
+      database = metadata.bindings?.find(({ name }) => name === "DB");
+      if (!database?.id && database?.database_id) database.id = database.database_id;
+      if (!database?.id) throw new Error("Database del Worker attivo non identificato.");
+    }
     const response = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${database.id}/query`,
       {
@@ -698,12 +665,90 @@ function provider(target) {
       ? (await query("SELECT name FROM d1_migrations ORDER BY id")).map(({ name }) => name)
       : [];
   };
-  return { cf, json, config, database, activeDeployment, currentVersion, liveReadback, applied };
+  return {
+    cf,
+    json,
+    config,
+    database,
+    activeDeployment,
+    currentVersion,
+    deployment,
+    liveReadback,
+    applied,
+    incidents: () =>
+      query("SELECT key, kind, severity, opened_at FROM owner_incidents WHERE resolved_at IS NULL"),
+  };
 }
 
+export const releaseProvider = (environment) => {
+  if (!targets[environment]) throw new Error("Ambiente non supportato.");
+  return provider(targets[environment]);
+};
+
 const receiptFile = "reports/release.json";
+export function saveReceipt(state) {
+  mkdirSync("reports", { recursive: true });
+  writeFileSync(receiptFile, JSON.stringify(state, null, 2));
+}
+
+/** Readback finale condiviso da guardia, rollback e coordinatore. Salva anche un ritiro. */
+export async function reconcileReceipt(receipt, io, requireCandidate = true) {
+  const current = await io.current();
+  await io.readback(current.version);
+  const schema = await io.schema();
+  const active = observedRelease(current, schema);
+  const candidateActive = !receipt.rolledBack && current.identity === releaseIdentity(receipt);
+  const state = { ...receipt, active, candidateActive, reconciledAt: new Date().toISOString() };
+  await io.save(state);
+  if (requireCandidate && !candidateActive)
+    throw new Error("Il candidato non è attivo: rilascio ritirato o versione diversa.");
+  return state;
+}
+
+function restoreState(environment, expectedSha) {
+  const repository = process.env.GH_REPO;
+  const run = process.env.GITHUB_RUN_ID;
+  if (!repository || !run) throw new Error("Run non identificata.");
+  const artifacts = ghJson(
+    "api",
+    "--paginate",
+    "--slurp",
+    `repos/${repository}/actions/runs/${run}/artifacts?per_page=100`,
+  )
+    .flatMap((page) => page.artifacts)
+    .filter(
+      (artifact) =>
+        !artifact.expired && /^(?:production-state-|release-receipt-)/u.test(artifact.name),
+    )
+    .sort((a, b) => b.id - a.id);
+  for (const artifact of artifacts) {
+    const state = downloadRecord(repository, { ...artifact, workflow_run: { id: run } });
+    if (state.environment === environment && state.sha === expectedSha) {
+      saveReceipt(state);
+      return;
+    }
+  }
+  throw new Error("Ricevuta della pubblicazione non disponibile.");
+}
 const remoteHead = (target) =>
   git("ls-remote", "origin", `refs/heads/${target.ref}`).split(/\s/u)[0];
+
+/**
+ * Vero se il candidato è ancora valido sul branch: in Production soltanto la testa di `main`; sul
+ * test anche un antenato della testa di `develop`, che ha un deploy proprio.
+ */
+function onBranch(target, sha) {
+  const head = remoteHead(target);
+  if (head === sha) return true;
+  if (target !== targets.test) return false;
+  try {
+    git("fetch", "--quiet", "origin", target.ref);
+    git("merge-base", "--is-ancestor", sha, head);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 async function confirmRelease(manifest, environment, target, remote, receipt) {
   assertResume(receipt, manifest);
@@ -715,45 +760,147 @@ async function confirmRelease(manifest, environment, target, remote, receipt) {
       if (!existsSync(evidence)) throw new Error(`Collaudo remoto non disponibile: ${name}.`);
       assertTestEvidence(JSON.parse(readFileSync(evidence, "utf8")), manifest.sha);
     }
-  const head = remoteHead(target);
   const current = await remote.currentVersion();
-  assertConfirmable(manifest, receipt, head, current);
+  assertConfirmable(manifest, receipt, onBranch(target, manifest.sha), current);
   await remote.liveReadback(current.version);
 }
 
-async function rollbackRelease(manifest, target, remote, receipt) {
+export async function rollbackRelease(manifest, target, remote, receipt, save = saveReceipt) {
   assertResume(Object.keys(receipt).length ? receipt : null, manifest);
-  if (!rollbackRequired(receipt)) return;
+  if (!receipt.deployAttempted && !receipt.staged && !receipt.deployed) return;
+  // Versione mai arrivata al traffico: esce dal deployment, senza limiti di compatibilità.
+  const unused = receipt.staged && !receipt.deployed && !receipt.activationAttempted;
   const current = remote.activeDeployment();
-  if (current?.versions.length !== 1 || current.versions[0].version_id !== receipt.version)
+  const expected = unused ? receipt.stagedVersion : receipt.version;
+  const restored =
+    current?.versions.length === 1 &&
+    current.versions[0].version_id === receipt.previous &&
+    current.versions[0].percentage === 100;
+  const traffic = current?.versions.find(({ version_id }) => version_id === expected)?.percentage;
+  if (!restored && !current?.versions.some(({ version_id }) => version_id === expected))
     throw new Error("Stato remoto cambiato: rollback rifiutato.");
-  remote.cf(
-    "workers",
-    "deployments",
-    "create",
-    "--worker",
-    target.worker,
-    "--body",
-    JSON.stringify({
-      strategy: "percentage",
-      versions: [{ version_id: receipt.previous, percentage: 100 }],
-      annotations: { "workers/message": "Collaudo non superato" },
-    }),
-  );
+  if (
+    !restored &&
+    !(unused && traffic === 0) &&
+    !rollbackRequired({
+      ...receipt,
+      deployed: traffic > 0 || receipt.activationAttempted || receipt.deployed,
+    })
+  )
+    return;
+  if (!restored)
+    remote.deployment([{ version_id: receipt.previous, percentage: 100 }], "Collaudo non superato");
   const after = remote.activeDeployment();
   if (after?.versions[0]?.version_id !== receipt.previous || after.versions[0].percentage !== 100)
     throw new Error("Rollback non confermato.");
   await remote.liveReadback(receipt.previous);
-  writeFileSync(receiptFile, JSON.stringify({ ...receipt, rolledBack: true }, null, 2));
+  await save({
+    ...receipt,
+    rolledBack: true,
+    rolledBackAt: receipt.rolledBackAt ?? new Date().toISOString(),
+    readback: false,
+  });
+}
+
+/**
+ * Versione a cui tornare in un incidente: la prima diversa da quella attiva e interamente assegnata.
+ * `compatible` confronta configurazione e migration dei due commit: senza compatibilità serve una
+ * correzione in avanti, perché il codice precedente potrebbe non capire lo schema attuale.
+ */
+export function incidentTarget(deployments, identityOf, compatible) {
+  const single = deployments.filter(({ versions }) => versions.length === 1);
+  const active = deployments[0]?.versions.find(({ percentage }) => percentage === 100)?.version_id;
+  if (!active) throw new Error("Deployment attivo non interamente assegnato a una versione.");
+  const previous = single
+    .map(({ versions }) => versions[0])
+    .find(({ version_id, percentage }) => version_id !== active && percentage === 100)?.version_id;
+  if (!previous) throw new Error("Nessuna versione precedente a cui tornare.");
+  const [from, to] = [active, previous].map((version) => identityOf(version)?.split(":")[0]);
+  if (![from, to].every((sha) => /^[0-9a-f]{40}$/u.test(sha ?? "")) || !compatible(to, from))
+    throw new Error("Versione precedente non compatibile: serve una correzione in avanti.");
+  return { active, previous };
+}
+
+async function incidentRollback(target, remote, expectedSha) {
+  const receipt = existsSync(receiptFile)
+    ? JSON.parse(readFileSync(receiptFile, "utf8"))
+    : undefined;
+  const current = await remote.currentVersion();
+  if (receipt?.rolledBack && (receipt.active?.version ?? receipt.previous) === current.version) {
+    await remote.liveReadback(current.version);
+    return;
+  }
+  if (expectedSha && current.identity?.split(":")[0] !== expectedSha)
+    throw new Error("Versione attiva diversa dal candidato: rollback d'incidente rifiutato.");
+  const { deployments } = remote.json(
+    "workers",
+    "deployments",
+    "list",
+    "--worker",
+    target.worker,
+    "--per-page",
+    "10",
+  );
+  const { active, previous } = incidentTarget(
+    deployments,
+    (version) =>
+      remote.json("workers", "versions", "get", version, "--worker-id", target.worker)
+        .annotations?.["workers/message"],
+    (from, to) => {
+      try {
+        git("diff", "--exit-code", from, to, "--", "migrations", "cloudflare.config.ts");
+        return true;
+      } catch {
+        return false;
+      }
+    },
+  );
+  remote.deployment([{ version_id: previous, percentage: 100 }], `Incidente: ritiro di ${active}`);
+  await remote.liveReadback(previous);
+  const identity = (await remote.currentVersion()).identity;
+  const base = receipt ?? {
+    environment: target === targets.production ? "production" : "test",
+    sha: current.identity?.split(":")[0],
+  };
+  saveReceipt({
+    ...base,
+    rolledBack: true,
+    readback: false,
+    candidateActive: false,
+    rolledBackAt: new Date().toISOString(),
+    active: observedRelease({ version: previous, identity }, await remote.applied()),
+  });
+  console.log(`Versione ${previous} attiva al posto di ${active}.`);
 }
 
 async function deployRelease(manifest, target, remote, receipt, reviewed) {
-  const { cf, json, config, database, currentVersion, liveReadback, applied } = remote;
+  const { cf, json, config, database, currentVersion, deployment, liveReadback, applied } = remote;
+  const environment = target === targets.production ? "production" : "test";
+  const tag = () =>
+    deployTag({
+      changelog: readFileSync("CHANGELOG.md", "utf8"),
+      environment,
+      sha: manifest.sha,
+      tree: manifest.tree,
+      releasedTags: releasedTags(),
+      expected: process.env.VERSION,
+      day: process.env.RELEASE_DAY,
+    });
+  const unchanged = (current, paths) => {
+    const previousSha = current.identity?.split(":")[0];
+    if (!/^[0-9a-f]{40}$/u.test(previousSha ?? "")) return false;
+    try {
+      git("diff", "--exit-code", previousSha, manifest.sha, "--", ...paths);
+      return true;
+    } catch {
+      return false;
+    }
+  };
   const state = await publish(
     manifest,
     {
       assertCurrent: async () => {
-        if (remoteHead(target) !== manifest.sha)
+        if (!onBranch(target, manifest.sha))
           throw new Error("Candidato superato: il branch remoto è avanzato.");
       },
       preflight: async () => {
@@ -766,14 +913,24 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
         if (required.some((name) => !bindings.some((binding) => binding.name === name)))
           throw new Error("Segreti runtime richiesti assenti.");
       },
+      incidents: remote.incidents,
       migrations: async () => {
         const names = await applied();
         const previousSha = (await currentVersion()).identity?.split(":")[0];
         if (/^[0-9a-f]{40}$/u.test(previousSha ?? "") && previousSha !== manifest.sha) {
-          const previous = names.map((name) => ({
-            name,
-            digest: hash(execFileSync("git", ["show", `${previousSha}:migrations/${name}`])),
-          }));
+          const previous = appliedMigrationHistory(
+            names,
+            (name) => {
+              try {
+                return execFileSync("git", ["show", `${previousSha}:migrations/${name}`], {
+                  stdio: ["ignore", "pipe", "ignore"],
+                });
+              } catch {
+                return undefined;
+              }
+            },
+            receipt,
+          );
           assertAppliedMigrations(manifest.migrations, previous, names);
         }
         return migrationPlan(
@@ -807,36 +964,70 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
           target.mode,
           "--no-provision",
           "--tag",
-          deployTag({
-            changelog: readFileSync("CHANGELOG.md", "utf8"),
-            environment: target === targets.production ? "production" : "test",
-            sha: manifest.sha,
-            tree: manifest.tree,
-            releasedTags: releasedTags(),
-            expected: process.env.VERSION,
-          }),
+          tag(),
           "--message",
           identity,
         );
       },
-      canRollback: async (current) => {
-        const previousSha = current.identity?.split(":")[0];
-        if (!/^[0-9a-f]{40}$/u.test(previousSha ?? "")) return false;
-        try {
-          git(
-            "diff",
-            "--exit-code",
-            previousSha,
-            manifest.sha,
-            "--",
-            "migrations",
-            "cloudflare.config.ts",
+      canStage: async (current) => unchanged(current, ["cloudflare.config.ts"]),
+      stage: async (identity, previous) => {
+        const findVersion = () => {
+          const listed = json(
+            "workers",
+            "versions",
+            "list",
+            "--worker-id",
+            target.worker,
+            "--per-page",
+            "50",
           );
-          return true;
-        } catch {
-          return false;
+          return (Array.isArray(listed) ? listed : (listed.items ?? [])).find(
+            (entry) =>
+              (entry.annotations?.["workers/message"] ??
+                json("workers", "versions", "get", entry.id, "--worker-id", target.worker)
+                  .annotations?.["workers/message"]) === identity,
+          )?.id;
+        };
+        let version = findVersion();
+        let uploadError;
+        if (!version)
+          try {
+            cf(
+              "workers",
+              "versions",
+              "create",
+              "--prebuilt",
+              "--mode",
+              target.mode,
+              "--tag",
+              tag(),
+              "--message",
+              identity,
+            );
+          } catch (error) {
+            uploadError = error;
+          }
+        version ??= findVersion();
+        if (!version) throw uploadError ?? new Error("Versione caricata non trovata.");
+        try {
+          deployment(
+            [
+              { version_id: version, percentage: 0 },
+              { version_id: previous, percentage: 100 },
+            ],
+            identity,
+          );
+        } catch (error) {
+          const versions = remote.activeDeployment()?.versions ?? [];
+          if (
+            !versions.some((entry) => entry.version_id === version && entry.percentage === 0) ||
+            !versions.some((entry) => entry.version_id === previous && entry.percentage === 100)
+          )
+            throw error;
         }
+        return version;
       },
+      canRollback: async (current) => unchanged(current, ["migrations", "cloudflare.config.ts"]),
       readback: liveReadback,
       save: async (state) => {
         mkdirSync("reports", { recursive: true });
@@ -845,10 +1036,25 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
     },
     receipt,
   );
-  const report = deployReport(state);
+  const report = deployReport(state, target.worker);
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, report.output);
   if (process.env.GITHUB_STEP_SUMMARY)
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, report.summary);
+}
+
+/** Conferma che l'override raggiunge la versione caricata: se non vale, Cloudflare lo ignora. */
+function stagedReadback(target, version, worker) {
+  return retryReadback(async () => {
+    const response = await fetch(`${target.origin}/`, {
+      headers: {
+        "cache-control": "no-cache",
+        "cloudflare-workers-version-overrides": versionOverride(worker, version),
+      },
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!response.ok || response.headers.get("x-fiscalbay-version") !== version)
+      throw new Error("La versione caricata non risponde all'override.");
+  });
 }
 
 async function main() {
@@ -860,6 +1066,8 @@ async function main() {
       "expected-sha": { type: "string" },
       "receipt-prefix": { type: "string" },
       base: { type: "string" },
+      version: { type: "string" },
+      day: { type: "string" },
     },
   });
   const environment = values.environment;
@@ -867,20 +1075,46 @@ async function main() {
   if (!target) throw new Error("Ambiente non supportato.");
   const command = positionals[0];
   if (command === "review") return reviewMigrations(values.base);
-  if (command === "freeze") {
+  if (command === "date")
+    return writeFileSync(
+      "CHANGELOG.md",
+      datedChangelog(readFileSync("CHANGELOG.md", "utf8"), values.version, values.day),
+    );
+  if (command === "version-step") {
     const changelog = readFileSync("CHANGELOG.md", "utf8");
-    const baseChangelog = values.base
-      ? execFileSync("git", ["show", `${values.base}:CHANGELOG.md`], { encoding: "utf8" })
-      : undefined;
-    const version = assertFreeze(changelog, process.env.PR_TITLE ?? "", {
-      baseChangelog,
-      deploy: process.env.DEPLOY === "true",
+    const baseChangelog = execFileSync("git", ["show", `${values.base}:CHANGELOG.md`], {
+      encoding: "utf8",
     });
-    if (baseChangelog !== undefined) assertVersionStep(changelog, baseChangelog, releasedTags());
-    console.log(version ? `Correzione ammessa nella ${version}.` : "Nessuna RC congelata.");
+    assertVersionStep(changelog, baseChangelog, releasedTags());
+    console.log(`Versione in preparazione: ${topVersion(changelog)}.`);
     return;
   }
-  if (command === "readiness") return productionReadiness(readPlan());
+  // Senza artefatto: il Worker dichiara le versioni, Git la loro compatibilità.
+  if (command === "incident-rollback")
+    return incidentRollback(target, provider(target), values["expected-sha"]);
+  if (command === "restore-state") return restoreState(environment, values["expected-sha"]);
+  if (command === "record" || command === "finalize") {
+    const receipt = JSON.parse(readFileSync(receiptFile, "utf8"));
+    if (command === "finalize" && !receipt.guardPassed)
+      throw new Error("Guardia del candidato non superata.");
+    if (values["expected-sha"] && receipt.sha !== values["expected-sha"])
+      throw new Error("Ricevuta di un altro candidato.");
+    const remote = provider(target);
+    const state = await reconcileReceipt(
+      receipt,
+      {
+        current: remote.currentVersion,
+        readback: remote.liveReadback,
+        schema: async () => (await remote.applied()).map((name) => ({ name })),
+        save: saveReceipt,
+      },
+      command === "finalize",
+    );
+    if (command === "finalize") saveReceipt({ ...state, completedAt: new Date().toISOString() });
+    if (process.env.GITHUB_OUTPUT)
+      appendFileSync(process.env.GITHUB_OUTPUT, `version=${state.active.version}\n`);
+    return;
+  }
   if (command === "manifest") return writeManifest(environment);
   // Ogni altro comando, anche sconosciuto, parte dalla provenienza verificata dell'artefatto.
   const manifest = verify(environment);
@@ -889,16 +1123,32 @@ async function main() {
     console.log("Provenienza dell'artefatto confermata.");
     return;
   }
-  if (!["deploy", "rollback", "confirm"].includes(command))
+  if (!["deploy", "staged-check", "activate", "rollback", "confirm"].includes(command))
     throw new Error("Comando non supportato.");
-  if (environment === "production") {
+  if (environment === "production")
     assertProductionApproval(manifest, values["expected-sha"], process.env);
-    productionReadiness(readPlan());
-  }
   const remote = provider(target);
   const receipt = existsSync(receiptFile) ? JSON.parse(readFileSync(receiptFile, "utf8")) : {};
   if (command === "confirm") return confirmRelease(manifest, environment, target, remote, receipt);
   if (command === "rollback") return rollbackRelease(manifest, target, remote, receipt);
+  if (command === "staged-check")
+    return receipt.staged
+      ? stagedReadback(target, receipt.stagedVersion, target.worker)
+      : console.log("Versione già attiva: nessun override da provare.");
+  if (command === "activate") {
+    await activate(
+      manifest,
+      {
+        current: remote.currentVersion,
+        activate: async (version) =>
+          remote.deployment([{ version_id: version, percentage: 100 }], releaseIdentity(manifest)),
+        readback: remote.liveReadback,
+        save: async (state) => writeFileSync(receiptFile, JSON.stringify(state, null, 2)),
+      },
+      receipt,
+    );
+    return;
+  }
   await deployRelease(manifest, target, remote, receipt, values["reviewed-migrations"]);
 }
 

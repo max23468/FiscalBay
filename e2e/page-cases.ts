@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 
-import { parseChangelog } from "../app/changelog.ts";
+import { parseChangelog, releaseChangelog } from "../app/changelog.ts";
 import { testAccount } from "./test-account.ts";
 
 /** Scenari delle route esistenti: le azioni esterne non vengono inviate dal collaudo. */
@@ -80,7 +80,10 @@ const settings = [
 // preparazione: la pagina, la voce del menu e una voce della campanella per versione degli
 // ultimi trenta giorni, che per la versione in preparazione parte dal deploy.
 const shownReleases = parseChangelog(
-  readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
+  releaseChangelog(
+    readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
+    process.env.VITE_RELEASE_DAY,
+  ),
 ).releases.filter(({ date }) => date === null || Date.parse(`${date}T00:00:00.000Z`) <= Date.now());
 export const whatsNew = shownReleases.length > 0;
 export const whatsNewUnread = shownReleases.filter(

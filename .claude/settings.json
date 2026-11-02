@@ -25,6 +25,7 @@
       "Bash(pnpm test:*)",
       "Bash(pnpm verify:*)",
       "Bash(pnpm release:cycle status:*)",
+      "Bash(pnpm release:cycle metrics:*)",
       "Bash(node scripts/verify-docs.mjs:*)"
     ]
   },
