@@ -66,17 +66,9 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 <a id="2-0-01"></a>
 #### 2.0-01 · Ordini, eBay e piattaforma
 
-**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§12](product/ORDERS_AND_SYNC.md#s12) · [retention](engineering/DATA_RETENTION.md) · [§25](engineering/ARCHITECTURE.md#s25) · [§31](operations/OPERATIONS.md#s31)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§12](product/ORDERS_AND_SYNC.md#s12) · [retention](engineering/DATA_RETENTION.md) · [§25](engineering/ARCHITECTURE.md#s25) · [§31](operations/OPERATIONS.md#s31)
 
-- Lettura dei recenti per tratti di tempo, senza ripartire da capo quando il totale di eBay cambia; lettura Trading per finestre di 30 giorni concatenate fino a 90 dopo una pausa.
-- Meno chiamate eBay: nessuna ricerca fiscale Trading oltre i 90 giorni, più ordini per chiamata, immagine letta una volta per inserzione.
-- Ordini scaduti cancellati a blocchi e chiavi anti-reimport eliminate dopo due anni. Il blocco del reimport resta soltanto per le cancellazioni volute (utente, eBay, scollegamento); i blocchi esistenti si ricostruiscono dove l'origine da scadenza è dimostrabile, così chi passa a Premium recupera lo storico.
-- Export con l'indirizzo di spedizione quando manca quello di fatturazione.
-- Negozio da ricollegare dopo errori ripetuti di credenziali e ricontrollo periodico della sottoscrizione alle notifiche degli ordini.
-- Nessuna scrittura D1 per richiesta HTTP nel registro delle attività; coda separata per webhook e pagamenti; messaggi persi ripresi entro due ore.
-- Allarme sul cron fermo senza nuovi provider; chiamate Telegram in un Worker separato per riaccendere le tracce del Worker principale; limite di CPU; ID Telegram dell'owner in un segreto.
-
-**Criterio di completamento:** ogni difetto riprodotto da un test prima della correzione; lettura conclusa con oltre 75 ordini modificati e dopo 45 giorni di pausa; migration non additiva rivista; retention e operazioni aggiornate.
+Recenti e storico si leggono per tratti di una pagina e Trading per finestre di trenta giorni concatenate, con meno chiamate eBay; la scadenza non blocca più il reimport e i blocchi dimostrabilmente nati da scadenza sono stati tolti; export con l'indirizzo di spedizione, ricollegamento dopo tre rifiuti delle credenziali, sottoscrizione ricontrollata ogni settimana, coda propria per webhook e pagamenti con ripresa in due ore, registro senza scritture per richiesta, CPU limitata, ID dell'owner in un segreto e Worker del bot con le tracce del principale riaccese ([D293](decisions/DECISION_REGISTER.md)). Il cron fermo resta al Monitor dell'account. Restano sul provider le nuove code, il Worker del bot, il segreto dell'owner e il readback dei Monitor.
 
 <a id="2-0-02"></a>
 #### 2.0-02 · Accesso, console e pagamenti

@@ -72,6 +72,9 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   domain: string;
   queue: string;
   ingress: string;
+  telegram: string;
+  /** Build da distribuire: soltanto lì esiste il Worker del bot da collegare. */
+  deployed: boolean;
   exports: string;
   metrics: string;
   database: { name: string; id: string };
@@ -91,9 +94,9 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   observability: {
     enabled: true,
     logs: { enabled: true, headSamplingRate: 1 },
-    // Spente come in CF Ready: gli span delle chiamate in uscita registrano l'URL completo, e
-    // l'API Telegram vuole il token del bot nel percorso (D225).
-    traces: { enabled: false },
+    // Gli span delle chiamate in uscita registrano l'URL completo: il token del bot resta nel
+    // Worker del bot, raggiunto con il binding `TELEGRAM` (D293).
+    traces: { enabled: true },
   },
   domains: [target.domain],
   triggers: [
@@ -137,6 +140,9 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     WORKER_NAME: bindings.text(target.name),
     CLOUDFLARE_ACCOUNT_ID: bindings.text(account),
     VERSION_METADATA: bindings.versionMetadata(),
+    // Worker del bot Telegram (`telegram-worker/`), che aggiunge il token alle chiamate della Bot
+    // API. Nelle prove e in locale manca, e le chiamate usano il token dell'ambiente.
+    ...(target.deployed ? { TELEGRAM: bindings.worker({ worker: target.telegram }) } : {}),
   },
 });
 
@@ -148,6 +154,8 @@ export default defineConfig((ctx) => ({
           domain: "fiscalbay.it",
           queue: "fiscalbay-webhooks",
           ingress: "fiscalbay-ingress",
+          telegram: "fiscalbay-telegram",
+          deployed: true,
           exports: "fiscalbay-exports",
           metrics: "fiscalbay_metrics",
           database: databases.live,
@@ -168,6 +176,8 @@ export default defineConfig((ctx) => ({
           domain: "test.fiscalbay.it",
           queue: "fiscalbay-test-webhooks",
           ingress: "fiscalbay-test-ingress",
+          telegram: "fiscalbay-test-telegram",
+          deployed: ctx.mode === "production",
           exports: "fiscalbay-test-exports",
           metrics: "fiscalbay_test_metrics",
           database: databases.test,

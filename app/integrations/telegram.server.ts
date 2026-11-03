@@ -7,6 +7,7 @@ import { readUpstream, retryAfterSeconds, UpstreamError } from "./http.server";
 // Ogni Worker ha il proprio bot: quello del test non condivide nome, token, segreto o webhook con
 // Production. Senza i tre valori il servizio non compare e l'ingresso risponde 503. Token e
 // segreto sono facoltativi come quelli di Stripe; il nome è una variabile di `cloudflare.config.ts`.
+// Nei Worker distribuiti il token sta nel Worker del bot, raggiunto con il binding `TELEGRAM`.
 // L'ID Telegram dell'owner per il Control Center (D198) è un segreto: senza, nessuna chat è sua.
 export type TelegramSecrets = {
   TELEGRAM_BOT_TOKEN: string;
@@ -30,7 +31,7 @@ export function telegramConfigured(env: Env): boolean {
   // Un valore assente diventa «undefined», che nessuno dei due formati ammette.
   return (
     usernamePattern.test(String(env.TELEGRAM_BOT_USERNAME)) &&
-    !!env.TELEGRAM_BOT_TOKEN &&
+    (!!env.TELEGRAM || !!env.TELEGRAM_BOT_TOKEN) &&
     secretPattern.test(String(env.TELEGRAM_WEBHOOK_SECRET))
   );
 }
@@ -254,8 +255,20 @@ function botStatus(response: Response, text: string, now?: number): UpstreamErro
 }
 
 /**
+ * Indirizzo e trasporto di una chiamata alla Bot API. Con il binding `TELEGRAM` la chiamata passa
+ * dal Worker del bot, che aggiunge il token: l'indirizzo che le tracce registrano non lo contiene.
+ * Senza, nelle prove e in locale, va diretta con il token dell'ambiente.
+ */
+function botEndpoint(env: Env, method: string, fetcher: typeof fetch): [string, typeof fetch] {
+  const worker = env.TELEGRAM;
+  return worker
+    ? [`https://telegram.invalid/${method}`, (input, init) => worker.fetch(input, init)]
+    : [`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`, fetcher];
+}
+
+/**
  * Chiamata alla Bot API con timeout, limite dei byte e la classificazione comune dei provider.
- * Il token sta nell'indirizzo e non entra mai in un errore o in un log.
+ * Il token non entra mai in un errore o in un log.
  */
 async function botApi<Schema extends z.ZodType>(
   env: Env,
@@ -264,9 +277,10 @@ async function botApi<Schema extends z.ZodType>(
   schema: Schema,
   fetcher: typeof fetch,
 ): Promise<z.infer<Schema>> {
+  const [url, send] = botEndpoint(env, method, fetcher);
   const { status, text } = await readUpstream(
-    fetcher,
-    `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/${method}`,
+    send,
+    url,
     {
       method: "POST",
       headers: { "content-type": "application/json" },
