@@ -38,6 +38,7 @@ import {
   cronTurn,
   series,
   setupScenarios,
+  slices,
 } from "./fixtures/order-acquisition-scenarios";
 
 setupScenarios();
@@ -69,14 +70,10 @@ describe("finestra dello storico secondo la copertura", () => {
         ).all<{ ebay_order_id: string; retention_until: string }>()
       ).results.map((row) => [row.ebay_order_id, row.retention_until]),
     );
-  const historyFilters = (fetcher: ReturnType<typeof ebay>) =>
-    fetcher.mock.calls
-      .map(([input]) => new URL(String(input)).searchParams)
-      .filter((params) => params.get("filter")?.startsWith("creationdate:"))
-      .map((params) => `${params.get("filter")}@${params.get("offset") ?? 0}`);
+  const historyFilters = (fetcher: ReturnType<typeof ebay>) => slices(fetcher, "creationdate");
   const history = () =>
     env.DB.prepare(
-      `SELECT history_from, history_until, history_through, history_next, history_done_at
+      `SELECT history_from, history_until, history_through, history_done_at
            FROM sync_state WHERE store_id = 's-a'`,
     ).first<Record<string, string | null>>();
 
@@ -95,34 +92,38 @@ describe("finestra dello storico secondo la copertura", () => {
     // Prova attiva: l'esecuzione successiva legge soltanto il periodo più vecchio.
     const active = linked + 60 * 60_000;
     await coverage(active, active + 14 * day);
-    let interrupted = false;
+    let requests = 0;
     const failing = ebay({
       orders,
+      pageLimit: 25,
       fail: (url) => {
-        if (url.searchParams.get("offset") !== "25" || interrupted) return undefined;
-        interrupted = true;
-        return new Response(null, { status: 503 });
+        if (!url.searchParams.get("filter")?.startsWith("creationdate:")) return undefined;
+        requests += 1;
+        return requests === 3 ? new Response(null, { status: 503 }) : undefined;
       },
     });
     await expect(acquire(failing, iso(active))).rejects.toMatchObject({
       failure: "unavailable",
     });
-    const range = `creationdate:[${iso(months(active, -12))}..${iso(linked - 30 * day)}]`;
-    expect(historyFilters(failing)).toEqual([`${range}@0`, `${range}@25`]);
+    const [first, applied] = historyFilters(failing);
+    expect(first).toBe(`${iso(months(active, -12))}..${iso(linked - 30 * day)}`);
+    const through = applied!.split("..")[0]!;
+    expect(applied).toBe(`${through}..${iso(linked - 30 * day)}`);
     expect(await history()).toMatchObject({
       history_from: iso(months(active, -12)),
       history_until: iso(linked),
-      history_through: iso(linked - 30 * day),
-      history_next: expect.stringContaining("offset=25"),
+      history_through: through,
       history_done_at: null,
     });
     expect((await listStores(env.DB, "u-a", new Date(active)))[0]).toMatchObject({
       history: { days: 365, done: false },
     });
 
-    const resumed = ebay({ orders });
+    const resumed = ebay({ orders, pageLimit: 25 });
     expect(await acquire(resumed, iso(active + 30 * 60_000))).toBe("complete");
-    expect(historyFilters(resumed)).toEqual([`${range}@25`, `${range}@50`]);
+    // Il tratto applicato non si rilegge.
+    expect(historyFilters(resumed)[0]).toBe(`${iso(months(active, -12))}..${through}`);
+    expect(historyFilters(resumed).every((range) => range.split("..")[1]! <= through)).toBe(true);
     const acquired = await terms();
     expect(Object.keys(acquired)).toHaveLength(61);
     expect(acquired["12-oltre-anno"]).toBeUndefined();
@@ -171,17 +172,34 @@ describe("finestra dello storico secondo la copertura", () => {
     expect(await terms()).toEqual({});
   });
 
+  it("non cerca i dati fiscali su Trading per gli ordini oltre i novanta giorni", async () => {
+    await coverage(linked - day, linked + 400 * day, "admin");
+    const fetcher = ebay({
+      orders: [dated("12-recente", linked - 89 * day), dated("12-vecchio", linked - 91 * day)],
+    });
+    expect(await acquire(fetcher, iso(linked))).toBe("complete");
+    // Soltanto l'ordine ancora alla portata di Trading; l'altro chiude il dettaglio senza CF.
+    expect(calls(fetcher, "GetOrders")).toBe(1);
+    expect(
+      await count(
+        "SELECT COUNT(*) AS total FROM order_source_refs WHERE detail_for = last_modified_time",
+      ),
+    ).toBe(2);
+  });
+
   it("il ritorno al Free chiude l'estensione dove era arrivata e una nuova copertura la riprende", async () => {
     const orders = series("12-esteso", 60, iso(linked - 30 * day));
     await acquire(ebay({ orders }), iso(linked));
     const active = linked + 60 * 60_000;
     await coverage(active, active + day);
-    expect(await acquire(ebay({ orders }), iso(active), { calls: 30, pages: 2 })).toBe("budget");
-    expect(await history()).toMatchObject({
-      history_through: iso(linked - 30 * day),
-      history_next: expect.stringContaining("offset=25"),
-    });
-    expect(Object.keys(await terms())).toHaveLength(25);
+    const partial = ebay({ orders, pageLimit: 25 });
+    expect(await acquire(partial, iso(active), { calls: 30, pages: 3 })).toBe("budget");
+    // Un tratto troppo denso e uno applicato.
+    const through = historyFilters(partial)[1]!.split("..")[0]!;
+    expect(await history()).toMatchObject({ history_through: through, history_done_at: null });
+    const kept = Object.keys(await terms()).length;
+    expect(kept).toBeGreaterThan(0);
+    expect(kept).toBeLessThan(60);
 
     // Senza copertura il periodo rimasto è fuori dalla finestra: nessuna pagina dello storico.
     const free = active + 2 * day;
@@ -189,10 +207,9 @@ describe("finestra dello storico secondo la copertura", () => {
     expect(await acquire(stopped, iso(free))).toBe("complete");
     expect(historyFilters(stopped)).toEqual([]);
     expect(await history()).toEqual({
-      history_from: iso(linked - 30 * day),
+      history_from: through,
       history_until: iso(linked),
       history_through: null,
-      history_next: null,
       history_done_at: iso(free),
     });
     expect((await listStores(env.DB, "u-a", new Date(free)))[0]).toMatchObject({
@@ -203,8 +220,7 @@ describe("finestra dello storico secondo la copertura", () => {
     await coverage(again, again + 30 * day, "premium");
     const resumed = ebay({ orders });
     expect(await acquire(resumed, iso(again))).toBe("complete");
-    const range = `creationdate:[${iso(months(again, -12))}..${iso(linked - 30 * day)}]`;
-    expect(historyFilters(resumed)).toEqual([`${range}@0`, `${range}@25`, `${range}@50`]);
+    expect(historyFilters(resumed)).toEqual([`${iso(months(again, -12))}..${through}`]);
     expect(Object.keys(await terms())).toHaveLength(60);
   });
 
@@ -239,9 +255,7 @@ describe("finestra dello storico secondo la copertura", () => {
     // Senza copertura l'estensione non vale: trenta giorni.
     const free = ebay({ orders });
     await acquire(free, iso(linked));
-    expect(historyFilters(free)).toEqual([
-      `creationdate:[${iso(linked - 30 * day)}..${iso(linked)}]@0`,
-    ]);
+    expect(historyFilters(free)).toEqual([`${iso(linked - 30 * day)}..${iso(linked)}`]);
 
     const active = linked + 60 * 60_000;
     await coverage(active, active + 30 * day);
@@ -417,8 +431,8 @@ it.each([false, true])(
     if (inFlight)
       expect(await syncState()).toMatchObject({
         cursor: rejectedAt,
-        recent_next: null,
-        history_next: null,
+        recent_end: null,
+        history_through: null,
         history_done_at: null,
         last_success_at: null,
         locked_until: null,
@@ -490,14 +504,14 @@ it("rispetta separatamente chiamate e pagine e lascia il dettaglio alle chiamate
     ...item,
     lastModifiedDate: "2026-09-02T00:30:00.000Z",
   }));
-  const partial = ebay({ orders: recent });
+  const partial = ebay({ orders: recent, pageLimit: 25 });
   // Anche con il profilo del negozio da rileggere, recenti incompleti non lo leggono.
   await env.DB.prepare("UPDATE ebay_stores SET store_profile_read_at = NULL").run();
   expect(await acquire(partial, "2026-09-02T01:00:00.000Z", { calls: 1, pages: 1 })).toBe("budget");
   expect(partial).toHaveBeenCalledTimes(1);
   expect(await syncState()).toMatchObject({
     last_success_at: "2026-09-02T00:00:00.000Z",
-    recent_next: expect.stringContaining("offset=25"),
+    recent_end: null,
   });
 
   // Finite le pagine, le chiamate rimaste leggono il dettaglio fino al budget.
@@ -510,8 +524,8 @@ it("rispetta separatamente chiamate e pagine e lascia il dettaglio alle chiamate
   );
   expect([singles.length, calls(details, "GetOrders")]).toEqual([4, 4]);
   expect(await syncState()).toMatchObject({
-    cursor: "2026-09-02T01:00:00.000Z",
-    recent_next: null,
+    cursor: "2026-09-02T01:10:00.000Z",
+    recent_end: null,
     last_success_at: "2026-09-02T01:10:00.000Z",
   });
 

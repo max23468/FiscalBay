@@ -16,7 +16,12 @@ import {
   fulfillmentTaxIdentifiers,
   readFulfillmentOrder,
 } from "../integrations/ebay/fulfillment.server";
-import { readItemImage, readTradingTaxObservation } from "../integrations/ebay/trading.server";
+import { dayMilliseconds } from "../time";
+import {
+  readItemImage,
+  readTradingTaxObservation,
+  tradingReachDays,
+} from "../integrations/ebay/trading.server";
 
 /**
  * Dettaglio delle versioni Fulfillment non ancora lette: dati fiscali e immagini. Un errore
@@ -29,25 +34,29 @@ const maxImagesPerDetail = 8;
 // Attese dopo il primo, secondo, terzo e quarto errore del dettaglio; il quinto chiude la versione.
 const detailRetryMinutes = [15, 60, 240, 960];
 
-/** Articoli con un ID d'inserzione che nel negozio non hanno ancora un'immagine. */
-async function listingsWithoutImage(
+/**
+ * Immagini già salvate nel negozio per le inserzioni dell'ordine, anche da altri acquisti: la
+ * chiave stabile di una riga inizia con l'ID dell'inserzione seguito da `-`.
+ */
+async function knownImages(
   ctx: Context,
   observation: OrderObservation,
-): Promise<Set<string>> {
-  const { results: known } = await ctx.db
+): Promise<Map<string, string>> {
+  const listings = [
+    ...new Set(observation.items.flatMap((item) => (item.legacyItemId ? [item.legacyItemId] : []))),
+  ];
+  const { results } = await ctx.db
     .prepare(
-      `SELECT i.stable_key FROM order_items i JOIN orders o ON o.id = i.order_id
-        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND i.image_url IS NOT NULL
-          AND i.stable_key IN (SELECT value FROM json_each(?2))`,
+      `SELECT l.value AS listing, (SELECT i.image_url FROM order_items i
+           JOIN orders o ON o.id = i.order_id
+          WHERE i.stable_key IS NOT NULL AND i.stable_key > l.value || '-'
+            AND i.stable_key < l.value || '.' AND o.store_id = ?1 AND o.merged_into IS NULL
+            AND i.image_url IS NOT NULL LIMIT 1) AS image_url
+         FROM json_each(?2) l`,
     )
-    .bind(ctx.storeId, JSON.stringify(observation.items.map((item) => item.stableKey)))
-    .all<{ stable_key: string }>();
-  const skip = new Set(known.map((row) => row.stable_key));
-  return new Set(
-    observation.items.flatMap((item) =>
-      item.legacyItemId && !(item.stableKey && skip.has(item.stableKey)) ? [item.legacyItemId] : [],
-    ),
-  );
+    .bind(ctx.storeId, JSON.stringify(listings))
+    .all<{ listing: string; image_url: string | null }>();
+  return new Map(results.flatMap((row) => (row.image_url ? [[row.listing, row.image_url]] : [])));
 }
 
 /** Credenziali rifiutate o limite di eBay: nessuna lettura successiva può riuscire. */
@@ -77,6 +86,7 @@ export type PendingDetail = {
   last_modified_time: string;
   detail_attempts: number;
   marketplace_id: string | null;
+  creation_time: string;
 };
 
 /** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
@@ -143,7 +153,10 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
   const qualifiedMarketplace =
     ctx.access.configuration.apiOrigin === "https://api.ebay.com" &&
     pending.marketplace_id === "EBAY_IT";
-  if (!spend(ctx.budget, qualifiedMarketplace ? 1 : 2)) return false;
+  // Trading non trova gli ordini oltre i novanta giorni: per loro nessuna ricerca fiscale.
+  const tradingReach =
+    Date.parse(pending.creation_time) > Date.parse(ctx.at) - tradingReachDays * dayMilliseconds;
+  if (!spend(ctx.budget, qualifiedMarketplace || !tradingReach ? 1 : 2)) return false;
   let observation: OrderObservation;
   try {
     const payload = await readFulfillmentOrder(
@@ -177,19 +190,29 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
     await failDetail(ctx, pending, error);
     return true;
   }
-  // Con la quota `GetItem` esaurita le righe restano senza immagine, come dopo un errore.
+  // Un'inserzione con un'immagine già salvata non si rilegge. Con la quota `GetItem` esaurita le
+  // righe restano senza immagine, come dopo un errore.
+  const known = await knownImages(ctx, observation);
   const listings = (await callLimited(ctx, "GetItem"))
     ? []
-    : [...(await listingsWithoutImage(ctx, observation))].slice(0, maxImagesPerDetail);
+    : [
+        ...new Set(
+          observation.items.flatMap((item) =>
+            item.legacyItemId && !known.has(item.legacyItemId) ? [item.legacyItemId] : [],
+          ),
+        ),
+      ].slice(0, maxImagesPerDetail);
   if (
     !spend(
       ctx.budget,
-      listings.length + (qualifiedMarketplace && !observation.taxIdentifiers ? 1 : 0),
+      listings.length +
+        (qualifiedMarketplace && tradingReach && !observation.taxIdentifiers ? 1 : 0),
     )
   )
     return false;
-  const images = new Map(
-    await Promise.all(
+  const images = new Map([
+    ...known,
+    ...(await Promise.all(
       listings.map(async (id) => {
         const image = await readItemImage(ctx.access, id).catch(async (error: unknown) => {
           // Un'immagine non disponibile non blocca l'ordine; credenziali e limite dell'origine
@@ -208,8 +231,8 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
         });
         return [id, image] as const;
       }),
-    ),
-  );
+    )),
+  ]);
   observation = {
     ...observation,
     items: observation.items.map((item) => {
@@ -217,23 +240,24 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
       return imageUrl ? { ...item, imageUrl } : item;
     }),
   };
-  const trading = observation.taxIdentifiers
-    ? null
-    : (await callLimited(ctx, "GetOrders"))
-      ? // Stryker disable next-line StringLiteral: il nome segnala soltanto un limite di quota; il valore non cambia l'esito.
-        { error: new UpstreamError("rate_limited", { limit: "GetOrders" }) }
-      : await readTradingTaxObservation(ctx.access, observation.externalOrderId).catch(
-          async (error: unknown) => {
-            if (callLimit(error))
-              await recordRateLimit(
-                ctx.db,
-                limitKey(ctx.access.configuration.apiOrigin, "GetOrders"),
-                error,
-                new Date(ctx.at),
-              );
-            return { error };
-          },
-        );
+  const trading =
+    observation.taxIdentifiers || !tradingReach
+      ? null
+      : (await callLimited(ctx, "GetOrders"))
+        ? // Stryker disable next-line StringLiteral: il nome segnala soltanto un limite di quota; il valore non cambia l'esito.
+          { error: new UpstreamError("rate_limited", { limit: "GetOrders" }) }
+        : await readTradingTaxObservation(ctx.access, observation.externalOrderId).catch(
+            async (error: unknown) => {
+              if (callLimit(error))
+                await recordRateLimit(
+                  ctx.db,
+                  limitKey(ctx.access.configuration.apiOrigin, "GetOrders"),
+                  error,
+                  new Date(ctx.at),
+                );
+              return { error };
+            },
+          );
   const result = await record(
     ctx,
     trading && "values" in trading
@@ -291,7 +315,8 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
 export async function readDetails(ctx: Context): Promise<boolean> {
   const { results } = await ctx.db
     .prepare(
-      `SELECT r.external_order_id, r.last_modified_time, r.detail_attempts, o.marketplace_id
+      `SELECT r.external_order_id, r.last_modified_time, r.detail_attempts, o.marketplace_id,
+              o.creation_time
          FROM order_source_refs r JOIN orders o ON o.id = r.order_id
         WHERE r.store_id = ?1 AND r.source = 'fulfillment'
           AND r.detail_for IS NOT r.last_modified_time

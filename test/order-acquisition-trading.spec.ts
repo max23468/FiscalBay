@@ -265,8 +265,14 @@ it("legge Trading nella finestra dello storico, salta l'ordine illeggibile e ric
           "2026-10-03T00:00:00Z",
         ),
       ]),
+    // Un mese dopo il limite: la seconda finestra arriva fino all'istante corrente.
+    () => tradingPage(0, false, []),
   ];
   expect(await acquire(provider, "2026-10-03T00:00:00.000Z")).toBe("complete");
+  expect(requested.slice(-2).map((body) => field(body, "ModTimeTo"))).toEqual([
+    "2026-10-02T01:45:00.000Z",
+    "2026-10-03T00:00:00.000Z",
+  ]);
   expect(
     await env.DB.prepare(
       "SELECT last_modified_time FROM order_source_refs WHERE external_order_id = 'VALIDO'",
@@ -299,4 +305,41 @@ it("non salta l'ordine Trading se cambia il consenso durante la passata", async 
   expect(await acquire(provider)).toBe("not_writable");
   expect(logged).not.toHaveBeenCalled();
   logged.mockRestore();
+});
+
+it("dopo una pausa di 45 giorni legge Trading per finestre di 30 giorni senza buchi", async () => {
+  const windows: Array<[string, string]> = [];
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      windows.push([
+        /<ModTimeFrom>([^<]+)</u.exec(body)![1]!,
+        /<ModTimeTo>([^<]+)</u.exec(body)![1]!,
+      ]);
+      return undefined;
+    },
+  });
+  expect(await acquire(provider)).toBe("complete");
+  expect(await env.DB.prepare("SELECT trading_cursor FROM sync_state").first()).toEqual({
+    trading_cursor: "2026-09-02T00:00:00.000Z",
+  });
+
+  windows.length = 0;
+  expect(await acquire(provider, "2026-10-17T00:00:00.000Z")).toBe("complete");
+  expect(windows).toEqual([
+    ["2026-09-01T23:45:00.000Z", "2026-10-01T23:45:00.000Z"],
+    ["2026-10-01T23:45:00.000Z", "2026-10-17T00:00:00.000Z"],
+  ]);
+  expect(
+    await env.DB.prepare("SELECT trading_cursor, trading_end FROM sync_state").first(),
+  ).toEqual({ trading_cursor: "2026-10-17T00:00:00.000Z", trading_end: null });
+
+  // Oltre i 90 giorni Trading non risponde: la lettura parte dal limite di eBay.
+  windows.length = 0;
+  expect(await acquire(provider, "2027-02-01T00:00:00.000Z")).toBe("complete");
+  expect(windows[0]![0]).toBe("2026-11-03T00:00:00.000Z");
+  expect(windows).toHaveLength(3);
+  expect(windows.at(-1)![1]).toBe("2027-02-01T00:00:00.000Z");
 });

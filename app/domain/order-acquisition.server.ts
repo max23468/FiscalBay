@@ -26,9 +26,10 @@ import {
   fulfillmentObservation,
   readFulfillmentOrder,
   readFulfillmentOrders,
+  type FulfillmentPage,
 } from "../integrations/ebay/fulfillment.server";
 import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
-import { readTradingOrders } from "../integrations/ebay/trading.server";
+import { readTradingOrders, tradingReachDays } from "../integrations/ebay/trading.server";
 import { inSequence } from "../sequence";
 
 /**
@@ -45,15 +46,22 @@ import { inSequence } from "../sequence";
  *
  * Dopo i recenti, al massimo una volta a settimana, si rileggono nome e logo del negozio eBay.
  *
- * Ogni pagina si applica prima di salvarne il link `next`, e il limite dei recenti avanza
- * solo a passata conclusa: un'interruzione riprende dall'ultima pagina applicata e la rilegge
- * senza duplicati. Se il totale di eBay cambia durante una passata, l'insieme si è spostato
- * sotto la paginazione e la passata ricomincia, invece di saltare un ordine. I recenti
- * precedono sempre lo storico, che non ne ritarda l'acquisizione; il dettaglio è un passo
- * separato che un errore non estende all'ordine.
+ * Recenti e storico si leggono per tratti di tempo, ciascuno con una sola pagina: una pagina
+ * è una fotografia coerente, quindi un ordine che cambia o compare durante la lettura non
+ * sposta la paginazione e non fa saltare ordini. Un tratto con più ordini di una pagina si
+ * restringe in proporzione e si rilegge. Ogni tratto si applica prima di salvarne il limite:
+ * un'interruzione riprende dal primo tratto non applicato. I recenti precedono sempre lo
+ * storico, che non ne ritarda l'acquisizione; il dettaglio è un passo separato che un errore
+ * non estende all'ordine.
  */
 
-const pageSize = 25;
+/** Massimo di `getOrders` per pagina. */
+const pageSize = 200;
+/**
+ * Tratto più stretto: oltre una pagina di ordini nello stesso secondo si seguono le pagine di
+ * eBay, senza ripartire se il totale cambia.
+ */
+const minimumSliceMilliseconds = 1_000;
 const overlapMilliseconds = 15 * 60_000;
 /** Intervallo massimo di modifica di una lettura Trading `GetOrders`. */
 const tradingWindowDays = 30;
@@ -91,38 +99,75 @@ async function saveState(ctx: Context, assignments: string, ...values: unknown[]
 }
 
 type Pass = {
-  next: string | null;
-  total: number | null;
-  /** Filtro di una nuova passata. */
-  begin: () => string;
-  progress: (next: string, total: number) => Promise<void>;
+  /** Intervallo ancora da leggere, estremi inclusi. */
+  from: string;
+  to: string;
+  /** I recenti avanzano dal più vecchio, lo storico arretra dal più recente. */
+  forward: boolean;
+  filter: (from: string, to: string) => string;
+  /** Data dell'ordine su cui filtra la passata. */
+  key: (order: FulfillmentPage["orders"][number]) => unknown;
+  /** Tratto applicato: il nuovo estremo dell'intervallo da leggere. */
+  progress: (reached: string) => Promise<void>;
   finish: () => Promise<void>;
 };
 
+const instant = (milliseconds: number) => new Date(milliseconds).toISOString();
+
 /**
- * Legge le pagine di una passata. Una ripartenza non si salva: se l'esecuzione si interrompe
- * prima della pagina successiva, la ripresa dal link precedente rivede il totale cambiato e
- * ricomincia comunque.
+ * Legge una passata per tratti di una pagina, entro il budget. L'ampiezza del tratto successivo
+ * segue la densità di ordini appena vista, con un margine sotto la pagina che eBay restituisce.
  */
 async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
-  let { next, total } = pass;
+  let from = Date.parse(pass.from);
+  let to = Date.parse(pass.to);
+  let width = to - from;
+  let capacity = pageSize;
+  const fit = (span: number, orders: number) =>
+    Math.max(minimumSliceMilliseconds, Math.floor((span * capacity * 0.8) / Math.max(orders, 1)));
   while (spend(ctx.budget, 1, 1)) {
-    const page = await readFulfillmentOrders(
-      ctx.access,
-      next ? { next } : { limit: pageSize, filter: pass.begin() },
-    );
+    const [start, end] = pass.forward
+      ? [from, Math.min(to, from + width)]
+      : [Math.max(from, to - width), to];
+    const span = end - start;
+    let page = await readFulfillmentOrders(ctx.access, {
+      limit: pageSize,
+      filter: pass.filter(instant(start), instant(end)),
+    });
+    if (page.next && span > minimumSliceMilliseconds) {
+      // Tratto troppo denso: si rilegge più stretto, senza applicarne una parte. Gli ordini della
+      // pagina sono un campione del tratto: il confine cade dove il campione ne lascia una pagina
+      // abbondante, oppure, senza campione utile, in proporzione al totale.
+      capacity = Math.min(capacity, Math.max(page.orders.length, 1));
+      const near = pass.forward ? start : end;
+      const sample = page.orders
+        .map((order) => Math.abs(Date.parse(String(pass.key(order))) - near))
+        .filter((distance) => distance <= span)
+        .sort((a, b) => a - b);
+      const bound = sample[Math.floor((sample.length * capacity * 0.8) / page.total)];
+      width = Math.max(
+        minimumSliceMilliseconds,
+        Math.min(Math.floor(span / 2), bound ?? fit(span, page.total)),
+      );
+      if (await callsOff(ctx)) return false;
+      continue;
+    }
     // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio.
     await inSequence(page.orders, (order) => record(ctx, fulfillmentObservation(order, ctx.at)));
-    if (next !== null && page.total !== total) {
-      next = null;
-    } else if (page.next) {
-      next = page.next;
-      total = page.total;
-      await pass.progress(next, total);
-    } else {
+    const read = page.total;
+    while (page.next) {
+      if (!spend(ctx.budget, 1, 1)) return false;
+      page = await readFulfillmentOrders(ctx.access, { next: page.next });
+      await inSequence(page.orders, (order) => record(ctx, fulfillmentObservation(order, ctx.at)));
+    }
+    if (pass.forward ? end >= to : start <= from) {
       await pass.finish();
       return true;
     }
+    if (pass.forward) from = end;
+    else to = start;
+    await pass.progress(instant(pass.forward ? from : to));
+    width = Math.min(span * 4, fit(span, read));
     if (await callsOff(ctx)) return false;
   }
   return false;
@@ -140,12 +185,9 @@ type SyncRow = {
   cursor: string;
   recent_end: string | null;
   recent_next: string | null;
-  recent_total: number | null;
   history_from: string;
   history_until: string;
   history_through: string | null;
-  history_next: string | null;
-  history_total: number | null;
   history_done_at: string | null;
   trading_cursor: string | null;
   trading_end: string | null;
@@ -159,8 +201,12 @@ function ordersLimit(ctx: Context) {
   return limitKey(ctx.access.configuration.apiOrigin, "GetOrders");
 }
 
+/**
+ * Legge gli acquisti Trading modificati dopo il limite, per finestre di trenta giorni concatenate
+ * fino all'istante corrente: dopo una pausa nessun periodo resta escluso, entro i novanta giorni
+ * che Trading conserva. Ogni finestra conclusa sposta il limite alla sua fine.
+ */
 async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
-  const until = state.trading_end ?? ctx.at;
   // Una passata già iniziata prosegue; altrimenti si rilegge al collegamento, su richiesta
   // manuale o quando l'ultima passata conclusa ha due ore.
   if (
@@ -171,17 +217,22 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   )
     return true;
   if ((await rateLimitWait(ctx.db, ordersLimit(ctx), new Date(ctx.at))) > 0) return false;
-  // Trading accetta al massimo trenta giorni per intervallo di modifica.
-  const from = new Date(
-    Math.max(
-      Date.parse(until) - tradingWindowDays * dayMilliseconds,
-      Date.parse(state.trading_cursor ?? state.history_from) - overlapMilliseconds,
-    ),
-  ).toISOString();
+  const reach = Date.parse(ctx.at) - tradingReachDays * dayMilliseconds;
+  // La prima passata parte dall'inizio dello storico, le altre dal limite con la sovrapposizione.
+  let cursor = state.trading_cursor
+    ? Date.parse(state.trading_cursor) - overlapMilliseconds
+    : Date.parse(state.history_from);
+  let until = state.trading_end === null ? null : Date.parse(state.trading_end);
   let page = state.trading_page ?? 1;
   let total = state.trading_total;
+  // Una finestra ormai oltre la portata di Trading ricomincia dal suo limite.
+  if (until !== null && until <= reach) [until, page, total] = [null, 1, null];
   while (spend(ctx.budget, 1, 1)) {
-    const result = await readTradingOrders(ctx.access, { from, until, page });
+    const start = Math.max(reach, cursor);
+    until ??= Math.min(Date.parse(ctx.at), start + tradingWindowDays * dayMilliseconds);
+    // Trading accetta al massimo trenta giorni per intervallo di modifica.
+    const from = instant(Math.max(start, until - tradingWindowDays * dayMilliseconds));
+    const result = await readTradingOrders(ctx.access, { from, until: instant(until), page });
     let skipped = result.skipped;
     await inSequence(result.orders, (observation) =>
       record(ctx, observation).catch((error: unknown) => {
@@ -200,15 +251,20 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
       await saveState(
         ctx,
         "trading_cursor = ?4, trading_end = NULL, trading_page = NULL, trading_total = NULL",
-        until,
+        instant(until),
       );
-      return true;
+      // Una finestra troncata dai trenta giorni continua con la successiva; il resto attende il
+      // turno di due ore.
+      if (until > Date.parse(ctx.at) - tradingIntervalMilliseconds) return true;
+      [cursor, until, page, total] = [until, null, 1, null];
+      if (await callsOff(ctx)) break;
+      continue;
     }
     total = result.total;
     await saveState(
       ctx,
       "trading_end = ?4, trading_page = ?5, trading_total = ?6",
-      until,
+      instant(until),
       page,
       total,
     );
@@ -228,19 +284,27 @@ async function tradingFailure(ctx: Context, error: unknown): Promise<false> {
 }
 
 function recentPass(ctx: Context, state: SyncRow): Pass {
-  let end = state.recent_end;
+  // Una passata a tratti già iniziata riprende dal limite applicato; una nuova parte da lì
+  // con la sovrapposizione, come una passata lasciata a metà dalla paginazione precedente.
+  const resumed = state.recent_end !== null && state.recent_next === null;
+  const end = resumed ? state.recent_end! : ctx.at;
+  // Un orologio indietro rispetto al limite già applicato non produce un intervallo vuoto.
+  const [checkpoint] = [state.cursor, end].sort();
+  const from = resumed ? checkpoint! : instant(Date.parse(checkpoint!) - overlapMilliseconds);
   return {
-    next: state.recent_next,
-    total: state.recent_total,
-    begin: () => {
-      end = ctx.at;
-      // Un orologio indietro rispetto al limite già applicato non produce un intervallo vuoto.
-      const [checkpoint] = [state.cursor, end].sort();
-      return buildLastModifiedFilter(new Date(checkpoint!), new Date(end), overlapMilliseconds);
-    },
-    progress: (next, total) =>
-      saveState(ctx, "recent_end = ?4, recent_next = ?5, recent_total = ?6", end, next, total),
+    from,
+    to: end,
+    forward: true,
+    filter: (start, until) => buildLastModifiedFilter(new Date(start), new Date(until), 0),
+    key: (order) => order.lastModifiedDate,
     // Il limite non torna indietro se un'esecuzione più lenta conclude una passata precedente.
+    progress: (reached) =>
+      saveState(
+        ctx,
+        "cursor = MAX(cursor, ?4), recent_end = ?5, recent_next = NULL, recent_total = NULL",
+        reached,
+        end,
+      ),
     finish: () =>
       saveState(
         ctx,
@@ -252,11 +316,13 @@ function recentPass(ctx: Context, state: SyncRow): Pass {
 
 function historyPass(ctx: Context, state: SyncRow): Pass {
   return {
-    next: state.history_next,
-    total: state.history_total,
-    begin: () =>
-      buildCreationDateFilter(state.history_from, state.history_through ?? state.history_until),
-    progress: (next, total) => saveState(ctx, "history_next = ?4, history_total = ?5", next, total),
+    from: state.history_from,
+    to: state.history_through ?? state.history_until,
+    forward: false,
+    filter: buildCreationDateFilter,
+    key: (order) => order.creationDate,
+    progress: (reached) =>
+      saveState(ctx, "history_through = ?4, history_next = NULL, history_total = NULL", reached),
     finish: () =>
       saveState(
         ctx,
@@ -348,15 +414,12 @@ export async function acquireOrders(input: {
            WHEN ${stop} THEN NULL ELSE sync_state.history_through END,
          history_done_at = CASE WHEN ${extend} THEN NULL WHEN ${stop} THEN excluded.updated_at
            ELSE sync_state.history_done_at END,
-         history_next = CASE WHEN ${extend} OR ${stop} THEN NULL ELSE sync_state.history_next END,
-         history_total = CASE WHEN ${extend} OR ${stop} THEN NULL
-           ELSE sync_state.history_total END,
          locked_until = excluded.locked_until,
          polled_at = COALESCE(excluded.polled_at, sync_state.polled_at),
          updated_at = excluded.updated_at
        WHERE sync_state.locked_until IS NULL OR sync_state.locked_until <= ?3
-       RETURNING cursor, recent_end, recent_next, recent_total, history_from, history_until,
-                 history_through, history_next, history_total, history_done_at,
+       RETURNING cursor, recent_end, recent_next, history_from, history_until,
+                 history_through, history_done_at,
                  trading_cursor, trading_end, trading_page, trading_total, requested_at`,
     )
     .bind(storeId, grantedAt, at, lock, poll ? at : null)
@@ -385,6 +448,7 @@ export async function acquireOrders(input: {
         last_modified_time: observation.lastModifiedTime,
         detail_attempts: 0,
         marketplace_id: observation.marketplaceId ?? null,
+        creation_time: observation.creationTime,
       }))
         ? "complete"
         : "budget";
