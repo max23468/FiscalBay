@@ -290,7 +290,9 @@ jobs:
     needs: verify
     if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.verify.outputs.mutation-lines != '{"include":[]}'
     runs-on: ubuntu-26.04
-    timeout-minutes: 30
+    # Come la mutation della qualifica: le righe cambiate stanno in una sola parte, e uno
+    # spostamento di codice in un modulo critico può superare la mezz'ora.
+    timeout-minutes: 60
     concurrency:
       group: mutation-lines-${{ github.event.pull_request.number }}-${{ strategy.job-index }}
       cancel-in-progress: true
