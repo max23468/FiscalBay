@@ -142,7 +142,252 @@ async function requireConfirmationSession(env: Env, user: LinkUser, request?: Re
   });
 }
 
-// Le regole dei link stanno fuori dalle opzioni, che formano un solo blocco per la mutation.
+// Ogni sezione delle opzioni è una funzione propria: la mutation divide il modulo fra le
+// funzioni, mentre un solo oggetto resterebbe una parte indivisibile.
+function databaseHooks(env: Env): BetterAuthOptions["databaseHooks"] {
+  return {
+    user: {
+      create: {
+        before: async (user) => {
+          // Include i callback OAuth; non modifica accessi e collegamenti esistenti.
+          requireRegistrationApproval(env, user.email);
+        },
+      },
+    },
+    account: {
+      create: {
+        // Google o eBay aggiunti a un account che aveva già un accesso: il titolare ne riceve
+        // avviso. La password impostata con il link ha l'avviso del reset.
+        after: async (account) => {
+          if (account.providerId !== "google" && account.providerId !== "ebay") return;
+          const other = await env.DB.prepare(
+            `SELECT 1 FROM "account" WHERE "userId" = ?1 AND "id" <> ?2
+           UNION ALL SELECT 1 FROM "passkey" WHERE "userId" = ?1 LIMIT 1`,
+          )
+            .bind(account.userId, account.id)
+            .first();
+          if (other) {
+            notifySecurityEvent(env, account.userId, {
+              kind: "method-linked",
+              method: account.providerId,
+            });
+          }
+        },
+      },
+    },
+    session: {
+      create: {
+        before: async (session, context) => {
+          // Cancellazione in corso: nessun metodo apre più una sessione, fino all'eliminazione.
+          const deleting = await env.DB.prepare("SELECT 1 FROM account_deletions WHERE user_id = ?")
+            .bind(session.userId)
+            .first();
+          if (deleting) {
+            throw new APIError("FORBIDDEN", {
+              code: "account_deletion_in_progress",
+              // Stryker disable next-line StringLiteral: i client leggono il codice, non il testo.
+              message: "Account deletion in progress.",
+            });
+          }
+          return {
+            data: {
+              ...session,
+              passkeyVerified: Boolean(
+                context?.request && userVerifiedRequests.has(context.request),
+              ),
+            },
+          };
+        },
+      },
+    },
+  };
+}
+
+function userOptions(env: Env): BetterAuthOptions["user"] {
+  return {
+    additionalFields: {
+      // Si concede solo dal database: `input: false` lo esclude da registrazione e modifiche.
+      admin: { type: "boolean", required: true, defaultValue: false, input: false },
+    },
+    // Cancellazione dell'account (§30): la richiesta dalle Impostazioni manda il link; la
+    // conferma registra la richiesta, ferma accesso, letture e notifiche e torna alla pagina
+    // dell'esito senza eliminare l'utente, che il lavoro FiscalBay elimina per ultimo. Il
+    // token vale una volta sola e soltanto con la sessione dello stesso utente.
+    deleteUser: {
+      enabled: true,
+      deleteTokenExpiresIn: emailVerificationSeconds,
+      sendDeleteAccountVerification: async ({ user, url }) => {
+        sendAuthEmail(env, "delete-account", { to: user.email, url });
+      },
+      beforeDelete: async (user, request) => {
+        // Better Auth passa sempre la richiesta del link: «it» vale soltanto per i tipi.
+        // Stryker disable next-line StringLiteral: nessun percorso chiama la cancellazione senza richiesta.
+        const language = request ? linkLanguage(request.url) : "it";
+        // Il lavoro porta con sé lo stop dei rinnovi: si carica soltanto alla conferma.
+        const { startAccountDeletion } = await import("./domain/account-deletion.server");
+        // Una registrazione non riuscita non scrive nulla: l'account resta com'era e la
+        // pagina invita a chiedere un nuovo link, perché questo è già consumato.
+        await startAccountDeletion(env, user, language).catch((error: unknown) => {
+          logFailure({ request, error, operation: "account_deletion" });
+          throw new APIError("INTERNAL_SERVER_ERROR");
+        });
+        throw new APIError("FOUND", undefined, {
+          location: localizedPath(language, accountDeletionPath),
+        });
+      },
+    },
+    // L'email si cambia con la conferma del vecchio indirizzo, se verificato, e poi del nuovo.
+    changeEmail: {
+      enabled: true,
+      sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+        sendAuthEmail(env, "change-email", { to: user.email, url, newEmail });
+      },
+    },
+    validateUserInfo: async ({ user, source }, context) => {
+      const provider = source.oauth?.providerId;
+      // Stryker disable next-line ConditionalExpression: solo eBay può dare un profilo senza email.
+      if (provider === "ebay" && !user.email) return { error: "email_not_found" };
+      if (source.action !== "link-account") return;
+      // Lo state è già validato da Better Auth. Senza linking esplicito il collegamento avviene
+      // per email: Better Auth richiede l'utente locale verificato, qui serve anche l'email
+      // verificata e autorevole del provider, che eBay non fornisce.
+      const state = await getOAuthState();
+      // Stryker disable next-line OptionalChaining: nel callback OAuth lo state c'è sempre.
+      if (!state?.link) return user.emailVerified ? undefined : { error: "account_not_linked" };
+      // Non basta essere autenticati: il linking esplicito vale solo per la stessa sessione,
+      // ancora valida e verificata. Così un account creato in anticipo con l'email di un altro
+      // non può conservare un metodo proprio quando il vero titolare recupera l'indirizzo.
+      const session = await getAuthoritativeSessionFromCtx(context);
+      if (
+        !session?.user.emailVerified ||
+        state.link.userId !== session.user.id ||
+        user.id !== session.user.id
+      ) {
+        return { error: "unable_to_link_account" };
+      }
+    },
+  };
+}
+
+function passwordOptions(env: Env): BetterAuthOptions["emailAndPassword"] {
+  return {
+    enabled: true,
+    minPasswordLength,
+    maxPasswordLength,
+    password: { hash: hashPassword, verify: verifyPassword },
+    revokeSessionsOnPasswordReset: true,
+    // Lo stesso tempo dei link di conferma, che l'email dichiara.
+    resetPasswordTokenExpiresIn: emailVerificationSeconds,
+    // La registrazione non apre la sessione e risponde allo stesso modo per un indirizzo già
+    // registrato: la sessione nasce dal link di conferma. Chi accede con la password senza
+    // aver confermato l'email esplora, ma non collega negozi.
+    requireEmailVerification: false,
+    autoSignIn: false,
+    onExistingUserSignUp: async ({ user }, request) => {
+      await sendExistingAccountEmail(env, user.email, request);
+    },
+    sendResetPassword: ({ user, url }) => sendPasswordReset(env, user, url),
+    onPasswordReset: async ({ user }) => {
+      notifySecurityEvent(env, user.id, { kind: "password-reset" });
+    },
+  };
+}
+
+function verificationOptions(env: Env): BetterAuthOptions["emailVerification"] {
+  return {
+    expiresIn: emailVerificationSeconds,
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, url }) => {
+      // Il secondo link arriva al nuovo indirizzo; l'accesso resta sul precedente fino alla conferma.
+      await env.DB.prepare(
+        "UPDATE account_email_changes SET stage = 'new', expires_at = ? WHERE user_id = ? AND new_email = ?",
+      )
+        .bind(
+          new Date(Date.now() + emailVerificationSeconds * 1000).toISOString(),
+          user.id,
+          user.email,
+        )
+        .run();
+      sendAuthEmail(env, "verify", { to: user.email, url });
+    },
+    beforeEmailVerification: (user, request) => requireConfirmationSession(env, user, request),
+    afterEmailVerification: async (user) => {
+      await env.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?")
+        .bind(user.id)
+        .run();
+    },
+  };
+}
+
+function authPlugins(env: Env, appOrigin: URL): BetterAuthPlugin[] {
+  return [
+    ...(env.BETTER_AUTH_API_KEY
+      ? [dash({ apiKey: env.BETTER_AUTH_API_KEY }), durableBackground]
+      : []),
+    passkey({
+      origin: appOrigin.origin,
+      rpID: appOrigin.hostname,
+      rpName: "FiscalBay",
+      authentication: {
+        // Il plugin accetta anche una passkey senza verifica dell'utente: qui vale come
+        // un solo fattore, quindi la sessione non è marcata.
+        afterVerification: ({ ctx, verification }) => {
+          if (verification.authenticationInfo.userVerified && ctx.request) {
+            userVerifiedRequests.add(ctx.request);
+          }
+        },
+      },
+    }),
+    genericOAuth({
+      config: [
+        {
+          providerId: "ebay",
+          name: "eBay",
+          authorizationUrl: "https://auth.ebay.com/oauth2/authorize",
+          tokenUrl: "https://api.ebay.com/identity/v1/oauth2/token",
+          clientId: env.EBAY_CLIENT_ID,
+          clientSecret: env.EBAY_CLIENT_SECRET,
+          redirectURI: env.EBAY_RUNAME,
+          authentication: "basic",
+          pkce: true,
+          allowIdpInitiated: false,
+          scopes: [
+            "https://api.ebay.com/oauth/api_scope",
+            "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
+          ],
+          accountSubject: ({ profile }) => ebayIdentitySchema.shape.userId.parse(profile.userId),
+          getUserInfo: async (tokens) => {
+            let profile: z.infer<typeof ebayIdentitySchema>;
+            try {
+              profile = await upstreamJson(
+                fetch,
+                "https://apiz.ebay.com/commerce/identity/v1/user/",
+                ebayIdentitySchema,
+                { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
+              );
+            } catch (error) {
+              // Better Auth chiude il login con un errore generico; il log ne conserva il tipo.
+              logFailure({ error, operation: "sign_in" });
+              return null;
+            }
+            // Senza email Better Auth rifiuta il login con `email_not_found` e la pagina di
+            // errore indirizza agli altri metodi. L'email business non è verificata da eBay:
+            // FiscalBay invia la propria conferma e non la collega da sola a un utente esistente.
+            return {
+              id: profile.userId,
+              userId: profile.userId,
+              name: profile.username,
+              email: profile.businessAccount?.email,
+              emailVerified: false,
+            };
+          },
+        },
+      ],
+    }),
+  ];
+}
+
 export function createAuthOptions(env: Env): BetterAuthOptions {
   const appOrigin = new URL(env.APP_ORIGIN);
 
@@ -189,64 +434,7 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
         passkeyVerified: { type: "boolean", required: true, defaultValue: false, input: false },
       },
     },
-    databaseHooks: {
-      user: {
-        create: {
-          before: async (user) => {
-            // Include i callback OAuth; non modifica accessi e collegamenti esistenti.
-            requireRegistrationApproval(env, user.email);
-          },
-        },
-      },
-      account: {
-        create: {
-          // Google o eBay aggiunti a un account che aveva già un accesso: il titolare ne riceve
-          // avviso. La password impostata con il link ha l'avviso del reset.
-          after: async (account) => {
-            if (account.providerId !== "google" && account.providerId !== "ebay") return;
-            const other = await env.DB.prepare(
-              `SELECT 1 FROM "account" WHERE "userId" = ?1 AND "id" <> ?2
-               UNION ALL SELECT 1 FROM "passkey" WHERE "userId" = ?1 LIMIT 1`,
-            )
-              .bind(account.userId, account.id)
-              .first();
-            if (other) {
-              notifySecurityEvent(env, account.userId, {
-                kind: "method-linked",
-                method: account.providerId,
-              });
-            }
-          },
-        },
-      },
-      session: {
-        create: {
-          before: async (session, context) => {
-            // Cancellazione in corso: nessun metodo apre più una sessione, fino all'eliminazione.
-            const deleting = await env.DB.prepare(
-              "SELECT 1 FROM account_deletions WHERE user_id = ?",
-            )
-              .bind(session.userId)
-              .first();
-            if (deleting) {
-              throw new APIError("FORBIDDEN", {
-                code: "account_deletion_in_progress",
-                // Stryker disable next-line StringLiteral: i client leggono il codice, non il testo.
-                message: "Account deletion in progress.",
-              });
-            }
-            return {
-              data: {
-                ...session,
-                passkeyVerified: Boolean(
-                  context?.request && userVerifiedRequests.has(context.request),
-                ),
-              },
-            };
-          },
-        },
-      },
-    },
+    databaseHooks: databaseHooks(env),
     account: {
       encryptOAuthTokens: true,
       accountLinking: {
@@ -255,114 +443,9 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
         trustedProviders: ["ebay", "google"],
       },
     },
-    user: {
-      additionalFields: {
-        // Si concede solo dal database: `input: false` lo esclude da registrazione e modifiche.
-        admin: { type: "boolean", required: true, defaultValue: false, input: false },
-      },
-      // Cancellazione dell'account (§30): la richiesta dalle Impostazioni manda il link; la
-      // conferma registra la richiesta, ferma accesso, letture e notifiche e torna alla pagina
-      // dell'esito senza eliminare l'utente, che il lavoro FiscalBay elimina per ultimo. Il
-      // token vale una volta sola e soltanto con la sessione dello stesso utente.
-      deleteUser: {
-        enabled: true,
-        deleteTokenExpiresIn: emailVerificationSeconds,
-        sendDeleteAccountVerification: async ({ user, url }) => {
-          sendAuthEmail(env, "delete-account", { to: user.email, url });
-        },
-        beforeDelete: async (user, request) => {
-          // Better Auth passa sempre la richiesta del link: «it» vale soltanto per i tipi.
-          // Stryker disable next-line StringLiteral: nessun percorso chiama la cancellazione senza richiesta.
-          const language = request ? linkLanguage(request.url) : "it";
-          // Il lavoro porta con sé lo stop dei rinnovi: si carica soltanto alla conferma.
-          const { startAccountDeletion } = await import("./domain/account-deletion.server");
-          // Una registrazione non riuscita non scrive nulla: l'account resta com'era e la
-          // pagina invita a chiedere un nuovo link, perché questo è già consumato.
-          await startAccountDeletion(env, user, language).catch((error: unknown) => {
-            logFailure({ request, error, operation: "account_deletion" });
-            throw new APIError("INTERNAL_SERVER_ERROR");
-          });
-          throw new APIError("FOUND", undefined, {
-            location: localizedPath(language, accountDeletionPath),
-          });
-        },
-      },
-      // L'email si cambia con la conferma del vecchio indirizzo, se verificato, e poi del nuovo.
-      changeEmail: {
-        enabled: true,
-        sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-          sendAuthEmail(env, "change-email", { to: user.email, url, newEmail });
-        },
-      },
-      validateUserInfo: async ({ user, source }, context) => {
-        const provider = source.oauth?.providerId;
-        // Stryker disable next-line ConditionalExpression: solo eBay può dare un profilo senza email.
-        if (provider === "ebay" && !user.email) return { error: "email_not_found" };
-        if (source.action !== "link-account") return;
-        // Lo state è già validato da Better Auth. Senza linking esplicito il collegamento avviene
-        // per email: Better Auth richiede l'utente locale verificato, qui serve anche l'email
-        // verificata e autorevole del provider, che eBay non fornisce.
-        const state = await getOAuthState();
-        // Stryker disable next-line OptionalChaining: nel callback OAuth lo state c'è sempre.
-        if (!state?.link) return user.emailVerified ? undefined : { error: "account_not_linked" };
-        // Non basta essere autenticati: il linking esplicito vale solo per la stessa sessione,
-        // ancora valida e verificata. Così un account creato in anticipo con l'email di un altro
-        // non può conservare un metodo proprio quando il vero titolare recupera l'indirizzo.
-        const session = await getAuthoritativeSessionFromCtx(context);
-        if (
-          !session?.user.emailVerified ||
-          state.link.userId !== session.user.id ||
-          user.id !== session.user.id
-        ) {
-          return { error: "unable_to_link_account" };
-        }
-      },
-    },
-    emailAndPassword: {
-      enabled: true,
-      minPasswordLength,
-      maxPasswordLength,
-      password: { hash: hashPassword, verify: verifyPassword },
-      revokeSessionsOnPasswordReset: true,
-      // Lo stesso tempo dei link di conferma, che l'email dichiara.
-      resetPasswordTokenExpiresIn: emailVerificationSeconds,
-      // La registrazione non apre la sessione e risponde allo stesso modo per un indirizzo già
-      // registrato: la sessione nasce dal link di conferma. Chi accede con la password senza
-      // aver confermato l'email esplora, ma non collega negozi.
-      requireEmailVerification: false,
-      autoSignIn: false,
-      onExistingUserSignUp: async ({ user }, request) => {
-        await sendExistingAccountEmail(env, user.email, request);
-      },
-      sendResetPassword: ({ user, url }) => sendPasswordReset(env, user, url),
-      onPasswordReset: async ({ user }) => {
-        notifySecurityEvent(env, user.id, { kind: "password-reset" });
-      },
-    },
-    emailVerification: {
-      expiresIn: emailVerificationSeconds,
-      sendOnSignUp: true,
-      autoSignInAfterVerification: true,
-      sendVerificationEmail: async ({ user, url }) => {
-        // Il secondo link arriva al nuovo indirizzo; l'accesso resta sul precedente fino alla conferma.
-        await env.DB.prepare(
-          "UPDATE account_email_changes SET stage = 'new', expires_at = ? WHERE user_id = ? AND new_email = ?",
-        )
-          .bind(
-            new Date(Date.now() + emailVerificationSeconds * 1000).toISOString(),
-            user.id,
-            user.email,
-          )
-          .run();
-        sendAuthEmail(env, "verify", { to: user.email, url });
-      },
-      beforeEmailVerification: (user, request) => requireConfirmationSession(env, user, request),
-      afterEmailVerification: async (user) => {
-        await env.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?")
-          .bind(user.id)
-          .run();
-      },
-    },
+    user: userOptions(env),
+    emailAndPassword: passwordOptions(env),
+    emailVerification: verificationOptions(env),
     socialProviders: {
       google: {
         clientId: env.GOOGLE_CLIENT_ID,
@@ -376,71 +459,7 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
         }),
       },
     },
-    plugins: [
-      ...(env.BETTER_AUTH_API_KEY
-        ? [dash({ apiKey: env.BETTER_AUTH_API_KEY }), durableBackground]
-        : []),
-      passkey({
-        origin: appOrigin.origin,
-        rpID: appOrigin.hostname,
-        rpName: "FiscalBay",
-        authentication: {
-          // Il plugin accetta anche una passkey senza verifica dell'utente: qui vale come
-          // un solo fattore, quindi la sessione non è marcata.
-          afterVerification: ({ ctx, verification }) => {
-            if (verification.authenticationInfo.userVerified && ctx.request) {
-              userVerifiedRequests.add(ctx.request);
-            }
-          },
-        },
-      }),
-      genericOAuth({
-        config: [
-          {
-            providerId: "ebay",
-            name: "eBay",
-            authorizationUrl: "https://auth.ebay.com/oauth2/authorize",
-            tokenUrl: "https://api.ebay.com/identity/v1/oauth2/token",
-            clientId: env.EBAY_CLIENT_ID,
-            clientSecret: env.EBAY_CLIENT_SECRET,
-            redirectURI: env.EBAY_RUNAME,
-            authentication: "basic",
-            pkce: true,
-            allowIdpInitiated: false,
-            scopes: [
-              "https://api.ebay.com/oauth/api_scope",
-              "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
-            ],
-            accountSubject: ({ profile }) => ebayIdentitySchema.shape.userId.parse(profile.userId),
-            getUserInfo: async (tokens) => {
-              let profile: z.infer<typeof ebayIdentitySchema>;
-              try {
-                profile = await upstreamJson(
-                  fetch,
-                  "https://apiz.ebay.com/commerce/identity/v1/user/",
-                  ebayIdentitySchema,
-                  { headers: { Authorization: `Bearer ${tokens.accessToken}` } },
-                );
-              } catch (error) {
-                // Better Auth chiude il login con un errore generico; il log ne conserva il tipo.
-                logFailure({ error, operation: "sign_in" });
-                return null;
-              }
-              // Senza email Better Auth rifiuta il login con `email_not_found` e la pagina di
-              // errore indirizza agli altri metodi. L'email business non è verificata da eBay:
-              // FiscalBay invia la propria conferma e non la collega da sola a un utente esistente.
-              return {
-                id: profile.userId,
-                userId: profile.userId,
-                name: profile.username,
-                email: profile.businessAccount?.email,
-                emailVerified: false,
-              };
-            },
-          },
-        ],
-      }),
-    ],
+    plugins: authPlugins(env, appOrigin),
   };
 }
 
