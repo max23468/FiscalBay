@@ -520,7 +520,7 @@ describe("limiti dei tentativi", () => {
     expect((await send("/sign-in/email", longest)).status).toBe(429);
   });
 
-  it.each(["application/x-www-form-urlencoded", "multipart/form-data; boundary=x"])(
+  it.each(["Application/X-WWW-Form-Urlencoded", "multipart/form-data; boundary=x"])(
     "rifiuta le credenziali in un modulo %s, che il limite per indirizzo non leggerebbe",
     async (type) => {
       const response = await handle("/api/auth/sign-in/email", {

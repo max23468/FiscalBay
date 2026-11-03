@@ -176,8 +176,9 @@ async function addressKey(request: Request): Promise<string | null> {
  * dell'indirizzo legge soltanto il JSON. Sui percorsi limitati per indirizzo non passa.
  */
 function formBody(request: Request): boolean {
-  const type = request.headers.get("content-type")?.toLowerCase() ?? "";
-  return type.includes("application/x-www-form-urlencoded") || type.includes("multipart/form-data");
+  return /application\/x-www-form-urlencoded|multipart\/form-data/iu.test(
+    String(request.headers.get("content-type")),
+  );
 }
 
 /**

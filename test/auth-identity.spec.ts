@@ -297,6 +297,7 @@ describe("Collegamento e modifica dell'identità", () => {
 
     // Chi riceve il link senza la sessione dell'account non lo conferma e non vi accede.
     const outside = await open();
+    expect(outside.status).toBe(302);
     expect(outside.headers.get("location")).toBe("/auth/error?error=verification_session");
     expect(outside.headers.getSetCookie()).toEqual([]);
     expect(await verified()).toEqual({ emailVerified: 0 });
@@ -310,6 +311,12 @@ describe("Collegamento e modifica dell'identità", () => {
     // Chi ha creato l'account, con la propria sessione, conferma l'indirizzo.
     expect((await open(sessionCookie(signedIn))).status).toBe(302);
     expect(await verified()).toEqual({ emailVerified: 1 });
+
+    // Confermato l'indirizzo, il link per la password torna a partire.
+    send.mockClear();
+    expect((await post(environment, "request-password-reset", { email })).ok).toBe(true);
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    expect(send.mock.calls[0]![0]).toMatchObject({ to: email });
   });
 
   it("riconosce Google dal subject anche con email cambiata, senza fondere utenti", async () => {
