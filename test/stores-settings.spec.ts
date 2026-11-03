@@ -26,6 +26,7 @@ import { action as ordersAction } from "../app/routes/orders";
 import { action as orderExportAction } from "../app/routes/order-export";
 
 import { requestLimitRules } from "../app/request-limits";
+import { fakeRateLimiters } from "./fixtures/rate-limiter";
 
 import { action as notificationsAction } from "../app/routes/notifications";
 
@@ -392,12 +393,17 @@ describe("modulo di assistenza", () => {
 
 describe("filtro per IP delle azioni costose", () => {
   const deployed = "https://test.fiscalbay.it";
-  let previous: string;
+  let previous: Pick<
+    Env,
+    "APP_ORIGIN" | "REQUEST_LIMIT_ATTEMPTS" | "REQUEST_LIMIT_EMAILS" | "REQUEST_LIMIT_WORK"
+  >;
   beforeAll(() => {
-    previous = env.APP_ORIGIN;
-    Object.assign(env, { APP_ORIGIN: deployed });
+    const { APP_ORIGIN, REQUEST_LIMIT_ATTEMPTS, REQUEST_LIMIT_EMAILS, REQUEST_LIMIT_WORK } = env;
+    previous = { APP_ORIGIN, REQUEST_LIMIT_ATTEMPTS, REQUEST_LIMIT_EMAILS, REQUEST_LIMIT_WORK };
+    // La finestra del binding locale segue l'orologio e può azzerare il contatore a metà serie.
+    Object.assign(env, { APP_ORIGIN: deployed, ...fakeRateLimiters() });
   });
-  afterAll(() => Object.assign(env, { APP_ORIGIN: previous }));
+  afterAll(() => Object.assign(env, previous));
   type Init = { status: number; headers: Record<string, string> };
   const post = (
     action: (args: never) => unknown,
