@@ -234,6 +234,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "Non conserviamo l’esito; presso il fornitore di rete per il tempo da lui stabilito",
               ],
               [
+                "Eventi di accesso e dell’account: tipo di evento (accesso, accesso non riuscito, sessione, modifica dell’account), email, nome, identificativi dell’account e della sessione, metodo di accesso, indirizzo IP, posizione approssimativa e browser",
+                "Sicurezza degli accessi e assistenza sugli account (legittimo interesse)",
+                "Presso il fornitore del monitoraggio degli accessi, per il tempo da lui stabilito",
+              ],
+              [
                 "Eventi di rete e protezione: indirizzo IP, percorso richiesto, browser, paese, regola applicata",
                 "Bloccare attacchi e abusi (legittimo interesse)",
                 "31 giorni presso il fornitore di rete",
@@ -293,7 +298,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           "Non vendiamo i dati, non li usiamo per pubblicità e non usiamo i dati di eBay o degli acquirenti per addestrare intelligenze artificiali. I dati arrivano soltanto a:",
           {
             items: [
-              "fornitori che lavorano per nostro conto, vincolati da contratto: hosting e database, rete e protezione, invio delle email di servizio, posta e assistenza;",
+              "fornitori che lavorano per nostro conto, vincolati da contratto: hosting e database, rete e protezione, monitoraggio degli accessi, invio delle email di servizio, posta e assistenza;",
               "eBay, che riceve le richieste di lettura con l’autorizzazione che hai dato e, se accedi con eBay, la richiesta di accesso;",
               "Stripe, che per gli acquisti è il venditore e tratta i dati di pagamento come titolare autonomo, secondo la sua informativa;",
               "Google, se scegli di accedere con Google;",
@@ -306,7 +311,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Dove sono i dati",
         blocks: [
-          "Ordini, dati fiscali, file esportati e archivio dei log sono conservati su server nell’Unione Europea; i log tecnici recenti, conservati per sette giorni, e gli eventi di sicurezza possono essere trattati dal fornitore di rete anche fuori dall’Unione Europea, con le garanzie indicate sotto. Le richieste transitano dalla rete globale del fornitore di hosting. Pagamenti, assistenza, statistiche del sito, accesso con Google, eBay e Telegram seguono i rispettivi fornitori, che possono trattare dati fuori dall’Unione Europea. In questi casi il trasferimento si basa sulle garanzie previste dal GDPR, come una decisione di adeguatezza o le clausole contrattuali tipo della Commissione europea. Puoi chiederne copia a info@fiscalbay.it.",
+          "Ordini, dati fiscali, file esportati e archivio dei log sono conservati su server nell’Unione Europea; i log tecnici recenti, conservati per sette giorni, e gli eventi di sicurezza possono essere trattati dal fornitore di rete anche fuori dall’Unione Europea, con le garanzie indicate sotto. Le richieste transitano dalla rete globale del fornitore di hosting. Pagamenti, assistenza, monitoraggio degli accessi, statistiche del sito, accesso con Google, eBay e Telegram seguono i rispettivi fornitori, che possono trattare dati fuori dall’Unione Europea. In questi casi il trasferimento si basa sulle garanzie previste dal GDPR, come una decisione di adeguatezza o le clausole contrattuali tipo della Commissione europea. Puoi chiederne copia a info@fiscalbay.it.",
         ],
       },
       {
@@ -550,6 +555,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "We do not keep the result; at the network provider for the time it sets",
               ],
               [
+                "Sign-in and account events: event type (sign-in, failed sign-in, session, account change), email, name, account and session identifiers, sign-in method, IP address, approximate location and browser",
+                "Sign-in security and account support (legitimate interest)",
+                "With the sign-in monitoring provider, for the period it sets",
+              ],
+              [
                 "Network and protection events: IP address, requested path, browser, country, rule applied",
                 "Blocking attacks and abuse (legitimate interest)",
                 "31 days at the network provider",
@@ -609,7 +619,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           "We do not sell data, do not use it for advertising and do not use eBay or buyer data to train artificial intelligence. Data only reaches:",
           {
             items: [
-              "providers working on our behalf under contract: hosting and database, network and protection, service email sending, mail and support;",
+              "providers working on our behalf under contract: hosting and database, network and protection, sign-in monitoring, service email sending, mail and support;",
               "eBay, which receives read requests with the authorisation you gave and, if you sign in with eBay, the sign-in request;",
               "Stripe, which is the seller for purchases and processes payment data as an independent controller under its own policy;",
               "Google, if you choose to sign in with Google;",
@@ -622,7 +632,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Where the data is",
         blocks: [
-          "Orders, tax data, exported files and the log archive are stored on servers in the European Union; recent technical logs, kept for seven days, and security events may also be processed by the network provider outside the European Union, with the safeguards described below. Requests pass through the hosting provider’s global network. Payments, support, site statistics, sign-in with Google, eBay and Telegram follow their respective providers, which may process data outside the European Union. In those cases the transfer relies on the safeguards provided by the GDPR, such as an adequacy decision or the European Commission’s standard contractual clauses. You can request a copy at info@fiscalbay.it.",
+          "Orders, tax data, exported files and the log archive are stored on servers in the European Union; recent technical logs, kept for seven days, and security events may also be processed by the network provider outside the European Union, with the safeguards described below. Requests pass through the hosting provider’s global network. Payments, support, sign-in monitoring, site statistics, sign-in with Google, eBay and Telegram follow their respective providers, which may process data outside the European Union. In those cases the transfer relies on the safeguards provided by the GDPR, such as an adequacy decision or the European Commission’s standard contractual clauses. You can request a copy at info@fiscalbay.it.",
         ],
       },
       {
