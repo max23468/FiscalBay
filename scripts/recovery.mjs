@@ -702,7 +702,7 @@ export function targetOf(mode) {
     live: mode === "live",
     worker: worker.name,
     origin: worker.env.APP_ORIGIN.value,
-    queue: worker.env.WORK_QUEUE.name,
+    queues: [worker.env.WORK_QUEUE.name, worker.env.INGRESS_QUEUE.name],
     database: (mode === "live" ? databases.live : databases.test).id,
   };
 }
@@ -731,11 +731,20 @@ function remoteRun(database) {
   };
 }
 
-function queueOf(target) {
-  const queue = cf("queues", "list").find(({ queue_name: name }) => name === target.queue);
-  if (!queue) throw new Error("Coda dell'ambiente non trovata.");
-  return queue;
+/** Coda del lavoro e coda degli ingressi dell'ambiente. */
+function queuesOf(target) {
+  const queues = cf("queues", "list");
+  return target.queues.map((name) => {
+    const queue = queues.find(({ queue_name: found }) => found === name);
+    if (!queue) throw new Error(`Coda ${name} dell'ambiente non trovata.`);
+    return queue;
+  });
 }
+
+const pauseQueues = (target, paused) => {
+  for (const queue of queuesOf(target))
+    cf("queues", "edit", queue.queue_id, "--settings-delivery-paused", String(paused));
+};
 
 const frozenSecret = (target) =>
   cf("workers", "secrets", "list", "--worker", target.worker).some(
@@ -744,7 +753,7 @@ const frozenSecret = (target) =>
 
 async function readFreeze(target) {
   const secret = frozenSecret(target);
-  const paused = queueOf(target).settings?.delivery_paused === true;
+  const paused = queuesOf(target).every((queue) => queue.settings?.delivery_paused === true);
   const response = await fetch(`${target.origin}/`, {
     headers: { "cache-control": "no-cache" },
     redirect: "manual",
@@ -841,7 +850,7 @@ async function freeze(target) {
     "--type",
     "secret_text",
   );
-  cf("queues", "edit", queueOf(target).queue_id, "--settings-delivery-paused", "true");
+  pauseQueues(target, true);
   await expectFreeze(target, "frozen");
   // Fino a quindici minuti, senza liberare righe per il solo trascorrere del tempo.
   await retryReadback(() => assertDrained(run), 181, 5000);
@@ -864,7 +873,7 @@ async function thaw(target) {
   if (frozenSecret(target))
     cf("workers", "secrets", "delete", "SERVICE_FROZEN", "--worker", target.worker, "--force");
   await setRecoveryFence(run, false);
-  cf("queues", "edit", queueOf(target).queue_id, "--settings-delivery-paused", "false");
+  pauseQueues(target, false);
   await expectFreeze(target, "open");
 }
 

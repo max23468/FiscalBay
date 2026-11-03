@@ -51,6 +51,7 @@ export const environment: Env = {
   ...env,
   APP_ORIGIN: "https://test.fiscalbay.it",
   WORK_QUEUE: fakeQueue({ send }),
+  INGRESS_QUEUE: fakeQueue({ send }),
 };
 
 /** Richiesta al Worker come la consegna Cloudflare; il contesto serve solo alla build. */

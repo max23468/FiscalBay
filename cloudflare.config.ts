@@ -71,6 +71,7 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   name: string;
   domain: string;
   queue: string;
+  ingress: string;
   exports: string;
   metrics: string;
   database: { name: string; id: string };
@@ -97,22 +98,27 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   domains: [target.domain],
   triggers: [
     triggers.scheduled({ schedule: "*/10 * * * *" }),
-    triggers.queue({
-      name: target.queue,
-      deadLetterQueue: `${target.queue}-failed`,
-      maxBatchSize: 1,
-      maxConcurrency: 5,
-      maxRetries: 5,
-    }),
+    ...[target.queue, target.ingress].map((name) =>
+      triggers.queue({
+        name,
+        deadLetterQueue: `${name}-failed`,
+        maxBatchSize: 1,
+        maxConcurrency: 5,
+        maxRetries: 5,
+      }),
+    ),
   ],
   env: {
     ...target.vars,
     ...secrets,
     DB: bindings.d1(target.database),
     AUTH_EMAIL: bindings.sendEmail({ allowedSenderAddresses: ["noreply@fiscalbay.it"] }),
-    // Una sola coda per webhook, letture dei negozi e compiti periodici; la risorsa conserva il
-    // nome con cui è nata.
+    // Letture dei negozi, compiti periodici, esportazioni e cancellazioni; la risorsa conserva il
+    // nome con cui è nata, quando portava anche i webhook.
     WORK_QUEUE: bindings.queue({ name: target.queue }),
+    // Ricevute dei webhook di eBay, Stripe e Telegram: eventi e pagamenti non attendono
+    // l'arretrato delle letture.
+    INGRESS_QUEUE: bindings.queue({ name: target.ingress }),
     // File delle esportazioni: bucket UE raggiungibile soltanto da questo binding, senza dominio
     // pubblico, `r2.dev` o URL prefirmati; il download passa sempre dal Worker.
     EXPORT_FILES: bindings.r2({ name: target.exports, jurisdiction: "eu" }),
@@ -141,6 +147,7 @@ export default defineConfig((ctx) => ({
           name: "fiscalbay",
           domain: "fiscalbay.it",
           queue: "fiscalbay-webhooks",
+          ingress: "fiscalbay-ingress",
           exports: "fiscalbay-exports",
           metrics: "fiscalbay_metrics",
           database: databases.live,
@@ -160,6 +167,7 @@ export default defineConfig((ctx) => ({
           name: "fiscalbay-test",
           domain: "test.fiscalbay.it",
           queue: "fiscalbay-test-webhooks",
+          ingress: "fiscalbay-test-ingress",
           exports: "fiscalbay-test-exports",
           metrics: "fiscalbay_test_metrics",
           database: databases.test,

@@ -107,7 +107,7 @@ export function releaseReceipt(db: D1Database, id: string, lease: string) {
 }
 
 export async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
-  await env.WORK_QUEUE.send({ receiptId });
+  await env.INGRESS_QUEUE.send({ receiptId });
   await env.DB.prepare("UPDATE webhook_receipts SET queued_at = ? WHERE id = ?")
     .bind(now.toISOString(), receiptId)
     .run();

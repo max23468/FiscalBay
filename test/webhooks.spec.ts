@@ -29,6 +29,8 @@ import { fakeBot } from "./fixtures/telegram-fixtures";
 
 import { insertStorePause } from "./fixtures/database-fixtures";
 
+import { fakeQueue, queued } from "./fixtures/queue-fixture";
+
 import {
   now,
   grantedAt,
@@ -407,6 +409,19 @@ it("rifiuta firma, schema, ambiente e data non validi e ignora venditori senza n
       ?.status,
   ).toBe(412);
   expect(await receipt()).toBeNull();
+});
+
+it("accoda le ricevute nella coda degli ingressi, separata dalle letture", async () => {
+  const ingress = vi.fn<Queue["send"]>().mockResolvedValue(queued);
+  const work = vi.fn<Queue["send"]>().mockResolvedValue(queued);
+  const separate = {
+    ...environment,
+    WORK_QUEUE: fakeQueue({ send: work }),
+    INGRESS_QUEUE: fakeQueue({ send: ingress }),
+  };
+  expect((await receive(undefined, separate))?.status).toBe(204);
+  expect(ingress).toHaveBeenCalledWith({ receiptId: (await receipt())?.id });
+  expect(work).not.toHaveBeenCalled();
 });
 
 it("riprende un claim se Queue fallisce, anche senza altre consegne del provider", async () => {
