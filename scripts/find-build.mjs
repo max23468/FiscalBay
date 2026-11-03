@@ -1,4 +1,4 @@
-/** Artefatti dello stesso tree, certificati da job riusciti del repository. */
+/** Artefatti dello stesso tree, prodotti sul branch protetto e certificati. */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -6,22 +6,38 @@ import path from "node:path";
 
 import { ghJson, runJobs } from "./lib/provider.mjs";
 
-export function verifiedBuildOrigin(candidate, run, jobs, repositoryId, kind = "build") {
+export function verifiedBuildOrigin(candidate, run, jobs, repositoryId, tree, kind, readTree) {
   const origin = candidate.workflow_run;
   if (
     candidate.expired ||
     origin?.repository_id !== repositoryId ||
-    origin.head_repository_id !== repositoryId
+    origin.head_repository_id !== repositoryId ||
+    run.id !== origin.id ||
+    run.repository?.id !== repositoryId ||
+    run.head_repository?.id !== repositoryId ||
+    run.head_sha !== origin.head_sha ||
+    !/^[a-f0-9]{40}$/u.test(run.head_sha ?? "") ||
+    !/^[a-f0-9]{40}$/u.test(tree ?? "") ||
+    candidate.name !== `${kind}-${tree}` ||
+    run.head_branch !== "develop" ||
+    !(
+      kind === "candidate" ? ["workflow_dispatch", "schedule"] : ["push", "workflow_dispatch"]
+    ).includes(run.event)
   )
     return false;
-  return kind === "candidate"
-    ? run.path === ".github/workflows/candidate.yml" &&
+  const qualified =
+    kind === "candidate"
+      ? run.path === ".github/workflows/candidate.yml" &&
         jobs.some(
           (job) =>
             job.name === "Qualifica candidato / Candidate qualified" &&
             job.conclusion === "success",
         )
-    : run.path === ".github/workflows/ci.yml" && run.conclusion === "success";
+      : kind === "build" && run.path === ".github/workflows/ci.yml" && run.conclusion === "success";
+  // Il nome e il manifest dell'artefatto non attestano il sorgente compilato. Solo i
+  // workflow sul branch protetto fanno checkout della revisione della run; le PR
+  // eseguono codice non fidato e il loro merge sintetico non è identificato da head_sha.
+  return qualified && readTree(run.head_sha) === tree;
 }
 
 function main() {
@@ -45,7 +61,18 @@ function main() {
       continue;
     const run = api(`repos/${repository}/actions/runs/${origin.id}`);
     const jobs = kind === "candidate" ? runJobs(repository, origin.id) : [];
-    if (!verifiedBuildOrigin(candidate, run, jobs, repositoryId, kind)) continue;
+    if (
+      !verifiedBuildOrigin(
+        candidate,
+        run,
+        jobs,
+        repositoryId,
+        tree,
+        kind,
+        (sha) => api(`repos/${repository}/git/commits/${sha}`).tree.sha,
+      )
+    )
+      continue;
     appendFileSync(process.env.GITHUB_OUTPUT, `run-id=${origin.id}\nartifact=${artifact}\n`);
     console.log(`Tree ${tree}: riuso ${kind} dalla run ${origin.id}.`);
     if (process.env.GITHUB_STEP_SUMMARY)
