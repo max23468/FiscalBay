@@ -401,7 +401,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       const proof = {
         name: `candidate-${tree}`,
         expired: false,
-        workflow_run: { id: 123, repository_id: 1, head_repository_id: 1 },
+        workflow_run: { id: 123, repository_id: 1, head_repository_id: 1, head_sha: sha },
       };
       const cycleJobs = {
         jobs: [
@@ -409,6 +409,14 @@ describe("coordinamento e provenienza della pubblicazione", () => {
           { name: "Qualifica candidato / Candidate qualified", conclusion: "success" },
         ],
       };
+      Object.assign(run, {
+        id: 123,
+        repository: { id: 1 },
+        head_repository: { id: 1 },
+        head_sha: sha,
+        head_branch: "develop",
+        event: "workflow_dispatch",
+      });
       const candidateGh = `#!${process.execPath}\nconst fs=require("node:fs");const a=process.argv.slice(2);fs.appendFileSync(process.env.CYCLE_CALLS,JSON.stringify(a)+"\\n");let value;if(a[1]==="repos/{owner}/{repo}")value={full_name:"example/project"};else if(a[0]==="run")value=[{databaseId:124,headSha:${JSON.stringify(sha)},status:"completed",conclusion:"success"}];else if(a[0]==="workflow")process.exit(99);else if(a.includes("--slurp"))value=a.at(-1).includes("/attempts/")?${JSON.stringify([jobs])}:${JSON.stringify([cycleJobs])};else if(a[1].includes("git/ref/")){console.log(${JSON.stringify(sha)});process.exit(0);}else if(a[1].includes("git/commits/"))value={tree:{sha:${JSON.stringify(tree)}}};else if(a[1].includes("/artifacts?"))value={artifacts:[{...${JSON.stringify(proof)},expired:process.env.CANDIDATE_EXPIRED==="1"}]};else if(a[1].includes("/actions/runs/"))value={...${JSON.stringify(run)},path:".github/workflows/candidate.yml"};else value={id:1};console.log(JSON.stringify(value));\n`;
       writeFileSync(path.join(directory, "gh"), candidateGh, { mode: 0o700 });
       writeFileSync(calls, "");
