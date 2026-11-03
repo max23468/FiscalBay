@@ -1,6 +1,6 @@
 # FiscalBay · Setup degli strumenti e contesto operativo
 
-L’avvio e la ripresa sono nel [README](../../README.md); autonomia e decisioni dell'owner in [AGENTS.md](../../AGENTS.md). Qui si documentano strumenti necessari, input e custodia. Non è una certificazione che gli accessi siano già configurati. Le [fonti](../reference/SOURCES.md) vanno verificate sul client/versione effettivi.
+L’avvio e la ripresa sono nella [guida di avvio](../START.md); autonomia e decisioni dell'owner in [AGENTS.md](../../AGENTS.md). Qui si documentano strumenti necessari, input e custodia. Non è una certificazione che gli accessi siano già configurati. Le [fonti](../reference/SOURCES.md) vanno verificate sul client/versione effettivi.
 
 ## 1. Strumenti e comandi
 
@@ -71,7 +71,7 @@ Leggere AGENTS, [stato e questioni aperte](../ROADMAP.md#stato), poi la capacit�
 | Piani/Stripe | [Piani](../product/PLANS_AND_BILLING.md#s04), [Free](../product/PLANS_AND_BILLING.md#s05), [billing](../product/PLANS_AND_BILLING.md#s06), [fonti Stripe](../reference/SOURCES.md#s01) |
 | Export/comunicazioni/admin | [Export](../product/ORDERS_AND_SYNC.md#s12), [Telegram](../product/CHANNELS_AND_ADMIN.md#s13), [email](../product/CHANNELS_AND_ADMIN.md#s14), [admin](../product/CHANNELS_AND_ADMIN.md#s15), [dominio](OPERATIONS.md#s24) |
 | Operations/test/release | [Sicurezza](../engineering/SECURITY_AND_PRIVACY.md#s29)–[recovery](OPERATIONS.md#s32), [Git/release](RELEASE.md#s34), [test](../engineering/TESTING.md#s35), [rischi](../ROADMAP.md#s38) |
-| Documentazione | [README](../../README.md#documenti) e fonte interessata; archivio solo per ricostruzioni storiche eccezionali |
+| Documentazione | [Guida di avvio](../START.md#documenti) e fonte interessata; archivio solo per ricostruzioni storiche eccezionali |
 
 <a id="input"></a>
 ## 4. Input esterni
