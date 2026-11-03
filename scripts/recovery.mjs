@@ -800,6 +800,32 @@ export async function prepareReapply(run, capturedAt) {
   await assertDrained(run);
 }
 
+/** Attesa per le richieste HTTP avviate prima del blocco: rispondono in secondi, `waitUntil` aggiunge al più 30 s. */
+const httpDrainMilliseconds = 2 * 60_000;
+/** Intervallo senza scritture che prova il database fermo. */
+const quietMilliseconds = 60_000;
+
+/**
+ * Le richieste HTTP non si registrano: il segreto blocca le nuove, quelle già avviate finiscono
+ * entro il drenaggio. Poi il bookmark della D1, che avanza a ogni scrittura, deve restare fermo
+ * per un intervallo intero; finché cambia il ripristino non parte.
+ */
+export async function awaitQuiet(
+  readBookmark,
+  wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+  attempts = 15,
+) {
+  await wait(httpDrainMilliseconds);
+  let previous = readBookmark();
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    await wait(quietMilliseconds);
+    const current = readBookmark();
+    if (current === previous) return;
+    previous = current;
+  }
+  throw new Error("Ripristino bloccato: la D1 riceve ancora scritture dopo il blocco.");
+}
+
 async function freeze(target) {
   const run = remoteRun(target.database);
   await setRecoveryFence(run, true);
@@ -819,6 +845,7 @@ async function freeze(target) {
   await expectFreeze(target, "frozen");
   // Fino a quindici minuti, senza liberare righe per il solo trascorrere del tempo.
   await retryReadback(() => assertDrained(run), 181, 5000);
+  await awaitQuiet(() => cf("d1", "time-travel", "get-bookmark", target.database).bookmark);
 }
 
 /** Ripetibile: una riapertura interrotta riprende dal passo mancante. */

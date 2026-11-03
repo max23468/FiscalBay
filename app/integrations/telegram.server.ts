@@ -7,7 +7,12 @@ import { readUpstream, retryAfterSeconds, UpstreamError } from "./http.server";
 // Ogni Worker ha il proprio bot: quello del test non condivide nome, token, segreto o webhook con
 // Production. Senza i tre valori il servizio non compare e l'ingresso risponde 503. Token e
 // segreto sono facoltativi come quelli di Stripe; il nome è una variabile di `cloudflare.config.ts`.
-export type TelegramSecrets = { TELEGRAM_BOT_TOKEN: string; TELEGRAM_WEBHOOK_SECRET: string };
+// L'ID Telegram dell'owner per il Control Center (D198) è un segreto: senza, nessuna chat è sua.
+export type TelegramSecrets = {
+  TELEGRAM_BOT_TOKEN: string;
+  TELEGRAM_WEBHOOK_SECRET: string;
+  TELEGRAM_OWNER_ID: string;
+};
 
 declare global {
   namespace Cloudflare {

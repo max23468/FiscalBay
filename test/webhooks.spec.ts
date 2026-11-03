@@ -420,18 +420,19 @@ it("riprende un claim se Queue fallisce, anche senza altre consegne del provider
   await recoverWebhookIngress(environment, now);
   expect(send).toHaveBeenCalledTimes(2);
 
-  // Un messaggio accettato e poi perso (scaduto o nella DLQ) si riaccoda dopo un giorno, finché
+  // Un messaggio accettato e poi perso (scaduto o nella DLQ) si riaccoda dopo due ore, finché
   // la ricevuta è valida e nessun consumer la tiene; una ricevuta scaduta non si riaccoda.
   const day = 86_400_000;
+  const lost = 2 * 60 * 60_000;
   await env.DB.prepare("UPDATE webhook_receipts SET locked_until = ?")
-    .bind(new Date(now.getTime() + day + 60_000).toISOString())
+    .bind(new Date(now.getTime() + lost + 60_000).toISOString())
     .run();
-  await recoverWebhookIngress(environment, new Date(now.getTime() + day));
+  await recoverWebhookIngress(environment, new Date(now.getTime() + lost));
   expect(send).toHaveBeenCalledTimes(2);
   await env.DB.prepare("UPDATE webhook_receipts SET locked_until = NULL").run();
-  await recoverWebhookIngress(environment, new Date(now.getTime() + day - 1));
+  await recoverWebhookIngress(environment, new Date(now.getTime() + lost - 1));
   expect(send).toHaveBeenCalledTimes(2);
-  await recoverWebhookIngress(environment, new Date(now.getTime() + day));
+  await recoverWebhookIngress(environment, new Date(now.getTime() + lost));
   expect(send).toHaveBeenCalledTimes(3);
   await recoverWebhookIngress(environment, new Date(now.getTime() + 8 * day));
   expect(send).toHaveBeenCalledTimes(3);

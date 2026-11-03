@@ -6,8 +6,6 @@ import { afterEach, beforeEach, expect, vi } from "vitest";
 
 import { receiveWebhook } from "../../app/webhooks.server";
 
-import { duringRequestActivity } from "../../app/service-activity.server";
-
 import { sealToken } from "../../app/integrations/ebay/seller-credentials.server";
 
 import worker from "../../workers/app";
@@ -162,7 +160,6 @@ export function recordingDatabase() {
   const batch = vi.fn(async (queries: object[]) => queries);
   const exec = vi.fn(async () => ({ count: 1, duration: 0 }));
   const db = {
-    marker: 1,
     prepare(sql: string) {
       const prepared = statement(sql);
       statements.push(prepared);
@@ -170,15 +167,9 @@ export function recordingDatabase() {
     },
     batch,
     exec,
-    withSession: () => undefined,
   };
   return { db: db as unknown as D1Database, calls, statements, batch, exec };
 }
-
-export const insideRequest = <T>(db: D1Database, run: (target: Env) => Promise<T>) =>
-  duringRequestActivity({ ...env, DB: db }, run, () => {
-    throw new Error("Operazione bloccata inattesa.");
-  });
 
 export async function receipt() {
   return env.DB.prepare("SELECT * FROM webhook_receipts").first<{

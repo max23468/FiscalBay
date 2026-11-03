@@ -37,9 +37,6 @@ export const logArchives = { test: "fiscalbay-test-logs", live: "fiscalbay-logs"
  */
 export const zone = "fiscalbay.it";
 
-/** ID Telegram dell'owner: lo stesso utente in ogni bot, quindi in entrambi gli ambienti. */
-const ownerTelegramId = "573159993";
-
 /** Account Cloudflare del progetto, comune ai due ambienti. */
 const account = "98195e505f42abaaeb4827f71a924b1a";
 
@@ -85,6 +82,9 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   compatibilityFlags: ["nodejs_compat"],
   entrypoint: "./workers/app.ts",
   workersDev: false,
+  // Tetto della CPU per invocazione, uguale per pagine, coda e cron: un ciclo fuori controllo si
+  // ferma prima di consumare la quota inclusa (D227). Il cron e la coda hanno 15 minuti di clock.
+  limits: { cpuMs: 30_000 },
   // Eventi di invocazione verso il job Logpush dell'archivio, che ne esporta i soli campi ammessi.
   logpush: true,
   observability: {
@@ -154,8 +154,6 @@ export default defineConfig((ctx) => ({
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UHl21JP7SSN14Zp0J41hMVs"),
             // Bot attuale, riusato come identità della 2.0; token e segreto restano in custodia.
             TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_bot"),
-            // Utente e chat privata dell'owner per il Control Center (D198).
-            TELEGRAM_OWNER_ID: bindings.text(ownerTelegramId),
           },
         })
       : worker({
@@ -176,7 +174,6 @@ export default defineConfig((ctx) => ({
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UUABxJqfZnQjIbK0m1dpfRa"),
             // Bot separato dal bot Production, con foto e profilo che lo dichiarano di prova.
             TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_test_bot"),
-            TELEGRAM_OWNER_ID: bindings.text(ownerTelegramId),
           },
         }),
 }));
