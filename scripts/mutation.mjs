@@ -162,6 +162,8 @@ export function evaluate(report, partial = false) {
 /**
  * Test della suite pertinente che importano il modulo, anche indirettamente. Senza consumatori
  * riconoscibili resta l'intera suite: un test mancante produce sopravvissuti, non un successo.
+ * Prima i file che importano il modulo direttamente: un mutante statico esegue tutta la selezione
+ * e deve incontrare il test che lo uccide prima del timeout di Stryker.
  */
 export function consumerTests(target, files) {
   const suite = files
@@ -185,7 +187,8 @@ export function consumerTests(target, files) {
     return visited.has(target);
   };
   const tests = suite.filter(reaches);
-  return tests.length ? tests : suite;
+  const direct = (file) => graph.get(file)?.has(target);
+  return tests.length ? [...tests.filter(direct), ...tests.filter((file) => !direct(file))] : suite;
 }
 
 /** Mutanti provati in un job: oltre, il modulo si divide in parti di circa quindici minuti. */

@@ -136,6 +136,14 @@ describe("esito dei mutation test", () => {
     ];
     assert.deepEqual(consumerTests("app/domain/grants.server.ts", files), ["test/grants.spec.ts"]);
     assert.deepEqual(consumerTests("app/tax-quality.ts", files), ["test/tax.unit.ts"]);
+    // Il file che importa il modulo precede quelli che lo raggiungono attraverso altri moduli.
+    assert.deepEqual(
+      consumerTests("app/helper.ts", [
+        ...files,
+        { path: "test/a.spec.ts", text: 'import { grant } from "../app/facade";' },
+      ]),
+      ["test/other.spec.ts", "test/a.spec.ts", "test/grants.spec.ts"],
+    );
     // Senza consumatori riconoscibili resta l'intera suite.
     assert.deepEqual(consumerTests("app/domain/stores.server.ts", files), [
       "test/grants.spec.ts",
