@@ -279,6 +279,39 @@ describe("Collegamento e modifica dell'identità", () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
+  it("conferma l'email di un account nato da un provider solo dalla sua sessione", async () => {
+    const send = emailSender();
+    const environment = withEmail(send);
+    const email = "conferma.provider@dominio-personale.invalid";
+    const signedIn = await googleCallback(
+      environment,
+      await post(environment, "sign-in/social", { provider: "google", callbackURL: "/" }),
+      { sub: "google-conferma-provider", email, email_verified: true },
+    );
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    const link = emailLink((send.mock.calls[0]![0] as { text: string }).text);
+    const open = (cookie = "") =>
+      handleAuthRequest(new Request(link, { headers: { cookie } }), environment);
+    const verified = () =>
+      env.DB.prepare('SELECT "emailVerified" FROM "user" WHERE email = ?').bind(email).first();
+
+    // Chi riceve il link senza la sessione dell'account non lo conferma e non vi accede.
+    const outside = await open();
+    expect(outside.headers.get("location")).toBe("/auth/error?error=verification_session");
+    expect(outside.headers.getSetCookie()).toEqual([]);
+    expect(await verified()).toEqual({ emailVerified: 0 });
+
+    // Né riceve un link per aggiungere una password all'account.
+    send.mockClear();
+    expect((await post(environment, "request-password-reset", { email })).ok).toBe(true);
+    await drainBackground();
+    expect(send).not.toHaveBeenCalled();
+
+    // Chi ha creato l'account, con la propria sessione, conferma l'indirizzo.
+    expect((await open(sessionCookie(signedIn))).status).toBe(302);
+    expect(await verified()).toEqual({ emailVerified: 1 });
+  });
+
   it("riconosce Google dal subject anche con email cambiata, senza fondere utenti", async () => {
     const send = emailSender();
     const environment = withEmail(send);

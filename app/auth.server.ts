@@ -96,6 +96,24 @@ function requireRegistrationApproval(env: Env, email: string) {
   }
 }
 
+/**
+ * Account mai confermato con un metodo eBay o Google: l'email del provider può appartenere a un
+ * altro, come quella business che eBay non verifica. Chi ne riceve i link non deve ottenere un
+ * account in cui resta il metodo di chi l'ha creato.
+ */
+async function unconfirmedProviderAccount(
+  env: Env,
+  user: { id: string; emailVerified?: boolean },
+): Promise<boolean> {
+  if (user.emailVerified) return false;
+  const method = await env.DB.prepare(
+    `SELECT 1 FROM "account" WHERE "userId" = ? AND "providerId" IN ('ebay', 'google') LIMIT 1`,
+  )
+    .bind(user.id)
+    .first();
+  return method !== null;
+}
+
 export function createAuthOptions(env: Env): BetterAuthOptions {
   const appOrigin = new URL(env.APP_ORIGIN);
 
@@ -288,6 +306,9 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
         await sendExistingAccountEmail(env, user.email, request);
       },
       sendResetPassword: async ({ user, url }) => {
+        // La password aggiunta dal link aprirebbe all'indirizzo un account che conserva il metodo
+        // di chi l'ha creato: prima serve la conferma, dalla sessione dello stesso utente.
+        if (await unconfirmedProviderAccount(env, user)) return;
         sendAuthEmail(env, "reset", { to: user.email, url });
       },
       onPasswordReset: async ({ user }) => {
@@ -310,6 +331,19 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
           )
           .run();
         sendAuthEmail(env, "verify", { to: user.email, url });
+      },
+      // Un account nato da eBay o Google si conferma soltanto con la sessione dello stesso
+      // utente: chi apre il link senza averla non entra in un account con il metodo di un altro.
+      beforeEmailVerification: async (user, request) => {
+        if (!(await unconfirmedProviderAccount(env, user))) return;
+        const { readSession } = await import("./domain/sessions.server");
+        const session = request ? await readSession(env, request) : null;
+        if (session?.user.id === user.id) return;
+        // Stryker disable next-line StringLiteral: Better Auth passa sempre la richiesta del link.
+        const language = request ? linkLanguage(request.url) : "it";
+        throw new APIError("FOUND", undefined, {
+          location: `${localizedPath(language, "/auth/error")}?error=verification_session`,
+        });
       },
       afterEmailVerification: async (user) => {
         await env.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?")
