@@ -65,7 +65,7 @@ export async function publishedCommit(
   record = publicationRecord,
 ) {
   const version = await versionOf("https://fiscalbay.it");
-  return record(repository, version, read).active.sha;
+  return record(repository, version, read, undefined, { latestState: true }).active.sha;
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
