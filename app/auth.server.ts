@@ -25,9 +25,8 @@ import { emailVerificationSeconds } from "./domain/email-change.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
 
-// Chiave facoltativa del progetto su dash.better-auth.com, impostata soltanto sul Worker test:
-// senza, il plugin non viene caricato. Dichiararla con `bindings.secret()` la renderebbe
-// obbligatoria anche in Production.
+// Chiave del progetto dell'ambiente su dash.better-auth.com: senza, il plugin non viene caricato,
+// così sviluppo locale e prove restano fuori dalla dashboard.
 declare global {
   namespace Cloudflare {
     interface Env {

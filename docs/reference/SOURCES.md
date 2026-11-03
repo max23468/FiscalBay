@@ -225,7 +225,7 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 
 Nella 0.4.25 (D241) la dashboard legge anche dal Worker, sugli endpoint `/api/auth/dash/*` autenticati con la chiave del progetto, e il plugin invia ogni evento con `runInBackground`.
 
-**Uso:** §29–30. La corsia cloud è qualificata per ambiente controllato. Prima di utenti pubblici occorrono DPA applicabile, inventario fornitore/subprocessori/trasferimenti, informativa coerente, procedura di cancellazione e conferma che il piano scelto sia ammesso e adeguato alla Production; in assenza di uno di questi elementi il secret Infrastructure viene rimosso e Better Auth core continua self-hosted.
+**Uso:** §29–30. Test e Production hanno ciascuno un progetto Starter con la propria chiave; senza DPA e con la Privacy che dichiara eventi di accesso, fornitore e trasferimento fuori dall'UE ([D292](../decisions/DECISION_REGISTER.md)).
 
 <a id="s30"></a>
 ### S30 · Privacy e consumatori · fonti pubbliche primarie
