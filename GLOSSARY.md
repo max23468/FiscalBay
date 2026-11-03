@@ -8,6 +8,18 @@ Linguaggio vincolante del prodotto, per documenti, codice e copy.
 **Merchant**:
 Utilizzatore/venditore che usa FiscalBay, distinto dall'acquirente eBay.
 
+**Iscritto**:
+Merchant che ha creato l'account, anche senza aver collegato un negozio.
+
+**Merchant attivo**:
+Stato di un merchant con almeno un negozio che ha completato la prima lettura degli ordini e non è in pausa né da ricollegare; lo perde quando nessun negozio soddisfa più queste condizioni.
+
+**Attivazione del merchant**:
+La prima volta in cui un merchant diventa attivo; resta contata anche se in seguito smette di esserlo. Distinta dall'attivazione di Premium, della prova o di un servizio.
+
+**Pagante**:
+Merchant con un abbonamento o un lifetime acquistato; la prova e le concessioni gratuite non lo rendono pagante.
+
 **Spazio / workspace**:
 Confine di attività, dati, abbonamento e autorizzazione; termine prevalentemente interno.
 
