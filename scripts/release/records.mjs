@@ -74,12 +74,16 @@ export function downloadRecord(repository, artifact) {
   }
 }
 
-/** Cerca anche nelle run fallite: un ritiro o un errore nel giorno non cancella il readback. */
+/**
+ * Cerca anche nelle run fallite: un ritiro o un errore nel giorno non cancella il readback.
+ * `latestState` ammette, per la sola base del lotto, una versione attiva senza ricevuta.
+ */
 export function publicationRecord(
   repository,
   version,
   api = (url) => ghJson("api", url),
   download = downloadRecord,
+  { latestState = false } = {},
 ) {
   const repositoryId = api(`repos/${repository}`).id;
   const valid = (artifact) =>
@@ -131,6 +135,32 @@ export function publicationRecord(
         if (record) return record;
       }
     }
+  }
+  // Un segreto aggiornato con la CLI crea una versione con lo stesso codice ma senza ricevuta né
+  // identità: vale l'ultimo stato registrato dal ciclo, pubblicazione o ritiro, che ne porta il
+  // commit. Il deploy successivo la tratta come versione precedente senza provenienza. Conta
+  // soltanto lo stato più recente: uno più vecchio non dice quale codice serve ora.
+  if (!latestState) throw new Error("Nessuna ricevuta valida per la versione realmente attiva.");
+  const runs = ["publish.yml", "rollback.yml"]
+    .flatMap(
+      (workflow) =>
+        api(`repos/${repository}/actions/workflows/${workflow}/runs?branch=main&per_page=20`)
+          .workflow_runs,
+    )
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  for (const run of runs) {
+    const [artifact] = api(`repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`)
+      .artifacts.filter((entry) => entry.name.startsWith("production-state-"))
+      .sort((a, b) => b.id - a.id);
+    if (!artifact) continue;
+    const receipt = valid(artifact) ? download(repository, artifact) : undefined;
+    const active =
+      receipt && !receipt.rolledBack ? receiptActive(receipt, receipt.active?.version) : undefined;
+    if (!active) break;
+    console.warn(
+      `Versione attiva ${version} senza ricevuta: base dall'ultimo stato del ciclo, ${active.version} (${active.sha}).`,
+    );
+    return { ...receipt, active, artifact: artifact.id, run: run.id, observed: version };
   }
   throw new Error("Nessuna ricevuta valida per la versione realmente attiva.");
 }
