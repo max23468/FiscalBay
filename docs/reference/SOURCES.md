@@ -208,7 +208,7 @@ Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corr
 - [Modello di sicurezza e approvazioni Codex](https://developers.openai.com/codex/security)
 - [Apple · lavorare con i file iCloud Drive sul Mac](https://support.apple.com/en-euro/guide/mac-help/mchl1a02d711/mac)
 
-**Verifica pertinente:** checkout locale corretto, disponibilità effettiva dello ZIP scaricato e permessi del client. Il percorso iCloud indicato nel README è un candidato standard, non una directory garantita su ogni Mac. Nessun collegamento in questa lista autorizza accesso o scritture.
+**Verifica pertinente:** checkout locale corretto, disponibilità effettiva dello ZIP scaricato e permessi del client. Il percorso iCloud indicato nella procedura di adozione archiviata è un candidato standard, non una directory garantita su ogni Mac. Nessun collegamento in questa lista autorizza accesso o scritture.
 
 <a id="s29"></a>
 ### S29 · Better Auth Infrastructure · dati, retention e condizioni

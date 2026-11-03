@@ -2,7 +2,7 @@
 
 ## Ingresso, fonti e autonomia
 
-Operare secondo il [README](README.md#avvio). Rispettare istruzioni di sessione, ambiente e override applicabili.
+Operare secondo la [guida di avvio](docs/START.md#avvio). Rispettare istruzioni di sessione, ambiente e override applicabili.
 
 [Prodotto](docs/product/PRODUCT.md) ed [engineering](docs/engineering/ARCHITECTURE.md) = requisiti; [roadmap](docs/ROADMAP.md) = lavoro futuro e pendenze; registro = sintesi/motivazioni; [archivio](docs/archive/2026-11-master-plan-2.0.md) = storia della 2.0, mai requisito; codice/test/configurazioni = stato tecnico; readback provider = stato remoto.
 

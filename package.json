@@ -2,6 +2,7 @@
   "name": "fiscalbay",
   "version": "0.0.0",
   "private": true,
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "build": "cf build && node scripts/check-bundle-size.mjs",
