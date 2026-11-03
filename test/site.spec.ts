@@ -13,6 +13,7 @@ import { loader as loadSupport } from "../app/routes/support";
 import { loader as loadLegal } from "../app/routes/legal";
 import { loader as loadRobots, robots } from "../app/routes/robots";
 import { sitemap } from "../app/routes/sitemap";
+import { llms } from "../app/site.server";
 import { indexable, isProductionOrigin } from "../app/app-links";
 import { appCopy, infoEmail } from "../app/app-copy";
 import { adminCopy } from "../app/copy/admin-copy";
@@ -237,6 +238,23 @@ describe("radice pubblica e area riservata", () => {
     expect(production).toContain("Disallow: /anteprima\nDisallow: /en/anteprima\n");
     expect(production).toMatch(/\nSitemap: https:\/\/fiscalbay\.it\/sitemap\.xml\n$/u);
     expect(production).not.toMatch(/termini|privacy|prezzi/u);
+    // Ricerca, risposte AI e addestramento ammessi, nel gruppo che vale per ogni crawler.
+    expect(production).toMatch(
+      /^User-agent: \*\nContent-Signal: search=yes, ai-input=yes, ai-train=yes\n/u,
+    );
+  });
+
+  it("descrive il servizio in llms.txt con le pagine della sitemap nelle due lingue", () => {
+    const text = llms("https://fiscalbay.it");
+    expect(text).toMatch(new RegExp(`^# FiscalBay\n\n> ${sitePages.it.home.description}\n`, "u"));
+    const links = [...text.matchAll(/^- \[[^\]]+\]\((https:\/\/fiscalbay\.it[^)]*)\): \S/gmu)];
+    const listed = new Set(
+      sitemap("https://fiscalbay.it")
+        .match(/<loc>[^<]+<\/loc>/gu)!
+        .map((loc) => loc.slice(5, -6)),
+    );
+    expect(new Set(links.map(([, url]) => url))).toEqual(listed);
+    expect(text).toContain(`[${sitePages.en.pricing.title}](https://fiscalbay.it/en/prezzi)`);
   });
 
   it("elenca nella sitemap le sole pagine canoniche, in ogni lingua con le alternate", () => {

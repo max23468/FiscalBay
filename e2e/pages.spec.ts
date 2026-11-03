@@ -155,6 +155,16 @@ for (const scenario of scenarios) {
             checked("HTTP e sitemap");
             return;
           }
+          if (scenario.path.endsWith("/llms.txt")) {
+            // Guida per gli assistenti AI con le pagine della sitemap dell'origine dell'app.
+            expect(response.headers()["content-type"]).toMatch(/^text\/markdown/u);
+            const text = await response.text();
+            const origin = production ? "https://fiscalbay.it" : baseURL;
+            expect(text).toMatch(/^# FiscalBay\n/u);
+            expect(text).toContain(`(${new URL("/en/prezzi", origin).href})`);
+            checked("HTTP e llms.txt");
+            return;
+          }
           if (response.status() === 405) {
             expect(response.headers().allow).toBe("POST");
             checked("HTTP e metodo ammesso");

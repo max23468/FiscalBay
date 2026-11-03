@@ -38,6 +38,8 @@ import { action as signInAction, loader as signInLoader } from "../app/routes/si
 
 import { action as storeLinkAction, loader as storeLinkLoader } from "../app/routes/store-link";
 
+import { action as passwordCheckAction } from "../app/routes/password-check";
+
 import { hashPassword, verifyPassword } from "../app/password.server";
 
 import { emailSender, mailEnv, sessionCookie, verifiedSession } from "./fixtures/account-fixtures";
@@ -147,6 +149,28 @@ it("conserva il rifiuto POST da origine estranea e del collegamento senza sessio
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe(`${base}/app/ordini?negozio=accesso`);
   }
+});
+
+it("riporta come trapelate le sole password segnalate dall'edge, senza leggere il corpo", async () => {
+  const check = async (signal?: string, origin?: string | null) =>
+    routeResponse(passwordCheckAction, "/api/v1/password-check", {
+      body: JSON.stringify({ username: "fiscalbay", password: "password-di-prova" }),
+      headers: signal ? { "exposed-credential-check": signal } : {},
+      origin,
+    });
+  for (const [signal, leaked] of [
+    ["1", true],
+    ["4", true],
+    ["2", false],
+    ["3", false],
+    [undefined, false],
+  ] as const) {
+    const response = await check(signal);
+    expect(response.headers.get("cache-control"), signal).toBe("no-store");
+    expect(await response.json(), signal).toEqual({ leaked });
+  }
+  expect((await check("4", "https://example.invalid")).status).toBe(403);
+  expect((await check("4", null)).status).toBe(403);
 });
 
 it("mantiene lo schema D1 allineato ai quattro metodi Auth", async () => {

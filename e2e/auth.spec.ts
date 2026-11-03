@@ -38,6 +38,15 @@ test.describe("area reale", () => {
         await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
         await form.getByRole("textbox", { name: "Password", exact: true }).fill("password-errata");
         await form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
+        // L'invio parte dopo il controllo della password: l'esito arriva con l'avviso d'errore.
+        await expect(
+          page.getByText(
+            it
+              ? "Operazione non riuscita. Controlla email e password."
+              : "Could not complete the operation. Check your email and password.",
+            { exact: true },
+          ),
+        ).toBeVisible();
         await expect(page).toHaveURL(/returnTo=/);
         await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
         await form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
@@ -835,6 +844,26 @@ for (const language of ["it", "en"] as const) {
           : "Accept the Terms of Service to continue.",
       ),
     ).toBeVisible();
+
+    // Una password nota nelle violazioni ferma la registrazione accanto al campo; il controllo
+    // riceve la sola password, con un nome utente fisso al posto dell'email.
+    const checks: unknown[] = [];
+    await page.route("**/api/v1/password-check", async (route) => {
+      checks.push(route.request().postDataJSON());
+      await route.fulfill({ json: { leaked: true } });
+    });
+    await terms.click();
+    await submit.click();
+    await expect(password).toBeFocused();
+    await expect(password).toHaveAccessibleDescription(
+      it
+        ? "Questa password compare in violazioni di dati note. Scegline un’altra."
+        : "This password appears in known data breaches. Choose a different one.",
+    );
+    expect(checks).toEqual([{ username: "fiscalbay", password: "una-password-lunga" }]);
+    await expect(page).toHaveURL(/\/accesso$/u);
+    await password.fill("un-altra-password-lunga");
+    await expect(password).not.toHaveAttribute("aria-invalid");
   });
 }
 

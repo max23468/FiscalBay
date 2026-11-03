@@ -1,0 +1,4 @@
+# Gli asset della build hanno l'hash del contenuto nel nome: un file cambiato ha un nome nuovo,
+# quindi il browser conserva per un anno quelli già scaricati senza riconvalidarli.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

@@ -3,7 +3,14 @@ import { data, redirect } from "react-router";
 
 import { accessNotice, signInNotice, type SignInNotice } from "./access-notice";
 import { currentSession } from "./account-area.server";
-import { accessPath, ordersPath, originUrl, securityReturnPath, visitCookie } from "./app-links";
+import {
+  accessPath,
+  leakedPasswordField,
+  ordersPath,
+  originUrl,
+  securityReturnPath,
+  visitCookie,
+} from "./app-links";
 import { readSession } from "./domain/sessions.server";
 import { authLimitWait, forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import { limitedHeaders } from "./request-limits.server";
@@ -302,7 +309,13 @@ export async function accessAction(request: Request) {
     email: field("email"),
     password: field("password"),
   });
-  if (response.ok) return redirectWithCookies(destination, response);
+  if (response.ok) {
+    // Password trapelata secondo il controllo del browser: l'avviso arriva nella prima pagina.
+    if (field(leakedPasswordField) !== "1") return redirectWithCookies(destination, response);
+    const [path, hash] = destination.split("#");
+    const query = new URLSearchParams({ accesso: "password-trapelata" });
+    return redirectWithCookies(`${path}?${query}${hash ? `#${hash}` : ""}`, response);
+  }
   if (response.status === 403) {
     const error = await response.clone().json<{ code?: string }>();
     if (error.code === "account_deletion_in_progress")

@@ -64,6 +64,11 @@ export function useFieldErrors(copy: ValidationCopy) {
       first.focus();
       return false;
     },
+    /** Errore deciso dopo i vincoli HTML, per esempio da un controllo remoto: focus sul campo. */
+    reject(control: Control, message: string) {
+      setErrors((current) => ({ ...current, [control.name]: message }));
+      control.focus();
+    },
     /** Attributi del controllo: stato non valido e messaggio collegato. */
     control(name: string, describedBy?: string) {
       const invalid = name in errors;

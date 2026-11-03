@@ -10,10 +10,14 @@ import { isProductionOrigin } from "../app-links";
 // pubblici con lo stesso inizio.
 const privatePaths = ["/app/", "/accesso", "/admin", "/api/", "/auth/", "/anteprima"];
 
+// Content Signals (contentsignals.org): le pagine pubbliche si possono usare per la ricerca,
+// per le risposte degli assistenti AI e per l'addestramento dei modelli.
+const contentSignal = "Content-Signal: search=yes, ai-input=yes, ai-train=yes";
+
 export function robots(origin: string) {
   if (!isProductionOrigin(origin)) return "User-agent: *\nDisallow: /\n";
   const rules = privatePaths.flatMap((path) => [`Disallow: ${path}`, `Disallow: /en${path}`]);
-  return `User-agent: *\n${rules.join("\n")}\n\nSitemap: ${new URL(origin).origin}/sitemap.xml\n`;
+  return `User-agent: *\n${contentSignal}\n${rules.join("\n")}\n\nSitemap: ${new URL(origin).origin}/sitemap.xml\n`;
 }
 
 export function loader() {

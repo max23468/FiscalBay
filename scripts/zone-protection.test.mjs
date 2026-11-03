@@ -59,7 +59,13 @@ const configured = () => {
       min_tls_version: "1.2",
       security_header: { strict_transport_security: { enabled: false } },
     },
-    botManagement: { fight_mode: false },
+    botManagement: {
+      fight_mode: false,
+      ai_bots_protection: "disabled",
+      crawler_protection: "disabled",
+      is_robots_txt_managed: false,
+    },
+    leakedCredentials: { enabled: true },
     ctAlerting: { enabled: true, emails: [alertEmail] },
     dmarcReports: { enabled: true, rua_prefix: prefix },
     dns: [
@@ -84,6 +90,11 @@ const configured = () => {
         }),
       },
       asset: { status: 200, headers: secured() },
+      hashedAsset: {
+        status: 200,
+        headers: secured({ "cache-control": "public, max-age=31536000, immutable" }),
+      },
+      passwordCheck: { leaked: true },
       missing: { status: 404, headers: secured() },
       probe: { status: 403, headers: {} },
       webhook: { status: 412, headers: secured() },
@@ -314,6 +325,13 @@ describe("protezioni della zona", () => {
       "HSTS di zona senza sottodomini né preload": (state) =>
         (state.settings.security_header.strict_transport_security.include_subdomains = true),
       "Bot Fight Mode spento": (state) => (state.botManagement.fight_mode = true),
+      "crawler AI ammessi": (state) => (state.botManagement.ai_bots_protection = "block"),
+      "rilevamento delle credenziali trapelate": (state) =>
+        (state.leakedCredentials.enabled = false),
+      "password nota segnalata al Worker": (state) =>
+        (state.responses.passwordCheck = { leaked: false }),
+      "asset con hash in cache per un anno": (state) =>
+        (state.responses.hashedAsset.headers["cache-control"] = "public, max-age=0"),
       "alert dei certificati": (state) => (state.ctAlerting.emails = ["altro@example.org"]),
       "DMARC Management attivo": (state) => (state.dmarcReports.enabled = false),
       "un solo record DMARC con i report": (state) => (state.dns[0].content = `"${dmarc}"`),

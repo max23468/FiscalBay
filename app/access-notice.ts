@@ -23,6 +23,7 @@ const signInTones: Record<SignInNotice, Tone> = {
   "ultimo-accesso": "warning",
   "recupero-inviato": "info",
   "password-reimpostata": "success",
+  "password-trapelata": "warning",
   "recupero-scaduto": "warning",
   "metodo-collegato": "success",
   "metodo-rimosso": "success",

@@ -1110,6 +1110,7 @@ export const en: AppCopy = {
       tooShort: (min: number) => `Use at least ${min} characters.`,
       checkbox: "Accept the Terms of Service to continue.",
     },
+    leakedPassword: "This password appears in known data breaches. Choose a different one.",
     passwordRecoveryBody:
       "Enter your account email and we will send you a link to set a new password.",
     passwordRecoverySend: "Send link",
@@ -1189,6 +1190,8 @@ export const en: AppCopy = {
       "recupero-inviato":
         "Check your inbox: if the address is registered, you will find a link to set a new password.",
       "password-reimpostata": "Password updated. Sign in with your new password.",
+      "password-trapelata":
+        "The password you signed in with appears in known data breaches. Change it from Settings › Account.",
       "recupero-scaduto": "This link is invalid or expired. Request a new one.",
     },
   },

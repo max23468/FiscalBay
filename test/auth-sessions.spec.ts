@@ -191,6 +191,18 @@ describe("Sessioni, revoche e area admin", () => {
         });
         expect(signedIn.headers.get("location")).toBe(expected);
       }
+      // Con la password segnalata come trapelata l'avviso arriva nella pagina di ritorno.
+      const warned = await routeResponse(signInAction, `${prefix}/accesso`, {
+        fields: {
+          email: user.email,
+          password: "Password-sintetica-123!",
+          returnTo: target,
+          "password-trapelata": "1",
+        },
+      });
+      expect(warned.headers.get("location")).toBe(
+        `${prefix}/app/impostazioni/account?accesso=password-trapelata#security-email`,
+      );
     }
   });
 
