@@ -1136,6 +1136,7 @@ export const it = {
       tooShort: (min: number) => `Usa almeno ${min} caratteri.`,
       checkbox: "Accetta i Termini di servizio per continuare.",
     },
+    leakedPassword: "Questa password compare in violazioni di dati note. Scegline un’altra.",
     passwordRecoveryBody:
       "Inserisci l’email del tuo account: ti invieremo un link per scegliere una nuova password.",
     passwordRecoverySend: "Invia il link",
@@ -1218,6 +1219,8 @@ export const it = {
       "recupero-inviato":
         "Controlla la posta: se l’indirizzo è registrato, trovi il link per scegliere una nuova password.",
       "password-reimpostata": "Password aggiornata. Accedi con la nuova password.",
+      "password-trapelata":
+        "La password usata per accedere compare in violazioni di dati note. Cambiala da Impostazioni › Account.",
       "recupero-scaduto": "Link non valido o scaduto. Richiedine uno nuovo.",
     },
   },

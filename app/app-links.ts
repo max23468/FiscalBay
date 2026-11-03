@@ -78,6 +78,12 @@ export const languagePath = `${appBase}/lingua`;
 /** Letture della campanella. */
 export const notificationsPath = "/api/v1/notifications";
 
+/** Controllo delle password trapelate, chiesto dal browser prima dell'invio dei moduli. */
+export const passwordCheckPath = "/api/v1/password-check";
+
+/** Campo nascosto del modulo di accesso: la password usata risulta trapelata. */
+export const leakedPasswordField = "password-trapelata";
+
 /** Dati e privacy, da cui parte la cancellazione dell'account. */
 export const privacySettingsPath = `${settingsPath}/privacy`;
 

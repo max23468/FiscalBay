@@ -5,6 +5,7 @@ import { useLocation } from "react-router";
 
 import { BrandPanel } from "~/components/access/brand-panel";
 import { EmailField, PasswordField } from "~/components/access/credential-fields";
+import { usePasswordCheck } from "~/components/access/password-check";
 import { EbayMark, GoogleMark } from "~/components/access/marks";
 import { PasskeyButton } from "~/components/access/passkey-button";
 import { rise } from "~/components/access/rise";
@@ -208,6 +209,8 @@ function AccessForms({
   const values = remembered?.values;
   const signIn = useFieldErrors(t.validation);
   const signUp = useFieldErrors(t.validation);
+  const signInCheck = usePasswordCheck();
+  const signUpCheck = usePasswordCheck((input) => signUp.reject(input, t.leakedPassword));
   // L'accesso con password non passa da Turnstile; il recupero e la registrazione sì.
   const recovery = useTurnstile(recovering ? turnstileActions.passwordReset : null);
   const registration = useTurnstile(turnstileActions.signUp);
@@ -231,7 +234,9 @@ function AccessForms({
           action={formAction}
           {...signIn.form}
           onSubmit={(event) => {
-            if (signIn.check(event)) recovery.submit(event);
+            if (!signIn.check(event)) return;
+            signInCheck.submit(event);
+            recovery.submit(event);
           }}
         >
           <FieldGroup className="gap-3">
@@ -251,6 +256,7 @@ function AccessForms({
                 v={signIn}
               />
             )}
+            {recovering ? null : signInCheck.field}
             {recovery.field}
             <Button
               type="submit"
@@ -279,7 +285,9 @@ function AccessForms({
           action={formAction}
           {...signUp.form}
           onSubmit={(event) => {
-            if (signUp.check(event)) registration.submit(event);
+            if (!signUp.check(event)) return;
+            signUpCheck.submit(event);
+            registration.submit(event);
           }}
         >
           <FieldGroup>
@@ -322,13 +330,16 @@ function ResetPassword({ token }: { token: string }) {
   const formAction = useAccessAction();
   const t = copy.access;
   const v = useFieldErrors(t.validation);
+  const passwordCheck = usePasswordCheck((input) => v.reject(input, t.leakedPassword));
   return (
     <form
       method="post"
       action={formAction}
       className="grid gap-4"
       {...v.form}
-      onSubmit={(event) => void v.check(event)}
+      onSubmit={(event) => {
+        if (v.check(event)) passwordCheck.submit(event);
+      }}
     >
       <h1 className="text-xl font-semibold">{t.passwordResetTitle}</h1>
       <input type="hidden" name="token" value={token} />

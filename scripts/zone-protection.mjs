@@ -10,7 +10,13 @@
  * - una regola di rate limiting sulle raffiche verso gli endpoint di accesso, prima del binding
  *   Rate Limiting del Worker e dei contatori D1;
  * - DMARC Management, con l'indirizzo `rua` di Cloudflare aggiunto al record esistente, e
- *   Certificate Transparency Monitoring verso l'indirizzo dell'owner.
+ *   Certificate Transparency Monitoring verso l'indirizzo dell'owner;
+ * - il rilevamento delle credenziali trapelate. L'header `Exposed-Credential-Check` verso il
+ *   Worker è un managed transform che la CLI non gestisce, attivato una volta dall'API
+ *   (`add_waf_credential_check_status_header`): il readback lo prova con una password nota.
+ *
+ * Il readback controlla anche che la zona lasci passare i crawler AI, ammessi dai Content
+ * Signals del robots.txt servito dall'app.
  *
  * Le regole dell'ambiente si riconoscono dal `ref`: `apply` sostituisce soltanto quelle e lascia
  * le altre della fase. Il readback controlla configurazione, impostazioni conservate (DNSSEC,
@@ -332,6 +338,14 @@ export function checkReadback(target, state) {
     ],
     ["Bot Fight Mode spento", state.botManagement?.fight_mode === false],
     [
+      "crawler AI ammessi",
+      state.botManagement?.ai_bots_protection === "disabled" &&
+        state.botManagement?.crawler_protection === "disabled" &&
+        state.botManagement?.is_robots_txt_managed === false,
+    ],
+    ["rilevamento delle credenziali trapelate", state.leakedCredentials?.enabled === true],
+    ["password nota segnalata al Worker", responses.passwordCheck?.leaked === true],
+    [
       "alert dei certificati",
       state.ctAlerting?.enabled === true &&
         Array.isArray(state.ctAlerting.emails) &&
@@ -362,6 +376,11 @@ export function checkReadback(target, state) {
     [
       "asset con header",
       responses.asset?.status === 200 && securedHeaders(target, responses.asset),
+    ],
+    [
+      "asset con hash in cache per un anno",
+      responses.hashedAsset?.status === 200 &&
+        header(responses.hashedAsset, "cache-control") === "public, max-age=31536000, immutable",
     ],
     [
       "pagina assente con header",
@@ -467,6 +486,7 @@ function apply(target) {
   const rules = validate(target);
   for (const phase of phases) writeRules(phase, rules[phase]);
   applyMail();
+  cf(["leaked-credential-checks", "update", "--enabled", "true", "--force", "-q"]);
 }
 
 function remove(target) {
@@ -497,10 +517,29 @@ async function burst(target) {
   return { first: statuses[0], limited: statuses.at(-1) === 429, requests: statuses.length };
 }
 
+/** Primo script della build citato dalla home: il nome contiene l'hash del contenuto. */
+async function hashedAsset(origin) {
+  const page = await (await fetch(`${origin}/`)).text();
+  const asset = /\/assets\/[^"]+\.js/u.exec(page)?.[0];
+  return asset ? request(`${origin}${asset}`) : null;
+}
+
+/** Esito del controllo delle password trapelate per una password presente nelle violazioni. */
+async function passwordCheck(origin) {
+  const response = await fetch(`${origin}/api/v1/password-check`, {
+    method: "POST",
+    headers: { origin, "content-type": "application/json" },
+    body: JSON.stringify({ username: "fiscalbay", password: "password123" }),
+  });
+  return response.ok ? await response.json() : { status: response.status };
+}
+
 async function readResponses(target, withBurst) {
   const [host] = target.hosts;
   const responses = {
     page: await request(`${target.origin}/`),
+    hashedAsset: await hashedAsset(target.origin),
+    passwordCheck: await passwordCheck(target.origin),
     asset: await request(`${target.origin}/favicon.ico`),
     missing: await request(`${target.origin}/pagina-inesistente-zona`),
     probe: await request(`${target.origin}/.env`),
@@ -529,6 +568,7 @@ async function readState(target, withBurst) {
       security_header: setting("security_header"),
     },
     botManagement: optional(["bot-management", "get"]),
+    leakedCredentials: optional(["leaked-credential-checks", "get"]),
     ctAlerting: optional(["ssl", "ct-alerting", "get"]),
     dmarcReports: optional(["email-auth", "dmarc-reports", "get"]),
     dns: optional(["dns", "records", "list"]) ?? [],

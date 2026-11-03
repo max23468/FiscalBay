@@ -286,6 +286,9 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
           }),
           make("/robots.txt", "public", { endpoint: true, remote: true }),
           make("/sitemap.xml", "public", { endpoint: true, remote: true }),
+          make("/llms.txt", "public", { endpoint: true, remote: true }),
+          // Riceve soltanto la password da controllare prima dell'invio dei moduli d'accesso.
+          make("/api/v1/password-check", "auth", { endpoint: true, status: 405 }),
           // Riceve soltanto i report del browser: una lettura risponde senza contenuto.
           make("/api/v1/page-timing", "public", { endpoint: true, status: 405 }),
           make("/api/v1/orders/search", "orders", { endpoint: true, status: 405 }),

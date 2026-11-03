@@ -1,5 +1,7 @@
 import { env } from "cloudflare:workers";
 
+import { appCopy } from "./app-copy";
+import { faqPath, featuresPath, pricingPath, siteSecurityPath, supportPath } from "./app-links";
 import { createAuth } from "./auth.server";
 import {
   formatPrice,
@@ -13,7 +15,8 @@ import { currentFreePromotion } from "./domain/grants.server";
 import { readSession } from "./domain/sessions.server";
 import { logFailure, tracePhase } from "./errors";
 import { formatDate } from "./format";
-import { languageFromPath, type Language } from "./i18n";
+import { sitePages } from "./copy/site-pages.server";
+import { languageFromPath, languages, localizedPath, type Language } from "./i18n";
 
 /**
  * Dati comuni delle pagine pubbliche: lingua, origine per canonical e Open Graph e sessione,
@@ -63,4 +66,30 @@ export async function siteListing(language: Language) {
     freePromotion,
     promotionEnd: freePromotion?.endsAt ? formatDate(freePromotion.endsAt, language, "date") : null,
   };
+}
+
+const sectionTitles: Record<Language, string> = { it: "Pagine", en: "English pages" };
+
+/**
+ * Guida per gli assistenti AI nel formato llms.txt (llmstxt.org): cosa fa FiscalBay e le pagine
+ * della sitemap con la loro descrizione, in italiano e in inglese. Titoli e descrizioni sono
+ * gli stessi dei metadati delle pagine, così restano allineati.
+ */
+export function llms(origin: string) {
+  const intro = sitePages.it.home;
+  const sections = languages.map((language) => {
+    const pages = sitePages[language];
+    const links = [
+      [pages.home.title, "/", pages.home.description],
+      [pages.features.title, featuresPath, pages.features.description],
+      [pages.pricing.title, pricingPath, pages.pricing.description],
+      [pages.security.title, siteSecurityPath, pages.security.description],
+      [pages.faq.title, faqPath, pages.faq.description],
+      [appCopy[language].supportPage.title, supportPath, appCopy[language].supportPage.description],
+    ].map(([title, path, description]) => {
+      return `- [${title}](${origin}${localizedPath(language, path!)}): ${description}`;
+    });
+    return `## ${sectionTitles[language]}\n\n${links.join("\n")}`;
+  });
+  return `# FiscalBay\n\n> ${intro.description}\n\n${intro.body}\n\n${sections.join("\n\n")}\n`;
 }

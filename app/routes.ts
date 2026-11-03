@@ -5,6 +5,8 @@ export default [
   route("en", "routes/site.tsx", { id: "site-en" }),
   route("robots.txt", "routes/robots.ts"),
   route("sitemap.xml", "routes/sitemap.ts"),
+  route("llms.txt", "routes/llms.ts"),
+  route("api/v1/password-check", "routes/password-check.ts"),
   route("auth/error", "routes/auth-error.tsx"),
   route("en/auth/error", "routes/auth-error.tsx", { id: "auth-error-en" }),
   route("cancellazione-account", "routes/account-deletion.tsx"),
