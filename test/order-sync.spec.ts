@@ -183,21 +183,33 @@ describe("lettura periodica e richieste manuali", () => {
       await cronTurn(env, early, minutes(60));
       expect(notificationCalls(early)).toEqual([]);
 
-      // Il giorno dopo la sottoscrizione riesce e non si ripete più per questo consenso.
+      // Il giorno dopo la sottoscrizione riesce e non si ripete per una settimana.
       created = 201;
       const later = provider();
       await cronTurn(env, later, minutes(24 * 60 + 60));
       expect(notificationCalls(later)).toHaveLength(2);
       expect(await outcome()).toMatchObject({ order_events: "subscribed" });
-      await env.DB.prepare(
-        "UPDATE ebay_store_credentials SET order_events_checked_at = '2026-01-01T00:00:00.000Z'",
-      ).run();
       await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
         .bind(minutes(3 * 24 * 60).toISOString())
         .run();
       const done = provider();
       await cronTurn(env, done, minutes(3 * 24 * 60));
       expect(notificationCalls(done)).toEqual([]);
+
+      // Dopo una settimana la sottoscrizione attiva si ricontrolla, se eBay l'ha disattivata.
+      await env.DB.prepare(
+        "UPDATE ebay_store_credentials SET order_events_checked_at = '2026-01-01T00:00:00.000Z'",
+      ).run();
+      await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+        .bind(minutes(3 * 24 * 60 + 30).toISOString())
+        .run();
+      const weekly = provider();
+      await cronTurn(env, weekly, minutes(3 * 24 * 60 + 30));
+      expect(notificationCalls(weekly)).toHaveLength(2);
+      expect(await outcome()).toEqual({
+        order_events: "subscribed",
+        order_events_checked_at: minutes(3 * 24 * 60 + 30).toISOString(),
+      });
 
       // Un nuovo consenso azzera l'esito: il ricollegamento riprova subito.
       await saveStoreCredentials(
@@ -232,6 +244,37 @@ describe("lettura periodica e richieste manuali", () => {
     } finally {
       errors.mockRestore();
     }
+  });
+
+  it("dopo tre letture consecutive con le credenziali rifiutate chiede di ricollegare il negozio", async () => {
+    const rejected = () =>
+      env.DB.prepare(
+        "SELECT rejected_at FROM ebay_store_credentials WHERE store_id = 's-a'",
+      ).first<{ rejected_at: string | null }>();
+    const refused = () =>
+      ebay({
+        fail: (url) =>
+          url.pathname === "/sell/fulfillment/v1/order"
+            ? new Response(null, { status: 401 })
+            : undefined,
+      });
+    const turn = async (fetcher: typeof fetch, minute: number) => {
+      await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+        .bind(minutes(minute).toISOString())
+        .run();
+      await cronTurn(env, fetcher, minutes(minute));
+    };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await cronTurn(env, ebay(), minutes(0));
+    await turn(refused(), 10);
+    await turn(refused(), 20);
+    // Una lettura riuscita azzera il conteggio: un rifiuto passeggero non basta.
+    await turn(ebay(), 30);
+    await turn(refused(), 40);
+    await turn(refused(), 50);
+    expect(await rejected()).toEqual({ rejected_at: null });
+    await turn(refused(), 60);
+    expect(await rejected()).toEqual({ rejected_at: minutes(60).toISOString() });
   });
 
   it("il cron legge con la cadenza Free e l'evento non attende il turno", async () => {

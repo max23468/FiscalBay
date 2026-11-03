@@ -11,6 +11,10 @@ import { activeStore, renewableConsent, writableStore } from "./store-state.serv
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
+import {
+  clearCredentialFailures,
+  countCredentialFailure,
+} from "../integrations/ebay/seller-credentials.server";
 import type { EbayEnvironment } from "../view-models";
 import {
   ebayConfiguration,
@@ -395,6 +399,7 @@ async function serveStore(
       if (result === "busy")
         // Stryker disable next-line StringLiteral: lo scopo conta soltanto nel confronto con «origin».
         return { delaySeconds: 60, scope: "store" };
+      await clearCredentialFailures(env.DB, store.store_id, store.granted_at);
       // Con il consenso appena usato, una volta per consenso: gli ordini nuovi arrivano anche
       // come evento, fuori dalla cadenza del piano.
       await ensureOrderEvents(env, store, access, now);
@@ -405,6 +410,8 @@ async function serveStore(
       );
     } catch (error) {
       logFailure({ error, operation: "order_acquisition" });
+      if (error instanceof UpstreamError && error.failure === "credentials")
+        await countCredentialFailure(env.DB, store.store_id, store.granted_at, now);
       if (error instanceof UpstreamError && error.failure === "rate_limited")
         return {
           delaySeconds: Math.min(
