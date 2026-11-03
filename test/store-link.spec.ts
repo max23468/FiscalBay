@@ -713,7 +713,7 @@ describe("collegamento negozio eBay", () => {
     const codeVerifier = new URLSearchParams(requests[0]!.body).get("code_verifier");
     const fulfillmentList = (field: string) => ({
       url: expect.stringContaining(
-        `https://api.ebay.com/sell/fulfillment/v1/order?limit=25&filter=${field}%3A%5B`,
+        `https://api.ebay.com/sell/fulfillment/v1/order?limit=200&filter=${field}%3A%5B`,
       ),
       method: "GET",
       headers: { authorization: "Bearer token-sintetico" },

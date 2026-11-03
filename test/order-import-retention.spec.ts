@@ -369,6 +369,7 @@ it.each(["scadenza", "cancellazione"])(
           last_modified_time: "2026-09-10T11:00:00.000Z",
           detail_attempts: 0,
           marketplace_id: null,
+          creation_time: now,
         },
       ),
     ).toBe(true);
@@ -405,6 +406,7 @@ it("un errore arrivato dopo la scadenza non riapre il retry del dettaglio", asyn
         last_modified_time: "2026-09-10T11:00:00.000Z",
         detail_attempts: 0,
         marketplace_id: null,
+        creation_time: now,
       },
     ),
   ).toBe(true);

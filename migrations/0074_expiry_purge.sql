@@ -2,7 +2,7 @@
 -- dell'utente, di eBay e dello scollegamento. La pulizia giornaliera inserisce una riga in questa
 -- tabella e la rimuove nello stesso batch: nessun'altra transazione la vede, e il trigger non
 -- registra le chiavi degli ordini che quel batch elimina.
-CREATE TABLE order_expiry_purges (at TEXT NOT NULL);
+CREATE TABLE order_expiry_purges (at TEXT PRIMARY KEY);
 
 DROP TRIGGER order_deletion_marker;
 CREATE TRIGGER order_deletion_marker BEFORE DELETE ON orders

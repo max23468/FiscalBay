@@ -888,7 +888,11 @@ describe("lettura periodica e richieste manuali", () => {
 
   describe("smistamento del cron", () => {
     const sendBatch = vi.fn<Queue["sendBatch"]>();
-    const cron = { ...env, WORK_QUEUE: { send, sendBatch } } as unknown as Env;
+    const cron = {
+      ...env,
+      WORK_QUEUE: { send, sendBatch },
+      INGRESS_QUEUE: { send },
+    } as unknown as Env;
 
     beforeEach(async () => {
       sendBatch.mockReset();
