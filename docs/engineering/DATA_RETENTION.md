@@ -41,8 +41,8 @@ cambiata nell'ultima settimana, e per quelli che perderebbero entro un giorno un
 ordine ancora dentro la finestra della copertura; le visite coprono gli altri. Il
 ritorno a Premium toglie le pause e riporta all'intera finestra della copertura il
 termine degli ordini ancora conservati, anche durante i trenta giorni transitori;
-quelli già eliminati non tornano, perché i marker ne impediscono il reimport anche
-dallo storico più ampio importato dopo l'attivazione. La Sandbox eBay, disponibile
+quelli già eliminati per scadenza tornano con lo storico più ampio importato dopo
+l'attivazione, perché la scadenza non ne blocca il reimport. La Sandbox eBay, disponibile
 soltanto sul test, resta fuori dal limite.
 
 Elenco, dettaglio e conteggi leggono soltanto ordini non scaduti. I dati fiscali
@@ -52,18 +52,26 @@ di sblocco e non restituisce quota. Per gli acquisti assorbiti da un combinato,
 il termine dell'ordine corrente governa anche la cancellazione delle copie originali,
 così storico e grant seguono il definitivo.
 
-La manutenzione giornaliera esistente elimina gli ordini scaduti, normalmente entro
-24 ore dal termine fisico. Le FK cancellano articoli, snapshot buyer, identificativi,
+La manutenzione giornaliera elimina gli ordini scaduti a blocchi di 200, fino a
+10.000 per esecuzione, normalmente entro 24 ore dal termine fisico. Le FK cancellano articoli, snapshot buyer, identificativi,
 versioni, verifiche fiscali, riferimenti, anomalie e grant. La quota del ciclo resta
 consumata. Un errore lascia il compito da riprovare; non estende l'accesso.
 
-Prima della cancellazione un trigger conserva in `deleted_order_keys` soltanto
+Prima di una cancellazione voluta (dell'utente, richiesta da eBay o con
+l'eliminazione del negozio) un trigger conserva in `deleted_order_keys` soltanto
 negozio, chiavi esterne degli ordini e delle righe, tipo e istante. Non conserva
 buyer, titoli, importi o dati fiscali. Queste chiavi restano associate all'identità
 del negozio, anche dopo il ricollegamento, per impedirne il reimport con vecchi job,
-alias o nuovi ID dello stesso acquisto. La cancellazione dell'intera identità
-elimina anche i marker. La loro conservazione residua rientra nella qualifica privacy,
-separata dallo storico buyer.
+alias o nuovi ID dello stesso acquisto, e si eliminano due anni dopo la
+cancellazione, quando eBay non restituisce più l'ordine. La scadenza non lascia
+chiavi: la pulizia segna il proprio batch con una riga di `order_expiry_purges`,
+visibile soltanto al suo interno, e un ordine eliminato per scadenza torna se una
+finestra più ampia lo comprende. I blocchi registrati prima per scadenza si sono
+tolti dove l'origine era dimostrabile (migration `0074`): negli ultimi trenta giorni,
+lontano dall'eliminazione dei dati del negozio e da cancellazioni richieste da eBay
+in corso; i più vecchi restano fino ai due anni. La cancellazione dell'intera
+identità elimina anche i marker. La loro conservazione residua rientra nella
+qualifica privacy, separata dallo storico buyer.
 
 `Scollega ed elimina negozio` prevale sulla grace e registra inoltre
 `orders_deleted_through`: nessun acquisto creato prima o all'istante di eliminazione

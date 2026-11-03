@@ -224,21 +224,27 @@ describe("finestra dello storico secondo la copertura", () => {
     expect(Object.keys(await terms())).toHaveLength(60);
   });
 
-  it("un ordine eliminato alla scadenza del Free non torna con la copertura", async () => {
+  it("un ordine eliminato alla scadenza del Free torna con la copertura", async () => {
     const kept = dated("12-eliminato", linked - 20 * day);
     await acquire(ebay({ orders: [kept] }), iso(linked));
     expect(Object.keys(await terms())).toEqual(["12-eliminato"]);
     const expired = linked + 11 * day;
     await purgeExpiredRecords(env.DB, new Date(expired));
     expect(await terms()).toEqual({});
+    // La scadenza non è una cancellazione voluta: nessun blocco del reimport.
+    expect(
+      await count(
+        "SELECT COUNT(*) AS total FROM deleted_order_keys WHERE external_key LIKE '12-eliminato%'",
+      ),
+    ).toBe(0);
 
-    // Con la prova eBay lo restituisce fra i modificati: il marker ne impedisce il reimport.
+    // Con la prova eBay lo restituisce fra i modificati e torna con il termine di un anno.
     await coverage(expired, expired + 14 * day);
     const replay = ebay({
       orders: [{ ...kept, lastModifiedDate: iso(expired + 60_000) }],
     });
     expect(await acquire(replay, iso(expired + 30 * 60_000))).toBe("complete");
-    expect(await terms()).toEqual({});
+    expect(await terms()).toEqual({ "12-eliminato": iso(months(linked - 20 * day, 12)) });
   });
 
   it("l'estensione concessa vale con la copertura, fino a due anni, e la revoca riporta l'anno", async () => {
