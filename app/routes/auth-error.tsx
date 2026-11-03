@@ -22,6 +22,7 @@ function messageFor(
   if (error === "delete_link") return t.deletionLink;
   if (error === "delete_failed") return t.deletionFailed;
   if (error === "account_deletion_in_progress") return t.deletionInProgress;
+  if (error === "verification_session") return t.verificationSession;
   if (error === "account_already_linked_to_different_user")
     return {
       title: t.alreadyLinked.title,

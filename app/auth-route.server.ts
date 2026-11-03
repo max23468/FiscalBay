@@ -25,8 +25,11 @@ import { limitedHeaders, requestLimitWait } from "./request-limits.server";
 // che conservano sempre un accesso valido. L'elenco delle sessioni restituirebbe i token delle
 // altre sessioni: l'app le mostra e le chiude dal server senza esporli. La cancellazione
 // dell'account parte soltanto dalle Impostazioni, che chiedono riautenticazione e conferma.
+// La verifica della password con la sessione non serve all'app e non ha limiti per indirizzo:
+// aperta, chi ha una sessione proverebbe password senza soglia.
 const closedAuthPaths = new Set([
   "/api/auth/delete-user",
+  "/api/auth/verify-password",
   "/api/auth/get-access-token",
   "/api/auth/refresh-token",
   "/api/auth/passkey/delete-passkey",
@@ -169,15 +172,26 @@ async function addressKey(request: Request): Promise<string | null> {
 }
 
 /**
+ * Corpo di un modulo urlencoded o multipart: Better Auth ne legge le credenziali, ma l'impronta
+ * dell'indirizzo legge soltanto il JSON. Sui percorsi limitati per indirizzo non passa.
+ */
+function formBody(request: Request): boolean {
+  return /application\/x-www-form-urlencoded|multipart\/form-data/iu.test(
+    String(request.headers.get("content-type")),
+  );
+}
+
+/**
  * Applica i limiti per indirizzo, coerenti fra data center; restituisce i secondi di attesa
  * oltre il limite. Attivo sui domini HTTPS come il filtro per IP; il limite interno di Better
  * Auth resta spento (vedi auth.server.ts).
  */
-async function addressWait(request: Request, env: Env): Promise<number | null> {
+async function addressWait(request: Request, env: Env): Promise<number | "unsupported" | null> {
   if (request.method !== "POST" || !env.APP_ORIGIN.startsWith("https:")) return null;
   const path = authPath(request);
   const rule = addressLimits.find(({ paths }) => paths.test(path));
   if (!rule) return null;
+  if (formBody(request)) return "unsupported";
   const address = await addressKey(request);
   if (!address) return null;
   const now = Date.now();
@@ -238,6 +252,7 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
     enrollingUserId = session.user.id;
   }
   const wait = await addressWait(request, env);
+  if (wait === "unsupported") return new Response(null, { status: 415 });
   if (wait !== null) return tooManyAuthRequests(wait);
   let response: Response;
   try {

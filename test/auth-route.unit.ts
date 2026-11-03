@@ -137,6 +137,7 @@ describe("confine HTTP Auth", () => {
     "unlink-account",
     "list-sessions",
     "update-session",
+    "verify-password",
     "sign-up/email",
     "request-password-reset",
     "send-verification-email",
@@ -518,6 +519,25 @@ describe("limiti dei tentativi", () => {
     }
     expect((await send("/sign-in/email", longest)).status).toBe(429);
   });
+
+  it.each(["Application/X-WWW-Form-Urlencoded", "multipart/form-data; boundary=x"])(
+    "rifiuta le credenziali in un modulo %s, che il limite per indirizzo non leggerebbe",
+    async (type) => {
+      const response = await handle("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "198.51.100.1", "content-type": type },
+        body: "email=vittima%40example.invalid&password=tentativo",
+      });
+      expect(response.status).toBe(415);
+      expect(services.handler).not.toHaveBeenCalled();
+      const json = await handle("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "198.51.100.2", "content-type": "application/json" },
+        body: JSON.stringify({ email: "vittima@example.invalid", password: "tentativo" }),
+      });
+      expect(json.status).toBe(202);
+    },
+  );
 
   it("le pagine trasmettono l'attesa dell'action oltre a no-store", () => {
     expect(pageHeaders({ actionHeaders: new Headers(limitedHeaders(60)) })).toEqual({

@@ -985,6 +985,10 @@ export const en: AppCopy = {
       title: "Deletion in progress",
       body: "You confirmed the deletion of this account: signing in is no longer possible. We will email you when the data has been erased.",
     },
+    verificationSession: {
+      title: "Sign in to confirm your email",
+      body: "This link confirms your email only when you open it where you are already signed in to the same account. Sign in with eBay or Google, then open the link again.",
+    },
   },
   accountDeletion: {
     title: "Deletion started",

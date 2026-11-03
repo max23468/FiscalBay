@@ -1006,6 +1006,10 @@ export const it = {
       title: "Cancellazione in corso",
       body: "Hai confermato la cancellazione di questo account: l’accesso non è più possibile. Ti scriviamo quando l’eliminazione dei dati è completata.",
     },
+    verificationSession: {
+      title: "Accedi per confermare l’email",
+      body: "Questo link conferma l’email solo se lo apri dove hai già effettuato l’accesso con lo stesso account. Accedi con eBay o Google e apri di nuovo il link.",
+    },
   },
   accountDeletion: {
     title: "Cancellazione avviata",
