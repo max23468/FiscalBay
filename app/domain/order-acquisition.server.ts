@@ -157,6 +157,7 @@ async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
     // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio.
     await inSequence(page.orders, (order) => record(ctx, fulfillmentObservation(order, ctx.at)));
     const read = page.total;
+    // Stryker disable next-line BlockStatement: senza il corpo il ciclo non termina e Stryker lo conta come Timeout; la prova con sessanta ordini nello stesso istante conta le pagine lette e il budget.
     while (page.next) {
       if (!spend(ctx.budget, 1, 1)) return false;
       page = await readFulfillmentOrders(ctx.access, { next: page.next });
