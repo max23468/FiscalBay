@@ -37,7 +37,7 @@ import {
   pullRequestView,
   pullRequestAction,
   checksOutcome,
-  pullRequestFiles,
+  mergeDeploys,
   cycleCommand,
   lockObject,
   assertCyclePullRequest,
@@ -331,22 +331,20 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     }
   });
 
-  it("legge soltanto i nomi dei file della PR, su tutte le pagine", () => {
+  it("decide il deploy del commit integrato con il piano della CI rispetto al precedente", () => {
     const calls = [];
-    const files = pullRequestFiles("example/project", 462, (...args) => {
-      calls.push(args);
-      return "app/root.tsx\ndocs/README.md\n";
-    });
-    assert.deepEqual(files, ["app/root.tsx", "docs/README.md"]);
-    assert.deepEqual(calls, [
-      [
-        "api",
-        "--paginate",
-        "--jq",
-        ".[].filename",
-        "repos/example/project/pulls/462/files?per_page=100",
-      ],
-    ]);
+    assert.equal(
+      mergeDeploys("abc", (base, head) => {
+        calls.push([base, head]);
+        return false;
+      }),
+      false,
+    );
+    assert.deepEqual(calls, [["abc^", "abc"]]);
+    assert.equal(
+      mergeDeploys("abc", () => true),
+      true,
+    );
   });
 
   it("esegue status in sola lettura, conserva modifiche e riconcilia una qualifica riusata", () => {

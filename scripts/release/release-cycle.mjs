@@ -21,7 +21,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { distributes, mainProcessChange, plan } from "../classify-changes.mjs";
+import { distributes, mainProcessChange, needsDeploy } from "../classify-changes.mjs";
 import {
   addedMigrations,
   assertMergedChangesVersion,
@@ -162,19 +162,6 @@ export async function enableAutoMerge(
       await wait(attempt * 5000);
     }
   }
-}
-
-/** File della PR, senza le patch: in una PR grande pesano più di un MiB. */
-export function pullRequestFiles(repository, number, run = gh) {
-  return run(
-    "api",
-    "--paginate",
-    "--jq",
-    ".[].filename",
-    `repos/${repository}/pulls/${number}/files?per_page=100`,
-  )
-    .split("\n")
-    .filter(Boolean);
 }
 
 const readPullRequest = (repository, number) =>
@@ -519,6 +506,9 @@ export function runTimings(run, jobs, now = Date.now()) {
     waitingSeconds: Math.round((elapsed - active) / 1000),
   };
 }
+
+/** Se il commit integrato di una PR richiede il deploy test, rispetto al commit precedente. */
+export const mergeDeploys = (merge, deploys = needsDeploy) => deploys(`${merge}^`, merge);
 
 export function checkCycleJobs(jobs, deployRequired) {
   if (jobs.find((job) => job.name === "Node 26")?.conclusion !== "success")
@@ -1481,8 +1471,14 @@ async function mergeOpenPullRequest(repository, number, pr) {
 
 /** Run del commit integrato, deploy test confermato e pulizia del branch della PR unita. */
 async function settleMergedPullRequest(repository, number, pr) {
-  const files = pullRequestFiles(repository, number);
-  const { jobs, deployRequired } = await settleMergeRun(pr.mergeCommit.oid, plan(files).deploy, {
+  const merge = pr.mergeCommit.oid;
+  // Lo stesso piano della CI sul commit integrato, con il contenuto dei file: un frammento di
+  // sole decisioni non distribuisce nulla e il push di `develop` non avvia il deploy test.
+  const required = await localGit(() => {
+    git("fetch", "origin", "develop");
+    return mergeDeploys(merge);
+  });
+  const { jobs, deployRequired } = await settleMergeRun(merge, required, {
     wait: (sha) =>
       waitRun(repository, "ci.yml", sha, "develop", undefined, undefined, [
         "success",
