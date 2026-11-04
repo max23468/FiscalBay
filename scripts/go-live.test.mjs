@@ -7,7 +7,6 @@ import {
   checkResources,
   checkSurface,
   exportsMaxAge,
-  ownerItems,
   plan,
   queueRetention,
   report,
@@ -421,15 +420,14 @@ describe("script di area e resoconto", () => {
     assert.equal(runStep(step, { env: { TOKEN: "t" }, spawn: () => ({ status: 0 }) }).ok, true);
   });
 
-  it("segna esiti, voci da attestare e rientra l'uscita degli script", () => {
+  it("segna esiti e rientra l'uscita degli script", () => {
     assert.equal(
       report([
         { ok: true, area: "Dati", item: "D1" },
         { ok: false, area: "Auth", item: "segreti", detail: "mancano X" },
-        { ok: null, area: "Legali", item: "DPA" },
         { ok: false, area: "eBay", item: "sottoscrizioni", output: "✓ email\n✗ destinazione" },
       ]),
-      "✓ Dati · D1\n✗ Auth · segreti (mancano X)\n○ Legali · DPA\n✗ eBay · sottoscrizioni\n    ✓ email\n    ✗ destinazione",
+      "✓ Dati · D1\n✗ Auth · segreti (mancano X)\n✗ eBay · sottoscrizioni\n    ✓ email\n    ✗ destinazione",
     );
   });
 
@@ -442,6 +440,5 @@ describe("script di area e resoconto", () => {
     assert.match(after, /consumer di fiscalbay-ingress/u);
     assert.match(after, /anteprima assente/u);
     assert.match(after, /node scripts\/zone-protection\.mjs readback --mode live/u);
-    for (const { item } of ownerItems) assert.equal(text.split(item).length, 2);
   });
 });

@@ -104,6 +104,9 @@ describe("registro delle scadenze", () => {
       // Anche i facoltativi: senza la voce la loro scadenza non aprirebbe un incidente.
       assert.ok(secrets.includes("STRIPE_SECRET_KEY"));
       assert.ok(secrets.includes("WEB_ANALYTICS_TOKEN"));
+      // Il token del bot sta nel Worker del bot; quello principale legge l'ID dell'owner.
+      assert.ok(secrets.includes("TELEGRAM_OWNER_ID"));
+      assert.ok(!secrets.includes("TELEGRAM_BOT_TOKEN"));
       assert.equal(secrets.includes("EBAY_SANDBOX_CLIENT_SECRET"), mode !== "live");
     }
   });
