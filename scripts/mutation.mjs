@@ -7,12 +7,11 @@
  *      node scripts/mutation.mjs --matrix [<file>... | <matrice JSON>]
  * `--matrix` scrive la matrice dei job per GitHub; senza file comprende tutti i moduli critici.
  * Un modulo con molti mutanti si divide in parti, eseguite in job paralleli: con
- * `MUTATION_SHARD=<parte>/<parti>` lo script prova soltanto la parte indicata. Con
- * `MUTATION_LINES=<inizio>-<fine>,...`, nelle PR, prova soltanto le righe cambiate del modulo;
- * `--lines-matrix <matrice JSON>` divide quelle righe in parti di circa cinquanta mutanti.
+ * `MUTATION_SHARD=<parte>/<parti>` lo script prova soltanto la parte indicata.
  * Stryker gira in modo incrementale: con `MUTATION_INCREMENTAL_BASE`, il report di una prova
- * precedente della stessa PR, ripete soltanto i mutanti con codice o test cambiati.
- * `--incremental-base <file>` scrive quel report dalle prove precedenti della PR, se ci sono.
+ * precedente, ripete soltanto i mutanti con codice o test cambiati.
+ * `--incremental-base <file>` scrive quel report dalle prove precedenti della PR o, senza, dal
+ * riferimento di `develop` in `MUTATION_REFERENCE`.
  */
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -148,15 +147,12 @@ export function mutationConcurrency(configured, cpu = availableParallelism(), me
 
 const accepted = new Set(["Killed", "Ignored"]);
 
-/**
- * Mutanti che fanno fallire la prova, dal report JSON di Stryker. Sulle sole righe cambiate può
- * non esserci nessun mutante: una riga di soli tipi o commenti non ha nulla da provare.
- */
-export function evaluate(report, partial = false) {
+/** Mutanti che fanno fallire la prova, dal report JSON di Stryker. */
+export function evaluate(report) {
   const mutants = Object.entries(report.files ?? {}).flatMap(([file, { mutants }]) =>
     mutants.map((mutant) => ({ file, ...mutant })),
   );
-  if (mutants.length === 0) return partial ? [] : ["nessun mutante generato"];
+  if (mutants.length === 0) return ["nessun mutante generato"];
   return mutants
     .filter(
       ({ status, statusReason }) =>
@@ -316,61 +312,6 @@ function sources() {
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
 }
 
-/** Mutanti provati in un job della mutation delle righe di una PR. */
-export const lineMutantsPerPart = 50;
-
-const parseRanges = (lines) =>
-  lines.split(",").map((range) => {
-    const [start, end] = range.split("-").map(Number);
-    return { start, end };
-  });
-const formatRanges = (ranges) => ranges.map(({ start, end }) => `${start}-${end}`).join(",");
-
-/**
- * Parti della mutation delle righe: intervalli consecutivi con al più `perPart` mutanti, e un
- * intervallo più grande diviso fra righe che nessun mutante attraversa, come le parti del
- * modulo. Stryker prova un mutante soltanto se sta per intero in un intervallo: ogni mutante
- * resta in una sola parte. Senza mutanti resta una parte, che conferma l'assenza.
- */
-export function lineParts(lines, mutants, perPart = lineMutantsPerPart) {
-  const inside = ({ start, end }) =>
-    mutants.filter((mutant) => mutant.start >= start && mutant.end <= end);
-  const pieces = parseRanges(lines).flatMap((range) => {
-    const own = inside(range);
-    if (own.length <= perPart) return [{ ...range, mutants: own.length }];
-    return shardRanges(own, Math.ceil(own.length / perPart), range.end).map((piece, index) => {
-      const bounded = { start: index === 0 ? range.start : piece.start, end: piece.end };
-      return { ...bounded, mutants: inside(bounded).length };
-    });
-  });
-  const parts = [];
-  for (const piece of pieces) {
-    const last = parts.at(-1);
-    if (last && last.mutants + piece.mutants <= perPart) {
-      last.ranges.push(piece);
-      last.mutants += piece.mutants;
-    } else parts.push({ ranges: [piece], mutants: piece.mutants });
-  }
-  return parts.map(({ ranges }) => formatRanges(ranges));
-}
-
-/** Matrice della mutation delle righe divisa in parti; una sola parte conserva il nome del job. */
-export async function lineMatrix(matrix, mutantsOf = mutantLines) {
-  const include = [];
-  for (const { target, lines } of matrix.include) {
-    if (!criticalModule(target)) throw new Error(`Modulo critico inesistente: ${target}`);
-    const parts = lineParts(lines, await mutantsOf(target));
-    parts.forEach((part, index) =>
-      include.push({
-        target,
-        lines: part,
-        part: parts.length > 1 ? `${index + 1}/${parts.length}` : "",
-      }),
-    );
-  }
-  return { include };
-}
-
 const mutantKey = ({ mutatorName, replacement, location }) =>
   `${mutatorName}|${replacement ?? ""}|${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`;
 
@@ -427,9 +368,11 @@ export const incrementalSafe = (file) =>
   /^test\/.+\.(?:spec|unit)\.ts$|\.md$|^docs\/|^changes\//u.test(file);
 
 /**
- * Base incrementale della mutation delle righe: le prove del modulo nella run precedente più
- * recente della stessa PR, dello stesso repository, se da allora sono cambiati soltanto test e
- * documenti. Il risultato vale soltanto per la PR; la campagna settimanale riparte dai sorgenti.
+ * Base incrementale della mutation della PR: le prove del modulo nella run precedente più recente
+ * della stessa PR, dello stesso repository, se da allora sono cambiati soltanto test e documenti.
+ * Senza, il riferimento di `develop` (`MUTATION_REFERENCE`), salvato dall'ultima qualifica o
+ * campagna riuscita del modulo: Stryker ripete i mutanti con codice o test cambiati da allora.
+ * Senza riferimento il modulo si prova per intero.
  */
 async function writeIncrementalBase(output) {
   const { REPOSITORY: repository, HEAD_REF: branch, GITHUB_RUN_ID: current } = process.env;
@@ -470,7 +413,7 @@ async function writeIncrementalBase(output) {
           "--repo",
           repository,
           "--pattern",
-          `mutation-lines-${run.id}-*`,
+          `mutation-pr-${run.id}-*`,
           "--dir",
           directory,
         );
@@ -486,16 +429,34 @@ async function writeIncrementalBase(output) {
       rmSync(directory, { recursive: true, force: true });
     }
   }
-  console.log(`Nessuna prova precedente di ${target} nella PR: mutation dai sorgenti.`);
+  const reference = process.env.MUTATION_REFERENCE;
+  if (reference && existsSync(reference)) {
+    copyFileSync(reference, output);
+    console.log(`Base incrementale di ${target}: riferimento di develop.`);
+  } else console.log(`Nessuna base incrementale di ${target}: mutation dell'intero modulo.`);
 }
 
-/** Porzioni di `mutate` per le righe cambiate, nel formato di Stryker. */
-export function changedRanges(target, lines) {
-  if (!/^\d+-\d+(?:,\d+-\d+)*$/u.test(lines)) throw new Error(`Righe non valide: ${lines}`);
-  return lines.split(",").map((range) => `${target}:${range}`);
+/**
+ * Moduli critici che la PR prova: quelli con il sorgente cambiato e quelli importati direttamente
+ * da un test cambiato, perché un test indebolito lascia vivo un mutante anche su righe invariate.
+ * I moduli raggiunti soltanto attraverso altri import restano al candidato e alla campagna: ogni
+ * modulo in più costa la prova iniziale dell'intera suite che lo copre.
+ */
+export function prTargets(changed, files) {
+  const present = new Set(files.map(({ path: file }) => file));
+  const targets = new Set(changed.filter((file) => criticalModule(file) && present.has(file)));
+  const tests = changed.filter(
+    (file) => /^test\/.+\.(?:spec|unit)\.ts$/u.test(file) && present.has(file),
+  );
+  if (tests.length) {
+    const graph = importGraph(files, /^(?:app|workers|test)\/.+\.tsx?$/u);
+    for (const test of tests)
+      for (const file of graph.get(test) ?? []) if (criticalModule(file)) targets.add(file);
+  }
+  return [...targets].sort();
 }
 
-async function runTarget(target, files, shard = "1/1", lines = "") {
+async function runTarget(target, files, shard = "1/1") {
   if (!criticalModule(target) || !existsSync(target))
     throw new Error(`Modulo critico inesistente: ${target}`);
   const [part, shards] = shard.split("/").map(Number);
@@ -522,9 +483,7 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
       incremental: true,
       incrementalFile,
       concurrency: mutationConcurrency(settings.concurrency),
-      mutate: lines
-        ? changedRanges(target, lines)
-        : [range ? `${target}:${range.start}-${range.end}` : target],
+      mutate: [range ? `${target}:${range.start}-${range.end}` : target],
       jsonReporter: { fileName: reportPath },
       vitest: { configFile: "vitest.mutation.config.ts" },
     }),
@@ -544,7 +503,7 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
     child.on("close", resolve);
   });
   const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, "utf8")) : undefined;
-  const failures = report ? evaluate(report, Boolean(lines)) : ["report mutation assente"];
+  const failures = report ? evaluate(report) : ["report mutation assente"];
   if (code !== 0) failures.push(`Stryker terminato con codice ${code}`);
   const counts = {};
   for (const { status } of Object.values(report?.files ?? {}).flatMap(({ mutants }) => mutants))
@@ -559,26 +518,16 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const {
     positionals: args,
-    values: { matrix: matrixMode, "lines-matrix": linesMode, "incremental-base": baseFile },
+    values: { matrix: matrixMode, "incremental-base": baseFile },
   } = parseArgs({
     allowPositionals: true,
     options: {
       matrix: { type: "boolean" },
-      "lines-matrix": { type: "string" },
       "incremental-base": { type: "string" },
     },
   });
   if (baseFile) {
     await writeIncrementalBase(baseFile);
-    process.exit(0);
-  }
-  if (linesMode) {
-    const jobs = await lineMatrix(JSON.parse(linesMode));
-    console.log(
-      `Job: ${jobs.include.map(({ target, part }) => `${target}${part ? ` ${part}` : ""}`).join(", ") || "nessuno"}.`,
-    );
-    if (process.env.GITHUB_OUTPUT)
-      appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(jobs)}\n`);
     process.exit(0);
   }
   const files = sources();
@@ -603,7 +552,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     process.exitCode = 2;
   } else {
     for (const target of args)
-      if (!(await runTarget(target, files, process.env.MUTATION_SHARD, process.env.MUTATION_LINES)))
-        process.exitCode = 1;
+      if (!(await runTarget(target, files, process.env.MUTATION_SHARD))) process.exitCode = 1;
   }
 }
