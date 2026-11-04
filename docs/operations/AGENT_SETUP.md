@@ -19,9 +19,9 @@ Claude Code lavora sul Mac con file e CLI locali, nelle sessioni cloud e nei thr
 | `pnpm verify:repo`, `pnpm verify:copy`, `pnpm test:scripts` | Regole di repository, em dash compreso, e test degli script in `scripts/**/*.test.mjs`, con casi negativi. |
 | `pnpm quality:knip`, `pnpm doctor:react` | File, dipendenze ed export inutilizzati; regole React ([qualità](RELEASE.md#qualita-del-codice-e-prestazioni)). |
 | `pnpm build` | Artefatto del runtime selezionato, nessun deploy implicito. |
-| `pnpm verify:changed`, `pnpm verify:browser`, `pnpm verify`, `pnpm verify:full` | Gate per livello scelto dal classificatore, prove browser scelte in Chromium, gate completo e gate con tutte le prove browser; le sequenze sono soltanto in `package.json` ([controlli proporzionati](RELEASE.md#controlli-proporzionati)). |
+| `pnpm verify:changed`, `pnpm verify:browser`, `pnpm verify`, `pnpm verify:full` | Gate per livello scelto dal classificatore, in locale statico con i test collegati al diff (`pnpm verify:static`, `pnpm test:related`), prove browser scelte in Chromium quando cambia ciò che il browser esegue, gate completo e gate con tutte le prove browser; le sequenze sono soltanto in `package.json` ([controlli proporzionati](RELEASE.md#controlli-proporzionati)). |
 | `pnpm benchmark`, `pnpm test:mutation <file>...` | Comandi a richiesta: misure sintetiche e mutation dei moduli critici ([mutation](RELEASE.md#mutation-test)). |
-| `pnpm release:cycle` | Cicli autorizzati di `Pubblica` e `Promuovi`, candidato, ripresa, rollback, stato delle run, metriche e controllo della base delle PR nella CI ([ciclo operativo](RELEASE.md#ciclo-operativo)). |
+| `pnpm release:cycle` | Cicli autorizzati di `Pubblica`, «Pubblica in Production» e `Promuovi`, candidato, ripresa, rollback, stato delle run, metriche e controllo della base delle PR nella CI ([ciclo operativo](RELEASE.md#ciclo-operativo)). |
 
 La tabella descrive i comandi presenti e le loro responsabilità; prove in PR/CI e ricevute, qualifiche mancanti nelle [questioni aperte](../ROADMAP.md#questioni-aperte). Node locale/CI non è il runtime Workers. Librerie opzionali non si installano per riempire un catalogo.
 

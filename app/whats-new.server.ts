@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-import changelog from "../CHANGELOG.md?raw";
+import versionedChangelog from "../CHANGELOG.md?raw";
 import { appCopy } from "./app-copy";
 import { isProduction } from "./app-links";
 import { displayTimeZone } from "./format";
@@ -9,6 +9,7 @@ import type { Language } from "./i18n";
 import {
   parseChangelog,
   releaseChangelog,
+  withChanges,
   type WhatsNewKind,
   type WhatsNewRelease,
 } from "./changelog";
@@ -26,6 +27,21 @@ export interface WhatsNewContext {
   production: boolean;
   deployedAt?: string;
 }
+
+/** Frammenti di `changes/` delle PR integrate: le loro voci entrano nella versione in cima. */
+const fragments = import.meta.glob<string>("../changes/*.md", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+
+/** Changelog versionato con le voci dei frammenti, letto alla build. */
+const changelog = withChanges(
+  versionedChangelog,
+  Object.keys(fragments)
+    .sort()
+    .map((file) => fragments[file]),
+);
 
 /** Novità del changelog versionato, lette alla build. */
 export const whatsNew: WhatsNewRelease[] = parseChangelog(

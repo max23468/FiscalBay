@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
 import { gh, ghJson } from "../lib/provider.mjs";
+import { fullChangelog } from "./release.mjs";
 
 const isAncestor = (ancestor, descendant) => {
   try {
@@ -66,7 +67,7 @@ async function main() {
     positionals: [version],
     values: { publish: sha },
   } = parseArgs({ allowPositionals: true, options: { publish: { type: "string" } } });
-  const notes = releaseNotes(readFileSync("CHANGELOG.md", "utf8"), version);
+  const notes = releaseNotes(fullChangelog(), version);
   mkdirSync("reports", { recursive: true });
   writeFileSync("reports/release-notes.md", `${notes}\n`);
   if (sha === undefined) return;

@@ -52,6 +52,18 @@ import {
   lotReview,
   promotionMetrics,
   candidateReadiness,
+  addedDecisions,
+  addedLineNumbers,
+  assertNotWithdrawn,
+  candidatePhases,
+  decisionRenumbering,
+  mergedCommit,
+  promotionTarget,
+  receiptPrefix,
+  remoteLockStore,
+  renumberDecisions,
+  resumeEnvironment,
+  withRemoteLock,
 } from "./release-cycle.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
@@ -892,6 +904,9 @@ describe("comandi del ciclo", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "cycle-cli-"));
     try {
       cpSync("scripts", path.join(directory, "scripts"), { recursive: true });
+      // Gli script leggono il changelog con i frammenti tramite il modulo dell'app.
+      mkdirSync(path.join(directory, "app"));
+      cpSync("app/changelog-fragments.mjs", path.join(directory, "app/changelog-fragments.mjs"));
       const git = (...args) => {
         const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
         assert.equal(result.status, 0, result.stderr);
@@ -960,7 +975,10 @@ process.stdout.write(JSON.stringify(result));`,
     assert.equal(lockObject("pr", "12"), "pr-12");
     assert.equal(lockObject("resume", "34"), "run-34");
     assert.equal(lockObject("promote", undefined), "promote");
-    for (const command of ["rc", "production", "promotion-source"])
+    // Pubblica in Production blocca la PR come il suo ciclo.
+    assert.deepEqual(cycleCommand(["production", "12"]), { command: "production", number: "12" });
+    assert.equal(lockObject("production", "12"), "pr-12");
+    for (const command of ["rc", "promotion-source"])
       assert.throws(() => cycleCommand([command]), /^Error: Uso: release:cycle/u);
   });
 
@@ -1270,5 +1288,265 @@ process.stdout.write(JSON.stringify(result));`,
     };
     assert.equal(promotionMetrics(runs, [active]).published, 1);
     assert.equal(promotionMetrics(runs, [{ ...active, completedAt: undefined }]).published, 0);
+  });
+});
+
+describe("pubblicazioni in parallelo", () => {
+  /** Blocco in memoria con la stessa interfaccia di `remoteLockStore`. */
+  const memoryStore = () => {
+    let held = null;
+    let count = 0;
+    return {
+      get held() {
+        return held;
+      },
+      read: async () => held,
+      create: async (entry) => {
+        if (held) return false;
+        held = { sha: `s${++count}`, ...entry };
+        return true;
+      },
+      remove: async (sha) => {
+        if (held?.sha === sha) held = null;
+      },
+    };
+  };
+
+  it("mette in fila i merge di cicli diversi e rilascia il blocco anche dopo un errore", async () => {
+    const store = memoryStore();
+    const order = [];
+    let release;
+    const first = withRemoteLock(
+      store,
+      () =>
+        new Promise((resolve) => {
+          order.push("primo");
+          release = resolve;
+        }),
+      { owner: "a", delay: 1 },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    const second = withRemoteLock(store, async () => order.push("secondo"), {
+      owner: "b",
+      delay: 1,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(order, ["primo"]);
+    release();
+    await Promise.all([first, second]);
+    assert.deepEqual(order, ["primo", "secondo"]);
+    assert.equal(store.held, null);
+    await assert.rejects(
+      withRemoteLock(
+        store,
+        async () => {
+          throw new Error("merge fallito");
+        },
+        { owner: "c" },
+      ),
+      /merge fallito/u,
+    );
+    assert.equal(store.held, null);
+  });
+
+  it("rimuove un blocco scaduto, riconosce il proprio e non toglie quello di un altro", async () => {
+    const store = memoryStore();
+    await store.create({ owner: "vecchio", at: "2026-11-04T07:30:00.000Z" });
+    const now = () => Date.parse("2026-11-04T09:00:00.000Z");
+    assert.equal(
+      await withRemoteLock(store, async () => "fatto", { owner: "nuovo", now }),
+      "fatto",
+    );
+    assert.equal(store.held, null);
+    // Una risposta persa dopo la creazione: il titolare ritrova il proprio blocco.
+    await store.create({ owner: "io", at: new Date(now()).toISOString() });
+    assert.equal(
+      await withRemoteLock(store, async () => "ripreso", { owner: "io", now }),
+      "ripreso",
+    );
+    // Durante il lavoro un altro ha preso il blocco scaduto: il titolare non lo toglie.
+    await withRemoteLock(
+      store,
+      async () => {
+        await store.remove(store.held.sha);
+        await store.create({ owner: "altro", at: new Date(now()).toISOString() });
+      },
+      { owner: "io", now },
+    );
+    assert.equal(store.held.owner, "altro");
+  });
+
+  it("usa un riferimento Git creato una sola volta come blocco", () => {
+    const calls = [];
+    let ref = null;
+    const run = (...args) => {
+      calls.push(args);
+      const url = args.find((arg) => arg.startsWith("repos/"));
+      const error = (status) =>
+        Object.assign(new Error(`HTTP ${status}`), { stderr: `gh: HTTP ${status}` });
+      if (args.includes("POST") && url.endsWith("/git/commits"))
+        return JSON.stringify({ sha: "c1" });
+      if (args.includes("POST") && url.endsWith("/git/refs")) {
+        if (ref) throw Object.assign(error(422), { stderr: "Reference already exists (HTTP 422)" });
+        ref = "c1";
+        return "{}";
+      }
+      if (url.endsWith("/git/ref/locks/merge")) {
+        if (!ref) throw error(404);
+        return JSON.stringify({ object: { sha: ref } });
+      }
+      if (url.endsWith("/git/ref/heads/develop")) return JSON.stringify({ object: { sha: "d1" } });
+      if (url.endsWith("/git/commits/d1")) return JSON.stringify({ tree: { sha: "t1" } });
+      if (url.endsWith("/git/commits/c1"))
+        return JSON.stringify({
+          message: JSON.stringify({ owner: "a", at: "2026-11-04T09:00:00Z" }),
+        });
+      throw new Error(`Chiamata inattesa ${args.join(" ")}`);
+    };
+    const pushes = [];
+    // La rimozione è un push con lease: riesce soltanto se il riferimento è ancora quello letto.
+    const push = (...args) => {
+      pushes.push(args);
+      if (ref !== args[0].split(":").at(-1))
+        throw Object.assign(new Error("rejected"), { stderr: "! [rejected] (stale info)" });
+      ref = null;
+      return "";
+    };
+    const store = remoteLockStore("example/project", "merge", run, push);
+    assert.equal(store.read(), null);
+    assert.equal(store.create({ owner: "a", at: "2026-11-04T09:00:00Z" }), true);
+    assert.equal(store.create({ owner: "b", at: "2026-11-04T09:00:00Z" }), false);
+    assert.deepEqual(store.read(), { sha: "c1", owner: "a", at: "2026-11-04T09:00:00Z" });
+    // Si rimuove soltanto il riferimento letto.
+    store.remove("altro");
+    assert.notEqual(store.read(), null);
+    store.remove("c1");
+    assert.equal(store.read(), null);
+    assert.ok(calls.some((args) => args.includes("ref=refs/locks/merge")));
+    assert.deepEqual(pushes.at(-1), [
+      "--force-with-lease=refs/locks/merge:c1",
+      "https://github.com/example/project.git",
+      ":refs/locks/merge",
+    ]);
+  });
+
+  it("promuove il commit certificato più recente, anche con la versione richiesta", () => {
+    const commits = [
+      { sha: "c3", tree: "t3" },
+      { sha: "c2", tree: "t2" },
+      { sha: "c1", tree: "t1" },
+    ];
+    const certified = (tree) => ["t2", "t1"].includes(tree);
+    assert.deepEqual(promotionTarget(commits, certified), { sha: "c2", later: 1, certified: true });
+    const versions = { c3: "2.0.4", c2: "2.0.3", c1: "2.0.3" };
+    assert.deepEqual(
+      promotionTarget(
+        commits,
+        () => true,
+        "2.0.3",
+        (sha) => versions[sha],
+      ),
+      { sha: "c2", later: 1, certified: true },
+    );
+    // Senza un commit certificato si promuove la testa, dopo la sua qualifica.
+    assert.deepEqual(
+      promotionTarget(commits, () => false),
+      {
+        sha: "c3",
+        later: 0,
+        certified: false,
+      },
+    );
+  });
+
+  it("promuove il commit integrato di Pubblica in Production", () => {
+    const pr = { state: "MERGED", baseRefName: "develop", mergeCommit: { oid: "m1" } };
+    assert.equal(mergedCommit(pr), "m1");
+    for (const other of [{ state: "OPEN", mergeCommit: null }, { baseRefName: "main" }])
+      assert.throws(() => mergedCommit({ ...pr, ...other }), /non integrata/u);
+  });
+
+  it("riprende il test senza aspettare Production e si ferma su una ricevuta ritirata", () => {
+    const ci = { path: ".github/workflows/ci.yml" };
+    const publish = { path: ".github/workflows/publish.yml" };
+    const candidate = { path: ".github/workflows/candidate.yml" };
+    assert.deepEqual([ci, publish, candidate].map(resumeEnvironment), [
+      "test",
+      "production",
+      "test",
+    ]);
+    assert.deepEqual([ci, publish, candidate].map(receiptPrefix), [
+      "deployed",
+      "release-receipt",
+      null,
+    ]);
+    assert.doesNotThrow(() => assertNotWithdrawn(null));
+    assert.doesNotThrow(() => assertNotWithdrawn({ rolledBack: false }));
+    assert.throws(() => assertNotWithdrawn({ rolledBack: true }), /Candidato ritirato/u);
+    const workflow = readFileSync(".github/workflows/cycle.yml", "utf8");
+    assert.match(workflow, /format\('pr-\{0\}', inputs\.object\)/u);
+    assert.match(workflow, /inputs\.environment == 'test' && format\('run-\{0\}'/u);
+  });
+
+  it("non aspetta i coordinatori di altri cicli sulla stessa testa", () => {
+    const check = (id, name, status, conclusion) => ({ id, name, status, conclusion });
+    assert.equal(
+      checksOutcome([
+        check(1, "Node 26", "completed", "success"),
+        check(2, "Coordinatore PR", "in_progress", null),
+        check(3, "Coordinatore promozione", "queued", null),
+      ]),
+      "passed",
+    );
+  });
+
+  it("misura coda, browser, mutation e minuti di runner della qualifica", () => {
+    const job = (name, start, end, conclusion = "success") => ({
+      name,
+      conclusion,
+      started_at: `2026-11-04T10:${String(start).padStart(2, "0")}:00Z`,
+      completed_at: `2026-11-04T10:${String(end).padStart(2, "0")}:00Z`,
+    });
+    assert.deepEqual(
+      candidatePhases([
+        job("Pianifica", 0, 2),
+        job("Qualifica candidato / select", 12, 13),
+        job("Qualifica candidato / browser (source, 1)", 13, 25),
+        job("Qualifica candidato / browser (source, 2)", 14, 24),
+        job("Qualifica candidato / Mutation / Select modules", 13, 14),
+        job("Qualifica candidato / Mutation / app/auth.server.ts 1/2", 14, 40),
+        job("Qualifica candidato / Mutation / app/auth.server.ts 2/2", 15, 30),
+        job("Qualifica candidato / production", 0, 0, "skipped"),
+      ]),
+      { queueSeconds: 600, browserSeconds: 720, mutationSeconds: 1560, runnerMinutes: 67 },
+    );
+    assert.deepEqual(candidatePhases([job("Pianifica", 0, 2)]), {
+      queueSeconds: null,
+      browserSeconds: null,
+      mutationSeconds: null,
+      runnerMinutes: 2,
+    });
+  });
+
+  it("rinumera le decisioni nuove già prese sulla base da un'altra PR", () => {
+    const diff =
+      "+| D295 | Ambito | Sintesi |\n+| D296 | a | b |\n-| D010 | x | y |\n+| D010 | x | Superato |\n+testo D295\n";
+    // Una riga esistente modificata non è una decisione nuova.
+    assert.deepEqual(addedDecisions(diff, ["D010"]), ["D295", "D296"]);
+    assert.deepEqual(addedDecisions(diff), ["D295", "D296", "D010"]);
+    const mapping = decisionRenumbering(["D295", "D296"], ["D294", "D295"]);
+    assert.deepEqual(mapping, { D295: "D297" });
+    assert.deepEqual(decisionRenumbering(["D296"], ["D294", "D295"]), {});
+    assert.equal(
+      renumberDecisions("[D295](x) e D2950, D295.", mapping),
+      "[D297](x) e D2950, D297.",
+    );
+    // Soltanto nelle righe aggiunte dalla PR: le altre citano la D295 dell'altra PR.
+    const lines = addedLineNumbers("@@ -1,0 +2,1 @@\n+nuova D295\n@@ -5 +6,2 @@\n-x\n+a\n+b\n");
+    assert.deepEqual([...lines], [2, 6, 7]);
+    assert.equal(
+      renumberDecisions("D295 altrui\nnuova D295\nD295", mapping, new Set([2])),
+      "D295 altrui\nnuova D297\nD295",
+    );
   });
 });

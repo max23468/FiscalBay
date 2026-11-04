@@ -54,7 +54,7 @@ jobs:
       browsers: ${{ steps.detect.outputs.browsers }}
       matrix: ${{ steps.detect.outputs.matrix }}
       browser-matrix: ${{ steps.browser-plan.outputs.browser-matrix }}
-      mutation-lines: ${{ steps.detect.outputs.mutation-lines }}
+      mutation-lines: ${{ steps.lines.outputs.matrix || steps.detect.outputs.mutation-lines }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
@@ -139,6 +139,15 @@ jobs:
         run: |
           PR_BODY="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.body // ""')" \
             node scripts/release/release.mjs review --base "${BASE_SHA}"
+
+      # Le righe cambiate dei moduli critici, senza i blocchi spostati, si dividono in parti di
+      # circa cinquanta mutanti: `Node 26` aspetta la parte più lenta, non l'intero modulo.
+      - name: Split changed-line mutation
+        id: lines
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && steps.detect.outputs.mutation-lines != '{"include":[]}'
+        env:
+          LINES: ${{ steps.detect.outputs.mutation-lines }}
+        run: node scripts/mutation.mjs --lines-matrix "${LINES}"
 
       # Una nuova sezione in cima al changelog sale di un solo passo dall'ultima versione pubblicata.
       - name: Check version step
@@ -284,15 +293,16 @@ jobs:
           retention-days: 7
 
   # Righe cambiate dei moduli critici: un mutante sopravvissuto si corregge nella PR, non alla
-  # qualifica del candidato. Il modulo intero resta alla qualifica e alla campagna settimanale.
+  # qualifica del candidato, che riusa questa prova per lo stesso contenuto. Il modulo intero resta
+  # alla campagna settimanale.
   mutation-lines:
-    name: Mutation ${{ matrix.target }}
+    name: Mutation ${{ matrix.target }}${{ matrix.part && format(' {0}', matrix.part) || '' }}
     needs: verify
     if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.verify.outputs.mutation-lines != '{"include":[]}'
     runs-on: ubuntu-26.04
-    # Come la mutation della qualifica: le righe cambiate stanno in una sola parte, e uno
-    # spostamento di codice in un modulo critico può superare la mezz'ora.
-    timeout-minutes: 60
+    # Una parte prova al più circa cinquanta mutanti, dopo la prova iniziale della suite che può
+    # durare fino a venti minuti.
+    timeout-minutes: 45
     concurrency:
       group: mutation-lines-${{ github.event.pull_request.number }}-${{ strategy.job-index }}
       cancel-in-progress: true
@@ -311,8 +321,30 @@ jobs:
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
 
+      # Una prova precedente della stessa PR fa ripetere soltanto i mutanti con codice o test
+      # cambiati; senza, Stryker parte dai sorgenti.
+      - name: Restore incremental base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/mutation.mjs --incremental-base "${RUNNER_TEMP}/mutation-base.json"
+
       - name: Check changed lines
+        env:
+          MUTATION_INCREMENTAL_BASE: ${{ runner.temp }}/mutation-base.json
         run: pnpm test:mutation "${MUTATION_TARGET}"
+
+      - name: Preserve incremental report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-lines-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
+          path: reports/mutation/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
