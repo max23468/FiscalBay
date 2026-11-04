@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import routes from "../app/routes.ts";
+import { localizedPath } from "../app/i18n.ts";
 import { pageCases } from "../e2e/page-cases.ts";
 import { fileURLToPath } from "node:url";
 import { readFileSync } from "node:fs";
@@ -20,7 +21,7 @@ export function missingSections(sections, cases) {
   const paths = new Set(cases.map(({ path }) => path));
   return sections
     .flatMap((section) =>
-      ["", "/en"].map((prefix) => `${prefix}/anteprima/impostazioni/${section}`),
+      ["it", "en"].map((language) => localizedPath(language, `/anteprima/impostazioni/${section}`)),
     )
     .filter((path) => !paths.has(path));
 }

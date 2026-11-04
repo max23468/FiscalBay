@@ -25,7 +25,7 @@ import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
 import { appCopy, loadCopy, pageTitle } from "./app-copy";
 import { appBase, previewBase } from "./app-links";
-import { languageFromPath, localizedPath } from "./i18n";
+import { canonicalPath, languageFromPath, localizedPath } from "./i18n";
 import { revalidateUnlessSnapshot } from "./orders/order-list";
 import { defaultDisplay, matchedShell } from "./preferences";
 import "./app.css";
@@ -34,6 +34,7 @@ export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
   { rel: "icon", href: "/favicon.ico", sizes: "any" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+  { rel: "manifest", href: "/site.webmanifest" },
 ];
 
 // Facoltativo: dichiararlo con `bindings.secret()` lo renderebbe obbligatorio in ogni ambiente.
@@ -79,6 +80,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#0e3372" />
         <Meta />
         <Links />
       </head>
@@ -93,10 +95,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
-  const preview = new RegExp(`^(/en)?${previewBase}(/|$)`, "u").test(pathname);
+  const page = canonicalPath(pathname);
+  const preview = new RegExp(`^${previewBase}(/|$)`, "u").test(page);
   const revalidator = useRevalidator();
   useEffect(() => {
-    if (!/^\/(en\/)?(app(?:\/|$)|accesso$)/u.test(pathname)) return;
+    if (!/^\/(app(?:\/|$)|accesso$)/u.test(page)) return;
     let refreshing = false;
     const refresh = () => {
       if (document.visibilityState !== "visible" || refreshing) return;
@@ -111,7 +114,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [pathname, revalidator]);
+  }, [page, revalidator]);
   return (
     <LinksProvider value={{ language: loaderData.language, base: preview ? previewBase : appBase }}>
       <Outlet />

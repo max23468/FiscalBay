@@ -9,7 +9,7 @@ import {
   searched,
   setScenario,
 } from "./components";
-import { expect, test, watchNetwork } from "./fixtures";
+import { expect, test, watchNetwork, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -49,7 +49,7 @@ test.describe("area reale", () => {
           },
         });
       });
-      await page.goto(`${prefix}/app/ordini/suggestions-${language}`);
+      await page.goto(`${pagePath(prefix, "/app/ordini/suggestions-")}${language}`);
       const dialog = page.getByRole("dialog");
       await expect(
         dialog.getByText(
@@ -189,7 +189,7 @@ test.describe("area reale", () => {
           },
         });
       });
-      await open(page, `${prefix}/anteprima/ordini/ord-09`, "dati-discordanti");
+      await open(page, pagePath(prefix, "/anteprima/ordini/ord-09"), "dati-discordanti");
       const dialog = page.getByRole("dialog");
       const copy = dialog.getByRole("button", {
         name: it ? "Copia dati di fatturazione" : "Copy billing details",
@@ -233,7 +233,7 @@ test.describe("area reale", () => {
         dialog.getByRole("status").filter({ hasText: it ? /Copia non riuscita/ : /Copy failed/ }),
       ).toBeVisible();
 
-      await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
+      await open(page, pagePath(prefix, "/anteprima/ordini/ord-03"), "dati-discordanti");
       await expect(
         dialog.getByText(it ? "Mascherato da eBay" : "Masked by eBay", { exact: true }),
       ).toHaveCount(5);
@@ -245,7 +245,7 @@ test.describe("area reale", () => {
       ).toHaveCount(0);
       await expect(dialog.locator('a[href^="tel:"], a[href^="mailto:"]')).toHaveCount(0);
 
-      await open(page, `${prefix}/anteprima/ordini/ord-02`, "dati-discordanti");
+      await open(page, pagePath(prefix, "/anteprima/ordini/ord-02"), "dati-discordanti");
       await expect(
         dialog.getByRole("definition").filter({ hasText: /^Maria Rossi$/u }),
       ).toBeVisible();
@@ -277,7 +277,7 @@ test.describe("area reale", () => {
     test(`anteprima: suggerimento e messaggio coerenti con gli ordini reali ${language}`, async ({
       page,
     }) => {
-      await open(page, `${prefix}/anteprima/ordini/ord-05`, "dati-discordanti");
+      await open(page, pagePath(prefix, "/anteprima/ordini/ord-05"), "dati-discordanti");
       const dialog = page.getByRole("dialog");
       await expect(
         dialog.getByText(
@@ -307,7 +307,7 @@ test.describe("area reale", () => {
       baseURL,
     }) => {
       await useLocalAccount(context, "member", baseURL!);
-      await page.goto(`${prefix}/app/ordini`);
+      await page.goto(pagePath(prefix, "/app/ordini"));
       // Come nel collaudo remoto: nel Free i negozi oltre a quello attivo sono in pausa per il
       // piano e non avvisano del consenso.
       await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
@@ -405,7 +405,7 @@ test.describe("area reale", () => {
             reducedMotion: "reduce",
           });
           // Il dialogo dello sblocco si apre solo dopo l'idratazione: un clic anticipato va perso.
-          await open(page, `${prefix}/app/ordini`);
+          await open(page, pagePath(prefix, "/app/ordini"));
           const card = (suffix = "") =>
             page.getByRole("article", {
               name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,
@@ -468,7 +468,7 @@ test.describe("area reale", () => {
           });
           // Lo sblocco chiude la selezione; resta disponibile per esportare.
           await expect(select).toBeEnabled();
-          await page.goto(`${prefix}/app/impostazioni/piano`);
+          await page.goto(pagePath(prefix, "/app/impostazioni/piano"));
           const confirmation = page.getByRole("switch", {
             name: it
               ? "Chiedi conferma prima di sbloccare un ordine"
@@ -499,7 +499,7 @@ test.describe("area reale", () => {
       const secret = `VALORE-SINTETICO-${language}`;
       await useLocalAccount(context, "member", baseURL!, id);
       // La selezione e il clic su Esporta richiedono la pagina idratata.
-      await open(page, `${prefix}/app/ordini`);
+      await open(page, pagePath(prefix, "/app/ordini"));
       await page.getByRole("button", { name: it ? "Seleziona" : "Select", exact: true }).click();
       for (const suffix of ["", "-2"])
         await page
@@ -507,7 +507,11 @@ test.describe("area reale", () => {
           .getByRole("checkbox")
           .check();
       await page.getByRole("button", { name: it ? "Esporta" : "Export", exact: true }).click();
-      await expect(page).toHaveURL(/\/app\/impostazioni\/esportazione\?.*ordini=/u);
+      await expect(page).toHaveURL(
+        it
+          ? /\/app\/impostazioni\/esportazione\?.*ordini=/u
+          : /\/app\/settings\/export\?.*ordini=/u,
+      );
       const status = page
         .getByRole("region", { name: it ? "Ordini da esportare" : "Orders to export" })
         .getByRole("status");
@@ -574,7 +578,7 @@ test.describe("area reale", () => {
     }) => {
       const id = `xlsx-${language}-${browserName}`;
       await useLocalAccount(context, "member", baseURL!, id);
-      await open(page, `${prefix}/app/impostazioni/esportazione`);
+      await open(page, pagePath(prefix, "/app/impostazioni/esportazione"));
       const section = page.getByRole("region", {
         name: it ? "Ordini da esportare" : "Orders to export",
       });
@@ -639,7 +643,7 @@ test.describe("area reale", () => {
     }) => {
       const id = `xlsx-${language}-${browserName}`;
       await useLocalAccount(context, "member", baseURL!, id);
-      await open(page, `${prefix}/app/impostazioni/esportazione`);
+      await open(page, pagePath(prefix, "/app/impostazioni/esportazione"));
       const section = page.getByRole("region", {
         name: it ? "Ordini da esportare" : "Orders to export",
       });
@@ -670,7 +674,7 @@ test.describe("area reale", () => {
         timeout: 20_000,
       });
       // Una nuova apertura riparte dalla forma standard; la configurazione si ritrova per nome.
-      await open(page, `${prefix}/app/impostazioni/esportazione`);
+      await open(page, pagePath(prefix, "/app/impostazioni/esportazione"));
       await expect(section.getByRole("radio", { name: "XLSX" })).not.toBeChecked();
       const configuration = section.getByRole("combobox", {
         name: it ? "Configurazione" : "Configuration",
@@ -713,7 +717,7 @@ test.describe("area reale", () => {
       const id = `lost-${language}-${browserName}`;
       const secret = `VALORE-SINTETICO-${language}`;
       await useLocalAccount(context, "member", baseURL!, id);
-      await open(page, `${prefix}/app/ordini`);
+      await open(page, pagePath(prefix, "/app/ordini"));
       const card = (suffix = "") =>
         page.getByRole("article", {
           name: `${it ? "Ordine" : "Order"} ${id}${suffix}`,
@@ -766,7 +770,7 @@ test.describe("area reale", () => {
     test(`ordini: sblocco non riuscito senza consumo o preferenza salvata ${language}`, async ({
       page,
     }) => {
-      await open(page, `${prefix}/anteprima/ordini`, "sblocco-non-riuscito");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "sblocco-non-riuscito");
       const order = page.getByRole("article", {
         name: `${it ? "Ordine" : "Order"} 05-55555-12121`,
       });
@@ -816,7 +820,7 @@ for (const language of ["it", "en"] as const) {
       await page.emulateMedia({ reducedMotion: "reduce" });
       const prefix = language === "it" ? "" : "/en";
       const t = (it: string, en: string) => (language === "it" ? it : en);
-      await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "ordinario");
       const locked = page.getByRole("article", {
         name: t("Ordine", "Order") + " 05-55555-12121",
       });
@@ -854,7 +858,7 @@ for (const language of ["it", "en"] as const) {
         name: t("Riattiva conferma sblocco", "Restore unlock confirmation"),
       });
       await expect(restore).toBeVisible();
-      await open(page, `${prefix}/anteprima/ordini/ord-09`);
+      await open(page, pagePath(prefix, "/anteprima/ordini/ord-09"));
       await page
         .getByRole("dialog")
         .getByRole("button", { name: t("Sblocca ordine", "Unlock order") })
@@ -869,7 +873,7 @@ for (const language of ["it", "en"] as const) {
         .click();
       await restore.click();
       await expect(restore).toHaveCount(0);
-      await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "ordinario");
       const select = page.getByRole("button", { name: t("Seleziona", "Select"), exact: true });
       await select.click();
       const zero = page.getByRole("button", { name: t("Sblocca 0", "Unlock 0"), exact: true });
@@ -927,7 +931,7 @@ for (const language of ["it", "en"] as const) {
       );
       await page.keyboard.press("Escape");
       await page.setViewportSize({ width, height: 600 });
-      await open(page, `${prefix}/anteprima/ordini/ord-01`, "ordinario");
+      await open(page, pagePath(prefix, "/anteprima/ordini/ord-01"), "ordinario");
       const dialog = page.getByRole("dialog");
       await expect(dialog).toHaveCSS("outline-style", "none");
       const ebay = dialog.getByRole("link", { name: t("Apri su eBay", "Open on eBay") });
@@ -961,7 +965,7 @@ for (const language of ["it", "en"] as const) {
       await page.screenshot({ path: test.info().outputPath("dettaglio.png") });
       expect(await noPageOverflow(page)).toBe(true);
       await page.setViewportSize({ width, height: 844 });
-      await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "ordinario");
       // Riquadro ambra senza etichetta ripetuta: una sola nota sotto il codice spiega il controllo.
       const code = page.getByText("SPSNNA85T55F83", { exact: true }).locator("..");
       await expect(code).toHaveClass(/bg-warning-surface/);
@@ -970,7 +974,7 @@ for (const language of ["it", "en"] as const) {
       const card = page.getByRole("article").filter({ hasText: "SPSNNA85T55F83" });
       await expect(card.getByText(t("Codice da controllare", "Check code"))).toHaveCount(1);
       await page.screenshot({ path: test.info().outputPath("elenco.png"), fullPage: true });
-      await open(page, await searched(page, "zzzz", `${prefix}/anteprima`), "ordinario");
+      await open(page, await searched(page, "zzzz", pagePath(prefix, "/anteprima")), "ordinario");
       const clear = page.getByRole("link", {
         name: t("Cancella ricerca", "Clear search"),
         exact: true,
@@ -980,19 +984,19 @@ for (const language of ["it", "en"] as const) {
         page.getByRole("button", { name: t("Cancella ricerca", "Clear search"), exact: true }),
       ).toHaveCount(0);
       await expect(clear.locator("../..")).toHaveClass(/rounded-xl/);
-      await open(page, `${prefix}/anteprima/ordini?mostra=10`, "ordinario");
+      await open(page, `${pagePath(prefix, "/anteprima/ordini")}?mostra=10`, "ordinario");
       await expect(
         page.getByText(
           t("Hai visto tutti gli ordini disponibili.", "You have seen all available orders."),
         ),
       ).toBeVisible();
-      await open(page, `${prefix}/anteprima/ordini?periodo=7&mostra=10`, "ordinario");
+      await open(page, `${pagePath(prefix, "/anteprima/ordini")}?periodo=7&mostra=10`, "ordinario");
       await expect(
         page.getByText(
           t("Hai visto tutti gli ordini del periodo.", "You have seen all orders in this period."),
         ),
       ).toBeVisible();
-      await open(page, `${prefix}/anteprima/ordini`, "dati-discordanti");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "dati-discordanti");
       await expect(page.getByRole("article").filter({ hasText: "05-55555-12121" })).toContainText(
         t("Ordine da verificare", "Order to check"),
       );
@@ -1019,10 +1023,13 @@ for (const language of ["it", "en"] as const) {
           t("Acquirente estero (Spagna)", "Foreign buyer (Spain)"),
         ],
       ] as const) {
-        await open(page, await searched(page, query, `${prefix}/anteprima`));
+        await open(page, await searched(page, query, pagePath(prefix, "/anteprima")));
         await expect(page.getByRole("article").filter({ hasText: order })).toContainText(text);
       }
-      await open(page, await searched(page, "nessun-risultato-collaudo", `${prefix}/anteprima`));
+      await open(
+        page,
+        await searched(page, "nessun-risultato-collaudo", pagePath(prefix, "/anteprima")),
+      );
       await expect(
         page.getByRole("heading", { name: t("Nessun risultato", "No results") }),
       ).toBeVisible();
@@ -1033,14 +1040,14 @@ for (const language of ["it", "en"] as const) {
         .getByRole("link", { name: t("Cancella ricerca", "Clear search"), exact: true })
         .click();
       await expect(page.getByRole("article").first()).toBeVisible();
-      await open(page, `${prefix}/anteprima/ordini/ord-03`, "dati-discordanti");
+      await open(page, pagePath(prefix, "/anteprima/ordini/ord-03"), "dati-discordanti");
       await expect(
         page
           .getByRole("dialog")
           .getByRole("status")
           .filter({ hasText: t("Ordine da verificare", "Order to check") }),
       ).toBeVisible();
-      await open(page, `${prefix}/anteprima/ordini`, "ebay-non-disponibile");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "ebay-non-disponibile");
       await expect(page.locator("main > div > header [role=status]")).toHaveClass(/text-warning/);
       await expect(
         page.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).first(),
@@ -1056,7 +1063,7 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(page.context(), baseURL!, area);
-    await open(page, `${area.base}/ordini`);
+    await open(page, pagePath(area.base, "/ordini"));
     await page.evaluate(() => {
       let attempts = 0;
       Object.defineProperty(navigator.clipboard, "writeText", {
@@ -1090,7 +1097,7 @@ for (const locale of ["it", "en"] as const) {
     watchNetwork(context);
     const page = await context.newPage();
     try {
-      await open(page, locale === "it" ? "/anteprima/ordini" : "/en/anteprima/ordini", "premium");
+      await open(page, locale === "it" ? "/anteprima/ordini" : "/en/preview/orders", "premium");
       await page.getByRole("button", { name: locale === "it" ? /^Filtri/ : /^Filters/ }).tap();
       const select = page.getByRole("combobox", {
         name: locale === "it" ? "Negozio" : "Store",
@@ -1121,7 +1128,7 @@ for (const area of areas)
   }) => {
     await enter(page.context(), baseURL!, area);
     await page.setViewportSize({ width: 667, height: 260 });
-    await open(page, `${area.base}/ordini/${area.detail}`);
+    await open(page, `${pagePath(area.base, "/ordini")}/${area.detail}`);
     const dialog = page.getByRole("dialog");
     // L'ordine reale di collaudo non ha ancora un controllo fiscale: chiude il pannello l'ultima
     // sezione, non la riga della fonte.
@@ -1136,7 +1143,9 @@ for (const area of areas)
     await close.click();
     await expect(dialog).toBeHidden();
     // L'elenco conserva la sua istantanea.
-    await expect(page).toHaveURL(new RegExp(`${area.base}/ordini\\?vista=[0-9a-z]+$`, "u"));
+    await expect(page).toHaveURL(
+      new RegExp(`${pagePath(area.base, "/ordini")}\\?vista=[0-9a-z]+$`, "u"),
+    );
   });
 
 test("messaggio per l'acquirente a larghezza piena e fonte in fondo al dettaglio", async ({
@@ -1145,7 +1154,7 @@ test("messaggio per l'acquirente a larghezza piena e fonte in fondo al dettaglio
   await page.emulateMedia({ reducedMotion: "reduce" });
   for (const language of ["it", "en"]) {
     const prefix = language === "it" ? "" : "/en";
-    await open(page, `${prefix}/anteprima/ordini/ord-05`, "ordinario");
+    await open(page, pagePath(prefix, "/anteprima/ordini/ord-05"), "ordinario");
     const dialog = page.getByRole("dialog");
     const source = dialog.getByText(language === "it" ? /^Fonte: eBay/ : /^Source: eBay/);
     const copy = dialog.getByRole("button", {
@@ -1239,7 +1248,7 @@ for (const area of areas)
         ["dark", "rgb(18, 20, 24)", "rgb(28, 31, 37)", "rgb(36, 40, 48)"],
       ] as const) {
         await page.emulateMedia({ colorScheme: scheme });
-        await open(page, `${area.base}/ordini/${area.detail}`);
+        await open(page, `${pagePath(area.base, "/ordini")}/${area.detail}`);
         await expect(page.locator("body")).toHaveCSS("background-color", background);
         await expect(page.locator("article").first()).toHaveCSS("background-color", card);
         await expect(page.getByRole("dialog")).toHaveCSS("background-color", panel);
@@ -1464,7 +1473,7 @@ test.describe("impostazioni", () => {
         await useLocalAccount(context, "member", baseURL!, `trial-${language}-${browserName}`);
         watchNetwork(context);
         // «Attiva la prova» risponde solo dopo l'idratazione: un clic anticipato va perso.
-        await open(page, `${prefix}/app/ordini`);
+        await open(page, pagePath(prefix, "/app/ordini"));
         const secret = `VALORE-SINTETICO-${language}`;
         expect(await page.content()).not.toContain(secret);
         await expect(
@@ -1493,7 +1502,7 @@ test.describe("impostazioni", () => {
         await expect(
           page.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
         ).toHaveCount(0);
-        await page.goto(`${prefix}/app/impostazioni/piano`);
+        await page.goto(pagePath(prefix, "/app/impostazioni/piano"));
         const plan = page.getByRole("region", {
           name: it ? "Piano e pagamenti" : "Plan and billing",
         });
@@ -1512,7 +1521,7 @@ test.describe("impostazioni", () => {
 test.describe("negozi e impostazioni", () => {
   for (const language of ["it", "en"] as const) {
     test(`idratazione dei tempi relativi ${language}`, async ({ browser, baseURL }) => {
-      const prefix = language === "it" ? "/anteprima" : "/en/anteprima";
+      const prefix = language === "it" ? "/anteprima" : "/en/preview";
       for (const route of ["impostazioni/aspetto", "impostazioni/supporto", "negozi", "ordini"]) {
         // Ogni caricamento diretto parte da una sessione nuova, senza richieste della pagina precedente.
         const context = await browser.newContext({
@@ -1557,7 +1566,7 @@ test.describe("negozi e impostazioni", () => {
       const prefix = language === "it" ? "" : "/en";
       const t = <Text>(it: Text, en: Text) => (language === "it" ? it : en);
       // Un solo negozio con le letture ferme: avviso con l'ultimo aggiornamento e campanella.
-      await open(page, `${prefix}/anteprima/ordini`, "negozio-scaduto");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "negozio-scaduto");
       const failed = page.getByRole("status").filter({
         hasText: t(
           "Vintage Garage Italia: aggiornamento non riuscito",
@@ -1566,17 +1575,17 @@ test.describe("negozi e impostazioni", () => {
       });
       await expect(
         failed.getByRole("link", { name: t("Apri il negozio", "Open store") }),
-      ).toHaveAttribute("href", `${prefix}/anteprima/negozi/neg-vintage`);
+      ).toHaveAttribute("href", pagePath(prefix, "/anteprima/negozi/neg-vintage"));
       await expect(page.getByRole("article").first()).toBeVisible();
       // Collegato e senza ordini: il periodo letto, senza errori inventati.
-      await open(page, `${prefix}/anteprima/ordini`, "nessun-ordine");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "nessun-ordine");
       await expect(
         page.getByRole("heading", {
           name: t("Nessun ordine negli ultimi 30 giorni", "No orders in the last 30 days"),
         }),
       ).toBeVisible();
       // Prima sincronizzazione: nessun errore, importazione in corso e primi passi.
-      await open(page, `${prefix}/anteprima/ordini`, "prima-sincronizzazione");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "prima-sincronizzazione");
       await expect(
         page.getByRole("heading", {
           name: t("Prima sincronizzazione in corso", "First sync in progress"),
@@ -1586,7 +1595,7 @@ test.describe("negozi e impostazioni", () => {
         t("Prima sincronizzazione", "First sync"),
       );
       // eBay non risponde: un solo avviso nella campanella e Riprova sospesa anche sul server.
-      await open(page, `${prefix}/anteprima/ordini`, "ebay-non-disponibile");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "ebay-non-disponibile");
       await page.getByRole("button", { name: t(/^Notifiche/u, /^Notifications/u) }).click();
       await expect(
         page
@@ -1595,7 +1604,7 @@ test.describe("negozi e impostazioni", () => {
       ).toBeVisible();
       await page.keyboard.press("Escape");
       // Primo accesso: primi passi dal punto raggiunto, senza wizard.
-      await open(page, `${prefix}/anteprima/ordini`, "primo-accesso");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "primo-accesso");
       await expect(page.locator('[aria-current="step"]')).toContainText(
         t("Negozio eBay collegato", "eBay store connected"),
       );
@@ -1603,7 +1612,7 @@ test.describe("negozi e impostazioni", () => {
       // dato e soltanto Riprova, su ogni pagina; resta la barra degli scenari.
       await setScenario(page, "servizio-non-disponibile");
       for (const section of ["ordini", "negozi", "impostazioni", "impostazioni/account"]) {
-        const response = await page.goto(`${prefix}/anteprima/${section}`);
+        const response = await page.goto(`${pagePath(prefix, "/anteprima")}/${section}`);
         expect(response?.status()).toBe(503);
         await expect(
           page.getByRole("heading", {
@@ -1612,18 +1621,18 @@ test.describe("negozi e impostazioni", () => {
           }),
         ).toBeVisible();
         await expect(page).toHaveTitle(
-          `FiscalBay | ${t("Servizio non disponibile", "Service unavailable")}`,
+          `${t("Servizio non disponibile", "Service unavailable")} | FiscalBay`,
         );
         await expect(page.getByRole("link", { name: t("Riprova", "Try again") })).toHaveAttribute(
           "href",
-          `${prefix}/anteprima/${section}`,
+          `${pagePath(prefix, "/anteprima")}/${section}`,
         );
         await expect(page.getByRole("article")).toHaveCount(0);
         await expect(page.getByRole("navigation")).toHaveCount(0);
         await expect(page.getByRole("searchbox", { includeHidden: true })).toHaveCount(0);
         await expect(page.locator("#preview-scenario")).toBeEnabled();
       }
-      await open(page, `${prefix}/anteprima/ordini`, "ordinario");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "ordinario");
       expect(errors).toEqual([]);
     });
   }

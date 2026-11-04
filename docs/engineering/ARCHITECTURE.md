@@ -39,7 +39,7 @@ Inventario read-only delle risorse condivise; nessuna migrazione di altri prodot
 | Workers Static Assets | Asset della build serviti dalla piattaforma, quelli con l'hash nel nome in cache per un anno (`public/_headers`); download privati e risposte dipendenti dalla sessione restano nel Worker |
 | DNS, TLS e Custom Domains | Zona esistente e domini canonici di [§24](../operations/OPERATIONS.md#s24); Register.it resta registrar, senza trasferimenti o nuovi domini richiesti |
 | Protezioni e report della zona | HSTS/header, WAF/rate limit edge, rilevamento delle credenziali trapelate, DMARC Management e Certificate Transparency secondo [§24](../operations/OPERATIONS.md#s24), qualificati sul test |
-| Monitor degli avvisi | Query della SQL API valutate da Cloudflare fuori dal Worker per la Production, da `scripts/alert-monitors.mjs`: cron fermo, coda dei falliti, eccezioni, spazio D1 ed email non consegnate ([incidenti](../operations/OPERATIONS.md#incidenti)) |
+| Monitor degli avvisi | Query della SQL API valutate da Cloudflare fuori dal Worker per la Production, da `scripts/alert-monitors.mjs`: cron fermo, coda dei falliti, eccezioni, spazio D1 ed email non consegnate ([incidenti](../operations/OBSERVABILITY.md#incidenti)) |
 | D1 (UE) | Unica fonte autorevole di dati applicativi, sessioni, checkpoint, ricevute, contatori per indirizzo e audit |
 | Queues e DLQ (UE) | Consegna, ritardi, retry e dead-letter di eventi e lavori ([§11](../product/ORDERS_AND_SYNC.md#s11)) |
 | Cron Triggers | Un solo trigger per ambiente che smista il lavoro periodico per `scheduledTime` ([§31](../operations/OPERATIONS.md#s31)) |

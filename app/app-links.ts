@@ -1,4 +1,5 @@
-import { localizedPath, type Language } from "./i18n";
+import { canonicalPath, localizedPath, type Language } from "./i18n";
+import { premiumOffers, type PremiumOffer } from "./catalog";
 import type { EbayEnvironment } from "./view-models";
 
 export interface AppLinks {
@@ -37,6 +38,18 @@ export const pricingPath = "/prezzi";
 export const siteSecurityPath = "/sicurezza";
 export const faqPath = "/faq";
 
+/** Guide del sito: l'elenco e gli articoli, ciascuno con il proprio indirizzo stabile. */
+export const guidesPath = "/guide";
+export const guidePaths = [
+  `${guidesPath}/trovare-codice-fiscale-ordini-ebay`,
+  `${guidesPath}/codice-fiscale-non-visibile-ordine-ebay`,
+  `${guidesPath}/chiedere-codice-fiscale-acquirente-ebay`,
+  `${guidesPath}/codice-fiscale-fattura-elettronica-ebay`,
+  `${guidesPath}/esportare-ordini-ebay-excel-csv`,
+  `${guidesPath}/partita-iva-acquirente-ebay`,
+] as const;
+export type GuidePath = (typeof guidePaths)[number];
+
 /** Documenti legali: pubblici ma `noindex` e fuori dalla sitemap (D204). */
 export const termsPath = "/termini";
 export const privacyPath = "/privacy";
@@ -59,6 +72,18 @@ export const settingsPath = `${appBase}/impostazioni`;
 
 /** Piano, fra le categorie delle Impostazioni: anche ritorno di checkout e portale Stripe. */
 export const planPath = `${settingsPath}/piano`;
+
+/**
+ * Offerta scelta in Prezzi: segue la registrazione fino alla pagina Piano, che la mette in
+ * evidenza. Non acquista nulla e un valore diverso da un'offerta si ignora.
+ */
+export const planChoiceParam = "piano";
+
+export function planChoice(value: string | null | undefined): PremiumOffer | null {
+  return (premiumOffers as readonly string[]).includes(value ?? "")
+    ? (value as PremiumOffer)
+    : null;
+}
 
 /** Notifiche, fra le categorie delle Impostazioni: collegamento e preferenze di Telegram. */
 export const notificationSettingsPath = `${settingsPath}/notifiche`;
@@ -161,10 +186,12 @@ export const sitemapPages = [
   siteSecurityPath,
   faqPath,
   supportPath,
+  guidesPath,
+  ...guidePaths,
 ] as const;
 
 /** Indicizzabile solo una pagina della sitemap servita dal dominio di produzione. */
 export function indexable(origin: string, pathname: string) {
-  const page = pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
+  const page = canonicalPath(pathname);
   return isProductionOrigin(origin) && (sitemapPages as readonly string[]).includes(page);
 }

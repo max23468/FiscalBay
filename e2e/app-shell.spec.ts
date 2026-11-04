@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, networkIdle, test, watchNetwork } from "./fixtures";
+import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { areas, clickHydrated, enter, open, searched, setScenario } from "./components";
 import { useLocalAccount } from "./local-account";
 import { whatsNew } from "./page-cases";
@@ -14,7 +14,7 @@ import { testAccount } from "./test-account";
 
 /** Navigazione principale degli Ordini, uguale nell'anteprima e nell'area reale. */
 async function expectOrdersNavigation(page: Page) {
-  await expect(page).toHaveTitle("FiscalBay | Ordini");
+  await expect(page).toHaveTitle("Ordini | FiscalBay");
   const nav = page.getByRole("navigation", { name: "Navigazione principale" });
   await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
   await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
@@ -34,7 +34,7 @@ async function openAccountFromMenu(page: Page, base: string) {
     "Esci",
   ]);
   await menu.getByRole("menuitem", { name: "Account" }).click();
-  await expect(page).toHaveURL(new RegExp(`${base}/impostazioni/account$`, "u"));
+  await expect(page).toHaveURL(new RegExp(`${pagePath(base, "/impostazioni/account")}$`, "u"));
   await expect(page.getByRole("heading", { name: "Account", level: 2 })).toBeVisible();
 }
 
@@ -49,7 +49,7 @@ async function searchFromTopBar(page: Page, base: string, query: string, suggest
   await expect(link).toBeVisible();
   await page.getByRole("link", { name: "Vedi tutti i risultati (1)" }).click();
   await expect(page).toHaveURL(
-    new RegExp(`${base}/ordini\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+    new RegExp(`${pagePath(base, "/ordini")}\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`, "u"),
   );
   expect(page.url()).not.toContain(query);
   await expect(search).toHaveValue(query);
@@ -60,21 +60,26 @@ async function searchFromTopBar(page: Page, base: string, query: string, suggest
   await search.fill(query);
   await link.click();
   await expect(page).toHaveURL(
-    new RegExp(`${base}/ordini/[^/?]+\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+    new RegExp(
+      `${pagePath(base, "/ordini")}/[^/?]+\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`,
+      "u",
+    ),
   );
   return page.getByRole("dialog");
 }
 
 /** Indirizzo inesistente, filtro sconosciuto e ricerca senza risultati restano nell'app. */
 async function expectOrdersFallbacks(page: Page, base: string, missing: string, total: string) {
-  const response = await page.goto(`${base}/ordini/${missing}`);
+  const response = await page.goto(`${pagePath(base, "/ordini")}/${missing}`);
   expect(response?.status()).toBe(404);
   await expect(page.getByRole("heading", { level: 1, name: "Ordine non trovato" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Navigazione principale" })).toBeVisible();
   await page.getByRole("link", { name: "Torna agli ordini" }).click();
-  await expect(page).toHaveURL(new RegExp(`${base}/ordini(?:[?&]vista=[0-9a-z]+)?$`, "u"));
+  await expect(page).toHaveURL(
+    new RegExp(`${pagePath(base, "/ordini")}(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+  );
 
-  await open(page, `${base}/ordini?pagamento=sconosciuto`);
+  await open(page, `${pagePath(base, "/ordini")}?pagamento=sconosciuto`);
   await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");
   await expect(page.getByText(total)).toBeVisible();
 
@@ -125,13 +130,16 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(context, baseURL!, area);
-    await open(page, `${area.base}/ordini?fiscale=available`);
+    await open(page, `${pagePath(area.base, "/ordini")}?fiscale=available`);
     const list = page.getByRole("region", { name: "Elenco ordini" });
     const first = list.getByRole("article").first();
     const buyer = (await first.getByRole("heading", { level: 2 }).textContent()) ?? "";
     await first.getByRole("link", { name: "Dettaglio" }).click();
     await expect(page).toHaveURL(
-      new RegExp(`${area.base}/ordini/[^/?]+\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+      new RegExp(
+        `${pagePath(area.base, "/ordini")}/[^/?]+\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`,
+        "u",
+      ),
     );
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText(buyer);
@@ -142,7 +150,10 @@ for (const area of areas)
     await page.goBack();
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(
-      new RegExp(`${area.base}/ordini\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+      new RegExp(
+        `${pagePath(area.base, "/ordini")}\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`,
+        "u",
+      ),
     );
     const entries = await page.evaluate(() => history.length);
     const details = first.getByRole("link", { name: "Dettaglio" });
@@ -177,7 +188,7 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(context, baseURL!, area);
-    await open(page, `${area.base}/ordini`);
+    await open(page, pagePath(area.base, "/ordini"));
     const list = page.getByRole("region", { name: "Elenco ordini" });
     const period = page.getByRole("combobox", { name: "Periodo" });
     let release = await holdData(page);
@@ -205,7 +216,7 @@ for (const area of areas)
       .poll(async () => (await nav.locator("li[aria-hidden]").boundingBox())?.x)
       .toBeCloseTo(link!.x + 12, 0);
     release();
-    await expect(page).toHaveTitle("FiscalBay | Negozi eBay");
+    await expect(page).toHaveTitle("Negozi eBay | FiscalBay");
     await expect(stores).toHaveAttribute("aria-current", "page");
   });
 
@@ -216,11 +227,11 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(context, baseURL!, area);
-    await open(page, `${area.base}/ordini`);
+    await open(page, pagePath(area.base, "/ordini"));
     await page.getByRole("button", { name: "Account" }).click();
     await page.getByRole("menu").getByRole("menuitem", { name: "Visita fiscalbay.it" }).click();
     await expect(page).toHaveURL(/\/$/u);
-    await expect(page).toHaveTitle("FiscalBay | Recupera il Codice Fiscale dagli ordini eBay");
+    await expect(page).toHaveTitle("Recupera il Codice Fiscale dagli ordini eBay | FiscalBay");
     const bar = page.getByRole("banner");
     if (area.base !== "/app") {
       // L'anteprima non ha una sessione: il sito propone l'accesso.
@@ -269,7 +280,7 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(context, baseURL!, area);
-    await open(page, `${area.base}/ordini?fiscale=locked`);
+    await open(page, `${pagePath(area.base, "/ordini")}?fiscale=locked`);
     await page.getByRole("button", { name: "Seleziona" }).click();
     const checkbox = page.getByRole("checkbox", { name: `Seleziona l’ordine ${area.locked}` });
     await checkbox.click();
@@ -295,7 +306,7 @@ for (const area of areas)
   }) => {
     await enter(context, baseURL!, area);
     await page.setViewportSize({ width: 375, height: 740 });
-    await open(page, `${area.base}/ordini`);
+    await open(page, pagePath(area.base, "/ordini"));
     await page.getByRole("article").first().getByRole("link", { name: "Dettaglio" }).click();
     // Si attende la fine dell'ingresso, che trasla il pannello.
     await expect
@@ -438,11 +449,11 @@ for (const language of ["it", "en"] as const) {
         });
         watchNetwork(context);
         const page = await context.newPage();
-        const base = language === "it" ? "/anteprima" : "/en/anteprima";
+        const base = language === "it" ? "/anteprima" : "/en/preview";
         const reset = (scenario: string) => setScenario(page, scenario, base);
         try {
           await reset("ordinario");
-          await open(page, `${base}/ordini?fiscale=locked`);
+          await open(page, `${pagePath(base, "/ordini")}?fiscale=locked`);
           await expect(page.getByText(/Europe\/Rome/)).toContainText(
             language === "it"
               ? "Simulazione fissata al 27 set 2026, 15:00"
@@ -469,11 +480,11 @@ for (const language of ["it", "en"] as const) {
           expect((await unlocked).status()).toBe(200);
           await page.goto(await searched(page, "Conti", base));
           await expect(page.getByText("04567890126")).toBeVisible();
-          await open(page, `${base}/impostazioni/piano`);
+          await open(page, pagePath(base, "/impostazioni/piano"));
           await expect(
             page.getByText(language === "it" ? "4 di 5" : "4 of 5", { exact: true }),
           ).toBeVisible();
-          await open(page, `${base}/impostazioni/supporto`);
+          await open(page, pagePath(base, "/impostazioni/supporto"));
           const diagnostic = page.getByText(
             language === "it" ? "Free, 4 di 5 ordini sbloccati" : "Free, 4 of 5 orders unlocked",
             { exact: true },
@@ -496,7 +507,7 @@ for (const language of ["it", "en"] as const) {
           await expect(faq).toContainText(
             language === "it" ? "Ogni ordine conta una sola volta" : "Each order counts only once",
           );
-          await open(page, `${base}/impostazioni/account`);
+          await open(page, pagePath(base, "/impostazioni/account"));
           for (const device of language === "it"
             ? ["Safari su macOS", "Safari su iPhone", "Chrome su Windows"]
             : ["Safari on macOS", "Safari on iPhone", "Chrome on Windows"]) {
@@ -505,7 +516,7 @@ for (const language of ["it", "en"] as const) {
             await expect(session).toBeVisible();
           }
           await reset("quota-esaurita");
-          await open(page, `${base}/ordini`);
+          await open(page, pagePath(base, "/ordini"));
           await expect(
             page.getByRole("button", {
               name: language === "it" ? "Sblocca ordine" : "Unlock order",
@@ -520,7 +531,7 @@ for (const language of ["it", "en"] as const) {
             ),
           ).toContainText("Partita IVA");
           await reset("caricamento");
-          await open(page, `${base}/ordini`);
+          await open(page, pagePath(base, "/ordini"));
           const grid = page.locator('[aria-busy="true"]');
           await expect(grid).toBeVisible();
           expect(
@@ -539,7 +550,7 @@ for (const language of ["it", "en"] as const) {
             }),
             contentType: "image/png",
           });
-          await page.goto(language === "it" ? "/termini" : "/en/termini");
+          await page.goto(language === "it" ? "/termini" : "/en/terms");
           await expect(
             page.getByText(
               language === "it"
@@ -671,7 +682,7 @@ for (const area of areas)
           ? { nav: "Navigazione principale", settings: "Impostazioni", notifications: "Notifiche" }
           : { nav: "Main navigation", settings: "Settings", notifications: "Notifications" };
       try {
-        await open(page, `${prefix}${area.base}/ordini`);
+        await open(page, `${pagePath(`${prefix}${area.base}`, "/ordini")}`);
         await expect(page.locator("html")).toHaveAttribute("lang", locale);
         // Anche su mobile l'anteprima dichiara che le azioni sono simulate.
         if (area.base === "/anteprima")
@@ -685,7 +696,9 @@ for (const area of areas)
           page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
         await expect.poll(noOverflow).toBe(true);
         await bottom.getByRole("link", { name: labels.settings }).tap();
-        await expect(page).toHaveURL(new RegExp(`${prefix}${area.base}/impostazioni$`, "u"));
+        await expect(page).toHaveURL(
+          new RegExp(`${pagePath(`${prefix}${area.base}`, "/impostazioni")}$`, "u"),
+        );
         const categories = page.getByRole("navigation", {
           name: locale === "it" ? "Categorie" : "Categories",
         });
@@ -708,7 +721,9 @@ for (const area of areas)
         await bottom
           .getByRole("link", { name: locale === "it" ? "Negozi eBay" : "eBay stores" })
           .tap();
-        await expect(page).toHaveURL(new RegExp(`${prefix}${area.base}/negozi$`, "u"));
+        await expect(page).toHaveURL(
+          new RegExp(`${pagePath(`${prefix}${area.base}`, "/negozi")}$`, "u"),
+        );
         await networkIdle(page);
         await expect.poll(noOverflow).toBe(true);
       } finally {
@@ -936,7 +951,7 @@ test.describe("fuso del dispositivo", () => {
   for (const area of areas)
     test(`Impostazioni con il fuso rilevato, ${area.name}`, async ({ page, context, baseURL }) => {
       await enter(context, baseURL!, area);
-      await open(page, `${area.base}/impostazioni/aspetto`);
+      await open(page, pagePath(area.base, "/impostazioni/aspetto"));
       await expect(page.getByRole("combobox", { name: "Fuso orario" })).toContainText(
         "Automatico: Roma (Italia)",
       );

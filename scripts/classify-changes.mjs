@@ -69,7 +69,7 @@ const tooling = [
   /^\.codex\//u,
   /^\.mcp\.json$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|stripe-account|telegram-bot|metrics-query|log-archive|zone-protection|alert-monitors|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|metrics-query|log-archive|zone-protection|alert-monitors|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -261,7 +261,7 @@ export const moduleAreas = [
     ["auth"],
   ],
   [
-    /^app\/(?:copy\/(?:site-pages|legal-documents)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|site-meta\.ts|contact\.ts)$/u,
+    /^app\/(?:copy\/(?:site-pages|legal-documents|guides)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|page-cache\.server\.ts|site-meta\.ts|contact\.ts)$/u,
     ["public"],
   ],
   [/^app\/components\/language-switch\.tsx$/u, ["auth", "public"]],
@@ -294,7 +294,8 @@ function routeAreas(route) {
   if (/settings|whats-new/u.test(route)) areas.push("settings");
   if (/profile/u.test(route)) areas.push("profile");
   if (/security|admin|auth|sign-in/u.test(route)) areas.push("auth");
-  if (/legal|site|robots|support|faq|features|pricing|sitemap/u.test(route)) areas.push("public");
+  if (/legal|site|robots|support|faq|features|pricing|sitemap|guide/u.test(route))
+    areas.push("public");
   return areas.length ? areas : undefined;
 }
 
@@ -398,8 +399,8 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     : targeted && !specs.length && !core && product.every((file) => serverOnly.test(file))
       ? "chromium"
       : "chromium,webkit";
-  // Soltanto il candidato esegue la mutation completa: moduli critici modificati e loro
-  // consumatori critici. Le PR provano le righe cambiate dei moduli critici che toccano.
+  // Soltanto il candidato esegue la mutation: moduli critici modificati e loro consumatori
+  // critici. Le PR non la eseguono (D293); la campagna settimanale prova tutti i moduli.
   const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);
   const mutationInputs =
     files.some((file) =>
@@ -421,7 +422,6 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     browsers,
     matrix,
     mutation,
-    changedCritical: complete ? [] : files.filter(critical),
     qualify: deploy || qualificationChange(files),
   };
 }
@@ -498,14 +498,6 @@ export function needsDeploy(base, head) {
 export function distributes(base, head) {
   const files = committedChanges(base, head);
   return files.length > 0 && plan(files, [], false, committedVersions(files, base, head)).deploy;
-}
-
-/** Righe nuove di ogni blocco, dall'intestazione di `git diff -U0`: `12-14`. */
-export function changedLines(diff) {
-  return [...diff.matchAll(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/gmu)].flatMap(([, start, count]) => {
-    const length = count === undefined ? 1 : Number(count);
-    return length ? [`${start}-${Number(start) + length - 1}`] : [];
-  });
 }
 
 /**
@@ -612,18 +604,12 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
 
   if (green) console.log(`Confronto con l'ultimo verde locale ${green.slice(0, 12)}.`);
   for (const file of files) console.log(`${fileLevel(file, changes[file])}: ${file}`);
-  const criticalLines = committed
-    ? result.changedCritical.flatMap((file) => {
-        const lines = changedLines(git("diff", "-U0", option("base"), option("head"), "--", file));
-        return lines.length ? [{ target: file, lines: lines.join(",") }] : [];
-      })
-    : [];
   const summary = `Gate ${result.gate} (\`pnpm ${result.script}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;
   console.log(summary);
   if (args["github-output"] && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\nqualify=${result.qualify}\ndistributes=${committed && distributes(option("base"), option("head"))}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmatrix=${result.matrix}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\nmutation-lines=${JSON.stringify({ include: criticalLines })}\n`,
+      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\nqualify=${result.qualify}\ndistributes=${committed && distributes(option("base"), option("head"))}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmatrix=${result.matrix}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
     );
   if (process.env.GITHUB_STEP_SUMMARY && !args.run)
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Piano dei controlli\n\n${summary}\n`);

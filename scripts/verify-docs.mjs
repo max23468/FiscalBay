@@ -33,6 +33,8 @@ const { assets, json: jsonOutput } = options;
 const COMPLETED_TASK_WORDS = 150;
 // Le sigle delle milestone concluse restano come provenienza soltanto nel registro e in archivio.
 const DECISION_REGISTER = "docs/decisions/DECISION_REGISTER.md";
+// Decisioni superate per intero: archiviate, ma ancora citabili da quelle che le superano.
+const SUPERSEDED_DECISIONS = "docs/archive/superseded-decisions.md";
 const MILESTONE_CODE = /\bM\d{1,2}(?:-\d{2})?\b|\bG-[A-Z]{3,}\b/;
 const errors = [],
   stats = {};
@@ -202,7 +204,12 @@ function main() {
       }
     }
   const decisionIds = [];
-  for (const text of documents.values())
+  const superseded = path.join(root, SUPERSEDED_DECISIONS);
+  const registers = [
+    ...documents.values(),
+    ...(fs.existsSync(superseded) ? [fs.readFileSync(superseded, "utf8")] : []),
+  ];
+  for (const text of registers)
     for (const m of text.matchAll(/^\|\s*(D\d+)\s*\|/gm)) decisionIds.push(m[1]);
   const decisions = duplicateIds(decisionIds, "DECISION_DUPLICATE");
   stats.decisions = decisions.size;

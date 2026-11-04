@@ -1,7 +1,7 @@
 name: Mutation
 
 # Campagna settimanale su `develop` e avvio manuale; la qualifica del candidato la richiama per i
-# moduli critici del diff cumulativo. Le PR provano soltanto le righe cambiate, nella CI.
+# moduli critici del diff cumulativo. Le PR non eseguono la mutation.
 on:
   # Pianificazione e avvio manuale leggono il workflow dal branch predefinito, `develop`.
   schedule:

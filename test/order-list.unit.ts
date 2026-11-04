@@ -110,8 +110,8 @@ describe("menu dell'avatar", () => {
 describe("sezione dell'area", () => {
   it("è la parte dopo app o anteprima, in entrambe le lingue", () => {
     expect(areaSection("/app/ordini/o-1")).toBe("ordini");
-    expect(areaSection("/en/app/impostazioni/sicurezza")).toBe("impostazioni");
-    expect(areaSection("/en/anteprima/negozi")).toBe("negozi");
+    expect(areaSection("/en/app/settings/sicurezza")).toBe("impostazioni");
+    expect(areaSection("/en/preview/stores")).toBe("negozi");
     expect(areaSection("/app/profilo")).toBe("profilo");
     expect(areaSection("/accesso")).toBe("");
   });

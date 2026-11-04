@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { noPageOverflow, open } from "./components";
-import { expect, networkIdle, test, watchNetwork } from "./fixtures";
+import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 
 test.describe("miglioramenti account e negozi", () => {
@@ -15,14 +15,14 @@ test.describe("miglioramenti account e negozi", () => {
     test(`conferma negozio: resta aperta durante la richiesta e si chiude al successo ${language}`, async ({
       page,
     }) => {
-      await open(page, `${prefix}/anteprima/negozi/neg-vintage`, "ordinario");
+      await open(page, pagePath(prefix, "/anteprima/negozi/neg-vintage"), "ordinario");
       await page.getByRole("button", { name: it ? "Scollega" : "Disconnect", exact: true }).click();
       const dialog = page.getByRole("alertdialog");
       let release!: () => void;
       const gate = new Promise<void>((resolve) => {
         release = resolve;
       });
-      await page.route("**/anteprima/negozi/*.data*", async (route) => {
+      await page.route(`**${pagePath(prefix, "/anteprima/negozi")}/*.data*`, async (route) => {
         if (route.request().method() === "POST") await gate;
         await route.continue();
       });
@@ -54,7 +54,7 @@ test.describe("impostazioni e profilo", () => {
         const prefix = language === "it" ? "" : "/en";
         await page.emulateMedia({ reducedMotion: "reduce" });
         await page.setViewportSize({ width, height: 844 });
-        await open(page, `${prefix}/anteprima/negozi`, "ordinario");
+        await open(page, pagePath(prefix, "/anteprima/negozi"), "ordinario");
         await expect(
           page.getByText(
             t(
@@ -126,7 +126,7 @@ test.describe("impostazioni e profilo", () => {
           page.getByRole("button", { name: t("Scegli annuale", "Choose annual") }).locator(".."),
         ).toHaveClass(/border-primary/);
 
-        await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "negozio-scaduto");
+        await open(page, pagePath(prefix, "/anteprima/negozi/neg-outlet"), "negozio-scaduto");
         await expect(
           panel.getByRole("button", { name: t("Reimporta storico", "Re-import history") }),
         ).toBeDisabled();
@@ -136,7 +136,7 @@ test.describe("impostazioni e profilo", () => {
         await expect(panel.locator("section[aria-labelledby=store-connection]")).toContainText(
           t("Scaduta", "Expired"),
         );
-        await open(page, `${prefix}/anteprima/negozi/neg-retro`);
+        await open(page, pagePath(prefix, "/anteprima/negozi/neg-retro"));
         await expect(panel).toContainText(
           t("Importazione dello storico non iniziata", "History import not started"),
         );
@@ -153,14 +153,14 @@ test.describe("impostazioni e profilo", () => {
         await expect(page.locator("main")).not.toContainText(
           t("finché la sincronizzazione", "until sync resumes"),
         );
-        await open(page, `${prefix}/anteprima/negozi/neg-bottega`);
+        await open(page, pagePath(prefix, "/anteprima/negozi/neg-bottega"));
         await expect(
           panel.getByRole("link", {
             name: t("Contatta l’assistenza", "Contact support"),
             exact: true,
           }),
-        ).toHaveAttribute("href", `${prefix}/anteprima/impostazioni/supporto`);
-        await open(page, `${prefix}/anteprima/negozi/neg-vintage`, "ebay-non-disponibile");
+        ).toHaveAttribute("href", pagePath(prefix, "/anteprima/impostazioni/supporto"));
+        await open(page, pagePath(prefix, "/anteprima/negozi/neg-vintage"), "ebay-non-disponibile");
         await expect(
           page.getByRole("button", {
             name: t("Collega negozio eBay", "Connect eBay store"),
@@ -196,7 +196,7 @@ test.describe("impostazioni e profilo", () => {
         await page.keyboard.press("Escape");
         await expect(remove).toBeFocused();
 
-        await open(page, `${prefix}/anteprima/negozi/neg-outlet`, "premium-a-vita");
+        await open(page, pagePath(prefix, "/anteprima/negozi/neg-outlet"), "premium-a-vita");
         await expect(panel.locator("#store-sync + ul")).toContainText(
           t("La pausa manuale", "A manual pause"),
         );
@@ -206,7 +206,7 @@ test.describe("impostazioni e profilo", () => {
         await expect(
           panel.getByRole("button", { name: t("Riprendi", "Resume"), exact: true }),
         ).toBeEnabled();
-        await open(page, `${prefix}/anteprima/negozi`, "premium");
+        await open(page, pagePath(prefix, "/anteprima/negozi"), "premium");
         if (width >= 1024) {
           const geometry = await page.getByRole("table").evaluate((table) => {
             const heads = table.querySelectorAll("th");
@@ -225,7 +225,7 @@ test.describe("impostazioni e profilo", () => {
           expect(geometry.center).toBeLessThan(1);
         }
 
-        await open(page, `${prefix}/anteprima/impostazioni/notifiche`, "premium");
+        await open(page, pagePath(prefix, "/anteprima/impostazioni/notifiche"), "premium");
         const enabled = page.getByRole("switch", {
           name: t("Invia notifiche degli ordini", "Send order notifications"),
         });
@@ -274,7 +274,7 @@ test.describe("impostazioni e profilo", () => {
         await expect(digest).toBeChecked();
         await expect(time).toBeEnabled();
 
-        await open(page, `${prefix}/anteprima/impostazioni/aspetto`);
+        await open(page, pagePath(prefix, "/anteprima/impostazioni/aspetto"));
         await expect(
           page.getByRole("combobox", { name: t("Fuso orario", "Time zone") }),
         ).toContainText(t("Automatico", "Automatic"));
@@ -303,7 +303,7 @@ test.describe("impostazioni e profilo", () => {
             page.locator('nav a[aria-current=true][href$="/impostazioni/aspetto"]'),
           ).toBeVisible();
         }
-        await open(page, `${prefix}/anteprima/impostazioni/privacy`);
+        await open(page, pagePath(prefix, "/anteprima/impostazioni/privacy"));
         await page
           .getByRole("button", { name: t("Elimina account", "Delete account"), exact: true })
           .click();
@@ -313,7 +313,7 @@ test.describe("impostazioni e profilo", () => {
           }),
         ).toBeDisabled();
         await page.keyboard.press("Escape");
-        await open(page, `${prefix}/anteprima/impostazioni/supporto`);
+        await open(page, pagePath(prefix, "/anteprima/impostazioni/supporto"));
         await expect(
           page.getByRole("textbox", { name: t("Messaggio", "Message"), exact: true }),
         ).toHaveAttribute("placeholder", /.+/);
@@ -330,7 +330,7 @@ test.describe("impostazioni e profilo", () => {
             await label.evaluate((element) => parseFloat(getComputedStyle(element).columnGap)),
           ).toBe(2);
         }
-        await open(page, `${prefix}/anteprima/impostazioni/account`);
+        await open(page, pagePath(prefix, "/anteprima/impostazioni/account"));
         await expect(
           page.getByRole("textbox", { name: t("Nome", "First name"), exact: true }),
         ).toHaveAttribute("required", "");
@@ -354,9 +354,9 @@ test.describe("ordini", () => {
       test(`negozi e contatti completi, ${locale}, ${width} px`, async ({ page }, testInfo) => {
         test.setTimeout(90_000);
         await page.emulateMedia({ reducedMotion: "reduce" });
-        const prefix = locale === "it" ? "/anteprima" : "/en/anteprima";
+        const prefix = locale === "it" ? "/anteprima" : "/en/preview";
         await page.setViewportSize({ width, height: 900 });
-        await open(page, `${prefix}/negozi`, "premium-a-vita");
+        await open(page, pagePath(prefix, "/negozi"), "premium-a-vita");
         const list =
           width < 1024
             ? page.getByRole("list", { name: locale === "it" ? "Elenco negozi" : "Store list" })
@@ -370,7 +370,7 @@ test.describe("ordini", () => {
         await expect.poll(() => noPageOverflow(page)).toBe(true);
         await page.screenshot({ path: testInfo.outputPath(`stores-${width}.png`), fullPage: true });
 
-        await open(page, `${prefix}/negozi/neg-vintage`);
+        await open(page, pagePath(prefix, "/negozi/neg-vintage"));
         const dialog = page.getByRole("dialog");
         const disconnect = dialog.getByRole("button", {
           name: locale === "it" ? "Scollega" : "Disconnect",
@@ -423,7 +423,7 @@ test.describe("ordini", () => {
         await page.keyboard.press("Escape");
         await expect(disconnect).toBeFocused();
 
-        await open(page, `${prefix}/ordini?mostra=2`, "ordinario");
+        await open(page, `${pagePath(prefix, "/ordini")}?mostra=2`, "ordinario");
         const email = page
           .getByRole("article")
           .getByText("amministrazione@galli-restauri.invalid", { exact: true });
@@ -446,13 +446,13 @@ test.describe("ordini", () => {
         await email.scrollIntoViewIfNeeded();
         await page.screenshot({ path: testInfo.outputPath(`contacts-${width}.png`) });
 
-        await open(page, `${prefix}/ordini/ord-10`);
+        await open(page, pagePath(prefix, "/ordini/ord-10"));
         await expect(
           page
             .getByRole("dialog")
             .getByText("amministrazione@galli-restauri.invalid", { exact: true }),
         ).toBeVisible();
-        await open(page, `${prefix}/ordini/ord-01`);
+        await open(page, pagePath(prefix, "/ordini/ord-01"));
         await page
           .getByRole("tab", { name: locale === "it" ? "Articoli (4)" : "Items (4)", exact: true })
           .click();
@@ -548,13 +548,17 @@ test.describe("abbonamento nel piano", () => {
         await confirm.getByRole("button", { name: it ? "Annulla" : "Cancel" }).click();
       };
       await useLocalAccount(context, "member", baseURL!, "subscription-active");
-      await page.goto(`${prefix}/app/negozi/subscription-active`);
+      await page.goto(pagePath(prefix, "/app/negozi/subscription-active"));
       await check(page);
       const preview = await browser.newContext({ baseURL });
       try {
         watchNetwork(preview);
         const previewPage = await preview.newPage();
-        await open(previewPage, `${prefix}/anteprima/negozi/neg-vintage`, "cambio-rinnovo");
+        await open(
+          previewPage,
+          pagePath(prefix, "/anteprima/negozi/neg-vintage"),
+          "cambio-rinnovo",
+        );
         await check(previewPage);
       } finally {
         await preview.unrouteAll({ behavior: "wait" });

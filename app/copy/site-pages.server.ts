@@ -82,7 +82,9 @@ const it = {
         : `Promozione Free per un periodo limitato: ${quota} ordini da sbloccare ogni 7 giorni invece di ${base}.`,
   },
   features: {
-    title: "Funzionalità",
+    title: "Funzionalità per il Codice Fiscale eBay",
+    /** Titolo della scheda e dei risultati di ricerca, con la parola chiave davanti. */
+    metaTitle: "Funzionalità per il Codice Fiscale degli ordini eBay",
     description:
       "Codice Fiscale e Partita IVA dagli ordini eBay, sincronizzazione automatica, ricerca, export CSV e XLSX, notifiche Telegram e più negozi.",
     lead: "Il Codice Fiscale dei tuoi ordini eBay a portata di mano, dal collegamento del negozio all’export.",
@@ -136,14 +138,18 @@ const it = {
   },
 
   pricing: {
-    title: "Prezzi",
+    title: "Prezzi per il Codice Fiscale eBay",
+    /** Titolo della scheda e dei risultati di ricerca, con la parola chiave davanti. */
+    metaTitle: "Prezzi per il Codice Fiscale degli ordini eBay",
     description:
       "Piano Free gratuito e Premium mensile, annuale o a vita per recuperare il Codice Fiscale dagli ordini eBay. Prova Premium di 14 giorni senza carta.",
     lead: "Inizia gratis. Passa a Premium quando ti servono più ordini, più negozi e più storico.",
     free: "Free",
     freePrice: "0 €",
-    freeItems: (quota: number) => [
-      `${quota} ordini da sbloccare ogni 7 giorni`,
+    freeItems: (quota: number | null) => [
+      quota === null
+        ? "Ordini da sbloccare ogni 7 giorni"
+        : `${quota} ordini da sbloccare ogni 7 giorni`,
       "Un negozio eBay attivo",
       "Ultimi 30 giorni di ordini",
       "Export CSV",
@@ -156,20 +162,29 @@ const it = {
       "XLSX e notifiche Telegram",
     ],
     offers: {
-      monthly: { name: "Mensile", period: "al mese", note: "Si rinnova ogni mese." },
+      monthly: {
+        name: "Mensile",
+        period: "al mese",
+        note: "Si rinnova ogni mese.",
+        choose: "Scegli il mensile",
+      },
       annual: {
         name: "Annuale",
         period: "all’anno",
         note: (months: number) => `12 mesi al prezzo di ${months}.`,
+        choose: "Scegli l’annuale",
       },
-      lifetime: { name: "A vita", period: "una tantum", note: "Pagamento unico, senza rinnovi." },
+      lifetime: {
+        name: "A vita",
+        period: "una tantum",
+        note: "Pagamento unico, senza rinnovi.",
+        choose: "Scegli a vita",
+      },
     },
     best: "Più conveniente",
     vat: "+ IVA",
     soldOut: "Esaurito",
     soldOutBody: "I posti a vita sono finiti.",
-    signUp: "Crea un account",
-    openPlan: "Apri il piano",
     trialTitle: "Prova Premium per 14 giorni",
     trialBody:
       "Senza carta e senza rinnovo automatico. La attivi quando vuoi dopo la prima lettura riuscita di un negozio; alla fine torni al Free e gli ordini sbloccati restano tali.",
@@ -178,6 +193,7 @@ const it = {
     taxNote:
       "Prezzi IVA esclusa. Stripe gestisce il pagamento e calcola le imposte del tuo paese e il totale, anche nella tua valuta, prima di pagare. Ricevute e fatture arrivano da Stripe.",
     compare: "Confronto dei piani",
+    paymentsTitle: "Domande sui pagamenti",
     feature: "Funzione",
     included: "Incluso",
     notIncluded: "Non incluso",
@@ -190,7 +206,8 @@ const it = {
       history: { label: "Storico degli ordini", free: "Ultimi 30 giorni", premium: "Un anno" },
       unlocks: {
         label: "Ordini da sbloccare",
-        free: (quota: number) => `${quota} ogni 7 giorni`,
+        free: (quota: number | null) =>
+          quota === null ? "Ogni 7 giorni" : `${quota} ogni 7 giorni`,
         premium: "Senza limite per ciclo",
       },
       browse: "Consultazione, ricerca e filtri",
@@ -202,7 +219,9 @@ const it = {
     },
   },
   security: {
-    title: "Sicurezza",
+    title: "Sicurezza dei dati eBay",
+    /** Titolo della scheda e dei risultati di ricerca, con la parola chiave davanti. */
+    metaTitle: "Sicurezza dei dati degli ordini eBay",
     description:
       "Come FiscalBay protegge l’accesso al tuo negozio eBay e i dati dei tuoi ordini: sola lettura, token cifrati e dati nell’Unione Europea.",
     lead: "FiscalBay legge i tuoi ordini e non li modifica. Ecco come proteggiamo l’accesso e i dati.",
@@ -255,7 +274,9 @@ const it = {
     report: "Hai trovato una vulnerabilità? Scrivi a",
   },
   faq: {
-    title: "Domande frequenti",
+    title: "Domande sul Codice Fiscale eBay",
+    /** Titolo della scheda e dei risultati di ricerca, con la parola chiave davanti. */
+    metaTitle: "Domande sul Codice Fiscale degli ordini eBay",
     description:
       "Risposte su FiscalBay: Codice Fiscale e Partita IVA dagli ordini eBay, piani, prova Premium, pagamenti, permessi e dati.",
     items: [
@@ -277,18 +298,22 @@ const it = {
       },
       {
         q: "Serve una carta per iniziare?",
+        payment: true,
         a: "No. Il piano Free è gratuito e la prova Premium di 14 giorni non chiede una carta.",
       },
       {
         q: "Cosa succede alla fine della prova?",
+        payment: true,
         a: "Torni al Free senza addebiti. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
       },
       {
         q: "Come si paga Premium?",
+        payment: true,
         a: "Con Stripe, che gestisce pagamento, imposte, ricevute e fatture. Disdici quando vuoi da Stripe: Premium resta attivo fino alla fine del periodo pagato.",
       },
       {
         q: "Cos’è il piano a vita?",
+        payment: true,
         a: "Premium con un pagamento unico, senza rinnovi. I posti sono venti in tutto.",
       },
       {
@@ -332,7 +357,7 @@ const en: SitePagesCopy = {
     description:
       "Get and manage the Codice Fiscale of your eBay orders, when eBay provides it, with automatic sync, export and notifications.",
     hero: "Find and manage the Codice Fiscale of your eBay orders.",
-    body: "Connect your eBay store and FiscalBay shows the buyer’s Codice Fiscale, when eBay provides it, ready to copy and export. The Partita IVA too, when there is one.",
+    body: "Connect your eBay store and FiscalBay shows the buyer’s tax code, when eBay provides it, ready to copy and export. The VAT number too, when there is one.",
     howItWorks: "How it works",
     trust: ["Official eBay APIs", "Secure payments handled by Stripe", "No card to get started"],
     steps: [
@@ -342,7 +367,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "FiscalBay reads your orders",
-        body: "It imports your recent orders, then reads new ones on its own and finds the Codice Fiscale, when eBay provides it.",
+        body: "It imports your recent orders, then reads new ones on its own and finds the tax code, when eBay provides it.",
       },
       {
         title: "Browse, copy and export",
@@ -354,13 +379,13 @@ const en: SitePagesCopy = {
       {
         shot: "scheda",
         title: "The Codice Fiscale on the order card",
-        body: "Every order shows the buyer, billing address and Codice Fiscale, when eBay provides it, ready to copy in one click. The Partita IVA too, when there is one.",
+        body: "Every order shows the buyer, billing address and tax code, when eBay provides it, ready to copy in one click. The VAT number too, when there is one.",
         premium: false,
       },
       {
         shot: "telegram",
         title: "Every new order on Telegram",
-        body: "The bot writes to you as soon as an order arrives, with the Codice Fiscale to copy straight from the message.",
+        body: "The bot writes to you as soon as an order arrives, with the tax code to copy straight from the message.",
         premium: true,
       },
       {
@@ -399,22 +424,23 @@ const en: SitePagesCopy = {
         : `Free promotion for a limited time: ${quota} orders to unlock every 7 days instead of ${base}.`,
   },
   features: {
-    title: "Features",
+    title: "Codice Fiscale features for eBay",
+    metaTitle: "Features for the Codice Fiscale on eBay orders",
     description:
       "Codice Fiscale and Partita IVA from your eBay orders, automatic sync, search, CSV and XLSX export, Telegram notifications and multiple stores.",
-    lead: "The Codice Fiscale of your eBay orders at hand, from connecting your store to exporting.",
+    lead: "The tax code of your eBay orders at hand, from connecting your store to exporting.",
     premium: "Premium",
     showcase: [
       {
         shot: "scheda",
         title: "Codice Fiscale and Partita IVA",
-        body: "FiscalBay shows the Codice Fiscale the buyer entered, when eBay provides it, and the Partita IVA when there is one. Copy it in one click, without spaces and in capitals; when it is missing, a message template helps you ask for it.",
+        body: "FiscalBay shows the tax code the buyer entered, when eBay provides it, and the VAT number when there is one. Copy it in one click, without spaces and in capitals; when it is missing, a message template helps you ask for it.",
         premium: false,
       },
       {
         shot: "ordini",
         title: "All orders in one list",
-        body: "Orders from all your stores together, with search by order, buyer, item, SKU or Codice Fiscale and filters by store, period, payment, shipping and tax identifier.",
+        body: "Orders from all your stores together, with search by order, buyer, item, SKU or tax code and filters by store, period, payment, shipping and tax identifier.",
         premium: false,
       },
       {
@@ -426,7 +452,7 @@ const en: SitePagesCopy = {
       {
         shot: "telegram",
         title: "Telegram notifications",
-        body: "Get new orders with their tax identifier on Telegram, or a digest, and copy the Codice Fiscale from the message.",
+        body: "Get new orders with their tax identifier on Telegram, or a digest, and copy the tax code from the message.",
         premium: true,
       },
       {
@@ -453,14 +479,15 @@ const en: SitePagesCopy = {
   },
 
   pricing: {
-    title: "Pricing",
+    title: "Codice Fiscale pricing for eBay",
+    metaTitle: "Pricing for the Codice Fiscale on eBay orders",
     description:
       "Free plan at no cost and Premium monthly, annual or lifetime to get the Codice Fiscale from your eBay orders. 14-day Premium trial with no card.",
     lead: "Start for free. Move to Premium when you need more orders, more stores and more history.",
     free: "Free",
     freePrice: "€0",
     freeItems: (quota) => [
-      `${quota} orders to unlock every 7 days`,
+      quota === null ? "Orders to unlock every 7 days" : `${quota} orders to unlock every 7 days`,
       "One active eBay store",
       "Last 30 days of orders",
       "CSV export",
@@ -473,20 +500,29 @@ const en: SitePagesCopy = {
       "XLSX and Telegram notifications",
     ],
     offers: {
-      monthly: { name: "Monthly", period: "per month", note: "Renews every month." },
+      monthly: {
+        name: "Monthly",
+        period: "per month",
+        note: "Renews every month.",
+        choose: "Choose monthly",
+      },
       annual: {
         name: "Annual",
         period: "per year",
         note: (months) => `12 months for the price of ${months}.`,
+        choose: "Choose annual",
       },
-      lifetime: { name: "Lifetime", period: "one-off", note: "One payment, no renewals." },
+      lifetime: {
+        name: "Lifetime",
+        period: "one-off",
+        note: "One payment, no renewals.",
+        choose: "Choose lifetime",
+      },
     },
     best: "Best value",
     vat: "+ VAT",
     soldOut: "Sold out",
     soldOutBody: "Lifetime places have run out.",
-    signUp: "Create an account",
-    openPlan: "Open your plan",
     trialTitle: "Try Premium for 14 days",
     trialBody:
       "No card and no automatic renewal. Start it whenever you like after a store’s first successful read; at the end you go back to Free and unlocked orders stay unlocked.",
@@ -495,6 +531,7 @@ const en: SitePagesCopy = {
     taxNote:
       "Prices exclude VAT. Stripe handles payment and works out your country’s taxes and the total, in your currency too, before you pay. Receipts and invoices come from Stripe.",
     compare: "Compare plans",
+    paymentsTitle: "Questions about payments",
     feature: "Feature",
     included: "Included",
     notIncluded: "Not included",
@@ -507,7 +544,7 @@ const en: SitePagesCopy = {
       history: { label: "Order history", free: "Last 30 days", premium: "One year" },
       unlocks: {
         label: "Orders to unlock",
-        free: (quota) => `${quota} every 7 days`,
+        free: (quota) => (quota === null ? "Every 7 days" : `${quota} every 7 days`),
         premium: "Unlimited per cycle",
       },
       browse: "Browsing, search and filters",
@@ -519,7 +556,8 @@ const en: SitePagesCopy = {
     },
   },
   security: {
-    title: "Security",
+    title: "Security of your eBay data",
+    metaTitle: "Security of your eBay order data",
     description:
       "How FiscalBay protects access to your eBay store and your order data: read-only access, encrypted tokens and data in the European Union.",
     lead: "FiscalBay reads your orders and never changes them. Here is how we protect access and data.",
@@ -550,7 +588,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "Who sees your data",
-        body: "Each account only sees its own stores and orders: every page, search and export checks permissions and plan again on the server. A search by Codice Fiscale never ends up in the page address. Exported files can only be downloaded from your account and expire within 24 hours.",
+        body: "Each account only sees its own stores and orders: every page, search and export checks permissions and plan again on the server. A search by tax code never ends up in the page address. Exported files can only be downloaded from your account and expire within 24 hours.",
       },
       {
         title: "How long we keep data",
@@ -572,13 +610,14 @@ const en: SitePagesCopy = {
     report: "Found a vulnerability? Write to",
   },
   faq: {
-    title: "Frequently asked questions",
+    title: "Codice Fiscale questions for eBay",
+    metaTitle: "Questions about the Codice Fiscale on eBay orders",
     description:
       "Answers about FiscalBay: Codice Fiscale and Partita IVA from eBay orders, plans, the Premium trial, payments, permissions and data.",
     items: [
       {
         q: "What is FiscalBay?",
-        a: "A web service that reads your eBay orders and shows you the buyer’s Codice Fiscale, when eBay provides it, ready to copy and export.",
+        a: "A web service that reads your eBay orders and shows you the buyer’s tax code, when eBay provides it, ready to copy and export.",
       },
       {
         q: "Does eBay always provide the Codice Fiscale?",
@@ -586,7 +625,7 @@ const en: SitePagesCopy = {
       },
       {
         q: "Does FiscalBay show the Partita IVA too?",
-        a: "Yes: when the buyer enters a Partita IVA, you find it next to the Codice Fiscale or in its place.",
+        a: "Yes: when the buyer enters a VAT number, you find it next to the tax code or in its place.",
       },
       {
         q: "Does FiscalBay issue e-invoices?",
@@ -594,18 +633,22 @@ const en: SitePagesCopy = {
       },
       {
         q: "Do I need a card to get started?",
+        payment: true,
         a: "No. The Free plan costs nothing and the 14-day Premium trial does not ask for a card.",
       },
       {
         q: "What happens when the trial ends?",
+        payment: true,
         a: "You go back to Free with no charge. Orders whose identifier arrived during the trial stay unlocked.",
       },
       {
         q: "How do I pay for Premium?",
+        payment: true,
         a: "With Stripe, which handles payment, taxes, receipts and invoices. Cancel whenever you like from Stripe: Premium stays active until the end of the paid period.",
       },
       {
         q: "What is the lifetime plan?",
+        payment: true,
         a: "Premium with a single payment and no renewals. There are twenty places in total.",
       },
       {
@@ -625,10 +668,10 @@ const en: SitePagesCopy = {
     support: "Go to Support",
   },
   shots: {
-    ordini: "FiscalBay order list with filters and the buyers’ Codice Fiscale and Partita IVA",
-    scheda: "eBay order card with buyer, address and the Codice Fiscale to copy",
-    esportazione: "Order file exported from FiscalBay with Codice Fiscale and Partita IVA",
-    telegram: "FiscalBay Telegram bot message for a new order with the Codice Fiscale",
+    ordini: "FiscalBay order list with filters and the buyers’ tax codes and VAT numbers",
+    scheda: "eBay order card with buyer, address and the tax code to copy",
+    esportazione: "Order file exported from FiscalBay with tax codes and VAT numbers",
+    telegram: "FiscalBay Telegram bot message for a new order with the tax code",
     negozi: "eBay stores connected to FiscalBay with status, last read and imported orders",
     sicurezza: "Sign-in methods and active sessions in FiscalBay Settings",
   },

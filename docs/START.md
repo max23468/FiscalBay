@@ -49,7 +49,7 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | [Glossario](../GLOSSARY.md)                       | Linguaggio vincolante del prodotto                                       |
 | [Prodotto](product/PRODUCT.md), [piani](product/PLANS_AND_BILLING.md), [account](product/ACCOUNTS_AND_STORES.md), [ordini](product/ORDERS_AND_SYNC.md), [canali](product/CHANNELS_AND_ADMIN.md), [esperienza](product/EXPERIENCE.md) | Requisiti del prodotto per dominio |
 | [Architettura](engineering/ARCHITECTURE.md), [sicurezza e privacy](engineering/SECURITY_AND_PRIVACY.md), [conservazione](engineering/DATA_RETENTION.md), [test](engineering/TESTING.md) | Requisiti tecnici |
-| [Operazioni](operations/OPERATIONS.md), [pubblicazione](operations/RELEASE.md) | Runbook, stato dei servizi, Git, CI e rilascio |
+| [Operazioni](operations/OPERATIONS.md) con i suoi [runbook](operations/OPERATIONS.md#runbook), [pubblicazione](operations/RELEASE.md) | Requisiti operativi, stato dei servizi, procedure, Git, CI e rilascio |
 | PR, CI e ricevute di pubblicazione            | Modifiche/verifiche dell'intervento e stato remoto osservato |
 | [Decision Register](decisions/DECISION_REGISTER.md) | Scelte sintetiche, motivazioni e alternative superate                    |
 | [Agent Setup](operations/AGENT_SETUP.md) | Strumenti, input, ambienti, custodia e responsabilità documentali        |

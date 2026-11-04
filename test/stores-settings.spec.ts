@@ -510,11 +510,11 @@ it("ricorda la lingua scelta e riapre l'area in quella lingua anche al nuovo acc
     });
   const moved = await choose("en", "/app/impostazioni/aspetto?x=1");
   expect(moved.status).toBe(303);
-  expect(moved.headers.get("location")).toBe("/en/app/impostazioni/aspetto?x=1");
+  expect(moved.headers.get("location")).toBe("/en/app/settings/appearance?x=1");
   // Le pagine dell'area aperte in italiano, anche da un nuovo accesso, seguono la scelta.
   const home = await homeFor(seller.cookie).catch((thrown: Response) => thrown);
-  expect((home as Response).headers.get("location")).toBe("/en/app/ordini");
-  expect(await settings(seller.cookie, "/en/app/impostazioni")).toMatchObject({
+  expect((home as Response).headers.get("location")).toBe("/en/app/orders");
+  expect(await settings(seller.cookie, "/en/app/settings")).toMatchObject({
     language: "en",
   });
   // Si torna soltanto a una pagina dell'area; altrimenti agli Ordini.

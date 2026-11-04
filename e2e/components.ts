@@ -1,5 +1,5 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
-import { expect, networkIdle, test } from "./fixtures";
+import { expect, networkIdle, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -16,7 +16,7 @@ import { testAccount } from "./test-account";
 export async function setScenario(page: Page, scenario: string, base = "/anteprima") {
   await page.request.post(base, {
     headers: { origin: new URL(test.info().project.use.baseURL!).origin },
-    form: { scenario, redirectTo: `${base}/ordini` },
+    form: { scenario, redirectTo: pagePath(base, "/ordini") },
     maxRedirects: 0,
   });
 }
@@ -89,7 +89,7 @@ export async function enter(
 export async function searched(page: Page, query: string, base = "/anteprima") {
   // L'area reale accetta la ricerca soltanto dalla propria origine.
   const response = await page.request.post(
-    base === "/app" ? "/api/v1/orders/search" : `${base}/ricerca`,
+    base === "/app" ? "/api/v1/orders/search" : pagePath(base, "/ricerca"),
     { form: { q: query }, headers: { origin: new URL(page.url()).origin }, maxRedirects: 0 },
   );
   expect(response.status()).toBe(303);

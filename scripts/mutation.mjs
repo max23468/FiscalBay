@@ -7,8 +7,7 @@
  *      node scripts/mutation.mjs --matrix [<file>... | <matrice JSON>]
  * `--matrix` scrive la matrice dei job per GitHub; senza file comprende tutti i moduli critici.
  * Un modulo con molti mutanti si divide in parti, eseguite in job paralleli: con
- * `MUTATION_SHARD=<parte>/<parti>` lo script prova soltanto la parte indicata. Con
- * `MUTATION_LINES=<inizio>-<fine>,...`, nelle PR, prova soltanto le righe cambiate del modulo.
+ * `MUTATION_SHARD=<parte>/<parti>` lo script prova soltanto la parte indicata.
  */
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -139,15 +138,12 @@ export function mutationConcurrency(configured, cpu = availableParallelism(), me
 
 const accepted = new Set(["Killed", "Ignored"]);
 
-/**
- * Mutanti che fanno fallire la prova, dal report JSON di Stryker. Sulle sole righe cambiate può
- * non esserci nessun mutante: una riga di soli tipi o commenti non ha nulla da provare.
- */
-export function evaluate(report, partial = false) {
+/** Mutanti che fanno fallire la prova, dal report JSON di Stryker. */
+export function evaluate(report) {
   const mutants = Object.entries(report.files ?? {}).flatMap(([file, { mutants }]) =>
     mutants.map((mutant) => ({ file, ...mutant })),
   );
-  if (mutants.length === 0) return partial ? [] : ["nessun mutante generato"];
+  if (mutants.length === 0) return ["nessun mutante generato"];
   return mutants
     .filter(
       ({ status, statusReason }) =>
@@ -307,13 +303,7 @@ function sources() {
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
 }
 
-/** Porzioni di `mutate` per le righe cambiate, nel formato di Stryker. */
-export function changedRanges(target, lines) {
-  if (!/^\d+-\d+(?:,\d+-\d+)*$/u.test(lines)) throw new Error(`Righe non valide: ${lines}`);
-  return lines.split(",").map((range) => `${target}:${range}`);
-}
-
-async function runTarget(target, files, shard = "1/1", lines = "") {
+async function runTarget(target, files, shard = "1/1") {
   if (!criticalModule(target) || !existsSync(target))
     throw new Error(`Modulo critico inesistente: ${target}`);
   const [part, shards] = shard.split("/").map(Number);
@@ -334,9 +324,7 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
     JSON.stringify({
       ...settings,
       concurrency: mutationConcurrency(settings.concurrency),
-      mutate: lines
-        ? changedRanges(target, lines)
-        : [range ? `${target}:${range.start}-${range.end}` : target],
+      mutate: [range ? `${target}:${range.start}-${range.end}` : target],
       jsonReporter: { fileName: reportPath },
       vitest: { configFile: "vitest.mutation.config.ts" },
     }),
@@ -356,7 +344,7 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
     child.on("close", resolve);
   });
   const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, "utf8")) : undefined;
-  const failures = report ? evaluate(report, Boolean(lines)) : ["report mutation assente"];
+  const failures = report ? evaluate(report) : ["report mutation assente"];
   if (code !== 0) failures.push(`Stryker terminato con codice ${code}`);
   const counts = {};
   for (const { status } of Object.values(report?.files ?? {}).flatMap(({ mutants }) => mutants))
@@ -395,7 +383,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     process.exitCode = 2;
   } else {
     for (const target of args)
-      if (!(await runTarget(target, files, process.env.MUTATION_SHARD, process.env.MUTATION_LINES)))
-        process.exitCode = 1;
+      if (!(await runTarget(target, files, process.env.MUTATION_SHARD))) process.exitCode = 1;
   }
 }

@@ -1,5 +1,5 @@
 import { noPageOverflow, open } from "./components";
-import { expect, networkIdle, test, watchNetwork } from "./fixtures";
+import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { useLocalAccount, localPassword } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -27,8 +27,8 @@ test.describe("area reale", () => {
             })
           ).ok(),
         ).toBe(true);
-        const target = `${prefix}/app/impostazioni/account#security-email`;
-        const response = await page.request.post(`${prefix}/app/impostazioni/account`, {
+        const target = `${pagePath(prefix, "/app/impostazioni/account")}#security-email`;
+        const response = await page.request.post(pagePath(prefix, "/app/impostazioni/account"), {
           headers: { origin: baseURL! },
           form: { intent: "riautentica", returnTo: target },
           maxRedirects: 0,
@@ -51,7 +51,7 @@ test.describe("area reale", () => {
         await form.getByRole("textbox", { name: "Password", exact: true }).fill(localPassword);
         await form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
         await expect(page).toHaveURL(
-          new RegExp(`${prefix}/app/impostazioni/account#security-email$`),
+          new RegExp(`${pagePath(prefix, "/app/impostazioni/account")}#security-email$`),
         );
         const token = `stale-security-${language}-${testInfo.project.name}`;
         await useLocalAccount(context, "member", baseURL!, token);
@@ -60,9 +60,9 @@ test.describe("area reale", () => {
           exact: true,
         });
         // Con un accesso di più di 24 ore nessun avviso fisso: l'esito arrivato nell'indirizzo sì.
-        await page.goto(`${prefix}/app/impostazioni/account?accesso=nuovo-accesso`);
+        await page.goto(`${pagePath(prefix, "/app/impostazioni/account")}?accesso=nuovo-accesso`);
         await expect(signInAgain).toHaveCount(1);
-        await page.goto(`${prefix}/app/impostazioni/account`);
+        await page.goto(pagePath(prefix, "/app/impostazioni/account"));
         await expect(signInAgain).toHaveCount(0);
         // La modifica resta possibile: prima chiede la conferma dell'identità sul posto.
         const change = page.getByRole("button", {
@@ -94,7 +94,9 @@ test.describe("area reale", () => {
         ).toBeVisible();
         await confirm.getByRole("button", { name: it ? "Annulla" : "Cancel", exact: true }).click();
         await expect(confirm).toHaveCount(0);
-        await expect(page).toHaveURL(new RegExp(`${prefix}/app/impostazioni/account$`));
+        await expect(page).toHaveURL(
+          new RegExp(`${pagePath(prefix, "/app/impostazioni/account")}$`),
+        );
         // Con la password giusta la conferma apre una sessione nuova e la modifica riparte da sola.
         await page
           .getByRole("button", { name: it ? "Invia il link" : "Send the link", exact: true })
@@ -312,10 +314,10 @@ for (const language of ["it", "en"] as const) {
       await page.setViewportSize({ width, height: 666 });
       await page.emulateMedia({ reducedMotion: "reduce" });
       const prefix = language === "it" ? "" : "/en";
-      await page.goto(`${prefix}/accesso`);
+      await page.goto(pagePath(prefix, "/accesso"));
       await networkIdle(page);
       await expect(page).toHaveTitle(
-        language === "it" ? "FiscalBay | Accedi" : "FiscalBay | Sign in",
+        language === "it" ? "Accedi | FiscalBay" : "Sign in | FiscalBay",
       );
       const legal = page.getByRole("navigation", {
         name: language === "it" ? "Documenti legali" : "Legal documents",
@@ -394,7 +396,7 @@ for (const language of ["it", "en"] as const) {
           .getByRole("banner")
           .getByRole("link", { name: language === "it" ? "Accedi" : "Sign in", exact: true });
         await expect(signIn).toBeVisible();
-        await expect(signIn).toHaveAttribute("href", `${prefix}/accesso`);
+        await expect(signIn).toHaveAttribute("href", pagePath(prefix, "/accesso"));
         const main = page.locator("main");
         await expect(main).toContainText("Temisfera");
         // Il contatto è `info@`, non l'assistenza clienti.
@@ -416,7 +418,7 @@ for (const language of ["it", "en"] as const) {
         await expect.poll(() => noPageOverflow(page)).toBe(true);
       }
       // La pagina d'errore dell'accesso resta una scheda vicino al logo.
-      await page.goto(`${prefix}/auth/error`);
+      await page.goto(pagePath(prefix, "/auth/error"));
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       await expect(
         page.getByRole("link", {
@@ -433,7 +435,7 @@ for (const language of ["it", "en"] as const) {
       await expect.poll(() => noPageOverflow(page)).toBe(true);
       for (const provider of ["google", "ebay", "unknown"]) {
         await page.goto(
-          `${prefix}/auth/error?error=account_already_linked_to_different_user&provider=${provider}`,
+          `${pagePath(prefix, "/auth/error")}?error=account_already_linked_to_different_user&provider=${provider}`,
         );
         const body = page.locator("main p");
         await expect(body).toContainText(
@@ -453,7 +455,7 @@ for (const language of ["it", "en"] as const) {
 
 for (const language of ["it", "en"] as const) {
   test(`esito di sicurezza con focus e nuovo accesso ${language}`, async ({ page }) => {
-    const prefix = language === "it" ? "/accesso" : "/en/accesso";
+    const prefix = language === "it" ? "/accesso" : "/en/sign-in";
     await page.goto(`${prefix}?accesso=nuovo-accesso`);
     const status = page
       .getByRole("status")
@@ -466,7 +468,7 @@ for (const language of ["it", "en"] as const) {
     await expect(button).toBeVisible();
     await expect(button.locator("..")).toHaveAttribute(
       "action",
-      language === "it" ? "/accesso" : "/en/accesso",
+      language === "it" ? "/accesso" : "/en/sign-in",
     );
     await page.goto(`${prefix}?accesso=password-link`);
     const notice = page.getByRole("status").filter({
@@ -523,7 +525,7 @@ test.describe("impostazioni", () => {
             fields: new URLSearchParams(request.postData() ?? ""),
           });
       });
-      await open(page, `${prefix}/anteprima/impostazioni/account`, "ordinario");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/account"), "ordinario");
       const removeText = it ? "Rimuovi" : "Remove";
       const cancelText = it ? "Annulla" : "Cancel";
       const methods = page.locator('section[aria-labelledby="security-methods"]');
@@ -560,13 +562,15 @@ test.describe("impostazioni", () => {
         await trigger.click();
         await dialog.getByRole("button", { name: removeText, exact: true }).click();
         await expect.poll(() => posts.length).toBe(before + 1);
-        expect(posts.at(-1)!.path).toBe(`${prefix}/anteprima/impostazioni/account`);
+        expect(posts.at(-1)!.path).toBe(pagePath(prefix, "/anteprima/impostazioni/account"));
         expect(posts.at(-1)!.fields.get("intent")).toBe(intent);
         expect(posts.at(-1)!.fields.get(field)).toBe(value);
         await expect(dialog).toHaveCount(0);
         await expect(page.getByText(notice!, { exact: true })).toBeVisible();
         // Dopo l'idratazione l'esito esce dall'indirizzo e i pulsanti rispondono di nuovo.
-        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/account$`));
+        await expect(page).toHaveURL(
+          new RegExp(`${pagePath(prefix, "/anteprima/impostazioni/account")}$`),
+        );
       }
       const before = posts.length;
       await page
@@ -609,7 +613,7 @@ test.describe("impostazioni", () => {
       // segnala come errore della pagina una richiesta annullata dalla navigazione.
       await networkIdle(page);
 
-      await open(page, `${prefix}/anteprima/impostazioni/account`);
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/account"));
       const profile = page.getByRole("region", { name: "Account", exact: true });
       const first = profile.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
       await expect(first).toHaveValue("Laura");
@@ -690,7 +694,7 @@ for (const language of ["it", "en"] as const) {
           "account_already_linked_to_different_user",
           "registration_approval_required",
         ]) {
-          await page.goto(`${prefix}/auth/error?error=${error}`);
+          await page.goto(`${pagePath(prefix, "/auth/error")}?error=${error}`);
           await expect(
             page.getByRole("link", { name: new RegExp(supportAddress) }),
           ).toHaveAttribute("href", `mailto:${supportAddress}`);
@@ -715,7 +719,7 @@ for (const language of ["it", "en"] as const) {
           }),
           contentType: "image/png",
         });
-        await page.goto(`${prefix}/accesso?negozio=altro-spazio`);
+        await page.goto(`${pagePath(prefix, "/accesso")}?negozio=altro-spazio`);
         // Anche il footer porta l'indirizzo: l'avviso è il collegamento con il suo invito.
         await expect(
           page.getByRole("link", {
@@ -724,11 +728,11 @@ for (const language of ["it", "en"] as const) {
             ),
           }),
         ).toBeVisible();
-        await page.goto(`${prefix}/accesso?token=synthetic-invalid-token`);
-        await expect(page).toHaveTitle(`FiscalBay | ${title}`);
+        await page.goto(`${pagePath(prefix, "/accesso")}?token=synthetic-invalid-token`);
+        await expect(page).toHaveTitle(`${title} | FiscalBay`);
         await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
         const form = page.locator("form");
-        await expect(form).toHaveAttribute("action", `${prefix}/accesso`);
+        await expect(form).toHaveAttribute("action", pagePath(prefix, "/accesso"));
         await expect(form.locator('input[name="token"]')).toHaveValue("synthetic-invalid-token");
         await expect(form.locator('input[name="password"]')).toHaveAttribute(
           "autocomplete",
@@ -751,7 +755,7 @@ for (const language of ["it", "en"] as const) {
         });
         await backLink.click();
         await networkIdle(page);
-        await expect(page).toHaveURL(new RegExp(`${prefix}/accesso$`));
+        await expect(page).toHaveURL(new RegExp(`${pagePath(prefix, "/accesso")}$`));
         await expect(
           page.getByRole("tab", { name: language === "it" ? "Accedi" : "Sign in", exact: true }),
         ).toBeVisible();
@@ -788,7 +792,7 @@ for (const language of ["it", "en"] as const) {
     page,
   }) => {
     const it = language === "it";
-    await page.goto(it ? "/accesso" : "/en/accesso");
+    await page.goto(it ? "/accesso" : "/en/sign-in");
     await networkIdle(page);
     const signIn = page.getByRole("tabpanel", { name: it ? "Accedi" : "Sign in", exact: true });
     await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();

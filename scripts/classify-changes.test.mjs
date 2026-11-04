@@ -14,7 +14,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
-  changedLines,
   changelogDayOnly,
   configFile,
   dependencyChange,
@@ -509,23 +508,6 @@ describe("mutation e riuso nel candidato", () => {
       "app/domain/stores.server.ts",
     ]);
     assert.deepEqual(plan(["app/tax-quality.ts"], files, true).mutation, ["app/tax-quality.ts"]);
-  });
-
-  it("indica i moduli critici modificati, non i consumatori, per la mutation della PR", () => {
-    const files = [
-      { path: "app/domain/stores.server.ts", text: "" },
-      { path: "app/auth.server.ts", text: 'import { load } from "./domain/stores.server";' },
-      { path: "app/format.ts", text: "" },
-    ];
-    assert.deepEqual(plan([files[0].path, files[2].path], files).changedCritical, [files[0].path]);
-    assert.deepEqual(plan([files[0].path], files, true).changedCritical, []);
-  });
-
-  it("ricava dal diff le righe nuove di ogni blocco", () => {
-    assert.deepEqual(changedLines("@@ -3,2 +3 @@ a\n-b\n@@ -10 +9,3 @@ c\n@@ -20,2 +21,0 @@ d\n"), [
-      "3-3",
-      "9-11",
-    ]);
   });
 });
 

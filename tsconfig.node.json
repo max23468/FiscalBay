@@ -6,6 +6,8 @@
     "playwright.config.ts",
     "e2e/**/*.ts",
     "app/changelog.ts",
+    "app/i18n.ts",
+    "app/money.ts",
     "app/web-analytics.ts",
     "scripts/local-d1.mjs",
     "scripts/third-party-notices.mjs"
@@ -13,7 +15,7 @@
   "compilerOptions": {
     "composite": true,
     "types": ["node"],
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022", "ES2023.Intl", "DOM"],
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "bundler",

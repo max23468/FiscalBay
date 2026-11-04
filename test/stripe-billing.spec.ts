@@ -1172,7 +1172,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     vi.setSystemTime(at(now));
     expect((await planAccount(now)).services).toMatchObject({ billingPortal: true });
     const portal = (await settingsAction({
-      request: new Request("http://localhost:5173/en/app/impostazioni/piano", {
+      request: new Request("http://localhost:5173/en/app/settings/plan", {
         method: "POST",
         headers: { cookie, origin: "http://localhost:5173" },
         body: new URLSearchParams({ intent: "manage-billing" }),
@@ -1182,7 +1182,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(portal.headers.get("location")).toBe("https://billing.example.invalid/p/session_test");
     expect(Object.fromEntries(stripe.writes.at(-1)!.body)).toEqual({
       customer: "cus_test",
-      return_url: `${new URL(env.APP_ORIGIN).origin}/en/app/impostazioni/piano`,
+      return_url: `${new URL(env.APP_ORIGIN).origin}/en/app/settings/plan`,
       locale: "en",
     });
     expect(

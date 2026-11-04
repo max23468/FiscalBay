@@ -509,7 +509,7 @@ describe("cancellazione dell'account", () => {
 
     const confirmed = await open(cookie);
     expect(confirmed.status).toBe(302);
-    expect(confirmed.headers.get("location")).toBe("/en/cancellazione-account");
+    expect(confirmed.headers.get("location")).toBe("/en/account-deletion");
     expect(confirmed.headers.getSetCookie().join("\n")).toContain("Max-Age=0");
     // L'utente resta fino all'ultimo passo del lavoro; sessioni, consenso e chat no.
     expect(await leftovers(userId)).toMatchObject({ user: 1, sessions: 0, orders: 2, stores: 1 });

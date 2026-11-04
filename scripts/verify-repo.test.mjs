@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { describe, it } from "node:test";
 import {
   checkActionPins,
@@ -7,6 +8,8 @@ import {
   checkGateJobs,
   checkImports,
   checkPlanCodes,
+  checkPrivateAddresses,
+  checkSecurityTxt,
   checkToolPins,
 } from "./verify-repo.mjs";
 
@@ -165,5 +168,51 @@ describe("job dopo Node 26", () => {
       checkGateJobs(ci("if: ${{ !cancelled() && needs.gate.result == 'success' }}")),
       [],
     );
+  });
+});
+
+describe("indirizzi privati", () => {
+  it("riconosce dall'impronta l'indirizzo di un account delle verifiche live", () => {
+    const hashes = new Set([createHash("sha256").update("prova@example.invalid").digest("hex")]);
+    assert.deepEqual(
+      checkPrivateAddresses(
+        [
+          { path: "docs/a.md", text: "Scrivi a\nProva@Example.invalid per l'audit." },
+          { path: "test/b.ts", text: "altro@example.invalid" },
+        ],
+        hashes,
+      ),
+      ["docs/a.md:2: indirizzo di un account delle verifiche live"],
+    );
+  });
+});
+
+describe("security.txt", () => {
+  const file = (expires) => ({
+    path: "public/.well-known/security.txt",
+    text: `Contact: mailto:info@example.invalid\nExpires: ${expires}\nCanonical: https://example.invalid/.well-known/security.txt\n`,
+  });
+  const now = new Date("2026-11-03T00:00:00Z");
+
+  it("accetta una scadenza fra trenta giorni e un anno", () => {
+    assert.deepEqual(checkSecurityTxt([file("2027-11-01T00:00:00.000Z")], now), []);
+  });
+
+  it("chiede il rinnovo vicino alla scadenza e rifiuta file incompleti", () => {
+    assert.deepEqual(checkSecurityTxt([file("2026-11-20T00:00:00.000Z")], now), [
+      "public/.well-known/security.txt: Expires entro 30 giorni, da rinnovare",
+    ]);
+    assert.deepEqual(checkSecurityTxt([file("2028-11-20T00:00:00.000Z")], now), [
+      "public/.well-known/security.txt: Expires oltre un anno",
+    ]);
+    assert.deepEqual(
+      checkSecurityTxt([{ path: "public/.well-known/security.txt", text: "Expires: x" }], now),
+      [
+        "public/.well-known/security.txt: campo Contact assente",
+        "public/.well-known/security.txt: campo Canonical assente",
+        "public/.well-known/security.txt: campo Expires assente o non valido",
+      ],
+    );
+    assert.deepEqual(checkSecurityTxt([], now), ["public/.well-known/security.txt: file assente"]);
   });
 });

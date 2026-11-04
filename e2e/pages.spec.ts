@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext, Response } from "@playwright/test";
-import { expect, networkIdle, test } from "./fixtures";
+import { expect, networkIdle, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { abortedDataRequest, pageCases, knownPagePath, expectedPageError } from "./page-cases";
 import { testAccount } from "./test-account";
@@ -119,7 +119,7 @@ for (const scenario of scenarios) {
             await expect(
               page,
               `Accesso: HTTP ${answer.status()} in ${Date.now() - started} ms`,
-            ).toHaveTitle("FiscalBay | Ordini", { timeout: 15_000 });
+            ).toHaveTitle("Ordini | FiscalBay", { timeout: 15_000 });
             remoteSession = await context.cookies();
           }
         }
@@ -161,7 +161,7 @@ for (const scenario of scenarios) {
             const text = await response.text();
             const origin = production ? "https://fiscalbay.it" : baseURL;
             expect(text).toMatch(/^# FiscalBay\n/u);
-            expect(text).toContain(`(${new URL("/en/prezzi", origin).href})`);
+            expect(text).toContain(`(${new URL("/en/pricing", origin).href})`);
             checked("HTTP e llms.txt");
             return;
           }
@@ -376,7 +376,8 @@ for (const scenario of scenarios) {
         await networkIdle(page);
         // Con la sessione la radice porta agli Ordini: la pagina iniziale è quella dell'app.
         const prefix = scenario.path.startsWith("/en") ? "/en" : "";
-        const home = scenario.role === "anonymous" ? prefix || "/" : `${prefix}/app/ordini`;
+        const home =
+          scenario.role === "anonymous" ? prefix || "/" : pagePath(prefix, "/app/ordini");
         const homeLink = page.locator(`a[href="${home}"]`).first();
         // I pannelli dichiarati dal catalogo coprono i collegamenti sotto: l'assenza prima
         // dell'idratazione non rende navigabile il logo.
@@ -434,9 +435,15 @@ for (const scenario of scenarios) {
           await searchFor(testAccount.taxCodes.unlocked);
           // L'indirizzo cambia dopo due richieste in sequenza, la ricerca e i dati dell'elenco:
           // sul dominio remoto possono superare insieme i 5 secondi predefiniti.
-          await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u, {
-            timeout: 15_000,
-          });
+          await expect(page).toHaveURL(
+            new RegExp(
+              `${pagePath(prefix, "/app/ordini")}\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`,
+              "u",
+            ),
+            {
+              timeout: 15_000,
+            },
+          );
           expect(page.url()).not.toContain(testAccount.taxCodes.unlocked);
           await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
           await searchFor(testAccount.taxCodes.locked);

@@ -330,7 +330,7 @@ describe("Stripe Managed Payments", () => {
       expect(body.get("metadata[price_generation]")).toBe(priceGeneration.id);
       expect(body.get("locale")).toBe("en");
       expect(body.get("success_url")).toBe(
-        "http://localhost:5173/en/app/impostazioni/piano?checkout=processing&session_id={CHECKOUT_SESSION_ID}",
+        "http://localhost:5173/en/app/settings/plan?checkout=processing&session_id={CHECKOUT_SESSION_ID}",
       );
     } finally {
       api.mockRestore();

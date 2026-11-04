@@ -1,5 +1,5 @@
 import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics";
-import { expect, test } from "./fixtures";
+import { expect, test, pagePath } from "./fixtures";
 
 test(
   "radice pubblica, accesso e area riservata senza sessione né cache",
@@ -7,7 +7,7 @@ test(
   async ({ request }) => {
     for (const prefix of ["", "/en"]) {
       // Sito e accesso rispondono all'anonimo; nessuna risposta del Worker resta in cache.
-      for (const path of [prefix || "/", `${prefix}/accesso`]) {
+      for (const path of [prefix || "/", pagePath(prefix, "/accesso")]) {
         const response = await request.get(path, { maxRedirects: 0 });
         expect(response.status()).toBe(200);
         expect(response.headers()["cache-control"]).toBe("no-store");
@@ -25,7 +25,9 @@ test(
           maxRedirects: 0,
         });
         expect(response.status()).toBe(302);
-        expect(response.headers().location).toMatch(new RegExp(`^${prefix}/accesso(?:\\?|$)`));
+        expect(response.headers().location).toMatch(
+          new RegExp(`^${pagePath(prefix, "/accesso")}(?:\\?|$)`),
+        );
         expect(response.headers()["cache-control"]).toBe("no-store");
       }
     }
@@ -66,7 +68,7 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await expect(bar.getByRole("link", { name: "Prezzi" })).toHaveAttribute("aria-current", "page");
   await expect(bar.getByRole("link", { name: "Accedi" })).toHaveAttribute("href", "/accesso");
   await bar.getByRole("link", { name: "English" }).click();
-  await expect(page).toHaveURL(/\/en\/prezzi$/u);
+  await expect(page).toHaveURL(/\/en\/pricing$/u);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Pricing");
 
   // Sotto i 768 px le pagine stanno in una seconda riga sempre visibile, senza menu da aprire.
@@ -92,7 +94,7 @@ test("le pagine del sito mostrano le schermate reali nel tema e nella lingua del
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto("/en/funzionalita");
+    await page.goto("/en/features");
     const card = page.getByRole("img", { name: /order card/u });
     await card.scrollIntoViewIfNeeded();
     await expect

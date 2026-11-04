@@ -29,7 +29,14 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { useCopy } from "~/components/copy-context";
 import { useTurnstile } from "~/components/turnstile";
-import { accessPath, privacyPath, securityReturnPath, termsPath } from "../app-links";
+import {
+  accessPath,
+  planChoice,
+  planChoiceParam,
+  privacyPath,
+  securityReturnPath,
+  termsPath,
+} from "../app-links";
 import { areaPage } from "../account-area.server";
 import { accessAction, accessLoader } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
@@ -147,6 +154,12 @@ function AgreementFields({
 function ReturnToField() {
   const target = useReturnTo();
   return target ? <input type="hidden" name="returnTo" value={target} /> : null;
+}
+
+/** Offerta scelta in Prezzi, portata dalla registrazione alla pagina Piano. */
+function PlanChoiceField() {
+  const chosen = planChoice(new URLSearchParams(useLocation().search).get(planChoiceParam));
+  return chosen ? <input type="hidden" name={planChoiceParam} value={chosen} /> : null;
 }
 
 function SocialForms() {
@@ -313,6 +326,7 @@ function AccessForms({
               values={remembered?.tab === "registrati" ? values : undefined}
             />
             {registration.field}
+            <PlanChoiceField />
             <Button type="submit" name="intent" value="registrati" className="w-full">
               {t.signUp}
             </Button>

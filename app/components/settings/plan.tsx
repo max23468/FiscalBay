@@ -1,5 +1,6 @@
 import { cn } from "cn";
 import { useState } from "react";
+import { useLocation } from "react-router";
 
 import { useAction } from "~/components/action";
 import { PremiumNote, StatusAlert } from "~/components/status";
@@ -17,6 +18,7 @@ import {
 import { Button } from "~/components/ui/button";
 import { useCopy } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
+import { planChoice, planChoiceParam } from "../../app-links";
 import {
   annualPaidMonths,
   formatPrice,
@@ -556,6 +558,7 @@ function PurchaseOptions({
 }) {
   const { t, language } = useCopy();
   const date = useDate();
+  const chosen = new URLSearchParams(useLocation().search).get(planChoiceParam);
   // Un solo acquisto alla volta: la richiesta in corso ferma tutte le offerte.
   const action = useAction();
   const lifetime = purchase.lifetime;
@@ -569,6 +572,8 @@ function PurchaseOptions({
   const chargeAt = trial ? firstChargeAt(trial.endsAt, trial.now) : null;
   const firstCharge = chargeAt ? copy.firstCharge(date(chargeAt, "date")) : null;
   const prices = offerTexts(t, language, lifetime, firstCharge);
+  // L'offerta scelta in Prezzi prima della registrazione resta in evidenza, altrimenti l'annuale.
+  const highlighted = planChoice(chosen) ?? "annual";
   const needsSync = purchase.state === "needs-sync" || lifetime?.state === "needs-sync";
   const closed = purchase.state === "closed" || lifetime?.state === "closed";
   return (
@@ -590,7 +595,7 @@ function PurchaseOptions({
             key={plan}
             className={cn(
               "grid grid-rows-[1fr_auto] gap-3 rounded-xl border bg-card p-4",
-              plan === "annual" && "border-primary bg-primary/5",
+              plan === highlighted && "border-primary bg-primary/5",
             )}
           >
             <span className="grid gap-1">

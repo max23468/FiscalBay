@@ -54,7 +54,6 @@ jobs:
       browsers: ${{ steps.detect.outputs.browsers }}
       matrix: ${{ steps.detect.outputs.matrix }}
       browser-matrix: ${{ steps.browser-plan.outputs.browser-matrix }}
-      mutation-lines: ${{ steps.detect.outputs.mutation-lines }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
@@ -283,41 +282,10 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # Righe cambiate dei moduli critici: un mutante sopravvissuto si corregge nella PR, non alla
-  # qualifica del candidato. Il modulo intero resta alla qualifica e alla campagna settimanale.
-  mutation-lines:
-    name: Mutation ${{ matrix.target }}
-    needs: verify
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.verify.outputs.mutation-lines != '{"include":[]}'
-    runs-on: ubuntu-26.04
-    # Come la mutation della qualifica: le righe cambiate stanno in una sola parte, e uno
-    # spostamento di codice in un modulo critico può superare la mezz'ora.
-    timeout-minutes: 60
-    concurrency:
-      group: mutation-lines-${{ github.event.pull_request.number }}-${{ strategy.job-index }}
-      cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.verify.outputs.mutation-lines) }}
-    env:
-      MUTATION_TARGET: ${{ matrix.target }}
-      MUTATION_LINES: ${{ matrix.lines }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node and dependencies
-        uses: ./.github/actions/setup
-
-      - name: Check changed lines
-        run: pnpm test:mutation "${MUTATION_TARGET}"
-
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
     name: Node 26
-    needs: [verify, quality, browser, mutation-lines]
+    needs: [verify, quality, browser]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5

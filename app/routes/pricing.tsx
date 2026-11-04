@@ -1,8 +1,8 @@
-import { env } from "cloudflare:workers";
 import { cn } from "cn";
 import { CircleCheckBig, Gift, Minus } from "lucide-react";
 
 import { useCopy } from "~/components/copy-context";
+import { FaqList } from "~/components/faq-list";
 import { IconTile } from "~/components/icon-tile";
 import { siteColumn } from "~/components/site-column";
 import { PageIntro, SiteLayout } from "~/components/site-layout";
@@ -18,12 +18,9 @@ import {
 } from "~/components/ui/table";
 import { appCopy } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
-import { accessPath, planPath, pricingPath, visitParam } from "../app-links";
-import { annualPaidMonths, lifetimeSlots, premiumOffers } from "../catalog";
-import { freeQuotaSettings } from "../domain/grants.server";
-import { lifetimeSlotsLeft } from "../domain/lifetime.server";
+import { accessPath, planChoiceParam, planPath, pricingPath, visitParam } from "../app-links";
+import { annualPaidMonths, lifetimeSlots, premiumOffers, priceGeneration } from "../catalog";
 import { languageFromPath, localizedPath } from "../i18n";
-import { areaPage } from "../account-area.server";
 import { publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/pricing";
@@ -31,25 +28,19 @@ import type { Route } from "./+types/pricing";
 /**
  * Prezzi (§23): Free e le tre modalità Premium nello stesso confronto, dal listino del sito
  * comune alla home. Promozione, posti lifetime e sospensione degli acquisti si leggono a ogni
- * richiesta, come la sessione della barra: la risposta resta `no-store`.
+ * richiesta; senza il database resta il listino di riserva, senza quota, prova o posti.
  */
 export async function loader({ request }: Route.LoaderArgs) {
-  const [{ language, origin, session }, settings, listing, lifetimeLeft] = await areaPage(
-    request,
-    () =>
-      Promise.all([
-        publicPage(request),
-        freeQuotaSettings(env.DB),
-        siteListing(languageFromPath(new URL(request.url).pathname)),
-        lifetimeSlotsLeft(env.DB),
-      ]),
-  );
-  const { purchasesOpen, prices, freePromotion, promotionEnd } = listing;
+  const [{ language, origin, session }, listing] = await Promise.all([
+    publicPage(request),
+    siteListing(request, languageFromPath(new URL(request.url).pathname)),
+  ]);
+  const { purchasesOpen, prices, freePromotion, promotionEnd, baseQuota, lifetimeLeft } = listing;
   const t = sitePages[language].pricing;
   const plan = appCopy[language].settings.plan;
-  const quota = freePromotion?.quota ?? settings.quota;
+  const quota = freePromotion?.quota ?? baseQuota;
   const offers = premiumOffers.map((offer) => {
-    const soldOut = offer === "lifetime" && lifetimeLeft <= 0;
+    const soldOut = offer === "lifetime" && lifetimeLeft !== null && lifetimeLeft <= 0;
     return {
       offer,
       name: t.offers[offer].name,
@@ -58,9 +49,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       gross: plan.priceGross(prices[offer].gross),
       note: offer === "annual" ? t.offers.annual.note(annualPaidMonths()) : t.offers[offer].note,
       best: offer === "annual",
+      choose: t.offers[offer].choose,
       soldOut,
       seats:
-        offer === "lifetime"
+        offer === "lifetime" && lifetimeLeft !== null
           ? soldOut
             ? t.soldOutBody
             : plan.lifetimeSeats(lifetimeLeft, lifetimeSlots)
@@ -82,17 +74,19 @@ export async function loader({ request }: Route.LoaderArgs) {
     language,
     origin,
     signedIn: Boolean(session),
-    baseFreeQuota: settings.quota,
+    baseFreeQuota: baseQuota,
     freePromotion,
     lifetime: { left: lifetimeLeft, total: lifetimeSlots },
     purchasesOpen,
     copy: {
       title: t.title,
+      metaTitle: t.metaTitle,
       description: t.description,
       lead: t.lead,
-      promotion: freePromotion
-        ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd, settings.quota)
-        : null,
+      promotion:
+        freePromotion && baseQuota !== null
+          ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd, baseQuota)
+          : null,
       free: t.free,
       freePrice: t.freePrice,
       freeItems: t.freeItems(quota),
@@ -101,13 +95,15 @@ export async function loader({ request }: Route.LoaderArgs) {
       offers,
       best: t.best,
       soldOut: t.soldOut,
-      signUp: t.signUp,
-      openPlan: t.openPlan,
       trialTitle: t.trialTitle,
       trialBody: t.trialBody,
-      purchaseNote: purchasesOpen ? t.purchaseNote : t.closed,
+      purchaseNote: purchasesOpen || listing.reserve ? t.purchaseNote : t.closed,
       taxNote: t.taxNote,
       compare: t.compare,
+      paymentsTitle: t.paymentsTitle,
+      payments: sitePages[language].faq.items
+        .filter((item) => "payment" in item)
+        .map(({ q, a }) => ({ q, a })),
       feature: t.feature,
       included: t.included,
       notIncluded: t.notIncluded,
@@ -118,13 +114,48 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin, copy } = loaderData;
-  return siteMeta({
-    language,
-    origin,
-    path: pricingPath,
-    title: copy.title,
-    description: copy.description,
+  const url = `${origin}${localizedPath(language, pricingPath)}`;
+  // Prezzi netti come nella pagina: l'IVA si aggiunge al pagamento, secondo il paese.
+  const offer = (name: string, cents: number, soldOut = false) => ({
+    "@type": "Offer",
+    name,
+    url,
+    price: (cents / 100).toFixed(2),
+    priceCurrency: "EUR",
+    priceSpecification: {
+      "@type": "PriceSpecification",
+      price: (cents / 100).toFixed(2),
+      priceCurrency: "EUR",
+      valueAddedTaxIncluded: false,
+    },
+    ...(soldOut ? { availability: "https://schema.org/SoldOut" } : {}),
   });
+  return [
+    ...siteMeta({
+      language,
+      origin,
+      path: pricingPath,
+      title: copy.metaTitle,
+      description: copy.description,
+    }),
+    {
+      "script:ld+json": {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        name: "FiscalBay",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        url: `${origin}${localizedPath(language)}`,
+        inLanguage: language,
+        offers: [
+          offer(copy.free, 0),
+          ...copy.offers.map((item) =>
+            offer(`${copy.premium} ${item.name}`, priceGeneration.net[item.offer], item.soldOut),
+          ),
+        ],
+      },
+    },
+  ];
 }
 
 function Included({ value, label }: { value: boolean; label: string }) {
@@ -146,9 +177,11 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
   const freeAction = signedIn
     ? { href: `${localizedPath(language)}?${visitParam}=0`, label: site.openApp }
     : { href: `${localizedPath(language, accessPath)}?registrati`, label: site.start };
-  const premiumAction = signedIn
-    ? { href: localizedPath(language, planPath), label: t.openPlan }
-    : { href: `${localizedPath(language, accessPath)}?registrati`, label: t.signUp };
+  // Ogni offerta porta la scelta alla registrazione, o alla pagina Piano con la sessione.
+  const offerHref = (offer: string) =>
+    signedIn
+      ? `${localizedPath(language, planPath)}?${planChoiceParam}=${offer}`
+      : `${localizedPath(language, accessPath)}?registrati&${planChoiceParam}=${offer}`;
   const cell = (value: string | boolean) =>
     typeof value === "string" ? (
       value
@@ -242,15 +275,21 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
                   <p className="text-sm text-muted-foreground">{offer.gross}</p>
                   <p className="text-sm text-pretty">{offer.note}</p>
                   {offer.seats ? <p className="text-sm font-medium">{offer.seats}</p> : null}
+                  {offer.soldOut ? null : (
+                    <a
+                      href={offerHref(offer.offer)}
+                      {...buttonLink({
+                        variant: offer.best ? "default" : "outline",
+                        className: "mt-2 md:mt-auto",
+                      })}
+                    >
+                      {offer.choose}
+                    </a>
+                  )}
                 </li>
               ))}
             </ul>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-              <a href={premiumAction.href} {...buttonLink({ size: "lg" })}>
-                {premiumAction.label}
-              </a>
-              <p className="text-sm text-pretty text-muted-foreground">{t.purchaseNote}</p>
-            </div>
+            <p className="text-sm text-pretty text-muted-foreground">{t.purchaseNote}</p>
           </section>
         </div>
         {purchasesOpen ? (
@@ -292,6 +331,12 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
             </TableBody>
           </Table>
           <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{t.taxNote}</p>
+        </section>
+        <section aria-labelledby="pagamenti" className="grid gap-4">
+          <h2 id="pagamenti" className="text-2xl font-semibold">
+            {t.paymentsTitle}
+          </h2>
+          <FaqList items={t.payments} />
         </section>
       </div>
     </SiteLayout>

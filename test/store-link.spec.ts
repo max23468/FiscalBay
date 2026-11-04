@@ -33,7 +33,13 @@ import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessError, homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { orderView } from "../app/domain/order-view.server";
-import { callRoute, routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
+import {
+  callRoute,
+  routeData,
+  routeResponse,
+  testOrigin,
+  pagePath,
+} from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -389,7 +395,7 @@ describe("collegamento negozio eBay", () => {
       const { userId, cookie } = await verifiedSession(
         `spazio${prefix.replace("/", "-")}-${fromStores}@example.invalid`,
       );
-      const start = await routeResponse(startStoreLink, `${prefix}/app/negozi/collega`, {
+      const start = await routeResponse(startStoreLink, pagePath(prefix, "/app/negozi/collega"), {
         cookie,
         fields: fromStores ? { da: "negozi" } : {},
       });
@@ -925,7 +931,9 @@ describe("collegamento negozio eBay", () => {
   it("mostra la schermata preparatoria solo a chi può collegare e parte per eBay dal suo invio", async () => {
     const { cookie } = await verifiedSession("preparatoria@example.invalid");
     for (const base of ["", "/en"]) {
-      const page = await routeData(loadStoreLink, `${base}/app/negozi/collega`, { cookie });
+      const page = await routeData(loadStoreLink, pagePath(base, "/app/negozi/collega"), {
+        cookie,
+      });
       expect(page).toEqual({
         language: base ? "en" : "it",
         reconnect: false,
@@ -1197,14 +1205,14 @@ describe("collegamento negozio eBay", () => {
           "location",
         )!,
       ).searchParams.get("state")!;
-    const english = await begin("/en/app/negozi/collega");
+    const english = await begin("/en/app/stores/link");
     const linked = await handleAuthRequest(
       storeCallback(`state=${english}&code=codice-sintetico`, cookie),
       env,
       syntheticEbay(),
     );
     expect(linked.headers.get("location")).toBe(
-      "http://localhost:5173/en/app/ordini?negozio=collegato",
+      "http://localhost:5173/en/app/orders?negozio=collegato",
     );
     // Senza sessione nessun collegamento, e nessun errore del server.
     const anonymous = await handleAuthRequest(
