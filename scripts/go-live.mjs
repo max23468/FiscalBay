@@ -18,8 +18,8 @@
  * attestare e non cambiano l'esito.
  *
  * Uso: node scripts/go-live.mjs [plan|check] [--mode live] [--phase prima|dopo|tutte]
- * Telegram si rilegge soltanto con `TELEGRAM_BOT_TOKEN` dell'ambiente nelle variabili del
- * comando, come per `telegram-bot.mjs`.
+ * Telegram si rilegge soltanto con `TELEGRAM_BOT_TOKEN` e `TELEGRAM_OWNER_ID` dell'ambiente nelle
+ * variabili del comando, come per `telegram-bot.mjs`.
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -106,7 +106,7 @@ export function scriptSteps(target) {
       area: "Telegram",
       item: "webhook e menu del bot",
       args: ["scripts/telegram-bot.mjs", ...mode],
-      needs: ["TELEGRAM_BOT_TOKEN"],
+      needs: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_ID"],
     },
     {
       phase: "dopo",
