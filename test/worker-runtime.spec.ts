@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import { duringServiceActivity, waitUntil } from "../app/service-activity.server";
 
 import worker from "../workers/app";
+import { sharedResponse, skipPageCache } from "../app/page-cache.server";
 import { canonicalPath, localizedPath, movedEnglishPath, settingsSectionParam } from "../app/i18n";
 
 import * as site from "../app/routes/site";
@@ -217,6 +218,33 @@ it("serve Home e Prezzi a chi non ha cookie dalla copia di un minuto, sempre no-
     expect(await (await fixed("/funzionalita")).text()).toBe("pagina 5");
     // Una nuova versione del Worker non riusa la copia della precedente.
     expect(await (await visit("/en/pricing")).text()).toBe("pagina 6");
+  } finally {
+    router.handle.mockReset();
+  }
+});
+
+it("non conserva il listino di riserva e toglie il riferimento d'errore dalle pagine condivise", async () => {
+  let renders = 0;
+  const shared: boolean[] = [];
+  router.handle.mockImplementation(async () => {
+    renders += 1;
+    shared.push(sharedResponse());
+    // La prima risposta è quella di riserva, senza database: la seconda richiesta la rifà.
+    if (renders === 1) skipPageCache();
+    return new Response(`pagina ${renders}`);
+  });
+  const version = { id: `riserva-${crypto.randomUUID()}` };
+  const visit = (headers: Record<string, string> = {}) =>
+    workerFetch(new Request("https://fiscalbay.it/prezzi", { headers }), {
+      ...environment,
+      VERSION_METADATA: version,
+    } as Env);
+  try {
+    expect(await (await visit()).text()).toBe("pagina 1");
+    expect(await (await visit()).text()).toBe("pagina 2");
+    expect(await (await visit()).text()).toBe("pagina 2");
+    expect(await (await visit({ cookie: "a=1" })).text()).toBe("pagina 3");
+    expect(shared).toEqual([true, true, false]);
   } finally {
     router.handle.mockReset();
   }

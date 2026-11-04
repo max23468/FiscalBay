@@ -1,8 +1,27 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 import { canonicalPath } from "./i18n";
 import { pricingPath } from "./app-links";
 
 /** Pagine pubbliche servite dalla cache breve: le più visitate, che leggono il listino. */
 const cachedPages = new Set(["/", pricingPath]);
+
+/** Pagina condivisa in preparazione: `stored` diventa falso se la copia non va conservata. */
+const sharedPage = new AsyncLocalStorage<{ stored: boolean }>();
+
+/**
+ * La risposta in preparazione è la copia condivisa da tutti i visitatori anonimi: niente che
+ * dipenda dalla singola richiesta, come il riferimento d'errore.
+ */
+export function sharedResponse() {
+  return sharedPage.getStore() !== undefined;
+}
+
+/** La risposta in preparazione non va conservata, come il listino di riserva senza database. */
+export function skipPageCache() {
+  const page = sharedPage.getStore();
+  if (page) page.stored = false;
+}
 
 /** Durata della copia: promozioni, posti e sospensioni della console arrivano entro un minuto. */
 export const pageCacheSeconds = 60;
@@ -43,8 +62,10 @@ export async function withPageCache(
     response.headers.set("cache-control", "no-store");
     return response;
   }
-  const response = await respond();
-  if (response.status !== 200 || response.headers.has("set-cookie")) return response;
+  const page = { stored: true };
+  const response = await sharedPage.run(page, respond);
+  if (!page.stored || response.status !== 200 || response.headers.has("set-cookie"))
+    return response;
   // La pagina è piccola: un solo corpo letto per intero serve al browser e alla copia.
   const body = await response.arrayBuffer();
   const copy = new Response(body, response);

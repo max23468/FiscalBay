@@ -23,6 +23,7 @@ import { StandalonePage } from "./components/standalone-page";
 import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
+import { sharedResponse } from "./page-cache.server";
 import { appCopy, loadCopy, pageTitle } from "./app-copy";
 import { appBase, previewBase } from "./app-links";
 import { canonicalPath, languageFromPath, localizedPath } from "./i18n";
@@ -49,7 +50,8 @@ declare global {
 export function loader({ request }: Route.LoaderArgs) {
   return {
     language: languageFromPath(new URL(request.url).pathname),
-    correlationId: correlationId(request),
+    // Una pagina condivisa dalla cache non porta il riferimento di una sola richiesta.
+    correlationId: sharedResponse() ? null : correlationId(request),
     // Chiave pubblica del widget Turnstile dell'ambiente, per i moduli che la usano.
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     // Token pubblico del sito Web Analytics dell'ambiente; senza, le pagine pubbliche non
@@ -126,7 +128,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const location = useLocation();
   const root = useRouteLoaderData<typeof loader>("root");
   const language = root?.language ?? languageFromPath(location.pathname);
-  const reference = root?.correlationId;
+  const reference = root?.correlationId ?? undefined;
   const t = appCopy[language].errors;
   const status = isRouteErrorResponse(error) ? error.status : 500;
   // Auth o database non rispondono: la stessa pagina si riapre appena tornano disponibili.

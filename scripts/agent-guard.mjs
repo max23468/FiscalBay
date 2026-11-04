@@ -7,7 +7,7 @@
  * classificatore o nel deploy, ma soltanto dopo.
  */
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,19 +39,27 @@ const commandRules = [
 const emDash = String.fromCodePoint(0x2014);
 
 /**
- * Esito per l'evento dello strumento: il messaggio che lo blocca, oppure null. `applied` dice se
- * una migration esiste già su `develop`, cioè se il database l'ha registrata.
+ * Esito per l'evento dello strumento: il messaggio che lo blocca, oppure null. `root` dà la radice
+ * della repository che contiene il file, null fuori da ogni repository: vale anche per un
+ * worktree diverso dalla cartella della sessione. `applied` dice se una migration esiste già su
+ * `develop` in quella repository, cioè se il database l'ha registrata.
  */
-export function guard(event, applied = () => false) {
+export function guard(event, { root = () => null, applied = () => false } = {}) {
   const input = event.tool_input ?? {};
   if (event.tool_name === "Bash") {
     const command = String(input.command ?? "");
     return commandRules.find(([pattern]) => pattern.test(command))?.[1] ?? null;
   }
   if (!["Edit", "MultiEdit", "Write", "NotebookEdit"].includes(event.tool_name)) return null;
-  const file = String(input.file_path ?? input.notebook_path ?? "");
-  const relative = path.relative(event.cwd ?? process.cwd(), file);
-  if (/^migrations\/.+\.sql$/u.test(relative) && applied(relative))
+  const file = path.resolve(
+    event.cwd ?? process.cwd(),
+    String(input.file_path ?? input.notebook_path ?? ""),
+  );
+  // Memoria, scratchpad e altri file fuori dalla repository seguono le proprie regole.
+  const repository = root(file);
+  if (!repository) return null;
+  const relative = path.relative(repository, file);
+  if (/^migrations\/.+\.sql$/u.test(relative) && applied(repository, relative))
     return `${relative} è già su develop: una migration applicata non si modifica, nemmeno in un commento, perché il deploy confronta il testo registrato. Scrivi una migration nuova.`;
   const written = [
     input.content,
@@ -64,10 +72,29 @@ export function guard(event, applied = () => false) {
   return null;
 }
 
-/** La migration esiste nel `develop` remoto conosciuto dal checkout. */
-function onDevelop(file, cwd) {
+/** Radice della repository Git che contiene il file, anche se il file non esiste ancora. */
+function repositoryRoot(file) {
+  let directory = path.dirname(file);
+  while (!existsSync(directory) && path.dirname(directory) !== directory)
+    directory = path.dirname(directory);
   try {
-    execFileSync("git", ["cat-file", "-e", `origin/develop:${file}`], { cwd, stdio: "ignore" });
+    return execFileSync("git", ["rev-parse", "--show-toplevel"], {
+      cwd: directory,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+/** La migration esiste nel `develop` remoto conosciuto dalla repository. */
+function onDevelop(repository, file) {
+  try {
+    execFileSync("git", ["cat-file", "-e", `origin/develop:${file}`], {
+      cwd: repository,
+      stdio: "ignore",
+    });
     return true;
   } catch {
     return false;
@@ -76,8 +103,7 @@ function onDevelop(file, cwd) {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const event = JSON.parse(readFileSync(0, "utf8") || "{}");
-  const cwd = event.cwd ?? process.cwd();
-  const reason = guard(event, (file) => onDevelop(file, cwd));
+  const reason = guard(event, { root: repositoryRoot, applied: onDevelop });
   if (reason) {
     console.error(reason);
     process.exitCode = 2;

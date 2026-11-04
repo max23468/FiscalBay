@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import { guard } from "./agent-guard.mjs";
 
 const bash = (command) => guard({ tool_name: "Bash", tool_input: { command } });
-const edit = (file_path, input = {}, applied = () => false) =>
-  guard({ tool_name: "Edit", cwd: "/repo", tool_input: { file_path, ...input } }, applied);
+// La repository di prova è `/repo`, anche quando la sessione lavora in un'altra cartella.
+const root = (file) => (file.startsWith("/repo/") ? "/repo" : null);
+const edit = (file_path, input = {}, applied = () => false, cwd = "/repo") =>
+  guard({ tool_name: "Edit", cwd, tool_input: { file_path, ...input } }, { root, applied });
 
 describe("hook degli agenti", () => {
   it("ferma i comandi che perdono lavoro altrui o riscrivono la storia", () => {
@@ -42,8 +44,14 @@ describe("hook degli agenti", () => {
   });
 
   it("protegge le migration già su develop, non quelle nuove del branch", () => {
-    const applied = (file) => file === "migrations/0002_better_auth.sql";
+    const applied = (repository, file) =>
+      repository === "/repo" && file === "migrations/0002_better_auth.sql";
     assert.match(edit("/repo/migrations/0002_better_auth.sql", {}, applied), /migration nuova/u);
+    // Una sessione aperta in un altro checkout che scrive nel worktree resta protetta.
+    assert.match(
+      edit("/repo/migrations/0002_better_auth.sql", {}, applied, "/altro-checkout"),
+      /migration nuova/u,
+    );
     assert.equal(edit("/repo/migrations/0099_nuova.sql", {}, applied), null);
     assert.equal(edit("/repo/app/i18n.ts", {}, applied), null);
   });
@@ -52,23 +60,31 @@ describe("hook degli agenti", () => {
     const dash = String.fromCodePoint(0x2014);
     assert.ok(edit("/repo/a.md", { new_string: `uno ${dash} due` }));
     assert.ok(
-      guard({
-        tool_name: "Write",
-        cwd: "/repo",
-        tool_input: { file_path: "/repo/b.ts", content: dash },
-      }),
+      guard(
+        {
+          tool_name: "Write",
+          cwd: "/repo",
+          tool_input: { file_path: "/repo/b.ts", content: dash },
+        },
+        { root },
+      ),
     );
     assert.ok(
-      guard({
-        tool_name: "MultiEdit",
-        cwd: "/repo",
-        tool_input: {
-          file_path: "/repo/c.ts",
-          edits: [{ new_string: "ok" }, { new_string: dash }],
+      guard(
+        {
+          tool_name: "MultiEdit",
+          cwd: "/repo",
+          tool_input: {
+            file_path: "/repo/c.ts",
+            edits: [{ new_string: "ok" }, { new_string: dash }],
+          },
         },
-      }),
+        { root },
+      ),
     );
     assert.equal(edit("/repo/a.md", { new_string: "uno, due" }), null);
+    // Fuori dalla repository, come memoria o scratchpad, il testo segue le proprie regole.
+    assert.equal(edit("/tmp/nota.md", { new_string: dash }), null);
   });
 
   it("ignora gli altri strumenti", () => {

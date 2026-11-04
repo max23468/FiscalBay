@@ -558,7 +558,7 @@ function PurchaseOptions({
 }) {
   const { t, language } = useCopy();
   const date = useDate();
-  const chosen = new URLSearchParams(useLocation().search).get(planChoiceParam);
+  const highlighted = useHighlightedOffer();
   // Un solo acquisto alla volta: la richiesta in corso ferma tutte le offerte.
   const action = useAction();
   const lifetime = purchase.lifetime;
@@ -572,8 +572,6 @@ function PurchaseOptions({
   const chargeAt = trial ? firstChargeAt(trial.endsAt, trial.now) : null;
   const firstCharge = chargeAt ? copy.firstCharge(date(chargeAt, "date")) : null;
   const prices = offerTexts(t, language, lifetime, firstCharge);
-  // L'offerta scelta in Prezzi prima della registrazione resta in evidenza, altrimenti l'annuale.
-  const highlighted = planChoice(chosen) ?? "annual";
   const needsSync = purchase.state === "needs-sync" || lifetime?.state === "needs-sync";
   const closed = purchase.state === "closed" || lifetime?.state === "closed";
   return (
@@ -622,6 +620,11 @@ function PurchaseOptions({
       <p className="text-sm text-muted-foreground">{copy.pricesNote}</p>
     </Group>
   );
+}
+
+/** L'offerta scelta in Prezzi prima della registrazione resta in evidenza, altrimenti l'annuale. */
+function useHighlightedOffer(): PremiumOffer {
+  return planChoice(new URLSearchParams(useLocation().search).get(planChoiceParam)) ?? "annual";
 }
 
 /**

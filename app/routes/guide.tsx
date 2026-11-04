@@ -63,9 +63,9 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
 }
 
 export default function Guide({ loaderData }: Route.ComponentProps) {
-  const { language, signedIn, copy: t } = loaderData;
+  const { language, path, signedIn, copy: t } = loaderData;
   return (
-    <SiteLayout path={guidesPath} signedIn={signedIn}>
+    <SiteLayout path={path} signedIn={signedIn}>
       <PageIntro title={t.title} lead={t.lead} />
       <article className={cn(siteColumn, "py-12 sm:py-16")}>
         <div className="grid max-w-3xl gap-10">

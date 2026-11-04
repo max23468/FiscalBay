@@ -891,3 +891,18 @@ describe("stati dell'area reale nell'anteprima", () => {
     });
   });
 });
+
+it("cambia lingua dell'anteprima conservando pagina e filtri", async () => {
+  const change = (returnTo: string, language: string) =>
+    callRoute(previewRootAction, "/en/preview", { fields: { language, returnTo } }).catch(
+      (thrown: Response) => thrown,
+    ) as Promise<Response>;
+  expect((await change("/en/preview/orders?negozio=x", "it")).headers.get("location")).toBe(
+    "/anteprima/ordini?negozio=x",
+  );
+  expect(
+    (await change("/anteprima/impostazioni/piano?checkout=1", "en")).headers.get("location"),
+  ).toBe("/en/preview/settings/plan?checkout=1");
+  // Fuori dall'anteprima si torna alle sue Impostazioni.
+  expect((await change("/app/ordini", "en")).headers.get("location")).toBe("/en/preview/settings");
+});

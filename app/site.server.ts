@@ -21,6 +21,7 @@ import {
 import { readPurchasesOpen } from "./domain/admission-state.server";
 import { currentFreePromotion, freeQuotaSettings } from "./domain/grants.server";
 import { lifetimeSlotsLeft } from "./domain/lifetime.server";
+import { skipPageCache } from "./page-cache.server";
 import { readSession } from "./domain/sessions.server";
 import { logFailure, tracePhase } from "./errors";
 import { formatDate } from "./format";
@@ -82,6 +83,8 @@ export async function siteListing(request: Request, language: Language) {
   })();
   tracePhase(request, "listing");
   if (!read) {
+    // La riserva vale finché il database non risponde: nessuna copia la conserva.
+    skipPageCache();
     return {
       reserve: true as const,
       purchasesOpen: false,
