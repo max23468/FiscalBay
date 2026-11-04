@@ -97,7 +97,7 @@ function currentCoverage() {
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
   const auxiliary = files
     .filter((file) =>
-      /^(?:e2e\/|migrations\/|public\/|app\/.+\.(?:css|json)$|CHANGELOG\.md$|\.github\/actions\/|\.github\/workflows\/(?:ci|candidate|qualify)\.yml$|scripts\/(?:browser-tests|pages-reuse|classify-changes|local-preview|local-d1)\.mjs$|(?:cloudflare|vite|playwright)\.config\.ts$|package\.json$|pnpm-(?:lock|workspace)\.yaml$|tsconfig.*\.json$)/u.test(
+      /^(?:e2e\/|migrations\/|public\/|app\/.+\.(?:css|json|mjs)$|CHANGELOG\.md$|changes\/|\.github\/actions\/|\.github\/workflows\/(?:ci|candidate|qualify)\.yml$|scripts\/(?:browser-tests|pages-reuse|classify-changes|local-preview|local-d1)\.mjs$|(?:cloudflare|vite|playwright)\.config\.ts$|package\.json$|pnpm-(?:lock|workspace)\.yaml$|tsconfig.*\.json$)/u.test(
         file,
       ),
     )

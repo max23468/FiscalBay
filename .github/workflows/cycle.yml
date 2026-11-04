@@ -8,14 +8,19 @@ on:
   workflow_dispatch:
     inputs:
       operation:
-        description: pr oppure promote
+        description: pr, production, promote, rollback oppure resume
         type: choice
-        options: [pr, promote, rollback, resume]
+        options: [pr, production, promote, rollback, resume]
         required: true
       object:
-        description: Numero della PR, versione oppure lotto
+        description: Numero della PR, versione, lotto oppure run da riprendere
         type: string
         required: true
+      environment:
+        description: Ambiente della run da riprendere
+        type: choice
+        options: [production, test]
+        default: production
       urgente:
         type: boolean
         default: false
@@ -36,18 +41,19 @@ env:
 permissions:
   contents: read
 
-# Qualifiche CI in parallelo; ciascun tipo di ciclo è serializzato anche fra runner. I merge verso
-# il test non aspettano una promozione, vincolata al proprio SHA.
-# Il ritiro non aspetta un ciclo in corso: `rollback.yml` condivide il gruppo con `publish.yml`.
-concurrency:
-  group: publication-cycle-${{ inputs.operation == 'rollback' && 'rollback' || inputs.operation == 'pr' && 'test' || 'release' }}
-  cancel-in-progress: false
-
+# Ogni PR ha il proprio ciclo: le PR si mettono in fila soltanto per il merge, con il blocco fra
+# runner del coordinatore. Promozioni e riprese Production restano una alla volta, senza fermare
+# le PR verso il test; la ripresa di una run del test o di una qualifica ha un gruppo proprio. Il
+# ritiro non aspetta un ciclo in corso: `rollback.yml` condivide il gruppo con `publish.yml`.
 jobs:
   cycle:
     name: Coordinatore
+    if: inputs.operation != 'production'
     runs-on: ubuntu-26.04
     timeout-minutes: 240
+    concurrency:
+      group: publication-cycle-${{ inputs.operation == 'rollback' && 'rollback' || inputs.operation == 'pr' && format('pr-{0}', inputs.object) || inputs.operation == 'resume' && inputs.environment == 'test' && format('run-{0}', inputs.object) || 'release' }}
+      cancel-in-progress: false
     # Il token dell'owner: con quello del workflow merge e push non avvierebbero la CI.
     environment: publication
     steps:
@@ -81,3 +87,56 @@ jobs:
           else
             node scripts/release/release-cycle.mjs rollback --sha "${EXPECTED_SHA}"
           fi
+
+  # Pubblica in Production: il ciclo della PR nel suo gruppo, poi la promozione del commit
+  # integrato, con la PR e il lotto già su `develop`, nel gruppo delle promozioni.
+  production-pr:
+    name: Coordinatore PR
+    if: inputs.operation == 'production'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    concurrency:
+      group: publication-cycle-pr-${{ inputs.object }}
+      cancel-in-progress: false
+    environment: publication
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+          token: ${{ secrets.PUBLISH_TOKEN }}
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Run the pull request cycle
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          OBJECT: ${{ inputs.object }}
+          EXPECTED_SHA: ${{ inputs.sha }}
+        run: node scripts/release/release-cycle.mjs pr "${OBJECT}" --sha "${EXPECTED_SHA}"
+
+  production-promote:
+    name: Coordinatore promozione
+    needs: production-pr
+    runs-on: ubuntu-26.04
+    timeout-minutes: 240
+    concurrency:
+      group: publication-cycle-release
+      cancel-in-progress: false
+    environment: publication
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+          token: ${{ secrets.PUBLISH_TOKEN }}
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - name: Promote the merged commit
+        env:
+          GH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
+          OBJECT: ${{ inputs.object }}
+          REVIEWED: ${{ inputs.reviewed_migrations }}
+          REQUESTED_AT: ${{ inputs.requested_at }}
+        run: node scripts/release/release-cycle.mjs promote --pr "${OBJECT}" --requested-at "${REQUESTED_AT}" --reviewed-migrations "${REVIEWED}"

@@ -6,26 +6,33 @@
  * precedenti si riconciliano a lotti con cleanup e a ogni promozione.
  */
 import { execFileSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import {
   appendFileSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   writeFileSync,
   rmSync,
   existsSync,
   statSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { distributes, plan, qualificationChange } from "../classify-changes.mjs";
+import { distributes, mainProcessChange, plan } from "../classify-changes.mjs";
 import {
   addedMigrations,
+  assertChangesVersion,
+  changeFile,
   declaredReview,
+  fullChangelog,
   latestReleased,
   nextVersions,
   requiredReview,
   reviewAdded,
+  receiptArtifact,
   romeDay,
   topVersion,
 } from "./release.mjs";
@@ -99,10 +106,10 @@ export function pullRequestAction(action, repository, number, head, env = proces
 
 export function checksOutcome(checkRuns) {
   // Come GitHub, conta soltanto l'ultima esecuzione di ogni controllo: una run annullata da
-  // quella successiva non fa fallire la PR. Il coordinatore gira sul commit che controlla: non
-  // aspetta sé stesso.
+  // quella successiva non fa fallire la PR. I coordinatori girano sulla testa di `develop`, anche
+  // quelli di altre PR in parallelo: nessuno aspetta sé stesso o un altro ciclo.
   const latest = new Map();
-  for (const check of checkRuns.filter(({ name }) => name !== "Coordinatore"))
+  for (const check of checkRuns.filter(({ name }) => !name.startsWith("Coordinatore")))
     if (!latest.has(check.name) || latest.get(check.name).id < check.id)
       latest.set(check.name, check);
   const current = [...latest.values()];
@@ -149,8 +156,12 @@ export function pullRequestFiles(repository, number, run = gh) {
 const readPullRequest = (repository, number) =>
   pullRequestView(ghJson("api", `repos/${repository}/pulls/${number}`));
 
-async function waitChecks(repository, sha) {
-  for (;;) {
+async function waitChecks(repository, sha, limit = Infinity) {
+  for (const deadline = Date.now() + limit; ;) {
+    if (Date.now() > deadline)
+      throw new Error(
+        "Controlli ancora in corso: merge rinviato, ciclo riprendibile dalla stessa PR.",
+      );
     const checks = ghJson(
       "api",
       "--paginate",
@@ -221,7 +232,7 @@ export function withLock(directory, label, work, wait = 5000) {
 
 /**
  * Blocchi del clone, nella cartella Git comune a tutti i worktree: uno per oggetto del ciclo e
- * due brevi condivisi, per i riferimenti locali e per il merge.
+ * uno breve condiviso per i riferimenti locali. Il merge usa il blocco fra runner.
  */
 function lockDirectory(name) {
   const root = path.resolve(git("rev-parse", "--git-common-dir"), "release-cycle");
@@ -231,6 +242,146 @@ function lockDirectory(name) {
 
 /** Fetch, worktree e branch locali: un ciclo alla volta, per pochi secondi. */
 const localGit = (work) => withLock(lockDirectory("git"), "le operazioni Git locali", work);
+
+/**
+ * Un blocco del merge più vecchio di così è rimasto da un ciclo interrotto: il titolare resta
+ * sotto il blocco al più quindici minuti per i controlli e trenta per il merge.
+ */
+export const remoteLockTtl = 60 * 60_000;
+
+/**
+ * Blocco fra runner e sessioni per un passo breve, come il merge: i cicli delle PR girano in
+ * parallelo e si mettono in fila soltanto qui. `store` crea il blocco una sola volta, lo legge con
+ * titolare e ora e lo rimuove se è ancora quello letto. Un blocco scaduto si rimuove; una
+ * risposta persa dopo la creazione si riconosce dal titolare.
+ */
+export async function withRemoteLock(
+  store,
+  work,
+  { owner, ttl = remoteLockTtl, delay = 10_000, now = Date.now } = {},
+) {
+  for (let notified = false; ;) {
+    const held = await store.read();
+    if (held?.owner === owner) break;
+    if (!held) {
+      if (await store.create({ owner, at: new Date(now()).toISOString() })) break;
+      // Creato da un altro ciclo nel frattempo: si rilegge dopo una breve pausa.
+      await pause(Math.min(delay, 2000));
+      continue;
+    }
+    if (!(now() - Date.parse(held.at) <= ttl)) {
+      console.log(`Blocco di ${held.owner} scaduto: rimosso.`);
+      await store.remove(held.sha);
+      continue;
+    }
+    if (!notified) console.log(`In attesa che il ciclo ${held.owner} concluda il merge.`);
+    notified = true;
+    await pause(delay);
+  }
+  try {
+    return await work();
+  } finally {
+    const held = await store.read();
+    if (held?.owner === owner) await store.remove(held.sha);
+  }
+}
+
+/**
+ * Blocco come riferimento `refs/locks/<nome>`: GitHub crea un riferimento una sola volta e
+ * risponde 422 a chi arriva dopo. Il commit del riferimento, sul tree di `develop`, porta titolare
+ * e ora; `git fetch` non scarica questi riferimenti. La rimozione è un push con lease sullo SHA
+ * letto, che il server applica soltanto se il riferimento non è cambiato.
+ */
+export function remoteLockStore(
+  repository,
+  name,
+  run = gh,
+  push = (...args) =>
+    execute(
+      "git",
+      [
+        "-c",
+        "credential.helper=",
+        "-c",
+        "credential.helper=!gh auth git-credential",
+        "push",
+        "--quiet",
+        ...args,
+      ],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    ),
+) {
+  // L'indirizzo HTTPS con le credenziali di `gh` vale sul runner e sul Mac, anche quando
+  // `origin` usa SSH.
+  const remote = `https://github.com/${repository}.git`;
+  const read = () => {
+    let sha;
+    try {
+      sha = JSON.parse(run("api", `repos/${repository}/git/ref/locks/${name}`)).object.sha;
+    } catch (error) {
+      if (/HTTP 404/u.test(String(error.stderr ?? error.message))) return null;
+      throw error;
+    }
+    const { message } = JSON.parse(run("api", `repos/${repository}/git/commits/${sha}`));
+    try {
+      return { sha, ...JSON.parse(message) };
+    } catch {
+      return { sha, owner: "sconosciuto", at: "" };
+    }
+  };
+  return {
+    read,
+    create(entry) {
+      const head = JSON.parse(run("api", `repos/${repository}/git/ref/heads/develop`)).object.sha;
+      const tree = JSON.parse(run("api", `repos/${repository}/git/commits/${head}`)).tree.sha;
+      const sha = JSON.parse(
+        run(
+          "api",
+          "-X",
+          "POST",
+          `repos/${repository}/git/commits`,
+          "-f",
+          `message=${JSON.stringify(entry)}`,
+          "-f",
+          `tree=${tree}`,
+        ),
+      ).sha;
+      try {
+        run(
+          "api",
+          "-X",
+          "POST",
+          `repos/${repository}/git/refs`,
+          "-f",
+          `ref=refs/locks/${name}`,
+          "-f",
+          `sha=${sha}`,
+        );
+        return true;
+      } catch (error) {
+        if (/Reference already exists/u.test(String(error.stderr ?? error.message))) return false;
+        throw error;
+      }
+    },
+    remove(sha) {
+      try {
+        push(`--force-with-lease=refs/locks/${name}:${sha}`, remote, `:refs/locks/${name}`);
+      } catch (error) {
+        // Riferimento già rimosso o sostituito da un altro ciclo: resta il suo.
+        if (
+          !/stale info|rejected|does not exist|unable to delete/iu.test(
+            String(error.stderr ?? error.message),
+          )
+        )
+          throw error;
+      }
+    },
+  };
+}
+
+/** Titolare del blocco: la run del coordinatore o il processo locale, con un suffisso casuale. */
+const lockOwner = () =>
+  `${process.env.GITHUB_RUN_ID ? `run ${process.env.GITHUB_RUN_ID}` : `pid ${process.pid}`} ${randomUUID().slice(0, 8)}`;
 
 export function assertBase(expected, current) {
   if (!/^[0-9a-f]{40}$/u.test(expected ?? "") || current !== expected)
@@ -703,6 +854,7 @@ const cycleCommands = [
   "metrics",
   "preflight",
   "pr",
+  "production",
   "cleanup",
   "candidate",
   "candidate-ready",
@@ -716,14 +868,18 @@ const cycleCommands = [
 export function cycleCommand([command, number]) {
   if (!cycleCommands.includes(command))
     throw new Error(
-      "Uso: release:cycle status <run> | metrics | preflight --sha <sha> [--version <versione>] | pr <numero> | cleanup | candidate | promote [--version <versione>] [--urgente] | resume <run> | rollback | qualification-base --base <sha> --head <sha>.",
+      "Uso: release:cycle status <run> | metrics | preflight --sha <sha> [--version <versione>] | pr <numero> | production <numero> | cleanup | candidate | promote [--version <versione>] [--urgente] [--testa] | resume <run> | rollback | qualification-base --base <sha> --head <sha>.",
     );
   return { command, number };
 }
 
 /** Oggetto del blocco locale: cicli su oggetti diversi procedono insieme. */
 export const lockObject = (command, number) =>
-  command === "pr" ? `pr-${number}` : command === "resume" ? `run-${number}` : command;
+  ["pr", "production"].includes(command)
+    ? `pr-${number}`
+    : command === "resume"
+      ? `run-${number}`
+      : command;
 
 function assertRun(number) {
   if (!/^\d+$/u.test(number ?? "")) throw new Error("Run non valida.");
@@ -889,6 +1045,46 @@ export function promotionMetrics(runs, receipts = [], jobs = new Map()) {
   };
 }
 
+/**
+ * Fasi di una qualifica del candidato: attesa in coda dopo la pianificazione, durata delle prove
+ * browser e della mutation, dal primo inizio all'ultima fine, e minuti di runner sommati su tutti
+ * i job. `null` per una fase che non è girata.
+ */
+export function candidatePhases(jobs) {
+  const ran = jobs.filter(
+    (job) => job.conclusion !== "skipped" && job.started_at && job.completed_at,
+  );
+  const span = (selected) =>
+    selected.length
+      ? Math.round(
+          (Math.max(...selected.map((job) => Date.parse(job.completed_at))) -
+            Math.min(...selected.map((job) => Date.parse(job.started_at)))) /
+            1000,
+        )
+      : null;
+  const plan = ran.find((job) => job.name === "Pianifica");
+  const qualify = ran.filter((job) => job.name.startsWith("Qualifica candidato /"));
+  const start = Math.min(...qualify.map((job) => Date.parse(job.started_at)));
+  return {
+    queueSeconds:
+      plan && qualify.length
+        ? Math.max(0, Math.round((start - Date.parse(plan.completed_at)) / 1000))
+        : null,
+    browserSeconds: span(qualify.filter((job) => / \/ browser /u.test(job.name))),
+    mutationSeconds: span(
+      qualify.filter(
+        (job) => / \/ Mutation \/ /u.test(job.name) && !job.name.endsWith("Select modules"),
+      ),
+    ),
+    runnerMinutes: Math.round(
+      ran.reduce(
+        (total, job) => total + (Date.parse(job.completed_at) - Date.parse(job.started_at)),
+        0,
+      ) / 60_000,
+    ),
+  };
+}
+
 function statusCycle({ repository, number }) {
   assertRun(number);
   summary(repository, number);
@@ -898,14 +1094,55 @@ function cleanupCycle({ repository }) {
   cleanupIntegrated(repository);
 }
 
+/** Prefisso delle ricevute di deploy di una run riprendibile; `null` se la run non distribuisce. */
+export function receiptPrefix(run) {
+  if (run.path.endsWith("/ci.yml")) return "deployed";
+  if (run.path.endsWith("/publish.yml")) return "release-receipt";
+  return null;
+}
+
+/**
+ * Ambiente del gruppo di una ripresa: la ripresa di un deploy test o di una qualifica non aspetta
+ * una promozione Production, quella di `publish.yml` sì.
+ */
+export const resumeEnvironment = (run) =>
+  run.path.endsWith("/publish.yml") ? "production" : "test";
+
+/**
+ * Una ricevuta ritirata non torna verde ripetendo i job: la ripresa si ferma prima di avviarli,
+ * con lo stesso errore che il deploy darebbe dopo l'attesa dei runner.
+ */
+export function assertNotWithdrawn(receipt) {
+  if (receipt?.rolledBack)
+    throw new Error("Candidato ritirato: serve una nuova correzione, non una ripresa del deploy.");
+}
+
+/** Ultima ricevuta di deploy della run, fra tutti i tentativi; `null` se non ce n'è. */
+function lastReceipt(repository, run) {
+  const prefix = receiptPrefix(run);
+  if (!prefix) return null;
+  const artifacts = ghJson(
+    "api",
+    "--paginate",
+    "--slurp",
+    `repos/${repository}/actions/runs/${run.id}/artifacts?per_page=100`,
+  ).flatMap((page) => page.artifacts);
+  const artifact = receiptArtifact(artifacts, prefix, run.id, (run.run_attempt ?? 1) + 1);
+  return artifact
+    ? downloadRecord(repository, { ...artifact, workflow_run: { id: run.id } })
+    : null;
+}
+
 async function resumeCycle({ repository, number, values }) {
   assertRun(number);
   let run = ghJson("api", `repos/${repository}/actions/runs/${number}`);
   if (values.sha) assertBase(values.sha, run.head_sha);
   assertResumableRun(run);
   assertBase(run.head_sha, headOf(repository, run.head_branch));
-  if (run.status === "completed" && run.conclusion !== "success")
+  if (run.status === "completed" && run.conclusion !== "success") {
+    assertNotWithdrawn(lastReceipt(repository, run));
     gh("run", "rerun", number, "--repo", repository, "--failed");
+  }
   if (run.conclusion !== "success")
     await watch([
       "run",
@@ -962,6 +1199,163 @@ async function rerunMigrationReview(repository, pr) {
   }
 }
 
+/** ID delle decisioni nelle righe di tabella aggiunte da un diff `-U0`. */
+/**
+ * ID delle decisioni nuove: righe di tabella aggiunte da un diff `-U0` con un ID assente dalla
+ * base. Una riga esistente modificata, per esempio con «Superato da», compare come aggiunta ma
+ * non è una decisione nuova.
+ */
+export const addedDecisions = (diff, existing = []) =>
+  [...diff.matchAll(/^\+\|\s*(D\d+)\s*\|/gmu)]
+    .map((match) => match[1])
+    .filter((id) => !existing.includes(id));
+
+/** Numeri delle righe aggiunte da un diff `-U0` di un solo file. */
+export function addedLineNumbers(diff) {
+  const numbers = new Set();
+  let line = 0;
+  for (const text of diff.split("\n")) {
+    const hunk = /^@@ -\S+ \+(\d+)(?:,\d+)? @@/u.exec(text);
+    if (hunk) line = Number(hunk[1]);
+    else if (text.startsWith("+") && !text.startsWith("+++ ")) numbers.add(line++);
+  }
+  return numbers;
+}
+
+/**
+ * Numeri delle decisioni nuove della PR che un'altra PR ha già portato sulla base: si spostano
+ * dopo l'ultima decisione, così due PR aperte insieme non pubblicano lo stesso numero.
+ */
+export function decisionRenumbering(added, taken) {
+  const used = new Set(taken);
+  let last = Math.max(0, ...[...taken, ...added].map((id) => Number(id.slice(1))));
+  const mapping = {};
+  for (const id of added)
+    if (used.has(id) && !mapping[id]) mapping[id] = `D${String(++last).padStart(3, "0")}`;
+  return mapping;
+}
+
+/** Riferimenti alle decisioni rinumerate; con `lines`, soltanto in quelle righe (da 1). */
+export const renumberDecisions = (text, mapping, lines) =>
+  text
+    .split("\n")
+    .map((line, index) =>
+      !lines || lines.has(index + 1)
+        ? line.replace(/\bD\d{3,}\b/gu, (id) => mapping[id] ?? id)
+        : line,
+    )
+    .join("\n");
+
+/**
+ * Rinumera sul branch della PR le decisioni prese nel frattempo da un'altra PR, in un worktree
+ * temporaneo, e restituisce la nuova testa. I file della PR non possono riferirsi a quei numeri
+ * per altro: sulla sua base non esistevano.
+ */
+function renumberPullRequest(pr, mapping) {
+  return localGit(() => {
+    const directory = mkdtempSync(path.join(tmpdir(), "decisions-"));
+    try {
+      git("worktree", "add", "--quiet", "--detach", directory, pr.headRefOid);
+      const inside = (...args) => execute("git", args, { cwd: directory });
+      const base = inside("merge-base", "origin/develop", "HEAD");
+      // Soltanto le righe Markdown aggiunte dalla PR: dopo un aggiornamento della base gli
+      // stessi file possono già citare la decisione dell'altra PR con quel numero.
+      for (const file of inside(
+        "diff",
+        "--name-only",
+        "--diff-filter=AM",
+        base,
+        "HEAD",
+        "--",
+        "*.md",
+      )
+        .split("\n")
+        .filter(Boolean)) {
+        const target = path.join(directory, file);
+        const text = readFileSync(target, "utf8");
+        const lines = addedLineNumbers(inside("diff", "-U0", base, "HEAD", "--", file));
+        const next = renumberDecisions(text, mapping, lines);
+        if (next !== text) writeFileSync(target, next);
+      }
+      const names = Object.entries(mapping)
+        .map(([from, to]) => `${from} in ${to}`)
+        .join(", ");
+      inside(
+        "-c",
+        "user.name=github-actions",
+        "-c",
+        "user.email=github-actions@users.noreply.github.com",
+        "commit",
+        "--quiet",
+        "-am",
+        `docs: rinumera le decisioni ${names}`,
+      );
+      inside(
+        "push",
+        "--quiet",
+        `--force-with-lease=refs/heads/${pr.headRefName}:${pr.headRefOid}`,
+        "origin",
+        `HEAD:refs/heads/${pr.headRefName}`,
+      );
+      return inside("rev-parse", "HEAD");
+    } finally {
+      git("worktree", "remove", "--force", directory);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+/** Rinumerazione delle decisioni della PR rispetto alla base attuale; vuota se non serve. */
+/**
+ * Le voci dei frammenti della PR vanno in una versione non ancora pubblicata della base attuale:
+ * se nel frattempo la versione in cima ha ricevuto tag o giorno, la PR apre la successiva prima
+ * del merge. La qualifica l'ha controllato sulla base di allora, e il changelog è fuori dalla
+ * compatibilità delle basi.
+ */
+function assertPullRequestChanges(pr) {
+  localGit(() => git("fetch", "--quiet", "--tags", "origin"));
+  const base = git("merge-base", "origin/develop", pr.headRefOid);
+  const fragments = git(
+    "diff",
+    "--name-only",
+    "--diff-filter=AM",
+    base,
+    pr.headRefOid,
+    "--",
+    "changes/",
+  )
+    .split("\n")
+    .filter((file) => changeFile.test(file))
+    .map((file) => git("show", `${pr.headRefOid}:${file}`));
+  assertChangesVersion(
+    git("show", "origin/develop:CHANGELOG.md"),
+    fragments,
+    git("tag", "--list", "v2.*").split("\n"),
+  );
+}
+
+/** ID delle decisioni nelle tabelle Markdown di un commit. */
+function decisionIds(ref) {
+  try {
+    return [
+      ...git("grep", "-h", "-o", "-E", "^[|] *D[0-9]+ *[|]", ref, "--", "*.md").matchAll(/D\d+/gu),
+    ].map((match) => match[0]);
+  } catch {
+    // Nessuna riga trovata: nessun numero.
+    return [];
+  }
+}
+
+function decisionCollisions(pr) {
+  const base = git("merge-base", "origin/develop", pr.headRefOid);
+  const added = addedDecisions(
+    git("diff", "-U0", base, pr.headRefOid, "--", "*.md"),
+    decisionIds(base),
+  );
+  if (!added.length) return {};
+  return decisionRenumbering(added, decisionIds("origin/develop"));
+}
+
 /** Qualifica e merge di una PR aperta; restituisce la PR riletta dopo l'esito. */
 async function mergeOpenPullRequest(repository, number, pr) {
   // Il merge automatico resta sospeso finché la testa non è qualificata sulla base attuale.
@@ -1014,31 +1408,47 @@ async function mergeOpenPullRequest(repository, number, pr) {
       }
     }
   };
-  // Un merge alla volta: le qualifiche delle altre PR proseguono intanto, e la PR entra soltanto
-  // se la base attuale resta compatibile con la sua testa, altrimenti si riqualifica.
+  // Un merge alla volta fra tutti i cicli, anche su runner diversi: le qualifiche delle altre PR
+  // proseguono intanto, e la PR entra soltanto se la base attuale resta compatibile con la sua
+  // testa, altrimenti si riqualifica.
+  const store = remoteLockStore(repository, "merge");
+  const owner = lockOwner();
   for (let round = 1; pr.state === "OPEN"; round++) {
     await qualify();
     const expectedHead = pr.headRefOid;
-    const requalify = await withLock(lockDirectory("merge"), "il merge", async () => {
-      fetchHead("develop");
-      pr = read();
-      if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante la qualifica.");
-      if (mergeDecision(round, independent(develop())) === "requalify") {
-        console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
-        return true;
-      }
-      // Tutti i controlli prima del merge: `Node 26` è il solo richiesto da GitHub.
-      await waitChecks(repository, pr.headRefOid);
-      enableAutoMerge(repository, number, pr.headRefOid);
-      // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
-      for (let attempt = 0; attempt < 180; attempt++) {
+    const requalify = await withRemoteLock(
+      store,
+      async () => {
+        fetchHead("develop");
         pr = read();
-        if (pr.state !== "OPEN") break;
-        if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante il ciclo.");
-        await pause(10_000);
-      }
-      return false;
-    });
+        if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante la qualifica.");
+        if (mergeDecision(round, independent(develop())) === "requalify") {
+          console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
+          return true;
+        }
+        // Un'altra PR ha già portato sulla base i numeri delle decisioni nuove: si rinumerano.
+        assertPullRequestChanges(pr);
+        const mapping = decisionCollisions(pr);
+        if (Object.keys(mapping).length) {
+          const head = renumberPullRequest(pr, mapping);
+          console.log(`Decisioni rinumerate sul branch della PR: nuova qualifica di ${head}.`);
+          pr = await waitUpdatedHead(read, expectedHead, (sha) => sha === head);
+          return true;
+        }
+        // Tutti i controlli prima del merge: `Node 26` è il solo richiesto da GitHub.
+        await waitChecks(repository, pr.headRefOid, 15 * 60_000);
+        enableAutoMerge(repository, number, pr.headRefOid);
+        // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
+        for (let attempt = 0; attempt < 180; attempt++) {
+          pr = read();
+          if (pr.state !== "OPEN") break;
+          if (pr.headRefOid !== expectedHead) throw new Error("PR modificata durante il ciclo.");
+          await pause(10_000);
+        }
+        return false;
+      },
+      { owner },
+    );
     if (!requalify) break;
   }
   return pr;
@@ -1118,11 +1528,12 @@ async function lotPreflight({ repository, sha, version, reviewed = "" }) {
   const lot = {
     base,
     deploy: distributes(base, sha),
-    qualify: qualificationChange(files),
+    // Senza deploy si attende la qualifica soltanto se cambia la procedura che gira da `main`.
+    qualify: mainProcessChange(files),
     reviewed: "",
   };
   if (!lot.deploy) return { ...lot, version };
-  const changelog = git("show", `${sha}:CHANGELOG.md`);
+  const changelog = fullChangelog(sha);
   const target = version ?? topVersion(changelog);
   assertPromotable(changelog, target, git("tag", "--list", "v2.*").split("\n"));
   const added = addedMigrations(base, sha);
@@ -1309,15 +1720,18 @@ async function confirmProduction(repository, jobs, sha, version) {
 }
 
 /**
- * Promuovi: la testa di `develop` con i controlli verdi, già qualificata, diventa `main` e si
- * distribuisce. Senza modifiche da distribuire basta avanzare `main`. `--urgente` non attende la
+ * Promuovi: il commit di `develop` già certificato, il più recente, o quello indicato, diventa
+ * `main` e si distribuisce. Senza modifiche da distribuire basta avanzare `main`. `--urgente` non attende la
  * produzione di nuove prove: riusa soltanto una certificazione già valida sul tree.
  */
 async function promoteCycle({ repository, values }) {
   const requestedAt = values["requested-at"] || new Date().toISOString();
   const head = headOf(repository, "develop");
-  const sha = values.sha ?? head;
-  if (values.sha) assertContained(sha, compareStatus(repository, sha, head));
+  // Pubblica in Production: il commit integrato della PR appena pubblicata, con il lotto che la
+  // precede su `develop`.
+  const merged = values.pr ? mergedCommit(readPullRequest(repository, values.pr)) : undefined;
+  const sha = merged ? chooseTarget(repository, values, merged) : (values.sha ?? head);
+  if (merged || values.sha) assertContained(sha, compareStatus(repository, sha, head));
   const lot = await lotPreflight({
     repository,
     sha,
@@ -1388,6 +1802,67 @@ async function promoteCycle({ repository, values }) {
   console.log("Pubblicazione conclusa; ricevuta e release disponibili nella run.");
 }
 
+/** Commit integrato di una PR unita in `develop`. */
+export function mergedCommit(pr) {
+  if (pr.state !== "MERGED" || pr.baseRefName !== "develop" || !pr.mergeCommit?.oid)
+    throw new Error("PR non integrata in develop: nessun commit da promuovere.");
+  return pr.mergeCommit.oid;
+}
+
+/**
+ * Commit da promuovere: il più recente di `develop` dopo `main` con il tree già certificato, così
+ * `Promuovi` non aspetta la qualifica dei merge appena entrati, che passano al lotto successivo.
+ * Con una versione indicata vale il più recente che la porta in cima al changelog. `commits` va
+ * dalla testa all'indietro; senza un commit certificato vale la testa, e il ciclo ne attende la
+ * qualifica.
+ */
+export function promotionTarget(commits, certified, version, topOf = () => version) {
+  const index = commits.findIndex(
+    (commit) => certified(commit.tree) && (!version || topOf(commit.sha) === version),
+  );
+  return index < 0
+    ? { sha: commits[0]?.sha, later: 0, certified: false }
+    : { sha: commits[index].sha, later: index, certified: true };
+}
+
+/**
+ * Destinazione di `Promuovi` sulla storia di `develop` dopo `main`, al più cinquanta commit; con
+ * `floor` soltanto quel commit e i suoi discendenti, come il commit integrato di «Pubblica in
+ * Production», la cui CI un merge successivo può aver annullato.
+ */
+function chooseTarget(repository, values, floor) {
+  const head = headOf(repository, "develop");
+  if (values.testa) return head;
+  localGit(() => git("fetch", "--quiet", "origin", "develop", "main"));
+  const commits = git(
+    "log",
+    "--first-parent",
+    "--max-count=50",
+    "--format=%H %T",
+    floor ? `${floor}^..${head}` : `origin/main..${head}`,
+  )
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [sha, tree] = line.split(" ");
+      return { sha, tree };
+    });
+  if (!commits.length) return head;
+  const target = promotionTarget(
+    commits,
+    (tree) => candidateAvailable(repository, tree),
+    values.version,
+    (sha) => topVersion(git("show", `${sha}:CHANGELOG.md`)),
+  );
+  if (!target.certified)
+    console.log("Nessun commit certificato dopo main: si promuove la testa dopo la sua qualifica.");
+  else if (target.later)
+    console.log(
+      `Si promuove ${target.sha.slice(0, 12)}, già certificato: ${target.later} merge successivi restano al lotto seguente.`,
+    );
+  return target.sha;
+}
+
 /** Ritiro d'incidente della versione attiva: non ricostruisce e non tocca i dati. */
 async function rollbackCycle({ repository, values }) {
   const sha = headOf(repository, "main");
@@ -1424,7 +1899,17 @@ function metricsCycle({ repository }) {
       attempts.push(...runJobs(repository, run.id, attempt));
     jobs.set(run.id, attempts);
   }
-  console.log(JSON.stringify(promotionMetrics(runs, receipts, jobs), null, 2));
+  // Le qualifiche del candidato sono il grosso dell'attesa di `Promuovi`: coda, browser e mutation.
+  const { workflow_runs: qualifications } = ghJson(
+    "api",
+    `repos/${repository}/actions/workflows/candidate.yml/runs?branch=develop&status=success&per_page=10`,
+  );
+  const candidates = qualifications.map((run) => ({
+    commit: (run.display_title ?? "").split(" ").at(-1)?.slice(0, 12) ?? run.head_sha.slice(0, 12),
+    day: run.created_at.slice(0, 10),
+    ...candidatePhases(runJobs(repository, run.id)),
+  }));
+  console.log(JSON.stringify({ ...promotionMetrics(runs, receipts, jobs), candidates }, null, 2));
 }
 
 /** Oggetto del ciclo nel titolo della run: il comando riaggancia quella attiva. */
@@ -1487,13 +1972,18 @@ function coordinatorAvailable(repository) {
  */
 async function coordinate({ repository, command, number, values }) {
   const requestedAt = new Date().toISOString();
-  const object = ["pr", "resume"].includes(command) ? number : (values.version ?? "lotto");
-  const sha =
-    command === "pr"
-      ? readPullRequest(repository, number).headRefOid
-      : command === "resume"
-        ? ghJson("api", `repos/${repository}/actions/runs/${number}`).head_sha
-        : headOf(repository, command === "rollback" ? "main" : "develop");
+  const object = ["pr", "production", "resume"].includes(command)
+    ? number
+    : (values.version ?? "lotto");
+  const resumed =
+    command === "resume" ? ghJson("api", `repos/${repository}/actions/runs/${number}`) : undefined;
+  const sha = ["pr", "production"].includes(command)
+    ? readPullRequest(repository, number).headRefOid
+    : resumed
+      ? resumed.head_sha
+      : command === "rollback"
+        ? headOf(repository, "main")
+        : chooseTarget(repository, values);
   const title = coordinatorTitle(command, object, sha);
   const list = () =>
     ghJson(
@@ -1524,6 +2014,8 @@ async function coordinate({ repository, command, number, values }) {
       "-f",
       `object=${object}`,
       "-f",
+      `environment=${resumed ? resumeEnvironment(resumed) : "production"}`,
+      "-f",
       `sha=${sha}`,
       "-f",
       `requested_at=${requestedAt}`,
@@ -1539,7 +2031,8 @@ async function coordinate({ repository, command, number, values }) {
     if (!run) throw new Error("Workflow del ciclo non osservato.");
   }
   console.log(`Ciclo in Actions: run ${run.databaseId}.`);
-  if (command === "pr") rememberPublication({ repository, number, sha, run: run.databaseId });
+  if (["pr", "production"].includes(command))
+    rememberPublication({ repository, number, sha, run: run.databaseId });
   await watch([
     "run",
     "watch",
@@ -1551,13 +2044,23 @@ async function coordinate({ repository, command, number, values }) {
     "30",
   ]);
   summary(repository, run.databaseId);
-  if (command === "pr") reconcileLocalPublications(repository);
+  if (["pr", "production"].includes(command)) reconcileLocalPublications(repository);
+}
+
+/** Pubblica in Production: nel workflow i due passi girano in job distinti, ciascuno nel suo gruppo. */
+async function productionCycle(context) {
+  await pullRequestCycle(context);
+  await promoteCycle({
+    ...context,
+    values: { ...context.values, sha: undefined, pr: context.number },
+  });
 }
 
 const cycles = {
   cleanup: cleanupCycle,
   resume: resumeCycle,
   pr: pullRequestCycle,
+  production: productionCycle,
   promote: promoteCycle,
   candidate: candidateCycle,
   rollback: rollbackCycle,
@@ -1575,6 +2078,8 @@ async function main() {
       qui: { type: "boolean", default: false },
       manual: { type: "boolean", default: false },
       weekly: { type: "boolean", default: false },
+      testa: { type: "boolean", default: false },
+      pr: { type: "string" },
       "requested-at": { type: "string" },
       "reviewed-migrations": { type: "string", default: "" },
     },
@@ -1590,12 +2095,12 @@ async function main() {
   if (command === "candidate-ready") return candidateReady({ repository, values });
   if (
     !process.env.GITHUB_ACTIONS &&
-    ["pr", "promote", "rollback", "resume", "cleanup"].includes(command)
+    ["pr", "production", "promote", "rollback", "resume", "cleanup"].includes(command)
   )
     reconcileLocalPublications(repository);
   // Il ciclo dura decine di minuti: in Actions sopravvive alla sessione e al Mac spento.
   if (
-    ["pr", "promote", "rollback", "resume"].includes(command) &&
+    ["pr", "production", "promote", "rollback", "resume"].includes(command) &&
     !process.env.GITHUB_ACTIONS &&
     (!values.qui || command !== "pr")
   ) {

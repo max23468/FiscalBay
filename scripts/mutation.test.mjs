@@ -7,6 +7,10 @@ import {
   consumerTests,
   criticalModule,
   evaluate,
+  incrementalSafe,
+  lineMatrix,
+  lineParts,
+  mergeReports,
   mutationConcurrency,
   mutationCoverageGaps,
   mutationJobs,
@@ -122,6 +126,91 @@ describe("esito dei mutation test", () => {
       { target: "app/b.server.ts", shard: "1/2" },
       { target: "app/a.server.ts", shard: "1/1" },
     ]);
+  });
+
+  it("divide le righe cambiate in parti di circa cinquanta mutanti senza tagliare un mutante", () => {
+    const mutants = (from, to) =>
+      Array.from({ length: to - from + 1 }, (_, index) => ({
+        start: from + index,
+        end: from + index,
+      }));
+    // Intervalli piccoli si riuniscono, uno grande si divide.
+    assert.deepEqual(lineParts("1-10,20-30", [...mutants(1, 10), ...mutants(20, 30)]), [
+      "1-10,20-30",
+    ]);
+    const large = lineParts("100-219", mutants(100, 219));
+    assert.equal(large.length, 3);
+    assert.equal(large[0].split("-")[0], "100");
+    assert.equal(large.at(-1).split("-")[1], "219");
+    // Un mutante su più righe resta in una sola parte.
+    const spanning = [...mutants(1, 49), { start: 50, end: 52 }, ...mutants(53, 60)];
+    for (const part of lineParts("1-60", spanning))
+      for (const range of part.split(",")) {
+        const [start, end] = range.split("-").map(Number);
+        assert.ok(!(start > 50 && start <= 52) && !(end >= 50 && end < 52), range);
+      }
+    // Senza mutanti resta una parte, che conferma l'assenza.
+    assert.deepEqual(lineParts("5-6,9-9", []), ["5-6,9-9"]);
+  });
+
+  it("riusa la base incrementale soltanto dopo cambi di test e documenti", () => {
+    for (const file of ["test/orders.spec.ts", "test/x.unit.ts", "docs/a.md", "changes/b.md"])
+      assert.ok(incrementalSafe(file), file);
+    for (const file of [
+      "app/auth.server.ts",
+      "test/fixtures/account-fixtures.ts",
+      "vitest.config.ts",
+      "pnpm-lock.yaml",
+    ])
+      assert.ok(!incrementalSafe(file), file);
+  });
+
+  it("conserva il nome del job quando le righe stanno in una parte", async () => {
+    const target = "app/auth.server.ts";
+    const many = Array.from({ length: 120 }, (_, index) => ({ start: index + 1, end: index + 1 }));
+    const single = await lineMatrix({ include: [{ target, lines: "1-3" }] }, async () => many);
+    assert.deepEqual(single.include, [{ target, lines: "1-3", part: "" }]);
+    const split = await lineMatrix({ include: [{ target, lines: "1-120" }] }, async () => many);
+    assert.deepEqual(
+      split.include.map(({ part }) => part),
+      ["1/3", "2/3", "3/3"],
+    );
+    await assert.rejects(lineMatrix({ include: [{ target: "app/format.ts", lines: "1-1" }] }));
+  });
+
+  it("riunisce le parti di una prova in un report incrementale senza doppioni né esiti instabili", () => {
+    const mutant = (line, status, mutatorName = "BooleanLiteral") => ({
+      id: String(line),
+      mutatorName,
+      replacement: "false",
+      status,
+      location: { start: { line, column: 1 }, end: { line, column: 5 } },
+    });
+    const report = (mutants, tests = {}) => ({
+      schemaVersion: "2",
+      files: { "app/a.server.ts": { language: "typescript", source: "sorgente", mutants } },
+      testFiles: tests,
+    });
+    const merged = mergeReports([
+      report([mutant(1, "Killed"), mutant(2, "Timeout")], {
+        "test/a.spec.ts": { tests: [{ id: "a" }] },
+      }),
+      report([mutant(1, "Killed"), mutant(3, "Survived"), mutant(4, "RuntimeError")], {
+        "test/b.spec.ts": { tests: [{ id: "b" }] },
+      }),
+    ]);
+    assert.deepEqual(
+      merged.files["app/a.server.ts"].mutants.map(({ location, status }) => [
+        location.start.line,
+        status,
+      ]),
+      [
+        [1, "Killed"],
+        [3, "Survived"],
+      ],
+    );
+    assert.deepEqual(Object.keys(merged.testFiles).sort(), ["test/a.spec.ts", "test/b.spec.ts"]);
+    assert.equal(mergeReports([]), undefined);
   });
 
   it("prova ogni modulo con i test che lo importano, anche indirettamente", () => {

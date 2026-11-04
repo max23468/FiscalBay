@@ -28,8 +28,14 @@ import {
   rollbackRequired,
   assertConfirmable,
   deployReport,
+  assertChangesVersion,
   assertVersionStep,
   deployTag,
+  fragmentDecisions,
+  laterPart,
+  publicationDay,
+  rebaseLinks,
+  withDecisions,
   datedChangelog,
   romeDay,
   topVersion,
@@ -56,6 +62,8 @@ describe("ciclo reale con provider simulati", () => {
         mkdirSync(path.dirname(path.join(directory, "scripts", file)), { recursive: true });
         cpSync(path.join("scripts", file), path.join(directory, "scripts", file));
       }
+      // Gli script leggono il changelog con i frammenti tramite il modulo dell'app.
+      write("app/changelog-fragments.mjs", readFileSync("app/changelog-fragments.mjs", "utf8"));
       write(".gitignore", ".cloudflare/\nreports/\n");
       write("package.json", JSON.stringify({ type: "module", packageManager: "pnpm@12.15.0" }));
       write("pnpm-lock.yaml", "lockfileVersion: '9.0'\n");
@@ -963,5 +971,119 @@ describe("comandi della pubblicazione", () => {
     assert.throws(() => tag("2.0.1", "production", ["v2.0.0"], "2.0.1", ""), /non ha il giorno/u);
     assert.equal(tag("2.0.1", "production", ["v2.0.0"], "2.0.1", "", "2026-11-05"), "2.0.1");
     assert.equal(tag("2.0.1", "test", ["v2.0.0"], undefined, ""), `2.0.1-dev.${"b".repeat(12)}`);
+  });
+});
+
+describe("frammenti delle PR", () => {
+  const changelog = [
+    "# Changelog",
+    "",
+    "## [2.0.3]",
+    "",
+    "### Novità",
+    "",
+    "#### Correzioni",
+    "",
+    "- **Uno.** Primo.",
+    "",
+    "### What's new",
+    "",
+    "#### Fixes",
+    "",
+    "- **One.** First.",
+    "",
+    "## [2.0.2] - 2026-11-03",
+    "",
+  ].join("\n");
+  const register =
+    "| ID | A | B |\n|---|---|---|\n| D001 | a | [R](../product/PRODUCT.md) |\n\nNota.\n";
+  const fragment = (title, decision = "") =>
+    [
+      "# Frammento",
+      "",
+      "## Changelog",
+      "",
+      "### Novità",
+      "",
+      "#### Correzioni",
+      "",
+      `- **${title}.** Testo.`,
+      "",
+      "### What's new",
+      "",
+      "#### Fixes",
+      "",
+      `- **${title}.** Text.`,
+      ...(decision ? ["", "## Decisioni", "", "| ID | A | B |", "|---|---|---|", decision] : []),
+      "",
+    ].join("\n");
+
+  it("il giorno riunisce i frammenti pubblicati e lascia gli altri alla versione seguente", () => {
+    const day = publicationDay(
+      {
+        changelog,
+        register,
+        published: [fragment("Due", "| D002 | b | [R](../docs/product/PRODUCT.md#s01) |")],
+        later: [fragment("Tre")],
+      },
+      "2.0.3",
+      "2026-11-05",
+    );
+    assert.ok(day.changelog.includes("## [2.0.4]\n\n## [2.0.3] - 2026-11-05"));
+    assert.ok(day.changelog.includes("- **Uno.** Primo.\n- **Due.** Testo."));
+    assert.ok(!day.changelog.includes("Tre"));
+    // Le righe arrivano dopo l'ultima decisione, con i link ricalcolati dal registro.
+    assert.equal(
+      day.register,
+      "| ID | A | B |\n|---|---|---|\n| D001 | a | [R](../product/PRODUCT.md) |\n| D002 | b | [R](../product/PRODUCT.md#s01) |\n\nNota.\n",
+    );
+    // Senza frammenti successivi non si apre nessuna versione.
+    const alone = publicationDay(
+      { changelog, register, published: [], later: [] },
+      "2.0.3",
+      "2026-11-05",
+    );
+    assert.ok(alone.changelog.startsWith("# Changelog\n\n## [2.0.3] - 2026-11-05"));
+    assert.equal(alone.register, register);
+  });
+
+  it("con una versione già aperta sopra, il giorno riunisce i frammenti in quella pubblicata", () => {
+    const open = changelog.replace("## [2.0.3]", "## [2.0.4]\n\n## [2.0.3]");
+    const day = publicationDay(
+      { changelog: open, register, published: [fragment("Due")], later: [] },
+      "2.0.3",
+      "2026-11-05",
+    );
+    const top = day.changelog.slice(0, day.changelog.indexOf("## [2.0.3]"));
+    assert.ok(!top.includes("Due"));
+    assert.ok(day.changelog.includes("## [2.0.3] - 2026-11-05"));
+    assert.ok(day.changelog.includes("- **Uno.** Primo.\n- **Due.** Testo."));
+    // Righe aggiunte dopo allo stesso frammento restano; senza novità il frammento sparisce.
+    const later = laterPart(`${fragment("Due")}\n- **Tre.** Altro.\n`, fragment("Due"));
+    assert.ok(later.includes("- **Tre.** Altro.") && !later.includes("- **Due.** Testo."));
+    assert.equal(laterPart(fragment("Due"), fragment("Due")), "");
+  });
+
+  it("legge le decisioni del frammento e ricalcola i link relativi", () => {
+    assert.deepEqual(fragmentDecisions(fragment("Due", "| D002 | b | c |")), ["| D002 | b | c |"]);
+    assert.deepEqual(fragmentDecisions("# Solo changelog\n"), []);
+    assert.throws(() => withDecisions("nessuna tabella", ["| D002 | b | c |"]), /Tabella/u);
+    assert.equal(
+      rebaseLinks("[a](../docs/x.md#y) [b](https://x.it) [c](#z)", "changes", "."),
+      "[a](docs/x.md#y) [b](https://x.it) [c](#z)",
+    );
+  });
+
+  it("le voci di un frammento richiedono una versione in preparazione", () => {
+    assert.doesNotThrow(() => assertChangesVersion(changelog, [fragment("Due")], ["v2.0.2"]));
+    const released = changelog.replace("## [2.0.3]", "## [2.0.3] - 2026-11-05");
+    assert.throws(
+      () => assertChangesVersion(released, [fragment("Due")], ["v2.0.3"]),
+      /versione in preparazione/u,
+    );
+    // Un frammento con le sole decisioni non chiede una versione.
+    assert.doesNotThrow(() =>
+      assertChangesVersion(released, ["# D\n\n## Decisioni\n\n| D002 | b | c |\n"], ["v2.0.3"]),
+    );
   });
 });

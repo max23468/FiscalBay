@@ -59,9 +59,10 @@ jobs:
     strategy:
       # Ogni modulo conclude la propria prova: un fallimento non nasconde gli altri esiti.
       fail-fast: false
-      # Venti job contemporanei per l'account: con gli otto browser del candidato restano liberi i
-      # posti per la CI di una PR quando la mutation gira da sola.
-      max-parallel: 12
+      # Venti job contemporanei per l'account. Di giorno la qualifica del candidato ne lascia
+      # almeno quattro alle PR mentre girano i suoi otto browser, e dodici dopo, anche quando parte
+      # dalla pianificazione oraria; le campagne del lunedì notte usano quasi tutti i posti.
+      max-parallel: ${{ (github.event.schedule == '17 3 * * 1' || github.event.schedule == '23 3 * * 1') && 16 || 8 }}
       matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
     env:
       MUTATION_TARGET: ${{ matrix.target }}
