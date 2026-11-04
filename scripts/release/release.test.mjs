@@ -29,6 +29,7 @@ import {
   assertConfirmable,
   deployReport,
   assertChangesVersion,
+  assertMergedChangesVersion,
   assertVersionStep,
   deployTag,
   fragmentDecisions,
@@ -1085,5 +1086,22 @@ describe("frammenti delle PR", () => {
     assert.doesNotThrow(() =>
       assertChangesVersion(released, ["# D\n\n## Decisioni\n\n| D002 | b | c |\n"], ["v2.0.3"]),
     );
+  });
+
+  it("al merge ammette la PR che apre la versione successiva a quella pubblicata su develop", () => {
+    const released = changelog.replace("## [2.0.3]", "## [2.0.3] - 2026-11-05");
+    const opened = released.replace(
+      "## [2.0.3] - 2026-11-05",
+      "## [2.0.4]\n\n## [2.0.3] - 2026-11-05",
+    );
+    assert.doesNotThrow(() =>
+      assertMergedChangesVersion(released, opened, [fragment("Due")], ["v2.0.3"]),
+    );
+    // Senza aprirla, o con la stessa versione già pubblicata nel frattempo, il merge si ferma.
+    for (const head of [released, changelog])
+      assert.throws(
+        () => assertMergedChangesVersion(released, head, [fragment("Due")], ["v2.0.3"]),
+        /versione in preparazione/u,
+      );
   });
 });

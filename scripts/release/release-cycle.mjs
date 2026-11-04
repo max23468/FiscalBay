@@ -24,7 +24,7 @@ import { fileURLToPath } from "node:url";
 import { distributes, mainProcessChange, plan } from "../classify-changes.mjs";
 import {
   addedMigrations,
-  assertChangesVersion,
+  assertMergedChangesVersion,
   changeFile,
   declaredReview,
   fullChangelog,
@@ -1331,9 +1331,9 @@ function renumberPullRequest(pr, mapping) {
 
 /** Rinumerazione delle decisioni della PR rispetto alla base attuale; vuota se non serve. */
 /**
- * Le voci dei frammenti della PR vanno in una versione non ancora pubblicata della base attuale:
- * se nel frattempo la versione in cima ha ricevuto tag o giorno, la PR apre la successiva prima
- * del merge. La qualifica l'ha controllato sulla base di allora, e il changelog è fuori dalla
+ * Le voci dei frammenti della PR vanno in una versione non ancora pubblicata della base attuale,
+ * o in quella che la PR stessa apre sopra: se nel frattempo la versione in cima ha ricevuto tag o
+ * giorno, la PR apre la successiva prima del merge. La qualifica l'ha controllato sulla base di allora, e il changelog è fuori dalla
  * compatibilità delle basi.
  */
 function assertPullRequestChanges(pr) {
@@ -1351,8 +1351,9 @@ function assertPullRequestChanges(pr) {
     .split("\n")
     .filter((file) => changeFile.test(file))
     .map((file) => git("show", `${pr.headRefOid}:${file}`));
-  assertChangesVersion(
+  assertMergedChangesVersion(
     git("show", "origin/develop:CHANGELOG.md"),
+    git("show", `${pr.headRefOid}:CHANGELOG.md`),
     fragments,
     git("tag", "--list", "v2.*").split("\n"),
   );

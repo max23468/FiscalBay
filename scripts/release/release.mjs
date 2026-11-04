@@ -292,6 +292,17 @@ export function assertChangesVersion(changelog, fragments, releasedTags = []) {
     );
 }
 
+/**
+ * Il controllo al merge: le voci della PR vanno nella versione in cima a `develop`, oppure in
+ * quella che la PR stessa apre sopra, come chiede la prima PR con una modifica visibile dopo una
+ * pubblicazione. Con la stessa versione in cima vale `develop`, che può averla pubblicata nel
+ * frattempo.
+ */
+export function assertMergedChangesVersion(developChangelog, headChangelog, fragments, tags) {
+  const opened = topVersion(headChangelog) !== topVersion(developChangelog);
+  assertChangesVersion(opened ? headChangelog : developChangelog, fragments, tags);
+}
+
 export const latestReleased = (releasedTags) =>
   releasedTags
     .map((tag) => tag.replace(/^v/u, ""))
