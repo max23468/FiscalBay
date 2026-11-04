@@ -140,6 +140,9 @@ async function tradingRequest(access: EbayAccess, call: string, fields: string):
   return xml;
 }
 
+/** Trading non restituisce ordini né modifiche più vecchi di novanta giorni. */
+export const tradingReachDays = 90;
+
 /** Elenco Trading: include gli acquisti non ancora disponibili in Fulfillment. */
 export async function readTradingOrders(
   access: EbayAccess,
@@ -154,7 +157,7 @@ export async function readTradingOrders(
     "GetOrders",
     `<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>` +
       `<ModTimeFrom>${from}</ModTimeFrom><ModTimeTo>${until}</ModTimeTo>` +
-      `<Pagination><EntriesPerPage>25</EntriesPerPage><PageNumber>${input.page}</PageNumber></Pagination>`,
+      `<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>${input.page}</PageNumber></Pagination>`,
   );
   return parseTradingOrders(xml);
 }

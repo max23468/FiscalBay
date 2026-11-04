@@ -23,7 +23,11 @@ export let callbackId = 0;
 export const origin = "http://localhost:5173";
 export const secret = env.TELEGRAM_WEBHOOK_SECRET!;
 export const send = vi.fn<Queue["send"]>().mockResolvedValue(queued);
-export const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) };
+export const environment = {
+  ...env,
+  WORK_QUEUE: fakeQueue({ send }),
+  INGRESS_QUEUE: fakeQueue({ send }),
+};
 /** Utente con spazio, negozio e, se richiesto, Premium in corso. */
 export async function account(name: string, premium = true) {
   const { userId, cookie } = await verifiedSession(`${name}@example.invalid`);

@@ -562,7 +562,11 @@ describe("Stripe Managed Payments", () => {
     const verified = await verifyStripeEvent(body, signature, secret);
     expect(verified).toEqual(event);
     const send = vi.fn().mockResolvedValue(queued);
-    const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) };
+    const environment = {
+      ...env,
+      WORK_QUEUE: fakeQueue({ send }),
+      INGRESS_QUEUE: fakeQueue({ send }),
+    };
     const request = () =>
       new Request("https://test.fiscalbay.it/webhooks/stripe", {
         method: "POST",
@@ -622,7 +626,7 @@ describe("Stripe Managed Payments", () => {
         headers: { "stripe-signature": signature },
         body,
       }),
-      { ...env, WORK_QUEUE: fakeQueue({ send }) },
+      { ...env, WORK_QUEUE: fakeQueue({ send }), INGRESS_QUEUE: fakeQueue({ send }) },
       fetch,
       new Date(event.created * 1000),
     );

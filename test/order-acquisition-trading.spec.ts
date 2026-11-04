@@ -6,6 +6,8 @@ import { listVisibleOrders } from "../app/domain/orders.server";
 
 import { recordOrderObservation } from "../app/domain/order-import.server";
 
+import { setSwitch } from "../app/domain/service-settings.server";
+
 import { now } from "./fixtures/database-fixtures";
 
 import {
@@ -265,8 +267,14 @@ it("legge Trading nella finestra dello storico, salta l'ordine illeggibile e ric
           "2026-10-03T00:00:00Z",
         ),
       ]),
+    // Un mese dopo il limite: la seconda finestra arriva fino all'istante corrente.
+    () => tradingPage(0, false, []),
   ];
   expect(await acquire(provider, "2026-10-03T00:00:00.000Z")).toBe("complete");
+  expect(requested.slice(-2).map((body) => field(body, "ModTimeTo"))).toEqual([
+    "2026-10-02T01:45:00.000Z",
+    "2026-10-03T00:00:00.000Z",
+  ]);
   expect(
     await env.DB.prepare(
       "SELECT last_modified_time FROM order_source_refs WHERE external_order_id = 'VALIDO'",
@@ -299,4 +307,108 @@ it("non salta l'ordine Trading se cambia il consenso durante la passata", async 
   expect(await acquire(provider)).toBe("not_writable");
   expect(logged).not.toHaveBeenCalled();
   logged.mockRestore();
+});
+
+it("dopo una pausa di 45 giorni legge Trading per finestre di 30 giorni senza buchi", async () => {
+  const windows: Array<[string, string]> = [];
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      windows.push([
+        /<ModTimeFrom>([^<]+)</u.exec(body)![1]!,
+        /<ModTimeTo>([^<]+)</u.exec(body)![1]!,
+      ]);
+      return undefined;
+    },
+  });
+  expect(await acquire(provider)).toBe("complete");
+  expect(await env.DB.prepare("SELECT trading_cursor FROM sync_state").first()).toEqual({
+    trading_cursor: "2026-09-02T00:00:00.000Z",
+  });
+
+  windows.length = 0;
+  expect(await acquire(provider, "2026-10-17T00:00:00.000Z")).toBe("complete");
+  expect(windows).toEqual([
+    ["2026-09-01T23:45:00.000Z", "2026-10-01T23:45:00.000Z"],
+    ["2026-10-01T23:45:00.000Z", "2026-10-17T00:00:00.000Z"],
+  ]);
+  expect(
+    await env.DB.prepare("SELECT trading_cursor, trading_end FROM sync_state").first(),
+  ).toEqual({ trading_cursor: "2026-10-17T00:00:00.000Z", trading_end: null });
+
+  // Oltre i 90 giorni Trading non risponde: la lettura parte dal limite di eBay.
+  windows.length = 0;
+  expect(await acquire(provider, "2027-02-01T00:00:00.000Z")).toBe("complete");
+  expect(windows[0]![0]).toBe("2026-11-03T00:00:00.000Z");
+  expect(windows).toHaveLength(3);
+  expect(windows.at(-1)![1]).toBe("2027-02-01T00:00:00.000Z");
+});
+
+it("fra due finestre Trading si ferma con le chiamate spente e continua fino al confine delle due ore", async () => {
+  const windows: string[] = [];
+  let stop = false;
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      windows.push(/<ModTimeTo>([^<]+)</u.exec(body)![1]!);
+      return undefined;
+    },
+    before: async (_, init) => {
+      if (stop && String(init?.body).includes("<ModTimeFrom>"))
+        await setSwitch(env.DB, "ebay_calls", false, new Date("2026-10-17T00:00:00.000Z"));
+    },
+  });
+  await acquire(provider);
+  windows.length = 0;
+  // Spente durante la prima finestra: la seconda resta al turno successivo.
+  stop = true;
+  expect(await acquire(provider, "2026-10-17T00:00:00.000Z")).toBe("budget");
+  expect(windows).toEqual(["2026-10-01T23:45:00.000Z"]);
+  expect(
+    await env.DB.prepare("SELECT trading_cursor, trading_end FROM sync_state").first(),
+  ).toEqual({ trading_cursor: "2026-10-01T23:45:00.000Z", trading_end: null });
+
+  // Una finestra che finisce esattamente due ore prima dell'istante corrente continua.
+  stop = false;
+  await setSwitch(env.DB, "ebay_calls", true, new Date("2026-10-17T00:01:00.000Z"));
+  await env.DB.prepare("UPDATE sync_state SET trading_cursor = ?")
+    .bind("2026-09-01T00:15:00.000Z")
+    .run();
+  windows.length = 0;
+  expect(await acquire(provider, "2026-10-01T02:00:00.000Z")).toBe("complete");
+  expect(windows).toEqual(["2026-10-01T00:00:00.000Z", "2026-10-01T02:00:00.000Z"]);
+});
+
+it("una finestra Trading interrotta e ormai oltre i novanta giorni ricomincia dal limite", async () => {
+  const requests: Array<[string, string]> = [];
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      requests.push([
+        /<ModTimeFrom>([^<]+)</u.exec(body)![1]!,
+        /<PageNumber>([^<]+)</u.exec(body)![1]!,
+      ]);
+      return undefined;
+    },
+  });
+  await acquire(provider);
+  const at = "2027-02-01T00:00:00.000Z";
+  const reach = "2026-11-03T00:00:00.000Z";
+  // Anche una fine esattamente sul limite è ormai fuori portata.
+  for (const end of ["2026-10-01T00:00:00.000Z", reach]) {
+    await env.DB.prepare(
+      "UPDATE sync_state SET trading_cursor = '2026-09-01T00:00:00.000Z', trading_end = ?, trading_page = 3, trading_total = 250",
+    )
+      .bind(end)
+      .run();
+    requests.length = 0;
+    expect(await acquire(provider, at)).toBe("complete");
+    expect(requests[0]).toEqual([reach, "1"]);
+  }
 });

@@ -795,6 +795,7 @@ it.each([
         last_modified_time: modified,
         detail_attempts: attempts,
         marketplace_id: null,
+        creation_time: now,
       },
     );
     expect(

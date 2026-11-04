@@ -11,6 +11,10 @@ import { activeStore, renewableConsent, writableStore } from "./store-state.serv
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
+import {
+  clearCredentialFailures,
+  countCredentialFailure,
+} from "../integrations/ebay/seller-credentials.server";
 import type { EbayEnvironment } from "../view-models";
 import {
   ebayConfiguration,
@@ -120,7 +124,7 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
               -- Dopo una lettura non riuscita l'arretrato attende la cadenza del piano.
               (EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.store_id = c.store_id
                           AND sr.started_at = ss.polled_at AND sr.ok = 1)
-               AND (ss.history_done_at IS NULL OR ss.recent_next IS NOT NULL
+               AND (ss.history_done_at IS NULL OR ss.recent_end IS NOT NULL
                     OR ss.trading_end IS NOT NULL OR EXISTS (
                  SELECT 1 FROM order_source_refs r
                   WHERE r.store_id = c.store_id AND r.source = 'fulfillment'
@@ -395,6 +399,7 @@ async function serveStore(
       if (result === "busy")
         // Stryker disable next-line StringLiteral: lo scopo conta soltanto nel confronto con «origin».
         return { delaySeconds: 60, scope: "store" };
+      await clearCredentialFailures(env.DB, store.store_id, store.granted_at);
       // Con il consenso appena usato, una volta per consenso: gli ordini nuovi arrivano anche
       // come evento, fuori dalla cadenza del piano.
       await ensureOrderEvents(env, store, access, now);
@@ -405,6 +410,8 @@ async function serveStore(
       );
     } catch (error) {
       logFailure({ error, operation: "order_acquisition" });
+      if (error instanceof UpstreamError && error.failure === "credentials")
+        await countCredentialFailure(env.DB, store.store_id, store.granted_at, now);
       if (error instanceof UpstreamError && error.failure === "rate_limited")
         return {
           delaySeconds: Math.min(

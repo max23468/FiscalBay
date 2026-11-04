@@ -538,6 +538,42 @@ describe("righe complete del file", () => {
     ]);
   });
 
+  it("senza indirizzo di fatturazione scrive quello di spedizione", () => {
+    const order = visible({});
+    order.summary.buyer = {
+      ...order.summary.buyer!,
+      billingAddress: null,
+      shipTo: {
+        name: "Luca Neri",
+        phone: null,
+        address: {
+          addressLine1: "Piazza Spedizione 2",
+          addressLine2: null,
+          city: "Bolzano",
+          stateOrProvince: "BZ",
+          postalCode: "39100",
+          countryCode: "IT",
+        },
+      },
+    };
+    expect(exportRows(order, "order", it_, "Europe/Rome")[0]!.slice(9, 14)).toEqual([
+      "Piazza Spedizione 2",
+      "39100",
+      "Bolzano",
+      "BZ",
+      "IT",
+    ]);
+    // Senza nessuno dei due indirizzi le colonne restano vuote.
+    order.summary.buyer = { ...order.summary.buyer!, shipTo: null };
+    expect(exportRows(order, "order", it_, "Europe/Rome")[0]!.slice(9, 14)).toEqual([
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
+  });
+
   it("scrive l'acquirente e la riga completa, con il telefono della consegna come riserva", () => {
     const order = visible({
       taxIdentifiers: [

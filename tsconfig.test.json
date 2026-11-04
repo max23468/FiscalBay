@@ -4,6 +4,7 @@
     ".react-router/types/**/*",
     "app/**/*",
     "workers/**/*",
+    "telegram-worker/forward.ts",
     ".cloudflare/types/index.d.ts",
     "test/**/*",
     "benchmarks/**/*",

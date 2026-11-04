@@ -137,18 +137,29 @@ describe("invocazioni", () => {
 describe("code", () => {
   const target = targetOf("live");
 
-  it("ammette un turno di arretrato e nessun messaggio fra i falliti", () => {
-    const metrics = { work: { backlog_count: backlogWarning }, failed: { backlog_count: 0 } };
-    assert.deepEqual(failing(checkQueues(target, metrics)), []);
+  const metrics = (backlog, failed) =>
+    Object.fromEntries(
+      target.queues.flatMap(({ name, deadLetterQueue }) => [
+        [name, { backlog_count: backlog }],
+        [deadLetterQueue, { backlog_count: failed }],
+      ]),
+    );
+
+  it("ammette un turno di arretrato e nessun messaggio fra i falliti, in ogni coda", () => {
+    assert.deepEqual(failing(checkQueues(target, metrics(backlogWarning, 0))), []);
   });
 
-  it("segnala l'arretrato oltre un turno e i messaggi falliti", () => {
-    const metrics = { work: { backlog_count: backlogWarning + 1 }, failed: { backlog_count: 1 } };
-    assert.equal(failing(checkQueues(target, metrics)).length, 2);
+  it("segnala l'arretrato oltre un turno e i messaggi falliti di ciascuna coda", () => {
+    assert.deepEqual(failing(checkQueues(target, metrics(backlogWarning + 1, 1))), [
+      "arretrato di fiscalbay-webhooks",
+      "coda fiscalbay-webhooks-failed vuota",
+      "arretrato di fiscalbay-ingress",
+      "coda fiscalbay-ingress-failed vuota",
+    ]);
   });
 
   it("non considera vuota una coda non letta", () => {
-    assert.equal(failing(checkQueues(target, {})).length, 2);
+    assert.equal(failing(checkQueues(target, {})).length, 4);
   });
 });
 

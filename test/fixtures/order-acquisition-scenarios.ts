@@ -26,11 +26,13 @@ export type FakeOrder = ReturnType<typeof order>;
 
 /**
  * eBay sintetico con paginazione reale: filtra per data, ordina dal più recente e restituisce
- * `next` con l'offset. `before` interviene prima di ogni richiesta.
+ * `next` con l'offset, al più `pageLimit` ordini per pagina. `before` interviene prima di ogni
+ * richiesta.
  */
 export const ebay = (
   options: {
     orders?: FakeOrder[];
+    pageLimit?: number;
     getItem?: () => Response;
     trading?: () => Response;
     fail?: (url: URL, init?: RequestInit) => Response | undefined;
@@ -84,7 +86,7 @@ export const ebay = (
     const matching = orders
       .filter((item) => item[key] >= from! && item[key] <= to!)
       .sort((a, b) => b.creationDate.localeCompare(a.creationDate));
-    const limit = Number(url.searchParams.get("limit"));
+    const limit = Math.min(Number(url.searchParams.get("limit")), options.pageLimit ?? Infinity);
     const offset = Number(url.searchParams.get("offset") ?? 0);
     const next = new URL(url);
     next.searchParams.set("offset", String(offset + limit));
@@ -106,11 +108,15 @@ export const calls = (fetcher: ReturnType<typeof ebay>, name: string) =>
       !String(init?.body).includes("<ModTimeFrom>"),
   ).length;
 
-export const pages = (fetcher: ReturnType<typeof ebay>, field: string) =>
+/** Intervalli delle letture dell'elenco per il campo indicato, con l'offset delle pagine seguite. */
+export const slices = (fetcher: ReturnType<typeof ebay>, field: string) =>
   fetcher.mock.calls
-    .map(([input]) => new URL(String(input)))
-    .filter((url) => url.searchParams.get("filter")?.startsWith(`${field}:`))
-    .map((url) => Number(url.searchParams.get("offset") ?? 0));
+    .map(([input]) => new URL(String(input)).searchParams)
+    .filter((params) => params.get("filter")?.startsWith(`${field}:`))
+    .map((params) => {
+      const [, range] = /\[(.+)\]/u.exec(params.get("filter")!)!;
+      return params.has("offset") ? `${range}@${params.get("offset")}` : range!;
+    });
 
 export const acquire = (
   fetcher: typeof fetch,
@@ -130,7 +136,7 @@ export const acquire = (
 
 export const syncState = () =>
   env.DB.prepare(
-    `SELECT cursor, recent_next, history_from, history_until, history_next, history_done_at,
+    `SELECT cursor, recent_end, history_from, history_until, history_through, history_done_at,
               locked_until, last_success_at FROM sync_state WHERE store_id = 's-a'`,
   ).first<Record<string, string | null>>();
 

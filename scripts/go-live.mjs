@@ -42,7 +42,8 @@ export function targetOf(mode) {
   const live = mode === "live";
   const worker = workerOf(mode);
   const environment = live ? "live" : "test";
-  const queue = worker.triggers.find(({ type }) => type === "queue");
+  // Coda del lavoro e coda degli ingressi dei webhook, ciascuna con la sua coda dei falliti.
+  const queues = worker.triggers.filter(({ type }) => type === "queue");
   return {
     live,
     environment,
@@ -51,7 +52,7 @@ export function targetOf(mode) {
     domain: worker.domains[0],
     origin: new URL(worker.env.APP_ORIGIN.value).origin,
     database: databases[environment],
-    queue,
+    queues,
     exports: worker.env.EXPORT_FILES.name,
     turnstile: worker.name,
     secrets: declaredSecrets(mode),
@@ -208,8 +209,6 @@ export function checkResources(target, state, phase) {
   const worker = byName(state.workers, target.worker);
   const secrets = new Set(state.secrets ?? []);
   const missing = target.secrets.filter((name) => !secrets.has(name));
-  const queue = byName(state.queues, target.queue.name, "queue_name");
-  const failed = byName(state.queues, target.queue.deadLetterQueue, "queue_name");
   const rules = state.lifecycle?.rules ?? [];
   const widget = byName(state.widgets, target.turnstile);
   const registry = state.registry;
@@ -232,13 +231,18 @@ export function checkResources(target, state, phase) {
       detail: missing.length ? `mancano ${missing.join(", ")}` : undefined,
     },
     { area: "Dati", item: "D1 dell'ambiente in UE", ok: state.database?.jurisdiction === "eu" },
-    ...[queue, failed].map((entry, index) => ({
-      area: "Quote",
-      item: `coda ${index ? target.queue.deadLetterQueue : target.queue.name} in UE a 14 giorni`,
-      ok:
-        entry?.jurisdiction === "eu" &&
-        entry?.settings?.message_retention_period === queueRetention,
-    })),
+    ...target.queues
+      .flatMap(({ name, deadLetterQueue }) => [name, deadLetterQueue])
+      .map((name) => {
+        const entry = byName(state.queues, name, "queue_name");
+        return {
+          area: "Quote",
+          item: `coda ${name} in UE a 14 giorni`,
+          ok:
+            entry?.jurisdiction === "eu" &&
+            entry?.settings?.message_retention_period === queueRetention,
+        };
+      }),
     {
       area: "Dati",
       item: `bucket ${target.exports} in UE senza accesso pubblico`,
@@ -274,19 +278,22 @@ export function checkResources(target, state, phase) {
     ...checkPublication(target.github, state.github),
   ];
   if (phase === "prima") return results;
-  const consumer = queue?.consumers?.find(({ script }) => script === target.worker);
   return [
     ...results,
-    {
-      area: "Quote",
-      item: "consumer della coda con retry e coda dei falliti",
-      ok:
-        consumer?.dead_letter_queue === target.queue.deadLetterQueue &&
-        consumer?.settings?.batch_size === target.queue.maxBatchSize &&
-        consumer?.settings?.max_retries === target.queue.maxRetries &&
-        consumer?.settings?.max_concurrency === target.queue.maxConcurrency &&
-        Boolean(queue?.producers?.some(({ script }) => script === target.worker)),
-    },
+    ...target.queues.map((expected) => {
+      const queue = byName(state.queues, expected.name, "queue_name");
+      const consumer = queue?.consumers?.find(({ script }) => script === target.worker);
+      return {
+        area: "Quote",
+        item: `consumer di ${expected.name} con retry e coda dei falliti`,
+        ok:
+          consumer?.dead_letter_queue === expected.deadLetterQueue &&
+          consumer?.settings?.batch_size === expected.maxBatchSize &&
+          consumer?.settings?.max_retries === expected.maxRetries &&
+          consumer?.settings?.max_concurrency === expected.maxConcurrency &&
+          Boolean(queue?.producers?.some(({ script }) => script === target.worker)),
+      };
+    }),
   ];
 }
 

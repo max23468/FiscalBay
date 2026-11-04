@@ -69,6 +69,42 @@ export async function rejectCredentials(
   return result.meta.changes === 1;
 }
 
+/** Letture consecutive con le credenziali rifiutate dopo cui il negozio va ricollegato. */
+const credentialFailureLimit = 3;
+
+/**
+ * Conta una lettura con le credenziali rifiutate da eBay: un rifiuto passeggero non chiude il
+ * consenso, la terza lettura consecutiva sì.
+ */
+export async function countCredentialFailure(
+  db: D1Database,
+  storeId: string,
+  grantedAt: string,
+  now: Date,
+): Promise<void> {
+  const row = await db
+    .prepare(
+      `UPDATE ebay_store_credentials SET credential_failures = credential_failures + 1
+        WHERE store_id = ? AND granted_at = ? AND rejected_at IS NULL
+        RETURNING credential_failures`,
+    )
+    .bind(storeId, grantedAt)
+    .first<{ credential_failures: number }>();
+  if (row && row.credential_failures >= credentialFailureLimit)
+    await rejectCredentials(db, storeId, grantedAt, now);
+}
+
+/** Una lettura riuscita azzera i rifiuti contati per il consenso. */
+export async function clearCredentialFailures(db: D1Database, storeId: string, grantedAt: string) {
+  await db
+    .prepare(
+      `UPDATE ebay_store_credentials SET credential_failures = 0
+        WHERE store_id = ? AND granted_at = ? AND credential_failures > 0`,
+    )
+    .bind(storeId, grantedAt)
+    .run();
+}
+
 /** Registra un nuovo consenso: sostituisce i token precedenti e annulla un rifiuto registrato. */
 export async function saveStoreCredentials(
   env: Env,
@@ -89,6 +125,7 @@ export async function saveStoreCredentials(
        granted_at = excluded.granted_at,
        refreshed_at = NULL,
        rejected_at = NULL,
+       credential_failures = 0,
        order_events = NULL,
        order_events_checked_at = NULL`,
   )

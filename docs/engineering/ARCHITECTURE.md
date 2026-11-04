@@ -35,7 +35,7 @@ Inventario read-only delle risorse condivise; nessuna migrazione di altri prodot
 
 | Servizio | Uso in FiscalBay |
 |---|---|
-| Workers | Web app, ingresso webhook, consumer Queue e lavoro pianificato in un solo Worker per ambiente |
+| Workers | Web app, ingresso webhook, consumer delle due code (lavoro e ingressi dei webhook) e lavoro pianificato in un Worker per ambiente; accanto, il Worker del bot Telegram con il token, raggiunto soltanto con un Service binding |
 | Workers Static Assets | Asset della build serviti dalla piattaforma, quelli con l'hash nel nome in cache per un anno (`public/_headers`); download privati e risposte dipendenti dalla sessione restano nel Worker |
 | DNS, TLS e Custom Domains | Zona esistente e domini canonici di [§24](../operations/OPERATIONS.md#s24); Register.it resta registrar, senza trasferimenti o nuovi domini richiesti |
 | Protezioni e report della zona | HSTS/header, WAF/rate limit edge, rilevamento delle credenziali trapelate, DMARC Management e Certificate Transparency secondo [§24](../operations/OPERATIONS.md#s24), qualificati sul test |
