@@ -43,6 +43,8 @@ const account = "98195e505f42abaaeb4827f71a924b1a";
 const secrets = {
   REGISTRATION_ALLOWED_EMAILS: bindings.secret(),
   BETTER_AUTH_SECRET: bindings.secret(),
+  // Chiave dei token dei negozi eBay, separata da quella di Auth (vedi seller-credentials).
+  EBAY_TOKEN_SECRET: bindings.secret(),
   GOOGLE_CLIENT_ID: bindings.secret(),
   GOOGLE_CLIENT_SECRET: bindings.secret(),
   EBAY_CLIENT_ID: bindings.secret(),

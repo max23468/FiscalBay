@@ -76,6 +76,8 @@ describe("percorso ordini", () => {
       notice: null,
       resetToken: null,
       tab: "accedi",
+      challenge: false,
+      lastMethod: null,
     });
 
     const auth = createAuth(env);

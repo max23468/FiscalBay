@@ -510,12 +510,7 @@ export async function storeAccess(
     return {
       fetcher,
       configuration,
-      accessToken: await openToken(
-        env.BETTER_AUTH_SECRET,
-        store.store_id,
-        "access",
-        store.access_token,
-      ),
+      accessToken: await openToken(env, store.store_id, "access", store.access_token),
     };
   } catch {
     await rejectCredentials(env.DB, store.store_id, store.granted_at, now);

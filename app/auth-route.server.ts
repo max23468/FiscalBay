@@ -79,10 +79,16 @@ function noStore(response: Response): Response {
 }
 
 // Soglie per IP e percorso sui soli invii sensibili, come le regole predefinite di Better Auth:
-// il binding Rate Limiting le applica prima di qualunque lettura o scrittura (§29).
-const attemptLimits: Array<{ paths: RegExp; limit: RequestLimit }> = [
+// il binding Rate Limiting le applica prima di qualunque lettura o scrittura (§29). La
+// preparazione della passkey è un GET, ma scrive in D1 una sfida a ogni chiamata.
+const attemptLimits: Array<{ paths: RegExp; limit: RequestLimit; anyMethod?: true }> = [
   { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, limit: "attempts" },
   { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, limit: "attempts" },
+  {
+    paths: /^\/passkey\/generate-(authenticate|register)-options(\/|$)/u,
+    limit: "attempts",
+    anyMethod: true,
+  },
   {
     paths: /^\/(send-verification-email|request-password-reset|forget-password|delete-user)(\/|$)/u,
     limit: "emails",
@@ -104,7 +110,7 @@ function authPath(request: Request): string {
  */
 export function authLimitWait(env: Env, request: Request, path = authPath(request)) {
   const rule = attemptLimits.find(({ paths }) => paths.test(path));
-  return request.method === "POST" && rule
+  return rule && (rule.anyMethod || request.method === "POST")
     ? requestLimitWait(env, request, rule.limit, `auth${path}`)
     : Promise.resolve(null);
 }

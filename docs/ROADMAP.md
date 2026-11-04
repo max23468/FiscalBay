@@ -73,16 +73,9 @@ Recenti e storico si leggono per tratti di una pagina e Trading per finestre di 
 <a id="2-0-02"></a>
 #### 2.0-02 · Accesso, console e pagamenti
 
-**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§7](product/ACCOUNTS_AND_STORES.md#s07) · [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§29](engineering/SECURITY_AND_PRIVACY.md#s29) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§7](product/ACCOUNTS_AND_STORES.md#s07) · [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§29](engineering/SECURITY_AND_PRIVACY.md#s29) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30)
 
-- Limite per IP anche sulla preparazione dell'accesso con passkey e pulizia indicizzata delle tabelle di Auth.
-- Password: controllo delle password violate, che invia soltanto i primi cinque caratteri dell'hash; Turnstile dopo alcuni tentativi falliti; regola di zona estesa ai moduli di accesso e assistenza.
-- Ultimo metodo di accesso indicato e verifica in due passaggi facoltativa per chi usa la password.
-- Token tecnico della console con lettura e scrittura come oggi, più scadenza e limite di tentativi.
-- Segreto di cifratura dei token eBay separato da quello di Auth, con versione della chiave e ricifratura progressiva.
-- Stripe: timeout breve, chiavi di idempotenza sulle creazioni, versione dell'API fissata.
-
-**Criterio di completamento:** limiti e Turnstile provati con test negativi; un token eBay cifrato con la chiave precedente si legge e viene ricifrato; Privacy e fornitori aggiornati; ciò che solo l'owner può provare dichiarato prima di `Pubblica`.
+Preparazione della passkey limitata per IP e pulizia di Auth indicizzata; password nuove confrontate con Have I Been Pwned, Turnstile all'accesso dopo tre errori dallo stesso IP e regola di zona estesa ad accesso e assistenza; ultimo metodo segnato da un cookie; token tecnico con scadenza e blocco dei tentativi; token eBay con un segreto proprio, versionati e ricifrati al rinnovo; Stripe con versione fissata, timeout breve e idempotenza ([D293](decisions/DECISION_REGISTER.md)). La verifica in due passaggi esce dal task per scelta owner. Dopo `Pubblica` restano l'applicazione della regola di zona e la prova reale di Turnstile sul test.
 
 <a id="2-0-03"></a>
 #### 2.0-03 · Sito, processi e documenti

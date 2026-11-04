@@ -10,11 +10,15 @@ export interface AuthSession {
   user: { id: string; admin?: boolean };
 }
 
-/** Token tecnico della console: l'etichetta esiste soltanto se il token non è revocato. */
+/**
+ * Token tecnico della console: l'etichetta esiste soltanto se il token non è revocato né
+ * scaduto. Un token senza scadenza non apre la console.
+ */
 export async function agentTokenLabel(db: D1Database, tokenHash: string, now: Date) {
   const row = await db
     .prepare(`UPDATE admin_agent_tokens SET used_at = ?2
-    WHERE token_hash = ?1 AND revoked_at IS NULL RETURNING label`)
+    WHERE token_hash = ?1 AND revoked_at IS NULL AND julianday(expires_at) > julianday(?2)
+    RETURNING label`)
     .bind(tokenHash, now.toISOString())
     .first<{ label: string }>();
   return row?.label ?? null;

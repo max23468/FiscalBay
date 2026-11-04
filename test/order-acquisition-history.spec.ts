@@ -744,8 +744,7 @@ it("tiene il negozio per l'esecuzione e regge un orologio indietro rispetto al l
 });
 
 it("il lavoro periodico accoda ogni negozio dovuto, con un budget ciascuno, isolando gli errori", async () => {
-  const seal = (storeId: string) =>
-    sealToken(env.BETTER_AUTH_SECRET, storeId, "access", `token-${storeId}`);
+  const seal = (storeId: string) => sealToken(env, storeId, "access", `token-${storeId}`);
   const expires = "2026-09-02T03:00:00.000Z";
   await env.DB.prepare(
     `INSERT INTO ebay_stores (id, workspace_id, ebay_user_id, linked_at)

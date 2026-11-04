@@ -993,20 +993,16 @@ describe("collegamento negozio eBay", () => {
     const row = await env.DB.prepare(
       `SELECT c.* FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id`,
     ).first<Record<string, string | null>>();
-    expect(row!.access_token).toMatch(/^v1\./u);
+    expect(row!.access_token).toMatch(/^v2\./u);
     expect(JSON.stringify(row)).not.toMatch(/token-sintetico|refresh-sintetico/u);
     const storeId = row!.store_id!;
-    const secret = env.BETTER_AUTH_SECRET;
-    expect(await openToken(secret, storeId, "access", row!.access_token!)).toBe("token-sintetico");
-    expect(await openToken(secret, storeId, "refresh", row!.refresh_token!)).toBe(
-      "refresh-sintetico",
-    );
+    expect(await openToken(env, storeId, "access", row!.access_token!)).toBe("token-sintetico");
+    expect(await openToken(env, storeId, "refresh", row!.refresh_token!)).toBe("refresh-sintetico");
     // Lo stesso valore non si apre come altro tipo, per un altro negozio o con un altro segreto.
-    await expect(openToken(secret, storeId, "refresh", row!.access_token!)).rejects.toThrow();
-    await expect(openToken(secret, "altro", "access", row!.access_token!)).rejects.toThrow();
-    await expect(
-      openToken(`${secret}-diverso`, storeId, "access", row!.access_token!),
-    ).rejects.toThrow();
+    await expect(openToken(env, storeId, "refresh", row!.access_token!)).rejects.toThrow();
+    await expect(openToken(env, "altro", "access", row!.access_token!)).rejects.toThrow();
+    const other = { ...env, EBAY_TOKEN_SECRET: `${env.EBAY_TOKEN_SECRET}-diverso` };
+    await expect(openToken(other, storeId, "access", row!.access_token!)).rejects.toThrow();
 
     const grantedAt = Date.parse(row!.granted_at!);
     expect(Date.parse(row!.access_expires_at!) - grantedAt).toBe(7200 * 1000);

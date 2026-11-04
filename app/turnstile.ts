@@ -1,8 +1,9 @@
 /**
  * Verifica anti-automazione Turnstile (§29) degli invii che mandano un'email o una richiesta al
- * supporto. L'azione distingue il modulo: Siteverify la restituisce e il server la confronta.
+ * supporto, e dell'accesso con password dopo alcuni tentativi falliti. L'azione distingue il modulo: Siteverify la restituisce e il server la confronta.
  */
 export const turnstileActions = {
+  signIn: "sign-in",
   signUp: "sign-up",
   passwordReset: "password-reset",
   emailLink: "email-link",

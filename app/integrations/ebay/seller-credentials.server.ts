@@ -15,7 +15,20 @@ export type SellerTokens = {
 
 type TokenKind = "access" | "refresh";
 
-const sealedPrefix = "v1.";
+/**
+ * Segreti delle versioni della chiave, indicate dal prefisso del valore salvato: `v1` deriva da
+ * `BETTER_AUTH_SECRET` e resta soltanto in lettura, `v2` da `EBAY_TOKEN_SECRET`, separato da
+ * quello di Auth. Ogni nuova cifratura usa `v2`; il rinnovo ricifra i token ancora in `v1`, così
+ * quando nessun token in `v1` resta il segreto di Auth si ruota senza ricollegare i negozi.
+ */
+export type TokenKeys = Pick<Env, "BETTER_AUTH_SECRET" | "EBAY_TOKEN_SECRET">;
+
+const keyVersions = {
+  "v1.": (keys: TokenKeys) => keys.BETTER_AUTH_SECRET,
+  "v2.": (keys: TokenKeys) => keys.EBAY_TOKEN_SECRET,
+} as const;
+
+const currentVersion = "v2.";
 
 /**
  * Scopo della chiave derivata e dati autenticati: negozio e tipo, così un token copiato su
@@ -26,27 +39,32 @@ const sealContext = (storeId: string, kind: TokenKind) =>
   ["fiscalbay/ebay-seller-token/v1", `${storeId}:${kind}`] as const;
 
 export async function sealToken(
-  secret: string,
+  keys: TokenKeys,
   storeId: string,
   kind: TokenKind,
   token: string,
 ): Promise<string> {
-  return sealedPrefix + (await seal(secret, ...sealContext(storeId, kind), token));
+  const secret = keyVersions[currentVersion](keys);
+  return currentVersion + (await seal(secret, ...sealContext(storeId, kind), token));
 }
 
 /**
- * Decifra un token salvato. Fallisce soltanto per un token che non si apre con il segreto
- * corrente (formato, cifratura o segreto diversi, per esempio dopo una rotazione di
- * `BETTER_AUTH_SECRET`): il consenso non è più utilizzabile e il negozio va ricollegato.
+ * Decifra un token salvato con la chiave della sua versione. Fallisce soltanto per un token che
+ * non si apre (versione, formato, cifratura o segreto diversi, per esempio dopo una rotazione):
+ * il consenso non è più utilizzabile e il negozio va ricollegato.
  */
 export async function openToken(
-  secret: string,
+  keys: TokenKeys,
   storeId: string,
   kind: TokenKind,
   value: string,
 ): Promise<string> {
-  if (!value.startsWith(sealedPrefix)) throw new Error("unsupported_token_format");
-  return unseal(secret, ...sealContext(storeId, kind), value.slice(sealedPrefix.length));
+  const version = Object.keys(keyVersions).find((prefix) => value.startsWith(prefix)) as
+    | keyof typeof keyVersions
+    | undefined;
+  if (!version) throw new Error("unsupported_token_format");
+  const secret = keyVersions[version](keys);
+  return unseal(secret, ...sealContext(storeId, kind), value.slice(version.length));
 }
 
 /**
@@ -112,7 +130,6 @@ export async function saveStoreCredentials(
   tokens: SellerTokens,
   grantedAt: string,
 ): Promise<void> {
-  const secret = env.BETTER_AUTH_SECRET;
   await env.DB.prepare(
     `INSERT INTO ebay_store_credentials
        (store_id, access_token, access_expires_at, refresh_token, refresh_expires_at, granted_at)
@@ -131,9 +148,9 @@ export async function saveStoreCredentials(
   )
     .bind(
       storeId,
-      await sealToken(secret, storeId, "access", tokens.accessToken),
+      await sealToken(env, storeId, "access", tokens.accessToken),
       tokens.accessExpiresAt,
-      await sealToken(secret, storeId, "refresh", tokens.refreshToken),
+      await sealToken(env, storeId, "refresh", tokens.refreshToken),
       tokens.refreshExpiresAt,
       grantedAt,
     )
@@ -177,12 +194,7 @@ export async function refreshStoreToken(input: {
 
   let refreshToken: string;
   try {
-    refreshToken = await openToken(
-      environment.BETTER_AUTH_SECRET,
-      storeId,
-      "refresh",
-      row.refresh_token,
-    );
+    refreshToken = await openToken(environment, storeId, "refresh", row.refresh_token);
   } catch {
     return reject();
   }
@@ -209,15 +221,17 @@ export async function refreshStoreToken(input: {
     throw error;
   }
 
+  // Anche il refresh token si ricifra: uno salvato con una chiave precedente passa alla corrente.
   const result = await environment.DB.prepare(
     `UPDATE ebay_store_credentials
-        SET access_token = ?, access_expires_at = ?, refreshed_at = ?
+        SET access_token = ?, access_expires_at = ?, refreshed_at = ?, refresh_token = ?
       WHERE store_id = ? AND granted_at = ? AND rejected_at IS NULL`,
   )
     .bind(
-      await sealToken(environment.BETTER_AUTH_SECRET, storeId, "access", token.access_token),
+      await sealToken(environment, storeId, "access", token.access_token),
       new Date(now.getTime() + token.expires_in * 1000).toISOString(),
       now.toISOString(),
+      await sealToken(environment, storeId, "refresh", refreshToken),
       storeId,
       row.granted_at,
     )
