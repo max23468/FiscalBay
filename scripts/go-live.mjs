@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Checklist operativa del go-live (§41). Rilegge in sola lettura le risorse dell'ambiente e
- * raccoglie in un solo esito i readback degli script di area, più le prove che restano
- * all'owner o a un'osservazione successiva.
+ * raccoglie in un solo esito i readback degli script di area. Le prove a vista dell'owner sono
+ * state attestate al go-live e non si ripetono.
  *
  * Due fasi. `prima` vale prima di `Promuovi`: Worker e dominio, segreti dichiarati, D1, code,
  * bucket dei file, widget Turnstile, registro delle scadenze, ambiente GitHub della pubblicazione
@@ -14,8 +14,7 @@
  * statistiche del sito, sulle sole pagine pubbliche.
  *
  * Il resoconto riporta soltanto nomi ed esiti, mai valori di segreti o dati degli utenti. Esce
- * con 1 se un controllo automatico non passa o non si esegue; le voci dell'owner restano da
- * attestare e non cambiano l'esito.
+ * con 1 se un controllo automatico non passa o non si esegue.
  *
  * Uso: node scripts/go-live.mjs [plan|check] [--mode live] [--phase prima|dopo|tutte]
  * Telegram si rilegge soltanto con `TELEGRAM_BOT_TOKEN` e `TELEGRAM_OWNER_ID` dell'ambiente nelle
@@ -121,53 +120,6 @@ export function scriptSteps(target) {
     },
   ];
 }
-
-/**
- * Prove che nessuno script attesta: restano all'owner o a un'osservazione, con il luogo in cui
- * si registra l'esito. Non cambiano l'esito del comando.
- */
-export const ownerItems = [
-  {
-    phase: "prima",
-    area: "Legali",
-    item: "garanzie dei trasferimenti extra UE per fornitore, obblighi 28 CFR Part 202 del DPA eBay, trattamento dei dati di OpenAI prima di usare Codex su dati reali",
-  },
-  {
-    phase: "prima",
-    area: "Supporto",
-    item: "casella supporto@ senza conversazioni oltre 24 mesi, notifica immediata per i mittenti Stripe e Link",
-  },
-  {
-    phase: "prima",
-    area: "Stripe",
-    item: "voci a vista della dashboard live: termini e privacy del checkout, sede fiscale, Smart Retries, metodi Managed Payments",
-  },
-  {
-    phase: "prima",
-    area: "eBay",
-    item: "RuName Production con nome, privacy, URL di ritorno e logo di fiscalbay.it e OAuth attivo",
-  },
-  {
-    phase: "dopo",
-    area: "Auth",
-    item: "password, Google, passkey e Accedi con eBay con un account business su fiscalbay.it",
-  },
-  {
-    phase: "dopo",
-    area: "Alert",
-    item: "primo report DMARC letto",
-  },
-  {
-    phase: "dopo",
-    area: "KPI",
-    item: "console Production con KPI, metriche tecniche e anomalie leggibili",
-  },
-  {
-    phase: "dopo",
-    area: "Rollback",
-    item: "versione precedente o forward-fix pronti secondo il ciclo di Promuovi",
-  },
-];
 
 const byName = (items, name, key = "name") => items?.find((item) => item?.[key] === name);
 
@@ -438,7 +390,7 @@ export function runStep(step, { env = process.env, spawn = spawnSync } = {}) {
   };
 }
 
-const mark = (ok) => (ok === true ? "✓" : ok === false ? "✗" : "○");
+const mark = (ok) => (ok ? "✓" : "✗");
 
 /** Resoconto per area: esito, voce, dettaglio e, per gli script, la loro uscita rientrata. */
 export function report(results) {
@@ -464,11 +416,9 @@ export function plan(target) {
   for (const phase of ["prima", "dopo"]) {
     lines.push(`Fase ${phase}:`);
     const steps = scriptSteps(target).filter((step) => step.phase === phase);
-    const owner = ownerItems.filter((entry) => entry.phase === phase);
     for (const { area, item } of checks[phase]) lines.push(`  ${area} · ${item}`);
     for (const { area, item, args } of steps)
       lines.push(`  ${area} · ${item}: node ${args.join(" ")}`);
-    for (const { area, item } of owner) lines.push(`  ${area} · ${item} (owner)`);
   }
   return lines.join("\n");
 }
@@ -588,15 +538,9 @@ async function main() {
   if (after) results.push(...checkSurface(target, await readSurface(target)));
   for (const step of scriptSteps(target).filter((entry) => phases.includes(entry.phase)))
     results.push(runStep(step));
-  results.push(
-    ...ownerItems
-      .filter((entry) => phases.includes(entry.phase))
-      .map((entry) => ({ ...entry, ok: null })),
-  );
   console.log(report(results));
   const failed = results.filter(({ ok }) => ok === false).length;
-  const owner = results.filter(({ ok }) => ok === null).length;
-  console.log(`\n${failed} controlli non superati, ${owner} voci da attestare.`);
+  console.log(`\n${failed} controlli non superati.`);
   if (failed) process.exitCode = 1;
 }
 
