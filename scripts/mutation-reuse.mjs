@@ -1,10 +1,11 @@
 /**
  * Mutation incrementale del candidato. Sulla prova di `develop` un modulo critico non si ripete
  * se la sua ultima mutation, in una qualifica o in una campagna precedente su un commit antenato,
- * è riuscita in ogni parte e da allora nessun sorgente che importa, anche indirettamente, è
- * cambiato. Un pacchetto di `dependencies` aggiunto, tolto o cambiato, anche fra quelli da cui
- * dipende, conta come sorgente modificato nei file che lo importano. Strumenti e prove modificate
- * non fanno ripetere nulla: li copre la campagna settimanale, che resta completa.
+ * è riuscita in ogni parte e ogni sorgente cambiato da allora che il modulo importa, anche
+ * indirettamente, o il modulo stesso, è un modulo critico già provato nella PR che l'ha
+ * integrato, sullo stesso contenuto. Un sorgente non critico cambiato, o un commit senza
+ * quella prova, ripete il modulo. Dipendenze, strumenti e prove modificate non fanno ripetere
+ * nulla: li copre la campagna settimanale, che resta completa.
  * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
  */
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
@@ -12,7 +13,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { criticalModule } from "./mutation.mjs";
-import { importGraph, importPattern } from "./verify-repo.mjs";
+import { importGraph } from "./verify-repo.mjs";
 import { ghJson, git, isAncestor, retry } from "./lib/provider.mjs";
 
 /** Workflow le cui mutation valgono come ricevuta. */
@@ -56,140 +57,89 @@ export function moduleOutcomes(jobs, cancelledRun = false) {
   );
 }
 
-/** Nome del pacchetto di una chiave del lockfile o di un import, senza versione né percorso. */
-export function packageName(specifier) {
-  const bare = specifier.replace(/^'|'$/gu, "");
-  const parts = bare.split("/");
-  const name = bare.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
-  const version = name.indexOf("@", 1);
-  return version > 0 ? name.slice(0, version) : name;
-}
-
-/**
- * Blocchi del lockfile di pnpm: ogni sezione di primo livello e, in `packages` e `snapshots`,
- * ogni voce; in `importers` ogni gruppo di dipendenze di ogni importer. I due documenti del file
- * (dipendenze di configurazione e progetto) si distinguono per posizione.
- */
-export function lockBlocks(text) {
-  const blocks = new Map();
-  let document = -1;
-  let section = "";
-  let importer = "";
-  let key = "";
-  for (const line of text.split("\n")) {
-    if (line === "---" || document < 0) {
-      document += 1;
-      section = "";
-      if (line === "---") continue;
-    }
-    if (!line.trim()) continue;
-    const indent = line.length - line.trimStart().length;
-    const name = line.trim().replace(/:.*$/u, "");
-    if (indent === 0) {
-      section = name;
-      key = `${document}/${section}`;
-    } else if (indent === 2 && ["packages", "snapshots"].includes(section))
-      key = `${document}/${section}/${line.trim().replace(/:\s*(?:\{\})?$/u, "")}`;
-    else if (indent === 2 && section === "importers") {
-      importer = name;
-      key = `${document}/importers/${importer}`;
-    } else if (indent === 4 && section === "importers")
-      key = `${document}/importers/${importer}/${name}`;
-    blocks.set(key, `${blocks.get(key) ?? ""}${line}\n`);
-  }
-  return blocks;
-}
-
-/** Dipendenze di ogni pacchetto nelle voci `snapshots`, per nome. */
-function snapshotDependencies(blocks) {
-  const dependencies = new Map();
-  for (const [key, text] of blocks) {
-    const entry = /^\d+\/snapshots\/(.+)$/u.exec(key)?.[1];
-    if (!entry) continue;
-    const children = dependencies.get(packageName(entry)) ?? new Set();
-    for (const [, child] of text.matchAll(/^ {6}('?[^\s:']+'?):/gmu))
-      children.add(packageName(child));
-    dependencies.set(packageName(entry), children);
-  }
-  return dependencies;
-}
-
-/**
- * Pacchetti cambiati fra due versioni del lockfile: quelli con una voce diversa e
- * quelli che ne dipendono, anche indirettamente. Contano soltanto per chi li importa.
- */
-export function changedPackages(before, after) {
-  const oldBlocks = lockBlocks(before.lockfile);
-  const newBlocks = lockBlocks(after.lockfile);
-  const changed = new Set();
-  for (const key of new Set([...oldBlocks.keys(), ...newBlocks.keys()])) {
-    if (oldBlocks.get(key) === newBlocks.get(key)) continue;
-    const entry = /^\d+\/(?:packages|snapshots)\/(.+)$/u.exec(key)?.[1];
-    if (entry) changed.add(packageName(entry));
-  }
-  const dependencies = snapshotDependencies(new Map([...oldBlocks, ...newBlocks]));
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const [name, children] of dependencies)
-      if (!changed.has(name) && [...children].some((child) => changed.has(child))) {
-        changed.add(name);
-        grew = true;
-      }
-  }
-  return changed;
-}
-
-/** Sorgenti che importano direttamente uno dei pacchetti indicati. */
-export function packageImporters(sources, packages) {
-  return sources
-    .filter(({ text }) =>
-      [...text.matchAll(importPattern)].some(([, from, dynamic]) => {
-        const specifier = from ?? dynamic;
-        return !/^(?:[./~]|[\w-]+:)/u.test(specifier) && packages.has(packageName(specifier));
-      }),
-    )
-    .map(({ path: file }) => file);
-}
-
 /** Testi dell'interfaccia e documenti legali: un loro cambio non tocca chi li importa (D244). */
 const copyFiles = /^app\/copy\//u;
 
 /**
- * Moduli critici che importano, anche indirettamente, uno dei sorgenti modificati. Un testo
- * cambiato conta soltanto per sé.
+ * Sorgenti modificati che raggiungono ciascun modulo critico, anche indirettamente; il modulo
+ * stesso compreso. Un testo cambiato conta soltanto per sé.
  */
-export function affectedModules(changed, graph) {
+export function affectingSources(changed, graph) {
   const sources = changed.filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file));
-  const affected = new Set(sources.filter((file) => !copyFiles.test(file)));
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const [file, imports] of graph)
-      if (!affected.has(file) && [...imports].some((target) => affected.has(target))) {
-        affected.add(file);
-        grew = true;
+  const reached = new Map();
+  for (const source of sources) {
+    const affected = new Set([source]);
+    if (!copyFiles.test(source))
+      for (let grew = true; grew;) {
+        grew = false;
+        for (const [file, imports] of graph)
+          if (!affected.has(file) && [...imports].some((target) => affected.has(target))) {
+            affected.add(file);
+            grew = true;
+          }
       }
+    for (const file of affected)
+      if (criticalModule(file)) reached.set(file, new Set([...(reached.get(file) ?? []), source]));
   }
-  return new Set([...affected, ...sources].filter(criticalModule));
+  return reached;
 }
+
+/** Moduli critici raggiunti da almeno un sorgente modificato. */
+export const affectedModules = (changed, graph) => new Set(affectingSources(changed, graph).keys());
 
 /**
  * Divide i moduli fra da provare e riusati. `runs` sono le run precedenti su commit antenati,
- * dalla più recente, con gli esiti per modulo; `affectedSince(commit)` restituisce i moduli
- * toccati dal diff fino alla testa. Conta soltanto l'ultima run che ha provato il modulo: un fallimento recente non si copre con un successo
- * più vecchio.
+ * dalla più recente, con gli esiti per modulo; `affectedSince(commit)` associa a ogni modulo i
+ * sorgenti cambiati fino alla testa che lo raggiungono; `covered(source, commit)` dice se ogni
+ * modifica di un modulo critico da `commit` è stata provata nella sua PR. Conta
+ * soltanto l'ultima run che ha provato il modulo: un fallimento recente non si copre con un
+ * successo più vecchio.
  */
-export function reusePlan(targets, runs, affectedSince) {
+export async function reusePlan(targets, runs, affectedSince, covered = async () => false) {
   const run = [];
   const reused = [];
   for (const target of targets) {
     const last = runs.find((entry) => entry.outcomes.has(target));
-    if (last?.outcomes.get(target) === "passed" && !affectedSince(last.commit).has(target))
-      reused.push({ target, run: last.id, commit: last.commit });
+    if (last?.outcomes.get(target) !== "passed") {
+      run.push(target);
+      continue;
+    }
+    const sources = [...(affectedSince(last.commit).get(target) ?? [])];
+    let ready = true;
+    for (const source of sources)
+      if (!criticalModule(source) || !(await covered(source, last.commit))) {
+        ready = false;
+        break;
+      }
+    if (ready)
+      reused.push({
+        target,
+        run: last.id,
+        commit: last.commit,
+        ...(sources.length ? { lines: sources } : {}),
+      });
     else run.push(target);
   }
   return { run, reused };
+}
+
+/** Modulo di un job della mutation nella CI di una PR, con l'eventuale parte. */
+export function lineMutationJob(name) {
+  const match = /^Mutation ((?:app|workers)\/\S+)(?: \d+\/\d+)?$/u.exec(name);
+  return match ? match[1] : null;
+}
+
+/**
+ * Vero se la run della PR ha provato il modulo: almeno un job del modulo e ogni suo job riuscito,
+ * nella run riuscita.
+ */
+export function linesProved(run, jobs, target) {
+  const own = jobs.filter((job) => lineMutationJob(job.name) === target);
+  return (
+    run?.conclusion === "success" &&
+    own.length > 0 &&
+    own.every((job) => job.conclusion === "success")
+  );
 }
 
 /** Run precedenti con gli esiti per modulo, dalla più recente; gli errori dell'API si ripetono. */
@@ -235,11 +185,55 @@ async function previousRuns(repository, repositoryId) {
   return runs;
 }
 
+/**
+ * Prova di `target` nelle PR integrate da `since`: ogni commit di `develop` che lo modifica viene
+ * da una PR dello stesso repository con la mutation del modulo riuscita, sulla testa unita con lo
+ * stesso contenuto del modulo nel commit integrato.
+ */
+async function prCoverage(repository, repositoryId, target, since, api) {
+  const commits = git("rev-list", "--first-parent", `${since}..HEAD`, "--", target)
+    .split("\n")
+    .filter(Boolean);
+  for (const commit of commits) {
+    const pull = (await api(`repos/${repository}/commits/${commit}/pulls`)).find(
+      (entry) => entry.merged_at && entry.merge_commit_sha === commit,
+    );
+    if (!pull || pull.head.repo?.id !== repositoryId) return false;
+    const head = pull.head.sha;
+    const blob = git("rev-parse", `${commit}:${target}`).trim();
+    // Un modulo assente dalla testa della PR non ha una prova da riusare: nessuna ripetizione.
+    let tested;
+    try {
+      tested = ghJson("api", `repos/${repository}/contents/${target}?ref=${head}`);
+    } catch {
+      return false;
+    }
+    if (tested?.sha !== blob) return false;
+    const { workflow_runs: prRuns } = await api(
+      `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&head_sha=${head}&status=success&per_page=10`,
+    );
+    let proved = false;
+    for (const prRun of prRuns.filter((entry) => entry.repository?.id === repositoryId)) {
+      const { jobs } = await api(
+        `repos/${repository}/actions/runs/${prRun.id}/jobs?filter=latest&per_page=100`,
+      );
+      if (linesProved(prRun, jobs, target)) {
+        proved = true;
+        break;
+      }
+    }
+    if (!proved) return false;
+  }
+  return true;
+}
+
 async function main() {
   const repository = process.env.REPOSITORY;
   const repositoryId = Number(process.env.REPOSITORY_ID);
   if (!repository || !repositoryId) throw new Error("Repository non identificato.");
   const targets = JSON.parse(process.env.MATRIX ?? '{"target":[]}').target;
+  const api = (url) =>
+    retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
   // Senza esiti leggibili la pianificazione fallisce e si ripete: la mutation completa resta
   // alla campagna settimanale, mai un ripiego della prova del candidato.
   const runs = await previousRuns(repository, repositoryId);
@@ -250,26 +244,24 @@ async function main() {
   const graph = importGraph(sources);
   const cache = new Map();
   const affectedSince = (commit) => {
-    if (!cache.has(commit)) {
-      const changed = git("diff", "--name-only", commit, "HEAD").split("\n").filter(Boolean);
-      const packages = ["package.json", "pnpm-lock.yaml"].some((file) => changed.includes(file))
-        ? changedPackages(
-            {
-              lockfile: git("show", `${commit}:pnpm-lock.yaml`),
-            },
-            {
-              lockfile: readFileSync("pnpm-lock.yaml", "utf8"),
-            },
-          )
-        : new Set();
+    if (!cache.has(commit))
       cache.set(
         commit,
-        affectedModules([...changed, ...packageImporters(sources, packages)], graph),
+        affectingSources(
+          git("diff", "--name-only", commit, "HEAD").split("\n").filter(Boolean),
+          graph,
+        ),
       );
-    }
     return cache.get(commit);
   };
-  const { run, reused } = reusePlan(targets, runs, affectedSince);
+  const coverage = new Map();
+  const covered = (source, commit) => {
+    const key = `${source} ${commit}`;
+    if (!coverage.has(key))
+      coverage.set(key, prCoverage(repository, repositoryId, source, commit, api));
+    return coverage.get(key);
+  };
+  const { run, reused } = await reusePlan(targets, runs, affectedSince, covered);
   const list = (entries) => entries.map((entry) => `- ${entry}`).join("\n");
   const summary = [
     `Mutation incrementale: ${run.length} moduli da provare, ${reused.length} riusati.`,
@@ -279,7 +271,8 @@ async function main() {
           "Riusati:",
           list(
             reused.map(
-              ({ target, run: id, commit }) => `${target}: run ${id} su ${commit.slice(0, 8)}`,
+              ({ target, run: id, commit, lines }) =>
+                `${target}: run ${id} su ${commit.slice(0, 8)}${lines ? `, sorgenti provati nelle PR: ${lines.join(", ")}` : ""}`,
             ),
           ),
         ]

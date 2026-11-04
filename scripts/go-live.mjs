@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Checklist operativa del go-live (§41). Rilegge in sola lettura le risorse dell'ambiente e
- * raccoglie in un solo esito i readback degli script di area, più le prove che restano
- * all'owner o a un'osservazione successiva.
+ * raccoglie in un solo esito i readback degli script di area. Le prove a vista dell'owner sono
+ * state attestate al go-live e non si ripetono.
  *
  * Due fasi. `prima` vale prima di `Promuovi`: Worker e dominio, segreti dichiarati, D1, code,
  * bucket dei file, widget Turnstile, registro delle scadenze, ambiente GitHub della pubblicazione
@@ -14,12 +14,11 @@
  * statistiche del sito, sulle sole pagine pubbliche.
  *
  * Il resoconto riporta soltanto nomi ed esiti, mai valori di segreti o dati degli utenti. Esce
- * con 1 se un controllo automatico non passa o non si esegue; le voci dell'owner restano da
- * attestare e non cambiano l'esito.
+ * con 1 se un controllo automatico non passa o non si esegue.
  *
  * Uso: node scripts/go-live.mjs [plan|check] [--mode live] [--phase prima|dopo|tutte]
- * Telegram si rilegge soltanto con `TELEGRAM_BOT_TOKEN` dell'ambiente nelle variabili del
- * comando, come per `telegram-bot.mjs`.
+ * Telegram si rilegge soltanto con `TELEGRAM_BOT_TOKEN` e `TELEGRAM_OWNER_ID` dell'ambiente nelle
+ * variabili del comando, come per `telegram-bot.mjs`.
  */
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
@@ -42,7 +41,8 @@ export function targetOf(mode) {
   const live = mode === "live";
   const worker = workerOf(mode);
   const environment = live ? "live" : "test";
-  const queue = worker.triggers.find(({ type }) => type === "queue");
+  // Coda del lavoro e coda degli ingressi dei webhook, ciascuna con la sua coda dei falliti.
+  const queues = worker.triggers.filter(({ type }) => type === "queue");
   return {
     live,
     environment,
@@ -51,7 +51,7 @@ export function targetOf(mode) {
     domain: worker.domains[0],
     origin: new URL(worker.env.APP_ORIGIN.value).origin,
     database: databases[environment],
-    queue,
+    queues,
     exports: worker.env.EXPORT_FILES.name,
     turnstile: worker.name,
     secrets: declaredSecrets(mode),
@@ -105,7 +105,7 @@ export function scriptSteps(target) {
       area: "Telegram",
       item: "webhook e menu del bot",
       args: ["scripts/telegram-bot.mjs", ...mode],
-      needs: ["TELEGRAM_BOT_TOKEN"],
+      needs: ["TELEGRAM_BOT_TOKEN", "TELEGRAM_OWNER_ID"],
     },
     {
       phase: "dopo",
@@ -120,53 +120,6 @@ export function scriptSteps(target) {
     },
   ];
 }
-
-/**
- * Prove che nessuno script attesta: restano all'owner o a un'osservazione, con il luogo in cui
- * si registra l'esito. Non cambiano l'esito del comando.
- */
-export const ownerItems = [
-  {
-    phase: "prima",
-    area: "Legali",
-    item: "garanzie dei trasferimenti extra UE per fornitore, obblighi 28 CFR Part 202 del DPA eBay, trattamento dei dati di OpenAI prima di usare Codex su dati reali",
-  },
-  {
-    phase: "prima",
-    area: "Supporto",
-    item: "casella supporto@ senza conversazioni oltre 24 mesi, notifica immediata per i mittenti Stripe e Link",
-  },
-  {
-    phase: "prima",
-    area: "Stripe",
-    item: "voci a vista della dashboard live: termini e privacy del checkout, sede fiscale, Smart Retries, metodi Managed Payments",
-  },
-  {
-    phase: "prima",
-    area: "eBay",
-    item: "RuName Production con nome, privacy, URL di ritorno e logo di fiscalbay.it e OAuth attivo",
-  },
-  {
-    phase: "dopo",
-    area: "Auth",
-    item: "password, Google, passkey e Accedi con eBay con un account business su fiscalbay.it",
-  },
-  {
-    phase: "dopo",
-    area: "Alert",
-    item: "primo report DMARC letto",
-  },
-  {
-    phase: "dopo",
-    area: "KPI",
-    item: "console Production con KPI, metriche tecniche e anomalie leggibili",
-  },
-  {
-    phase: "dopo",
-    area: "Rollback",
-    item: "versione precedente o forward-fix pronti secondo il ciclo di Promuovi",
-  },
-];
 
 const byName = (items, name, key = "name") => items?.find((item) => item?.[key] === name);
 
@@ -208,8 +161,6 @@ export function checkResources(target, state, phase) {
   const worker = byName(state.workers, target.worker);
   const secrets = new Set(state.secrets ?? []);
   const missing = target.secrets.filter((name) => !secrets.has(name));
-  const queue = byName(state.queues, target.queue.name, "queue_name");
-  const failed = byName(state.queues, target.queue.deadLetterQueue, "queue_name");
   const rules = state.lifecycle?.rules ?? [];
   const widget = byName(state.widgets, target.turnstile);
   const registry = state.registry;
@@ -232,13 +183,18 @@ export function checkResources(target, state, phase) {
       detail: missing.length ? `mancano ${missing.join(", ")}` : undefined,
     },
     { area: "Dati", item: "D1 dell'ambiente in UE", ok: state.database?.jurisdiction === "eu" },
-    ...[queue, failed].map((entry, index) => ({
-      area: "Quote",
-      item: `coda ${index ? target.queue.deadLetterQueue : target.queue.name} in UE a 14 giorni`,
-      ok:
-        entry?.jurisdiction === "eu" &&
-        entry?.settings?.message_retention_period === queueRetention,
-    })),
+    ...target.queues
+      .flatMap(({ name, deadLetterQueue }) => [name, deadLetterQueue])
+      .map((name) => {
+        const entry = byName(state.queues, name, "queue_name");
+        return {
+          area: "Quote",
+          item: `coda ${name} in UE a 14 giorni`,
+          ok:
+            entry?.jurisdiction === "eu" &&
+            entry?.settings?.message_retention_period === queueRetention,
+        };
+      }),
     {
       area: "Dati",
       item: `bucket ${target.exports} in UE senza accesso pubblico`,
@@ -274,19 +230,22 @@ export function checkResources(target, state, phase) {
     ...checkPublication(target.github, state.github),
   ];
   if (phase === "prima") return results;
-  const consumer = queue?.consumers?.find(({ script }) => script === target.worker);
   return [
     ...results,
-    {
-      area: "Quote",
-      item: "consumer della coda con retry e coda dei falliti",
-      ok:
-        consumer?.dead_letter_queue === target.queue.deadLetterQueue &&
-        consumer?.settings?.batch_size === target.queue.maxBatchSize &&
-        consumer?.settings?.max_retries === target.queue.maxRetries &&
-        consumer?.settings?.max_concurrency === target.queue.maxConcurrency &&
-        Boolean(queue?.producers?.some(({ script }) => script === target.worker)),
-    },
+    ...target.queues.map((expected) => {
+      const queue = byName(state.queues, expected.name, "queue_name");
+      const consumer = queue?.consumers?.find(({ script }) => script === target.worker);
+      return {
+        area: "Quote",
+        item: `consumer di ${expected.name} con retry e coda dei falliti`,
+        ok:
+          consumer?.dead_letter_queue === expected.deadLetterQueue &&
+          consumer?.settings?.batch_size === expected.maxBatchSize &&
+          consumer?.settings?.max_retries === expected.maxRetries &&
+          consumer?.settings?.max_concurrency === expected.maxConcurrency &&
+          Boolean(queue?.producers?.some(({ script }) => script === target.worker)),
+      };
+    }),
   ];
 }
 
@@ -431,7 +390,7 @@ export function runStep(step, { env = process.env, spawn = spawnSync } = {}) {
   };
 }
 
-const mark = (ok) => (ok === true ? "✓" : ok === false ? "✗" : "○");
+const mark = (ok) => (ok ? "✓" : "✗");
 
 /** Resoconto per area: esito, voce, dettaglio e, per gli script, la loro uscita rientrata. */
 export function report(results) {
@@ -457,11 +416,9 @@ export function plan(target) {
   for (const phase of ["prima", "dopo"]) {
     lines.push(`Fase ${phase}:`);
     const steps = scriptSteps(target).filter((step) => step.phase === phase);
-    const owner = ownerItems.filter((entry) => entry.phase === phase);
     for (const { area, item } of checks[phase]) lines.push(`  ${area} · ${item}`);
     for (const { area, item, args } of steps)
       lines.push(`  ${area} · ${item}: node ${args.join(" ")}`);
-    for (const { area, item } of owner) lines.push(`  ${area} · ${item} (owner)`);
   }
   return lines.join("\n");
 }
@@ -581,15 +538,9 @@ async function main() {
   if (after) results.push(...checkSurface(target, await readSurface(target)));
   for (const step of scriptSteps(target).filter((entry) => phases.includes(entry.phase)))
     results.push(runStep(step));
-  results.push(
-    ...ownerItems
-      .filter((entry) => phases.includes(entry.phase))
-      .map((entry) => ({ ...entry, ok: null })),
-  );
   console.log(report(results));
   const failed = results.filter(({ ok }) => ok === false).length;
-  const owner = results.filter(({ ok }) => ok === null).length;
-  console.log(`\n${failed} controlli non superati, ${owner} voci da attestare.`);
+  console.log(`\n${failed} controlli non superati.`);
   if (failed) process.exitCode = 1;
 }
 

@@ -27,6 +27,8 @@ if (!production) {
     value: "telegram-local-synthetic-webhook-secret",
   };
 }
+// Il Worker del bot non esiste in locale: senza binding le chiamate usano il token sintetico.
+delete config.env.TELEGRAM;
 // Token sintetico per il beacon delle pagine pubbliche, che i fixture delle prove sostituiscono.
 config.env.WEB_ANALYTICS_TOKEN = { type: "text", value: "local-web-analytics-token" };
 writeFileSync(workerConfig, JSON.stringify(config));

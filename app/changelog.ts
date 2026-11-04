@@ -9,12 +9,10 @@
  * qualificato: `develop` lo scrive subito dopo.
  * Senza voci pagina, voce del menu, collegamento di Supporto e campanella non compaiono.
  */
-/** Gruppi delle voci, nell'ordine della pagina, con il titolo `####` in ciascuna lingua. */
-export const whatsNewKinds = {
-  features: { it: "Funzionalità", en: "Features" },
-  improvements: { it: "Miglioramenti", en: "Improvements" },
-  fixes: { it: "Correzioni", en: "Fixes" },
-} as const;
+import { headings, whatsNewKinds } from "./changelog-fragments.mjs";
+
+export { withChanges } from "./changelog-fragments.mjs";
+export { whatsNewKinds };
 
 export type WhatsNewKind = keyof typeof whatsNewKinds;
 
@@ -25,8 +23,6 @@ export interface WhatsNewRelease {
   date: string | null;
   items: Array<{ kind: WhatsNewKind } & Record<"it" | "en", { title: string; body: string }>>;
 }
-
-const headings: Record<"it" | "en", string> = { it: "Novità", en: "What's new" };
 
 /** Versioni con Novità: dalla 2.0.0, senza prerelease. */
 const userVersion = (version: string) => /^[2-9]\d*\.\d+\.\d+$/u.test(version);

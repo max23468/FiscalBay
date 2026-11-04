@@ -24,7 +24,7 @@ Quote mensili di Workers Paid lette il 2026-10-28 dalla [documentazione dei prez
 
 | Risorsa | Inclusa nel piano | Oltre l'incluso | Punto di arresto |
 |---|---|---|---|
-| Worker | 10 milioni di richieste e 30 milioni di ms CPU al mese; 30 s di CPU per richiesta, 15 minuti per cron e consumer | 0,30 USD per milione di richieste, 0,02 USD per milione di ms | 80% delle richieste o della CPU; CPU p95 di una pagina oltre il doppio della misura del 2026-10-28 sul test (Ordini 177 ms il documento e 37 ms i dati, Negozi 86 e 50 ms) |
+| Worker | 10 milioni di richieste e 30 milioni di ms CPU al mese; 30 s di CPU per invocazione, fissati in `cloudflare.config.ts`, con 15 minuti di clock per cron e consumer | 0,30 USD per milione di richieste, 0,02 USD per milione di ms | 80% delle richieste o della CPU; CPU p95 di una pagina oltre il doppio della misura del 2026-10-28 sul test (Ordini 177 ms il documento e 37 ms i dati, Negozi 86 e 50 ms) |
 | Database D1 | 25 miliardi di righe lette, 50 milioni di righe scritte, 5 GB al mese; 10 GB per database | 0,001 USD per milione di righe lette, 1 USD per milione scritte, 0,75 USD per GB | 80% delle righe o 8 GB nel database dell'ambiente |
 | Queue | 1 milione di operazioni al mese, tre per messaggio; il cron accoda dieci negozi per messaggio | 0,40 USD per milione | 80% delle operazioni; arretrato oltre un turno del cron o messaggi nella coda dei falliti |
 | Email Service | 3.000 invii al mese | Prezzi del servizio | 80% degli invii |

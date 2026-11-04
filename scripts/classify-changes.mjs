@@ -28,8 +28,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { criticalModule } from "./mutation.mjs";
-import { migrationEntry, requiredReview } from "./release/release.mjs";
+import { criticalModule, prTargets } from "./mutation.mjs";
+import { changeFile, fullChangelog, migrationEntry, requiredReview } from "./release/release.mjs";
 import { importGraph } from "./verify-repo.mjs";
 
 /** Script di package.json eseguito da ciascun livello, dal più leggero. */
@@ -42,6 +42,40 @@ export const levelScripts = {
 };
 const levels = Object.keys(levelScripts);
 
+/**
+ * Gate locale di `pnpm verify:changed`: controlli statici del livello, poi i test collegati al
+ * diff. Copertura, build, React Doctor fuori dal livello completo, WebKit e suite browser restano
+ * alla CI, che esegue `levelScripts` sul diff della PR.
+ */
+export const localScripts = {
+  docs: "verify:documents",
+  tooling: "verify:tooling",
+  unit: "verify:static",
+  build: "verify:static",
+  full: "verify:static:full",
+};
+
+/**
+ * Test Vitest del gate locale: nessuno per documenti e strumenti, quelli che importano i moduli
+ * e i test cambiati quando il diff resta in `app/`, `workers/` e `test/`, l'intera suite senza
+ * copertura se cambia altro che i test leggono, come manifest, configurazioni o changelog. Le
+ * prove browser e i loro strumenti non toccano Vitest.
+ */
+export function localTests(gate, files, impacts) {
+  if (!["unit", "build", "full"].includes(gate)) return [];
+  const source = (file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file);
+  const others = files.filter(
+    (file, index) =>
+      !source(file) &&
+      !browser.test(file) &&
+      levels.indexOf(impacts[index].level) >= levels.indexOf("unit"),
+  );
+  if (others.length || files.some((file) => source(file) && !existsSync(file)))
+    return [["pnpm", ["test"]]];
+  const related = files.filter(source);
+  return related.length ? [["pnpm", ["test:related", ...related]]] : [];
+}
+
 /** Configurazione dei Worker: i soli valori del test hanno un livello proprio. */
 export const configFile = "cloudflare.config.ts";
 
@@ -50,7 +84,10 @@ const manifestFile = "package.json";
 const lockFile = "pnpm-lock.yaml";
 
 /** File che si confrontano per contenuto, oltre che per nome. */
-const comparedFiles = [configFile, manifestFile, "CHANGELOG.md"];
+const comparedFiles = [configFile, manifestFile];
+
+/** Changelog e frammenti delle PR: si confrontano insieme, come li legge la build. */
+const changelogFile = (file) => file === "CHANGELOG.md" || changeFile.test(file);
 
 // Strumenti che entrano nella build o decidono dove girano le prove: un aggiornamento cambia
 // l'artefatto o l'ambiente del collaudo.
@@ -69,7 +106,7 @@ const tooling = [
   /^\.codex\//u,
   /^\.mcp\.json$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|metrics-query|log-archive|zone-protection|alert-monitors|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -162,10 +199,13 @@ export function changelogDayOnly(before, after) {
  * `core` limita i browser al nucleo essenziale: la suite completa resta alla qualifica.
  */
 export function fileImpact(file, change, lock) {
-  // Le Novità dell'app si leggono dal changelog alla build: cambia ciò che si distribuisce. Il
-  // giorno scritto dopo una pubblicazione è già nella build distribuita.
-  if (file === "CHANGELOG.md")
-    return changelogDayOnly(change?.before, change?.after)
+  // Le Novità dell'app si leggono dal changelog e dai frammenti alla build: cambia ciò che si
+  // distribuisce. Il giorno scritto dopo una pubblicazione, con i frammenti riuniti nel
+  // changelog, è già nella build distribuita.
+  // Un frammento con le sole decisioni lascia il changelog com'era.
+  if (changelogFile(file))
+    return changelogDayOnly(change?.before, change?.after) ||
+      (typeof change?.before === "string" && change.before === change.after)
       ? { level: "docs", e2e: false, deploy: false }
       : { level: "build", e2e: false, deploy: true };
   if (file === manifestFile) {
@@ -338,6 +378,19 @@ export const qualificationChange = (files) =>
     ),
   );
 
+/**
+ * Procedura che gira da `main`: pubblicazione, ritiro, qualifica e mutation che `publish.yml`
+ * richiama, Action, script e prove browser. Un lotto senza deploy che non la tocca, per esempio
+ * documenti, test o workflow della CI di `develop`, fa avanzare `main` senza attendere il candidato.
+ */
+export const mainProcessChange = (files) =>
+  files.some(
+    (file) =>
+      /^(?:\.github\/(?:workflows\/(?:publish|rollback|qualify|mutation)\.yml|actions\/)|scripts\/|e2e\/|playwright\.config\.ts$)/u.test(
+        file,
+      ) && !file.endsWith(".test.mjs"),
+  );
+
 // Le visite del catalogo si scelgono soltanto per area, con il loro tag; le altre prove per titolo.
 const areaGrep = (areas) => [
   ...areas.map((area) => `@pages-${area}`),
@@ -399,14 +452,14 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     : targeted && !specs.length && !core && product.every((file) => serverOnly.test(file))
       ? "chromium"
       : "chromium,webkit";
-  // Soltanto il candidato esegue la mutation: moduli critici modificati e loro consumatori
-  // critici. Le PR non la eseguono (D293); la campagna settimanale prova tutti i moduli.
+  // Il candidato esegue la mutation dei moduli critici modificati e dei loro consumatori critici,
+  // salvo quelli già provati nella PR, che prova in modo incrementale i moduli critici toccati o
+  // coperti da un test cambiato. Le dipendenze non ripetono la mutation: misura le prove del nostro
+  // codice, mentre una libreria aggiornata si prova con test, browser e collaudo remoto.
   const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);
   const mutationInputs =
     files.some((file) =>
-      /^(?:package\.json|pnpm-(?:lock|workspace)\.yaml|stryker\.config\.json|vitest.*\.config\.ts)$/u.test(
-        file,
-      ),
+      /^(?:pnpm-workspace\.yaml|stryker\.config\.json|vitest.*\.config\.ts)$/u.test(file),
     ) || qualificationChange(files)
       ? [...graph.keys()].filter(critical)
       : files.filter(critical);
@@ -479,12 +532,34 @@ function lastGreen(kind) {
   }
 }
 
+/** Changelog completo a un commit, o nel checkout senza `ref`; `undefined` se non si legge. */
+function changelogAt(ref) {
+  try {
+    return fullChangelog(ref);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Versioni dei file confrontati per contenuto; il changelog con i frammenti, per tutti i suoi file. */
+function versions(files, before, after) {
+  const changelog = files.some(changelogFile)
+    ? { before: changelogAt(before.ref), after: changelogAt(after.ref) }
+    : undefined;
+  return Object.fromEntries([
+    ...comparedFiles
+      .filter((file) => files.includes(file))
+      .map((file) => [file, { before: before.read(file), after: after.read(file) }]),
+    ...files.filter(changelogFile).map((file) => [file, changelog]),
+  ]);
+}
+
 /** Versioni dei file confrontati per contenuto fra due commit. */
 function committedVersions(files, base, head) {
-  return Object.fromEntries(
-    comparedFiles
-      .filter((file) => files.includes(file))
-      .map((file) => [file, { before: show(base, file), after: show(head, file) }]),
+  return versions(
+    files,
+    { ref: base, read: (file) => show(base, file) },
+    { ref: head, read: (file) => show(head, file) },
   );
 }
 
@@ -586,16 +661,13 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     );
   const changes = committed
     ? committedVersions(files, before, option("head"))
-    : Object.fromEntries(
-        comparedFiles
-          .filter((file) => files.includes(file))
-          .map((file) => [
-            file,
-            {
-              before: show(before, file),
-              after: existsSync(file) ? readFileSync(file, "utf8") : undefined,
-            },
-          ]),
+    : versions(
+        files,
+        { ref: before, read: (file) => show(before, file) },
+        {
+          ref: undefined,
+          read: (file) => (existsSync(file) ? readFileSync(file, "utf8") : undefined),
+        },
       );
   const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
     .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
@@ -604,12 +676,24 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
 
   if (green) console.log(`Confronto con l'ultimo verde locale ${green.slice(0, 12)}.`);
   for (const file of files) console.log(`${fileLevel(file, changes[file])}: ${file}`);
-  const summary = `Gate ${result.gate} (\`pnpm ${result.script}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;
+  // La PR prova per intero, in modo incrementale, i moduli critici cambiati e quelli coperti
+  // da un test cambiato; il candidato prova il diff cumulativo.
+  const prMutation =
+    committed && !args.complete
+      ? prTargets(
+          files,
+          lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
+            .filter((file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file) && existsSync(file))
+            .map((file) => ({ path: file, text: readFileSync(file, "utf8") })),
+        )
+      : [];
+  // In locale il livello esegue lo script statico; la CI quello completo del livello.
+  const summary = `Gate ${result.gate} (\`pnpm ${committed ? result.script : localScripts[result.gate]}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;
   console.log(summary);
   if (args["github-output"] && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\nqualify=${result.qualify}\ndistributes=${committed && distributes(option("base"), option("head"))}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmatrix=${result.matrix}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\n`,
+      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\nqualify=${result.qualify}\ndistributes=${committed && distributes(option("base"), option("head"))}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmatrix=${result.matrix}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\nmutation-pr=${JSON.stringify({ target: prMutation })}\n`,
     );
   if (process.env.GITHUB_STEP_SUMMARY && !args.run)
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Piano dei controlli\n\n${summary}\n`);
@@ -628,18 +712,36 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       );
   }
 
+  const started = Date.now();
+  const receipt = (kind, extra) =>
+    writeFileSync(
+      greenFile(kind),
+      `${JSON.stringify({ tree, seconds: Math.round((Date.now() - started) / 1000), ...extra })}\n`,
+    );
   if (args.run) {
-    run("pnpm", [result.script]);
-    if (tree) writeFileSync(greenFile(), `${JSON.stringify({ tree })}\n`);
+    if (committed) run("pnpm", [result.script]);
+    else {
+      const impacts = files.map((file) => fileImpact(file, changes[file]));
+      run("pnpm", [localScripts[result.gate]]);
+      for (const [command, commandArgs] of localTests(result.gate, files, impacts))
+        run(command, commandArgs);
+    }
+    if (tree) receipt("gate", { gate: result.gate });
   }
-  // In locale le prove scelte girano in Chromium: WebKit e la suite completa restano alla CI.
+  // In locale le prove scelte girano in Chromium, e soltanto se la modifica cambia ciò che il
+  // browser disegna o esegue: logica server, WebKit e la suite completa restano alla CI.
   if (args.browser) {
-    if (result.e2e)
+    const local = result.e2e && result.browsers !== "chromium";
+    if (local)
       run(
         "node",
         ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", "chromium"],
         result.matrix ? { E2E_MATRIX: result.matrix } : {},
       );
-    if (tree) writeFileSync(greenFile("browser"), `${JSON.stringify({ tree })}\n`);
+    else if (result.e2e)
+      console.log(
+        "Prove browser lasciate alla CI: la modifica non cambia ciò che il browser esegue.",
+      );
+    if (tree) receipt("browser", { browsers: local ? "chromium" : "" });
   }
 }

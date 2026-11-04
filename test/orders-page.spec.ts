@@ -12,7 +12,7 @@ import { markNotificationsRead } from "../app/domain/notification-reads.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
 import versionedChangelog from "../CHANGELOG.md?raw";
-import { parseChangelog, releaseChangelog } from "../app/changelog";
+import { parseChangelog, releaseChangelog, withChanges } from "../app/changelog";
 import {
   hasWhatsNew,
   whatsNew,
@@ -113,6 +113,81 @@ describe("pagina Ordini reale", () => {
     // Una versione più in basso senza giorno è un errore del changelog: la build non lo copre.
     const second = "## [2.0.3] - 2026-11-04\n\n## [2.0.2]\n";
     expect(releaseChangelog(second, "2026-11-05")).toBe(second);
+  });
+
+  it("i frammenti delle PR entrano nella versione in cima, nei loro gruppi e in entrambe le lingue", () => {
+    const top = [
+      "# Changelog",
+      "",
+      "## [2.0.3]",
+      "",
+      "### Novità",
+      "",
+      "#### Correzioni",
+      "",
+      "- **Uno.** Primo.",
+      "",
+      "### What's new",
+      "",
+      "#### Fixes",
+      "",
+      "- **One.** First.",
+      "",
+      "## [2.0.2] - 2026-11-03",
+      "",
+      "### Altre modifiche",
+      "",
+      "- Vecchia.",
+      "",
+    ].join("\n");
+    const fragment = (it: string, en: string, group: [string, string]) =>
+      [
+        "# Frammento",
+        "",
+        "## Changelog",
+        "",
+        "### Novità",
+        "",
+        `#### ${group[0]}`,
+        "",
+        `- **${it}.** Testo.`,
+        "",
+        "### What's new",
+        "",
+        `#### ${group[1]}`,
+        "",
+        `- **${en}.** Text.`,
+        "",
+        "### Altre modifiche",
+        "",
+        `- Interna ${it}.`,
+        "",
+        "## Decisioni",
+        "",
+        "| D999 | Ambito | Sintesi | Provenienza | Stato |",
+      ].join("\n");
+    const merged = withChanges(top, [
+      fragment("Due", "Two", ["Correzioni", "Fixes"]),
+      fragment("Tre", "Three", ["Funzionalità", "Features"]),
+    ]);
+    const { releases, problems } = parseChangelog(merged);
+    expect(problems).toEqual([]);
+    expect(releases[0].items.map(({ kind, it, en }) => [kind, it.title, en.title])).toEqual([
+      ["features", "Tre", "Three"],
+      ["fixes", "Uno", "One"],
+      ["fixes", "Due", "Two"],
+    ]);
+    // Le altre modifiche restano nella versione in cima, le decisioni fuori dal changelog.
+    const section = merged.slice(0, merged.indexOf("## [2.0.2]"));
+    expect(section).toContain("### Altre modifiche\n\n- Interna Due.\n- Interna Tre.");
+    expect(merged).not.toContain("D999");
+    expect(merged.slice(merged.indexOf("## [2.0.2]"))).toBe(
+      "## [2.0.2] - 2026-11-03\n\n### Altre modifiche\n\n- Vecchia.\n",
+    );
+    expect(withChanges(top, [])).toBe(top);
+    expect(
+      withChanges(top, ["# Solo decisioni\n\n## Decisioni\n\n| D999 | a | b | c | d |\n"]),
+    ).toBe(top);
   });
 
   it("ricava le Novità dal changelog e le annuncia nella campanella e nel menu, solo se ci sono", async () => {

@@ -4,6 +4,8 @@
     ".": {
       "entry": [
         "cloudflare.config.ts",
+        "telegram-worker/index.ts",
+        "telegram-worker/vite.config.ts",
         "vitest.mutation.config.ts",
         "vitest.benchmark.config.ts",
         "vitest.capacity.config.ts",

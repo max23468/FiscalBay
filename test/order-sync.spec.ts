@@ -44,7 +44,7 @@ import { access, order } from "./fixtures/ebay-client-fixtures";
 import {
   grantedAt,
   ebay,
-  pages,
+  slices,
   count,
   cronTurn,
   setupScenarios,
@@ -183,21 +183,33 @@ describe("lettura periodica e richieste manuali", () => {
       await cronTurn(env, early, minutes(60));
       expect(notificationCalls(early)).toEqual([]);
 
-      // Il giorno dopo la sottoscrizione riesce e non si ripete più per questo consenso.
+      // Il giorno dopo la sottoscrizione riesce e non si ripete per una settimana.
       created = 201;
       const later = provider();
       await cronTurn(env, later, minutes(24 * 60 + 60));
       expect(notificationCalls(later)).toHaveLength(2);
       expect(await outcome()).toMatchObject({ order_events: "subscribed" });
-      await env.DB.prepare(
-        "UPDATE ebay_store_credentials SET order_events_checked_at = '2026-01-01T00:00:00.000Z'",
-      ).run();
       await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
         .bind(minutes(3 * 24 * 60).toISOString())
         .run();
       const done = provider();
       await cronTurn(env, done, minutes(3 * 24 * 60));
       expect(notificationCalls(done)).toEqual([]);
+
+      // Dopo una settimana la sottoscrizione attiva si ricontrolla, se eBay l'ha disattivata.
+      await env.DB.prepare(
+        "UPDATE ebay_store_credentials SET order_events_checked_at = '2026-01-01T00:00:00.000Z'",
+      ).run();
+      await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+        .bind(minutes(3 * 24 * 60 + 30).toISOString())
+        .run();
+      const weekly = provider();
+      await cronTurn(env, weekly, minutes(3 * 24 * 60 + 30));
+      expect(notificationCalls(weekly)).toHaveLength(2);
+      expect(await outcome()).toEqual({
+        order_events: "subscribed",
+        order_events_checked_at: minutes(3 * 24 * 60 + 30).toISOString(),
+      });
 
       // Un nuovo consenso azzera l'esito: il ricollegamento riprova subito.
       await saveStoreCredentials(
@@ -234,6 +246,47 @@ describe("lettura periodica e richieste manuali", () => {
     }
   });
 
+  it("dopo tre letture consecutive con le credenziali rifiutate chiede di ricollegare il negozio", async () => {
+    const rejected = () =>
+      env.DB.prepare(
+        "SELECT rejected_at FROM ebay_store_credentials WHERE store_id = 's-a'",
+      ).first<{ rejected_at: string | null }>();
+    const refused = () =>
+      ebay({
+        fail: (url) =>
+          url.pathname === "/sell/fulfillment/v1/order"
+            ? new Response(null, { status: 401 })
+            : undefined,
+      });
+    const turn = async (fetcher: typeof fetch, minute: number) => {
+      await env.DB.prepare("UPDATE sync_state SET requested_at = ?")
+        .bind(minutes(minute).toISOString())
+        .run();
+      await cronTurn(env, fetcher, minutes(minute));
+    };
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await cronTurn(env, ebay(), minutes(0));
+    // Altri errori di eBay non contano come rifiuti delle credenziali.
+    const unavailable = () =>
+      ebay({
+        fail: (url) =>
+          url.pathname === "/sell/fulfillment/v1/order"
+            ? new Response(null, { status: 503 })
+            : undefined,
+      });
+    for (const minute of [1, 2, 3]) await turn(unavailable(), minute);
+    expect(await rejected()).toEqual({ rejected_at: null });
+    await turn(refused(), 10);
+    await turn(refused(), 20);
+    // Una lettura riuscita azzera il conteggio: un rifiuto passeggero non basta.
+    await turn(ebay(), 30);
+    await turn(refused(), 40);
+    await turn(refused(), 50);
+    expect(await rejected()).toEqual({ rejected_at: null });
+    await turn(refused(), 60);
+    expect(await rejected()).toEqual({ rejected_at: minutes(60).toISOString() });
+  });
+
   it("il cron legge con la cadenza Free e l'evento non attende il turno", async () => {
     const fetcher = ebay();
     await cronTurn(env, fetcher, minutes(0));
@@ -265,7 +318,7 @@ describe("lettura periodica e richieste manuali", () => {
 
     fetcher.mockClear();
     await cronTurn(env, fetcher, minutes(30));
-    expect(pages(fetcher, "lastmodifieddate")).toEqual([0]);
+    expect(slices(fetcher, "lastmodifieddate")).toHaveLength(1);
     expect(await state()).toMatchObject({ polled_at: minutes(30).toISOString() });
 
     // Una richiesta rende il negozio dovuto anche se il cron l'aveva letto da poco: così si
@@ -275,14 +328,14 @@ describe("lettura periodica e richieste manuali", () => {
       .run();
     fetcher.mockClear();
     await cronTurn(env, fetcher, minutes(40));
-    expect(pages(fetcher, "lastmodifieddate")).toEqual([0]);
+    expect(slices(fetcher, "lastmodifieddate")).toHaveLength(1);
     expect(await state()).toMatchObject({ requested_at: null });
 
     // Lo storico ancora da importare è lavoro arretrato: si legge a ogni esecuzione utile.
     await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
     fetcher.mockClear();
     await cronTurn(env, fetcher, minutes(50));
-    expect(pages(fetcher, "creationdate")).toEqual([0]);
+    expect(slices(fetcher, "creationdate")).toHaveLength(1);
     fetcher.mockClear();
     await cronTurn(env, fetcher, minutes(60));
     expect(fetcher).not.toHaveBeenCalled();
@@ -667,13 +720,13 @@ describe("lettura periodica e richieste manuali", () => {
       await cronTurn(env, fetcher, minutes(20));
       expect(fetcher).not.toHaveBeenCalled();
       await cronTurn(env, fetcher, minutes(30));
-      expect(pages(fetcher, "creationdate")).toEqual([0]);
+      expect(slices(fetcher, "creationdate")).toHaveLength(1);
 
       // Dopo una lettura riuscita l'arretrato riprende al turno successivo.
       await env.DB.prepare("UPDATE sync_state SET history_done_at = NULL").run();
       fetcher.mockClear();
       await cronTurn(env, fetcher, minutes(40));
-      expect(pages(fetcher, "creationdate")).toEqual([0]);
+      expect(slices(fetcher, "creationdate")).toHaveLength(1);
     } finally {
       errors.mockRestore();
     }
@@ -686,7 +739,7 @@ describe("lettura periodica e richieste manuali", () => {
     await cronTurn(env, fetcher, minutes(8));
     expect(fetcher).not.toHaveBeenCalled();
     await cronTurn(env, fetcher, minutes(9));
-    expect(pages(fetcher, "creationdate")).toEqual([0]);
+    expect(slices(fetcher, "creationdate")).toHaveLength(1);
   });
 
   it("con il token in rinnovo lascia la richiesta al cron e chiude gli altri errori", async () => {
@@ -759,7 +812,7 @@ describe("lettura periodica e richieste manuali", () => {
 
     const fetcher = ebay();
     await consumeStoreSync(message(), queueEnv, fetcher, minutes(60 * 24 + 2));
-    expect(pages(fetcher, "creationdate")).toEqual([0]);
+    expect(slices(fetcher, "creationdate")).toHaveLength(1);
     expect(await state()).toMatchObject({
       history_done_at: minutes(60 * 24 + 2).toISOString(),
     });
@@ -845,7 +898,11 @@ describe("lettura periodica e richieste manuali", () => {
 
   describe("smistamento del cron", () => {
     const sendBatch = vi.fn<Queue["sendBatch"]>();
-    const cron = { ...env, WORK_QUEUE: { send, sendBatch } } as unknown as Env;
+    const cron = {
+      ...env,
+      WORK_QUEUE: { send, sendBatch },
+      INGRESS_QUEUE: { send },
+    } as unknown as Env;
 
     beforeEach(async () => {
       sendBatch.mockReset();

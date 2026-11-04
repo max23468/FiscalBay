@@ -54,6 +54,7 @@ jobs:
       browsers: ${{ steps.detect.outputs.browsers }}
       matrix: ${{ steps.detect.outputs.matrix }}
       browser-matrix: ${{ steps.browser-plan.outputs.browser-matrix }}
+      mutation-pr: ${{ steps.modules.outputs.matrix || '{"include":[]}' }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
@@ -108,7 +109,7 @@ jobs:
             echo "playwright=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
           } >> "${GITHUB_OUTPUT}"
 
-      # Un tree già verificato da una PR di questo repository non ripete il gate:
+      # Un tree già verificato su develop non ripete il gate:
       # il deploy distribuisce l'artefatto prodotto da quella verifica.
       - name: Find verified artifact
         id: reuse
@@ -138,6 +139,14 @@ jobs:
         run: |
           PR_BODY="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.body // ""')" \
             node scripts/release/release.mjs review --base "${BASE_SHA}"
+
+      # I moduli critici della PR si dividono nelle stesse parti del riferimento di `develop`.
+      - name: Split module mutation
+        id: modules
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && steps.detect.outputs.mutation-pr != '{"target":[]}'
+        env:
+          TARGETS: ${{ steps.detect.outputs.mutation-pr }}
+        run: node scripts/mutation.mjs --matrix "${TARGETS}"
 
       # Una nuova sezione in cima al changelog sale di un solo passo dall'ultima versione pubblicata.
       - name: Check version step
@@ -282,10 +291,78 @@ jobs:
           path: test-results/
           retention-days: 7
 
+  # Moduli critici cambiati o importati da un test cambiato, per intero e in modo incrementale: un
+  # mutante sopravvissuto si corregge nella PR, non alla qualifica del candidato, che riusa questa
+  # prova per lo stesso contenuto. I consumatori restano al candidato e alla campagna settimanale.
+  mutation-pr:
+    name: Mutation ${{ matrix.target }} ${{ matrix.shard }}
+    needs: verify
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.verify.outputs.mutation-pr != '{"include":[]}'
+    runs-on: ubuntu-26.04
+    # Senza riferimento una parte prova circa 150 mutanti, dopo la prova iniziale della suite che
+    # può durare fino a venti minuti.
+    timeout-minutes: 60
+    concurrency:
+      group: mutation-pr-${{ github.event.pull_request.number }}-${{ strategy.job-index }}
+      cancel-in-progress: true
+    strategy:
+      fail-fast: false
+      # Venti job contemporanei per l'account: il resto alla qualifica del candidato e alle altre PR.
+      max-parallel: 6
+      matrix: ${{ fromJSON(needs.verify.outputs.mutation-pr) }}
+    env:
+      MUTATION_TARGET: ${{ matrix.target }}
+      MUTATION_SHARD: ${{ matrix.shard }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node and dependencies
+        uses: ./.github/actions/setup
+
+      # Il riferimento della stessa parte, salvato su `develop` dall'ultima qualifica o campagna
+      # riuscita; con parti diverse quello più recente del modulo, che copre comunque i suoi mutanti.
+      - name: Restore develop reference
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-reference
+          key: mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: |
+            mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-
+            mutation-reference-${{ matrix.target }}-
+
+      # Una prova precedente della stessa PR, se da allora sono cambiati soltanto test e documenti,
+      # altrimenti il riferimento: Stryker ripete soltanto i mutanti con codice o test cambiati.
+      - name: Restore incremental base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MUTATION_REFERENCE: .mutation-reference/incremental.json
+        run: node scripts/mutation.mjs --incremental-base "${RUNNER_TEMP}/mutation-base.json"
+
+      - name: Qualify critical module
+        env:
+          MUTATION_INCREMENTAL_BASE: ${{ runner.temp }}/mutation-base.json
+        run: pnpm test:mutation "${MUTATION_TARGET}"
+
+      - name: Preserve incremental report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-pr-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
+          path: reports/mutation/
+          if-no-files-found: ignore
+          retention-days: 7
+
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
     name: Node 26
-    needs: [verify, quality, browser]
+    needs: [verify, quality, browser, mutation-pr]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5

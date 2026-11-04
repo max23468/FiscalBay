@@ -3,9 +3,12 @@
   "include": [
     "vite.config.ts",
     "cloudflare.config.ts",
+    "telegram-worker/cloudflare.config.ts",
+    "telegram-worker/vite.config.ts",
     "playwright.config.ts",
     "e2e/**/*.ts",
     "app/changelog.ts",
+    "app/changelog-fragments.mjs",
     "app/i18n.ts",
     "app/money.ts",
     "app/web-analytics.ts",

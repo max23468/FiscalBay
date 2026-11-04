@@ -8,6 +8,7 @@ import { after, describe, it } from "node:test";
 import {
   batched,
   assertDrained,
+  awaitQuiet,
   assertThawSafe,
   capture,
   freezeState,
@@ -438,6 +439,19 @@ describe("file e controlli del ripristino", () => {
     await setRecoveryFence(run, false);
     await assert.rejects(assertDrained(run), /blocco D1 assente/u);
     db.close();
+  });
+  it("dopo il drenaggio attende un minuto senza scritture prima della cattura", async () => {
+    const waits = [];
+    const wait = async (milliseconds) => void waits.push(milliseconds);
+    const bookmarks = ["a", "b", "c", "c"];
+    await awaitQuiet(() => bookmarks.shift(), wait);
+    assert.deepEqual(waits, [120_000, 60_000, 60_000, 60_000]);
+    // Un database che continua a cambiare blocca il ripristino.
+    let count = 0;
+    await assert.rejects(
+      awaitQuiet(() => String(count++), wait, 3),
+      /riceve ancora scritture/u,
+    );
   });
   const key = recoveryKey(Buffer.alloc(32, 7).toString("base64"));
   const header = { format: 1, live: false, database: "db", bookmark: "b", undo: "u" };

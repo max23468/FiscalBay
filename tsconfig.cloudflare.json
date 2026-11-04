@@ -6,6 +6,8 @@
     "app/**/.server/**/*",
     "app/**/.client/**/*",
     "workers/**/*",
+    "telegram-worker/index.ts",
+    "telegram-worker/forward.ts",
     ".cloudflare/types/index.d.ts"
   ],
   "compilerOptions": {

@@ -18,6 +18,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
+import { fragmentEntries, withChanges } from "../../app/changelog-fragments.mjs";
 import { downloadRecord, observedRelease } from "./records.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -178,6 +179,129 @@ export function datedChangelog(changelog, version, day) {
 }
 
 const releasedTags = () => git("tag", "--list", "v2.*").split("\n");
+
+/** Frammento di una PR: voci del changelog e righe del registro delle decisioni. */
+export const changeFile = /^changes\/[^/]+\.md$/u;
+export const decisionRegister = "docs/decisions/DECISION_REGISTER.md";
+
+/** Frammenti di `changes/` in ordine di nome, nel checkout o in un commit. */
+export function changeFiles(ref) {
+  const files = ref
+    ? git("ls-tree", "--name-only", ref, "changes/").split("\n")
+    : existsSync("changes")
+      ? readdirSync("changes").map((name) => `changes/${name}`)
+      : [];
+  return files.filter((file) => changeFile.test(file)).sort();
+}
+
+/** Changelog con i frammenti, nel checkout o in un commit: quello che build e note leggono. */
+export function fullChangelog(ref) {
+  const read = (file) => (ref ? git("show", `${ref}:${file}`) : readFileSync(file, "utf8"));
+  return withChanges(read("CHANGELOG.md"), changeFiles(ref).map(read));
+}
+
+/** Righe delle decisioni nella parte `## Decisioni` di un frammento. */
+export function fragmentDecisions(fragment) {
+  const lines = fragment.split("\n");
+  const start = lines.findIndex((line) => line.trim() === "## Decisioni");
+  if (start === -1) return [];
+  const end = lines.findIndex((line, index) => index > start && line.startsWith("## "));
+  return lines
+    .slice(start + 1, end === -1 ? undefined : end)
+    .filter((line) => /^\| D\d+ \|/u.test(line));
+}
+
+/** Registro con le righe dei frammenti dopo l'ultima decisione della tabella. */
+export function withDecisions(register, rows) {
+  if (!rows.length) return register;
+  const lines = register.split("\n");
+  const last = lines.findLastIndex((line) => /^\| D\d+ \|/u.test(line));
+  if (last === -1) throw new Error("Tabella delle decisioni non trovata.");
+  lines.splice(last + 1, 0, ...rows);
+  return lines.join("\n");
+}
+
+/** Link relativi di un testo spostato dalla cartella `from` alla cartella `to`. */
+export function rebaseLinks(text, from, to) {
+  return text.replace(/(\]\()([^\s)#]+)((?:#[^\s)]*)?\))/gu, (match, open, target, rest) =>
+    /^[a-z][a-z\d+.-]*:/iu.test(target) || target.startsWith("/")
+      ? match
+      : `${open}${path.posix.relative(to, path.posix.join(from, target)) || "."}${rest}`,
+  );
+}
+
+/**
+ * Giorno della pubblicazione su `develop`: i frammenti del commit pubblicato entrano nella
+ * versione, che riceve il giorno, e le loro decisioni nel registro; poi si eliminano. Frammenti
+ * con voci entrati dopo quel commit restano e aprono la versione di correzione successiva, perché
+ * non appartengono a quella pubblicata.
+ */
+export function publicationDay({ changelog, register, published, later }, version, day) {
+  const dated = datedChangelog(
+    withChanges(
+      changelog,
+      published.map((fragment) => rebaseLinks(fragment, "changes", ".")),
+      version,
+    ),
+    version,
+    day,
+  );
+  const open =
+    later.some((fragment) => fragmentEntries(fragment).length) && topSection(dated)?.day
+      ? dated.replace(/^## /mu, `## [${nextVersions(version)[0]}]\n\n## `)
+      : dated;
+  return {
+    changelog: open,
+    register: withDecisions(
+      register,
+      published
+        .flatMap(fragmentDecisions)
+        .map((row) => rebaseLinks(row, "changes", "docs/decisions")),
+    ),
+  };
+}
+
+/**
+ * Parte di un frammento entrata dopo la pubblicazione: senza le voci e le decisioni già
+ * pubblicate; vuota se non resta nessuna voce né decisione.
+ */
+export function laterPart(current, published) {
+  if (current === published) return "";
+  const sent = new Set(
+    published.split("\n").filter((line) => line.startsWith("- ") || /^\| D\d+ \|/u.test(line)),
+  );
+  const rest = current
+    .split("\n")
+    .filter((line) => !sent.has(line))
+    .join("\n");
+  return fragmentEntries(rest).length || fragmentDecisions(rest).length ? rest : "";
+}
+
+/**
+ * Le voci di un frammento appartengono alla versione in preparazione: con la versione in cima
+ * già pubblicata la PR apre prima quella successiva.
+ */
+export function assertChangesVersion(changelog, fragments, releasedTags = []) {
+  const top = topVersion(changelog);
+  if (
+    fragments.some((fragment) => fragmentEntries(fragment).length) &&
+    (topSection(changelog)?.day || releasedTags.includes(`v${top}`))
+  )
+    throw new Error(
+      `Le voci di changes/ richiedono una versione in preparazione: in cima c'è la ${top}, già pubblicata.`,
+    );
+}
+
+/**
+ * Il controllo al merge: le voci della PR vanno nella versione in cima a `develop`, oppure in
+ * quella che la PR stessa apre sopra, come chiede la prima PR con una modifica visibile dopo una
+ * pubblicazione. Con la stessa versione in cima vale `develop`, che può averla pubblicata nel
+ * frattempo.
+ */
+export function assertMergedChangesVersion(developChangelog, headChangelog, fragments, tags) {
+  const opened = topVersion(headChangelog) !== topVersion(developChangelog);
+  assertChangesVersion(opened ? headChangelog : developChangelog, fragments, tags);
+}
 
 export const latestReleased = (releasedTags) =>
   releasedTags
@@ -1059,6 +1183,7 @@ async function main() {
       base: { type: "string" },
       version: { type: "string" },
       day: { type: "string" },
+      sha: { type: "string" },
     },
   });
   const environment = values.environment;
@@ -1066,17 +1191,48 @@ async function main() {
   if (!target) throw new Error("Ambiente non supportato.");
   const command = positionals[0];
   if (command === "review") return reviewMigrations(values.base);
-  if (command === "date")
-    return writeFileSync(
-      "CHANGELOG.md",
-      datedChangelog(readFileSync("CHANGELOG.md", "utf8"), values.version, values.day),
+  if (command === "date") {
+    if (!/^[0-9a-f]{40}$/u.test(values.sha ?? "")) throw new Error("Commit pubblicato richiesto.");
+    // Si riunisce il contenuto pubblicato, non quello attuale: una PR successiva può aver
+    // modificato lo stesso frammento, e quelle righe restano al lotto seguente.
+    const published = changeFiles(values.sha).map((file) => ({
+      file,
+      text: git("show", `${values.sha}:${file}`),
+    }));
+    const read = (file) => readFileSync(file, "utf8");
+    const remaining = changeFiles()
+      .map((file) => {
+        const sent = published.find((entry) => entry.file === file)?.text;
+        return { file, text: sent === undefined ? read(file) : laterPart(read(file), sent) };
+      })
+      .filter(({ text }) => text !== "");
+    const day = publicationDay(
+      {
+        changelog: read("CHANGELOG.md"),
+        register: read(decisionRegister),
+        published: published.map(({ text }) => text),
+        later: remaining.map(({ text }) => text),
+      },
+      values.version,
+      values.day,
     );
+    writeFileSync("CHANGELOG.md", day.changelog);
+    writeFileSync(decisionRegister, day.register);
+    for (const { file } of published) if (existsSync(file)) rmSync(file);
+    for (const { file, text } of remaining) writeFileSync(file, text);
+    return;
+  }
   if (command === "version-step") {
     const changelog = readFileSync("CHANGELOG.md", "utf8");
     const baseChangelog = execFileSync("git", ["show", `${values.base}:CHANGELOG.md`], {
       encoding: "utf8",
     });
     assertVersionStep(changelog, baseChangelog, releasedTags());
+    assertChangesVersion(
+      changelog,
+      changeFiles().map((file) => readFileSync(file, "utf8")),
+      releasedTags(),
+    );
     console.log(`Versione in preparazione: ${topVersion(changelog)}.`);
     return;
   }

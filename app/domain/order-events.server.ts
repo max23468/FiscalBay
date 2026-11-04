@@ -11,10 +11,14 @@ import {
 // Un tentativo non concluso, o una sottoscrizione rimasta all'altro ambiente, si riprova dopo un
 // giorno: la lettura periodica resta la fonte degli ordini nel frattempo.
 const retryMilliseconds = 24 * 60 * 60_000;
+// Una sottoscrizione attiva si ricontrolla ogni settimana: eBay può disattivarla dopo consegne
+// fallite, e la nuova richiesta la riattiva.
+const recheckMilliseconds = 7 * retryMilliseconds;
 
 /**
  * Dopo una lettura riuscita, sottoscrive il negozio a `ORDER_CONFIRMATION` una volta per
- * consenso (D235). Il tentativo si prenota in D1 prima delle chiamate, così letture concorrenti
+ * consenso (D235) e ricontrolla ogni settimana quella attiva. Il tentativo si prenota in D1
+ * prima delle chiamate, così letture concorrenti
  * non lo ripetono; esito ed errori non fermano la lettura. Un consenso senza lo scope delle
  * notifiche resta senza eventi fino al ricollegamento.
  */
@@ -27,14 +31,16 @@ export async function ensureOrderEvents(
   const claimed = await env.DB.prepare(
     `UPDATE ebay_store_credentials SET order_events_checked_at = ?3
       WHERE store_id = ?1 AND granted_at = ?2 AND rejected_at IS NULL
-        AND (order_events IS NULL OR order_events = 'elsewhere')
-        AND (order_events_checked_at IS NULL OR order_events_checked_at <= ?4)`,
+        AND (((order_events IS NULL OR order_events = 'elsewhere')
+              AND (order_events_checked_at IS NULL OR order_events_checked_at <= ?4))
+          OR (order_events = 'subscribed' AND order_events_checked_at <= ?5))`,
   )
     .bind(
       store.store_id,
       store.granted_at,
       now.toISOString(),
       new Date(now.getTime() - retryMilliseconds).toISOString(),
+      new Date(now.getTime() - recheckMilliseconds).toISOString(),
     )
     .run();
   if (claimed.meta.changes !== 1) return;

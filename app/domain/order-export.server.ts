@@ -85,7 +85,8 @@ export function exportRecords(
   timeZone: string,
 ): Array<Record<ExportColumn, string>> {
   const { buyer, lineItems } = order.summary;
-  const billing = buyer?.billingAddress;
+  // Senza indirizzo di fatturazione il file porta quello di spedizione, mai un misto dei due.
+  const billing = buyer?.billingAddress ?? buyer?.shipTo?.address;
   const tax = taxCells(order);
   const total = minorToDecimal(order.totalMinor, order.currency);
   const common = {

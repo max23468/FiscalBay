@@ -2,11 +2,7 @@ import { env } from "cloudflare:workers";
 
 import { expect, it, vi } from "vitest";
 
-import {
-  duringRequestActivity,
-  duringServiceActivity,
-  waitUntil,
-} from "../app/service-activity.server";
+import { duringServiceActivity, waitUntil } from "../app/service-activity.server";
 
 import worker from "../workers/app";
 import { canonicalPath, localizedPath, movedEnglishPath, settingsSectionParam } from "../app/i18n";
@@ -395,17 +391,11 @@ it("durante la sospensione pagine, webhook, coda e cron non toccano i dati", asy
   expect(open.status).toBe(405);
 });
 
-it("il blocco D1 impedisce nuovi ingressi anche senza il segreto aggiornato", async () => {
+it("il blocco D1 ferma coda e cron; le pagine si fermano con il segreto", async () => {
   await env.DB.prepare(`INSERT INTO service_settings (name, value, updated_at)
     VALUES ('recovery_frozen', 'true', ?)`)
     .bind(now.toISOString())
     .run();
-  router.handle.mockImplementationOnce(async () => {
-    await env.DB.prepare("SELECT 1").first();
-    return new Response("unexpected");
-  });
-  const page = await workerFetch(new Request("https://test.fiscalbay.it/app/ordini"), environment);
-  expect(page.status).toBe(503);
   const sync = { body: { syncStore: "synthetic-store" }, retry: vi.fn() };
   await worker.queue({ messages: [sync] } as unknown as MessageBatch<unknown>, environment);
   expect(sync.retry).toHaveBeenCalledWith({ delaySeconds: 43_200 });
@@ -414,41 +404,13 @@ it("il blocco D1 impedisce nuovi ingressi anche senza il segreto aggiornato", as
   expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM scheduled_tasks").first("n")).toBe(0);
 });
 
-it("il filtro senza accessi D1 non scrive e le letture successive usano il contesto della richiesta", async () => {
-  const blocked = () => new Response(null, { status: 503 });
-  const response = await duringRequestActivity(
-    environment,
-    async () => new Response(null, { status: 429 }),
-    blocked,
-  );
-  expect(response.status).toBe(429);
-  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
-  const imported: Env[] = [];
-  const databases: D1Database[] = [];
-  for (let index = 0; index < 2; index++) {
-    await duringRequestActivity(
-      environment,
-      async (target) => {
-        imported.push(env);
-        databases.push(target.DB);
-        const a = target.DB.prepare("SELECT 1 AS n");
-        const b = env.DB.prepare("SELECT ? AS n").bind(2);
-        const results = await target.DB.batch<{ n: number }>([a, b]);
-        expect(env.DB).toBe(target.DB);
-        expect(results.map(({ results }) => results[0].n)).toEqual([1, 2]);
-        expect(
-          await target.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n"),
-        ).toBe(1);
-        await target.DB.exec("SELECT 1");
-      },
-      () => {
-        throw new Error("unexpected block");
-      },
-    );
-    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
-  }
-  expect(imported[0]).toBe(imported[1]);
-  expect(databases[0]).toBe(databases[1]);
+it("una richiesta HTTP non scrive nel registro delle attività", async () => {
+  router.handle.mockImplementationOnce(async () => {
+    const active = await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n");
+    return new Response(String(active));
+  });
+  const page = await workerFetch(new Request("https://test.fiscalbay.it/app/ordini"), environment);
+  expect(await page.text()).toBe("0");
 });
 
 it("il ripristino vede un lavoro già entrato fino alla sua conclusione", async () => {

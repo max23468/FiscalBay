@@ -93,7 +93,15 @@ export async function networkIdle(page: Page) {
   for (;;) {
     const current = pages.get(page);
     if (!current || (current.pending.size === 0 && Date.now() - current.changed >= 500)) return;
-    if (page.isClosed()) throw new Error("Pagina chiusa durante l'attesa della rete.");
+    // Le richieste ancora aperte dicono quale attesa non finisce; la query resta fuori.
+    if (page.isClosed()) {
+      const open = [...current.pending].map(
+        (request) => `${request.method()} ${request.url().split("?")[0]}`,
+      );
+      throw new Error(
+        `Pagina chiusa durante l'attesa della rete: ${open.join(", ") || "nessuna"}.`,
+      );
+    }
     await delay(50);
   }
 }

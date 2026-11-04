@@ -13,7 +13,7 @@ import { withInvocationMetrics, withPhaseTimings } from "../app/observability.se
 import { withResponseCookies } from "../app/response-cookies.server";
 import { withPageCache } from "../app/page-cache.server";
 import { queueRetryDelay } from "../app/domain/work-timing";
-import { duringRequestActivity, duringServiceActivity } from "../app/service-activity.server";
+import { duringServiceActivity } from "../app/service-activity.server";
 import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
 import { consumeExportJob, isExportJobMessage } from "../app/domain/export-jobs.server";
 import {
@@ -257,8 +257,10 @@ const handlers = {
 export default {
   async fetch(request, env, ctx) {
     const blocked = () => frozenResponse(new URL(request.url).pathname);
+    // Le richieste non si registrano in D1: il segreto le blocca, e il ripristino attende il
+    // drenaggio di quelle già avviate.
     if (frozen(env)) return blocked();
-    return duringRequestActivity(env, (target) => handlers.fetch(request, target, ctx), blocked);
+    return handlers.fetch(request, env, ctx);
   },
   async queue(batch, env, ctx?: ExecutionContext) {
     const blocked = () => {

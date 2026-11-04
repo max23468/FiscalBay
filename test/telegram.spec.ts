@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
+import { forward } from "../telegram-worker/forward";
 import { setSwitch } from "../app/domain/service-settings.server";
 import { noticesOf } from "../app/domain/telegram-deliveries.server";
 import type { VisibleOrder } from "../app/domain/orders.server";
@@ -1584,6 +1585,55 @@ describe("Bot API e conservazione", () => {
     const asked = answer(Response.json({ ok: true, result: { username: "venditore" } }));
     await chatLabel(env, "88", asked);
     expect(JSON.parse(String(asked.mock.calls[0]![1]?.body))).toEqual({ chat_id: "88" });
+  });
+
+  it("con il Worker del bot chiama la Bot API dal binding, senza il token nell'indirizzo", async () => {
+    const worker = vi.fn<Fetcher["fetch"]>(async () =>
+      Response.json({ ok: true, result: { username: "venditore" } }),
+    );
+    const direct = vi.fn<typeof fetch>();
+    const bound = { ...env, TELEGRAM: { fetch: worker } as unknown as Fetcher };
+    expect(await chatLabel(bound, "88", direct)).toBe("@venditore");
+    expect(direct).not.toHaveBeenCalled();
+    const [url, init] = worker.mock.calls[0]! as [string, RequestInit];
+    expect(url).toBe("https://telegram.invalid/getChat");
+    expect(url).not.toContain(env.TELEGRAM_BOT_TOKEN!);
+    expect(JSON.parse(String(init.body))).toEqual({ chat_id: "88" });
+  });
+
+  it("il Worker del bot aggiunge il token e inoltra soltanto metodi della Bot API", async () => {
+    const telegram = vi.fn<typeof fetch>(async () => new Response("{}", { status: 429 }));
+    const call = (path: string, method = "POST") =>
+      forward(
+        new Request(`https://telegram.invalid${path}`, {
+          method,
+          body: method === "POST" ? "{}" : null,
+        }),
+        "123:segreto",
+        telegram,
+      );
+    expect((await call("/sendMessage")).status).toBe(429);
+    expect(telegram).toHaveBeenCalledWith("https://api.telegram.org/bot123:segreto/sendMessage", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    });
+    for (const [path, method] of [
+      ["/sendMessage", "GET"],
+      ["/bot/getMe", "POST"],
+      ["/", "POST"],
+    ] as const)
+      expect((await call(path, method)).status).toBe(404);
+    expect(
+      (
+        await forward(
+          new Request("https://telegram.invalid/getMe", { method: "POST" }),
+          undefined,
+          telegram,
+        )
+      ).status,
+    ).toBe(503);
+    expect(telegram).toHaveBeenCalledOnce();
   });
 
   it("invia e modifica i messaggi con anteprima e pulsanti soltanto se presenti", async () => {

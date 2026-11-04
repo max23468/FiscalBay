@@ -7,10 +7,13 @@ import {
   consumerTests,
   criticalModule,
   evaluate,
+  incrementalSafe,
+  mergeReports,
   mutationConcurrency,
   mutationCoverageGaps,
   mutationJobs,
   mutationMatrix,
+  prTargets,
   shardRanges,
 } from "./mutation.mjs";
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
@@ -122,6 +125,71 @@ describe("esito dei mutation test", () => {
       { target: "app/b.server.ts", shard: "1/2" },
       { target: "app/a.server.ts", shard: "1/1" },
     ]);
+  });
+
+  it("riusa la base incrementale soltanto dopo cambi di test e documenti", () => {
+    for (const file of ["test/orders.spec.ts", "test/x.unit.ts", "docs/a.md", "changes/b.md"])
+      assert.ok(incrementalSafe(file), file);
+    for (const file of [
+      "app/auth.server.ts",
+      "test/fixtures/account-fixtures.ts",
+      "vitest.config.ts",
+      "pnpm-lock.yaml",
+    ])
+      assert.ok(!incrementalSafe(file), file);
+  });
+
+  it("prova nella PR i moduli critici cambiati e quelli importati da un test cambiato", () => {
+    const files = [
+      { path: "app/domain/orders.server.ts", text: 'import { a } from "../time";' },
+      { path: "app/time.ts", text: "" },
+      { path: "app/format.ts", text: "" },
+      { path: "app/auth.server.ts", text: "" },
+      { path: "test/orders.spec.ts", text: 'import { b } from "../app/domain/orders.server";' },
+      { path: "test/helpers.ts", text: 'import { c } from "../app/auth.server";' },
+    ];
+    assert.deepEqual(prTargets(["app/auth.server.ts", "app/format.ts"], files), [
+      "app/auth.server.ts",
+    ]);
+    // Un modulo raggiunto soltanto attraverso un altro import resta al candidato.
+    assert.deepEqual(prTargets(["test/orders.spec.ts"], files), ["app/domain/orders.server.ts"]);
+    // Gli helper dei test e i file eliminati non scelgono moduli.
+    assert.deepEqual(prTargets(["test/helpers.ts", "app/domain/gone.server.ts"], files), []);
+  });
+
+  it("riunisce le parti di una prova in un report incrementale senza doppioni né esiti instabili", () => {
+    const mutant = (line, status, mutatorName = "BooleanLiteral") => ({
+      id: String(line),
+      mutatorName,
+      replacement: "false",
+      status,
+      location: { start: { line, column: 1 }, end: { line, column: 5 } },
+    });
+    const report = (mutants, tests = {}) => ({
+      schemaVersion: "2",
+      files: { "app/a.server.ts": { language: "typescript", source: "sorgente", mutants } },
+      testFiles: tests,
+    });
+    const merged = mergeReports([
+      report([mutant(1, "Killed"), mutant(2, "Timeout")], {
+        "test/a.spec.ts": { tests: [{ id: "a" }] },
+      }),
+      report([mutant(1, "Killed"), mutant(3, "Survived"), mutant(4, "RuntimeError")], {
+        "test/b.spec.ts": { tests: [{ id: "b" }] },
+      }),
+    ]);
+    assert.deepEqual(
+      merged.files["app/a.server.ts"].mutants.map(({ location, status }) => [
+        location.start.line,
+        status,
+      ]),
+      [
+        [1, "Killed"],
+        [3, "Survived"],
+      ],
+    );
+    assert.deepEqual(Object.keys(merged.testFiles).sort(), ["test/a.spec.ts", "test/b.spec.ts"]);
+    assert.equal(mergeReports([]), undefined);
   });
 
   it("prova ogni modulo con i test che lo importano, anche indirettamente", () => {

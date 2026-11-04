@@ -8,22 +8,31 @@
  * `--matrix` scrive la matrice dei job per GitHub; senza file comprende tutti i moduli critici.
  * Un modulo con molti mutanti si divide in parti, eseguite in job paralleli: con
  * `MUTATION_SHARD=<parte>/<parti>` lo script prova soltanto la parte indicata.
+ * Stryker gira in modo incrementale: con `MUTATION_INCREMENTAL_BASE`, il report di una prova
+ * precedente, ripete soltanto i mutanti con codice o test cambiati.
+ * `--incremental-base <file>` scrive quel report dalle prove precedenti della PR o, senza, dal
+ * riferimento di `develop` in `MUTATION_REFERENCE`.
  */
 import { execFileSync, spawn } from "node:child_process";
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
+import { gh, ghJson } from "./lib/provider.mjs";
 
 /**
  * Regole condivise dei moduli critici: dati fiscali, orari, lista ordini, coda,
@@ -303,6 +312,150 @@ function sources() {
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
 }
 
+const mutantKey = ({ mutatorName, replacement, location }) =>
+  `${mutatorName}|${replacement ?? ""}|${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`;
+
+/** Esiti che dipendono soltanto da codice e test: timeout ed errori si provano di nuovo. */
+const stableStatuses = new Set(["Killed", "Survived", "NoCoverage", "Ignored"]);
+
+/**
+ * Un solo report incrementale dalle parti di una prova precedente: mutanti dello stesso sorgente
+ * riuniti senza doppioni, test per nome. Stryker identifica mutanti e test per contenuto e
+ * posizione, non per numero, quindi le parti si sommano. Timeout ed errori, che possono dipendere
+ * dal carico del runner, restano fuori e si ripetono.
+ */
+export function mergeReports(reports) {
+  if (!reports.length) return undefined;
+  const files = {};
+  const testFiles = {};
+  for (const report of reports) {
+    for (const [file, entry] of Object.entries(report.files ?? {})) {
+      const mutants = entry.mutants.filter(({ status }) => stableStatuses.has(status));
+      const current = files[file];
+      if (!current) files[file] = { ...entry, mutants };
+      else if (current.source === entry.source) {
+        const known = new Set(current.mutants.map(mutantKey));
+        current.mutants.push(...mutants.filter((mutant) => !known.has(mutantKey(mutant))));
+      }
+    }
+    for (const [file, entry] of Object.entries(report.testFiles ?? {})) testFiles[file] ??= entry;
+  }
+  return { ...reports[0], files, testFiles };
+}
+
+/** Report incrementali di `target` in una cartella di artefatti scaricati. */
+function incrementalReports(directory, target) {
+  const slug = target.replaceAll("/", "_");
+  const found = [];
+  const visit = (folder) => {
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      const file = path.join(folder, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else if (entry.name === "incremental.json" && path.basename(folder).startsWith(slug))
+        found.push(JSON.parse(readFileSync(file, "utf8")));
+    }
+  };
+  visit(directory);
+  return found;
+}
+
+/**
+ * File che possono cambiare fra la prova precedente e quella attuale senza invalidarne la base:
+ * Stryker confronta il testo di ogni mutante e i file di test, ma non vede le altre righe del
+ * modulo, i moduli importati né helper e fixture dei test.
+ */
+export const incrementalSafe = (file) =>
+  /^test\/.+\.(?:spec|unit)\.ts$|\.md$|^docs\/|^changes\//u.test(file);
+
+/**
+ * Base incrementale della mutation della PR: le prove del modulo nella run precedente più recente
+ * della stessa PR, dello stesso repository, se da allora sono cambiati soltanto test e documenti.
+ * Senza, il riferimento di `develop` (`MUTATION_REFERENCE`), salvato dall'ultima qualifica o
+ * campagna riuscita del modulo: Stryker ripete i mutanti con codice o test cambiati da allora.
+ * Senza riferimento il modulo si prova per intero.
+ */
+async function writeIncrementalBase(output) {
+  const { REPOSITORY: repository, HEAD_REF: branch, GITHUB_RUN_ID: current } = process.env;
+  const { HEAD_SHA: head, GITHUB_RUN_ATTEMPT: attempt = "1" } = process.env;
+  const target = process.env.MUTATION_TARGET;
+  const repositoryId = Number(process.env.REPOSITORY_ID);
+  if (!repository || !branch || !target || !repositoryId || !head)
+    throw new Error("PR, repository, testa o modulo della base incrementale non indicati.");
+  const { workflow_runs: runs } = ghJson(
+    "api",
+    `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&branch=${encodeURIComponent(branch)}&per_page=20`,
+  );
+  // Una ripetizione dei job falliti parte dai tentativi precedenti della stessa run.
+  for (const run of runs.filter(
+    (entry) =>
+      (String(entry.id) !== current || Number(attempt) > 1) &&
+      entry.head_repository?.id === repositoryId,
+  )) {
+    if (run.head_sha !== head) {
+      const { files = [] } = ghJson("api", `repos/${repository}/compare/${run.head_sha}...${head}`);
+      const changed = files
+        .map(({ filename }) => filename)
+        .filter((file) => !incrementalSafe(file));
+      if (changed.length) {
+        console.log(
+          `Base incrementale della run ${run.id} non riusabile: cambiati ${changed.slice(0, 5).join(", ")}.`,
+        );
+        break;
+      }
+    }
+    const directory = mkdtempSync(path.join(tmpdir(), "mutation-base-"));
+    try {
+      try {
+        gh(
+          "run",
+          "download",
+          String(run.id),
+          "--repo",
+          repository,
+          "--pattern",
+          `mutation-pr-${run.id}-*`,
+          "--dir",
+          directory,
+        );
+      } catch {
+        continue;
+      }
+      const report = mergeReports(incrementalReports(directory, target));
+      if (!report) continue;
+      writeFileSync(output, JSON.stringify(report));
+      console.log(`Base incrementale di ${target}: run ${run.id}.`);
+      return;
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }
+  const reference = process.env.MUTATION_REFERENCE;
+  if (reference && existsSync(reference)) {
+    copyFileSync(reference, output);
+    console.log(`Base incrementale di ${target}: riferimento di develop.`);
+  } else console.log(`Nessuna base incrementale di ${target}: mutation dell'intero modulo.`);
+}
+
+/**
+ * Moduli critici che la PR prova: quelli con il sorgente cambiato e quelli importati direttamente
+ * da un test cambiato, perché un test indebolito lascia vivo un mutante anche su righe invariate.
+ * I moduli raggiunti soltanto attraverso altri import restano al candidato e alla campagna: ogni
+ * modulo in più costa la prova iniziale dell'intera suite che lo copre.
+ */
+export function prTargets(changed, files) {
+  const present = new Set(files.map(({ path: file }) => file));
+  const targets = new Set(changed.filter((file) => criticalModule(file) && present.has(file)));
+  const tests = changed.filter(
+    (file) => /^test\/.+\.(?:spec|unit)\.ts$/u.test(file) && present.has(file),
+  );
+  if (tests.length) {
+    const graph = importGraph(files, /^(?:app|workers|test)\/.+\.tsx?$/u);
+    for (const test of tests)
+      for (const file of graph.get(test) ?? []) if (criticalModule(file)) targets.add(file);
+  }
+  return [...targets].sort();
+}
+
 async function runTarget(target, files, shard = "1/1") {
   if (!criticalModule(target) || !existsSync(target))
     throw new Error(`Modulo critico inesistente: ${target}`);
@@ -319,10 +472,16 @@ async function runTarget(target, files, shard = "1/1") {
   const reportPath = `${directory}/mutation.json`;
   const settings = JSON.parse(readFileSync("stryker.config.json", "utf8"));
   const configPath = `${directory}/stryker.json`;
+  // Senza base Stryker prova tutti i mutanti e scrive comunque il report per la prova seguente.
+  const incrementalFile = `${directory}/incremental.json`;
+  const base = process.env.MUTATION_INCREMENTAL_BASE;
+  if (base && existsSync(base)) copyFileSync(base, incrementalFile);
   writeFileSync(
     configPath,
     JSON.stringify({
       ...settings,
+      incremental: true,
+      incrementalFile,
       concurrency: mutationConcurrency(settings.concurrency),
       mutate: [range ? `${target}:${range.start}-${range.end}` : target],
       jsonReporter: { fileName: reportPath },
@@ -359,8 +518,18 @@ async function runTarget(target, files, shard = "1/1") {
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const {
     positionals: args,
-    values: { matrix: matrixMode },
-  } = parseArgs({ allowPositionals: true, options: { matrix: { type: "boolean" } } });
+    values: { matrix: matrixMode, "incremental-base": baseFile },
+  } = parseArgs({
+    allowPositionals: true,
+    options: {
+      matrix: { type: "boolean" },
+      "incremental-base": { type: "string" },
+    },
+  });
+  if (baseFile) {
+    await writeIncrementalBase(baseFile);
+    process.exit(0);
+  }
   const files = sources();
   if (matrixMode) {
     const matrix = mutationMatrix(

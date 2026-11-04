@@ -7,7 +7,6 @@ import {
   checkResources,
   checkSurface,
   exportsMaxAge,
-  ownerItems,
   plan,
   queueRetention,
   report,
@@ -38,16 +37,16 @@ function resources(target) {
     ],
     secrets: [...target.secrets],
     database: { jurisdiction: "eu" },
-    queues: [
-      queue(target.queue.name, [
+    queues: target.queues.flatMap(({ name, deadLetterQueue }) => [
+      queue(name, [
         {
           script: target.worker,
-          dead_letter_queue: target.queue.deadLetterQueue,
+          dead_letter_queue: deadLetterQueue,
           settings: { batch_size: 1, max_retries: 5, max_concurrency: 5 },
         },
       ]),
-      queue(target.queue.deadLetterQueue),
-    ],
+      queue(deadLetterQueue),
+    ]),
     bucket: { jurisdiction: "eu" },
     lifecycle: {
       rules: [
@@ -86,7 +85,13 @@ describe("ambiente", () => {
     assert.equal(live.worker, "fiscalbay");
     assert.equal(live.domain, "fiscalbay.it");
     assert.equal(live.origin, "https://fiscalbay.it");
-    assert.equal(live.queue.deadLetterQueue, "fiscalbay-webhooks-failed");
+    assert.deepEqual(
+      live.queues.map(({ name, deadLetterQueue }) => [name, deadLetterQueue]),
+      [
+        ["fiscalbay-webhooks", "fiscalbay-webhooks-failed"],
+        ["fiscalbay-ingress", "fiscalbay-ingress-failed"],
+      ],
+    );
     assert.equal(live.exports, "fiscalbay-exports");
     assert.equal(test.worker, "fiscalbay-test");
     assert.ok(live.secrets.includes("STRIPE_WEBHOOK_SECRET"));
@@ -114,7 +119,8 @@ describe("risorse", () => {
     assert.deepEqual(failing(checkResources(live, resources(live), "prima")), []);
     const after = checkResources(live, resources(live), "dopo");
     assert.deepEqual(failing(after), []);
-    assert.equal(after.length, checkResources(live, resources(live), "prima").length + 1);
+    // Un consumer per la coda del lavoro e uno per quella degli ingressi.
+    assert.equal(after.length, checkResources(live, resources(live), "prima").length + 2);
   });
 
   it("richiede l'ambiente GitHub della pubblicazione con il suo branch e l'interruttore", () => {
@@ -195,7 +201,7 @@ describe("risorse", () => {
     const state = resources(live);
     state.queues[0].consumers[0].settings.max_retries = 3;
     assert.deepEqual(failing(checkResources(live, state, "dopo")), [
-      "consumer della coda con retry e coda dei falliti",
+      "consumer di fiscalbay-webhooks con retry e coda dei falliti",
     ]);
     state.queues[0].consumers[0].settings.max_retries = 5;
     state.queues[0].producers = [];
@@ -414,15 +420,14 @@ describe("script di area e resoconto", () => {
     assert.equal(runStep(step, { env: { TOKEN: "t" }, spawn: () => ({ status: 0 }) }).ok, true);
   });
 
-  it("segna esiti, voci da attestare e rientra l'uscita degli script", () => {
+  it("segna esiti e rientra l'uscita degli script", () => {
     assert.equal(
       report([
         { ok: true, area: "Dati", item: "D1" },
         { ok: false, area: "Auth", item: "segreti", detail: "mancano X" },
-        { ok: null, area: "Legali", item: "DPA" },
         { ok: false, area: "eBay", item: "sottoscrizioni", output: "✓ email\n✗ destinazione" },
       ]),
-      "✓ Dati · D1\n✗ Auth · segreti (mancano X)\n○ Legali · DPA\n✗ eBay · sottoscrizioni\n    ✓ email\n    ✗ destinazione",
+      "✓ Dati · D1\n✗ Auth · segreti (mancano X)\n✗ eBay · sottoscrizioni\n    ✓ email\n    ✗ destinazione",
     );
   });
 
@@ -431,10 +436,9 @@ describe("script di area e resoconto", () => {
     assert.match(text, /^Checklist operativa · live\nFase prima:\n/u);
     const [before, after] = text.split("Fase dopo:\n");
     assert.match(before, /segreti dichiarati sul Worker/u);
-    assert.doesNotMatch(before, /consumer della coda/u);
-    assert.match(after, /consumer della coda/u);
+    assert.doesNotMatch(before, /consumer di fiscalbay-ingress/u);
+    assert.match(after, /consumer di fiscalbay-ingress/u);
     assert.match(after, /anteprima assente/u);
     assert.match(after, /node scripts\/zone-protection\.mjs readback --mode live/u);
-    for (const { item } of ownerItems) assert.equal(text.split(item).length, 2);
   });
 });

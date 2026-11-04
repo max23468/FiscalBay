@@ -1,5 +1,4 @@
 import { inSequence } from "../sequence";
-import { dayMilliseconds } from "../time";
 import { stalledReceiptMilliseconds } from "./work-timing";
 
 export type Receipt = {
@@ -108,15 +107,16 @@ export function releaseReceipt(db: D1Database, id: string, lease: string) {
 }
 
 export async function enqueueReceipt(env: Env, receiptId: string, now: Date) {
-  await env.WORK_QUEUE.send({ receiptId });
+  await env.INGRESS_QUEUE.send({ receiptId });
   await env.DB.prepare("UPDATE webhook_receipts SET queued_at = ? WHERE id = ?")
     .bind(now.toISOString(), receiptId)
     .run();
 }
 
-// Una ricevuta accodata da oltre un giorno e non completata ha perso il messaggio: retry e
-// attese del provider si esauriscono prima, e resta la DLQ o la scadenza della coda.
-const lostMilliseconds = dayMilliseconds;
+// Una ricevuta accodata da oltre due ore e non completata ha perso il messaggio: i tentativi
+// della coda si esauriscono in circa un quarto d'ora e resta la DLQ. Un doppione di un
+// messaggio ancora in attesa si chiude con la ricevuta, presa da un solo consumer.
+const lostMilliseconds = 2 * 60 * 60_000;
 
 /**
  * Riprende la finestra fra claim D1 e accettazione Queue, anche senza retry provider, e le
@@ -136,7 +136,7 @@ export async function recoverWebhookIngress(env: Env, now = new Date()) {
 
 /**
  * Ripresa chiesta dalla console per le ricevute in ritardo di un provider, senza aspettare il
- * giorno del recupero automatico. Come il cron non tocca quelle prese da un consumer e riaccoda
+ * recupero automatico dopo due ore. Come il cron non tocca quelle prese da un consumer e riaccoda
  * al massimo 25 ricevute; restituisce quante ne ha riaccodate.
  */
 export async function resumeStalledReceipts(
