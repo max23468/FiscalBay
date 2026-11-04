@@ -224,11 +224,12 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   let cursor = state.trading_cursor
     ? Date.parse(state.trading_cursor) - overlapMilliseconds
     : Date.parse(state.history_from);
-  let until = state.trading_end === null ? null : Date.parse(state.trading_end);
-  let page = state.trading_page ?? 1;
-  let total = state.trading_total;
-  // Una finestra ormai oltre la portata di Trading ricomincia dal suo limite.
-  if (until !== null && until <= reach) [until, page, total] = [null, 1, null];
+  // Una finestra iniziata riprende dalla sua pagina; una ormai oltre la portata di Trading, o
+  // nessuna, ricomincia dal limite.
+  const resumed = Date.parse(String(state.trading_end)) > reach;
+  let until = resumed ? Date.parse(state.trading_end!) : null;
+  let page = resumed ? (state.trading_page ?? 1) : 1;
+  let total = resumed ? state.trading_total : null;
   while (spend(ctx.budget, 1, 1)) {
     const start = Math.max(reach, cursor);
     until ??= Math.min(Date.parse(ctx.at), start + tradingWindowDays * dayMilliseconds);

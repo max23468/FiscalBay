@@ -485,6 +485,36 @@ it("stringe un tratto denso dal campione della pagina, nell'ordine delle date", 
   expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
 });
 
+it("nello stesso secondo segue le pagine di eBay ed entro il budget si ferma senza concludere", async () => {
+  await acquire(ebay({ orders: [] }));
+  // Sessanta ordini modificati nello stesso istante: nessun tratto ne contiene una pagina.
+  const orders = series("12-istante", 60, "2026-09-02T00:30:00.000Z").map((item) => ({
+    ...item,
+    lastModifiedDate: "2026-09-02T00:40:00.000Z",
+  }));
+  const ample = ebay({ orders, pageLimit: 25 });
+  expect(await acquire(ample, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  const reads = slices(ample, "lastmodifieddate");
+  expect(reads.filter((range) => range.includes("@"))).toHaveLength(2);
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
+
+  // Il budget finisce prima della terza pagina: i recenti non si concludono.
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM orders"),
+    env.DB.prepare("DELETE FROM deleted_order_keys"),
+    env.DB.prepare(
+      "UPDATE sync_state SET cursor = ?1, last_success_at = ?1, recent_end = NULL",
+    ).bind("2026-09-02T00:00:00.000Z"),
+  ]);
+  const short = ebay({ orders, pageLimit: 25 });
+  const budget = reads.findIndex((range) => range.endsWith("@50"));
+  expect(await acquire(short, "2026-09-02T01:00:00.000Z", { calls: budget, pages: budget })).toBe(
+    "budget",
+  );
+  expect(slices(short, "lastmodifieddate")).toEqual(reads.slice(0, budget));
+  expect(await syncState()).toMatchObject({ last_success_at: "2026-09-02T00:00:00.000Z" });
+});
+
 it("una data illeggibile nella pagina non ferma la lettura dei tratti", async () => {
   await acquire(ebay({ orders: [] }));
   const orders = series("12-leggibile", 30, "2026-09-02T00:30:00.000Z").map((item, index) => ({

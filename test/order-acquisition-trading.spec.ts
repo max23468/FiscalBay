@@ -382,3 +382,33 @@ it("fra due finestre Trading si ferma con le chiamate spente e continua fino al 
   expect(await acquire(provider, "2026-10-01T02:00:00.000Z")).toBe("complete");
   expect(windows).toEqual(["2026-10-01T00:00:00.000Z", "2026-10-01T02:00:00.000Z"]);
 });
+
+it("una finestra Trading interrotta e ormai oltre i novanta giorni ricomincia dal limite", async () => {
+  const requests: Array<[string, string]> = [];
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      requests.push([
+        /<ModTimeFrom>([^<]+)</u.exec(body)![1]!,
+        /<PageNumber>([^<]+)</u.exec(body)![1]!,
+      ]);
+      return undefined;
+    },
+  });
+  await acquire(provider);
+  const at = "2027-02-01T00:00:00.000Z";
+  const reach = "2026-11-03T00:00:00.000Z";
+  // Anche una fine esattamente sul limite è ormai fuori portata.
+  for (const end of ["2026-10-01T00:00:00.000Z", reach]) {
+    await env.DB.prepare(
+      "UPDATE sync_state SET trading_cursor = '2026-09-01T00:00:00.000Z', trading_end = ?, trading_page = 3, trading_total = 250",
+    )
+      .bind(end)
+      .run();
+    requests.length = 0;
+    expect(await acquire(provider, at)).toBe("complete");
+    expect(requests[0]).toEqual([reach, "1"]);
+  }
+});
