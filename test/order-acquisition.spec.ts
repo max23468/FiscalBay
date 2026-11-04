@@ -414,6 +414,29 @@ it("con le chiamate eBay spente durante la lettura si ferma prima del tratto suc
     last_success_at: "2026-09-02T01:10:00.000Z",
   });
   expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(120);
+
+  // Spente durante un tratto denso: la passata si ferma senza concludersi né avanzare.
+  const dense = series("12-denso", 60, "2026-09-02T00:00:00.000Z").map((item, index) => ({
+    ...item,
+    lastModifiedDate: new Date(
+      Date.parse("2026-09-02T01:15:00.000Z") + index * 1_000,
+    ).toISOString(),
+  }));
+  const crowded = ebay({
+    orders: [...recent, ...dense],
+    pageLimit: 25,
+    before: async (url) => {
+      if (url.searchParams.get("filter")?.startsWith("lastmodifieddate:"))
+        await setSwitch(env.DB, "ebay_calls", false, new Date("2026-09-02T01:30:00.000Z"));
+    },
+  });
+  expect(await acquire(crowded, "2026-09-02T01:30:00.000Z")).toBe("budget");
+  expect(slices(crowded, "lastmodifieddate")).toHaveLength(1);
+  expect(await syncState()).toMatchObject({
+    cursor: "2026-09-02T01:00:00.000Z",
+    last_success_at: "2026-09-02T01:10:00.000Z",
+  });
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(120);
 });
 
 it("con le chiamate eBay spente durante la lettura Trading la riprende dalla pagina successiva", async () => {
