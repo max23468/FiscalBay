@@ -22,7 +22,8 @@ import { gzipSync } from "node:zlib";
  */
 export const budgetKiB = { public: 170, app: 300 };
 
-const appPath = /^(?:en\/)?(?:app|admin|anteprima|accesso)(?:\/|$)/u;
+// In inglese anteprima e accesso hanno i segmenti tradotti, come gli indirizzi dell'app.
+const appPath = /^(?:en\/)?(?:app|admin|anteprima|preview|accesso|sign-in)(?:\/|$)/u;
 
 const jsFiles = (directory) =>
   readdirSync(directory, { recursive: true, withFileTypes: true })
