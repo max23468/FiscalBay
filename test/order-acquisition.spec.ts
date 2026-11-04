@@ -501,7 +501,7 @@ it("una data illeggibile nella pagina non ferma la lettura dei tratti", async ()
       if (!first || !url.searchParams.get("filter")?.startsWith("lastmodifieddate:")) return;
       first = false;
       return Response.json({
-        orders: orders.slice(0, 25).map(({ lastModifiedDate: _, ...order }) => order),
+        orders: orders.slice(0, 25).map((order) => ({ ...order, lastModifiedDate: undefined })),
         total: 30,
         next: `${url.href}&offset=25`,
       });
