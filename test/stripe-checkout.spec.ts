@@ -13,6 +13,7 @@ import {
 import {
   buildManagedCheckoutParams,
   closeCheckoutSession,
+  createLifetimeCredit,
   createManagedCheckout,
   createStripeClient,
   stripeApiVersion,
@@ -217,7 +218,7 @@ describe("Stripe Managed Payments", () => {
     const transport = vi.spyOn(Stripe, "createFetchHttpClient");
     const request = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
+      .mockImplementation(async () =>
         Response.json(session, { headers: { "request-id": "req_test_transport" } }),
       );
     try {
@@ -244,6 +245,21 @@ describe("Stripe Managed Payments", () => {
       expect(body.get("managed_payments[enabled]")).toBe("true");
       expect(body.get("metadata[offer]")).toBe("annual");
       expect(body.get("subscription_data[metadata][workspace_id]")).toBe("workspace-test");
+      // Anche il coupon del credito porta la chiave del turno: un nuovo tentativo non ne crea un altro.
+      await createLifetimeCredit(
+        client,
+        {
+          amount: 245,
+          product: "prod_lifetime",
+          redeemBy: "2026-10-01T00:00:00.000Z",
+          workspaceId: "workspace-test",
+          name: "Periodo pagato non usato",
+        },
+        "turno-test",
+      );
+      const [couponUrl, couponOptions] = request.mock.calls[1]!;
+      expect(new URL(String(couponUrl)).pathname).toBe("/v1/coupons");
+      expect(new Headers(couponOptions?.headers).get("idempotency-key")).toBe("credit-turno-test");
     } finally {
       request.mockRestore();
       transport.mockRestore();
