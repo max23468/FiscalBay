@@ -175,7 +175,12 @@ describe("finestra dello storico secondo la copertura", () => {
   it("non cerca i dati fiscali su Trading per gli ordini oltre i novanta giorni", async () => {
     await coverage(linked - day, linked + 400 * day, "admin");
     const fetcher = ebay({
-      orders: [dated("12-recente", linked - 89 * day), dated("12-vecchio", linked - 91 * day)],
+      orders: [
+        dated("12-recente", linked - 89 * day),
+        // Esattamente novanta giorni prima: già fuori dalla portata di Trading.
+        dated("12-confine", linked - 90 * day),
+        dated("12-vecchio", linked - 91 * day),
+      ],
     });
     expect(await acquire(fetcher, iso(linked))).toBe("complete");
     // Soltanto l'ordine ancora alla portata di Trading; l'altro chiude il dettaglio senza CF.
@@ -184,7 +189,7 @@ describe("finestra dello storico secondo la copertura", () => {
       await count(
         "SELECT COUNT(*) AS total FROM order_source_refs WHERE detail_for = last_modified_time",
       ),
-    ).toBe(2);
+    ).toBe(3);
   });
 
   it("il ritorno al Free chiude l'estensione dove era arrivata e una nuova copertura la riprende", async () => {

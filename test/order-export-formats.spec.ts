@@ -563,6 +563,15 @@ describe("righe complete del file", () => {
       "BZ",
       "IT",
     ]);
+    // Senza nessuno dei due indirizzi le colonne restano vuote.
+    order.summary.buyer = { ...order.summary.buyer!, shipTo: null };
+    expect(exportRows(order, "order", it_, "Europe/Rome")[0]!.slice(9, 14)).toEqual([
+      "",
+      "",
+      "",
+      "",
+      "",
+    ]);
   });
 
   it("scrive l'acquirente e la riga completa, con il telefono della consegna come riserva", () => {

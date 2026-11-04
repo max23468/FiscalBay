@@ -121,7 +121,8 @@ const instant = (milliseconds: number) => new Date(milliseconds).toISOString();
 async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
   let from = Date.parse(pass.from);
   let to = Date.parse(pass.to);
-  let width = to - from;
+  // Il primo tratto è l'intero intervallo.
+  let width = Infinity;
   let capacity = pageSize;
   const fit = (span: number, orders: number) =>
     Math.max(minimumSliceMilliseconds, Math.floor((span * capacity * 0.8) / Math.max(orders, 1)));
@@ -137,12 +138,13 @@ async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
     if (page.next && span > minimumSliceMilliseconds) {
       // Tratto troppo denso: si rilegge più stretto, senza applicarne una parte. Gli ordini della
       // pagina sono un campione del tratto: il confine cade dove il campione ne lascia una pagina
-      // abbondante, oppure, senza campione utile, in proporzione al totale.
+      // abbondante, oppure, senza campione utile, in proporzione al totale. Una data illeggibile
+      // resta fuori dal campione.
       capacity = Math.min(capacity, Math.max(page.orders.length, 1));
       const near = pass.forward ? start : end;
       const sample = page.orders
         .map((order) => Math.abs(Date.parse(String(pass.key(order))) - near))
-        .filter((distance) => distance <= span)
+        .filter((distance) => Number.isFinite(distance))
         .sort((a, b) => a - b);
       const bound = sample[Math.floor((sample.length * capacity * 0.8) / page.total)];
       width = Math.max(

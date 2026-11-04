@@ -454,6 +454,63 @@ it("con le chiamate eBay spente durante la lettura Trading la riprende dalla pag
   ).toEqual({ trading_cursor: "2026-09-02T00:00:00.000Z", trading_page: null });
 });
 
+it("una passata lasciata a metà dalla paginazione precedente riparte con la sovrapposizione", async () => {
+  await acquire(ebay({ orders: [] }));
+  await env.DB.prepare("UPDATE sync_state SET recent_end = ?1, recent_next = ?2, recent_total = 60")
+    .bind("2026-09-02T00:30:00.000Z", "https://api.ebay.com/sell/fulfillment/v1/order?offset=25")
+    .run();
+  const fetcher = ebay({ orders: [] });
+  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(slices(fetcher, "lastmodifieddate")).toEqual([
+    "2026-09-01T23:45:00.000Z..2026-09-02T01:00:00.000Z",
+  ]);
+});
+
+it("stringe un tratto denso dal campione della pagina, nell'ordine delle date", async () => {
+  await acquire(ebay({ orders: [] }));
+  // Creati e modificati in ordine: eBay restituisce per primi i più recenti, i più lontani
+  // dall'inizio del tratto, e il confine si ricava dal campione ordinato per data.
+  const orders = series("12-denso", 60, "2026-09-02T00:30:00.000Z").map((item, index) => ({
+    ...item,
+    lastModifiedDate: new Date(
+      Date.parse("2026-09-02T00:06:00.000Z") - index * 20_000,
+    ).toISOString(),
+  }));
+  const fetcher = ebay({ orders, pageLimit: 25 });
+  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(slices(fetcher, "lastmodifieddate").slice(0, 2)).toEqual([
+    "2026-09-01T23:45:00.000Z..2026-09-02T01:00:00.000Z",
+    "2026-09-01T23:45:00.000Z..2026-09-02T00:00:40.000Z",
+  ]);
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
+});
+
+it("una data illeggibile nella pagina non ferma la lettura dei tratti", async () => {
+  await acquire(ebay({ orders: [] }));
+  const orders = series("12-leggibile", 30, "2026-09-02T00:30:00.000Z").map((item, index) => ({
+    ...item,
+    lastModifiedDate: new Date(
+      Date.parse("2026-09-02T00:40:00.000Z") + index * 1_000,
+    ).toISOString(),
+  }));
+  let first = true;
+  const fetcher = ebay({
+    orders,
+    pageLimit: 25,
+    fail: (url) => {
+      if (!first || !url.searchParams.get("filter")?.startsWith("lastmodifieddate:")) return;
+      first = false;
+      return Response.json({
+        orders: orders.slice(0, 25).map(({ lastModifiedDate: _, ...order }) => order),
+        total: 30,
+        next: `${url.href}&offset=25`,
+      });
+    },
+  });
+  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(30);
+});
+
 it("non salta ordini se l'elenco cambia durante la lettura dei tratti", async () => {
   await acquire(ebay({ orders: [] }));
   // Ordini ancora conservabili, modificati dopo l'ultimo limite dei recenti.

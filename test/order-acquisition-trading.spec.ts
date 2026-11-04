@@ -6,6 +6,8 @@ import { listVisibleOrders } from "../app/domain/orders.server";
 
 import { recordOrderObservation } from "../app/domain/order-import.server";
 
+import { setSwitch } from "../app/domain/service-settings.server";
+
 import { now } from "./fixtures/database-fixtures";
 
 import {
@@ -342,4 +344,41 @@ it("dopo una pausa di 45 giorni legge Trading per finestre di 30 giorni senza bu
   expect(windows[0]![0]).toBe("2026-11-03T00:00:00.000Z");
   expect(windows).toHaveLength(3);
   expect(windows.at(-1)![1]).toBe("2027-02-01T00:00:00.000Z");
+});
+
+it("fra due finestre Trading si ferma con le chiamate spente e continua fino al confine delle due ore", async () => {
+  const windows: string[] = [];
+  let stop = false;
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      windows.push(/<ModTimeTo>([^<]+)</u.exec(body)![1]!);
+      return undefined;
+    },
+    before: async (_, init) => {
+      if (stop && String(init?.body).includes("<ModTimeFrom>"))
+        await setSwitch(env.DB, "ebay_calls", false, new Date("2026-10-17T00:00:00.000Z"));
+    },
+  });
+  await acquire(provider);
+  windows.length = 0;
+  // Spente durante la prima finestra: la seconda resta al turno successivo.
+  stop = true;
+  expect(await acquire(provider, "2026-10-17T00:00:00.000Z")).toBe("budget");
+  expect(windows).toEqual(["2026-10-01T23:45:00.000Z"]);
+  expect(
+    await env.DB.prepare("SELECT trading_cursor, trading_end FROM sync_state").first(),
+  ).toEqual({ trading_cursor: "2026-10-01T23:45:00.000Z", trading_end: null });
+
+  // Una finestra che finisce esattamente due ore prima dell'istante corrente continua.
+  stop = false;
+  await setSwitch(env.DB, "ebay_calls", true, new Date("2026-10-17T00:01:00.000Z"));
+  await env.DB.prepare("UPDATE sync_state SET trading_cursor = ?")
+    .bind("2026-09-01T00:15:00.000Z")
+    .run();
+  windows.length = 0;
+  expect(await acquire(provider, "2026-10-01T02:00:00.000Z")).toBe("complete");
+  expect(windows).toEqual(["2026-10-01T00:00:00.000Z", "2026-10-01T02:00:00.000Z"]);
 });

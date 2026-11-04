@@ -266,6 +266,16 @@ describe("lettura periodica e richieste manuali", () => {
     };
     vi.spyOn(console, "error").mockImplementation(() => {});
     await cronTurn(env, ebay(), minutes(0));
+    // Altri errori di eBay non contano come rifiuti delle credenziali.
+    const unavailable = () =>
+      ebay({
+        fail: (url) =>
+          url.pathname === "/sell/fulfillment/v1/order"
+            ? new Response(null, { status: 503 })
+            : undefined,
+      });
+    for (const minute of [1, 2, 3]) await turn(unavailable(), minute);
+    expect(await rejected()).toEqual({ rejected_at: null });
     await turn(refused(), 10);
     await turn(refused(), 20);
     // Una lettura riuscita azzera il conteggio: un rifiuto passeggero non basta.

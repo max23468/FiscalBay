@@ -43,6 +43,7 @@ async function knownImages(
   observation: OrderObservation,
 ): Promise<Map<string, string>> {
   const listings = [
+    // Stryker disable next-line ArrayDeclaration: un ID in più senza righe nel negozio non trova immagini e non cambia l'esito.
     ...new Set(observation.items.flatMap((item) => (item.legacyItemId ? [item.legacyItemId] : []))),
   ];
   const { results } = await ctx.db
