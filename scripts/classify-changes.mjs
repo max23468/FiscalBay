@@ -27,8 +27,8 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs, stripVTControlCharacters } from "node:util";
-import { criticalModule } from "./mutation.mjs";
+import { parseArgs } from "node:util";
+import { criticalModule, prTargets } from "./mutation.mjs";
 import { changeFile, fullChangelog, migrationEntry, requiredReview } from "./release/release.mjs";
 import { importGraph } from "./verify-repo.mjs";
 
@@ -451,9 +451,9 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     : targeted && !specs.length && !core && product.every((file) => serverOnly.test(file))
       ? "chromium"
       : "chromium,webkit";
-  // Soltanto il candidato esegue la mutation dei moduli: critici modificati e loro consumatori
-  // critici, salvo quelli già provati riga per riga nella PR. Le PR provano le righe cambiate dei
-  // moduli critici che toccano. Le dipendenze non ripetono la mutation: misura le prove del nostro
+  // Il candidato esegue la mutation dei moduli critici modificati e dei loro consumatori critici,
+  // salvo quelli già provati nella PR, che prova in modo incrementale i moduli critici toccati o
+  // coperti da un test cambiato. Le dipendenze non ripetono la mutation: misura le prove del nostro
   // codice, mentre una libreria aggiornata si prova con test, browser e collaudo remoto.
   const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);
   const mutationInputs =
@@ -474,7 +474,6 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     browsers,
     matrix,
     mutation,
-    changedCritical: complete ? [] : files.filter(critical),
     qualify: deploy || qualificationChange(files),
   };
 }
@@ -573,65 +572,6 @@ export function needsDeploy(base, head) {
 export function distributes(base, head) {
   const files = committedChanges(base, head);
   return files.length > 0 && plan(files, [], false, committedVersions(files, base, head)).deploy;
-}
-
-/** Diff con prefissi e colori fissi: le righe aggiunte in verde, quelle spostate in blu. */
-export const movedColors = [
-  "diff.noprefix=false",
-  "diff.mnemonicPrefix=false",
-  "color.diff.new=green",
-  "color.diff.newMoved=blue",
-  "color.diff.newMovedAlternative=blue",
-  "color.diff.newMovedDimmed=blue",
-  "color.diff.newMovedAlternativeDimmed=blue",
-].flatMap((setting) => ["-c", setting]);
-
-/**
- * Righe aggiunte di ogni file, escluse quelle spostate, da `git diff -U0 --color=always
- * --color-moved=blocks` con i colori di `movedColors`. Git riconosce come spostati i blocchi di
- * almeno venti caratteri alfanumerici, anche fra file e con un'altra indentazione: un tratto di
- * codice portato in una funzione propria ha già superato la mutation dove si trovava. Un blocco
- * spostato in un altro ramo della stessa funzione resta fuori anche se il suo esito cambia: lo
- * riprova la campagna settimanale, con l'intero modulo.
- */
-export function addedLines(diff) {
-  const added = new Map();
-  let file;
-  let line = 0;
-  let header = false;
-  for (const raw of diff.split("\n")) {
-    const text = stripVTControlCharacters(raw);
-    if (text.startsWith("diff --git ")) {
-      header = true;
-      file = undefined;
-      continue;
-    }
-    if (header && text.startsWith("+++ ")) {
-      file = text.startsWith("+++ b/") ? text.slice(6) : undefined;
-      continue;
-    }
-    const hunk = /^@@ -\S+ \+(\d+)(?:,\d+)? @@/u.exec(text);
-    if (hunk) {
-      header = false;
-      line = Number(hunk[1]);
-      continue;
-    }
-    if (header || !file || !text.startsWith("+")) continue;
-    if (!raw.startsWith("\u001b[34m")) added.set(file, [...(added.get(file) ?? []), line]);
-    line += 1;
-  }
-  return added;
-}
-
-/** Intervalli `inizio-fine` di righe in ordine crescente. */
-export function lineRanges(numbers) {
-  const ranges = [];
-  for (const number of numbers) {
-    const last = ranges.at(-1);
-    if (last && number === last[1] + 1) last[1] = number;
-    else ranges.push([number, number]);
-  }
-  return ranges.map(([start, end]) => `${start}-${end}`);
 }
 
 /**
@@ -735,40 +675,24 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
 
   if (green) console.log(`Confronto con l'ultimo verde locale ${green.slice(0, 12)}.`);
   for (const file of files) console.log(`${fileLevel(file, changes[file])}: ${file}`);
-  const moved =
-    committed && result.changedCritical.length
-      ? addedLines(
-          execFileSync(
-            "git",
-            [
-              ...movedColors,
-              "diff",
-              "-U0",
-              "--color=always",
-              "--color-moved=blocks",
-              "--color-moved-ws=allow-indentation-change",
-              option("base"),
-              option("head"),
-              // Un blocco conta come spostato soltanto fra moduli critici: portato da un modulo
-              // non critico o da un test, non ha mai superato la mutation.
-              "--",
-              ...result.changedCritical,
-            ],
-            { encoding: "utf8", maxBuffer: 256 << 20 },
-          ),
+  // La PR prova per intero, in modo incrementale, i moduli critici cambiati e quelli coperti
+  // da un test cambiato; il candidato prova il diff cumulativo.
+  const prMutation =
+    committed && !args.complete
+      ? prTargets(
+          files,
+          lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
+            .filter((file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file) && existsSync(file))
+            .map((file) => ({ path: file, text: readFileSync(file, "utf8") })),
         )
-      : new Map();
-  const criticalLines = result.changedCritical.flatMap((file) => {
-    const lines = lineRanges(moved.get(file) ?? []);
-    return lines.length ? [{ target: file, lines: lines.join(",") }] : [];
-  });
+      : [];
   // In locale il livello esegue lo script statico; la CI quello completo del livello.
   const summary = `Gate ${result.gate} (\`pnpm ${committed ? result.script : localScripts[result.gate]}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;
   console.log(summary);
   if (args["github-output"] && process.env.GITHUB_OUTPUT)
     appendFileSync(
       process.env.GITHUB_OUTPUT,
-      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\nqualify=${result.qualify}\ndistributes=${committed && distributes(option("base"), option("head"))}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmatrix=${result.matrix}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\nmutation-lines=${JSON.stringify({ include: criticalLines })}\n`,
+      `gate=${result.gate}\ne2e=${result.e2e}\nbuild=${result.build}\ndeploy=${result.deploy}\nqualify=${result.qualify}\ndistributes=${committed && distributes(option("base"), option("head"))}\ngrep=${result.browserGrep}\nbrowsers=${result.browsers}\nmatrix=${result.matrix}\nmutation=${result.mutation.join(" ")}\nmutation-matrix=${JSON.stringify({ target: result.mutation })}\nmutation-pr=${JSON.stringify({ target: prMutation })}\n`,
     );
   if (process.env.GITHUB_STEP_SUMMARY && !args.run)
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Piano dei controlli\n\n${summary}\n`);

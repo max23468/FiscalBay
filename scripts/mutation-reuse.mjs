@@ -2,8 +2,8 @@
  * Mutation incrementale del candidato. Sulla prova di `develop` un modulo critico non si ripete
  * se la sua ultima mutation, in una qualifica o in una campagna precedente su un commit antenato,
  * è riuscita in ogni parte e ogni sorgente cambiato da allora che il modulo importa, anche
- * indirettamente, o il modulo stesso, è un modulo critico già provato riga per riga nella PR che
- * l'ha integrato, sullo stesso contenuto. Un sorgente non critico cambiato, o un commit senza
+ * indirettamente, o il modulo stesso, è un modulo critico già provato nella PR che l'ha
+ * integrato, sullo stesso contenuto. Un sorgente non critico cambiato, o un commit senza
  * quella prova, ripete il modulo. Dipendenze, strumenti e prove modificate non fanno ripetere
  * nulla: li copre la campagna settimanale, che resta completa.
  * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
@@ -91,7 +91,7 @@ export const affectedModules = (changed, graph) => new Set(affectingSources(chan
  * Divide i moduli fra da provare e riusati. `runs` sono le run precedenti su commit antenati,
  * dalla più recente, con gli esiti per modulo; `affectedSince(commit)` associa a ogni modulo i
  * sorgenti cambiati fino alla testa che lo raggiungono; `covered(source, commit)` dice se ogni
- * modifica di un modulo critico da `commit` è stata provata riga per riga nella sua PR. Conta
+ * modifica di un modulo critico da `commit` è stata provata nella sua PR. Conta
  * soltanto l'ultima run che ha provato il modulo: un fallimento recente non si copre con un
  * successo più vecchio.
  */
@@ -123,15 +123,15 @@ export async function reusePlan(targets, runs, affectedSince, covered = async ()
   return { run, reused };
 }
 
-/** Modulo di un job della mutation delle righe nella CI di una PR, con l'eventuale parte. */
+/** Modulo di un job della mutation nella CI di una PR, con l'eventuale parte. */
 export function lineMutationJob(name) {
   const match = /^Mutation ((?:app|workers)\/\S+)(?: \d+\/\d+)?$/u.exec(name);
   return match ? match[1] : null;
 }
 
 /**
- * Vero se la run della PR ha provato le righe del modulo: almeno un job del modulo e ogni suo
- * job riuscito, nella run riuscita.
+ * Vero se la run della PR ha provato il modulo: almeno un job del modulo e ogni suo job riuscito,
+ * nella run riuscita.
  */
 export function linesProved(run, jobs, target) {
   const own = jobs.filter((job) => lineMutationJob(job.name) === target);
@@ -186,9 +186,9 @@ async function previousRuns(repository, repositoryId) {
 }
 
 /**
- * Prova delle righe di `target` nelle PR integrate da `since`: ogni commit di `develop` che lo
- * modifica viene da una PR dello stesso repository con la mutation delle righe riuscita, sulla
- * testa unita con lo stesso contenuto del modulo nel commit integrato.
+ * Prova di `target` nelle PR integrate da `since`: ogni commit di `develop` che lo modifica viene
+ * da una PR dello stesso repository con la mutation del modulo riuscita, sulla testa unita con lo
+ * stesso contenuto del modulo nel commit integrato.
  */
 async function prCoverage(repository, repositoryId, target, since, api) {
   const commits = git("rev-list", "--first-parent", `${since}..HEAD`, "--", target)
@@ -272,7 +272,7 @@ async function main() {
           list(
             reused.map(
               ({ target, run: id, commit, lines }) =>
-                `${target}: run ${id} su ${commit.slice(0, 8)}${lines ? `, righe provate nelle PR per ${lines.join(", ")}` : ""}`,
+                `${target}: run ${id} su ${commit.slice(0, 8)}${lines ? `, sorgenti provati nelle PR: ${lines.join(", ")}` : ""}`,
             ),
           ),
         ]

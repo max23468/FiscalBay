@@ -1,7 +1,8 @@
 name: Mutation
 
 # Campagna settimanale su `develop` e avvio manuale; la qualifica del candidato la richiama per i
-# moduli critici del diff cumulativo. Le PR provano soltanto le righe cambiate, nella CI.
+# moduli critici del diff cumulativo. Su `develop` ogni parte riuscita salva il riferimento da cui
+# la CI delle PR prova i moduli in modo incrementale.
 on:
   # Pianificazione e avvio manuale leggono il workflow dal branch predefinito, `develop`.
   schedule:
@@ -75,6 +76,19 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Qualify critical module
         run: pnpm test:mutation "${MUTATION_TARGET}"
+      # Soltanto una parte senza superstiti: un esito sopravvissuto nel riferimento si ripeterebbe
+      # in ogni PR che tocca il modulo. Le chiavi sono immutabili: la run le distingue.
+      - name: Keep develop reference
+        if: success() && github.ref == 'refs/heads/develop'
+        run: |
+          mkdir -p .mutation-reference
+          cp reports/mutation/*/incremental.json .mutation-reference/incremental.json
+      - name: Save develop reference
+        if: success() && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-reference
+          key: mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Preserve mutation evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

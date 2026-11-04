@@ -14,9 +14,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
-  addedLines,
-  lineRanges,
-  movedColors,
   mainProcessChange,
   changelogDayOnly,
   configFile,
@@ -529,89 +526,6 @@ describe("mutation e riuso nel candidato", () => {
       "app/domain/stores.server.ts",
     ]);
     assert.deepEqual(plan(["app/tax-quality.ts"], files, true).mutation, ["app/tax-quality.ts"]);
-  });
-
-  it("indica i moduli critici modificati, non i consumatori, per la mutation della PR", () => {
-    const files = [
-      { path: "app/domain/stores.server.ts", text: "" },
-      { path: "app/auth.server.ts", text: 'import { load } from "./domain/stores.server";' },
-      { path: "app/format.ts", text: "" },
-    ];
-    assert.deepEqual(plan([files[0].path, files[2].path], files).changedCritical, [files[0].path]);
-    assert.deepEqual(plan([files[0].path], files, true).changedCritical, []);
-  });
-
-  it("ricava le righe aggiunte di ogni file senza quelle spostate", () => {
-    const green = (text) => `\u001b[32m${text}\u001b[m`;
-    const blue = (text) => `\u001b[34m${text}\u001b[m`;
-    const diff = [
-      "\u001b[1mdiff --git a/app/a.server.ts b/app/a.server.ts\u001b[m",
-      "\u001b[1m--- a/app/a.server.ts\u001b[m",
-      "\u001b[1m+++ b/app/a.server.ts\u001b[m",
-      "\u001b[36m@@ -3,2 +3 @@\u001b[m",
-      "\u001b[31m-old\u001b[m",
-      green("+++counter;"),
-      "\u001b[36m@@ -10 +9,3 @@\u001b[m",
-      blue("+moved one"),
-      blue("+moved two"),
-      green("+new"),
-      "\u001b[1mdiff --git a/app/gone.ts b/app/gone.ts\u001b[m",
-      "\u001b[1m+++ /dev/null\u001b[m",
-      "\u001b[36m@@ -1 +0,0 @@\u001b[m",
-      "\u001b[31m-x\u001b[m",
-    ].join("\n");
-    // Una riga aggiunta che inizia con «++» resta una riga, non un'intestazione.
-    assert.deepEqual(Object.fromEntries(addedLines(diff)), { "app/a.server.ts": [3, 11] });
-    assert.deepEqual(lineRanges([3, 4, 5, 9, 11, 12]), ["3-5", "9-9", "11-12"]);
-    assert.deepEqual(lineRanges([]), []);
-  });
-
-  it("il diff reale di git segna in blu i blocchi spostati, anche con un'altra indentazione", () => {
-    const directory = mkdtempSync(path.join(tmpdir(), "moved-lines-"));
-    const git = (...args) => spawnSync("git", args, { cwd: directory, encoding: "utf8" });
-    try {
-      git("init", "--quiet");
-      const body = [
-        "  const total = orders.reduce((sum, order) => sum + order.amount, 0);",
-        "  const average = orders.length ? total / orders.length : 0;",
-        "  return { total, average, count: orders.length };",
-      ];
-      writeFileSync(
-        path.join(directory, "a.ts"),
-        ["export function stats(orders) {", ...body, "}", ""].join("\n"),
-      );
-      git("add", "a.ts");
-      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "base");
-      writeFileSync(
-        path.join(directory, "a.ts"),
-        [
-          "function summary(orders) {",
-          ...body.map((line) => `  ${line}`),
-          "}",
-          "export function stats(orders) {",
-          "  return summary(orders.filter(Boolean));",
-          "}",
-          "",
-        ].join("\n"),
-      );
-      const diff = spawnSync(
-        "git",
-        [
-          ...movedColors,
-          "diff",
-          "-U0",
-          "--color=always",
-          "--color-moved=blocks",
-          "--color-moved-ws=allow-indentation-change",
-        ],
-        { cwd: directory, encoding: "utf8" },
-      ).stdout;
-      // Il corpo spostato resta fuori: si provano la nuova firma, la parentesi e la chiamata; la
-      // firma esportata è invariata.
-      assert.deepEqual(addedLines(diff).get("a.ts"), [1, 5, 7]);
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
   });
 
   it("attende il candidato senza deploy soltanto se cambia la procedura che gira da main", () => {

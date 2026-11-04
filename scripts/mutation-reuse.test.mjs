@@ -123,7 +123,7 @@ describe("mutation incrementale della prova del candidato", () => {
     ]);
   });
 
-  it("riusa un modulo critico cambiato soltanto con le righe provate nella sua PR", async () => {
+  it("riusa un modulo critico cambiato soltanto se provato nella sua PR", async () => {
     const orders = "app/domain/orders.server.ts";
     const exports = "app/domain/export-jobs.server.ts";
     const sql = "app/domain/sql.server.ts";
