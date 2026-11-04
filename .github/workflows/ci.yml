@@ -109,7 +109,7 @@ jobs:
             echo "playwright=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
           } >> "${GITHUB_OUTPUT}"
 
-      # Un tree già verificato da una PR di questo repository non ripete il gate:
+      # Un tree già verificato su develop non ripete il gate:
       # il deploy distribuisce l'artefatto prodotto da quella verifica.
       - name: Find verified artifact
         id: reuse

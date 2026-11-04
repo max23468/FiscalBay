@@ -2,6 +2,28 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
+## [2.0.2] - 2026-11-03
+
+### Novità
+
+#### Miglioramenti
+
+- **Password più sicure.** Se scegli una password che compare in violazioni di dati note, FiscalBay ti chiede di sceglierne un'altra. Se accedi con una password trapelata, un avviso ti invita a cambiarla da Impostazioni › Account.
+- **Pagine più rapide.** Alle visite successive il browser riusa i file già scaricati, così le pagine si aprono prima.
+
+### What's new
+
+#### Improvements
+
+- **Safer passwords.** If you choose a password that appears in known data breaches, FiscalBay asks you to pick another one. If you sign in with a leaked password, a notice invites you to change it from Settings › Account.
+- **Faster pages.** On later visits your browser reuses the files it already downloaded, so pages open sooner.
+
+### Altre modifiche
+
+- Il robots.txt della Production ammette ricerca, risposte degli assistenti AI e addestramento con i Content Signals, e `/llms.txt` descrive il servizio con le pagine pubbliche.
+- I Monitor di Cloudflare avvisano l'owner per email di cron fermo, eccezioni, messaggi nella coda dei falliti, spazio D1 ed email non consegnate; le protezioni della zona attivano il rilevamento delle credenziali trapelate.
+- Il collaudo remoto indica le richieste ancora aperte quando l'attesa della rete non finisce.
+
 ## [2.0.1] - 2026-11-01
 
 ### Novità

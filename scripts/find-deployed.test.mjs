@@ -149,6 +149,72 @@ describe("commit attivo in Production", () => {
     );
   });
 
+  it("con una versione nata da un segreto usa per la base soltanto l'ultimo stato del ciclo", () => {
+    const state = (id, run, version) => ({
+      id,
+      name: `production-state-${version}`,
+      expired: false,
+      workflow_run: { id: run, repository_id: 1, head_repository_id: 1 },
+    });
+    const receipts = { 10: receipt(a, "old"), 20: receipt(b, "new") };
+    const reads =
+      (latest, rolledBack = false) =>
+      (url) => {
+        if (url === "repos/example/repo") return { id: 1 };
+        if (url.includes("/artifacts?name=")) return { artifacts: [] };
+        if (url.includes("/workflows/publish.yml/"))
+          return {
+            workflow_runs: [
+              { id: 1, created_at: "2026-11-03T10:00:00Z" },
+              { id: 2, created_at: latest },
+            ],
+          };
+        if (url.includes("/workflows/rollback.yml/")) return { workflow_runs: [] };
+        if (url.includes("/runs/1/artifacts")) return { artifacts: [state(10, 1, "old")] };
+        if (url.includes("/runs/2/artifacts"))
+          return { artifacts: [{ ...state(20, 2, "new"), rolledBack }] };
+        throw new Error(`Lettura inattesa: ${url}`);
+      };
+    const download = (_, artifact) =>
+      artifact.rolledBack ? { ...receipts[artifact.id], rolledBack: true } : receipts[artifact.id];
+    const options = { latestState: true };
+    // La versione creata dal segreto non ha ricevuta: vale lo stato più recente, con il suo commit.
+    const record = publicationRecord(
+      "example/repo",
+      "secret",
+      reads("2026-11-03T20:00:00Z"),
+      download,
+      options,
+    );
+    assert.deepEqual(
+      [record.active.sha, record.active.version, record.observed],
+      [b, "new", "secret"],
+    );
+    // La conferma finale resta legata alla ricevuta della versione servita.
+    assert.throws(
+      () => publicationRecord("example/repo", "secret", reads("2026-11-03T20:00:00Z"), download),
+      /Nessuna ricevuta/u,
+    );
+    // Uno stato più recente ritirato non fa ripiegare su uno più vecchio.
+    assert.throws(
+      () =>
+        publicationRecord(
+          "example/repo",
+          "secret",
+          reads("2026-11-03T20:00:00Z", true),
+          download,
+          options,
+        ),
+      /Nessuna ricevuta/u,
+    );
+    // Le run si ordinano per data, non per posizione nell'elenco.
+    assert.equal(
+      publicationRecord("example/repo", "secret", reads("2026-11-03T09:00:00Z"), download, options)
+        .active.sha,
+      a,
+    );
+  });
+
   it("richiede un readback reale e conserva soltanto la compatibilità delle ricevute già distribuite", async () => {
     const version = "11111111-1111-1111-1111-111111111111";
     assert.equal(

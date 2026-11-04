@@ -470,7 +470,18 @@ function candidateAvailable(repository, tree) {
       continue;
     const run = ghJson("api", `repos/${repository}/actions/runs/${origin.id}`);
     const jobs = runJobs(repository, origin.id);
-    if (verifiedBuildOrigin(artifact, run, jobs, repositoryId, "candidate")) return true;
+    if (
+      verifiedBuildOrigin(
+        artifact,
+        run,
+        jobs,
+        repositoryId,
+        tree,
+        "candidate",
+        (sha) => ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha,
+      )
+    )
+      return true;
   }
   return false;
 }
