@@ -245,7 +245,24 @@ describe("Stripe Managed Payments", () => {
       expect(body.get("managed_payments[enabled]")).toBe("true");
       expect(body.get("metadata[offer]")).toBe("annual");
       expect(body.get("subscription_data[metadata][workspace_id]")).toBe("workspace-test");
-      // Anche il coupon del credito porta la chiave del turno: un nuovo tentativo non ne crea un altro.
+    } finally {
+      request.mockRestore();
+      transport.mockRestore();
+    }
+  });
+
+  it("crea il coupon del credito con la chiave di idempotenza del turno", async () => {
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () =>
+        Response.json(
+          { id: "coupon_test", object: "coupon" },
+          { headers: { "request-id": "req_test_coupon" } },
+        ),
+      );
+    try {
+      const client = await createStripeClient("sk_test_transport");
+      // Un nuovo tentativo dello stesso turno non crea un secondo coupon.
       await createLifetimeCredit(
         client,
         {
@@ -257,12 +274,11 @@ describe("Stripe Managed Payments", () => {
         },
         "turno-test",
       );
-      const [couponUrl, couponOptions] = request.mock.calls[1]!;
-      expect(new URL(String(couponUrl)).pathname).toBe("/v1/coupons");
-      expect(new Headers(couponOptions?.headers).get("idempotency-key")).toBe("credit-turno-test");
+      const [url, options] = request.mock.calls.at(-1)!;
+      expect(new URL(String(url)).pathname).toBe("/v1/coupons");
+      expect(new Headers(options?.headers).get("idempotency-key")).toBe("credit-turno-test");
     } finally {
       request.mockRestore();
-      transport.mockRestore();
     }
   });
 
