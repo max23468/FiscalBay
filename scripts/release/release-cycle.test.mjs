@@ -54,6 +54,8 @@ import {
   candidateReadiness,
   addedDecisions,
   addedLineNumbers,
+  enableAutoMerge,
+  transientGitHub,
   assertNotWithdrawn,
   candidatePhases,
   decisionRenumbering,
@@ -1548,5 +1550,69 @@ describe("pubblicazioni in parallelo", () => {
       renumberDecisions("D295 altrui\nnuova D295\nD295", mapping, new Set([2])),
       "D295 altrui\nnuova D297\nD295",
     );
+  });
+});
+
+describe("merge automatico con risposte incerte", () => {
+  const failure = (stderr) => Object.assign(new Error("gh"), { stderr });
+  const bad = "non-200 OK status code: 502 Bad Gateway body: nginx";
+
+  it("ripete la richiesta dopo un 502 se la PR non ha ancora il merge automatico", async () => {
+    const calls = [];
+    const waits = [];
+    const run = (...args) => {
+      calls.push(args[0]);
+      if (calls.length === 1) throw failure(bad);
+      return "";
+    };
+    await enableAutoMerge("example/project", "12", "a".repeat(40), {
+      run,
+      read: () => ({ state: "OPEN", autoMergeRequest: null }),
+      wait: async (ms) => waits.push(ms),
+    });
+    assert.equal(calls.length, 2);
+    assert.deepEqual(waits, [5000]);
+  });
+
+  it("non ripete un effetto già arrivato e si ferma sugli altri errori", async () => {
+    let calls = 0;
+    const run = () => {
+      calls += 1;
+      throw failure(bad);
+    };
+    for (const pr of [
+      { state: "OPEN", autoMergeRequest: { enabledAt: "x" } },
+      { state: "MERGED" },
+    ]) {
+      calls = 0;
+      await enableAutoMerge("example/project", "12", "a".repeat(40), {
+        run,
+        read: () => pr,
+        wait: async () => {},
+      });
+      assert.equal(calls, 1);
+    }
+    await assert.rejects(
+      enableAutoMerge("example/project", "12", "a".repeat(40), {
+        run: () => {
+          throw failure("GraphQL: Pull request is not mergeable");
+        },
+        read: () => ({ state: "OPEN" }),
+        wait: async () => {},
+      }),
+      /gh/u,
+    );
+    // Dopo quattro risposte 5xx l'errore resta: il ciclo si riprende dalla stessa PR.
+    calls = 0;
+    await assert.rejects(
+      enableAutoMerge("example/project", "12", "a".repeat(40), {
+        run,
+        read: () => ({ state: "OPEN", autoMergeRequest: null }),
+        wait: async () => {},
+      }),
+    );
+    assert.equal(calls, 4);
+    assert.ok(transientGitHub(failure("HTTP 503: Service Unavailable")));
+    assert.ok(!transientGitHub(failure("HTTP 422: Unprocessable")));
   });
 });

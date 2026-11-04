@@ -118,25 +118,49 @@ export function checksOutcome(checkRuns) {
   return current.every((check) => check.status === "completed") ? "passed" : "pending";
 }
 
+/** Risposta di GitHub persa o non servita: l'effetto può essere arrivato o no. */
+export const transientGitHub = (error) =>
+  /\b50[234]\b|Bad Gateway|Service Unavailable|Gateway Timeout|TLS handshake timeout|connection reset|ECONNRESET/iu.test(
+    String(error.stderr ?? error.message ?? ""),
+  );
+
 /**
  * GitHub rifiuta il merge automatico di una PR già unibile; `gh pr merge --auto` in quel caso
- * unisce subito, e nel cloud si fa lo stesso con il merge REST vincolato alla testa.
+ * unisce subito, e nel cloud si fa lo stesso con il merge REST vincolato alla testa. Dopo una
+ * risposta 5xx la PR si rilegge: con il merge automatico attivo o la PR unita l'effetto è
+ * arrivato, altrimenti la richiesta si ripete, al più quattro volte.
  */
-function enableAutoMerge(repository, number, head) {
-  try {
-    gh(...pullRequestAction("enable-auto", repository, number, head));
-  } catch (error) {
-    if (!/is in (clean|unstable) status/u.test(String(error.stderr ?? ""))) throw error;
-    gh(
-      "api",
-      "-X",
-      "PUT",
-      `repos/${repository}/pulls/${number}/merge`,
-      "-f",
-      "merge_method=squash",
-      "-f",
-      `sha=${head}`,
-    );
+export async function enableAutoMerge(
+  repository,
+  number,
+  head,
+  { run = gh, read = () => readPullRequest(repository, number), wait = pause } = {},
+) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      try {
+        run(...pullRequestAction("enable-auto", repository, number, head));
+      } catch (error) {
+        if (!/is in (clean|unstable) status/u.test(String(error.stderr ?? ""))) throw error;
+        run(
+          "api",
+          "-X",
+          "PUT",
+          `repos/${repository}/pulls/${number}/merge`,
+          "-f",
+          "merge_method=squash",
+          "-f",
+          `sha=${head}`,
+        );
+      }
+      return;
+    } catch (error) {
+      if (!transientGitHub(error) || attempt === 4) throw error;
+      const pr = read();
+      if (pr.state === "MERGED" || pr.autoMergeRequest) return;
+      console.error(`Merge automatico non confermato da GitHub: tentativo ${attempt}/4.`);
+      await wait(attempt * 5000);
+    }
   }
 }
 
@@ -1437,7 +1461,7 @@ async function mergeOpenPullRequest(repository, number, pr) {
         }
         // Tutti i controlli prima del merge: `Node 26` è il solo richiesto da GitHub.
         await waitChecks(repository, pr.headRefOid, 15 * 60_000);
-        enableAutoMerge(repository, number, pr.headRefOid);
+        await enableAutoMerge(repository, number, pr.headRefOid);
         // Il blocco del merge ferma le altre PR: l'esito si rilegge ogni dieci secondi.
         for (let attempt = 0; attempt < 180; attempt++) {
           pr = read();
