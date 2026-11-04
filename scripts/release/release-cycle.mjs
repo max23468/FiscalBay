@@ -2013,8 +2013,9 @@ async function coordinate({ repository, command, number, values }) {
       `operation=${command}`,
       "-f",
       `object=${object}`,
-      "-f",
-      `environment=${resumed ? resumeEnvironment(resumed) : "production"}`,
+      // Soltanto la ripresa sceglie il gruppo dall'ambiente: gli altri cicli restano avviabili anche
+      // con un `cycle.yml` che non conosce l'input, come quello della PR che lo introduce.
+      ...(resumed ? ["-f", `environment=${resumeEnvironment(resumed)}`] : []),
       "-f",
       `sha=${sha}`,
       "-f",
