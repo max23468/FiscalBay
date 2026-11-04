@@ -2,69 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   affectedModules,
-  changedPackages,
+  affectingSources,
+  lineMutationJob,
+  linesProved,
   moduleOutcomes,
   mutationJob,
-  packageImporters,
   reusePlan,
 } from "./mutation-reuse.mjs";
-
-/** Lockfile di pnpm con i due documenti, dipendenze del progetto e di un altro importer. */
-function lockfile({ dependencies = "", devDependencies = "", extra = "", settings = "" } = {}) {
-  return `---
-lockfileVersion: '9.0'
-
-importers:
-
-  .:
-    configDependencies: {}
-
----
-lockfileVersion: '9.0'
-
-settings:
-  autoInstallPeers: true${settings}
-
-importers:
-
-  .:
-    dependencies:
-      '@scope/auth':
-        specifier: 1.0.0
-        version: 1.0.0
-${dependencies}    devDependencies:
-      vitest:
-        specifier: 5.0.0
-        version: 5.0.0
-${devDependencies}
-  placeholder:
-    devDependencies:
-      cf:
-        specifier: 1.0.0
-        version: 1.0.0
-
-packages:
-
-  '@scope/auth@1.0.0':
-    resolution: {integrity: sha512-a}
-
-  vitest@5.0.0:
-    resolution: {integrity: sha512-v}
-${extra}
-snapshots:
-
-  '@scope/auth@1.0.0':
-    dependencies:
-      zod: 4.0.0
-
-  vitest@5.0.0: {}
-
-  zod@4.0.0: {}
-`;
-}
-
-const manifest = (dependencies = {}, rest = {}) =>
-  JSON.stringify({ dependencies: { "@scope/auth": "1.0.0", ...dependencies }, ...rest });
 
 describe("mutation incrementale della prova del candidato", () => {
   it("riconosce i job di mutation della qualifica e della campagna", () => {
@@ -154,15 +98,19 @@ describe("mutation incrementale della prova del candidato", () => {
     assert.deepEqual([...affectedModules(["test/orders.spec.ts"], graph)], []);
   });
 
-  it("riusa solo l'ultimo esito riuscito e non toccato", () => {
+  it("riusa solo l'ultimo esito riuscito e non toccato", async () => {
     const outcomes = (entries) => new Map(Object.entries(entries));
     const runs = [
       { id: 3, commit: "c3", outcomes: outcomes({ "app/a.ts": "failed", "app/b.ts": "passed" }) },
       { id: 2, commit: "c2", outcomes: outcomes({ "app/a.ts": "passed", "app/c.ts": "passed" }) },
       { id: 1, commit: "c1", outcomes: outcomes({ "app/d.ts": "passed", "app/e.ts": "passed" }) },
     ];
-    const affected = { c3: new Set(["app/b.ts"]), c2: new Set(), c1: new Set() };
-    const plan = reusePlan(
+    const affected = {
+      c3: new Map([["app/b.ts", new Set(["app/b.ts"])]]),
+      c2: new Map(),
+      c1: new Map(),
+    };
+    const plan = await reusePlan(
       ["app/a.ts", "app/b.ts", "app/c.ts", "app/d.ts", "app/f.ts"],
       runs,
       (commit) => affected[commit],
@@ -175,69 +123,83 @@ describe("mutation incrementale della prova del candidato", () => {
     ]);
   });
 
-  it("con un pacchetto cambiato ripete soltanto chi lo importa o dipende da lui", () => {
-    const before = { manifest: manifest(), lockfile: lockfile() };
-    const added = {
-      manifest: manifest({ "@scope/dash": "0.4.0" }),
-      lockfile: lockfile({
-        dependencies: "      '@scope/dash':\n        specifier: 0.4.0\n        version: 0.4.0\n",
-        extra: "\n  '@scope/dash@0.4.0':\n    resolution: {integrity: sha512-d}\n",
-      }),
-    };
-    assert.deepEqual([...changedPackages(before, added)], ["@scope/dash"]);
-    // Una dipendenza aggiornata cambia anche il pacchetto che la usa.
-    const zod = lockfile().replace("zod: 4.0.0", "zod: 4.1.0").replace("zod@4.0.0", "zod@4.1.0");
-    assert.deepEqual([...changedPackages(before, { manifest: manifest(), lockfile: zod })].sort(), [
-      "@scope/auth",
-      "zod",
-    ]);
-    // Un altro importer non entra nella mutation.
-    const other = lockfile().replace(
-      "cf:\n        specifier: 1.0.0",
-      "cf:\n        specifier: 1.1.0",
-    );
-    assert.deepEqual([...changedPackages(before, { manifest: manifest(), lockfile: other })], []);
-  });
-
-  it("uno strumento cambiato non riguarda chi non lo importa", () => {
-    const before = { manifest: manifest(), lockfile: lockfile() };
-    const sources = [{ path: "app/a.server.ts", text: 'import { auth } from "@scope/auth";' }];
-    for (const after of [
-      { manifest: manifest({}, { scripts: { test: "vitest" } }), lockfile: lockfile() },
+  it("riusa un modulo critico cambiato soltanto con le righe provate nella sua PR", async () => {
+    const orders = "app/domain/orders.server.ts";
+    const exports = "app/domain/export-jobs.server.ts";
+    const sql = "app/domain/sql.server.ts";
+    const runs = [
       {
-        manifest: manifest(),
-        lockfile: lockfile({ settings: "\n  excludeLinksFromLockfile: false" }),
+        id: 5,
+        commit: "c5",
+        outcomes: new Map([
+          [orders, "passed"],
+          [exports, "passed"],
+        ]),
       },
-      {
-        manifest: manifest(),
-        lockfile: lockfile({
-          devDependencies: "      stryker:\n        specifier: 9.0.0\n        version: 9.0.0\n",
-        }),
-      },
-      {
-        manifest: manifest(),
-        lockfile: lockfile().replace(
-          "vitest@5.0.0: {}",
-          "vitest@5.0.0:\n    dependencies:\n      zod: 4.0.0",
-        ),
-      },
-    ])
-      assert.equal(packageImporters(sources, changedPackages(before, after)).length, 0);
-  });
-
-  it("riconosce gli import dei pacchetti, anche per percorso, ma non i moduli locali o di piattaforma", () => {
-    const sources = [
-      { path: "app/auth.server.ts", text: 'import { dash } from "@scope/dash/plugins";' },
-      { path: "app/lazy.ts", text: 'const zod = await import("zod");' },
-      {
-        path: "app/local.ts",
-        text: 'import "~/scope/dash";\nimport { env } from "cloudflare:workers";',
-      },
-      { path: "app/other.ts", text: 'import { auth } from "@scope/auth";' },
     ];
-    assert.deepEqual(packageImporters(sources, new Set(["@scope/dash", "zod"])), [
-      "app/auth.server.ts",
-      "app/lazy.ts",
+    const graph = new Map([
+      [orders, new Set([sql])],
+      [exports, new Set([orders])],
+      [sql, new Set()],
     ]);
+    const calls = [];
+    const covered = async (source, commit) => {
+      calls.push(`${source} ${commit}`);
+      return source === orders;
+    };
+    // Il modulo cambiato e il suo consumatore critico si riusano con la prova della PR.
+    const proved = await reusePlan(
+      [orders, exports],
+      runs,
+      () => affectingSources([orders], graph),
+      covered,
+    );
+    assert.deepEqual(proved.run, []);
+    assert.deepEqual(
+      proved.reused.map(({ target, lines }) => [target, lines]),
+      [
+        [orders, [orders]],
+        [exports, [orders]],
+      ],
+    );
+    // Un sorgente non critico cambiato non ha una prova delle righe: si ripete chi lo importa.
+    const support = await reusePlan(
+      [orders, exports],
+      runs,
+      () => affectingSources([sql], graph),
+      covered,
+    );
+    assert.deepEqual(support.run, [orders, exports]);
+    assert.ok(!calls.includes(`${sql} c5`));
+    // Senza la prova della PR il modulo si ripete.
+    const missing = await reusePlan(
+      [orders],
+      runs,
+      () => affectingSources([orders], graph),
+      async () => false,
+    );
+    assert.deepEqual(missing.run, [orders]);
+  });
+
+  it("legge la prova delle righe dalla CI della PR, parti comprese", () => {
+    assert.equal(lineMutationJob("Mutation app/auth.server.ts"), "app/auth.server.ts");
+    assert.equal(lineMutationJob("Mutation app/auth.server.ts 2/3"), "app/auth.server.ts");
+    for (const name of ["Mutation", "Browser 1/8", "Gate", "Mutation docs/x.md"])
+      assert.equal(lineMutationJob(name), null);
+    const run = { conclusion: "success" };
+    const job = (name, conclusion = "success") => ({ name, conclusion });
+    const target = "app/auth.server.ts";
+    assert.ok(
+      linesProved(run, [job(`Mutation ${target} 1/2`), job(`Mutation ${target} 2/2`)], target),
+    );
+    assert.ok(
+      !linesProved(
+        run,
+        [job(`Mutation ${target} 1/2`), job(`Mutation ${target} 2/2`, "failure")],
+        target,
+      ),
+    );
+    assert.ok(!linesProved(run, [job("Mutation app/sealed.server.ts")], target));
+    assert.ok(!linesProved({ conclusion: "failure" }, [job(`Mutation ${target}`)], target));
   });
 });

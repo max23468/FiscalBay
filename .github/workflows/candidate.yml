@@ -26,6 +26,8 @@ env:
 permissions:
   contents: read
   actions: read
+  # Il riuso della mutation legge le PR dei commit e la loro CI.
+  pull-requests: read
 
 jobs:
   plan:

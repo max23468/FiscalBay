@@ -14,7 +14,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
-  changedLines,
+  addedLines,
+  lineRanges,
+  movedColors,
+  mainProcessChange,
   changelogDayOnly,
   configFile,
   dependencyChange,
@@ -312,6 +315,23 @@ describe("giorno della versione", () => {
     const selected = plan(["CHANGELOG.md"], [], false, change);
     assert.deepEqual([selected.gate, selected.deploy, selected.e2e], ["docs", false, false]);
   });
+
+  it("un frammento di changes/ distribuisce, e riunito nel changelog con il giorno no", () => {
+    const fragment = "changes/filtro.md";
+    const merged = { before: undated, after: `${undated}- nuova\n` };
+    const added = plan([fragment], [], false, { [fragment]: merged });
+    assert.deepEqual([added.gate, added.deploy, added.e2e], ["build", true, false]);
+    // Il giorno riunisce i frammenti: il changelog completo resta lo stesso, con il giorno.
+    const day = { before: undated, after: dated };
+    const folded = plan(["CHANGELOG.md", fragment], [], false, {
+      "CHANGELOG.md": day,
+      [fragment]: day,
+    });
+    assert.deepEqual([folded.gate, folded.deploy], ["docs", false]);
+    // Un frammento con le sole decisioni non cambia il changelog: resta un documento.
+    const same = { before: undated, after: undated };
+    assert.deepEqual(plan([fragment], [], false, { [fragment]: same }).gate, "docs");
+  });
 });
 
 describe("prove browser per area", () => {
@@ -521,11 +541,98 @@ describe("mutation e riuso nel candidato", () => {
     assert.deepEqual(plan([files[0].path], files, true).changedCritical, []);
   });
 
-  it("ricava dal diff le righe nuove di ogni blocco", () => {
-    assert.deepEqual(changedLines("@@ -3,2 +3 @@ a\n-b\n@@ -10 +9,3 @@ c\n@@ -20,2 +21,0 @@ d\n"), [
-      "3-3",
-      "9-11",
-    ]);
+  it("ricava le righe aggiunte di ogni file senza quelle spostate", () => {
+    const green = (text) => `\u001b[32m${text}\u001b[m`;
+    const blue = (text) => `\u001b[34m${text}\u001b[m`;
+    const diff = [
+      "\u001b[1mdiff --git a/app/a.server.ts b/app/a.server.ts\u001b[m",
+      "\u001b[1m--- a/app/a.server.ts\u001b[m",
+      "\u001b[1m+++ b/app/a.server.ts\u001b[m",
+      "\u001b[36m@@ -3,2 +3 @@\u001b[m",
+      "\u001b[31m-old\u001b[m",
+      green("+++counter;"),
+      "\u001b[36m@@ -10 +9,3 @@\u001b[m",
+      blue("+moved one"),
+      blue("+moved two"),
+      green("+new"),
+      "\u001b[1mdiff --git a/app/gone.ts b/app/gone.ts\u001b[m",
+      "\u001b[1m+++ /dev/null\u001b[m",
+      "\u001b[36m@@ -1 +0,0 @@\u001b[m",
+      "\u001b[31m-x\u001b[m",
+    ].join("\n");
+    // Una riga aggiunta che inizia con «++» resta una riga, non un'intestazione.
+    assert.deepEqual(Object.fromEntries(addedLines(diff)), { "app/a.server.ts": [3, 11] });
+    assert.deepEqual(lineRanges([3, 4, 5, 9, 11, 12]), ["3-5", "9-9", "11-12"]);
+    assert.deepEqual(lineRanges([]), []);
+  });
+
+  it("il diff reale di git segna in blu i blocchi spostati, anche con un'altra indentazione", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "moved-lines-"));
+    const git = (...args) => spawnSync("git", args, { cwd: directory, encoding: "utf8" });
+    try {
+      git("init", "--quiet");
+      const body = [
+        "  const total = orders.reduce((sum, order) => sum + order.amount, 0);",
+        "  const average = orders.length ? total / orders.length : 0;",
+        "  return { total, average, count: orders.length };",
+      ];
+      writeFileSync(
+        path.join(directory, "a.ts"),
+        ["export function stats(orders) {", ...body, "}", ""].join("\n"),
+      );
+      git("add", "a.ts");
+      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", "base");
+      writeFileSync(
+        path.join(directory, "a.ts"),
+        [
+          "function summary(orders) {",
+          ...body.map((line) => `  ${line}`),
+          "}",
+          "export function stats(orders) {",
+          "  return summary(orders.filter(Boolean));",
+          "}",
+          "",
+        ].join("\n"),
+      );
+      const diff = spawnSync(
+        "git",
+        [
+          ...movedColors,
+          "diff",
+          "-U0",
+          "--color=always",
+          "--color-moved=blocks",
+          "--color-moved-ws=allow-indentation-change",
+        ],
+        { cwd: directory, encoding: "utf8" },
+      ).stdout;
+      // Il corpo spostato resta fuori: si provano la nuova firma, la parentesi e la chiamata; la
+      // firma esportata è invariata.
+      assert.deepEqual(addedLines(diff).get("a.ts"), [1, 5, 7]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("attende il candidato senza deploy soltanto se cambia la procedura che gira da main", () => {
+    for (const file of [
+      ".github/workflows/publish.yml",
+      ".github/workflows/qualify.yml",
+      ".github/actions/setup/action.yml",
+      "scripts/release/release.mjs",
+      "e2e/pages.spec.ts",
+      "playwright.config.ts",
+    ])
+      assert.ok(mainProcessChange([file]), file);
+    for (const file of [
+      ".github/workflows/ci.yml",
+      ".github/workflows/candidate.yml",
+      "scripts/release/release.test.mjs",
+      "docs/operations/RELEASE.md",
+      "AGENTS.md",
+      "test/orders.spec.ts",
+    ])
+      assert.ok(!mainProcessChange([file]), file);
   });
 });
 
@@ -579,6 +686,8 @@ describe("esecuzione del classificatore", () => {
         "lib/provider.mjs",
       ])
         cpSync(path.join("scripts", file), path.join(repo, "scripts", file));
+      mkdirSync(path.join(repo, "app"));
+      cpSync("app/changelog-fragments.mjs", path.join(repo, "app/changelog-fragments.mjs"));
       writeFileSync(path.join(repo, "README.md"), "base\n");
       git("init", "--quiet", "--initial-branch", "develop");
       git("add", "--all");
@@ -611,10 +720,12 @@ describe("esecuzione del classificatore", () => {
       assert.match(incremental.output, /ultimo verde locale/u);
       assert.doesNotMatch(incremental.output, /tooling: AGENTS\.md/u);
       mkdirSync(path.join(repo, "app/routes"), { recursive: true });
+      // In locale il livello completo esegue i controlli statici e i test collegati al diff:
+      // copertura e build restano alla CI.
       writeFileSync(path.join(repo, "app/routes/stores.tsx"), "export const stores = 1;\n");
-      assert.equal(classify().commands, "verify");
+      assert.equal(classify().commands, "verify:static:full\ntest:related app/routes/stores.tsx");
       writeFileSync(path.join(repo, "app/routes/settings.tsx"), "export const settings = 1;\n");
-      assert.equal(classify().commands, "verify");
+      assert.equal(classify().commands, "verify:static:full\ntest:related app/routes/settings.tsx");
       const browser = classify("--browser");
       assert.match(browser.commands, /scripts\/browser-tests\.mjs/u);
       assert.match(browser.commands, /@pages-stores/u);
@@ -625,6 +736,23 @@ describe("esecuzione del classificatore", () => {
       const selected = classify("--browser");
       assert.match(selected.commands, /@pages-settings/u);
       assert.doesNotMatch(selected.commands, /@pages-stores/u);
+      // Un modulo server cambia soltanto ciò che Chromium proverebbe: i browser restano alla CI.
+      mkdirSync(path.join(repo, "app/domain"), { recursive: true });
+      writeFileSync(path.join(repo, "app/domain/stores.server.ts"), "export const load = 1;\n");
+      writeFileSync(
+        path.join(repo, "app/routes/stores.tsx"),
+        'import { load } from "../domain/stores.server";\nexport const stores = load;\n',
+      );
+      classify();
+      classify("--browser");
+      writeFileSync(path.join(repo, "app/domain/stores.server.ts"), "export const load = 2;\n");
+      classify();
+      const server = classify("--browser");
+      assert.equal(server.commands, "");
+      assert.match(server.output, /Prove browser lasciate alla CI/u);
+      // Un file che i test leggono fuori da `app/`, `workers/` e `test/` esegue l'intera suite.
+      writeFileSync(path.join(repo, "package.json"), '{"name":"prova"}\n');
+      assert.equal(classify().commands, "verify:static:full\ntest");
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

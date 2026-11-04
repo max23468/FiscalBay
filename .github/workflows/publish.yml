@@ -222,17 +222,21 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           install: "false"
+      # Con il giorno, i frammenti di `changes/` del commit pubblicato entrano nel changelog e nel
+      # registro delle decisioni; quelli arrivati dopo restano al lotto seguente.
       - name: Write the day on develop
         env:
           VERSION: ${{ inputs.version }}
           DAY: ${{ inputs.day }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           git config user.name github-actions
           git config user.email github-actions@users.noreply.github.com
+          git fetch --quiet --depth=1 origin "${EXPECTED_SHA}"
           for attempt in 1 2 3; do
             git fetch --quiet --depth=1 origin develop
             git reset --quiet --hard FETCH_HEAD
-            node scripts/release/release.mjs date --version "${VERSION}" --day "${DAY}"
+            node scripts/release/release.mjs date --version "${VERSION}" --day "${DAY}" --sha "${EXPECTED_SHA}"
             if git diff --quiet; then echo "Il changelog porta già il giorno."; exit 0; fi
             git commit --quiet -am "chore: giorno della ${VERSION}"
             if git push --quiet origin HEAD:refs/heads/develop; then exit 0; fi

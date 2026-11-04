@@ -1,6 +1,6 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 
-import { parseChangelog, releaseChangelog } from "../app/changelog.ts";
+import { parseChangelog, releaseChangelog, withChanges } from "../app/changelog.ts";
 import { testAccount } from "./test-account.ts";
 
 /** Scenari delle route esistenti: le azioni esterne non vengono inviate dal collaudo. */
@@ -79,9 +79,18 @@ const settings = [
 // Le Novità del changelog che l'ambiente locale e il test mostrano, con il loro giorno o in
 // preparazione: la pagina, la voce del menu e una voce della campanella per versione degli
 // ultimi trenta giorni, che per la versione in preparazione parte dal deploy.
+const changesDirectory = new URL("../changes/", import.meta.url);
 const shownReleases = parseChangelog(
   releaseChangelog(
-    readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
+    withChanges(
+      readFileSync(new URL("../CHANGELOG.md", import.meta.url), "utf8"),
+      existsSync(changesDirectory)
+        ? readdirSync(changesDirectory)
+            .filter((name) => name.endsWith(".md"))
+            .sort()
+            .map((name) => readFileSync(new URL(name, changesDirectory), "utf8"))
+        : [],
+    ),
     process.env.VITE_RELEASE_DAY,
   ),
 ).releases.filter(({ date }) => date === null || Date.parse(`${date}T00:00:00.000Z`) <= Date.now());

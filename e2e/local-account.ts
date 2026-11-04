@@ -1,12 +1,19 @@
 import { execFileSync } from "node:child_process";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import { request, type APIResponse, type BrowserContext } from "@playwright/test";
 import { applyLocalMigrations, database } from "../scripts/local-d1.mjs";
 import type { PageRole } from "./page-cases";
 
 export const localSecret = "fiscalbay-e2e-secret-at-least-32-bytes";
 export const localPassword = "fiscalbay-local-synthetic-password-only";
-export const localPort = process.env.E2E_PORT || "5186";
+/**
+ * Porta della preview locale: in CI quella fissa, sul Mac una per worktree, ricavata dal percorso,
+ * così due sessioni non si contendono la stessa porta. `E2E_PORT` la sceglie esplicitamente.
+ */
+export const worktreePort = (directory: string) =>
+  String(5200 + (createHash("sha256").update(directory).digest().readUInt16BE(0) % 700));
+export const localPort =
+  process.env.E2E_PORT || (process.env.CI ? "5186" : worktreePort(process.cwd()));
 // WebAuthn richiede un dominio come RP ID: un indirizzo IP non è valido.
 export const localOrigin = `http://localhost:${localPort}`;
 
