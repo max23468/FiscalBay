@@ -30,6 +30,33 @@ import {
 
 setupScenarios();
 
+it("una riga cancellata non torna con un nuovo identificativo dell'ordine", async () => {
+  await env.DB.prepare(
+    `INSERT INTO deleted_order_keys (store_id, kind, external_key, deleted_at)
+       VALUES ('s-a', 'line', 'k2', ?1)`,
+  )
+    .bind(now)
+    .run();
+  expect(
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({ externalOrderId: "D-nuovo", items: [line("k2")] }),
+    ),
+  ).toEqual({ outcome: "stale" });
+  expect(await orders()).toEqual([]);
+  // Una riga diversa dello stesso venditore entra.
+  expect(
+    (
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({ externalOrderId: "D-altro", items: [line("k3")] }),
+      )
+    ).outcome,
+  ).toBe("created");
+});
+
 it("nega l'accesso alla scadenza anche senza pulizia e non rinnova il grant", async () => {
   const result = await recordOrderObservation(
     env.DB,
