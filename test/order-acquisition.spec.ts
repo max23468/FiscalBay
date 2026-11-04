@@ -385,16 +385,15 @@ it("con le chiamate eBay spente durante la lettura si ferma prima del tratto suc
     before: async (url) => {
       if (!url.searchParams.get("filter")?.startsWith("lastmodifieddate:")) return;
       reads += 1;
-      if (reads === 3)
+      if (reads === 2)
         await setSwitch(env.DB, "ebay_calls", false, new Date("2026-09-02T01:00:00.000Z"));
     },
   });
   expect(await acquire(paused, "2026-09-02T01:00:00.000Z")).toBe("budget");
-  // Il tratto vuoto prima degli ordini è applicato; quello denso si ferma con le chiamate.
+  // Spente durante il tratto vuoto prima degli ordini: il tratto è applicato e il successivo non parte.
   expect(slices(paused, "lastmodifieddate")).toEqual([
     "2026-09-02T00:15:00.000Z..2026-09-02T01:00:00.000Z",
     "2026-09-02T00:15:00.000Z..2026-09-02T00:37:30.000Z",
-    "2026-09-02T00:37:30.000Z..2026-09-02T01:00:00.000Z",
   ]);
   expect(calls(paused, "GetStore")).toBe(0);
   expect(await syncState()).toMatchObject({
