@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import { canonicalPath } from "./i18n";
 import { pricingPath } from "./app-links";
+import { arrivalSource } from "./signup-source";
 
 /** Pagine pubbliche servite dalla cache breve: le più visitate, che leggono il listino. */
 const cachedPages = new Set(["/", pricingPath]);
@@ -42,19 +43,30 @@ function cacheable(request: Request) {
 }
 
 /**
- * Home e Prezzi per chi non ha sessione (§23): una copia per indirizzo e versione del Worker resta
+ * Chiave della copia: indirizzo, versione del Worker e categoria di provenienza (D303), che la
+ * pagina porta nei link interni. La categoria viene dall'elenco chiuso calcolato dal root loader,
+ * mai dall'host del Referer; una visita dall'interno del sito ha una copia propria.
+ */
+export function pageCacheKey(request: Request, version: string | undefined, appOrigin: string) {
+  const url = new URL(request.url);
+  const channel = arrivalSource(request, appOrigin)?.channel ?? "interno";
+  return new Request(`${url.origin}${url.pathname}?versione=${version ?? "locale"}&via=${channel}`);
+}
+
+/**
+ * Home e Prezzi per chi non ha sessione (§23): una copia per indirizzo, versione del Worker e provenienza resta
  * nella cache di Cloudflare per un minuto, così un picco di visite non legge ogni volta il
  * database. Il browser riceve comunque `no-store`: dopo l'accesso la home porta agli Ordini.
  */
 export async function withPageCache(
   request: Request,
   version: string | undefined,
+  appOrigin: string,
   context: Pick<ExecutionContext, "waitUntil"> | undefined,
   respond: () => Promise<Response>,
 ): Promise<Response> {
   if (!cacheable(request)) return respond();
-  const url = new URL(request.url);
-  const key = new Request(`${url.origin}${url.pathname}?versione=${version ?? "locale"}`);
+  const key = pageCacheKey(request, version, appOrigin);
   const cache = await caches.open("pagine-pubbliche");
   const hit = await cache.match(key).catch(() => undefined);
   if (hit) {

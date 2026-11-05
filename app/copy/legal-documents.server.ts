@@ -219,6 +219,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "6 mesi presso il fornitore di rete, in forma aggregata dopo 7 giorni",
               ],
               [
+                "Provenienza dell’iscrizione: categoria del canale da cui sei arrivato sul sito (per esempio un motore di ricerca, la Community eBay, un altro sito o l’accesso diretto) e percorso della prima pagina vista, ricavati dal sito di provenienza o da un’etichetta nei nostri link e salvati soltanto alla creazione dell’account, senza cookie né dati salvati nel browser",
+                "Contare in forma aggregata quali canali portano nuovi iscritti, senza profilazione né effetti sul tuo account (legittimo interesse)",
+                "Finché l’account esiste",
+              ],
+              [
                 "Archivio dei log: istante, tipo ed esito delle operazioni, codici di errore, riferimenti interni, senza IP, indirizzi delle pagine, email, dati degli acquirenti o valori fiscali",
                 "Diagnosi e sicurezza (legittimo interesse)",
                 "90 giorni",
@@ -543,6 +548,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "Statistics of the public website pages: page, referring site, country, device type, browser, operating system and load times, without cookies and without identifying the visitor",
                 "Counting visits and measuring site speed (legitimate interest)",
                 "6 months at the network provider, aggregated after 7 days",
+              ],
+              [
+                "Sign-up source: the category of the channel you came to the site from (for example a search engine, the eBay Community, another website or a direct visit) and the path of the first page you viewed, taken from the referring site or from a label in our links and saved only when the account is created, without cookies or data stored in the browser",
+                "Counting in aggregate which channels bring new sign-ups, without profiling or any effect on your account (legitimate interest)",
+                "As long as the account exists",
               ],
               [
                 "Log archive: time, type and result of operations, error codes, internal references, without IP, page addresses, emails, buyer data or tax values",

@@ -2,6 +2,7 @@ import { priceGeneration } from "../catalog";
 import { stripeEnvironment } from "../integrations/stripe.server";
 import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
 import { dayMilliseconds } from "../time";
+import { signupChannels, type SignupChannel } from "../signup-source";
 
 /**
  * KPI della console (§31): conteggi aggregati con finestra e denominatore espliciti, calcolati
@@ -95,11 +96,13 @@ const funnelBase = {
 async function funnel(db: D1Database, from: string, to: string) {
   const cohortSql = `FROM "user" u
     LEFT JOIN workspace_members wm ON wm.user_id = u.id AND wm.role = 'owner'
+    LEFT JOIN signup_sources src ON src.user_id = u.id
     WHERE u."admin" = 0
       AND ${julian('u."createdAt"')} >= julianday(?1) AND ${julian('u."createdAt"')} < julianday(?2)`;
   const [cohort, reached] = await db.batch<Record<string, number | string | null>>([
     db
-      .prepare(`SELECT u.id AS user, u."emailVerified" = 1 AS verified ${cohortSql}`)
+      .prepare(`SELECT u.id AS user, u."emailVerified" = 1 AS verified,
+          COALESCE(src.channel, 'unknown') AS channel ${cohortSql}`)
       .bind(from, to),
     db
       .prepare(`SELECT u.id AS user, m.step,
@@ -107,7 +110,7 @@ async function funnel(db: D1Database, from: string, to: string) {
         ${cohortSql.replace("WHERE", "JOIN workspace_funnel_steps m ON m.workspace_id = wm.workspace_id WHERE")}`)
       .bind(from, to),
   ]);
-  const users = cohort!.results as { user: string; verified: number }[];
+  const users = cohort!.results as { user: string; verified: number; channel: SignupChannel }[];
   // Ore dalla registrazione di ogni passaggio raggiunto, per utente.
   const reachedBy = new Map<FunnelStep["step"], Map<string, number | null>>([
     ["registered", new Map(users.map((row) => [row.user, null]))],
@@ -146,8 +149,24 @@ async function funnel(db: D1Database, from: string, to: string) {
     });
   }
   const synced = counted.get("first_sync")!;
+  // Provenienza della coorte (D303): attivazione del merchant e primo acquisto valgono a
+  // prescindere dai passaggi precedenti. Solo le categorie con almeno un iscritto.
+  const sources = signupChannels
+    .map((channel) => {
+      const members = users.filter((row) => row.channel === channel);
+      const reaching = (step: SpaceStep) =>
+        members.filter((row) => reachedBy.get(step)!.has(row.user)).length;
+      return {
+        channel,
+        signups: members.length,
+        activations: reaching("first_sync"),
+        payers: reaching("purchase"),
+      };
+    })
+    .filter((row) => row.signups > 0);
   return {
     steps,
+    sources,
     /** Prima lettura riuscita senza ordini: lo spazio non ha ancora un ordine. */
     syncWithoutOrders: [...synced.keys()].filter((user) => !reachedBy.get("first_order")!.has(user))
       .length,

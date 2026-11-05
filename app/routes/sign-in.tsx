@@ -1,7 +1,7 @@
 import { cn } from "cn";
 import { LogOut } from "lucide-react";
 import { useState } from "react";
-import { useLocation } from "react-router";
+import { useLocation, useRouteLoaderData } from "react-router";
 
 import { BrandPanel } from "~/components/access/brand-panel";
 import { EmailField, PasswordField } from "~/components/access/credential-fields";
@@ -16,6 +16,7 @@ import { Logo } from "~/components/standalone-page";
 import { useFieldErrors, type FieldErrors } from "~/components/form-validation";
 import { LanguageSwitch } from "~/components/language-switch";
 import { SiteFooter } from "~/components/site-footer";
+import { SourceLinks } from "~/components/source-links";
 import { ProfileFields } from "~/components/profile-fields";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -45,6 +46,7 @@ import { languageFromPath, localizedPath } from "../i18n";
 import { turnstileActions } from "../turnstile";
 import type { Route } from "./+types/sign-in";
 import { pageHeaders } from "../request-limits.server";
+import { sourceParam } from "../signup-source";
 
 export function meta({ location, loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const language = languageFromPath(location.pathname);
@@ -78,12 +80,20 @@ function useReturnTo() {
   return securityReturnPath(language, new URLSearchParams(search).get("returnTo"));
 }
 
-/** Indirizzo dei moduli: conserva il ritorno alla Sicurezza anche quando l'errore resta qui. */
+/**
+ * Indirizzo dei moduli: conserva il ritorno alla Sicurezza anche quando l'errore resta qui, e la
+ * provenienza che la registrazione salva sul nuovo account (D303).
+ */
 function useAccessAction() {
   const { language } = useCopy();
   const returnTo = useReturnTo();
+  const arrival = useRouteLoaderData<{ arrival: string | null }>("root")?.arrival;
+  const query = new URLSearchParams({
+    ...(returnTo ? { returnTo } : {}),
+    ...(arrival ? { [sourceParam]: arrival } : {}),
+  });
   const path = localizedPath(language, accessPath);
-  return returnTo ? `${path}?${new URLSearchParams({ returnTo })}` : path;
+  return query.size ? `${path}?${query}` : path;
 }
 
 /**
@@ -581,6 +591,7 @@ export default function SignIn({ loaderData, actionData }: Route.ComponentProps)
           {loaderData.authenticated ? <SignOutForm /> : null}
         </div>
         <SiteFooter className="w-full pb-2 sm:max-w-md" />
+        <SourceLinks />
       </main>
     </div>
   );

@@ -258,6 +258,12 @@ async function everyTable(userId: string) {
     row("INSERT INTO support_requests (id, user_id, sent_at) VALUES ('sr-1', ?1, ?2)", userId, now),
     row("INSERT INTO unlock_preferences VALUES (?, 0)", userId),
     row(
+      `INSERT INTO signup_sources (user_id, channel, first_page, recorded_at)
+       VALUES (?1, 'google', '/prezzi', ?2)`,
+      userId,
+      now,
+    ),
+    row(
       `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter",
          "deviceType", "backedUp") VALUES ('pk-1', 'chiave', ?, 'credenziale', 0, 'singleDevice', 0)`,
       userId,

@@ -414,7 +414,11 @@ for (const language of ["it", "en"] as const) {
           .getByRole("banner")
           .getByRole("link", { name: language === "it" ? "Accedi" : "Sign in", exact: true });
         await expect(signIn).toBeVisible();
-        await expect(signIn).toHaveAttribute("href", pagePath(prefix, "/accesso"));
+        // Il link porta la provenienza della visita diretta, che la barra dell'indirizzo non mostra.
+        await expect(signIn).toHaveAttribute(
+          "href",
+          new RegExp(`^${pagePath(prefix, "/accesso")}\\?via=direct%3A%2F`, "u"),
+        );
         const main = page.locator("main");
         await expect(main).toContainText("Temisfera");
         // Il contatto è `info@`, non l'assistenza clienti.
@@ -752,7 +756,10 @@ for (const language of ["it", "en"] as const) {
         await expect(page).toHaveTitle(`${title} | FiscalBay`);
         await expect(page.getByRole("heading", { name: title, level: 1 })).toBeVisible();
         const form = page.locator("form");
-        await expect(form).toHaveAttribute("action", pagePath(prefix, "/accesso"));
+        await expect(form).toHaveAttribute(
+          "action",
+          new RegExp(`^${pagePath(prefix, "/accesso")}\\?via=direct%3A%2F`, "u"),
+        );
         await expect(form.locator('input[name="token"]')).toHaveValue("synthetic-invalid-token");
         await expect(form.locator('input[name="password"]')).toHaveAttribute(
           "autocomplete",

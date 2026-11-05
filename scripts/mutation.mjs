@@ -90,6 +90,7 @@ export const supportModules = new Set([
   "app/domain/order-view.server.ts",
   "app/domain/owner-notifications.server.ts",
   "app/domain/service-settings.server.ts",
+  "app/domain/signup-sources.server.ts",
   "app/domain/sql.server.ts",
   "app/domain/store-link.server.ts",
   "app/domain/store-profile.server.ts",
@@ -110,6 +111,7 @@ export const supportModules = new Set([
   "app/request-limits.ts",
   "app/response-cookies.server.ts",
   "app/sequence.ts",
+  "app/signup-source.ts",
   "app/view-models.ts",
 ]);
 
