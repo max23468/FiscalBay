@@ -85,7 +85,7 @@ describe("lettura periodica e richieste manuali", () => {
     await env.DB.prepare(
       "UPDATE ebay_store_credentials SET access_token = ? WHERE store_id = 's-a'",
     )
-      .bind(await sealToken(env.BETTER_AUTH_SECRET, "s-a", "access", "token-s-a"))
+      .bind(await sealToken(env, "s-a", "access", "token-s-a"))
       .run();
   });
 
@@ -578,7 +578,7 @@ describe("lettura periodica e richieste manuali", () => {
   it("dopo un limite il cron non tenta gli altri negozi dello stesso keyset", async () => {
     await insertCredentials({
       storeId: "s-b",
-      accessToken: await sealToken(env.BETTER_AUTH_SECRET, "s-b", "access", "token-s-b"),
+      accessToken: await sealToken(env, "s-b", "access", "token-s-b"),
       accessExpiresAt: now,
       grantedAt,
     }).run();
@@ -623,7 +623,7 @@ describe("lettura periodica e richieste manuali", () => {
     for (const storeId of ["s-c", "s-d", "s-e"])
       await insertCredentials({
         storeId,
-        accessToken: await sealToken(env.BETTER_AUTH_SECRET, storeId, "access", `token-${storeId}`),
+        accessToken: await sealToken(env, storeId, "access", `token-${storeId}`),
         accessExpiresAt: now,
         grantedAt,
       }).run();
@@ -875,7 +875,7 @@ describe("lettura periodica e richieste manuali", () => {
     // Un ricollegamento a metà lettura cambia il consenso: nessuna scrittura né lettura
     // registrata, e la richiesta resta per il nuovo consenso.
     await env.DB.prepare("UPDATE ebay_store_credentials SET access_token = ?")
-      .bind(await sealToken(env.BETTER_AUTH_SECRET, "s-a", "access", "token-s-a"))
+      .bind(await sealToken(env, "s-a", "access", "token-s-a"))
       .run();
     expect(await request(minutes(2))).toBe("queued");
     const reconnected = ebay({
@@ -1442,7 +1442,7 @@ describe("lettura periodica e richieste manuali", () => {
         "UPDATE ebay_store_credentials SET refresh_token = ?, access_expires_at = ?",
       )
         .bind(
-          await sealToken(env.BETTER_AUTH_SECRET, "s-a", "refresh", "refresh-sintetico"),
+          await sealToken(env, "s-a", "refresh", "refresh-sintetico"),
           minutes(20).toISOString(),
         )
         .run();

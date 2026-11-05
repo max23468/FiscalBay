@@ -25,6 +25,7 @@ const signInTones: Record<SignInNotice, Tone> = {
   "password-reimpostata": "success",
   "password-trapelata": "warning",
   "recupero-scaduto": "warning",
+  "password-violata": "warning",
   "metodo-collegato": "success",
   "metodo-rimosso": "success",
   "ebay-rimosso": "success",

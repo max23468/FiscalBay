@@ -34,6 +34,7 @@ const fixtureHosts = new Set([
   "i.ebayimg.com",
   "i.ebayimg.sandbox.ebay.com",
   "api.telegram.org",
+  "api.pwnedpasswords.com",
   "api.cloudflare.com",
   "challenges.cloudflare.com",
   "static.cloudflareinsights.com",

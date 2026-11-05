@@ -1115,6 +1115,7 @@ export const it = {
     sendEmailLink: "Invia il link",
     setPassword: "Imposta password",
     passkeySignIn: "Accedi con passkey",
+    lastUsed: "Ultimo usato",
     passkeyRecovery: "Accedi con impronta, volto o blocco schermo del dispositivo.",
     passkeyEmpty: "Nessuna passkey aggiunta.",
     passkeyErrors: {
@@ -1223,6 +1224,7 @@ export const it = {
       "password-trapelata":
         "La password usata per accedere compare in violazioni di dati note. Cambiala da Impostazioni › Account.",
       "recupero-scaduto": "Link non valido o scaduto. Richiedine uno nuovo.",
+      "password-violata": "Questa password compare in violazioni di dati note. Scegline un’altra.",
     },
   },
 };

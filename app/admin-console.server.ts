@@ -73,6 +73,8 @@ import { displayTimeZone, formatDate } from "./format";
 import type { Language } from "./i18n";
 import { sha256Hex } from "./sealed.server";
 import { agentTokenLabel } from "./domain/sessions.server";
+import { authAttemptWait, countAuthAttempt } from "./domain/auth-attempts.server";
+import { clientKey, limitedHeaders } from "./request-limits.server";
 import { storeAuditTarget } from "./domain/admin-directory.server";
 import { wallInstant } from "./time";
 import { resumeStalledReceipts } from "./domain/webhook-receipts.server";
@@ -111,15 +113,29 @@ export function sectionFrom(value: string | undefined): AdminSection | null {
 const agentTokenPrefix = "fbat_";
 
 /**
- * Accesso tecnico (D213): un token `Bearer` il cui SHA-256 è registrato e non revocato apre la
- * console all'agente che assiste l'owner, anche senza passkey, con le stesse operazioni della
- * sessione admin. Restituisce l'etichetta del token, o null.
+ * Token rifiutati per IP prima del blocco: un token valido non conta, così l'agente lavora
+ * senza soglia, mentre chi prova token a caso si ferma dopo pochi tentativi.
+ */
+const agentTokenFailures = { window: 900, max: 10 };
+
+/**
+ * Accesso tecnico (D213): un token `Bearer` il cui SHA-256 è registrato, non revocato e non
+ * scaduto apre la console all'agente che assiste l'owner, anche senza passkey, con le stesse
+ * operazioni della sessione admin. Restituisce l'etichetta del token, o null; oltre il limite
+ * dei token rifiutati risponde 429 prima di leggerlo.
  */
 async function agentAccess(request: Request, now: Date) {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith(`Bearer ${agentTokenPrefix}`) ? header.slice(7) : null;
-  if (!token || token.length > 128) return null;
-  return agentTokenLabel(env.DB, await sha256Hex(token), now);
+  if (!token) return null;
+  const ip = request.headers.get("cf-connecting-ip");
+  const key = ip ? `admin-token|${clientKey(ip)}` : null;
+  const wait = key && (await authAttemptWait(env.DB, key, agentTokenFailures, now.getTime()));
+  if (wait) throw data(null, { status: 429, headers: limitedHeaders(wait) });
+  const label =
+    token.length > 128 ? null : await agentTokenLabel(env.DB, await sha256Hex(token), now);
+  if (!label && key) await countAuthAttempt(env.DB, key, agentTokenFailures, now.getTime());
+  return label;
 }
 
 /**

@@ -7,7 +7,7 @@ import {
   getAuthoritativeSessionFromCtx,
   getOAuthState,
 } from "better-auth/api";
-import { genericOAuth } from "better-auth/plugins";
+import { genericOAuth, haveIBeenPwned, lastLoginMethod } from "better-auth/plugins";
 import { waitUntil } from "./service-activity.server";
 import { z } from "zod";
 
@@ -319,11 +319,23 @@ function verificationOptions(env: Env): BetterAuthOptions["emailVerification"] {
   };
 }
 
+/** Cookie dell'ultimo metodo di accesso, letto dalla pagina di accesso per indicarlo. */
+export const lastLoginMethodCookie = "fiscalbay.ultimo_accesso";
+
 function authPlugins(env: Env, appOrigin: URL): BetterAuthPlugin[] {
   return [
     ...(env.BETTER_AUTH_API_KEY
       ? [dash({ apiKey: env.BETTER_AUTH_API_KEY }), durableBackground]
       : []),
+    // Una nuova password si confronta con Have I Been Pwned, che riceve soltanto i primi cinque
+    // caratteri del suo SHA-1. Attivo sui domini HTTPS: le prove locali non escono in rete.
+    haveIBeenPwned({
+      enabled: appOrigin.protocol === "https:",
+      paths: ["/sign-up/email", "/change-password", "/reset-password"],
+    }),
+    // Solo nel cookie del browser, senza campo nel database: la pagina di accesso evidenzia il
+    // metodo usato l'ultima volta su questo dispositivo.
+    lastLoginMethod({ cookieName: lastLoginMethodCookie, storeInDatabase: false }),
     passkey({
       origin: appOrigin.origin,
       rpID: appOrigin.hostname,

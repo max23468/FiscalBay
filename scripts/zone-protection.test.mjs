@@ -195,7 +195,12 @@ describe("protezioni della zona", () => {
 
   it("conta per IP le raffiche verso gli endpoint di accesso con i limiti del Free", () => {
     const rule = authRule();
-    assert.equal(rule.expression, 'starts_with(http.request.uri.path, "/api/auth/")');
+    assert.equal(
+      rule.expression,
+      'starts_with(http.request.uri.path, "/api/auth/") or http.request.uri.path in ' +
+        '{"/accesso" "/accesso.data" "/en/accesso" "/en/accesso.data" ' +
+        '"/supporto" "/supporto.data" "/en/supporto" "/en/supporto.data"}',
+    );
     assert.deepEqual(rule.ratelimit, {
       characteristics: ["cf.colo.id", "ip.src"],
       period: 10,

@@ -1089,6 +1089,7 @@ export const en: AppCopy = {
     sendEmailLink: "Send the link",
     setPassword: "Set password",
     passkeySignIn: "Sign in with a passkey",
+    lastUsed: "Last used",
     passkeyRecovery: "Sign in with your fingerprint, face or device screen lock.",
     passkeyEmpty: "No passkeys added.",
     passkeyErrors: {
@@ -1194,6 +1195,7 @@ export const en: AppCopy = {
       "password-trapelata":
         "The password you signed in with appears in known data breaches. Change it from Settings › Account.",
       "recupero-scaduto": "This link is invalid or expired. Request a new one.",
+      "password-violata": "This password appears in known data breaches. Choose a different one.",
     },
   },
 };

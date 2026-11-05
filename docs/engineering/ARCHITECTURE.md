@@ -45,7 +45,7 @@ Inventario read-only delle risorse condivise; nessuna migrazione di altri prodot
 | Cron Triggers | Un solo trigger per ambiente che smista il lavoro periodico per `scheduledTime` ([§31](../operations/OPERATIONS.md#s31)) |
 | R2 (UE) | File export a 24 ore ([§12.1](../product/ORDERS_AND_SYNC.md#s12)) e archivio dei log a 90 giorni ([§31](../operations/OPERATIONS.md#s31)) |
 | Rate Limiting | Primo filtro nel Worker per IP e percorso davanti ad Auth e operazioni costose ([§29](SECURITY_AND_PRIVACY.md#s29)) |
-| Turnstile | Verifica anti-automazione su registrazione, richieste di link email e form di supporto ([§29](SECURITY_AND_PRIVACY.md#s29)) |
+| Turnstile | Verifica anti-automazione su registrazione, richieste di link email, form di supporto e accesso con password dopo alcuni errori ([§29](SECURITY_AND_PRIVACY.md#s29)) |
 | Analytics Engine | Metriche tecniche aggregate e budget di prestazione, senza dati personali ([§31](../operations/OPERATIONS.md#s31)) |
 | Web Analytics | Visite e tempi di caricamento delle sole pagine pubbliche, senza cookie ([§23](../product/EXPERIENCE.md#s23), D242) |
 | Email Service | Trasporto di `noreply@` verso destinatari qualsiasi con Workers Paid e invio gratuito agli indirizzi verificati dell'owner ([§14](../product/CHANNELS_AND_ADMIN.md#s14), D169) |
@@ -76,7 +76,8 @@ Dal 2026-10-08, su indicazione dell'owner, nessuna attesa minima di 24 ore dalla
 | Icone | Lucide |
 | Schemi runtime | Zod, usato ai confini dati/contratti |
 | Localizzazione | Dizionari IT/EN tipizzati nel codice (`app/app-copy.ts`) e formatter `Intl` nativi, senza libreria di localizzazione (D149) |
-| Stripe | SDK ufficiale server-side, Hosted Checkout; niente Elements per il solo redirect |
+| Stripe | SDK ufficiale server-side, Hosted Checkout; niente Elements per il solo redirect. Versione dell'API fissata nel client, timeout di 8 secondi nelle richieste dell'utente e chiave di idempotenza del turno su sessioni e coupon |
+| Have I Been Pwned | Controllo gratuito delle password nuove con il plugin di Better Auth, che invia soltanto il prefisso dell'hash ([§29](SECURITY_AND_PRIVACY.md#s29)) |
 | HTTP, UUID, crittografia | fetch, crypto.randomUUID, Web Crypto del runtime ove qualificato |
 | Test | Vitest (progetti Node e Cloudflare), Playwright, axe con Playwright |
 | Qualità | Oxlint, Oxfmt, React Doctor bloccante dai warning, typecheck compiler, CI e sicurezza dipendenze |
