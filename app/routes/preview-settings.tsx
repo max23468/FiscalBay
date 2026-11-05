@@ -3,7 +3,7 @@ import { data, isRouteErrorResponse, redirect } from "react-router";
 import { SettingsPage } from "~/components/settings/page";
 import { NotFoundState } from "~/components/not-found";
 import { appCopy, pageTitle } from "../app-copy";
-import { languageFromPath } from "../i18n";
+import { languageFromPath, settingsSectionParam } from "../i18n";
 import { previewSettingsPage } from "../preview/settings-page.server";
 import {
   assertPreviewAction,
@@ -20,23 +20,25 @@ function isSection(value: string | undefined): value is SettingsSection {
 
 export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  const title = isSection(params.sezione)
-    ? `${t.settings.sections[params.sezione].title} | ${t.settings.title}`
+  const section = settingsSectionParam(params.sezione);
+  const title = isSection(section)
+    ? `${t.settings.sections[section].title} | ${t.settings.title}`
     : t.settings.title;
   return [{ title: pageTitle(title) }, { name: "robots", content: "noindex, nofollow" }];
 }
 
 export async function loader({ request, params }: Route.LoaderArgs) {
-  const merged = mergedSettingsSections[params.sezione ?? ""];
+  const sezione = settingsSectionParam(params.sezione);
+  const merged = mergedSettingsSections[sezione ?? ""];
   if (merged) {
     const url = new URL(request.url);
     throw redirect(`${url.pathname.replace(/[^/]+$/u, merged)}${url.search}`, 301);
   }
   const current = await verifiedPageScenario(request);
-  if (params.sezione !== undefined && !isSection(params.sezione)) {
+  if (sezione !== undefined && !isSection(sezione)) {
     throw data(null, { status: 404 });
   }
-  return previewSettingsPage(request, current, params.sezione ?? null);
+  return previewSettingsPage(request, current, sezione ?? null);
 }
 
 /** Azioni dei componenti: nell'anteprima nessun effetto, solo la risposta simulata. */

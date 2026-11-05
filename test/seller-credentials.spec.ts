@@ -375,7 +375,7 @@ describe("rinnovo dei token del negozio", () => {
     expect(send).toHaveBeenCalledTimes(2);
     expect(sent(1)).toMatchObject({
       subject: "Reconnect your eBay store to FiscalBay",
-      text: expect.stringContaining("Open Stores: http://localhost:5173/en/app/negozi\n"),
+      text: expect.stringContaining("Open Stores: http://localhost:5173/en/app/stores\n"),
     });
     // Un negozio in pausa non legge comunque, e oltre trenta giorni l'email non parte più.
     await update("refresh_expires_at = ?", "2026-10-26T00:00:00.000Z");

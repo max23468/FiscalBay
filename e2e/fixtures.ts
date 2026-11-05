@@ -6,6 +6,8 @@ import { abortedDataRequest } from "./page-cases";
 
 export { expect } from "@playwright/test";
 
+export { pagePath } from "./page-cases";
+
 interface Traffic {
   pending: Set<Request>;
   /** Navigazione del frame principale non ancora confermata da un nuovo documento. */

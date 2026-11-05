@@ -24,7 +24,7 @@ test(
     await signIn.getByRole("textbox", { name: "Email" }).fill(testAccount.email);
     await signIn.getByRole("textbox", { name: "Password" }).fill(password!);
     await signIn.getByRole("button", { name: "Accedi", exact: true }).click();
-    await expect(page).toHaveTitle("FiscalBay | Ordini");
+    await expect(page).toHaveTitle("Ordini | FiscalBay");
 
     // Nel Free resta attivo il primo negozio collegato: gli altri sono in pausa per il piano,
     // non avvisano del consenso e non compaiono negli Ordini.
@@ -44,7 +44,7 @@ test(
     // Negozi: elenco riconoscibile e pannello aperto da link diretto, senza azioni. Il negozio
     // in pausa per il piano rimanda alla scelta del negozio attivo nel Piano.
     await page.getByRole("link", { name: "Negozi eBay" }).first().click();
-    await expect(page).toHaveTitle("FiscalBay | Negozi eBay");
+    await expect(page).toHaveTitle("Negozi eBay | FiscalBay");
     await expect(page.getByRole("heading", { name: "Negozi eBay", exact: true })).toBeVisible();
     await expect(page.getByText("Il piano Free include un solo negozio attivo.")).toBeVisible();
     for (const name of Object.values(stores)) {
@@ -66,18 +66,18 @@ test(
     // Il vecchio indirizzo del profilo porta alla categoria Account delle Impostazioni.
     await page.goto("/app/profilo");
     await expect(page).toHaveURL(/\/app\/impostazioni\/account$/u);
-    await expect(page).toHaveTitle("FiscalBay | Account | Impostazioni");
+    await expect(page).toHaveTitle("Account | Impostazioni | FiscalBay");
 
     // Con la sessione la radice porta agli Ordini; «Visita fiscalbay.it» mostra il sito e
     // «Apri l'app» torna agli Ordini, senza uscire.
     await page.goto("/?visita=1");
     await expect(page).toHaveURL(/\/$/u);
-    await expect(page).toHaveTitle("FiscalBay | Recupera il Codice Fiscale dagli ordini eBay");
+    await expect(page).toHaveTitle("Recupera il Codice Fiscale dagli ordini eBay | FiscalBay");
     await page.getByRole("link", { name: "Apri l’app" }).first().click();
-    await expect(page).toHaveTitle("FiscalBay | Ordini");
+    await expect(page).toHaveTitle("Ordini | FiscalBay");
     await page.goto("/en");
-    await expect(page).toHaveURL(/\/en\/app\/ordini(?:[?&]vista=[0-9a-z]+)?$/u);
-    await expect(page).toHaveTitle("FiscalBay | Orders");
+    await expect(page).toHaveURL(/\/en\/app\/orders(?:[?&]vista=[0-9a-z]+)?$/u);
+    await expect(page).toHaveTitle("Orders | FiscalBay");
     await expect(page.getByText(`${stores.expired}: connection expired`)).toHaveCount(0);
     expect(await page.content()).not.toContain(taxCodes.locked);
     expect(errors).toEqual([]);

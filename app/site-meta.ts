@@ -1,12 +1,22 @@
 import type { MetaDescriptor } from "react-router";
 
 import { pageTitle } from "./app-copy";
+import { sitemapPages } from "./app-links";
 import { languages, localizedPath, type Language } from "./i18n";
 
 const ogLocales: Record<Language, string> = { it: "it_IT", en: "en_GB" };
 
-/** Immagine delle condivisioni, 1200×630, una per lingua. */
-const ogImage = (language: Language) => `/og/fiscalbay-${language}.png`;
+/**
+ * Immagine delle condivisioni, 1200×630, per pagina e lingua (`scripts/og-images.mjs`): le pagine
+ * della sitemap hanno la propria, dal percorso italiano; le altre quella della home.
+ */
+export function ogImage(language: Language, path: string) {
+  const name =
+    path === "/" || !(sitemapPages as readonly string[]).includes(path)
+      ? "fiscalbay"
+      : path.slice(1).replaceAll("/", "-");
+  return `/og/${name}-${language}.png`;
+}
 
 /**
  * Metadati di una pagina pubblica: titolo, descrizione, canonical sulla lingua servita,
@@ -48,7 +58,7 @@ export function siteMeta({
     { property: "og:title", content: fullTitle },
     { property: "og:description", content: description },
     { property: "og:url", content: url },
-    { property: "og:image", content: `${origin}${ogImage(language)}` },
+    { property: "og:image", content: `${origin}${ogImage(language, path)}` },
     { property: "og:image:width", content: "1200" },
     { property: "og:image:height", content: "630" },
     { name: "twitter:card", content: "summary_large_image" },

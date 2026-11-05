@@ -5,6 +5,7 @@
  * con finestra dichiarata, mai una base per quote, billing o controlli di accesso. La disposizione
  * dei campi è descritta in `metrics.server.ts`.
  */
+import { localizedPath } from "./i18n.ts";
 
 export const metricQueries = ["invocations", "phases", "pages"] as const;
 
@@ -169,7 +170,11 @@ export function pageCpuQuery(
     throw new Error("INVALID_WINDOW");
   const { path, excluded } = cpuPages.find((entry) => entry.page === page)!;
   const suffix = kind === "data" ? String.raw`\.data` : "";
-  const detail = excluded ? segmentOtherThan(excluded) : `${segmentChar}+`;
+  // In inglese percorso e segmento escluso hanno i nomi tradotti (`/en/app/stores/link`).
+  const english = (italian: string) => localizedPath("en", `/${italian}`).slice(1);
+  const detail = (word: string | null) => (word ? segmentOtherThan(word) : `${segmentChar}+`);
+  const englishExcluded = excluded ? english(`${path}/${excluded}`).split("/").pop()! : null;
+  const paths = `(?:/${path}(/${detail(excluded)})?|/${english(path)}(/${detail(englishExcluded)})?)`;
   return {
     queryId: `page-cpu-${page}-${kind}`,
     view: "calculations",
@@ -185,7 +190,7 @@ export function pageCpuQuery(
           key: "$workers.event.request.url",
           operation: "regex",
           type: "string",
-          value: String.raw`^https://[^/]+(/en)?/${path}(/${detail})?${suffix}(\?.*)?$`,
+          value: String.raw`^https://[^/]+${paths}${suffix}(\?.*)?$`,
         },
       ],
       calculations: [

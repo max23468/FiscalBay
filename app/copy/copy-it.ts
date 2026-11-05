@@ -48,7 +48,7 @@ export const it = {
         back: "Torna agli ordini",
       },
     },
-    skipToContent: "Vai al contenuto",
+    skipToContent: "Vai al contenuto principale",
     mainNav: "Navigazione principale",
     orders: "Ordini",
     stores: "Negozi eBay",
@@ -1058,6 +1058,7 @@ export const it = {
     },
     independent: "Servizio indipendente, non affiliato a eBay.",
     support: "Supporto",
+    guides: "Guide",
   },
   /** Pagina pubblica dell'assistenza: domande d'uso e contatti. */
   supportPage: {

@@ -44,7 +44,7 @@ import { hashPassword, verifyPassword } from "../app/password.server";
 
 import { emailSender, mailEnv, sessionCookie, verifiedSession } from "./fixtures/account-fixtures";
 
-import { routeData, routeResponse } from "./fixtures/route-fixtures";
+import { routeData, routeResponse, pagePath } from "./fixtures/route-fixtures";
 
 it("i tentativi di accesso rispettano soglia, secondi di attesa e riapertura della finestra", async () => {
   const at = Date.parse("2026-09-01T12:00:00.000Z");
@@ -124,11 +124,14 @@ it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
   for (const base of ["", "/en"]) {
     const query = "?token=synthetic&redirectTo=https://example.invalid";
     // L'accesso mostra il modulo per la nuova password, senza seguire il redirect richiesto.
-    const access = await routeData(signInLoader, `${base}/accesso${query}`);
+    const access = await routeData(signInLoader, `${pagePath(base, "/accesso")}${query}`);
     expect(access).toMatchObject({ authenticated: false, resetToken: "synthetic" });
-    const response = await routeResponse(storeLinkLoader, `${base}/app/negozi/collega${query}`);
+    const response = await routeResponse(
+      storeLinkLoader,
+      `${pagePath(base, "/app/negozi/collega")}${query}`,
+    );
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(`${base}/accesso`);
+    expect(response.headers.get("location")).toBe(pagePath(base, "/accesso"));
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.getSetCookie()).toEqual([]);
   }
@@ -138,16 +141,21 @@ it("conserva il rifiuto POST da origine estranea e del collegamento senza sessio
   for (const base of ["", "/en"]) {
     for (const origin of ["https://example.invalid", null]) {
       const foreign = { origin, fields: {} };
-      expect((await routeResponse(signInAction, `${base}/accesso`, foreign)).status).toBe(403);
+      expect((await routeResponse(signInAction, pagePath(base, "/accesso"), foreign)).status).toBe(
+        403,
+      );
       expect(
-        (await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, foreign)).status,
+        (await routeResponse(storeLinkAction, pagePath(base, "/app/negozi/collega"), foreign))
+          .status,
       ).toBe(403);
     }
-    const response = await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, {
+    const response = await routeResponse(storeLinkAction, pagePath(base, "/app/negozi/collega"), {
       fields: {},
     });
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(`${base}/app/ordini?negozio=accesso`);
+    expect(response.headers.get("location")).toBe(
+      `${pagePath(base, "/app/ordini")}?negozio=accesso`,
+    );
   }
 });
 

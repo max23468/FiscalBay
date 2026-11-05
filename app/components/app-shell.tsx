@@ -11,6 +11,7 @@ import { NotificationsMenu } from "~/components/notifications-menu";
 import { areaSection, type AccountMenuItem, type NavDestination } from "~/components/shell-links";
 import { GlobalSearch, MobileSearch, type ShellSearch } from "~/components/shell-search";
 import { siteColumn } from "~/components/site-column";
+import { mainContentId, SkipLink } from "~/components/skip-link";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,12 +79,7 @@ export function AppShell({
 
   return (
     <NoticeContext value={notify}>
-      <a
-        href="#contenuto"
-        className="sr-only z-50 rounded-lg bg-background px-3 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:ring-3 focus:ring-ring"
-      >
-        {t.shell.skipToContent}
-      </a>
+      <SkipLink />
       {before}
       <header className="sticky top-0 z-40 border-b bg-background">
         <NavigationProgress />
@@ -129,7 +125,7 @@ export function AppShell({
       {/* Una nuova sezione entra con una breve dissolvenza; il primo caricamento no. */}
       <main
         key={section.key}
-        id="contenuto"
+        id={mainContentId}
         tabIndex={-1}
         className={cn(
           siteColumn,

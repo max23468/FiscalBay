@@ -80,18 +80,9 @@ Preparazione della passkey limitata per IP e pulizia di Auth indicizzata; passwo
 <a id="2-0-03"></a>
 #### 2.0-03 · Sito, processi e documenti
 
-**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§23](product/EXPERIENCE.md#s23) · [§34](operations/RELEASE.md#s34) · [§35](engineering/TESTING.md#s35)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§23](product/EXPERIENCE.md#s23) · [§34](operations/RELEASE.md#s34) · [§35](engineering/TESTING.md#s35)
 
-- Home e Prezzi in cache breve per chi non ha sessione, con listino di riserva invece del 503.
-- Indirizzi inglesi con redirect permanenti, titoli con la parola chiave davanti, dati strutturati delle offerte, immagine social per pagina, `lastmod` nella sitemap.
-- Manifest con icone e colore del tema, immagine principale prioritaria in AVIF, cache lunga per le immagini del sito.
-- «Inizia gratis» nella barra, piano scelto portato alla registrazione, domande sui pagamenti in Prezzi, «Salta al contenuto», terminologia inglese unica, `security.txt`.
-- Sezione Guide con articoli stabili sulle domande reali dei venditori.
-- Actions fissate per SHA; mutation fuori dal gate delle PR, al candidato e alla campagna settimanale.
-- Insidie ricorrenti degli agenti trasformate in hook e controlli di `verify:repo`.
-- Decisioni superate del registro in archivio e operazioni divise in runbook; ciclo di rilascio invariato.
-
-**Criterio di completamento:** pagine pubbliche servite anche con D1 non disponibile; vecchi indirizzi inglesi in 301; §23 aggiornato per le Guide; `verify-docs` verde dopo la riorganizzazione.
+Home e Prezzi restano consultabili senza database con il listino di riserva e arrivano dalla cache di un minuto a chi non ha cookie. Sito, area e anteprima hanno indirizzi inglesi, con 301 dai vecchi; titoli con la parola chiave davanti, offerte e Guide nei dati strutturati, immagine social per pagina, `lastmod`, manifest, AVIF e cache delle immagini. «Inizia gratis» sta nella barra, l'offerta scelta arriva alla pagina Piano, Prezzi risponde sui pagamenti, «Vai al contenuto principale» apre ogni pagina, l'inglese segue la regola del 27 settembre e `security.txt` è pubblicato. Hook degli agenti e nuovi controlli di `verify:repo`; decisioni superate in archivio e operazioni in runbook ([D293](decisions/DECISION_REGISTER.md)). Le Actions erano già fissate per SHA; la mutation resta nelle PR per [D301](decisions/DECISION_REGISTER.md); meno JavaScript resta alla 2.x.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni
@@ -114,7 +105,7 @@ Pagina dell'area riservata, raggiunta dalla campanella, con tutte le voci degli 
 
 Registrare per FiscalBay, eBay, Telegram, Stripe, accessi ed email l'esito dell'ultimo controllo e la sua ora, dai controlli interni e dalle pagine di stato dei fornitori dove sono leggibili. eBay risulta non disponibile secondo la definizione del [§20](product/EXPERIENCE.md#s20): le ultime letture di tutti i negozi attivi non riescono, mai per un errore isolato. I segnali sono aggregati, senza dati di merchant o negozi, e non si conserva uno storico.
 
-**Criterio di completamento:** ogni servizio ha un esito con ora, provato con un guasto simulato per ciascuno, senza quote di lettura aggiuntive oltre il margine del [runbook di capacità](operations/OPERATIONS.md#capacita).
+**Criterio di completamento:** ogni servizio ha un esito con ora, provato con un guasto simulato per ciascuno, senza quote di lettura aggiuntive oltre il margine del [runbook di capacità](operations/CAPACITY.md#capacita).
 
 <a id="2-1-03"></a>
 #### 2.1-03 · Comunicazioni pubbliche
@@ -181,7 +172,7 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | Prima vendita reale | `commercial.mjs verify` del 2026-11-02 non trova vendite: si ripete alla prima vendita reale. |
 | Sandbox e dati fiscali | Sul test la Sandbox è spenta su richiesta dell'owner (`EBAY_SANDBOX_ENABLED` a `false`) e si riattiva soltanto su sua indicazione. I pagamenti Sandbox non riescono (`CashOnPickup` rimosso per managed payments, acquisto confermato non pagato e assente da Fulfillment) e Buy API è esclusa dall'owner: serve un pagamento Sandbox riuscito con importazione, oppure una soluzione concordata. La consultazione Production autorizzata della lettura fiscale non prova il pagamento o l'import Sandbox. Nessun permesso implicito di modificare ordini Production o introdurre import Trading. |
 | Protezioni della zona | HSTS/header, WAF/rate limit edge, report DMARC e alert certificati configurati per ambiente da `scripts/zone-protection.mjs` (D229): applicati e riletti sul test il 2026-10-29 e in Production il 2026-11-01. HSTS è a un anno sui due ambienti dal 2026-11-02, su indicazione dell'owner, senza `includeSubDomains` né `preload`. Primo report DMARC ricevuto il 2026-11-01, con DMARC, SPF e DKIM superati; primo alert dei certificati ancora da osservare. Rilevamento delle credenziali trapelate attivo sulla zona dal 2026-11-03 ([D294](decisions/DECISION_REGISTER.md)): il readback con la password nota e la cache degli asset si ripete sul test dopo il deploy della PR e in Production dopo `Promuovi`. |
-| Piano e costi | Workers Paid continuativo e Cloudflare Email Service (D169); nessun costo variabile (D227), con avvisi di budget da 0,01 USD all'owner. Il cron supera ancora i 10 ms in ogni esecuzione dopo D167. Coda e DLQ del test in UE a 14 giorni (D171); quelle di Production nascono allo stesso modo secondo la [pubblicazione](operations/OPERATIONS.md#webhook). Prezzi Observability dal 1° dicembre 2026 riletti il 2026-11-02 ([runbook](operations/OPERATIONS.md#capacita)): consumo stimato ben sotto i 50 GB inclusi, da confermare con il volume reale alla prima fattura successiva. Lo smistamento resta idempotente rispetto alle invocazioni ripetute del cron già osservate. Le misure della qualifica iniziale non autorizzano capacità pubblica né costi oltre il canone. |
+| Piano e costi | Workers Paid continuativo e Cloudflare Email Service (D169); nessun costo variabile (D227), con avvisi di budget da 0,01 USD all'owner. Il cron supera ancora i 10 ms in ogni esecuzione dopo D167. Coda e DLQ del test in UE a 14 giorni (D171); quelle di Production nascono allo stesso modo secondo la [pubblicazione](operations/WEBHOOKS.md#webhook). Prezzi Observability dal 1° dicembre 2026 riletti il 2026-11-02 ([runbook](operations/CAPACITY.md#capacita)): consumo stimato ben sotto i 50 GB inclusi, da confermare con il volume reale alla prima fattura successiva. Lo smistamento resta idempotente rispetto alle invocazioni ripetute del cron già osservate. Le misure della qualifica iniziale non autorizzano capacità pubblica né costi oltre il canone. |
 | CLI Cloudflare | `cf` (D170) qualificata sul test per deploy, migration, ripresa e rollback; il primo deploy Production con `cf` avviene con `Promuovi`. Rimuovere la patch che limita la rilevazione al pacchetto della radice quando una versione qualificata di `cf` corregge i workspace, il collegamento `build/client` in `vite.config.ts` quando plugin Vite 2.x e React Router concordano sulla cartella client, e `scripts/local-d1.mjs` quando `cf --local` termina da solo ([cloudflare/cf#64](https://github.com/cloudflare/cf/issues/64)). Aggiornare `cf` e plugin solo a versioni esatte riprovate. |
 | Cutover provider | OAuth eBay attivo sul RuName Production dal 2026-10-31 ([D247](decisions/DECISION_REGISTER.md)): sul test non funzionano più Accedi con eBay né il collegamento di nuovi negozi. Non modificare `botCF 2` (SyncBay) o il callback condiviso con Hub Fatture. Branding finale Checkout ancora da osservare. |
 

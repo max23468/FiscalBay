@@ -453,9 +453,9 @@ describe("ricerca dell'anteprima", () => {
     // Un valore da sbloccare non trova l'ordine; uno disponibile sì, anche normalizzato.
     expect(((await (await search("BNCLCU75C12F205G")).json()) as SearchResults).total).toBe(0);
     const english = (await (
-      await search("rossi", true, "/en/anteprima/ricerca")
+      await search("rossi", true, "/en/preview/search")
     ).json()) as SearchResults;
-    expect(english.href).toMatch(/^\/en\/anteprima\/ordini\?ricerca=/u);
+    expect(english.href).toMatch(/^\/en\/preview\/orders\?ricerca=/u);
     const submitted = await search("rossi", false);
     expect(submitted.status).toBe(303);
     const listed = await routeData(previewOrders, submitted.headers.get("location")!);
@@ -848,9 +848,9 @@ describe("stati dell'area reale nell'anteprima", () => {
     ).toBe("/anteprima/ordini");
     expect(
       await redirected(
-        await routeResponse(previewSettings, "/en/anteprima/impostazioni/piano", { cookie }),
+        await routeResponse(previewSettings, "/en/preview/settings/plan", { cookie }),
       ),
-    ).toBe("/en/anteprima/ordini");
+    ).toBe("/en/preview/orders");
     // Il nuovo invio del link resta simulato.
     expect(
       await routeData(previewOrdersAction, "/anteprima/ordini", {
@@ -890,4 +890,19 @@ describe("stati dell'area reale nell'anteprima", () => {
       loading: true,
     });
   });
+});
+
+it("cambia lingua dell'anteprima conservando pagina e filtri", async () => {
+  const change = (returnTo: string, language: string) =>
+    callRoute(previewRootAction, "/en/preview", { fields: { language, returnTo } }).catch(
+      (thrown: Response) => thrown,
+    ) as Promise<Response>;
+  expect((await change("/en/preview/orders?negozio=x", "it")).headers.get("location")).toBe(
+    "/anteprima/ordini?negozio=x",
+  );
+  expect(
+    (await change("/anteprima/impostazioni/piano?checkout=1", "en")).headers.get("location"),
+  ).toBe("/en/preview/settings/plan?checkout=1");
+  // Fuori dall'anteprima si torna alle sue Impostazioni.
+  expect((await change("/app/ordini", "en")).headers.get("location")).toBe("/en/preview/settings");
 });

@@ -489,7 +489,7 @@ describe("tempo CPU delle pagine dai Workers Logs", () => {
     const data = filterOf("orders", "data");
     for (const url of [
       "https://test.fiscalbay.it/app/ordini",
-      "https://test.fiscalbay.it/en/app/ordini?negozio=collaudo",
+      "https://test.fiscalbay.it/en/app/orders?negozio=collaudo",
       "https://test.fiscalbay.it/app/ordini/12-00000-00001",
     ]) {
       expect(url).toMatch(document);
@@ -517,7 +517,7 @@ describe("tempo CPU delle pagine dai Workers Logs", () => {
     for (const kind of ["document", "data"] as const) {
       const stores = filterOf("stores", kind);
       const suffix = kind === "data" ? ".data" : "";
-      for (const path of ["/app/negozi/collega", "/en/app/negozi/collega"])
+      for (const path of ["/app/negozi/collega", "/en/app/stores/link"])
         expect(`https://test.fiscalbay.it${path}${suffix}?esito=ok`).not.toMatch(stores);
       for (const detail of ["", "/c", "/coll", "/collegamento", "/collegb", "/xcollega", "/s-1"])
         expect(`https://test.fiscalbay.it/app/negozi${detail}${suffix}`).toMatch(stores);

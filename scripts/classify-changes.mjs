@@ -106,7 +106,7 @@ const tooling = [
   /^\.codex\//u,
   /^\.mcp\.json$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -301,7 +301,7 @@ export const moduleAreas = [
     ["auth"],
   ],
   [
-    /^app\/(?:copy\/(?:site-pages|legal-documents)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|site-meta\.ts|contact\.ts)$/u,
+    /^app\/(?:copy\/(?:site-pages|legal-documents|guides)\.server\.ts|components\/(?:site-layout|site-footer|faq-list|product-shot|standalone-page)\.tsx|components\/site-column\.ts|site\.server\.ts|page-cache\.server\.ts|site-meta\.ts|contact\.ts)$/u,
     ["public"],
   ],
   [/^app\/components\/language-switch\.tsx$/u, ["auth", "public"]],
@@ -334,7 +334,8 @@ function routeAreas(route) {
   if (/settings|whats-new/u.test(route)) areas.push("settings");
   if (/profile/u.test(route)) areas.push("profile");
   if (/security|admin|auth|sign-in/u.test(route)) areas.push("auth");
-  if (/legal|site|robots|support|faq|features|pricing|sitemap/u.test(route)) areas.push("public");
+  if (/legal|site|robots|support|faq|features|pricing|sitemap|guide/u.test(route))
+    areas.push("public");
   return areas.length ? areas : undefined;
 }
 

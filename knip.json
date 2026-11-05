@@ -11,7 +11,7 @@
         "vitest.capacity.config.ts",
         "benchmarks/**/*.bench.ts"
       ],
-      "ignoreBinaries": ["stripe"]
+      "ignoreBinaries": ["stripe", "magick"]
     }
   },
   "ignoreExportsUsedInFile": true

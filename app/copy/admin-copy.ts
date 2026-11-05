@@ -1344,7 +1344,7 @@ const en: AdminCopy = {
       store_linked: "Store connected",
       first_sync: "First successful read",
       first_order: "First order",
-      first_tax_id: "First tax code",
+      first_tax_id: "First tax identifier",
       first_unlock: "First unlock",
       trial: "Trial started",
       purchase: "First purchase",

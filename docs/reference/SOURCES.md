@@ -312,7 +312,7 @@ Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazion
 
 **Verifica del 2026-10-28:** l'API Telemetry dei Workers Logs legge con il solo permesso Workers Observability Read e riporta per ogni invocazione `$workers.cpuTimeMs` e `$workers.wallTimeMs`; query, dashboard e alert non hanno addebiti propri, dal 1° dicembre 2026 si pagano soltanto acquisizione e conservazione dei log già raccolti. Nel Worker l'orologio avanza soltanto con l'I/O, quindi una durata misurata nel codice non coglie il calcolo.
 
-**Uso:** §12, §14, §25, §29, §31; procedura in [RELEASE](../operations/OPERATIONS.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
+**Uso:** §12, §14, §25, §29, §31; procedura in [RELEASE](../operations/OBSERVABILITY.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
 
 <a id="s35"></a>
 ### S35 · Trasporto email alternativo

@@ -43,7 +43,7 @@ describe("catalogo delle pagine", () => {
       "/",
       "/en",
       "/anteprima/ordini",
-      "/en/anteprima/ordini/ord-02",
+      "/en/preview/orders/ord-02",
       "/api/auth/get-session",
     ])
       assert.ok(knownPagePath(pathname), pathname);
@@ -54,9 +54,9 @@ describe("catalogo delle pagine", () => {
     assert.deepEqual(
       missingSections(["aspetto", "nuova"], [{ path: "/anteprima/impostazioni/aspetto" }]),
       [
-        "/en/anteprima/impostazioni/aspetto",
+        "/en/preview/settings/appearance",
         "/anteprima/impostazioni/nuova",
-        "/en/anteprima/impostazioni/nuova",
+        "/en/preview/settings/nuova",
       ],
     );
   });

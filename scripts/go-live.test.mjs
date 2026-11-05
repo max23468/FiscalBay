@@ -316,9 +316,9 @@ describe("superficie pubblica", () => {
     assert.deepEqual(
       sitemapPaths(
         "https://fiscalbay.it",
-        "<loc>https://fiscalbay.it/</loc><loc>https://fiscalbay.it/en/prezzi</loc><loc>https://altro.it/x</loc>",
+        "<loc>https://fiscalbay.it/</loc><loc>https://fiscalbay.it/en/pricing</loc><loc>https://altro.it/x</loc>",
       ),
-      ["/", "/en/prezzi"],
+      ["/", "/en/pricing"],
     );
     assert.deepEqual(sitemapPaths("https://fiscalbay.it", undefined), []);
   });

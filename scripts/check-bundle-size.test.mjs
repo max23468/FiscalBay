@@ -36,9 +36,10 @@ describe("budget del JavaScript client", () => {
       routes: {
         root: { ...route("root", "", undefined, "/assets/entry.js"), parentId: undefined },
         site: { ...route("site", undefined, "root", "/assets/site.js"), index: true },
-        // Layout senza percorso dell'area: pesa negli Ordini, non come pagina pubblica.
+        // Layout senza percorso dell'area: pesa negli Ordini dell'anteprima inglese, che hanno
+        // la soglia dell'area riservata, non come pagina pubblica.
         area: route("area", undefined, "root", "/assets/area.js"),
-        orders: route("orders", "en/app/ordini/:ordine?", "area", "/assets/orders.js"),
+        orders: route("orders", "en/preview/orders/:ordine?", "area", "/assets/orders.js"),
       },
     };
     writeFileSync(

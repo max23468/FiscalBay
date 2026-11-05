@@ -384,7 +384,7 @@ describe("pagina Ordini reale", () => {
       whatsNew.push(...releases);
       expect((await areaShell(cookie)).whatsNew).toBe(true);
       expect(
-        (await routeData(loadWhatsNew, "/en/app/novita", { cookie })).releases.map(
+        (await routeData(loadWhatsNew, "/en/app/whats-new", { cookie })).releases.map(
           (release: { version: string; date: string | null }) => [release.version, release.date],
         ),
       ).toEqual([
@@ -1060,8 +1060,8 @@ describe("pagina Ordini reale", () => {
     await env.DB.prepare("DELETE FROM marketing_consents WHERE user_id = ? AND text_version = ?")
       .bind(userId, marketingTextVersions.proposal)
       .run();
-    expect(await proposal("/en/app/ordini")).toBe(true);
-    expect(await answer("/en/app/ordini", "true")).toEqual({
+    expect(await proposal("/en/app/orders")).toBe(true);
+    expect(await answer("/en/app/orders", "true")).toEqual({
       ok: true,
       notice: appCopy.en.orders.marketingProposal.accepted,
     });
@@ -1069,7 +1069,7 @@ describe("pagina Ordini reale", () => {
       registration,
       { granted: 1, text_version: marketingTextVersions.proposal, language: "en" },
     ]);
-    expect(await proposal("/en/app/ordini")).toBe(false);
+    expect(await proposal("/en/app/orders")).toBe(false);
     // Chi aderisce in registrazione non riceve la proposta; la revoca resta nelle Impostazioni.
     await register(true);
     expect(await proposal()).toBe(false);

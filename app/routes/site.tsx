@@ -23,9 +23,7 @@ import {
   visitCookie,
   visitParam,
 } from "../app-links";
-import { freeQuotaSettings } from "../domain/grants.server";
 import { languageFromPath, localizedPath } from "../i18n";
-import { areaPage } from "../account-area.server";
 import { publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/site";
@@ -59,12 +57,10 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (session && !visiting) {
     throw redirect(localizedPath(language, ordersPath), { headers: noStore });
   }
-  // Senza cache la pagina annuncia la promozione in corso e la quota base appena finisce; prezzi
-  // e prova seguono il listino di Prezzi.
-  const [{ quota: baseFreeQuota }, listing] = await areaPage(request, () =>
-    Promise.all([freeQuotaSettings(env.DB), siteListing(language)]),
-  );
-  const { freePromotion, prices, purchasesOpen } = listing;
+  // La pagina annuncia la promozione in corso e la quota base appena finisce; prezzi e prova
+  // seguono il listino di Prezzi, anche quello di riserva senza il database.
+  const listing = await siteListing(request, language);
+  const { freePromotion, prices, purchasesOpen, baseQuota } = listing;
   const pages = sitePages[language];
   const {
     freeQuota,
@@ -92,13 +88,19 @@ export async function loader({ request }: Route.LoaderArgs) {
       })),
       best: pages.pricing.best,
       premiumGross: premiumGross(prices.monthly.gross, prices.annual.gross),
-      // Con acquisti e prove sospesi la home lo dice, come Prezzi, invece di promettere la prova.
-      premiumBody: `${premiumBody} ${purchasesOpen ? premiumTrial : pages.pricing.closed}`,
+      // Con acquisti e prove sospesi la home lo dice, come Prezzi, invece di promettere la prova;
+      // il listino di riserva non dice né l'una né l'altra cosa.
+      premiumBody: listing.reserve
+        ? premiumBody
+        : `${premiumBody} ${purchasesOpen ? premiumTrial : pages.pricing.closed}`,
       faq: pages.faq.items.slice(0, 4),
       shots: pages.shots,
-      quota: freePromotion
-        ? promotionLine(freePromotion.quota, listing.promotionEnd, baseFreeQuota)
-        : freeQuota(baseFreeQuota),
+      quota:
+        baseQuota === null
+          ? null
+          : freePromotion
+            ? promotionLine(freePromotion.quota, listing.promotionEnd, baseQuota)
+            : freeQuota(baseQuota),
     },
   };
 }
@@ -265,7 +267,9 @@ export default function Site({ loaderData }: Route.ComponentProps) {
           <div className="grid content-start gap-2 rounded-2xl border bg-card p-6">
             <h3 className="font-semibold">{t.freePlan}</h3>
             <p className="text-3xl font-semibold">{t.freePrice}</p>
-            <p className="leading-relaxed text-pretty text-muted-foreground">{t.quota}</p>
+            {t.quota ? (
+              <p className="leading-relaxed text-pretty text-muted-foreground">{t.quota}</p>
+            ) : null}
           </div>
           <div className="grid content-start gap-2 rounded-2xl border border-primary bg-card p-6 ring-1 ring-primary">
             <h3 className="font-semibold">{t.premiumPlan}</h3>

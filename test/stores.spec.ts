@@ -474,11 +474,11 @@ it("mostra elenco e pannello del negozio con i soli dati posseduti e il piano de
   ).toBeNull();
 
   // Link diretto e refresh del pannello, anche in inglese.
-  const detail = await storesPage(`/en/app/negozi/${seller.storeId}`, seller.cookie);
+  const detail = await storesPage(`/en/app/stores/${seller.storeId}`, seller.cookie);
   expect(detail.data).toMatchObject({
     language: "en",
     notFound: false,
-    page: { detail: { id: seller.storeId }, connectHref: "/en/app/negozi/collega" },
+    page: { detail: { id: seller.storeId }, connectHref: "/en/app/stores/link" },
   });
 
   // Un negozio di un altro spazio risponde come uno inesistente, dentro la shell.
@@ -704,7 +704,7 @@ it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
   // Il vecchio indirizzo del profilo porta alla categoria Account delle Impostazioni.
   for (const [path, target] of [
     ["/app/profilo", "/app/impostazioni/account"],
-    ["/en/app/profilo", "/en/app/impostazioni/account"],
+    ["/en/app/profile", "/en/app/settings/account"],
   ]) {
     const moved = await routeResponse(loadProfile, path);
     expect(moved.status).toBe(302);
@@ -714,7 +714,7 @@ it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
   // inviate, ci portano conservando la query.
   for (const [path, target] of [
     ["/app/impostazioni/profilo", "/app/impostazioni/account"],
-    ["/en/app/impostazioni/sicurezza?accesso=x", "/en/app/impostazioni/account?accesso=x"],
+    ["/en/app/settings/sicurezza?accesso=x", "/en/app/settings/account?accesso=x"],
   ]) {
     const moved = await routeResponse(loadSettings, path, {
       cookie: seller.cookie,
@@ -723,7 +723,7 @@ it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
     expect(moved.status).toBe(301);
     expect(moved.headers.get("location")).toBe(target);
   }
-  const loaded = await routeData(loadSettings, "/en/app/impostazioni/account", {
+  const loaded = await routeData(loadSettings, "/en/app/settings/account", {
     cookie: seller.cookie,
     params: { sezione: "account" },
   });

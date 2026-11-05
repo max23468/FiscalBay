@@ -33,7 +33,13 @@ import {
   homeFor,
 } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
-import { areaShell, callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
+import {
+  areaShell,
+  callRoute,
+  routeData,
+  routeResponse,
+  pagePath,
+} from "./fixtures/route-fixtures";
 import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
 import { turnstileField } from "../app/turnstile";
@@ -52,9 +58,9 @@ it("mostra l'autorizzazione preventiva in entrambe le lingue senza creare profil
     env.REGISTRATION_ALLOWED_EMAILS = "[]";
     for (const language of ["it", "en"] as const) {
       const prefix = language === "it" ? "" : "/en";
-      const page = await routeData(loadAccess, `${prefix}/accesso`);
+      const page = await routeData(loadAccess, pagePath(prefix, "/accesso"));
       expect(page).toMatchObject({ registrationRestricted: true });
-      const response = await accessForm(`${prefix}/accesso`, {
+      const response = await accessForm(pagePath(prefix, "/accesso"), {
         intent: "registrati",
         ...person,
         email: "non-invitato@example.invalid",
@@ -216,9 +222,9 @@ describe("registrazione e verifica del contatto", () => {
     const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
     const register = (path: string) =>
       accessForm(path, { intent: "registrati", ...person, email, password, termini: "on" });
-    const created = await register("/en/accesso");
+    const created = await register("/en/sign-in");
     expect(created.status).toBe(303);
-    expect(created.headers.get("location")).toBe("/en/accesso?accesso=registrato");
+    expect(created.headers.get("location")).toBe("/en/sign-in?accesso=registrato");
     expect(created.headers.getSetCookie()).toEqual([]);
     const user = await env.DB.prepare(
       'SELECT id, name, "emailVerified" FROM "user" WHERE email = ?',
@@ -260,12 +266,12 @@ describe("registrazione e verifica del contatto", () => {
       subject: "Hai già un account FiscalBay",
     });
     // Dalla pagina inglese l'avviso è in inglese e porta all'accesso inglese.
-    await register("/en/accesso");
+    await register("/en/sign-in");
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(3));
     expect(send.mock.calls[2]![0]).toMatchObject({
       to: email,
       subject: "You already have a FiscalBay account",
-      text: expect.stringContaining("/en/accesso"),
+      text: expect.stringContaining("/en/sign-in"),
     });
     expect(
       await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE email = ?')
@@ -298,7 +304,7 @@ describe("registrazione e verifica del contatto", () => {
 
     // Il link di conferma apre la sessione verificata.
     const verified = await handleAuthRequest(new Request(emailLink(confirmation.text)), env);
-    expect(verified.headers.get("location")).toBe("/en/app/ordini");
+    expect(verified.headers.get("location")).toBe("/en/app/orders");
     const verifiedCookie = sessionCookie(verified);
     expect(await homeFor(verifiedCookie)).toMatchObject({ verified: true });
     send.mockRestore();
@@ -319,7 +325,7 @@ describe("registrazione e verifica del contatto", () => {
     try {
       const request = new Request("http://localhost:5173/api/auth/sign-up/email", {
         method: "POST",
-        body: JSON.stringify({ email, callbackURL: "/en/app/ordini" }),
+        body: JSON.stringify({ email, callbackURL: "/en/app/orders" }),
       });
       // Come per un indirizzo nuovo, la risposta non aspetta il provider dell'email.
       const outcome = await Promise.race([
@@ -701,7 +707,7 @@ describe("registrazione e verifica del contatto", () => {
   });
 
   it("avvia eBay dal modulo e richiede una sessione verificata per collegarlo", async () => {
-    const response = await accessForm("/en/accesso", { intent: "ebay" });
+    const response = await accessForm("/en/sign-in", { intent: "ebay" });
     expect(response.status).toBe(303);
     const location = new URL(response.headers.get("location")!);
     expect(location.hostname).toBe("auth.ebay.com");
@@ -709,11 +715,11 @@ describe("registrazione e verifica del contatto", () => {
       "https://api.ebay.com/oauth/api_scope",
       "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
     ]);
-    const refused = await securityForm("/en/app/impostazioni/account", {
+    const refused = await securityForm("/en/app/settings/account", {
       intent: "collega-metodo",
       metodo: "ebay",
     });
-    expect(refused.headers.get("location")).toBe("/en/accesso");
+    expect(refused.headers.get("location")).toBe("/en/sign-in");
     const session = await verifiedSession("link-modulo@example.invalid");
     const allowed = await securityForm(
       "/app/impostazioni/account",
@@ -739,7 +745,7 @@ describe("registrazione e verifica del contatto", () => {
 
   it("conserva provider e lingua nel ritorno di un accesso OAuth rifiutato", async () => {
     for (const provider of ["google", "ebay"]) {
-      const start = await accessForm("/en/accesso", { intent: provider });
+      const start = await accessForm("/en/sign-in", { intent: provider });
       const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
       const cookie = sessionCookie(start);
       const result = await handleAuthRequest(

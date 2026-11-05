@@ -1,7 +1,15 @@
 import { loader as loadArea } from "../../app/routes/account";
 import { withTurnstileToken } from "./turnstile-fixtures";
+import { localizedPath } from "../../app/i18n";
 
 export const testOrigin = "http://localhost:5173";
+
+/**
+ * Indirizzo servito di una pagina: `base` è il prefisso di lingua, vuoto o `/en`, `path` il
+ * seguito con i segmenti italiani, tradotti come nell'app.
+ */
+export const pagePath = (base: string, path: string) =>
+  localizedPath(base.startsWith("/en") ? "en" : "it", path);
 
 type RouteOptions = {
   cookie?: string | null;

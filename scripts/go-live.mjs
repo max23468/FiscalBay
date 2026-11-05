@@ -254,8 +254,8 @@ export function checkResources(target, state, phase) {
  * Le pagine pubbliche vengono dalla sitemap servita, che il Worker compone dal codice.
  */
 export const surfacePaths = {
-  legal: ["/termini", "/privacy", "/en/termini", "/en/privacy"],
-  private: ["/accesso", "/app/ordini", "/en/accesso"],
+  legal: ["/termini", "/privacy", "/en/terms", "/en/privacy"],
+  private: ["/accesso", "/app/ordini", "/en/sign-in"],
   preview: "/anteprima",
 };
 
