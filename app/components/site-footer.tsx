@@ -1,17 +1,19 @@
 import { cn } from "cn";
 
 import { useCopy } from "~/components/copy-context";
+import { LanguageSwitch } from "~/components/language-switch";
 import { siteColumn } from "~/components/site-column";
 import { appCopy, supportEmail } from "../app-copy";
-import { guidesPath, privacyPath, supportPath, termsPath } from "../app-links";
+import { privacyPath, supportPath, termsPath } from "../app-links";
 import { localizedPath } from "../i18n";
 
 /**
  * Footer unico delle pagine pubbliche, accesso, Termini e Privacy compresi (D202), con
  * l'indirizzo di assistenza. L'area autenticata non ne ha uno. `className` adatta la larghezza
- * alla colonna che lo contiene.
+ * alla colonna che lo contiene. Con `path`, la pagina senza prefisso di lingua, sotto i 360 px
+ * porta anche la scelta della lingua, che la barra lì non ha.
  */
-export function SiteFooter({ className }: { className?: string }) {
+export function SiteFooter({ className, path }: { className?: string; path?: string }) {
   const { language } = useCopy();
   const t = appCopy[language];
   return (
@@ -39,13 +41,20 @@ export function SiteFooter({ className }: { className?: string }) {
           <a href={localizedPath(language, privacyPath)} className="link-underline">
             {t.legal.privacyLink}
           </a>
-          <a href={localizedPath(language, guidesPath)} className="link-underline">
-            {t.site.guides}
-          </a>
           <a href={localizedPath(language, supportPath)} className="link-underline">
             {t.site.support}
           </a>
         </nav>
+        {path === undefined ? null : (
+          <div className="min-[360px]:hidden">
+            <LanguageSwitch
+              label={t.access.language}
+              current={language}
+              hrefFor={(code) => localizedPath(code, path)}
+              reloadDocument
+            />
+          </div>
+        )}
       </div>
     </footer>
   );

@@ -29,7 +29,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { criticalModule, prTargets } from "./mutation.mjs";
-import { changeFile, fullChangelog, migrationEntry, requiredReview } from "./release/release.mjs";
+import {
+  changeFile,
+  fullChangelog,
+  migrationEntry,
+  requiredReview,
+  visibleNews,
+} from "./release/release.mjs";
 import { importGraph } from "./verify-repo.mjs";
 
 /** Script di package.json eseguito da ciascun livello, dal più leggero. */
@@ -185,6 +191,12 @@ export function dependencyChange(before, after) {
   }
 }
 
+/** Vero se due changelog leggibili mostrano la stessa pagina Novità. */
+export const sameNews = (before, after) =>
+  typeof before === "string" &&
+  typeof after === "string" &&
+  visibleNews(before) === visibleNews(after);
+
 /** Vero se due changelog differiscono soltanto per il giorno di una versione. */
 export function changelogDayOnly(before, after) {
   if (typeof before !== "string" || typeof after !== "string" || before === after) return false;
@@ -199,13 +211,13 @@ export function changelogDayOnly(before, after) {
  * `core` limita i browser al nucleo essenziale: la suite completa resta alla qualifica.
  */
 export function fileImpact(file, change, lock) {
-  // Le Novità dell'app si leggono dal changelog e dai frammenti alla build: cambia ciò che si
-  // distribuisce. Il giorno scritto dopo una pubblicazione, con i frammenti riuniti nel
-  // changelog, è già nella build distribuita.
-  // Un frammento con le sole decisioni lascia il changelog com'era.
+  // La pagina Novità si legge dal changelog con i frammenti alla build: distribuisce soltanto un
+  // cambio di ciò che mostra, cioè le parti «Novità» e «What's new» e il giorno delle versioni che
+  // le hanno. Altre modifiche, decisioni e versioni senza Novità sono documentazione (D303); il
+  // giorno scritto dopo una pubblicazione è già nella build distribuita.
   if (changelogFile(file))
     return changelogDayOnly(change?.before, change?.after) ||
-      (typeof change?.before === "string" && change.before === change.after)
+      sameNews(change?.before, change?.after)
       ? { level: "docs", e2e: false, deploy: false }
       : { level: "build", e2e: false, deploy: true };
   if (file === manifestFile) {
@@ -723,6 +735,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     if (committed) run("pnpm", [result.script]);
     else {
       const impacts = files.map((file) => fileImpact(file, changes[file]));
+      // Lo stesso controllo della versione di `Verify`, prima del gate: un frammento con Novità su
+      // una versione già pubblicata emerge in locale, non nella CI della PR.
+      run("node", ["scripts/release/release.mjs", "version-step", "--base", "origin/develop"]);
       run("pnpm", [localScripts[result.gate]]);
       for (const [command, commandArgs] of localTests(result.gate, files, impacts))
         run(command, commandArgs);

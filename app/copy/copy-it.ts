@@ -1055,10 +1055,10 @@ export const it = {
       pricing: "Prezzi",
       security: "Sicurezza",
       faq: "FAQ",
+      guides: "Guide",
     },
     independent: "Servizio indipendente, non affiliato a eBay.",
     support: "Supporto",
-    guides: "Guide",
   },
   /** Pagina pubblica dell'assistenza: domande d'uso e contatti. */
   supportPage: {

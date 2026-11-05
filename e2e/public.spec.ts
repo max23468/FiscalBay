@@ -76,15 +76,35 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
     "Codice Fiscale pricing for eBay",
   );
 
-  // Sotto i 768 px le pagine stanno in una seconda riga sempre visibile, senza menu da aprire.
-  await page.setViewportSize({ width: 360, height: 780 });
+  // Sotto i 1024 px le pagine stanno in una seconda riga sempre visibile, senza menu da aprire.
   const pages = bar.getByRole("navigation", { name: "Site pages" });
-  await expect(pages.getByRole("link")).toHaveText(["Features", "Pricing", "Security", "FAQ"]);
-  // Sotto i 400 px resta «Start for free», la cui pagina porta anche all'accesso.
-  await expect(bar.getByRole("link", { name: "Start for free" })).toBeVisible();
-  await expect(bar.getByRole("link", { name: "Sign in" })).toBeHidden();
-  await expect(bar.getByRole("link", { name: "Italiano" })).toHaveText("IT");
+  await page.setViewportSize({ width: 768, height: 900 });
+  // Le voci nascoste escono dai ruoli: resta soltanto la seconda riga, sotto il logo. Durante il
+  // ridimensionamento le due righe possono essere visibili insieme per un frame.
+  await expect(pages).toHaveCount(1);
+  await expect.poll(async () => (await pages.boundingBox())?.y).toBeGreaterThan(50);
+  await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 360, height: 780 });
+  await expect(pages.getByRole("link")).toHaveText([
+    "Features",
+    "Pricing",
+    "Security",
+    "FAQ",
+    "Guides",
+  ]);
+  // «Sign in» e «Start for free» restano a ogni larghezza; la lingua mostra soltanto l'altra.
+  await expect(bar.getByRole("link", { name: "Start for free" })).toBeVisible();
+  await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expect(bar.getByRole("link", { name: "Italiano" })).toHaveText("IT");
+  await expect(bar.getByRole("link", { name: "English" })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  // Sotto i 360 px la lingua passa nel footer.
+  await page.setViewportSize({ width: 320, height: 780 });
+  await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
+  await expect(bar.getByRole("link", { name: "Italiano" })).toBeHidden();
+  await expect(page.getByRole("contentinfo").getByRole("link", { name: "Italiano" })).toBeVisible();
+  await page.setViewportSize({ width: 360, height: 780 });
   await pages.getByRole("link", { name: "FAQ" }).click();
   await expect(page).toHaveURL(/\/en\/faq$/u);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(

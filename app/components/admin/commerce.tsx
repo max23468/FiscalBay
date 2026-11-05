@@ -11,7 +11,7 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
   const { t, date } = useAdmin();
   const c = t.commerce;
   const fields = (id?: string, startsAt?: string, endsAt?: string | null, quota?: number) => (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
       <TextField
         label={c.startsAt}
         name="inizio"

@@ -339,8 +339,8 @@ for (const language of ["it", "en"] as const) {
       const legal = page.getByRole("navigation", {
         name: language === "it" ? "Documenti legali" : "Legal documents",
       });
-      // Termini, Privacy, Guide e Supporto.
-      await expect(legal.getByRole("link")).toHaveCount(4);
+      // Termini, Privacy e Supporto: le Guide stanno nella barra del sito.
+      await expect(legal.getByRole("link")).toHaveCount(3);
       // Il footer resta su una riga per elemento anche sugli smartphone più stretti.
       if (width === 500) {
         await page.setViewportSize({ width: 360, height: 666 });

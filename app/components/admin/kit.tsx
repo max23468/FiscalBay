@@ -55,7 +55,7 @@ export function TextField({
   return (
     <Field className={className}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input id={id} {...props} />
+      <Input id={id} className="min-w-0" {...props} />
     </Field>
   );
 }
@@ -144,7 +144,7 @@ export function Disclosure({
   children: ReactNode;
 }) {
   return (
-    <details className="group rounded-lg border px-3 py-2 [&[open]>summary]:mb-3">
+    <details className="group min-w-0 rounded-lg border px-3 py-2 [&[open]>summary]:mb-3">
       <summary
         className={cn(
           "flex cursor-pointer list-none items-center justify-between gap-3 rounded-sm text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring pointer-coarse:min-h-11 [&::-webkit-details-marker]:hidden",
@@ -194,14 +194,16 @@ export function DataTable({
         {rows.map((row) => {
           const cells = head.map((column, index) => ({ column, cell: row.cells[index] }));
           return (
-            <li key={row.key} className="grid gap-2 rounded-lg border p-3 text-sm">
-              <div className="min-w-0 font-medium break-words">{cells[0]!.cell}</div>
-              <dl className="grid grid-cols-[minmax(6.5rem,auto)_1fr] gap-x-3 gap-y-1.5">
+            <li key={row.key} className="grid min-w-0 gap-2 rounded-lg border p-3 text-sm">
+              <div className="min-w-0 font-medium wrap-anywhere">{cells[0]!.cell}</div>
+              <dl className="grid grid-cols-[minmax(6.5rem,auto)_minmax(0,1fr)] gap-x-3 gap-y-1.5">
                 {cells.slice(1).map(({ column, cell }) =>
                   column !== actions && cell !== null && cell !== "" ? (
                     <div key={column} className="contents">
                       <dt className="text-muted-foreground">{column}</dt>
-                      <dd className="min-w-0 break-words">{cell}</dd>
+                      <dd className="min-w-0 wrap-anywhere [&_[data-slot=badge]]:h-auto [&_[data-slot=badge]]:whitespace-normal">
+                        {cell}
+                      </dd>
                     </div>
                   ) : null,
                 )}
@@ -267,14 +269,19 @@ export function DataTable({
   );
 }
 
-/** Coppie etichetta e valore, in due colonne anche su mobile. */
+/**
+ * Coppie etichetta e valore, in due colonne anche su mobile. Email, identificativi ed etichette
+ * di stato vanno a capo invece di uscire dalla colonna.
+ */
 export function Facts({ items }: { items: [string, ReactNode][] }) {
   return (
-    <dl className="grid grid-cols-[minmax(6.5rem,auto)_1fr] gap-x-6 gap-y-2 text-sm">
+    <dl className="grid grid-cols-[minmax(6.5rem,auto)_minmax(0,1fr)] gap-x-6 gap-y-2 text-sm">
       {items.map(([label, value]) => (
         <div key={label} className="contents">
           <dt className="text-muted-foreground">{label}</dt>
-          <dd className="min-w-0 break-words">{value}</dd>
+          <dd className="min-w-0 wrap-anywhere [&_[data-slot=badge]]:h-auto [&_[data-slot=badge]]:whitespace-normal">
+            {value}
+          </dd>
         </div>
       ))}
     </dl>
