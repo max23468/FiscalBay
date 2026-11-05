@@ -258,6 +258,10 @@ for (const scenario of scenarios) {
         // tutti, così uno scorrimento orizzontale fra le larghezze della matrice emerge nella PR.
         if (width === matrix[0].width && scheme === matrix[0].scheme) {
           const overflowing: number[] = [];
+          // I pannelli richiudibili si misurano aperti: il loro contenuto non deve uscire.
+          await page.evaluate(() =>
+            document.querySelectorAll("details").forEach((details) => (details.open = true)),
+          );
           for (const edge of breakpointEdges) {
             await page.setViewportSize({ width: edge, height: 844 });
             // Le media query si aggiornano al frame successivo al ridimensionamento.

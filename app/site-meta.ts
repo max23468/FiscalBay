@@ -29,12 +29,15 @@ export function siteMeta({
   path,
   title,
   description,
+  type = "website",
 }: {
   language: Language;
   origin: string;
   path: string;
   title: string;
   description: string;
+  /** Tipo Open Graph: `article` per gli articoli delle Guide. */
+  type?: "website" | "article";
 }): MetaDescriptor[] {
   const url = `${origin}${localizedPath(language, path)}`;
   const fullTitle = pageTitle(title);
@@ -49,7 +52,7 @@ export function siteMeta({
       href: `${origin}${localizedPath(code, path)}`,
     })),
     { tagName: "link", rel: "alternate", hrefLang: "x-default", href: `${origin}${path}` },
-    { property: "og:type", content: "website" },
+    { property: "og:type", content: type },
     { property: "og:site_name", content: "FiscalBay" },
     { property: "og:locale", content: ogLocales[language] },
     ...languages

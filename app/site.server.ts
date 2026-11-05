@@ -150,7 +150,7 @@ const pageUpdates: Record<(typeof sitemapPages)[number], string> = {
   "/sicurezza": "2026-11-03",
   "/faq": "2026-11-03",
   "/supporto": "2026-11-03",
-  "/guide": "2026-11-04",
+  "/guide": "2026-11-05",
   ...Object.fromEntries(guidePaths.map((path) => [path, guides.it.articles[path].updated])),
 } as Record<(typeof sitemapPages)[number], string>;
 
