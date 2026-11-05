@@ -66,7 +66,7 @@ export function LastSync({
   slot?: boolean;
   /** Nei riquadri stretti della scheda il testo va a capo. */
   wrap?: boolean;
-  /** Fuori dalla tabella, che ha l'intestazione della colonna, il valore ha la sua etichetta. */
+  /** Fuori dalla tabella, che ha l'intestazione della colonna, il valore ha la sua etichetta e va a capo. */
   labelled?: boolean;
 }) {
   const { t, language } = useCopy();
@@ -77,7 +77,7 @@ export function LastSync({
     <span
       className={cn(
         "inline-flex items-center gap-2 text-muted-foreground",
-        wrap ? "min-w-0" : "whitespace-nowrap",
+        wrap || labelled ? "min-w-0" : "whitespace-nowrap",
       )}
     >
       {live || store.syncing ? (

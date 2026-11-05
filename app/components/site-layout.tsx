@@ -28,7 +28,7 @@ const navItems = [
 
 /**
  * Barra superiore delle pagine pubbliche (D202): logo, pagine, lingua, `Accedi` e `Inizia gratis`,
- * oppure `Apri l'app` con una sessione. Sotto i 768 px le pagine passano in una seconda riga sempre
+ * oppure `Apri l'app` con una sessione. Sotto i 1024 px le pagine passano in una seconda riga sempre
  * visibile, allineate al logo con spazi uguali, senza menu da aprire, e la lingua mostra il solo codice.
  * `path` è la pagina corrente senza prefisso di lingua, per lingua e voce attiva.
  */
@@ -58,22 +58,22 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
         >
           <Logo className="h-5 w-auto min-[360px]:h-6 md:h-7" />
         </a>
-        <nav aria-label={t.site.nav.label} className="max-md:hidden">
+        <nav aria-label={t.site.nav.label} className="max-lg:hidden">
           <NavLinks path={path} className="gap-1 text-sm" />
         </nav>
         <div className="ml-auto flex items-center gap-1 min-[360px]:gap-2">
-          <div className="md:hidden">{switchFor(true)}</div>
-          <div className="max-md:hidden">{switchFor(false)}</div>
+          <div className="lg:hidden">{switchFor(true)}</div>
+          <div className="max-lg:hidden">{switchFor(false)}</div>
           {signedIn ? (
             <a href={`${localizedPath(language)}?${visitParam}=0`} {...buttonLink({ size: "sm" })}>
               {t.site.openApp}
             </a>
           ) : (
             <>
-              {/* Sotto i 400 px resta «Inizia gratis»: la sua pagina porta anche all'accesso. */}
+              {/* Sotto i 440 px resta «Inizia gratis»: la sua pagina porta anche all'accesso. */}
               <a
                 href={signIn}
-                {...buttonLink({ variant: "ghost", size: "sm", className: "max-[399px]:hidden" })}
+                {...buttonLink({ variant: "ghost", size: "sm", className: "max-[440px]:hidden" })}
               >
                 {t.site.signIn}
               </a>
@@ -84,7 +84,7 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
           )}
         </div>
       </div>
-      <nav aria-label={t.site.nav.label} className="border-t md:hidden">
+      <nav aria-label={t.site.nav.label} className="border-t lg:hidden">
         <NavLinks path={path} className={cn(siteColumn, "gap-5 text-sm min-[360px]:gap-7")} />
       </nav>
     </header>
@@ -101,7 +101,7 @@ function NavLinks({ path, className }: { path: string; className: string }) {
           <a
             href={localizedPath(language, item.path)}
             aria-current={path === item.path ? "page" : undefined}
-            className="inline-flex min-h-11 items-center rounded-md px-2.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground max-md:rounded-none max-md:border-b-2 max-md:border-transparent max-md:px-0 max-md:aria-[current=page]:border-primary md:min-h-0 md:py-1.5"
+            className="inline-flex min-h-11 items-center rounded-md px-2.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground max-lg:rounded-none max-lg:border-b-2 max-lg:border-transparent max-lg:px-0 max-lg:aria-[current=page]:border-primary lg:min-h-0 lg:py-1.5"
           >
             {t.site.nav[item.key]}
           </a>

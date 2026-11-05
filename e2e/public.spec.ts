@@ -76,11 +76,16 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
     "Codice Fiscale pricing for eBay",
   );
 
-  // Sotto i 768 px le pagine stanno in una seconda riga sempre visibile, senza menu da aprire.
-  await page.setViewportSize({ width: 360, height: 780 });
+  // Sotto i 1024 px le pagine stanno in una seconda riga sempre visibile, senza menu da aprire.
   const pages = bar.getByRole("navigation", { name: "Site pages" });
+  await page.setViewportSize({ width: 768, height: 900 });
+  // Le voci nascoste escono dai ruoli: resta soltanto la seconda riga, sotto il logo.
+  await expect.poll(async () => (await pages.boundingBox())?.y).toBeGreaterThan(50);
+  await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.setViewportSize({ width: 360, height: 780 });
   await expect(pages.getByRole("link")).toHaveText(["Features", "Pricing", "Security", "FAQ"]);
-  // Sotto i 400 px resta «Start for free», la cui pagina porta anche all'accesso.
+  // Sotto i 440 px resta «Start for free», la cui pagina porta anche all'accesso.
   await expect(bar.getByRole("link", { name: "Start for free" })).toBeVisible();
   await expect(bar.getByRole("link", { name: "Sign in" })).toBeHidden();
   await expect(bar.getByRole("link", { name: "Italiano" })).toHaveText("IT");
