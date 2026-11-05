@@ -79,7 +79,9 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   // Sotto i 1024 px le pagine stanno in una seconda riga sempre visibile, senza menu da aprire.
   const pages = bar.getByRole("navigation", { name: "Site pages" });
   await page.setViewportSize({ width: 768, height: 900 });
-  // Le voci nascoste escono dai ruoli: resta soltanto la seconda riga, sotto il logo.
+  // Le voci nascoste escono dai ruoli: resta soltanto la seconda riga, sotto il logo. Durante il
+  // ridimensionamento le due righe possono essere visibili insieme per un frame.
+  await expect(pages).toHaveCount(1);
   await expect.poll(async () => (await pages.boundingBox())?.y).toBeGreaterThan(50);
   await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
