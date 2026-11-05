@@ -30,11 +30,13 @@ import {
   fullChangelog,
   latestReleased,
   nextVersions,
+  openedChangelog,
   requiredReview,
   reviewAdded,
   receiptArtifact,
   romeDay,
   topVersion,
+  versionToOpen,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
 import { verifiedBuildOrigin } from "../find-build.mjs";
@@ -1327,6 +1329,11 @@ function renumberPullRequest(pr, mapping) {
  * compatibilità delle basi.
  */
 function assertPullRequestChanges(pr) {
+  assertMergedChangesVersion(...pullRequestChanges(pr));
+}
+
+/** Changelog di `develop` e della PR, frammenti della PR e tag pubblicati. */
+function pullRequestChanges(pr) {
   localGit(() => git("fetch", "--quiet", "--tags", "origin"));
   const base = git("merge-base", "origin/develop", pr.headRefOid);
   const fragments = git(
@@ -1341,12 +1348,68 @@ function assertPullRequestChanges(pr) {
     .split("\n")
     .filter((file) => changeFile.test(file))
     .map((file) => git("show", `${pr.headRefOid}:${file}`));
-  assertMergedChangesVersion(
+  return [
     git("show", "origin/develop:CHANGELOG.md"),
     git("show", `${pr.headRefOid}:CHANGELOG.md`),
     fragments,
     git("tag", "--list", "v2.*").split("\n"),
-  );
+  ];
+}
+
+/**
+ * Unisce `develop` al branch della PR e apre `version` in cima al changelog, in un worktree
+ * temporaneo e in un solo push: la qualifica parte già sulla versione giusta invece di fallire
+ * sul merge di GitHub con la versione in cima appena pubblicata. Restituisce la nuova testa, o
+ * null se il merge ha conflitti: allora resta l'aggiornamento di GitHub.
+ */
+function openVersionOnPullRequest(pr, version) {
+  return localGit(() => {
+    const directory = mkdtempSync(path.join(tmpdir(), "version-"));
+    try {
+      git("worktree", "add", "--quiet", "--detach", directory, pr.headRefOid);
+      const inside = (...args) =>
+        execute(
+          "git",
+          [
+            "-c",
+            "user.name=github-actions",
+            "-c",
+            "user.email=github-actions@users.noreply.github.com",
+            ...args,
+          ],
+          { cwd: directory },
+        );
+      try {
+        inside("merge", "--quiet", "--no-edit", "origin/develop");
+      } catch {
+        // Conflitti: il worktree temporaneo si elimina comunque.
+        return null;
+      }
+      const file = path.join(directory, "CHANGELOG.md");
+      writeFileSync(file, openedChangelog(readFileSync(file, "utf8"), version));
+      inside("commit", "--quiet", "-am", `chore: apre la ${version} per le voci della PR`);
+      inside(
+        "push",
+        "--quiet",
+        `--force-with-lease=refs/heads/${pr.headRefName}:${pr.headRefOid}`,
+        "origin",
+        `HEAD:refs/heads/${pr.headRefName}`,
+      );
+      return inside("rev-parse", "HEAD");
+    } finally {
+      git("worktree", "remove", "--force", directory);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+}
+
+/** Testa della PR con la versione aperta, se le sue voci la richiedono sulla base attuale. */
+function openPendingVersion(pr) {
+  const version = versionToOpen(...pullRequestChanges(pr));
+  if (!version) return null;
+  const head = openVersionOnPullRequest(pr, version);
+  if (head) console.log(`Versione ${version} aperta sul branch della PR: qualifica di ${head}.`);
+  return head;
 }
 
 /** ID delle decisioni nelle tabelle Markdown di un commit. */
@@ -1391,7 +1454,11 @@ async function mergeOpenPullRequest(repository, number, pr) {
       const base = develop();
       fetchHead("develop");
       let since = 0;
-      if (!independent(base)) {
+      const opened = !independent(base) && openPendingVersion(pr);
+      if (opened) {
+        since = Date.now() - 1000;
+        pr = await waitUpdatedHead(read, pr.headRefOid, (head) => head === opened);
+      } else if (!independent(base)) {
         since = Date.now() - 1000;
         gh(
           "api",
@@ -1442,6 +1509,11 @@ async function mergeOpenPullRequest(repository, number, pr) {
           return true;
         }
         // Un'altra PR ha già portato sulla base i numeri delle decisioni nuove: si rinumerano.
+        const opened = openPendingVersion(pr);
+        if (opened) {
+          pr = await waitUpdatedHead(read, expectedHead, (sha) => sha === opened);
+          return true;
+        }
         assertPullRequestChanges(pr);
         const mapping = decisionCollisions(pr);
         if (Object.keys(mapping).length) {

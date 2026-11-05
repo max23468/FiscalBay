@@ -30,6 +30,8 @@ import {
   deployReport,
   assertChangesVersion,
   assertMergedChangesVersion,
+  openedChangelog,
+  versionToOpen,
   assertVersionStep,
   deployTag,
   fragmentDecisions,
@@ -1103,5 +1105,22 @@ describe("frammenti delle PR", () => {
         () => assertMergedChangesVersion(released, head, [fragment("Due")], ["v2.0.3"]),
         /versione in preparazione/u,
       );
+  });
+
+  it("il ciclo apre la patch successiva quando develop ha pubblicato la versione della PR", () => {
+    const released = changelog.replace("## [2.0.3]", "## [2.0.3] - 2026-11-05");
+    // La PR teneva la 2.0.3 aperta, che develop ha pubblicato nel frattempo.
+    assert.equal(versionToOpen(released, changelog, [fragment("Due")], ["v2.0.3"]), "2.0.4");
+    const opened = openedChangelog(released, "2.0.4");
+    assert.ok(opened.includes("## [2.0.4]\n\n## [2.0.3] - 2026-11-05"));
+    assert.doesNotThrow(() =>
+      assertMergedChangesVersion(released, opened, [fragment("Due")], ["v2.0.3"]),
+    );
+    // Versione ancora aperta, PR che ne apre già una o senza voci: nulla da aprire.
+    assert.equal(versionToOpen(changelog, changelog, [fragment("Due")], ["v2.0.2"]), null);
+    assert.equal(versionToOpen(released, opened, [fragment("Due")], ["v2.0.3"]), null);
+    const decisions = "# D\n\n## Decisioni\n\n| D002 | b | c |\n";
+    assert.equal(versionToOpen(released, changelog, [decisions], ["v2.0.3"]), null);
+    assert.throws(() => openedChangelog("# Changelog\n", "2.0.4"), /Nessuna versione/u);
   });
 });
