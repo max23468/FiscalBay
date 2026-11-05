@@ -18,7 +18,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
-import { fragmentEntries, withChanges } from "../../app/changelog-fragments.mjs";
+import { fragmentEntries, headings, withChanges } from "../../app/changelog-fragments.mjs";
 import { downloadRecord, observedRelease } from "./records.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -231,10 +231,19 @@ export function rebaseLinks(text, from, to) {
 }
 
 /**
+ * Voci di un frammento per gli utenti dell'app, nelle parti «Novità» e «What's new»: soltanto
+ * queste chiedono una versione nuova. «Altre modifiche», come i cambi del sito pubblico, della
+ * console o interni, viaggiano con la versione già pubblicata (D302).
+ */
+export const userEntries = (fragment) =>
+  fragmentEntries(fragment).filter(({ title }) => title === headings.it || title === headings.en);
+
+/**
  * Giorno della pubblicazione su `develop`: i frammenti del commit pubblicato entrano nella
  * versione, che riceve il giorno, e le loro decisioni nel registro; poi si eliminano. Frammenti
- * con voci entrati dopo quel commit restano e aprono la versione di correzione successiva, perché
- * non appartengono a quella pubblicata.
+ * con Novità entrati dopo quel commit restano e aprono la versione di correzione successiva, perché
+ * non appartengono a quella pubblicata; quelli con le sole altre modifiche restano senza aprirla.
+ * Un lotto senza Novità ripubblica la versione già datata: i suoi frammenti vi si aggiungono.
  */
 export function publicationDay({ changelog, register, published, later }, version, day) {
   const dated = datedChangelog(
@@ -247,7 +256,7 @@ export function publicationDay({ changelog, register, published, later }, versio
     day,
   );
   const open =
-    later.some((fragment) => fragmentEntries(fragment).length) && topSection(dated)?.day
+    later.some((fragment) => userEntries(fragment).length) && topSection(dated)?.day
       ? openedChangelog(dated, nextVersions(version)[0])
       : dated;
   return {
@@ -278,17 +287,17 @@ export function laterPart(current, published) {
 }
 
 /**
- * Le voci di un frammento appartengono alla versione in preparazione: con la versione in cima
- * già pubblicata la PR apre prima quella successiva.
+ * Le Novità di un frammento appartengono alla versione in preparazione: con la versione in cima
+ * già pubblicata la PR apre prima quella successiva. Le sole altre modifiche non la chiedono.
  */
 export function assertChangesVersion(changelog, fragments, releasedTags = []) {
   const top = topVersion(changelog);
   if (
-    fragments.some((fragment) => fragmentEntries(fragment).length) &&
+    fragments.some((fragment) => userEntries(fragment).length) &&
     (topSection(changelog)?.day || releasedTags.includes(`v${top}`))
   )
     throw new Error(
-      `Le voci di changes/ richiedono una versione in preparazione: in cima c'è la ${top}, già pubblicata.`,
+      `Le Novità di changes/ richiedono una versione in preparazione: in cima c'è la ${top}, già pubblicata.`,
     );
 }
 
@@ -325,6 +334,14 @@ export function openedChangelog(changelog, version) {
   return `${changelog.slice(0, at)}## [${version}]\n\n${changelog.slice(at)}`;
 }
 
+/** Versione in cima senza testo propria: le sue voci stanno ancora soltanto nei frammenti. */
+const emptyTop = (changelog) => {
+  const lines = changelog.split("\n");
+  const top = lines.findIndex((line) => line.startsWith("## "));
+  const next = lines.findIndex((line, index) => index > top && line.startsWith("## "));
+  return lines.slice(top + 1, next === -1 ? undefined : next).every((line) => !line.trim());
+};
+
 export const latestReleased = (releasedTags) =>
   releasedTags
     .map((tag) => tag.replace(/^v/u, ""))
@@ -335,17 +352,23 @@ export const latestReleased = (releasedTags) =>
     .at(-1);
 
 /**
- * Il lotto su `develop` porta una sola versione: la prima PR con una modifica visibile apre in
- * cima al changelog la versione successiva all'ultima pubblicata, di un solo passo; le seguenti la
- * riusano o ne alzano il livello.
+ * Il lotto su `develop` porta una sola versione: la prima PR con una Novità apre in cima al
+ * changelog la versione successiva all'ultima pubblicata, di un solo passo; le seguenti la riusano
+ * o ne alzano il livello. Una PR può richiudere una versione aperta e mai pubblicata, tornando
+ * all'ultima pubblicata.
  */
 export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
   const head = topVersion(changelog);
   const base = topVersion(baseChangelog);
   if (head === base) return;
   const released = latestReleased(releasedTags);
-  // Una versione promossa e ritirata perde il tag e la sezione: torna l'ultima pubblicata.
-  if (head === released && topSection(baseChangelog)?.day && !releasedTags.includes(`v${base}`))
+  // Una versione promossa e ritirata perde il tag e la sezione, una aperta e ancora vuota si può
+  // richiudere: in entrambi i casi torna l'ultima pubblicata.
+  if (
+    head === released &&
+    !releasedTags.includes(`v${base}`) &&
+    (topSection(baseChangelog)?.day || emptyTop(baseChangelog))
+  )
     return;
   const next = parseVersion(head);
   if (!next) throw new Error(`In cima al changelog serve una versione, non "${head ?? ""}".`);
@@ -1255,7 +1278,11 @@ async function main() {
       changeFiles().map((file) => readFileSync(file, "utf8")),
       releasedTags(),
     );
-    console.log(`Versione in preparazione: ${topVersion(changelog)}.`);
+    console.log(
+      topSection(changelog)?.day || releasedTags().includes(`v${topVersion(changelog)}`)
+        ? `Nessuna versione nuova: senza Novità il lotto resta sulla ${topVersion(changelog)}.`
+        : `Versione in preparazione: ${topVersion(changelog)}.`,
+    );
     return;
   }
   // Senza artefatto: il Worker dichiara le versioni, Git la loro compatibilità.

@@ -950,6 +950,13 @@ describe("comandi della pubblicazione", () => {
     );
     // Una sezione invariata in cima non chiede nulla.
     assert.doesNotThrow(() => assertVersionStep(section("2.0.0"), section("2.0.0"), ["v2.0.0"]));
+    // Una versione aperta senza Novità si richiude tornando all'ultima pubblicata.
+    const open = (version) => `# Changelog\n\n## [${version}]\n\n## [2.0.1] - 2026-11-02\n`;
+    assert.doesNotThrow(() => assertVersionStep(dated("2.0.1"), open("2.0.2"), ["v2.0.1"]));
+    assert.throws(
+      () => assertVersionStep(dated("2.0.1"), open("2.0.2"), ["v2.0.1", "v2.0.2"]),
+      /non è un passo dalla 2\.0\.2/u,
+    );
   });
 
   it("l'etichetta del deploy porta la versione soltanto dopo la prima 2.x pubblicata", () => {
@@ -1021,6 +1028,9 @@ describe("frammenti delle PR", () => {
       "",
     ].join("\n");
 
+  const other = (line) =>
+    ["# Frammento", "", "## Changelog", "", "### Altre modifiche", "", `- ${line}.`, ""].join("\n");
+
   it("il giorno riunisce i frammenti pubblicati e lascia gli altri alla versione seguente", () => {
     const day = publicationDay(
       {
@@ -1077,17 +1087,31 @@ describe("frammenti delle PR", () => {
     );
   });
 
-  it("le voci di un frammento richiedono una versione in preparazione", () => {
+  it("le Novità di un frammento richiedono una versione in preparazione", () => {
     assert.doesNotThrow(() => assertChangesVersion(changelog, [fragment("Due")], ["v2.0.2"]));
     const released = changelog.replace("## [2.0.3]", "## [2.0.3] - 2026-11-05");
     assert.throws(
       () => assertChangesVersion(released, [fragment("Due")], ["v2.0.3"]),
-      /versione in preparazione/u,
+      /Novità di changes\/ richiedono una versione in preparazione/u,
     );
-    // Un frammento con le sole decisioni non chiede una versione.
+    // Decisioni o sole altre modifiche, come i cambi del sito, non chiedono una versione.
     assert.doesNotThrow(() =>
       assertChangesVersion(released, ["# D\n\n## Decisioni\n\n| D002 | b | c |\n"], ["v2.0.3"]),
     );
+    assert.doesNotThrow(() => assertChangesVersion(released, [other("Sito")], ["v2.0.3"]));
+    assert.equal(versionToOpen(released, released, [other("Sito")], ["v2.0.3"]), null);
+  });
+
+  it("un lotto senza Novità aggiunge le altre modifiche alla versione già pubblicata", () => {
+    const released = changelog.replace("## [2.0.3]", "## [2.0.3] - 2026-11-05");
+    const day = publicationDay(
+      { changelog: released, register, published: [other("Sito")], later: [other("Console")] },
+      "2.0.3",
+      "2026-11-06",
+    );
+    assert.ok(day.changelog.startsWith("# Changelog\n\n## [2.0.3] - 2026-11-05"));
+    assert.ok(day.changelog.includes("### Altre modifiche\n\n- Sito."));
+    assert.ok(!day.changelog.includes("Console"));
   });
 
   it("al merge ammette la PR che apre la versione successiva a quella pubblicata su develop", () => {
