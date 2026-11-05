@@ -159,12 +159,7 @@ function databaseHooks(env: Env): BetterAuthOptions["databaseHooks"] {
           const state = await getOAuthState().catch(() => null);
           if (!state) return;
           const value = (state as { signupSource?: unknown }).signupSource;
-          await recordSignupSource(
-            env.DB,
-            user.id,
-            parseSource(typeof value === "string" ? value : null),
-            new Date(),
-          );
+          await recordSignupSource(env.DB, user.id, parseSource(value), new Date());
         },
       },
     },

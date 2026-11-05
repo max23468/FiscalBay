@@ -79,8 +79,8 @@ export function channelFromHost(host: string): SignupChannel {
  * Valore del parametro: un'etichetta dell'elenco chiuso, oppure categoria e prima pagina
  * (`google:/prezzi`) propagate dai link interni. Qualunque altro valore è ignorato.
  */
-export function parseSource(value: string | null | undefined): SignupSource | null {
-  if (!value || value.length > 160) return null;
+export function parseSource(value: unknown): SignupSource | null {
+  if (typeof value !== "string" || !value || value.length > 160) return null;
   const separator = value.indexOf(":");
   if (separator < 0) {
     return (labelledChannels as readonly string[]).includes(value)
