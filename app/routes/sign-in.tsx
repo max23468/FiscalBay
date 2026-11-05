@@ -82,7 +82,7 @@ function useReturnTo() {
 
 /**
  * Indirizzo dei moduli: conserva il ritorno alla Sicurezza anche quando l'errore resta qui, e la
- * provenienza che la registrazione salva sul nuovo account (D303).
+ * provenienza che la registrazione salva sul nuovo account (D304).
  */
 function useAccessAction() {
   const { language } = useCopy();

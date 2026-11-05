@@ -59,7 +59,7 @@ export function loader({ request }: Route.LoaderArgs) {
     // Token pubblico del sito Web Analytics dell'ambiente; senza, le pagine pubbliche non
     // caricano il beacon, come in locale e nelle prove.
     webAnalyticsToken: env.WEB_ANALYTICS_TOKEN ?? null,
-    // Provenienza del visitatore per i link del sito e la registrazione (D303), mai salvata qui.
+    // Provenienza del visitatore per i link del sito e la registrazione (D304), mai salvata qui.
     arrival: arrival ? formatSource(arrival) : null,
   };
 }

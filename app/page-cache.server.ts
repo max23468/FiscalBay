@@ -43,7 +43,7 @@ function cacheable(request: Request) {
 }
 
 /**
- * Chiave della copia: indirizzo, versione del Worker e categoria di provenienza (D303), che la
+ * Chiave della copia: indirizzo, versione del Worker e categoria di provenienza (D304), che la
  * pagina porta nei link interni. La categoria viene dall'elenco chiuso calcolato dal root loader,
  * mai dall'host del Referer; una visita dall'interno del sito ha una copia propria.
  */

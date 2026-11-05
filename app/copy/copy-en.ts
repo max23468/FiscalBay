@@ -1038,6 +1038,7 @@ export const en: AppCopy = {
   },
   supportPage: {
     title: "Support",
+    metaTitle: "Support | Codice Fiscale for eBay orders",
     description:
       "FiscalBay support: questions about using the app, the in-app support form and email.",
     contact: contactSupport,

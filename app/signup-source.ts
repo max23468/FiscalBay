@@ -1,5 +1,5 @@
 /**
- * Provenienza degli iscritti (D303): la categoria del canale da cui un visitatore arriva sul sito
+ * Provenienza degli iscritti (D304): la categoria del canale da cui un visitatore arriva sul sito
  * e la prima pagina vista. Il Worker la ricava dal Referer, che con `strict-origin-when-cross-origin`
  * porta la sola origine, o da un'etichetta nei link che pubblichiamo; poi viaggia nell'indirizzo
  * dei link interni fino alla registrazione. Nessun cookie né archivio del browser.

@@ -149,7 +149,7 @@ async function funnel(db: D1Database, from: string, to: string) {
     });
   }
   const synced = counted.get("first_sync")!;
-  // Provenienza della coorte (D303): attivazione del merchant e primo acquisto valgono a
+  // Provenienza della coorte (D304): attivazione del merchant e primo acquisto valgono a
   // prescindere dai passaggi precedenti. Solo le categorie con almeno un iscritto.
   const sources = signupChannels
     .map((channel) => {

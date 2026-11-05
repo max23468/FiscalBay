@@ -1063,6 +1063,7 @@ export const it = {
   /** Pagina pubblica dell'assistenza: domande d'uso e contatti. */
   supportPage: {
     title: "Supporto",
+    metaTitle: "Supporto | Codice Fiscale degli ordini eBay",
     description:
       "Assistenza FiscalBay: domande sull’uso, modulo di assistenza nell’app e indirizzo email.",
     contact: contactSupport,

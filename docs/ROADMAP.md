@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi; dal 2026-11-04 anche la provenienza degli iscritti ([D303](decisions/DECISION_REGISTER.md)), in corso. Un task per PR. |
+| [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)), un task per PR. |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -61,7 +61,7 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 <a id="correzioni-2-0"></a>
 ## 2.0.x · Correzioni e miglioramenti
 
-**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)), più la provenienza degli iscritti approvata il 2026-11-04 ([D303](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i task procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
+**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)), più la provenienza degli iscritti approvata il 2026-11-04 ([D304](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i task procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
 
 <a id="2-0-01"></a>
 #### 2.0-01 · Ordini, eBay e piattaforma
@@ -87,15 +87,9 @@ Home e Prezzi restano consultabili senza database con il listino di riserva e ar
 <a id="2-0-04"></a>
 #### 2.0-04 · Provenienza degli iscritti
 
-**Stato:** In corso · **Prerequisiti:** nessuno; coordinamento con 2.0-03 sui file del sito · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§23](product/EXPERIENCE.md#s23) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30) · [retention](engineering/DATA_RETENTION.md)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§23](product/EXPERIENCE.md#s23) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30) · [retention](engineering/DATA_RETENTION.md)
 
-- Il Worker classifica l'origine del Referer delle pagine pubbliche in categorie chiuse e annota il percorso della prima pagina; un'etichetta dell'elenco chiuso nel parametro `via` dei nostri link vale più del Referer.
-- Categoria e prima pagina viaggiano nel parametro dei link interni fino all'accesso, senza cookie né archivi del browser; canonical, sitemap e dati strutturati restano senza parametro.
-- Alla creazione dell'account con password, Google o eBay la provenienza si salva una volta sola; per i provider passa dallo state firmato di Better Auth. Senza segnale vale «unknown». La passkey non crea account (§7).
-- La console mostra, per la coorte delle metriche, iscritti, attivazioni del merchant e paganti per categoria; nessun elenco per account.
-- Il dato segue l'account: esportazione dei dati, cancellazione con l'utente, Privacy IT/EN alla versione `2026-11-05`.
-
-**Criterio di completamento:** test di classificazione, elenco chiuso, priorità, propagazione, assenza di cookie e archivi, salvataggio unico con ogni metodo, canonical invariato, aggregati e cancellazione; migration additiva; readback sul test di un'iscrizione arrivata da un link etichettato e della tabella in console.
+Ogni nuovo account salva una volta sola la categoria del canale d'arrivo e il percorso della prima pagina: il Worker li ricava dal Referer o da un'etichetta `via` dell'elenco chiuso, i link interni li portano fino all'accesso senza cookie né archivi del browser e i provider li passano nello state firmato. La console li mostra in aggregato con iscritti, attivazioni e paganti; il dato entra nell'esportazione, sparisce con l'account ed è nella Privacy IT/EN `2026-11-05` ([D304](decisions/DECISION_REGISTER.md)). Senza JavaScript la provenienza non si propaga e vale «unknown»; le iscrizioni reali con Google ed eBay si provano sul test dopo `Pubblica`.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni

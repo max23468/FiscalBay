@@ -153,7 +153,7 @@ function databaseHooks(env: Env): BetterAuthOptions["databaseHooks"] {
           // Include i callback OAuth; non modifica accessi e collegamenti esistenti.
           requireRegistrationApproval(env, user.email);
         },
-        // Nuovo utente da Google o eBay: la provenienza arriva nello state firmato (D303). La
+        // Nuovo utente da Google o eBay: la provenienza arriva nello state firmato (D304). La
         // registrazione con password la salva l'azione dell'accesso, che ne ha l'indirizzo.
         after: async (user) => {
           const state = await getOAuthState().catch(() => null);
