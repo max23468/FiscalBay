@@ -842,6 +842,71 @@ describe("Turnstile sugli ingressi pubblici", () => {
     expect(siteverify.requests).toEqual([]);
   });
 
+  it("chiede la verifica all'accesso con password soltanto dopo tre errori dallo stesso IP", async () => {
+    const from = (ip: string) => ({ "cf-connecting-ip": ip });
+    const attempt = (fields: Record<string, string> = {}) =>
+      routeResponse(signIn, "/accesso", {
+        headers: from("198.51.100.30"),
+        fields: { email, password: "Password-sbagliata-123", [turnstileField]: "", ...fields },
+      });
+    for (let count = 0; count < 3; count++)
+      expect(await accessError(await attempt())).toMatchObject({ status: 400, key: "errore" });
+    expect(siteverify.requests).toEqual([]);
+    expect(
+      await routeData(loadAccess, "/accesso", { headers: from("198.51.100.30") }),
+    ).toMatchObject({ challenge: true });
+    expect(
+      await routeData(loadAccess, "/accesso", { headers: from("198.51.100.31") }),
+    ).toMatchObject({ challenge: false });
+    // Senza token il modulo si ferma prima di Auth; con il token verificato l'accesso prosegue.
+    expect(await accessError(await attempt())).toMatchObject({
+      status: 400,
+      key: "verifica-non-riuscita",
+      tab: "accedi",
+      values: { email },
+    });
+    expect(siteverify.requests).toEqual([]);
+    expect(await accessError(await attempt({ [turnstileField]: testToken }))).toMatchObject({
+      key: "errore",
+    });
+    expect(siteverify.requests).toEqual([
+      { secret: env.TURNSTILE_SECRET_KEY, response: testToken, remoteip: "198.51.100.30" },
+    ]);
+    // Senza IP, come nelle prove locali, il contatore non esiste.
+    expect(await routeData(loadAccess, "/accesso")).toMatchObject({ challenge: false });
+  });
+
+  it("indica nell'accesso l'ultimo metodo usato da questo browser, senza salvarlo nel database", async () => {
+    const auth = createAuth(env);
+    await auth.handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Ultimo metodo", email, password: "Password-ultimo-metodo" }),
+      }),
+    );
+    const response = await auth.handler(
+      new Request("http://localhost:5173/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:5173" },
+        body: JSON.stringify({ email, password: "Password-ultimo-metodo" }),
+      }),
+    );
+    expect(response.headers.getSetCookie()).toContainEqual(
+      expect.stringMatching(/^fiscalbay\.ultimo_accesso=email;.*Max-Age=2592000/u),
+    );
+    const page = (cookie: string) => routeData(loadAccess, "/accesso", { cookie });
+    expect(await page("fiscalbay.ultimo_accesso=email")).toMatchObject({ lastMethod: "email" });
+    expect(await page("altro=1; fiscalbay.ultimo_accesso=passkey")).toMatchObject({
+      lastMethod: "passkey",
+    });
+    expect(await page("fiscalbay.ultimo_accesso=sconosciuto")).toMatchObject({ lastMethod: null });
+    const columns = await env.DB.prepare(`SELECT name FROM pragma_table_info('user')`).all<{
+      name: string;
+    }>();
+    expect(columns.results.map(({ name }) => name)).not.toContain("lastLoginMethod");
+  });
+
   it("non accetta registrazione, recupero e nuovo link chiamati direttamente su Auth", async () => {
     for (const path of ["sign-up/email", "request-password-reset", "send-verification-email"]) {
       const response = await handleAuthRequest(

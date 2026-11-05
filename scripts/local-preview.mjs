@@ -37,6 +37,7 @@ writeFileSync(
   [
     "REGISTRATION_ALLOWED_EMAILS=[]",
     `BETTER_AUTH_SECRET=${localSecret}`,
+    "EBAY_TOKEN_SECRET=local-synthetic-ebay-token-secret-32-bytes",
     "GOOGLE_CLIENT_ID=google-test-client",
     "GOOGLE_CLIENT_SECRET=google-test-secret",
     "EBAY_CLIENT_ID=ebay-test-client",

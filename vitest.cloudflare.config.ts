@@ -11,6 +11,7 @@ export default defineConfig({
           REGISTRATION_MODE: "open",
           REGISTRATION_ALLOWED_EMAILS: "[]",
           BETTER_AUTH_SECRET: "fiscalbay-test-secret-at-least-32-bytes",
+          EBAY_TOKEN_SECRET: "fiscalbay-test-ebay-token-secret-32-bytes",
           GOOGLE_CLIENT_ID: "google-test-client",
           GOOGLE_CLIENT_SECRET: "google-test-secret",
           EBAY_CLIENT_ID: "ebay-test-client",

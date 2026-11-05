@@ -185,6 +185,7 @@ export async function startCheckout(
         },
       },
       {
+        key: turn,
         release: () => releaseClaim(env.DB, workspaceId, turn),
         bind: (sessionId) => bindCheckout(env.DB, workspaceId, turn, sessionId),
       },
@@ -376,14 +377,19 @@ async function startLifetimeCheckout(
             : "sold-out",
       };
     const product = stripeId(price.product);
+    const turn = claim;
     const coupon = context.offer.credit
-      ? await createLifetimeCredit(stripe, {
-          amount: context.offer.credit,
-          product,
-          redeemBy: reservation.expiresAt,
-          workspaceId: context.workspaceId,
-          name: appCopy[input.language].settings.plan.lifetimeCreditName,
-        })
+      ? await createLifetimeCredit(
+          stripe,
+          {
+            amount: context.offer.credit,
+            product,
+            redeemBy: reservation.expiresAt,
+            workspaceId: context.workspaceId,
+            name: appCopy[input.language].settings.plan.lifetimeCreditName,
+          },
+          turn,
+        )
       : null;
     const slot = reservation;
     return await openManagedSession(
@@ -406,6 +412,7 @@ async function startLifetimeCheckout(
         },
       },
       {
+        key: turn,
         release: () => releaseUnboundReservation(env.DB, context.workspaceId, slot),
         // Un'altra richiesta dello stesso spazio può aver già ripreso il posto.
         bind: (sessionId) => bindLifetimeSession(env.DB, context.workspaceId, slot, sessionId),
@@ -449,14 +456,18 @@ async function openManagedSession(
   stripe: Stripe,
   request: Request,
   params: Omit<Parameters<typeof createManagedCheckout>[1], "successUrl" | "cancelUrl">,
-  turn: { release: () => Promise<unknown>; bind: (sessionId: string) => Promise<boolean> },
+  turn: {
+    key: string;
+    release: () => Promise<unknown>;
+    bind: (sessionId: string) => Promise<boolean>;
+  },
 ): Promise<CheckoutResult> {
   const plan = appUrl(env, params.language, planPath);
-  const session = await createManagedCheckout(stripe, {
-    ...params,
-    successUrl: plan,
-    cancelUrl: plan,
-  });
+  const session = await createManagedCheckout(
+    stripe,
+    { ...params, successUrl: plan, cancelUrl: plan },
+    turn.key,
+  );
   if (session.managed_payments?.enabled !== true) {
     await expireCheckout(stripe, session.id);
     logCheckoutFailure(request, "not_managed");

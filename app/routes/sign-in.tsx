@@ -7,6 +7,7 @@ import { BrandPanel } from "~/components/access/brand-panel";
 import { EmailField, PasswordField } from "~/components/access/credential-fields";
 import { usePasswordCheck } from "~/components/access/password-check";
 import { EbayMark, GoogleMark } from "~/components/access/marks";
+import { useLastUsed } from "~/components/access/last-used";
 import { PasskeyButton } from "~/components/access/passkey-button";
 import { rise } from "~/components/access/rise";
 import { AccessNotice, VerifyEmail } from "~/components/access-notice";
@@ -31,7 +32,7 @@ import { useCopy } from "~/components/copy-context";
 import { useTurnstile } from "~/components/turnstile";
 import { accessPath, privacyPath, securityReturnPath, termsPath } from "../app-links";
 import { areaPage } from "../account-area.server";
-import { accessAction, accessLoader } from "../account-page.server";
+import { accessAction, accessLoader, type LoginMethod } from "../account-page.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { turnstileActions } from "../turnstile";
@@ -149,20 +150,38 @@ function ReturnToField() {
   return target ? <input type="hidden" name="returnTo" value={target} /> : null;
 }
 
-function SocialForms() {
+function SocialForms({ lastMethod }: { lastMethod?: LoginMethod | null }) {
   const { t: copy } = useCopy();
   const formAction = useAccessAction();
   const t = copy.access;
+  const google = useLastUsed(lastMethod === "google");
+  const ebay = useLastUsed(lastMethod === "ebay");
   return (
     <form method="post" action={formAction} className="grid gap-2">
       <ReturnToField />
-      <Button type="submit" variant="outline" name="intent" value="google" className="w-full">
+      <Button
+        type="submit"
+        variant="outline"
+        name="intent"
+        value="google"
+        className="w-full"
+        {...google.props}
+      >
         <GoogleMark />
         {t.google}
+        {google.badge}
       </Button>
-      <Button type="submit" variant="outline" name="intent" value="ebay" className="w-full">
+      <Button
+        type="submit"
+        variant="outline"
+        name="intent"
+        value="ebay"
+        className="w-full"
+        {...ebay.props}
+      >
         <EbayMark />
         {t.ebay}
+        {ebay.badge}
       </Button>
     </form>
   );
@@ -177,16 +196,102 @@ function OrSeparator() {
   );
 }
 
-function SignInAlternatives({ recovering }: { recovering: boolean }) {
+function SignInAlternatives({
+  recovering,
+  lastMethod,
+}: {
+  recovering: boolean;
+  lastMethod: LoginMethod | null;
+}) {
   const target = useReturnTo();
   if (recovering) return null;
   return (
     <>
       <OrSeparator />
       <div className="grid gap-2">
-        <SocialForms />
-        <PasskeyButton target={target} />
+        <SocialForms lastMethod={lastMethod} />
+        <PasskeyButton target={target} lastUsed={lastMethod === "passkey"} />
       </div>
+    </>
+  );
+}
+
+/** Scheda di accesso con email e password, con il recupero della password e le alternative. */
+function SignInPanel({
+  remembered,
+  challenge,
+  lastMethod,
+  recovering,
+  setRecovering,
+}: {
+  remembered: Remembered | null;
+  challenge: boolean;
+  lastMethod: LoginMethod | null;
+  recovering: boolean;
+  setRecovering: (recovering: boolean) => void;
+}) {
+  const { t: copy } = useCopy();
+  const formAction = useAccessAction();
+  const t = copy.access;
+  const values = remembered?.values;
+  const signIn = useFieldErrors(t.validation);
+  const signInCheck = usePasswordCheck();
+  // Il recupero passa sempre da Turnstile; l'accesso con password soltanto dopo alcuni tentativi
+  // falliti dallo stesso IP.
+  const recovery = useTurnstile(
+    recovering ? turnstileActions.passwordReset : challenge ? turnstileActions.signIn : null,
+  );
+  return (
+    <>
+      {recovering ? <p className="text-muted-foreground">{t.passwordRecoveryBody}</p> : null}
+      <form
+        method="post"
+        action={formAction}
+        {...signIn.form}
+        onSubmit={(event) => {
+          if (!signIn.check(event)) return;
+          signInCheck.submit(event);
+          recovery.submit(event);
+        }}
+      >
+        <FieldGroup className="gap-3">
+          <ReturnToField />
+          <EmailField
+            id="email"
+            label={t.email}
+            autoComplete="username"
+            defaultValue={remembered?.tab === "accedi" ? values?.email : undefined}
+            v={signIn}
+          />
+          {recovering ? null : (
+            <PasswordField
+              id="password"
+              label={t.password}
+              autoComplete="current-password"
+              v={signIn}
+            />
+          )}
+          {recovering ? null : signInCheck.field}
+          {recovery.field}
+          <Button
+            type="submit"
+            className="w-full"
+            name={recovering ? "intent" : undefined}
+            value={recovering ? "recupera-password" : undefined}
+          >
+            {recovering ? t.passwordRecoverySend : t.signIn}
+          </Button>
+        </FieldGroup>
+      </form>
+      <Button
+        type="button"
+        variant="link"
+        className="h-auto w-fit px-0 py-1"
+        onClick={() => setRecovering(!recovering)}
+      >
+        {recovering ? t.backToSignIn : t.passwordRecovery}
+      </Button>
+      <SignInAlternatives recovering={recovering} lastMethod={lastMethod} />
     </>
   );
 }
@@ -196,10 +301,14 @@ function AccessForms({
   remembered,
   initialTab,
   signUpBody,
+  challenge,
+  lastMethod,
 }: {
   remembered: Remembered | null;
   initialTab: string;
   signUpBody: string;
+  challenge: boolean;
+  lastMethod: LoginMethod | null;
 }) {
   const { t: copy } = useCopy();
   const formAction = useAccessAction();
@@ -207,12 +316,8 @@ function AccessForms({
   const [tab, setTab] = useState(initialTab);
   const [recovering, setRecovering] = useState(false);
   const values = remembered?.values;
-  const signIn = useFieldErrors(t.validation);
   const signUp = useFieldErrors(t.validation);
-  const signInCheck = usePasswordCheck();
   const signUpCheck = usePasswordCheck((input) => signUp.reject(input, t.leakedPassword));
-  // L'accesso con password non passa da Turnstile; il recupero e la registrazione sì.
-  const recovery = useTurnstile(recovering ? turnstileActions.passwordReset : null);
   const registration = useTurnstile(turnstileActions.signUp);
   return (
     <Tabs
@@ -228,55 +333,13 @@ function AccessForms({
         <TabsTrigger value="registrati">{t.signUp}</TabsTrigger>
       </TabsList>
       <TabsContent value="accedi" keepMounted className={cn("grid gap-3", rise)}>
-        {recovering ? <p className="text-muted-foreground">{t.passwordRecoveryBody}</p> : null}
-        <form
-          method="post"
-          action={formAction}
-          {...signIn.form}
-          onSubmit={(event) => {
-            if (!signIn.check(event)) return;
-            signInCheck.submit(event);
-            recovery.submit(event);
-          }}
-        >
-          <FieldGroup className="gap-3">
-            <ReturnToField />
-            <EmailField
-              id="email"
-              label={t.email}
-              autoComplete="username"
-              defaultValue={remembered?.tab === "accedi" ? values?.email : undefined}
-              v={signIn}
-            />
-            {recovering ? null : (
-              <PasswordField
-                id="password"
-                label={t.password}
-                autoComplete="current-password"
-                v={signIn}
-              />
-            )}
-            {recovering ? null : signInCheck.field}
-            {recovery.field}
-            <Button
-              type="submit"
-              className="w-full"
-              name={recovering ? "intent" : undefined}
-              value={recovering ? "recupera-password" : undefined}
-            >
-              {recovering ? t.passwordRecoverySend : t.signIn}
-            </Button>
-          </FieldGroup>
-        </form>
-        <Button
-          type="button"
-          variant="link"
-          className="h-auto w-fit px-0 py-1"
-          onClick={() => setRecovering(!recovering)}
-        >
-          {recovering ? t.backToSignIn : t.passwordRecovery}
-        </Button>
-        <SignInAlternatives recovering={recovering} />
+        <SignInPanel
+          remembered={remembered}
+          challenge={challenge}
+          lastMethod={lastMethod}
+          recovering={recovering}
+          setRecovering={setRecovering}
+        />
       </TabsContent>
       <TabsContent value="registrati" keepMounted className={cn("grid gap-5", rise)}>
         <p className="text-muted-foreground">{signUpBody}</p>
@@ -451,6 +514,8 @@ function AccessPanel({
       remembered={remembered}
       initialTab={remembered && remembered.tab !== "completa" ? remembered.tab : loaderData.tab}
       signUpBody={loaderData.registrationRestricted ? t.registrationRestricted : t.signUpBody}
+      challenge={loaderData.challenge}
+      lastMethod={loaderData.lastMethod}
     />
   );
 }

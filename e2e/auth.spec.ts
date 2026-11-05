@@ -35,6 +35,23 @@ test.describe("area reale", () => {
         });
         await page.goto(response.headers().location);
         const form = page.getByRole("tabpanel", { name: it ? "Accedi" : "Sign in", exact: true });
+        // Il segno dell'ultimo metodo sta soltanto sugli accessi alternativi, fuori dal nome:
+        // l'accesso con password di poco fa non lo porta sul pulsante principale.
+        const google = page.getByRole("button", {
+          name: it ? "Continua con Google" : "Continue with Google",
+        });
+        await expect(
+          form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }),
+        ).not.toHaveAttribute("aria-describedby");
+        await expect(google).not.toHaveAttribute("aria-describedby");
+        await context.addCookies([
+          { name: "fiscalbay.ultimo_accesso", value: "google", url: baseURL! },
+        ]);
+        await page.reload();
+        await expect(google).toHaveAccessibleDescription(it ? "Ultimo usato" : "Last used");
+        await expect(
+          form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }),
+        ).not.toHaveAttribute("aria-describedby");
         await form.getByRole("textbox", { name: "Email", exact: true }).fill(testAccount.email);
         await form.getByRole("textbox", { name: "Password", exact: true }).fill("password-errata");
         await form.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();

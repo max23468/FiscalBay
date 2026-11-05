@@ -398,6 +398,33 @@ describe("limiti dei tentativi", () => {
     },
   );
 
+  it("limita per IP anche il GET che prepara la sfida della passkey", async () => {
+    const prepare = (ip = "203.0.113.4") =>
+      handle("/api/auth/passkey/generate-authenticate-options", {
+        headers: { "cf-connecting-ip": ip },
+      });
+    for (let count = 0; count < 3; count++) expect((await prepare()).status).toBe(202);
+    const response = await prepare();
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("10");
+    expect(services.handler).toHaveBeenCalledTimes(3);
+    expect((await prepare("203.0.113.5")).status).toBe(202);
+    await handle("/api/auth/passkey/generate-register-options", {
+      headers: { "cf-connecting-ip": "203.0.113.4" },
+    });
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toContain(
+      "auth/passkey/generate-register-options|203.0.113.4",
+    );
+  });
+
+  it("limita la preparazione della passkey soltanto dalla radice di Auth", async () => {
+    // Lo stesso nome più in profondità non è la preparazione della passkey e non consuma il limite.
+    await handle("/api/auth/altro/passkey/generate-register-options", {
+      headers: { "cf-connecting-ip": "203.0.113.6" },
+    });
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([]);
+  });
+
   it("scarta la richiesta oltre il limite prima di sessione, corpo e indirizzo", async () => {
     const send = () =>
       handle("/api/auth/change-email", {

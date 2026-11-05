@@ -270,12 +270,7 @@ export function setupScenarios(router: {
     ]);
     await insertCredentials({
       storeId: "webhook-store",
-      accessToken: await sealToken(
-        env.BETTER_AUTH_SECRET,
-        "webhook-store",
-        "access",
-        "access-synthetic",
-      ),
+      accessToken: await sealToken(env, "webhook-store", "access", "access-synthetic"),
       accessExpiresAt: "2026-10-12T12:00:00.000Z",
       refreshExpiresAt: "2027-10-12T12:00:00.000Z",
       grantedAt,

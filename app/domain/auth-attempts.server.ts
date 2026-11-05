@@ -18,6 +18,24 @@ export async function countAuthAttempt(
   return Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000));
 }
 
+/** Secondi di attesa di una finestra già oltre il limite, senza contare un nuovo tentativo. */
+export async function authAttemptWait(
+  db: D1Database,
+  key: string,
+  rule: { window: number; max: number },
+  now: number,
+): Promise<number | null> {
+  const windowMs = rule.window * 1000;
+  const row = await db
+    .prepare(
+      `SELECT "count", "lastRequest" FROM "rateLimit" WHERE "key" = ?1 AND ?2 - "lastRequest" < ?3`,
+    )
+    .bind(key, now, windowMs)
+    .first<{ count: number; lastRequest: number }>();
+  if (!row || row.count < rule.max) return null;
+  return Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000));
+}
+
 export function purgeAuthAttempts(db: D1Database, now: number) {
   return db
     .prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?')

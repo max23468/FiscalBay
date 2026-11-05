@@ -538,6 +538,44 @@ describe("Better Auth su Workers e D1", () => {
     await env.DB.prepare('DELETE FROM "user" WHERE "id" = ?').bind(id).run();
   });
 
+  it("rifiuta una password violata inviando a Have I Been Pwned solo il prefisso dell'hash", async () => {
+    const origin = "https://test.fiscalbay.it";
+    const auth = createAuth(mailEnv(emailSender(), { APP_ORIGIN: origin }));
+    const password = "Password-violata-di-prova";
+    const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(password));
+    const sha1 = [...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase();
+    const requested: string[] = [];
+    const range = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      requested.push(input instanceof Request ? input.url : String(input));
+      return new Response(`0000000000000000000000000000000000A:0\r\n${sha1.slice(5)}:42`);
+    });
+    const signUp = (email: string, value: string) =>
+      auth.handler(
+        new Request(`${origin}/api/auth/sign-up/email`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin },
+          body: JSON.stringify({ name: "Password violata", email, password: value }),
+        }),
+      );
+    try {
+      const rejected = await signUp("violata@example.invalid", password);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toMatchObject({ code: "PASSWORD_COMPROMISED" });
+      expect(requested).toEqual([`https://api.pwnedpasswords.com/range/${sha1.slice(0, 5)}`]);
+      expect((await signUp("sicura@example.invalid", "Un-altra-password-lunga")).ok).toBe(true);
+      expect(
+        await env.DB.prepare('SELECT email FROM "user" WHERE email IN (?, ?)')
+          .bind("violata@example.invalid", "sicura@example.invalid")
+          .all(),
+      ).toMatchObject({ results: [{ email: "sicura@example.invalid" }] });
+    } finally {
+      range.mockRestore();
+    }
+  });
+
   it("recupera l'accesso con una password nuova e revoca le sessioni precedenti", async () => {
     const origin = "http://localhost:5173";
     const auth = createAuth(env);

@@ -344,7 +344,7 @@ it("legge un negozio senza novità e uno con dieci ordini nuovi", async () => {
       "UPDATE ebay_store_credentials SET access_token = ?, access_expires_at = ? WHERE store_id = ?",
     )
       .bind(
-        await sealToken(env.BETTER_AUTH_SECRET, store, "access", `token-${store}`),
+        await sealToken(env, store, "access", `token-${store}`),
         new Date(now.getTime() + 2 * 3_600_000).toISOString(),
         store,
       )

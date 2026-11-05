@@ -229,9 +229,14 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "Poche ore, al più un giorno",
               ],
               [
-                "Verifica anti-automazione, alla registrazione con password, alla richiesta di una nuova password o di un nuovo link e all’invio di una richiesta di assistenza: indirizzo IP e caratteristiche tecniche del browser e del dispositivo, esaminati dal fornitore di rete",
-                "Impedire registrazioni e invii automatici (legittimo interesse)",
+                "Verifica anti-automazione, alla registrazione con password, alla richiesta di una nuova password o di un nuovo link, all’invio di una richiesta di assistenza e all’accesso con password dopo alcuni tentativi non riusciti: indirizzo IP e caratteristiche tecniche del browser e del dispositivo, esaminati dal fornitore di rete",
+                "Impedire registrazioni, accessi e invii automatici (legittimo interesse)",
                 "Non conserviamo l’esito; presso il fornitore di rete per il tempo da lui stabilito",
+              ],
+              [
+                "Controllo delle password violate, quando scegli una nuova password: i primi cinque caratteri della sua impronta, inviati a un servizio pubblico che raccoglie le password comparse in violazioni di dati, da cui non si risale alla password né a te",
+                "Rifiutare password comparse in violazioni di dati note (legittimo interesse)",
+                "Non conserviamo né l’impronta né l’esito",
               ],
               [
                 "Eventi di accesso e dell’account: tipo di evento (accesso, accesso non riuscito, sessione, modifica dell’account), email, nome, identificativi dell’account e della sessione, metodo di accesso, indirizzo IP, posizione approssimativa e browser",
@@ -289,7 +294,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Cookie e tecnologie simili",
         blocks: [
-          "FiscalBay usa soltanto cookie tecnici: quelli necessari all’accesso e alla sicurezza della sessione e quelli che ricordano una tua scelta, cioè il fuso orario del dispositivo, il negozio scelto nei filtri degli ordini e la visita al sito pubblico senza uscire dall’account. La memoria del browser conserva temporaneamente una selezione di ordini da esportare. Nei moduli di registrazione, recupero della password, nuovo link e assistenza, la verifica anti-automazione del fornitore di rete legge caratteristiche tecniche del browser per distinguere le persone dai programmi automatici. Le pagine pubbliche del sito contano le visite con lo strumento statistico del fornitore di rete, che non usa cookie né altri identificativi salvati nel browser e non segue il visitatore su altri siti. Nessun cookie di analisi, profilazione o pubblicità: per questo non c’è un banner dei cookie.",
+          "FiscalBay usa soltanto cookie tecnici: quelli necessari all’accesso e alla sicurezza della sessione e quelli che ricordano una tua scelta, cioè il fuso orario del dispositivo, il negozio scelto nei filtri degli ordini, la visita al sito pubblico senza uscire dall’account e il metodo usato per l’ultimo accesso, che la pagina di accesso indica per 30 giorni. La memoria del browser conserva temporaneamente una selezione di ordini da esportare. Nei moduli di registrazione, recupero della password, nuovo link e assistenza, e nell’accesso con password dopo alcuni tentativi non riusciti, la verifica anti-automazione del fornitore di rete legge caratteristiche tecniche del browser per distinguere le persone dai programmi automatici. Le pagine pubbliche del sito contano le visite con lo strumento statistico del fornitore di rete, che non usa cookie né altri identificativi salvati nel browser e non segue il visitatore su altri siti. Nessun cookie di analisi, profilazione o pubblicità: per questo non c’è un banner dei cookie.",
         ],
       },
       {
@@ -550,9 +555,14 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "A few hours, at most one day",
               ],
               [
-                "Automation check, when signing up with a password, requesting a new password or a new link and sending a support request: IP address and technical characteristics of the browser and device, examined by the network provider",
-                "Preventing automated sign-ups and submissions (legitimate interest)",
+                "Automation check, when signing up with a password, requesting a new password or a new link, sending a support request and signing in with a password after a few failed attempts: IP address and technical characteristics of the browser and device, examined by the network provider",
+                "Preventing automated sign-ups, sign-ins and submissions (legitimate interest)",
                 "We do not keep the result; at the network provider for the time it sets",
+              ],
+              [
+                "Breached password check, when you choose a new password: the first five characters of its hash, sent to a public service that collects passwords exposed in data breaches, which cannot trace them back to the password or to you",
+                "Rejecting passwords that appear in known data breaches (legitimate interest)",
+                "We keep neither the hash nor the result",
               ],
               [
                 "Sign-in and account events: event type (sign-in, failed sign-in, session, account change), email, name, account and session identifiers, sign-in method, IP address, approximate location and browser",
@@ -610,7 +620,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Cookies and similar technologies",
         blocks: [
-          "FiscalBay only uses technical cookies: those needed for sign-in and session security, and those that remember a choice of yours, namely the device time zone, the store chosen in the order filters and visiting the public website without leaving your account. Browser storage temporarily keeps a selection of orders to export. In the sign-up, password recovery, new link and support forms, the network provider’s automation check reads technical characteristics of the browser to tell people from automated programs. The public website pages count visits with the network provider’s statistics tool, which uses no cookies or other identifiers stored in the browser and does not follow the visitor across other sites. No analytics, profiling or advertising cookies: that is why there is no cookie banner.",
+          "FiscalBay only uses technical cookies: those needed for sign-in and session security, and those that remember a choice of yours, namely the device time zone, the store chosen in the order filters, visiting the public website without leaving your account and the method used for the last sign-in, which the sign-in page points out for 30 days. Browser storage temporarily keeps a selection of orders to export. In the sign-up, password recovery, new link and support forms, and when signing in with a password after a few failed attempts, the network provider’s automation check reads technical characteristics of the browser to tell people from automated programs. The public website pages count visits with the network provider’s statistics tool, which uses no cookies or other identifiers stored in the browser and does not follow the visitor across other sites. No analytics, profiling or advertising cookies: that is why there is no cookie banner.",
         ],
       },
       {
