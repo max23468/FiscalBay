@@ -39,3 +39,4 @@
 - Il testo inglese segue la regola del 27 settembre: «Codice Fiscale» in titoli ed etichette, «tax code» nelle frasi.
 - Un hook degli agenti ferma reset, stash, push forzati, Wrangler fuori dai casi ammessi, modifiche di migration applicate ed em dash; `verify:repo` controlla anche gli indirizzi degli account delle verifiche live e la scadenza di `security.txt`.
 - Le decisioni superate per intero passano in un archivio e le operazioni sono divise in runbook.
+- La mutation divide un modulo in parti di al più 150 mutanti anche quando i tagli fra le funzioni le sbilanciano: una parte troppo grande superava il limite di 60 minuti del job.
