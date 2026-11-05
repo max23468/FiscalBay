@@ -232,11 +232,45 @@ export function rebaseLinks(text, from, to) {
 
 /**
  * Voci di un frammento per gli utenti dell'app, nelle parti «Novità» e «What's new»: soltanto
- * queste chiedono una versione nuova. «Altre modifiche», come i cambi del sito pubblico, della
- * console o interni, viaggiano con la versione già pubblicata (D302).
+ * queste chiedono una versione nuova e cambiano ciò che l'app mostra. «Altre modifiche», come i
+ * cambi del sito pubblico, della console o interni, viaggiano con la versione già pubblicata.
+ * @param {string} fragment
  */
 export const userEntries = (fragment) =>
   fragmentEntries(fragment).filter(({ title }) => title === headings.it || title === headings.en);
+
+/**
+ * Ciò che la pagina Novità mostra di un changelog: per ogni versione con Novità, intestazione con
+ * il giorno e righe delle parti «Novità» e «What's new». Due changelog con la stessa impronta
+ * producono la stessa pagina, anche se cambiano le altre parti o versioni senza Novità.
+ * @param {string} changelog
+ */
+export function visibleNews(changelog) {
+  /** @type {string[]} */
+  const visible = [];
+  /** @type {string | null} */
+  let header = null;
+  let shown = false;
+  /** @type {string[]} */
+  let own = [];
+  const flush = () => {
+    if (header && own.some((line) => line.trim())) visible.push(header, ...own);
+  };
+  for (const line of changelog.split("\n")) {
+    if (line.startsWith("## ")) {
+      flush();
+      header = line.trim();
+      own = [];
+      shown = false;
+    } else if (line.startsWith("### ")) {
+      const title = line.slice(4).trim();
+      shown = title === headings.it || title === headings.en;
+      if (shown) own.push(line.trim());
+    } else if (shown && line.trim()) own.push(line.trim());
+  }
+  flush();
+  return visible.join("\n");
+}
 
 /**
  * Giorno della pubblicazione su `develop`: i frammenti del commit pubblicato entrano nella

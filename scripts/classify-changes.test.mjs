@@ -16,6 +16,7 @@ import { describe, it } from "node:test";
 import {
   mainProcessChange,
   changelogDayOnly,
+  sameNews,
   configFile,
   dependencyChange,
   editedMigrations,
@@ -301,7 +302,8 @@ describe("dipendenze per tipo", () => {
 });
 
 describe("giorno della versione", () => {
-  const undated = "## [2.0.3]\n\n- voce\n\n## [2.0.1] - 2026-11-01\n";
+  const undated =
+    "## [2.0.3]\n\n### Novità\n\n#### Correzioni\n\n- voce\n\n## [2.0.1] - 2026-11-01\n";
   const dated = undated.replace("## [2.0.3]", "## [2.0.3] - 2026-11-02");
 
   it("il solo giorno non distribuisce e non prova nulla", () => {
@@ -315,7 +317,7 @@ describe("giorno della versione", () => {
 
   it("un frammento di changes/ distribuisce, e riunito nel changelog con il giorno no", () => {
     const fragment = "changes/filtro.md";
-    const merged = { before: undated, after: `${undated}- nuova\n` };
+    const merged = { before: undated, after: undated.replace("- voce", "- voce\n- nuova") };
     const added = plan([fragment], [], false, { [fragment]: merged });
     assert.deepEqual([added.gate, added.deploy, added.e2e], ["build", true, false]);
     // Il giorno riunisce i frammenti: il changelog completo resta lo stesso, con il giorno.
@@ -328,6 +330,26 @@ describe("giorno della versione", () => {
     // Un frammento con le sole decisioni non cambia il changelog: resta un documento.
     const same = { before: undated, after: undated };
     assert.deepEqual(plan([fragment], [], false, { [fragment]: same }).gate, "docs");
+  });
+
+  it("distribuisce soltanto un cambio di ciò che la pagina Novità mostra", () => {
+    const fragment = "changes/sito.md";
+    const other = `${undated}### Altre modifiche\n\n- sito\n`;
+    // Altre modifiche, versioni senza Novità aperte o richiuse: la pagina resta la stessa.
+    for (const after of [
+      undated.replace("- voce", "- voce\n\n### Altre modifiche\n\n- sito"),
+      `## [2.0.4]\n\n${undated}`,
+      undated.replace("## [2.0.1] - 2026-11-01", "## [2.0.2] - 2026-11-01\n\n- interna"),
+    ]) {
+      assert.equal(sameNews(undated, after), true, after);
+      const selected = plan([fragment], [], false, { [fragment]: { before: undated, after } });
+      assert.deepEqual([selected.gate, selected.deploy], ["docs", false]);
+    }
+    assert.equal(sameNews(other, other.replace("- sito", "- console")), true);
+    // Una Novità nuova, cambiata o il giorno di una versione con Novità cambiano la pagina.
+    assert.equal(sameNews(undated, undated.replace("- voce", "- altra")), false);
+    assert.equal(sameNews(undated, undated.replace("[2.0.3]", "[2.0.4]")), false);
+    assert.equal(sameNews(undefined, undated), false);
   });
 });
 
