@@ -248,7 +248,7 @@ export function publicationDay({ changelog, register, published, later }, versio
   );
   const open =
     later.some((fragment) => fragmentEntries(fragment).length) && topSection(dated)?.day
-      ? dated.replace(/^## /mu, `## [${nextVersions(version)[0]}]\n\n## `)
+      ? openedChangelog(dated, nextVersions(version)[0])
       : dated;
   return {
     changelog: open,
@@ -301,6 +301,28 @@ export function assertChangesVersion(changelog, fragments, releasedTags = []) {
 export function assertMergedChangesVersion(developChangelog, headChangelog, fragments, tags) {
   const opened = topVersion(headChangelog) !== topVersion(developChangelog);
   assertChangesVersion(opened ? headChangelog : developChangelog, fragments, tags);
+}
+
+/**
+ * Versione che il ciclo apre quando unisce la PR alla base: le voci dei frammenti vogliono una
+ * versione in preparazione e, se quella in cima è stata pubblicata mentre la PR aspettava, si
+ * apre la patch successiva all'ultima pubblicata. Una PR che apre già una versione libera la
+ * tiene. Null quando non serve aprirne una.
+ */
+export function versionToOpen(developChangelog, headChangelog, fragments, releasedTags) {
+  try {
+    assertMergedChangesVersion(developChangelog, headChangelog, fragments, releasedTags);
+    return null;
+  } catch {
+    return nextVersions(latestReleased(releasedTags))[0];
+  }
+}
+
+/** Changelog con `version` aperta in cima, sopra la prima versione. */
+export function openedChangelog(changelog, version) {
+  const at = changelog.search(/^## /mu);
+  if (at < 0) throw new Error("Nessuna versione nel changelog.");
+  return `${changelog.slice(0, at)}## [${version}]\n\n${changelog.slice(at)}`;
 }
 
 export const latestReleased = (releasedTags) =>
