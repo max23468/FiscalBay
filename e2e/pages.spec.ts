@@ -25,6 +25,9 @@ const matrix =
           { width: 1280, scheme: "light" },
         ] as const);
 
+// Bordi dei breakpoint usati dai layout: 360 e 400 px, poi `sm`, `md`, `lg` e `xl`.
+const breakpointEdges = [320, 359, 360, 399, 400, 639, 640, 767, 768, 1023, 1024, 1279, 1280];
+
 const scenarios = production
   ? pageCases.filter(
       (scenario, index) =>
@@ -251,6 +254,22 @@ for (const scenario of scenarios) {
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
         ).toBe(true);
+        // I layout cambiano ai bordi dei breakpoint: una sola combinazione per pagina li prova
+        // tutti, così uno scorrimento orizzontale fra le larghezze della matrice emerge nella PR.
+        if (width === matrix[0].width && scheme === matrix[0].scheme) {
+          const overflowing: number[] = [];
+          for (const edge of breakpointEdges) {
+            await page.setViewportSize({ width: edge, height: 844 });
+            // Le media query si aggiornano al frame successivo al ridimensionamento.
+            await page.evaluate(
+              () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+            );
+            if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1))
+              overflowing.push(edge);
+          }
+          await page.setViewportSize({ width, height: 844 });
+          expect(overflowing, "Scorrimento orizzontale alle larghezze").toEqual([]);
+        }
         // Le immagini sotto la piega si caricano tardi: qui si caricano tutte, così una rotta emerge.
         await page.locator("img").evaluateAll((images) =>
           Promise.all(
