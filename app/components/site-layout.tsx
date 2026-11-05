@@ -12,6 +12,7 @@ import {
   accessPath,
   faqPath,
   featuresPath,
+  guidesPath,
   pricingPath,
   siteSecurityPath,
   visitParam,
@@ -24,6 +25,7 @@ const navItems = [
   { path: pricingPath, key: "pricing" },
   { path: siteSecurityPath, key: "security" },
   { path: faqPath, key: "faq" },
+  { path: guidesPath, key: "guides" },
 ] as const;
 
 /**
@@ -49,20 +51,21 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
       <div
         className={cn(
           siteColumn,
-          "flex h-14 items-center gap-2 min-[360px]:gap-3 md:h-16 md:gap-6",
+          "flex h-14 items-center gap-2 min-[400px]:gap-3 md:h-16 md:gap-6",
         )}
       >
         <a
           href={localizedPath(language)}
           className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
         >
-          <Logo className="h-5 w-auto min-[360px]:h-6 md:h-7" />
+          <Logo className="h-5 w-auto min-[400px]:h-6 md:h-7" />
         </a>
         <nav aria-label={t.site.nav.label} className="max-lg:hidden">
           <NavLinks path={path} className="gap-1 text-sm" />
         </nav>
-        <div className="ml-auto flex items-center gap-1 min-[360px]:gap-2">
-          <div className="lg:hidden">{switchFor(true)}</div>
+        <div className="ml-auto flex items-center gap-1 min-[400px]:gap-2">
+          {/* Sotto i 360 px la lingua passa nel footer, per lasciare spazio ad «Accedi». */}
+          <div className="max-[360px]:hidden lg:hidden">{switchFor(true)}</div>
           <div className="max-lg:hidden">{switchFor(false)}</div>
           {signedIn ? (
             <a href={`${localizedPath(language)}?${visitParam}=0`} {...buttonLink({ size: "sm" })}>
@@ -70,14 +73,16 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
             </a>
           ) : (
             <>
-              {/* Sotto i 440 px resta «Inizia gratis»: la sua pagina porta anche all'accesso. */}
               <a
                 href={signIn}
-                {...buttonLink({ variant: "ghost", size: "sm", className: "max-[440px]:hidden" })}
+                {...buttonLink({ variant: "ghost", size: "sm", className: "max-[400px]:px-2" })}
               >
                 {t.site.signIn}
               </a>
-              <a href={`${signIn}?registrati`} {...buttonLink({ size: "sm" })}>
+              <a
+                href={`${signIn}?registrati`}
+                {...buttonLink({ size: "sm", className: "max-[400px]:px-2" })}
+              >
                 {t.site.start}
               </a>
             </>
@@ -85,7 +90,10 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
         </div>
       </div>
       <nav aria-label={t.site.nav.label} className="border-t lg:hidden">
-        <NavLinks path={path} className={cn(siteColumn, "gap-5 text-sm min-[360px]:gap-7")} />
+        <NavLinks
+          path={path}
+          className={cn(siteColumn, "gap-2 text-sm min-[360px]:gap-3 min-[400px]:gap-6")}
+        />
       </nav>
     </header>
   );
@@ -100,7 +108,9 @@ function NavLinks({ path, className }: { path: string; className: string }) {
         <li key={item.key}>
           <a
             href={localizedPath(language, item.path)}
-            aria-current={path === item.path ? "page" : undefined}
+            aria-current={
+              path === item.path || path.startsWith(`${item.path}/`) ? "page" : undefined
+            }
             className="inline-flex min-h-11 items-center rounded-md px-2.5 text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:font-medium aria-[current=page]:text-foreground max-lg:rounded-none max-lg:border-b-2 max-lg:border-transparent max-lg:px-0 max-lg:aria-[current=page]:border-primary lg:min-h-0 lg:py-1.5"
           >
             {t.site.nav[item.key]}
@@ -129,7 +139,7 @@ export function SiteLayout({
       <main id={mainContentId} tabIndex={-1} className="flex-1 outline-none">
         {children}
       </main>
-      <SiteFooter />
+      <SiteFooter path={path} />
       {token ? (
         <script defer src={webAnalyticsScript} data-cf-beacon={webAnalyticsBeacon(token)} />
       ) : null}

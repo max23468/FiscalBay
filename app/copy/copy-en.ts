@@ -1031,10 +1031,10 @@ export const en: AppCopy = {
       pricing: "Pricing",
       security: "Security",
       faq: "FAQ",
+      guides: "Guides",
     },
     independent: "Independent service, not affiliated with eBay.",
     support: "Support",
-    guides: "Guides",
   },
   supportPage: {
     title: "Support",
