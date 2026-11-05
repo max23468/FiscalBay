@@ -31,7 +31,8 @@ const navItems = [
 /**
  * Barra superiore delle pagine pubbliche (D202): logo, pagine, lingua, `Accedi` e `Inizia gratis`,
  * oppure `Apri l'app` con una sessione. Sotto i 1024 px le pagine passano in una seconda riga sempre
- * visibile, allineate al logo con spazi uguali, senza menu da aprire, e la lingua mostra il solo codice.
+ * visibile, senza menu da aprire: sotto i 640 px distribuite con spazi uguali anche ai lati, poi
+ * allineate al logo con spazi fissi, e la lingua mostra il solo codice.
  * `path` è la pagina corrente senza prefisso di lingua, per lingua e voce attiva.
  */
 function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
@@ -92,7 +93,7 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
       <nav aria-label={t.site.nav.label} className="border-t lg:hidden">
         <NavLinks
           path={path}
-          className={cn(siteColumn, "gap-2 text-sm min-[360px]:gap-3 min-[400px]:gap-6")}
+          className={cn(siteColumn, "justify-evenly gap-2 text-sm sm:justify-start sm:gap-10")}
         />
       </nav>
     </header>
