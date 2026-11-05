@@ -480,7 +480,7 @@ test.describe("area reale", () => {
           const revalidated = page.waitForResponse(
             (response) =>
               response.request().method() === "GET" &&
-              response.url().includes("/impostazioni/piano.data"),
+              /\/(?:impostazioni\/piano|settings\/plan)\.data/u.test(response.url()),
           );
           await confirmation.click();
           await revalidated;
@@ -734,7 +734,7 @@ test.describe("area reale", () => {
       await expect(dialog).toContainText(left(4));
       // Lo sblocco arriva al server e la risposta si perde per strada.
       await page.route(
-        (url) => url.pathname.endsWith("/app/ordini.data"),
+        (url) => /\/app\/(?:ordini|orders)\.data$/u.test(url.pathname),
         async (route) => {
           if (route.request().method() !== "POST") return route.fallback();
           await route.fetch();
@@ -886,7 +886,8 @@ for (const language of ["it", "en"] as const) {
       });
       const retried = page.waitForResponse(
         (response) =>
-          response.url().includes("/ordini.data") && response.request().method() === "POST",
+          /\/(?:ordini|orders)\.data/u.test(response.url()) &&
+          response.request().method() === "POST",
       );
       await failed.getByRole("button", { name: t("Riprova", "Try again"), exact: true }).click();
       await expect(failed).toContainText(t("Verifica in corso", "Verification in progress"));
@@ -1533,7 +1534,7 @@ test.describe("negozi e impostazioni", () => {
         const errors: string[] = [];
         page.on("pageerror", (error) => errors.push(error.message));
         try {
-          await open(page, `${prefix}/${route}`, "ordinario");
+          await open(page, pagePath(prefix, `/${route}`), "ordinario");
           expect(errors, route).toEqual([]);
           if (route.startsWith("impostazioni/")) {
             await expect(
@@ -1612,7 +1613,7 @@ test.describe("negozi e impostazioni", () => {
       // dato e soltanto Riprova, su ogni pagina; resta la barra degli scenari.
       await setScenario(page, "servizio-non-disponibile");
       for (const section of ["ordini", "negozi", "impostazioni", "impostazioni/account"]) {
-        const response = await page.goto(`${pagePath(prefix, "/anteprima")}/${section}`);
+        const response = await page.goto(pagePath(prefix, `/anteprima/${section}`));
         expect(response?.status()).toBe(503);
         await expect(
           page.getByRole("heading", {
@@ -1625,7 +1626,7 @@ test.describe("negozi e impostazioni", () => {
         );
         await expect(page.getByRole("link", { name: t("Riprova", "Try again") })).toHaveAttribute(
           "href",
-          `${pagePath(prefix, "/anteprima")}/${section}`,
+          pagePath(prefix, `/anteprima/${section}`),
         );
         await expect(page.getByRole("article")).toHaveCount(0);
         await expect(page.getByRole("navigation")).toHaveCount(0);

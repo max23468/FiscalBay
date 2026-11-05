@@ -292,7 +292,9 @@ for (const width of [390, 768, 1440]) {
       await expect(appearance).toBeInViewport({ ratio: 1 });
       if (width >= 768) {
         await expect(
-          page.locator('a[aria-current="true"][href$="/impostazioni/aspetto"]'),
+          page.locator(
+            `a[aria-current="true"][href$="${it ? "/impostazioni/aspetto" : "/settings/appearance"}"]`,
+          ),
         ).toBeVisible();
         await expect
           .poll(async () => {
@@ -304,7 +306,9 @@ for (const width of [390, 768, 1440]) {
         await expect
           .poll(() =>
             page
-              .locator('a[aria-current="true"][href$="/impostazioni/aspetto"]')
+              .locator(
+                `a[aria-current="true"][href$="${it ? "/impostazioni/aspetto" : "/settings/appearance"}"]`,
+              )
               .evaluate((link) => {
                 const item = link.parentElement!.getBoundingClientRect();
                 const indicator = link
@@ -689,7 +693,7 @@ test.describe("assistenza reale", () => {
       const sent = page.waitForResponse(
         (response) =>
           response.request().method() === "POST" &&
-          response.url().includes("/app/impostazioni/supporto"),
+          /\/app\/(?:impostazioni\/supporto|settings\/support)/u.test(response.url()),
       );
       await send.click();
       expect((await sent).status()).toBe(200);

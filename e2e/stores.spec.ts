@@ -294,13 +294,17 @@ test.describe("impostazioni e profilo", () => {
             .locator("#settings-privacy")
             .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
           await expect(
-            page.locator('nav a[aria-current=true][href$="/impostazioni/privacy"]'),
+            page.locator(
+              `nav a[aria-current=true][href$="${prefix ? "/settings/privacy" : "/impostazioni/privacy"}"]`,
+            ),
           ).toBeVisible();
           await page
             .locator("#settings-aspetto")
             .evaluate((el) => window.scrollBy(0, el.getBoundingClientRect().top - 210));
           await expect(
-            page.locator('nav a[aria-current=true][href$="/impostazioni/aspetto"]'),
+            page.locator(
+              `nav a[aria-current=true][href$="${prefix ? "/settings/appearance" : "/impostazioni/aspetto"}"]`,
+            ),
           ).toBeVisible();
         }
         await open(page, pagePath(prefix, "/anteprima/impostazioni/privacy"));
@@ -543,7 +547,10 @@ test.describe("abbonamento nel piano", () => {
           }),
         ).toHaveAttribute(
           "href",
-          `${prefix}/${target.url().includes("/anteprima/") ? "anteprima" : "app"}/impostazioni/piano`,
+          pagePath(
+            prefix,
+            `/${/\/(?:anteprima|preview)\//u.test(target.url()) ? "anteprima" : "app"}/impostazioni/piano`,
+          ),
         );
         await confirm.getByRole("button", { name: it ? "Annulla" : "Cancel" }).click();
       };

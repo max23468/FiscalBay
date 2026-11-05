@@ -322,7 +322,8 @@ for (const language of ["it", "en"] as const) {
       const legal = page.getByRole("navigation", {
         name: language === "it" ? "Documenti legali" : "Legal documents",
       });
-      await expect(legal.getByRole("link")).toHaveCount(3);
+      // Termini, Privacy, Guide e Supporto.
+      await expect(legal.getByRole("link")).toHaveCount(4);
       // Il footer resta su una riga per elemento anche sugli smartphone più stretti.
       if (width === 500) {
         await page.setViewportSize({ width: 360, height: 666 });
@@ -602,7 +603,9 @@ test.describe("impostazioni", () => {
       await expect.poll(() => posts.length).toBe(before + 2);
       expect(posts.at(-1)!.fields.get("intent")).toBe("passkey-add");
       expect(
-        posts.some((post) => post.path.includes("/api/auth") || post.path.endsWith("/accesso")),
+        posts.some(
+          (post) => post.path.includes("/api/auth") || /\/(?:accesso|sign-in)$/u.test(post.path),
+        ),
       ).toBe(false);
       await expect.poll(() => noPageOverflow(page)).toBe(true);
       await page.screenshot({
@@ -865,7 +868,7 @@ for (const language of ["it", "en"] as const) {
         : "This password appears in known data breaches. Choose a different one.",
     );
     expect(checks).toEqual([{ username: "fiscalbay", password: "una-password-lunga" }]);
-    await expect(page).toHaveURL(/\/accesso$/u);
+    await expect(page).toHaveURL(it ? /\/accesso$/u : /\/en\/sign-in$/u);
     await password.fill("un-altra-password-lunga");
     await expect(password).not.toHaveAttribute("aria-invalid");
   });

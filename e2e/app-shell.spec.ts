@@ -465,7 +465,8 @@ for (const language of ["it", "en"] as const) {
           await expect(card).toContainText("Partita IVA");
           const unlocked = page.waitForResponse(
             (response) =>
-              response.url().endsWith("/ordini.data") && response.request().method() === "POST",
+              /\/(?:ordini|orders)\.data$/u.test(response.url()) &&
+              response.request().method() === "POST",
           );
           await card
             .getByRole("button", {

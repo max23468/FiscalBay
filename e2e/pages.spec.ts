@@ -111,7 +111,7 @@ for (const scenario of scenarios) {
               page.waitForResponse(
                 (response) =>
                   response.request().method() === "POST" &&
-                  new URL(response.url()).pathname.endsWith("/accesso"),
+                  /\/(?:accesso|sign-in)$/u.test(new URL(response.url()).pathname),
                 { timeout: 30_000 },
               ),
               signIn.getByRole("button", { name: "Accedi", exact: true }).click(),
@@ -236,7 +236,7 @@ for (const scenario of scenarios) {
         expect(nonces.length).toBeGreaterThan(0);
         expect(new Set(nonces)).toEqual(new Set([nonce]));
         checked("CSP e nonce degli script");
-        await expect(page).toHaveTitle(/^FiscalBay \| /);
+        await expect(page).toHaveTitle(/ \| FiscalBay$/);
         await expect(page.locator("main")).toBeVisible();
         await expect(page.getByRole("heading").first()).toBeVisible();
         await expect(page.locator("html")).toHaveAttribute(
