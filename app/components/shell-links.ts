@@ -12,7 +12,7 @@ import {
 
 import type { AppCopy } from "../app-copy";
 import { appHref, visitParam, type AppLinks } from "../app-links";
-import { languageNames, localizedPath, type Language } from "../i18n";
+import { canonicalPath, languageNames, localizedPath, type Language } from "../i18n";
 
 /**
  * Voce del menu dell'avatar; `reloadDocument` per le pagine fuori dalle route dell'app,
@@ -61,7 +61,7 @@ export function accountMenu(links: AppLinks, t: AppCopy, whatsNew = false): Acco
 
 /** Sezione dell'area: la parte dell'indirizzo dopo `app` o `anteprima`. */
 export function areaSection(pathname: string) {
-  const parts = pathname.split("/");
+  const parts = canonicalPath(pathname).split("/");
   const at = parts.findIndex((part) => part === "app" || part === "anteprima");
   return at < 0 ? "" : (parts[at + 1] ?? "");
 }

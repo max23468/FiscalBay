@@ -39,7 +39,7 @@ export const en: AppCopy = {
         back: "Back to orders",
       },
     },
-    skipToContent: "Skip to content",
+    skipToContent: "Skip to main content",
     mainNav: "Main navigation",
     orders: "Orders",
     stores: "eBay stores",
@@ -423,7 +423,7 @@ export const en: AppCopy = {
     deleteStore: "Delete store",
     disconnectTitle: (name) => `Disconnect ${name}?`,
     disconnectBody:
-      "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later. To also revoke the authorization on eBay, remove FiscalBay from third-party apps in your eBay account’s security settings.",
+      "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later. To also revoke the authorisation on eBay, remove FiscalBay from third-party apps in your eBay account’s security settings.",
     disconnectSubscription:
       "Disconnecting the store does not cancel the Premium subscription: scheduled charges still apply.",
     disconnectSubscriptionLink: "Manage subscription",
@@ -1004,7 +1004,7 @@ export const en: AppCopy = {
     reconnectIntro:
       "We’ll take you to eBay to renew the authorisation. Sign in with the seller account of the store you want to reconnect: FiscalBay recognises it and keeps the orders already imported.",
     intro:
-      "We’ll take you to eBay to authorize FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
+      "We’ll take you to eBay to authorise FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [
       "FiscalBay reads orders and the tax codes eBay makes available, read-only.",
       "It changes nothing on eBay and never contacts buyers.",
@@ -1034,6 +1034,7 @@ export const en: AppCopy = {
     },
     independent: "Independent service, not affiliated with eBay.",
     support: "Support",
+    guides: "Guides",
   },
   supportPage: {
     title: "Support",

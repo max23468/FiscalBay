@@ -1,5 +1,6 @@
 import type { BrowserContext, Locator, Page } from "@playwright/test";
-import { expect, networkIdle, test } from "./fixtures";
+import { expect, networkIdle, test, pagePath } from "./fixtures";
+import { canonicalPath } from "../app/i18n.ts";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -16,7 +17,7 @@ import { testAccount } from "./test-account";
 export async function setScenario(page: Page, scenario: string, base = "/anteprima") {
   await page.request.post(base, {
     headers: { origin: new URL(test.info().project.use.baseURL!).origin },
-    form: { scenario, redirectTo: `${base}/ordini` },
+    form: { scenario, redirectTo: pagePath(base, "/ordini") },
     maxRedirects: 0,
   });
 }
@@ -40,15 +41,17 @@ export async function open(page: Page, path = "/anteprima/ordini", scenario?: st
   await page.bringToFront();
   if (scenario) await setScenario(page, scenario);
   await page.goto(path);
+  // Percorso italiano della pagina, anche aperta in inglese, per riconoscere area e sezione.
+  const italianPath = canonicalPath(new URL(path, "http://localhost").pathname);
   // Con un pannello aperto il resto della pagina è inerte: si attende il controllo per id.
-  if (path.includes("/anteprima"))
+  if (italianPath.startsWith("/anteprima"))
     await expect(page.locator("#preview-scenario")).toBeEnabled({ timeout: 20_000 });
   await expect(
     page.getByRole("searchbox", { name: /Cerca ordini|Search orders/u, includeHidden: true }),
   ).toBeEnabled();
   await networkIdle(page);
   await page.evaluate(() => document.fonts.ready);
-  const section = /\/impostazioni\/([^/?#]+)/u.exec(path)?.[1];
+  const section = /\/impostazioni\/([^/?#]+)/u.exec(italianPath)?.[1];
   if (section) {
     // La route deve avere allineato davvero la sezione, anche con hydration differita.
     await expect(page.locator(`#settings-${section}`)).toBeInViewport({ ratio: 1 });
@@ -89,7 +92,7 @@ export async function enter(
 export async function searched(page: Page, query: string, base = "/anteprima") {
   // L'area reale accetta la ricerca soltanto dalla propria origine.
   const response = await page.request.post(
-    base === "/app" ? "/api/v1/orders/search" : `${base}/ricerca`,
+    base === "/app" ? "/api/v1/orders/search" : pagePath(base, "/ricerca"),
     { form: { q: query }, headers: { origin: new URL(page.url()).origin }, maxRedirects: 0 },
   );
   expect(response.status()).toBe(303);

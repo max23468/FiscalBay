@@ -1,5 +1,5 @@
 import { open } from "./components";
-import { expect, test } from "./fixtures";
+import { expect, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
@@ -15,7 +15,7 @@ test.describe("area reale", () => {
       const prefix = language === "it" ? "" : "/en";
       const it = language === "it";
       test(`profilo: modifiche, uscita, attesa e salvataggio ${language}`, async ({ page }) => {
-        await open(page, `${prefix}/anteprima/impostazioni/account`, "ordinario");
+        await open(page, pagePath(prefix, "/anteprima/impostazioni/account"), "ordinario");
         const section = page.getByRole("region", { name: "Account", exact: true });
         const first = section.getByRole("textbox", {
           name: it ? "Nome" : "First name",
@@ -34,7 +34,9 @@ test.describe("area reale", () => {
           .getByRole("navigation", { name: it ? "Categorie" : "Categories" })
           .getByRole("link", { name: it ? /^Piano e pagamenti/u : /^Plan and billing/u })
           .click();
-        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
+        await expect(page).toHaveURL(
+          new RegExp(`${pagePath(prefix, "/anteprima/impostazioni/piano")}$`),
+        );
         const dialog = page.getByRole("alertdialog");
         await expect(dialog).toHaveCount(0);
         await expect(first).toHaveValue(`${original} modificato`);
@@ -51,10 +53,13 @@ test.describe("area reale", () => {
         const gate = new Promise<void>((resolve) => {
           release = resolve;
         });
-        await page.route(`**${prefix}/anteprima/impostazioni/*.data*`, async (route) => {
-          if (route.request().method() === "POST") await gate;
-          await route.continue();
-        });
+        await page.route(
+          `**${pagePath(prefix, "/anteprima/impostazioni")}/*.data*`,
+          async (route) => {
+            if (route.request().method() === "POST") await gate;
+            await route.continue();
+          },
+        );
         await save.click();
         await expect(
           section.getByRole("button", { name: it ? "Salvataggio…" : "Saving…", exact: true }),
@@ -77,7 +82,7 @@ test.describe("area reale", () => {
             .filter({ hasText: it ? "profilo non salvato" : "profile not saved" }),
         ).toBeVisible();
         await orders.click();
-        await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/ordini`));
+        await expect(page).toHaveURL(new RegExp(pagePath(prefix, "/anteprima/ordini")));
       });
 
       test(`errore eliminazione negozio e profilo: conserva finestra e valori ${language}`, async ({
@@ -86,7 +91,7 @@ test.describe("area reale", () => {
         baseURL,
       }) => {
         await useLocalAccount(context, "member", baseURL!);
-        await page.goto(`${prefix}/app/negozi/${testAccount.stores.paused}`);
+        await page.goto(`${pagePath(prefix, "/app/negozi")}/${testAccount.stores.paused}`);
         await page
           .getByRole("button", {
             name: it ? "Scollega ed elimina negozio" : "Disconnect and delete store",
@@ -96,7 +101,7 @@ test.describe("area reale", () => {
         const dialog = page.getByRole("alertdialog");
         const input = dialog.getByRole("textbox");
         await input.fill(testAccount.stores.paused);
-        await page.route("**/app/negozi/*.data*", async (route) => {
+        await page.route(`**${pagePath(prefix, "/app/negozi")}/*.data*`, async (route) => {
           if (route.request().method() !== "POST") return route.continue();
           const form = new URLSearchParams(route.request().postData()!);
           form.set("conferma", "conferma-errata");
@@ -110,7 +115,7 @@ test.describe("area reale", () => {
           .click();
         await expect(dialog.getByRole("alert")).toBeVisible();
         await expect(input).toHaveValue(testAccount.stores.paused);
-        await page.route("**/app/negozi/*.data*", (route) =>
+        await page.route(`**${pagePath(prefix, "/app/negozi")}/*.data*`, (route) =>
           route.request().method() === "POST" ? route.abort("failed") : route.continue(),
         );
         await dialog
@@ -134,17 +139,22 @@ test.describe("area reale", () => {
         });
         const first = page.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
         try {
-          await page.goto(`${prefix}/app/impostazioni/account`, { waitUntil: "commit" });
+          await page.goto(pagePath(prefix, "/app/impostazioni/account"), {
+            waitUntil: "commit",
+          });
           await expect(first).toBeDisabled();
         } finally {
           continueHydration();
         }
-        await page.route("**/app/impostazioni/account.data*", async (route) => {
-          if (route.request().method() !== "POST") return route.continue();
-          const form = new URLSearchParams(route.request().postData()!);
-          form.set("nome", "");
-          await route.continue({ postData: form.toString() });
-        });
+        await page.route(
+          `**${pagePath(prefix, "/app/impostazioni/account")}.data*`,
+          async (route) => {
+            if (route.request().method() !== "POST") return route.continue();
+            const form = new URLSearchParams(route.request().postData()!);
+            form.set("nome", "");
+            await route.continue({ postData: form.toString() });
+          },
+        );
         await first.fill("Valore da conservare");
         await page
           .getByRole("region", { name: "Account", exact: true })
@@ -159,7 +169,7 @@ test.describe("area reale", () => {
             .getByRole("region", { name: "Account", exact: true })
             .getByRole("button", { name: it ? "Salva" : "Save", exact: true }),
         ).toBeEnabled();
-        await page.route("**/app/impostazioni/account.data*", (route) =>
+        await page.route(`**${pagePath(prefix, "/app/impostazioni/account")}.data*`, (route) =>
           route.request().method() === "POST" ? route.abort("failed") : route.continue(),
         );
         await page

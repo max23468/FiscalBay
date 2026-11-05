@@ -3,7 +3,7 @@ import { cn } from "cn";
 import { useCopy } from "~/components/copy-context";
 import { siteColumn } from "~/components/site-column";
 import { appCopy, supportEmail } from "../app-copy";
-import { privacyPath, supportPath, termsPath } from "../app-links";
+import { guidesPath, privacyPath, supportPath, termsPath } from "../app-links";
 import { localizedPath } from "../i18n";
 
 /**
@@ -38,6 +38,9 @@ export function SiteFooter({ className }: { className?: string }) {
           </a>
           <a href={localizedPath(language, privacyPath)} className="link-underline">
             {t.legal.privacyLink}
+          </a>
+          <a href={localizedPath(language, guidesPath)} className="link-underline">
+            {t.site.guides}
           </a>
           <a href={localizedPath(language, supportPath)} className="link-underline">
             {t.site.support}

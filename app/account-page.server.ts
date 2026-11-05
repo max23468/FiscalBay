@@ -8,6 +8,9 @@ import {
   leakedPasswordField,
   ordersPath,
   originUrl,
+  planChoice,
+  planChoiceParam,
+  planPath,
   securityReturnPath,
   visitCookie,
 } from "./app-links";
@@ -266,13 +269,17 @@ export async function accessAction(request: Request) {
     if (wait) return failed("troppi-tentativi", "registrati", wait);
     const check = await turnstileFailure(env, request, form, turnstileActions.signUp);
     if (check) return failed(check, "registrati");
+    // La conferma dell'email apre la pagina Piano con l'offerta scelta in Prezzi, se c'è.
+    const chosen = planChoice(field(planChoiceParam));
     const response = await forward(
       "/sign-up/email",
       {
         email: field("email"),
         password: field("password"),
         name: `${profile.firstName} ${profile.lastName}`,
-        callbackURL: base,
+        callbackURL: chosen
+          ? `${localizedPath(language, planPath)}?${planChoiceParam}=${chosen}`
+          : base,
       },
       true,
     );

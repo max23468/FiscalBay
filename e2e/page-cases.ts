@@ -2,6 +2,16 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 
 import { parseChangelog, releaseChangelog, withChanges } from "../app/changelog.ts";
 import { testAccount } from "./test-account.ts";
+import { canonicalPath, localizedPath } from "../app/i18n.ts";
+
+/**
+ * Indirizzo servito di una pagina: `base` è un prefisso di lingua o di area, italiano o già
+ * localizzato, `path` il seguito con i segmenti italiani, tradotti come nell'app.
+ */
+export function pagePath(base: string, path: string) {
+  const language = base.startsWith("/en") ? "en" : "it";
+  return localizedPath(language, `${canonicalPath(base || "/").replace(/\/$/u, "")}${path}`);
+}
 
 /** Scenari delle route esistenti: le azioni esterne non vengono inviate dal collaudo. */
 export type PageRole = "anonymous" | "member" | "admin-verify" | "admin-granted";
@@ -109,17 +119,17 @@ export const bellName = (language: "it" | "en", unread: number) => {
 
 export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
   const make = (path: string, area: string, options: Partial<PageCase> = {}): PageCase => ({
-    pattern: `${prefix}${path}` || "/",
-    path: `${prefix}${path}` || "/",
+    pattern: pagePath(prefix, path) || "/",
+    path: pagePath(prefix, path) || "/",
     area,
     role: "anonymous",
     status: 200,
     ...options,
   });
   const home = prefix || "/";
-  const access = `${prefix}/accesso`;
-  const orders = `${prefix}/app/ordini`;
-  const admin = `${prefix}/admin/:sezione?/:voce?`;
+  const access = pagePath(prefix, "/accesso");
+  const orders = pagePath(prefix, "/app/ordini");
+  const admin = `${pagePath(prefix, "/admin/:sezione")}?/:voce?`;
   const preview = (path: string, area: string, options: Partial<PageCase> = {}) =>
     make(`/anteprima${path}`, area, { preview: true, ...options });
   return [
@@ -152,7 +162,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
       "account_deletion_in_progress",
     ].map((error) =>
       make(`/auth/error?error=${error}&provider=ebay`, "auth", {
-        pattern: `${prefix}/auth/error`,
+        pattern: pagePath(prefix, "/auth/error"),
       }),
     ),
     make("/cancellazione-account", "auth"),
@@ -165,19 +175,27 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/prezzi", "public", { role: "member" }),
     make("/sicurezza", "public"),
     make("/faq", "public", { remote: !prefix }),
+    make("/guide", "public"),
+    make("/guide/trovare-codice-fiscale-ordini-ebay", "public", {
+      pattern: pagePath(prefix, "/guide/:guida"),
+    }),
+    make("/guide/non-esiste", "public", {
+      pattern: pagePath(prefix, "/guide/:guida"),
+      status: 404,
+    }),
     make("/app/negozi/collega", "stores", { redirect: access }),
     make("/app/negozi/collega", "stores", { role: "member" }),
     make(`/app/negozi/collega?ricollega=${testAccount.stores.expiring}`, "stores", {
       role: "member",
-      pattern: `${prefix}/app/negozi/collega`,
+      pattern: pagePath(prefix, "/app/negozi/collega"),
     }),
     make("/app/negozi/collega?ricollega", "stores", {
       role: "member",
       status: 400,
-      pattern: `${prefix}/app/negozi/collega`,
+      pattern: pagePath(prefix, "/app/negozi/collega"),
     }),
     make("/app/negozi", "stores", {
-      pattern: `${prefix}/app/negozi/:negozio?`,
+      pattern: `${pagePath(prefix, "/app/negozi/:negozio")}?`,
       redirect: access,
       remote: !prefix,
     }),
@@ -185,7 +203,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     ...["", `/${testAccount.stores.active}`, "/non-esiste"].map((suffix) =>
       make(`/app/negozi${suffix}`, "stores", {
         role: "member",
-        pattern: `${prefix}/app/negozi/:negozio?`,
+        pattern: `${pagePath(prefix, "/app/negozi/:negozio")}?`,
         status: suffix === "/non-esiste" ? 404 : 200,
         remote: !prefix && suffix !== "/non-esiste",
         dialog: suffix === `/${testAccount.stores.active}`,
@@ -194,25 +212,25 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/app/profilo", "profile", { redirect: access }),
     make("/app/profilo", "profile", {
       role: "member",
-      redirect: `${prefix}/app/impostazioni/account`,
+      redirect: pagePath(prefix, "/app/impostazioni/account"),
       remote: !prefix,
     }),
     make("/app/impostazioni", "settings", {
-      pattern: `${prefix}/app/impostazioni/:sezione?`,
+      pattern: `${pagePath(prefix, "/app/impostazioni/:sezione")}?`,
       redirect: access,
     }),
     // Profilo e Sicurezza sono riunite in Account: i vecchi indirizzi portano lì.
     ...["profilo", "sicurezza"].map((section) =>
       make(`/app/impostazioni/${section}`, "settings", {
         role: "member",
-        pattern: `${prefix}/app/impostazioni/:sezione?`,
-        redirect: `${prefix}/app/impostazioni/account`,
+        pattern: `${pagePath(prefix, "/app/impostazioni/:sezione")}?`,
+        redirect: pagePath(prefix, "/app/impostazioni/account"),
       }),
     ),
     ...["", ...settings.map((section) => `/${section}`), "/non-esiste"].map((suffix) =>
       make(`/app/impostazioni${suffix}`, "settings", {
         role: "member",
-        pattern: `${prefix}/app/impostazioni/:sezione?`,
+        pattern: `${pagePath(prefix, "/app/impostazioni/:sezione")}?`,
         status: suffix === "/non-esiste" ? 404 : 200,
         remote: !prefix && (suffix === "" || suffix === "/sicurezza"),
       }),
@@ -251,10 +269,10 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
         status: suffix === "/non-esiste" ? 404 : 200,
       }),
     ),
-    preview("", "orders", { redirect: `${prefix}/anteprima/ordini` }),
+    preview("", "orders", { redirect: pagePath(prefix, "/anteprima/ordini") }),
     ...["", "/ord-02", "/non-esiste"].map((suffix) =>
       preview(`/ordini${suffix}`, "orders", {
-        pattern: `${prefix}/anteprima/ordini/:ordine?`,
+        pattern: `${pagePath(prefix, "/anteprima/ordini/:ordine")}?`,
         status: suffix === "/non-esiste" ? 404 : 200,
         remote: !prefix && !suffix,
         dialog: suffix === "/ord-02",
@@ -262,14 +280,14 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     ),
     ...["", "/neg-vintage", "/non-esiste"].map((suffix) =>
       preview(`/negozi${suffix}`, "stores", {
-        pattern: `${prefix}/anteprima/negozi/:negozio?`,
+        pattern: `${pagePath(prefix, "/anteprima/negozi/:negozio")}?`,
         status: suffix === "/non-esiste" ? 404 : 200,
         dialog: suffix === "/neg-vintage",
       }),
     ),
     ...["", ...settings.map((section) => `/${section}`), "/non-esiste"].map((suffix) =>
       preview(`/impostazioni${suffix}`, "settings", {
-        pattern: `${prefix}/anteprima/impostazioni/:sezione?`,
+        pattern: `${pagePath(prefix, "/anteprima/impostazioni/:sezione")}?`,
         status: suffix === "/non-esiste" ? 404 : 200,
       }),
     ),
@@ -280,8 +298,8 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     ...(["anonymous", "member"] as const).map((role) =>
       make(`/api/v1/exports/${missingExportFile}`, "settings", {
         role,
-        pattern: `${prefix}/api/v1/exports/:file`,
-        redirect: role === "member" ? `${prefix}/app/impostazioni/esportazione` : access,
+        pattern: pagePath(prefix, "/api/v1/exports/:file"),
+        redirect: role === "member" ? pagePath(prefix, "/app/impostazioni/esportazione") : access,
       }),
     ),
     make("/pagina-inesistente", "public", { status: 404, pattern: "*", remote: !prefix }),

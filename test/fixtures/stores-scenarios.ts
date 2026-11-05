@@ -68,7 +68,10 @@ export async function quotaUsed(): Promise<number> {
 }
 
 export function storesPage(path: string, cookie: string) {
-  return callRoute(loadStores, path, { cookie, params: { negozio: path.split("/negozi/")[1] } });
+  return callRoute(loadStores, path, {
+    cookie,
+    params: { negozio: path.split(/\/(?:negozi|stores)\//u)[1] },
+  });
 }
 
 export function storeForm(cookie: string, fields: Record<string, string>, origin = testOrigin) {

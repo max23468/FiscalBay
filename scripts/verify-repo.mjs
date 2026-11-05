@@ -7,6 +7,7 @@
  * Uso: node scripts/verify-repo.mjs [--copy]
  */
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -225,6 +226,48 @@ export function checkGateJobs(files) {
     .map((job) => `${ci.path}: «${job.trim().split(":")[0]}» dopo gate senza !cancelled()`);
 }
 
+/**
+ * Impronte SHA-256 degli indirizzi degli account delle verifiche live, che restano
+ * nell'inventario privato (AGENTS): il controllo li riconosce senza scriverli qui.
+ */
+const privateAddressHashes = new Set([
+  "b48ba865305b142dccb2743171b8b490611bef089390a98ea6ad2ce2abe8d2a0",
+]);
+
+/** Nessun indirizzo degli account delle verifiche live in file, test, fixture o documenti. */
+export function checkPrivateAddresses(files, hashes = privateAddressHashes) {
+  const errors = [];
+  for (const { path: file, text } of files)
+    for (const [index, line] of text.split("\n").entries())
+      for (const [address] of line.matchAll(/[\w.%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/giu))
+        if (hashes.has(createHash("sha256").update(address.toLowerCase()).digest("hex")))
+          errors.push(`${file}:${index + 1}: indirizzo di un account delle verifiche live`);
+  return errors;
+}
+
+/** Giorni di anticipo con cui `security.txt` chiede il rinnovo della scadenza (RFC 9116). */
+const securityTxtNotice = 30;
+
+/**
+ * `security.txt` ha contatto, indirizzo canonico e una scadenza entro un anno: una scadenza
+ * vicina ferma il gate prima che il file diventi non valido per chi segnala una vulnerabilità.
+ */
+export function checkSecurityTxt(files, now = new Date()) {
+  const file = files.find(({ path: name }) => name === "public/.well-known/security.txt");
+  if (!file) return ["public/.well-known/security.txt: file assente"];
+  const field = (name) => file.text.match(new RegExp(`^${name}:\\s*(\\S+)\\s*$`, "mu"))?.[1];
+  const errors = [];
+  for (const name of ["Contact", "Canonical"])
+    if (!field(name)) errors.push(`${file.path}: campo ${name} assente`);
+  const expires = Date.parse(field("Expires") ?? "");
+  const day = 86_400_000;
+  if (Number.isNaN(expires)) errors.push(`${file.path}: campo Expires assente o non valido`);
+  else if (expires - now.getTime() < securityTxtNotice * day)
+    errors.push(`${file.path}: Expires entro ${securityTxtNotice} giorni, da rinnovare`);
+  else if (expires - now.getTime() > 366 * day) errors.push(`${file.path}: Expires oltre un anno`);
+  return errors;
+}
+
 export const checks = {
   "sigle di piano": checkPlanCodes,
   fixture: checkFixtures,
@@ -232,6 +275,8 @@ export const checks = {
   "versioni degli strumenti": checkToolPins,
   "Action fissate": checkActionPins,
   "job dopo Node 26": checkGateJobs,
+  "indirizzi privati": (files) => checkPrivateAddresses(files),
+  "security.txt": (files) => checkSecurityTxt(files),
 };
 
 function readRepository(root) {

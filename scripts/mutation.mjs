@@ -252,18 +252,33 @@ export function shardRanges(mutants, shards, lastLine) {
   }));
 }
 
-/** Intervalli delle parti del modulo, una ogni `mutantsPerShard` mutanti dove i tagli lo consentono. */
+/**
+ * Parti del modulo con al più `mutantsPerShard` mutanti ciascuna dove i tagli lo consentono.
+ * I tagli cadono fra le funzioni, quindi le parti escono sbilanciate: se la più grande supera
+ * il limite si prova con una parte in più, fino a quattro oltre il minimo, tenendo la divisione
+ * con la parte più piccola. Con due parti `stores.server.ts` ne aveva una da 162 mutanti che
+ * superava i 60 minuti del job.
+ */
+export function shardPlan(mutants, lastLine) {
+  const inside = (range) =>
+    mutants.filter(({ start, end }) => start >= range.start && end <= range.end).length;
+  const minimum = Math.max(1, Math.ceil(mutants.length / mutantsPerShard));
+  let best = null;
+  for (let shards = minimum; shards <= minimum + 4; shards++) {
+    const plan = shardRanges(mutants, shards, lastLine).map((range) => ({
+      ...range,
+      mutants: inside(range),
+    }));
+    const largest = Math.max(...plan.map((part) => part.mutants));
+    if (best === null || largest < best.largest) best = { plan, largest };
+    if (largest <= mutantsPerShard) break;
+  }
+  return best.plan;
+}
+
+/** Intervalli delle parti del modulo, secondo `shardPlan`. */
 export async function moduleShards(file) {
-  const mutants = await mutantLines(file);
-  const lastLine = readFileSync(file, "utf8").split("\n").length;
-  return shardRanges(
-    mutants,
-    Math.max(1, Math.ceil(mutants.length / mutantsPerShard)),
-    lastLine,
-  ).map((range) => ({
-    ...range,
-    mutants: mutants.filter(({ start, end }) => start >= range.start && end <= range.end).length,
-  }));
+  return shardPlan(await mutantLines(file), readFileSync(file, "utf8").split("\n").length);
 }
 
 /**

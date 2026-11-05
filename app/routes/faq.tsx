@@ -18,7 +18,13 @@ export async function loader({ request }: Route.LoaderArgs) {
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin, copy: t } = loaderData;
   return [
-    ...siteMeta({ language, origin, path: faqPath, title: t.title, description: t.description }),
+    ...siteMeta({
+      language,
+      origin,
+      path: faqPath,
+      title: t.metaTitle,
+      description: t.description,
+    }),
     {
       "script:ld+json": {
         "@context": "https://schema.org",

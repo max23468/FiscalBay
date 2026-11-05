@@ -42,7 +42,7 @@ it("lo ZIP dell'account in inglese scrive le date nel fuso dell'utente, senza cl
          VALUES ('e-paid', 'w-a', 'premium', ?1, ?2, 'in_segreta', 73914286, 'EUR', ?1)`,
     ).bind(now, hours(24 * 30)),
   ]);
-  const result = (await callRoute(settingsAction, "/en/app/impostazioni/esportazione", {
+  const result = (await callRoute(settingsAction, "/en/app/settings/export", {
     cookie,
     fields: { intent: "account-export" },
   })) as { ok: boolean; download: string };

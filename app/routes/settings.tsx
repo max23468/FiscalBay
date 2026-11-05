@@ -27,7 +27,7 @@ import { stripeSecretKey } from "../integrations/stripe.server";
 import { botUrl, telegramConfigured } from "../integrations/telegram.server";
 import { deletionReauthenticated } from "../domain/account-deletion.server";
 import { hasWhatsNew } from "../whats-new.server";
-import { languageFromPath } from "../i18n";
+import { languageFromPath, settingsSectionParam } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction, securityAuthPath } from "../security-actions.server";
 import { mergedSettingsSections, settingsSections, type SettingsSection } from "../view-models";
@@ -61,8 +61,9 @@ function isSection(value: string | undefined): value is SettingsSection {
 
 export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
-  const title = isSection(params.sezione)
-    ? `${t.settings.sections[params.sezione].title} | ${t.settings.title}`
+  const section = settingsSectionParam(params.sezione);
+  const title = isSection(section)
+    ? `${t.settings.sections[section].title} | ${t.settings.title}`
     : t.settings.title;
   return [{ title: pageTitle(title) }, { name: "robots", content: "noindex" }];
 }
@@ -71,7 +72,7 @@ export const headers = pageHeaders;
 
 export function loader(args: Route.LoaderArgs) {
   // Profilo e Sicurezza stanno in Account: i vecchi indirizzi, anche delle email, portano lì.
-  const merged = mergedSettingsSections[args.params.sezione ?? ""];
+  const merged = mergedSettingsSections[settingsSectionParam(args.params.sezione) ?? ""];
   if (merged) {
     const url = new URL(args.request.url);
     throw redirect(`${url.pathname.replace(/[^/]+$/u, merged)}${url.search}`, 301);
@@ -84,9 +85,10 @@ export function loader(args: Route.LoaderArgs) {
  * fonte salvata, Sicurezza dai metodi di accesso e dalle sessioni reali.
  */
 async function readSettings({ request, params }: Route.LoaderArgs) {
+  const sezione = settingsSectionParam(params.sezione);
   const area = await requireAccountArea(request);
   const { language, session, account, profile, preferences } = area;
-  if (params.sezione !== undefined && !isSection(params.sezione)) {
+  if (sezione !== undefined && !isSection(sezione)) {
     return data(
       {
         notFound: true as const,
@@ -138,7 +140,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   );
   const [exportData, subscription] = await Promise.all([
     measure("d1", "settings", () =>
-      exportSection(request, area, params.sezione === "esportazione", !!allowance?.premium, now),
+      exportSection(request, area, sezione === "esportazione", !!allowance?.premium, now),
     ),
     measure("d1", "settings", () => subscriptionState(allowance, now)),
   ]);
@@ -150,7 +152,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   };
   const page: SettingsPageData = {
     confirmUnlock,
-    section: params.sezione ?? null,
+    section: sezione ?? null,
     sections: settingsSections,
     services: services(),
     account: accountView,

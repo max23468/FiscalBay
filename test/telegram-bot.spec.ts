@@ -33,6 +33,7 @@ import {
   receipt,
   callbackId,
 } from "./fixtures/telegram-scenarios";
+import { pagePath } from "./fixtures/route-fixtures";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -415,9 +416,9 @@ describe("comandi e pulsanti del bot", () => {
       freeNote: "Notifications are stopped on the Free plan.",
       enabled: "Notifications on",
       paused: "Notifications paused",
-      fiscal: "only with a tax ID",
+      fiscal: "only with a tax identifier",
       all: "all orders",
-      fiscalTitle: "Only orders with a tax ID",
+      fiscalTitle: "Only orders with a tax identifier",
       allTitle: "All orders",
       each: "One message per order",
       digest: "Summary at 18:00 · Rome (Italy)",
@@ -435,7 +436,7 @@ describe("comandi e pulsanti del bot", () => {
         "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
       pause: "Pause",
       resume: "Resume notifications",
-      fiscalOnly: "Only with a tax ID",
+      fiscalOnly: "Only with a tax identifier",
       allOrders: "All orders",
       eachShort: "One per order",
       digestShort: "Summary",
@@ -532,9 +533,12 @@ describe("comandi e pulsanti del bot", () => {
       const { seller, gen, api, say, press } = await storefront(language);
       const settings = {
         text: `🔗 ${t.settings}`,
-        url: `${origin}${t.path}/app/impostazioni/notifiche`,
+        url: `${origin}${pagePath(t.path, "/app/impostazioni/notifiche")}`,
       };
-      const plan = { text: `⭐ ${t.choosePlan}`, url: `${origin}${t.path}/app/impostazioni/piano` };
+      const plan = {
+        text: `⭐ ${t.choosePlan}`,
+        url: `${origin}${pagePath(t.path, "/app/impostazioni/piano")}`,
+      };
       const stores = [
         `🏪 <b>${t.stores}</b>`,
         `🔴 Da ricollegare · <i>${t.notes.reconnect}</i>`,
@@ -1047,7 +1051,7 @@ describe("comandi e pulsanti del bot", () => {
     expect(String(first.params.text)).toContain("🛒 <b>Latest orders</b> · <i>1–5 of 20</i>");
     expect(keyboard(first)).toEqual([
       [{ text: "5 more ›", callback_data: `${gen}:la:5` }],
-      [{ text: "🔗 Open orders", url: `${origin}/en/app/ordini` }],
+      [{ text: "🔗 Open orders", url: `${origin}/en/app/orders` }],
     ]);
     await tap(`${gen}:la:15`, seller.chat, api.fetcher, later(6));
     const lastPage = api.calls.at(-1)!;

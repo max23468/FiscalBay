@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Monitor degli avvisi (OPERATIONS.md, incidenti): query della SQL API che Cloudflare valuta
+ * Monitor degli avvisi (OBSERVABILITY.md, incidenti): query della SQL API che Cloudflare valuta
  * fuori dal Worker, con l'avviso per email all'owner. Coprono ciò che il compito
  * `owner_incidents` non può segnalare: cron fermo, eccezioni, coda dei falliti, spazio D1 ed
  * email non consegnate. Sono policy `custom_analytics` dell'account, riconosciute dal nome:

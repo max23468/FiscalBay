@@ -1,5 +1,5 @@
 import { webAnalyticsCollector, webAnalyticsScript } from "../app/web-analytics";
-import { expect, test } from "./fixtures";
+import { expect, test, pagePath } from "./fixtures";
 
 test(
   "radice pubblica, accesso e area riservata senza sessione né cache",
@@ -7,7 +7,7 @@ test(
   async ({ request }) => {
     for (const prefix of ["", "/en"]) {
       // Sito e accesso rispondono all'anonimo; nessuna risposta del Worker resta in cache.
-      for (const path of [prefix || "/", `${prefix}/accesso`]) {
+      for (const path of [prefix || "/", pagePath(prefix, "/accesso")]) {
         const response = await request.get(path, { maxRedirects: 0 });
         expect(response.status()).toBe(200);
         expect(response.headers()["cache-control"]).toBe("no-store");
@@ -21,11 +21,16 @@ test(
         "/app/negozi/collega",
         "/app/impostazioni/account",
       ]) {
-        const response = await request.get(`${prefix}${path}?redirectTo=https://example.invalid`, {
-          maxRedirects: 0,
-        });
+        const response = await request.get(
+          `${pagePath(prefix, path)}?redirectTo=https://example.invalid`,
+          {
+            maxRedirects: 0,
+          },
+        );
         expect(response.status()).toBe(302);
-        expect(response.headers().location).toMatch(new RegExp(`^${prefix}/accesso(?:\\?|$)`));
+        expect(response.headers().location).toMatch(
+          new RegExp(`^${pagePath(prefix, "/accesso")}(?:\\?|$)`),
+        );
         expect(response.headers()["cache-control"]).toBe("no-store");
       }
     }
@@ -66,19 +71,25 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await expect(bar.getByRole("link", { name: "Prezzi" })).toHaveAttribute("aria-current", "page");
   await expect(bar.getByRole("link", { name: "Accedi" })).toHaveAttribute("href", "/accesso");
   await bar.getByRole("link", { name: "English" }).click();
-  await expect(page).toHaveURL(/\/en\/prezzi$/u);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Pricing");
+  await expect(page).toHaveURL(/\/en\/pricing$/u);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Codice Fiscale pricing for eBay",
+  );
 
   // Sotto i 768 px le pagine stanno in una seconda riga sempre visibile, senza menu da aprire.
   await page.setViewportSize({ width: 360, height: 780 });
   const pages = bar.getByRole("navigation", { name: "Site pages" });
   await expect(pages.getByRole("link")).toHaveText(["Features", "Pricing", "Security", "FAQ"]);
-  await expect(bar.getByRole("link", { name: "Sign in" })).toBeVisible();
+  // Sotto i 400 px resta «Start for free», la cui pagina porta anche all'accesso.
+  await expect(bar.getByRole("link", { name: "Start for free" })).toBeVisible();
+  await expect(bar.getByRole("link", { name: "Sign in" })).toBeHidden();
   await expect(bar.getByRole("link", { name: "Italiano" })).toHaveText("IT");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await pages.getByRole("link", { name: "FAQ" }).click();
   await expect(page).toHaveURL(/\/en\/faq$/u);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Frequently asked questions");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Codice Fiscale questions for eBay",
+  );
 
   await page.goto("/");
   await page.getByRole("link", { name: "Come funziona" }).click();
@@ -92,7 +103,7 @@ test("le pagine del sito mostrano le schermate reali nel tema e nella lingua del
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.goto("/en/funzionalita");
+    await page.goto("/en/features");
     const card = page.getByRole("img", { name: /order card/u });
     await card.scrollIntoViewIfNeeded();
     await expect
@@ -104,6 +115,7 @@ test("le pagine del sito mostrano le schermate reali nel tema e nella lingua del
     const hero = page.getByRole("img", { name: /Elenco Ordini/u });
     await expect
       .poll(() => hero.evaluate((image: HTMLImageElement) => image.currentSrc))
-      .toMatch(new RegExp(`/site/ordini-mobile-it-${scheme}\\.webp$`, "u"));
+      // L'immagine del primo schermo arriva in AVIF, con il WebP per i browser che non lo leggono.
+      .toMatch(new RegExp(`/site/ordini-mobile-it-${scheme}\\.(?:avif|webp)$`, "u"));
   }
 });

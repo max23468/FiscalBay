@@ -1,7 +1,16 @@
 import { env } from "cloudflare:workers";
 
 import { appCopy } from "./app-copy";
-import { faqPath, featuresPath, pricingPath, siteSecurityPath, supportPath } from "./app-links";
+import {
+  faqPath,
+  featuresPath,
+  guidePaths,
+  guidesPath,
+  pricingPath,
+  sitemapPages,
+  siteSecurityPath,
+  supportPath,
+} from "./app-links";
 import { createAuth } from "./auth.server";
 import {
   formatPrice,
@@ -11,10 +20,13 @@ import {
   type PremiumOffer,
 } from "./catalog";
 import { readPurchasesOpen } from "./domain/admission-state.server";
-import { currentFreePromotion } from "./domain/grants.server";
+import { currentFreePromotion, freeQuotaSettings } from "./domain/grants.server";
+import { lifetimeSlotsLeft } from "./domain/lifetime.server";
+import { skipPageCache } from "./page-cache.server";
 import { readSession } from "./domain/sessions.server";
 import { logFailure, tracePhase } from "./errors";
 import { formatDate } from "./format";
+import { guides } from "./copy/guides.server";
 import { sitePages } from "./copy/site-pages.server";
 import { languageFromPath, languages, localizedPath, type Language } from "./i18n";
 
@@ -42,15 +54,12 @@ export async function publicPage(request: Request) {
 
 /**
  * Listino delle pagine pubbliche (§23), lo stesso per Home e Prezzi: ogni prezzo netto con il
- * totale con l'IVA italiana al 22%, la promozione Free in corso con il solo giorno di fine, se c'è, e gli
- * acquisti con le prove aperti o sospesi dalla console. Tutto si legge a ogni richiesta: senza il
- * database la pagina risponde 503 (`areaPage`), senza promettere prova, quota o posti.
+ * totale con l'IVA italiana al 22%, la quota Free, la promozione in corso con il solo giorno di
+ * fine, se c'è, i posti lifetime e gli acquisti con le prove aperti o sospesi dalla console. Senza
+ * il database resta il listino di riserva: i prezzi del catalogo, senza promettere prova, quota,
+ * promozione o posti, e le pagine restano consultabili invece di rispondere 503.
  */
-export async function siteListing(language: Language) {
-  const [admission, freePromotion] = await Promise.all([
-    readPurchasesOpen(env.DB),
-    currentFreePromotion(env.DB),
-  ]);
+export async function siteListing(request: Request, language: Language) {
   const prices = Object.fromEntries(
     premiumOffers.map((offer) => {
       const net = priceGeneration.net[offer];
@@ -60,11 +69,42 @@ export async function siteListing(language: Language) {
       ];
     }),
   ) as Record<PremiumOffer, { net: string; gross: string }>;
+  const read = await (async () => {
+    try {
+      return await Promise.all([
+        readPurchasesOpen(env.DB),
+        currentFreePromotion(env.DB),
+        freeQuotaSettings(env.DB),
+        lifetimeSlotsLeft(env.DB),
+      ]);
+    } catch (error) {
+      logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
+      return null;
+    }
+  })();
+  tracePhase(request, "listing");
+  if (!read) {
+    // La riserva vale finché il database non risponde: nessuna copia la conserva.
+    skipPageCache();
+    return {
+      reserve: true as const,
+      purchasesOpen: false,
+      prices,
+      baseQuota: null,
+      freePromotion: null,
+      promotionEnd: null,
+      lifetimeLeft: null,
+    };
+  }
+  const [admission, freePromotion, { quota: baseQuota }, lifetimeLeft] = read;
   return {
+    reserve: false as const,
     purchasesOpen: Boolean(admission?.open),
     prices,
+    baseQuota,
     freePromotion,
     promotionEnd: freePromotion?.endsAt ? formatDate(freePromotion.endsAt, language, "date") : null,
+    lifetimeLeft,
   };
 }
 
@@ -86,10 +126,52 @@ export function llms(origin: string) {
       [pages.security.title, siteSecurityPath, pages.security.description],
       [pages.faq.title, faqPath, pages.faq.description],
       [appCopy[language].supportPage.title, supportPath, appCopy[language].supportPage.description],
+      [guides[language].index.title, guidesPath, guides[language].index.description],
+      ...guidePaths.map((path) => {
+        const article = guides[language].articles[path];
+        return [article.title, path, article.description];
+      }),
     ].map(([title, path, description]) => {
       return `- [${title}](${origin}${localizedPath(language, path!)}): ${description}`;
     });
     return `## ${sectionTitles[language]}\n\n${links.join("\n")}`;
   });
   return `# FiscalBay\n\n> ${intro.description}\n\n${intro.body}\n\n${sections.join("\n\n")}\n`;
+}
+
+/**
+ * Giorno dell'ultima modifica sostanziale del contenuto di ogni pagina, per `lastmod`: si
+ * aggiorna con il testo della pagina, non a ogni rilascio. Le guide portano la propria data.
+ */
+const pageUpdates: Record<(typeof sitemapPages)[number], string> = {
+  "/": "2026-11-03",
+  "/funzionalita": "2026-11-03",
+  "/prezzi": "2026-11-03",
+  "/sicurezza": "2026-11-03",
+  "/faq": "2026-11-03",
+  "/supporto": "2026-11-03",
+  "/guide": "2026-11-04",
+  ...Object.fromEntries(guidePaths.map((path) => [path, guides.it.articles[path].updated])),
+} as Record<(typeof sitemapPages)[number], string>;
+
+/**
+ * Sitemap delle sole pagine pubbliche canoniche, in ogni lingua con le alternate: Termini e
+ * Privacy restano fuori perché `noindex` (D204). Fuori dalla produzione le pagine elencate
+ * rispondono comunque `noindex` e robots.txt chiude il dominio.
+ */
+export function sitemap(origin: string) {
+  const alternates = (path: string) =>
+    [...languages, "x-default" as const]
+      .map((code) => {
+        const href = `${origin}${code === "x-default" ? path : localizedPath(code, path)}`;
+        return `<xhtml:link rel="alternate" hreflang="${code}" href="${href}"/>`;
+      })
+      .join("");
+  const urls = sitemapPages.flatMap((path) =>
+    languages.map(
+      (language) =>
+        `<url><loc>${origin}${localizedPath(language, path)}</loc><lastmod>${pageUpdates[path]}</lastmod>${alternates(path)}</url>`,
+    ),
+  );
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n${urls.join("\n")}\n</urlset>\n`;
 }

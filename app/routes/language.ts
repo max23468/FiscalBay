@@ -5,7 +5,7 @@ import { assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appBase, ordersPath } from "../app-links";
 import { parsePreference, savePreference } from "../domain/preferences.server";
 import { errorResponse, postOnly } from "../error-response";
-import { localizedPath } from "../i18n";
+import { canonicalPath, localizedPath } from "../i18n";
 import type { Route } from "./+types/language";
 
 export const loader = postOnly;
@@ -22,7 +22,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (change?.name !== "language") return errorResponse(request, "INVALID_REQUEST");
   await savePreference(env.DB, session.user.id, change);
   const target = new URL(String(form.get("returnTo") ?? ""), env.APP_ORIGIN);
-  const bare = target.pathname.replace(/^\/en(?=\/|$)/u, "");
+  const bare = canonicalPath(target.pathname);
   const inArea =
     target.origin === new URL(env.APP_ORIGIN).origin &&
     (bare === appBase || bare.startsWith(`${appBase}/`));

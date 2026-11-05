@@ -14,6 +14,7 @@ import {
   mutationJobs,
   mutationMatrix,
   prTargets,
+  shardPlan,
   shardRanges,
 } from "./mutation.mjs";
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
@@ -97,6 +98,33 @@ describe("esito dei mutation test", () => {
     assert.deepEqual(shardRanges(mutants, 1, 12), [at(1, 12)]);
     // Senza tagli possibili resta una sola parte, che li comprende tutti.
     assert.deepEqual(shardRanges([at(1, 12), at(5)], 3, 12), [at(1, 12)]);
+  });
+
+  it("aggiunge parti finché nessuna supera il limite dei mutanti", () => {
+    // Settanta righe semplici e due funzioni da 81 mutanti: con due parti il taglio migliore
+    // lascia 151 mutanti nella prima, con tre nessuna supera il limite.
+    const lines = (from, length) =>
+      Array.from({ length }, (_, index) => ({ start: from + index, end: from + index }));
+    const mutants = [
+      ...lines(1, 70),
+      { start: 100, end: 180 },
+      ...lines(100, 80),
+      { start: 200, end: 280 },
+      ...lines(200, 80),
+    ];
+    const inside = ({ start, end }) =>
+      mutants.filter((mutant) => mutant.start >= start && mutant.end <= end).length;
+    assert.deepEqual(shardRanges(mutants, 2, 300).map(inside), [151, 81]);
+    assert.deepEqual(
+      shardPlan(mutants, 300).map((part) => part.mutants),
+      [70, 81, 81],
+    );
+    // Senza tagli possibili resta la divisione minima.
+    const whole = [{ start: 1, end: 300 }, ...mutants];
+    assert.deepEqual(
+      shardPlan(whole, 300).map((part) => part.mutants),
+      [233],
+    );
   });
 
   it("assegna a ogni modulo una parte per intervallo", async () => {

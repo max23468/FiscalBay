@@ -48,7 +48,7 @@ import { action as storeLinkAction } from "../app/routes/store-link";
 
 import { sessionCookie } from "./fixtures/account-fixtures";
 
-import { routeData, routeResponse } from "./fixtures/route-fixtures";
+import { routeData, routeResponse, pagePath } from "./fixtures/route-fixtures";
 
 describe("Sessioni, revoche e area admin", () => {
   it("considera recente un accesso sotto le 24 ore e la conferma admin sotto le 12", () => {
@@ -167,32 +167,36 @@ describe("Sessioni, revoche e area admin", () => {
   it("esce per riautenticare e torna soltanto a una sezione consentita di Sicurezza", async () => {
     for (const prefix of ["", "/en"]) {
       const user = await createUser(`ritorno${prefix.replace("/", "-")}@example.invalid`);
-      const target = `${prefix}/app/impostazioni/account#security-email`;
-      const area = await routeData(securityLoader, `${prefix}/app/impostazioni/account`, {
+      const target = `${pagePath(prefix, "/app/impostazioni/account")}#security-email`;
+      const area = await routeData(securityLoader, pagePath(prefix, "/app/impostazioni/account"), {
         cookie: user.cookie,
         params: { sezione: "account" },
       });
       expect(area.userId).toBe(user.id);
-      const out = await routeResponse(securityRouteAction, `${prefix}/app/impostazioni/account`, {
-        cookie: user.cookie,
-        fields: { intent: "riautentica", returnTo: target },
-      });
+      const out = await routeResponse(
+        securityRouteAction,
+        pagePath(prefix, "/app/impostazioni/account"),
+        {
+          cookie: user.cookie,
+          fields: { intent: "riautentica", returnTo: target },
+        },
+      );
       const destination = new URL(out.headers.get("location")!, origin);
-      expect(destination.pathname).toBe(`${prefix}/accesso`);
+      expect(destination.pathname).toBe(pagePath(prefix, "/accesso"));
       expect(destination.searchParams.get("returnTo")).toBe(target);
       expect(await security(user.cookie)).toBe("/accesso");
       for (const [returnTo, expected] of [
         [target, target],
-        ["https://example.invalid", `${prefix}/app/ordini`],
-        [`${prefix}/app/negozi`, `${prefix}/app/ordini`],
+        ["https://example.invalid", pagePath(prefix, "/app/ordini")],
+        [pagePath(prefix, "/app/negozi"), pagePath(prefix, "/app/ordini")],
       ]) {
-        const signedIn = await routeResponse(signInAction, `${prefix}/accesso`, {
+        const signedIn = await routeResponse(signInAction, pagePath(prefix, "/accesso"), {
           fields: { email: user.email, password: "Password-sintetica-123!", returnTo },
         });
         expect(signedIn.headers.get("location")).toBe(expected);
       }
       // Con la password segnalata come trapelata l'avviso arriva nella pagina di ritorno.
-      const warned = await routeResponse(signInAction, `${prefix}/accesso`, {
+      const warned = await routeResponse(signInAction, pagePath(prefix, "/accesso"), {
         fields: {
           email: user.email,
           password: "Password-sintetica-123!",
@@ -201,7 +205,7 @@ describe("Sessioni, revoche e area admin", () => {
         },
       });
       expect(warned.headers.get("location")).toBe(
-        `${prefix}/app/impostazioni/account?accesso=password-trapelata#security-email`,
+        `${pagePath(prefix, "/app/impostazioni/account")}?accesso=password-trapelata#security-email`,
       );
     }
   });
@@ -270,8 +274,8 @@ describe("Sessioni, revoche e area admin", () => {
   async function expectRevoked(cookie: string) {
     expect(await jsonRequest("get-session", cookie).then((response) => response.json())).toBeNull();
     expect((await home(cookie)).authenticated).toBe(false);
-    expect(await security(cookie, "/en/app/impostazioni/account?accesso=sessione-chiusa")).toBe(
-      "/en/accesso?accesso=sessione-chiusa",
+    expect(await security(cookie, "/en/app/settings/account?accesso=sessione-chiusa")).toBe(
+      "/en/sign-in?accesso=sessione-chiusa",
     );
     expect(
       await securityAction(cookie, { intent: "cambia-email", email: "x@example.invalid" }),

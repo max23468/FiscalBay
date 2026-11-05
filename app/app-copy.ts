@@ -39,5 +39,8 @@ export const supportEmail = "supporto@fiscalbay.it";
 /** Indirizzo per privacy, sicurezza e ogni contatto che non è assistenza clienti. */
 export const infoEmail = "info@fiscalbay.it";
 
-/** Titolo della scheda del browser: marchio e pagina, separati da ` | `. */
-export const pageTitle = (title: string) => `FiscalBay | ${title}`;
+/**
+ * Titolo della scheda del browser: prima la pagina, poi il marchio, separati da ` | `. Nei
+ * risultati di ricerca e fra molte schede aperte resta visibile la parte che distingue la pagina.
+ */
+export const pageTitle = (title: string) => `${title} | FiscalBay`;

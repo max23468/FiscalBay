@@ -209,14 +209,14 @@ describe("testi dei messaggi", () => {
     ).toEqual([
       {
         html:
-          "⚠️ <b>Tax ID removed</b> · Negozio &lt;A&amp;B&gt;\n" +
-          "The tax ID notified earlier is no longer in the order.\n➖ No tax ID\n\n" +
+          "⚠️ <b>Tax identifier removed</b> · Negozio &lt;A&amp;B&gt;\n" +
+          "The tax identifier notified earlier is no longer in the order.\n➖ No tax identifier\n\n" +
           `<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n📦 1 × Articolo 1\n` +
           "📦 1 × Articolo 2\n📦 1 × Articolo 3\nand 2 more items\n" +
           "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
         buttons: [
           [
-            { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/ordini/o-1" },
+            { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/orders/o-1" },
             { text: "🛍 Open on eBay", url: ebayOrderHref("12-34567-89012") },
           ],
         ],
@@ -226,23 +226,23 @@ describe("testi dei messaggi", () => {
       orderMessage(site, "en", "Europe/Rome", notice(fields), change, at)[0]!;
     expect(english({ items: items(4), values: [vat, cf] }, "available")).toEqual({
       html:
-        "✅ <b>Tax ID available</b> · Negozio &lt;A&amp;B&gt;\n🧾 VAT <code>IT01234567890</code>\n" +
+        "✅ <b>Tax identifier available</b> · Negozio &lt;A&amp;B&gt;\n🧾 VAT <code>IT01234567890</code>\n" +
         `🧾 <code>RSSMRA80A01H501U</code>\n\n<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n` +
         "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\nand one more item\n" +
         "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
       buttons: [
         [
-          { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/ordini/o-1" },
+          { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/orders/o-1" },
           { text: "🛍 Open on eBay", url: ebayOrderHref("12-34567-89012") },
         ],
-        [{ text: "📋 Copy tax code", copy_text: { text: cf.value } }],
+        [{ text: "📋 Copy Codice Fiscale", copy_text: { text: cf.value } }],
       ],
     });
     expect(english({ values: [] }, "changed").html).toMatch(
-      /^✏️ <b>Tax ID updated<\/b> · Negozio &lt;A&amp;B&gt;\n\n<blockquote>/u,
+      /^✏️ <b>Tax identifier updated<\/b> · Negozio &lt;A&amp;B&gt;\n\n<blockquote>/u,
     );
     expect(english({ fiscal: "checking", values: [] }, "new").html).toMatch(
-      /^🛒 <b>New order<\/b> · Negozio &lt;A&amp;B&gt;\n⏳ Tax ID being checked\nIf it arrives, you get a new message\.\n\n/u,
+      /^🛒 <b>New order<\/b> · Negozio &lt;A&amp;B&gt;\n⏳ Tax identifier being checked\nIf it arrives, you get a new message\.\n\n/u,
     );
   });
 
@@ -253,8 +253,8 @@ describe("testi dei messaggi", () => {
         .slice(2)
         .join("\n");
     const states = [
-      [{ fiscal: "checking" }, "⏳ Dato fiscale in verifica", "⏳ Tax ID being checked"],
-      [{ fiscal: "missing" }, "➖ Nessun dato fiscale", "➖ No tax ID"],
+      [{ fiscal: "checking" }, "⏳ Dato fiscale in verifica", "⏳ Tax identifier being checked"],
+      [{ fiscal: "missing" }, "➖ Nessun dato fiscale", "➖ No tax identifier"],
       [
         { fiscal: "foreign", country: "DE" },
         "🌍 Fatturazione estera (DE)",
@@ -264,7 +264,7 @@ describe("testi dei messaggi", () => {
       [
         { fiscal: "error" },
         "⚠️ Dato fiscale non letto: riprova da FiscalBay",
-        "⚠️ Tax ID not read: try again from FiscalBay",
+        "⚠️ Tax identifier not read: try again from FiscalBay",
       ],
       [{ fiscal: "locked" }, "🔒 Da sbloccare in FiscalBay", "🔒 To unlock in FiscalBay"],
       [{ fiscal: "available" }, "", ""],
@@ -335,8 +335,8 @@ describe("testi dei messaggi", () => {
         ),
       ).toBe(plain);
     expect(orderEntry(site, "en", "Europe/Rome", notice({ values: [] }), "removed", at)).toBe(
-      '<a href="https://fiscalbay.invalid/en/app/ordini/o-1">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n' +
-        `⚠️ <i>Tax ID removed</i>\n👤 Mario Rossi · 💶 <b>${amountEn}</b> · <i>today 14:03</i>`,
+      '<a href="https://fiscalbay.invalid/en/app/orders/o-1">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n' +
+        `⚠️ <i>Tax identifier removed</i>\n👤 Mario Rossi · 💶 <b>${amountEn}</b> · <i>today 14:03</i>`,
     );
   });
 
@@ -381,7 +381,7 @@ describe("testi dei messaggi", () => {
       /^🗓 <b>Summary of 25 Oct<\/b>\n<i>2 orders since the last summary<\/i>\n\n/u,
     );
     expect(english!.buttons!.at(-1)).toEqual([
-      { text: "🔗 Open orders", url: "https://fiscalbay.invalid/en/app/ordini?periodo=7" },
+      { text: "🔗 Open orders", url: "https://fiscalbay.invalid/en/app/orders?periodo=7" },
     ]);
     expect(
       digestMessage(site, "it", "Europe/Rome", day, [...mixed, ...mixed], at)[0]!.html,
@@ -440,13 +440,13 @@ describe("testi dei messaggi", () => {
     ).toEqual({
       html:
         "📥 <b>Import completed</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "📦 3 orders · 🧾 <b>2</b> with a tax ID\n🗓 from 1 Nov 2025 to 25 Oct\n" +
+        "📦 3 orders · 🧾 <b>2</b> with a tax identifier\n🗓 from 1 Nov 2025 to 25 Oct\n" +
         "<i>Imported orders get no individual messages: new orders arrive from now on.</i>",
       buttons: [
         [
           {
             text: "🔗 Open orders",
-            url: "https://fiscalbay.invalid/en/app/ordini?negozio=s-1&environment=sandbox",
+            url: "https://fiscalbay.invalid/en/app/orders?negozio=s-1&environment=sandbox",
           },
         ],
       ],
@@ -460,10 +460,10 @@ describe("testi dei messaggi", () => {
   it("indirizzi dell'app con ambiente e filtri, nomi dei fusi", () => {
     expect(appUrl(site, "it", "/app/ordini")).toBe("https://fiscalbay.invalid/app/ordini");
     expect(appUrl(site, "en", "/app/ordini", "sandbox")).toBe(
-      "https://fiscalbay.invalid/en/app/ordini?environment=sandbox",
+      "https://fiscalbay.invalid/en/app/orders?environment=sandbox",
     );
     expect(settingsUrl(site, "it")).toBe("https://fiscalbay.invalid/app/impostazioni/notifiche");
-    expect(settingsUrl(site, "en")).toBe("https://fiscalbay.invalid/en/app/impostazioni/notifiche");
+    expect(settingsUrl(site, "en")).toBe("https://fiscalbay.invalid/en/app/settings/notifications");
     expect(zoneName("it", "Europe/Rome")).toBe("Roma (Italia)");
     expect(zoneName("en", "Europe/Rome")).toBe("Rome (Italy)");
     expect(zoneName("it", "")).toBe("");
@@ -1090,7 +1090,7 @@ describe("collegamento della chat", () => {
     expect(text).toContain("collega questa chat da FiscalBay");
     expect(text).toContain("link this chat in FiscalBay");
     expect(text).toContain("https://fiscalbay.it/app/impostazioni/notifiche");
-    expect(text).toContain("https://fiscalbay.it/en/app/impostazioni/notifiche");
+    expect(text).toContain("https://fiscalbay.it/en/app/settings/notifications");
     // Le due lingue stanno in paragrafi separati.
     expect(text).toContain("/app/impostazioni/notifiche\n\nTo receive");
     const unknown = bot();
@@ -1172,7 +1172,7 @@ describe("collegamento della chat", () => {
   it("collega dal consumer anche senza passare dalla coda, con la risposta in inglese", async () => {
     const seller = await account("inglese");
     const response = (await settingsAction({
-      request: new Request(`${origin}/en/app/impostazioni/notifiche`, {
+      request: new Request(`${origin}/en/app/settings/notifications`, {
         method: "POST",
         headers: { cookie: seller.cookie, origin },
         body: new URLSearchParams({ intent: "telegram-link" }),

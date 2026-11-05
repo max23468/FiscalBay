@@ -41,7 +41,7 @@ describe("errors, locale and redacted logs", () => {
   });
 
   it("localizes notices from the actual access loader", async () => {
-    const result = await routeData(loadAccess, "/en/accesso?accesso=errore");
+    const result = await routeData(loadAccess, "/en/sign-in?accesso=errore");
     expect(result).toMatchObject({
       language: "en",
       notice: {
@@ -102,7 +102,7 @@ describe("errors, locale and redacted logs", () => {
     expect(languageFromPath("/en.data")).toBe("en");
     expect(languageFromPath("/_root.data")).toBe("it");
     expect(languageFromPath("/english")).toBe("it");
-    expect(localizedPath("en", "/accesso")).toBe("/en/accesso");
+    expect(localizedPath("en", "/accesso")).toBe("/en/sign-in");
     expect(appCopy.it.orders.title).toBe("Ordini");
     expect(appCopy.en.orders.title).toBe("Orders");
     expect(formatDate("2026-09-26T12:30:00.000Z", "it")).not.toBe(

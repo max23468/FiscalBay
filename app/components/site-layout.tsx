@@ -5,6 +5,7 @@ import { useCopy } from "~/components/copy-context";
 import { LanguageSwitch } from "~/components/language-switch";
 import { siteColumn } from "~/components/site-column";
 import { SiteFooter } from "~/components/site-footer";
+import { mainContentId, SkipLink } from "~/components/skip-link";
 import { Logo } from "~/components/standalone-page";
 import { buttonLink } from "~/components/ui/button-variants";
 import {
@@ -26,16 +27,14 @@ const navItems = [
 ] as const;
 
 /**
- * Barra superiore delle pagine pubbliche (D202): logo, pagine, lingua e `Accedi`, oppure
- * `Apri l'app` con una sessione. Sotto i 768 px le pagine passano in una seconda riga sempre
+ * Barra superiore delle pagine pubbliche (D202): logo, pagine, lingua, `Accedi` e `Inizia gratis`,
+ * oppure `Apri l'app` con una sessione. Sotto i 768 px le pagine passano in una seconda riga sempre
  * visibile, allineate al logo con spazi uguali, senza menu da aprire, e la lingua mostra il solo codice.
  * `path` è la pagina corrente senza prefisso di lingua, per lingua e voce attiva.
  */
 function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
   const { t, language } = useCopy();
-  const action = signedIn
-    ? { href: `${localizedPath(language)}?${visitParam}=0`, label: t.site.openApp }
-    : { href: localizedPath(language, accessPath), label: t.site.signIn };
+  const signIn = localizedPath(language, accessPath);
   const switchFor = (compact: boolean) => (
     <LanguageSwitch
       label={t.access.language}
@@ -65,9 +64,24 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
         <div className="ml-auto flex items-center gap-1 min-[360px]:gap-2">
           <div className="md:hidden">{switchFor(true)}</div>
           <div className="max-md:hidden">{switchFor(false)}</div>
-          <a href={action.href} {...buttonLink({ size: "sm" })}>
-            {action.label}
-          </a>
+          {signedIn ? (
+            <a href={`${localizedPath(language)}?${visitParam}=0`} {...buttonLink({ size: "sm" })}>
+              {t.site.openApp}
+            </a>
+          ) : (
+            <>
+              {/* Sotto i 400 px resta «Inizia gratis»: la sua pagina porta anche all'accesso. */}
+              <a
+                href={signIn}
+                {...buttonLink({ variant: "ghost", size: "sm", className: "max-[399px]:hidden" })}
+              >
+                {t.site.signIn}
+              </a>
+              <a href={`${signIn}?registrati`} {...buttonLink({ size: "sm" })}>
+                {t.site.start}
+              </a>
+            </>
+          )}
         </div>
       </div>
       <nav aria-label={t.site.nav.label} className="border-t md:hidden">
@@ -110,8 +124,11 @@ export function SiteLayout({
   const token = useRouteLoaderData<{ webAnalyticsToken: string | null }>("root")?.webAnalyticsToken;
   return (
     <div className="flex min-h-dvh flex-col">
+      <SkipLink />
       <SiteHeader path={path} signedIn={signedIn} />
-      <main className="flex-1">{children}</main>
+      <main id={mainContentId} tabIndex={-1} className="flex-1 outline-none">
+        {children}
+      </main>
       <SiteFooter />
       {token ? (
         <script defer src={webAnalyticsScript} data-cf-beacon={webAnalyticsBeacon(token)} />

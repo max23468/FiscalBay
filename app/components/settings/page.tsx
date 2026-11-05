@@ -18,7 +18,7 @@ import { Link } from "react-router";
 import { useCopy, useLinks } from "~/components/copy-context";
 import { IconTile, PageTitle } from "~/components/icon-tile";
 import { appHref } from "../../app-links";
-import type { Language } from "../../i18n";
+import { canonicalPath, type Language } from "../../i18n";
 import type { Theme, TimeZoneChoice } from "../../preferences";
 import {
   settingsGroups,
@@ -111,7 +111,7 @@ const sectionIcons: Record<SettingsSection, React.ComponentType<React.SVGProps<S
 
 /** Radice delle Impostazioni di un indirizzo, oppure l'indirizzo stesso fuori da esse. */
 function settingsRoot(pathname: string) {
-  return /^(.*\/impostazioni)(?:\/[^/]*)?$/u.exec(pathname)?.[1] ?? pathname;
+  return /^(.*\/impostazioni)(?:\/[^/]*)?$/u.exec(canonicalPath(pathname))?.[1] ?? pathname;
 }
 
 /** Campi modificabili del profilo; la ragione sociale soltanto per un'azienda. */
