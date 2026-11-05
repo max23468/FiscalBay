@@ -604,6 +604,8 @@ describe("esecuzione del classificatore", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "local-green-"));
     const bin = path.join(directory, "bin");
     const log = path.join(directory, "commands");
+    // Ogni gate locale parte dal controllo della versione di `Verify`.
+    const version = "scripts/release/release.mjs version-step --base origin/develop\n";
     const repo = path.join(directory, "repo");
     const runner = `#!${process.execPath}\nrequire("node:fs").appendFileSync(process.env.GATE_TEST_LOG, process.argv.slice(2).join(" ") + "\\n");\n`;
     const git = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
@@ -647,21 +649,27 @@ describe("esecuzione del classificatore", () => {
         return { output: result.stdout, commands: readFileSync(log, "utf8").trim() };
       };
       writeFileSync(path.join(repo, "AGENTS.md"), "regole\n");
-      assert.equal(classify().commands, "verify:tooling");
+      assert.equal(classify().commands, `${version}verify:tooling`);
       assert.match(classify().output, /Nessuna modifica dall'ultimo verde locale/u);
       assert.equal(classify().commands, "");
       writeFileSync(path.join(repo, "notes.md"), "nota\n");
       const incremental = classify();
-      assert.equal(incremental.commands, "verify:documents");
+      assert.equal(incremental.commands, `${version}verify:documents`);
       assert.match(incremental.output, /ultimo verde locale/u);
       assert.doesNotMatch(incremental.output, /tooling: AGENTS\.md/u);
       mkdirSync(path.join(repo, "app/routes"), { recursive: true });
       // In locale il livello completo esegue i controlli statici e i test collegati al diff:
       // copertura e build restano alla CI.
       writeFileSync(path.join(repo, "app/routes/stores.tsx"), "export const stores = 1;\n");
-      assert.equal(classify().commands, "verify:static:full\ntest:related app/routes/stores.tsx");
+      assert.equal(
+        classify().commands,
+        `${version}verify:static:full\ntest:related app/routes/stores.tsx`,
+      );
       writeFileSync(path.join(repo, "app/routes/settings.tsx"), "export const settings = 1;\n");
-      assert.equal(classify().commands, "verify:static:full\ntest:related app/routes/settings.tsx");
+      assert.equal(
+        classify().commands,
+        `${version}verify:static:full\ntest:related app/routes/settings.tsx`,
+      );
       const browser = classify("--browser");
       assert.match(browser.commands, /scripts\/browser-tests\.mjs/u);
       assert.match(browser.commands, /@pages-stores/u);
@@ -688,7 +696,7 @@ describe("esecuzione del classificatore", () => {
       assert.match(server.output, /Prove browser lasciate alla CI/u);
       // Un file che i test leggono fuori da `app/`, `workers/` e `test/` esegue l'intera suite.
       writeFileSync(path.join(repo, "package.json"), '{"name":"prova"}\n');
-      assert.equal(classify().commands, "verify:static:full\ntest");
+      assert.equal(classify().commands, `${version}verify:static:full\ntest`);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

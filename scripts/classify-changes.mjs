@@ -734,6 +734,9 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     if (committed) run("pnpm", [result.script]);
     else {
       const impacts = files.map((file) => fileImpact(file, changes[file]));
+      // Lo stesso controllo della versione di `Verify`, prima del gate: un frammento con Novità su
+      // una versione già pubblicata emerge in locale, non nella CI della PR.
+      run("node", ["scripts/release/release.mjs", "version-step", "--base", "origin/develop"]);
       run("pnpm", [localScripts[result.gate]]);
       for (const [command, commandArgs] of localTests(result.gate, files, impacts))
         run(command, commandArgs);
