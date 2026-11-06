@@ -215,7 +215,7 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 20);
     await run(api.fetcher, 30);
     expect(sentTexts(api)).toEqual([expect.stringContaining("Importazione completata")]);
-    expect(sentTexts(api)[0]).toContain("📦 Un ordine · 🧾 <b>1</b> con Codice Fiscale o P.IVA");
+    expect(sentTexts(api)[0]).toContain("📦 Un ordine · 🧾 <b>1</b> con Codice Fiscale o P. IVA");
     expect(keyboard(api.texts()[0]!)).toEqual([
       [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?negozio=${seller.store}` }],
     ]);
@@ -633,7 +633,7 @@ describe("invii degli ordini", () => {
     expect(sentTexts(api)).toEqual([expect.stringContaining("ebay-o-coda-fiscale")]);
   });
 
-  it("CF, P.IVA e identificativi esteri nella forma derivata, anche nei riepiloghi suddivisi", async () => {
+  it("CF, P. IVA e identificativi esteri nella forma derivata, anche nei riepiloghi suddivisi", async () => {
     const others = (orderId: string) =>
       insertTaxIdentifiers(
         {
@@ -654,7 +654,7 @@ describe("invii degli ordini", () => {
       ).run();
     const derived = [
       "🧾 <code>RSSMRA80A01H501U</code>",
-      "🧾 P.IVA <code>00743110157</code>",
+      "🧾 P. IVA <code>00743110157</code>",
       "🧾 VAT_ID · DE <code>de 123 456 789</code>",
     ];
     const single = await linked("forma");

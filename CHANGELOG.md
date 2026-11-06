@@ -193,9 +193,9 @@ Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce 
 #### Funzionalità
 
 - **Nuova FiscalBay.** Un'app web in italiano e in inglese, da usare nel browser su computer e smartphone.
-- **Ordini e dati fiscali.** Gli ordini eBay arrivano con il codice fiscale o la partita IVA già controllati, con ricerca e filtri.
+- **Ordini con Codice Fiscale e Partita IVA.** Gli ordini eBay arrivano con il Codice Fiscale o la Partita IVA già controllati, con ricerca e filtri.
 - **Negozi eBay.** Colleghi uno o più negozi in sola lettura: FiscalBay legge gli ordini senza modificarli e mostra i nuovi appena arrivano.
-- **Messaggi all'acquirente.** Un messaggio già scritto, in italiano o in inglese, per chiedere il dato fiscale.
+- **Messaggi all'acquirente.** Un messaggio già scritto, in italiano o in inglese, per chiedere il Codice Fiscale.
 - **Esportazione.** Gli ordini si scaricano in CSV, Excel o ZIP.
 - **Telegram.** Il bot segnala i nuovi ordini e risponde ai comandi del tuo account.
 - **Accesso e piani.** Accedi con email, Google, passkey o eBay; i piani sono Free, prova gratuita e Premium.
@@ -205,9 +205,9 @@ Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce 
 #### Features
 
 - **New FiscalBay.** A web app in Italian and English, to use in the browser on computer and smartphone.
-- **Orders and tax data.** eBay orders arrive with tax code or VAT number already checked, with search and filters.
+- **Orders with tax code and VAT number.** eBay orders arrive with tax code (Codice Fiscale) or VAT number (Partita IVA) already checked, with search and filters.
 - **eBay stores.** Connect one or more stores read-only: FiscalBay reads orders without changing them and shows new ones as soon as they arrive.
-- **Buyer messages.** A ready-made message, in Italian or English, to ask for tax data.
+- **Buyer messages.** A ready-made message, in Italian or English, to ask for the tax code.
 - **Export.** Orders can be downloaded as CSV, Excel or ZIP.
 - **Telegram.** The bot announces new orders and answers the commands of your account.
 - **Sign-in and plans.** Sign in with email, Google, passkey or eBay; plans are Free, free trial and Premium.

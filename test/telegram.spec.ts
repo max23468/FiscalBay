@@ -177,11 +177,22 @@ describe("testi dei messaggi", () => {
     expect(changed).toEqual({
       html:
         "✏️ <b>Codice Fiscale aggiornato</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "🧾 P.IVA <code>IT01234567890</code>\n🧾 <code>RSSMRA80A01H501U</code>\n\n" +
+        "🧾 P. IVA <code>IT01234567890</code>\n🧾 <code>RSSMRA80A01H501U</code>\n\n" +
         `<blockquote>👤 Mario Rossi\n💶 <b>${amountIt}</b>\n📦 1 × Articolo 1\n` +
         "📦 1 × Articolo 2\n📦 1 × Articolo 3\n🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
       buttons: [[{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay], [copyCf]],
     });
+    // Con la sola Partita IVA il titolo e il pulsante la nominano; senza valori vale il CF.
+    expect(
+      orderMessage(site, "it", "Europe/Rome", notice({ values: [vat] }), "available", at)[0]!.html,
+    ).toMatch(/^✅ <b>Partita IVA disponibile<\/b>/u);
+    expect(
+      orderMessage(site, "en", "Europe/Rome", notice({ values: [vat] }), "changed", at)[0]!.html,
+    ).toMatch(/^✏️ <b>VAT number updated<\/b>/u);
+    expect(
+      orderMessage(site, "it", "Europe/Rome", notice({ values: [cf, vat] }), "available", at)[0]!
+        .html,
+    ).toMatch(/^✅ <b>Codice Fiscale disponibile<\/b>/u);
     // Con la sola Partita IVA il pulsante la nomina e la copia.
     expect(
       orderMessage(site, "it", "Europe/Rome", notice({ values: [vat] }), "new", at)[0]!.buttons,
@@ -246,7 +257,7 @@ describe("testi dei messaggi", () => {
           { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/orders/o-1" },
           { text: "🛍 Open on eBay", url: ebayOrderHref("12-34567-89012") },
         ],
-        [{ text: "📋 Copy Codice Fiscale", copy_text: { text: cf.value } }],
+        [{ text: "📋 Copy tax code", copy_text: { text: cf.value } }],
       ],
     });
     expect(english({ values: [] }, "changed").html).toMatch(
@@ -438,7 +449,7 @@ describe("testi dei messaggi", () => {
     expect(importMessage(site, "it", "Europe/Rome", summary, at)).toEqual({
       html:
         "📥 <b>Importazione completata</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "📦 Un ordine · 🧾 <b>0</b> con Codice Fiscale o P.IVA\n🗓 dal 1 nov 2025 al 25 ott\n" +
+        "📦 Un ordine · 🧾 <b>0</b> con Codice Fiscale o P. IVA\n🗓 dal 1 nov 2025 al 25 ott\n" +
         "<i>Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.</i>",
       buttons: [
         [{ text: "🔗 Apri gli ordini", url: "https://fiscalbay.invalid/app/ordini?negozio=s-1" }],

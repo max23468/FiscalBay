@@ -357,7 +357,7 @@ const en: SitePagesCopy = {
     description:
       "Get and manage the tax code (Codice Fiscale) of your eBay orders, when eBay provides it, with automatic sync, export and notifications.",
     hero: "Find and manage the tax code (Codice Fiscale) of your eBay orders.",
-    body: "Connect your eBay store and FiscalBay shows the buyer’s tax code (Codice Fiscale), when eBay provides it, ready to copy and export. The VAT number too, when there is one.",
+    body: "Connect your eBay store and FiscalBay shows the buyer’s tax code (Codice Fiscale), when eBay provides it, ready to copy and export. The VAT number (Partita IVA) too, when there is one.",
     howItWorks: "How it works",
     trust: ["Official eBay APIs", "Secure payments handled by Stripe", "No card to get started"],
     steps: [
@@ -371,7 +371,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "Browse, copy and export",
-        body: "Copy the identifier in one click and export your orders. With Premium you also get notifications on Telegram.",
+        body: "Copy the tax code in one click and export your orders. With Premium you also get notifications on Telegram.",
       },
     ],
     showcaseTitle: "Inside FiscalBay",
@@ -425,16 +425,16 @@ const en: SitePagesCopy = {
   },
   features: {
     title: "Features",
-    metaTitle: "Features | Codice Fiscale for eBay orders",
+    metaTitle: "Features | Tax code (Codice Fiscale) for eBay orders",
     description:
-      "Tax code (Codice Fiscale) and VAT number from your eBay orders, automatic sync, search, CSV and XLSX export, Telegram notifications and multiple stores.",
+      "Tax code (Codice Fiscale) and VAT number (Partita IVA) from your eBay orders, automatic sync, search, CSV and XLSX export, Telegram notifications and multiple stores.",
     lead: "The tax code (Codice Fiscale) of your eBay orders at hand, from connecting your store to exporting.",
     premium: "Premium",
     showcase: [
       {
         shot: "scheda",
         title: "Tax code and VAT number",
-        body: "FiscalBay shows the tax code (Codice Fiscale) the buyer entered, when eBay provides it, and the VAT number when there is one. Copy it in one click, without spaces and in capitals; when it is missing, a message template helps you ask for it.",
+        body: "FiscalBay shows the tax code (Codice Fiscale) the buyer entered, when eBay provides it, and the VAT number (Partita IVA) when there is one. Copy it in one click, without spaces and in capitals; when it is missing, a message template helps you ask for it.",
         premium: false,
       },
       {
@@ -480,7 +480,7 @@ const en: SitePagesCopy = {
 
   pricing: {
     title: "Pricing",
-    metaTitle: "Pricing | Codice Fiscale for eBay orders",
+    metaTitle: "Pricing | Tax code (Codice Fiscale) for eBay orders",
     description:
       "Free plan at no cost and Premium monthly, annual or lifetime to get the tax code (Codice Fiscale) from your eBay orders. 14-day Premium trial with no card.",
     lead: "Start for free. Move to Premium when you need more orders, more stores and more history.",
@@ -557,7 +557,7 @@ const en: SitePagesCopy = {
   },
   security: {
     title: "Security",
-    metaTitle: "Security | Codice Fiscale for eBay orders",
+    metaTitle: "Security | Tax code (Codice Fiscale) for eBay orders",
     description:
       "How FiscalBay protects access to your eBay store and your order data: read-only access, encrypted tokens and data in the European Union.",
     lead: "FiscalBay reads your orders and never changes them. Here is how we protect access and data.",
@@ -569,7 +569,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "Data in the European Union",
-        body: "Orders, tax codes, VAT numbers and exported files stay on Cloudflare servers in the European Union. Payments, support and Telegram follow the providers listed in the Privacy policy.",
+        body: "Orders, tax codes (Codici Fiscali), VAT numbers (Partite IVA) and exported files stay on Cloudflare servers in the European Union. Payments, support and Telegram follow the providers listed in the Privacy policy.",
       },
       {
         title: "Protected sign-in",
@@ -611,9 +611,9 @@ const en: SitePagesCopy = {
   },
   faq: {
     title: "Frequently asked questions",
-    metaTitle: "Frequently asked questions | Codice Fiscale for eBay orders",
+    metaTitle: "Frequently asked questions | Tax code (Codice Fiscale) for eBay orders",
     description:
-      "Answers about FiscalBay: tax code (Codice Fiscale) and VAT number from eBay orders, plans, the Premium trial, payments, permissions and data.",
+      "Answers about FiscalBay: tax code (Codice Fiscale) and VAT number (Partita IVA) from eBay orders, plans, the Premium trial, payments, permissions and data.",
     items: [
       {
         q: "What is FiscalBay?",
@@ -629,7 +629,7 @@ const en: SitePagesCopy = {
       },
       {
         q: "Does FiscalBay issue e-invoices?",
-        a: "No. FiscalBay gives you the buyer’s tax details to use in your management or invoicing software, including through export.",
+        a: "No. FiscalBay gives you the buyer’s tax code and VAT number to use in your management or invoicing software, including through export.",
       },
       {
         q: "Do I need a card to get started?",
@@ -639,7 +639,7 @@ const en: SitePagesCopy = {
       {
         q: "What happens when the trial ends?",
         payment: true,
-        a: "You go back to Free with no charge. Orders whose identifier arrived during the trial stay unlocked.",
+        a: "You go back to Free with no charge. Orders whose tax code or VAT number arrived during the trial stay unlocked.",
       },
       {
         q: "How do I pay for Premium?",

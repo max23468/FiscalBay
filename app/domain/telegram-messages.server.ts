@@ -247,6 +247,18 @@ export function orderButtons(
 }
 
 /**
+ * Titolo della variazione: nomina la Partita IVA quando l'ordine ha soltanto quella, altrimenti il
+ * Codice Fiscale, anche senza valori come dopo una rimozione.
+ */
+function changeTitle(language: Language, notice: Pick<OrderNotice, "values">, change: OrderChange) {
+  const copy = text[language];
+  const vatOnly =
+    notice.values.some((value) => value.kind === "PIVA") &&
+    !notice.values.some((value) => value.kind === "CF");
+  return change !== "new" && vatOnly ? copy.vatChange[change] : copy.change[change];
+}
+
+/**
  * Notifica di un ordine: in testa la variazione e il dato fiscale, poi in citazione
  * acquirente, totale, articoli, numero e data.
  */
@@ -264,7 +276,7 @@ export function orderMessage(
     .map((item) => `${icons.items} ${item.quantity} × ${escape(clip(item.title, 80))}`);
   if (notice.items.length > maxItems) items.push(escape(copy.more(notice.items.length - maxItems)));
   const head = [
-    `${icons.change[change]} <b>${escape(copy.change[change])}</b> · ${escape(notice.storeName)}`,
+    `${icons.change[change]} <b>${escape(changeTitle(language, notice, change))}</b> · ${escape(notice.storeName)}`,
     ...(change === "removed" ? [escape(copy.removedNote)] : []),
     ...fiscalLines(language, notice),
     ...(change === "new" && notice.fiscal === "checking" ? [escape(copy.checkingNote)] : []),
@@ -303,7 +315,7 @@ export function orderEntry(
   return [
     `<a href="${escape(orderUrl(env, language, notice))}">${escape(notice.ebayOrderId)}</a> · ${escape(notice.storeName)}`,
     ...(change && change !== "new"
-      ? [`${icons.change[change]} <i>${escape(copy.change[change])}</i>`]
+      ? [`${icons.change[change]} <i>${escape(changeTitle(language, notice, change))}</i>`]
       : []),
     [
       notice.buyer ? `${icons.buyer} ${escape(clip(notice.buyer, 64))}` : null,

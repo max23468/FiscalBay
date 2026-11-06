@@ -19,10 +19,15 @@ export const telegramMessageCopy = {
       changed: "Codice Fiscale aggiornato",
       removed: "Codice Fiscale rimosso",
     },
+    vatChange: {
+      available: "Partita IVA disponibile",
+      changed: "Partita IVA aggiornata",
+      removed: "Partita IVA rimossa",
+    },
     today: "oggi",
     yesterday: "ieri",
     more: (count: number) => (count === 1 ? "e un altro articolo" : `e altri ${count} articoli`),
-    kinds: { CF: null, PIVA: "P.IVA" },
+    kinds: { CF: null, PIVA: "P. IVA" },
     removedNote: "Il codice notificato in precedenza non è più nell'ordine.",
     fiscal: {
       checking: "Codice Fiscale in verifica",
@@ -43,7 +48,7 @@ export const telegramMessageCopy = {
     import: {
       title: "Importazione completata",
       orders: (count: number) => (count === 1 ? "Un ordine" : `${count} ordini`),
-      fiscal: "con Codice Fiscale o P.IVA",
+      fiscal: "con Codice Fiscale o P. IVA",
       period: (from: string, until: string) => `dal ${from} al ${until}`,
       note: "Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.",
     },
@@ -54,6 +59,11 @@ export const telegramMessageCopy = {
       available: "Tax code available",
       changed: "Tax code updated",
       removed: "Tax code removed",
+    },
+    vatChange: {
+      available: "VAT number available",
+      changed: "VAT number updated",
+      removed: "VAT number removed",
     },
     today: "today",
     yesterday: "yesterday",
@@ -112,7 +122,7 @@ export const telegramBotCopy = {
     freeNote: "Con il piano Free le notifiche sono ferme.",
     enabled: "Notifiche attive",
     paused: "Notifiche in pausa",
-    filters: { fiscal: "solo con Codice Fiscale o P.IVA", all: "tutti gli ordini" },
+    filters: { fiscal: "solo con Codice Fiscale o P. IVA", all: "tutti gli ordini" },
     filterTitles: {
       fiscal: "Solo ordini con Codice Fiscale o Partita IVA",
       all: "Tutti gli ordini",
@@ -136,7 +146,7 @@ export const telegramBotCopy = {
     zoneNote: "Il fuso si cambia dal sito.",
     pause: "Metti in pausa",
     resume: "Riprendi le notifiche",
-    fiscalOnly: "Solo con Codice Fiscale o P.IVA",
+    fiscalOnly: "Solo con Codice Fiscale o P. IVA",
     allOrders: "Tutti gli ordini",
     each: "Uno per ordine",
     digest: "Riepilogo",
@@ -172,8 +182,9 @@ export const telegramBotCopy = {
   en: {
     profile: {
       name: "FiscalBay",
-      shortDescription: "eBay order notifications with the buyer’s tax code or VAT number.",
-      description: `Get notifications for new eBay orders here, with the tax code or VAT number when eBay provides it. To start, connect this chat from FiscalBay, in ${shared.en.notifications}. Search, unlocking and export stay on the website.`,
+      shortDescription:
+        "eBay order notifications with the buyer’s tax code (Codice Fiscale) or VAT number (Partita IVA).",
+      description: `Get notifications for new eBay orders here, with the tax code (Codice Fiscale) or VAT number (Partita IVA) when eBay provides it. To start, connect this chat from FiscalBay, in ${shared.en.notifications}. Search, unlocking and export stay on the website.`,
     },
     commands: {
       status: "Plan, notifications and stores",

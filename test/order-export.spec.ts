@@ -74,18 +74,18 @@ it("esporta la selezione con i soli valori autorizzati e il motivo dei dati vuot
   expect(rows[0]).toMatchObject({
     "Codice Fiscale": "RSSMRA80A01H501U",
     "Partita IVA": "01234567890",
-    "Situazione fiscale": "Disponibile",
+    "Stato del Codice Fiscale": "Disponibile",
     Articoli: "1 × Articolo A | 2 × Articolo B",
     "Totale ordine": "12.99",
   });
   expect(rows[1]).toMatchObject({
     "Codice Fiscale": "",
-    "Situazione fiscale": "Da sbloccare",
+    "Stato del Codice Fiscale": "Da sbloccare",
     Articoli: '1 × =HYPERLINK("http://x.invalid")',
   });
   // La formula del titolo resta neutralizzata nel file.
   expect(text).toContain(`"1 × =HYPERLINK(""http://x.invalid"")"`);
-  expect(rows[2]).toMatchObject({ "Situazione fiscale": "Acquirente estero", Paese: "DE" });
+  expect(rows[2]).toMatchObject({ "Stato del Codice Fiscale": "Acquirente estero", Paese: "DE" });
 });
 
 it("neutralizza la formula di un titolo esportato per articolo", async () => {
@@ -508,7 +508,7 @@ it("il file riporta la stessa avvertenza della pagina dopo una lettura non riusc
   const [row] = (await csv(await request("ordini=o-a"))).rows;
   expect(row).toMatchObject({
     "Codice Fiscale": "RSSMRA80A01H501U",
-    "Situazione fiscale": "Disponibile, ultima lettura da eBay non riuscita",
+    "Stato del Codice Fiscale": "Disponibile, ultima lettura da eBay non riuscita",
   });
 });
 

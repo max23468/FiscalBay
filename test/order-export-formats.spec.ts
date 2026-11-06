@@ -105,7 +105,7 @@ describe("righe e celle del file", () => {
     expect(cell("Codice Fiscale")).toBe("BNCLGU80A01H501Z | rssmra80a01h501u");
     expect(cell("Partita IVA")).toBe("00123456789");
     expect(cell("Codici fiscali esteri")).toBe("VAT (DE): DE123456789");
-    expect(cell("Situazione fiscale")).toBe("Disponibile");
+    expect(cell("Stato del Codice Fiscale")).toBe("Disponibile");
     expect(cell("Ultima modifica su eBay")).toBe("2026-09-14 10:30:00");
   });
 
@@ -160,12 +160,14 @@ describe("righe e celle del file", () => {
     };
     const [row] = exportRows(foreign, "item", it_, "Europe/Rome");
     const cell = (name: string) => row![header.indexOf(name)];
-    expect(cell("Situazione fiscale")).toBe("Acquirente estero");
+    expect(cell("Stato del Codice Fiscale")).toBe("Acquirente estero");
     expect(cell("Pagamento")).toBe("ON_HOLD");
     expect(cell("Totale ordine")).toBe("15.99");
     expect(cell("Articolo")).toBe("");
     const locked = exportRows(visible({ fiscalState: "locked" }), "order", it_, "Europe/Rome")[0]!;
-    expect(locked[exportHeader("order", it_).indexOf("Situazione fiscale")]).toBe("Da sbloccare");
+    expect(locked[exportHeader("order", it_).indexOf("Stato del Codice Fiscale")]).toBe(
+      "Da sbloccare",
+    );
   });
 
   it("scrive la situazione fiscale con l'avvertenza della pagina sull'ultima lettura", () => {
@@ -344,7 +346,7 @@ describe("colonne scelte e file XLSX", () => {
     expect(column("Totale ordine")[2]!.numFmt).toBe("0");
     expect(values("Quantità")).toEqual([2, 1, 2, 1, 2, 1]);
     expect(values("Data")[0]).toEqual(new Date("2026-09-13T22:00:00.000Z"));
-    for (const name of ["Data", "Ultima verifica fiscale", "Ultima modifica su eBay"])
+    for (const name of ["Data", "Ultima verifica del Codice Fiscale", "Ultima modifica su eBay"])
       expect([name, column(name)[0]!.numFmt]).toEqual([name, "yyyy-mm-dd hh:mm:ss"]);
     // Larghezze: il nome intero, più spazio per articoli, indirizzo e altri identificativi.
     const width = (name: string) => sheet.getColumn(header.indexOf(name)).width;

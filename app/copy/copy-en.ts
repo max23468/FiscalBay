@@ -232,8 +232,12 @@ export const en: AppCopy = {
       unverifiable: "We cannot verify that the code matches the buyer’s name.",
       unchecked: "FiscalBay does not check the format of this type of code.",
     },
-    codeToCheck: "Check code",
-    differentCodes: "Different codes",
+    codeToCheck: { CF: "Check tax code", PIVA: "Check VAT number", OTHER: "Check code" },
+    differentCodes: {
+      CF: "Different tax codes",
+      PIVA: "Different VAT numbers",
+      OTHER: "Different codes",
+    },
     updated: "Updated by eBay",
     updatedHint: "eBay changed this value after it was first read.",
     suggestion: "Suggestion from a previous order",
@@ -293,7 +297,8 @@ export const en: AppCopy = {
       `The eBay authorisation expires on ${date}. Reconnect the store by then to keep syncing.`,
     importingStatus: (count) => `Importing: ${count} ${plural(count, "order", "orders")} so far`,
     firstUseTitle: "No store connected",
-    firstUseBody: "Connect your eBay store to view orders and available tax codes.",
+    firstUseBody:
+      "Connect your eBay store to view orders and available tax codes (Codici Fiscali).",
     connectStore: "Connect eBay store",
     marketingProposal: {
       title: "Would you like news and offers about FiscalBay?",
@@ -728,7 +733,7 @@ export const en: AppCopy = {
           vat: "VAT number",
           otherTax: "Foreign tax codes",
           fiscal: "Tax code status",
-          checkedAt: "Last tax check",
+          checkedAt: "Last tax code check",
           updatedAt: "Last modified on eBay",
         },
         fiscalNotice: {
@@ -842,7 +847,7 @@ export const en: AppCopy = {
         },
         {
           q: "Does FiscalBay change orders on eBay?",
-          a: "No. FiscalBay reads your orders to show you the tax details: everything on your eBay store stays as it is.",
+          a: "No. FiscalBay reads your orders to show you the tax code: everything on your eBay store stays as it is.",
         },
       ],
       contact: contactSupport,
@@ -1010,7 +1015,7 @@ export const en: AppCopy = {
     intro:
       "We’ll take you to eBay to authorise FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [
-      "FiscalBay reads orders and the tax codes eBay makes available, read-only.",
+      "FiscalBay reads orders and the tax codes (Codici Fiscali) eBay makes available, read-only.",
       "It changes nothing on eBay and never contacts buyers.",
       "It doesn’t ask for the email address of your eBay account.",
       "An eBay store can be connected to only one FiscalBay account.",
@@ -1042,7 +1047,7 @@ export const en: AppCopy = {
   },
   supportPage: {
     title: "Support",
-    metaTitle: "Support | Codice Fiscale for eBay orders",
+    metaTitle: "Support | Tax code (Codice Fiscale) for eBay orders",
     description:
       "FiscalBay support: questions about using the app, the in-app support form and email.",
     contact: contactSupport,
@@ -1062,7 +1067,7 @@ export const en: AppCopy = {
       },
       {
         title: "Ready to copy",
-        body: "You find the tax code provided by eBay, or the VAT number if that is all it has, ready to paste wherever you need it.",
+        body: "You find the tax code provided by eBay, or the VAT number (Partita IVA) if that is all it has, ready to paste wherever you need it.",
       },
       {
         title: "Connect in a few steps",
