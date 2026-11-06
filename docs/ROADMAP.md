@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)), un task per PR. |
+| [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -90,6 +90,13 @@ Home e Prezzi restano consultabili senza database con il listino di riserva e ar
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§23](product/EXPERIENCE.md#s23) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30) · [retention](engineering/DATA_RETENTION.md)
 
 Ogni nuovo account salva una volta sola la categoria del canale d'arrivo e il percorso della prima pagina: il Worker li ricava dal Referer o da un'etichetta `via` dell'elenco chiuso, i link interni li portano fino all'accesso senza cookie né archivi del browser e i provider li passano nello state firmato. La console li mostra in aggregato con iscritti, attivazioni e paganti; il dato entra nell'esportazione, sparisce con l'account ed è nella Privacy IT/EN `2026-11-05` ([D304](decisions/DECISION_REGISTER.md)). Senza JavaScript la provenienza non si propaga e vale «unknown»; le iscrizioni reali con Google ed eBay si provano sul test dopo `Pubblica`.
+
+<a id="2-0-05"></a>
+#### 2.0-05 · Rilievi dell'audit Production
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§12](product/ORDERS_AND_SYNC.md#s12) · [§23](product/EXPERIENCE.md#s23) · [audit Production](audits/2026-11-06-audit-ui-ux-production.md)
+
+I rilievi dell'audit Production del 2026-11-06 sono corretti: Negozi eBay mostra in corso la lettura richiesta e si rilegge fino all'esito, gli avvisi dei suggerimenti usano parole comuni, i conteggi di ordini raggruppano le migliaia, l'Esportazione nomina filtri e ricerca, la ricerca della barra avviata dagli Ordini ne conserva i filtri e Prezzi mostra a chi ha Premium a vita il piano attivo, con i pulsanti dei piani allineati ([D308](decisions/DECISION_REGISTER.md)). Web Analytics conta di nuovo le visite con un sito per host senza inserimento automatico. La notifica dei Termini resta eliminabile per scelta dell'owner. La verifica su Chrome in Production segue la promozione.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni

@@ -1,4 +1,5 @@
 import { ChevronRight } from "lucide-react";
+import { formatNumber } from "../../format";
 import { Link } from "react-router";
 
 import { StatusBadge } from "~/components/status";
@@ -25,7 +26,7 @@ type ListProps = {
 /** Tabella da desktop: tutta la riga apre il pannello del negozio. */
 export function StoreTable({ stores, premium, now }: ListProps) {
   const { links } = useLinks();
-  const { t } = useCopy();
+  const { t, language } = useCopy();
   const storesHref = appHref(links, "negozi");
   return (
     <div className="hidden overflow-hidden rounded-xl border bg-card lg:block">
@@ -85,7 +86,9 @@ export function StoreTable({ stores, premium, now }: ListProps) {
                     {notificationsLabel(store, t)}
                   </TableCell>
                 ) : null}
-                <TableCell className="font-code text-right">{store.importedOrders}</TableCell>
+                <TableCell className="font-code text-right">
+                  {formatNumber(store.importedOrders, language)}
+                </TableCell>
                 <TableCell className="pr-4">
                   <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />
                 </TableCell>
@@ -101,7 +104,7 @@ export function StoreTable({ stores, premium, now }: ListProps) {
 /** Elenco da mobile e tablet, con gli stessi dati della tabella. */
 export function StoreList({ stores, premium, now }: ListProps) {
   const { links } = useLinks();
-  const { t } = useCopy();
+  const { t, language } = useCopy();
   const storesHref = appHref(links, "negozi");
   return (
     <ul aria-label={t.stores.list} className="grid divide-y border-y lg:hidden">
@@ -122,7 +125,8 @@ export function StoreList({ stores, premium, now }: ListProps) {
                 ) : null}
                 <span className="text-xs text-muted-foreground">
                   {marketplaceText(store) ? `${marketplaceText(store)} · ` : null}
-                  {t.stores.orders}: <span className="font-code">{store.importedOrders}</span>
+                  {t.stores.orders}:{" "}
+                  <span className="font-code">{formatNumber(store.importedOrders, language)}</span>
                 </span>
               </span>
               <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />

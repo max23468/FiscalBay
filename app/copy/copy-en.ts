@@ -1,6 +1,15 @@
 import { legalDate, plural } from "./format";
 import type { AppCopy } from "./copy-it";
 
+/**
+ * Conteggi con il separatore delle migliaia anche a quattro cifre, come `formatNumber`. Il formato
+ * nasce al primo uso: creato al caricamento renderebbe il modulo non eliminabile dai bundle che
+ * non usano i testi.
+ */
+let groupedFormat: Intl.NumberFormat | undefined;
+const grouped = (value: number) =>
+  (groupedFormat ??= new Intl.NumberFormat("en-GB", { useGrouping: "always" })).format(value);
+
 const registrationRestricted = "Private test environment. Registration requires prior approval.";
 
 const inactivityTitle = "Reading paused for inactivity";
@@ -46,20 +55,23 @@ export const en: AppCopy = {
     settings: "Settings",
     search: "Search orders",
     searchPlaceholder: "Order, buyer, item or SKU",
-    searchSeeAll: (count) => `See all results (${count})`,
+    searchSeeAll: (count) => `See all results (${grouped(count)})`,
     searchEmpty: "No orders match your search.",
     searchFailed: "Search failed. Try again.",
     searchSummary: (count) =>
-      count === 0 ? "No suggestions" : `${count} ${plural(count, "suggestion", "suggestions")}`,
+      count === 0
+        ? "No suggestions"
+        : `${grouped(count)} ${plural(count, "suggestion", "suggestions")}`,
     notifications: "Notifications",
     notificationsUnread: (count) =>
-      count === 0 ? "Notifications" : `Notifications, ${count} unread`,
+      count === 0 ? "Notifications" : `Notifications, ${grouped(count)} unread`,
     notificationsWindow: "Last 30 days",
     notificationsEmpty: "No notifications in the last 30 days.",
     markAllRead: "Mark all as read",
     dismissNotification: (title) => `Delete notification: ${title}`,
     dismissAll: "Delete all",
-    dismissed: (count) => (count === 1 ? "Notification deleted" : `${count} notifications deleted`),
+    dismissed: (count) =>
+      count === 1 ? "Notification deleted" : `${grouped(count)} notifications deleted`,
     undo: "Undo",
     storeNotifications: {
       expiredTitle: "Connection expired",
@@ -102,7 +114,7 @@ export const en: AppCopy = {
   },
   orders: {
     title: "Orders",
-    count: (count) => `${count} ${plural(count, "order", "orders")}`,
+    count: (count) => `${grouped(count)} ${plural(count, "order", "orders")}`,
     sortedBy: "Newest first",
     filters: "Filters",
     store: "Store",
@@ -164,19 +176,19 @@ export const en: AppCopy = {
     },
     select: "Select",
     selectOrder: (id) => `Select order ${id}`,
-    selected: (count) => `${count} selected`,
+    selected: (count) => `${grouped(count)} selected`,
     selectedLocked: (count) =>
       count === 0
         ? "No orders to unlock"
-        : `${count} ${plural(count, "order to unlock", "orders to unlock")}`,
+        : `${grouped(count)} ${plural(count, "order to unlock", "orders to unlock")}`,
     unlock: "Unlock order",
-    unlockSelected: (count) => `Unlock ${count}`,
+    unlockSelected: (count) => `Unlock ${grouped(count)}`,
     exportSelected: "Export",
-    unlockTitle: (count) => `Unlock ${count} ${plural(count, "order", "orders")}?`,
+    unlockTitle: (count) => `Unlock ${grouped(count)} ${plural(count, "order", "orders")}?`,
     unlockConfirmText: (count, remaining) =>
       `After unlocking, you will have ${remaining - count} ${plural(remaining - count, "unlock", "unlocks")} left this cycle.`,
     unlockExceeds: (count, remaining) =>
-      `You selected ${count} orders to unlock, but you have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. Reduce the selection.`,
+      `You selected ${grouped(count)} orders to unlock, but you have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. Reduce the selection.`,
     unlockConfirm: "Unlock",
     dontAskUnlock: "Don’t ask again",
     unlockFailed: "Unlock failed. Check the orders and remaining unlocks, then try again.",
@@ -185,7 +197,7 @@ export const en: AppCopy = {
       remaining === null
         ? "Order unlocked."
         : `Order unlocked. You have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle.`,
-    unlockedMany: (count) => `${count} orders unlocked.`,
+    unlockedMany: (count) => `${grouped(count)} orders unlocked.`,
     loadMore: "Load more",
     allShown: "You have seen all orders in this period.",
     allShownAll: "You have seen all available orders.",
@@ -195,9 +207,9 @@ export const en: AppCopy = {
     moreActions: (id) => `More actions for order ${id}`,
     openOnEbay: "Open on eBay",
     exportOrder: "Export order",
-    itemsMore: (count) => `+ ${count} more ${plural(count, "item", "items")}`,
+    itemsMore: (count) => `+ ${grouped(count)} more ${plural(count, "item", "items")}`,
     quantity: "Quantity",
-    newOrders: (count) => `${count} new ${plural(count, "order", "orders")}`,
+    newOrders: (count) => `${grouped(count)} new ${plural(count, "order", "orders")}`,
     showNew: "Show",
     identifier: { CF: "Codice Fiscale", PIVA: "Partita IVA" },
     copy: (label, order) => `Copy ${label}: order ${order}`,
@@ -242,11 +254,10 @@ export const en: AppCopy = {
     suggestionHint: (order, date) => `From order ${order} on ${date}.`,
     suggestionConflict: "Previous orders show different codes: this is the most recent.",
     suggestionStatus: {
-      identity_missing:
-        "Stable buyer identity unavailable: previous orders cannot be linked automatically.",
-      none: "No authorised previous orders with a usable tax code.",
+      identity_missing: "eBay does not let us recognise this buyer in their previous orders.",
+      none: "No previous order from this buyer has a tax code to suggest.",
       ambiguous:
-        "The most recent orders do not identify a unique value for one or more identifiers: no value is suggested for those identifiers.",
+        "This buyer’s previous orders show different details: we suggest nothing for those details.",
     },
     messageLanguage: "Message language",
     messageText: "Text for the buyer",
@@ -291,7 +302,8 @@ export const en: AppCopy = {
     consentExpiringTitle: (store) => `${store}: authorisation expiring`,
     consentExpiringBody: (date) =>
       `The eBay authorisation expires on ${date}. Reconnect the store by then to keep syncing.`,
-    importingStatus: (count) => `Importing: ${count} ${plural(count, "order", "orders")} so far`,
+    importingStatus: (count) =>
+      `Importing: ${grouped(count)} ${plural(count, "order", "orders")} so far`,
     firstUseTitle: "No store connected",
     firstUseBody: "Connect your eBay store to view orders and available tax codes.",
     connectStore: "Connect eBay store",
@@ -405,7 +417,7 @@ export const en: AppCopy = {
     recentOk: (count) =>
       count === 0
         ? "Succeeded, no new orders"
-        : `Succeeded, ${count} new ${plural(count, "order", "orders")}`,
+        : `Succeeded, ${grouped(count)} new ${plural(count, "order", "orders")}`,
     recentFailed: "Failed",
     notificationsLink: "Open notifications",
     syncNow: "Sync recent orders",

@@ -10,6 +10,7 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { useCopy, useLinks } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
+import { formatNumber } from "../../format";
 import { type StoreView } from "../../view-models";
 import { PauseButton, ReconnectButton } from "./actions";
 import {
@@ -92,7 +93,7 @@ function historyText(store: StoreView, t: AppCopy) {
 
 /** Riquadri della scheda: ordini, ultima lettura, storico e scadenza dell'autorizzazione. */
 function OverviewStats({ store, now }: SectionProps & { now: string }) {
-  const { t } = useCopy();
+  const { t, language } = useCopy();
   const date = useDate();
   const history = historyText(store, t);
   const expired =
@@ -101,7 +102,7 @@ function OverviewStats({ store, now }: SectionProps & { now: string }) {
   return (
     <dl className="grid grid-cols-2 gap-3">
       <OverviewStat label={t.stores.orders}>
-        <span className="font-code">{store.importedOrders}</span>
+        <span className="font-code">{formatNumber(store.importedOrders, language)}</span>
       </OverviewStat>
       <OverviewStat label={t.stores.lastRead}>
         <LastSync store={store} now={now} slot={false} wrap />

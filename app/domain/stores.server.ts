@@ -45,8 +45,9 @@ export type StoreStatus = {
   /** Ultima lettura riuscita degli ordini su eBay. */
   lastSyncAt: string | null;
   /**
-   * Un'acquisizione degli ordini tiene il negozio in questo momento. Un blocco rimasto da
-   * un'esecuzione interrotta smette di contare alla sua scadenza.
+   * Un'acquisizione degli ordini tiene il negozio in questo momento, oppure una lettura chiesta a
+   * mano su un negozio attivo aspetta di partire. Un blocco rimasto da un'esecuzione interrotta
+   * smette di contare alla sua scadenza.
    */
   syncing: boolean;
   /** Cadenza prevista della lettura periodica per il piano dello spazio. */
@@ -147,6 +148,7 @@ type StoreRow = {
   history_done_at: string | null;
   window_from: string;
   syncing: number | null;
+  requested: number | null;
   pauses: string | null;
   inactive_since: string | null;
   premium: number;
@@ -202,7 +204,7 @@ async function readStores(
               c.store_id AS credentials, c.granted_at, c.refresh_expires_at,
               c.rejected_at, ss.last_success_at, ss.history_from, ss.history_done_at,
               ${historyStartSql("s.workspace_id", "?2")} AS window_from,
-              ss.locked_until > ?2 AS syncing,
+              ss.locked_until > ?2 AS syncing, ss.requested_at IS NOT NULL AS requested,
               (SELECT group_concat(${pauseReasonSql}) FROM ebay_store_pauses p
                 WHERE p.store_id = s.id) AS pauses,
               (SELECT paused_at FROM ebay_store_pauses p WHERE p.store_id = s.id
@@ -289,7 +291,7 @@ async function readStores(
       consentGrantedAt: row.disconnected_at ? null : row.granted_at,
       consentExpiresAt: row.disconnected_at ? null : expiresAt,
       lastSyncAt: row.last_success_at,
-      syncing: row.syncing === 1,
+      syncing: row.syncing === 1 || (row.requested === 1 && connection === "active"),
       targetMinutes: syncMinutes[row.premium ? "premium" : "free"],
       recent: recent.get(row.id) ?? [],
       importedOrders: row.orders,

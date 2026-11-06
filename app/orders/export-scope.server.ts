@@ -27,7 +27,11 @@ export async function accountExportScope(
   ebayEnvironment: EbayEnvironment,
   premium: boolean,
   now: Date,
-): Promise<{ scope: ExportScope; filter: ExportFilter } | null> {
+): Promise<{
+  scope: ExportScope;
+  filter: ExportFilter;
+  names: { search: string | null; store: string | null };
+} | null> {
   const scope = exportScope(query);
   if (!scope) return null;
   const [stores, search] = await Promise.all([
@@ -40,12 +44,21 @@ export async function accountExportScope(
     )
     .map((store) => store.id);
   const { criteria } = listCriteria(query, now, premium ? "premium" : "free", storeIds, search);
+  const store = criteria.storeId
+    ? (stores.find((candidate) => candidate.id === criteria.storeId)?.name ?? null)
+    : null;
+  const names = { search: search?.trim() || null, store };
   if (scope.kind === "orders" && scope.detail)
     return {
       scope,
       filter: { ids: scope.ids, criteria: {}, provisional: criteria.payment === "unpaid" },
+      names,
     };
-  return { scope, filter: { ids: scope.kind === "orders" ? scope.ids : undefined, criteria } };
+  return {
+    scope,
+    filter: { ids: scope.kind === "orders" ? scope.ids : undefined, criteria },
+    names,
+  };
 }
 
 /**

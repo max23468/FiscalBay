@@ -185,6 +185,8 @@ const it = {
     vat: "+ IVA",
     soldOut: "Esaurito",
     soldOutBody: "I posti a vita sono finiti.",
+    owned: "Hai già Premium a vita: tutte le funzioni Premium sono attive, senza rinnovi.",
+    ownedLink: "Apri Piano e pagamenti",
     trialTitle: "Prova Premium per 14 giorni",
     trialBody:
       "Senza carta e senza rinnovo automatico. La attivi quando vuoi dopo la prima lettura riuscita di un negozio; alla fine torni al Free e gli ordini sbloccati restano tali.",
@@ -523,6 +525,8 @@ const en: SitePagesCopy = {
     vat: "+ VAT",
     soldOut: "Sold out",
     soldOutBody: "Lifetime places have run out.",
+    owned: "You already have Premium for life: every Premium feature is on, with no renewals.",
+    ownedLink: "Open Plan and payments",
     trialTitle: "Try Premium for 14 days",
     trialBody:
       "No card and no automatic renewal. Start it whenever you like after a store’s first successful read; at the end you go back to Free and unlocked orders stay unlocked.",

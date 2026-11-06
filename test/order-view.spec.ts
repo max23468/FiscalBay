@@ -7,6 +7,7 @@ import {
   rememberStore,
   revalidateUnlessSnapshot,
   snapshotInstant,
+  listFilters,
   withoutListPosition,
 } from "../app/orders/order-list";
 import { orderView } from "../app/domain/order-view.server";
@@ -698,6 +699,24 @@ describe("posizione e negozio ricordato dell'elenco ordini", () => {
     const params = new URLSearchParams("fiscale=locked&mostra=2&vista=abc&negozio=s1");
     expect(withoutListPosition(params).toString()).toBe("fiscale=locked&negozio=s1");
     expect(params.toString()).toBe("fiscale=locked&mostra=2&vista=abc&negozio=s1");
+  });
+
+  it("tiene soltanto i filtri dell'elenco, con valori fino a 64 caratteri", () => {
+    const longest = "s".repeat(64);
+    const params = new URLSearchParams({
+      negozio: longest,
+      periodo: "30",
+      pagamento: "",
+      spedizione: "x".repeat(65),
+      fiscale: "available",
+      ricerca: "cifrata",
+      mostra: "2",
+    });
+    expect(Object.fromEntries(listFilters(params))).toEqual({
+      negozio: longest,
+      periodo: "30",
+      fiscale: "available",
+    });
   });
 
   it("non rilegge la pagina quando all'indirizzo si aggiunge soltanto l'istantanea", () => {
