@@ -189,9 +189,34 @@ it("prima dello sblocco nomina Partita IVA il numero che eBay riporta come Codic
   const view = async () => (await listVisibleOrders(env.DB, "u-a"))[0]!;
   await recordOrderObservation(env.DB, target(), tax("0123 4567 897"));
   expect(await view()).toMatchObject({ fiscalState: "locked", lockedShownAs: "PIVA" });
-  // Il codice numerico di un ente senza Partita IVA resta Codice Fiscale.
-  await recordOrderObservation(env.DB, target(), tax("80012345678"));
-  expect(await view()).toMatchObject({ fiscalState: "locked", lockedShownAs: "CF" });
+  // Il codice numerico di un ente e ogni altra forma restano Codice Fiscale.
+  for (const value of [
+    "80012345678",
+    "97012345678",
+    "012345678978",
+    "0123456789A",
+    "A1234567897",
+  ]) {
+    await recordOrderObservation(env.DB, target(), tax(value));
+    expect(await view(), value).toMatchObject({ fiscalState: "locked", lockedShownAs: "CF" });
+  }
+  // Un codice estero non cambia il nome: conta soltanto se c'è un Codice Fiscale italiano.
+  const values = (...entries: Array<[string, string, string]>) =>
+    observation({
+      taxIdentifiers: {
+        source: "ebay_fulfillment",
+        complete: true,
+        values: entries.map(([type, issuingCountry, value]) => ({ type, issuingCountry, value })),
+      },
+    });
+  await recordOrderObservation(
+    env.DB,
+    target(),
+    values(["CODICE_FISCALE", "IT", "01234567897"], ["VAT", "DE", "DE123456789"]),
+  );
+  expect(await view()).toMatchObject({ fiscalState: "locked", lockedShownAs: "PIVA" });
+  await recordOrderObservation(env.DB, target(), values(["VAT", "DE", "DE123456789"]));
+  expect(await view()).toMatchObject({ lockedShownAs: "CF" });
 });
 
 it("normalizza le riletture, aggiorna il tipo presente e conserva gli altri identificativi", async () => {

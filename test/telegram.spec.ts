@@ -81,6 +81,60 @@ beforeEach(async () => {
   send.mockClear();
 });
 
+// In testa alla suite: la mutation attribuisce la copertura di questa regola soltanto a un test
+// che la esegue per primo.
+describe("nome del dato nelle notifiche", () => {
+  it("CF e Partita IVA hanno l'impronta del CF, un codice estero conserva il proprio tipo", async () => {
+    const values = [
+      { kind: "PIVA" as const, label: null, value: "01234567897" },
+      { kind: "OTHER" as const, label: "NIF · ES", value: "x1" },
+    ];
+    expect(await fiscalKey({ values })).toBe(
+      await fiscalDigest(
+        JSON.stringify([
+          ["CF", null, "01234567897"],
+          ["OTHER", "NIF · ES", "x1"],
+        ]),
+      ),
+    );
+  });
+
+  it("il titolo nomina la Partita IVA soltanto se l'ordine ha solo quella", () => {
+    const site = { APP_ORIGIN: "https://fiscalbay.invalid" };
+    const at = new Date("2026-10-25T21:30:00Z");
+    const title = (values: OrderNotice["values"]) =>
+      orderMessage(
+        site,
+        "it",
+        "Europe/Rome",
+        {
+          id: "o-1",
+          ebayOrderId: "12-34567-89012",
+          environment: "production",
+          storeName: "Negozio",
+          createdAt: "2026-10-25T13:03:00Z",
+          buyer: null,
+          items: [],
+          imageUrl: null,
+          totalMinor: 100,
+          currency: "EUR",
+          fiscal: "available",
+          country: null,
+          values,
+        },
+        "available",
+        at,
+      )[0]!.html.split("</b>")[0];
+    const vat = { kind: "PIVA" as const, label: null, value: "01234567897" };
+    const foreign = { kind: "OTHER" as const, label: "NIF · ES", value: "x1" };
+    expect(title([vat])).toContain("Partita IVA disponibile");
+    expect(title([vat, foreign])).toContain("Partita IVA disponibile");
+    // Un codice estero da solo non è una Partita IVA.
+    expect(title([foreign])).toContain("Codice Fiscale disponibile");
+    expect(title([])).toContain("Codice Fiscale disponibile");
+  });
+});
+
 describe("testi dei messaggi", () => {
   const site = { APP_ORIGIN: "https://fiscalbay.invalid/percorso" };
   // Importo nella forma condivisa con l'app, spazi tipografici compresi.
@@ -566,11 +620,7 @@ describe("testi dei messaggi", () => {
     expect(await fiscalKey({ values: [cf, vat] })).toBe(expected);
     expect(await fiscalKey({ values: [vat, cf] })).toBe(expected);
     expect(await fiscalKey({ values: [] })).toBe(emptyFiscalKey);
-    // Un codice estero conserva il proprio tipo nell'impronta.
-    const foreign = { kind: "OTHER" as const, label: "NIF · ES", value: "x1" };
-    expect(await fiscalKey({ values: [foreign] })).toBe(
-      await fiscalDigest(JSON.stringify([["OTHER", "NIF · ES", "x1"]])),
-    );
+
     expect(expected).toMatch(/^"[\da-f]{64}"$/u);
   });
 });

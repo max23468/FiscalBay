@@ -194,6 +194,8 @@ describe("qualità formale degli identificativi", () => {
     ["CODICE_FISCALE", "IT", "97012345678", "CF"],
     ["CODICE_FISCALE", "IT", "0123456789", "CF"],
     ["CODICE_FISCALE", "IT", "0123456789A", "CF"],
+    ["CODICE_FISCALE", "IT", "012345678978", "CF"],
+    ["CODICE_FISCALE", "IT", "A01234567897", "CF"],
     ["VAT_ID", "IT", "01234567897", "PIVA"],
     ["CODICE_FISCALE", "ES", "01234567897", "OTHER"],
   ])("mostra %s %s con valore %s come %s", (type, country, value, expected) => {
