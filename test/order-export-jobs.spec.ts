@@ -99,6 +99,7 @@ it("oltre la soglia prepara il file dalla coda e la campanella lo annuncia", asy
   expect(await bell()).toEqual([
     {
       id: `export:${id}`,
+      kind: "export-ready",
       tone: "success",
       title: it_.shell.storeNotifications.exportReadyTitle,
       body: it_.shell.storeNotifications.exportReadyBody("fiscalbay-ordini-2026-09-13.csv"),
@@ -144,6 +145,7 @@ it("un lavoro accodato prima di una revoca non pubblica il file", async () => {
   expect(await bell()).toEqual([
     expect.objectContaining({
       id: `export:${id}`,
+      kind: "export-failed",
       tone: "warning",
       title: it_.shell.storeNotifications.exportFailedTitle,
       href: "impostazioni/esportazione",

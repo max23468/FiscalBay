@@ -99,8 +99,9 @@ export function whatsNewNotifications(
     return [
       {
         id: `whats-new:${release.version}`,
+        kind: "whats-new",
         tone: "info",
-        title: appCopy[language].shell.whatsNewTitle,
+        title: appCopy[language].shell.whatsNewTitle(release.version),
         body: release.items.map((item) => item.title).join(" · "),
         at,
         read: false,

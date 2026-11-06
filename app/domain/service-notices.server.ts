@@ -124,6 +124,7 @@ export async function activeServiceNotices(
     }>();
   return results.map((row) => ({
     id: `service:${row.id}:${row.updated_at}`,
+    kind: "service" as const,
     tone: row.tone,
     title: row.title,
     body: row.body,

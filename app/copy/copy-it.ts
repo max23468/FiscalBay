@@ -68,6 +68,11 @@ export const it = {
     notificationsWindow: "Ultimi 30 giorni",
     notificationsEmpty: "Nessuna notifica negli ultimi 30 giorni.",
     markAllRead: "Segna tutte come lette",
+    dismissNotification: (title: string) => `Elimina notifica: ${title}`,
+    dismissAll: "Elimina tutte",
+    dismissed: (count: number) =>
+      count === 1 ? "Notifica eliminata" : `${count} notifiche eliminate`,
+    undo: "Annulla",
     storeNotifications: {
       expiredTitle: "Collegamento scaduto",
       expiredBody: (store: string) =>
@@ -96,7 +101,7 @@ export const it = {
     visitSite: "Visita fiscalbay.it",
     console: "Console",
     whatsNew: "Novità",
-    whatsNewTitle: "Novità di FiscalBay",
+    whatsNewTitle: (version: string) => `Novità di FiscalBay ${version}`,
     whatsNewUpcoming: "In preparazione",
     whatsNewVersion: (version: string) => `Versione ${version}`,
     signOut: "Esci",

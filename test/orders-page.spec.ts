@@ -8,7 +8,11 @@ import { action as unlockAction, loader as loadHome } from "../app/routes/orders
 import { action as storesAction, loader as loadStores } from "../app/routes/stores";
 import { action as startStoreLink } from "../app/routes/store-link";
 import { listNotifications } from "../app/domain/notifications.server";
-import { markNotificationsRead } from "../app/domain/notification-reads.server";
+import {
+  dismissNotifications,
+  markNotificationsRead,
+  restoreNotifications,
+} from "../app/domain/notification-reads.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
 import versionedChangelog from "../CHANGELOG.md?raw";
@@ -348,8 +352,9 @@ describe("pagina Ordini reale", () => {
     expect(whatsNewNotifications("it", at, test, releases)).toEqual([
       {
         id: "whats-new:2.0.3",
+        kind: "whats-new",
         tone: "info",
-        title: "Novità di FiscalBay",
+        title: "Novità di FiscalBay 2.0.3",
         body: "Filtro per negozio",
         at: "2026-11-19T15:00:00.000Z",
         read: false,
@@ -357,8 +362,9 @@ describe("pagina Ordini reale", () => {
       },
       {
         id: "whats-new:2.0.1",
+        kind: "whats-new",
         tone: "info",
-        title: "Novità di FiscalBay",
+        title: "Novità di FiscalBay 2.0.1",
         body: "Esportazione · Telegram",
         at: "2026-11-10T00:00:00.000Z",
         read: false,
@@ -392,9 +398,19 @@ describe("pagina Ordini reale", () => {
         ["2.0.1", "2026-11-10"],
       ]);
       const news = (await bell("en")).find(({ id }) => id === "whats-new:2.0.1");
-      expect(news).toMatchObject({ title: "What’s new in FiscalBay", body: "Export · Telegram" });
+      expect(news).toMatchObject({
+        title: "What’s new in FiscalBay 2.0.1",
+        body: "Export · Telegram",
+      });
       await markNotificationsRead(env.DB, userId, ["whats-new:2.0.1"], at);
       expect((await bell("it")).find(({ id }) => id === "whats-new:2.0.1")).toMatchObject({
+        read: true,
+      });
+      // Eliminata esce dalla campanella e l'annullamento la riporta, già letta.
+      await dismissNotifications(env.DB, userId, ["whats-new:2.0.3"], at);
+      expect((await bell("it")).map(({ id }) => id)).toEqual(["whats-new:2.0.1"]);
+      await restoreNotifications(env.DB, userId, ["whats-new:2.0.3"]);
+      expect((await bell("it")).find(({ id }) => id === "whats-new:2.0.3")).toMatchObject({
         read: true,
       });
     } finally {

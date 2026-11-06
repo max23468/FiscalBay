@@ -319,8 +319,22 @@ export interface TelegramView {
 /** Identificativi letti al massimo in una sola richiesta della campanella. */
 export const maxReadNotifications = 50;
 
+/** Origine della notifica, che ne sceglie l'icona; il tono ne sceglie il colore. */
+export type NotificationKind =
+  | "store-expired"
+  | "store-expiring"
+  | "ebay-down"
+  | "store-read-failed"
+  | "inactivity"
+  | "export-ready"
+  | "export-failed"
+  | "service"
+  | "whats-new"
+  | "terms";
+
 export interface NotificationView {
   id: string;
+  kind: NotificationKind;
   tone: StatusTone;
   title: string;
   body: string;

@@ -629,6 +629,7 @@ it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture",
   expect(await bell()).toEqual([
     {
       id: `store-expired:${seller.storeId}:${expired}`,
+      kind: "store-expired",
       tone: "warning",
       title: "Collegamento scaduto",
       body: "venditore: la sincronizzazione è sospesa. Ricollega il negozio.",
@@ -637,11 +638,11 @@ it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture",
       href: `negozi/${seller.storeId}`,
     },
   ]);
-  const read = (ids: string, from = origin) =>
+  const read = (ids: string, from = origin, intent?: string) =>
     routeResponse(notificationsAction, "/api/v1/notifications", {
       cookie: seller.cookie,
       origin: from,
-      fields: { ids },
+      fields: intent ? { ids, intent } : { ids },
     });
   expect((await read(notification!.id)).status).toBe(200);
   expect((await read(notification!.id)).status).toBe(200);
@@ -650,6 +651,13 @@ it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture",
     expect((await read(ids)).status).toBe(400);
   }
   expect((await read(notification!.id, "https://estraneo.invalid")).status).toBe(403);
+  // Eliminata esce dalla campanella finché non si annulla; un'altra azione è rifiutata.
+  expect((await read(notification!.id, origin, "dismiss")).status).toBe(200);
+  expect(await bell()).toEqual([]);
+  expect((await read(notification!.id, origin, "restore")).status).toBe(200);
+  expect(await bell()).toEqual([{ ...notification, read: true }]);
+  expect((await read(notification!.id, origin, "toString")).status).toBe(400);
+  expect((await read(notification!.id, "https://estraneo.invalid", "dismiss")).status).toBe(403);
   // Un consenso in scadenza compare con la data nel fuso scelto.
   await env.DB.prepare(
     "UPDATE ebay_store_credentials SET rejected_at = NULL, refresh_expires_at = ?",
