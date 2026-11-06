@@ -104,7 +104,7 @@ describe("righe e celle del file", () => {
     // I valori restano quelli della fonte: nessuna correzione di maiuscole o spazi.
     expect(cell("Codice Fiscale")).toBe("BNCLGU80A01H501Z | rssmra80a01h501u");
     expect(cell("Partita IVA")).toBe("00123456789");
-    expect(cell("Altri identificativi fiscali")).toBe("VAT (DE): DE123456789");
+    expect(cell("Codici fiscali esteri")).toBe("VAT (DE): DE123456789");
     expect(cell("Situazione fiscale")).toBe("Disponibile");
     expect(cell("Ultima modifica su eBay")).toBe("2026-09-14 10:30:00");
   });
@@ -120,7 +120,7 @@ describe("righe e celle del file", () => {
     expect(column("Quantity")).toEqual(["2", "1"]);
     expect(column("Item amount")).toEqual(["10.00", ""]);
     expect(column("Order total")).toEqual(["15.99", ""]);
-    expect(column("Codice Fiscale")).toEqual(["RSSMRA80A01H501U", "RSSMRA80A01H501U"]);
+    expect(column("Tax code")).toEqual(["RSSMRA80A01H501U", "RSSMRA80A01H501U"]);
     expect(column("Payment")).toEqual(["Paid", "Paid"]);
   });
 
@@ -354,7 +354,7 @@ describe("colonne scelte e file XLSX", () => {
         "Paese",
         "Articolo",
         "Indirizzo di fatturazione",
-        "Altri identificativi fiscali",
+        "Codici fiscali esteri",
       ].map(width),
     ).toEqual([17, 14, 40, 40, 40]);
     // CF, Partita IVA, SKU e la formula del titolo restano testo, con gli zeri iniziali.
@@ -374,7 +374,7 @@ describe("colonne scelte e file XLSX", () => {
         "@",
       ]);
     }
-    expect(values("Altri identificativi fiscali")[1]).toBe("VAT (DE): DE123456789");
+    expect(values("Codici fiscali esteri")[1]).toBe("VAT (DE): DE123456789");
   });
 
   it("scrive le parti del foglio come le legge Excel, con righe di più pagine", async () => {
@@ -579,6 +579,9 @@ describe("righe complete del file", () => {
       taxIdentifiers: [
         tax("VAT_ID", "22222222222"),
         tax("PartitaIVA", "11111111111", null),
+        // Partita IVA riportata come Codice Fiscale; il codice di un ente resta Codice Fiscale.
+        tax("CODICE_FISCALE", "33333333333"),
+        tax("CODICE_FISCALE", "80012345678"),
         tax("VAT", "FR2", "FR"),
         tax("TIN", "ZZ1", null),
         tax("VAT", "DE1", "DE"),
@@ -614,8 +617,8 @@ describe("righe complete del file", () => {
         "15.99",
         "Pagato",
         "Da spedire",
-        "",
-        "11111111111 | 22222222222",
+        "80012345678",
+        "11111111111 | 22222222222 | 33333333333",
         "TIN: ZZ1 | VAT (DE): DE1 | VAT (FR): FR2",
         "Disponibile",
         "2026-09-13 23:00:00",
@@ -644,8 +647,8 @@ describe("righe complete del file", () => {
         "",
         "Pagato",
         "Da spedire",
-        "",
-        "11111111111 | 22222222222",
+        "80012345678",
+        "11111111111 | 22222222222 | 33333333333",
         "TIN: ZZ1 | VAT (DE): DE1 | VAT (FR): FR2",
         "Disponibile",
         "2026-09-13 23:00:00",

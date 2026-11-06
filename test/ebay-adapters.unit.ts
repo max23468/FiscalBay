@@ -4,6 +4,7 @@ import {
   displayTaxValue,
   taxQuality,
   buyerTaxKey,
+  shownTaxType,
   taxComparisonKey,
   taxIdentifierType,
 } from "../app/tax-quality";
@@ -182,6 +183,25 @@ describe("qualità formale degli identificativi", () => {
     ["CODICE_FISCALE", "ES", "OTHER"],
   ])("mappa il tipo %s e Paese %s per la vista", (type, country, expected) => {
     expect(taxIdentifierType(type!, country!)).toBe(expected);
+  });
+  it.each([
+    ["CODICE_FISCALE", "IT", "RSSMRA80A01H501U", "CF"],
+    ["CODICE_FISCALE", "IT", "01234567897", "PIVA"],
+    ["CodiceFiscale", null, " 0123 4567 897", "PIVA"],
+    ["CODICE_FISCALE", "IT", "70123456789", "PIVA"],
+    // Enti senza Partita IVA: codice numerico che inizia per 8 o 9.
+    ["CODICE_FISCALE", "IT", "80012345678", "CF"],
+    ["CODICE_FISCALE", "IT", "97012345678", "CF"],
+    ["CODICE_FISCALE", "IT", "0123456789", "CF"],
+    ["CODICE_FISCALE", "IT", "0123456789A", "CF"],
+    ["VAT_ID", "IT", "01234567897", "PIVA"],
+    ["CODICE_FISCALE", "ES", "01234567897", "OTHER"],
+  ])("mostra %s %s con valore %s come %s", (type, country, value, expected) => {
+    expect(shownTaxType({ type: type!, issuingCountry: country!, value: value! })).toBe(expected);
+    // Confronti e storico restano sul tipo della fonte.
+    expect(taxIdentifierType(type!, country!)).toBe(
+      expected === "PIVA" && type !== "VAT_ID" ? "CF" : expected,
+    );
   });
 });
 

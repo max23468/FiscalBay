@@ -171,7 +171,7 @@ describe("invii degli ordini", () => {
       .run();
     await run(api.fetcher, 30);
     const removed = api.texts()[1]!;
-    expect(String(removed.params.text)).toContain("Dato fiscale rimosso");
+    expect(String(removed.params.text)).toContain("Codice Fiscale rimosso");
     expect(String(removed.params.text)).not.toContain("BNCLGU80A01H501Z");
     expect(
       keyboard(removed)
@@ -188,7 +188,7 @@ describe("invii degli ordini", () => {
     await order(seller.store, "o-tutti", { checking: true });
     const api = bot();
     await run(api.fetcher, 10);
-    expect(sentTexts(api)[0]).toContain("Dato fiscale in verifica");
+    expect(sentTexts(api)[0]).toContain("Codice Fiscale in verifica");
     await insertTaxIdentifiers({
       id: "t-tutti",
       orderId: "o-tutti",
@@ -199,7 +199,7 @@ describe("invii degli ordini", () => {
     }).run();
     await env.DB.prepare("UPDATE order_source_refs SET detail_for = last_modified_time").run();
     await run(api.fetcher, 20);
-    expect(sentTexts(api)[1]).toContain("Dato fiscale disponibile");
+    expect(sentTexts(api)[1]).toContain("Codice Fiscale disponibile");
     expect(sentTexts(api)[1]).toContain("<code>RSSMRA80A01H501U</code>");
   });
 
@@ -215,7 +215,7 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 20);
     await run(api.fetcher, 30);
     expect(sentTexts(api)).toEqual([expect.stringContaining("Importazione completata")]);
-    expect(sentTexts(api)[0]).toContain("📦 Un ordine · 🧾 <b>1</b> con dato fiscale");
+    expect(sentTexts(api)[0]).toContain("📦 Un ordine · 🧾 <b>1</b> con Codice Fiscale o P.IVA");
     expect(keyboard(api.texts()[0]!)).toEqual([
       [{ text: "🔗 Apri gli ordini", url: `${origin}/app/ordini?negozio=${seller.store}` }],
     ]);
@@ -560,7 +560,7 @@ describe("invii degli ordini", () => {
     expect(sentTexts(api).slice(1)).toEqual([
       expect.stringContaining("<code>BNCLGU80A01H501Z</code>"),
     ]);
-    expect(sentTexts(api)[1]).toContain("Dato fiscale disponibile");
+    expect(sentTexts(api)[1]).toContain("Codice Fiscale disponibile");
   }
 
   it("alla riattivazione delle notifiche non arriva la variazione del periodo spento", () =>
@@ -695,7 +695,7 @@ describe("invii degli ordini", () => {
       ]);
   });
 
-  it("una correzione del dato notifica «Dato fiscale aggiornato» con il solo valore nuovo", async () => {
+  it("una correzione del dato notifica «Codice Fiscale aggiornato» con il solo valore nuovo", async () => {
     const seller = await linked("corretto");
     await order(seller.store, "o-corretto", { cf: "RSSMRA80A01H501U" });
     const api = bot();
@@ -717,7 +717,7 @@ describe("invii degli ordini", () => {
     await run(api.fetcher, 30);
     expect(api.texts()).toHaveLength(2);
     const changed = sentTexts(api)[1]!;
-    expect(changed).toMatch(/^✏️ <b>Dato fiscale aggiornato<\/b>/u);
+    expect(changed).toMatch(/^✏️ <b>Codice Fiscale aggiornato<\/b>/u);
     expect(changed).toContain("<code>BNCLGU80A01H501Z</code>");
     expect(changed).not.toContain("RSSMRA80A01H501U");
   });
@@ -1155,8 +1155,8 @@ describe("esiti delle consegne", () => {
     // Più eventi dello stesso ordine sono una voce «nuovo», con il dato corrente.
     expect(digest).toContain(">ebay-o-voci-nuovo</a>");
     expect(digest).toContain("<code>LGUBNC80A01H501Z</code>");
-    expect(digest).not.toContain("Dato fiscale aggiornato");
-    expect(digest).toContain("Dato fiscale rimosso");
+    expect(digest).not.toContain("Codice Fiscale aggiornato");
+    expect(digest).toContain("Codice Fiscale rimosso");
     expect(digest).not.toContain("ebay-o-voci-scaduto");
     // Gli eventi raccolti, anche quello omesso, risultano consegnati con il riepilogo.
     expect(

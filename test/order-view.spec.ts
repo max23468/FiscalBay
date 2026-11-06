@@ -129,7 +129,10 @@ describe("vista condivisa e criteri degli ordini", () => {
           updated: false,
         },
       ],
-    });
+    }); // Un numero da Partita IVA si chiama Partita IVA anche col tipo Codice Fiscale di eBay.
+    expect(
+      view({ fiscalState: "available", taxIdentifiers: [{ ...cf, value: "01234567897" }] }).fiscal,
+    ).toMatchObject({ identifiers: [{ type: "PIVA", value: "01234567897" }] });
   });
 
   it("sospende lo sblocco durante una nuova verifica", () => {
@@ -589,7 +592,7 @@ describe("vista condivisa e criteri degli ordini", () => {
       `${prefix}\nCodice Fiscale: RSSMRA80A01H501U\nPartita IVA: 12345678901\nNIF: 123x`,
     );
     expect(billingCopyText(available, "en", appCopy.en)).toContain(
-      "Italy\nCodice Fiscale: RSSMRA80A01H501U",
+      "Italy\nTax code: RSSMRA80A01H501U",
     );
     expect(
       billingCopyText(

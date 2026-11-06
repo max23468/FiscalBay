@@ -1160,7 +1160,10 @@ test.describe("notifiche Telegram", () => {
         );
       await expect(
         page.getByRole("radio", {
-          name: t("Solo ordini con Codice Fiscale", "Only orders with a tax code"),
+          name: t(
+            "Solo ordini con Codice Fiscale o Partita IVA",
+            "Only orders with a tax code or VAT number",
+          ),
         }),
       ).toBeChecked();
       let done = saved("telegram-filter");

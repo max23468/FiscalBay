@@ -177,6 +177,23 @@ it("prima dello sblocco nomina la Partita IVA solo quando l'ordine ha soltanto q
   expect(await view()).toMatchObject({ fiscalState: "locked", lockedShownAs: "CF" });
 });
 
+it("prima dello sblocco nomina Partita IVA il numero che eBay riporta come Codice Fiscale", async () => {
+  const tax = (value: string) =>
+    observation({
+      taxIdentifiers: {
+        source: "ebay_fulfillment",
+        complete: true,
+        values: [{ type: "CODICE_FISCALE", issuingCountry: "IT", value }],
+      },
+    });
+  const view = async () => (await listVisibleOrders(env.DB, "u-a"))[0]!;
+  await recordOrderObservation(env.DB, target(), tax("0123 4567 897"));
+  expect(await view()).toMatchObject({ fiscalState: "locked", lockedShownAs: "PIVA" });
+  // Il codice numerico di un ente senza Partita IVA resta Codice Fiscale.
+  await recordOrderObservation(env.DB, target(), tax("80012345678"));
+  expect(await view()).toMatchObject({ fiscalState: "locked", lockedShownAs: "CF" });
+});
+
 it("normalizza le riletture, aggiorna il tipo presente e conserva gli altri identificativi", async () => {
   const value = { type: "CODICE_FISCALE", issuingCountry: null, value: " rssmra80a01h501u " };
   const fiscal = (values: NonNullable<OrderObservation["taxIdentifiers"]>["values"]) =>

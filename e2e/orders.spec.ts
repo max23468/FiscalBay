@@ -517,8 +517,8 @@ test.describe("area reale", () => {
         .getByRole("status");
       await expect(status).toHaveText(
         it
-          ? "2 ordini. Per 1 ordine da sbloccare il Codice Fiscale resta vuoto."
-          : "2 orders. For 1 order to unlock, the tax code stays empty.",
+          ? "2 ordini. Per 1 ordine da sbloccare Codice Fiscale e Partita IVA restano vuoti."
+          : "2 orders. For 1 order to unlock, tax code and VAT number stay empty.",
       );
       // Le prime righe del file mostrano soltanto i dati sbloccati.
       const preview = page.getByRole("region", {
@@ -562,7 +562,7 @@ test.describe("area reale", () => {
       expect(await readFile(await (await again).path(), "utf8")).toBe(csv);
       await page
         .getByRole("radio", {
-          name: it ? "Solo con il Codice Fiscale disponibile" : "Only with the tax code available",
+          name: it ? "Solo con Codice Fiscale o Partita IVA" : "Only with a tax code or VAT number",
         })
         .check();
       await expect(status).toHaveText(it ? "1 ordine." : "1 order.");
@@ -590,7 +590,7 @@ test.describe("area reale", () => {
       // Si tengono numero ordine e altri identificativi, con questi ultimi in testa.
       for (const checkbox of await columns.getByRole("checkbox").all()) await checkbox.uncheck();
       await columns.getByRole("checkbox", { name: it ? "Numero ordine" : "Order number" }).check();
-      const other = it ? "Altri identificativi fiscali" : "Other tax identifiers";
+      const other = it ? "Codici fiscali esteri" : "Foreign tax codes";
       await columns.getByRole("checkbox", { name: other }).check();
       const up = columns.getByRole("button", {
         name: it ? `Sposta su: ${other}` : `Move up: ${other}`,

@@ -6,7 +6,7 @@ import { formatAmount, type Language, locales } from "../i18n";
 import type { BotButton, BotMessage } from "../integrations/telegram.server";
 import { escapeMarkup } from "../markup";
 import { zoneLabel } from "../preferences";
-import { displayTaxValue, taxIdentifierType } from "../tax-quality";
+import { displayTaxValue, shownTaxType } from "../tax-quality";
 import type { EbayEnvironment, FiscalSituation } from "../view-models";
 import type { VisibleOrder } from "./orders.server";
 import { sha256Hex } from "../sealed.server";
@@ -98,7 +98,7 @@ export function orderNotice(order: VisibleOrder, environment: EbayEnvironment): 
     fiscal: order.fiscalState,
     country: buyer?.billingAddress?.countryCode ?? null,
     values: order.taxIdentifiers.map((identifier) => {
-      const kind = taxIdentifierType(identifier.type, identifier.issuingCountry);
+      const kind = shownTaxType(identifier);
       return {
         kind,
         label:
@@ -114,12 +114,15 @@ export function orderNotice(order: VisibleOrder, environment: EbayEnvironment): 
 /**
  * Impronta del dato fiscale notificato: SHA-256 dei valori correnti in un ordine fisso, così lo
  * stato delle notifiche non conserva una seconda copia dei Codici Fiscali. Cambia con un nuovo
- * valore, una correzione o una rimozione, non con la forma in cui eBay li riporta.
+ * valore, una correzione o una rimozione, non con la forma in cui eBay li riporta né con il nome
+ * mostrato: CF e Partita IVA italiani hanno l'impronta del CF.
  */
 export async function fiscalKey(notice: Pick<OrderNotice, "values">): Promise<string> {
   // Il JSON dell'elenco delle terne in ordine di testo: l'ordine non dipende dalla lingua.
   const entries = notice.values
-    .map((value) => JSON.stringify([value.kind, value.label, value.value]))
+    .map((value) =>
+      JSON.stringify([value.kind === "PIVA" ? "CF" : value.kind, value.label, value.value]),
+    )
     .sort();
   return fiscalDigest(`[${entries.join(",")}]`);
 }
@@ -210,14 +213,26 @@ function fiscalLines(language: Language, notice: OrderNotice): string[] {
 const amount = (language: Language, notice: OrderNotice) =>
   `${icons.total} <b>${escape(formatAmount(notice.totalMinor, notice.currency, language))}</b>`;
 
-/** Pulsanti di un ordine: dettaglio, eBay per i negozi reali e copia del CF autorizzato. */
+/** Codici copiati dai pulsanti: i CF, o le Partite IVA se l'ordine ha solo quelle. */
+function copiedCodes(notice: Pick<OrderNotice, "values">) {
+  type Code = OrderNotice["values"][number] & { kind: "CF" | "PIVA" };
+  const of = (kind: Code["kind"]) =>
+    notice.values.filter((value): value is Code => value.kind === kind);
+  const cf = of("CF");
+  return cf.length > 0 ? cf : of("PIVA");
+}
+
+/**
+ * Pulsanti di un ordine: dettaglio, eBay per i negozi reali e copia del CF autorizzato, o della
+ * Partita IVA se l'ordine ha solo quella.
+ */
 export function orderButtons(
   env: { APP_ORIGIN: string },
   language: Language,
   notice: OrderNotice,
 ): BotButton[][] {
   const copy = text[language];
-  const cf = notice.values.find((value) => value.kind === "CF");
+  const code = copiedCodes(notice)[0];
   return [
     [
       { text: `${icons.link} ${copy.open}`, url: orderUrl(env, language, notice) },
@@ -225,7 +240,9 @@ export function orderButtons(
         ? [{ text: `${icons.ebay} ${copy.ebay}`, url: ebayOrderHref(notice.ebayOrderId) }]
         : []),
     ],
-    ...(cf ? [[{ text: `${icons.copy} ${copy.copy}`, copy_text: { text: cf.value } }]] : []),
+    ...(code
+      ? [[{ text: `${icons.copy} ${copy.copy[code.kind]}`, copy_text: { text: code.value } }]]
+      : []),
   ];
 }
 
@@ -300,14 +317,12 @@ export function orderEntry(
 }
 
 /**
- * Un pulsante per Codice Fiscale autorizzato degli ordini, presente nel testo indicato: il codice
- * nel pulsante dice di quale ordine è, il tocco lo copia.
+ * Un pulsante per codice autorizzato degli ordini, scelto come nella notifica e presente nel
+ * testo: il codice nel pulsante dice di quale ordine è, il tocco lo copia.
  */
 export function copyButtons(notices: OrderNotice[], html: string): BotButton[][] {
   const codes = new Set(
-    notices.flatMap((notice) =>
-      notice.values.filter((value) => value.kind === "CF").map((value) => value.value),
-    ),
+    notices.flatMap((notice) => copiedCodes(notice).map((value) => value.value)),
   );
   return [...codes]
     .filter((code) => html.includes(`<code>${escape(code)}</code>`))

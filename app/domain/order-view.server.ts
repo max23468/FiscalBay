@@ -1,7 +1,7 @@
 import type { BuyerSnapshot } from "./order-observation.server";
 import type { VisibleOrder } from "./orders.server";
 import { contactsView } from "../contact";
-import { taxIdentifierType } from "../tax-quality";
+import { shownTaxType } from "../tax-quality";
 import type {
   FiscalNotice,
   FiscalView,
@@ -34,7 +34,7 @@ function fiscalView(order: VisibleOrder): FiscalView {
     return {
       state: "available",
       identifiers: order.taxIdentifiers.map((identifier) => {
-        const type = taxIdentifierType(identifier.type, identifier.issuingCountry);
+        const type = shownTaxType(identifier);
         return {
           type,
           ...(type === "OTHER" ? { typeLabel: identifier.type } : {}),
