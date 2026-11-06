@@ -566,6 +566,11 @@ describe("testi dei messaggi", () => {
     expect(await fiscalKey({ values: [cf, vat] })).toBe(expected);
     expect(await fiscalKey({ values: [vat, cf] })).toBe(expected);
     expect(await fiscalKey({ values: [] })).toBe(emptyFiscalKey);
+    // Un codice estero conserva il proprio tipo nell'impronta.
+    const foreign = { kind: "OTHER" as const, label: "NIF · ES", value: "x1" };
+    expect(await fiscalKey({ values: [foreign] })).toBe(
+      await fiscalDigest(JSON.stringify([["OTHER", "NIF · ES", "x1"]])),
+    );
     expect(expected).toMatch(/^"[\da-f]{64}"$/u);
   });
 });
