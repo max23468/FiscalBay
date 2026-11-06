@@ -18,6 +18,7 @@ import {
   digestDirectory,
   assertAppliedMigrations,
   appliedMigrationHistory,
+  previousMigration,
   receiptArtifact,
   readReceipt,
   releaseIdentity,
@@ -554,6 +555,24 @@ describe("pubblicazione riprendibile", () => {
         }),
       /senza storia/u,
     );
+  });
+
+  it("accetta la migration applicata da un candidato ritirato soltanto se mai modificata dopo", () => {
+    const sql = Buffer.from("ALTER TABLE example ADD COLUMN value TEXT;");
+    const show = (sha) => (sha === "candidato" ? sql : undefined);
+    // Presente nella versione attiva: vale quella.
+    assert.equal(
+      previousMigration("attiva", "candidato", (sha) => (sha === "attiva" ? sql : undefined), []),
+      sql,
+    );
+    // Aggiunta una volta dopo la versione attiva: il candidato ritirato l'aveva identica.
+    assert.equal(previousMigration("attiva", "candidato", show, ["aggiunta"]), sql);
+    // Modificata dopo l'aggiunta, o mai aggiunta nell'intervallo: nessuna storia.
+    assert.equal(
+      previousMigration("attiva", "candidato", show, ["aggiunta", "modifica"]),
+      undefined,
+    );
+    assert.equal(previousMigration("attiva", "candidato", show, []), undefined);
   });
 
   it("registra un'identità di versione entro il limite del messaggio Cloudflare", () => {
