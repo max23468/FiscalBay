@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { retry } from "../lib/provider.mjs";
 import { spawnSync, execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync, mkdirSync, cpSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -669,6 +670,27 @@ describe("versione provata prima del traffico", () => {
       ["readback", "new"],
     ]);
     assert.deepEqual([active.deployed, active.readback, active.version], [true, true, "new"]);
+  });
+
+  it("conferma l'attivazione anche se il provider riporta per qualche lettura la versione precedente", async () => {
+    const { io } = harness();
+    const staged = await publish(manifest, io);
+    const activated = io.activate;
+    let stale = 2;
+    const reads = io.current;
+    io.activate = async (version) => {
+      await activated(version);
+      io.current = async () =>
+        stale-- > 0 ? { version: "old", identity: `${"b".repeat(40)}:x` } : reads();
+    };
+    io.confirm = (check) => retry(check, { attempts: 4, delay: () => 0 });
+    assert.equal((await activate(manifest, io, staged)).version, "new");
+    // Oltre la finestra la versione precedente resta un errore.
+    const late = harness();
+    const again = await publish(manifest, late.io);
+    late.io.activate = async () => {};
+    late.io.confirm = (check) => retry(check, { attempts: 2, delay: () => 0 });
+    await assert.rejects(activate(manifest, late.io, again), /Attivazione non confermata/u);
   });
 
   it("con una configurazione diversa il traffico passa subito", async () => {
