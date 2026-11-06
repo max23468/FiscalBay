@@ -1081,6 +1081,11 @@ describe("frammenti delle PR", () => {
     assert.deepEqual(fragmentDecisions(fragment("Due", "| D002 | b | c |")), ["| D002 | b | c |"]);
     assert.deepEqual(fragmentDecisions("# Solo changelog\n"), []);
     assert.throws(() => withDecisions("nessuna tabella", ["| D002 | b | c |"]), /Tabella/u);
+    // Un secondo giorno della stessa versione non ripete decisioni già registrate.
+    assert.equal(
+      withDecisions(register, ["| D001 | a | c |", "| D002 | b | c |"]),
+      register.replace("|\n\nNota.", "|\n| D002 | b | c |\n\nNota."),
+    );
     assert.equal(
       rebaseLinks("[a](../docs/x.md#y) [b](https://x.it) [c](#z)", "changes", "."),
       "[a](docs/x.md#y) [b](https://x.it) [c](#z)",

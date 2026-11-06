@@ -211,13 +211,18 @@ export function fragmentDecisions(fragment) {
     .filter((line) => /^\| D\d+ \|/u.test(line));
 }
 
-/** Registro con le righe dei frammenti dopo l'ultima decisione della tabella. */
+/**
+ * Registro con le righe dei frammenti dopo l'ultima decisione della tabella. Una decisione già
+ * registrata non si ripete: un secondo giorno della stessa versione rilegge frammenti già riuniti.
+ */
 export function withDecisions(register, rows) {
   if (!rows.length) return register;
   const lines = register.split("\n");
   const last = lines.findLastIndex((line) => /^\| D\d+ \|/u.test(line));
   if (last === -1) throw new Error("Tabella delle decisioni non trovata.");
-  lines.splice(last + 1, 0, ...rows);
+  const id = (line) => /^\| (D\d+) \|/u.exec(line)?.[1];
+  const known = new Set(lines.map(id).filter(Boolean));
+  lines.splice(last + 1, 0, ...rows.filter((row) => !known.has(id(row))));
   return lines.join("\n");
 }
 
