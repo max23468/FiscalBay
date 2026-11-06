@@ -128,6 +128,17 @@ it("segue filtri, ricerca cifrata e «Non pagato» dell'elenco", async () => {
   // Un valore da sbloccare non trova l'ordine nemmeno nel file.
   const { href: guess } = await searchOrders(cookie, "VRDGPP80A01H501X");
   expect((await request(guess.split("?")[1]!)).status).toBe(409);
+  // Dagli Ordini la ricerca della barra conserva i filtri, anche nel conteggio e nei suggerimenti.
+  const all = await searchOrders(cookie, "articolo");
+  expect(all.items.map((item) => item.ebayOrderId)).toEqual(["ebay-a"]);
+  const kept = await searchOrders(cookie, "articolo", "fiscale=available&altro=x");
+  expect(new URLSearchParams(kept.href.split("?")[1]).get("fiscale")).toBe("available");
+  expect(kept.href).not.toContain("altro=");
+  expect(kept).toMatchObject({ total: 1, items: [{ ebayOrderId: "ebay-a" }] });
+  const fromKept = await csv(await request(kept.href.split("?")[1]!));
+  expect(fromKept.rows.map((row) => row["Numero ordine"])).toEqual(["ebay-a"]);
+  const excluded = await searchOrders(cookie, "articolo", "fiscale=locked");
+  expect(excluded).toMatchObject({ total: 0, items: [] });
 });
 
 it("senza ambito degli Ordini esporta il periodo scelto e ignora quello Premium nel Free", async () => {
@@ -426,6 +437,16 @@ it("la sezione conta l'ambito e ogni periodo con le regole del file", async () =
   });
   expect(locked.page.exportSample?.all.length).toBeGreaterThan(0);
   expect(locked.page.exportSample?.available).toEqual([]);
+  expect(locked.page.exportContext).toMatchObject({ filtered: true, search: null, store: null });
+  // L'ambito filtrato nomina la ricerca già decifrata, che resta fuori dall'indirizzo.
+  const { href } = await searchOrders(cookie, "articolo a");
+  const searched = await routePage(
+    loadSettings,
+    `/app/impostazioni/esportazione?${href.split("?")[1]}`,
+    { cookie, params: { sezione: "esportazione" } },
+  );
+  expect(searched.page.exportContext).toMatchObject({ filtered: true, search: "articolo a" });
+  expect(searched.page.exportContext?.query).not.toContain("articolo");
   const periods = await routePage(loadSettings, "/app/impostazioni/esportazione", {
     cookie,
     params: { sezione: "esportazione" },

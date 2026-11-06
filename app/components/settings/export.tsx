@@ -40,9 +40,12 @@ import {
 } from "../../orders/export-columns";
 import type { ExportContext, ExportTally } from "../../orders/export-scope";
 import {
+  fiscalSituations,
   orderPeriods,
   orderPeriodStart,
+  paymentStatuses,
   premiumOrderPeriods,
+  shippingStatuses,
   type OrderPeriod,
 } from "../../view-models";
 import { CheckboxOption } from "~/components/checkbox-option";
@@ -51,9 +54,59 @@ import { Group, RadioOption, SimpleSelect } from "./controls";
 /** Valore della scelta «Standard» fra le configurazioni salvate. */
 const standardChoice = "";
 
+/** Filtri e ricerca che compongono l'ambito ricevuto dagli Ordini, con le etichette della barra. */
+function contextCriteria(context: ExportContext, t: AppCopy): string[] {
+  const query = new URLSearchParams(context.query);
+  const pick = <Value extends string>(name: string, values: readonly Value[]) =>
+    values.find((value) => value === query.get(name));
+  const period = pick("periodo", orderPeriods);
+  const payment = pick("pagamento", paymentStatuses);
+  const shipping = pick("spedizione", shippingStatuses);
+  const fiscal = pick("fiscale", fiscalSituations);
+  return [
+    context.store ? `${t.orders.store}: ${context.store}` : null,
+    period ? `${t.orders.period}: ${t.orders.periods[period]}` : null,
+    payment ? `${t.orders.paymentStatus}: ${t.orders.payment[payment]}` : null,
+    shipping ? `${t.orders.shippingStatus}: ${t.orders.shipping[shipping]}` : null,
+    fiscal ? `${t.orders.fiscalStatus}: ${t.orders.fiscal[fiscal]}` : null,
+    context.search ? t.orders.searchActive(context.search) : null,
+  ].filter((item) => item !== null);
+}
+
+/**
+ * Ordini inclusi: tutti o soltanto quelli con il Codice Fiscale disponibile. Con il filtro Codice
+ * Fiscale degli Ordini la scelta è già nell'ambito e non compare.
+ */
+function FiscalChoice({
+  context,
+  value,
+  onChange,
+}: {
+  context: ExportContext | null;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const { t } = useCopy();
+  const copy = t.settings.export;
+  const filtered =
+    context?.kind === "filtered" &&
+    fiscalSituations.some((item) => item === new URLSearchParams(context.query).get("fiscale"));
+  if (filtered) return null;
+  return (
+    <FieldSet>
+      <FieldLegend variant="label">{copy.exportFiscal}</FieldLegend>
+      <RadioGroup value={value} onValueChange={(next) => onChange(String(next))} className="gap-3">
+        <RadioOption value="all">{copy.exportFiscalAll}</RadioOption>
+        <RadioOption value="available">{copy.exportFiscalAvailable}</RadioOption>
+      </RadioGroup>
+    </FieldSet>
+  );
+}
+
 /** Ambito ricevuto dagli Ordini, sempre esplicito, con il ritorno all'elenco di partenza. */
 function ExportContextNote({ context }: { context: ExportContext }) {
   const { t } = useCopy();
+  const criteria = context.kind === "filtered" ? contextCriteria(context, t) : [];
   return (
     <div className="grid justify-items-start gap-2 rounded-lg border bg-muted/30 p-3 text-sm">
       <p>
@@ -65,6 +118,13 @@ function ExportContextNote({ context }: { context: ExportContext }) {
               ? t.settings.export.exportContextFiltered
               : t.settings.export.exportContextAll}
       </p>
+      {criteria.length > 0 ? (
+        <ul className="grid gap-1 text-muted-foreground">
+          {criteria.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : null}
       <Link to={context.returnHref} className="link-underline">
         {t.settings.export.exportContextBack}
       </Link>
@@ -705,17 +765,7 @@ export function ExportSection({
               onChange={(next) => setPeriod(next as OrderPeriod)}
             />
           )}
-          <FieldSet>
-            <FieldLegend variant="label">{copy.exportFiscal}</FieldLegend>
-            <RadioGroup
-              value={fiscal}
-              onValueChange={(next) => setFiscal(String(next))}
-              className="gap-3"
-            >
-              <RadioOption value="all">{copy.exportFiscalAll}</RadioOption>
-              <RadioOption value="available">{copy.exportFiscalAvailable}</RadioOption>
-            </RadioGroup>
-          </FieldSet>
+          <FiscalChoice context={context} value={fiscal} onChange={setFiscal} />
           <LayoutFields
             premium={premium}
             configurations={configurations}

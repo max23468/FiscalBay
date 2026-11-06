@@ -456,7 +456,8 @@ export type OrderSearchMatch = {
 
 /**
  * Primi ordini della ricerca e loro numero, con lo stesso filtro dell'elenco: la barra
- * superiore propone ciò che «Vedi tutti» mostra, senza leggere gli ordini completi.
+ * superiore propone ciò che «Vedi tutti» mostra, senza leggere gli ordini completi. Dagli Ordini
+ * valgono anche i loro filtri.
  */
 export async function searchVisibleOrders(
   db: D1Database,
@@ -465,8 +466,9 @@ export async function searchVisibleOrders(
   now: Date,
   tokens: string[],
   limit = 5,
+  filters: OrderCriteria = {},
 ): Promise<{ items: OrderSearchMatch[]; total: number }> {
-  const criteria = { tokens };
+  const criteria: OrderCriteria = { ...filters, tokens };
   const [result, total] = await Promise.all([
     db
       .prepare(

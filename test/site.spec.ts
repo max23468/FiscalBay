@@ -26,7 +26,7 @@ import { freeHistoryDays } from "../app/domain/history-window.server";
 import { formatDate } from "../app/format";
 import { ogImage, siteMeta } from "../app/site-meta";
 import { loader as loadRoot } from "../app/root";
-import { resetDatabase, insertWorkspace } from "./fixtures/database-fixtures";
+import { resetDatabase, insertEntitlement, insertWorkspace } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
 import { callRoute, pagePath } from "./fixtures/route-fixtures";
@@ -454,6 +454,29 @@ describe("pagine del sito pubblico", () => {
     expect(await visit(cookie)).toMatchObject(
       languages.map((language) => ({ language, signedIn: true })),
     );
+  });
+
+  it("in Prezzi chi ha già Premium a vita vede il piano attivo al posto delle offerte", async () => {
+    const { userId, cookie } = await verifiedSession("sito-lifetime@example.invalid");
+    const visitor = await callRoute(loadPricing, "/prezzi", { cookie });
+    expect(visitor).toMatchObject({ signedIn: true, owned: false });
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-a", userId, name: "Spazio" }),
+      env.DB.prepare(
+        `INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at, activated_at)
+         VALUES (1, 'w-a', 'active', ?1, ?1)`,
+      ).bind(new Date().toISOString()),
+      insertEntitlement({
+        workspaceId: "w-a",
+        source: "lifetime",
+        grantedBy: "admin@example.invalid",
+        grantReason: "Omaggio di prova",
+      }),
+    ]);
+    const owner = await callRoute(loadPricing, "/en/pricing", { cookie });
+    expect(owner).toMatchObject({ owned: true });
+    expect(owner.copy.owned).toBe(sitePages.en.pricing.owned);
+    expect(await callRoute(loadPricing, "/prezzi")).toMatchObject({ owned: false });
   });
 
   it("con Auth o database non disponibili le pagine pubbliche restano, Home e Prezzi con il listino di riserva", async () => {

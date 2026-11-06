@@ -1,4 +1,5 @@
 import { Bell, History, Link2, RefreshCw } from "lucide-react";
+import { formatNumber } from "../../format";
 import { useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 
@@ -227,7 +228,7 @@ function ConnectionSection({ store, now }: SectionProps & { now: string }) {
 }
 
 function SyncSection({ store, data }: SectionProps & { data: StoresPageData }) {
-  const { t } = useCopy();
+  const { t, language } = useCopy();
   return (
     <StoreSection id="store-sync" icon={RefreshCw} title={t.stores.sectionSync}>
       <ul className="grid gap-2 text-sm">
@@ -250,7 +251,7 @@ function SyncSection({ store, data }: SectionProps & { data: StoresPageData }) {
       </ul>
       <dl className="grid gap-0.5 text-sm">
         <dt className="text-muted-foreground">{t.stores.orders}</dt>
-        <dd className="font-code">{store.importedOrders}</dd>
+        <dd className="font-code">{formatNumber(store.importedOrders, language)}</dd>
       </dl>
     </StoreSection>
   );

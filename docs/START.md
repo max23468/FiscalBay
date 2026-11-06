@@ -57,6 +57,7 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | [Riferimenti brand](brand/REFERENCES.md)  | Concept e immagini originali, non asset finali già approvati             |
 | [Design system](brand/DESIGN_SYSTEM.md)  | Token, componenti, catalogo dei riferimenti e provenienza                |
 | [Audit UI/UX del test](audits/AUDIT_UI_UX.md) | Problemi rilevati sul test e correzioni verificate |
+| [Audit UI/UX di Production](audits/2026-11-06-audit-ui-ux-production.md) | Problemi rilevati in Production e correzioni verificate |
 
 
 Questa guida è l’unico ingresso e indice generale. `CLAUDE.md` importa AGENTS senza una seconda policy. `docs/archive/` contiene la procedura di adozione e il Master Plan della 2.0, con milestone e gate: sono storici, non requisiti, e stanno fuori dai controlli ordinari di `verify-docs`.
