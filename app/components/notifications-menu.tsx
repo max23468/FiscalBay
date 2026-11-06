@@ -269,21 +269,29 @@ export function NotificationsMenu({
             })}
           </ul>
         )}
-        {/* Piede fisso: «Annulla» dopo un'eliminazione, altrimenti «Elimina tutte». */}
+        {/* Piede fisso: «Elimina tutte» resta sempre; dopo un'eliminazione «Annulla» le sta accanto. */}
         {undo || visible.length > 0 ? (
           <div className="sticky bottom-0 z-10 flex min-h-11 items-center justify-between gap-3 border-t bg-popover px-3 py-1.5">
-            <span role="status" className="text-muted-foreground">
-              {undo ? t.shell.dismissed(undo.length) : ""}
-            </span>
-            {undo ? (
-              <Button ref={undoButton} variant="ghost" size="sm" onClick={() => restore(undo)}>
-                {t.shell.undo}
-              </Button>
-            ) : (
-              <Button variant="ghost" size="sm" onClick={() => dismiss(visible)}>
+            <div className="flex min-w-0 items-center gap-1">
+              <span role="status" className="truncate text-muted-foreground">
+                {undo ? t.shell.dismissed(undo.length) : ""}
+              </span>
+              {undo ? (
+                <Button ref={undoButton} variant="ghost" size="sm" onClick={() => restore(undo)}>
+                  {t.shell.undo}
+                </Button>
+              ) : null}
+            </div>
+            {visible.length > 0 ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="shrink-0"
+                onClick={() => dismiss(visible)}
+              >
                 {t.shell.dismissAll}
               </Button>
-            )}
+            ) : null}
           </div>
         ) : null}
       </PopoverContent>

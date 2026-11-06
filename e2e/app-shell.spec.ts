@@ -242,6 +242,61 @@ for (const area of areas)
     await expectOrdersNavigation(page);
   });
 
+test("nelle Novità le voci di un gruppo si affiancano senza colonne vuote", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  test.skip(!whatsNew, "Non applicabile: senza voci nel changelog la pagina Novità non esiste.");
+  await useLocalAccount(context, "member", baseURL!);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page, "/app/novita");
+  // Due voci sulla stessa riga distano al più lo spazio fra le colonne: nessuna colonna vuota.
+  const gaps = await page.locator("main section ul").evaluateAll((lists) =>
+    lists.flatMap((list) => {
+      const boxes = [...list.children].map((item) => item.getBoundingClientRect());
+      return boxes.slice(1).flatMap((box, index) => {
+        const before = boxes[index]!;
+        return Math.abs(box.top - before.top) < 1 ? [box.left - before.right] : [];
+      });
+    }),
+  );
+  for (const gap of gaps) expect(gap).toBeLessThanOrEqual(33);
+});
+
+test("con molte notifiche e dopo un'eliminazione «Elimina tutte» resta visibile", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  test.skip(
+    !whatsNew,
+    "Non applicabile: senza voci nel changelog la campanella ha poche notifiche.",
+  );
+  await useLocalAccount(context, "member", baseURL!);
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 664 },
+  ]) {
+    await page.setViewportSize(size);
+    await open(page, "/app/ordini");
+    await page.getByRole("button", { name: /^Notifiche/u }).click();
+    const dialog = page.getByRole("dialog", { name: "Notifiche" });
+    expect(await dialog.getByRole("listitem").count()).toBeGreaterThan(3);
+    const all = dialog.getByRole("button", { name: "Elimina tutte" });
+    await expect(all).toBeInViewport({ ratio: 1 });
+    // Dopo un'eliminazione «Annulla» compare accanto, senza togliere «Elimina tutte».
+    await dialog
+      .getByRole("button", { name: /^Elimina notifica: / })
+      .first()
+      .click();
+    await expect(dialog.getByRole("button", { name: "Annulla" })).toBeVisible();
+    await expect(all).toBeInViewport({ ratio: 1 });
+    await dialog.getByRole("button", { name: "Annulla" }).click();
+    await page.keyboard.press("Escape");
+  }
+});
+
 test("il menu dell'avatar porta l'admin alla console", async ({ page, context, baseURL }) => {
   await useLocalAccount(context, "admin-granted", baseURL!);
   await open(page, "/app/ordini");
