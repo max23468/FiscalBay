@@ -6,6 +6,7 @@ import { LanguageSwitch } from "~/components/language-switch";
 import { siteColumn } from "~/components/site-column";
 import { SiteFooter } from "~/components/site-footer";
 import { mainContentId, SkipLink } from "~/components/skip-link";
+import { SourceLinks } from "~/components/source-links";
 import { Logo } from "~/components/standalone-page";
 import { buttonLink } from "~/components/ui/button-variants";
 import {
@@ -141,6 +142,7 @@ export function SiteLayout({
         {children}
       </main>
       <SiteFooter path={path} />
+      <SourceLinks />
       {token ? (
         <script defer src={webAnalyticsScript} data-cf-beacon={webAnalyticsBeacon(token)} />
       ) : null}

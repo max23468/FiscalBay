@@ -75,6 +75,28 @@ export function MetricsView({ metrics }: { metrics: ProductMetrics }) {
           <p className="text-sm">{m.syncWithoutOrders(funnel.syncWithoutOrders)}</p>
         ) : null}
       </Panel>
+      <Panel title={m.sources}>
+        <p className="text-sm text-muted-foreground text-pretty">{m.sourcesNote}</p>
+        <DataTable
+          head={[m.channel, m.signups, m.activations, m.payers]}
+          numeric={[1, 2, 3]}
+          rows={funnel.sources.map((row) => ({
+            key: row.channel,
+            cells: [
+              m.channels[row.channel],
+              <span key="signups" className="font-code">
+                {row.signups}
+              </span>,
+              <span key="activations" className="font-code">
+                {row.activations}
+              </span>,
+              <span key="payers" className="font-code">
+                {row.payers}
+              </span>,
+            ],
+          }))}
+        />
+      </Panel>
       <Panel title={m.commerce}>
         <StatGrid>
           <Stat

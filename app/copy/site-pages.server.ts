@@ -82,9 +82,9 @@ const it = {
         : `Promozione Free per un periodo limitato: ${quota} ordini da sbloccare ogni 7 giorni invece di ${base}.`,
   },
   features: {
-    title: "Funzionalità per il Codice Fiscale eBay",
-    /** Titolo della scheda e dei risultati di ricerca, con la parola chiave davanti. */
-    metaTitle: "Funzionalità per il Codice Fiscale degli ordini eBay",
+    title: "Funzionalità",
+    /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
+    metaTitle: "Funzionalità | Codice Fiscale degli ordini eBay",
     description:
       "Codice Fiscale e Partita IVA dagli ordini eBay, sincronizzazione automatica, ricerca, export CSV e XLSX, notifiche Telegram e più negozi.",
     lead: "Il Codice Fiscale dei tuoi ordini eBay a portata di mano, dal collegamento del negozio all’export.",
@@ -138,9 +138,9 @@ const it = {
   },
 
   pricing: {
-    title: "Prezzi per il Codice Fiscale eBay",
-    /** Titolo della scheda e dei risultati di ricerca, con la parola chiave davanti. */
-    metaTitle: "Prezzi per il Codice Fiscale degli ordini eBay",
+    title: "Prezzi",
+    /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
+    metaTitle: "Prezzi | Codice Fiscale degli ordini eBay",
     description:
       "Piano Free gratuito e Premium mensile, annuale o a vita per recuperare il Codice Fiscale dagli ordini eBay. Prova Premium di 14 giorni senza carta.",
     lead: "Inizia gratis. Passa a Premium quando ti servono più ordini, più negozi e più storico.",
@@ -219,9 +219,9 @@ const it = {
     },
   },
   security: {
-    title: "Sicurezza dei dati eBay",
-    /** Titolo della scheda e dei risultati di ricerca, con la parola chiave davanti. */
-    metaTitle: "Sicurezza dei dati degli ordini eBay",
+    title: "Sicurezza",
+    /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
+    metaTitle: "Sicurezza | Codice Fiscale degli ordini eBay",
     description:
       "Come FiscalBay protegge l’accesso al tuo negozio eBay e i dati dei tuoi ordini: sola lettura, token cifrati e dati nell’Unione Europea.",
     lead: "FiscalBay legge i tuoi ordini e non li modifica. Ecco come proteggiamo l’accesso e i dati.",
@@ -274,9 +274,9 @@ const it = {
     report: "Hai trovato una vulnerabilità? Scrivi a",
   },
   faq: {
-    title: "Domande sul Codice Fiscale eBay",
-    /** Titolo della scheda e dei risultati di ricerca, con la parola chiave davanti. */
-    metaTitle: "Domande sul Codice Fiscale degli ordini eBay",
+    title: "Domande frequenti",
+    /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
+    metaTitle: "Domande frequenti | Codice Fiscale degli ordini eBay",
     description:
       "Risposte su FiscalBay: Codice Fiscale e Partita IVA dagli ordini eBay, piani, prova Premium, pagamenti, permessi e dati.",
     items: [
@@ -424,8 +424,8 @@ const en: SitePagesCopy = {
         : `Free promotion for a limited time: ${quota} orders to unlock every 7 days instead of ${base}.`,
   },
   features: {
-    title: "Codice Fiscale features for eBay",
-    metaTitle: "Features for the Codice Fiscale on eBay orders",
+    title: "Features",
+    metaTitle: "Features | Codice Fiscale for eBay orders",
     description:
       "Codice Fiscale and Partita IVA from your eBay orders, automatic sync, search, CSV and XLSX export, Telegram notifications and multiple stores.",
     lead: "The tax code of your eBay orders at hand, from connecting your store to exporting.",
@@ -479,8 +479,8 @@ const en: SitePagesCopy = {
   },
 
   pricing: {
-    title: "Codice Fiscale pricing for eBay",
-    metaTitle: "Pricing for the Codice Fiscale on eBay orders",
+    title: "Pricing",
+    metaTitle: "Pricing | Codice Fiscale for eBay orders",
     description:
       "Free plan at no cost and Premium monthly, annual or lifetime to get the Codice Fiscale from your eBay orders. 14-day Premium trial with no card.",
     lead: "Start for free. Move to Premium when you need more orders, more stores and more history.",
@@ -556,8 +556,8 @@ const en: SitePagesCopy = {
     },
   },
   security: {
-    title: "Security of your eBay data",
-    metaTitle: "Security of your eBay order data",
+    title: "Security",
+    metaTitle: "Security | Codice Fiscale for eBay orders",
     description:
       "How FiscalBay protects access to your eBay store and your order data: read-only access, encrypted tokens and data in the European Union.",
     lead: "FiscalBay reads your orders and never changes them. Here is how we protect access and data.",
@@ -610,8 +610,8 @@ const en: SitePagesCopy = {
     report: "Found a vulnerability? Write to",
   },
   faq: {
-    title: "Codice Fiscale questions for eBay",
-    metaTitle: "Questions about the Codice Fiscale on eBay orders",
+    title: "Frequently asked questions",
+    metaTitle: "Frequently asked questions | Codice Fiscale for eBay orders",
     description:
       "Answers about FiscalBay: Codice Fiscale and Partita IVA from eBay orders, plans, the Premium trial, payments, permissions and data.",
     items: [

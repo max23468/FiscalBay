@@ -144,7 +144,7 @@ const handlers = {
       const response = await withPhaseTimings(
         correlatedRequest,
         () =>
-          withPageCache(correlatedRequest, env.VERSION_METADATA?.id, ctx, () =>
+          withPageCache(correlatedRequest, env.VERSION_METADATA?.id, env.APP_ORIGIN, ctx, () =>
             withResponseCookies(() => handler(correlatedRequest)),
           ),
         { ...metrics, tracing: ctx?.tracing },

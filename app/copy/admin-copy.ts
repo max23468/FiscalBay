@@ -647,6 +647,29 @@ const it = {
       purchase: "Primo acquisto",
     },
     of: (count: number, step: string) => `${count} · ${step}`,
+    sources: "Provenienza degli iscritti",
+    sourcesNote:
+      "Stessa coorte dei primi passi, per canale d’arrivo. Attivazioni e paganti contano la prima lettura riuscita e il primo acquisto, fino a oggi.",
+    channel: "Canale",
+    signups: "Iscritti",
+    activations: "Attivazioni",
+    payers: "Paganti",
+    channels: {
+      google: "Google",
+      bing: "Bing",
+      other_search: "Altro motore di ricerca",
+      ai_assistant: "Assistente AI",
+      ebay_community: "Community eBay",
+      ebay_other: "Altro sito eBay",
+      github: "GitHub",
+      youtube: "YouTube",
+      reddit: "Reddit",
+      telegram: "Telegram",
+      email: "Email",
+      other_site: "Altro sito",
+      direct: "Diretto",
+      unknown: "Sconosciuto",
+    },
     syncWithoutOrders: (count: number) =>
       count === 1
         ? "1 spazio ha la prima lettura riuscita senza ordini."
@@ -1350,6 +1373,29 @@ const en: AdminCopy = {
       purchase: "First purchase",
     },
     of: (count: number, step: string) => `${count} · ${step}`,
+    sources: "Where sign-ups come from",
+    sourcesNote:
+      "Same cohort as first steps, by arrival channel. Activations and payers count the first successful read and the first purchase, up to today.",
+    channel: "Channel",
+    signups: "Sign-ups",
+    activations: "Activations",
+    payers: "Payers",
+    channels: {
+      google: "Google",
+      bing: "Bing",
+      other_search: "Other search engine",
+      ai_assistant: "AI assistant",
+      ebay_community: "eBay Community",
+      ebay_other: "Other eBay site",
+      github: "GitHub",
+      youtube: "YouTube",
+      reddit: "Reddit",
+      telegram: "Telegram",
+      email: "Email",
+      other_site: "Other website",
+      direct: "Direct",
+      unknown: "Unknown",
+    },
     syncWithoutOrders: (count: number) =>
       count === 1
         ? "1 space has its first successful read with no orders."

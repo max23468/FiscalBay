@@ -25,6 +25,7 @@ import { legalVersions } from "../app/domain/registration.server";
 import { freeHistoryDays } from "../app/domain/history-window.server";
 import { formatDate } from "../app/format";
 import { ogImage, siteMeta } from "../app/site-meta";
+import { loader as loadRoot } from "../app/root";
 import { resetDatabase, insertWorkspace } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
@@ -32,6 +33,44 @@ import { callRoute, pagePath } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
+
+describe("provenienza dei visitatori", () => {
+  /** Referer di un sito esterno: soltanto l'origine, come la manda il browser. */
+  const from = (host: string) => `https://${host}/`;
+  const arrival = async (path: string, referer?: string) =>
+    (await callRoute(loadRoot, path, referer ? { headers: { referer } } : {})).arrival;
+
+  it("ricava categoria e prima pagina dal Referer, con l'etichetta che vale di più", async () => {
+    expect(await arrival("/prezzi?utm=x", from("www.google.it"))).toBe("google:/prezzi");
+    expect(await arrival("/en/faq", from("community.ebay.it"))).toBe("ebay_community:/en/faq");
+    expect(await arrival("/", from("www.google.com"))).toBe("google:/");
+    expect(await arrival("/?via=github", from("www.google.com"))).toBe("github:/");
+    expect(await arrival("/?via=newsletter", from("www.bing.com"))).toBe("bing:/");
+    expect(await arrival("/funzionalita")).toBe("direct:/funzionalita");
+    // Fra le pagine del sito la provenienza viaggia soltanto nel parametro.
+    expect(await arrival("/faq", "http://localhost:5173/prezzi")).toBeNull();
+    expect(
+      await arrival("/accesso?registrati&via=google%3A%2Fprezzi", "http://localhost:5173/"),
+    ).toBe("google:/prezzi");
+  });
+
+  it("non cambia canonical, dati strutturati né sitemap e non scrive cookie", async () => {
+    const plain = siteRouteMeta({
+      loaderData: await callRoute(loadSite, "/"),
+    } as Parameters<typeof siteRouteMeta>[0]);
+    const tagged = siteRouteMeta({
+      loaderData: await callRoute(loadSite, "/?via=google%3A%2Fprezzi", {
+        headers: { referer: from("www.google.com") },
+      }),
+    } as Parameters<typeof siteRouteMeta>[0]);
+    expect(tagged).toEqual(plain);
+    expect(JSON.stringify(tagged)).not.toContain("via=");
+    expect(sitemap("https://fiscalbay.it")).not.toContain("via=");
+    expect(new Headers(siteHeaders()).has("set-cookie")).toBe(false);
+    const pricing = await callRoute(loadPricing, "/prezzi?via=reddit");
+    expect(pricing).not.toBeInstanceOf(Response);
+  });
+});
 
 describe("radice pubblica e area riservata", () => {
   const root = (path: string, cookie?: string) =>

@@ -22,8 +22,10 @@ import { logFailure } from "./errors";
 import { localizedPath } from "./i18n";
 import { maxPasswordLength, minPasswordLength } from "./limits";
 import { emailVerificationSeconds } from "./domain/email-change.server";
+import { recordSignupSource } from "./domain/signup-sources.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
+import { parseSource } from "./signup-source";
 
 // Chiave del progetto dell'ambiente su dash.better-auth.com: senza, il plugin non viene caricato,
 // così sviluppo locale e prove restano fuori dalla dashboard.
@@ -150,6 +152,14 @@ function databaseHooks(env: Env): BetterAuthOptions["databaseHooks"] {
         before: async (user) => {
           // Include i callback OAuth; non modifica accessi e collegamenti esistenti.
           requireRegistrationApproval(env, user.email);
+        },
+        // Nuovo utente da Google o eBay: la provenienza arriva nello state firmato (D304). La
+        // registrazione con password la salva l'azione dell'accesso, che ne ha l'indirizzo.
+        after: async (user) => {
+          const state = await getOAuthState().catch(() => null);
+          if (!state) return;
+          const value = (state as { signupSource?: unknown }).signupSource;
+          await recordSignupSource(env.DB, user.id, parseSource(value), new Date());
         },
       },
     },

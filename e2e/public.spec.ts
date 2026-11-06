@@ -69,12 +69,13 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await page.goto("/prezzi");
   const bar = page.getByRole("banner");
   await expect(bar.getByRole("link", { name: "Prezzi" })).toHaveAttribute("aria-current", "page");
-  await expect(bar.getByRole("link", { name: "Accedi" })).toHaveAttribute("href", "/accesso");
+  await expect(bar.getByRole("link", { name: "Accedi" })).toHaveAttribute(
+    "href",
+    /^\/accesso\?via=direct%3A%2Fprezzi$/u,
+  );
   await bar.getByRole("link", { name: "English" }).click();
   await expect(page).toHaveURL(/\/en\/pricing$/u);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Codice Fiscale pricing for eBay",
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Pricing");
 
   // Sotto i 1024 px le pagine stanno in una seconda riga sempre visibile, senza menu da aprire.
   const pages = bar.getByRole("navigation", { name: "Site pages" });
@@ -107,9 +108,7 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await page.setViewportSize({ width: 360, height: 780 });
   await pages.getByRole("link", { name: "FAQ" }).click();
   await expect(page).toHaveURL(/\/en\/faq$/u);
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-    "Codice Fiscale questions for eBay",
-  );
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Frequently asked questions");
 
   await page.goto("/");
   await page.getByRole("link", { name: "Come funziona" }).click();

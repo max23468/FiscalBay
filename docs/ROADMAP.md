@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | Da completare | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, un task per PR. |
+| [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)), un task per PR. |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -61,7 +61,7 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 <a id="correzioni-2-0"></a>
 ## 2.0.x · Correzioni e miglioramenti
 
-**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i tre procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
+**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)), più la provenienza degli iscritti approvata il 2026-11-04 ([D304](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i task procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
 
 <a id="2-0-01"></a>
 #### 2.0-01 · Ordini, eBay e piattaforma
@@ -83,6 +83,13 @@ Preparazione della passkey limitata per IP e pulizia di Auth indicizzata; passwo
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§23](product/EXPERIENCE.md#s23) · [§34](operations/RELEASE.md#s34) · [§35](engineering/TESTING.md#s35)
 
 Home e Prezzi restano consultabili senza database con il listino di riserva e arrivano dalla cache di un minuto a chi non ha cookie. Sito, area e anteprima hanno indirizzi inglesi, con 301 dai vecchi; titoli con la parola chiave davanti, offerte e Guide nei dati strutturati, immagine social per pagina, `lastmod`, manifest, AVIF e cache delle immagini. «Inizia gratis» sta nella barra, l'offerta scelta arriva alla pagina Piano, Prezzi risponde sui pagamenti, «Vai al contenuto principale» apre ogni pagina, l'inglese segue la regola del 27 settembre e `security.txt` è pubblicato. Hook degli agenti e nuovi controlli di `verify:repo`; decisioni superate in archivio e operazioni in runbook ([D293](decisions/DECISION_REGISTER.md)). Le Actions erano già fissate per SHA; la mutation resta nelle PR per [D301](decisions/DECISION_REGISTER.md); meno JavaScript resta alla 2.x.
+
+<a id="2-0-04"></a>
+#### 2.0-04 · Provenienza degli iscritti
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§23](product/EXPERIENCE.md#s23) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30) · [retention](engineering/DATA_RETENTION.md)
+
+Ogni nuovo account salva una volta sola la categoria del canale d'arrivo e il percorso della prima pagina: il Worker li ricava dal Referer o da un'etichetta `via` dell'elenco chiuso, i link interni li portano fino all'accesso senza cookie né archivi del browser e i provider li passano nello state firmato. La console li mostra in aggregato con iscritti, attivazioni e paganti; il dato entra nell'esportazione, sparisce con l'account ed è nella Privacy IT/EN `2026-11-05` ([D304](decisions/DECISION_REGISTER.md)). Senza JavaScript la provenienza non si propaga e vale «unknown»; le iscrizioni reali con Google ed eBay si provano sul test dopo `Pubblica`.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni

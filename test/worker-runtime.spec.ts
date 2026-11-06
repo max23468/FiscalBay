@@ -5,7 +5,7 @@ import { expect, it, vi } from "vitest";
 import { duringServiceActivity, waitUntil } from "../app/service-activity.server";
 
 import worker from "../workers/app";
-import { sharedResponse, skipPageCache } from "../app/page-cache.server";
+import { pageCacheKey, sharedResponse, skipPageCache } from "../app/page-cache.server";
 import { canonicalPath, localizedPath, movedEnglishPath, settingsSectionParam } from "../app/i18n";
 
 import * as site from "../app/routes/site";
@@ -221,6 +221,46 @@ it("serve Home e Prezzi a chi non ha cookie dalla copia di un minuto, sempre no-
   } finally {
     router.handle.mockReset();
   }
+});
+
+it("tiene una copia per ogni provenienza, che la pagina porta nei link interni", async () => {
+  let renders = 0;
+  router.handle.mockImplementation(async () => {
+    renders += 1;
+    return new Response(`pagina ${renders}`);
+  });
+  const version = { id: `provenienza-${crypto.randomUUID()}` };
+  // Referer esterni dal solo nome dell'host, come per i test della provenienza.
+  const visit = (host?: string) =>
+    workerFetch(
+      new Request("https://fiscalbay.it/prezzi", {
+        headers: host ? { referer: `https://${host}/` } : {},
+      }),
+      { ...environment, APP_ORIGIN: "https://fiscalbay.it", VERSION_METADATA: version } as Env,
+    );
+  try {
+    expect(await (await visit()).text()).toBe("pagina 1");
+    expect(await (await visit("www.google.it")).text()).toBe("pagina 2");
+    expect(await (await visit("www.google.com")).text()).toBe("pagina 2");
+    expect(await (await visit("github.com")).text()).toBe("pagina 3");
+    expect(await (await visit("fiscalbay.it")).text()).toBe("pagina 4");
+    expect(await (await visit()).text()).toBe("pagina 1");
+  } finally {
+    router.handle.mockReset();
+  }
+});
+
+it("nella chiave della copia mette la sola categoria, mai l'host del Referer", () => {
+  const key = (referer: string) =>
+    pageCacheKey(
+      new Request("https://fiscalbay.it/", { headers: { referer } }),
+      "v1",
+      "https://fiscalbay.it",
+    ).url;
+  expect(key("https://qualunque-host.invalid/")).toBe(
+    "https://fiscalbay.it/?versione=v1&via=other_site",
+  );
+  expect(key("https://altro.invalid/")).toBe(key("https://qualunque-host.invalid/"));
 });
 
 it("non conserva il listino di riserva e toglie il riferimento d'errore dalle pagine condivise", async () => {

@@ -49,7 +49,7 @@ export const guides: Record<
   it: {
     index: {
       title: "Guide",
-      metaTitle: "Guide al Codice Fiscale negli ordini eBay",
+      metaTitle: "Guide | Codice Fiscale degli ordini eBay",
       description:
         "Guide pratiche per chi vende su eBay: dove trovare il Codice Fiscale e la Partita IVA degli acquirenti, come chiederli e come usarli in fattura.",
       lead: "Risposte alle domande più comuni di chi vende su eBay sul Codice Fiscale degli acquirenti.",
@@ -318,7 +318,7 @@ export const guides: Record<
   en: {
     index: {
       title: "Guides",
-      metaTitle: "Guides to the Codice Fiscale on eBay orders",
+      metaTitle: "Guides | Codice Fiscale for eBay orders",
       description:
         "Practical guides for eBay sellers: where to find buyers’ Codice Fiscale and Partita IVA, how to ask for them and how to use them on invoices.",
       lead: "Answers to the questions eBay sellers ask most about their buyers’ tax codes.",

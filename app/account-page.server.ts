@@ -35,6 +35,8 @@ import { tooManyRequests } from "./area-actions.server";
 import { errorResponse, unavailableData } from "./error-response";
 import { isSameOrigin } from "./account-area.server";
 import { registeredUserExists } from "./domain/registration.server";
+import { recordSignupSource } from "./domain/signup-sources.server";
+import { formatSource, parseSource, sourceParam } from "./signup-source";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
 import { turnstileActions, turnstileField } from "./turnstile";
@@ -173,6 +175,8 @@ export async function accessAction(request: Request) {
   const returnTo = securityReturnPath(language, field("returnTo"));
   const destination = returnTo ?? base;
   const accessReturn = returnTo ? `${access}?${new URLSearchParams({ returnTo })}` : access;
+  // Provenienza portata dall'indirizzo del modulo, per un account che nasce da questo invio.
+  const source = parseSource(new URL(request.url).searchParams.get(sourceParam));
   const notice = (value: SignInNotice, page = access) => {
     const query = new URLSearchParams({ accesso: value });
     if (returnTo) query.set("returnTo", returnTo);
@@ -224,6 +228,8 @@ export async function accessAction(request: Request) {
       provider: intent,
       callbackURL: destination,
       errorCallbackURL: `${localizedPath(language, "/auth/error")}?${new URLSearchParams({ provider: intent, ...(returnTo ? { returnTo } : {}) })}`,
+      // Lo state firmato la porta al callback, dove Better Auth crea l'eventuale nuovo utente.
+      ...(source ? { additionalData: { signupSource: formatSource(source) } } : {}),
     });
     if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
     const { url } = await response.clone().json<{ url: string }>();
@@ -305,6 +311,7 @@ export async function accessAction(request: Request) {
         profile,
         agreement: { marketing: field("marketing") === "on" },
       });
+      await recordSignupSource(env.DB, user.id, source, new Date());
     }
     return notice("registrato");
   }

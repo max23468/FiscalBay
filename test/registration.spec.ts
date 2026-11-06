@@ -43,6 +43,7 @@ import {
 import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
 import { turnstileField } from "../app/turnstile";
+import { recordSignupSource } from "../app/domain/signup-sources.server";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -760,6 +761,124 @@ describe("registrazione e verifica del contatto", () => {
       expect(destination.searchParams.get("provider")).toBe(provider);
       expect(destination.searchParams.get("error")).toBe("access_denied");
     }
+  });
+});
+
+describe("provenienza dell'iscrizione", () => {
+  const password = "Una-password-provenienza-lunga";
+  const person = { tipo: "privato", nome: "Mario", cognome: "Rossi" };
+  const via = (value: string) => `via=${encodeURIComponent(value)}`;
+  const sourceOf = (email: string) =>
+    env.DB.prepare(
+      `SELECT s.channel, s.first_page FROM signup_sources s JOIN "user" u ON u.id = s.user_id
+        WHERE u.email = ?`,
+    )
+      .bind(email)
+      .first<{ channel: string; first_page: string | null }>();
+
+  /** Callback del provider con un profilo sintetico, dopo l'avvio dal modulo d'accesso. */
+  async function oauthCallback(start: Response, provider: "google" | "ebay", subject: string) {
+    const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+    const email = `${subject}@example.invalid`;
+    const segment = (value: object) => btoa(JSON.stringify(value)).replace(/=+$/u, "");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (provider === "google") {
+        const idToken = `${segment({ alg: "none" })}.${segment({
+          aud: "google-test-client",
+          sub: subject,
+          email,
+          email_verified: true,
+          name: "Provenienza sintetica",
+        })}.`;
+        return Response.json({
+          access_token: "sintetico",
+          id_token: idToken,
+          token_type: "Bearer",
+        });
+      }
+      if (url.endsWith("/identity/v1/oauth2/token")) {
+        return Response.json({ access_token: "sintetico", token_type: "Bearer", expires_in: 7200 });
+      }
+      return Response.json({ userId: subject, username: subject, businessAccount: { email } });
+    });
+    try {
+      const response = await handleAuthRequest(
+        new Request(
+          `http://localhost:5173/api/auth/callback/${provider}?code=synthetic&state=${encodeURIComponent(state)}`,
+          { headers: { cookie: sessionCookie(start) } },
+        ),
+        env,
+      );
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).not.toContain("error");
+    } finally {
+      fetchMock.mockRestore();
+    }
+    return email;
+  }
+
+  it("salva con la password categoria e prima pagina una volta sola, senza segnale «unknown»", async () => {
+    vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    const register = (path: string, email: string) =>
+      accessForm(path, { intent: "registrati", ...person, email, password, termini: "on" });
+    const email = "provenienza-password@example.invalid";
+    const created = await register(`/accesso?registrati&${via("google:/prezzi")}`, email);
+    expect(created.headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect(created.headers.getSetCookie()).toEqual([]);
+    expect(await sourceOf(email)).toEqual({ channel: "google", first_page: "/prezzi" });
+    // Un nuovo invio per lo stesso indirizzo non crea un account e non cambia la provenienza.
+    await register(`/accesso?${via("reddit:/")}`, email);
+    expect(await sourceOf(email)).toEqual({ channel: "google", first_page: "/prezzi" });
+    const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind(email)
+      .first<{ id: string }>();
+    await recordSignupSource(
+      env.DB,
+      user!.id,
+      { channel: "github", firstPage: "/" },
+      new Date(now),
+    );
+    expect(await sourceOf(email)).toEqual({ channel: "google", first_page: "/prezzi" });
+
+    const silent = "provenienza-assente@example.invalid";
+    await register("/accesso", silent);
+    expect(await sourceOf(silent)).toEqual({ channel: "unknown", first_page: null });
+    // Un valore fuori elenco non si indovina.
+    const forged = "provenienza-falsa@example.invalid";
+    await register(`/accesso?${via("newsletter")}`, forged);
+    expect(await sourceOf(forged)).toEqual({ channel: "unknown", first_page: null });
+  });
+
+  it("porta la provenienza nello state di Google ed eBay, senza cookie aggiuntivi", async () => {
+    const start = await accessForm(`/accesso?${via("youtube:/faq")}`, { intent: "google" });
+    const plain = await accessForm("/accesso", { intent: "google" });
+    // Gli stessi cookie dell'avvio senza provenienza: il valore viaggia soltanto nello state.
+    expect(start.headers.getSetCookie().map((cookie) => cookie.split("=")[0])).toEqual(
+      plain.headers.getSetCookie().map((cookie) => cookie.split("=")[0]),
+    );
+    const google = await oauthCallback(start, "google", "google-provenienza");
+    expect(await sourceOf(google)).toEqual({ channel: "youtube", first_page: "/faq" });
+    // Un nuovo accesso con un'altra provenienza non la sovrascrive.
+    await oauthCallback(
+      await accessForm(`/accesso?${via("reddit:/")}`, { intent: "google" }),
+      "google",
+      "google-provenienza",
+    );
+    expect(await sourceOf(google)).toEqual({ channel: "youtube", first_page: "/faq" });
+
+    const ebay = await oauthCallback(
+      await accessForm(`/en/accesso?${via("ebay_community:/en/accesso")}`, { intent: "ebay" }),
+      "ebay",
+      "ebay-provenienza",
+    );
+    expect(await sourceOf(ebay)).toEqual({ channel: "ebay_community", first_page: "/en/accesso" });
+    const unknown = await oauthCallback(
+      await accessForm("/accesso", { intent: "ebay" }),
+      "ebay",
+      "ebay-senza-provenienza",
+    );
+    expect(await sourceOf(unknown)).toEqual({ channel: "unknown", first_page: null });
   });
 });
 
