@@ -476,6 +476,20 @@ export function assertAppliedMigrations(migrations, previous, applied) {
   }
 }
 
+/**
+ * SQL di una migration applicata secondo la versione attiva. Una migration che quella versione non
+ * contiene vale soltanto se, fra la versione e il candidato, il file è stato aggiunto una volta e
+ * mai modificato: ogni candidato intermedio, anche ritirato dopo averla applicata, ne aveva gli
+ * stessi byte del candidato.
+ * @param {(sha: string) => Buffer | undefined} show
+ * @param {string[]} changes commit che toccano il file fra la versione attiva e il candidato
+ */
+export function previousMigration(previousSha, sha, show, changes) {
+  const before = show(previousSha);
+  if (before !== undefined) return before;
+  return changes.length === 1 ? show(sha) : undefined;
+}
+
 /** SQL precedente oppure piano salvato prima dell'effetto D1, per una ripresa parziale. */
 export function appliedMigrationHistory(applied, readPrevious, receipt) {
   const saved = receipt.schemaChanged && receipt.migrationPlan;
@@ -1119,15 +1133,29 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
         if (/^[0-9a-f]{40}$/u.test(previousSha ?? "") && previousSha !== manifest.sha) {
           const previous = appliedMigrationHistory(
             names,
-            (name) => {
-              try {
-                return execFileSync("git", ["show", `${previousSha}:migrations/${name}`], {
-                  stdio: ["ignore", "pipe", "ignore"],
-                });
-              } catch {
-                return undefined;
-              }
-            },
+            (name) =>
+              previousMigration(
+                previousSha,
+                manifest.sha,
+                (sha) => {
+                  try {
+                    return execFileSync("git", ["show", `${sha}:migrations/${name}`], {
+                      stdio: ["ignore", "pipe", "ignore"],
+                    });
+                  } catch {
+                    return undefined;
+                  }
+                },
+                git(
+                  "log",
+                  "--format=%H",
+                  `${previousSha}..${manifest.sha}`,
+                  "--",
+                  `migrations/${name}`,
+                )
+                  .split("\n")
+                  .filter(Boolean),
+              ),
             receipt,
           );
           assertAppliedMigrations(manifest.migrations, previous, names);
