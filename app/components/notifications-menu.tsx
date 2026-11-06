@@ -62,6 +62,8 @@ export function NotificationsMenu({
   const undoButton = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
   const [restored, setRestored] = useState<string | null>(null);
+  // Ultima eliminazione inviata: «Annulla» parte dopo, così il server la riceve per seconda.
+  const lastDismiss = useRef<Promise<unknown> | null>(null);
   const isRead = (item: NotificationView) => item.read || readIds.has(item.id);
   const visible = notifications.filter((item) => !dismissedIds.has(item.id));
   const unread = visible.filter((item) => !isRead(item)).length;
@@ -95,27 +97,35 @@ export function NotificationsMenu({
    * `keepalive` regge l'apertura della notifica. Un blocco che il server non registra torna
    * com'era, invece di sembrare riuscito.
    */
-  const send = (intent: Intent, ids: string[], revert: (chunk: string[]) => void) => {
-    if (!readAction) return;
+  const send = (
+    intent: Intent,
+    ids: string[],
+    revert: (chunk: string[]) => void,
+  ): Promise<unknown> => {
+    if (!readAction) return Promise.resolve();
+    const requests = [];
     for (let start = 0; start < ids.length; start += maxReadNotifications) {
       const chunk = ids.slice(start, start + maxReadNotifications);
       const body = new FormData();
       body.set("ids", chunk.join(","));
       if (intent !== "read") body.set("intent", intent);
-      void fetch(readAction, { method: "POST", body, keepalive: true })
-        .then((response) => response.ok)
-        .catch(() => false)
-        .then((saved) => {
-          if (!saved) revert(chunk);
-        });
+      requests.push(
+        fetch(readAction, { method: "POST", body, keepalive: true })
+          .then((response) => response.ok)
+          .catch(() => false)
+          .then((saved) => {
+            if (!saved) revert(chunk);
+          }),
+      );
     }
+    return Promise.all(requests);
   };
 
   const markRead = (items: NotificationView[]) => {
     const ids = items.filter((item) => !isRead(item)).map((item) => item.id);
     if (ids.length === 0) return;
     setReadIds((current) => add(current, ids));
-    send("read", ids, (chunk) => setReadIds((current) => remove(current, chunk)));
+    void send("read", ids, (chunk) => setReadIds((current) => remove(current, chunk)));
   };
 
   // Eliminata, una notifica conta anche come letta: se torna con «Annulla» è già letta.
@@ -126,7 +136,7 @@ export function NotificationsMenu({
     setDismissedIds((current) => add(current, ids));
     setReadIds((current) => add(current, unreadIds));
     setUndo(ids);
-    send("dismiss", ids, (chunk) => {
+    lastDismiss.current = send("dismiss", ids, (chunk) => {
       const failed = new Set(chunk);
       setDismissedIds((current) => remove(current, chunk));
       setReadIds((current) =>
@@ -143,7 +153,9 @@ export function NotificationsMenu({
     setUndo(null);
     setDismissedIds((current) => remove(current, ids));
     setRestored(ids[0] ?? null);
-    send("restore", ids, (chunk) => setDismissedIds((current) => add(current, chunk)));
+    void (lastDismiss.current ?? Promise.resolve()).then(() =>
+      send("restore", ids, (chunk) => setDismissedIds((current) => add(current, chunk))),
+    );
   };
 
   return (

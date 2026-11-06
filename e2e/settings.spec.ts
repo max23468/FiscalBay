@@ -97,15 +97,25 @@ test.describe("area reale", () => {
     await page.reload();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
 
-    // Eliminata, la notifica esce dalla campanella; «Annulla» la riporta e l'eliminazione resta
-    // dopo una nuova lettura della pagina.
+    // Eliminata, la notifica esce dalla campanella; «Annulla», anche subito, la riporta sul
+    // server, e un'eliminazione resta dopo una nuova lettura della pagina.
     await page.getByRole("button", { name: "Notifiche", exact: true }).click();
     const dismiss = dialog.getByRole("button", { name: "Elimina notifica: Collegamento scaduto" });
+    const restored = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/notifications") &&
+        Boolean(response.request().postData()?.includes("restore")),
+    );
     await dismiss.click();
     await expect(dialog).toContainText("Notifica eliminata");
     await dialog.getByRole("button", { name: "Annulla" }).click();
     await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
     await expect(dismiss).toBeFocused();
+    expect((await restored).status()).toBe(200);
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
     const dismissed = page.waitForResponse(
       (response) =>
         response.url().endsWith("/api/v1/notifications") &&
