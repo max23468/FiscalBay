@@ -101,7 +101,7 @@ Ogni nuovo account salva una volta sola la categoria del canale d'arrivo e il pe
 
 **Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§19](product/EXPERIENCE.md#s19) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30)
 
-Pagina dell'area riservata, raggiunta dalla campanella, con tutte le voci degli ultimi 30 giorni: filtri per categoria e stato di lettura, testo completo e link all'azione. Stessa fonte, stesse letture e stessa retention del popover, che resta com'è.
+Pagina dell'area riservata, raggiunta dalla campanella, con tutte le voci degli ultimi 30 giorni: filtri per categoria e stato di lettura, testo completo e link all'azione. Stessa fonte, stesse letture ed eliminazioni e stessa retention del popover, che resta com'è.
 
 **Criterio di completamento:** una lettura o «Segna tutte come lette» su una delle due superfici si riflette sull'altra dal server, IT/EN e mobile compresi; nessuna voce oltre i 30 giorni.
 
