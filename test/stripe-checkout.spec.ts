@@ -428,7 +428,7 @@ describe("Stripe Managed Payments", () => {
       expect(await buy(cookie, "monthly")).toMatchObject({
         data: {
           ok: false,
-          notice: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
+          notice: "Potrai acquistare Pro dopo la prima lettura riuscita di un negozio.",
         },
         init: { status: 409 },
       });
@@ -449,7 +449,7 @@ describe("Stripe Managed Payments", () => {
         endsAt: "2026-10-13T20:00:00.000Z",
       }).run();
       expect(await buy(cookie, "annual")).toMatchObject({
-        data: { ok: false, notice: "Il tuo account ha già Premium attivo." },
+        data: { ok: false, notice: "Il tuo account ha già Pro attivo." },
       });
       expect(paths(api)).toEqual([
         "GET /v1/prices/price_test_monthly",

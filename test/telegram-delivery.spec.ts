@@ -333,7 +333,7 @@ describe("invii degli ordini", () => {
     ]);
   });
 
-  it("una consegna in attesa alla fine di Premium non parte al rinnovo", async () => {
+  it("una consegna in attesa alla fine di Pro non parte al rinnovo", async () => {
     const seller = await linked("rinnovo");
     await order(seller.store, "o-rinnovo", { cf: "RSSMRA80A01H501U" });
     const limited = bot((call) =>
@@ -410,7 +410,7 @@ describe("invii degli ordini", () => {
     expect(api.calls).toHaveLength(0);
     // La chat scrive di nuovo: lo stato risponde e gli invii riprendono dagli eventi successivi.
     await deliver("/stato", seller.chat, api.fetcher, later(30));
-    expect(sentTexts(api)[0]).toContain("Premium fino al");
+    expect(sentTexts(api)[0]).toContain("Pro fino al");
     expect((await telegramSettings(env.DB, seller.userId, "UTC")).chat?.failure).toBeUndefined();
     await order(seller.store, "o-dopo", { cf: "VRDGPP80A01H501X", created: 35, listed: 40 });
     await run(api.fetcher, 45);
@@ -483,7 +483,7 @@ describe("invii degli ordini", () => {
     });
   });
 
-  it("notifiche spente, negozio escluso e Premium scaduto non inviano nulla", async () => {
+  it("notifiche spente, negozio escluso e Pro scaduto non inviano nulla", async () => {
     const seller = await linked("spente");
     await saveTelegramChange(env.DB, seller.userId, { name: "enabled", value: false }, "UTC");
     await order(seller.store, "o-spente", { cf: "RSSMRA80A01H501U" });
@@ -604,7 +604,7 @@ describe("invii degli ordini", () => {
       (seller) => deliver("/stato", seller.chat, bot().fetcher, later(25)),
     ));
 
-  it("al rinnovo di Premium non arriva la variazione del periodo senza Premium", () =>
+  it("al rinnovo di Pro non arriva la variazione del periodo senza Pro", () =>
     withoutBacklog(
       "pausa-premium",
       (seller) =>
@@ -780,7 +780,7 @@ describe("invii degli ordini", () => {
     await deliver("/ultimi", seller.chat, api.fetcher, later(51));
     await deliver("/stato", seller.chat, api.fetcher, later(52));
     expect(sentTexts(api)).toEqual([
-      expect.stringContaining("compresi in Premium"),
+      expect.stringContaining("compresi in Pro"),
       expect.stringContaining("<b>Free</b>"),
     ]);
     for (const text of sentTexts(api)) expect(text).not.toMatch(/RSSMRA|BNCLGU/u);

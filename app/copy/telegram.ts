@@ -114,9 +114,9 @@ export const telegramBotCopy = {
       help: "Come funziona il bot",
     } satisfies Record<BotCommand, string>,
     plans: {
-      premium: (until: string) => `Premium fino al ${until}`,
-      trial: (until: string) => `Prova Premium fino al ${until}`,
-      lifetime: "Premium a vita",
+      premium: (until: string) => `Pro fino al ${until}`,
+      trial: (until: string) => `Prova Pro fino al ${until}`,
+      lifetime: "Pro a vita",
       free: "Free",
     },
     freeNote: "Con il piano Free le notifiche sono ferme.",
@@ -142,7 +142,7 @@ export const telegramBotCopy = {
     openSettings: "Impostazioni",
     choosePlan: "Scegli il piano",
     premiumRequired:
-      "Notifiche e ultimi ordini nel bot sono compresi in Premium, nella prova e nel lifetime.",
+      "Notifiche e ultimi ordini nel bot sono compresi in Pro, nella prova e nel lifetime.",
     zoneNote: "Il fuso si cambia dal sito.",
     pause: "Metti in pausa",
     resume: "Riprendi le notifiche",
@@ -193,9 +193,9 @@ export const telegramBotCopy = {
       help: "How the bot works",
     } satisfies Record<BotCommand, string>,
     plans: {
-      premium: (until: string) => `Premium until ${until}`,
-      trial: (until: string) => `Premium trial until ${until}`,
-      lifetime: "Lifetime Premium",
+      premium: (until: string) => `Pro until ${until}`,
+      trial: (until: string) => `Pro trial until ${until}`,
+      lifetime: "Lifetime Pro",
       free: "Free",
     },
     freeNote: "Notifications are stopped on the Free plan.",
@@ -218,7 +218,7 @@ export const telegramBotCopy = {
     openSettings: "Settings",
     choosePlan: "Choose a plan",
     premiumRequired:
-      "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
+      "Notifications and latest orders in the bot are included in Pro, the trial and lifetime.",
     zoneNote: "The time zone is changed on the website.",
     pause: "Pause",
     resume: "Resume notifications",

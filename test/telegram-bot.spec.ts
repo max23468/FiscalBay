@@ -48,7 +48,7 @@ describe("comandi e pulsanti del bot", () => {
     const api = bot();
     await deliver("/stato", seller.chat, api.fetcher);
     const status = api.texts()[0]!;
-    expect(String(status.params.text)).toContain("Premium fino al");
+    expect(String(status.params.text)).toContain("Pro fino al");
     expect(String(status.params.text)).toContain(
       "🔔 Notifiche attive · solo con Codice Fiscale o P. IVA\n📨 Un messaggio per ordine",
     );
@@ -200,7 +200,7 @@ describe("comandi e pulsanti del bot", () => {
     expect(sentTexts(api)[1]).toContain("🛒 /latest · the latest orders");
   });
 
-  it("senza Premium lo stato dice Free e le preferenze rimandano al piano", async () => {
+  it("senza Pro lo stato dice Free e le preferenze rimandano al piano", async () => {
     const seller = await linked("free");
     await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
       .bind(now, seller.workspace)
@@ -211,7 +211,7 @@ describe("comandi e pulsanti del bot", () => {
     await deliver("/aiuto", seller.chat, api.fetcher, later(3));
     expect(sentTexts(api)).toEqual([
       expect.stringContaining("Con il piano Free le notifiche sono ferme."),
-      expect.stringContaining("compresi in Premium"),
+      expect.stringContaining("compresi in Pro"),
       expect.stringContaining("/ultimi"),
     ]);
   });
@@ -358,9 +358,9 @@ describe("comandi e pulsanti del bot", () => {
   const replies = {
     it: {
       path: "",
-      premium: "Premium fino al 13 ott",
-      trial: "Prova Premium fino al 20 set",
-      lifetime: "Premium a vita",
+      premium: "Pro fino al 13 ott",
+      trial: "Prova Pro fino al 20 set",
+      lifetime: "Pro a vita",
       freeNote: "Con il piano Free le notifiche sono ferme.",
       enabled: "Notifiche attive",
       paused: "Notifiche in pausa",
@@ -381,7 +381,7 @@ describe("comandi e pulsanti del bot", () => {
       settings: "Impostazioni",
       choosePlan: "Scegli il piano",
       premiumRequired:
-        "Notifiche e ultimi ordini nel bot sono compresi in Premium, nella prova e nel lifetime.",
+        "Notifiche e ultimi ordini nel bot sono compresi in Pro, nella prova e nel lifetime.",
       pause: "Metti in pausa",
       resume: "Riprendi le notifiche",
       fiscalOnly: "Solo con Codice Fiscale o P. IVA",
@@ -410,9 +410,9 @@ describe("comandi e pulsanti del bot", () => {
     },
     en: {
       path: "/en",
-      premium: "Premium until 13 Oct",
-      trial: "Premium trial until 20 Sept",
-      lifetime: "Lifetime Premium",
+      premium: "Pro until 13 Oct",
+      trial: "Pro trial until 20 Sept",
+      lifetime: "Lifetime Pro",
       freeNote: "Notifications are stopped on the Free plan.",
       enabled: "Notifications on",
       paused: "Notifications paused",
@@ -433,7 +433,7 @@ describe("comandi e pulsanti del bot", () => {
       settings: "Settings",
       choosePlan: "Choose a plan",
       premiumRequired:
-        "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
+        "Notifications and latest orders in the bot are included in Pro, the trial and lifetime.",
       pause: "Pause",
       resume: "Resume notifications",
       fiscalOnly: "Only with tax code or VAT",
@@ -977,7 +977,7 @@ describe("comandi e pulsanti del bot", () => {
       .run();
     await deliver("/stato", seller.chat, api.fetcher, later(++minute));
     expect(last().params.text).toBe(
-      "⭐ <b>Premium fino al 13 ott</b>\n🔔 Notifiche attive · solo con Codice Fiscale o P. IVA\n📨 Un messaggio per ordine\n\n📨 <i>Nessun invio finora</i>",
+      "⭐ <b>Pro fino al 13 ott</b>\n🔔 Notifiche attive · solo con Codice Fiscale o P. IVA\n📨 Un messaggio per ordine\n\n📨 <i>Nessun invio finora</i>",
     );
     // Senza negozi e con un messaggio per ordine la riga di orario e negozi non c'è.
     await deliver("/preferenze", seller.chat, api.fetcher, later(++minute));

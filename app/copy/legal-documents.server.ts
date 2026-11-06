@@ -24,7 +24,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Cosa fa FiscalBay",
         blocks: [
-          "FiscalBay legge gli ordini dei negozi eBay che colleghi e ti mostra il Codice Fiscale e la Partita IVA dell’acquirente quando eBay li rende disponibili, con ricerca, export e, con Premium, notifiche su Telegram.",
+          "FiscalBay legge gli ordini dei negozi eBay che colleghi e ti mostra il Codice Fiscale e la Partita IVA dell’acquirente quando eBay li rende disponibili, con ricerca, export e, con Pro, notifiche su Telegram.",
           {
             items: [
               "FiscalBay chiede a eBay soltanto di leggere gli ordini e l’identità del negozio e di avvisarlo dei nuovi ordini. Non modifica ordini, annunci o messaggi e non contatta gli acquirenti.",
@@ -40,7 +40,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           {
             items: [
               "Devi avere almeno 18 anni e la capacità di concludere questo contratto.",
-              "I dati del profilo devono essere veri e aggiornati. Un account corrisponde a una sola attività; il piano Free e la prova Premium valgono una volta per attività.",
+              "I dati del profilo devono essere veri e aggiornati. Un account corrisponde a una sola attività; il piano Free e la prova Pro valgono una volta per attività.",
               "Custodisci i tuoi metodi di accesso. Dalle Impostazioni vedi e chiudi le sessioni attive.",
               "Per collegare un negozio serve l’indirizzo email confermato.",
             ],
@@ -59,8 +59,8 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           {
             items: [
               "Free: gratuito, un negozio attivo sostituibile ogni 90 giorni, gli ultimi 30 giorni di ordini e un numero di ordini da sbloccare ogni 7 giorni indicato nella pagina Prezzi. Gli ordini senza dato fiscale non consumano sblocchi. Dopo 30 giorni senza attività ti avvisiamo; se non confermi entro 7 giorni le letture automatiche si fermano finché non rientri.",
-              "Premium: più negozi, un anno di storico, ordini da sbloccare senza limite per ciclo, XLSX, suggerimenti e notifiche Telegram. Restano limiti tecnici e antiabuso.",
-              "Prova Premium: 14 giorni, senza carta e senza rinnovo automatico, attivabile dopo la prima lettura riuscita di un negozio. Alla fine torni al Free senza addebiti e gli ordini già sbloccati restano tali.",
+              "Pro: più negozi, un anno di storico, ordini da sbloccare senza limite per ciclo, XLSX, suggerimenti e notifiche Telegram. Restano limiti tecnici e antiabuso.",
+              "Prova Pro: 14 giorni, senza carta e senza rinnovo automatico, attivabile dopo la prima lettura riuscita di un negozio. Alla fine torni al Free senza addebiti e gli ordini già sbloccati restano tali.",
             ],
           },
           "Contenuto dei piani e promozioni in corso sono descritti nella pagina Prezzi.",
@@ -71,10 +71,10 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
         blocks: [
           {
             items: [
-              "Premium si acquista dall’app, dopo la prima lettura riuscita di un negozio, con il checkout di Stripe. Per questi acquisti Stripe è il venditore (merchant of record): conclude la vendita con te, calcola le imposte del tuo paese e il totale prima del pagamento, anche nella tua valuta, ed emette ricevute e fatture. FiscalBay non vede i dati della carta.",
+              "Pro si acquista dall’app, dopo la prima lettura riuscita di un negozio, con il checkout di Stripe. Per questi acquisti Stripe è il venditore (merchant of record): conclude la vendita con te, calcola le imposte del tuo paese e il totale prima del pagamento, anche nella tua valuta, ed emette ricevute e fatture. FiscalBay non vede i dati della carta.",
               "I prezzi sono indicati IVA esclusa.",
-              "Mensile e annuale si rinnovano automaticamente. Puoi disdire quando vuoi da Stripe: Premium resta attivo fino alla fine del periodo pagato. Il cambio fra mensile e annuale vale dalla fine del periodo in corso.",
-              "A vita: pagamento unico, senza rinnovi, con venti posti in tutto. Comprende il livello Premium anche nelle versioni future e nelle eventuali app, non ogni funzione futura o risorse illimitate.",
+              "Mensile e annuale si rinnovano automaticamente. Puoi disdire quando vuoi da Stripe: Pro resta attivo fino alla fine del periodo pagato. Il cambio fra mensile e annuale vale dalla fine del periodo in corso.",
+              "A vita: pagamento unico, senza rinnovi, con venti posti in tutto. Comprende il livello Pro anche nelle versioni future e nelle eventuali app, non ogni funzione futura o risorse illimitate.",
               "Recesso e rimborsi seguono le condizioni di Stripe mostrate nel checkout. Restano fermi i diritti che la legge ti riconosce come consumatore. Per altri casi scrivi all’assistenza, che li valuta uno per uno. Un rimborso totale o una contestazione persa revocano il diritto acquistato.",
             ],
           },
@@ -190,7 +190,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
               [
                 "Acquisti: riferimenti del cliente e degli abbonamenti presso Stripe, piano, periodi e importi pagati",
-                "Attribuire i diritti Premium e riconciliare i pagamenti (contratto, obblighi di legge)",
+                "Attribuire i diritti Pro e riconciliare i pagamenti (contratto, obblighi di legge)",
                 "Finché l’account esiste; per il piano a vita, la prova dell’acquisto resta finché il diritto è recuperabile",
               ],
               [
@@ -355,7 +355,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "What FiscalBay does",
         blocks: [
-          "FiscalBay reads the orders of the eBay stores you connect and shows you the buyer’s Italian tax code (Codice Fiscale) and VAT number when eBay makes them available, with search, export and, with Premium, Telegram notifications.",
+          "FiscalBay reads the orders of the eBay stores you connect and shows you the buyer’s Italian tax code (Codice Fiscale) and VAT number when eBay makes them available, with search, export and, with Pro, Telegram notifications.",
           {
             items: [
               "FiscalBay only asks eBay to read orders and the store identity and to notify it of new orders. It does not change orders, listings or messages and does not contact buyers.",
@@ -371,7 +371,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           {
             items: [
               "You must be at least 18 and able to enter into this contract.",
-              "Your profile details must be true and up to date. One account corresponds to one business; the Free plan and the Premium trial apply once per business.",
+              "Your profile details must be true and up to date. One account corresponds to one business; the Free plan and the Pro trial apply once per business.",
               "Keep your sign-in methods safe. In Settings you can see and close active sessions.",
               "Connecting a store requires a confirmed email address.",
             ],
@@ -390,8 +390,8 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           {
             items: [
               "Free: free of charge, one active store replaceable every 90 days, the last 30 days of orders and a number of orders to unlock every 7 days shown on the Pricing page. Orders without tax data do not use unlocks. After 30 days without activity we notify you; if you do not confirm within 7 days, automatic reads stop until you come back.",
-              "Premium: more stores, one year of history, unlimited unlocks per cycle, XLSX, suggestions and Telegram notifications. Technical and anti-abuse limits still apply.",
-              "Premium trial: 14 days, no card and no automatic renewal, available after the first successful read of a store. At the end you go back to Free with no charge and orders already unlocked stay unlocked.",
+              "Pro: more stores, one year of history, unlimited unlocks per cycle, XLSX, suggestions and Telegram notifications. Technical and anti-abuse limits still apply.",
+              "Pro trial: 14 days, no card and no automatic renewal, available after the first successful read of a store. At the end you go back to Free with no charge and orders already unlocked stay unlocked.",
             ],
           },
           "Plan contents and current promotions are described on the Pricing page.",
@@ -402,10 +402,10 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
         blocks: [
           {
             items: [
-              "Premium is bought in the app, after the first successful read of a store, through Stripe checkout. For these purchases Stripe is the seller (merchant of record): it concludes the sale with you, calculates your country’s taxes and the total before payment, also in your currency, and issues receipts and invoices. FiscalBay does not see card details.",
+              "Pro is bought in the app, after the first successful read of a store, through Stripe checkout. For these purchases Stripe is the seller (merchant of record): it concludes the sale with you, calculates your country’s taxes and the total before payment, also in your currency, and issues receipts and invoices. FiscalBay does not see card details.",
               "Prices are shown excluding VAT.",
-              "Monthly and annual plans renew automatically. You can cancel at any time from Stripe: Premium stays active until the end of the paid period. Switching between monthly and annual applies from the end of the current period.",
-              "Lifetime: one payment, no renewals, twenty seats in total. It includes the Premium level in future versions and in any apps, not every future feature or unlimited resources.",
+              "Monthly and annual plans renew automatically. You can cancel at any time from Stripe: Pro stays active until the end of the paid period. Switching between monthly and annual applies from the end of the current period.",
+              "Lifetime: one payment, no renewals, twenty seats in total. It includes the Pro level in future versions and in any apps, not every future feature or unlimited resources.",
               "Withdrawal and refunds follow Stripe’s terms shown at checkout. The rights the law grants you as a consumer are unaffected. For other cases write to support, which assesses them one by one. A full refund or a lost dispute revokes the purchased right.",
             ],
           },
@@ -521,7 +521,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
               [
                 "Purchases: customer and subscription references at Stripe, plan, periods and amounts paid",
-                "Granting Premium rights and reconciling payments (contract, legal obligations)",
+                "Granting Pro rights and reconciling payments (contract, legal obligations)",
                 "As long as the account exists; for lifetime, proof of purchase stays as long as the right can be recovered",
               ],
               [

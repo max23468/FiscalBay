@@ -1123,7 +1123,7 @@ describe("Lifetime e concessioni", () => {
     ]);
   });
 
-  it("concede Premium dopo la copertura in corso e ne rinvia il rinnovo", async () => {
+  it("concede Pro dopo la copertura in corso e ne rinvia il rinnovo", async () => {
     const stripe = stripeAccount();
     vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
     const grant = (days: number, time = now) =>

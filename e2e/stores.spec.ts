@@ -538,8 +538,8 @@ test.describe("abbonamento nel piano", () => {
         const confirm = target.getByRole("alertdialog");
         await expect(confirm).toContainText(
           it
-            ? "Scollegare il negozio non disdice l’abbonamento Premium"
-            : "Disconnecting the store does not cancel the Premium subscription",
+            ? "Scollegare il negozio non disdice l’abbonamento Pro"
+            : "Disconnecting the store does not cancel the Pro subscription",
         );
         await expect(
           confirm.getByRole("link", {

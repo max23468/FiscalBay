@@ -60,7 +60,7 @@ Temisfera è operatore del prodotto; Stripe Managed Payments assume il ruolo del
 | Categoria | Regola di conservazione approvata |
 |---|---|
 | Ordini visibili Free | 30 giorni dalla data ordine, salvo obblighi prevalenti |
-| Ordini Premium standard | Un anno, estensioni concesse esplicitamente |
+| Ordini Pro standard | Un anno, estensioni concesse esplicitamente |
 | Eccedenza dopo downgrade | 30 giorni transitori, non consultabile/aggiornata, ove consentito |
 | Raw eBay temporaneo | 24 ore, non storico diagnostico permanente |
 | File export server | 24 ore; copie scaricate fuori dal servizio |

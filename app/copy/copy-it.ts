@@ -23,9 +23,9 @@ const contactSupport = "Contatta l’assistenza";
  * Periodi di Premium, nella pagina del piano e nel riepilogo diagnostico. Stringhe e non un
  * oggetto condiviso: un oggetto usato in due punti terrebbe i testi nel bundle del browser.
  */
-const premiumMonthly = "Premium mensile";
-const premiumAnnual = "Premium annuale";
-const premiumLifetime = "Premium a vita";
+const premiumMonthly = "Pro mensile";
+const premiumAnnual = "Pro annuale";
+const premiumLifetime = "Pro a vita";
 
 /** Titoli dei documenti legali, nelle Impostazioni, nelle pagine legali e nel consenso. */
 const termsTitle = "Termini di servizio";
@@ -144,7 +144,7 @@ export const it = {
     searchActive: (query: string) => `Ricerca: ${query}`,
     clearSearch: "Cancella ricerca",
     resetFilters: "Reimposta filtri",
-    premiumOption: "Disponibile con Premium",
+    premiumOption: "Disponibile con Pro",
     payment: {
       paid: "Pagato",
       unpaid: "Non pagato",
@@ -303,12 +303,12 @@ export const it = {
     quotaTitle: "Sblocchi esauriti per questo ciclo",
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
-    quotaAction: "Passa a Premium",
+    quotaAction: "Passa a Pro",
     waitlistTitle: "Sei in lista d’attesa per il Free",
-    trialOffer: "Prova Premium gratis per 14 giorni, senza carta.",
+    trialOffer: "Prova Pro gratis per 14 giorni, senza carta.",
     trialStatus: (days: number) =>
-      `Prova Premium: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}`,
-    trialEndingTitle: (date: string) => `La prova Premium finisce il ${date}`,
+      `Prova Pro: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}`,
+    trialEndingTitle: (date: string) => `La prova Pro finisce il ${date}`,
     trialEndingBody:
       "Poi Codice Fiscale e Partita IVA dei nuovi ordini tornano agli sblocchi del Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
     trialEndingAction: "Vedi il piano",
@@ -408,7 +408,7 @@ export const it = {
     notificationsOff: "Disattivate",
     notificationsHeld: "Sospese",
     notificationsHeldHint: "Sospese finché la sincronizzazione non riprende",
-    notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Premium.",
+    notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Pro.",
     freeLimit: "Il piano Free include un solo negozio attivo.",
     sectionConnection: "Collegamento",
     sectionSync: "Sincronizzazione",
@@ -464,7 +464,7 @@ export const it = {
     disconnectBody:
       "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito. Per revocare anche l’autorizzazione su eBay, rimuovi FiscalBay dalle app di terze parti nelle impostazioni di sicurezza del tuo account eBay.",
     disconnectSubscription:
-      "Scollegare il negozio non disdice l’abbonamento Premium: gli addebiti previsti restano.",
+      "Scollegare il negozio non disdice l’abbonamento Pro: gli addebiti previsti restano.",
     disconnectSubscriptionLink: "Gestisci l’abbonamento",
     deleteBody:
       "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
@@ -528,28 +528,28 @@ export const it = {
       currentPlan: "Piano attuale",
       unlockConfirmation: "Chiedi conferma prima di sbloccare un ordine",
       free: "Free",
-      premium: "Premium",
+      premium: "Pro",
       freeSummary: "Un negozio attivo, ultimi 30 giorni di ordini, CSV.",
       waitlisted:
         "Il piano Free è al completo e il tuo account è in lista d’attesa: FiscalBay non legge i tuoi negozi e non offre gli sblocchi del Free finché non verrai ammesso.",
-      waitlistedPurchase: "Intanto puoi collegare un negozio e scegliere la prova o Premium.",
+      waitlistedPurchase: "Intanto puoi collegare un negozio e scegliere la prova o Pro.",
       unlocksCycle: "Ordini sbloccati in questo ciclo",
       unlocksUsed: (used: number, limit: number) => `${used} di ${limit}`,
       cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
       nextCycleLimit: (limit: number) => `Il prossimo ciclo avrà ${limit} sblocchi.`,
-      trialTitle: "Prova Premium per 14 giorni",
+      trialTitle: "Prova Pro per 14 giorni",
       trialBody: "Senza carta e senza rinnovo automatico: alla fine torni al Free.",
       trialAction: "Attiva la prova",
-      trialStarted: "Prova Premium attivata.",
-      trialUnavailable: "La prova Premium non è disponibile per questo account.",
-      trialPlan: "Prova Premium",
+      trialStarted: "Prova Pro attivata.",
+      trialUnavailable: "La prova Pro non è disponibile per questo account.",
+      trialPlan: "Prova Pro",
       trialEnds: (date: string, days: number) =>
         `Finisce il ${date}: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}.`,
       trialAfter:
         "Nessun addebito: alla fine torni al Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
       trialAfterChosen:
-        "Alla fine Premium continua con il primo addebito. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
-      buyTitle: "Passa a Premium",
+        "Alla fine Pro continua con il primo addebito. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+      buyTitle: "Passa a Pro",
       buyBody:
         "Ordini da sbloccare senza limite per ciclo, più negozi attivi, un anno di storico, XLSX e notifiche Telegram.",
       priceMonthly: (price: string) => `${price} al mese`,
@@ -567,9 +567,9 @@ export const it = {
       lifetimeRenewing:
         "Il tuo abbonamento si rinnova a breve: potrai passare a vita subito dopo il rinnovo.",
       lifetimeUpgradeTitle: "Passa a vita",
-      lifetimeProcessingTitle: "Premium a vita in attivazione",
+      lifetimeProcessingTitle: "Pro a vita in attivazione",
       lifetimeProcessingBody:
-        "Premium a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale.",
+        "Pro a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale.",
       trialPurchaseNote:
         "Con mensile o annuale oggi non paghi: i giorni di prova restano e il primo addebito arriva quando la prova finisce.",
       trialEndingPurchaseNote:
@@ -586,12 +586,12 @@ export const it = {
         `Nessun addebito: il ${date}, alla fine della prova, torni al Free. Fino ad allora puoi riattivarlo su Stripe.`,
       pricesNote:
         "Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
-      purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
-      purchaseClosed: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
+      purchaseNeedsSync: "Potrai acquistare Pro dopo la prima lettura riuscita di un negozio.",
+      purchaseClosed: "I nuovi acquisti di Pro e le prove sono sospesi per ora.",
       checkoutUnavailable: "Pagamento non disponibile ora. Riprova più tardi.",
-      checkoutCovered: "Il tuo account ha già Premium attivo.",
-      checkoutProcessingTitle: "Attivazione Premium in corso",
-      checkoutProcessingBody: "Premium si attiva appena Stripe conferma il pagamento.",
+      checkoutCovered: "Il tuo account ha già Pro attivo.",
+      checkoutProcessingTitle: "Attivazione Pro in corso",
+      checkoutProcessingBody: "Pro si attiva appena Stripe conferma il pagamento.",
       checkoutCancelled: "Pagamento annullato. Nessun addebito.",
       buyPeriod: { monthly: "Scegli mensile", annual: "Scegli annuale", lifetime: "Scegli a vita" },
       freeStoreHint: "Puoi sostituire il negozio attivo ogni 90 giorni.",
@@ -609,16 +609,16 @@ export const it = {
       },
       premiumLifetime: "Acquisto una tantum, senza rinnovi.",
       premiumLifetimeGranted: "Concesso da FiscalBay, senza rinnovi.",
-      grantEnds: (date: string) => `Premium concesso fino al ${date}.`,
+      grantEnds: (date: string) => `Pro concesso fino al ${date}.`,
       premiumRenews: (date: string) => `Si rinnova il ${date}.`,
-      premiumEnds: (date: string) => `Rinnovo disdetto: Premium resta attivo fino al ${date}.`,
+      premiumEnds: (date: string) => `Rinnovo disdetto: Pro resta attivo fino al ${date}.`,
       refundedTitle: "Pagamento rimborsato",
       refundedBody: (renewsAt: string | null) =>
         renewsAt
-          ? `Il pagamento del periodo in corso è stato rimborsato e sei nel piano Free. Premium riprende con il rinnovo del ${renewsAt}.`
+          ? `Il pagamento del periodo in corso è stato rimborsato e sei nel piano Free. Pro riprende con il rinnovo del ${renewsAt}.`
           : "Il pagamento del periodo in corso è stato rimborsato e sei di nuovo nel piano Free.",
       lifetimeRefundedBody:
-        "Il pagamento di Premium a vita è stato rimborsato e sei di nuovo nel piano Free.",
+        "Il pagamento di Pro a vita è stato rimborsato e sei di nuovo nel piano Free.",
       renewalFailedTitle: "Rinnovo non riuscito",
       renewalFailedBody: (date: string) =>
         `Sei di nuovo nel piano Free. Completa il pagamento richiesto da Stripe entro il ${date} per mantenere il tuo prezzo.`,
@@ -637,7 +637,7 @@ export const it = {
     },
     notifications: {
       telegramTitle: "Notifiche Telegram",
-      telegramPremium: "Le notifiche degli ordini su Telegram sono incluse in Premium.",
+      telegramPremium: "Le notifiche degli ordini su Telegram sono incluse in Pro.",
       telegramChat: "Chat collegata",
       telegramChange: "Cambia chat",
       telegramEnabled: "Invia notifiche degli ordini",
@@ -710,7 +710,7 @@ export const it = {
       exportFileQueued: "In preparazione",
       exportFileFailed: "Non creato: crealo di nuovo",
       exportDownload: "Scarica",
-      exportPremium: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Premium.",
+      exportPremium: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Pro.",
       exportColumnsInvalid: "Scegli almeno una colonna.",
       exportXlsxHint:
         "Nel file XLSX Codice Fiscale, Partita IVA e SKU sono colonne di testo e conservano gli zeri iniziali.",
@@ -921,8 +921,8 @@ export const it = {
           free: "Free",
           freeQuota: (used: number, limit: number) => `Free, ${used} di ${limit} ordini sbloccati`,
           waitlist: "Free, in lista d’attesa",
-          trial: "Prova Premium",
-          granted: "Premium concesso",
+          trial: "Prova Pro",
+          granted: "Pro concesso",
           lifetime: premiumLifetime,
           monthly: premiumMonthly,
           annual: premiumAnnual,

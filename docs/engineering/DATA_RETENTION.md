@@ -5,10 +5,10 @@
 millisecondi. Il termine parte dalla creazione dell'ordine, mai dalla lettura o
 dall'ultimo aggiornamento, e segue la finestra dello spazio
 (`app/domain/history-window.server.ts`): trenta giorni nel Free, un anno calendariale
-con una copertura in corso (Premium, prova, lifetime o concessa), fino a ventiquattro
+con una copertura in corso (Pro, prova, lifetime o concessa), fino a ventiquattro
 mesi con un'estensione concessa. La stessa finestra fissa l'inizio dello storico da
 importare. Una pausa o uno scollegamento non fermano il tempo. Il modello non deduce
-un piano attivo dalla presenza di un vecchio grant Premium, trial o lifetime: vale la
+un piano attivo dalla presenza di un vecchio grant Pro, trial o lifetime: vale la
 copertura in corso.
 
 Un'estensione oltre l'anno è una riga `history_extensions` con mesi, motivo e autore,
@@ -39,7 +39,7 @@ letture dell'utente lo trovano già applicato anche prima della pulizia. Il cron
 i termini degli ordini per gli spazi la cui copertura è finita o la cui estensione è
 cambiata nell'ultima settimana, e per quelli che perderebbero entro un giorno un
 ordine ancora dentro la finestra della copertura; le visite coprono gli altri. Il
-ritorno a Premium toglie le pause e riporta all'intera finestra della copertura il
+ritorno a Pro toglie le pause e riporta all'intera finestra della copertura il
 termine degli ordini ancora conservati, anche durante i trenta giorni transitori;
 quelli già eliminati per scadenza tornano con lo storico più ampio importato dopo
 l'attivazione, perché la scadenza non ne blocca il reimport. La Sandbox eBay, disponibile
@@ -96,11 +96,11 @@ anche i dettagli e i retry pendenti.
 | Checkpoint e letture sync | Cursori, date, contatori ed esiti minimizzati; nessun ordine o identificativo fiscale serializzato. |
 | Buyer e storico fiscale | Legati all'ordine tramite FK, senza anagrafica globale o snapshot indipendente. |
 | Elenco, dettaglio e conteggi | Filtro server sulla scadenza, applicato prima di limite e risposta; i valori revocati non entrano nella risposta. |
-| Suggerimenti | Calcolati a ogni lettura dai valori correnti di ordini autorizzati e non scaduti, senza cache o copie persistenti; il piano Premium deve essere attivo. Identità stabile conservata soltanto sull'ordine. |
+| Suggerimenti | Calcolati a ogni lettura dai valori correnti di ordini autorizzati e non scaduti, senza cache o copie persistenti; il piano Pro deve essere attivo. Identità stabile conservata soltanto sull'ordine. |
 | Ricerca | Stesso filtro dell'elenco sul termine della fonte e sul grant corrente all'istante della richiesta; il testo cercabile vive sull'ordine e si elimina con esso. |
 | Richieste di assistenza | Testo, argomento e riepilogo diagnostico allowlistato (versione, riferimento interno del negozio, fase ed esito della lettura, codice errore, diritti, correlation ID) vanno soltanto alla casella `supporto@` con Reply-To sull'utente; nessun CF, token, payload, nome eBay o dato di un altro spazio. D1 conserva l'istante di invio per il limite di cinque richieste per account, eliminato dopo 24 ore. Nella casella iCloud le conversazioni restano 24 mesi dall'ultima risposta, poi l'owner le elimina (D230). |
 | Verifica Turnstile | Il token del modulo va a Siteverify con l'IP della richiesta e non si conserva: D1 non registra né token né esito, il modulo che torna dopo un errore lo esclude dai valori da ricompilare. Un guasto di Siteverify lascia nei log soltanto codice, operazione `turnstile`, tipo di guasto e stato HTTP. Widget e segnali del browser restano presso Cloudflare secondo le sue condizioni (D231). |
-| Export | Il CSV e l'XLSX degli ordini si creano a ogni richiesta autenticata, o dal lavoro in coda oltre 2.000 ordini, con lo stesso filtro dell'elenco su negozi, scadenza e grant all'istante della generazione. Il file sta nel bucket R2 UE con chiave casuale e vale al più 24 ore, non oltre la copertura Premium che lo permette né oltre il primo termine di conservazione o di sblocco degli ordini inclusi; una revoca dello spazio lo nega subito, la pulizia oraria elimina byte e righe, la regola a un giorno del bucket resta la rete di sicurezza. Il lavoro conserva ambito e opzioni cifrati soltanto finché non si conclude e si elimina 24 ore dopo la richiesta. Lo ZIP dei dati dell'account segue le stesse regole e non contiene ordini, segreti o documenti di pagamento. Le configurazioni salvate contengono soltanto nome, formato, granularità e colonne, nessun ordine o valore fiscale, e si eliminano con l'account. |
+| Export | Il CSV e l'XLSX degli ordini si creano a ogni richiesta autenticata, o dal lavoro in coda oltre 2.000 ordini, con lo stesso filtro dell'elenco su negozi, scadenza e grant all'istante della generazione. Il file sta nel bucket R2 UE con chiave casuale e vale al più 24 ore, non oltre la copertura Pro che lo permette né oltre il primo termine di conservazione o di sblocco degli ordini inclusi; una revoca dello spazio lo nega subito, la pulizia oraria elimina byte e righe, la regola a un giorno del bucket resta la rete di sicurezza. Il lavoro conserva ambito e opzioni cifrati soltanto finché non si conclude e si elimina 24 ore dopo la richiesta. Lo ZIP dei dati dell'account segue le stesse regole e non contiene ordini, segreti o documenti di pagamento. Le configurazioni salvate contengono soltanto nome, formato, granularità e colonne, nessun ordine o valore fiscale, e si eliminano con l'account. |
 | Accesso tecnico alla console | Soltanto l'impronta SHA-256 del token, con etichetta, creazione, scadenza, revoca e ultimo uso; il token resta nella custodia dell'owner. Le letture con il token entrano nel registro della console e ne seguono la conservazione. |
 | Metriche della console | Per spazio, il nome e l'istante del primo di ciascun passaggio del funnel, senza ordini, buyer, valori fiscali o identificativi eBay: escono con lo spazio. Le letture sono conteggi giornalieri di tutti i negozi, eliminati dopo novanta giorni. I report del browser lasciano soltanto il nonce del biglietto, eliminato dopo la scadenza di quindici minuti. |
 | Cancellazione dell'account | La richiesta conserva utente e spazio come identificativi, gli istanti dei passi e, cifrati fino all'invio dell'email finale, indirizzo e lingua. Conclusa, resta come marker per un restore e si elimina dopo 30 giorni, la finestra di Time Travel. Lo spazio con abbonamenti e sessioni di acquisto resta soltanto finché Stripe non conferma lo stop dei rinnovi. |
@@ -169,7 +169,7 @@ Il campo non viene restituito al browser e viene eliminato con l'ordine. La sua
 assenza nelle letture Fulfillment non cancella un'identità già acquisita; una
 nuova identità autorevole invalida immediatamente il collegamento precedente.
 
-Il suggerimento è riservato a Premium attivo, fra ordini dello stesso spazio e
+Il suggerimento è riservato a Pro attivo, fra ordini dello stesso spazio e
 ambiente eBay. Ogni fonte deve essere consultabile, non assorbita, ancora entro
 retention e con diritto fiscale valido. Le fonti in pausa per piano sono escluse.
 Si usa soltanto il valore fiscale corrente; la modifica, rimozione o cancellazione

@@ -122,7 +122,7 @@ Default: UUID interni; univocità per namespace/tenant; FK o integrità equivale
 
 Invarianti bloccanti: un account eBay attivo in uno spazio; niente saldo Free negativo; un solo primo sblocco per ordine; nessun secondo addebito per tipo fiscale; lifetime allocati+prenotati non oltre disponibilità; nessun diritto dal redirect; grant rimborsato distinto da grant indipendente; job stale incapace di reinserire dato cancellato; dato non autorizzato non esposto da cache/export/search; ordine e importi non modificabili dal client.
 
-Diritti Premium creati quando il dato è acquisito/disponibile nel periodo valido, non quando aperto (Q568). Concorrenza tra acquisizione e scadenza gestita con istante autorevole e transazione: non concedere retroattività arbitraria al completamento di un job iniziato prima.
+Diritti Pro creati quando il dato è acquisito/disponibile nel periodo valido, non quando aperto (Q568). Concorrenza tra acquisizione e scadenza gestita con istante autorevole e transazione: non concedere retroattività arbitraria al completamento di un job iniziato prima.
 
 Audit e raw separati dal modello operativo, con retention propria. Buyer senza ordini giustificanti viene eliminato quando non necessario; conservazioni commerciali minime distinte dai dati fiscali buyer. Persistono tutte le variazioni fiscali effettive fino alla cancellazione dell’ordine; non duplicare versioni identiche o l’intero ordine per un cambiamento irrilevante. Misurare il volume delle informazioni effettivamente conservate. La modifica del dato di un buyer canonico non riscrive gli snapshot storici.
 

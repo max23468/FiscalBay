@@ -16,9 +16,9 @@ const inactivityTitle = "Reading paused for inactivity";
 
 const contactSupport = "Contact support";
 
-const premiumMonthly = "Premium, monthly";
-const premiumAnnual = "Premium, annual";
-const premiumLifetime = "Premium, lifetime";
+const premiumMonthly = "Pro, monthly";
+const premiumAnnual = "Pro, annual";
+const premiumLifetime = "Pro, lifetime";
 
 const termsTitle = "Terms of service";
 const privacyTitle = "Privacy policy";
@@ -133,7 +133,7 @@ export const en: AppCopy = {
     searchActive: (query) => `Search: ${query}`,
     clearSearch: "Clear search",
     resetFilters: "Reset filters",
-    premiumOption: "Available with Premium",
+    premiumOption: "Available with Pro",
     payment: {
       paid: "Paid",
       unpaid: "Unpaid",
@@ -287,12 +287,12 @@ export const en: AppCopy = {
     quotaTitle: "No unlocks left this cycle",
     quotaBody: (date) =>
       `You can still view and search all orders. Tax codes and VAT numbers of new orders stay locked until ${date}.`,
-    quotaAction: "Upgrade to Premium",
+    quotaAction: "Upgrade to Pro",
     waitlistTitle: "You are on the Free waiting list",
-    trialOffer: "Try Premium free for 14 days, no card needed.",
+    trialOffer: "Try Pro free for 14 days, no card needed.",
     trialStatus: (days) =>
-      `Premium trial: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left`,
-    trialEndingTitle: (date) => `Your Premium trial ends on ${date}`,
+      `Pro trial: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left`,
+    trialEndingTitle: (date) => `Your Pro trial ends on ${date}`,
     trialEndingBody:
       "After that, tax codes and VAT numbers of new orders go back to Free unlocks. Orders whose data arrived during the trial stay unlocked.",
     trialEndingAction: "View plan",
@@ -390,7 +390,7 @@ export const en: AppCopy = {
     notificationsOff: "Off",
     notificationsHeld: "Paused",
     notificationsHeldHint: "Paused until sync resumes",
-    notificationsFree: "Telegram notifications for new orders are available with Premium.",
+    notificationsFree: "Telegram notifications for new orders are available with Pro.",
     freeLimit: "The Free plan includes one active store.",
     sectionConnection: "Connection",
     sectionSync: "Sync",
@@ -446,7 +446,7 @@ export const en: AppCopy = {
     disconnectBody:
       "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later. To also revoke the authorisation on eBay, remove FiscalBay from third-party apps in your eBay account’s security settings.",
     disconnectSubscription:
-      "Disconnecting the store does not cancel the Premium subscription: scheduled charges still apply.",
+      "Disconnecting the store does not cancel the Pro subscription: scheduled charges still apply.",
     disconnectSubscriptionLink: "Manage subscription",
     deleteBody:
       "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
@@ -509,28 +509,28 @@ export const en: AppCopy = {
       currentPlan: "Current plan",
       unlockConfirmation: "Ask before unlocking an order",
       free: "Free",
-      premium: "Premium",
+      premium: "Pro",
       freeSummary: "One active store, the last 30 days of orders, CSV.",
       waitlisted:
         "The Free plan is full and your account is on the waiting list: FiscalBay does not read your stores or offer Free unlocks until you are admitted.",
-      waitlistedPurchase: "Meanwhile you can connect a store and choose the trial or Premium.",
+      waitlistedPurchase: "Meanwhile you can connect a store and choose the trial or Pro.",
       unlocksCycle: "Orders unlocked this cycle",
       unlocksUsed: (used, limit) => `${used} of ${limit}`,
       cycleEnds: (date) => `The cycle renews on ${date}.`,
       nextCycleLimit: (limit) => `The next cycle will have ${limit} unlocks.`,
-      trialTitle: "Try Premium for 14 days",
+      trialTitle: "Try Pro for 14 days",
       trialBody: "No card and no automatic renewal: when it ends you go back to Free.",
       trialAction: "Start trial",
-      trialStarted: "Premium trial started.",
-      trialUnavailable: "The Premium trial is not available for this account.",
-      trialPlan: "Premium trial",
+      trialStarted: "Pro trial started.",
+      trialUnavailable: "The Pro trial is not available for this account.",
+      trialPlan: "Pro trial",
       trialEnds: (date, days) =>
         `Ends on ${date}: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left.`,
       trialAfter:
         "No charge: when it ends you go back to Free. Orders whose data arrived during the trial stay unlocked.",
       trialAfterChosen:
-        "When it ends, Premium continues with the first charge. Orders whose data arrived during the trial stay unlocked.",
-      buyTitle: "Upgrade to Premium",
+        "When it ends, Pro continues with the first charge. Orders whose data arrived during the trial stay unlocked.",
+      buyTitle: "Upgrade to Pro",
       buyBody:
         "No limit on orders to unlock per cycle, more active stores, one year of history, XLSX and Telegram notifications.",
       priceMonthly: (price) => `${price} per month`,
@@ -547,9 +547,9 @@ export const en: AppCopy = {
       lifetimeRenewing:
         "Your subscription renews shortly: you can switch to lifetime right after the renewal.",
       lifetimeUpgradeTitle: "Switch to lifetime",
-      lifetimeProcessingTitle: "Activating lifetime Premium",
+      lifetimeProcessingTitle: "Activating lifetime Pro",
       lifetimeProcessingBody:
-        "Lifetime Premium starts as soon as Stripe confirms the payment; until then your plan stays as it is.",
+        "Lifetime Pro starts as soon as Stripe confirms the payment; until then your plan stays as it is.",
       trialPurchaseNote:
         "With monthly or annual you don't pay today: your trial days stay and the first charge comes when the trial ends.",
       trialEndingPurchaseNote:
@@ -566,12 +566,12 @@ export const en: AppCopy = {
         `No charge: on ${date}, when the trial ends, you go back to Free. Until then you can reactivate it on Stripe.`,
       pricesNote:
         "Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
-      purchaseNeedsSync: "You can buy Premium once a store has been read successfully.",
-      purchaseClosed: "New Premium purchases and trials are paused for now.",
+      purchaseNeedsSync: "You can buy Pro once a store has been read successfully.",
+      purchaseClosed: "New Pro purchases and trials are paused for now.",
       checkoutUnavailable: "Payment is not available right now. Try again later.",
-      checkoutCovered: "Your account already has Premium.",
-      checkoutProcessingTitle: "Activating Premium",
-      checkoutProcessingBody: "Premium starts as soon as Stripe confirms the payment.",
+      checkoutCovered: "Your account already has Pro.",
+      checkoutProcessingTitle: "Activating Pro",
+      checkoutProcessingBody: "Pro starts as soon as Stripe confirms the payment.",
       checkoutCancelled: "Payment cancelled. You have not been charged.",
       buyPeriod: {
         monthly: "Choose monthly",
@@ -593,15 +593,15 @@ export const en: AppCopy = {
       },
       premiumLifetime: "One-off purchase, no renewals.",
       premiumLifetimeGranted: "Granted by FiscalBay, no renewals.",
-      grantEnds: (date: string) => `Premium granted until ${date}.`,
+      grantEnds: (date: string) => `Pro granted until ${date}.`,
       premiumRenews: (date) => `Renews on ${date}.`,
-      premiumEnds: (date) => `Renewal cancelled: Premium stays active until ${date}.`,
+      premiumEnds: (date) => `Renewal cancelled: Pro stays active until ${date}.`,
       refundedTitle: "Payment refunded",
       refundedBody: (renewsAt) =>
         renewsAt
-          ? `The payment for the current period was refunded and you are on Free. Premium resumes with the renewal on ${renewsAt}.`
+          ? `The payment for the current period was refunded and you are on Free. Pro resumes with the renewal on ${renewsAt}.`
           : "The payment for the current period was refunded and you are back on Free.",
-      lifetimeRefundedBody: "The lifetime Premium payment was refunded and you are back on Free.",
+      lifetimeRefundedBody: "The lifetime Pro payment was refunded and you are back on Free.",
       renewalFailedTitle: "Renewal failed",
       renewalFailedBody: (date) =>
         `You are back on Free. Complete the payment Stripe asks for by ${date} to keep your price.`,
@@ -620,7 +620,7 @@ export const en: AppCopy = {
     },
     notifications: {
       telegramTitle: "Telegram notifications",
-      telegramPremium: "Order notifications on Telegram are included in Premium.",
+      telegramPremium: "Order notifications on Telegram are included in Pro.",
       telegramChat: "Connected chat",
       telegramChange: "Change chat",
       telegramEnabled: "Send order notifications",
@@ -693,7 +693,7 @@ export const en: AppCopy = {
       exportFileQueued: "Being prepared",
       exportFileFailed: "Not created: create it again",
       exportDownload: "Download",
-      exportPremium: "XLSX, chosen columns and saved configurations are included in Premium.",
+      exportPremium: "XLSX, chosen columns and saved configurations are included in Pro.",
       exportColumnsInvalid: "Choose at least one column.",
       exportXlsxHint:
         "In the XLSX file tax code, VAT number and SKU are text columns and keep leading zeros.",
@@ -901,8 +901,8 @@ export const en: AppCopy = {
           free: "Free",
           freeQuota: (used, limit) => `Free, ${used} of ${limit} orders unlocked`,
           waitlist: "Free, waiting list",
-          trial: "Premium trial",
-          granted: "Premium, granted",
+          trial: "Pro trial",
+          granted: "Pro, granted",
           lifetime: premiumLifetime,
           monthly: premiumMonthly,
           annual: premiumAnnual,

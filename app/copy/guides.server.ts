@@ -68,7 +68,7 @@ export const guides: Record<
           "Il Codice Fiscale dell’acquirente non si vede nell’ordine eBay né nel report di Seller Hub. Dove si trova davvero e come averlo per ogni vendita.",
         lead: "Apri un ordine su eBay e il Codice Fiscale non c’è, anche se l’acquirente l’ha inserito al pagamento. Non è un errore. eBay lo salva, ma non lo mostra nella pagina dell’ordine.",
         published: "2026-11-03",
-        updated: "2026-11-05",
+        updated: "2026-11-06",
         sections: [
           {
             title: "Dove non lo trovi",
@@ -105,7 +105,7 @@ export const guides: Record<
           body: [
             "Colleghi il negozio eBay una volta sola, in sola lettura. Da lì FiscalBay legge i nuovi ordini da solo.",
             "Nella scheda di ogni ordine trovi il Codice Fiscale inserito dall’acquirente, da copiare con un clic o da esportare insieme agli altri dati.",
-            "Gli ordini senza Codice Fiscale li trovi con un filtro, e per ognuno c’è già il messaggio per chiederlo. Con Premium ricevi anche una notifica su Telegram a ogni nuovo ordine, con il dato dentro.",
+            "Gli ordini senza Codice Fiscale li trovi con un filtro, e per ognuno c’è già il messaggio per chiederlo. Con Pro ricevi anche una notifica su Telegram a ogni nuovo ordine, con il dato dentro.",
           ],
           shot: "scheda",
           caption: "Il Codice Fiscale nella scheda dell’ordine",
@@ -119,7 +119,7 @@ export const guides: Record<
           "L’acquirente dice di aver inserito il Codice Fiscale, ma nell’ordine eBay non c’è. Il dato esiste: dove finisce e come leggerlo senza chiederlo di nuovo.",
         lead: "Hai attivato la richiesta del Codice Fiscale, l’acquirente giura di averlo inserito e nell’ordine non lo trovi. Ha ragione lui. Il dato c’è, solo che eBay non lo fa vedere.",
         published: "2026-11-04",
-        updated: "2026-11-05",
+        updated: "2026-11-06",
         sections: [
           {
             title: "Perché non lo vedi",
@@ -144,7 +144,7 @@ export const guides: Record<
           body: [
             "FiscalBay legge gli ordini del tuo negozio e ti mostra il Codice Fiscale che l’acquirente ha inserito. Non devi chiederlo una seconda volta.",
             "Con un filtro vedi solo gli ordini senza il dato e scrivi soltanto a quegli acquirenti.",
-            "Con Premium ogni nuovo ordine arriva su Telegram con il Codice Fiscale già nel messaggio.",
+            "Con Pro ogni nuovo ordine arriva su Telegram con il Codice Fiscale già nel messaggio.",
           ],
           shot: "telegram",
           caption: "Un nuovo ordine su Telegram, con il Codice Fiscale",
@@ -204,7 +204,7 @@ export const guides: Record<
           "Quali dati dell’acquirente servono per fatturare una vendita eBay, a un privato o a un’azienda, e come averli senza ricopiarli a mano.",
         lead: "Per la fattura elettronica di una vendita eBay devi identificare l’acquirente. Se è un privato serve il Codice Fiscale, se è un’azienda o un professionista la Partita IVA.",
         published: "2026-11-03",
-        updated: "2026-11-05",
+        updated: "2026-11-06",
         sections: [
           {
             title: "Vendita a un privato",
@@ -234,7 +234,7 @@ export const guides: Record<
         solution: {
           body: [
             "FiscalBay mette in un unico file acquirente, indirizzo di fatturazione, Codice Fiscale e Partita IVA dei tuoi ordini eBay.",
-            "Lo esporti in CSV, o in Excel con Premium, e lo importi nel software di fatturazione oppure lo mandi al commercialista. Le fatture le emetti sempre dal tuo software.",
+            "Lo esporti in CSV, o in Excel con Pro, e lo importi nel software di fatturazione oppure lo mandi al commercialista. Le fatture le emetti sempre dal tuo software.",
           ],
           shot: "esportazione",
           caption: "Ordini esportati con Codice Fiscale e Partita IVA",
@@ -248,7 +248,7 @@ export const guides: Record<
           "Come esportare gli ordini eBay in Excel o CSV con acquirente, indirizzo, Codice Fiscale e Partita IVA, pronti per il gestionale o il commercialista.",
         lead: "Il report degli ordini di eBay non ha né il Codice Fiscale né la Partita IVA dell’acquirente. Per averli in un file ti serve uno strumento collegato al negozio.",
         published: "2026-11-03",
-        updated: "2026-11-05",
+        updated: "2026-11-06",
         sections: [
           {
             title: "Cosa manca nel report di eBay",
@@ -268,7 +268,7 @@ export const guides: Record<
           body: [
             "FiscalBay esporta gli ordini del negozio con numero e data, acquirente, indirizzo di fatturazione, importi e, quando l’acquirente li ha inseriti, Codice Fiscale e Partita IVA.",
             "Puoi esportare tutto, un periodo, un solo negozio o gli ordini che selezioni, con una riga per ordine o per articolo.",
-            "Il CSV è incluso nel piano Free. Con Premium hai anche l’Excel, scegli le colonne e salvi le configurazioni che usi di più. Il file si scarica solo dal tuo account, entro 24 ore.",
+            "Il CSV è incluso nel piano Free. Con Pro hai anche l’Excel, scegli le colonne e salvi le configurazioni che usi di più. Il file si scarica solo dal tuo account, entro 24 ore.",
           ],
           shot: "esportazione",
           caption: "Gli ordini esportati in Excel",
@@ -337,7 +337,7 @@ export const guides: Record<
           "The buyer’s tax code does not show on the eBay order or in the Seller Hub report. Where it really is and how to get it for every sale.",
         lead: "Open an order on eBay and the tax code (Codice Fiscale) is not there, even if the buyer entered it at checkout. It is not a mistake. eBay saves it, but does not show it on the order page.",
         published: "2026-11-03",
-        updated: "2026-11-05",
+        updated: "2026-11-06",
         sections: [
           {
             title: "Where you will not find it",
@@ -374,7 +374,7 @@ export const guides: Record<
           body: [
             "You connect your eBay store once, read-only. From then on FiscalBay reads new orders on its own.",
             "On each order card you find the tax code the buyer entered, to copy in one click or export with the other details.",
-            "Orders without a tax code are one filter away, and each one comes with a message ready to ask for it. With Premium you also get a Telegram notification for every new order, with the data in it.",
+            "Orders without a tax code are one filter away, and each one comes with a message ready to ask for it. With Pro you also get a Telegram notification for every new order, with the data in it.",
           ],
           shot: "scheda",
           caption: "The tax code on the order card",
@@ -388,7 +388,7 @@ export const guides: Record<
           "The buyer says they entered their tax code, but it is not on the eBay order. The data exists: where it goes and how to read it without asking again.",
         lead: "You turned on the tax code request, the buyer swears they entered it, and you cannot find it on the order. They are right. The data is there, eBay just does not show it.",
         published: "2026-11-04",
-        updated: "2026-11-05",
+        updated: "2026-11-06",
         sections: [
           {
             title: "Why you cannot see it",
@@ -413,7 +413,7 @@ export const guides: Record<
           body: [
             "FiscalBay reads your store’s orders and shows you the tax code the buyer entered. You do not need to ask a second time.",
             "A filter shows only the orders without it, so you write to those buyers alone.",
-            "With Premium every new order reaches you on Telegram with the tax code already in the message.",
+            "With Pro every new order reaches you on Telegram with the tax code already in the message.",
           ],
           shot: "telegram",
           caption: "A new order on Telegram, with the tax code",
@@ -473,7 +473,7 @@ export const guides: Record<
           "Which buyer details you need to invoice an eBay sale, to a private buyer or a business, and how to get them without copying them by hand.",
         lead: "For the Italian e-invoice of an eBay sale you have to identify the buyer. A private buyer needs the tax code (Codice Fiscale), a business or professional the VAT number (Partita IVA).",
         published: "2026-11-03",
-        updated: "2026-11-05",
+        updated: "2026-11-06",
         sections: [
           {
             title: "Selling to a private buyer",
@@ -503,7 +503,7 @@ export const guides: Record<
         solution: {
           body: [
             "FiscalBay puts the buyer, billing address, tax code and VAT number of your eBay orders in a single file.",
-            "Export it as CSV, or as Excel with Premium, and import it into your invoicing software or send it to your accountant. You still issue invoices from your own software.",
+            "Export it as CSV, or as Excel with Pro, and import it into your invoicing software or send it to your accountant. You still issue invoices from your own software.",
           ],
           shot: "esportazione",
           caption: "Orders exported with tax code and VAT number",
@@ -517,7 +517,7 @@ export const guides: Record<
           "How to export eBay orders to Excel or CSV with buyer, address, tax code (Codice Fiscale) and VAT number (Partita IVA), ready for your management software or accountant.",
         lead: "eBay’s order report has neither the buyer’s tax code nor their VAT number. To get them in a file you need a tool connected to your store.",
         published: "2026-11-03",
-        updated: "2026-11-05",
+        updated: "2026-11-06",
         sections: [
           {
             title: "What eBay’s report leaves out",
@@ -537,7 +537,7 @@ export const guides: Record<
           body: [
             "FiscalBay exports your store’s orders with order number and date, buyer, billing address, amounts and, when the buyer entered them, tax code and VAT number.",
             "You can export everything, a period, a single store or the orders you select, with one row per order or per item.",
-            "CSV is included in the Free plan. With Premium you also get Excel, choose the columns and save the configurations you use most. The file can only be downloaded from your account, within 24 hours.",
+            "CSV is included in the Free plan. With Pro you also get Excel, choose the columns and save the configurations you use most. The file can only be downloaded from your account, within 24 hours.",
           ],
           shot: "esportazione",
           caption: "Orders exported to Excel",

@@ -1023,7 +1023,7 @@ describe("percorso ordini", () => {
     });
   });
 
-  it("mantiene senza apertura i dati acquisiti in Premium, esclude quelli tardivi e rispetta le revoche indipendenti", async () => {
+  it("mantiene senza apertura i dati acquisiti in Pro, esclude quelli tardivi e rispetta le revoche indipendenti", async () => {
     await seed();
     const end = "2026-09-14T00:00:00.000Z";
     await env.DB.batch([

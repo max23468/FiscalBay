@@ -63,7 +63,7 @@ const it = {
       removed: "Dati eliminati",
     },
     operations: {
-      "grant-premium": "Premium concesso",
+      "grant-premium": "Pro concesso",
       "grant-lifetime": "Lifetime concesso",
       "grant-history": "Storico esteso",
       "revoke-history": "Estensione revocata",
@@ -134,7 +134,7 @@ const it = {
     waitlisted: (count: number) => `${count} in lista d’attesa`,
     paid: "Spazi coperti",
     paidNote: (premium: number, lifetime: number, trial: number, granted: number) =>
-      `Premium ${premium} · lifetime ${lifetime} · prova ${trial} · concessi ${granted}`,
+      `Pro ${premium} · lifetime ${lifetime} · prova ${trial} · concessi ${granted}`,
     stores: "Negozi attivi",
     storeProblems: (count: number) =>
       count === 0 ? "Nessun problema" : count === 1 ? "1 con problemi" : `${count} con problemi`,
@@ -269,7 +269,7 @@ const it = {
     noWorkspace: "Senza spazio",
   },
   coverage: {
-    premium: "Premium",
+    premium: "Pro",
     trial: "Prova",
     lifetime: "Lifetime",
     admin: "Concesso",
@@ -329,7 +329,7 @@ const it = {
       transfer: "Trasferisci",
     },
     actions: "Azioni",
-    grantPremium: "Concedi Premium",
+    grantPremium: "Concedi Pro",
     days: "Giorni",
     grantLifetime: "Concedi lifetime",
     grantLifetimeHint:
@@ -351,7 +351,7 @@ const it = {
   },
   results: {
     grantPremium: {
-      done: (end: string) => `Premium concesso fino al ${end}.`,
+      done: (end: string) => `Pro concesso fino al ${end}.`,
       lifetime: "Lo spazio ha già il lifetime.",
       unavailable: "Stripe non risponde: nessuna concessione registrata.",
     },
@@ -690,7 +690,7 @@ const it = {
     trialsOpen: "Prove in corso",
     gifts: "Omaggi",
     giftsNote: (lifetime: number, granted: number) =>
-      `Lifetime ${lifetime} · Premium concesso ${granted}`,
+      `Lifetime ${lifetime} · Pro concesso ${granted}`,
     cancelling: "Disdette programmate",
     trialConversion: "Prove concluse con un acquisto",
     trialConversionNote: (converted: number, ended: number) =>
@@ -798,7 +798,7 @@ const en: AdminCopy = {
       removed: "Data deleted",
     },
     operations: {
-      "grant-premium": "Premium granted",
+      "grant-premium": "Pro granted",
       "grant-lifetime": "Lifetime granted",
       "grant-history": "History extended",
       "revoke-history": "Extension revoked",
@@ -869,7 +869,7 @@ const en: AdminCopy = {
     waitlisted: (count: number) => `${count} on the waiting list`,
     paid: "Covered spaces",
     paidNote: (premium: number, lifetime: number, trial: number, granted: number) =>
-      `Premium ${premium} · lifetime ${lifetime} · trial ${trial} · granted ${granted}`,
+      `Pro ${premium} · lifetime ${lifetime} · trial ${trial} · granted ${granted}`,
     stores: "Active stores",
     storeProblems: (count: number) =>
       count === 0 ? "No problems" : count === 1 ? "1 with problems" : `${count} with problems`,
@@ -1004,7 +1004,7 @@ const en: AdminCopy = {
     noWorkspace: "No space",
   },
   coverage: {
-    premium: "Premium",
+    premium: "Pro",
     trial: "Trial",
     lifetime: "Lifetime",
     admin: "Granted",
@@ -1064,7 +1064,7 @@ const en: AdminCopy = {
       transfer: "Transfer",
     },
     actions: "Actions",
-    grantPremium: "Grant Premium",
+    grantPremium: "Grant Pro",
     days: "Days",
     grantLifetime: "Grant lifetime",
     grantLifetimeHint: "Uses a seat, or reuses the seat of a refunded lifetime in the same space.",
@@ -1085,7 +1085,7 @@ const en: AdminCopy = {
   },
   results: {
     grantPremium: {
-      done: (end: string) => `Premium granted until ${end}.`,
+      done: (end: string) => `Pro granted until ${end}.`,
       lifetime: "The space already has lifetime.",
       unavailable: "Stripe is not responding: no grant recorded.",
     },
@@ -1416,7 +1416,7 @@ const en: AdminCopy = {
     trialsOpen: "Trials in progress",
     gifts: "Gifts",
     giftsNote: (lifetime: number, granted: number) =>
-      `Lifetime ${lifetime} · Premium granted ${granted}`,
+      `Lifetime ${lifetime} · Pro granted ${granted}`,
     cancelling: "Scheduled cancellations",
     trialConversion: "Trials ended with a purchase",
     trialConversionNote: (converted: number, ended: number) =>

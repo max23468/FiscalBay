@@ -26,7 +26,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 #### Miglioramenti
 
-- **Offerta scelta in evidenza.** Se scegli un'offerta Premium prima di registrarti, la pagina Piano te la mostra in evidenza.
+- **Offerta scelta in evidenza.** Se scegli un'offerta Pro prima di registrarti, la pagina Piano te la mostra in evidenza.
 - **Indirizzi in inglese.** In inglese anche le pagine dell'app hanno indirizzi in inglese; i vecchi indirizzi portano a quelli nuovi.
 
 #### Correzioni
@@ -37,7 +37,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 #### Improvements
 
-- **Chosen offer highlighted.** If you choose a Premium offer before signing up, the Plan page highlights it.
+- **Chosen offer highlighted.** If you choose a Pro offer before signing up, the Plan page highlights it.
 - **English addresses.** In English, app pages have English addresses too; old addresses lead to the new ones.
 
 #### Fixes
@@ -97,7 +97,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 #### Miglioramenti
 
-- **Storico dopo il passaggio a Premium.** Gli ordini eliminati alla scadenza della finestra Free tornano quando attivi Premium e l'importazione arriva al loro periodo.
+- **Storico dopo il passaggio a Pro.** Gli ordini eliminati alla scadenza della finestra Free tornano quando attivi Pro e l'importazione arriva al loro periodo.
 - **Indirizzo nell'export.** Se eBay non fornisce l'indirizzo di fatturazione, il file riporta quello di spedizione.
 
 #### Correzioni
@@ -109,7 +109,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 #### Improvements
 
-- **History after upgrading to Premium.** Orders deleted when the Free window ended come back when you activate Premium and the import reaches their period.
+- **History after upgrading to Pro.** Orders deleted when the Free window ended come back when you activate Pro and the import reaches their period.
 - **Address in the export.** If eBay does not provide the billing address, the file shows the shipping address.
 
 #### Fixes
@@ -198,7 +198,7 @@ Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce 
 - **Messaggi all'acquirente.** Un messaggio già scritto, in italiano o in inglese, per chiedere il Codice Fiscale.
 - **Esportazione.** Gli ordini si scaricano in CSV, Excel o ZIP.
 - **Telegram.** Il bot segnala i nuovi ordini e risponde ai comandi del tuo account.
-- **Accesso e piani.** Accedi con email, Google, passkey o eBay; i piani sono Free, prova gratuita e Premium.
+- **Accesso e piani.** Accedi con email, Google, passkey o eBay; i piani sono Free, prova gratuita e Pro.
 
 ### What's new
 
@@ -210,7 +210,7 @@ Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce 
 - **Buyer messages.** A ready-made message, in Italian or English, to ask for the tax code.
 - **Export.** Orders can be downloaded as CSV, Excel or ZIP.
 - **Telegram.** The bot announces new orders and answers the commands of your account.
-- **Sign-in and plans.** Sign in with email, Google, passkey or eBay; plans are Free, free trial and Premium.
+- **Sign-in and plans.** Sign in with email, Google, passkey or eBay; plans are Free, free trial and Pro.
 
 ### Contenuto
 

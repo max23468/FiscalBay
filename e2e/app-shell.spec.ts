@@ -630,7 +630,7 @@ test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page 
   await expect(quota).toBeVisible();
   // Con la prova disponibile l'avviso la offre e non c'è un secondo invito.
   await expect(quota.getByRole("button", { name: "Attiva la prova" })).toBeVisible();
-  await expect(page.getByText("Prova Premium gratis per 14 giorni, senza carta.")).toHaveCount(0);
+  await expect(page.getByText("Prova Pro gratis per 14 giorni, senza carta.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
     "Sblocco disponibile dal 2 ott 2026.",
@@ -703,7 +703,7 @@ test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) 
 
 test("il salvataggio automatico fallito ripristina il valore", async ({ page }) => {
   await open(page);
-  await chooseScenario(page, "Premium, più negozi");
+  await chooseScenario(page, "Pro, più negozi");
   // Un clic prima dell'idratazione non chiama il salvataggio.
   await open(page, "/anteprima/impostazioni/notifiche");
   await expect(page.locator("#settings-notifiche")).toBeInViewport();
@@ -789,7 +789,7 @@ for (const area of areas)
     });
   }
 
-test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinnova", async ({
+test("con Pro nessun ordine resta da sbloccare e il piano a vita non si rinnova", async ({
   page,
 }) => {
   await open(page);
@@ -797,12 +797,12 @@ test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinn
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByText("BNCLCU75C12F205G")).toBeVisible();
 
-  await chooseScenario(page, "Premium a vita");
+  await chooseScenario(page, "Pro a vita");
   await expect(page.getByText("Il carattere di controllo non corrisponde.")).toBeVisible();
   await page.goto("/anteprima/impostazioni/piano");
   // Su desktop tutte le categorie stanno nella stessa pagina: la prova resta sulla sezione del piano.
   const plan = page.getByRole("region", { name: "Piano e pagamenti" });
-  await expect(plan.getByText("Premium a vita")).toBeVisible();
+  await expect(plan.getByText("Pro a vita")).toBeVisible();
   await expect(plan.getByText("Acquisto una tantum, senza rinnovi.")).toBeVisible();
   await expect(page.getByRole("button", { name: /Gestisci abbonamento/u })).toHaveCount(0);
 });
@@ -811,22 +811,20 @@ test("la prova si attiva volontariamente, poi la fine è in evidenza e non si ri
   page,
 }) => {
   await open(page);
-  await expect(page.getByText("Prova Premium gratis per 14 giorni, senza carta.")).toBeVisible();
+  await expect(page.getByText("Prova Pro gratis per 14 giorni, senza carta.")).toBeVisible();
   await page.getByRole("button", { name: "Attiva la prova", exact: true }).click();
-  await expect(
-    page.getByRole("status").filter({ hasText: "Prova Premium attivata." }),
-  ).toBeVisible();
-  await expect(page.getByText("Prova Premium: 14 giorni rimasti")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Prova Pro attivata." })).toBeVisible();
+  await expect(page.getByText("Prova Pro: 14 giorni rimasti")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Attiva la prova" })).toHaveCount(0);
 
   await chooseScenario(page, "Prova in scadenza");
-  const ending = page.getByRole("status").filter({ hasText: "La prova Premium finisce il" });
+  const ending = page.getByRole("status").filter({ hasText: "La prova Pro finisce il" });
   await expect(ending).toContainText("29 set 2026");
   await ending.getByRole("link", { name: "Vedi il piano" }).click();
   await expect(page).toHaveURL(/\/anteprima\/impostazioni\/piano$/u);
   const plan = page.getByRole("region", { name: "Piano e pagamenti" });
-  await expect(plan.getByText("Prova Premium", { exact: true })).toBeVisible();
+  await expect(plan.getByText("Prova Pro", { exact: true })).toBeVisible();
   await expect(plan.getByText(/1 giorno rimasto/u)).toBeVisible();
 
   await chooseScenario(page, "Prova terminata");

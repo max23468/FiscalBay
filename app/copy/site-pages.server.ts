@@ -29,7 +29,7 @@ const it = {
       },
       {
         title: "Consulta, copia ed esporta",
-        body: "Copi il dato con un clic ed esporti gli ordini. Con Premium ricevi anche le notifiche su Telegram.",
+        body: "Copi il dato con un clic ed esporti gli ordini. Con Pro ricevi anche le notifiche su Telegram.",
       },
     ],
     showcaseTitle: "Dentro FiscalBay",
@@ -59,11 +59,11 @@ const it = {
         premium: true,
       },
     ],
-    premium: "Premium",
+    premium: "Pro",
     plansTitle: "Piani",
     freePlan: "Free",
     freePrice: "0 €",
-    premiumPlan: "Premium",
+    premiumPlan: "Pro",
     premiumGross: (monthly: string, annual: string) =>
       `${monthly} al mese o ${annual} all’anno con IVA italiana al 22%`,
     premiumBody:
@@ -88,7 +88,7 @@ const it = {
     description:
       "Codice Fiscale e Partita IVA dagli ordini eBay, sincronizzazione automatica, ricerca, export CSV e XLSX, notifiche Telegram e più negozi.",
     lead: "Il Codice Fiscale dei tuoi ordini eBay a portata di mano, dal collegamento del negozio all’export.",
-    premium: "Premium",
+    premium: "Pro",
     showcase: [
       {
         shot: "scheda",
@@ -105,7 +105,7 @@ const it = {
       {
         shot: "esportazione",
         title: "Export CSV e XLSX",
-        body: "Esporti gli ordini in CSV, una riga per ordine o per articolo, pronti per il gestionale o il software di fatturazione. Con Premium anche in XLSX, con le colonne che scegli e le configurazioni salvate.",
+        body: "Esporti gli ordini in CSV, una riga per ordine o per articolo, pronti per il gestionale o il software di fatturazione. Con Pro anche in XLSX, con le colonne che scegli e le configurazioni salvate.",
         premium: false,
       },
       {
@@ -117,7 +117,7 @@ const it = {
       {
         shot: "negozi",
         title: "Più negozi e un anno di storico",
-        body: "Il piano Free ha un negozio attivo, sostituibile ogni 90 giorni, e gli ultimi 30 giorni di ordini. Premium collega più negozi e conserva un anno di storico.",
+        body: "Il piano Free ha un negozio attivo, sostituibile ogni 90 giorni, e gli ultimi 30 giorni di ordini. Pro collega più negozi e conserva un anno di storico.",
         premium: true,
       },
     ],
@@ -142,8 +142,8 @@ const it = {
     /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
     metaTitle: "Prezzi | Codice Fiscale degli ordini eBay",
     description:
-      "Piano Free gratuito e Premium mensile, annuale o a vita per recuperare il Codice Fiscale dagli ordini eBay. Prova Premium di 14 giorni senza carta.",
-    lead: "Inizia gratis. Passa a Premium quando ti servono più ordini, più negozi e più storico.",
+      "Piano Free gratuito e Pro mensile, annuale o a vita per recuperare il Codice Fiscale dagli ordini eBay. Prova Pro di 14 giorni senza carta.",
+    lead: "Inizia gratis. Passa a Pro quando ti servono più ordini, più negozi e più storico.",
     free: "Free",
     freePrice: "0 €",
     freeItems: (quota: number | null) => [
@@ -154,7 +154,7 @@ const it = {
       "Ultimi 30 giorni di ordini",
       "Export CSV",
     ],
-    premium: "Premium",
+    premium: "Pro",
     premiumItems: [
       "Ordini da sbloccare senza limite per ciclo",
       "Più negozi eBay attivi",
@@ -185,13 +185,13 @@ const it = {
     vat: "+ IVA",
     soldOut: "Esaurito",
     soldOutBody: "I posti a vita sono finiti.",
-    owned: "Hai già Premium a vita: tutte le funzioni Premium sono attive, senza rinnovi.",
+    owned: "Hai già Pro a vita: tutte le funzioni Pro sono attive, senza rinnovi.",
     ownedLink: "Apri Piano e pagamenti",
-    trialTitle: "Prova Premium per 14 giorni",
+    trialTitle: "Prova Pro per 14 giorni",
     trialBody:
       "Senza carta e senza rinnovo automatico. La attivi quando vuoi dopo la prima lettura riuscita di un negozio; alla fine torni al Free e gli ordini sbloccati restano tali.",
-    purchaseNote: "Premium si acquista dall’app, dopo la prima lettura riuscita di un negozio.",
-    closed: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
+    purchaseNote: "Pro si acquista dall’app, dopo la prima lettura riuscita di un negozio.",
+    closed: "I nuovi acquisti di Pro e le prove sono sospesi per ora.",
     taxNote:
       "Prezzi IVA esclusa. Stripe gestisce il pagamento e calcola le imposte del tuo paese e il totale, anche nella tua valuta, prima di pagare. Ricevute e fatture arrivano da Stripe.",
     compare: "Confronto dei piani",
@@ -258,7 +258,7 @@ const it = {
       },
       {
         title: "Quanto conserviamo",
-        body: "Gli ordini restano consultabili nella finestra del tuo piano: 30 giorni con Free, un anno con Premium. Quando elimini un negozio o l’account, i suoi dati vengono cancellati, salvo i pochi dati minimi indicati nell’Informativa privacy.",
+        body: "Gli ordini restano consultabili nella finestra del tuo piano: 30 giorni con Free, un anno con Pro. Quando elimini un negozio o l’account, i suoi dati vengono cancellati, salvo i pochi dati minimi indicati nell’Informativa privacy.",
       },
       {
         title: "Accesso all’account",
@@ -280,7 +280,7 @@ const it = {
     /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
     metaTitle: "Domande frequenti | Codice Fiscale degli ordini eBay",
     description:
-      "Risposte su FiscalBay: Codice Fiscale e Partita IVA dagli ordini eBay, piani, prova Premium, pagamenti, permessi e dati.",
+      "Risposte su FiscalBay: Codice Fiscale e Partita IVA dagli ordini eBay, piani, prova Pro, pagamenti, permessi e dati.",
     items: [
       {
         q: "Cos’è FiscalBay?",
@@ -301,7 +301,7 @@ const it = {
       {
         q: "Serve una carta per iniziare?",
         payment: true,
-        a: "No. Il piano Free è gratuito e la prova Premium di 14 giorni non chiede una carta.",
+        a: "No. Il piano Free è gratuito e la prova Pro di 14 giorni non chiede una carta.",
       },
       {
         q: "Cosa succede alla fine della prova?",
@@ -309,18 +309,18 @@ const it = {
         a: "Torni al Free senza addebiti. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
       },
       {
-        q: "Come si paga Premium?",
+        q: "Come si paga Pro?",
         payment: true,
-        a: "Con Stripe, che gestisce pagamento, imposte, ricevute e fatture. Disdici quando vuoi da Stripe: Premium resta attivo fino alla fine del periodo pagato.",
+        a: "Con Stripe, che gestisce pagamento, imposte, ricevute e fatture. Disdici quando vuoi da Stripe: Pro resta attivo fino alla fine del periodo pagato.",
       },
       {
         q: "Cos’è il piano a vita?",
         payment: true,
-        a: "Premium con un pagamento unico, senza rinnovi. I posti sono venti in tutto.",
+        a: "Pro con un pagamento unico, senza rinnovi. I posti sono venti in tutto.",
       },
       {
         q: "Posso collegare più negozi eBay?",
-        a: "Con Free hai un negozio attivo, sostituibile ogni 90 giorni. Con Premium colleghi più negozi.",
+        a: "Con Free hai un negozio attivo, sostituibile ogni 90 giorni. Con Pro colleghi più negozi.",
       },
       {
         q: "Quali permessi chiede FiscalBay su eBay?",
@@ -373,7 +373,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "Browse, copy and export",
-        body: "Copy the tax code in one click and export your orders. With Premium you also get notifications on Telegram.",
+        body: "Copy the tax code in one click and export your orders. With Pro you also get notifications on Telegram.",
       },
     ],
     showcaseTitle: "Inside FiscalBay",
@@ -403,11 +403,11 @@ const en: SitePagesCopy = {
         premium: true,
       },
     ],
-    premium: "Premium",
+    premium: "Pro",
     plansTitle: "Plans",
     freePlan: "Free",
     freePrice: "€0",
-    premiumPlan: "Premium",
+    premiumPlan: "Pro",
     premiumGross: (monthly, annual) =>
       `${monthly} per month or ${annual} per year with 22% Italian VAT`,
     premiumBody:
@@ -431,7 +431,7 @@ const en: SitePagesCopy = {
     description:
       "Tax code (Codice Fiscale) and VAT number (Partita IVA) from your eBay orders, automatic sync, search, CSV and XLSX export, Telegram notifications and multiple stores.",
     lead: "The tax code (Codice Fiscale) of your eBay orders at hand, from connecting your store to exporting.",
-    premium: "Premium",
+    premium: "Pro",
     showcase: [
       {
         shot: "scheda",
@@ -448,7 +448,7 @@ const en: SitePagesCopy = {
       {
         shot: "esportazione",
         title: "CSV and XLSX export",
-        body: "Export your orders as CSV, one row per order or per item, ready for your management or invoicing software. With Premium as XLSX too, with the columns you choose and saved configurations.",
+        body: "Export your orders as CSV, one row per order or per item, ready for your management or invoicing software. With Pro as XLSX too, with the columns you choose and saved configurations.",
         premium: false,
       },
       {
@@ -460,7 +460,7 @@ const en: SitePagesCopy = {
       {
         shot: "negozi",
         title: "More stores and a year of history",
-        body: "The Free plan has one active store, replaceable every 90 days, and the last 30 days of orders. Premium connects more stores and keeps a year of history.",
+        body: "The Free plan has one active store, replaceable every 90 days, and the last 30 days of orders. Pro connects more stores and keeps a year of history.",
         premium: true,
       },
     ],
@@ -484,8 +484,8 @@ const en: SitePagesCopy = {
     title: "Pricing",
     metaTitle: "Pricing | Tax code (Codice Fiscale) for eBay orders",
     description:
-      "Free plan at no cost and Premium monthly, annual or lifetime to get the tax code (Codice Fiscale) from your eBay orders. 14-day Premium trial with no card.",
-    lead: "Start for free. Move to Premium when you need more orders, more stores and more history.",
+      "Free plan at no cost and Pro monthly, annual or lifetime to get the tax code (Codice Fiscale) from your eBay orders. 14-day Pro trial with no card.",
+    lead: "Start for free. Move to Pro when you need more orders, more stores and more history.",
     free: "Free",
     freePrice: "€0",
     freeItems: (quota) => [
@@ -494,7 +494,7 @@ const en: SitePagesCopy = {
       "Last 30 days of orders",
       "CSV export",
     ],
-    premium: "Premium",
+    premium: "Pro",
     premiumItems: [
       "Unlimited orders to unlock per cycle",
       "More active eBay stores",
@@ -525,13 +525,13 @@ const en: SitePagesCopy = {
     vat: "+ VAT",
     soldOut: "Sold out",
     soldOutBody: "Lifetime places have run out.",
-    owned: "You already have Premium for life: every Premium feature is on, with no renewals.",
+    owned: "You already have Pro for life: every Pro feature is on, with no renewals.",
     ownedLink: "Open Plan and payments",
-    trialTitle: "Try Premium for 14 days",
+    trialTitle: "Try Pro for 14 days",
     trialBody:
       "No card and no automatic renewal. Start it whenever you like after a store’s first successful read; at the end you go back to Free and unlocked orders stay unlocked.",
-    purchaseNote: "Premium is bought in the app, after a store’s first successful read.",
-    closed: "New Premium purchases and trials are paused for now.",
+    purchaseNote: "Pro is bought in the app, after a store’s first successful read.",
+    closed: "New Pro purchases and trials are paused for now.",
     taxNote:
       "Prices exclude VAT. Stripe handles payment and works out your country’s taxes and the total, in your currency too, before you pay. Receipts and invoices come from Stripe.",
     compare: "Compare plans",
@@ -596,7 +596,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "How long we keep data",
-        body: "Orders stay available within your plan’s window: 30 days on Free, one year on Premium. When you delete a store or your account, its data is erased, except for the minimal data listed in the Privacy policy.",
+        body: "Orders stay available within your plan’s window: 30 days on Free, one year on Pro. When you delete a store or your account, its data is erased, except for the minimal data listed in the Privacy policy.",
       },
       {
         title: "Signing in",
@@ -617,7 +617,7 @@ const en: SitePagesCopy = {
     title: "Frequently asked questions",
     metaTitle: "Frequently asked questions | Tax code (Codice Fiscale) for eBay orders",
     description:
-      "Answers about FiscalBay: tax code (Codice Fiscale) and VAT number (Partita IVA) from eBay orders, plans, the Premium trial, payments, permissions and data.",
+      "Answers about FiscalBay: tax code (Codice Fiscale) and VAT number (Partita IVA) from eBay orders, plans, the Pro trial, payments, permissions and data.",
     items: [
       {
         q: "What is FiscalBay?",
@@ -638,7 +638,7 @@ const en: SitePagesCopy = {
       {
         q: "Do I need a card to get started?",
         payment: true,
-        a: "No. The Free plan costs nothing and the 14-day Premium trial does not ask for a card.",
+        a: "No. The Free plan costs nothing and the 14-day Pro trial does not ask for a card.",
       },
       {
         q: "What happens when the trial ends?",
@@ -646,18 +646,18 @@ const en: SitePagesCopy = {
         a: "You go back to Free with no charge. Orders whose tax code or VAT number arrived during the trial stay unlocked.",
       },
       {
-        q: "How do I pay for Premium?",
+        q: "How do I pay for Pro?",
         payment: true,
-        a: "With Stripe, which handles payment, taxes, receipts and invoices. Cancel whenever you like from Stripe: Premium stays active until the end of the paid period.",
+        a: "With Stripe, which handles payment, taxes, receipts and invoices. Cancel whenever you like from Stripe: Pro stays active until the end of the paid period.",
       },
       {
         q: "What is the lifetime plan?",
         payment: true,
-        a: "Premium with a single payment and no renewals. There are twenty places in total.",
+        a: "Pro with a single payment and no renewals. There are twenty places in total.",
       },
       {
         q: "Can I connect more than one eBay store?",
-        a: "On Free you have one active store, replaceable every 90 days. With Premium you connect more stores.",
+        a: "On Free you have one active store, replaceable every 90 days. With Pro you connect more stores.",
       },
       {
         q: "Which permissions does FiscalBay ask for on eBay?",

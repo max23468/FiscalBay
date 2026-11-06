@@ -6,8 +6,8 @@ import type { Language } from "../i18n";
  * senza bloccare alcuna funzione (D232).
  */
 export const legalVersions = {
-  terms: "2026-11-02",
-  privacy: "2026-11-05",
+  terms: "2026-11-06",
+  privacy: "2026-11-06",
 } as const;
 
 /**
