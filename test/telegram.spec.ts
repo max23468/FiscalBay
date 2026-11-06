@@ -81,6 +81,60 @@ beforeEach(async () => {
   send.mockClear();
 });
 
+// In testa alla suite: la mutation attribuisce la copertura di questa regola soltanto a un test
+// che la esegue per primo.
+describe("nome del dato nelle notifiche", () => {
+  it("CF e Partita IVA hanno l'impronta del CF, un codice estero conserva il proprio tipo", async () => {
+    const values = [
+      { kind: "PIVA" as const, label: null, value: "01234567897" },
+      { kind: "OTHER" as const, label: "NIF · ES", value: "x1" },
+    ];
+    expect(await fiscalKey({ values })).toBe(
+      await fiscalDigest(
+        JSON.stringify([
+          ["CF", null, "01234567897"],
+          ["OTHER", "NIF · ES", "x1"],
+        ]),
+      ),
+    );
+  });
+
+  it("il titolo nomina la Partita IVA soltanto se l'ordine ha solo quella", () => {
+    const site = { APP_ORIGIN: "https://fiscalbay.invalid" };
+    const at = new Date("2026-10-25T21:30:00Z");
+    const title = (values: OrderNotice["values"]) =>
+      orderMessage(
+        site,
+        "it",
+        "Europe/Rome",
+        {
+          id: "o-1",
+          ebayOrderId: "12-34567-89012",
+          environment: "production",
+          storeName: "Negozio",
+          createdAt: "2026-10-25T13:03:00Z",
+          buyer: null,
+          items: [],
+          imageUrl: null,
+          totalMinor: 100,
+          currency: "EUR",
+          fiscal: "available",
+          country: null,
+          values,
+        },
+        "available",
+        at,
+      )[0]!.html.split("</b>")[0];
+    const vat = { kind: "PIVA" as const, label: null, value: "01234567897" };
+    const foreign = { kind: "OTHER" as const, label: "NIF · ES", value: "x1" };
+    expect(title([vat])).toContain("Partita IVA disponibile");
+    expect(title([vat, foreign])).toContain("Partita IVA disponibile");
+    // Un codice estero da solo non è una Partita IVA.
+    expect(title([foreign])).toContain("Codice Fiscale disponibile");
+    expect(title([])).toContain("Codice Fiscale disponibile");
+  });
+});
+
 describe("testi dei messaggi", () => {
   const site = { APP_ORIGIN: "https://fiscalbay.invalid/percorso" };
   // Importo nella forma condivisa con l'app, spazi tipografici compresi.
@@ -157,7 +211,7 @@ describe("testi dei messaggi", () => {
     ).toEqual([
       {
         html:
-          "🛒 <b>Nuovo ordine</b> · Negozio &lt;A&amp;B&gt;\n⏳ Dato fiscale in verifica\n" +
+          "🛒 <b>Nuovo ordine</b> · Negozio &lt;A&amp;B&gt;\n⏳ Codice Fiscale in verifica\n" +
           `Se arriva, ricevi un nuovo messaggio.\n\n<blockquote>💶 <b>${amountIt}</b>\n` +
           "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\ne un altro articolo\n" +
           "🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
@@ -176,23 +230,45 @@ describe("testi dei messaggi", () => {
     );
     expect(changed).toEqual({
       html:
-        "✏️ <b>Dato fiscale aggiornato</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "🧾 P.IVA <code>IT01234567890</code>\n🧾 <code>RSSMRA80A01H501U</code>\n\n" +
+        "✏️ <b>Codice Fiscale aggiornato</b> · Negozio &lt;A&amp;B&gt;\n" +
+        "🧾 P. IVA <code>IT01234567890</code>\n🧾 <code>RSSMRA80A01H501U</code>\n\n" +
         `<blockquote>👤 Mario Rossi\n💶 <b>${amountIt}</b>\n📦 1 × Articolo 1\n` +
         "📦 1 × Articolo 2\n📦 1 × Articolo 3\n🕑 <i>oggi 14:03 · 12-34567-89012</i></blockquote>",
       buttons: [[{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay], [copyCf]],
     });
+    // Con la sola Partita IVA il titolo e il pulsante la nominano; senza valori vale il CF.
+    expect(
+      orderMessage(site, "it", "Europe/Rome", notice({ values: [vat] }), "available", at)[0]!.html,
+    ).toMatch(/^✅ <b>Partita IVA disponibile<\/b>/u);
+    expect(
+      orderMessage(site, "en", "Europe/Rome", notice({ values: [vat] }), "changed", at)[0]!.html,
+    ).toMatch(/^✏️ <b>VAT number updated<\/b>/u);
+    expect(
+      orderMessage(site, "it", "Europe/Rome", notice({ values: [cf, vat] }), "available", at)[0]!
+        .html,
+    ).toMatch(/^✅ <b>Codice Fiscale disponibile<\/b>/u);
+    // Con la sola Partita IVA il pulsante la nomina e la copia.
+    expect(
+      orderMessage(site, "it", "Europe/Rome", notice({ values: [vat] }), "new", at)[0]!.buttons,
+    ).toEqual([
+      [{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay],
+      [{ text: "📋 Copia Partita IVA", copy_text: { text: vat.value } }],
+    ]);
+    expect(
+      orderMessage(site, "en", "Europe/Rome", notice({ values: [vat] }), "new", at)[0]!
+        .buttons?.[1],
+    ).toEqual([{ text: "📋 Copy VAT number", copy_text: { text: vat.value } }]);
     expect(
       orderMessage(site, "it", "Europe/Rome", notice({ items: items(5) }), "new", at)[0]!.html,
     ).toContain("📦 1 × Articolo 3\ne altri 2 articoli\n🕑");
     expect(
       orderMessage(site, "it", "Europe/Rome", notice({ values: [] }), "removed", at)[0]!.html,
     ).toMatch(
-      /^⚠️ <b>Dato fiscale rimosso<\/b> · Negozio &lt;A&amp;B&gt;\nIl dato notificato in precedenza non è più nell'ordine\.\n\n/u,
+      /^⚠️ <b>Codice Fiscale rimosso<\/b> · Negozio &lt;A&amp;B&gt;\nIl codice notificato in precedenza non è più nell'ordine\.\n\n/u,
     );
-    // Senza Codice Fiscale non c'è il pulsante di copia, anche con una Partita IVA.
+    // Senza dato fiscale non c'è il pulsante di copia.
     expect(
-      orderMessage(site, "it", "Europe/Rome", notice({ values: [vat] }), "new", at)[0]!.buttons,
+      orderMessage(site, "it", "Europe/Rome", notice({ values: [] }), "new", at)[0]!.buttons,
     ).toEqual([[{ text: "🔗 Apri in FiscalBay", url: orderLink }, ebay]]);
   });
 
@@ -209,8 +285,8 @@ describe("testi dei messaggi", () => {
     ).toEqual([
       {
         html:
-          "⚠️ <b>Tax identifier removed</b> · Negozio &lt;A&amp;B&gt;\n" +
-          "The tax identifier notified earlier is no longer in the order.\n➖ No tax identifier\n\n" +
+          "⚠️ <b>Tax code removed</b> · Negozio &lt;A&amp;B&gt;\n" +
+          "The code notified earlier is no longer in the order.\n➖ No tax code\n\n" +
           `<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n📦 1 × Articolo 1\n` +
           "📦 1 × Articolo 2\n📦 1 × Articolo 3\nand 2 more items\n" +
           "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
@@ -226,7 +302,7 @@ describe("testi dei messaggi", () => {
       orderMessage(site, "en", "Europe/Rome", notice(fields), change, at)[0]!;
     expect(english({ items: items(4), values: [vat, cf] }, "available")).toEqual({
       html:
-        "✅ <b>Tax identifier available</b> · Negozio &lt;A&amp;B&gt;\n🧾 VAT <code>IT01234567890</code>\n" +
+        "✅ <b>Tax code available</b> · Negozio &lt;A&amp;B&gt;\n🧾 VAT <code>IT01234567890</code>\n" +
         `🧾 <code>RSSMRA80A01H501U</code>\n\n<blockquote>👤 Mario Rossi\n💶 <b>${amountEn}</b>\n` +
         "📦 1 × Articolo 1\n📦 1 × Articolo 2\n📦 1 × Articolo 3\nand one more item\n" +
         "🕑 <i>today 14:03 · 12-34567-89012</i></blockquote>",
@@ -235,14 +311,14 @@ describe("testi dei messaggi", () => {
           { text: "🔗 Open in FiscalBay", url: "https://fiscalbay.invalid/en/app/orders/o-1" },
           { text: "🛍 Open on eBay", url: ebayOrderHref("12-34567-89012") },
         ],
-        [{ text: "📋 Copy Codice Fiscale", copy_text: { text: cf.value } }],
+        [{ text: "📋 Copy tax code", copy_text: { text: cf.value } }],
       ],
     });
     expect(english({ values: [] }, "changed").html).toMatch(
-      /^✏️ <b>Tax identifier updated<\/b> · Negozio &lt;A&amp;B&gt;\n\n<blockquote>/u,
+      /^✏️ <b>Tax code updated<\/b> · Negozio &lt;A&amp;B&gt;\n\n<blockquote>/u,
     );
     expect(english({ fiscal: "checking", values: [] }, "new").html).toMatch(
-      /^🛒 <b>New order<\/b> · Negozio &lt;A&amp;B&gt;\n⏳ Tax identifier being checked\nIf it arrives, you get a new message\.\n\n/u,
+      /^🛒 <b>New order<\/b> · Negozio &lt;A&amp;B&gt;\n⏳ Tax code being checked\nIf it arrives, you get a new message\.\n\n/u,
     );
   });
 
@@ -253,8 +329,8 @@ describe("testi dei messaggi", () => {
         .slice(2)
         .join("\n");
     const states = [
-      [{ fiscal: "checking" }, "⏳ Dato fiscale in verifica", "⏳ Tax identifier being checked"],
-      [{ fiscal: "missing" }, "➖ Nessun dato fiscale", "➖ No tax identifier"],
+      [{ fiscal: "checking" }, "⏳ Codice Fiscale in verifica", "⏳ Tax code being checked"],
+      [{ fiscal: "missing" }, "➖ Nessun Codice Fiscale", "➖ No tax code"],
       [
         { fiscal: "foreign", country: "DE" },
         "🌍 Fatturazione estera (DE)",
@@ -263,8 +339,8 @@ describe("testi dei messaggi", () => {
       [{ fiscal: "foreign" }, "🌍 Fatturazione estera ()", "🌍 Billing abroad ()"],
       [
         { fiscal: "error" },
-        "⚠️ Dato fiscale non letto: riprova da FiscalBay",
-        "⚠️ Tax identifier not read: try again from FiscalBay",
+        "⚠️ Codice Fiscale non letto: riprova da FiscalBay",
+        "⚠️ Tax code not read: try again from FiscalBay",
       ],
       [{ fiscal: "locked" }, "🔒 Da sbloccare in FiscalBay", "🔒 To unlock in FiscalBay"],
       [{ fiscal: "available" }, "", ""],
@@ -316,7 +392,7 @@ describe("testi dei messaggi", () => {
   it("negli elenchi l'ordine apre il dettaglio e mostra la variazione se non è nuovo", () => {
     expect(orderEntry(site, "it", "Europe/Rome", notice(), "changed", at)).toBe(
       `<a href="${orderLink}">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n` +
-        "✏️ <i>Dato fiscale aggiornato</i>\n" +
+        "✏️ <i>Codice Fiscale aggiornato</i>\n" +
         `👤 Mario Rossi · 💶 <b>${amountIt}</b> · <i>oggi 14:03</i>\n` +
         "🧾 <code>RSSMRA80A01H501U</code>",
     );
@@ -336,7 +412,7 @@ describe("testi dei messaggi", () => {
       ).toBe(plain);
     expect(orderEntry(site, "en", "Europe/Rome", notice({ values: [] }), "removed", at)).toBe(
       '<a href="https://fiscalbay.invalid/en/app/orders/o-1">12-34567-89012</a> · Negozio &lt;A&amp;B&gt;\n' +
-        `⚠️ <i>Tax identifier removed</i>\n👤 Mario Rossi · 💶 <b>${amountEn}</b> · <i>today 14:03</i>`,
+        `⚠️ <i>Tax code removed</i>\n👤 Mario Rossi · 💶 <b>${amountEn}</b> · <i>today 14:03</i>`,
     );
   });
 
@@ -349,6 +425,10 @@ describe("testi dei messaggi", () => {
     expect(
       copyButtons(notices, `<code>${cf.value}</code> <code>${vat.value}</code> ${other}`),
     ).toEqual([[{ text: `📋 ${cf.value}`, copy_text: { text: cf.value } }]]);
+    // Un ordine con la sola Partita IVA la offre da copiare.
+    expect(copyButtons([notice({ values: [vat] })], `<code>${vat.value}</code>`)).toEqual([
+      [{ text: `📋 ${vat.value}`, copy_text: { text: vat.value } }],
+    ]);
   });
 
   it("il riepilogo conta gli ordini e apre i sette giorni nell'ambiente comune", () => {
@@ -423,7 +503,7 @@ describe("testi dei messaggi", () => {
     expect(importMessage(site, "it", "Europe/Rome", summary, at)).toEqual({
       html:
         "📥 <b>Importazione completata</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "📦 Un ordine · 🧾 <b>0</b> con dato fiscale\n🗓 dal 1 nov 2025 al 25 ott\n" +
+        "📦 Un ordine · 🧾 <b>0</b> con Codice Fiscale o P. IVA\n🗓 dal 1 nov 2025 al 25 ott\n" +
         "<i>Gli ordini importati non ricevono messaggi singoli: da ora arrivano quelli nuovi.</i>",
       buttons: [
         [{ text: "🔗 Apri gli ordini", url: "https://fiscalbay.invalid/app/ordini?negozio=s-1" }],
@@ -440,7 +520,7 @@ describe("testi dei messaggi", () => {
     ).toEqual({
       html:
         "📥 <b>Import completed</b> · Negozio &lt;A&amp;B&gt;\n" +
-        "📦 3 orders · 🧾 <b>2</b> with a tax identifier\n🗓 from 1 Nov 2025 to 25 Oct\n" +
+        "📦 3 orders · 🧾 <b>2</b> with a tax code or VAT\n🗓 from 1 Nov 2025 to 25 Oct\n" +
         "<i>Imported orders get no individual messages: new orders arrive from now on.</i>",
       buttons: [
         [
@@ -495,6 +575,7 @@ describe("testi dei messaggi", () => {
       order({ name: "MARIO ROSSI", username: "mrossi", billingAddress: { countryCode: "DE" } }, [
         { type: "CODICE_FISCALE", issuingCountry: "IT", value: "rssmra 80a01h501u" },
         { type: "PartitaIVA", issuingCountry: "IT", value: "it 01234567890" },
+        { type: "CODICE_FISCALE", issuingCountry: "IT", value: "0123 4567 897" },
         { type: "VAT_ID", issuingCountry: null, value: "de 123" },
         { type: "VAT_ID", issuingCountry: "DE", value: "de 123" },
       ]),
@@ -517,6 +598,7 @@ describe("testi dei messaggi", () => {
       values: [
         { kind: "CF", label: null, value: "RSSMRA80A01H501U" },
         { kind: "PIVA", label: null, value: "IT01234567890" },
+        { kind: "PIVA", label: null, value: "01234567897" },
         { kind: "OTHER", label: "VAT_ID", value: "de 123" },
         { kind: "OTHER", label: "VAT_ID · DE", value: "de 123" },
       ],
@@ -528,16 +610,17 @@ describe("testi dei messaggi", () => {
     });
     expect(order(null)).toMatchObject({ buyer: null, country: null });
 
-    // L'impronta non dipende dall'ordine dei valori.
+    // L'impronta non dipende dall'ordine dei valori né dal nome mostrato dei codici italiani.
     const expected = await fiscalDigest(
       JSON.stringify([
+        ["CF", null, vat.value],
         ["CF", null, cf.value],
-        ["PIVA", null, vat.value],
       ]),
     );
     expect(await fiscalKey({ values: [cf, vat] })).toBe(expected);
     expect(await fiscalKey({ values: [vat, cf] })).toBe(expected);
     expect(await fiscalKey({ values: [] })).toBe(emptyFiscalKey);
+
     expect(expected).toMatch(/^"[\da-f]{64}"$/u);
   });
 });

@@ -121,7 +121,7 @@ export const en: AppCopy = {
     period: "Period",
     paymentStatus: "Payment",
     shippingStatus: "Shipping",
-    fiscalStatus: "Codice Fiscale",
+    fiscalStatus: "Tax code",
     all: "All",
     periods: {
       "7": "Last 7 days",
@@ -211,7 +211,7 @@ export const en: AppCopy = {
     quantity: "Quantity",
     newOrders: (count) => `${grouped(count)} new ${plural(count, "order", "orders")}`,
     showNew: "Show",
-    identifier: { CF: "Codice Fiscale", PIVA: "Partita IVA" },
+    identifier: { CF: "Tax code", PIVA: "VAT number" },
     copy: (label, order) => `Copy ${label}: order ${order}`,
     copied: "Copied to clipboard",
     copyFailed: "Copy failed. Try again, or select and copy the code.",
@@ -242,10 +242,14 @@ export const en: AppCopy = {
       checksum: "The check character does not match.",
       name: "The letters of the code do not match the name on the order.",
       unverifiable: "We cannot verify that the code matches the buyer’s name.",
-      unchecked: "FiscalBay does not check the format of this identifier type.",
+      unchecked: "FiscalBay does not check the format of this type of code.",
     },
-    codeToCheck: "Check code",
-    differentCodes: "Different codes",
+    codeToCheck: { CF: "Check tax code", PIVA: "Check VAT number", OTHER: "Check code" },
+    differentCodes: {
+      CF: "Different tax codes",
+      PIVA: "Different VAT numbers",
+      OTHER: "Different codes",
+    },
     updated: "Updated by eBay",
     updatedHint: "eBay changed this value after it was first read.",
     suggestion: "Suggestion from a previous order",
@@ -255,7 +259,7 @@ export const en: AppCopy = {
     suggestionConflict: "Previous orders show different codes: this is the most recent.",
     suggestionStatus: {
       identity_missing: "eBay does not let us recognise this buyer in their previous orders.",
-      none: "No previous order from this buyer has a tax code to suggest.",
+      none: "No previous order from this buyer has a tax code or VAT number to suggest.",
       ambiguous:
         "This buyer’s previous orders show different details: we suggest nothing for those details.",
     },
@@ -282,7 +286,7 @@ export const en: AppCopy = {
       `Orders from this store are up to date as of ${time}. Other stores continue and FiscalBay retries automatically.`,
     quotaTitle: "No unlocks left this cycle",
     quotaBody: (date) =>
-      `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
+      `You can still view and search all orders. Tax codes and VAT numbers of new orders stay locked until ${date}.`,
     quotaAction: "Upgrade to Premium",
     waitlistTitle: "You are on the Free waiting list",
     trialOffer: "Try Premium free for 14 days, no card needed.",
@@ -290,7 +294,7 @@ export const en: AppCopy = {
       `Premium trial: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left`,
     trialEndingTitle: (date) => `Your Premium trial ends on ${date}`,
     trialEndingBody:
-      "After that, the Codice Fiscale of new orders goes back to Free unlocks. Orders whose data arrived during the trial stay unlocked.",
+      "After that, tax codes and VAT numbers of new orders go back to Free unlocks. Orders whose data arrived during the trial stay unlocked.",
     trialEndingAction: "View plan",
     reconciliationTitle: "Order to check",
     reconciliationBody:
@@ -305,7 +309,8 @@ export const en: AppCopy = {
     importingStatus: (count) =>
       `Importing: ${grouped(count)} ${plural(count, "order", "orders")} so far`,
     firstUseTitle: "No store connected",
-    firstUseBody: "Connect your eBay store to view orders and available tax codes.",
+    firstUseBody:
+      "Connect your eBay store to view orders and available tax codes (Codici Fiscali).",
     connectStore: "Connect eBay store",
     marketingProposal: {
       title: "Would you like news and offers about FiscalBay?",
@@ -621,7 +626,7 @@ export const en: AppCopy = {
       telegramEnabled: "Send order notifications",
       telegramFilter: "Which orders",
       telegramFilterAll: "All new orders",
-      telegramFilterFiscal: "Only orders with a tax code",
+      telegramFilterFiscal: "Only orders with a tax code or VAT number",
       telegramMode: "Frequency",
       telegramModeEach: "One message per order",
       telegramModeDigest: "Daily summary",
@@ -657,16 +662,16 @@ export const en: AppCopy = {
       exportColumns: "Columns",
       exportFiscal: "Orders included",
       exportFiscalAll: "All",
-      exportFiscalAvailable: "Only with the tax code available",
+      exportFiscalAvailable: "Only with a tax code or VAT number",
       exportCount: (orders, locked) =>
-        `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax code stays empty.`}`,
+        `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, tax code and VAT number stay empty.`}`,
       exportNone: {
         scope: "No orders to export: the chosen orders are no longer available.",
         period: "No orders in this period.",
-        available: "None of these orders has the tax code available.",
+        available: "None of these orders has a tax code or VAT number available.",
       },
       exportTextHint:
-        "To keep leading zeros in Codice Fiscale, Partita IVA, SKU, postal code and phone, open the file in Excel from Data > From Text/CSV and set those columns to Text.",
+        "To keep leading zeros in tax code, VAT number, SKU, postal code and phone, open the file in Excel from Data > From Text/CSV and set those columns to Text.",
       exportContextSelection: "Orders selected on the Orders page.",
       exportContextOrder: (id) => `Order ${id}.`,
       exportContextFiltered: "Orders in the list with the active filters and search.",
@@ -691,7 +696,7 @@ export const en: AppCopy = {
       exportPremium: "XLSX, chosen columns and saved configurations are included in Premium.",
       exportColumnsInvalid: "Choose at least one column.",
       exportXlsxHint:
-        "In the XLSX file Codice Fiscale, Partita IVA and SKU are text columns and keep leading zeros.",
+        "In the XLSX file tax code, VAT number and SKU are text columns and keep leading zeros.",
       exportMoveUp: (column) => `Move up: ${column}`,
       exportMoveDown: (column) => `Move down: ${column}`,
       exportColumnMoved: (column, position, total) =>
@@ -736,11 +741,11 @@ export const en: AppCopy = {
           total: "Order total",
           payment: "Payment",
           shipping: "Shipping",
-          taxCode: "Codice Fiscale",
-          vat: "Partita IVA",
-          otherTax: "Other tax identifiers",
-          fiscal: "Tax data status",
-          checkedAt: "Last tax check",
+          taxCode: "Tax code",
+          vat: "VAT number",
+          otherTax: "Foreign tax codes",
+          fiscal: "Tax code status",
+          checkedAt: "Last tax code check",
           updatedAt: "Last modified on eBay",
         },
         fiscalNotice: {
@@ -845,16 +850,16 @@ export const en: AppCopy = {
       faq: "Frequently asked questions",
       faqItems: [
         {
-          q: "Why does an order have no Codice Fiscale?",
+          q: "Why does an order have no tax code (Codice Fiscale)?",
           a: "eBay does not provide it for every order. When it is missing, you can ask the buyer with the message template.",
         },
         {
           q: "When does an order count as unlocked?",
-          a: "When at least one of its tax identifiers, Codice Fiscale or Partita IVA, becomes visible. Each order counts only once, even if it contains both. Orders without data or with an error do not count, and you can copy and export as often as you like.",
+          a: "When its tax code or VAT number becomes visible. Each order counts only once, even if it contains both. Orders without a code or with an error do not count, and you can copy and export as often as you like.",
         },
         {
           q: "Does FiscalBay change orders on eBay?",
-          a: "No. FiscalBay reads your orders to show you the tax details: everything on your eBay store stays as it is.",
+          a: "No. FiscalBay reads your orders to show you the tax code: everything on your eBay store stays as it is.",
         },
       ],
       contact: contactSupport,
@@ -1022,7 +1027,7 @@ export const en: AppCopy = {
     intro:
       "We’ll take you to eBay to authorise FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [
-      "FiscalBay reads orders and the tax codes eBay makes available, read-only.",
+      "FiscalBay reads orders and the tax codes (Codici Fiscali) eBay makes available, read-only.",
       "It changes nothing on eBay and never contacts buyers.",
       "It doesn’t ask for the email address of your eBay account.",
       "An eBay store can be connected to only one FiscalBay account.",
@@ -1054,7 +1059,7 @@ export const en: AppCopy = {
   },
   supportPage: {
     title: "Support",
-    metaTitle: "Support | Codice Fiscale for eBay orders",
+    metaTitle: "Support | Tax code (Codice Fiscale) for eBay orders",
     description:
       "FiscalBay support: questions about using the app, the in-app support form and email.",
     contact: contactSupport,
@@ -1066,7 +1071,7 @@ export const en: AppCopy = {
   },
   access: {
     description: "eBay orders available in FiscalBay",
-    headline: "The Codice Fiscale of your eBay orders, in one place.",
+    headline: "The tax code (Codice Fiscale) of your eBay orders, in one place.",
     features: [
       {
         title: "All your orders together",
@@ -1074,7 +1079,7 @@ export const en: AppCopy = {
       },
       {
         title: "Ready to copy",
-        body: "You find the tax code provided by eBay, or the VAT number if that is all it has, ready to paste wherever you need it.",
+        body: "You find the tax code provided by eBay, or the VAT number (Partita IVA) if that is all it has, ready to paste wherever you need it.",
       },
       {
         title: "Connect in a few steps",

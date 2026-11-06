@@ -439,7 +439,7 @@ test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno
   const section = page.locator("main");
   await expect(section).toContainText("Ordini selezionati nella pagina Ordini.");
   await expect(section).toContainText(
-    "2 ordini. Per 2 ordini da sbloccare il Codice Fiscale resta vuoto.",
+    "2 ordini. Per 2 ordini da sbloccare Codice Fiscale e Partita IVA restano vuoti.",
   );
   // Il periodo è già nei filtri degli Ordini; il file nasce soltanto da «Crea file».
   await expect(page.getByRole("combobox", { name: "Periodo" })).toHaveCount(0);
@@ -517,7 +517,7 @@ for (const language of ["it", "en"] as const) {
           const card = page.getByRole("article", {
             name: language === "it" ? "Ordine 02-44519-70831" : "Order 02-44519-70831",
           });
-          await expect(card).toContainText("Partita IVA");
+          await expect(card).toContainText(language === "it" ? "Partita IVA" : "VAT number");
           const unlocked = page.waitForResponse(
             (response) =>
               /\/(?:ordini|orders)\.data$/u.test(response.url()) &&
@@ -559,7 +559,7 @@ for (const language of ["it", "en"] as const) {
                 : "When does an order count as unlocked?",
           });
           await faq.locator("summary").click();
-          await expect(faq).toContainText("Partita IVA");
+          await expect(faq).toContainText(language === "it" ? "Partita IVA" : "VAT number");
           await expect(faq).toContainText(
             language === "it" ? "Ogni ordine conta una sola volta" : "Each order counts only once",
           );
@@ -585,7 +585,7 @@ for (const language of ["it", "en"] as const) {
                 ? /^Puoi consultare e cercare tutti gli ordini\./
                 : /^You can still view and search all orders\./,
             ),
-          ).toContainText("Partita IVA");
+          ).toContainText(language === "it" ? "Partita IVA" : "VAT number");
           await reset("caricamento");
           await open(page, pagePath(base, "/ordini"));
           const grid = page.locator('[aria-busy="true"]');

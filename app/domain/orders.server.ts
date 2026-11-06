@@ -138,6 +138,18 @@ const taxKind = (table: string) => `CASE
       AND ${table}.identifier_type IN (${sqlList(taxTypeNames.italianVat)})) THEN 'PIVA'
   ELSE json_array(${table}.identifier_type, ${table}.issuing_country) END`;
 
+/**
+ * Nome mostrato come in `shownTaxType`: undici cifre che non iniziano per 8 o 9, sul valore senza
+ * spazi, sono una Partita IVA anche col tipo CF.
+ */
+function shownTaxKind(table: string) {
+  const value = `replace(${table}.value, ' ', '')`;
+  return `CASE
+  WHEN ${taxKind(table)} = 'CF' AND length(${value}) = 11 AND ${value} NOT GLOB '*[^0-9]*'
+    AND substr(${value}, 1, 1) NOT IN ('8', '9') THEN 'PIVA'
+  ELSE ${taxKind(table)} END`;
+}
+
 function summaryOf(row: {
   buyer_json: string | null;
   payment_status: string | null;
@@ -551,8 +563,11 @@ export async function listVisibleOrders(
                         'stableKey', stable_key))
                  FROM (SELECT * FROM order_items WHERE order_id = o.id ORDER BY rowid)) AS items_json,
               ${storeLabelSql("s")} AS store_name,
-              NOT EXISTS (SELECT 1 FROM tax_identifiers t WHERE t.order_id = o.id
-                AND t.removed_at IS NULL AND ${taxKind("t")} <> 'PIVA') AS vat_only,
+              -- Partita IVA senza Codice Fiscale: i codici esteri non cambiano il nome.
+              EXISTS (SELECT 1 FROM tax_identifiers t WHERE t.order_id = o.id
+                AND t.removed_at IS NULL AND ${shownTaxKind("t")} = 'PIVA')
+              AND NOT EXISTS (SELECT 1 FROM tax_identifiers t WHERE t.order_id = o.id
+                AND t.removed_at IS NULL AND ${shownTaxKind("t")} = 'CF') AS vat_only,
               ti.identifier_type,
               EXISTS (SELECT 1 FROM tax_identifiers previous
                 JOIN orders original ON original.id = previous.order_id

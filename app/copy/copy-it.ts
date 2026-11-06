@@ -257,10 +257,14 @@ export const it = {
       checksum: "Il carattere di controllo non corrisponde.",
       name: "Le lettere del codice non corrispondono al nome dell’ordine.",
       unverifiable: "Non possiamo verificare che il codice corrisponda al nome dell’acquirente.",
-      unchecked: "FiscalBay non verifica il formato di questo tipo di identificativo.",
+      unchecked: "FiscalBay non verifica il formato di questo tipo di codice.",
     },
-    codeToCheck: "Codice da controllare",
-    differentCodes: "Codici diversi",
+    codeToCheck: {
+      CF: "CF da controllare",
+      PIVA: "P. IVA da controllare",
+      OTHER: "Codice da controllare",
+    },
+    differentCodes: { CF: "CF diversi", PIVA: "P. IVA diverse", OTHER: "Codici diversi" },
     updated: "Aggiornato da eBay",
     updatedHint: "eBay ha modificato questo dato dopo la prima lettura.",
     suggestion: "Suggerimento da un ordine precedente",
@@ -271,7 +275,7 @@ export const it = {
     suggestionStatus: {
       identity_missing:
         "eBay non permette di riconoscere questo acquirente nei suoi ordini precedenti.",
-      none: "Nessun ordine precedente di questo acquirente ha un Codice Fiscale da proporre.",
+      none: "Nessun ordine precedente di questo acquirente ha un Codice Fiscale o una Partita IVA da proporre.",
       ambiguous:
         "Gli ordini precedenti di questo acquirente riportano dati diversi: per quei dati non proponiamo nulla.",
     },
@@ -306,7 +310,7 @@ export const it = {
       `Prova Premium: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}`,
     trialEndingTitle: (date: string) => `La prova Premium finisce il ${date}`,
     trialEndingBody:
-      "Poi i Codici Fiscali dei nuovi ordini tornano agli sblocchi del Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+      "Poi Codice Fiscale e Partita IVA dei nuovi ordini tornano agli sblocchi del Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
     trialEndingAction: "Vedi il piano",
     reconciliationTitle: "Ordine da verificare",
     reconciliationBody:
@@ -639,7 +643,7 @@ export const it = {
       telegramEnabled: "Invia notifiche degli ordini",
       telegramFilter: "Quali ordini",
       telegramFilterAll: "Tutti i nuovi ordini",
-      telegramFilterFiscal: "Solo ordini con Codice Fiscale",
+      telegramFilterFiscal: "Solo ordini con Codice Fiscale o Partita IVA",
       telegramMode: "Frequenza",
       telegramModeEach: "Un messaggio per ordine",
       telegramModeDigest: "Riepilogo giornaliero",
@@ -675,13 +679,13 @@ export const it = {
       exportColumns: "Colonne",
       exportFiscal: "Ordini inclusi",
       exportFiscalAll: "Tutti",
-      exportFiscalAvailable: "Solo con il Codice Fiscale disponibile",
+      exportFiscalAvailable: "Solo con Codice Fiscale o Partita IVA",
       exportCount: (orders: number, locked: number) =>
-        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} il Codice Fiscale resta vuoto.`}`,
+        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} Codice Fiscale e Partita IVA restano vuoti.`}`,
       exportNone: {
         scope: "Nessun ordine da esportare: gli ordini scelti non sono più disponibili.",
         period: "Nessun ordine nel periodo.",
-        available: "Nessuno di questi ordini ha il Codice Fiscale disponibile.",
+        available: "Nessuno di questi ordini ha Codice Fiscale o Partita IVA disponibili.",
       },
       exportTextHint:
         "Per conservare gli zeri iniziali di Codice Fiscale, Partita IVA, SKU, CAP e telefono, apri il file in Excel da Dati > Da testo/CSV e imposta quelle colonne come Testo.",
@@ -756,9 +760,9 @@ export const it = {
           shipping: "Spedizione",
           taxCode: "Codice Fiscale",
           vat: "Partita IVA",
-          otherTax: "Altri identificativi fiscali",
-          fiscal: "Situazione fiscale",
-          checkedAt: "Ultima verifica fiscale",
+          otherTax: "Codici fiscali esteri",
+          fiscal: "Stato del Codice Fiscale",
+          checkedAt: "Ultima verifica del Codice Fiscale",
           updatedAt: "Ultima modifica su eBay",
         },
         // Dato disponibile con la stessa avvertenza della pagina Ordini.
@@ -870,7 +874,7 @@ export const it = {
         },
         {
           q: "Quando un ordine conta come sbloccato?",
-          a: "Quando almeno un suo dato fiscale, Codice Fiscale o Partita IVA, diventa visibile. Ogni ordine conta una sola volta, anche se contiene entrambi. Ordini senza dato o con un errore non contano, e puoi copiare ed esportare quanto vuoi.",
+          a: "Quando il suo Codice Fiscale o la sua Partita IVA diventano visibili. Ogni ordine conta una sola volta, anche se li contiene entrambi. Ordini senza codice o con un errore non contano, e puoi copiare ed esportare quanto vuoi.",
         },
         {
           q: "FiscalBay modifica gli ordini su eBay?",

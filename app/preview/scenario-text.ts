@@ -78,7 +78,7 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
     en: {
       name: "No unlocks left",
       focus:
-        "Orders remain available. Codice Fiscale and Partita IVA of new orders wait for the next cycle.",
+        "Orders remain available. Tax codes and VAT numbers of new orders wait for the next cycle.",
     },
   },
   "proposta-consenso": {

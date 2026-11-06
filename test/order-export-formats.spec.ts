@@ -104,8 +104,8 @@ describe("righe e celle del file", () => {
     // I valori restano quelli della fonte: nessuna correzione di maiuscole o spazi.
     expect(cell("Codice Fiscale")).toBe("BNCLGU80A01H501Z | rssmra80a01h501u");
     expect(cell("Partita IVA")).toBe("00123456789");
-    expect(cell("Altri identificativi fiscali")).toBe("VAT (DE): DE123456789");
-    expect(cell("Situazione fiscale")).toBe("Disponibile");
+    expect(cell("Codici fiscali esteri")).toBe("VAT (DE): DE123456789");
+    expect(cell("Stato del Codice Fiscale")).toBe("Disponibile");
     expect(cell("Ultima modifica su eBay")).toBe("2026-09-14 10:30:00");
   });
 
@@ -120,7 +120,7 @@ describe("righe e celle del file", () => {
     expect(column("Quantity")).toEqual(["2", "1"]);
     expect(column("Item amount")).toEqual(["10.00", ""]);
     expect(column("Order total")).toEqual(["15.99", ""]);
-    expect(column("Codice Fiscale")).toEqual(["RSSMRA80A01H501U", "RSSMRA80A01H501U"]);
+    expect(column("Tax code")).toEqual(["RSSMRA80A01H501U", "RSSMRA80A01H501U"]);
     expect(column("Payment")).toEqual(["Paid", "Paid"]);
   });
 
@@ -160,12 +160,14 @@ describe("righe e celle del file", () => {
     };
     const [row] = exportRows(foreign, "item", it_, "Europe/Rome");
     const cell = (name: string) => row![header.indexOf(name)];
-    expect(cell("Situazione fiscale")).toBe("Acquirente estero");
+    expect(cell("Stato del Codice Fiscale")).toBe("Acquirente estero");
     expect(cell("Pagamento")).toBe("ON_HOLD");
     expect(cell("Totale ordine")).toBe("15.99");
     expect(cell("Articolo")).toBe("");
     const locked = exportRows(visible({ fiscalState: "locked" }), "order", it_, "Europe/Rome")[0]!;
-    expect(locked[exportHeader("order", it_).indexOf("Situazione fiscale")]).toBe("Da sbloccare");
+    expect(locked[exportHeader("order", it_).indexOf("Stato del Codice Fiscale")]).toBe(
+      "Da sbloccare",
+    );
   });
 
   it("scrive la situazione fiscale con l'avvertenza della pagina sull'ultima lettura", () => {
@@ -344,7 +346,7 @@ describe("colonne scelte e file XLSX", () => {
     expect(column("Totale ordine")[2]!.numFmt).toBe("0");
     expect(values("Quantità")).toEqual([2, 1, 2, 1, 2, 1]);
     expect(values("Data")[0]).toEqual(new Date("2026-09-13T22:00:00.000Z"));
-    for (const name of ["Data", "Ultima verifica fiscale", "Ultima modifica su eBay"])
+    for (const name of ["Data", "Ultima verifica del Codice Fiscale", "Ultima modifica su eBay"])
       expect([name, column(name)[0]!.numFmt]).toEqual([name, "yyyy-mm-dd hh:mm:ss"]);
     // Larghezze: il nome intero, più spazio per articoli, indirizzo e altri identificativi.
     const width = (name: string) => sheet.getColumn(header.indexOf(name)).width;
@@ -354,7 +356,7 @@ describe("colonne scelte e file XLSX", () => {
         "Paese",
         "Articolo",
         "Indirizzo di fatturazione",
-        "Altri identificativi fiscali",
+        "Codici fiscali esteri",
       ].map(width),
     ).toEqual([17, 14, 40, 40, 40]);
     // CF, Partita IVA, SKU e la formula del titolo restano testo, con gli zeri iniziali.
@@ -374,7 +376,7 @@ describe("colonne scelte e file XLSX", () => {
         "@",
       ]);
     }
-    expect(values("Altri identificativi fiscali")[1]).toBe("VAT (DE): DE123456789");
+    expect(values("Codici fiscali esteri")[1]).toBe("VAT (DE): DE123456789");
   });
 
   it("scrive le parti del foglio come le legge Excel, con righe di più pagine", async () => {
@@ -579,6 +581,9 @@ describe("righe complete del file", () => {
       taxIdentifiers: [
         tax("VAT_ID", "22222222222"),
         tax("PartitaIVA", "11111111111", null),
+        // Partita IVA riportata come Codice Fiscale; il codice di un ente resta Codice Fiscale.
+        tax("CODICE_FISCALE", "33333333333"),
+        tax("CODICE_FISCALE", "80012345678"),
         tax("VAT", "FR2", "FR"),
         tax("TIN", "ZZ1", null),
         tax("VAT", "DE1", "DE"),
@@ -614,8 +619,8 @@ describe("righe complete del file", () => {
         "15.99",
         "Pagato",
         "Da spedire",
-        "",
-        "11111111111 | 22222222222",
+        "80012345678",
+        "11111111111 | 22222222222 | 33333333333",
         "TIN: ZZ1 | VAT (DE): DE1 | VAT (FR): FR2",
         "Disponibile",
         "2026-09-13 23:00:00",
@@ -644,8 +649,8 @@ describe("righe complete del file", () => {
         "",
         "Pagato",
         "Da spedire",
-        "",
-        "11111111111 | 22222222222",
+        "80012345678",
+        "11111111111 | 22222222222 | 33333333333",
         "TIN: ZZ1 | VAT (DE): DE1 | VAT (FR): FR2",
         "Disponibile",
         "2026-09-13 23:00:00",

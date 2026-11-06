@@ -22,6 +22,23 @@ export function taxIdentifierType(type: string, country: string | null): TaxIden
 }
 
 /**
+ * Nome con cui l'identificativo si mostra, si copia e si esporta: come `taxIdentifierType`, con la
+ * Partita IVA riconosciuta anche dalla forma del valore. Confronti e storico restano sul tipo
+ * della fonte.
+ */
+export function shownTaxType(tax: {
+  type: string;
+  issuingCountry: string | null;
+  value: string;
+}): TaxIdentifierType {
+  const kind = taxIdentifierType(tax.type, tax.issuingCountry);
+  // Undici cifre che non iniziano per 8 o 9: la forma della Partita IVA. eBay la riporta come
+  // Codice Fiscale quando l'acquirente la scrive in quel campo; i codici numerici degli enti senza
+  // Partita IVA iniziano per 8 o 9 e restano Codice Fiscale.
+  return kind === "CF" && /^[0-7]\d{10}$/u.test(tax.value.replace(/\s/gu, "")) ? "PIVA" : kind;
+}
+
+/**
  * Forma mostrata e copiata: CF e Partita IVA italiani senza spazi e in maiuscolo, gli altri tipi
  * come forniti. Non corregge un valore errato; l'originale resta quello della fonte.
  */

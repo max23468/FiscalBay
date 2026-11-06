@@ -174,7 +174,7 @@ function IdentifierNote({ identifier, prefix }: { identifier: TaxIdentifierView;
   if (quality !== "valid" && quality !== "unchecked") {
     return (
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-relaxed text-pretty sm:col-span-2">
-        <StatusBadge tone="warning">{t.orders.codeToCheck}</StatusBadge>
+        <StatusBadge tone="warning">{t.orders.codeToCheck[identifier.type]}</StatusBadge>
         <span className="text-muted-foreground">
           {prefix}
           {t.orders.quality[quality]}
@@ -500,7 +500,9 @@ export function MissingOrderHelp({
               <p className="flex gap-2 text-sm text-warning">
                 <StatusIcon tone="warning" className="mt-0.5" />
                 <span>
-                  <span className="font-medium">{t.orders.differentCodes}.</span>{" "}
+                  <span className="font-medium">
+                    {t.orders.differentCodes[suggestion.identifier?.type ?? "CF"]}.
+                  </span>{" "}
                   {t.orders.suggestionConflict}
                 </span>
               </p>

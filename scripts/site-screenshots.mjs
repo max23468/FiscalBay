@@ -167,7 +167,7 @@ const sheet = {
   },
   en: {
     file: "fiscalbay-orders-2026-09-27.xlsx",
-    columns: ["Order number", "Date", "Buyer", "Codice Fiscale", "Partita IVA", "Order total"],
+    columns: ["Order number", "Date", "Buyer", "Tax code", "VAT number", "Order total"],
     decimal: ".",
   },
 };

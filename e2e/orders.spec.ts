@@ -203,7 +203,7 @@ test.describe("area reale", () => {
       expect(copied).toContain(
         `Via dell'Orto 12B\n26866 Sant'Angelo Lodigiano (LO)\n${it ? "Italia" : "Italy"}`,
       );
-      expect(copied).toContain("Codice Fiscale: MRNSRA90L41H50LE");
+      expect(copied).toContain(`${it ? "Codice Fiscale" : "Tax code"}: MRNSRA90L41H50LE`);
       await expect(copy).toHaveAttribute("data-state", "copied");
       await page.screenshot({ path: testInfo.outputPath("billing-details.png") });
       await expect(dialog.locator("time")).not.toHaveCount(0);
@@ -270,7 +270,7 @@ test.describe("area reale", () => {
         () => (window as Window & { copiedText?: string }).copiedText,
       );
       expect(block).toBe(
-        `Maria Rossi\n${addressLine}\n00100 Roma (RM)\n${it ? "Italia" : "Italy"}\nCodice Fiscale: RSSMRA80A41H501Y`,
+        `Maria Rossi\n${addressLine}\n00100 Roma (RM)\n${it ? "Italia" : "Italy"}\n${it ? "Codice Fiscale" : "Tax code"}: RSSMRA80A41H501Y`,
       );
       await page.screenshot({ path: testInfo.outputPath("billing-long-text.png") });
     });
@@ -328,7 +328,7 @@ test.describe("area reale", () => {
       expect(await page.content()).not.toContain(testAccount.taxCodes.locked);
       // Come nell'anteprima il dato da sbloccare mostra il riquadro senza valore.
       await expect(
-        page.getByText(it ? "Codice Fiscale da sbloccare" : "Codice Fiscale to unlock").first(),
+        page.getByText(it ? "Codice Fiscale da sbloccare" : "Tax code to unlock").first(),
       ).toBeAttached();
       await page
         .getByRole("link", {
@@ -517,8 +517,8 @@ test.describe("area reale", () => {
         .getByRole("status");
       await expect(status).toHaveText(
         it
-          ? "2 ordini. Per 1 ordine da sbloccare il Codice Fiscale resta vuoto."
-          : "2 orders. For 1 order to unlock, the tax code stays empty.",
+          ? "2 ordini. Per 1 ordine da sbloccare Codice Fiscale e Partita IVA restano vuoti."
+          : "2 orders. For 1 order to unlock, tax code and VAT number stay empty.",
       );
       // Le prime righe del file mostrano soltanto i dati sbloccati.
       const preview = page.getByRole("region", {
@@ -562,7 +562,7 @@ test.describe("area reale", () => {
       expect(await readFile(await (await again).path(), "utf8")).toBe(csv);
       await page
         .getByRole("radio", {
-          name: it ? "Solo con il Codice Fiscale disponibile" : "Only with the tax code available",
+          name: it ? "Solo con Codice Fiscale o Partita IVA" : "Only with a tax code or VAT number",
         })
         .check();
       await expect(status).toHaveText(it ? "1 ordine." : "1 order.");
@@ -590,7 +590,7 @@ test.describe("area reale", () => {
       // Si tengono numero ordine e altri identificativi, con questi ultimi in testa.
       for (const checkbox of await columns.getByRole("checkbox").all()) await checkbox.uncheck();
       await columns.getByRole("checkbox", { name: it ? "Numero ordine" : "Order number" }).check();
-      const other = it ? "Altri identificativi fiscali" : "Other tax identifiers";
+      const other = it ? "Codici fiscali esteri" : "Foreign tax codes";
       await columns.getByRole("checkbox", { name: other }).check();
       const up = columns.getByRole("button", {
         name: it ? `Sposta su: ${other}` : `Move up: ${other}`,
@@ -970,10 +970,10 @@ for (const language of ["it", "en"] as const) {
       // Riquadro ambra senza etichetta ripetuta: una sola nota sotto il codice spiega il controllo.
       const code = page.getByText("SPSNNA85T55F83", { exact: true }).locator("..");
       await expect(code).toHaveClass(/bg-warning-surface/);
-      await expect(code).not.toContainText(t("Codice da controllare", "Check code"));
+      await expect(code).not.toContainText(t("CF da controllare", "Check tax code"));
       await expect(code.getByRole("button", { name: /^Copia |^Copy / })).toBeVisible();
       const card = page.getByRole("article").filter({ hasText: "SPSNNA85T55F83" });
-      await expect(card.getByText(t("Codice da controllare", "Check code"))).toHaveCount(1);
+      await expect(card.getByText(t("CF da controllare", "Check tax code"))).toHaveCount(1);
       await page.screenshot({ path: test.info().outputPath("elenco.png"), fullPage: true });
       await open(page, await searched(page, "zzzz", pagePath(prefix, "/anteprima")), "ordinario");
       const clear = page.getByRole("link", {

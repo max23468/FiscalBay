@@ -343,8 +343,8 @@ describe("stato sintetico dell'anteprima", () => {
       );
       const t = appCopy[language];
       for (const text of [t.settings.support.faqItems[1]!.a, t.orders.quotaBody("date")]) {
-        expect(text).toContain("Codice Fiscale");
-        expect(text).toContain("Partita IVA");
+        expect(text).toMatch(language === "it" ? /Codice Fiscale/u : /tax code/iu);
+        expect(text).toMatch(language === "it" ? /Partita IVA/u : /VAT number/u);
       }
       expect(t.legal.version("2026-10-29")).toBe(
         language === "it" ? "Versione del 29 ottobre 2026" : "Version of 29 October 2026",
