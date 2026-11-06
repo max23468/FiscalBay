@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectTrigger, SelectValue } from "~/components/
 import { useCopy } from "~/components/copy-context";
 import { PremiumSelectItem } from "~/components/premium-select-item";
 import { usePendingList } from "./pending-list";
-import { rememberStore, withoutListPosition } from "../../orders/order-list";
+import { listFilterParams, rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
 import {
   fiscalSituations,
@@ -172,8 +172,7 @@ export function OrdersToolbar({
   const { params } = usePendingList();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [settled, setSettled] = useState(false);
-  const filterKeys = ["negozio", "periodo", "pagamento", "spedizione", "fiscale"];
-  const active = filterKeys.filter((key) => params.get(key)).length;
+  const active = listFilterParams.filter((key) => params.get(key)).length;
   // Un filtro diverso apre un nuovo elenco, dall'inizio e con una nuova istantanea.
   const change = (name: string, value: string) => {
     const next = withoutListPosition(params);

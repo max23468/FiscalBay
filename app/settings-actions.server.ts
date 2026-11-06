@@ -227,7 +227,7 @@ export async function exportSection(
       exportSample,
     };
   }
-  const { scope, filter } = fromOrders;
+  const { scope, filter, names } = fromOrders;
   const single = scope.kind === "orders" && scope.ids.length === 1;
   const [[estimate], listed, exportSample] = await Promise.all([
     visibleOrderTallies(env.DB, userId, environment, now, filter),
@@ -243,6 +243,7 @@ export async function exportSection(
       localizedPath(area.language, ordersPath),
       listed[0]?.ebayOrderId ?? null,
       estimate!,
+      names,
     ),
     exportPeriods: null,
     exportSample,

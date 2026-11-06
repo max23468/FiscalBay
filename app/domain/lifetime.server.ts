@@ -718,3 +718,14 @@ export async function grantLifetime(
     );
   return "done";
 }
+
+/** Lo spazio dell'utente ha Premium a vita, acquistato o concesso e non revocato. */
+export async function hasLifetime(db: D1Database, userId: string): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT 1 AS owned FROM workspace_entitlements e
+      JOIN workspace_members wm ON wm.workspace_id = e.workspace_id
+      WHERE wm.user_id = ? AND e.source = 'lifetime' AND e.revoked_at IS NULL LIMIT 1`)
+    .bind(userId)
+    .first<{ owned: number }>();
+  return row !== null;
+}

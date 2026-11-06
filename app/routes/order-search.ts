@@ -9,10 +9,13 @@ import {
   type AccountArea,
 } from "../account-area.server";
 import { ordersPath } from "../app-links";
-import { searchVisibleOrders } from "../domain/orders.server";
+import { searchVisibleOrders, type OrderCriteria } from "../domain/orders.server";
+import { orderAllowance } from "../domain/grants.server";
+import { listStores } from "../domain/stores.server";
 import { errorResponse, postOnly } from "../error-response";
 import { localizedPath } from "../i18n";
 import { measure } from "../observability.server";
+import { listCriteria, listFilters } from "../orders/order-list";
 import { searchQuery, searchTokens } from "../orders/order-search";
 import { accountSearchScope, searchHref } from "../orders/order-search.server";
 import type { Route } from "./+types/order-search";
@@ -40,19 +43,25 @@ export async function action({ request }: Route.ActionArgs) {
   const environment = requestedEbayEnvironment(request);
   const query = searchQuery(form.get("q"));
   const path = localizedPath(language, ordersPath);
+  // Dagli Ordini la ricerca conserva i filtri dell'elenco, anche nei suggerimenti e nel conteggio.
+  const filters = listFilters(new URLSearchParams(String(form.get("filters") ?? "")));
   const kept = new URLSearchParams(environment === "sandbox" ? { environment } : {});
+  for (const [name, value] of filters) kept.set(name, value);
   const href = query
     ? await searchHref(env.BETTER_AUTH_SECRET, accountSearchScope(area.session), path, query, kept)
     : `${path}${kept.size ? `?${kept}` : ""}`;
   if (!json) return redirect(href, 303);
+  const now = new Date();
   const { items, total } = query
-    ? await measure("d1", "orders", () =>
+    ? await measure("d1", "orders", async () =>
         searchVisibleOrders(
           env.DB,
           area.session.user.id,
           environment,
-          new Date(),
+          now,
           searchTokens(query),
+          5,
+          filters.size ? await listedFilters(area, environment, filters, now) : {},
         ),
       )
     : { items: [], total: 0 };
@@ -65,4 +74,34 @@ export async function action({ request }: Route.ActionArgs) {
     } satisfies SearchResults,
     { headers: { "cache-control": "no-store" } },
   );
+}
+
+/**
+ * Filtri degli Ordini nella forma della loro query, con le stesse regole dell'elenco: negozi
+ * filtrabili dell'ambiente e periodi Premium soltanto con Premium.
+ */
+async function listedFilters(
+  area: AccountArea,
+  environment: ReturnType<typeof requestedEbayEnvironment>,
+  filters: URLSearchParams,
+  now: Date,
+): Promise<OrderCriteria> {
+  const userId = area.session.user.id;
+  const [stores, allowance] = await Promise.all([
+    listStores(env.DB, userId),
+    orderAllowance(env.DB, userId, now),
+  ]);
+  const storeIds = stores
+    .filter(
+      (store) => store.ebayEnvironment === environment && !store.pauseReasons.includes("plan"),
+    )
+    .map((store) => store.id);
+  const { filters: criteria } = listCriteria(
+    filters,
+    now,
+    allowance?.premium ? "premium" : "free",
+    storeIds,
+    null,
+  );
+  return criteria;
 }

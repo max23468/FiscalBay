@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { cn } from "cn";
 import { CircleCheckBig, Gift, Minus } from "lucide-react";
 
@@ -21,6 +22,7 @@ import { sitePages } from "../copy/site-pages.server";
 import { accessPath, planChoiceParam, planPath, pricingPath, visitParam } from "../app-links";
 import { annualPaidMonths, lifetimeSlots, premiumOffers, priceGeneration } from "../catalog";
 import { languageFromPath, localizedPath } from "../i18n";
+import { hasLifetime } from "../domain/lifetime.server";
 import { publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/pricing";
@@ -35,6 +37,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     publicPage(request),
     siteListing(request, languageFromPath(new URL(request.url).pathname)),
   ]);
+  // Chi ha già Premium a vita vede il piano attivo al posto delle offerte. Senza database la
+  // pagina resta quella di tutti.
+  const owned = session ? await hasLifetime(env.DB, session.user.id).catch(() => false) : false;
   const { purchasesOpen, prices, freePromotion, promotionEnd, baseQuota, lifetimeLeft } = listing;
   const t = sitePages[language].pricing;
   const plan = appCopy[language].settings.plan;
@@ -74,6 +79,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     language,
     origin,
     signedIn: Boolean(session),
+    owned,
     baseFreeQuota: baseQuota,
     freePromotion,
     lifetime: { left: lifetimeLeft, total: lifetimeSlots },
@@ -95,6 +101,8 @@ export async function loader({ request }: Route.LoaderArgs) {
       offers,
       best: t.best,
       soldOut: t.soldOut,
+      owned: t.owned,
+      ownedLink: t.ownedLink,
       trialTitle: t.trialTitle,
       trialBody: t.trialBody,
       purchaseNote: purchasesOpen || listing.reserve ? t.purchaseNote : t.closed,
@@ -172,7 +180,7 @@ function Included({ value, label }: { value: boolean; label: string }) {
 }
 
 export default function Pricing({ loaderData }: Route.ComponentProps) {
-  const { language, signedIn, purchasesOpen, copy: t } = loaderData;
+  const { language, signedIn, owned, purchasesOpen, copy: t } = loaderData;
   const site = useCopy().t.site;
   const freeAction = signedIn
     ? { href: `${localizedPath(language)}?${visitParam}=0`, label: site.openApp }
@@ -248,7 +256,7 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
                 <li
                   key={offer.offer}
                   className={cn(
-                    "grid content-start gap-1 rounded-xl border p-3 md:gap-2 md:p-4",
+                    "flex flex-col gap-1 rounded-xl border p-3 md:gap-2 md:p-4",
                     offer.best && "border-primary ring-1 ring-primary",
                   )}
                 >
@@ -275,7 +283,7 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
                   <p className="text-sm text-muted-foreground">{offer.gross}</p>
                   <p className="text-sm text-pretty">{offer.note}</p>
                   {offer.seats ? <p className="text-sm font-medium">{offer.seats}</p> : null}
-                  {offer.soldOut ? null : (
+                  {offer.soldOut || owned ? null : (
                     <a
                       href={offerHref(offer.offer)}
                       {...buttonLink({
@@ -289,7 +297,16 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
                 </li>
               ))}
             </ul>
-            <p className="text-sm text-pretty text-muted-foreground">{t.purchaseNote}</p>
+            {owned ? (
+              <p className="grid justify-items-start gap-1 text-sm text-pretty">
+                {t.owned}
+                <a href={localizedPath(language, planPath)} className="link-underline">
+                  {t.ownedLink}
+                </a>
+              </p>
+            ) : (
+              <p className="text-sm text-pretty text-muted-foreground">{t.purchaseNote}</p>
+            )}
           </section>
         </div>
         {purchasesOpen ? (

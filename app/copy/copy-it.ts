@@ -1,5 +1,14 @@
 import { legalDate, plural } from "./format";
 
+/**
+ * Conteggi con il separatore delle migliaia anche a quattro cifre, come `formatNumber`. Il formato
+ * nasce al primo uso: creato al caricamento renderebbe il modulo non eliminabile dai bundle che
+ * non usano i testi.
+ */
+let groupedFormat: Intl.NumberFormat | undefined;
+const grouped = (value: number) =>
+  (groupedFormat ??= new Intl.NumberFormat("it-IT", { useGrouping: "always" })).format(value);
+
 /** Registrazione chiusa sul test: la stessa frase nell'errore di accesso, nel modulo e nell'esito. */
 const registrationRestricted =
   "Ambiente di test riservato. La registrazione richiede un’autorizzazione preventiva.";
@@ -55,23 +64,23 @@ export const it = {
     settings: "Impostazioni",
     search: "Cerca ordini",
     searchPlaceholder: "Ordine, acquirente, articolo o SKU",
-    searchSeeAll: (count: number) => `Vedi tutti i risultati (${count})`,
+    searchSeeAll: (count: number) => `Vedi tutti i risultati (${grouped(count)})`,
     searchEmpty: "Nessun ordine corrisponde alla ricerca.",
     searchFailed: "Ricerca non riuscita. Riprova.",
     searchSummary: (count: number) =>
       count === 0
         ? "Nessun suggerimento"
-        : `${count} ${plural(count, "suggerimento", "suggerimenti")}`,
+        : `${grouped(count)} ${plural(count, "suggerimento", "suggerimenti")}`,
     notifications: "Notifiche",
     notificationsUnread: (count: number) =>
-      count === 0 ? "Notifiche" : `Notifiche, ${count} da leggere`,
+      count === 0 ? "Notifiche" : `Notifiche, ${grouped(count)} da leggere`,
     notificationsWindow: "Ultimi 30 giorni",
     notificationsEmpty: "Nessuna notifica negli ultimi 30 giorni.",
     markAllRead: "Segna tutte come lette",
     dismissNotification: (title: string) => `Elimina notifica: ${title}`,
     dismissAll: "Elimina tutte",
     dismissed: (count: number) =>
-      count === 1 ? "Notifica eliminata" : `${count} notifiche eliminate`,
+      count === 1 ? "Notifica eliminata" : `${grouped(count)} notifiche eliminate`,
     undo: "Annulla",
     storeNotifications: {
       expiredTitle: "Collegamento scaduto",
@@ -116,7 +125,7 @@ export const it = {
   },
   orders: {
     title: "Ordini",
-    count: (count: number) => `${count} ${plural(count, "ordine", "ordini")}`,
+    count: (count: number) => `${grouped(count)} ${plural(count, "ordine", "ordini")}`,
     sortedBy: "Dal più recente",
     filters: "Filtri",
     store: "Negozio",
@@ -179,19 +188,20 @@ export const it = {
     },
     select: "Seleziona",
     selectOrder: (id: string) => `Seleziona l’ordine ${id}`,
-    selected: (count: number) => `${count} ${plural(count, "selezionato", "selezionati")}`,
+    selected: (count: number) => `${grouped(count)} ${plural(count, "selezionato", "selezionati")}`,
     selectedLocked: (count: number) =>
       count === 0
         ? "Nessun ordine da sbloccare"
-        : `${count} ${plural(count, "ordine da sbloccare", "ordini da sbloccare")}`,
+        : `${grouped(count)} ${plural(count, "ordine da sbloccare", "ordini da sbloccare")}`,
     unlock: "Sblocca ordine",
-    unlockSelected: (count: number) => `Sblocca ${count}`,
+    unlockSelected: (count: number) => `Sblocca ${grouped(count)}`,
     exportSelected: "Esporta",
-    unlockTitle: (count: number) => `Sbloccare ${count} ${plural(count, "ordine", "ordini")}?`,
+    unlockTitle: (count: number) =>
+      `Sbloccare ${grouped(count)} ${plural(count, "ordine", "ordini")}?`,
     unlockConfirmText: (count: number, remaining: number) =>
       `Dopo lo sblocco ${plural(remaining - count, "ti resterà", "ti resteranno")} ${remaining - count} ${plural(remaining - count, "sblocco", "sblocchi")} in questo ciclo.`,
     unlockExceeds: (count: number, remaining: number) =>
-      `Hai selezionato ${count} ordini da sbloccare, ma hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Riduci la selezione.`,
+      `Hai selezionato ${grouped(count)} ordini da sbloccare, ma hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Riduci la selezione.`,
     unlockConfirm: "Sblocca",
     dontAskUnlock: "Non chiedermelo più",
     unlockFailed: "Sblocco non riuscito. Controlla gli ordini e gli sblocchi rimasti, poi riprova.",
@@ -200,7 +210,7 @@ export const it = {
       remaining === null
         ? "Ordine sbloccato."
         : `Ordine sbloccato. ${plural(remaining, "Ti resta", "Ti restano")} ${remaining} ${plural(remaining, "sblocco", "sblocchi")} in questo ciclo.`,
-    unlockedMany: (count: number) => `${count} ordini sbloccati.`,
+    unlockedMany: (count: number) => `${grouped(count)} ordini sbloccati.`,
     loadMore: "Carica altri",
     allShown: "Hai visto tutti gli ordini del periodo.",
     allShownAll: "Hai visto tutti gli ordini disponibili.",
@@ -210,9 +220,11 @@ export const it = {
     moreActions: (id: string) => `Altre azioni per l’ordine ${id}`,
     openOnEbay: "Apri su eBay",
     exportOrder: "Esporta ordine",
-    itemsMore: (count: number) => `+ ${count} ${plural(count, "altro articolo", "altri articoli")}`,
+    itemsMore: (count: number) =>
+      `+ ${grouped(count)} ${plural(count, "altro articolo", "altri articoli")}`,
     quantity: "Quantità",
-    newOrders: (count: number) => `${count} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
+    newOrders: (count: number) =>
+      `${grouped(count)} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
     showNew: "Mostra",
     identifier: { CF: "Codice Fiscale", PIVA: "Partita IVA" },
     copy: (label: string, order: string) => `Copia ${label}: ordine ${order}`,
@@ -262,10 +274,10 @@ export const it = {
     suggestionConflict: "Gli ordini precedenti riportano codici diversi: questo è il più recente.",
     suggestionStatus: {
       identity_missing:
-        "Identità stabile dell’acquirente non disponibile: nessun collegamento automatico con i precedenti.",
-      none: "Nessun precedente autorizzato con Codice Fiscale o Partita IVA utilizzabili.",
+        "eBay non permette di riconoscere questo acquirente nei suoi ordini precedenti.",
+      none: "Nessun ordine precedente di questo acquirente ha un Codice Fiscale o una Partita IVA da proporre.",
       ambiguous:
-        "I precedenti più recenti non permettono una scelta univoca per uno o più codici: nessun valore proposto per quei codici.",
+        "Gli ordini precedenti di questo acquirente riportano dati diversi: per quei dati non proponiamo nulla.",
     },
     messageLanguage: "Lingua del messaggio",
     messageText: "Testo per l’acquirente",
@@ -312,7 +324,7 @@ export const it = {
     consentExpiringBody: (date: string) =>
       `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per non interrompere la sincronizzazione.`,
     importingStatus: (count: number) =>
-      `Importazione in corso: ${count} ${plural(count, "ordine", "ordini")} finora`,
+      `Importazione in corso: ${grouped(count)} ${plural(count, "ordine", "ordini")} finora`,
     firstUseTitle: "Nessun negozio collegato",
     firstUseBody:
       "Collega il tuo negozio eBay per consultare gli ordini e i Codici\u00a0Fiscali disponibili.",
@@ -428,7 +440,7 @@ export const it = {
     recentOk: (count: number) =>
       count === 0
         ? "Riuscito, nessun nuovo ordine"
-        : `Riuscito, ${count} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
+        : `Riuscito, ${grouped(count)} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
     recentFailed: "Non riuscito",
     notificationsLink: "Apri le notifiche",
     syncNow: "Sincronizza ordini recenti",

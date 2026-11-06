@@ -189,6 +189,10 @@ async function previewExport(
     localizedPath(language, previewOrdersPath),
     chosen[0]?.ebayOrderId ?? null,
     previewTally(chosen),
+    {
+      search: search?.trim() || null,
+      store: scenario.stores.find((store) => store.id === query.get("negozio"))?.name ?? null,
+    },
   );
   return { exportContext, exportPeriods: null, exportSample: sample(chosen) };
 }

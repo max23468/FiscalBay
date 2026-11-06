@@ -670,8 +670,9 @@ it("chiede letture e reimportazione dalla schermata con l'esito della richiesta"
       { ok: true, notice: "Sincronizzazione già richiesta: parte appena possibile." },
     );
     expect(send).toHaveBeenCalledExactlyOnceWith({ syncStore: seller.storeId });
+    // La lettura richiesta e non ancora partita vale come in corso: la pagina ne attende l'esito.
     const [store] = (await storesPage("/app/negozi", seller.cookie)).data.page.stores;
-    expect(store).toMatchObject({ syncing: false, targetMinutes: 30 });
+    expect(store).toMatchObject({ syncing: true, targetMinutes: 30 });
 
     // Lo storico importato al collegamento si può reimportare; mentre riparte, no.
     expect(
@@ -693,6 +694,9 @@ it("chiede letture e reimportazione dalla schermata con l'esito della richiesta"
       store: seller.storeId,
     });
     expect((paused as { init: ResponseInit }).init.status).toBe(409);
+    // In pausa la richiesta rimasta non tiene la pagina in attesa.
+    const [held] = (await storesPage("/app/negozi", seller.cookie)).data.page.stores;
+    expect(held).toMatchObject({ syncing: false });
     expect(send).toHaveBeenCalledOnce();
   } finally {
     send.mockRestore();
