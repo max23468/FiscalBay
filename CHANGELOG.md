@@ -44,6 +44,8 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 - Sotto i 640 px le pagine della seconda riga della barra del sito si distribuiscono con spazi uguali, anche ai lati, invece di restare raccolte a sinistra.
 - Una versione nuova nasce soltanto da Novità per gli utenti dell'app: i cambi del sito pubblico, della console o interni vanno in Production con la versione già pubblicata, senza tag né release. La 2.0.6, pubblicata senza Novità, è ritirata: le sue voci passano nella 2.0.5, release e tag `v2.0.6` sono eliminati e la prossima versione con Novità sarà la 2.0.6. La 2.0.7, aperta per la sola barra del sito, è richiusa.
 - Un cambio del changelog o dei frammenti distribuisce soltanto se cambia ciò che la pagina Novità mostra: le altre modifiche restano documentazione, senza deploy test né qualifica, e la loro PR si unisce in pochi minuti.
+- Alla creazione dell'account si salvano la categoria del canale da cui si è arrivati sul sito e la prima pagina vista, senza cookie né dati salvati nel browser; la console ne mostra gli aggregati e l'esportazione dei dati dell'account li include.
+- Funzionalità, Prezzi, Sicurezza e Domande frequenti tornano ad avere il solo nome della pagina come titolo; il titolo della scheda di queste pagine, di Supporto e delle Guide mette il nome della pagina e poi «Codice Fiscale degli ordini eBay».
 
 ## [2.0.4] - 2026-11-05
 
