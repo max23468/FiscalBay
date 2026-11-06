@@ -30,6 +30,10 @@ function frameOf(request: Request) {
   }
 }
 
+/** Dati di una navigazione del router: un solo caricamento per volta. */
+const dataRequest = (request: Request) =>
+  request.method() === "GET" && new URL(request.url()).pathname.endsWith(".data");
+
 /**
  * Osserva le richieste delle pagine del contesto per `networkIdle`. Il contesto della prova lo è
  * già; un contesto creato nella prova va osservato prima di aprirne le pagine.
@@ -67,6 +71,11 @@ export function watchNetwork(context: BrowserContext) {
     const current = state(frame.page());
     if (request.isNavigationRequest() && frame === frame.page().mainFrame())
       current.navigation = request;
+    // Una navigazione interna annulla i dati di quella precedente, e Chromium non ne riporta
+    // sempre la fine: un caricamento `.data` più recente supera quelli ancora aperti.
+    if (dataRequest(request))
+      for (const previous of current.pending)
+        if (dataRequest(previous)) current.pending.delete(previous);
     current.pending.add(request);
     current.changed = Date.now();
   });

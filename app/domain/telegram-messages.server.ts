@@ -311,7 +311,6 @@ export function orderEntry(
   change: OrderChange | null,
   now: Date,
 ): string {
-  const copy = text[language];
   return [
     `<a href="${escape(orderUrl(env, language, notice))}">${escape(notice.ebayOrderId)}</a> · ${escape(notice.storeName)}`,
     ...(change && change !== "new"
