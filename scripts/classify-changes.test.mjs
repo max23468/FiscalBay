@@ -19,10 +19,12 @@ import {
   sameNews,
   configFile,
   dependencyChange,
+  scriptsChange,
   editedMigrations,
   fileImpact,
   fileLevel,
   levelScripts,
+  ciGateScript,
   moduleAreas,
   plan,
   sharedModules,
@@ -39,6 +41,17 @@ const testValue = config.replace(
 );
 
 describe("livello del gate dai file modificati", () => {
+  it("conserva i controlli del gate senza ricompilare la build test già prodotta", () => {
+    assert.equal(ciGateScript("full", true), "verify:gate");
+    assert.equal(ciGateScript("build", true), "verify:unit");
+    for (const level of Object.keys(levelScripts))
+      assert.equal(ciGateScript(level), levelScripts[level]);
+    const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
+    assert.equal(
+      scripts[ciGateScript("full", true)],
+      "pnpm verify:unit && pnpm doctor:react && pnpm build:live",
+    );
+  });
   it("ferma le migration già presenti modificate o eliminate, non quelle nuove", () => {
     const base = {
       "migrations/0001_a.sql": "-- commento\nCREATE TABLE a (id TEXT);",
@@ -66,6 +79,10 @@ describe("livello del gate dai file modificati", () => {
       "README.md",
       "docs/decisions/DECISION_REGISTER.md",
       "docs/brand/README.md",
+      "docs/ROADMAP.md",
+      "docs/product/PRODUCT.md",
+      "docs/engineering/ARCHITECTURE.md",
+      "docs/operations/RELEASE.md",
       "docs/archive/screenshot.png",
     ])
       assert.equal(fileLevel(file), "docs", file);
@@ -73,10 +90,6 @@ describe("livello del gate dai file modificati", () => {
     assert.deepEqual(fileImpact("CHANGELOG.md"), { level: "build", e2e: false, deploy: true });
     for (const file of [
       "AGENTS.md",
-      "docs/ROADMAP.md",
-      "docs/product/PRODUCT.md",
-      "docs/engineering/ARCHITECTURE.md",
-      "docs/operations/RELEASE.md",
       "scripts/classify-changes.mjs",
       "scripts/classify-changes.test.mjs",
       "scripts/release/release.mjs",
@@ -273,6 +286,66 @@ describe("dipendenze per tipo", () => {
     assert.equal(dependencyChange(runtime.before, runtime.after), "build");
     assert.equal(dependencyChange(scripts.before, scripts.after), undefined);
     assert.equal(dependencyChange(undefined, tools.after), undefined);
+  });
+
+  it("gli script del manifest prendono il gate che li esegue", () => {
+    const base = {
+      scripts: {
+        build: "cf build && pnpm bundle:check",
+        "bundle:check": "node scripts/check-bundle-size.mjs",
+        postinstall: "pnpm typegen",
+        typegen: "react-router typegen",
+        "verify:documents": "pnpm verify:copy",
+        "verify:copy": "node scripts/verify-copy.mjs",
+        "verify:tooling": "pnpm verify:documents && pnpm lint",
+        lint: "oxlint .",
+        "verify:unit": "pnpm verify:tooling && pnpm test",
+        test: "vitest run",
+        "verify:build": "pnpm verify:unit && pnpm build",
+        verify: "pnpm verify:build",
+      },
+    };
+    const edit = (apply) => {
+      const after = structuredClone(base);
+      apply(after);
+      return [JSON.stringify(base), JSON.stringify(after)];
+    };
+    assert.equal(
+      scriptsChange(...edit((next) => (next.scripts.lint = "oxlint --deny-warnings ."))),
+      "tooling",
+    );
+    assert.equal(
+      scriptsChange(...edit((next) => (next.scripts.test = "vitest run --bail 1"))),
+      "unit",
+    );
+    assert.equal(
+      scriptsChange(...edit((next) => (next.scripts["verify:copy"] += " --strict"))),
+      "docs",
+    );
+    assert.equal(
+      scriptsChange(...edit((next) => (next.scripts["verify:gate"] = "pnpm verify:unit"))),
+      "tooling",
+    );
+    // Build, installazione e ciò che richiamano restano al livello completo, con il deploy.
+    for (const name of ["build", "bundle:check", "postinstall", "typegen"])
+      assert.equal(
+        scriptsChange(...edit((next) => (next.scripts[name] += " --x"))),
+        undefined,
+        name,
+      );
+    assert.equal(scriptsChange(...edit((next) => (next.scripts.predeploy = "true"))), undefined);
+    assert.equal(
+      scriptsChange(...edit((next) => ((next.scripts.lint += " -q"), (next.private = true)))),
+      undefined,
+    );
+    assert.equal(scriptsChange("{", "{}"), undefined);
+    const [before, after] = edit((next) => (next.scripts.lint += " -q"));
+    assert.deepEqual(fileImpact("package.json", { before, after }), {
+      level: "tooling",
+      e2e: false,
+      deploy: false,
+    });
+    assert.deepEqual(fileImpact(".gitignore"), { level: "tooling", e2e: false, deploy: false });
   });
 
   it("gli strumenti di sviluppo non aprono browser né deploy, il gate resta completo", () => {
@@ -519,14 +592,29 @@ describe("spec browser modificate", () => {
   });
 
   it("esegue tutto per gli strumenti condivisi delle prove browser", () => {
-    for (const file of [
-      "e2e/fixtures.ts",
-      "e2e/page-cases.ts",
-      "playwright.config.ts",
-      "scripts/browser-tests.mjs",
-    ])
+    for (const file of ["e2e/fixtures.ts", "e2e/page-cases.ts", "playwright.config.ts"])
       assert.equal(plan([file, "e2e/stores.spec.ts"], sources).browserGrep, ".", file);
     assert.equal(plan(["e2e/stores.spec.ts"], sources, true).browserGrep, ".");
+  });
+
+  it("prova runner, anteprima e D1 locale con il nucleo nei due browser", () => {
+    for (const file of [
+      "scripts/browser-tests.mjs",
+      "scripts/local-preview.mjs",
+      "scripts/local-d1.mjs",
+    ]) {
+      const selected = plan([file], sources);
+      assert.deepEqual(
+        [selected.gate, selected.e2e, selected.browserGrep, selected.browsers, selected.deploy],
+        ["build", true, "@smoke", "chromium,webkit", false],
+        file,
+      );
+    }
+    assert.equal(
+      plan(["scripts/browser-tests.mjs", "e2e/stores.spec.ts"], sources).browserGrep,
+      "@smoke|stores.spec",
+    );
+    assert.equal(plan(["scripts/browser-evidence.mjs"], sources).e2e, false);
   });
 });
 

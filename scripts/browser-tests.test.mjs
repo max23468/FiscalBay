@@ -2,12 +2,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
-import {
-  shardTests,
-  listedTestIds,
-  assertCandidateReports,
-  browserShards,
-} from "./browser-tests.mjs";
+import { shardTests, listedTestIds, browserShards } from "./browser-tests.mjs";
+import { assertCandidateReports } from "./browser-evidence.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
   it("certifica tutte le partizioni browser solo con prove coerenti e complete", () => {
