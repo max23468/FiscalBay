@@ -97,6 +97,29 @@ test.describe("area reale", () => {
     await page.reload();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
 
+    // Eliminata, la notifica esce dalla campanella; «Annulla» la riporta e l'eliminazione resta
+    // dopo una nuova lettura della pagina.
+    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    const dismiss = dialog.getByRole("button", { name: "Elimina notifica: Collegamento scaduto" });
+    await dismiss.click();
+    await expect(dialog).toContainText("Notifica eliminata");
+    await dialog.getByRole("button", { name: "Annulla" }).click();
+    await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
+    await expect(dismiss).toBeFocused();
+    const dismissed = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/notifications") &&
+        Boolean(response.request().postData()?.includes("dismiss")),
+    );
+    await dialog.getByRole("button", { name: "Elimina tutte" }).click();
+    expect((await dismissed).status()).toBe(200);
+    await expect(dialog).toContainText("Nessuna notifica negli ultimi 30 giorni.");
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    await expect(dialog).toContainText("Nessuna notifica negli ultimi 30 giorni.");
+    await page.keyboard.press("Escape");
+
     // La lingua scelta resta anche aprendo l'area in italiano.
     const appearance = page.locator('section[aria-labelledby="settings-aspetto"]');
     await clickHydrated(appearance.getByRole("button", { name: "English", exact: true }));

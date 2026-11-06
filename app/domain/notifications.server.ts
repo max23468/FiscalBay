@@ -17,7 +17,8 @@ import { ebayOutages, readsFailing, type StoreStatus } from "./stores.server";
  * scaricabile o non riuscite, e le comunicazioni di servizio della console; ogni notifica ha un
  * identificativo stabile per problema, così la lettura vale finché il problema resta lo stesso.
  * Si aggiunge una voce per ogni rilascio con Novità, identificata dalla sua versione, e
- * l'invito ad accettare la versione corrente dei Termini finché manca.
+ * l'invito ad accettare la versione corrente dei Termini finché manca. Le notifiche eliminate
+ * dall'utente non compaiono.
  */
 export async function listNotifications(
   db: D1Database,
@@ -41,6 +42,7 @@ export async function listNotifications(
     return [
       {
         id: `store-${store.reminder.kind}:${store.id}:${store.reminder.at}`,
+        kind: expired ? "store-expired" : "store-expiring",
         tone: "warning",
         title: expired ? t.expiredTitle : t.expiringTitle,
         body: expired
@@ -60,6 +62,7 @@ export async function listNotifications(
   const reads: NotificationView[] = [
     ...[...outages].map(([environment, outage]): NotificationView => ({
       id: `ebay-down:${environment === "sandbox" ? "sandbox:" : ""}${outage.lastSyncAt ?? "never"}`,
+      kind: "ebay-down",
       tone: "warning",
       title: t.ebayDownTitle,
       body: t.ebayDownBody,
@@ -73,6 +76,7 @@ export async function listNotifications(
       .filter((store) => !outages.has(store.ebayEnvironment))
       .map((store): NotificationView => ({
         id: `store-read-failed:${store.id}:${store.lastSyncAt ?? "never"}`,
+        kind: "store-read-failed",
         tone: "warning",
         title: t.readFailedTitle,
         body: t.readFailedBody(store.name),
@@ -89,6 +93,7 @@ export async function listNotifications(
     ? [
         {
           id: `inactivity:${inactiveSince}`,
+          kind: "inactivity",
           tone: "warning",
           title: t.inactivityTitle,
           body: t.inactivityBody,
@@ -102,6 +107,7 @@ export async function listNotifications(
   // oltre, la sua lettura non è più conservata e resta l'avviso di Ordini e Negozi.
   const exports = (await finishedExportJobs(db, userId, now)).map((job): NotificationView => ({
     id: `export:${job.id}`,
+    kind: job.ready ? "export-ready" : "export-failed",
     tone: job.ready ? "success" : "warning",
     title: job.ready ? t.exportReadyTitle : t.exportFailedTitle,
     body: (job.ready ? t.exportReadyBody : t.exportFailedBody)(job.name),
@@ -119,6 +125,7 @@ export async function listNotifications(
       ? [
           {
             id: `terms:${legalVersions.terms}`,
+            kind: "terms",
             tone: "info",
             title: t.termsUpdateTitle,
             body: t.termsUpdateBody,
@@ -132,13 +139,17 @@ export async function listNotifications(
   if (items.length === 0) return [];
   const { results } = await db
     .prepare(
-      `SELECT notification_id FROM notification_reads WHERE user_id = ?
+      `SELECT notification_id, dismissed_at FROM notification_reads WHERE user_id = ?
        AND notification_id IN (SELECT value FROM json_each(?))`,
     )
     .bind(userId, JSON.stringify(items.map((item) => item.id)))
-    .all<{ notification_id: string }>();
+    .all<{ notification_id: string; dismissed_at: string | null }>();
   const read = new Set(results.map((row) => row.notification_id));
+  const dismissed = new Set(
+    results.filter((row) => row.dismissed_at).map((row) => row.notification_id),
+  );
   return items
+    .filter((item) => !dismissed.has(item.id))
     .map((item) => ({ ...item, read: read.has(item.id) }))
     .sort((a, b) => b.at.localeCompare(a.at));
 }
