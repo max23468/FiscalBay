@@ -55,13 +55,13 @@ Gli avvisi partono dal compito `owner_incidents` della coda: un cron o un consum
 
 | Monitor | Query e soglia |
 |---|---|
-| `fiscalbay cron fermo` | `logs.workersLogs`, invocazioni `scheduled` del Worker: nessuna in 30 minuti |
+| `fiscalbay cron fermo` | `logs.workersLogs`, invocazioni `scheduled` del Worker: nessuna in un'ora |
 | `fiscalbay eccezioni` | `logs.workersLogs`, invocazioni con esito diverso da `ok` e `canceled`: almeno tre in 15 minuti |
 | `fiscalbay coda dei falliti` | `events.queuesMessages`, scritture nella coda `fiscalbay-webhooks-failed`: almeno una in un'ora |
 | `fiscalbay spazio D1` | `states.d1Storage`, dimensione del database nell'ultima ora: oltre 8 GB, il punto di arresto della [tabella delle quote](CAPACITY.md#capacita) |
 | `fiscalbay email non consegnate` | `logs.emails`, invii da `fiscalbay.it` non consegnati, esclusi i destinatari `.invalid` delle prove e comuni ai due ambienti: almeno tre in un'ora |
 
-Un avviso si tratta come un incidente P2, P1 per il cron fermo o la coda dei falliti. Ogni monitor si valuta una volta per periodo, sul conteggio dell'intero periodo: con valutazioni al minuto e la media sul periodo un monitor appena creato non vede i dati precedenti, e il 2026-11-03 il primo ha segnalato un cron fermo che girava. Lo stesso avviso si ripete ogni ora finché la condizione resta vera. I Monitor non hanno un prezzo pubblicato e dopo la loro creazione, il 2026-11-03, gli abbonamenti dell'account non sono cambiati.
+Un avviso si tratta come un incidente P2, P1 per il cron fermo o la coda dei falliti. Ogni monitor si valuta una volta per periodo, sul conteggio dell'intero periodo: con valutazioni al minuto e la media sul periodo un monitor appena creato non vede i dati precedenti, e il 2026-11-03 il primo ha segnalato un cron fermo che girava. Il 2026-11-07 alle 02:01 la valutazione su 30 minuti ha contato zero esecuzioni del cron che i log contenevano, poi rientrata alle 02:31: la finestra del cron fermo è di un'ora, sei esecuzioni mancate. Lo stesso avviso si ripete ogni ora finché la condizione resta vera. I Monitor non hanno un prezzo pubblicato e dopo la loro creazione, il 2026-11-03, gli abbonamenti dell'account non sono cambiati.
 
 **Degrado per guasto ([§20](../product/EXPERIENCE.md#s20), [§32](OPERATIONS.md#s32)).** Un guasto o un interruttore ferma soltanto le operazioni che ne dipendono; nessuna pagina simula una consultazione senza i dati.
 
