@@ -25,9 +25,6 @@ on:
       force_full:
         type: boolean
         default: false
-      priority:
-        type: boolean
-        default: false
     outputs:
       artifact:
         value: ${{ jobs.certify.outputs.artifact }}
@@ -251,7 +248,6 @@ jobs:
     with:
       targets: ${{ inputs.mutation_targets }}
       expected_sha: ${{ inputs.expected_sha }}
-      priority: ${{ inputs.priority }}
 
   certify:
     name: Candidate qualified

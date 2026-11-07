@@ -112,4 +112,3 @@ jobs:
       mutation_targets: ${{ needs.plan.outputs.mutation-matrix }}
       skip_pages: ${{ needs.plan.outputs.skip-pages }}
       force_full: ${{ github.event.schedule == '23 3 * * 1' }}
-      priority: ${{ github.event_name == 'workflow_dispatch' && !inputs.automatic }}
