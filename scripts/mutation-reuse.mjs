@@ -130,16 +130,81 @@ export function lineMutationJob(name) {
 }
 
 /**
- * Vero se la run della PR ha provato il modulo: almeno un job del modulo e ogni suo job riuscito,
- * nella run riuscita.
+ * File che non cambiano l'esito della mutation di nessun modulo: documenti, frammenti, prove
+ * browser, script estranei alla mutation, workflow diversi da CI e mutation, stili e immagini.
  */
-export function linesProved(run, jobs, target) {
+const mutationNeutral = (file) =>
+  /\.md$|^docs\/|^changes\/|^e2e\/|^public\/|\.(?:css|svg|png|jpe?g|webp|avif|ico)$/u.test(file) ||
+  (/^scripts\//u.test(file) && !/^scripts\/mutation(?:-vitest|-reuse)?\.mjs$/u.test(file)) ||
+  (/^\.github\//u.test(file) && !/^\.github\/workflows\/(?:ci|mutation)\.yml$/u.test(file));
+
+/**
+ * Vero se i file cambiati da una prova riuscita lasciano valida la mutation di `target`: nessun
+ * sorgente che il modulo importa, anche indirettamente, né il modulo stesso; nessun test che lo
+ * importa direttamente e nessun helper o fixture dei test, che possono indebolire qualunque prova;
+ * nessuna migration, configurazione o strumento della mutation. `graph` comprende anche i test.
+ */
+export function proofUnaffected(changed, target, graph) {
+  if (affectingSources(changed, graph).has(target)) return false;
+  return changed.every((file) => {
+    if (/^(?:app|workers)\/.+\.tsx?$/u.test(file)) return true;
+    if (/^test\/.+\.(?:spec|unit)\.ts$/u.test(file)) return !graph.get(file)?.has(target);
+    return mutationNeutral(file);
+  });
+}
+
+/** Esito del modulo nei job di una run della PR: `passed` con ogni parte riuscita, `failed`, o nulla. */
+export function pullRequestOutcome(jobs, target) {
   const own = jobs.filter((job) => lineMutationJob(job.name) === target);
-  return (
-    run?.conclusion === "success" &&
-    own.length > 0 &&
-    own.every((job) => job.conclusion === "success")
+  if (!own.length) return null;
+  if (own.some((job) => ["failure", "timed_out"].includes(job.conclusion))) return "failed";
+  // GitHub elenca soltanto i job partiti: ogni parte deve esserci, riuscita.
+  if (!own.every((job) => job.conclusion === "success")) return null;
+  const parts = own.map((job) => /(\d+)\/(\d+)$/u.exec(job.name));
+  const total = Number(parts[0]?.[2] ?? 1);
+  const complete =
+    parts.every((part) => Number(part?.[2] ?? 1) === total) &&
+    new Set(parts.map((part) => Number(part?.[1] ?? 1))).size === total;
+  return complete ? "passed" : null;
+}
+
+/**
+ * Prova riusabile di `target` nelle run della CI della PR sul branch `branch`, fino alla testa
+ * `head`: l'ultima run che ha concluso il modulo, su un commit antenato della testa, con ogni parte
+ * riuscita e senza cambi che la invalidino da allora (`proofUnaffected`). Una run annullata o in
+ * corso senza esito del modulo non decide; un fallimento recente non si copre con un successo
+ * più vecchio. Restituisce la run e il suo commit, o null.
+ */
+export async function pullRequestProof(
+  { repository, repositoryId, branch, head, target, graph, exclude },
+  api = defaultApi,
+) {
+  const { workflow_runs: runs = [] } = await api(
+    `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&branch=${encodeURIComponent(branch)}&per_page=30`,
   );
+  const ordered = runs
+    .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  for (const run of ordered) {
+    const jobs = [];
+    for (let page = 1; ; page++) {
+      const batch = await api(
+        `repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=30&page=${page}`,
+      );
+      jobs.push(...batch.jobs);
+      if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
+    }
+    const outcome = pullRequestOutcome(jobs, target);
+    if (outcome === "failed") return null;
+    if (outcome !== "passed") continue;
+    if (run.head_sha === head) return { run: run.id, commit: run.head_sha };
+    const compare = await api(`repos/${repository}/compare/${run.head_sha}...${head}`);
+    // Oltre trecento file l'API tronca l'elenco: non si può escludere un cambio rilevante.
+    const files = (compare.files ?? []).map(({ filename }) => filename);
+    if (!["ahead", "identical"].includes(compare.status) || files.length >= 300) return null;
+    return proofUnaffected(files, target, graph) ? { run: run.id, commit: run.head_sha } : null;
+  }
+  return null;
 }
 
 /**
@@ -196,7 +261,7 @@ const defaultApi = (url) =>
  * da una PR dello stesso repository con la mutation del modulo riuscita, sulla testa unita con lo
  * stesso contenuto del modulo nel commit integrato.
  */
-async function prCoverage(repository, repositoryId, target, since, api) {
+async function prCoverage(repository, repositoryId, target, since, api, graph) {
   const commits = git("rev-list", "--first-parent", `${since}..HEAD`, "--", target)
     .split("\n")
     .filter(Boolean);
@@ -215,20 +280,13 @@ async function prCoverage(repository, repositoryId, target, since, api) {
       return false;
     }
     if (tested?.sha !== blob) return false;
-    const { workflow_runs: prRuns } = await api(
-      `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&head_sha=${head}&status=success&per_page=10`,
+    // L'ultima run della PR che ha concluso il modulo, anche precedente alla testa unita se da
+    // allora nulla lo ha toccato: la PR può averne riusato la prova dopo un'unione di `develop`.
+    const proof = await pullRequestProof(
+      { repository, repositoryId, branch: pull.head.ref, head, target, graph },
+      api,
     );
-    let proved = false;
-    for (const prRun of prRuns.filter((entry) => entry.repository?.id === repositoryId)) {
-      const { jobs } = await api(
-        `repos/${repository}/actions/runs/${prRun.id}/jobs?filter=latest&per_page=100`,
-      );
-      if (linesProved(prRun, jobs, target)) {
-        proved = true;
-        break;
-      }
-    }
-    if (!proved) return false;
+    if (!proof) return false;
   }
   return true;
 }
@@ -248,6 +306,13 @@ async function main() {
     .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
   const graph = importGraph(sources);
+  const testGraph = importGraph(
+    git("ls-files")
+      .split("\n")
+      .filter((file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file) && existsSync(file))
+      .map((file) => ({ path: file, text: readFileSync(file, "utf8") })),
+    /^(?:app|workers|test)\/.+\.tsx?$/u,
+  );
   const cache = new Map();
   const affectedSince = (commit) => {
     if (!cache.has(commit))
@@ -264,7 +329,7 @@ async function main() {
   const covered = (source, commit) => {
     const key = `${source} ${commit}`;
     if (!coverage.has(key))
-      coverage.set(key, prCoverage(repository, repositoryId, source, commit, api));
+      coverage.set(key, prCoverage(repository, repositoryId, source, commit, api, testGraph));
     return coverage.get(key);
   };
   const { run, reused } = await reusePlan(targets, runs, affectedSince, covered);
