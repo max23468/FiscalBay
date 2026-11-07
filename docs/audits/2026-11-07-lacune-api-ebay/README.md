@@ -14,7 +14,7 @@ Cinque invii e cinque domande secondarie. Le capacità già costruibili con le A
 | 4 | Notifiche degli ordini: versione 1.1 di `ORDER_CONFIRMATION`, variazioni dell'ordine in sola lettura, destinazioni | contratto da chiarire e capacità | da inviare ([bozza](bozza-04-notifiche-ordini.en.md)) |
 | 5 | Quote per utente leggibili con gli scope di sola lettura degli ordini | capacità | da inviare ([bozza](bozza-05-quote-per-utente.en.md)) |
 
-Stato al 7 novembre: nessun invio fatto. L'owner ha scelto di inviare tutto in un solo ticket entro i 2.000 caratteri del modulo, in ordine di urgenza, con le domande Q1-Q3 in coda; le bozze separate restano come dettaglio dei singoli punti.
+Stato al 7 novembre: nessun invio fatto. L'owner ha scelto un solo ticket, limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta: fatture combinate senza checkout eBay, identità immutabile dell'acquirente e scope delle API sostitute. Gli altri punti restano note interne, non da inviare.
 
 **Dismissione di `GetOrders`.** Il 6 novembre eBay ha deprecato Trading `GetOrders` e fissato lo spegnimento al 30 giugno 2027: per gli ordini pagati rimanda a Fulfillment, per impegni non pagati e `PurchaseQuote` alla Order API GraphQL (documentato, [stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status), letto nel browser il 7 novembre). Con `GetOrders` spariscono il fallback fiscale, le fatture combinate senza checkout eBay e l'unica fonte del token eIAS dell'acquirente. Gli invii 2 e 3 diventano urgenti; la migrazione interna è [2.0-11](../../ROADMAP.md#2-0-11).
 
@@ -86,6 +86,8 @@ La mappatura ufficiale indica la Order API GraphQL (`orders`, `ordersByIds`, pri
 - `PurchaseQuote`, la sostituta delle fatture combinate, ha `shippingAddress` ma nessun dato fiscale (specifica verificata).
 
 Le fatture combinate dal venditore senza checkout eBay esistono soltanto in Trading: Fulfillment rifiuta come non valide quelle senza `ExtendedOrderID` (osservato, [prova del 27 ottobre](../../reference/EBAY_TAX_COMPARISON.md#seller-transactions)). Il supporto ha dichiarato che `GetOrders` restituisce CF e indirizzo di fatturazione di queste fatture e che ogni dismissione segue il preavviso standard.
+
+Il 7 novembre, in Production, tutti i 907 ordini con CF lo avevano da Fulfillment e nessuno soltanto da Trading; le fatture combinate senza checkout eBay erano 1 su 1.100, senza CF in nessuna fonte, come le sei della prova del 27 ottobre (osservato, conteggi aggregati). Lo spegnimento di `GetOrders` toglie quindi queste fatture come ordini, non un CF che Fulfillment non dia già.
 
 **Richiesta.** Prima del 30 giugno 2027 esporre nella Order API e in `PurchaseQuote` lo stesso identificativo fiscale dell'acquirente e l'indirizzo di fatturazione, con le stesse regole di autorizzazione di `getOrder`; se la parità non arriva in tempo, rinviare lo spegnimento di `GetOrders` per le letture che non hanno ancora una sostituta.
 
