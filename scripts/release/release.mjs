@@ -613,8 +613,13 @@ export async function activate(manifest, io, receipt) {
       if ((await io.current()).identity !== identity) throw error;
     }
   }
-  const active = await io.current();
-  if (active.identity !== identity) throw new Error("Attivazione non confermata.");
+  // L'API del provider può riportare per qualche secondo il deployment precedente: la conferma
+  // rilegge entro la stessa finestra del readback prima di dichiarare l'attivazione fallita.
+  const active = await (io.confirm ?? retryReadback)(async () => {
+    const current = await io.current();
+    if (current.identity !== identity) throw new Error("Attivazione non confermata.");
+    return current;
+  });
   state.version = active.version;
   state.deployed = true;
   state.activatedAt ??= new Date().toISOString();

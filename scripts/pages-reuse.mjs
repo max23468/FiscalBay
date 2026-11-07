@@ -49,6 +49,18 @@ export function lastFullQualification(artifacts, repositoryId, isAncestor, quali
 /** Dipendenze delle route e dichiarazioni esplicite: ogni esclusione ha file e digest verificabili. */
 export function pageCoverage(sources, auxiliary = []) {
   const graph = importGraph(sources);
+  // Raw import e glob di Vite non fanno parte del grafo TypeScript. Le Novità sono
+  // consumate da questo modulo: si propagano lungo i suoi import, anche transitivi.
+  const news = auxiliary.filter(
+    ({ path: file }) => file === "CHANGELOG.md" || /^changes\/.+\.md$/u.test(file),
+  );
+  graph.set(
+    "app/whats-new.server.ts",
+    new Set([
+      ...(graph.get("app/whats-new.server.ts") ?? []),
+      ...news.map(({ path: file }) => file),
+    ]),
+  );
   const unknown = undeclaredModules(sources.map(({ path: file }) => file));
   if (unknown.length) throw new Error(`Moduli senza copertura dichiarata: ${unknown.join(", ")}.`);
   const byPath = new Map([...sources, ...auxiliary].map((source) => [source.path, source.text]));
@@ -64,15 +76,35 @@ export function pageCoverage(sources, auxiliary = []) {
     for (const child of graph.get(file) ?? []) dependencies(child, found);
     return found;
   };
+  // La shell monta soltanto queste pagine. Le route di servizio importano anche utility
+  // dallo stesso modulo: non per questo rendono le Novità nel sito pubblico.
+  const newsAreas = {
+    "app/routes/account.tsx": ["orders", "stores", "settings"],
+    "app/routes/language.ts": ["orders", "stores", "settings", "profile"],
+    "app/routes/export-file.ts": ["orders", "settings"],
+    "app/routes/notifications.ts": ["orders", "stores", "settings"],
+    "app/routes/page-timing.ts": [],
+    "app/routes/password-check.ts": [],
+  };
+  const globalNews = [...dependencies("app/root.tsx")].includes("app/whats-new.server.ts");
   const areas = Object.fromEntries(
     areaTags.map((area) => {
-      const files = new Set(auxiliary.map(({ path: file }) => file));
+      const files = new Set(
+        auxiliary.filter((entry) => !news.includes(entry)).map(({ path: file }) => file),
+      );
       for (const route of routes.filter((entry) => entry.areas.includes(area)))
-        for (const file of dependencies(route.path)) files.add(file);
+        for (const file of dependencies(route.path))
+          if (
+            !news.some(({ path: newsPath }) => newsPath === file) ||
+            (newsAreas[route.path] ?? route.areas).includes(area)
+          )
+            files.add(file);
+      if (globalNews) for (const { path: file } of news) files.add(file);
       for (const { path: file } of sources) {
         const declaration = moduleAreas.find(([pattern]) => pattern.test(file));
         if (declaration ? declaration[1].includes(area) : sharedModules.test(file))
-          for (const dependency of dependencies(file)) files.add(dependency);
+          for (const dependency of dependencies(file))
+            if (!news.some(({ path: newsPath }) => newsPath === dependency)) files.add(dependency);
       }
       const ordered = [...files].sort();
       const digest = createHash("sha256")

@@ -30,6 +30,7 @@
     "typegen": "cf workers types && react-router typegen",
     "verify": "pnpm verify:unit && pnpm doctor:react && pnpm build:live && pnpm build",
     "verify:build": "pnpm verify:unit && pnpm build",
+    "verify:gate": "pnpm verify:unit && pnpm doctor:react && pnpm build:live",
     "verify:documents": "pnpm verify:copy && pnpm verify:docs",
     "verify:unit": "pnpm verify:tooling && pnpm typecheck && pnpm test:coverage",
     "verify:tooling": "pnpm verify:documents && pnpm typegen && pnpm verify:repo && pnpm verify:pages && pnpm test:scripts && pnpm format:check && pnpm lint && pnpm quality:knip",

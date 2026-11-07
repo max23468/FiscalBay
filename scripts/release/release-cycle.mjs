@@ -1758,8 +1758,8 @@ function candidateReady({ repository, values }) {
       ).workflow_runs.some(
         (run) =>
           run.head_sha === sha &&
-          run.status !== "completed" &&
-          String(run.id) !== process.env.GITHUB_RUN_ID,
+          run.status === "in_progress" &&
+          Number(run.id) < Number(process.env.GITHUB_RUN_ID),
       );
   // La qualifica richiesta da `Promuovi` riguarda il commit autorizzato, anche se poi entrano PR.
   const pinned =

@@ -109,13 +109,15 @@ jobs:
             echo "playwright=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
           } >> "${GITHUB_OUTPUT}"
 
-      # Un tree già verificato su develop non ripete il gate:
-      # il deploy distribuisce l'artefatto prodotto da quella verifica.
+      # Un tree già verificato su develop, o dalla PR del merge che non tocca il processo, non
+      # ripete il gate: il deploy distribuisce l'artefatto prodotto da quella verifica.
       - name: Find verified artifact
         id: reuse
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.detect.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          DEPLOYED_SHA: ${{ steps.deployed.outputs.sha }}
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
         run: node scripts/find-build.mjs
@@ -141,6 +143,12 @@ jobs:
             node scripts/release/release.mjs review --base "${BASE_SHA}"
 
       # I moduli critici della PR si dividono nelle stesse parti del riferimento di `develop`.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name == 'pull_request' && steps.detect.outputs.mutation-pr != '{"target":[]}'
+        with:
+          path: .mutation-timings.json
+          key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-timings-
       - name: Split module mutation
         id: modules
         if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && steps.detect.outputs.mutation-pr != '{"target":[]}'
@@ -191,6 +199,26 @@ jobs:
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
         run: node scripts/release/release.mjs manifest --environment test
 
+      # Una build riusata dalla PR diventa anche artefatto di questa run su `develop`: la qualifica
+      # del candidato e le run successive dello stesso tree la riconoscono come verificata qui.
+      - name: Download pull request build
+        if: steps.reuse.outputs.source == 'pull'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.reuse.outputs.artifact }}
+          path: .cloudflare/output/
+          run-id: ${{ steps.reuse.outputs.run-id }}
+          github-token: ${{ github.token }}
+      - name: Republish pull request build
+        if: steps.reuse.outputs.source == 'pull'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ steps.tree.outputs.tree }}
+          path: .cloudflare/output/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Upload verified build
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -225,6 +253,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || needs.verify.outputs.base }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
+          VERIFIED_TEST_BUILD: "true"
         # I browser restano nei rispettivi job; il gate locale usa la stessa sequenza.
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run
 
@@ -313,6 +342,8 @@ jobs:
     env:
       MUTATION_TARGET: ${{ matrix.target }}
       MUTATION_SHARD: ${{ matrix.shard }}
+      MUTATION_RANGES: ${{ matrix.ranges }}
+      MUTATION_DIGEST: ${{ matrix.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
