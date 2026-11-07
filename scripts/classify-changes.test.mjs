@@ -740,6 +740,7 @@ describe("esecuzione del classificatore", () => {
             GATE_TEST_LOG: log,
             GITHUB_OUTPUT: "",
             GITHUB_STEP_SUMMARY: "",
+            VERIFIED_TEST_BUILD: "",
           },
         });
         assert.equal(result.status, 0, result.stderr);
@@ -818,6 +819,7 @@ describe("esecuzione del classificatore", () => {
             GATE_TEST_LOG: log,
             GITHUB_OUTPUT: "",
             GITHUB_STEP_SUMMARY: "",
+            VERIFIED_TEST_BUILD: "",
           },
         },
       );
