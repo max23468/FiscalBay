@@ -21,7 +21,9 @@ import {
   candidateRun,
   assertQualificationBase,
   independentBase,
+  waitMutationJobs,
   waitUpdatedHead,
+  mutationSettled,
   expectedRun,
   runTimings,
   checkCycleJobs,
@@ -602,6 +604,52 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       ),
       /non aggiornata/u,
     );
+  });
+
+  it("prima di aggiornare la base attende i job della mutation in corso", async () => {
+    const running = { status: "in_progress" };
+    const job = (name, status = "completed") => ({ name, status });
+    const verify = job("Verify");
+    // Nessuna run, o run conclusa: nulla da attendere.
+    assert.ok(mutationSettled(undefined, []));
+    assert.ok(mutationSettled({ status: "completed" }, []));
+    // Prima della matrice i job della mutation non esistono ancora.
+    assert.ok(!mutationSettled(running, [job("Verify", "in_progress")]));
+    assert.ok(!mutationSettled(running, [verify]));
+    assert.ok(
+      !mutationSettled(running, [verify, job("Mutation app/auth.server.ts 1/2", "queued")]),
+    );
+    assert.ok(
+      !mutationSettled(running, [verify, job("Mutation app/auth.server.ts 2/2", "in_progress")]),
+    );
+    // Browser ancora in corso non contano.
+    assert.ok(
+      mutationSettled(running, [
+        verify,
+        job("Mutation app/auth.server.ts 1/2"),
+        job("Mutation app/auth.server.ts 2/2"),
+        job("Browser 1/8", "in_progress"),
+      ]),
+    );
+    let clock = 0;
+    const reads = [];
+    const states = [
+      [verify, job("Mutation app/auth.server.ts 1/1", "in_progress")],
+      [verify, job("Mutation app/auth.server.ts 1/1")],
+    ];
+    const read = async () => {
+      reads.push(clock);
+      return { run: running, jobs: states[Math.min(reads.length - 1, states.length - 1)] };
+    };
+    const now = () => clock;
+    assert.equal(await waitMutationJobs(read, { limit: 100, delay: 0, now }), true);
+    assert.equal(reads.length, 2);
+    // Allo scadere il ciclo aggiorna comunque la base.
+    const stuck = async () => {
+      clock += 60;
+      return { run: running, jobs: states[0] };
+    };
+    assert.equal(await waitMutationJobs(stuck, { limit: 100, delay: 0, now }), false);
   });
 
   it("non chiude un ciclo con un tag di un altro commit", () => {

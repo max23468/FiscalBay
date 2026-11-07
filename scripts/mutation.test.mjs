@@ -8,7 +8,7 @@ import {
   consumerTests,
   criticalModule,
   evaluate,
-  incrementalSafe,
+  incrementalBase,
   mergeReports,
   mutationConcurrency,
   mutationCoverageGaps,
@@ -237,11 +237,12 @@ describe("esito dei mutation test", () => {
   it("assegna a ogni modulo una parte per intervallo", async () => {
     const parts = { "app/a.server.ts": 1, "app/b.server.ts": 2 };
     const shardsOf = async (file) => Array.from({ length: parts[file] }, () => ({ mutants: 1 }));
-    assert.deepEqual(await mutationJobs(Object.keys(parts), shardsOf), {
+    const digestOf = () => "d";
+    assert.deepEqual(await mutationJobs(Object.keys(parts), shardsOf, undefined, { digestOf }), {
       include: [
-        { target: "app/a.server.ts", shard: "1/1" },
-        { target: "app/b.server.ts", shard: "1/2" },
-        { target: "app/b.server.ts", shard: "2/2" },
+        { target: "app/a.server.ts", shard: "1/1", digest: "d" },
+        { target: "app/b.server.ts", shard: "1/2", digest: "d" },
+        { target: "app/b.server.ts", shard: "2/2", digest: "d" },
       ],
     });
     assert.deepEqual(await mutationJobs([], shardsOf), { include: [] });
@@ -254,11 +255,12 @@ describe("esito dei mutation test", () => {
       Object.keys(mutants),
       async (file) => mutants[file].map((count) => ({ mutants: count })),
       (file) => tests[file],
+      { digestOf: () => "d" },
     );
     assert.deepEqual(include, [
-      { target: "app/b.server.ts", shard: "2/2" },
-      { target: "app/b.server.ts", shard: "1/2" },
-      { target: "app/a.server.ts", shard: "1/1" },
+      { target: "app/b.server.ts", shard: "2/2", digest: "d" },
+      { target: "app/b.server.ts", shard: "1/2", digest: "d" },
+      { target: "app/a.server.ts", shard: "1/1", digest: "d" },
     ]);
   });
 
@@ -344,22 +346,76 @@ describe("esito dei mutation test", () => {
 
   it("porta il riferimento completo nel job del modulo", async () => {
     const reference = ".mutation-references/app_a.server.ts.json";
-    const { include } = await mutationJobs(["app/a.server.ts"], async () => [
-      { mutants: 0, reference },
+    const { include } = await mutationJobs(
+      ["app/a.server.ts"],
+      async () => [{ mutants: 0, reference }],
+      undefined,
+      { digestOf: () => "d" },
+    );
+    assert.deepEqual(include, [
+      { target: "app/a.server.ts", shard: "1/1", digest: "d", reference },
     ]);
-    assert.deepEqual(include, [{ target: "app/a.server.ts", shard: "1/1", reference }]);
   });
 
-  it("riusa la base incrementale soltanto dopo cambi di test e documenti", () => {
-    for (const file of ["test/orders.spec.ts", "test/x.unit.ts", "docs/a.md", "changes/b.md"])
-      assert.ok(incrementalSafe(file), file);
-    for (const file of [
-      "app/auth.server.ts",
-      "test/fixtures/account-fixtures.ts",
-      "vitest.config.ts",
-      "pnpm-lock.yaml",
-    ])
-      assert.ok(!incrementalSafe(file), file);
+  it("parte dal report più recente della PR su un antenato, preferendo la stessa parte", async () => {
+    const run = (id, sha, minute, repo = 1) => ({
+      id,
+      head_sha: sha,
+      created_at: `2026-11-08T10:${String(minute).padStart(2, "0")}:00Z`,
+      head_repository: { id: repo },
+    });
+    const statuses = { h1: "ahead", h2: "ahead", h3: "diverged", h4: "ahead" };
+    const choose = (runs, found, extra = {}) =>
+      incrementalBase(
+        { runs, head: "h5", current: 10, repositoryId: 1, ...extra },
+        { status: async (sha) => statuses[sha], reports: async (id) => found[id] ?? null },
+      );
+    const runs = [run(10, "h5", 50), run(9, "h4", 40), run(8, "h3", 30), run(7, "h2", 20)];
+    // Codice cambiato da allora non scarta più il report: basta un commit antenato.
+    assert.deepEqual(await choose(runs, { 9: { same: "r9" } }), {
+      run: 9,
+      report: "r9",
+      same: true,
+    });
+    // Un commit non antenato non vale; la stessa parte vince su una run più recente con altre.
+    assert.deepEqual(
+      await choose(runs, { 9: { any: "a9" }, 8: { same: "r8" }, 7: { same: "r7" } }),
+      { run: 7, report: "r7", same: true },
+    );
+    assert.deepEqual(await choose(runs, { 9: { any: "a9" }, 7: { any: "a7" } }), {
+      run: 9,
+      report: "a9",
+      same: false,
+    });
+    // Senza report, o di un altro repository, si ripiega sul riferimento di develop.
+    assert.equal(await choose(runs, {}), null);
+    assert.equal(await choose([run(9, "h4", 40, 2)], { 9: { same: "r9" } }), null);
+    // La run in corso vale soltanto per una ripetizione dei job falliti.
+    assert.equal(await choose([runs[0]], { 10: { same: "r10" } }), null);
+    assert.deepEqual(await choose([runs[0]], { 10: { same: "r10" } }, { attempt: "2" }), {
+      run: 10,
+      report: "r10",
+      same: true,
+    });
+  });
+
+  it("limita la matrice alle parti mancanti con gli intervalli del piano", async () => {
+    const ranges = [
+      { start: 1, end: 10, mutants: 5 },
+      { start: 11, end: 20, mutants: 9 },
+      { start: 21, end: 30, mutants: 7 },
+    ];
+    const { include } = await mutationJobs(["app/a.server.ts"], async () => ranges, undefined, {
+      keep: new Map([["app/a.server.ts", new Set([1, 3])]]),
+      digestOf: () => "d",
+    });
+    assert.deepEqual(
+      include.map(({ shard, ranges: plan, digest }) => [shard, JSON.parse(plan), digest]),
+      [
+        ["3/3", ranges, "d"],
+        ["1/3", ranges, "d"],
+      ],
+    );
   });
 
   it("prova nella PR i moduli critici cambiati e quelli importati da un test cambiato", () => {

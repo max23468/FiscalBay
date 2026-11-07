@@ -8,13 +8,16 @@
  * nulla: li copre la campagna settimanale, che resta completa.
  * Uso: MATRIX='{"target":[...]}' REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/mutation-reuse.mjs
  */
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { criticalModule } from "./lib/critical-modules.mjs";
 import { importGraph } from "./verify-repo.mjs";
-import { ghJson, git, isAncestor, retry } from "./lib/provider.mjs";
+import { gh, ghJson, git, isAncestor, retry } from "./lib/provider.mjs";
 
 /** Workflow le cui mutation valgono come ricevuta. */
 const mutationWorkflows = [".github/workflows/candidate.yml", ".github/workflows/mutation.yml"];
@@ -134,7 +137,7 @@ export function lineMutationJob(name) {
  * script e workflow, compresi gli strumenti della mutation, manifest e lockfile, stili e immagini.
  * Strumenti e dipendenze li prova la campagna settimanale completa (D317).
  */
-const mutationNeutral = (file) =>
+export const mutationNeutral = (file) =>
   /\.md$|^docs\/|^changes\/|^e2e\/|^public\/|^scripts\/|^\.github\/|\.(?:css|svg|png|jpe?g|webp|avif|ico)$/u.test(
     file,
   ) ||
@@ -149,7 +152,13 @@ const mutationNeutral = (file) =>
  * nessuna migration o altro file letto dai test. `graph` comprende anche i test.
  */
 export function proofUnaffected(changed, target, graph) {
-  if (affectingSources(changed, graph).has(target)) return false;
+  return (
+    !affectingSources(changed, graph).has(target) && otherFilesUnaffected(changed, target, graph)
+  );
+}
+
+/** File cambiati diversi dai sorgenti che lasciano valida la prova di `target`. */
+function otherFilesUnaffected(changed, target, graph) {
   return changed.every((file) => {
     if (/^(?:app|workers)\/.+\.tsx?$/u.test(file)) return true;
     if (/^test\/.+\.(?:spec|unit)\.ts$/u.test(file)) return !graph.get(file)?.has(target);
@@ -164,24 +173,95 @@ export function pullRequestOutcome(jobs, target) {
   if (own.some((job) => ["failure", "timed_out"].includes(job.conclusion))) return "failed";
   // GitHub elenca soltanto i job partiti: ogni parte deve esserci, riuscita.
   if (!own.every((job) => job.conclusion === "success")) return null;
-  const parts = own.map((job) => /(\d+)\/(\d+)$/u.exec(job.name));
-  const total = Number(parts[0]?.[2] ?? 1);
+  const parts = own.map((job) => pullRequestPart(job.name));
+  const total = parts[0].parts;
   const complete =
-    parts.every((part) => Number(part?.[2] ?? 1) === total) &&
-    new Set(parts.map((part) => Number(part?.[1] ?? 1))).size === total;
+    parts.every((part) => part.parts === total) &&
+    new Set(parts.map((part) => part.part)).size === total;
   return complete ? "passed" : null;
 }
 
+/** Parte di un job della mutation della PR, `<parte>/<parti>` in fondo al nome; senza, 1/1. */
+function pullRequestPart(name) {
+  const match = /(\d+)\/(\d+)$/u.exec(name);
+  return match ? { part: Number(match[1]), parts: Number(match[2]) } : { part: 1, parts: 1 };
+}
+
 /**
- * Prova riusabile di `target` nelle run della CI della PR sul branch `branch`, fino alla testa
- * `head`: l'ultima run che ha concluso il modulo, su un commit antenato della testa, con ogni parte
- * riuscita e senza cambi che la invalidino da allora (`proofUnaffected`). Una run annullata o in
- * corso senza esito del modulo non decide; un fallimento recente non si copre con un successo
- * più vecchio. Restituisce la run e il suo commit, o null.
+ * Divisione di `target` nel piano della matrice di una run della PR, l'artefatto
+ * `mutation-plan-<run>`: numero di parti, impronta del sorgente e intervalli. Due piani dividono
+ * il modulo allo stesso modo se hanno la stessa chiave; una parte sola copre tutto il sorgente.
  */
-export async function pullRequestProof(
-  { repository, repositoryId, branch, head, target, graph, exclude },
+export function planLayout(plan, target) {
+  const entry = (plan?.include ?? []).find((job) => job.target === target);
+  if (!entry) return null;
+  const total = pullRequestPart(entry.shard ?? "").parts;
+  const ranges = entry.ranges ? JSON.parse(entry.ranges) : null;
+  return {
+    total,
+    digest: entry.digest ?? null,
+    ranges: entry.ranges ?? null,
+    key:
+      total === 1 ? "whole" : JSON.stringify(ranges?.map(({ start, end }) => [start, end]) ?? null),
+  };
+}
+
+/**
+ * Come `proofUnaffected`, ma un sorgente critico diverso dal modulo stesso vale come invariato se
+ * `excused(source)` lo conferma, per esempio perché è entrato dalla base già provato nella sua PR.
+ */
+export async function proofStands(changed, target, graph, excused = async () => false) {
+  if (!otherFilesUnaffected(changed, target, graph)) return false;
+  for (const source of affectingSources(changed, graph).get(target) ?? [])
+    if (source === target || !criticalModule(source) || !(await excused(source))) return false;
+  return true;
+}
+
+const plans = new Map();
+
+/** Piano della matrice di una run della PR, o null se l'artefatto manca o non si legge. */
+function defaultPlan(repository, run) {
+  if (!plans.has(run)) {
+    const directory = mkdtempSync(path.join(tmpdir(), "mutation-plan-"));
+    let plan = null;
+    try {
+      gh(
+        "run",
+        "download",
+        String(run),
+        "--repo",
+        repository,
+        "--name",
+        `mutation-plan-${run}`,
+        "--dir",
+        directory,
+      );
+      plan = JSON.parse(readFileSync(path.join(directory, "mutation-plan.json"), "utf8"));
+    } catch {
+      plan = null;
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+    plans.set(run, plan);
+  }
+  return plans.get(run);
+}
+
+/**
+ * Parti di `target` già provate nelle run della CI della PR sul branch `branch`, fino al commit
+ * provato `head`. Il piano di riferimento è quello della run più recente che ha eseguito il
+ * modulo: deve avere l'impronta `digest` del sorgente attuale. Vale ogni parte riuscita in una run
+ * con lo stesso piano, impronta e intervalli, su un commit antenato di `head` e senza cambi che la
+ * invalidino da allora (`proofStands`, con `excused(source, commit)` per i sorgenti critici); per
+ * ogni parte decide l'esito più recente, quindi un fallimento non si copre con un successo più
+ * vecchio. Le run più vecchie di un piano diverso non contano. Una run senza piano, precedente
+ * all'artefatto, vale soltanto con tutte le parti riuscite. Restituisce parti provate e mancanti
+ * con gli intervalli del riferimento, o null senza un riferimento con il sorgente attuale.
+ */
+export async function pullRequestParts(
+  { repository, repositoryId, branch, head, target, graph, digest, exclude, excused },
   api = defaultApi,
+  readPlan = defaultPlan,
 ) {
   const { workflow_runs: runs = [] } = await api(
     `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&branch=${encodeURIComponent(branch)}&per_page=30`,
@@ -189,6 +269,27 @@ export async function pullRequestProof(
   const ordered = runs
     .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  const verdicts = new Map();
+  // Commit antenato della testa e nessun cambio che invalidi la prova del modulo da allora.
+  const stands = (run) => {
+    if (!verdicts.has(run.id))
+      verdicts.set(
+        run.id,
+        (async () => {
+          if (run.head_sha === head) return true;
+          const compare = await api(`repos/${repository}/compare/${run.head_sha}...${head}`);
+          // Oltre trecento file l'API tronca l'elenco: non si può escludere un cambio rilevante.
+          const files = (compare.files ?? []).map(({ filename }) => filename);
+          if (!["ahead", "identical"].includes(compare.status) || files.length >= 300) return false;
+          return proofStands(files, target, graph, (source) =>
+            excused ? excused(source, run.head_sha) : false,
+          );
+        })(),
+      );
+    return verdicts.get(run.id);
+  };
+  let layout = null;
+  const decided = new Map();
   for (const run of ordered) {
     const jobs = [];
     for (let page = 1; ; page++) {
@@ -198,17 +299,60 @@ export async function pullRequestProof(
       jobs.push(...batch.jobs);
       if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
     }
-    const outcome = pullRequestOutcome(jobs, target);
-    if (outcome === "failed") return null;
-    if (outcome !== "passed") continue;
-    if (run.head_sha === head) return { run: run.id, commit: run.head_sha };
-    const compare = await api(`repos/${repository}/compare/${run.head_sha}...${head}`);
-    // Oltre trecento file l'API tronca l'elenco: non si può escludere un cambio rilevante.
-    const files = (compare.files ?? []).map(({ filename }) => filename);
-    if (!["ahead", "identical"].includes(compare.status) || files.length >= 300) return null;
-    return proofUnaffected(files, target, graph) ? { run: run.id, commit: run.head_sha } : null;
+    const own = jobs.filter((job) => lineMutationJob(job.name) === target);
+    const plan = await readPlan(repository, run.id);
+    const entry = planLayout(plan, target);
+    if (!own.length && !entry) continue;
+    if (!layout && !entry) {
+      // Run senza piano: soltanto la prova completa nella stessa run.
+      const outcome = pullRequestOutcome(jobs, target);
+      if (outcome === "failed") return null;
+      if (outcome !== "passed") continue;
+      if (!(await stands(run))) return null;
+      const total = pullRequestPart(own[0].name).parts;
+      return {
+        total,
+        ranges: null,
+        proved: Array.from({ length: total }, (_, index) => ({
+          part: index + 1,
+          run: run.id,
+          commit: run.head_sha,
+        })),
+        missing: [],
+      };
+    }
+    if (!layout) {
+      if (entry.digest !== digest) return null;
+      layout = entry;
+    } else if (!entry || entry.digest !== layout.digest || entry.key !== layout.key) break;
+    for (const job of own) {
+      const { part, parts } = pullRequestPart(job.name);
+      if (parts !== layout.total || decided.has(part)) continue;
+      if (["failure", "timed_out"].includes(job.conclusion)) decided.set(part, null);
+      else if (job.conclusion === "success")
+        decided.set(part, (await stands(run)) ? { part, run: run.id, commit: run.head_sha } : null);
+    }
+    if (decided.size === layout.total) break;
   }
-  return null;
+  if (!layout) return null;
+  const proved = [...decided.values()].filter(Boolean).sort((a, b) => a.part - b.part);
+  const missing = Array.from({ length: layout.total }, (_, index) => index + 1).filter(
+    (part) => !decided.get(part),
+  );
+  return { total: layout.total, ranges: layout.ranges, proved, missing };
+}
+
+/**
+ * Prova riusabile di `target` nelle run della CI della PR: ogni parte provata, anche in run
+ * diverse (`pullRequestParts`). Restituisce la run più recente, il suo commit e tutte le run
+ * usate, o null.
+ */
+export async function pullRequestProof(args, api = defaultApi, readPlan = defaultPlan) {
+  const parts = await pullRequestParts(args, api, readPlan);
+  if (!parts || parts.missing.length) return null;
+  // Gli ID delle run crescono nel tempo: il più alto è la run più recente.
+  const runs = [...new Set(parts.proved.map(({ run }) => run))].sort((a, b) => b - a);
+  return { run: runs[0], commit: parts.proved.find(({ run }) => run === runs[0]).commit, runs };
 }
 
 /**
@@ -260,15 +404,35 @@ export async function previousRuns(repository, repositoryId, targets, api = defa
 const defaultApi = (url) =>
   retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
 
+/** Impronta SHA-256 di un file in un commit, come quella dei piani della matrice. */
+const commitDigest = (commit, file) =>
+  createHash("sha256")
+    .update(execFileSync("git", ["show", `${commit}:${file}`], { maxBuffer: 64 * 1024 ** 2 }))
+    .digest("hex");
+
 /**
- * Prova di `target` nelle PR integrate da `since`: ogni commit di `develop` che lo modifica viene
- * da una PR dello stesso repository con la mutation del modulo riuscita, sulla testa unita con lo
- * stesso contenuto del modulo nel commit integrato.
+ * Prova di `target` nelle PR integrate fra `since` e `tip`: almeno un commit di `develop` lo
+ * modifica e ognuno viene da una PR dello stesso repository con la mutation del modulo riuscita,
+ * sulla testa unita con lo stesso contenuto del modulo nel commit integrato. Nella prova della PR
+ * un sorgente critico entrato dalla sua base, e non modificato dalla PR, vale se è a sua volta
+ * coperto (`covered`) fino alla base del commit integrato.
  */
-async function prCoverage(repository, repositoryId, target, since, api, graph) {
-  const commits = git("rev-list", "--first-parent", `${since}..HEAD`, "--", target)
+async function prCoverage({
+  repository,
+  repositoryId,
+  target,
+  since,
+  tip,
+  api,
+  graph,
+  readPlan,
+  covered,
+}) {
+  const commits = git("rev-list", "--first-parent", `${since}..${tip}`, "--", target)
     .split("\n")
     .filter(Boolean);
+  // Senza commit di `develop` il contenuto non viene da una PR provata.
+  if (!commits.length) return false;
   for (const commit of commits) {
     const pull = (await api(`repos/${repository}/commits/${commit}/pulls`)).find(
       (entry) => entry.merged_at && entry.merge_commit_sha === commit,
@@ -284,15 +448,64 @@ async function prCoverage(repository, repositoryId, target, since, api, graph) {
       return false;
     }
     if (tested?.sha !== blob) return false;
-    // L'ultima run della PR che ha concluso il modulo, anche precedente alla testa unita se da
-    // allora nulla lo ha toccato: la PR può averne riusato la prova dopo un'unione di `develop`.
+    const base = git("rev-parse", `${commit}^1`).trim();
+    const own = new Set(git("diff", "--name-only", base, commit).split("\n").filter(Boolean));
+    // Le run della PR che hanno provato il modulo, anche in parti di run diverse e precedenti alla
+    // testa unita se da allora nulla lo ha toccato: la PR può averne riusato la prova.
     const proof = await pullRequestProof(
-      { repository, repositoryId, branch: pull.head.ref, head, target, graph },
+      {
+        repository,
+        repositoryId,
+        branch: pull.head.ref,
+        head,
+        target,
+        graph,
+        digest: commitDigest(commit, target),
+        excused: async (source, proved) => {
+          if (own.has(source)) return false;
+          const point = (await api(`repos/${repository}/compare/${proved}...${base}`))
+            .merge_base_commit?.sha;
+          return Boolean(point) && covered(source, point, base);
+        },
+      },
       api,
+      readPlan,
     );
     if (!proof) return false;
   }
   return true;
+}
+
+/**
+ * `covered(source, since, tip = "HEAD")`: vero se ogni modifica del modulo critico `source` fra
+ * `since` e `tip` è stata provata nella sua PR (`prCoverage`). Gli esiti restano in memoria.
+ */
+export function pullRequestCoverage(
+  { repository, repositoryId, graph },
+  api = defaultApi,
+  readPlan = defaultPlan,
+) {
+  const cache = new Map();
+  const covered = (source, since, tip = "HEAD") => {
+    const key = `${source} ${since} ${tip}`;
+    if (!cache.has(key))
+      cache.set(
+        key,
+        prCoverage({
+          repository,
+          repositoryId,
+          target: source,
+          since,
+          tip,
+          api,
+          graph,
+          readPlan,
+          covered,
+        }),
+      );
+    return cache.get(key);
+  };
+  return covered;
 }
 
 async function main() {
@@ -329,13 +542,7 @@ async function main() {
       );
     return cache.get(commit);
   };
-  const coverage = new Map();
-  const covered = (source, commit) => {
-    const key = `${source} ${commit}`;
-    if (!coverage.has(key))
-      coverage.set(key, prCoverage(repository, repositoryId, source, commit, api, testGraph));
-    return coverage.get(key);
-  };
+  const covered = pullRequestCoverage({ repository, repositoryId, graph: testGraph }, api);
   const { run, reused } = await reusePlan(targets, runs, affectedSince, covered);
   const list = (entries) => entries.map((entry) => `- ${entry}`).join("\n");
   const summary = [

@@ -43,6 +43,7 @@ import { verifiedBuildOrigin } from "../find-build.mjs";
 import { publishedCommit } from "../find-deployed.mjs";
 import { publicVersion, publicationRecord, downloadRecord } from "./records.mjs";
 import { gh, ghJson, runJobs } from "../lib/provider.mjs";
+import { lineMutationJob, mutationNeutral } from "../mutation-reuse.mjs";
 
 // Diff e cronologie grandi superano il MiB predefinito di execFileSync.
 const execute = (command, args, options = {}) =>
@@ -471,6 +472,60 @@ export async function waitUpdatedHead(read, previous, contains, attempts = 30, d
     await pause(delay);
   }
   throw new Error("Base della PR non aggiornata da GitHub: nessun rilancio automatico.");
+}
+
+/**
+ * Vero quando i job `Mutation …` di una run della PR sono conclusi: la run è conclusa, o `Verify`
+ * è concluso, GitHub ha creato i job che ne dipendono e nessuno della mutation resta in coda o in
+ * corso. Senza run non c'è nulla da attendere.
+ */
+export function mutationSettled(run, jobs) {
+  if (!run || run.status === "completed") return true;
+  if (jobs.find((job) => job.name === "Verify")?.status !== "completed" || jobs.length < 2)
+    return false;
+  return jobs.every((job) => !lineMutationJob(job.name) || job.status === "completed");
+}
+
+/** Tempo massimo di attesa della mutation in corso prima di aggiornare la base della PR. */
+const mutationWaitLimit = 40 * 60_000;
+
+/**
+ * Attende, entro `limit`, che la mutation della run in corso sulla testa finisca, così le sue
+ * parti riuscite valgono anche dopo l'aggiornamento della base, che annulla la run. `read()`
+ * restituisce `{ run, jobs }`; vero se la mutation è conclusa, falso allo scadere.
+ */
+export async function waitMutationJobs(
+  read,
+  { limit = mutationWaitLimit, delay = 30_000, now = Date.now } = {},
+) {
+  const deadline = now() + limit;
+  for (;;) {
+    const { run, jobs } = await read();
+    if (mutationSettled(run, jobs)) return true;
+    if (now() >= deadline) return false;
+    await pause(delay);
+  }
+}
+
+/** Run della CI sulla testa della PR, la più recente, con i suoi job. */
+function headCiRun(repository, pr) {
+  const [run] = ghJson(
+    "run",
+    "list",
+    "--repo",
+    repository,
+    "--workflow",
+    "ci.yml",
+    "--branch",
+    pr.headRefName,
+    "--limit",
+    "20",
+    "--json",
+    "databaseId,headSha,event,status,createdAt",
+  )
+    .filter((entry) => entry.headSha === pr.headRefOid && entry.event === "pull_request")
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  return { run, jobs: run ? runJobs(repository, run.databaseId) : [] };
 }
 
 function contains(base, head, run = git) {
@@ -1459,6 +1514,21 @@ async function mergeOpenPullRequest(repository, number, pr) {
         since = Date.now() - 1000;
         pr = await waitUpdatedHead(read, pr.headRefOid, (head) => head === opened);
       } else if (!independent(base)) {
+        // Una base avanzata soltanto su file neutri per la mutation lascia valide le parti già
+        // riuscite: prima di aggiornare, e annullare la run, si attende quelle in corso.
+        const baseFiles = git(
+          "diff",
+          "--name-only",
+          git("merge-base", base, pr.headRefOid).trim(),
+          base,
+        )
+          .split("\n")
+          .filter(Boolean);
+        if (baseFiles.every(mutationNeutral)) {
+          console.log("Base avanzata su file neutri per la mutation: attesa dei job in corso.");
+          if (!(await waitMutationJobs(() => headCiRun(repository, pr))))
+            console.log("Mutation ancora in corso allo scadere dell'attesa: aggiornamento.");
+        }
         since = Date.now() - 1000;
         gh(
           "api",
