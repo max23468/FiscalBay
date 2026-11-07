@@ -532,17 +532,10 @@ export function plan(files, sources = [], complete = false, changes = {}) {
   // salvo quelli già provati nella PR, che prova in modo incrementale i moduli critici toccati o
   // coperti da un test cambiato. Le dipendenze non ripetono la mutation: misura le prove del nostro
   // codice, mentre una libreria aggiornata si prova con test, browser e collaudo remoto.
-  // Tutti i moduli critici si ripetono soltanto se cambiano gli strumenti della mutation: un
-  // cambio della pubblicazione, del classificatore o delle prove browser non cambia quali
-  // mutanti i test uccidono.
+  // Nemmeno gli strumenti della mutation la ripetono per intero: la campagna settimanale resta
+  // completa e prova anche loro (D317).
   const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);
-  const mutationInputs = files.some((file) =>
-    /^(?:pnpm-workspace\.yaml|stryker\.config\.json|vitest.*\.config\.ts|scripts\/mutation(?:-reuse)?\.mjs|\.github\/workflows\/mutation\.yml)$/u.test(
-      file,
-    ),
-  )
-    ? [...graph.keys()].filter(critical)
-    : files.filter(critical);
+  const mutationInputs = files.filter(critical);
   const mutation = complete ? [...consumers(mutationInputs, graph)].filter(critical) : [];
   return {
     gate,

@@ -1,0 +1,7 @@
+# Mutation della PR senza ripetizioni dopo un'unione
+
+## Decisioni
+
+| ID | Ambito | Sintesi della scelta / motivazione | Provenienza | Stato / requisito completo |
+|---|---|---|---|---|
+| D317 | **Mutation della PR riusata dopo un'unione** | Il passo che prepara la matrice della mutation di una PR salta un modulo critico già concluso con ogni parte riuscita nell'ultima run della stessa PR che lo ha provato, su un commit antenato della testa, se da allora non sono cambiati il modulo, i sorgenti che importa anche indirettamente, i test che lo importano direttamente, helper e fixture dei test o migration. Un fallimento recente non si copre con un successo più vecchio, una run annullata o in corso senza tutte le parti non decide, un confronto troncato oltre trecento file ripete il modulo. La qualifica del candidato accetta la stessa prova, così il salto non sposta lavoro dopo il merge. Nemmeno un cambio degli strumenti della mutation o delle dipendenze ripete la mutation di tutti i moduli, nella PR o nel candidato: la campagna settimanale resta completa e li prova. Supera D306. | Il 2026-11-07 la PR #685 ha ripetuto tre volte tutta la mutation, circa un'ora ciascuna, dopo le unioni di `develop` con #686 e #687, che non toccavano i moduli già provati; l'owner chiede di non rifare il controllo completo e di togliere D306, che dopo un cambio degli strumenti ripeteva tutti i moduli critici nel candidato | Confermato · [Pubblicazione](../docs/operations/RELEASE.md#controlli-proporzionati) |
