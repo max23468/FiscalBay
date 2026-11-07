@@ -5,7 +5,6 @@ import type { AuditRow } from "../../domain/admin-audit.server";
 import type { WorkspaceDetail } from "../../domain/admin-directory.server";
 import { AuditTable } from "./governance";
 import { ActionForm, DataTable, Disclosure, Facts, Panel, Stat, StatGrid, TextField } from "./kit";
-import { lifetimeSlots } from "../../catalog";
 import { formatNumber } from "../../format";
 import { maxGrantDays } from "../../limits";
 import { storeActions } from "./store-actions";
@@ -313,7 +312,6 @@ export function WorkspaceView({
                     name="posto"
                     type="number"
                     min={1}
-                    max={lifetimeSlots}
                     aria-describedby={undefined}
                   />
                   <p className="text-sm text-muted-foreground">{w.vacantSeatHint}</p>
