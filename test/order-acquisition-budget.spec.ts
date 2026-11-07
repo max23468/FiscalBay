@@ -1,9 +1,11 @@
 import { env } from "cloudflare:workers";
 
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import {
+  countedAccess,
   countedCall,
+  loadCallBudget,
   ownCalls,
   quotaUsageStatements,
 } from "../app/domain/order-acquisition-context.server";
@@ -242,4 +244,98 @@ it("una lettura fiscale non riuscita non copre le versioni di un ordine pagato",
   expect(await env.DB.prepare("SELECT paid FROM order_tax_checks").first()).toEqual({ paid: 0 });
   await read("completed");
   expect(await env.DB.prepare("SELECT paid FROM order_tax_checks").first()).toEqual({ paid: 1 });
+});
+
+it("conta soltanto le chiamate seguite e un errore di D1 non ferma la lettura", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const fetcher = vi.fn<typeof fetch>(async () => new Response("ok"));
+  const counted = countedAccess(env.DB, access(fetcher), new Date("2026-09-02T00:00:00.000Z"));
+  await counted.fetcher("https://api.ebay.com/commerce/notification/v1/subscription");
+  expect((await ownCalls(env.DB, origin, new Date("2026-09-02T00:00:00.000Z"))).size).toBe(0);
+  expect(errors).not.toHaveBeenCalled();
+  const broken = {
+    prepare: () => ({ bind: () => ({ run: () => Promise.reject(new Error("d1")) }) }),
+  } as unknown as D1Database;
+  const response = await countedAccess(broken, access(fetcher), new Date()).fetcher(
+    "https://api.ebay.com/sell/fulfillment/v1/order/1",
+  );
+  expect(await response.text()).toBe("ok");
+  expect(errors).toHaveBeenCalledOnce();
+  expect(JSON.parse(String(errors.mock.calls[0]![0]))).toMatchObject({
+    operation: "order_acquisition",
+  });
+  errors.mockRestore();
+});
+
+it("senza un azzeramento valido il lavoro rimandato riparte alla mezzanotte UTC", async () => {
+  const at = new Date("2026-09-02T10:00:00.000Z");
+  for (const resetAt of [null, "2026-09-02T09:00:00.000Z", at.toISOString()]) {
+    await env.DB.prepare("DELETE FROM ebay_quota_usage").run();
+    await quota("GetOrders", 60, resetAt);
+    const budget = await loadCallBudget(env.DB, access(ebay()), at);
+    expect(budget.background("GetOrders")).toBe(resetAt === null ? false : true);
+    expect(budget.reopenAt("GetOrders")).toBe("2026-09-03T00:00:00.000Z");
+  }
+  // Un azzeramento futuro vale come indicato da eBay.
+  await env.DB.prepare("DELETE FROM ebay_quota_usage").run();
+  await quota("GetOrders", 60, "2026-09-02T11:00:00.000Z");
+  expect((await loadCallBudget(env.DB, access(ebay()), at)).reopenAt("GetOrders")).toBe(
+    "2026-09-02T11:00:00.000Z",
+  );
+});
+
+it("la parte del Worker vale soltanto sotto l'intera quota e con un limite letto", async () => {
+  const at = new Date("2026-09-02T00:00:00.000Z");
+  const own = (count: number) =>
+    env.DB.prepare(
+      `INSERT INTO ebay_call_counts (day, api_origin, call, count) VALUES ('2026-09-02', ?1, 'GetOrders', ?2)
+       ON CONFLICT (day, api_origin, call) DO UPDATE SET count = excluded.count`,
+    )
+      .bind(origin, count)
+      .run();
+  const limited = () =>
+    env.DB.prepare("SELECT COUNT(*) AS n FROM ebay_rate_limits").first<{ n: number }>();
+  const shared = (share: number) => ({
+    ...access(ebay()),
+    configuration: { ...configuration, workerShare: share },
+  });
+  await quota("GetOrders", 0);
+  await own(100);
+  await loadCallBudget(env.DB, shared(1), at);
+  expect(await limited()).toEqual({ n: 0 });
+  await env.DB.prepare("UPDATE ebay_quota_usage SET quota_limit = 0").run();
+  await own(0);
+  await loadCallBudget(env.DB, shared(0.1), at);
+  expect(await limited()).toEqual({ n: 0 });
+});
+
+it("la passata Trading conta nel budget del lavoro non urgente", async () => {
+  // 49 su 100: la passata ne usa una e il fallback di un ordine non corrente supererebbe metà.
+  await quota("GetOrders", 49);
+  const old = ebay({ orders: [foreign(18)] });
+  expect(await acquire(old)).toBe("complete");
+  expect(calls(old, "GetOrders")).toBe(0);
+});
+
+it("conserva l'azzeramento della quota, o nessuno se eBay non lo indica", async () => {
+  const at = new Date("2026-09-02T00:00:00.000Z");
+  const rate = (resetAt: string | null) => ({ limit: 5000, consumed: 1, resetAt });
+  await env.DB.batch(
+    quotaUsageStatements(
+      env.DB,
+      origin,
+      [
+        { resource: "GetOrders", daily: true, rate: rate(reset) },
+        { resource: "GetItem", daily: true, rate: rate(null) },
+      ],
+      at,
+    ),
+  );
+  expect(
+    (await env.DB.prepare("SELECT call, reset_at FROM ebay_quota_usage ORDER BY call").all())
+      .results,
+  ).toEqual([
+    { call: "GetItem", reset_at: null },
+    { call: "GetOrders", reset_at: reset },
+  ]);
 });

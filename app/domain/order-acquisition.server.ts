@@ -228,8 +228,9 @@ async function tradingInterval(ctx: Context): Promise<number> {
     )
     .bind(ctx.storeId, ctx.at, instant(Date.parse(ctx.at) - tradingActivityDays * dayMilliseconds))
     .first<{ dormant: number; trading: number }>();
-  if (row?.dormant) return tradingIntervals.dormant;
-  return row?.trading ? tradingIntervals.trading : tradingIntervals.fulfillment;
+  // Una SELECT senza tabella restituisce sempre la sua riga.
+  if (row!.dormant) return tradingIntervals.dormant;
+  return row!.trading ? tradingIntervals.trading : tradingIntervals.fulfillment;
 }
 
 /**
@@ -242,9 +243,7 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   // manuale o quando l'ultima passata conclusa ha l'età della cadenza del negozio.
   if (!state.trading_end && state.trading_cursor && state.requested_at === null) {
     const age = Date.parse(ctx.at) - Date.parse(state.trading_cursor);
-    // La cadenza del negozio si legge soltanto quando l'età della passata non basta a decidere.
-    if (age < tradingIntervals.trading) return true;
-    if (age < tradingIntervals.dormant && age < (await tradingInterval(ctx))) return true;
+    if (age < (await tradingInterval(ctx))) return true;
   }
   if ((await rateLimitWait(ctx.db, ordersLimit(ctx), new Date(ctx.at))) > 0) return false;
   const reach = Date.parse(ctx.at) - tradingReachDays * dayMilliseconds;

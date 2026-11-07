@@ -158,7 +158,7 @@ type CallState = {
 export type CallBudget = {
   /** Il lavoro non urgente può usare `calls` chiamate di questo tipo. */
   background: (call: BudgetedCall, calls?: number) => boolean;
-  /** Istante in cui il lavoro non urgente rimandato riparte. */
+  /** Istante in cui riparte il lavoro non urgente rimandato per `call`. */
   reopenAt: (call: BudgetedCall) => string;
   /** Chiamate fatte nell'esecuzione, da sommare al consumo letto all'inizio. */
   spent: (call: BudgetedCall, calls?: number) => void;
@@ -228,23 +228,14 @@ export async function loadCallBudget(
       const state = states.get(call);
       return !state || state.used + calls <= state.limit * backgroundShare;
     },
-    reopenAt: (call) => states.get(call)?.resetAt ?? midnight.toISOString(),
+    // Soltanto una chiamata con la quota letta si rimanda.
+    reopenAt: (call) => states.get(call)!.resetAt,
     spent: (call, calls = 1) => {
       const state = states.get(call);
-      if (state) {
-        state.used += calls;
-        state.own += calls;
-      }
+      if (state) state.used += calls;
     },
   };
 }
-
-/** Budget senza letture delle quote: nessuna chiamata si rimanda. */
-export const openBudget: CallBudget = {
-  background: () => true,
-  reopenAt: () => new Date(0).toISOString(),
-  spent: () => {},
-};
 
 /** Conserva l'ultima lettura delle quote giornaliere del keyset per le chiamate seguite. */
 export function quotaUsageStatements(

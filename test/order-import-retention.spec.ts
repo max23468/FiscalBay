@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { expect, it, vi } from "vitest";
 
 import { readDetail } from "../app/domain/order-acquisition-details.server";
-import { openBudget } from "../app/domain/order-acquisition-context.server";
+import { openBudget } from "./fixtures/ebay-client-fixtures";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 

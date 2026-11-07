@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { vi } from "vitest";
 import { UpstreamError } from "../../app/integrations/http.server";
+import type { CallBudget } from "../../app/domain/order-acquisition-context.server";
 import { ebayConfiguration } from "../../app/integrations/ebay/environment.server";
 
 export const configuration = ebayConfiguration(env, "production");
@@ -82,3 +83,10 @@ export const order = (overrides: Record<string, unknown> = {}) => ({
   ],
   ...overrides,
 });
+
+/** Budget giornaliero senza letture delle quote: nessuna chiamata si rimanda. */
+export const openBudget: CallBudget = {
+  background: () => true,
+  reopenAt: () => new Date(0).toISOString(),
+  spent: () => {},
+};
