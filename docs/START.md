@@ -58,6 +58,7 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | [Design system](brand/DESIGN_SYSTEM.md)  | Token, componenti, catalogo dei riferimenti e provenienza                |
 | [Audit UI/UX del test](audits/AUDIT_UI_UX.md) | Problemi rilevati sul test e correzioni verificate |
 | [Audit UI/UX di Production](audits/2026-11-06-audit-ui-ux-production.md) | Problemi rilevati in Production e correzioni verificate |
+| [Lacune delle API eBay](audits/2026-11-07-lacune-api-ebay/README.md) | Limiti delle API eBay usate, prove e bozze delle richieste a eBay |
 
 
 Questa guida è l’unico ingresso e indice generale. `CLAUDE.md` importa AGENTS senza una seconda policy. `docs/archive/` contiene la procedura di adozione e il Master Plan della 2.0, con milestone e gate: sono storici, non requisiti, e stanno fuori dai controlli ordinari di `verify-docs`.
