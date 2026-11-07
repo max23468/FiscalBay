@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) e la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
+| [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -104,6 +104,13 @@ I rilievi dell'audit Production del 2026-11-06 sono corretti: Negozi eBay mostra
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [Pubblicazione](operations/RELEASE.md#controlli-proporzionati)
 
 La mutation divide i moduli secondo le durate misurate sullo stesso sorgente e cede posti alle PR e ai cicli attivi soltanto nel lavoro di fondo; ogni ambiente si compila una volta per run, i browser del candidato si dimensionano sulle prove rimaste e quelli Production partono dalla propria build, roadmap e documenti di prodotto passano dal gate documentale, `.gitignore` e gli script del manifest estranei all'artefatto da quello degli strumenti changelog e frammenti invalidano soltanto le aree che mostrano le Novità, il runner browser prova il nucleo e il merge di una PR che non tocca il processo distribuisce la build già provata nella PR ([D309](decisions/DECISION_REGISTER.md)). Inventari, provenienza, migration e readback restano obbligatori; la riduzione dei tempi si misura sulle qualifiche successive.
+
+<a id="2-0-07"></a>
+#### 2.0-07 · Controllo di sicurezza pianificato
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§29](engineering/SECURITY_AND_PRIVACY.md#s29)
+
+Ogni giovedì, anche senza PR, un workflow ricontrolla avvisi delle dipendenze distribuite, firme dei pacchetti, protezione di `develop` e `main` con il solo `Node 26` richiesto e alert aperti di Dependabot, code scanning e secret scanning; un fallimento arriva all'owner come notifica di GitHub ([D313](decisions/DECISION_REGISTER.md)). Gli alert si leggono con un token in sola lettura la cui scadenza sta nel registro delle credenziali, che resta l'unico controllo delle scadenze.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni
