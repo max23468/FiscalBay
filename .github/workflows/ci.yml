@@ -167,9 +167,16 @@ jobs:
       - name: Split module mutation
         id: modules
         if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && steps.detect.outputs.mutation-pr != '{"target":[]}'
+        # Un modulo già provato in una run precedente della stessa PR, e non toccato da allora, per
+        # esempio dopo un'unione di `develop`, non si ripete.
         env:
           TARGETS: ${{ steps.detect.outputs.mutation-pr }}
           MUTATION_REFERENCES: .mutation-references
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          MUTATION_PR_BRANCH: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: node scripts/mutation.mjs --matrix "${TARGETS}"
 
       # Una nuova sezione in cima al changelog sale di un solo passo dall'ultima versione pubblicata.
