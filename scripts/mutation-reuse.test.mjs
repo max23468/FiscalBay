@@ -4,10 +4,12 @@ import {
   affectedModules,
   affectingSources,
   lineMutationJob,
-  linesProved,
   moduleOutcomes,
   mutationJob,
   previousRuns,
+  proofUnaffected,
+  pullRequestOutcome,
+  pullRequestProof,
   reusePlan,
 } from "./mutation-reuse.mjs";
 import { execFileSync } from "node:child_process";
@@ -188,21 +190,155 @@ describe("mutation incrementale della prova del candidato", () => {
     assert.equal(lineMutationJob("Mutation app/auth.server.ts 2/3"), "app/auth.server.ts");
     for (const name of ["Mutation", "Browser 1/8", "Gate", "Mutation docs/x.md"])
       assert.equal(lineMutationJob(name), null);
-    const run = { conclusion: "success" };
     const job = (name, conclusion = "success") => ({ name, conclusion });
     const target = "app/auth.server.ts";
-    assert.ok(
-      linesProved(run, [job(`Mutation ${target} 1/2`), job(`Mutation ${target} 2/2`)], target),
+    const both = [job(`Mutation ${target} 1/2`), job(`Mutation ${target} 2/2`)];
+    assert.equal(pullRequestOutcome(both, target), "passed");
+    assert.equal(pullRequestOutcome([job(`Mutation ${target} 1/1`)], target), "passed");
+    assert.equal(pullRequestOutcome([job(`Mutation ${target}`)], target), "passed");
+    // Una parte non ancora partita manca dall'elenco: nessun esito.
+    assert.equal(pullRequestOutcome([both[0]], target), null);
+    assert.equal(
+      pullRequestOutcome([both[0], job(`Mutation ${target} 2/2`, "cancelled")], target),
+      null,
     );
+    assert.equal(
+      pullRequestOutcome([both[0], job(`Mutation ${target} 2/2`, "failure")], target),
+      "failed",
+    );
+    assert.equal(
+      pullRequestOutcome([both[0], job(`Mutation ${target} 2/2`, "timed_out")], target),
+      "failed",
+    );
+    // Parti di una divisione diversa non si sommano.
+    assert.equal(pullRequestOutcome([both[0], job(`Mutation ${target} 2/3`)], target), null);
+    assert.equal(pullRequestOutcome([job("Mutation app/sealed.server.ts 1/1")], target), null);
+  });
+
+  it("una prova della PR resta valida soltanto se nulla di ciò che usa il modulo è cambiato", () => {
+    const graph = new Map([
+      ["app/domain/billing.server.ts", new Set(["app/domain/grants.server.ts"])],
+      ["app/domain/grants.server.ts", new Set()],
+      ["app/domain/other.server.ts", new Set()],
+      ["test/billing.spec.ts", new Set(["app/domain/billing.server.ts"])],
+      ["test/other.spec.ts", new Set(["app/domain/other.server.ts"])],
+    ]);
+    const target = "app/domain/billing.server.ts";
+    const valid = (...changed) => proofUnaffected(changed, target, graph);
+    assert.ok(valid());
+    assert.ok(valid("docs/ROADMAP.md", "changes/x.md", "e2e/a.spec.ts", "app/app.css"));
+    assert.ok(valid("app/domain/other.server.ts", "test/other.spec.ts"));
+    assert.ok(valid("scripts/indexnow.mjs", ".github/workflows/security.yml", "public/a.png"));
+    // Strumenti della mutation e dipendenze restano alla campagna settimanale.
     assert.ok(
-      !linesProved(
-        run,
-        [job(`Mutation ${target} 1/2`), job(`Mutation ${target} 2/2`, "failure")],
-        target,
+      valid(
+        "package.json",
+        "pnpm-lock.yaml",
+        "stryker.config.json",
+        "vitest.mutation.config.ts",
+        "scripts/mutation.mjs",
+        ".github/workflows/ci.yml",
+        ".github/workflows/mutation.yml",
       ),
     );
-    assert.ok(!linesProved(run, [job("Mutation app/sealed.server.ts")], target));
-    assert.ok(!linesProved({ conclusion: "failure" }, [job(`Mutation ${target}`)], target));
+    for (const changed of [
+      target,
+      "app/domain/grants.server.ts",
+      "test/billing.spec.ts",
+      "test/fixtures/database-fixtures.ts",
+      "migrations/0080_x.sql",
+      "app/request-limits.json",
+    ])
+      assert.ok(!valid(changed), changed);
+  });
+
+  it("riusa la prova di una run precedente della stessa PR dopo un'unione che non tocca il modulo", async () => {
+    const target = "app/domain/billing.server.ts";
+    const graph = new Map([
+      [target, new Set()],
+      ["app/domain/other.server.ts", new Set()],
+    ]);
+    const passed = [{ name: `Mutation ${target} 1/1`, conclusion: "success" }];
+    const fake = ({ runs, jobs, compare = {} }) => {
+      const calls = [];
+      const api = async (url) => {
+        calls.push(url);
+        if (url.includes("/workflows/ci.yml/runs")) return { workflow_runs: runs };
+        const id = /runs\/(\d+)\/jobs/u.exec(url)?.[1];
+        if (id) return { jobs: jobs[id] ?? [], total_count: (jobs[id] ?? []).length };
+        const pair = /compare\/(\w+)\.\.\.(\w+)/u.exec(url);
+        return compare[pair[1]] ?? { status: "diverged", files: [] };
+      };
+      return { api, calls };
+    };
+    const run = (id, sha, created, repo = 1) => ({
+      id,
+      head_sha: sha,
+      created_at: created,
+      head_repository: { id: repo },
+    });
+    const ask = (api, extra = {}) =>
+      pullRequestProof(
+        {
+          repository: "o/r",
+          repositoryId: 1,
+          branch: "feat/x",
+          head: "h3",
+          target,
+          graph,
+          exclude: 9,
+          ...extra,
+        },
+        api,
+      );
+    const runs = [
+      run(9, "h3", "2026-11-07T22:20:00Z"),
+      run(8, "h2", "2026-11-07T21:09:00Z"),
+      run(7, "h1", "2026-11-07T19:00:00Z"),
+    ];
+    // La run più recente con un esito, su un antenato, senza cambi del modulo: riusata.
+    const merge = { status: "ahead", files: [{ filename: "app/domain/other.server.ts" }] };
+    const reused = fake({ runs, jobs: { 8: passed }, compare: { h2: merge } });
+    assert.deepEqual(await ask(reused.api), { run: 8, commit: "h2" });
+    assert.ok(!reused.calls.some((url) => url.includes("/runs/9/jobs")));
+    // La stessa testa non richiede il confronto.
+    assert.deepEqual(await ask(fake({ runs, jobs: { 9: passed } }).api, { exclude: 0 }), {
+      run: 9,
+      commit: "h3",
+    });
+    // Run 8 senza esito del modulo, annullata o in corso: decide la 7.
+    const older = fake({
+      runs,
+      jobs: { 8: [{ name: `Mutation ${target} 1/2`, conclusion: "success" }], 7: passed },
+      compare: { h1: merge },
+    });
+    assert.deepEqual(await ask(older.api), { run: 7, commit: "h1" });
+    // Un fallimento recente non si copre con un successo più vecchio.
+    const failed = fake({
+      runs,
+      jobs: { 8: [{ name: `Mutation ${target} 1/1`, conclusion: "failure" }], 7: passed },
+      compare: { h1: merge },
+    });
+    assert.equal(await ask(failed.api), null);
+    // Il modulo cambiato, un commit non antenato, troppi file o un altro repository: nessun riuso.
+    const touched = { status: "ahead", files: [{ filename: target }] };
+    assert.equal(
+      await ask(fake({ runs, jobs: { 8: passed }, compare: { h2: touched } }).api),
+      null,
+    );
+    const diverged = { status: "diverged", files: [] };
+    assert.equal(
+      await ask(fake({ runs, jobs: { 8: passed }, compare: { h2: diverged } }).api),
+      null,
+    );
+    const many = {
+      status: "ahead",
+      files: Array.from({ length: 300 }, (_, index) => ({ filename: `docs/${index}.md` })),
+    };
+    assert.equal(await ask(fake({ runs, jobs: { 8: passed }, compare: { h2: many } }).api), null);
+    const foreign = [run(8, "h2", "2026-11-07T21:09:00Z", 2)];
+    assert.equal(await ask(fake({ runs: foreign, jobs: { 8: passed } }).api), null);
+    assert.equal(await ask(fake({ runs: [], jobs: {} }).api), null);
   });
 });
 
