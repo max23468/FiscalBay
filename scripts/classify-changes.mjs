@@ -642,6 +642,25 @@ export function needsDeploy(base, head) {
   return plan(files, [], false, committedVersions(files, base, head)).deploy;
 }
 
+/**
+ * Vero se fra due commit nulla cambia per le prove browser: per i file cambiati, valutati per
+ * contenuto come nel gate, il classificatore non chiede browser né deploy. Documenti, frammenti
+ * senza Novità, strumenti e test unitari non cambiano ciò che le prove browser verificano.
+ */
+export function browserUnaffected(base, head) {
+  let files;
+  try {
+    files = lines(git("diff", "--name-only", base, head));
+  } catch {
+    // Un confronto non disponibile non prova nulla: le prove ripartono.
+    return false;
+  }
+  // Senza differenze non c'è nulla da riprovare, anche se il gate proverebbe tutto per prudenza.
+  if (!files.length) return true;
+  const result = plan(files, [], false, committedVersions(files, base, head));
+  return !result.e2e && !result.deploy;
+}
+
 /** Se fra due commit cambia ciò che si distribuisce: senza differenze non c'è nulla da pubblicare. */
 export function distributes(base, head) {
   const files = committedChanges(base, head);
