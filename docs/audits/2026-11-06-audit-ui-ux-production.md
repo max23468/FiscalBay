@@ -56,7 +56,7 @@ italiano e inglese, temi e motori. Tre rilievi Medi, cinque Bassi.
 | AP4 | La ricerca dalla barra in alto azzera i filtri attivi di Ordini | Bassa | Alta | Corretto nel codice per [D308](../decisions/DECISION_REGISTER.md): dagli Ordini filtri conservati anche in suggerimenti e conteggio |
 | AP5 | I conteggi di ordini non raggruppano le migliaia, a differenza del feedback | Bassa | Alta | Corretto nel codice: conteggi del copy e «Ordini importati», anche nella console |
 | AP6 | Esportazione: l'ambito non nomina filtri e ricerca e ripropone «Tutti» | Bassa | Alta | Corretto nel codice: la nota elenca negozio, filtri e ricerca; «Ordini inclusi» sparisce quando il filtro Codice Fiscale lo decide |
-| AP7 | Prezzi a 1440 px: «Scegli il mensile» non è allineato agli altri pulsanti | Bassa | Alta | Corretto nel codice: pulsanti allineati e, per [D308](../decisions/DECISION_REGISTER.md), piano attivo a chi ha Premium a vita |
+| AP7 | Prezzi a 1440 px: «Scegli il mensile» non è allineato agli altri pulsanti | Bassa | Alta | Corretto nel codice: pulsanti allineati e, per [D308](../decisions/DECISION_REGISTER.md), piano attivo a chi ha Pro a vita |
 | AP8 | Una notifica dei Termini eliminata lascia il nuovo testo da accettare senza richiamo | Bassa | Media | Scelta confermata dall'owner ([D308](../decisions/DECISION_REGISTER.md)): la notifica resta eliminabile |
 
 | Superficie | Salute | Copertura |
@@ -225,5 +225,17 @@ Il tema chiaro è stato applicato soltanto nella pagina e tolto alla navigazione
   `cloudflareinsights.com/cdn-cgi/rum` risponde 204; Home, FAQ e Prezzi hanno un solo script del
   beacon, accesso e Ordini nessuno.
 
-Le correzioni nel codice (AP1, AP2, AP4-AP7) si registrano qui dopo la verifica su Chrome in
-Production, che segue la promozione.
+- **AP1, AP4-AP7 · 7 novembre 2026.** Chrome reale su `fiscalbay.it` con la 2.0.7 e l'account
+  delle verifiche live:
+  - AP1: dopo «Sincronizza ordini recenti» l'ultima lettura passa a «In corso» e, senza ricaricare,
+    a «questo minuto» con la nuova riga negli aggiornamenti.
+  - AP4: con «Ultimi 7 giorni» la ricerca della barra per «argento» propone 16 risultati invece
+    di 607, e «Vedi tutti i risultati» apre l'elenco con il periodo conservato.
+  - AP5: «Ordini importati» e intestazione di Ordini mostrano 1.095.
+  - AP6: dall'elenco filtrato l'Esportazione indica «Periodo: Ultimi 7 giorni», 23 ordini come
+    l'elenco, e il collegamento per tornare agli ordini.
+  - AP7: Prezzi indica il piano attivo a chi ha Pro a vita e rimanda a Piano e pagamenti.
+- **AP2.** Verificato sul test e incluso nella 2.0.7. In Production nessun ordine dell'account ha
+  mostrato questi avvisi durante la verifica.
+- **Nome del piano.** In Production le pagine pubbliche, Termini, Privacy, `llms.txt`, l'immagine
+  social di Prezzi e Piano e pagamenti dicono «Pro». «premium» resta solo nelle chiavi interne.
