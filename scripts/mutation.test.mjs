@@ -38,12 +38,24 @@ describe("esito dei mutation test", () => {
     assert.equal(backgroundConcurrency([{ event: "pull_request", status: "completed" }]), 8);
   });
   it("conserva le durate soltanto se coprono tutto il modulo", () => {
-    const part = (start, end, digest = "same") => ({ start, end, digest });
-    assert.equal(completeTimings([part(1, 5), part(6, 10)], "x", "same", 10), true);
-    assert.equal(completeTimings([part(6, 10)], "x", "same", 10), false);
-    assert.equal(completeTimings([part(1, 4), part(6, 10)], "x", "same", 10), false);
-    assert.equal(completeTimings([part(1, 5), part(6, 10, "old")], "x", "same", 10), false);
-    assert.equal(completeTimings([], "x", "same", 10), false);
+    const digest = "a".repeat(64);
+    const part = (start, end, change = {}) => ({
+      start,
+      end,
+      digest,
+      lines: 10,
+      mutationMs: 1000,
+      preparationMs: 100,
+      ...change,
+    });
+    assert.equal(completeTimings([part(1, 5), part(6, 10)]), true);
+    assert.equal(completeTimings([part(6, 10)]), false);
+    assert.equal(completeTimings([part(1, 4), part(6, 10)]), false);
+    assert.equal(completeTimings([part(1, 5), part(6, 10, { digest: "b".repeat(64) })]), false);
+    assert.equal(completeTimings([part(1, 5), part(6, 10, { lines: 11 })]), false);
+    assert.equal(completeTimings([part(1, 10, { digest: "forged" })]), false);
+    assert.equal(completeTimings([part(1, 10, { mutationMs: "1" })]), false);
+    assert.equal(completeTimings([]), false);
   });
   it("bilancia i tempi senza saltare mutanti e rifiuta piani incompleti", () => {
     const mutants = Array.from({ length: 12 }, (_, index) => ({

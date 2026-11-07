@@ -324,19 +324,25 @@ export function timedMutants(mutants, history, digest) {
 
 const sourceDigest = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
-export function completeTimings(
-  parts,
-  target,
-  digest = sourceDigest(target),
-  lastLine = readFileSync(target, "utf8").split("\n").length,
-) {
+/**
+ * Vero se le parti misurate coprono tutto il modulo, contigue e con lo stesso digest. Digest e
+ * righe vengono dalle misure: la raccolta non legge i sorgenti del commit qualificato.
+ */
+export function completeTimings(parts) {
+  const [first] = parts;
   return (
     parts.length > 0 &&
-    parts[0].start === 1 &&
-    parts.at(-1).end === lastLine &&
+    /^[a-f0-9]{64}$/u.test(first.digest ?? "") &&
+    Number.isSafeInteger(first.lines) &&
+    first.start === 1 &&
+    parts.at(-1).end === first.lines &&
     parts.every(
       (part, index) =>
-        part.digest === digest && (index === 0 || part.start === parts[index - 1].end + 1),
+        part.digest === first.digest &&
+        part.lines === first.lines &&
+        Number.isFinite(part.mutationMs) &&
+        Number.isFinite(part.preparationMs) &&
+        (index === 0 || part.start === parts[index - 1].end + 1),
     )
   );
 }
@@ -671,6 +677,7 @@ async function runTarget(target, files, shard = "1/1") {
         digest: sourceDigest(target),
         start: range?.start ?? 1,
         end: range?.end ?? readFileSync(target, "utf8").split("\n").length,
+        lines: readFileSync(target, "utf8").split("\n").length,
         mutants: mutants.filter(
           ({ start, end }) => !range || (start >= range.start && end <= range.end),
         ).length,
@@ -709,7 +716,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       const parts = samples
         .filter((entry) => entry.target === target)
         .sort((a, b) => a.start - b.start);
-      if (completeTimings(parts, target)) history[target] = parts;
+      if (completeTimings(parts)) history[target] = parts;
     }
     writeFileSync(timingFile, JSON.stringify(history));
     process.exit(0);

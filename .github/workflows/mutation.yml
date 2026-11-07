@@ -119,10 +119,11 @@ jobs:
     if: success() && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
+    # Il codice della raccolta è quello della run su `develop`: le misure portano già digest e
+    # righe del sorgente provato, e decidono soltanto come dividere le parti, mai cosa provare.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.expected_sha || 'develop' }}
           persist-credentials: false
       - uses: ./.github/actions/setup
         with:
