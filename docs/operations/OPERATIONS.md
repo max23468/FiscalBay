@@ -11,6 +11,7 @@ Requisiti di dominio, osservabilità e continuità, con lo stato dei servizi est
 - [Capacità e costi](CAPACITY.md): quote, costi e punti di arresto dei servizi.
 - [Avvio e collaudo commerciale](LAUNCH.md): configurazione commerciale, checklist operativa, sorveglianza iniziale e test merchant.
 - [Ripristino dei dati](RECOVERY.md): ripristino con le protezioni native e drill conclusivo.
+- [Assistenza sui pagamenti](BILLING_SUPPORT.md): rimborsi, dispute, cancellazioni finanziarie, concessioni e riconciliazione con Stripe.
 
 <a id="s24"></a>
 ## 24. Dominio, DNS, TLS e posta
