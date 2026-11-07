@@ -2,7 +2,7 @@
 
 **Dove:** nuovo ticket al supporto sviluppatori eBay, con riferimento a quello del 27 ottobre 2026; in alternativa il referente del Partner Program, se FiscalBay viene ammesso.
 
-**Prima dell'invio:** azioni interne 1 e 2 del [dossier](README.md#azioni-interne-prima-degli-invii); completare il punto sui tipi fiscali con `TaxIdentifierTypeEnum` letto nel browser.
+**Prima dell'invio:** azione interna 1 del [dossier](README.md#azioni-interne-prima-degli-invii). È l'invio più urgente: `GetOrders` si spegne il 30 giugno 2027.
 
 **Verifica:** 7 novembre 2026, specifica Fulfillment `v1.20.7` e schema GraphQL `listing.graphqls`; prove del 10 e del 27 ottobre nel [confronto fiscale](../../reference/EBAY_TAX_COMPARISON.md).
 
@@ -10,11 +10,11 @@
 
 ---
 
-**Subject:** Buyer tax identifier: list retrieval in Fulfillment and parity in the GraphQL Order API before any GetOrders deprecation
+**Subject:** Buyer tax identifier: parity in the GraphQL Order API before the GetOrders decommission on June 30, 2027
 
 **Context**
 
-FiscalBay is a read-only app for Italian eBay sellers. It reads the buyer's Codice Fiscale, which Italian sellers need to issue invoices, from Sell Fulfillment `getOrder`, with Trading `GetOrders` as fallback. On October 27, 2026, Developer Support confirmed that `getOrder` is the supported REST source, that `GetOrders` also returns the tax ID and billing address of seller-created combined invoices, and that any deprecation will follow the standard notice.
+FiscalBay is a read-only app for Italian eBay sellers. It reads the buyer's Codice Fiscale, which Italian sellers need to issue invoices, from Sell Fulfillment `getOrder`, with Trading `GetOrders` as fallback. On October 27, 2026, Developer Support confirmed that `getOrder` is the supported REST source and that `GetOrders` also returns the tax ID and billing address of seller-created combined invoices. On November 6, 2026, `GetOrders` was deprecated, with decommission on June 30, 2027.
 
 **1. One extra call per order**
 
@@ -24,7 +24,7 @@ Request: return `taxIdentifier` in `getOrders` as well, at least with `orderIds`
 
 **2. Completeness of the container**
 
-- `Buyer.taxIdentifier` is a single object, so it can't carry two identifiers for the same buyer.
+- `Buyer.taxIdentifier` is a single object, while `TaxIdentifierTypeEnum` includes both `CODICE_FISCALE` and `VATIN`. An Italian buyer with both a Codice Fiscale and a VAT number can't have both in the same response.
 - `issuingCountry` was missing in part of our sample; Trading `BuyerTaxIdentifier` never returned it.
 - A missing container doesn't tell "buyer has no tax ID" from "marketplace not covered" or "data no longer available".
 
@@ -32,7 +32,7 @@ Request: a list of identifiers with type and issuing country always set on cover
 
 **3. Parity in the modern APIs**
 
-The migration mapping lists the GraphQL Order API (`orders`, `ordersByIds`) as the replacement for `GetOrders` and `GetSellerTransactions`. In the schema published on November 7, 2026:
+The deprecation notice and the migration mapping point to Fulfillment for paid orders and to the GraphQL Order API (`orders`, `ordersByIds`), item commitments and Purchase Quote for the rest. In the schema published on November 7, 2026:
 
 - `Order` has `buyer`, `taxes`, `logistics` and totals, and `OrderTaxes` only has `eBayCollectAndRemitTax`, `taxAddress` and `taxBreakdown`;
 - we couldn't find a buyer tax identifier or a per-order billing address;
@@ -42,8 +42,8 @@ Seller-created combined invoices paid outside eBay checkout exist only in Tradin
 
 Requests:
 
-1. Expose the buyer tax identifier and billing address in the Order API and in `PurchaseQuote`, under the same authorization rules as `getOrder`.
-2. Until that parity exists, confirm in writing that `GetOrders` won't get a decommission date.
+1. Before June 30, 2027, expose the buyer tax identifier and billing address in the Order API and in `PurchaseQuote`, under the same authorization rules as `getOrder`.
+2. If that parity can't ship in time, keep `GetOrders` available for the reads that have no replacement yet.
 
 **Expected result**
 

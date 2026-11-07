@@ -9,14 +9,16 @@ Cinque invii e cinque domande secondarie. Le capacità già costruibili con le A
 | # | Invio | Tipo | Stato |
 | --- | --- | --- | --- |
 | 1 | Header del marketplace necessario per l'identificativo fiscale, assente dalla specifica di `getOrder` | bug documentale | da inviare ([bozza](bozza-01-header-marketplace.en.md)) |
-| 2 | Identificativo fiscale dell'acquirente nelle letture di elenco e nelle API moderne, fatture combinate comprese | capacità e parità prima delle dismissioni | da inviare dopo le azioni interne 1 e 2 ([bozza](bozza-02-dati-fiscali-acquirente.en.md)) |
+| 2 | Identificativo fiscale dell'acquirente nelle letture di elenco e nelle API moderne, fatture combinate comprese | capacità e parità prima delle dismissioni | da inviare per primo, dopo l'azione interna 1 ([bozza](bozza-02-dati-fiscali-acquirente.en.md)) |
 | 3 | Identità immutabile dell'acquirente negli ordini, per le cancellazioni degli account | capacità e contratto da chiarire | da inviare ([bozza](bozza-03-identita-acquirente.en.md)) |
 | 4 | Notifiche degli ordini: versione 1.1 di `ORDER_CONFIRMATION`, variazioni dell'ordine in sola lettura, destinazioni | contratto da chiarire e capacità | da inviare ([bozza](bozza-04-notifiche-ordini.en.md)) |
 | 5 | Quote per utente leggibili con gli scope di sola lettura degli ordini | capacità | da inviare ([bozza](bozza-05-quote-per-utente.en.md)) |
 
 Stato al 7 novembre: nessun invio fatto.
 
-**Rischio emerso, ridotto internamente.** Il token eIAS dell'acquirente arriva soltanto da Trading, entro 90 giorni. Il 7 novembre, in Production, 978 dei 1.100 ordini definitivi non lo avevano: tutti gli 891 oltre i 90 giorni e 87 fra 30 e 90, rimasti fuori dalla finestra Trading del primo collegamento (conteggio aggregato in sola lettura, senza identità). Per questi una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Ora ogni ordine registra l'ultima lettura dello username e quelli senza token lo rileggono ogni settimana ([D318](../../decisions/DECISION_REGISTER.md)); resta scoperto un cambio di username a ridosso della cancellazione, che soltanto l'invio 3 chiude.
+**Dismissione di `GetOrders`.** Il 6 novembre eBay ha deprecato Trading `GetOrders` e fissato lo spegnimento al 30 giugno 2027: per gli ordini pagati rimanda a Fulfillment, per impegni non pagati e `PurchaseQuote` alla Order API GraphQL (documentato, [stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status), letto nel browser il 7 novembre). Con `GetOrders` spariscono il fallback fiscale, le fatture combinate senza checkout eBay e l'unica fonte del token eIAS dell'acquirente. Gli invii 2 e 3 diventano urgenti; la migrazione interna è [2.0-11](../../ROADMAP.md#2-0-11).
+
+**Rischio emerso, ridotto internamente.** Il token eIAS dell'acquirente arriva soltanto da Trading `GetOrders`, entro 90 giorni, e sparirà con il suo spegnimento. Il 7 novembre, in Production, 978 dei 1.100 ordini definitivi non lo avevano: tutti gli 891 oltre i 90 giorni e 87 fra 30 e 90, rimasti fuori dalla finestra Trading del primo collegamento (conteggio aggregato in sola lettura, senza identità). Per questi una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Ora ogni ordine registra l'ultima lettura dello username e quelli senza token lo rileggono ogni settimana ([D318](../../decisions/DECISION_REGISTER.md)); resta scoperto un cambio di username a ridosso della cancellazione, che soltanto l'invio 3 chiude.
 
 **Rapporto con i riconoscimenti esterni.** Il dossier non ripete [RE-01](../../ROADMAP.md#re-01)–[RE-04](../../ROADMAP.md#re-04). L'aumento dei limiti resta nell'Application Growth Check ([RE-01](../../ROADMAP.md#re-01)): l'invio 2 riduce le chiamate necessarie, non chiede quota. `USER_STATUS_CHANGE` e i contatti diretti con eBay potrebbero arrivare con il Partner Program ([RE-02](../../ROADMAP.md#re-02)); se FiscalBay viene ammesso, gli invii 2 e 3 possono passare dal referente del programma.
 
@@ -26,14 +28,14 @@ Codice e documenti: `origin/develop` al commit `9e39de91`, versione `2.0.7` in P
 
 Fonti eBay rilette il 7 novembre:
 
-- specifica OpenAPI ufficiale di Fulfillment `v1.20.7`, scaricata e interrogata campo per campo;
+- specifica OpenAPI ufficiale di Fulfillment `v1.20.7`, scaricata e interrogata campo per campo, sia all'indirizzo storico sia a quello del nuovo portale (`/develop/api/spec/fulfillment_api.json`), che include anche gli enum;
 - schema GraphQL unificato `listing.graphqls`, scaricato lo stesso giorno;
 - specifica OpenAPI della Developer Analytics API `v1_beta.0.1`;
 - Notification API Production: `getTopics` e `getTopic` con il token dell'applicazione del keyset FiscalBay, tre chiamate in tutto, nessun token di venditore;
 - guida [Marketplace user account deletion](https://developer.ebay.com/develop/guides-v2/marketplace-user-account-deletion) e release notes di [Fulfillment](https://developer.ebay.com/api-docs/sell/fulfillment/release-notes.html) e [Notification](https://developer.ebay.com/api-docs/commerce/notification/release-notes.html);
 - riferimenti di migrazione eBay per ordini e account (mappatura ufficiale `GetOrders`, `GetStore`, `GetUser`, `GetItem`).
 
-Le pagine `TaxIdentifierTypeEnum` e [API Deprecation Status](https://developer.ebay.com/develop/get-started/api-deprecation-status) rifiutano la lettura automatica (403) e vanno rilette nel browser (azione interna 4).
+La pagina [API Deprecation Status](https://developer.ebay.com/develop/get-started/api-deprecation-status) rifiuta la lettura automatica (403) ed è stata letta nel browser integrato; `TaxIdentifierTypeEnum` è stato letto dalla specifica del nuovo portale.
 
 | Livello | Significato |
 | --- | --- |
@@ -59,7 +61,7 @@ Nella qualifica del 10 ottobre, sugli stessi 18 ordini `EBAY_IT`, `getOrder` sen
 
 ## 2. Dati fiscali dell'acquirente nelle letture di elenco e nelle API moderne
 
-**Tipo:** capacità e parità prima delle dismissioni. **Canale:** ticket al supporto sviluppatori; in alternativa referente del Partner Program ([RE-02](../../ROADMAP.md#re-02)). **Prerequisiti:** azioni interne 1 e 2.
+**Tipo:** capacità e parità prima delle dismissioni. **Canale:** ticket al supporto sviluppatori; in alternativa referente del Partner Program ([RE-02](../../ROADMAP.md#re-02)). **Prerequisiti:** azione interna 1.
 
 ### 2.1 Una chiamata in più per ogni ordine
 
@@ -69,7 +71,7 @@ Nella qualifica del 10 ottobre, sugli stessi 18 ordini `EBAY_IT`, `getOrder` sen
 
 ### 2.2 Completezza del contenitore
 
-- `Buyer.taxIdentifier` è un oggetto singolo, non un elenco (specifica verificata): non può portare due identificativi dello stesso acquirente.
+- `Buyer.taxIdentifier` è un oggetto singolo, non un elenco (specifica verificata), mentre `TaxIdentifierTypeEnum` comprende `CODICE_FISCALE`, `CURP`, `DNI`, `NIE`, `NIF`, `NIT`, `RFC`, `RUT` e `VATIN`, la partita IVA usata nell'Unione europea (specifica verificata): un acquirente italiano con CF e partita IVA non può avere entrambi nella stessa risposta.
 - `issuingCountry` è descritto, ma nella qualifica il Paese non era completo (osservato); in Trading `BuyerTaxIdentifier` non lo riporta mai (osservato il 27 ottobre).
 - L'assenza del contenitore non distingue «acquirente senza identificativo», «marketplace non coperto» e «dato non più disponibile».
 
@@ -77,7 +79,7 @@ Nella qualifica del 10 ottobre, sugli stessi 18 ordini `EBAY_IT`, `getOrder` sen
 
 ### 2.3 Parità delle API moderne
 
-La mappatura ufficiale indica la Order API GraphQL (`orders`, `ordersByIds`, prima versione nelle release notes del 26 ottobre 2026) come sostituta di `GetOrders` e `GetSellerTransactions` (documentato). Nello schema del 7 novembre:
+La mappatura ufficiale indica la Order API GraphQL (`orders`, `ordersByIds`, prima versione nelle release notes del 26 ottobre 2026) come sostituta di `GetOrders` e `GetSellerTransactions`, e la pagina delle dismissioni lo ripete per lo spegnimento di `GetOrders` del 30 giugno 2027 (documentato). Nello schema del 7 novembre:
 
 - `Order` ha `buyer`, `taxes`, `logistics` e totali; `OrderTaxes` contiene soltanto `eBayCollectAndRemitTax`, `taxAddress` e `taxBreakdown` (specifica verificata);
 - non compaiono identificativi fiscali dell'acquirente né un indirizzo di fatturazione per ordine (non individuato);
@@ -85,7 +87,7 @@ La mappatura ufficiale indica la Order API GraphQL (`orders`, `ordersByIds`, pri
 
 Le fatture combinate dal venditore senza checkout eBay esistono soltanto in Trading: Fulfillment rifiuta come non valide quelle senza `ExtendedOrderID` (osservato, [prova del 27 ottobre](../../reference/EBAY_TAX_COMPARISON.md#seller-transactions)). Il supporto ha dichiarato che `GetOrders` restituisce CF e indirizzo di fatturazione di queste fatture e che ogni dismissione segue il preavviso standard.
 
-**Richiesta.** Prima di fissare una data per `GetOrders`, esporre nella Order API e in `PurchaseQuote` lo stesso identificativo fiscale dell'acquirente e l'indirizzo di fatturazione, con le stesse regole di autorizzazione di `getOrder`; nel frattempo, conferma scritta che `GetOrders` resta finché la parità non esiste.
+**Richiesta.** Prima del 30 giugno 2027 esporre nella Order API e in `PurchaseQuote` lo stesso identificativo fiscale dell'acquirente e l'indirizzo di fatturazione, con le stesse regole di autorizzazione di `getOrder`; se la parità non arriva in tempo, rinviare lo spegnimento di `GetOrders` per le letture che non hanno ancora una sostituta.
 
 **Accettazione.** Un venditore italiano ottiene il CF di ogni ordine pagato, incluse le fatture combinate, da un'API non deprecata, senza una chiamata per ordine.
 
@@ -98,6 +100,8 @@ La notifica `MARKETPLACE_ACCOUNT_DELETION` porta `userId` immutabile, `eiasToken
 Per gli ordini senza token, l'89% di quelli in Production il 7 novembre, FiscalBay abbina quindi una cancellazione allo username registrato nell'ordine, che può non essere più quello attuale; la rilettura settimanale ([D318](../../decisions/DECISION_REGISTER.md)) accorcia questo intervallo senza chiuderlo. La guida richiede di cancellare i dati dell'utente pena la revoca dell'accesso, ma non dice come riconoscerlo negli ordini letti da Fulfillment (non individuato). Lo schema GraphQL espone `User.userId` sotto `commerce.identity.readonly`, ma non chiarisce se è restituito per l'acquirente di un ordine del venditore (non individuato).
 
 **Richiesta.** Un identificativo immutabile dell'acquirente (`userId` o `eiasToken`) in Fulfillment `getOrder` e `getOrders` e nella Order API, con gli scope di lettura degli ordini; in subordine, l'indicazione ufficiale della chiave con cui abbinare la notifica agli ordini letti da Fulfillment.
+
+Con lo spegnimento di `GetOrders` il 30 giugno 2027 il token eIAS non arriverà più da nessuna fonte: tutti gli ordini si abbineranno soltanto per username (documentato, stato delle dismissioni).
 
 **Accettazione.** Ogni ordine conservato si abbina a una cancellazione senza dipendere dallo username o da Trading.
 
@@ -141,9 +145,9 @@ Vanno poste come domande, senza presentarle come lacune dimostrate.
 
 **Q1. Ordini di prova con dati fiscali in Sandbox.** In Sandbox i pagamenti non riescono, l'acquisto confermato resta non pagato e non compare in Fulfillment (osservato, [questioni aperte](../../ROADMAP.md#questioni-aperte)). Domanda: come si crea in Sandbox un ordine pagato di un acquirente italiano con `taxIdentifier`?
 
-**Q2. Partita IVA degli acquirenti italiani.** `TaxIdentifierTypeEnum` ha `CODICE_FISCALE` e, dal 2024, tipi messicani e cileni (documentato). Domanda: come arriva al venditore la Partita IVA di un acquirente italiano con account aziendale, se arriva, e con quale tipo?
+**Q2. Partita IVA degli acquirenti italiani.** `TaxIdentifierTypeEnum` comprende `VATIN` (specifica verificata) e FiscalBay lo tratta già come partita IVA italiana soltanto con Paese emittente `IT`, che spesso manca (2.2). Domanda: sul marketplace `EBAY_IT` la partita IVA di un acquirente con account aziendale arriva come `VATIN`, e in quali condizioni al posto del CF?
 
-**Q3. Sostitute moderne di `GetItem`, `GetStore` e `GetUser`.** La mappatura indica `sellerListings`, Stores API e la query `user` (documentato), ciascuna con scope nuovi. `LineItem` di Fulfillment non ha l'immagine dell'articolo (specifica verificata). Domanda: le date di dismissione previste e se feedback, percentuale positiva e Top Rated restano leggibili senza scope aggiuntivi ([D186](../../decisions/DECISION_REGISTER.md), [D216](../../decisions/DECISION_REGISTER.md)).
+**Q3. Sostitute moderne di `GetItem`, `GetStore` e `GetUser`.** Il 7 novembre la pagina delle dismissioni non le elenca (documentato). La mappatura indica `sellerListings`, Stores API e la query `user` (documentato), ciascuna con scope nuovi. `LineItem` di Fulfillment non ha l'immagine dell'articolo (specifica verificata). Domanda: se sono previste dismissioni e se feedback, percentuale positiva e Top Rated restano leggibili senza scope aggiuntivi ([D186](../../decisions/DECISION_REGISTER.md), [D216](../../decisions/DECISION_REGISTER.md)).
 
 **Q4. Dati dell'acquirente oltre i 90 giorni.** Fulfillment toglie indirizzo ed email dopo 90 giorni e i recapiti della spedizione dopo 14 (specifica verificata). Domanda: esiste un accesso ai dati di fatturazione già forniti per i documenti che il venditore emette più tardi?
 
@@ -152,9 +156,9 @@ Vanno poste come domande, senza presentarle come lacune dimostrate.
 ## Azioni interne prima degli invii
 
 1. **Rileggere la specifica al momento dell'invio.** Ripetere i controlli di questo dossier su Fulfillment e sullo schema GraphQL; se eBay ha già corretto un punto, toglierlo dalla bozza. Serve prima degli invii 1 e 2.
-2. **Tipi fiscali.** Leggere `TaxIdentifierTypeEnum` nel browser e completare 2.2 e Q2. Serve prima dell'invio 2.
+2. **Tipi fiscali (conclusa il 7 novembre).** Elenco in 2.2 e Q2.
 3. **Copertura delle cancellazioni (conclusa il 7 novembre).** Misura in sintesi; la rilettura settimanale dello username è in [D318](../../decisions/DECISION_REGISTER.md).
-4. **Stato delle dismissioni.** Rileggere nel browser [API Deprecation Status](https://developer.ebay.com/develop/get-started/api-deprecation-status) per `GetOrders`, `GetItem`, `GetStore`, `GetUser` e la Developer Analytics API. Serve prima degli invii 2 e Q3.
+4. **Stato delle dismissioni (conclusa il 7 novembre).** `GetOrders` deprecato dal 6 novembre e spento il 30 giugno 2027; `GetItem`, `GetStore`, `GetUser`, `GetSellerTransactions` e la Developer Analytics API non compaiono.
 5. **`ORDER_CONFIRMATION` 1.1.** Sottoscrivere la 1.1 soltanto dopo lo schema pubblicato (invio 4); fino ad allora l'ingresso resta sulla 1.0.
 
 ## Appendice: costruibile oggi, da non chiedere a eBay
