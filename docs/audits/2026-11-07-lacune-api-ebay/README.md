@@ -14,7 +14,7 @@ Cinque invii e cinque domande secondarie. Le capacità già costruibili con le A
 | 4 | Notifiche degli ordini: versione 1.1 di `ORDER_CONFIRMATION`, variazioni dell'ordine in sola lettura, destinazioni | contratto da chiarire e capacità | da inviare ([bozza](bozza-04-notifiche-ordini.en.md)) |
 | 5 | Quote per utente leggibili con gli scope di sola lettura degli ordini | capacità | da inviare ([bozza](bozza-05-quote-per-utente.en.md)) |
 
-Stato al 7 novembre: nessun invio fatto. L'owner ha scelto di inviare tutto in un [ticket unico](ticket-unico.en.md), in ordine di urgenza, con le domande secondarie in coda; le bozze separate restano come dettaglio dei singoli punti.
+Stato al 7 novembre: nessun invio fatto. L'owner ha scelto di inviare tutto in un [ticket unico](ticket-unico.en.md), in ordine di urgenza e entro i 2.000 caratteri del modulo, con le domande Q1-Q3 in coda; le bozze separate restano come dettaglio dei singoli punti.
 
 **Dismissione di `GetOrders`.** Il 6 novembre eBay ha deprecato Trading `GetOrders` e fissato lo spegnimento al 30 giugno 2027: per gli ordini pagati rimanda a Fulfillment, per impegni non pagati e `PurchaseQuote` alla Order API GraphQL (documentato, [stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status), letto nel browser il 7 novembre). Con `GetOrders` spariscono il fallback fiscale, le fatture combinate senza checkout eBay e l'unica fonte del token eIAS dell'acquirente. Gli invii 2 e 3 diventano urgenti; la migrazione interna è [2.0-11](../../ROADMAP.md#2-0-11).
 
