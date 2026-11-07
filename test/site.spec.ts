@@ -357,6 +357,8 @@ describe("radice pubblica e area riservata", () => {
         name: "FiscalBay",
         url: "http://localhost:5173/",
         logo: "http://localhost:5173/apple-touch-icon.png",
+        description: sitePages.it.home.description,
+        sameAs: ["https://t.me/FiscalBayTestBot"],
         email: infoEmail,
       },
       {
