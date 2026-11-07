@@ -607,10 +607,11 @@ async function prepareFiscalWrites(input: {
     add(
       db
         .prepare(
-          `INSERT INTO order_tax_checks (order_id, source, last_modified_time, observed_at, availability, verification)
-       SELECT ?4, ?3, ?5, ?6, ?7, ?8 WHERE ${orderExists}
+          `INSERT INTO order_tax_checks (order_id, source, last_modified_time, observed_at, availability, verification, paid)
+       SELECT ?4, ?3, ?5, ?6, ?7, ?8, ?9 WHERE ${orderExists}
        ON CONFLICT (order_id, source) DO UPDATE SET last_modified_time = excluded.last_modified_time,
-         observed_at = excluded.observed_at, availability = excluded.availability, verification = excluded.verification`,
+         observed_at = excluded.observed_at, availability = excluded.availability, verification = excluded.verification,
+         paid = excluded.paid`,
         )
         .bind(
           ...scope,
@@ -620,6 +621,8 @@ async function prepareFiscalWrites(input: {
           observedAt,
           tax.values.length ? "present" : tax.complete ? "removed" : (tax.availability ?? "absent"),
           tax.verification,
+          // Una lettura riuscita su un ordine pagato vale anche per le sue versioni successive.
+          tax.verification === "completed" && observation.paymentStatus === "PAID" ? 1 : 0,
         ),
     );
   }

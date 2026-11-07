@@ -9,6 +9,7 @@ import {
   spend,
   NotWritable,
   type Context,
+  urgentDays,
 } from "./order-acquisition-context.server";
 import { UpstreamError } from "../integrations/http.server";
 import {
@@ -16,11 +17,14 @@ import {
   fulfillmentTaxIdentifiers,
   readFulfillmentOrder,
 } from "../integrations/ebay/fulfillment.server";
+import { inSequence, untilStopped } from "../sequence";
 import { dayMilliseconds } from "../time";
 import {
   readItemImage,
-  readTradingTaxObservation,
+  readTradingTaxObservations,
   tradingReachDays,
+  tradingTaxBatch,
+  type TradingTaxObservation,
 } from "../integrations/ebay/trading.server";
 
 /**
@@ -88,6 +92,8 @@ export type PendingDetail = {
   detail_attempts: number;
   marketplace_id: string | null;
   creation_time: string;
+  /** Lettura fiscale Trading già coperta per la versione; se assente si legge da D1. */
+  trading_covered?: number;
 };
 
 /** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
@@ -137,12 +143,58 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
 }
 
 /**
- * Dettaglio di una versione dell'ordine: rilegge l'ordine, le immagini mancanti (un errore
- * lascia la riga senza immagine) e il CF Fulfillment sul marketplace italiano Production.
- * Negli altri casi Trading resta il fallback. Un'assenza non rimuove dati già osservati.
- * false se il budget non basta: la versione resta in attesa.
+ * Lettura fiscale Trading già coperta per la versione: una risposta riuscita e autorevole di
+ * Trading, ricevuta dopo la modifica della versione (anche dalla passata periodica, che porta gli
+ * identificativi) oppure su un ordine già pagato, i cui identificativi non cambiano più senza
+ * che la passata periodica lo riveda. Argomento: espressione della data di modifica della versione.
  */
-export async function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean> {
+const tradingCoveredSql = (modified: string) =>
+  `tc.source = 'ebay_trading_get_orders' AND tc.verification = 'completed'
+   AND tc.availability IN ('present', 'absent', 'removed')
+   AND (tc.paid = 1 OR tc.observed_at >= ${modified})`;
+
+async function tradingCovered(ctx: Context, pending: PendingDetail): Promise<boolean> {
+  if (pending.trading_covered !== undefined) return pending.trading_covered === 1;
+  const row = await ctx.db
+    .prepare(
+      `SELECT 1 FROM order_source_refs r JOIN order_tax_checks tc ON tc.order_id = r.order_id
+        WHERE r.store_id = ?1 AND r.source = 'fulfillment' AND r.external_order_id = ?2
+          AND ${tradingCoveredSql("?3")}`,
+    )
+    .bind(ctx.storeId, pending.external_order_id, pending.last_modified_time)
+    .first();
+  return row !== null;
+}
+
+/** Versione letta da Fulfillment, in attesa della lettura fiscale Trading del lotto o della scrittura. */
+type Prepared = {
+  pending: PendingDetail;
+  observation: OrderObservation;
+  /** La lettura fiscale Trading entra nel lotto. */
+  trading: boolean;
+  /** Immagini o lettura fiscale non urgenti rimandate fino a questo istante. */
+  deferredUntil: string | null;
+};
+
+type TradingResult = TradingTaxObservation | { error: unknown } | null;
+
+/** Chiamata del lotto Trading già nel budget dell'esecuzione. */
+type BatchState = { reserved: boolean };
+
+const later = (first: string | null, second: string) =>
+  first === null || second > first ? second : first;
+
+/**
+ * Prima parte del dettaglio: rilegge l'ordine, le immagini mancanti (un errore lascia la riga
+ * senza immagine) e il CF Fulfillment sul marketplace italiano Production, e decide se serve la
+ * lettura fiscale Trading. Negli altri casi Trading resta il fallback. null se la versione è già
+ * chiusa, `budget` se il budget non basta: la versione resta in attesa.
+ */
+async function prepareDetail(
+  ctx: Context,
+  pending: PendingDetail,
+  batch: BatchState,
+): Promise<Prepared | null | "budget"> {
   const retained = await ctx.db
     .prepare(`SELECT 1 FROM order_source_refs r
     JOIN orders o ON o.id = r.order_id
@@ -150,14 +202,33 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
       AND o.retention_until > ?`)
     .bind(ctx.storeId, pending.external_order_id, deadlineCheckAt(ctx.at))
     .first();
-  if (!retained) return true;
+  if (!retained) return null;
   const qualifiedMarketplace =
     ctx.access.configuration.apiOrigin === "https://api.ebay.com" &&
     pending.marketplace_id === "EBAY_IT";
-  // Trading non trova gli ordini oltre i novanta giorni: per loro nessuna ricerca fiscale.
-  const tradingReach =
-    Date.parse(pending.creation_time) > Date.parse(ctx.at) - tradingReachDays * dayMilliseconds;
-  if (!spend(ctx.budget, qualifiedMarketplace || !tradingReach ? 1 : 2)) return false;
+  // Trading non trova gli ordini oltre i novanta giorni: per loro nessuna ricerca fiscale, come
+  // per una versione la cui lettura Trading è già coperta.
+  const fallback =
+    Date.parse(pending.creation_time) > Date.parse(ctx.at) - tradingReachDays * dayMilliseconds &&
+    !(await tradingCovered(ctx, pending));
+  // Le letture di un ordine corrente non aspettano; le altre restano entro il budget del giorno.
+  const urgent =
+    Date.parse(pending.creation_time) > Date.parse(ctx.at) - urgentDays * dayMilliseconds;
+  let deferredUntil: string | null = null;
+  /** Lettura fiscale Trading per la versione: rimandata oltre il budget del lavoro non urgente. */
+  const needsTrading = () => {
+    if (urgent || ctx.quota.background("GetOrders")) return true;
+    deferredUntil = later(deferredUntil, ctx.quota.reopenAt("GetOrders"));
+    return false;
+  };
+  let trading = fallback && !qualifiedMarketplace && needsTrading();
+  const reserve = (calls: number) => {
+    const extra = trading && !batch.reserved ? 1 : 0;
+    if (!spend(ctx.budget, calls + extra)) return false;
+    if (extra) batch.reserved = true;
+    return true;
+  };
+  if (!reserve(1)) return "budget";
   let observation: OrderObservation;
   try {
     const payload = await readFulfillmentOrder(
@@ -189,12 +260,13 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
     }
   } catch (error) {
     await failDetail(ctx, pending, error);
-    return true;
+    return null;
   }
+  if (qualifiedMarketplace && fallback && !observation.taxIdentifiers) trading = needsTrading();
   // Un'inserzione con un'immagine già salvata non si rilegge. Con la quota `GetItem` esaurita le
   // righe restano senza immagine, come dopo un errore.
   const known = await knownImages(ctx, observation);
-  const listings = (await callLimited(ctx, "GetItem"))
+  let listings = (await callLimited(ctx, "GetItem"))
     ? []
     : [
         ...new Set(
@@ -203,14 +275,12 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
           ),
         ),
       ].slice(0, maxImagesPerDetail);
-  if (
-    !spend(
-      ctx.budget,
-      listings.length +
-        (qualifiedMarketplace && tradingReach && !observation.taxIdentifiers ? 1 : 0),
-    )
-  )
-    return false;
+  if (listings.length && !urgent && !ctx.quota.background("GetItem", listings.length)) {
+    deferredUntil = later(deferredUntil, ctx.quota.reopenAt("GetItem"));
+    listings = [];
+  }
+  if (!reserve(listings.length)) return "budget";
+  ctx.quota.spent("GetItem", listings.length);
   const images = new Map([
     ...known,
     ...(await Promise.all(
@@ -241,24 +311,12 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
       return imageUrl ? { ...item, imageUrl } : item;
     }),
   };
-  const trading =
-    observation.taxIdentifiers || !tradingReach
-      ? null
-      : (await callLimited(ctx, "GetOrders"))
-        ? // Stryker disable next-line StringLiteral: il nome segnala soltanto un limite di quota; il valore non cambia l'esito.
-          { error: new UpstreamError("rate_limited", { limit: "GetOrders" }) }
-        : await readTradingTaxObservation(ctx.access, observation.externalOrderId).catch(
-            async (error: unknown) => {
-              if (callLimit(error))
-                await recordRateLimit(
-                  ctx.db,
-                  limitKey(ctx.access.configuration.apiOrigin, "GetOrders"),
-                  error,
-                  new Date(ctx.at),
-                );
-              return { error };
-            },
-          );
+  return { pending, observation, trading, deferredUntil };
+}
+
+/** Seconda parte del dettaglio: scrive la versione con l'eventuale lettura fiscale Trading. */
+async function finishDetail(ctx: Context, prepared: Prepared, trading: TradingResult) {
+  const { pending, observation } = prepared;
   const result = await record(
     ctx,
     trading && "values" in trading
@@ -293,6 +351,24 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
   } else if (result.outcome === "stale") {
     // eBay ha restituito una versione più vecchia di quella già registrata: si riprova.
     await failDetail(ctx, pending, new UpstreamError("invalid_response"));
+  } else if (prepared.deferredUntil) {
+    // Lavoro non urgente oltre il budget del giorno: la versione resta da leggere e riparte
+    // all'azzeramento della quota, senza consumare tentativi.
+    await ctx.db
+      .prepare(
+        `UPDATE order_source_refs SET detail_error = NULL, detail_retry_at = ?5
+          WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
+            AND last_modified_time <= ?4 AND detail_for IS NOT last_modified_time
+            AND ${writableStore}`,
+      )
+      .bind(
+        ctx.storeId,
+        ctx.grantedAt,
+        pending.external_order_id,
+        observation.lastModifiedTime,
+        prepared.deferredUntil,
+      )
+      .run();
   } else {
     // Una versione più recente registrata nel frattempo resta da leggere.
     await ctx.db
@@ -305,7 +381,78 @@ export async function readDetail(ctx: Context, pending: PendingDetail): Promise<
       .bind(ctx.storeId, ctx.grantedAt, pending.external_order_id, observation.lastModifiedTime)
       .run();
   }
-  return true;
+}
+
+/**
+ * Letture fiscali Trading del lotto con una sola chiamata `GetOrders`; un errore della chiamata
+ * vale per ogni ordine del lotto, quello di un ordine soltanto per lui.
+ */
+async function finishBatch(ctx: Context, batch: Prepared[]) {
+  const ids = batch.map((prepared) => prepared.observation.externalOrderId);
+  let results: Map<string, TradingTaxObservation | UpstreamError> | null = null;
+  let failure: unknown = null;
+  if (await callLimited(ctx, "GetOrders"))
+    // Stryker disable next-line StringLiteral: il nome segnala soltanto un limite di quota; il valore non cambia l'esito.
+    failure = new UpstreamError("rate_limited", { limit: "GetOrders" });
+  else {
+    ctx.quota.spent("GetOrders");
+    results = await readTradingTaxObservations(ctx.access, ids).catch(async (error: unknown) => {
+      if (callLimit(error))
+        await recordRateLimit(
+          ctx.db,
+          limitKey(ctx.access.configuration.apiOrigin, "GetOrders"),
+          error,
+          new Date(ctx.at),
+        );
+      failure = error;
+      return null;
+    });
+  }
+  // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio.
+  await inSequence(batch, (prepared) => {
+    const result = results?.get(prepared.observation.externalOrderId);
+    return finishDetail(
+      ctx,
+      prepared,
+      result === undefined
+        ? { error: failure ?? new UpstreamError("invalid_response") }
+        : result instanceof UpstreamError
+          ? { error: result }
+          : result,
+    );
+  });
+}
+
+/**
+ * Dettaglio delle versioni indicate, nell'ordine dato. Le letture fiscali Trading si raccolgono
+ * in lotti da `tradingTaxBatch` ordini con una chiamata ciascuno. false se il budget non basta:
+ * le versioni non lette restano in attesa.
+ */
+async function processDetails(ctx: Context, pendings: PendingDetail[]): Promise<boolean> {
+  const batch: Prepared[] = [];
+  const state: BatchState = { reserved: false };
+  const stopped = await untilStopped(pendings, async (pending) => {
+    const prepared = await prepareDetail(ctx, pending, state);
+    if (prepared === "budget") return "budget";
+    if (!prepared) return "continue";
+    if (!prepared.trading) {
+      await finishDetail(ctx, prepared, null);
+      return "continue";
+    }
+    batch.push(prepared);
+    if (batch.length === tradingTaxBatch) {
+      await finishBatch(ctx, batch.splice(0));
+      state.reserved = false;
+    }
+    return "continue";
+  });
+  if (batch.length) await finishBatch(ctx, batch);
+  return stopped === "continue";
+}
+
+/** Dettaglio di una sola versione, come per l'evento di un ordine confermato. */
+export function readDetail(ctx: Context, pending: PendingDetail): Promise<boolean> {
+  return processDetails(ctx, [pending]);
 }
 
 /**
@@ -317,7 +464,9 @@ export async function readDetails(ctx: Context): Promise<boolean> {
   const { results } = await ctx.db
     .prepare(
       `SELECT r.external_order_id, r.last_modified_time, r.detail_attempts, o.marketplace_id,
-              o.creation_time
+              o.creation_time,
+              EXISTS (SELECT 1 FROM order_tax_checks tc WHERE tc.order_id = r.order_id
+                AND ${tradingCoveredSql("r.last_modified_time")}) AS trading_covered
          FROM order_source_refs r JOIN orders o ON o.id = r.order_id
         WHERE r.store_id = ?1 AND r.source = 'fulfillment'
           AND r.detail_for IS NOT r.last_modified_time
@@ -327,6 +476,5 @@ export async function readDetails(ctx: Context): Promise<boolean> {
     )
     .bind(ctx.storeId, ctx.at, ctx.budget.calls + 1)
     .all<PendingDetail>();
-  for (const pending of results) if (!(await readDetail(ctx, pending))) return false;
-  return true;
+  return processDetails(ctx, results);
 }

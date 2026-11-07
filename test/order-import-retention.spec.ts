@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { expect, it, vi } from "vitest";
 
 import { readDetail } from "../app/domain/order-acquisition-details.server";
+import { openBudget } from "../app/domain/order-acquisition-context.server";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 
@@ -390,6 +391,7 @@ it.each(["scadenza", "cancellazione"])(
           at: now,
           budget,
           created: 0,
+          quota: openBudget,
         },
         {
           external_order_id: "D-1",
@@ -427,6 +429,7 @@ it("un errore arrivato dopo la scadenza non riapre il retry del dettaglio", asyn
         at: now,
         budget: { calls: 12, pages: 1 },
         created: 0,
+        quota: openBudget,
       },
       {
         external_order_id: "D-1",

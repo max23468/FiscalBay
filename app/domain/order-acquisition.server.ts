@@ -1,7 +1,7 @@
 import { servedSql } from "./admission.server";
 import { DuplicateLineIdentity } from "./order-import.server";
 import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
-import { activeStore, writableStore } from "./store-state.server";
+import { activeStore, dormantWorkspaceSql, writableStore } from "./store-state.server";
 import {
   limitKey,
   rateLimitWait,
@@ -11,6 +11,8 @@ import {
   NotWritable,
   type AcquisitionBudget,
   type Context,
+  countedAccess,
+  loadCallBudget,
 } from "./order-acquisition-context.server";
 import { readDetail, readDetails, stopsReads } from "./order-acquisition-details.server";
 import { serviceSetting } from "./service-settings.server";
@@ -37,7 +39,7 @@ import { inSequence } from "../sequence";
  *
  * 1. recenti: ordini modificati dopo l'ultimo limite applicato, con una sovrapposizione;
  * 2. Trading: acquisti modificati, compresi quelli prima del checkout che Fulfillment non
- *    espone, con pagina e limite propri, al massimo ogni due ore salvo collegamento e richieste
+ *    espone, con pagina e limite propri, con la cadenza del negozio salvo collegamento e richieste
  *    manuali; un suo errore, anche il limite della sua quota, non ferma i passi successivi;
  * 3. storico: ordini creati nella finestra dello spazio fissata al primo avvio, dal più recente,
  *    estesa al periodo più vecchio quando la finestra si allarga;
@@ -70,9 +72,19 @@ const tradingWindowDays = 30;
  * D1 fino a questo tempo dopo l'istante registrato.
  */
 export const lockMilliseconds = 15 * 60_000;
-// Acquisti prima del pagamento e ordini combinati cambiano di rado: la lettura Trading periodica
-// ogni due ore tiene la quota `GetOrders` del keyset lontana dal limite anche con molti negozi.
-const tradingIntervalMilliseconds = 2 * 60 * 60_000;
+/**
+ * Cadenza della passata Trading periodica (D177, D317). Il solo dato visibile che Trading aggiunge
+ * a Fulfillment sono le fatture combinate dal venditore senza checkout eBay: ogni due ore per un
+ * negozio che ne ha avute negli ultimi trenta giorni, ogni sei ore per gli altri, ogni dodici per
+ * uno spazio che nessuno segue. Collegamento e richieste manuali la eseguono subito.
+ */
+const tradingIntervals = {
+  trading: 2 * 60 * 60_000,
+  fulfillment: 6 * 60 * 60_000,
+  dormant: 12 * 60 * 60_000,
+};
+/** Periodo in cui una fattura combinata senza checkout tiene il negozio alla cadenza più breve. */
+const tradingActivityDays = 30;
 /** Letture dei recenti conservate per negozio nella schermata Negozi. */
 const keptRuns = 3;
 
@@ -204,6 +216,22 @@ function ordersLimit(ctx: Context) {
   return limitKey(ctx.access.configuration.apiOrigin, "GetOrders");
 }
 
+/** Cadenza della passata Trading periodica per il negozio, in millisecondi. */
+async function tradingInterval(ctx: Context): Promise<number> {
+  const row = await ctx.db
+    .prepare(
+      `SELECT ${dormantWorkspaceSql(storeWorkspaceSql("?1"), "?2")} AS dormant,
+              EXISTS (SELECT 1 FROM orders o
+                WHERE o.store_id = ?1 AND o.is_provisional = 0 AND o.merged_into IS NULL
+                  AND o.creation_time > ?3 AND NOT EXISTS (SELECT 1 FROM order_source_refs r
+                    WHERE r.order_id = o.id AND r.source = 'fulfillment')) AS trading`,
+    )
+    .bind(ctx.storeId, ctx.at, instant(Date.parse(ctx.at) - tradingActivityDays * dayMilliseconds))
+    .first<{ dormant: number; trading: number }>();
+  if (row?.dormant) return tradingIntervals.dormant;
+  return row?.trading ? tradingIntervals.trading : tradingIntervals.fulfillment;
+}
+
 /**
  * Legge gli acquisti Trading modificati dopo il limite, per finestre di trenta giorni concatenate
  * fino all'istante corrente: dopo una pausa nessun periodo resta escluso, entro i novanta giorni
@@ -211,14 +239,13 @@ function ordersLimit(ctx: Context) {
  */
 async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
   // Una passata già iniziata prosegue; altrimenti si rilegge al collegamento, su richiesta
-  // manuale o quando l'ultima passata conclusa ha due ore.
-  if (
-    !state.trading_end &&
-    state.trading_cursor &&
-    state.requested_at === null &&
-    Date.parse(state.trading_cursor) > Date.parse(ctx.at) - tradingIntervalMilliseconds
-  )
-    return true;
+  // manuale o quando l'ultima passata conclusa ha l'età della cadenza del negozio.
+  if (!state.trading_end && state.trading_cursor && state.requested_at === null) {
+    const age = Date.parse(ctx.at) - Date.parse(state.trading_cursor);
+    // La cadenza del negozio si legge soltanto quando l'età della passata non basta a decidere.
+    if (age < tradingIntervals.trading) return true;
+    if (age < tradingIntervals.dormant && age < (await tradingInterval(ctx))) return true;
+  }
   if ((await rateLimitWait(ctx.db, ordersLimit(ctx), new Date(ctx.at))) > 0) return false;
   const reach = Date.parse(ctx.at) - tradingReachDays * dayMilliseconds;
   // La prima passata parte dall'inizio dello storico, le altre dal limite con la sovrapposizione.
@@ -236,6 +263,7 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
     until ??= Math.min(Date.parse(ctx.at), start + tradingWindowDays * dayMilliseconds);
     // Trading accetta al massimo trenta giorni per intervallo di modifica.
     const from = instant(Math.max(start, until - tradingWindowDays * dayMilliseconds));
+    ctx.quota.spent("GetOrders");
     const result = await readTradingOrders(ctx.access, { from, until: instant(until), page });
     let skipped = result.skipped;
     await inSequence(result.orders, (observation) =>
@@ -258,8 +286,8 @@ async function runTradingPass(ctx: Context, state: SyncRow): Promise<boolean> {
         instant(until),
       );
       // Una finestra troncata dai trenta giorni continua con la successiva; il resto attende il
-      // turno di due ore.
-      if (until > Date.parse(ctx.at) - tradingIntervalMilliseconds) return true;
+      // turno della cadenza.
+      if (until > Date.parse(ctx.at) - tradingIntervals.trading) return true;
       [cursor, until, page, total] = [until, null, 1, null];
       if (await callsOff(ctx)) break;
       continue;
@@ -393,6 +421,9 @@ export async function acquireOrders(input: {
   const wait = await rateLimitWait(db, apiOrigin, now);
   if (wait > 0) throw new UpstreamError("rate_limited", { retryAfter: wait });
   const poll = !input.confirmedOrderId;
+  // Ogni chiamata del negozio si conta per giorno; il budget del giorno vale per tutta la lettura.
+  const access = countedAccess(db, input.access, now);
+  const quota = await loadCallBudget(db, access, now);
   const lock = new Date(now.getTime() + lockMilliseconds).toISOString();
   // Con una finestra più ampia, come all'attivazione di una copertura, lo storico concluso
   // riprende dal periodo più vecchio non ancora importato; una passata ormai tutta fuori dalla
@@ -436,7 +467,7 @@ export async function acquireOrders(input: {
     return writable ? "busy" : "not_writable";
   }
 
-  const ctx: Context = { ...input, at, created: 0 };
+  const ctx: Context = { ...input, access, at, created: 0, quota };
   // Esito della lettura dei recenti da registrare; null per un evento o un consenso cambiato.
   let outcome: { ok: boolean; served: boolean } | null = null;
   try {

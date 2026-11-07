@@ -958,6 +958,24 @@ describe("lettura periodica e richieste manuali", () => {
       expect(await dispatchStoreSyncs(cron, minutes(42))).toEqual(["s-a"]);
     });
 
+    it("uno spazio senza sessioni aperte né Telegram legge ogni due ore e torna alla cadenza al ritorno", async () => {
+      await env.DB.prepare(`DELETE FROM "session"`).run();
+      expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual(["s-a"]);
+      await consumeStoreSync(message(), env, ebay(), minutes(1));
+      expect(await dispatchStoreSyncs(cron, minutes(31))).toEqual([]);
+      expect(await dispatchStoreSyncs(cron, minutes(119))).toEqual([]);
+      expect(await dispatchStoreSyncs(cron, minutes(121))).toEqual(["s-a"]);
+      await consumeStoreSync(message(), env, ebay(), minutes(122));
+      // Una visita riapre la sessione: il negozio torna subito alla cadenza Free.
+      await env.DB.prepare(
+        `INSERT INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+         VALUES ('ritorno', '2099-01-01T00:00:00.000Z', 'token-ritorno', ?1, ?1, 'u-a')`,
+      )
+        .bind(minutes(140).toISOString())
+        .run();
+      expect(await dispatchStoreSyncs(cron, minutes(152))).toEqual(["s-a"]);
+    });
+
     it("fra trigger sovrapposti uno solo prende il turno di un negozio", async () => {
       const turns = await Promise.all([
         dispatchStoreSyncs(cron, minutes(0)),

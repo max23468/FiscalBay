@@ -56,3 +56,13 @@ export const listedOrder = (order: string, at: string) =>
 export const writableStore = `EXISTS (SELECT 1 FROM ebay_store_credentials
    WHERE store_id = ?1 AND granted_at = ?2 AND rejected_at IS NULL)
   AND ${unpausedStore("?1")}`;
+
+/**
+ * Spazio senza nessuno che lo segua all'istante `at`: nessun membro con una sessione aperta (la
+ * sessione scade dopo sette giorni senza visite) e nessuna chat Telegram collegata. I suoi negozi
+ * si leggono più di rado (D317). Argomento: espressione dello spazio.
+ */
+export const dormantWorkspaceSql = (workspace: string, at: string) =>
+  `(NOT EXISTS (SELECT 1 FROM workspace_members m JOIN "session" se ON se."userId" = m.user_id
+      WHERE m.workspace_id = ${workspace} AND se."expiresAt" > ${at})
+    AND NOT EXISTS (SELECT 1 FROM telegram_links t WHERE t.workspace_id = ${workspace}))`;

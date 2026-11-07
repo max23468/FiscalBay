@@ -1,6 +1,8 @@
 import { priceGeneration } from "../catalog";
 import { stripeEnvironment } from "../integrations/stripe.server";
 import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
+import { dormantSyncMinutes } from "./order-sync.server";
+import { dormantWorkspaceSql } from "./store-state.server";
 import { dayMilliseconds } from "../time";
 import { signupChannels, type SignupChannel } from "../signup-source";
 
@@ -284,7 +286,8 @@ async function operations(db: D1Database, from: string, to: string) {
         FROM sync_daily WHERE day > date(?1) AND day <= date(?2)`)
       .bind(from, to),
     db
-      .prepare(`SELECT t.last_success_at AS lastSuccess FROM ebay_stores s
+      .prepare(`SELECT t.last_success_at AS lastSuccess,
+          ${dormantWorkspaceSql("s.workspace_id", "?1")} AS dormant FROM ebay_stores s
         JOIN ebay_store_credentials c ON c.store_id = s.id
         LEFT JOIN sync_state t ON t.store_id = s.id WHERE ${readingStoreSql}`)
       .bind(to),
@@ -308,10 +311,16 @@ async function operations(db: D1Database, from: string, to: string) {
         (SELECT COUNT(*) FROM sync_daily) AS days, (SELECT COUNT(*) FROM sync_runs) AS runs`),
   ]);
   const read = reads!.results[0] as { attempts: number; failures: number; days: number };
-  const lags = (stores!.results as { lastSuccess: string | null }[]).map((row) =>
+  const rows = stores!.results as { lastSuccess: string | null; dormant: number }[];
+  const lags = rows.map((row) =>
     row.lastSuccess === null ? null : Math.max(0, (at - Date.parse(row.lastSuccess)) / 60_000),
   );
   const measured = lags.filter((lag) => lag !== null);
+  // Uno spazio che nessuno segue legge con la propria cadenza: è in ritardo solo oltre quella.
+  const late = lags.filter(
+    (lag, index) =>
+      lag !== null && lag > (rows[index]!.dormant ? dormantSyncMinutes : lagTargetMinutes),
+  ).length;
   const active = spaces!.results[0] as { operative: number; active: number };
   const cycles = quota!.results[0] as {
     cycles: number;
@@ -334,7 +343,7 @@ async function operations(db: D1Database, from: string, to: string) {
       neverRead: lags.length - measured.length,
       medianMinutes: median(measured),
       maxMinutes: measured.length ? Math.max(...measured) : null,
-      late: measured.filter((lag) => lag > lagTargetMinutes).length,
+      late,
     },
     spaces: active,
     freeQuota: cycles,

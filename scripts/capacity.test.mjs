@@ -100,8 +100,8 @@ describe("misure di capacità", () => {
       share: (projection.messages * 3) / included.queueOperations,
     });
     assert.equal(projection.dispatch.perTurn, 52 + 100 / 3);
-    // Trading: dodici passate dei modificati al giorno per negozio e una lettura fiscale per ordine.
-    assert.equal(projection.ebayDaily.getOrders.calls, 152 * 12 + 15_200 / 30);
+    // Trading: quattro passate dei modificati al giorno per negozio e le letture fiscali misurate.
+    assert.equal(projection.ebayDaily.getOrders.calls, 152 * 4 + 15_200 / 30);
     assert.equal(projection.ebayDaily.getItem.calls, (15_200 / 30) * 3);
     assert.equal(projection.ebayDaily.fulfillment.calls, turns / 30 + (15_200 / 30) * (1 + 0));
   });

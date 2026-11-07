@@ -216,7 +216,11 @@ it("conclude un dettaglio fiscale qualificato con una sola chiamata disponibile"
 it("rimanda il fallback quando resta budget soltanto per Fulfillment", async () => {
   const fetcher = ebay();
   await acquire(fetcher);
-  await env.DB.prepare("UPDATE order_source_refs SET detail_for = NULL").run();
+  // Senza la lettura Trading già fatta la versione torna a chiedere il fallback.
+  await env.DB.batch([
+    env.DB.prepare("UPDATE order_source_refs SET detail_for = NULL"),
+    env.DB.prepare("DELETE FROM order_tax_checks"),
+  ]);
   fetcher.mockClear();
   const budget = { calls: 2, pages: 1 };
   expect(await acquire(fetcher, undefined, budget)).toBe("budget");
@@ -253,11 +257,12 @@ it("legge dati fiscali e immagini una volta per versione, senza bloccare l'ordin
   await acquire(same, "2026-09-02T01:00:00.000Z");
   expect([calls(same, "GetItem"), calls(same, "GetOrders")]).toEqual([0, 0]);
 
-  // Una nuova versione rilegge immagini e dati fiscali.
+  // Una nuova versione rilegge le immagini mancanti; i dati fiscali Trading di un ordine già
+  // pagato non si rileggono, perché la passata periodica ne vede comunque le modifiche.
   failing.orders[0] = { ...failing.orders[0]!, lastModifiedDate: "2026-09-02T02:00:00.000Z" };
   const working = ebay({ orders: failing.orders });
   await acquire(working, "2026-09-02T03:00:00.000Z");
-  expect([calls(working, "GetItem"), calls(working, "GetOrders")]).toEqual([1, 1]);
+  expect([calls(working, "GetItem"), calls(working, "GetOrders")]).toEqual([1, 0]);
   expect(await env.DB.prepare("SELECT image_url FROM order_items").all()).toMatchObject({
     results: [{ image_url: image }, { image_url: image }],
   });
@@ -266,7 +271,7 @@ it("legge dati fiscali e immagini una volta per versione, senza bloccare l'ordin
   failing.orders[0] = { ...failing.orders[0]!, lastModifiedDate: "2026-09-02T04:00:00.000Z" };
   const again = ebay({ orders: failing.orders });
   await acquire(again, "2026-09-02T05:00:00.000Z");
-  expect([calls(again, "GetItem"), calls(again, "GetOrders")]).toEqual([0, 1]);
+  expect([calls(again, "GetItem"), calls(again, "GetOrders")]).toEqual([0, 0]);
   expect(await env.DB.prepare("SELECT image_url FROM order_items").all()).toMatchObject({
     results: [{ image_url: image }, { image_url: image }],
   });
@@ -831,4 +836,38 @@ it("classifica gli ordini non pagati senza rappresentarli come incassati", async
     payment: "unpaid",
     shipping: null,
   });
+});
+
+it("rilegge i dati fiscali Trading finché l'ordine non è pagato e non dopo una lettura più recente", async () => {
+  const pending = ebay({ orders: [order({ orderPaymentStatus: "PENDING" })] });
+  const version = async (modified: string, at: string, paid = false) => {
+    pending.orders[0] = {
+      ...pending.orders[0]!,
+      lastModifiedDate: modified,
+      orderPaymentStatus: paid ? "PAID" : "PENDING",
+    };
+    const fetcher = ebay({ orders: pending.orders });
+    await acquire(fetcher, at);
+    return calls(fetcher, "GetOrders");
+  };
+  await acquire(pending);
+  expect(calls(pending, "GetOrders")).toBe(1);
+  // Ordine non ancora pagato: ogni nuova versione chiede di nuovo il dato fiscale.
+  expect(await version("2026-09-02T01:30:00.000Z", "2026-09-02T02:00:00.000Z")).toBe(1);
+  // Una lettura Trading successiva alla versione, come quella della passata periodica, la copre.
+  await env.DB.prepare(
+    "UPDATE order_tax_checks SET observed_at = '2026-09-02T02:45:00.000Z'",
+  ).run();
+  expect(await version("2026-09-02T02:30:00.000Z", "2026-09-02T03:00:00.000Z")).toBe(0);
+  // Al pagamento si rilegge una volta, poi le versioni successive non lo chiedono più.
+  expect(await version("2026-09-02T03:30:00.000Z", "2026-09-02T04:00:00.000Z", true)).toBe(1);
+  expect(
+    await env.DB.prepare(
+      "SELECT paid FROM order_tax_checks WHERE source = 'ebay_trading_get_orders'",
+    ).first(),
+  ).toEqual({ paid: 1 });
+  expect(await version("2026-09-02T04:30:00.000Z", "2026-09-02T05:00:00.000Z", true)).toBe(0);
+  // Una lettura Trading non riuscita non copre le versioni successive.
+  await env.DB.prepare("UPDATE order_tax_checks SET verification = 'error'").run();
+  expect(await version("2026-09-02T05:30:00.000Z", "2026-09-02T06:00:00.000Z", true)).toBe(1);
 });

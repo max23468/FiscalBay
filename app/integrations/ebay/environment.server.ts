@@ -25,6 +25,8 @@ type EbayBindings = OptionalEbaySecrets & {
   EBAY_CLIENT_SECRET: string;
   EBAY_RUNAME: string;
   EBAY_SANDBOX_ENABLED?: string;
+  /** Percentuale delle quote giornaliere del keyset che questo Worker può usare da solo. */
+  EBAY_WORKER_SHARE?: string;
 };
 
 export function sandboxAvailable(env: EbayBindings): boolean {
@@ -40,6 +42,12 @@ export function sandboxAvailable(env: EbayBindings): boolean {
 /** Ambiente configurato: Production sempre, la Sandbox soltanto dove è disponibile. */
 export function ebayEnvironmentAvailable(env: EbayBindings, environment: EbayEnvironment) {
   return environment !== "sandbox" || sandboxAvailable(env);
+}
+
+/** Valore fra 1 e 100; assente o non valido vale l'intera quota. */
+function workerShare(value: string | undefined) {
+  const percent = Number(value);
+  return Number.isInteger(percent) && percent >= 1 && percent <= 100 ? percent / 100 : 1;
 }
 
 export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironment) {
@@ -61,6 +69,8 @@ export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironmen
     apiOrigin: api,
     ordersUrl: `${api}/sell/fulfillment/v1/order`,
     tradingUrl: `${api}/ws/api.dll`,
+    /** Parte delle quote `GetOrders` e `GetItem` del keyset riservata alle chiamate di questo Worker. */
+    workerShare: workerShare(env.EBAY_WORKER_SHARE),
   };
 }
 

@@ -30,6 +30,11 @@ describe("pulizia dei dati tecnici scaduti", () => {
         `INSERT INTO ebay_store_link_sessions (state, user_id, code_verifier, expires_at)
          VALUES ('scaduto', ?1, 'v', ?2), ('valido', ?1, 'v', ?3)`,
       ).bind(userId, past, future),
+      env.DB.prepare(
+        `INSERT INTO ebay_call_counts (day, api_origin, call, count)
+         VALUES (date(?1, '-8 days'), 'https://api.ebay.com', 'GetOrders', 1),
+                (date(?1, '-7 days'), 'https://api.ebay.com', 'GetOrders', 1)`,
+      ).bind(at.toISOString()),
     ]);
 
     await purgeExpiredRecords(env.DB, at);
@@ -50,6 +55,8 @@ describe("pulizia dei dati tecnici scaduti", () => {
         "SELECT state AS id FROM ebay_store_link_sessions WHERE state IN ('scaduto', 'valido')",
       ),
     ).toEqual(["valido"]);
+    // Dei conteggi delle chiamate eBay resta l'ultima settimana.
+    expect(await ids("SELECT day AS id FROM ebay_call_counts").then((days) => days.length)).toBe(1);
 
     // La sessione creata da Better Auth usa lo stesso formato: oltre la scadenza se ne va.
     await purgeExpiredRecords(env.DB, new Date(at.getTime() + 8 * 24 * 60 * 60 * 1000));

@@ -166,6 +166,7 @@ export default defineConfig((ctx) => ({
             APP_ORIGIN: bindings.text("https://fiscalbay.it"),
             REGISTRATION_MODE: bindings.text("open"),
             EBAY_SANDBOX_ENABLED: bindings.text("false"),
+            EBAY_WORKER_SHARE: bindings.text("100"),
             STRIPE_PRICE_MONTHLY: bindings.text("price_1UHl21JP7SSN14ZpQyiVmdoP"),
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UHl21JP7SSN14ZpqDoFn3Sb"),
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UHl21JP7SSN14Zp0J41hMVs"),
@@ -189,6 +190,8 @@ export default defineConfig((ctx) => ({
             REGISTRATION_MODE: bindings.text("approval"),
             // Spenta su richiesta dell'owner finché non la riattiva: segreti e dati restano.
             EBAY_SANDBOX_ENABLED: bindings.text("false"),
+            // Il keyset è quello di Production: il test ne usa al massimo un decimo (D317).
+            EBAY_WORKER_SHARE: bindings.text("10"),
             STRIPE_PRICE_MONTHLY: bindings.text("price_1UUABwJqfZnQjIbKpQPYZhKu"),
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UUABwJqfZnQjIbKjc1m9dc0"),
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UUABxJqfZnQjIbK0m1dpfRa"),
