@@ -10,7 +10,12 @@ import {
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
 import { grantLifetimeConcession, grantPremium } from "../app/domain/concessions.server";
 import { accountCoverage, orderAllowance, startTrial } from "../app/domain/grants.server";
-import { lifetimeContext, refundedShare, unusedCredit } from "../app/domain/lifetime.server";
+import {
+  lifetimeContext,
+  lifetimeSlotsLeft,
+  refundedShare,
+  unusedCredit,
+} from "../app/domain/lifetime.server";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { subscriptionView } from "../app/domain/plan-view.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
@@ -962,7 +967,7 @@ describe("Lifetime e concessioni", () => {
     expect(await allocations()).toHaveLength(1);
 
     // Pagamento confermato senza posto, dopo una liberazione: occupa il primo libero; a posti
-    // finiti si segnala all'assistenza senza diritto né rimborso automatico.
+    // finiti riceve un posto oltre il ventesimo, che nessuna prenotazione può occupare.
     await env.DB.prepare("DELETE FROM lifetime_allocations").run();
     stripe.settle(stripe.state.sessions.at(-1)!.id, "paid");
     await reconcileBilling(env, stripe.fetcher, at("2026-09-13T21:30:00.000Z"));
@@ -975,8 +980,59 @@ describe("Lifetime e concessioni", () => {
     await taken(20);
     log.mockClear();
     await event(stripe, "checkout.session.completed", stripe.state.sessions.at(-1)!.id);
-    expect(await lifetimes()).toEqual([]);
+    await event(stripe, "checkout.session.completed", stripe.state.sessions.at(-1)!.id);
+    expect(await lifetimes()).toEqual([
+      expect.objectContaining({ stripe_checkout_session_id: stripe.state.sessions.at(-1)!.id }),
+    ]);
+    expect((await allocations()).at(-1)).toMatchObject({
+      slot: 21,
+      status: "active",
+      kind: "sale",
+      provider_reference: stripe.state.sessions.at(-1)!.id,
+    });
+    expect(await allocations()).toHaveLength(21);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM billing_incidents").first("n")).toBe(0);
+    expect(JSON.stringify(log.mock.calls)).not.toContain("lifetime_unallocated");
+    expect(await lifetimeSlotsLeft(env.DB)).toBe(0);
+    // Prenotazioni e omaggi restano entro il ventesimo posto.
+    await expect(
+      env.DB.prepare(`INSERT INTO lifetime_allocations (slot, status, kind, activated_at,
+          created_at) VALUES (22, 'active', 'gift', ?1, ?1)`)
+        .bind(now)
+        .run(),
+    ).rejects.toThrow();
+    await expect(
+      env.DB.prepare(`INSERT INTO lifetime_allocations (slot, status, expires_at, created_at)
+          VALUES (22, 'reserved', ?1, ?1)`)
+        .bind(now)
+        .run(),
+    ).rejects.toThrow();
+  });
+
+  it("a posti finiti segnala all'assistenza l'incasso di uno spazio che ha già un altro posto", async () => {
+    const stripe = stripeAccount();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await taken(19);
+    await env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
+        activated_at, created_at) VALUES (20, 'w-a', 'active', 'gift', ?1, ?1)`)
+      .bind(now)
+      .run();
+    stripe.state.sessions.push({
+      id: "cs_doppio",
+      mode: "payment",
+      subscription: null,
+      status: "complete",
+      payment_status: "paid",
+      livemode: false,
+      metadata: { offer: "lifetime", workspace_id: "w-a" },
+    });
+    stripe.settle("cs_doppio", "paid");
+    await event(stripe, "checkout.session.completed", "cs_doppio");
     expect(await allocations()).toHaveLength(20);
+    expect(await lifetimes()).toEqual([]);
+    expect(
+      await env.DB.prepare("SELECT session_id FROM billing_incidents").first("session_id"),
+    ).toBe("cs_doppio");
     expect(JSON.parse(String(log.mock.calls.at(-1)?.[0]))).toMatchObject({
       operation: "billing",
       failure: "lifetime_unallocated",
