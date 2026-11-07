@@ -146,7 +146,7 @@ eIAS e, per quelli che non lo riportano, con il suo username: è l'unico uso del
 username per trovare ordini. Il token arriva soltanto da Trading, entro novanta giorni;
 lo username può cambiare, quindi ogni ordine senza token registra l'ultima lettura
 dello username e, dopo una settimana, si rilegge da Fulfillment, fino a 50 ordini per
-chiamata del budget della lettura periodica ([D318](../decisions/DECISION_REGISTER.md)).
+chiamata del budget della lettura periodica ([D319](../decisions/DECISION_REGISTER.md)).
 I marker di `deleted_order_keys` impediscono il reimport
 da letture, conferme o ricevute già in coda. Restano i diritti commerciali minimi
 dello spazio: quota del ciclo già usata, prova usata, coperture e posti lifetime,

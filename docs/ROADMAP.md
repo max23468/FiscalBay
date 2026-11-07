@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia, verifica del brand Google e richieste a eBay sulle lacune delle API, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D318](decisions/DECISION_REGISTER.md)) e la dismissione di `GetOrders`, un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
+| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)) e la dismissione di `GetOrders`, un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -63,7 +63,7 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 
 **Stato:** In corso · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
 
-Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richieste a eBay, con le bozze in inglese: header del marketplace non documentato per il CF, dati fiscali dell'acquirente negli elenchi e nella Order API, identità immutabile dell'acquirente per le cancellazioni, notifiche degli ordini e quote per utente. L'agente esegue prima le azioni interne rimaste nel dossier; misura e rilettura settimanale degli username per le cancellazioni sono già fatte ([D318](decisions/DECISION_REGISTER.md)). L'owner ha inviato il 2026-11-07 un solo ticket, limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta; la risposta orienta [2.0-11](#2-0-11).
+Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richieste a eBay, con le bozze in inglese: header del marketplace non documentato per il CF, dati fiscali dell'acquirente negli elenchi e nella Order API, identità immutabile dell'acquirente per le cancellazioni, notifiche degli ordini e quote per utente. L'agente esegue prima le azioni interne rimaste nel dossier; misura e rilettura settimanale degli username per le cancellazioni sono già fatte ([D319](decisions/DECISION_REGISTER.md)). L'owner ha inviato il 2026-11-07 un solo ticket, limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta; la risposta orienta [2.0-11](#2-0-11).
 
 **Criterio di completamento:** ticket inviato dall'owner, risposta registrata nel dossier e conseguenze portate nei documenti competenti.
 
@@ -126,7 +126,7 @@ Ogni giovedì, anche senza PR, un workflow ricontrolla avvisi delle dipendenze d
 
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [retention](engineering/DATA_RETENTION.md#cancellazione-ebay)
 
-Ogni ordine registra l'ultima lettura dello username dell'acquirente e quelli senza token eIAS, l'89% in Production il 2026-11-07, lo rileggono ogni settimana da Fulfillment, fino a 50 per chiamata del budget della lettura periodica ([D318](decisions/DECISION_REGISTER.md)). Resta scoperto un cambio di username a ridosso della cancellazione, chiesto a eBay in [RE-05](#re-05).
+Ogni ordine registra l'ultima lettura dello username dell'acquirente e quelli senza token eIAS, l'89% in Production il 2026-11-07, lo rileggono ogni settimana da Fulfillment, fino a 50 per chiamata del budget della lettura periodica ([D319](decisions/DECISION_REGISTER.md)). Resta scoperto un cambio di username a ridosso della cancellazione, chiesto a eBay in [RE-05](#re-05).
 
 <a id="2-0-11"></a>
 #### 2.0-11 · Dismissione di Trading `GetOrders`

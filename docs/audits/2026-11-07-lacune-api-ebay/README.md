@@ -18,7 +18,7 @@ Stato al 7 novembre: ticket inviato dall'owner, area Trading API, in attesa di r
 
 **Dismissione di `GetOrders`.** Il 6 novembre eBay ha deprecato Trading `GetOrders` e fissato lo spegnimento al 30 giugno 2027: per gli ordini pagati rimanda a Fulfillment, per impegni non pagati e `PurchaseQuote` alla Order API GraphQL (documentato, [stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status), letto nel browser il 7 novembre). Con `GetOrders` spariscono il fallback fiscale, le fatture combinate senza checkout eBay e l'unica fonte del token eIAS dell'acquirente. Gli invii 2 e 3 diventano urgenti; la migrazione interna è [2.0-11](../../ROADMAP.md#2-0-11).
 
-**Rischio emerso, ridotto internamente.** Il token eIAS dell'acquirente arriva soltanto da Trading `GetOrders`, entro 90 giorni, e sparirà con il suo spegnimento. Il 7 novembre, in Production, 978 dei 1.100 ordini definitivi non lo avevano: tutti gli 891 oltre i 90 giorni e 87 fra 30 e 90, rimasti fuori dalla finestra Trading del primo collegamento (conteggio aggregato in sola lettura, senza identità). Per questi una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Ora ogni ordine registra l'ultima lettura dello username e quelli senza token lo rileggono ogni settimana ([D318](../../decisions/DECISION_REGISTER.md)); resta scoperto un cambio di username a ridosso della cancellazione, che soltanto l'invio 3 chiude.
+**Rischio emerso, ridotto internamente.** Il token eIAS dell'acquirente arriva soltanto da Trading `GetOrders`, entro 90 giorni, e sparirà con il suo spegnimento. Il 7 novembre, in Production, 978 dei 1.100 ordini definitivi non lo avevano: tutti gli 891 oltre i 90 giorni e 87 fra 30 e 90, rimasti fuori dalla finestra Trading del primo collegamento (conteggio aggregato in sola lettura, senza identità). Per questi una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Ora ogni ordine registra l'ultima lettura dello username e quelli senza token lo rileggono ogni settimana ([D319](../../decisions/DECISION_REGISTER.md)); resta scoperto un cambio di username a ridosso della cancellazione, che soltanto l'invio 3 chiude.
 
 **Rapporto con i riconoscimenti esterni.** Il dossier non ripete [RE-01](../../ROADMAP.md#re-01)–[RE-04](../../ROADMAP.md#re-04). L'aumento dei limiti resta nell'Application Growth Check ([RE-01](../../ROADMAP.md#re-01)): l'invio 2 riduce le chiamate necessarie, non chiede quota. `USER_STATUS_CHANGE` e i contatti diretti con eBay potrebbero arrivare con il Partner Program ([RE-02](../../ROADMAP.md#re-02)); se FiscalBay viene ammesso, gli invii 2 e 3 possono passare dal referente del programma.
 
@@ -99,7 +99,7 @@ Il 7 novembre, in Production, tutti i 907 ordini con CF lo avevano da Fulfillmen
 
 La notifica `MARKETPLACE_ACCOUNT_DELETION` porta `userId` immutabile, `eiasToken` e `username`; la guida avverte che alcuni sviluppatori non ricevono lo username degli utenti statunitensi (documentato). Fulfillment `Buyer` ha soltanto `username`, `taxAddress`, `taxIdentifier` e `buyerRegistrationAddress` (specifica verificata), e Identity `getUser` descrive lo username come modificabile dall'utente (specifica verificata). Il token eIAS dell'acquirente si legge soltanto in Trading `GetOrders` (codice: `buyerEiasToken` nell'adapter Trading).
 
-Per gli ordini senza token, l'89% di quelli in Production il 7 novembre, FiscalBay abbina quindi una cancellazione allo username registrato nell'ordine, che può non essere più quello attuale; la rilettura settimanale ([D318](../../decisions/DECISION_REGISTER.md)) accorcia questo intervallo senza chiuderlo. La guida richiede di cancellare i dati dell'utente pena la revoca dell'accesso, ma non dice come riconoscerlo negli ordini letti da Fulfillment (non individuato). Lo schema GraphQL espone `User.userId` sotto `commerce.identity.readonly`, ma non chiarisce se è restituito per l'acquirente di un ordine del venditore (non individuato).
+Per gli ordini senza token, l'89% di quelli in Production il 7 novembre, FiscalBay abbina quindi una cancellazione allo username registrato nell'ordine, che può non essere più quello attuale; la rilettura settimanale ([D319](../../decisions/DECISION_REGISTER.md)) accorcia questo intervallo senza chiuderlo. La guida richiede di cancellare i dati dell'utente pena la revoca dell'accesso, ma non dice come riconoscerlo negli ordini letti da Fulfillment (non individuato). Lo schema GraphQL espone `User.userId` sotto `commerce.identity.readonly`, ma non chiarisce se è restituito per l'acquirente di un ordine del venditore (non individuato).
 
 **Richiesta.** Un identificativo immutabile dell'acquirente (`userId` o `eiasToken`) in Fulfillment `getOrder` e `getOrders` e nella Order API, con gli scope di lettura degli ordini; in subordine, l'indicazione ufficiale della chiave con cui abbinare la notifica agli ordini letti da Fulfillment.
 
@@ -159,7 +159,7 @@ Vanno poste come domande, senza presentarle come lacune dimostrate.
 
 1. **Rileggere la specifica al momento dell'invio.** Ripetere i controlli di questo dossier su Fulfillment e sullo schema GraphQL; se eBay ha già corretto un punto, toglierlo dalla bozza. Serve prima degli invii 1 e 2.
 2. **Tipi fiscali (conclusa il 7 novembre).** Elenco in 2.2 e Q2.
-3. **Copertura delle cancellazioni (conclusa il 7 novembre).** Misura in sintesi; la rilettura settimanale dello username è in [D318](../../decisions/DECISION_REGISTER.md).
+3. **Copertura delle cancellazioni (conclusa il 7 novembre).** Misura in sintesi; la rilettura settimanale dello username è in [D319](../../decisions/DECISION_REGISTER.md).
 4. **Stato delle dismissioni (conclusa il 7 novembre).** `GetOrders` deprecato dal 6 novembre e spento il 30 giugno 2027; `GetItem`, `GetStore`, `GetUser`, `GetSellerTransactions` e la Developer Analytics API non compaiono.
 5. **`ORDER_CONFIRMATION` 1.1.** Sottoscrivere la 1.1 soltanto dopo lo schema pubblicato (invio 4); fino ad allora l'ingresso resta sulla 1.0.
 
@@ -174,7 +174,7 @@ Vanno poste come domande, senza presentarle come lacune dimostrate.
 | Immagine dell'articolo | sostitute di `GetItem` già mappate (Q3 chiede solo le date) |
 | Profilo del negozio | Stores API e query `user` esistono; serve un nuovo consenso ([D216](../../decisions/DECISION_REGISTER.md)) |
 | Stato dell'account del venditore | `USER_STATUS_CHANGE` esiste per i partner ([RE-02](../../ROADMAP.md#re-02)) |
-| Username aggiornato degli ordini senza token | rilettura settimanale da Fulfillment ([D318](../../decisions/DECISION_REGISTER.md)) |
+| Username aggiornato degli ordini senza token | rilettura settimanale da Fulfillment ([D319](../../decisions/DECISION_REGISTER.md)) |
 
 ## Fonti
 
