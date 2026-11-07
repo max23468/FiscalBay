@@ -143,7 +143,11 @@ la riga del negozio resta senza identità eBay né profilo, con i dati eliminati
 le righe commerciali che la citano (scelta del negozio Free, trasferimenti eseguiti).
 Per l'acquirente elimina in ogni negozio dell'ambiente gli ordini con il suo token
 eIAS e, per quelli che non lo riportano, con il suo username: è l'unico uso dello
-username per trovare ordini. I marker di `deleted_order_keys` impediscono il reimport
+username per trovare ordini. Il token arriva soltanto da Trading, entro novanta giorni;
+lo username può cambiare, quindi ogni ordine senza token registra l'ultima lettura
+dello username e, dopo una settimana, si rilegge da Fulfillment, fino a 50 ordini per
+chiamata del budget della lettura periodica ([D318](../decisions/DECISION_REGISTER.md)).
+I marker di `deleted_order_keys` impediscono il reimport
 da letture, conferme o ricevute già in coda. Restano i diritti commerciali minimi
 dello spazio: quota del ciclo già usata, prova usata, coperture e posti lifetime,
 nessuno dei quali porta l'identità eBay. L'utente FiscalBay e i suoi altri metodi di

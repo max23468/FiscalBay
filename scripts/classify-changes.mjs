@@ -346,7 +346,7 @@ export const moduleAreas = [
     ["orders", "settings"],
   ],
   [
-    /^app\/(?:integrations\/ebay\/|domain\/order-(?:sync|acquisition(?:-context|-details)?|import|events)\.server\.ts$)/u,
+    /^app\/(?:integrations\/ebay\/|domain\/(?:order-(?:sync|acquisition(?:-context|-details)?|import|events)|buyer-check)\.server\.ts$)/u,
     ["orders", "stores"],
   ],
   [/^app\/(?:webhooks\.server|webhook-paths)\.ts$/u, ["orders", "settings", "stores"]],

@@ -106,6 +106,26 @@ describe("client eBay e normalizzazione", () => {
     ).toBeUndefined();
   });
 
+  it("legge per ID da uno a 50 ordini, senza filtro né limite", async () => {
+    const pages = vi.fn<typeof fetch>(async () => Response.json({ orders: [], total: 0 }));
+    const ids = Array.from({ length: 50 }, (_, index) => `O-${index}`);
+    await readFulfillmentOrders(access(pages), { orderIds: ["A", "B"] });
+    await readFulfillmentOrders(access(pages), { orderIds: ids });
+    expect(pages.mock.calls.map(([url, init]) => [String(url), init?.headers])).toEqual([
+      [
+        "https://api.ebay.com/sell/fulfillment/v1/order?orderIds=A%2CB",
+        { authorization: "Bearer token-sintetico" },
+      ],
+      [
+        `https://api.ebay.com/sell/fulfillment/v1/order?orderIds=${ids.join("%2C")}`,
+        { authorization: "Bearer token-sintetico" },
+      ],
+    ]);
+    for (const orderIds of [[], [...ids, "O-50"]])
+      await expect(readFulfillmentOrders(access(pages), { orderIds })).rejects.toThrow(RangeError);
+    expect(pages).toHaveBeenCalledTimes(2);
+  });
+
   it("segue `next` solo sulla stessa origine API HTTPS, senza inviare il token altrove", async () => {
     const pages = vi.fn<typeof fetch>(async () =>
       Response.json({

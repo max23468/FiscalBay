@@ -10,13 +10,13 @@ Cinque invii e cinque domande secondarie. Le capacità già costruibili con le A
 | --- | --- | --- | --- |
 | 1 | Header del marketplace necessario per l'identificativo fiscale, assente dalla specifica di `getOrder` | bug documentale | da inviare ([bozza](bozza-01-header-marketplace.en.md)) |
 | 2 | Identificativo fiscale dell'acquirente nelle letture di elenco e nelle API moderne, fatture combinate comprese | capacità e parità prima delle dismissioni | da inviare dopo le azioni interne 1 e 2 ([bozza](bozza-02-dati-fiscali-acquirente.en.md)) |
-| 3 | Identità immutabile dell'acquirente negli ordini, per le cancellazioni degli account | capacità e contratto da chiarire | da inviare dopo l'azione interna 3 ([bozza](bozza-03-identita-acquirente.en.md)) |
+| 3 | Identità immutabile dell'acquirente negli ordini, per le cancellazioni degli account | capacità e contratto da chiarire | da inviare ([bozza](bozza-03-identita-acquirente.en.md)) |
 | 4 | Notifiche degli ordini: versione 1.1 di `ORDER_CONFIRMATION`, variazioni dell'ordine in sola lettura, destinazioni | contratto da chiarire e capacità | da inviare ([bozza](bozza-04-notifiche-ordini.en.md)) |
 | 5 | Quote per utente leggibili con gli scope di sola lettura degli ordini | capacità | da inviare ([bozza](bozza-05-quote-per-utente.en.md)) |
 
 Stato al 7 novembre: nessun invio fatto.
 
-**Rischio emerso, da trattare internamente.** Gli ordini importati oltre i 90 giorni dalla creazione non passano da Trading ([#647](https://github.com/max23468/FiscalBay/pull/647)), quindi non hanno il token eIAS dell'acquirente. Per loro una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Vedi l'invio 3 e l'azione interna 3.
+**Rischio emerso, ridotto internamente.** Il token eIAS dell'acquirente arriva soltanto da Trading, entro 90 giorni. Il 7 novembre, in Production, 978 dei 1.100 ordini definitivi non lo avevano: tutti gli 891 oltre i 90 giorni e 87 fra 30 e 90, rimasti fuori dalla finestra Trading del primo collegamento (conteggio aggregato in sola lettura, senza identità). Per questi una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Ora ogni ordine registra l'ultima lettura dello username e quelli senza token lo rileggono ogni settimana ([D318](../../decisions/DECISION_REGISTER.md)); resta scoperto un cambio di username a ridosso della cancellazione, che soltanto l'invio 3 chiude.
 
 **Rapporto con i riconoscimenti esterni.** Il dossier non ripete [RE-01](../../ROADMAP.md#re-01)–[RE-04](../../ROADMAP.md#re-04). L'aumento dei limiti resta nell'Application Growth Check ([RE-01](../../ROADMAP.md#re-01)): l'invio 2 riduce le chiamate necessarie, non chiede quota. `USER_STATUS_CHANGE` e i contatti diretti con eBay potrebbero arrivare con il Partner Program ([RE-02](../../ROADMAP.md#re-02)); se FiscalBay viene ammesso, gli invii 2 e 3 possono passare dal referente del programma.
 
@@ -91,11 +91,11 @@ Le fatture combinate dal venditore senza checkout eBay esistono soltanto in Trad
 
 ## 3. Identità immutabile dell'acquirente negli ordini
 
-**Tipo:** capacità e contratto da chiarire. **Canale:** ticket al supporto sviluppatori. **Prerequisiti:** azione interna 3.
+**Tipo:** capacità e contratto da chiarire. **Canale:** ticket al supporto sviluppatori. **Prerequisiti:** nessuno; l'azione interna 3 è conclusa.
 
 La notifica `MARKETPLACE_ACCOUNT_DELETION` porta `userId` immutabile, `eiasToken` e `username`; la guida avverte che alcuni sviluppatori non ricevono lo username degli utenti statunitensi (documentato). Fulfillment `Buyer` ha soltanto `username`, `taxAddress`, `taxIdentifier` e `buyerRegistrationAddress` (specifica verificata), e Identity `getUser` descrive lo username come modificabile dall'utente (specifica verificata). Il token eIAS dell'acquirente si legge soltanto in Trading `GetOrders` (codice: `buyerEiasToken` nell'adapter Trading).
 
-Per gli ordini oltre i 90 giorni, che Trading non restituisce, FiscalBay abbina quindi una cancellazione allo username registrato nell'ordine, che può non essere più quello attuale. La guida richiede di cancellare i dati dell'utente pena la revoca dell'accesso, ma non dice come riconoscerlo negli ordini letti da Fulfillment (non individuato). Lo schema GraphQL espone `User.userId` sotto `commerce.identity.readonly`, ma non chiarisce se è restituito per l'acquirente di un ordine del venditore (non individuato).
+Per gli ordini senza token, l'89% di quelli in Production il 7 novembre, FiscalBay abbina quindi una cancellazione allo username registrato nell'ordine, che può non essere più quello attuale; la rilettura settimanale ([D318](../../decisions/DECISION_REGISTER.md)) accorcia questo intervallo senza chiuderlo. La guida richiede di cancellare i dati dell'utente pena la revoca dell'accesso, ma non dice come riconoscerlo negli ordini letti da Fulfillment (non individuato). Lo schema GraphQL espone `User.userId` sotto `commerce.identity.readonly`, ma non chiarisce se è restituito per l'acquirente di un ordine del venditore (non individuato).
 
 **Richiesta.** Un identificativo immutabile dell'acquirente (`userId` o `eiasToken`) in Fulfillment `getOrder` e `getOrders` e nella Order API, con gli scope di lettura degli ordini; in subordine, l'indicazione ufficiale della chiave con cui abbinare la notifica agli ordini letti da Fulfillment.
 
@@ -153,7 +153,7 @@ Vanno poste come domande, senza presentarle come lacune dimostrate.
 
 1. **Rileggere la specifica al momento dell'invio.** Ripetere i controlli di questo dossier su Fulfillment e sullo schema GraphQL; se eBay ha già corretto un punto, toglierlo dalla bozza. Serve prima degli invii 1 e 2.
 2. **Tipi fiscali.** Leggere `TaxIdentifierTypeEnum` nel browser e completare 2.2 e Q2. Serve prima dell'invio 2.
-3. **Copertura delle cancellazioni.** Contare, senza estrarre identità, gli ordini Production senza token eIAS dell'acquirente, per età, e valutare se aggiornare lo username con le riletture Fulfillment. Serve prima dell'invio 3 e misura il rischio in sintesi.
+3. **Copertura delle cancellazioni (conclusa il 7 novembre).** Misura in sintesi; la rilettura settimanale dello username è in [D318](../../decisions/DECISION_REGISTER.md).
 4. **Stato delle dismissioni.** Rileggere nel browser [API Deprecation Status](https://developer.ebay.com/develop/get-started/api-deprecation-status) per `GetOrders`, `GetItem`, `GetStore`, `GetUser` e la Developer Analytics API. Serve prima degli invii 2 e Q3.
 5. **`ORDER_CONFIRMATION` 1.1.** Sottoscrivere la 1.1 soltanto dopo lo schema pubblicato (invio 4); fino ad allora l'ingresso resta sulla 1.0.
 
@@ -168,7 +168,7 @@ Vanno poste come domande, senza presentarle come lacune dimostrate.
 | Immagine dell'articolo | sostitute di `GetItem` già mappate (Q3 chiede solo le date) |
 | Profilo del negozio | Stores API e query `user` esistono; serve un nuovo consenso ([D216](../../decisions/DECISION_REGISTER.md)) |
 | Stato dell'account del venditore | `USER_STATUS_CHANGE` esiste per i partner ([RE-02](../../ROADMAP.md#re-02)) |
-| Token eIAS degli ordini recenti | già letto da Trading entro 90 giorni; l'azione interna 3 copre il resto |
+| Username aggiornato degli ordini senza token | rilettura settimanale da Fulfillment ([D318](../../decisions/DECISION_REGISTER.md)) |
 
 ## Fonti
 

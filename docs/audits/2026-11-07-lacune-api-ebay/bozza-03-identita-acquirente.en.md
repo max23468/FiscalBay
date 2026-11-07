@@ -2,8 +2,6 @@
 
 **Dove:** nuovo ticket al supporto sviluppatori eBay, area Marketplace Account Deletion e Fulfillment.
 
-**Prima dell'invio:** azione interna 3 del [dossier](README.md#azioni-interne-prima-degli-invii), per sapere quanti ordini conservati dipendono dallo username.
-
 **Verifica:** 7 novembre 2026, guida [Marketplace user account deletion](https://developer.ebay.com/develop/guides-v2/marketplace-user-account-deletion), specifiche Fulfillment `v1.20.7` e Identity, schema GraphQL; abbinamento descritto nella [conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay).
 
 **Dati:** nessun ID, username o conteggio di singoli negozi.
@@ -21,7 +19,7 @@ FiscalBay stores eBay orders for its sellers and must delete a buyer's data when
 - Sell Fulfillment `Buyer` has only `username`, `taxAddress`, `taxIdentifier` and `buyerRegistrationAddress`, with no `userId` or `eiasToken`.
 - The Identity API describes `username` as a value the user can change.
 - The buyer's EIAS token is available only in Trading `GetOrders`, which returns orders up to 90 days old, while Fulfillment returns them up to two years.
-- So for orders read only from Fulfillment, the only key that matches a deletion request is the username recorded with the order, which may no longer be the buyer's current one.
+- So for orders read only from Fulfillment, the only key that matches a deletion request is the username recorded with the order, which may no longer be the buyer's current one. For one of our sellers this applies to most stored orders. We now re-read the username weekly, which narrows the gap but can't close it.
 - The GraphQL `User` type exposes `userId` under `commerce.identity.readonly`, but we couldn't find whether it's returned for the buyer of a seller's order.
 
 The guide requires deleting the user's data, but doesn't say how to recognize that user in orders read from Fulfillment.

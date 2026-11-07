@@ -63,7 +63,7 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 
 **Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
 
-Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richieste a eBay, con le bozze in inglese: header del marketplace non documentato per il CF, dati fiscali dell'acquirente negli elenchi e nella Order API, identità immutabile dell'acquirente per le cancellazioni, notifiche degli ordini e quote per utente. L'agente esegue prima le azioni interne del dossier, tra cui la misura degli ordini che si abbinano a una cancellazione soltanto per username; l'owner decide e fa gli invii.
+Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richieste a eBay, con le bozze in inglese: header del marketplace non documentato per il CF, dati fiscali dell'acquirente negli elenchi e nella Order API, identità immutabile dell'acquirente per le cancellazioni, notifiche degli ordini e quote per utente. L'agente esegue prima le azioni interne rimaste nel dossier; misura e rilettura settimanale degli username per le cancellazioni sono già fatte ([D318](decisions/DECISION_REGISTER.md)). L'owner decide e fa gli invii.
 
 **Criterio di completamento:** invii fatti dall'owner, risposte registrate nel dossier e conseguenze portate nei documenti competenti.
 
