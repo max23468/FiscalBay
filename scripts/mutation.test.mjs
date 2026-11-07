@@ -24,7 +24,7 @@ import {
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 
 describe("esito dei mutation test", () => {
-  it("riduce i job di fondo in presenza di PR o cicli richiesti", () => {
+  it("riduce le sole campagne in presenza di PR o cicli, mai la qualifica del candidato", () => {
     const pr = [{ event: "pull_request", status: "queued" }];
     assert.equal(backgroundConcurrency([]), 8);
     assert.equal(backgroundConcurrency([], { campaign: true }), 16);
@@ -34,7 +34,9 @@ describe("esito dei mutation test", () => {
       backgroundConcurrency([{ path: ".github/workflows/cycle.yml", status: "in_progress" }]),
       4,
     );
-    assert.equal(backgroundConcurrency(pr, { priority: true }), 8);
+    assert.equal(backgroundConcurrency(pr, { qualification: true }), 8);
+    assert.equal(backgroundConcurrency(pr, { qualification: true, campaign: true }), 8);
+    assert.equal(backgroundConcurrency([], { qualification: true, campaign: true }), 16);
     assert.equal(backgroundConcurrency([{ event: "pull_request", status: "completed" }]), 8);
   });
   it("conserva le durate soltanto se coprono tutto il modulo", () => {

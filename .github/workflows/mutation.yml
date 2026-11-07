@@ -19,10 +19,6 @@ on:
       expected_sha:
         type: string
         default: ""
-      # Qualifica richiesta, per esempio da `Promuovi`: non cede posti al lavoro di fondo.
-      priority:
-        type: boolean
-        default: false
       targets:
         description: Matrice JSON dei moduli critici da qualificare
         type: string
@@ -61,7 +57,8 @@ jobs:
         env:
           TARGETS: ${{ inputs.targets }}
           GH_TOKEN: ${{ github.token }}
-          MUTATION_PRIORITY: ${{ inputs.priority }}
+          # Soltanto la qualifica del candidato richiama il workflow con il commit atteso.
+          MUTATION_QUALIFICATION: ${{ inputs.expected_sha != '' }}
           MUTATION_CAMPAIGN: ${{ github.event.schedule == '17 3 * * 1' || github.event.schedule == '23 3 * * 1' }}
         run: node scripts/mutation.mjs --matrix "${TARGETS}"
 
@@ -74,8 +71,7 @@ jobs:
     strategy:
       # Ogni modulo conclude la propria prova: un fallimento non nasconde gli altri esiti.
       fail-fast: false
-      # Con PR o cicli attivi il lavoro di fondo lascia spazio ai job che sbloccano il deploy;
-      # le qualifiche richieste e le campagne notturne senza altro lavoro restano piene.
+      # Con PR o cicli attivi le sole campagne lasciano spazio ai job che sbloccano il deploy.
       max-parallel: ${{ fromJSON(needs.select.outputs.parallel) }}
       matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
     env:
