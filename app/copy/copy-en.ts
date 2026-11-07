@@ -249,6 +249,7 @@ export const en: AppCopy = {
       CF: "Different tax codes",
       PIVA: "Different VAT numbers",
       OTHER: "Different codes",
+      MIXED: "Different tax codes and VAT numbers",
     },
     updated: "Updated by eBay",
     updatedHint: "eBay changed this value after it was first read.",

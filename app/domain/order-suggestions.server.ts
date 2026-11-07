@@ -93,11 +93,13 @@ export async function orderSuggestions(
         continue;
       }
       const row = latest.find((item) => item.source === "ebay_fulfillment") ?? latest[0]!;
-      const type = shownTaxType({
-        type: row.identifier_type!,
-        issuingCountry: row.issuing_country,
-        value: row.value,
-      });
+      const shown = (item: (typeof rows)[number]) =>
+        shownTaxType({
+          type: item.identifier_type!,
+          issuingCountry: item.issuing_country,
+          value: item.value,
+        });
+      const type = shown(row);
       result.suggestions.push({
         value: row.value,
         identifier: {
@@ -115,6 +117,7 @@ export async function orderSuggestions(
         sourceStore: row.store_name,
         source: row.source,
         conflict: new Set(rows.map(normalized)).size > 1,
+        ...(new Set(rows.map(shown)).size > 1 ? { mixedConflict: true as const } : {}),
       });
     }
   }
