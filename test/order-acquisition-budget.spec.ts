@@ -10,7 +10,11 @@ import {
 
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 
+import { recordOrderObservation } from "../app/domain/order-import.server";
+
 import { access, configuration, order } from "./fixtures/ebay-client-fixtures";
+
+import { observation } from "./fixtures/order-import-scenarios";
 
 import {
   acquire,
@@ -162,4 +166,80 @@ it("un Worker con una parte della quota si ferma alla sua parte fino all'azzeram
       .bind(`${origin}#GetOrders`)
       .first(),
   ).toEqual({ until: reset });
+});
+
+/** Ordine fuori dal marketplace qualificato, creato `days` giorni prima del 2026-09-02. */
+const foreign = (days: number, id = "12-34567-89012", item = "110000000001") =>
+  order({
+    orderId: id,
+    creationDate: new Date(
+      Date.parse("2026-09-02T00:00:00.000Z") - days * 86_400_000,
+    ).toISOString(),
+    lastModifiedDate: "2026-09-01T09:00:00.000Z",
+    lineItems: [
+      {
+        ...order().lineItems[0],
+        lineItemId: `${item}9`,
+        legacyItemId: item,
+        listingMarketplaceId: "EBAY_DE",
+      },
+    ],
+  });
+
+it("ogni chiamata rimandata riparte all'azzeramento della propria quota", async () => {
+  // Soltanto la lettura fiscale oltre metà quota: le immagini si leggono.
+  await quota("GetOrders", 50, "2026-09-02T05:00:00.000Z");
+  const fiscal = ebay({ orders: [foreign(18)] });
+  expect(await acquire(fiscal)).toBe("complete");
+  expect([calls(fiscal, "GetOrders"), calls(fiscal, "GetItem")]).toEqual([0, 1]);
+  expect(await refs()).toMatchObject({ detail_retry_at: "2026-09-02T05:00:00.000Z" });
+});
+
+it("rimanda soltanto le immagini quando è la loro quota a superare metà", async () => {
+  await quota("GetItem", 50, "2026-09-02T06:00:00.000Z");
+  const images = ebay({ orders: [foreign(18)] });
+  expect(await acquire(images)).toBe("complete");
+  expect([calls(images, "GetOrders"), calls(images, "GetItem")]).toEqual([1, 0]);
+  expect(await refs()).toMatchObject({ detail_retry_at: "2026-09-02T06:00:00.000Z" });
+});
+
+it("conta le immagini già lette nell'esecuzione per il budget del giorno", async () => {
+  await quota("GetItem", 49);
+  const two = ebay({
+    orders: [foreign(18), foreign(19, "12-34567-89013", "110000000002")],
+  });
+  expect(await acquire(two)).toBe("complete");
+  expect(calls(two, "GetItem")).toBe(1);
+});
+
+it("un ordine creato esattamente sette giorni prima non è più corrente", async () => {
+  await quota("GetOrders", 50);
+  const boundary = ebay({ orders: [foreign(7)] });
+  expect(await acquire(boundary)).toBe("complete");
+  expect(calls(boundary, "GetOrders")).toBe(0);
+});
+
+it("una lettura fiscale non riuscita non copre le versioni di un ordine pagato", async () => {
+  const at = {
+    storeId: "s-a",
+    consentGrantedAt: grantedAt,
+    observedAt: "2026-09-02T00:00:00.000Z",
+  };
+  const read = (verification: "completed" | "error") =>
+    recordOrderObservation(
+      env.DB,
+      at,
+      observation({
+        taxIdentifiers: {
+          source: "ebay_trading_get_orders",
+          complete: false,
+          verification,
+          values: [],
+        },
+      }),
+    );
+  await read("error");
+  expect(await env.DB.prepare("SELECT paid FROM order_tax_checks").first()).toEqual({ paid: 0 });
+  await read("completed");
+  expect(await env.DB.prepare("SELECT paid FROM order_tax_checks").first()).toEqual({ paid: 1 });
 });
