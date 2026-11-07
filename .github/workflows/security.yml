@@ -1,0 +1,92 @@
+name: Sicurezza
+
+# Controllo pianificato, indipendente dalle PR: un avviso pubblicato dopo l'ultimo merge, un
+# ruleset cambiato o un alert aperto emergono anche senza nuovo codice. L'avviso all'owner è il
+# fallimento del workflow, che GitHub notifica per email.
+on:
+  schedule:
+    # Giovedì 05:23 UTC: lontano dalla mutation del lunedì e dall'inizio dell'ora.
+    - cron: "23 5 * * 4"
+  workflow_dispatch:
+  # Una modifica del controllo si prova sulla propria PR prima del merge.
+  pull_request:
+    paths:
+      - .github/workflows/security.yml
+
+env:
+  DO_NOT_TRACK: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Controllo di sicurezza
+    # Le PR da fork non ricevono il token degli alert.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      # La pianificazione parte dal branch predefinito: il controllo prova `develop`.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+
+      # Ogni controllo gira anche se il precedente fallisce: una run mostra tutti i problemi.
+      - name: Avvisi delle dipendenze distribuite
+        run: pnpm audit --prod
+
+      - name: Firme dei pacchetti
+        if: ${{ !cancelled() }}
+        run: pnpm audit signatures
+
+      # Il repository è pubblico: regole effettive e protezione si leggono con il token del run.
+      - name: Protezione di develop e main
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Unico controllo richiesto, pubblicato dalle Actions di GitHub (app 15368).
+          EXPECTED_CHECKS: '[{"context":"Node 26","app":15368}]'
+        run: |
+          failed=0
+          fail() { echo "::error::$1"; failed=1; }
+
+          test "$(gh api "repos/$GITHUB_REPOSITORY" --jq .default_branch)" = develop ||
+            fail "Il branch predefinito non è develop"
+
+          develop="$(gh api "repos/$GITHUB_REPOSITORY/rules/branches/develop")"
+          test "$(jq -c '[.[].type] | sort' <<< "$develop")" = '["deletion","non_fast_forward","required_status_checks"]' ||
+            fail "Regole di develop cambiate: $(jq -c '[.[].type]' <<< "$develop")"
+          test "$(jq -c '[.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[] | {context, app: .integration_id}] | sort_by(.context)' <<< "$develop")" = "$EXPECTED_CHECKS" ||
+            fail "Controlli richiesti su develop cambiati"
+
+          main="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .protection)"
+          test "$(jq -r '.enabled and .required_status_checks.enforcement_level == "everyone"' <<< "$main")" = true ||
+            fail "Protezione di main disattivata o non valida per gli admin"
+          test "$(jq -c '[.required_status_checks.checks[] | {context, app: .app_id}] | sort_by(.context)' <<< "$main")" = "$EXPECTED_CHECKS" ||
+            fail "Controlli richiesti su main cambiati"
+
+          exit "$failed"
+
+      # Gli alert di secret scanning non sono leggibili dal token del run: serve un token con
+      # grana fine, in sola lettura sugli alert di questo repository.
+      - name: Alert aperti
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.SECURITY_READ_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo "::error::Segreto SECURITY_READ_TOKEN assente"; exit 1; }
+          failed=0
+          for endpoint in dependabot/alerts code-scanning/alerts secret-scanning/alerts; do
+            open="$(gh api --paginate --slurp --method GET "repos/$GITHUB_REPOSITORY/$endpoint" -f state=open | jq 'map(length) | add // 0')"
+            if test "$open" -ne 0; then
+              echo "::error::$open alert aperti in $endpoint"
+              failed=1
+            fi
+          done
+          exit "$failed"
