@@ -474,8 +474,8 @@ export async function acquireOrders(input: {
       recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
     const details = !(await callsOff(ctx)) && (await readDetails(ctx));
     outcome = { ok: true, served: true };
-    // Con il dettaglio concluso resta budget per verificare gli username degli acquirenti.
-    if (details && !(await callsOff(ctx))) await checkBuyerNames(ctx);
+    // Il budget rimasto verifica gli username degli acquirenti, con le chiamate ancora accese.
+    if (!(await callsOff(ctx))) await checkBuyerNames(ctx);
     return trading && history && details ? "complete" : "budget";
   } catch (error) {
     if (error instanceof NotWritable) return "not_writable";

@@ -949,6 +949,16 @@ describe("username degli acquirenti senza token eIAS", () => {
     expect(byIds(fetcher)).toHaveLength(2);
   });
 
+  it("con le chiamate eBay spente dalla console non verifica gli username", async () => {
+    await acquire(ebay());
+    await env.DB.prepare("UPDATE orders SET buyer_checked_at = '2026-08-01T00:00:00.000Z'").run();
+    await setSwitch(env.DB, "ebay_calls", false, new Date(after(8)));
+    const off = ebay();
+    await acquire(off, after(8));
+    expect(byIds(off)).toEqual([]);
+    expect(await checkedAt()).toBe("2026-08-01T00:00:00.000Z");
+  });
+
   it("senza budget non chiama eBay", async () => {
     await acquire(ebay());
     const fetcher = ebay();
