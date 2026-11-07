@@ -299,6 +299,18 @@ const it = {
         a: "No. FiscalBay ti dà Codice Fiscale e Partita IVA dell’acquirente da usare nel tuo gestionale o nel software di fatturazione, anche con l’export.",
       },
       {
+        q: "Dove trovo il Codice Fiscale dell’acquirente di un ordine eBay?",
+        a: "Quando l’acquirente lo indica, eBay lo associa all’ordine. FiscalBay lo legge con le API ufficiali e lo mostra nella scheda dell’ordine, con ricerca ed export, senza aprire gli ordini uno alla volta su eBay.",
+      },
+      {
+        q: "Posso esportare gli ordini eBay in Excel con il Codice Fiscale?",
+        a: "Sì. Con il piano Free esporti in CSV, che Excel apre direttamente; con Pro anche in XLSX, con le colonne che scegli.",
+      },
+      {
+        q: "Posso ricevere il Codice Fiscale dei nuovi ordini senza aprire FiscalBay?",
+        a: "Sì, con Pro: le notifiche Telegram ti portano ogni nuovo ordine con il Codice Fiscale, quando disponibile su eBay, pronto da copiare.",
+      },
+      {
         q: "Serve una carta per iniziare?",
         payment: true,
         a: "No. Il piano Free è gratuito e la prova Pro di 14 giorni non chiede una carta.",
@@ -634,6 +646,18 @@ const en: SitePagesCopy = {
       {
         q: "Does FiscalBay issue e-invoices?",
         a: "No. FiscalBay gives you the buyer’s tax code and VAT number to use in your management or invoicing software, including through export.",
+      },
+      {
+        q: "Where do I find the buyer’s tax code for an eBay order?",
+        a: "When the buyer enters it, eBay attaches it to the order. FiscalBay reads it through the official APIs and shows it on the order card, with search and export, without opening orders one by one on eBay.",
+      },
+      {
+        q: "Can I export eBay orders to Excel with the tax code?",
+        a: "Yes. On the Free plan you export to CSV, which Excel opens directly; with Pro also to XLSX, with the columns you choose.",
+      },
+      {
+        q: "Can I get the tax code of new orders without opening FiscalBay?",
+        a: "Yes, with Pro: Telegram notifications bring you every new order with the tax code, when eBay provides it, ready to copy.",
       },
       {
         q: "Do I need a card to get started?",
