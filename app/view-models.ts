@@ -208,6 +208,8 @@ export interface SuggestionView {
   sourceDate: string;
   /** Precedenti con codici diversi: si propone il più recente con un avviso. */
   conflict: boolean;
+  /** I codici discordanti sono in parte CF e in parte P. IVA. */
+  mixedConflict?: true;
   identifier?: TaxIdentifierView;
   issuingCountry?: string | null;
   sourceStore?: string;
