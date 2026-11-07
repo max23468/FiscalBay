@@ -368,7 +368,7 @@ export const moduleAreas = [
     ["auth", "settings"],
   ],
   [
-    /^app\/(?:account-email\.server\.ts|domain\/(?:registration|account-deletion|deletion-steps)\.server\.ts)$/u,
+    /^app\/(?:account-email\.server\.ts|exit-reasons\.ts|domain\/(?:registration|account-deletion|deletion-steps|exit-feedback)\.server\.ts)$/u,
     ["auth", "settings"],
   ],
   [

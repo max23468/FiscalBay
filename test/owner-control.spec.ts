@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { consoleSummary } from "../app/domain/admin-directory.server";
 import { listAnomalies } from "../app/domain/admin-operations.server";
 import { recordBulkDataThreshold } from "../app/domain/ebay-quotas.server";
+import { recordCancellationFeedback } from "../app/domain/exit-feedback.server";
 import { productMetrics } from "../app/domain/product-metrics.server";
 import {
   configureOwnerCommands,
@@ -426,6 +427,7 @@ describe("comandi e pulsanti", () => {
             { command: "lavori", description: "Lavori periodici, eventi e webhook" },
             { command: "quote", description: "Quote delle API eBay" },
             { command: "commerciale", description: "Incassi, lifetime e listino" },
+            { command: "uscite", description: "Motivi di disdette e cancellazioni" },
             { command: "metriche", description: "Funnel e KPI" },
             { command: "negozi", description: "Negozi con problemi" },
             { command: "prestazioni", description: "Metriche tecniche" },
@@ -520,6 +522,7 @@ describe("viste", () => {
 
     expect(value(panels.commerciale, "Ultimi 30 giorni")).toBe("0,00\u00a0€");
     expect(value(panels.commerciale, "Mensile")).toContain("Lettura non riuscita");
+    expect(panels.uscite.lead).toBe("Nessuna uscita negli ultimi 12 mesi");
 
     expect(value(panels.lavori, "Indirizzo")).toBe("Corretto");
     expect(value(panels.lavori, "Riconciliazione Stripe")).toMatch(/^Concluso /u);
@@ -1314,6 +1317,125 @@ describe("avvisi commerciali", () => {
     expect(await notifications()).toHaveLength(1);
     await purgeExpiredRecords(env.DB, later(60 * 24 * 31));
     expect(await notifications()).toEqual([]);
+  });
+
+  it("la disdetta porta motivo e commento del portale nell'avviso e nelle uscite", async () => {
+    await register("n-x");
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-x", userId: "n-x" }),
+      ...insertWorkspace({ id: "w-y" }),
+      subscription("sub_x", "w-x"),
+      subscription("sub_y", "w-y"),
+      subscription("sub_z", "w-y", "past_due"),
+    ]);
+    const cancel = (
+      id: string,
+      details: { feedback: string | null; comment: string | null } | null,
+      scheduled = true,
+      at = later(2),
+    ) =>
+      recordCancellationFeedback(
+        env.DB,
+        {
+          id,
+          cancel_at_period_end: scheduled,
+          cancel_at: null,
+          status: "active",
+          cancellation_details: details as never,
+        },
+        at,
+      );
+    // Prima dell'avviso la disdetta non ha ancora una riga di uscita.
+    await cancel("sub_x", { feedback: "too_expensive", comment: null });
+    for (const id of ["sub_x", "sub_y", "sub_z"])
+      await updateSubscription(id, "cancel_at_period_end = 1");
+    await cancel("sub_x", {
+      feedback: "too_expensive",
+      comment: "  Troppo\u202e  caro\r\nper me  ",
+    });
+    // Una lettura successiva senza risposta non cancella motivo e commento.
+    await cancel("sub_x", { feedback: null, comment: null });
+    // Un'opzione del portale fuori elenco conta come «Altro»; una riattivazione la toglie.
+    await cancel("sub_y", { feedback: "customer_service", comment: null });
+    expect(
+      (await env.DB.prepare("SELECT reason FROM exit_feedback WHERE workspace_id = 'w-y'").first())
+        ?.reason,
+    ).toBe("other");
+    await cancel("sub_y", null, false);
+    // La chiusura di un rinnovo non pagato non è una disdetta del cliente.
+    await cancel("sub_z", { feedback: "unused", comment: null });
+
+    const exits = await env.DB.prepare(
+      "SELECT kind, reason, plan, tenure, comment, workspace_id FROM exit_feedback",
+    ).all();
+    expect(exits.results).toEqual([
+      {
+        kind: "cancellation",
+        reason: "too_expensive",
+        plan: "monthly",
+        tenure: "under_1",
+        comment: "Troppo caro\nper me",
+        workspace_id: "w-x",
+      },
+    ]);
+    const api = await deliver();
+    const alert = api.calls.find((call) => heading(call) === "📅 Disdetta programmata")!;
+    const text = JSON.stringify(alert.params);
+    expect(text).toContain("Costa troppo");
+    expect(text).toContain("Troppo caro");
+    expect(api.calls.filter((call) => heading(call) === "📅 Disdetta programmata")).toHaveLength(2);
+    expect(
+      JSON.stringify(
+        api.calls.filter((call) => heading(call) === "📅 Disdetta programmata")[1]!.params,
+      ),
+    ).toContain("Nessuna risposta");
+
+    const panel = await ownerPanel(
+      environment,
+      { view: "uscite", arg: 0, copy: false },
+      api.fetcher,
+      later(3),
+    );
+    const panelRows = panel.sections.flatMap((section) => section.rows);
+    expect(panel.lead).toBe("Ultimi 30 giorni · ultimi 12 mesi");
+    expect(panelRows).toContainEqual(["Costa troppo", "1 · 1"]);
+    expect(panelRows.find(([, comment]) => comment === "Troppo caro\nper me")?.[0]).toContain(
+      "Disdetta · Costa troppo",
+    );
+
+    // Dopo trenta giorni resta l'istantanea anonima, dopo ventiquattro mesi nulla.
+    await purgeExpiredRecords(env.DB, later(60 * 24 * 31));
+    expect(
+      (await env.DB.prepare("SELECT * FROM exit_feedback").all()).results.map((row) => ({
+        ...row,
+        id: undefined,
+      })),
+    ).toEqual([
+      {
+        id: undefined,
+        kind: "cancellation",
+        reason: "too_expensive",
+        plan: "monthly",
+        tenure: "under_1",
+        month: later(2).toISOString().slice(0, 7),
+        source_key: null,
+        workspace_id: null,
+        comment: null,
+        recorded_at: null,
+      },
+    ]);
+    const after = await ownerPanel(
+      environment,
+      { view: "uscite", arg: 0, copy: false },
+      api.fetcher,
+      later(60 * 24 * 31),
+    );
+    expect(after.sections.flatMap((section) => section.rows)).toContainEqual([
+      "Costa troppo",
+      "0 · 1",
+    ]);
+    await purgeExpiredRecords(env.DB, later(60 * 24 * 760));
+    expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM exit_feedback").first())?.n).toBe(0);
   });
 
   it("con la cancellazione dell'utente escono gli avvisi con il suo identificativo", async () => {

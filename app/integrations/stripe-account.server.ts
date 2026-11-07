@@ -61,7 +61,14 @@ export function stripePortalConfiguration(origin: string) {
         proration_behavior: "none",
         cancellation_reason: {
           enabled: true,
-          options: ["too_expensive", "switched_service", "unused", "other"],
+          options: [
+            "too_expensive",
+            "unused",
+            "switched_service",
+            "missing_features",
+            "low_quality",
+            "other",
+          ],
         },
       },
       subscription_update: { enabled: false },

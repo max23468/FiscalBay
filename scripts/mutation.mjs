@@ -84,6 +84,7 @@ export const supportModules = new Set([
   "app/domain/admission-state.server.ts",
   "app/domain/admission.server.ts",
   "app/domain/email-change.server.ts",
+  "app/domain/exit-feedback.server.ts",
   "app/domain/history-window.server.ts",
   "app/domain/lifetime.server.ts",
   "app/domain/order-events.server.ts",

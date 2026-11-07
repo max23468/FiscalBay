@@ -14,6 +14,7 @@ import { actionFailure } from "./area-actions.server";
 import { forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import { deletionReauthenticated } from "./domain/account-deletion.server";
 import { pendingEmailChange } from "./domain/email-change.server";
+import { saveDeletionFeedback } from "./domain/exit-feedback.server";
 import {
   passkeyChangeBlock,
   recentSignIn,
@@ -52,16 +53,17 @@ export type ConfirmResult = { ok: boolean; notice?: string };
  * Richiesta di cancellazione dell'account (§30), dalle Impostazioni o, per chi non ha ancora
  * completato la registrazione o verificato l'email, dalla pagina di accesso e dall'avviso della
  * verifica: accesso degli ultimi minuti e indirizzo dell'account scritto per esteso, poi Better
- * Auth manda il link, anche a un indirizzo non ancora verificato. La conferma dal link avvia la
- * cancellazione e il lavoro dalla coda.
+ * Auth manda il link, anche a un indirizzo non ancora verificato. Il motivo facoltativo resta in
+ * attesa. La conferma dal link avvia la cancellazione e il lavoro dalla coda.
  */
 export async function requestAccountDeletion(
   request: Request,
   { language, session }: Pick<AccountArea, "language" | "session">,
-  confirmation: string,
+  form: FormData,
   admitted = false,
 ): Promise<ActionResult | ReturnType<typeof data<ActionResult>>> {
   const t = appCopy[language].settings.privacy;
+  const confirmation = String(form.get("confirmation") ?? "");
   if (!deletionReauthenticated(session.session.createdAt))
     return actionFailure(403, t.deleteAccountReauth);
   const email = session.user.email;
@@ -76,6 +78,11 @@ export async function requestAccountDeletion(
   );
   if (!response.ok)
     return actionFailure(response.status === 429 ? 429 : 503, t.deleteAccountFailed);
+  // Motivo facoltativo (D314): aspetta la conferma dal link, che lo porta fra le uscite.
+  await saveDeletionFeedback(env.DB, session.user.id, {
+    reason: form.get("reason"),
+    comment: form.get("comment"),
+  });
   return { ok: true, notice: t.deleteAccountSent(email) } satisfies ActionResult;
 }
 
