@@ -12,7 +12,7 @@ import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { criticalModule } from "./mutation.mjs";
+import { criticalModule } from "./lib/critical-modules.mjs";
 import { importGraph } from "./verify-repo.mjs";
 import { ghJson, git, isAncestor, retry } from "./lib/provider.mjs";
 

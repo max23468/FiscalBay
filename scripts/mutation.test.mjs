@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
@@ -31,6 +31,24 @@ import {
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 
 describe("esito dei mutation test", () => {
+  it("con la riusabilità della PR la matrice parte senza restare in attesa del proprio modulo", () => {
+    // Un import dinamico di `mutation-reuse.mjs` durante l'await di primo livello non si chiudeva
+    // mai (codice 13): ora la matrice arriva ai controlli e segnala i dati mancanti.
+    const base = { ...process.env };
+    for (const name of ["REPOSITORY", "REPOSITORY_ID", "HEAD_SHA"]) delete base[name];
+    const result = spawnSync(
+      process.execPath,
+      [
+        "scripts/mutation.mjs",
+        "--matrix",
+        JSON.stringify({ target: ["app/domain/orders.server.ts"] }),
+      ],
+      { encoding: "utf8", env: { ...base, MUTATION_PR_BRANCH: "prova" }, timeout: 60_000 },
+    );
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /PR, repository o testa non indicati/u);
+  });
+
   it("riduce le sole campagne in presenza di PR o cicli, mai la qualifica del candidato", () => {
     const pr = [{ event: "pull_request", status: "queued" }];
     assert.equal(backgroundConcurrency([]), 8);
