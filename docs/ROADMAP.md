@@ -27,7 +27,7 @@ Decidono soltanto l'owner: requisiti non realizzabili, conflitti di diritti, nuo
 
 **Stato:** Da completare · **Prerequisiti:** consumo giornaliero di una quota oltre il 70% con le chiamate di Production, dopo le riduzioni del [§11](product/ORDERS_AND_SYNC.md#s11) · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§15](product/CHANNELS_AND_ADMIN.md#s15)
 
-Completare l'Application Growth Check sull'applicazione Production per i limiti delle chiamate di lettura degli ordini soltanto quando serve davvero: quando l'anomalia della soglia del 70% ([D188](decisions/DECISION_REGISTER.md)) nasce dalle letture dei negozi Production, non da importazioni o collaudi del test ([D317](decisions/DECISION_REGISTER.md)). Il keyset `botCF` è usato soltanto da FiscalBay, con i Worker di test e Production: la richiesta non cambia impostazioni, RuName o notifiche.
+Completare l'Application Growth Check sull'applicazione Production per i limiti delle chiamate di lettura degli ordini soltanto quando serve davvero: quando l'anomalia della soglia del 70% ([D188](decisions/DECISION_REGISTER.md)) nasce dalle letture dei negozi Production, non da importazioni o collaudi del test ([D319](decisions/DECISION_REGISTER.md)). Il keyset `botCF` è usato soltanto da FiscalBay, con i Worker di test e Production: la richiesta non cambia impostazioni, RuName o notifiche.
 
 **Criterio di completamento:** esito di eBay registrato e nuovi limiti riletti nelle quote della console; con un rifiuto, motivazione registrata e soglia del 70% invariata.
 
@@ -61,7 +61,7 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 <a id="correzioni-2-0"></a>
 ## 2.0.x · Correzioni e miglioramenti
 
-**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)), più la provenienza degli iscritti approvata il 2026-11-04 ([D304](decisions/DECISION_REGISTER.md)) e le riduzioni del consumo delle API eBay del 2026-11-07 ([D317](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i task procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
+**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)), più la provenienza degli iscritti approvata il 2026-11-04 ([D304](decisions/DECISION_REGISTER.md)) e le riduzioni del consumo delle API eBay del 2026-11-07 ([D319](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i task procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
 
 <a id="2-0-01"></a>
 #### 2.0-01 · Ordini, eBay e piattaforma
@@ -117,7 +117,7 @@ Ogni giovedì, anche senza PR, un workflow ricontrolla avvisi delle dipendenze d
 
 **Stato:** In corso · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11) · [§15](product/CHANNELS_AND_ADMIN.md#s15) · [capacità](operations/CAPACITY.md#capacita)
 
-Ridurre le chiamate `GetOrders` e `GetItem` perché l'Application Growth Check serva soltanto con il carico reale dei negozi Production ([D317](decisions/DECISION_REGISTER.md)): passata Trading ogni due ore soltanto con fatture combinate senza checkout recenti, altrimenti ogni sei, e ogni dodici negli spazi che nessuno segue, che leggono Fulfillment ogni due ore; letture fiscali Trading a lotti e non ripetute dopo una risposta più recente o su un ordine pagato; budget giornaliero del lavoro non urgente a metà quota; chiamate contate per Worker e mostrate in console; test entro il 10% delle quote.
+Ridurre le chiamate `GetOrders` e `GetItem` perché l'Application Growth Check serva soltanto con il carico reale dei negozi Production ([D319](decisions/DECISION_REGISTER.md)): passata Trading ogni due ore soltanto con fatture combinate senza checkout recenti, altrimenti ogni sei, e ogni dodici negli spazi che nessuno segue, che leggono Fulfillment ogni due ore; letture fiscali Trading a lotti e non ripetute dopo una risposta più recente o su un ordine pagato; budget giornaliero del lavoro non urgente a metà quota; chiamate contate per Worker e mostrate in console; test entro il 10% delle quote.
 
 **Criterio di completamento:** comportamento provato in locale e nella CI, costi rimisurati con `node scripts/capacity.mjs costs`, chiamate dell'ambiente lette nella console del test dopo il deploy.
 

@@ -41,7 +41,7 @@ export type SyncPlan = "free" | "premium";
 /** Cadenza della lettura dei recenti per piano, in minuti: obiettivo, non garanzia. */
 export const syncMinutes: Record<SyncPlan, number> = { premium: 10, free: 30 };
 /**
- * Cadenza di uno spazio che nessuno segue, con qualunque piano (D317): gli ordini nuovi arrivano
+ * Cadenza di uno spazio che nessuno segue, con qualunque piano (D319): gli ordini nuovi arrivano
  * comunque come evento, e al ritorno di un utente il negozio torna subito alla cadenza del piano.
  */
 export const dormantSyncMinutes = 120;

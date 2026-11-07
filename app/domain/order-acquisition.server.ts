@@ -73,7 +73,7 @@ const tradingWindowDays = 30;
  */
 export const lockMilliseconds = 15 * 60_000;
 /**
- * Cadenza della passata Trading periodica (D177, D317). Il solo dato visibile che Trading aggiunge
+ * Cadenza della passata Trading periodica (D177, D319). Il solo dato visibile che Trading aggiunge
  * a Fulfillment sono le fatture combinate dal venditore senza checkout eBay: ogni due ore per un
  * negozio che ne ha avute negli ultimi trenta giorni, ogni sei ore per gli altri, ogni dodici per
  * uno spazio che nessuno segue. Collegamento e richieste manuali la eseguono subito.

@@ -60,7 +60,7 @@ export const writableStore = `EXISTS (SELECT 1 FROM ebay_store_credentials
 /**
  * Spazio senza nessuno che lo segua all'istante `at`: nessun membro con una sessione aperta (la
  * sessione scade dopo sette giorni senza visite) e nessuna chat Telegram collegata. I suoi negozi
- * si leggono più di rado (D317). Argomento: espressione dello spazio.
+ * si leggono più di rado (D319). Argomento: espressione dello spazio.
  */
 export const dormantWorkspaceSql = (workspace: string, at: string) =>
   `(NOT EXISTS (SELECT 1 FROM workspace_members m JOIN "session" se ON se."userId" = m.user_id
