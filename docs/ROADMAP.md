@@ -7,8 +7,8 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 
 | Filone | Stato | Contenuto |
 |---|---|---|
-| [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
+| [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia, verifica del brand Google e richieste a eBay sulle lacune delle API, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
+| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)) e la dismissione di `GetOrders`, un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -57,6 +57,15 @@ Chiedere a eBay Italia l'inserimento di FiscalBay nella pagina Solution Provider
 Far verificare a Google il brand della schermata di consenso del client OAuth Production, così che «Accedi con Google» mostri nome e logo FiscalBay. Servono home page, Privacy e Termini pubblicati su fiscalbay.it e il dominio verificato in Search Console; gli scope restano quelli del login, senza ambiti sensibili.
 
 **Criterio di completamento:** verifica approvata e schermata di consenso riletta su Production con nome, logo e link legali di FiscalBay.
+
+<a id="re-05"></a>
+#### RE-05 · Lacune delle API eBay
+
+**Stato:** In corso · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
+
+Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richieste a eBay, con le bozze in inglese: header del marketplace non documentato per il CF, dati fiscali dell'acquirente negli elenchi e nella Order API, identità immutabile dell'acquirente per le cancellazioni, notifiche degli ordini e quote per utente. L'agente esegue prima le azioni interne rimaste nel dossier; misura e rilettura settimanale degli username per le cancellazioni sono già fatte ([D319](decisions/DECISION_REGISTER.md)). L'owner ha inviato il 2026-11-07 un solo ticket, limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta; la risposta orienta [2.0-11](#2-0-11).
+
+**Criterio di completamento:** ticket inviato dall'owner, risposta registrata nel dossier e conseguenze portate nei documenti competenti.
 
 <a id="correzioni-2-0"></a>
 ## 2.0.x · Correzioni e miglioramenti
@@ -118,6 +127,22 @@ Ogni giovedì, anche senza PR, un workflow ricontrolla avvisi delle dipendenze d
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15) · [piani](product/PLANS_AND_BILLING.md) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30) · [retention](engineering/DATA_RETENTION.md)
 
 La disdetta dal portale Stripe porta motivo e commento dei `cancellation_details`, con sei opzioni allineate all'elenco di FiscalBay; la cancellazione dell'account chiede lo stesso elenco, con «Chiudo o sospendo l'attività su eBay», e un commento, entrambi facoltativi. Gli avvisi Telegram di disdetta e cancellazione li mostrano, la pagina Commerciale della console e il comando `/uscite` riassumono i motivi a 30 giorni, 3 e 12 mesi con i commenti recenti. Il commento dura 30 giorni, poi resta un'istantanea anonima per 24 mesi; Privacy IT/EN `2026-11-07` ([D314](decisions/DECISION_REGISTER.md)). Lo scollegamento dell'ultimo negozio non chiede nulla. Le opzioni del portale si applicano sul test dopo `Pubblica` e in live con `Promuovi`, con `scripts/stripe-account.mjs --apply`.
+
+<a id="2-0-10"></a>
+#### 2.0-10 · Username degli acquirenti per le cancellazioni eBay
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [retention](engineering/DATA_RETENTION.md#cancellazione-ebay)
+
+Ogni ordine registra l'ultima lettura dello username dell'acquirente e quelli senza token eIAS, l'89% in Production il 2026-11-07, lo rileggono ogni settimana da Fulfillment, fino a 50 per chiamata del budget della lettura periodica ([D319](decisions/DECISION_REGISTER.md)). Resta scoperto un cambio di username a ridosso della cancellazione, chiesto a eBay in [RE-05](#re-05).
+
+<a id="2-0-11"></a>
+#### 2.0-11 · Dismissione di Trading `GetOrders`
+
+**Stato:** Da completare · **Prerequisiti:** scelte dell'owner su scope e consenso · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11) · [retention](engineering/DATA_RETENTION.md#cancellazione-ebay)
+
+eBay ha deprecato `GetOrders` il 2026-11-06 e lo spegne il 2027-06-30 ([stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status)). FiscalBay lo usa per il fallback fiscale, gli acquisti prima del checkout e il loro consolidamento, le fatture combinate senza checkout eBay e il token eIAS degli acquirenti. Le sostitute indicate da eBay sono Fulfillment per gli ordini pagati e la Order API GraphQL con impegni e `PurchaseQuote` per il resto: chiedono scope nuovi e un nuovo consenso dei negozi ([D216](decisions/DECISION_REGISTER.md)) e non espongono CF, indirizzo di fatturazione né token eIAS ([lacune](audits/2026-11-07-lacune-api-ebay/README.md#2-dati-fiscali-dellacquirente-nelle-letture-di-elenco-e-nelle-api-moderne)). Prima di progettare decide l'owner quali funzioni visibili si riducono e quali scope chiedere.
+
+**Criterio di completamento:** nessuna chiamata `GetOrders` prima del 2027-06-30, funzioni ridotte approvate dall'owner, documenti di ordini e conservazione allineati.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni
@@ -185,7 +210,7 @@ Elenco delle funzioni previste per la 2.x, approvato dall'owner il 2026-10-31, n
 
 Da collocare in una versione 2.x ([D293](decisions/DECISION_REGISTER.md)): dati economici dell'ordine già forniti da Fulfillment (commissioni, netto, IVA riscossa da eBay, rimborsi, spedizione), senza la Finances API, che richiederebbe lo scope `sell.finances`, un nuovo consenso dei negozi e le firme digitali per i venditori UE; comandi Telegram di ricerca, riepilogo della giornata ed export; chat di supporto Tawk.to con una pagina Supporto migliorata, subordinata all'inventario dei cookie e alla Privacy, unica eccezione alle integrazioni con altri servizi; JavaScript ridotto nelle pagine pubbliche.
 
-L'accessibilità entra nelle correzioni `2.2.x`, dopo i cambi della pagina Ordini: prove manuali con VoiceOver e NVDA sui percorsi principali e correzioni conseguenti, senza dichiarazione di accessibilità pubblicata. Restano fuori dalla 2.x le integrazioni con altri servizi e l'accesso con codice via email o con conferma Telegram. Le dismissioni delle API Trading annunciate da eBay si coprono con le sostitute moderne in una versione di correzione appena eBay fissa la data; se una funzione visibile si riduce o sparisce decide l'owner prima della pubblicazione.
+L'accessibilità entra nelle correzioni `2.2.x`, dopo i cambi della pagina Ordini: prove manuali con VoiceOver e NVDA sui percorsi principali e correzioni conseguenti, senza dichiarazione di accessibilità pubblicata. Restano fuori dalla 2.x le integrazioni con altri servizi e l'accesso con codice via email o con conferma Telegram. Le dismissioni delle API Trading annunciate da eBay si coprono con le sostitute moderne in una versione di correzione appena eBay fissa la data, come per `GetOrders` in [2.0-11](#2-0-11); se una funzione visibile si riduce o sparisce decide l'owner prima della pubblicazione.
 
 La disponibilità PayPal **come pagamento** può entrare in 2.0 solo se supportata dal MoR scelto, senza account PayPal personale separato e con costo accettabile; non è garanzia di roadmap o collegamento login. Niente Microsoft login, nessuna app desktop promessa.
 

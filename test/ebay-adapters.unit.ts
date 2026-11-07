@@ -731,6 +731,26 @@ describe("contratto Fulfillment senza persistenza", () => {
     });
     expect(fetcher).toHaveBeenCalledTimes(2);
   });
+
+  it("legge per ID da uno a 50 ordini, senza filtro né limite", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => Response.json({ orders: [], total: 0 }));
+    const access = { fetcher, configuration, accessToken: "token-sintetico" };
+    const ids = Array.from({ length: 50 }, (_, index) => `O-${index}`);
+    await readFulfillmentOrders(access, { orderIds: ["A", "B"] });
+    await readFulfillmentOrders(access, { orderIds: ids });
+    expect(fetcher.mock.calls.map(([url]) => String(url))).toEqual([
+      "https://api.ebay.com/sell/fulfillment/v1/order?orderIds=A%2CB",
+      `https://api.ebay.com/sell/fulfillment/v1/order?orderIds=${ids.join("%2C")}`,
+    ]);
+    expect(new Headers(fetcher.mock.calls[0]?.[1]?.headers).get("authorization")).toBe(
+      "Bearer token-sintetico",
+    );
+    for (const orderIds of [[], [...ids, "O-50"]])
+      await expect(readFulfillmentOrders(access, { orderIds })).rejects.toThrow(
+        new RangeError("Ordini eBay da leggere per ID non validi"),
+      );
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe("seconda osservazione fiscale Fulfillment", () => {

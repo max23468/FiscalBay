@@ -208,17 +208,26 @@ export function buildCreationDateFilter(from: string, until: string): string {
 
 const ordersPath = "/sell/fulfillment/v1/order";
 
+/** Massimo di ordini di una lettura per ID con `getOrders`. */
+export const orderIdsLimit = 50;
+
 /**
  * Una pagina di `getOrders`: la prima con limite e filtro, le successive dal link `next` di eBay,
- * seguito solo sulla stessa origine API dell'ambiente.
+ * seguito solo sulla stessa origine API dell'ambiente. Con `orderIds` legge fino a 50 ordini
+ * indicati, in una sola pagina.
  */
 export async function readFulfillmentOrders(
   access: EbayAccess,
-  page: { limit: number; filter: string } | { next: string },
+  page: { limit: number; filter: string } | { next: string } | { orderIds: readonly string[] },
 ): Promise<FulfillmentPage> {
   let url: URL;
   if ("next" in page) {
     url = ebayApiUrl(access.configuration, page.next, ordersPath);
+  } else if ("orderIds" in page) {
+    if (page.orderIds.length === 0 || page.orderIds.length > orderIdsLimit)
+      throw new RangeError("Ordini eBay da leggere per ID non validi");
+    url = ebayApiUrl(access.configuration, access.configuration.ordersUrl, ordersPath);
+    url.searchParams.set("orderIds", page.orderIds.join(","));
   } else {
     url = ebayApiUrl(access.configuration, access.configuration.ordersUrl, ordersPath);
     url.searchParams.set("limit", String(page.limit));
