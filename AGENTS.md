@@ -21,7 +21,7 @@ Decidere i dettagli tecnici reversibili ed eseguire autonomamente le attività n
 
 Nei titoli delle pagine del sito usare ` | ` come separatore. Gli em dash (U+2014), anche codificati come entità HTML o escape Unicode, sono vietati in tutti i file della repository, inclusi documenti, commenti e test. `pnpm verify:copy`, incluso in `pnpm verify`, controlla i file versionati e quelli nuovi non ignorati da Git.
 
-Controllare stato, branch, diff e istruzioni vicine prima di scrivere. Preservare lavoro altrui; no reset distruttivi o riscritture della storia. Un blocco remoto non ferma le prove locali indipendenti. Ogni sessione che scrive lavora in un worktree proprio, da `origin/develop`; il checkout principale resta pulito su `develop`. Modifiche al processo e ai file globali (manifest, lockfile, workflow, classificatore) viaggiano in una PR alla volta.
+Controllare stato, branch, diff e istruzioni vicine prima di scrivere. Preservare lavoro altrui; no reset distruttivi o riscritture della storia. Un blocco remoto non ferma le prove locali indipendenti. Ogni sessione che scrive lavora in un worktree proprio, da `origin/develop`; il checkout principale resta pulito su `develop`.
 
 Seguire feature branch → `develop`, test dai merge; `main` è la testa di `develop` promossa e Production parte soltanto con `Promuovi`. La 1.x è dismessa e la sua branch eliminata: il commit finale `508ded87` resta raggiungibile da `v2.0.0`.
 
