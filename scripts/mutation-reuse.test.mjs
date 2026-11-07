@@ -7,8 +7,10 @@ import {
   linesProved,
   moduleOutcomes,
   mutationJob,
+  previousRuns,
   reusePlan,
 } from "./mutation-reuse.mjs";
+import { execFileSync } from "node:child_process";
 
 describe("mutation incrementale della prova del candidato", () => {
   it("riconosce i job di mutation della qualifica e della campagna", () => {
@@ -201,5 +203,69 @@ describe("mutation incrementale della prova del candidato", () => {
     );
     assert.ok(!linesProved(run, [job("Mutation app/sealed.server.ts")], target));
     assert.ok(!linesProved({ conclusion: "failure" }, [job(`Mutation ${target}`)], target));
+  });
+});
+
+describe("lettura delle run precedenti", () => {
+  const head = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const run = (id, created) => ({
+    id,
+    path: ".github/workflows/candidate.yml",
+    event: "workflow_dispatch",
+    repository: { id: 1 },
+    head_repository: { id: 1 },
+    head_sha: head,
+    created_at: created,
+    conclusion: "success",
+  });
+  const job = (target) => ({
+    name: `Qualifica candidato / Mutation / ${target} 1/1`,
+    conclusion: "success",
+    steps: [{}],
+  });
+  const fake = (jobsOf) => {
+    const calls = [];
+    const api = async (url) => {
+      calls.push(url);
+      if (url.includes("/workflows/candidate.yml/runs"))
+        return {
+          workflow_runs: [
+            run(3, "2026-11-07T03:00:00Z"),
+            run(2, "2026-11-07T02:00:00Z"),
+            run(1, "2026-11-07T01:00:00Z"),
+          ],
+        };
+      if (url.includes("/workflows/")) return { workflow_runs: [] };
+      const id = Number(/runs\/(\d+)\/jobs/u.exec(url)[1]);
+      const jobs = jobsOf[id] ?? [];
+      return { jobs, total_count: jobs.length };
+    };
+    return { api, calls };
+  };
+
+  it("si ferma quando ogni modulo richiesto ha l'esito più recente", async () => {
+    const { api, calls } = fake({
+      3: [job("app/a.server.ts")],
+      2: [job("app/b.server.ts")],
+      1: [job("app/c.server.ts")],
+    });
+    const runs = await previousRuns("o/r", 1, ["app/a.server.ts", "app/b.server.ts"], api);
+    assert.deepEqual(
+      runs.map(({ id }) => id),
+      [3, 2],
+    );
+    assert.equal(
+      calls.some((url) => url.includes("/runs/1/jobs")),
+      false,
+    );
+  });
+
+  it("legge tutte le run se un modulo non ha esiti e nessuna senza moduli", async () => {
+    const { api, calls } = fake({ 3: [job("app/a.server.ts")] });
+    assert.equal((await previousRuns("o/r", 1, ["app/z.server.ts"], api)).length, 3);
+    const empty = fake({});
+    assert.deepEqual(await previousRuns("o/r", 1, [], empty.api), []);
+    assert.equal(empty.calls.length, 0);
+    assert.ok(calls.length > 0);
   });
 });
