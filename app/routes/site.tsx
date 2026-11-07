@@ -24,6 +24,7 @@ import {
   visitParam,
 } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
+import { botUrl } from "../integrations/telegram.server";
 import { publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/site";
@@ -75,6 +76,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     language,
     signedIn: Boolean(session),
     origin,
+    telegramBot: botUrl(env),
     copy: {
       ...copy,
       // Come in Prezzi: importo grande, periodo con l'IVA esclusa sotto e l'annuale in evidenza.
@@ -111,7 +113,7 @@ export function headers(): HeadersInit {
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   if (!loaderData) return [];
-  const { language, origin, copy } = loaderData;
+  const { language, origin, telegramBot, copy } = loaderData;
   const organization = `${origin}/#organization`;
   return [
     ...siteMeta({ language, origin, path: "/", title: copy.title, description: copy.description }),
@@ -125,6 +127,9 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
             name: "FiscalBay",
             url: `${origin}/`,
             logo: `${origin}/apple-touch-icon.png`,
+            description: copy.description,
+            // Profili che appartengono a FiscalBay: il bot Telegram dell'ambiente.
+            sameAs: [telegramBot],
             // I contatti generali usano `info@`; `supporto@` resta all'assistenza clienti (§14).
             email: infoEmail,
           },
