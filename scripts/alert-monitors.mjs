@@ -76,12 +76,14 @@ export function desiredMonitors(target, queueIds) {
   return [
     monitor({
       name: `${target.worker} cron fermo`,
-      description: `Nessuna esecuzione del cron del Worker ${target.worker} negli ultimi 30 minuti.`,
+      description: `Nessuna esecuzione del cron del Worker ${target.worker} nell'ultima ora.`,
       query: `SELECT COUNT(*) AS value ${events} AND invocationType = 'scheduled'`,
-      // Un cron ogni dieci minuti: in 30 minuti ne mancano almeno due prima dell'avviso.
+      // Un cron ogni dieci minuti: in un'ora ne mancano sei prima dell'avviso. Con 30 minuti la
+      // valutazione del provider ha contato zero esecuzioni presenti nei log (2026-11-07 01:01 UTC,
+      // tre esecuzioni nella finestra): un'ora assorbe questi conteggi mancati.
       operator: "<",
       value: 1,
-      window: "30m",
+      window: "1h",
     }),
     monitor({
       name: `${target.worker} eccezioni`,
