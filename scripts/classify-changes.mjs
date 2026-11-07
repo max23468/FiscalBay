@@ -120,7 +120,7 @@ const tooling = [
   // Git e gli strumenti di formato e lint lo leggono; build e Worker no.
   /^\.gitignore$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|indexnow|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|browser-evidence|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|indexnow|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|browser-evidence|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker|critical-modules))\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -449,7 +449,7 @@ export const areaTags = Object.keys(areaPatterns);
 /** Cambiare il processo richiede la sua qualifica anche senza distribuire il prodotto. */
 export const qualificationChange = (files) =>
   files.some((file) =>
-    /^(?:\.github\/(?:workflows\/|actions\/)|scripts\/(?:release\/|classify-changes|browser-(?:tests|evidence)|pages-reuse|find-(?:build|deployed)|mutation(?:-reuse)?|lib\/(?:provider|worker)))/u.test(
+    /^(?:\.github\/(?:workflows\/|actions\/)|scripts\/(?:release\/|classify-changes|browser-(?:tests|evidence)|pages-reuse|find-(?:build|deployed)|mutation(?:-reuse)?|lib\/(?:provider|worker|critical-modules)))/u.test(
       file,
     ),
   );

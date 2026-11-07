@@ -752,10 +752,12 @@ describe("esecuzione del classificatore", () => {
       for (const file of [
         "classify-changes.mjs",
         "mutation.mjs",
+        "mutation-reuse.mjs",
         "verify-repo.mjs",
         "release/release.mjs",
         "release/records.mjs",
         "lib/provider.mjs",
+        "lib/critical-modules.mjs",
       ])
         cpSync(path.join("scripts", file), path.join(repo, "scripts", file));
       mkdirSync(path.join(repo, "app"));
