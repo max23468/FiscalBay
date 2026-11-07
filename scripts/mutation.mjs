@@ -60,6 +60,7 @@ export const supportModules = new Set([
   "app/domain/account-deletion.server.ts",
   "app/domain/admission-state.server.ts",
   "app/domain/admission.server.ts",
+  "app/domain/buyer-check.server.ts",
   "app/domain/email-change.server.ts",
   "app/domain/exit-feedback.server.ts",
   "app/domain/history-window.server.ts",
