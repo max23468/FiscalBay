@@ -6,6 +6,12 @@ name: Candidato
 # Il titolo lega il ciclo al commit qualificato, anche se nel frattempo `develop` avanza.
 run-name: Candidato ${{ inputs.expected_sha || github.sha }}
 
+# Run dello stesso commit non duplicano la qualifica; quella in corso termina. Le richieste
+# esplicite hanno una coda propria: un merge automatico non sostituisce quella in attesa.
+concurrency:
+  group: candidate-${{ inputs.expected_sha || github.sha }}-${{ github.event_name == 'workflow_dispatch' && !inputs.automatic && 'requested' || 'automatic' }}
+  cancel-in-progress: false
+
 on:
   schedule:
     - cron: "11 * * * *"
@@ -98,7 +104,7 @@ jobs:
     if: ${{ !cancelled() && needs.plan.outputs.qualify == 'true' }}
     # Una qualifica in corso finisce; dopo di lei parte soltanto l'ultima in attesa.
     concurrency:
-      group: candidate-qualification
+      group: candidate-qualification-${{ github.event_name == 'workflow_dispatch' && !inputs.automatic && 'requested' || 'automatic' }}
       cancel-in-progress: false
     uses: ./.github/workflows/qualify.yml
     with:
@@ -106,3 +112,4 @@ jobs:
       mutation_targets: ${{ needs.plan.outputs.mutation-matrix }}
       skip_pages: ${{ needs.plan.outputs.skip-pages }}
       force_full: ${{ github.event.schedule == '23 3 * * 1' }}
+      priority: ${{ github.event_name == 'workflow_dispatch' && !inputs.automatic }}

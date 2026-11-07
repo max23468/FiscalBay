@@ -48,6 +48,12 @@ export const levelScripts = {
 };
 const levels = Object.keys(levelScripts);
 
+export function ciGateScript(level, built = false) {
+  if (built && level === "full") return "verify:gate";
+  if (built && level === "build") return "verify:unit";
+  return levelScripts[level];
+}
+
 /**
  * Gate locale di `pnpm verify:changed`: controlli statici del livello, poi i test collegati al
  * diff. Copertura, build, React Doctor fuori dal livello completo, WebKit e suite browser restano
@@ -100,9 +106,9 @@ const changelogFile = (file) => file === "CHANGELOG.md" || changeFile.test(file)
 const buildTool =
   /^(?:vite|vite-.+|@vitejs\/.+|@cloudflare\/(?:vite-plugin|workers-types)|@react-router\/.+|react-router|tailwindcss|@tailwindcss\/.+|typescript|lightningcss|@playwright\/test)$/u;
 
-// Il governo contiene i gate Production letti dagli script: richiede anche i loro test.
-const governance =
-  /^(?:AGENTS\.md|CLAUDE\.md|docs\/ROADMAP\.md|docs\/(?:product|engineering|operations)\/.+)$/u;
+// Le istruzioni degli agenti governano l'esecuzione. I documenti di prodotto e operativi
+// sono verificati da verify-docs, senza eseguire strumenti che non li consumano.
+const governance = /^(?:AGENTS\.md|CLAUDE\.md)$/u;
 
 // Strumenti che non entrano nella build, nei test applicativi o nelle prove browser.
 const tooling = [
@@ -111,8 +117,10 @@ const tooling = [
   /^\.agents\//u,
   /^\.codex\//u,
   /^\.mcp\.json$/u,
+  // Git e gli strumenti di formato e lint lo leggono; build e Worker no.
+  /^\.gitignore$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|browser-evidence|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker))\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -127,6 +135,7 @@ const browserSpec = /^e2e\/([^/]+\.spec)\.ts$/u;
 // ma non cambiano l'artefatto distribuito.
 const browser =
   /^(?:e2e\/|playwright\.config\.ts$|scripts\/(?:browser-tests|local-preview|local-d1)\.mjs$)/u;
+const browserRunner = /^scripts\/(?:browser-tests|local-preview|local-d1)\.mjs$/u;
 
 /**
  * Vero se le due versioni della configurazione differiscono soltanto nei valori
@@ -191,6 +200,54 @@ export function dependencyChange(before, after) {
   }
 }
 
+/** Script raggiunti da quelli indicati attraverso `pnpm <script>` o `pnpm run <script>`. */
+function scriptClosure(scripts, roots) {
+  const found = new Set();
+  const visit = (name) => {
+    if (found.has(name) || !(name in scripts)) return;
+    found.add(name);
+    for (const [, child] of String(scripts[name]).matchAll(/\bpnpm (?:run )?([\w:.-]+)/gu))
+      visit(child);
+  };
+  roots.forEach(visit);
+  return found;
+}
+
+// Script che entrano nell'artefatto, nel deploy o nell'installazione delle dipendenze.
+const artifactScript = /^(?:(?:pre|post)?(?:build|deploy|install)(?::.+)?|prepare)$/u;
+
+/**
+ * Livello di un manifest che cambia soltanto la sezione `scripts`: il più leggero il cui gate
+ * esegue tutti gli script cambiati, oppure `tooling` se nessun gate li esegue. `undefined` se
+ * cambia altro o se uno script cambiato entra in build, deploy o installazione.
+ */
+export function scriptsChange(before, after) {
+  try {
+    const [previous, next] = [before, after].map((text) => JSON.parse(text));
+    const { sections } = manifestDifference(before, after);
+    if (sections.length !== 1 || sections[0] !== "scripts") return undefined;
+    const [from, to] = [previous.scripts ?? {}, next.scripts ?? {}];
+    const changed = [...new Set([...Object.keys(from), ...Object.keys(to)])].filter(
+      (name) => from[name] !== to[name],
+    );
+    for (const scripts of [from, to]) {
+      const artifact = scriptClosure(
+        scripts,
+        Object.keys(scripts).filter((name) => artifactScript.test(name)),
+      );
+      if (changed.some((name) => artifactScript.test(name) || artifact.has(name))) return undefined;
+    }
+    return (
+      levels.find((level) => {
+        const run = scriptClosure(to, [levelScripts[level]]);
+        return changed.every((name) => run.has(name));
+      }) ?? "tooling"
+    );
+  } catch {
+    return undefined;
+  }
+}
+
 /** Vero se due changelog leggibili mostrano la stessa pagina Novità. */
 export const sameNews = (before, after) =>
   typeof before === "string" &&
@@ -221,6 +278,8 @@ export function fileImpact(file, change, lock) {
       ? { level: "docs", e2e: false, deploy: false }
       : { level: "build", e2e: false, deploy: true };
   if (file === manifestFile) {
+    const scripts = scriptsChange(change?.before, change?.after);
+    if (scripts) return { level: scripts, e2e: false, deploy: false };
     const weight = dependencyChange(change?.before, change?.after);
     if (weight === "tools") return { level: "full", e2e: false, deploy: false };
     if (weight === "build") return { level: "full", e2e: true, deploy: true, core: true };
@@ -234,6 +293,10 @@ export function fileImpact(file, change, lock) {
   if (governance.test(file) || tooling.some((pattern) => pattern.test(file)))
     return { level: "tooling", e2e: false, deploy: false };
   if (unit.test(file)) return { level: "unit", e2e: false, deploy: false };
+  // Runner, anteprima e D1 locale preparano ogni prova allo stesso modo: il nucleo essenziale nei
+  // due browser li prova, la suite completa resta alla qualifica. Spec, helper e configurazione di
+  // Playwright cambiano invece ciò che le prove verificano.
+  if (browserRunner.test(file)) return { level: "build", e2e: true, deploy: false, core: true };
   if (browser.test(file)) return { level: "build", e2e: true, deploy: false };
   if (file === "scripts/check-bundle-size.mjs")
     return { level: "build", e2e: false, deploy: false };
@@ -386,7 +449,7 @@ export const areaTags = Object.keys(areaPatterns);
 /** Cambiare il processo richiede la sua qualifica anche senza distribuire il prodotto. */
 export const qualificationChange = (files) =>
   files.some((file) =>
-    /^(?:\.github\/(?:workflows\/|actions\/)|scripts\/(?:release\/|classify-changes|browser-tests|pages-reuse|find-(?:build|deployed)|mutation(?:-reuse)?|lib\/(?:provider|worker)))/u.test(
+    /^(?:\.github\/(?:workflows\/|actions\/)|scripts\/(?:release\/|classify-changes|browser-(?:tests|evidence)|pages-reuse|find-(?:build|deployed)|mutation(?:-reuse)?|lib\/(?:provider|worker)))/u.test(
       file,
     ),
   );
@@ -736,7 +799,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       `${JSON.stringify({ tree, seconds: Math.round((Date.now() - started) / 1000), ...extra })}\n`,
     );
   if (args.run) {
-    if (committed) run("pnpm", [result.script]);
+    if (committed)
+      run("pnpm", [ciGateScript(result.gate, process.env.VERIFIED_TEST_BUILD === "true")]);
     else {
       const impacts = files.map((file) => fileImpact(file, changes[file]));
       // Lo stesso controllo della versione di `Verify`, prima del gate: un frammento con Novità su

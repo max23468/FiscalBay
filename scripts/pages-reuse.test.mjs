@@ -10,6 +10,55 @@ import {
 } from "./pages-reuse.mjs";
 
 describe("riuso delle visite del catalogo", () => {
+  it("invalida i contenuti delle Novità soltanto per i consumatori reali, anche transitivi", () => {
+    const files = [
+      { path: "app/routes/stores.tsx", text: 'import "../whats-new.server";' },
+      { path: "app/routes/settings.tsx", text: 'import "../account-area.server";' },
+      { path: "app/account-area.server.ts", text: 'import "./whats-new.server";' },
+      { path: "app/routes/orders.tsx", text: "" },
+      { path: "app/whats-new.server.ts", text: "" },
+    ];
+    const before = pageCoverage(files, [{ path: "CHANGELOG.md", text: "before" }]);
+    for (const news of [
+      [{ path: "CHANGELOG.md", text: "after" }],
+      [{ path: "changes/new.md", text: "new" }],
+      [],
+    ]) {
+      const reused = coveredAreas(before, pageCoverage(files, news));
+      assert.ok(reused.includes("orders"));
+      assert.ok(!reused.includes("stores"));
+      assert.ok(!reused.includes("settings"));
+    }
+  });
+  it("la shell non rende Novità nel sito, ma una route sconosciuta o la radice invalidano tutto", () => {
+    const news = (text) => [{ path: "CHANGELOG.md", text }];
+    const sources = [
+      { path: "app/routes/account.tsx", text: 'import "../whats-new.server";' },
+      { path: "app/whats-new.server.ts", text: "" },
+    ];
+    const reused = coveredAreas(
+      pageCoverage(sources, news("old")),
+      pageCoverage(sources, news("new")),
+    );
+    assert.ok(reused.includes("public"));
+    assert.ok(!reused.includes("orders"));
+    for (const path of ["app/root.tsx", "app/routes/new-page.tsx"]) {
+      const all = [
+        ...sources,
+        {
+          path,
+          text:
+            path === "app/root.tsx"
+              ? 'import "./whats-new.server";'
+              : 'import "../whats-new.server";',
+        },
+      ];
+      assert.deepEqual(
+        coveredAreas(pageCoverage(all, news("old")), pageCoverage(all, news("new"))),
+        [],
+      );
+    }
+  });
   const sources = [
     { path: "app/routes/stores.tsx", text: "" },
     { path: "app/domain/scheduled-work.server.ts", text: "" },

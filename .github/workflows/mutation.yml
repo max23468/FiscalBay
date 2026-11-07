@@ -19,6 +19,10 @@ on:
       expected_sha:
         type: string
         default: ""
+      # Qualifica richiesta, per esempio da `Promuovi`: non cede posti al lavoro di fondo.
+      priority:
+        type: boolean
+        default: false
       targets:
         description: Matrice JSON dei moduli critici da qualificare
         type: string
@@ -29,6 +33,7 @@ env:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   select:
@@ -37,6 +42,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
+      parallel: ${{ steps.targets.outputs.parallel }}
     steps:
       # La pianificazione parte dal branch predefinito: la campagna prova `develop`.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -45,10 +51,18 @@ jobs:
           persist-credentials: false
       # L'instrumenter di Stryker conta i mutanti di ogni modulo per dividerlo in parti.
       - uses: ./.github/actions/setup
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-timings.json
+          key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-timings-
       - name: List critical modules
         id: targets
         env:
           TARGETS: ${{ inputs.targets }}
+          GH_TOKEN: ${{ github.token }}
+          MUTATION_PRIORITY: ${{ inputs.priority }}
+          MUTATION_CAMPAIGN: ${{ github.event.schedule == '17 3 * * 1' || github.event.schedule == '23 3 * * 1' }}
         run: node scripts/mutation.mjs --matrix "${TARGETS}"
 
   mutation:
@@ -60,14 +74,15 @@ jobs:
     strategy:
       # Ogni modulo conclude la propria prova: un fallimento non nasconde gli altri esiti.
       fail-fast: false
-      # Venti job contemporanei per l'account. Di giorno la qualifica del candidato ne lascia
-      # almeno quattro alle PR mentre girano i suoi otto browser, e dodici dopo, anche quando parte
-      # dalla pianificazione oraria; le campagne del lunedì notte usano quasi tutti i posti.
-      max-parallel: ${{ (github.event.schedule == '17 3 * * 1' || github.event.schedule == '23 3 * * 1') && 16 || 8 }}
+      # Con PR o cicli attivi il lavoro di fondo lascia spazio ai job che sbloccano il deploy;
+      # le qualifiche richieste e le campagne notturne senza altro lavoro restano piene.
+      max-parallel: ${{ fromJSON(needs.select.outputs.parallel) }}
       matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
     env:
       MUTATION_TARGET: ${{ matrix.target }}
       MUTATION_SHARD: ${{ matrix.shard }}
+      MUTATION_RANGES: ${{ matrix.ranges }}
+      MUTATION_DIGEST: ${{ matrix.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -97,3 +112,33 @@ jobs:
           path: reports/mutation/
           if-no-files-found: ignore
           retention-days: 7
+
+  timings:
+    name: Preserve measured durations
+    needs: mutation
+    if: success() && github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # Il codice della raccolta è quello della run su `develop`: le misure portano già digest e
+    # righe del sorgente provato, e decidono soltanto come dividere le parti, mai cosa provare.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-timings.json
+          key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-timings-
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: reports/mutation-timings/
+      - run: node scripts/mutation.mjs --collect-timings reports/mutation-timings
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-timings.json
+          key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}

@@ -16,10 +16,90 @@ import {
   prTargets,
   shardPlan,
   shardRanges,
+  timedMutants,
+  validateRanges,
+  backgroundConcurrency,
+  completeTimings,
 } from "./mutation.mjs";
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 
 describe("esito dei mutation test", () => {
+  it("riduce i job di fondo in presenza di PR o cicli richiesti", () => {
+    const pr = [{ event: "pull_request", status: "queued" }];
+    assert.equal(backgroundConcurrency([]), 8);
+    assert.equal(backgroundConcurrency([], { campaign: true }), 16);
+    assert.equal(backgroundConcurrency(pr), 4);
+    assert.equal(backgroundConcurrency(pr, { campaign: true }), 4);
+    assert.equal(
+      backgroundConcurrency([{ path: ".github/workflows/cycle.yml", status: "in_progress" }]),
+      4,
+    );
+    assert.equal(backgroundConcurrency(pr, { priority: true }), 8);
+    assert.equal(backgroundConcurrency([{ event: "pull_request", status: "completed" }]), 8);
+  });
+  it("conserva le durate soltanto se coprono tutto il modulo", () => {
+    const digest = "a".repeat(64);
+    const part = (start, end, change = {}) => ({
+      start,
+      end,
+      digest,
+      lines: 10,
+      mutationMs: 1000,
+      preparationMs: 100,
+      ...change,
+    });
+    assert.equal(completeTimings([part(1, 5), part(6, 10)]), true);
+    assert.equal(completeTimings([part(6, 10)]), false);
+    assert.equal(completeTimings([part(1, 4), part(6, 10)]), false);
+    assert.equal(completeTimings([part(1, 5), part(6, 10, { digest: "b".repeat(64) })]), false);
+    assert.equal(completeTimings([part(1, 5), part(6, 10, { lines: 11 })]), false);
+    assert.equal(completeTimings([part(1, 10, { digest: "forged" })]), false);
+    assert.equal(completeTimings([part(1, 10, { mutationMs: "1" })]), false);
+    assert.equal(completeTimings([]), false);
+  });
+  it("bilancia i tempi senza saltare mutanti e rifiuta piani incompleti", () => {
+    const mutants = Array.from({ length: 12 }, (_, index) => ({
+      start: index + 1,
+      end: index + 1,
+    }));
+    const history = [
+      { digest: "same", start: 1, end: 6, mutants: 6, mutationMs: 600000, preparationMs: 1000 },
+      { digest: "same", start: 7, end: 12, mutants: 6, mutationMs: 6000, preparationMs: 1000 },
+    ];
+    const timed = timedMutants(mutants, history, "same");
+    assert.equal(timed[0].weight, 100000);
+    assert.deepEqual(timedMutants(mutants, history, "changed"), mutants);
+    assert.deepEqual(timedMutants(mutants, [], "same"), mutants);
+    const ranges = shardPlan(timed, 12, 1000);
+    assert.ok(ranges.length > 1);
+    assert.equal(
+      ranges.reduce((sum, range) => sum + range.mutants, 0),
+      12,
+    );
+    assert.doesNotThrow(() => validateRanges(ranges, 12, mutants));
+    assert.throws(() => validateRanges(ranges.slice(1), 12, mutants));
+    assert.throws(() =>
+      validateRanges(
+        [
+          { start: 1, end: 6 },
+          { start: 6, end: 12 },
+        ],
+        12,
+        mutants,
+      ),
+    );
+    assert.throws(() =>
+      validateRanges(
+        [
+          { start: 1, end: 6 },
+          { start: 7, end: 12 },
+        ],
+        12,
+        [{ start: 4, end: 8 }],
+      ),
+    );
+    assert.equal(shardPlan(timed, 12, 10000000).length, 1);
+  });
   it("limita i runner alle CPU e alla memoria senza azzerare l'esecuzione", () => {
     const gib = 1024 ** 3;
     assert.equal(mutationConcurrency(4, 8, 8 * gib), 2);

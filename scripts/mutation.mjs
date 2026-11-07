@@ -28,6 +28,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { availableParallelism, totalmem } from "node:os";
@@ -235,10 +236,12 @@ export async function mutantLines(file) {
  */
 export function shardRanges(mutants, shards, lastLine) {
   const crossed = (line) => mutants.some(({ start, end }) => start < line && end >= line);
-  const before = (line) => mutants.filter(({ end }) => end < line).length;
+  const before = (line) =>
+    mutants.filter(({ end }) => end < line).reduce((sum, mutant) => sum + (mutant.weight ?? 1), 0);
+  const total = before(lastLine + 1);
   const cuts = [];
   for (let part = 1; part < shards; part++) {
-    const target = (part * mutants.length) / shards;
+    const target = (part * total) / shards;
     let best = null;
     for (let line = (cuts.at(-1) ?? 1) + 1; line <= lastLine; line++)
       if (
@@ -261,26 +264,143 @@ export function shardRanges(mutants, shards, lastLine) {
  * con la parte più piccola. Con due parti `stores.server.ts` ne aveva una da 162 mutanti che
  * superava i 60 minuti del job.
  */
-export function shardPlan(mutants, lastLine) {
+export function shardPlan(mutants, lastLine, preparationMs = 0) {
   const inside = (range) =>
     mutants.filter(({ start, end }) => start >= range.start && end <= range.end).length;
   const minimum = Math.max(1, Math.ceil(mutants.length / mutantsPerShard));
   let best = null;
+  const timed = mutants.some((mutant) => mutant.weight !== undefined);
   for (let shards = minimum; shards <= minimum + 4; shards++) {
     const plan = shardRanges(mutants, shards, lastLine).map((range) => ({
       ...range,
       mutants: inside(range),
+      ...(timed
+        ? {
+            estimatedMs:
+              preparationMs +
+              mutants
+                .filter(({ start, end }) => start >= range.start && end <= range.end)
+                .reduce((sum, mutant) => sum + mutant.weight, 0),
+          }
+        : {}),
     }));
-    const largest = Math.max(...plan.map((part) => part.mutants));
+    const largest = timed
+      ? Math.max(
+          ...plan.map((range) =>
+            mutants
+              .filter(({ start, end }) => start >= range.start && end <= range.end)
+              .reduce((sum, mutant) => sum + mutant.weight, 0),
+          ),
+        ) +
+        (preparationMs * plan.length) / 4
+      : Math.max(...plan.map((part) => part.mutants));
     if (best === null || largest < best.largest) best = { plan, largest };
-    if (largest <= mutantsPerShard) break;
+    if (!timed && largest <= mutantsPerShard) break;
   }
   return best.plan;
 }
 
 /** Intervalli delle parti del modulo, secondo `shardPlan`. */
+export function timedMutants(mutants, history, digest) {
+  if (
+    !Array.isArray(history) ||
+    !history.length ||
+    history.some(
+      (entry) =>
+        entry.digest !== digest ||
+        !Number.isFinite(entry.mutationMs) ||
+        !(entry.mutationMs > 0) ||
+        !(entry.mutants > 0) ||
+        !Number.isFinite(entry.preparationMs) ||
+        entry.preparationMs < 0,
+    )
+  )
+    return mutants;
+  return mutants.map((mutant) => {
+    const sample = history.find(({ start, end }) => mutant.start >= start && mutant.end <= end);
+    return { ...mutant, weight: sample ? sample.mutationMs / sample.mutants : 1000 };
+  });
+}
+
+const sourceDigest = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+
+/**
+ * Vero se le parti misurate coprono tutto il modulo, contigue e con lo stesso digest. Digest e
+ * righe vengono dalle misure: la raccolta non legge i sorgenti del commit qualificato.
+ */
+export function completeTimings(parts) {
+  const [first] = parts;
+  return (
+    parts.length > 0 &&
+    /^[a-f0-9]{64}$/u.test(first.digest ?? "") &&
+    Number.isSafeInteger(first.lines) &&
+    first.start === 1 &&
+    parts.at(-1).end === first.lines &&
+    parts.every(
+      (part, index) =>
+        part.digest === first.digest &&
+        part.lines === first.lines &&
+        Number.isFinite(part.mutationMs) &&
+        Number.isFinite(part.preparationMs) &&
+        (index === 0 || part.start === parts[index - 1].end + 1),
+    )
+  );
+}
+
+const timingFile = ".mutation-timings.json";
+function timingHistory() {
+  try {
+    return JSON.parse(readFileSync(timingFile, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
 export async function moduleShards(file) {
-  return shardPlan(await mutantLines(file), readFileSync(file, "utf8").split("\n").length);
+  const history = timingHistory()[file];
+  const mutants = timedMutants(await mutantLines(file), history, sourceDigest(file));
+  const preparation = mutants.some((entry) => entry.weight !== undefined)
+    ? Math.max(...history.map((entry) => entry.preparationMs || 0))
+    : 0;
+  return shardPlan(mutants, readFileSync(file, "utf8").split("\n").length, preparation);
+}
+
+export function validateRanges(ranges, lastLine, mutants) {
+  if (
+    !Array.isArray(ranges) ||
+    !ranges.length ||
+    ranges[0].start !== 1 ||
+    ranges.at(-1).end !== lastLine ||
+    ranges.some(
+      (range, index) =>
+        !Number.isSafeInteger(range.start) ||
+        !Number.isSafeInteger(range.end) ||
+        range.end < range.start ||
+        (index > 0 && range.start !== ranges[index - 1].end + 1),
+    ) ||
+    mutants.some(
+      ({ start, end }) =>
+        ranges.filter((range) => start >= range.start && end <= range.end).length !== 1,
+    )
+  )
+    throw new Error("Intervalli mutation incompleti o sovrapposti.");
+  return ranges;
+}
+
+/**
+ * Job mutation contemporanei. Una qualifica richiesta, come quella attesa da `Promuovi`, non
+ * rallenta; il lavoro di fondo lascia posti alle PR e ai cicli attivi, e le campagne notturne
+ * senza altro lavoro usano quasi tutti i venti posti dell'account.
+ */
+export function backgroundConcurrency(runs, { priority = false, campaign = false } = {}) {
+  if (priority) return 8;
+  const busy = runs.some(
+    (run) =>
+      run.status !== "completed" &&
+      (run.event === "pull_request" || run.path === ".github/workflows/cycle.yml"),
+  );
+  if (busy) return 4;
+  return campaign ? 16 : 8;
 }
 
 /**
@@ -291,9 +411,15 @@ export async function mutationJobs(targets, shardsOf = moduleShards, testsOf = (
   const jobs = await Promise.all(
     targets.map(async (target) => {
       const shards = await shardsOf(target);
-      return shards.map(({ mutants }, index) => ({
-        job: { target, shard: `${index + 1}/${shards.length}` },
-        weight: mutants * testsOf(target),
+      return shards.map(({ mutants, estimatedMs }, index) => ({
+        job: {
+          target,
+          shard: `${index + 1}/${shards.length}`,
+          ...(shards.every((range) => Number.isInteger(range.start))
+            ? { ranges: JSON.stringify(shards), digest: sourceDigest(target) }
+            : {}),
+        },
+        weight: estimatedMs ?? mutants * testsOf(target),
       }));
     }),
   );
@@ -479,7 +605,18 @@ async function runTarget(target, files, shard = "1/1") {
   const [part, shards] = shard.split("/").map(Number);
   if (!Number.isInteger(part) || !Number.isInteger(shards) || part < 1 || part > shards)
     throw new Error(`Parte mutation non valida: ${shard}`);
-  const ranges = shards > 1 ? await moduleShards(target) : [null];
+  if (process.env.MUTATION_DIGEST && process.env.MUTATION_DIGEST !== sourceDigest(target))
+    throw new Error("Sorgente mutation diverso dal piano.");
+  const mutants = await mutantLines(target);
+  const ranges = process.env.MUTATION_RANGES
+    ? validateRanges(
+        JSON.parse(process.env.MUTATION_RANGES),
+        readFileSync(target, "utf8").split("\n").length,
+        mutants,
+      )
+    : shards > 1
+      ? await moduleShards(target)
+      : [null];
   // La matrice e il job leggono lo stesso sorgente: parti diverse indicano un altro commit.
   if (ranges.length !== shards) throw new Error(`Parti mutation diverse per ${target}: ${shard}`);
   const range = ranges[part - 1];
@@ -497,6 +634,7 @@ async function runTarget(target, files, shard = "1/1") {
     configPath,
     JSON.stringify({
       ...settings,
+      reporters: [...settings.reporters, "timing"],
       incremental: true,
       incrementalFile,
       concurrency: mutationConcurrency(settings.concurrency),
@@ -513,6 +651,8 @@ async function runTarget(target, files, shard = "1/1") {
       env: {
         ...process.env,
         MUTATION_TARGET: target,
+        MUTATION_STARTED_AT: String(start),
+        MUTATION_TIMING_FILE: path.resolve(directory, "preparation.json"),
         MUTATION_TEST_FILES: JSON.stringify(tests),
       },
     });
@@ -525,6 +665,27 @@ async function runTarget(target, files, shard = "1/1") {
   const counts = {};
   for (const { status } of Object.values(report?.files ?? {}).flatMap(({ mutants }) => mutants))
     counts[status] = (counts[status] ?? 0) + 1;
+  // Solo esecuzioni complete alimentano il bilanciamento: l'incrementale costa meno.
+  if (!base && failures.length === 0) {
+    const preparationMs = existsSync(`${directory}/preparation.json`)
+      ? JSON.parse(readFileSync(`${directory}/preparation.json`, "utf8")).preparationMs
+      : 0;
+    writeFileSync(
+      `${directory}/timing.json`,
+      JSON.stringify({
+        target,
+        digest: sourceDigest(target),
+        start: range?.start ?? 1,
+        end: range?.end ?? readFileSync(target, "utf8").split("\n").length,
+        lines: readFileSync(target, "utf8").split("\n").length,
+        mutants: mutants.filter(
+          ({ start, end }) => !range || (start >= range.start && end <= range.end),
+        ).length,
+        preparationMs,
+        mutationMs: Math.max(1, Date.now() - start - preparationMs),
+      }),
+    );
+  }
   const summary = `${target}${shards > 1 ? ` (parte ${shard})` : ""}: ${Math.round((Date.now() - start) / 1000)}s, ${tests.length} file di test, ${JSON.stringify(counts)}, ${failures.length} problemi.\n`;
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
@@ -535,14 +696,31 @@ async function runTarget(target, files, shard = "1/1") {
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const {
     positionals: args,
-    values: { matrix: matrixMode, "incremental-base": baseFile },
+    values: { matrix: matrixMode, "incremental-base": baseFile, "collect-timings": collectTimings },
   } = parseArgs({
     allowPositionals: true,
     options: {
       matrix: { type: "boolean" },
       "incremental-base": { type: "string" },
+      "collect-timings": { type: "string" },
     },
   });
+  if (collectTimings) {
+    const history = timingHistory();
+    const samples = readdirSync(collectTimings, { recursive: true })
+      .filter((file) => file.endsWith("timing.json"))
+      .map((file) => JSON.parse(readFileSync(path.join(collectTimings, file), "utf8")));
+    // Una run con parti incrementali misura soltanto una parte del modulo: le durate si
+    // sostituiscono quando le parti complete coprono tutto il sorgente corrente.
+    for (const target of new Set(samples.map((entry) => entry.target))) {
+      const parts = samples
+        .filter((entry) => entry.target === target)
+        .sort((a, b) => a.start - b.start);
+      if (completeTimings(parts)) history[target] = parts;
+    }
+    writeFileSync(timingFile, JSON.stringify(history));
+    process.exit(0);
+  }
   if (baseFile) {
     await writeIncrementalBase(baseFile);
     process.exit(0);
@@ -564,6 +742,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     );
     if (process.env.GITHUB_OUTPUT)
       appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(jobs)}\n`);
+    if (process.env.GITHUB_OUTPUT && process.env.GH_TOKEN) {
+      const runs = ["queued", "in_progress", "waiting", "pending"].flatMap((status) =>
+        ghJson(
+          "api",
+          "--paginate",
+          "--slurp",
+          `repos/${process.env.GITHUB_REPOSITORY}/actions/runs?status=${status}&per_page=100`,
+        ).flatMap((page) => page.workflow_runs),
+      );
+      appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        `parallel=${backgroundConcurrency(runs, { priority: process.env.MUTATION_PRIORITY === "true", campaign: process.env.MUTATION_CAMPAIGN === "true" })}\n`,
+      );
+    }
   } else if (args.length === 0) {
     console.error("Uso: node scripts/mutation.mjs <file>...");
     process.exitCode = 2;
