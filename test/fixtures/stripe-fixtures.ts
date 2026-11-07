@@ -112,6 +112,8 @@ export type FakeSubscription = {
   cancel?: boolean;
   /** Disdetta a un istante esplicito, come dal portale. */
   cancelAt?: string;
+  /** Motivo e commento scelti nel portale alla disdetta. */
+  feedback?: { feedback: string | null; comment: string | null };
   /** Modifica programmata con una Subscription Schedule. */
   schedule?: string;
   /** Abbonamento senza righe. */
@@ -187,6 +189,9 @@ export function stripeAccount() {
     status: state.subscription.status,
     cancel_at_period_end: state.subscription.cancel ?? false,
     cancel_at: state.subscription.cancelAt ? second(state.subscription.cancelAt) : null,
+    cancellation_details: state.subscription.feedback
+      ? { ...state.subscription.feedback, reason: "cancellation_requested" }
+      : { feedback: null, comment: null, reason: null },
     schedule: state.subscription.schedule ?? null,
     metadata: state.subscription.metadata ?? {
       workspace_id: "w-a",

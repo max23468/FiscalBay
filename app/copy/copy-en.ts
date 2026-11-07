@@ -1,5 +1,6 @@
 import { legalDate, plural } from "./format";
 import type { AppCopy } from "./copy-it";
+import type { ExitReason } from "../exit-reasons";
 
 /**
  * Conteggi con il separatore delle migliaia anche a quattro cifre, come `formatNumber`. Il formato
@@ -839,6 +840,18 @@ export const en: AppCopy = {
       deleteAccountExport:
         "You can download the account data first. Orders are exported from Export.",
       deleteAccountOpenExport: "Open Export",
+      deleteAccountReason: "Why are you deleting your account? (optional)",
+      deleteAccountNoReason: "I’d rather not say",
+      deleteAccountReasons: {
+        too_expensive: "It costs too much",
+        unused: "I don’t use it enough",
+        switched_service: "I’m switching to another service",
+        missing_features: "A feature I need is missing",
+        low_quality: "It doesn’t work as I expected",
+        closing_business: "I’m closing or pausing my eBay business",
+        other: "Other",
+      } satisfies Record<ExitReason, string>,
+      deleteAccountComment: "Anything else you’d like to tell us? (optional)",
       deleteAccountEmail: "Type your email address to confirm",
       deleteAccountConfirm: "Send confirmation link",
       deleteAccountSent: (email: string) =>

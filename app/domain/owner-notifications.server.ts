@@ -6,6 +6,7 @@ import { untilStopped } from "../sequence";
 import { formatAmount } from "../i18n";
 import { ownerChatId, telegramConfigured } from "../integrations/telegram.server";
 import { activeCoverageSql } from "./grants.server";
+import { exitOfNotification } from "./exit-feedback.server";
 import { listSignInMethods } from "./sign-in-methods.server";
 import { at, ownerRetryMs, sendPanel, type Panel, type Row } from "./owner-panels.server";
 
@@ -85,6 +86,9 @@ type NotificationRow = {
   claim_token: string;
 };
 
+/** Motivo e commento di una disdetta o di una cancellazione, letti all'invio (D314). */
+type Exit = { reason: keyof typeof t.exits.reasons | null; comment: string | null };
+
 /** Spazio dell'avviso letto all'invio: stato e conteggi. */
 type Space = { createdAt: string; stores: number; coverage: string | null };
 
@@ -155,7 +159,17 @@ const amount = (minor: number | null | undefined, currency: string | undefined) 
 const offerName = (offer: Detail["offer"]) => (offer ? t.commerce.offer[offer] : "n.d.");
 
 /** Righe della sezione commerciale, per avviso. */
-function commerceRows(kind: NotificationKind, detail: Detail, occurredAt: string): Row[] {
+function commerceRows(
+  kind: NotificationKind,
+  detail: Detail,
+  occurredAt: string,
+  exit: Exit | null,
+): Row[] {
+  // Il motivo vale «Nessuna risposta» anche senza riga di uscita; il commento solo se c'è.
+  const exitRows: Row[] = [
+    [n.labels.reason, t.exits.reasons[exit?.reason ?? "none"]],
+    ...(exit?.comment ? [[n.labels.comment, exit.comment] satisfies Row] : []),
+  ];
   switch (kind) {
     case "registered":
       return [
@@ -189,6 +203,7 @@ function commerceRows(kind: NotificationKind, detail: Detail, occurredAt: string
       return [
         [n.labels.plan, offerName(detail.offer)],
         [n.labels.coveredUntil, at(detail.ends)],
+        ...exitRows,
       ];
     case "renewal_unpaid":
       return [
@@ -229,6 +244,7 @@ function commerceRows(kind: NotificationKind, detail: Detail, occurredAt: string
       return [
         [n.labels.requestedAt, at(occurredAt)],
         [n.labels.paidCoverage, detail.paid ? n.yes : n.no],
+        ...exitRows,
       ];
   }
 }
@@ -255,6 +271,7 @@ export function notificationPanel(
   row: NotificationRow,
   space: Space | null,
   account: Account | null,
+  exit: Exit | null = null,
 ): Panel {
   const detail = JSON.parse(row.detail) as Detail;
   const href = row.workspace_id
@@ -281,7 +298,7 @@ export function notificationPanel(
             },
           ]
         : []),
-      { title: n.commerce, rows: commerceRows(row.kind, detail, row.occurred_at) },
+      { title: n.commerce, rows: commerceRows(row.kind, detail, row.occurred_at, exit) },
     ],
     buttons: [[{ text: copy.openConsole, url: originUrl(env, href) }]],
   };
@@ -389,7 +406,11 @@ export async function deliverOwnerNotifications(env: Env, fetcher: typeof fetch,
     if (!row) return "stop";
     try {
       const { space, account } = await subjectOf(db, row, now);
-      await sendPanel(env, chatId, notificationPanel(env, row, space, account), now, fetcher);
+      const exit =
+        row.kind === "cancel_scheduled" || row.kind === "account_deleted"
+          ? await exitOfNotification(db, row.key)
+          : null;
+      await sendPanel(env, chatId, notificationPanel(env, row, space, account, exit), now, fetcher);
     } catch (error) {
       await db
         .prepare(`UPDATE owner_notifications SET status = ?3, retry_at = ?4, claim_token = NULL,

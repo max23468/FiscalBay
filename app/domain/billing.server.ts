@@ -18,6 +18,7 @@ import {
   stripeSecretKey,
 } from "../integrations/stripe.server";
 import { cancelSubscription } from "./billing-subscriptions.server";
+import { recordCancellationFeedback } from "./exit-feedback.server";
 import { recordDisputeOpened } from "./owner-notifications.server";
 import {
   closedSubscriptionStatuses,
@@ -294,6 +295,8 @@ export async function reconcileSubscription(
         : [];
     }),
   ]);
+  // Motivo e commento della disdetta dal portale, dopo l'avviso che il trigger ha appena scritto.
+  await recordCancellationFeedback(env.DB, subscription, now);
   const lapsed = (lapsedStatuses as readonly string[]).includes(subscription.status);
   if (lapsed && now.getTime() >= protectionEnd(item) * 1000) {
     const canceled = await stripeCall(() => stripe.subscriptions.cancel(subscription.id));

@@ -360,6 +360,17 @@ describe("accesso alla console", () => {
       cookie,
       params: { sezione: "quote" },
     });
+    // La pagina Commerciale porta i motivi di uscita, anche senza uscite.
+    const commerce = await routeData(adminLoader, "/admin/commerciale", {
+      cookie,
+      params: { sezione: "commerciale" },
+    });
+    expect(commerce.page).toMatchObject({
+      exits: {
+        counts: { cancellation: { unused: { days30: 0, months3: 0, months12: 0 } } },
+        recent: [],
+      },
+    });
     // eBay non risponde: la quota resta non letta, non piena né vuota.
     expect(quotas.page).toMatchObject({ quotas: [{ read: "failed", rows: [] }], bulk: [] });
     expect(
