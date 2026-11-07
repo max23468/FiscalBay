@@ -2,7 +2,46 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
-## [2.0.7]
+## [2.0.7] - 2026-11-07
+
+### Novità
+
+#### Miglioramenti
+
+- **Sincronizzazione dei negozi.** Dopo «Sincronizza ordini recenti» la pagina Negozi eBay mostra la lettura in corso e si aggiorna da sola con l'esito.
+- **Ricerca con i filtri.** Dalla pagina Ordini la ricerca in alto tiene i filtri attivi, anche nei suggerimenti e nel numero dei risultati.
+- **Esportazione più chiara.** Quando esporti dagli Ordini vedi quali filtri e quale ricerca compongono il file.
+
+#### Correzioni
+
+- **Suggerimenti dagli ordini precedenti.** Quando FiscalBay non può proporre un Codice Fiscale da un ordine precedente, il dettaglio dell'ordine spiega il motivo in parole semplici.
+- **Numeri più leggibili.** Il numero degli ordini usa il separatore delle migliaia, per esempio 1.094.
+- **Pagina Novità su Safari.** Le voci di una versione con un solo gruppo stanno una accanto all'altra, senza uno spazio vuoto in mezzo.
+- **«Elimina tutte» sempre disponibile.** Dopo aver eliminato una notifica, «Elimina tutte» resta nel menu accanto ad «Annulla».
+- **Partita IVA con il suo nome.** Quando l'acquirente scrive la Partita IVA nel campo del Codice Fiscale, FiscalBay la chiama Partita IVA negli ordini, nell'export e su Telegram, dove si copia con un tocco e dà il titolo alla notifica.
+- **Nomi più chiari.** Filtri, export, prova e bot nominano Codice Fiscale e Partita IVA quando valgono per entrambi, e le etichette di controllo dicono se riguardano il CF o la P. IVA.
+
+### What's new
+
+#### Improvements
+
+- **Store sync.** After “Sync recent orders” the eBay stores page shows the read in progress and updates by itself with the result.
+- **Search with filters.** From the Orders page the search at the top keeps the active filters, in suggestions and in the result count too.
+- **Clearer export.** When you export from Orders you see which filters and search make up the file.
+
+#### Fixes
+
+- **Suggestions from previous orders.** When FiscalBay cannot suggest a tax code from a previous order, the order details explain why in plain words.
+- **Easier-to-read numbers.** Order counts use a thousands separator, for example 1,094.
+- **What's new page in Safari.** The entries of a version with a single group sit next to each other, without an empty gap between them.
+- **“Delete all” always available.** After you delete a notification, “Delete all” stays in the menu next to “Undo”.
+- **VAT numbers named correctly.** When the buyer enters a VAT number (Partita IVA) in the tax code (Codice Fiscale) field, FiscalBay calls it a VAT number in orders, exports and Telegram, where you can copy it with one tap and it titles the notification.
+- **Clearer names.** Filters, exports, the trial and the bot mention both the tax code and the VAT number when they apply to both, and check labels say which one they refer to. In English, app, site and guides use “tax code” and “VAT number”.
+
+### Altre modifiche
+
+- **Prezzi.** Chi ha già Premium a vita vede il piano attivo al posto delle offerte, e i pulsanti dei tre piani stanno alla stessa altezza.
+- **Il piano a pagamento si chiama Pro.** App, sito, guide, email, Telegram, console e prodotto Stripe usano il nome Pro al posto di Premium; Termini e Privacy passano alla versione del 6 novembre 2026 con il solo cambio del nome. La pagina Novità non lo annuncia, per scelta dell'owner.
 
 ## [2.0.6] - 2026-11-06
 
