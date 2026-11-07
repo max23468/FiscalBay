@@ -61,9 +61,9 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 <a id="re-05"></a>
 #### RE-05 · Lacune delle API eBay
 
-**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
+**Stato:** In corso · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
 
-Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richieste a eBay, con le bozze in inglese: header del marketplace non documentato per il CF, dati fiscali dell'acquirente negli elenchi e nella Order API, identità immutabile dell'acquirente per le cancellazioni, notifiche degli ordini e quote per utente. L'agente esegue prima le azioni interne rimaste nel dossier; misura e rilettura settimanale degli username per le cancellazioni sono già fatte ([D318](decisions/DECISION_REGISTER.md)). L'owner le invia in un solo ticket.
+Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richieste a eBay, con le bozze in inglese: header del marketplace non documentato per il CF, dati fiscali dell'acquirente negli elenchi e nella Order API, identità immutabile dell'acquirente per le cancellazioni, notifiche degli ordini e quote per utente. L'agente esegue prima le azioni interne rimaste nel dossier; misura e rilettura settimanale degli username per le cancellazioni sono già fatte ([D318](decisions/DECISION_REGISTER.md)). L'owner ha inviato il 2026-11-07 un solo ticket, limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta; la risposta orienta [2.0-11](#2-0-11).
 
 **Criterio di completamento:** ticket inviato dall'owner, risposta registrata nel dossier e conseguenze portate nei documenti competenti.
 
