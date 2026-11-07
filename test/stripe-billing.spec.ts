@@ -429,7 +429,13 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(await changeSubscriptionPeriod(env, userId, "annual", at(now))).toBe("not_allowed");
     // Disdetto dal portale prima del primo addebito: nessun incasso annunciato e nessun
     // avviso allo scollegamento; riattivato, torna com'era.
-    stripe.state.subscription = { status: "trialing", start: now, end: trialEnd, cancel: true };
+    stripe.state.subscription = {
+      status: "trialing",
+      start: now,
+      end: trialEnd,
+      cancel: true,
+      feedback: { feedback: "missing_features", comment: "Manca l'export per il commercialista" },
+    };
     await applyStripeEvent(
       env,
       { topic: "customer.subscription.updated", objectId: "sub_test" },
@@ -439,6 +445,19 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(await view(now)).toEqual({
       payment: { state: "scheduled", period: "monthly", chargeAt: trialEnd, cancelled: true },
     });
+    // Il motivo del portale diventa l'uscita della disdetta; la riattivazione la toglie.
+    const exits = () =>
+      env.DB.prepare("SELECT kind, reason, plan, comment FROM exit_feedback")
+        .all()
+        .then((result) => result.results);
+    expect(await exits()).toEqual([
+      {
+        kind: "cancellation",
+        reason: "missing_features",
+        plan: "trial",
+        comment: "Manca l'export per il commercialista",
+      },
+    ]);
     expect(await subscriptionRenews(env.DB, env, userId)).toBe(false);
     stripe.state.subscription = { status: "trialing", start: now, end: trialEnd };
     await applyStripeEvent(
@@ -451,6 +470,7 @@ describe("Webhook e riconciliazione Stripe", () => {
       payment: { state: "scheduled", period: "monthly", chargeAt: trialEnd },
     });
     expect(await subscriptionRenews(env.DB, env, userId)).toBe(true);
+    expect(await exits()).toEqual([]);
     // Alla fine della prova Stripe incassa il primo periodo, che copre fino al rinnovo.
     stripe.state.subscription = { status: "active", start: trialEnd, end: renewsAt };
     stripe.state.invoices = [

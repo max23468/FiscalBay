@@ -7,7 +7,7 @@ import type { Language } from "../i18n";
  */
 export const legalVersions = {
   terms: "2026-11-06",
-  privacy: "2026-11-06",
+  privacy: "2026-11-07",
 } as const;
 
 /**

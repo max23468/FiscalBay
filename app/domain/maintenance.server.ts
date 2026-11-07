@@ -1,6 +1,7 @@
 import { orderSearchText } from "../orders/order-search";
 import { purgeDeletionMarkers } from "./account-deletion.server";
 import { purgeEbayDeletionMarkers } from "./ebay-account-deletion.server";
+import { purgeExitFeedback } from "./exit-feedback.server";
 import { auditRetentionDays } from "./admin-audit.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
 import { notificationRetentionDays } from "./owner-notifications.server";
@@ -91,6 +92,8 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db
       .prepare("DELETE FROM owner_notifications WHERE julianday(occurred_at) < julianday(?) - ?")
       .bind(at, notificationRetentionDays),
+    // Motivi di uscita: dettaglio dopo 30 giorni, istantanee dopo 24 mesi, attese scadute.
+    ...purgeExitFeedback(db, now),
     // Aggregati giornalieri delle letture e ricevute dei report del browser.
     db
       .prepare("DELETE FROM sync_daily WHERE julianday(day) < julianday(?) - ?")

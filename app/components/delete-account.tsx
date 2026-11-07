@@ -12,12 +12,21 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { Button } from "~/components/ui/button";
-import { FieldLabel } from "~/components/ui/field";
+import { Field, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "~/components/ui/select";
+import { Textarea } from "~/components/ui/textarea";
 import { useCopy } from "~/components/copy-context";
 import { ConfirmIdentity } from "./settings/confirm-identity";
 import { settingsRow, settingsRowText } from "./settings/security-rows";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
+import { exitReasons, maxExitComment } from "../exit-reasons";
 
 /** Conferma dell'identità per la cancellazione: metodi, sessione in uso e accesso recente. */
 export type DeletionAccess = {
@@ -30,7 +39,7 @@ export type DeletionAccess = {
 /**
  * Cancellazione dell'account (§30): l'indirizzo dell'account scritto per esteso e la conferma
  * dell'identità sul posto quando l'ultimo accesso non è di pochi minuti fa; poi il link via
- * email, che avvia la cancellazione. Le Impostazioni aggiungono l'esportazione proposta; la
+ * email, che avvia la cancellazione. Motivo e commento sono facoltativi (D314). Le Impostazioni aggiungono l'esportazione proposta; la
  * pagina di accesso e l'avviso della verifica inviano alla pagina di accesso, e la prima, senza
  * la shell degli avvisi, mostra l'esito sotto il pulsante.
  */
@@ -55,11 +64,21 @@ export function DeleteAccount({
   const action = useAction(undefined, actionPath);
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
+  const [reason, setReason] = useState("");
+  const [comment, setComment] = useState("");
   const [confirming, setConfirming] = useState(false);
   // Identità già confermata in questa pagina: un nuovo invio non la richiede di nuovo.
   const confirmed = useRef(false);
   const matches = typed.trim().toLowerCase() === email.toLowerCase();
-  const send = () => action.run("account-delete", { confirmation: typed.trim() });
+  const send = () =>
+    action.run("account-delete", { confirmation: typed.trim(), reason, comment: comment.trim() });
+  const reasons = [
+    { value: "", label: t.settings.privacy.deleteAccountNoReason },
+    ...exitReasons.map((value) => ({
+      value,
+      label: t.settings.privacy.deleteAccountReasons[value],
+    })),
+  ];
   return (
     <div className={cn(settingsRow, "py-0")}>
       <span className={settingsRowText}>
@@ -98,6 +117,39 @@ export function DeleteAccount({
               else setConfirming(true);
             }}
           >
+            <Field>
+              <FieldLabel htmlFor={`${id}-reason`}>
+                {t.settings.privacy.deleteAccountReason}
+              </FieldLabel>
+              <Select
+                items={reasons}
+                value={reason}
+                onValueChange={(next) => setReason(String(next ?? ""))}
+              >
+                <SelectTrigger id={`${id}-reason`} className="w-full min-w-0">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {reasons.map((item) => (
+                    <SelectItem key={item.value} value={item.value}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor={`${id}-comment`}>
+                {t.settings.privacy.deleteAccountComment}
+              </FieldLabel>
+              <Textarea
+                id={`${id}-comment`}
+                rows={3}
+                maxLength={maxExitComment}
+                value={comment}
+                onChange={(event) => setComment(event.currentTarget.value)}
+              />
+            </Field>
             <FieldLabel htmlFor={`${id}-email`}>{t.settings.privacy.deleteAccountEmail}</FieldLabel>
             <Input
               id={`${id}-email`}

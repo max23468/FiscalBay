@@ -23,6 +23,7 @@ export const ownerCommands = [
   "lavori",
   "quote",
   "commerciale",
+  "uscite",
   "metriche",
   "negozi",
   "prestazioni",

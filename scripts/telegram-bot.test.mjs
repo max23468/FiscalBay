@@ -126,6 +126,7 @@ describe("bot Telegram dell'ambiente", () => {
         "lavori",
         "quote",
         "commerciale",
+        "uscite",
         "metriche",
         "negozi",
         "prestazioni",

@@ -40,6 +40,7 @@ import {
   revokeHistoryExtension,
 } from "./domain/concessions.server";
 import { bulkDataAnomalies, quotaAnomalies, readEbayQuotas } from "./domain/ebay-quotas.server";
+import { exitOverview } from "./domain/exit-feedback.server";
 import { assistFreeStore } from "./domain/free-store.server";
 import { metricWindowFrom, productMetrics } from "./domain/product-metrics.server";
 import { readTechnicalMetrics } from "./domain/technical-metrics.server";
@@ -241,8 +242,12 @@ export async function loadSection(section: AdminSection, item: string | undefine
     case "prestazioni":
       return { section, performance: await readTechnicalMetrics(env, fetch) } as const;
     case "commerciale": {
-      const [overview, prices] = await Promise.all([commerceOverview(env, now), checkPrices(env)]);
-      return { section, ...overview, prices } as const;
+      const [overview, prices, exits] = await Promise.all([
+        commerceOverview(env, now),
+        checkPrices(env),
+        exitOverview(env.DB, now),
+      ]);
+      return { section, ...overview, prices, exits } as const;
     }
     case "antiabuso":
       return { section, signals: await listAbuseSignals(env.DB, now) } as const;

@@ -279,6 +279,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "30 giorni",
               ],
               [
+                "Motivo dell’uscita, quando disdici l’abbonamento sulla pagina del fornitore dei pagamenti o cancelli l’account: motivo scelto da un elenco e commento, entrambi facoltativi",
+                "Capire perché gli utenti lasciano il servizio e migliorarlo (legittimo interesse)",
+                "Il commento 30 giorni, o fino alla cancellazione dell’account se lo hai lasciato disdicendo; poi resta un riepilogo anonimo con motivo, piano, anzianità e mese, per 24 mesi",
+              ],
+              [
                 "Cancellazione dei dati chiesta a Stripe: riferimento del cliente, origine e istante",
                 "Rispettare la richiesta e non ricreare i dati (legittimo interesse)",
                 "Senza scadenza",
@@ -292,7 +297,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
             ],
           },
-          "Quando cancelli l’account eliminiamo i dati sopra, salvo quelli per cui la tabella indica una durata propria: l’impronta antiabuso, il registro della console, i trasferimenti di negozio eseguiti, gli avvisi interni, la cancellazione chiesta a Stripe, la prova dell’acquisto a vita e le email di assistenza. Resta inoltre per 30 giorni un’indicazione della cancellazione, che ne impedisce l’annullamento con un ripristino. Le copie di ripristino del database scadono entro 30 giorni.",
+          "Quando cancelli l’account eliminiamo i dati sopra, salvo quelli per cui la tabella indica una durata propria: l’impronta antiabuso, il registro della console, i trasferimenti di negozio eseguiti, gli avvisi interni, il motivo lasciato cancellando l’account, la cancellazione chiesta a Stripe, la prova dell’acquisto a vita e le email di assistenza. Resta inoltre per 30 giorni un’indicazione della cancellazione, che ne impedisce l’annullamento con un ripristino. Le copie di ripristino del database scadono entro 30 giorni.",
           "I dati dell’account sono necessari per usare FiscalBay. Il consenso a novità e offerte è facoltativo e non cambia il servizio.",
         ],
       },
@@ -610,6 +615,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "30 days",
               ],
               [
+                "Reason for leaving, when you cancel the subscription on the payment provider’s page or delete the account: a reason chosen from a list and a comment, both optional",
+                "Understanding why users leave the service and improving it (legitimate interest)",
+                "The comment 30 days, or until the account is deleted if you left it when cancelling; then an anonymous summary with reason, plan, account age and month remains for 24 months",
+              ],
+              [
                 "Data deletion requested through Stripe: customer reference, source and time",
                 "Honouring the request and not recreating the data (legitimate interest)",
                 "No expiry",
@@ -623,7 +633,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
             ],
           },
-          "When you delete your account we delete the data above, except where the table gives its own retention: the anti-abuse fingerprint, the console log, completed store transfers, internal alerts, deletions requested through Stripe, lifetime proof of purchase and support emails. A record of the deletion also stays for 30 days so that a restore cannot undo it. Database restore copies expire within 30 days.",
+          "When you delete your account we delete the data above, except where the table gives its own retention: the anti-abuse fingerprint, the console log, completed store transfers, internal alerts, the reason given when deleting the account, deletions requested through Stripe, lifetime proof of purchase and support emails. A record of the deletion also stays for 30 days so that a restore cannot undo it. Database restore copies expire within 30 days.",
           "Account data is needed to use FiscalBay. Consent to news and offers is optional and does not change the service.",
         ],
       },

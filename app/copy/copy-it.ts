@@ -1,4 +1,5 @@
 import { legalDate, plural } from "./format";
+import type { ExitReason } from "../exit-reasons";
 
 /**
  * Conteggi con il separatore delle migliaia anche a quattro cifre, come `formatNumber`. Il formato
@@ -862,6 +863,18 @@ export const it = {
       deleteAccountExport:
         "Prima puoi scaricare i dati dell’account. Gli ordini si esportano da Esportazione.",
       deleteAccountOpenExport: "Apri Esportazione",
+      deleteAccountReason: "Perché elimini l’account? (facoltativo)",
+      deleteAccountNoReason: "Preferisco non dirlo",
+      deleteAccountReasons: {
+        too_expensive: "Costa troppo",
+        unused: "Non lo uso abbastanza",
+        switched_service: "Passo a un altro servizio",
+        missing_features: "Manca una funzione che mi serve",
+        low_quality: "Non funziona come mi aspettavo",
+        closing_business: "Chiudo o sospendo l’attività su eBay",
+        other: "Altro",
+      } satisfies Record<ExitReason, string>,
+      deleteAccountComment: "Vuoi dirci di più? (facoltativo)",
       deleteAccountEmail: "Scrivi il tuo indirizzo email per confermare",
       deleteAccountConfirm: "Invia il link di conferma",
       deleteAccountSent: (email: string) =>

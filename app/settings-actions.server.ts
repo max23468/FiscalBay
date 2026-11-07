@@ -456,8 +456,7 @@ export const settingsActions: Record<string, AreaAction> = {
   },
   "account-delete": {
     // Il filtro per IP di `/delete-user` l'ha già applicato l'action, prima della sessione.
-    run: ({ request, area, form }) =>
-      requestAccountDeletion(request, area, String(form.get("confirmation") ?? ""), true),
+    run: ({ request, area, form }) => requestAccountDeletion(request, area, form, true),
     failureNotice: (t) => t.settings.privacy.deleteAccountFailed,
   },
   profile: {

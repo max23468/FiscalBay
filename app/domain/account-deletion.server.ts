@@ -15,6 +15,7 @@ import {
   runToEnd,
   claimStepJob,
 } from "./deletion-steps.server";
+import { deletionFeedbackStatements, forgetWorkspaceExits } from "./exit-feedback.server";
 import { deleteExportFiles } from "./export-files.server";
 import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.server";
 import { taskPeriods } from "./work-timing";
@@ -115,6 +116,11 @@ export async function startAccountDeletion(
     seal(env.BETTER_AUTH_SECRET, sealPurpose, id, JSON.stringify({ email: user.email, language })),
     userWorkspace(env.DB, user.id),
   ]);
+  const feedback = await deletionFeedbackStatements(
+    env.DB,
+    { id, userId: user.id, workspaceId: workspace },
+    now,
+  );
   const [created] = await env.DB.batch<{ id: string }>([
     env.DB.prepare(`INSERT INTO account_deletions (id, user_id, workspace_id, notice_sealed,
         requested_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(user_id) DO NOTHING RETURNING id`).bind(
@@ -125,6 +131,8 @@ export async function startAccountDeletion(
       now.toISOString(),
     ),
     ...stopStatements(env.DB, user.id, workspace),
+    // Uscita con il motivo scelto nella richiesta, soltanto per la richiesta appena scritta.
+    ...feedback,
   ]);
   if (!created!.results.length) {
     const existing = await env.DB.prepare("SELECT id FROM account_deletions WHERE user_id = ?")
@@ -185,7 +193,9 @@ function workspaceDataStatements(db: D1Database, workspaceId: string) {
     "DELETE FROM telegram_preferences WHERE workspace_id = ?",
     "DELETE FROM workspace_funnel_steps WHERE workspace_id = ?",
     "DELETE FROM abuse_reviews WHERE workspace_id = ?",
-  ].map((sql) => db.prepare(sql).bind(workspaceId));
+  ]
+    .map((sql) => db.prepare(sql).bind(workspaceId))
+    .concat(forgetWorkspaceExits(db, workspaceId));
 }
 
 /**
