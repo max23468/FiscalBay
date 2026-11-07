@@ -242,12 +242,12 @@ describe("stato sintetico dell'anteprima", () => {
       expect(trialDaysLeft("2026-09-28T12:59:59Z", previewNow)).toBe(0);
       expect(appCopy[language].orders.trialStatus(0)).toBe(
         language === "it"
-          ? "Prova Premium: meno di un giorno rimasto"
-          : "Premium trial: less than a day left",
+          ? "Prova Pro: meno di un giorno rimasto"
+          : "Pro trial: less than a day left",
       );
       // Durante la prova nessun ordine resta da sbloccare.
       expect(active.orders.some((order) => order.fiscal.state === "locked")).toBe(false);
-      expect(active.diagnostics.rights).toBe(language === "it" ? "Prova Premium" : "Premium trial");
+      expect(active.diagnostics.rights).toBe(language === "it" ? "Prova Pro" : "Pro trial");
       expect(ended.account).toMatchObject({ plan: "free", trialAvailable: false });
       expect(ended.account.trial).toBeUndefined();
       // Prima della prima lettura riuscita la prova non si offre.
@@ -305,9 +305,7 @@ describe("stato sintetico dell'anteprima", () => {
         plan: "premium",
         premium: { period: "monthly", renewsAt: null, endsAt: "2026-10-13T10:00:00Z" },
       });
-      expect(cancelled.diagnostics.rights).toBe(
-        language === "it" ? "Premium mensile" : "Premium, monthly",
-      );
+      expect(cancelled.diagnostics.rights).toBe(language === "it" ? "Pro mensile" : "Pro, monthly");
       // Rimborsati: il periodo con il rinnovo che riporta Premium, il lifetime senza offerta.
       expect(loadScenario("pagamento-rimborsato", language, new Set()).account).toMatchObject({
         plan: "free",

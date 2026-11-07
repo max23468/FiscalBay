@@ -15,7 +15,7 @@ Merchant che ha creato l'account, anche senza aver collegato un negozio.
 Stato di un merchant con almeno un negozio che ha completato la prima lettura degli ordini e non è in pausa né da ricollegare; lo perde quando nessun negozio soddisfa più queste condizioni.
 
 **Attivazione del merchant**:
-La prima volta in cui un merchant diventa attivo; resta contata anche se in seguito smette di esserlo. Distinta dall'attivazione di Premium, della prova o di un servizio.
+La prima volta in cui un merchant diventa attivo; resta contata anche se in seguito smette di esserlo. Distinta dall'attivazione di Pro, della prova o di un servizio.
 
 **Pagante**:
 Merchant con un abbonamento o un lifetime acquistato; la prova e le concessioni gratuite non lo rendono pagante.
@@ -46,6 +46,9 @@ Intervallo individuale di 7 × 24 ore dall'ancoraggio al primo collegamento rius
 
 **Grant / concessione**:
 Origine e periodo di un diritto: trial, pagamento, lifetime, estensione o intervento admin.
+
+**Free** e **Pro**:
+I due piani. Pro è il piano a pagamento, mensile, annuale o a vita, con la prova di 14 giorni; nel codice, nel database e nelle metriche resta `premium`.
 
 **Piano effettivo**:
 Funzioni ottenute dall'insieme dei diritti validi; non una stringa aggiornata dal browser.

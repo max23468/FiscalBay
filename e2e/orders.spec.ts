@@ -569,7 +569,7 @@ test.describe("area reale", () => {
       await expect(preview.getByRole("row")).toHaveCount(2);
       expect(errors).toEqual([]);
     });
-    test(`ordini reali: con Premium l'XLSX segue le colonne scelte ${language}`, async ({
+    test(`ordini reali: con Pro l'XLSX segue le colonne scelte ${language}`, async ({
       page,
       context,
       baseURL,
@@ -634,7 +634,7 @@ test.describe("area reale", () => {
       );
       expect(errors).toEqual([]);
     });
-    test(`ordini reali: con Premium la configurazione salvata torna e si elimina ${language}`, async ({
+    test(`ordini reali: con Pro la configurazione salvata torna e si elimina ${language}`, async ({
       page,
       context,
       baseURL,
@@ -916,9 +916,7 @@ for (const language of ["it", "en"] as const) {
       await period.click();
       const menu = page.locator('[data-slot="select-content"]');
       // Nel Free i periodi oltre i 30 giorni sono Premium: 90 giorni, 6 e 12 mesi.
-      await expect(
-        menu.getByText(t("Disponibile con Premium", "Available with Premium")),
-      ).toHaveCount(3);
+      await expect(menu.getByText(t("Disponibile con Pro", "Available with Pro"))).toHaveCount(3);
       // Il menu è largo quanto la voce più lunga, mai meno del campo, e resta entro il
       // margine laterale di 16 px.
       await expect
@@ -1415,7 +1413,7 @@ test.describe("caricamento degli Ordini reali", () => {
 
 // Queste prove proseguono nelle Impostazioni.
 test.describe("impostazioni", () => {
-  test("stati senza valore senza Copia, sblocco e Premium distinti", async ({ page }) => {
+  test("stati senza valore senza Copia, sblocco e Pro distinti", async ({ page }) => {
     await open(page, "/anteprima/ordini", "ordinario");
     await expect(
       page.getByText("2 sblocchi disponibili in questo ciclo.", { exact: true }),
@@ -1449,13 +1447,13 @@ test.describe("impostazioni", () => {
     // Nel Free la corona compare una volta, nella nota che vale per XLSX e colonne.
     await open(page, "/anteprima/impostazioni/esportazione");
     const note = page.getByRole("region", { name: "Esportazione" }).locator("p").filter({
-      hasText: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Premium.",
+      hasText: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Pro.",
     });
     await expect(note.locator("svg")).toHaveClass(/lucide-crown/);
     await expect(page.getByRole("radio", { name: "XLSX" })).toBeDisabled();
   });
 
-  test.describe("prova Premium", () => {
+  test.describe("prova Pro", () => {
     test.skip(
       Boolean(process.env.E2E_BASE_URL),
       "Prove con dati sintetici soltanto sul database locale.",
@@ -1480,8 +1478,8 @@ test.describe("impostazioni", () => {
         await expect(
           page.getByText(
             it
-              ? "Prova Premium gratis per 14 giorni, senza carta."
-              : "Try Premium free for 14 days, no card needed.",
+              ? "Prova Pro gratis per 14 giorni, senza carta."
+              : "Try Pro free for 14 days, no card needed.",
           ),
         ).toBeVisible();
         await page
@@ -1490,10 +1488,10 @@ test.describe("impostazioni", () => {
         await expect(
           page
             .getByRole("status")
-            .filter({ hasText: it ? "Prova Premium attivata." : "Premium trial started." }),
+            .filter({ hasText: it ? "Prova Pro attivata." : "Pro trial started." }),
         ).toBeVisible();
         await expect(
-          page.getByText(it ? "Prova Premium: 13 giorni rimasti" : "Premium trial: 13 days left"),
+          page.getByText(it ? "Prova Pro: 13 giorni rimasti" : "Pro trial: 13 days left"),
         ).toBeVisible();
         // Con la prova il dato è leggibile senza sblocco e senza consumare la quota.
         await expect(page.getByText(secret, { exact: true }).first()).toBeVisible();
@@ -1507,9 +1505,7 @@ test.describe("impostazioni", () => {
         const plan = page.getByRole("region", {
           name: it ? "Piano e pagamenti" : "Plan and billing",
         });
-        await expect(
-          plan.getByText(it ? "Prova Premium" : "Premium trial", { exact: true }),
-        ).toBeVisible();
+        await expect(plan.getByText(it ? "Prova Pro" : "Pro trial", { exact: true })).toBeVisible();
         await expect(plan.getByText(it ? /13 giorni rimasti/u : /13 days left/u)).toBeVisible();
         await expect(
           plan.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),

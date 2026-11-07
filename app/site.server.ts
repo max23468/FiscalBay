@@ -144,11 +144,11 @@ export function llms(origin: string) {
  * aggiorna con il testo della pagina, non a ogni rilascio. Le guide portano la propria data.
  */
 const pageUpdates: Record<(typeof sitemapPages)[number], string> = {
-  "/": "2026-11-03",
-  "/funzionalita": "2026-11-03",
-  "/prezzi": "2026-11-03",
-  "/sicurezza": "2026-11-03",
-  "/faq": "2026-11-03",
+  "/": "2026-11-06",
+  "/funzionalita": "2026-11-06",
+  "/prezzi": "2026-11-06",
+  "/sicurezza": "2026-11-06",
+  "/faq": "2026-11-06",
   "/supporto": "2026-11-03",
   "/guide": "2026-11-05",
   ...Object.fromEntries(guidePaths.map((path) => [path, guides.it.articles[path].updated])),

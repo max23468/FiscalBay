@@ -296,7 +296,7 @@ describe("negozio attivo del Free e downgrade", () => {
       }>()
     ).results;
 
-  it("al downgrade l'eccedenza non è più consultabile, resta 30 giorni e poi non torna con Premium", async () => {
+  it("al downgrade l'eccedenza non è più consultabile, resta 30 giorni e poi non torna con Pro", async () => {
     const { seller, end, applied } = await downgraded("downgrade@example.invalid");
     await applyFreePlans(env.DB, new Date(end - 60_000));
     expect(await visible(seller.userId, end - 60_000)).toEqual([
@@ -347,7 +347,7 @@ describe("negozio attivo del Free e downgrade", () => {
     expect(await visible(seller.userId, again)).toEqual([]);
   });
 
-  it("il ritorno a Premium prima della pulizia riporta l'anno di storico agli ordini conservati", async () => {
+  it("il ritorno a Pro prima della pulizia riporta l'anno di storico agli ordini conservati", async () => {
     const { seller, end, applied } = await downgraded("ritorno@example.invalid");
     await applyFreePlan(env.DB, seller.userId, new Date(applied));
     const back = applied + 10 * day;

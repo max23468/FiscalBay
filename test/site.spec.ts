@@ -161,9 +161,7 @@ describe("radice pubblica e area riservata", () => {
     const { copy } = await callRoute(loadSite, "/en");
     expect(copy).toMatchObject({
       premiumGross: "€5.98 per month or €59.78 per year with 22% Italian VAT",
-      premiumBody: expect.stringMatching(
-        /\. New Premium purchases and trials are paused for now\.$/u,
-      ),
+      premiumBody: expect.stringMatching(/\. New Pro purchases and trials are paused for now\.$/u),
     });
     expect(copy.premiumBody).not.toContain("14-day");
     expect((await callRoute(loadPricing, "/en/pricing")).copy.purchaseNote).toBe(
@@ -321,7 +319,7 @@ describe("radice pubblica e area riservata", () => {
     );
     // Ogni pagina porta il giorno dell'ultima modifica del contenuto.
     expect(xml).toContain(
-      '<url><loc>https://fiscalbay.it/en/pricing</loc><lastmod>2026-11-03</lastmod><xhtml:link rel="alternate" hreflang="it" href="https://fiscalbay.it/prezzi"/><xhtml:link rel="alternate" hreflang="en" href="https://fiscalbay.it/en/pricing"/><xhtml:link rel="alternate" hreflang="x-default" href="https://fiscalbay.it/prezzi"/></url>',
+      '<url><loc>https://fiscalbay.it/en/pricing</loc><lastmod>2026-11-06</lastmod><xhtml:link rel="alternate" hreflang="it" href="https://fiscalbay.it/prezzi"/><xhtml:link rel="alternate" hreflang="en" href="https://fiscalbay.it/en/pricing"/><xhtml:link rel="alternate" hreflang="x-default" href="https://fiscalbay.it/prezzi"/></url>',
     );
     expect(xml.match(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/gu)).toHaveLength(locations.length);
     expect(xml).not.toMatch(/termini|privacy|accesso|\/app/u);
@@ -456,7 +454,7 @@ describe("pagine del sito pubblico", () => {
     );
   });
 
-  it("in Prezzi chi ha già Premium a vita vede il piano attivo al posto delle offerte", async () => {
+  it("in Prezzi chi ha già Pro a vita vede il piano attivo al posto delle offerte", async () => {
     const { userId, cookie } = await verifiedSession("sito-lifetime@example.invalid");
     const visitor = await callRoute(loadPricing, "/prezzi", { cookie });
     expect(visitor).toMatchObject({ signedIn: true, owned: false });
@@ -648,7 +646,7 @@ describe("pagine del sito pubblico", () => {
     // Il Free mostra la quota della promozione; il prezzo netto ha accanto il totale con IVA.
     expect(pricing.copy).toMatchObject({
       freeItems: expect.arrayContaining(["10 ordini da sbloccare ogni 7 giorni"]),
-      purchaseNote: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
+      purchaseNote: "I nuovi acquisti di Pro e le prove sono sospesi per ora.",
       offers: [
         {
           offer: "monthly",

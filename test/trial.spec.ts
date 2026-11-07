@@ -19,7 +19,7 @@ import { callRoute, routePage } from "./fixtures/route-fixtures";
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
 
-describe("prova Premium", () => {
+describe("prova Pro", () => {
   const day = 24 * 60 * 60 * 1000;
   const at = (offset: number) => new Date(Date.parse(now) + offset);
   /** Prima lettura riuscita di un negozio dello spazio, anche senza ordini. */

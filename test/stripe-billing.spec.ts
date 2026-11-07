@@ -295,7 +295,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(await premium(now)).toBe(true);
   });
 
-  it("un redirect falso, un abbonamento estraneo o dell'altro ambiente non attivano Premium", async () => {
+  it("un redirect falso, un abbonamento estraneo o dell'altro ambiente non attivano Pro", async () => {
     const stripe = stripeAccount();
     const { cookie } = await verifiedSession("redirect-falso@example.invalid");
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});

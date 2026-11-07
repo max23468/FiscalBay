@@ -192,7 +192,7 @@ describe("suggerimenti fiscali dai precedenti", () => {
     expect((await read(current)).get(current)!.suggestions[0]!.sourceOrder).toBe("old-backfill");
   });
 
-  it("nega i suggerimenti Free e dopo revoca/scadenza Premium, senza restituire valori", async () => {
+  it("nega i suggerimenti Free e dopo revoca/scadenza Pro, senza restituire valori", async () => {
     await imported("previous", "2026-09-11T00:00:00.000Z", [cf("RSSMRA80A01H501U")]);
     const current = await imported("current", "2026-09-13T00:00:00.000Z");
     expect((await read(current)).size).toBe(0);

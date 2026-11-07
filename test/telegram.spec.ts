@@ -1215,10 +1215,10 @@ describe("collegamento della chat", () => {
     ).toMatchObject({ chatId: "902", linkId: second.id });
   });
 
-  it("senza Premium non si crea il link; la chat senza nome resta collegata", async () => {
+  it("senza Pro non si crea il link; la chat senza nome resta collegata", async () => {
     const free = await account("senza-premium", false);
     expect(await settingsForm(free.cookie, { intent: "telegram-link" })).toMatchObject({
-      data: { ok: false, notice: "Le notifiche degli ordini su Telegram sono incluse in Premium." },
+      data: { ok: false, notice: "Le notifiche degli ordini su Telegram sono incluse in Pro." },
       init: { status: 409 },
     });
     expect(
@@ -1430,7 +1430,7 @@ describe("preferenze e destinatario", () => {
 });
 
 describe("casi limite del collegamento e delle preferenze", () => {
-  it("senza Premium il dominio non crea il link e lo dice", async () => {
+  it("senza Pro il dominio non crea il link e lo dice", async () => {
     const free = await account("limite-free", false);
     const session = await env.DB.prepare('SELECT id FROM "session" WHERE "userId" = ?')
       .bind(free.userId)
@@ -1565,7 +1565,7 @@ describe("pagine", () => {
     });
   });
 
-  it("i Negozi mostrano le notifiche per negozio soltanto con Premium", async () => {
+  it("i Negozi mostrano le notifiche per negozio soltanto con Pro", async () => {
     const seller = await account("negozi");
     const free = await account("negozi-free", false);
     const stores = async (cookie: string) => {

@@ -163,8 +163,8 @@ Elenco delle funzioni previste per la 2.x, approvato dall'owner il 2026-10-31, n
 | Versione | Contesto | Funzioni |
 |---|---|---|
 | 2.1 | Comunicazioni | Pagina Notifiche completa; pagina pubblica dello stato di FiscalBay e dei servizi da cui dipende (eBay, Telegram, Stripe, accessi ed email), dai controlli interni e dalle pagine di stato dei fornitori dove esistono; riepiloghi settimanali o mensili e avvisi su ordini senza CF, negozi fermi e CF mancanti |
-| 2.2 | Ordini | Filtri salvati e personalizzazione delle schede Premium; elenco degli ordini senza codice fiscale da richiedere, con la data in cui il merchant ha copiato il messaggio, senza invii all'acquirente; periodi di calendario per filtri ed export (dal… al…, mese scorso, trimestre); ricerca indicizzata e stato fiscale salvato |
-| 2.3 | Dati | Analisi Premium su ordini, presenza del CF, andamento, negozi e marketplace; metriche di prodotto per l'owner, con l'aggiornamento della Privacy |
+| 2.2 | Ordini | Filtri salvati e personalizzazione delle schede Pro; elenco degli ordini senza codice fiscale da richiedere, con la data in cui il merchant ha copiato il messaggio, senza invii all'acquirente; periodi di calendario per filtri ed export (dal… al…, mese scorso, trimestre); ricerca indicizzata e stato fiscale salvato |
+| 2.3 | Dati | Analisi Pro su ordini, presenza del CF, andamento, negozi e marketplace; metriche di prodotto per l'owner, con l'aggiornamento della Privacy |
 | 2.4 | Crescita | Coupon; invito di un collega con premio e regole antiabuso decisi sui numeri delle metriche; prova sociale reale con numeri aggregati e testimonianze autorizzate |
 | 2.5 | Team | Collaboratori nello stesso spazio, con un ruolo in sola lettura per il commercialista |
 | 3.x | App native | iOS/Android nativi con React Native/Expo e riuso ragionato; Apple login da riesaminare, offline solo eventuale |
@@ -177,7 +177,7 @@ La disponibilità PayPal **come pagamento** può entrare in 2.0 solo se supporta
 
 Nella 2.0 FiscalBay non invia né legge messaggi eBay (Message API, `NEW_MESSAGE`), non mostra le linee guida normative di `REGULATORY_GUIDELINE` e non sottoscrive topic con scope propri per spedizioni, annullamenti, resi o preventivi, già coperti dalla lettura periodica (D215, D216). La candidatura all'eBay Partner Program presenta FiscalBay per gestione degli ordini, analisi e conformità fiscale, senza aggiungere gestione di inserzioni o spedizioni ([D255](decisions/DECISION_REGISTER.md), [RE-02](#re-02)). Restano fuori anche le novità eBay estranee agli ordini: Inventory Mapping, garanzia di durabilità UE, taglie moda, condizione delle monete, resi facilitati in Germania, Media API e video, API Buy, annunci video del Marketing, VeRO ed eDIS.
 
-API pubblica fuori dalla roadmap: si valuta caso per caso soltanto per chi ne ha un bisogno concreto, mantenendo servizi e contratti riusabili; endpoint solo quando necessari a un client reale. Analisi non diventa una suite e-commerce generale. Lifetime mantiene livello equivalente e riceve tutte le funzioni Premium della 2.x, team compreso (conferma dell'owner del 2026-10-31); non dà licenza di cambiare indiscriminatamente l'offerta già acquistata.
+API pubblica fuori dalla roadmap: si valuta caso per caso soltanto per chi ne ha un bisogno concreto, mantenendo servizi e contratti riusabili; endpoint solo quando necessari a un client reale. Analisi non diventa una suite e-commerce generale. Lifetime mantiene livello equivalente e riceve tutte le funzioni Pro della 2.x, team compreso (conferma dell'owner del 2026-10-31); non dà licenza di cambiare indiscriminatamente l'offerta già acquistata.
 
 <a id="questioni-aperte"></a>
 ## Questioni aperte

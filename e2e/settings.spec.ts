@@ -388,7 +388,7 @@ for (const width of [390, 768, 1440]) {
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
       await expect(page).toHaveURL(/\?checkout=processing$/u);
       await expect(
-        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+        page.getByText(it ? "Attivazione Pro in corso" : "Activating Pro"),
       ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`checkout-processing-${locale}.png`) });
       // Prima della prima lettura riuscita i prezzi restano visibili, l'acquisto no.
@@ -396,8 +396,8 @@ for (const width of [390, 768, 1440]) {
       await expect(
         page.getByText(
           it
-            ? "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio."
-            : "You can buy Premium once a store has been read successfully.",
+            ? "Potrai acquistare Pro dopo la prima lettura riuscita di un negozio."
+            : "You can buy Pro once a store has been read successfully.",
         ),
       ).toBeVisible();
       await expect(
@@ -452,7 +452,7 @@ for (const width of [390, 768, 1440]) {
       // Passaggio a vita pagato e in conferma: l'abbonamento resta, nessun secondo acquisto.
       await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "passaggio-a-vita");
       await expect(
-        page.getByText(it ? "Premium a vita in attivazione" : "Activating lifetime Premium"),
+        page.getByText(it ? "Pro a vita in attivazione" : "Activating lifetime Pro"),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: /Scegli a vita|Choose lifetime/u }),
@@ -476,7 +476,7 @@ for (const width of [390, 768, 1440]) {
       // Premium concesso: la sua fine, senza gestione su Stripe.
       await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "premium-concesso");
       await expect(page.locator("main")).toContainText(
-        it ? "Premium concesso fino al" : "Premium granted until",
+        it ? "Pro concesso fino al" : "Pro granted until",
       );
       await expect(
         page.getByRole("button", { name: /Gestisci abbonamento|Manage subscription/u }),
@@ -488,7 +488,7 @@ for (const width of [390, 768, 1440]) {
         "pagamento-in-attivazione",
       );
       await expect(
-        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+        page.getByText(it ? "Attivazione Pro in corso" : "Activating Pro"),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
@@ -602,7 +602,7 @@ for (const width of [390, 768, 1440]) {
       const prefix = it ? "" : "/en";
       await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "prova-premium");
       const main = page.locator("main");
-      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(main).toContainText(it ? "Prova Pro" : "Pro trial");
       await expect(main).toContainText(
         it ? "Con mensile o annuale oggi non paghi" : "With monthly or annual you don't pay today",
       );
@@ -622,7 +622,7 @@ for (const width of [390, 768, 1440]) {
       // Il ritorno da Stripe durante la prova non parla di pagamento: la prova continua.
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
       await expect(page).toHaveURL(/\?checkout=processing$/u);
-      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(main).toContainText(it ? "Prova Pro" : "Pro trial");
       await expect(
         page.getByText(it ? "Scelta del piano in corso" : "Confirming your plan"),
       ).toBeVisible();
@@ -631,7 +631,7 @@ for (const width of [390, 768, 1440]) {
       await page.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }).click();
       await expect(page).toHaveURL(/\?checkout=lifetime$/u);
       await expect(
-        page.getByText(it ? "Premium a vita in attivazione" : "Activating lifetime Premium"),
+        page.getByText(it ? "Pro a vita in attivazione" : "Activating lifetime Pro"),
       ).toBeVisible();
       await expect(
         page.getByText(it ? "Scelta del piano in corso" : "Confirming your plan"),
@@ -639,7 +639,7 @@ for (const width of [390, 768, 1440]) {
       // Con l'abbonamento scelto la prova continua senza addebiti né un secondo acquisto.
       await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "prova-con-abbonamento");
       await expect(
-        page.getByText(it ? "Premium mensile scelto" : "You chose Premium, monthly"),
+        page.getByText(it ? "Pro mensile scelto" : "You chose Pro, monthly"),
       ).toBeVisible();
       await expect(main).toContainText(
         it ? "Fino ad allora non paghi nulla." : "Until then you pay nothing.",
@@ -647,8 +647,8 @@ for (const width of [390, 768, 1440]) {
       // La prova non annuncia più il ritorno al Free.
       await expect(main).toContainText(
         it
-          ? "Alla fine Premium continua con il primo addebito."
-          : "When it ends, Premium continues with the first charge.",
+          ? "Alla fine Pro continua con il primo addebito."
+          : "When it ends, Pro continues with the first charge.",
       );
       await expect(main).not.toContainText(
         it ? "alla fine torni al Free" : "when it ends you go back to Free",
@@ -921,8 +921,8 @@ test.describe("inattività e ammissione", () => {
       await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "acquisti-sospesi");
       await expect(plan).toContainText(
         it
-          ? "I nuovi acquisti di Premium e le prove sono sospesi per ora."
-          : "New Premium purchases and trials are paused for now.",
+          ? "I nuovi acquisti di Pro e le prove sono sospesi per ora."
+          : "New Pro purchases and trials are paused for now.",
       );
       await expect(
         plan.getByRole("button", {
@@ -965,44 +965,42 @@ test.describe("abbonamento nel piano", () => {
           const prefix = it ? "" : "/en";
           const expected = {
             active: {
-              title: it ? /^Premium (mensile|annuale)$/u : /^Premium, (monthly|annual)$/u,
+              title: it ? /^Pro (mensile|annuale)$/u : /^Pro, (monthly|annual)$/u,
               text: it ? "Si rinnova il" : "Renews on",
             },
             switching: {
-              title: it ? "Premium mensile" : "Premium, monthly",
+              title: it ? "Pro mensile" : "Pro, monthly",
               text: it ? "come annuale" : "as annual",
             },
             cancelled: {
-              title: it ? "Premium mensile" : "Premium, monthly",
+              title: it ? "Pro mensile" : "Pro, monthly",
               text: it
-                ? "Rinnovo disdetto: Premium resta attivo fino al"
-                : "Renewal cancelled: Premium stays active until",
+                ? "Rinnovo disdetto: Pro resta attivo fino al"
+                : "Renewal cancelled: Pro stays active until",
             },
             pending: {
               title: "Free",
-              text: it ? "Attivazione Premium in corso" : "Activating Premium",
+              text: it ? "Attivazione Pro in corso" : "Activating Pro",
             },
             lapsed: {
               title: "Free",
               text: it ? "per mantenere il tuo prezzo" : "to keep your price",
             },
             scheduled: {
-              title: it ? "Prova Premium" : "Premium trial",
+              title: it ? "Prova Pro" : "Pro trial",
               text: it
-                ? "Alla fine Premium continua con il primo addebito."
-                : "When it ends, Premium continues with the first charge.",
+                ? "Alla fine Pro continua con il primo addebito."
+                : "When it ends, Pro continues with the first charge.",
             },
             // Disdetto durante la prova: nessun addebito e ritorno al Free alla fine.
             "scheduled-cancelled": {
-              title: it ? "Prova Premium" : "Premium trial",
-              text: it ? "Premium mensile disdetto" : "Premium, monthly cancelled",
+              title: it ? "Prova Pro" : "Pro trial",
+              text: it ? "Pro mensile disdetto" : "Pro, monthly cancelled",
             },
             // Periodo rimborsato: Free subito, Premium torna con il rinnovo.
             refunded: {
               title: "Free",
-              text: it
-                ? "Premium riprende con il rinnovo del"
-                : "Premium resumes with the renewal on",
+              text: it ? "Pro riprende con il rinnovo del" : "Pro resumes with the renewal on",
             },
           }[account];
           const check = async (target: Page, surface: "real" | "preview") => {
@@ -1068,8 +1066,8 @@ test.describe("abbonamento nel piano", () => {
         await expect(section.getByText("Free", { exact: true })).toBeVisible();
         await expect(section).toContainText(
           it
-            ? "Il pagamento di Premium a vita è stato rimborsato"
-            : "The lifetime Premium payment was refunded",
+            ? "Il pagamento di Pro a vita è stato rimborsato"
+            : "The lifetime Pro payment was refunded",
         );
         await expect(
           section.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }),
@@ -1302,20 +1300,20 @@ test.describe("notifiche Telegram", () => {
       }
     });
 
-  test("su desktop «Passa a Premium» da Telegram scorre fino al piano", async ({ page }) => {
+  test("su desktop «Passa a Pro» da Telegram scorre fino al piano", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 720 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await open(page, "/anteprima/impostazioni/notifiche");
     await expect(page.locator("#settings-notifiche")).toBeInViewport();
     // Il primo collegamento al piano è quello della sezione Telegram, in testa alla pagina.
-    await page.getByRole("link", { name: "Passa a Premium", exact: true }).first().click();
+    await page.getByRole("link", { name: "Passa a Pro", exact: true }).first().click();
     await expect(page).toHaveURL(/\/anteprima\/impostazioni\/piano$/u);
     await expect(page.locator("#settings-piano")).toBeInViewport();
     await expect(page.locator('a[aria-current="true"][href$="/impostazioni/piano"]')).toBeVisible();
   });
 
   for (const language of ["it", "en"] as const)
-    test(`anteprima: Premium senza chat propone il collegamento simulato, ${language}`, async ({
+    test(`anteprima: Pro senza chat propone il collegamento simulato, ${language}`, async ({
       page,
     }) => {
       const it = language === "it";

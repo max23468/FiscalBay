@@ -994,7 +994,7 @@ describe("pagina Ordini reale", () => {
     expect(await stores()).toMatchObject({ ebayDown: [], ebayMaintenance: false });
   });
 
-  it("con eBay, Telegram e acquisti spenti e i provider irraggiungibili il Premium resta e sblocca", async () => {
+  it("con eBay, Telegram e acquisti spenti e i provider irraggiungibili il Pro resta e sblocca", async () => {
     const { cookie } = await owner();
     await premiumCoverage();
     for (const name of ["ebay_calls", "telegram_sends", "purchases_open"] as const)

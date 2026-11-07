@@ -941,7 +941,7 @@ describe("lettura periodica e richieste manuali", () => {
       expect(await dispatchStoreSyncs(cron, minutes(90))).toEqual(["s-a"]);
     });
 
-    it("durante la prova legge con la cadenza Premium e poi torna a quella Free", async () => {
+    it("durante la prova legge con la cadenza Pro e poi torna a quella Free", async () => {
       expect(await dispatchStoreSyncs(cron, minutes(0))).toEqual(["s-a"]);
       await consumeStoreSync(message(), env, ebay(), minutes(1));
       expect(await dispatchStoreSyncs(cron, minutes(11))).toEqual([]);

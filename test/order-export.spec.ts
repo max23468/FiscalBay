@@ -141,7 +141,7 @@ it("segue filtri, ricerca cifrata e «Non pagato» dell'elenco", async () => {
   expect(excluded).toMatchObject({ total: 0, items: [] });
 });
 
-it("senza ambito degli Ordini esporta il periodo scelto e ignora quello Premium nel Free", async () => {
+it("senza ambito degli Ordini esporta il periodo scelto e ignora quello Pro nel Free", async () => {
   await env.DB.prepare(
     `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor, retention_until)
        VALUES ('o-old', 's-a', 'ebay-old', ?1, ?1, 'EUR', 100, ?2)`,
@@ -186,7 +186,7 @@ it("esclude negozi con i dati eliminati, ordini scaduti e il file di un ambito v
   expect((await request("ordini=o-a")).status).toBe(409);
 });
 
-it("con Premium crea l'XLSX con le colonne scelte; nel Free resta il CSV standard", async () => {
+it("con Pro crea l'XLSX con le colonne scelte; nel Free resta il CSV standard", async () => {
   for (const fields of [{ format: "xlsx" }, { columns: "order" }] as Record<string, string>[]) {
     const refused = await request("ordini=o-a", fields);
     expect(refused.status).toBe(403);
@@ -273,7 +273,7 @@ it("legge un dataset esteso a pagine senza moltiplicare totali o righe", async (
   expect(big[0]!.slice(3)).toEqual(["RSSMRA80A01H501U", "00123456789", "VAT (DE): DE123456789"]);
 });
 
-it("salva, sostituisce ed elimina le configurazioni soltanto con Premium", async () => {
+it("salva, sostituisce ed elimina le configurazioni soltanto con Pro", async () => {
   const save = (fields: Record<string, string>) =>
     settingsIntent({
       intent: "export-save",

@@ -95,7 +95,7 @@ it("in inglese rimanda al download in inglese e un modulo senza JavaScript lo se
   expect(response.headers.get("location")).toMatch(/^\/en\/api\/v1\/exports\/[0-9a-f-]{36}$/u);
 });
 
-it("con Premium il file non vale oltre la fine della copertura", async () => {
+it("con Pro il file non vale oltre la fine della copertura", async () => {
   const endsAt = new Date(Date.parse(now) + 2 * 3_600_000).toISOString();
   await insertEntitlement({
     source: "admin",
@@ -391,7 +391,7 @@ it("il file non vale oltre il primo termine dei dati inclusi, anche con la puliz
   expect(await purgeExportFiles(env, new Date())).toBe(2);
 });
 
-it("con Premium i periodi di 6 e 12 mesi seguono quelli degli Ordini", async () => {
+it("con Pro i periodi di 6 e 12 mesi seguono quelli degli Ordini", async () => {
   await insertEntitlement({
     source: "admin",
     endsAt: hours(24 * 30),
