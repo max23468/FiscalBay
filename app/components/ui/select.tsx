@@ -67,7 +67,8 @@ function SelectContent({
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
         collisionPadding={collisionPadding}
-        className="isolate z-50"
+        // Sopra le finestre di conferma (z-60), che possono contenere un elenco.
+        className="isolate z-70"
       >
         <SelectPrimitive.Popup
           data-slot="select-content"
