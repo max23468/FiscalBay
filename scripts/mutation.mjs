@@ -704,6 +704,39 @@ export function prTargets(changed, files) {
   return [...targets].sort();
 }
 
+/**
+ * Moduli della PR ancora da provare: quelli senza una prova riusabile in una run precedente della
+ * stessa PR (`pullRequestProof`), per esempio dopo un'unione di `develop` che non li tocca. I
+ * riusati finiscono nel riepilogo della run, con la run che li ha provati.
+ */
+async function withoutProvedModules(targets, files) {
+  const { pullRequestProof } = await import("./mutation-reuse.mjs");
+  const repositoryId = Number(process.env.REPOSITORY_ID);
+  const { REPOSITORY: repository, MUTATION_PR_BRANCH: branch, HEAD_SHA: head } = process.env;
+  if (!repository || !repositoryId || !head)
+    throw new Error("PR, repository o testa non indicati.");
+  const graph = importGraph(files, /^(?:app|workers|test)\/.+\.tsx?$/u);
+  const run = [];
+  const reused = [];
+  for (const target of targets) {
+    const proof = await pullRequestProof({
+      repository,
+      repositoryId,
+      branch,
+      head,
+      target,
+      graph,
+      exclude: process.env.GITHUB_RUN_ID,
+    });
+    if (proof) reused.push(`${target}: run ${proof.run} su ${proof.commit.slice(0, 8)}`);
+    else run.push(target);
+  }
+  const summary = `Mutation della PR: ${run.length} moduli da provare, ${reused.length} già provati.${reused.length ? `\n\nRiusati:\n${reused.map((line) => `- ${line}`).join("\n")}` : ""}\n`;
+  console.log(summary);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+  return run;
+}
+
 async function runTarget(target, files, shard = "1/1") {
   if (!criticalModule(target) || !existsSync(target))
     throw new Error(`Modulo critico inesistente: ${target}`);
@@ -853,6 +886,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       files.map(({ path: file }) => file),
     );
     console.log(`Moduli critici: ${matrix.target.join(", ") || "nessuno"}.`);
+    if (process.env.MUTATION_PR_BRANCH)
+      matrix.target = await withoutProvedModules(matrix.target, files);
     const references = process.env.MUTATION_REFERENCES;
     const jobs = await mutationJobs(
       matrix.target,

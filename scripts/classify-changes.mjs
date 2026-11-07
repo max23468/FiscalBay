@@ -532,17 +532,10 @@ export function plan(files, sources = [], complete = false, changes = {}) {
   // salvo quelli già provati nella PR, che prova in modo incrementale i moduli critici toccati o
   // coperti da un test cambiato. Le dipendenze non ripetono la mutation: misura le prove del nostro
   // codice, mentre una libreria aggiornata si prova con test, browser e collaudo remoto.
-  // Tutti i moduli critici si ripetono soltanto se cambiano gli strumenti della mutation: un
-  // cambio della pubblicazione, del classificatore o delle prove browser non cambia quali
-  // mutanti i test uccidono.
+  // Nemmeno gli strumenti della mutation la ripetono per intero: la campagna settimanale resta
+  // completa e prova anche loro (D317).
   const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);
-  const mutationInputs = files.some((file) =>
-    /^(?:pnpm-workspace\.yaml|stryker\.config\.json|vitest.*\.config\.ts|scripts\/mutation(?:-reuse)?\.mjs|\.github\/workflows\/mutation\.yml)$/u.test(
-      file,
-    ),
-  )
-    ? [...graph.keys()].filter(critical)
-    : files.filter(critical);
+  const mutationInputs = files.filter(critical);
   const mutation = complete ? [...consumers(mutationInputs, graph)].filter(critical) : [];
   return {
     gate,
@@ -647,6 +640,25 @@ function committedVersions(files, base, head) {
 export function needsDeploy(base, head) {
   const files = committedChanges(base, head);
   return plan(files, [], false, committedVersions(files, base, head)).deploy;
+}
+
+/**
+ * Vero se fra due commit nulla cambia per le prove browser: per i file cambiati, valutati per
+ * contenuto come nel gate, il classificatore non chiede browser né deploy. Documenti, frammenti
+ * senza Novità, strumenti e test unitari non cambiano ciò che le prove browser verificano.
+ */
+export function browserUnaffected(base, head) {
+  let files;
+  try {
+    files = lines(git("diff", "--name-only", base, head));
+  } catch {
+    // Un confronto non disponibile non prova nulla: le prove ripartono.
+    return false;
+  }
+  // Senza differenze non c'è nulla da riprovare, anche se il gate proverebbe tutto per prudenza.
+  if (!files.length) return true;
+  const result = plan(files, [], false, committedVersions(files, base, head));
+  return !result.e2e && !result.deploy;
 }
 
 /** Se fra due commit cambia ciò che si distribuisce: senza differenze non c'è nulla da pubblicare. */

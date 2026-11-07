@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
+  browserUnaffected,
   mainProcessChange,
   changelogDayOnly,
   sameNews,
@@ -618,6 +619,42 @@ describe("spec browser modificate", () => {
   });
 });
 
+describe("prove browser invariate fra due commit", () => {
+  it("documenti e strumenti non cambiano le prove browser, il codice e le spec sì", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "browser-unaffected-"));
+    const before = process.cwd();
+    const git = (...args) =>
+      spawnSync("git", args, { cwd: directory, encoding: "utf8" }).stdout.trim();
+    const commit = (file, text) => {
+      mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+      writeFileSync(path.join(directory, file), text);
+      git("add", "--all");
+      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", file);
+      return git("rev-parse", "HEAD");
+    };
+    try {
+      git("init", "--quiet", "--initial-branch", "develop");
+      const base = commit("README.md", "base\n");
+      process.chdir(directory);
+      const docs = commit("docs/nota.md", "nota\n");
+      assert.ok(browserUnaffected(base, docs));
+      const tooling = commit("scripts/mutation.mjs", "// strumento\n");
+      assert.ok(browserUnaffected(base, tooling));
+      const unitTest = commit("test/a.spec.ts", "// prova\n");
+      assert.ok(browserUnaffected(docs, unitTest));
+      const spec = commit("e2e/a.spec.ts", "// prova browser\n");
+      assert.ok(!browserUnaffected(unitTest, spec));
+      const app = commit("app/a.ts", "export const a = 1;\n");
+      assert.ok(!browserUnaffected(spec, app));
+      assert.ok(browserUnaffected(app, app));
+      assert.ok(!browserUnaffected("0123456789abcdef0123456789abcdef01234567", app));
+    } finally {
+      process.chdir(before);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("mutation e riuso nel candidato", () => {
   it("esegue mutation soltanto nel candidato, sui moduli critici e i consumatori critici", () => {
     const files = [
@@ -636,15 +673,15 @@ describe("mutation e riuso nel candidato", () => {
       "app/domain/stores.server.ts",
     ]);
     assert.deepEqual(plan(["app/tax-quality.ts"], files, true).mutation, ["app/tax-quality.ts"]);
-    // La pubblicazione o il classificatore non ripetono la mutation; i suoi strumenti sì.
-    for (const file of ["scripts/release/release.mjs", "scripts/classify-changes.mjs"])
+    // Né la pubblicazione, né il classificatore, né gli strumenti della mutation la ripetono.
+    for (const file of [
+      "scripts/release/release.mjs",
+      "scripts/classify-changes.mjs",
+      "scripts/mutation.mjs",
+      ".github/workflows/mutation.yml",
+      "stryker.config.json",
+    ])
       assert.deepEqual(plan([file], files, true).mutation, [], file);
-    for (const file of ["scripts/mutation.mjs", ".github/workflows/mutation.yml"])
-      assert.deepEqual(
-        plan([file], files, true).mutation.sort(),
-        ["app/auth.server.ts", "app/domain/stores.server.ts", "app/tax-quality.ts"],
-        file,
-      );
   });
 
   it("attende il candidato senza deploy soltanto se cambia la procedura che gira da main", () => {

@@ -61,6 +61,7 @@ jobs:
       browsers: ${{ steps.detect.outputs.browsers }}
       matrix: ${{ steps.detect.outputs.matrix }}
       browser-matrix: ${{ steps.browser-plan.outputs.browser-matrix }}
+      browser-reused: ${{ steps.browser-plan.outputs.browser-reused }}
       mutation-pr: ${{ steps.modules.outputs.matrix || '{"include":[]}' }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
@@ -167,9 +168,17 @@ jobs:
       - name: Split module mutation
         id: modules
         if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && steps.detect.outputs.mutation-pr != '{"target":[]}'
+        # Un modulo già provato in una run precedente della stessa PR, e non toccato da allora, per
+        # esempio dopo un'unione di `develop`, non si ripete.
         env:
           TARGETS: ${{ steps.detect.outputs.mutation-pr }}
           MUTATION_REFERENCES: .mutation-references
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          MUTATION_PR_BRANCH: ${{ github.head_ref }}
+          # Il commit di merge provato: una base avanzata senza unione nel branch conta come cambio.
+          HEAD_SHA: ${{ github.sha }}
         run: node scripts/mutation.mjs --matrix "${TARGETS}"
 
       # Una nuova sezione in cima al changelog sale di un solo passo dall'ultima versione pubblicata.
@@ -212,11 +221,26 @@ jobs:
       - name: Size browser jobs from selected inventory
         id: browser-plan
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
+        # Nella PR le prove già concluse in una run precedente, con lo stesso inventario e senza
+        # cambi che il classificatore giudichi rilevanti per i browser, non ripartono.
         env:
           BROWSER_GREP: ${{ steps.detect.outputs.grep }}
           BROWSERS: ${{ steps.detect.outputs.browsers }}
           E2E_MATRIX: ${{ steps.detect.outputs.matrix }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          BROWSER_PR_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || '' }}
         run: node scripts/browser-tests.mjs --plan --grep "${BROWSER_GREP}" --browsers "${BROWSERS}"
+
+      - name: Preserve browser inventory
+        if: steps.browser-plan.outcome == 'success' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-plan-${{ github.run_id }}
+          path: test-results/browser-plan.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Record build provenance
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
@@ -295,7 +319,7 @@ jobs:
     name: Browser ${{ matrix.shard }}/${{ matrix.total }}
     needs: verify
     # Una PR in bozza esegue soltanto `Verify`: le prove complete partono quando è pronta.
-    if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
+    if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && needs.verify.outputs.browser-reused != 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
     container:
       image: mcr.microsoft.com/playwright:v${{ needs.verify.outputs.playwright }}-noble
