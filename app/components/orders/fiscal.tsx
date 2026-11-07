@@ -468,6 +468,7 @@ export function MissingOrderHelp({
       {order.suggestions.map((suggestion) => {
         const identifier = suggestedIdentifier(suggestion);
         const label = identifierLabel(identifier, t);
+        const conflictKind = suggestion.mixedConflict ? "MIXED" : identifier.type;
         return (
           <div
             key={`${identifier.type}:${suggestion.issuingCountry}:${suggestion.value}`}
@@ -500,9 +501,7 @@ export function MissingOrderHelp({
               <p className="flex gap-2 text-sm text-warning">
                 <StatusIcon tone="warning" className="mt-0.5" />
                 <span>
-                  <span className="font-medium">
-                    {t.orders.differentCodes[suggestion.identifier?.type ?? "CF"]}.
-                  </span>{" "}
+                  <span className="font-medium">{t.orders.differentCodes[conflictKind]}.</span>{" "}
                   {t.orders.suggestionConflict}
                 </span>
               </p>

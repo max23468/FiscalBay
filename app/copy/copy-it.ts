@@ -264,7 +264,12 @@ export const it = {
       PIVA: "P. IVA da controllare",
       OTHER: "Codice da controllare",
     },
-    differentCodes: { CF: "CF diversi", PIVA: "P. IVA diverse", OTHER: "Codici diversi" },
+    differentCodes: {
+      CF: "CF diversi",
+      PIVA: "P. IVA diverse",
+      OTHER: "Codici diversi",
+      MIXED: "CF e P. IVA diversi",
+    },
     updated: "Aggiornato da eBay",
     updatedHint: "eBay ha modificato questo dato dopo la prima lettura.",
     suggestion: "Suggerimento da un ordine precedente",
