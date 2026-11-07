@@ -36,9 +36,7 @@ it("legge il CF Fulfillment italiano con header e conserva lo storico quando man
     issuingCountry: "IT",
   };
   const source = order();
-  const fetcher = ebay({
-    orders: [order({ buyer: { ...source.buyer, taxIdentifier: tax } })],
-  });
+  const fetcher = ebay({ orders: [order({ buyer: { ...source.buyer, taxIdentifier: tax } })] });
   expect(await acquire(fetcher)).toBe("complete");
   const single = fetcher.mock.calls.find(([input]) =>
     new URL(String(input)).pathname.includes("/order/"),
@@ -50,19 +48,12 @@ it("legge il CF Fulfillment italiano con header e conserva lo storico quando man
     await env.DB.prepare("SELECT identifier_type, source, value FROM tax_identifiers").all(),
   ).toMatchObject({
     results: [
-      {
-        identifier_type: "CODICE_FISCALE",
-        source: "ebay_fulfillment",
-        value: "SINTETICO",
-      },
+      { identifier_type: "CODICE_FISCALE", source: "ebay_fulfillment", value: "SINTETICO" },
     ],
   });
   fetcher.orders[0] = order({
     lastModifiedDate: "2026-09-02T02:00:00.000Z",
-    buyer: {
-      ...source.buyer,
-      taxIdentifier: { ...tax, taxpayerId: "ALTRO-SINTETICO" },
-    },
+    buyer: { ...source.buyer, taxIdentifier: { ...tax, taxpayerId: "ALTRO-SINTETICO" } },
   });
   await acquire(fetcher, "2026-09-02T03:00:00.000Z");
   expect(
@@ -75,10 +66,7 @@ it("legge il CF Fulfillment italiano con header e conserva lo storico quando man
     lastModifiedDate: "2026-09-02T03:30:00.000Z",
     buyer: {
       ...source.buyer,
-      taxIdentifier: {
-        taxpayerId: "SENZA-PAESE",
-        taxIdentifierType: "CODICE_FISCALE",
-      },
+      taxIdentifier: { taxpayerId: "SENZA-PAESE", taxIdentifierType: "CODICE_FISCALE" },
     },
   });
   await acquire(fetcher, "2026-09-02T04:00:00.000Z");
@@ -102,26 +90,14 @@ it("legge il CF Fulfillment italiano con header e conserva lo storico quando man
 
 it.each([
   { tax: undefined },
+  { tax: { taxpayerId: "SINTETICO", taxIdentifierType: "VATIN", issuingCountry: "IT" } },
   {
-    tax: {
-      taxpayerId: "SINTETICO",
-      taxIdentifierType: "VATIN",
-      issuingCountry: "IT",
-    },
-  },
-  {
-    tax: {
-      taxpayerId: "SINTETICO",
-      taxIdentifierType: "CODICE_FISCALE",
-      issuingCountry: "ES",
-    },
+    tax: { taxpayerId: "SINTETICO", taxIdentifierType: "CODICE_FISCALE", issuingCountry: "ES" },
   },
   { tax: { taxpayerId: "", taxIdentifierType: "CODICE_FISCALE" } },
 ])("usa Trading per un dato fiscale assente o non qualificato: $tax", async ({ tax }) => {
   const source = order();
-  const fetcher = ebay({
-    orders: [order({ buyer: { ...source.buyer, taxIdentifier: tax } })],
-  });
+  const fetcher = ebay({ orders: [order({ buyer: { ...source.buyer, taxIdentifier: tax } })] });
   expect(await acquire(fetcher)).toBe("complete");
   expect(calls(fetcher, "GetOrders")).toBe(1);
   expect(await env.DB.prepare("SELECT source FROM tax_identifiers").all()).toMatchObject({
@@ -138,10 +114,7 @@ it.each(["EBAY_ES", null])(
         order({
           buyer: {
             ...source.buyer,
-            taxIdentifier: {
-              taxpayerId: "SINTETICO",
-              taxIdentifierType: "CODICE_FISCALE",
-            },
+            taxIdentifier: { taxpayerId: "SINTETICO", taxIdentifierType: "CODICE_FISCALE" },
           },
           lineItems: source.lineItems.map((line) => ({
             ...line,
@@ -202,10 +175,7 @@ it("mantiene Trading come fonte fiscale in Sandbox", async () => {
 it.each([
   { orderId: "ALTRO-ORDINE" },
   {
-    lineItems: order().lineItems.map((line) => ({
-      ...line,
-      listingMarketplaceId: "EBAY_ES",
-    })),
+    lineItems: order().lineItems.map((line) => ({ ...line, listingMarketplaceId: "EBAY_ES" })),
   },
 ])(
   "rifiuta un dettaglio con identità o marketplace discordante: $orderId $lineItems",
@@ -295,10 +265,7 @@ it("legge dati fiscali e immagini una volta per versione, senza bloccare l'ordin
   });
 
   // Con l'immagine già salvata non si richiama GetItem e la rilettura la conserva.
-  failing.orders[0] = {
-    ...failing.orders[0]!,
-    lastModifiedDate: "2026-09-02T04:00:00.000Z",
-  };
+  failing.orders[0] = { ...failing.orders[0]!, lastModifiedDate: "2026-09-02T04:00:00.000Z" };
   const again = ebay({ orders: failing.orders });
   await acquire(again, "2026-09-02T05:00:00.000Z");
   expect([calls(again, "GetItem"), calls(again, "GetOrders")]).toEqual([0, 1]);
@@ -344,9 +311,7 @@ it("importa lo storico a tratti e riprende dal primo tratto non applicato", asyn
       return requests === 4 ? new Response(null, { status: 503 }) : undefined;
     },
   });
-  await expect(acquire(failing)).rejects.toMatchObject({
-    failure: "unavailable",
-  });
+  await expect(acquire(failing)).rejects.toMatchObject({ failure: "unavailable" });
   const applied = "2026-08-31T19:00:00.000Z";
   expect(slices(failing, "creationdate")).toEqual([
     "2026-08-03T00:00:00.000Z..2026-09-02T00:00:00.000Z",
@@ -567,16 +532,11 @@ it("nello stesso secondo segue le pagine di eBay ed entro il budget si ferma sen
   ]);
   const short = ebay({ orders, pageLimit: 25 });
   const budget = reads.findIndex((range) => range.endsWith("@50"));
-  expect(
-    await acquire(short, "2026-09-02T01:00:00.000Z", {
-      calls: budget,
-      pages: budget,
-    }),
-  ).toBe("budget");
+  expect(await acquire(short, "2026-09-02T01:00:00.000Z", { calls: budget, pages: budget })).toBe(
+    "budget",
+  );
   expect(slices(short, "lastmodifieddate")).toEqual(reads.slice(0, budget));
-  expect(await syncState()).toMatchObject({
-    last_success_at: "2026-09-02T00:00:00.000Z",
-  });
+  expect(await syncState()).toMatchObject({ last_success_at: "2026-09-02T00:00:00.000Z" });
 });
 
 it("una data illeggibile nella pagina non ferma la lettura dei tratti", async () => {
@@ -625,10 +585,7 @@ it("non salta ordini se l'elenco cambia durante la lettura dei tratti", async ()
         .first();
       if (!read) return;
       moved = true;
-      orders[0] = {
-        ...orders[0]!,
-        lastModifiedDate: "2026-09-03T00:00:00.000Z",
-      };
+      orders[0] = { ...orders[0]!, lastModifiedDate: "2026-09-03T00:00:00.000Z" };
     },
   });
   expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
@@ -693,13 +650,8 @@ it("acquisisce i nuovi ordini prima di completare lo storico e ne mostra l'avanz
   const orders = series("12-storico", 60, "2026-09-02T00:00:00.000Z");
   const small = { calls: 4, pages: 4 };
   // Prima del primo avvio lo storico non ha ancora una finestra.
-  expect((await listStores(env.DB, "u-a"))[0]).toMatchObject({
-    history: null,
-    syncing: false,
-  });
-  await acquire(ebay({ orders, pageLimit: 25 }), "2026-09-02T00:00:00.000Z", {
-    ...small,
-  });
+  expect((await listStores(env.DB, "u-a"))[0]).toMatchObject({ history: null, syncing: false });
+  await acquire(ebay({ orders, pageLimit: 25 }), "2026-09-02T00:00:00.000Z", { ...small });
   // Un tratto troppo denso e poi le ultime nove ore, un ordine all'ora.
   expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(9);
   expect((await listStores(env.DB, "u-a", new Date("2026-09-02T00:10:00.000Z")))[0]).toMatchObject({
@@ -743,9 +695,7 @@ it("acquisisce i nuovi ordini prima di completare lo storico e ne mostra l'avanz
   // Tre letture riuscite: un solo giorno aggregato e la prima lettura alla prima esecuzione.
   expect(
     await env.DB.prepare("SELECT day, attempts, failures FROM sync_daily").all(),
-  ).toMatchObject({
-    results: [{ day: "2026-09-02", attempts: 3, failures: 0 }],
-  });
+  ).toMatchObject({ results: [{ day: "2026-09-02", attempts: 3, failures: 0 }] });
   const { results: steps } = await env.DB.prepare(
     "SELECT step, occurred_at AS at FROM workspace_funnel_steps WHERE workspace_id = 'w-a'",
   ).all<{ step: string; at: string }>();
@@ -768,22 +718,14 @@ it("una rilettura con dati mascherati non cancella quelli già acquisiti", async
     buyer: {
       username: "acquirente-sintetico",
       buyerRegistrationAddress: {
-        contactAddress: {
-          city: "Trento",
-          postalCode: "38122",
-          countryCode: "IT",
-        },
+        contactAddress: { city: "Trento", postalCode: "38122", countryCode: "IT" },
       },
     },
     fulfillmentStartInstructions: [
       {
         shippingStep: {
           shipTo: {
-            contactAddress: {
-              city: "Bolzano",
-              postalCode: "39100",
-              countryCode: "IT",
-            },
+            contactAddress: { city: "Bolzano", postalCode: "39100", countryCode: "IT" },
           },
         },
       },
@@ -823,10 +765,7 @@ it("una rilettura con dati mascherati non cancella quelli già acquisiti", async
     },
   });
   const [visible] = await listVisibleOrders(env.DB, "u-a");
-  expect(visible!.summary).toMatchObject({
-    payment: "refunded",
-    shipping: "to_ship",
-  });
+  expect(visible!.summary).toMatchObject({ payment: "refunded", shipping: "to_ship" });
 
   // Un campo assente anche nella lettura precedente resta mascherato, senza valore.
   await env.DB.batch([
@@ -840,10 +779,7 @@ it("una rilettura con dati mascherati non cancella quelli già acquisiti", async
         order({
           buyer: {
             username: "acquirente-sintetico",
-            buyerRegistrationAddress: {
-              fullName: "Maria Verdi",
-              email: "a@example.invalid",
-            },
+            buyerRegistrationAddress: { fullName: "Maria Verdi", email: "a@example.invalid" },
           },
           fulfillmentStartInstructions: [],
         }),
@@ -856,9 +792,8 @@ it("una rilettura con dati mascherati non cancella quelli già acquisiti", async
   await acquire(ebay({ orders: [masked] }), "2026-12-02T00:00:00.000Z");
   expect(
     JSON.parse(
-      (await env.DB.prepare("SELECT buyer_json FROM orders").first<{
-        buyer_json: string;
-      }>())!.buyer_json,
+      (await env.DB.prepare("SELECT buyer_json FROM orders").first<{ buyer_json: string }>())!
+        .buyer_json,
     ),
   ).toMatchObject({
     name: "Maria Verdi",
@@ -889,12 +824,7 @@ it("una rilettura con dati mascherati non cancella quelli già acquisiti", async
 it("classifica gli ordini non pagati senza rappresentarli come incassati", async () => {
   await acquire(
     ebay({
-      orders: [
-        order({
-          orderPaymentStatus: "PENDING",
-          orderFulfillmentStatus: undefined,
-        }),
-      ],
+      orders: [order({ orderPaymentStatus: "PENDING", orderFulfillmentStatus: undefined })],
     }),
   );
   const [visible] = await listVisibleOrders(env.DB, "u-a");
