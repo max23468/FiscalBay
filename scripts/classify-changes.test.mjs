@@ -636,15 +636,15 @@ describe("mutation e riuso nel candidato", () => {
       "app/domain/stores.server.ts",
     ]);
     assert.deepEqual(plan(["app/tax-quality.ts"], files, true).mutation, ["app/tax-quality.ts"]);
-    // La pubblicazione o il classificatore non ripetono la mutation; i suoi strumenti sì.
-    for (const file of ["scripts/release/release.mjs", "scripts/classify-changes.mjs"])
+    // Né la pubblicazione, né il classificatore, né gli strumenti della mutation la ripetono.
+    for (const file of [
+      "scripts/release/release.mjs",
+      "scripts/classify-changes.mjs",
+      "scripts/mutation.mjs",
+      ".github/workflows/mutation.yml",
+      "stryker.config.json",
+    ])
       assert.deepEqual(plan([file], files, true).mutation, [], file);
-    for (const file of ["scripts/mutation.mjs", ".github/workflows/mutation.yml"])
-      assert.deepEqual(
-        plan([file], files, true).mutation.sort(),
-        ["app/auth.server.ts", "app/domain/stores.server.ts", "app/tax-quality.ts"],
-        file,
-      );
   });
 
   it("attende il candidato senza deploy soltanto se cambia la procedura che gira da main", () => {

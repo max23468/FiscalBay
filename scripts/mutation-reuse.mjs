@@ -130,19 +130,23 @@ export function lineMutationJob(name) {
 }
 
 /**
- * File che non cambiano l'esito della mutation di nessun modulo: documenti, frammenti, prove
- * browser, script estranei alla mutation, workflow diversi da CI e mutation, stili e immagini.
+ * File che non fanno ripetere la mutation di nessun modulo: documenti, frammenti, prove browser,
+ * script e workflow, compresi gli strumenti della mutation, manifest e lockfile, stili e immagini.
+ * Strumenti e dipendenze li prova la campagna settimanale completa (D317).
  */
 const mutationNeutral = (file) =>
-  /\.md$|^docs\/|^changes\/|^e2e\/|^public\/|\.(?:css|svg|png|jpe?g|webp|avif|ico)$/u.test(file) ||
-  (/^scripts\//u.test(file) && !/^scripts\/mutation(?:-vitest|-reuse)?\.mjs$/u.test(file)) ||
-  (/^\.github\//u.test(file) && !/^\.github\/workflows\/(?:ci|mutation)\.yml$/u.test(file));
+  /\.md$|^docs\/|^changes\/|^e2e\/|^public\/|^scripts\/|^\.github\/|\.(?:css|svg|png|jpe?g|webp|avif|ico)$/u.test(
+    file,
+  ) ||
+  /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|stryker\.config\.json|vitest.*\.config\.ts)$/u.test(
+    file,
+  );
 
 /**
  * Vero se i file cambiati da una prova riuscita lasciano valida la mutation di `target`: nessun
  * sorgente che il modulo importa, anche indirettamente, né il modulo stesso; nessun test che lo
  * importa direttamente e nessun helper o fixture dei test, che possono indebolire qualunque prova;
- * nessuna migration, configurazione o strumento della mutation. `graph` comprende anche i test.
+ * nessuna migration o altro file letto dai test. `graph` comprende anche i test.
  */
 export function proofUnaffected(changed, target, graph) {
   if (affectingSources(changed, graph).has(target)) return false;

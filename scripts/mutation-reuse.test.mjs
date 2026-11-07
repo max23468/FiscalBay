@@ -229,20 +229,24 @@ describe("mutation incrementale della prova del candidato", () => {
     assert.ok(valid("docs/ROADMAP.md", "changes/x.md", "e2e/a.spec.ts", "app/app.css"));
     assert.ok(valid("app/domain/other.server.ts", "test/other.spec.ts"));
     assert.ok(valid("scripts/indexnow.mjs", ".github/workflows/security.yml", "public/a.png"));
+    // Strumenti della mutation e dipendenze restano alla campagna settimanale.
+    assert.ok(
+      valid(
+        "package.json",
+        "pnpm-lock.yaml",
+        "stryker.config.json",
+        "vitest.mutation.config.ts",
+        "scripts/mutation.mjs",
+        ".github/workflows/ci.yml",
+        ".github/workflows/mutation.yml",
+      ),
+    );
     for (const changed of [
       target,
       "app/domain/grants.server.ts",
       "test/billing.spec.ts",
       "test/fixtures/database-fixtures.ts",
       "migrations/0080_x.sql",
-      "package.json",
-      "pnpm-lock.yaml",
-      "stryker.config.json",
-      "vitest.mutation.config.ts",
-      "scripts/mutation.mjs",
-      "scripts/mutation-reuse.mjs",
-      ".github/workflows/ci.yml",
-      ".github/workflows/mutation.yml",
       "app/request-limits.json",
     ])
       assert.ok(!valid(changed), changed);
