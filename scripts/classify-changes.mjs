@@ -10,7 +10,7 @@
  * La sequenza di ogni livello esiste soltanto negli script di package.json; ogni livello comprende
  * il precedente. Il classificatore sceglie anche le prove browser e il deploy test.
  * Uso: node scripts/classify-changes.mjs [--base REF --head REF] [--complete] [--all] [--github-output] [--json] [--run] [--browser]
- * `--run` esegue il gate del livello, `--browser` le sole prove browser scelte, in Chromium.
+ * `--run` esegue il gate del livello, `--browser` le sole prove browser scelte, nei browser della CI.
  * Senza --base confronta il checkout, file non tracciati inclusi, con l'ultimo verde locale di
  * `--run` nello stesso worktree, oppure con origin/develop se manca o con `--all`.
  */
@@ -56,7 +56,7 @@ export function ciGateScript(level, built = false) {
 
 /**
  * Gate locale di `pnpm verify:changed`: controlli statici del livello, poi i test collegati al
- * diff. Copertura, build, React Doctor fuori dal livello completo, WebKit e suite browser restano
+ * diff. Copertura, build, React Doctor fuori dal livello completo e suite browser restano
  * alla CI, che esegue `levelScripts` sul diff della PR.
  */
 export const localScripts = {
@@ -812,20 +812,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     }
     if (tree) receipt("gate", { gate: result.gate });
   }
-  // In locale le prove scelte girano in Chromium, e soltanto se la modifica cambia ciò che il
-  // browser disegna o esegue: logica server, WebKit e la suite completa restano alla CI.
+  // In locale le prove scelte girano negli stessi browser della CI, e soltanto se la modifica
+  // cambia ciò che il browser disegna o esegue: logica server e suite completa restano alla CI.
   if (args.browser) {
     const local = result.e2e && result.browsers !== "chromium";
     if (local)
       run(
         "node",
-        ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", "chromium"],
+        ["scripts/browser-tests.mjs", "--grep", result.browserGrep, "--browsers", result.browsers],
         result.matrix ? { E2E_MATRIX: result.matrix } : {},
       );
     else if (result.e2e)
       console.log(
         "Prove browser lasciate alla CI: la modifica non cambia ciò che il browser esegue.",
       );
-    if (tree) receipt("browser", { browsers: local ? "chromium" : "" });
+    if (tree) receipt("browser", { browsers: local ? result.browsers : "" });
   }
 }
