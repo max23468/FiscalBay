@@ -770,6 +770,7 @@ describe("esecuzione del classificatore", () => {
       );
       const browser = classify("--browser");
       assert.match(browser.commands, /scripts\/browser-tests\.mjs/u);
+      assert.match(browser.commands, /--browsers chromium,webkit/u);
       assert.match(browser.commands, /@pages-stores/u);
       assert.match(browser.commands, /@pages-settings/u);
       assert.equal(classify("--browser").commands, "");

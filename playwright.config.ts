@@ -1,3 +1,4 @@
+import { totalmem } from "node:os";
 import { defineConfig } from "@playwright/test";
 import { localOrigin, localPort } from "./e2e/local-account";
 
@@ -5,8 +6,15 @@ export default defineConfig({
   testDir: "./e2e",
   outputDir: `./test-results/${process.env.E2E_RUN_ID || (process.env.E2E_BASE_URL ? "deployed" : "local")}`,
   // Sul dominio test l'account di collaudo è unico; in CI ogni macchina esegue una parte. In
-  // Production il collaudo dopo il deploy è anonimo e senza sessioni da condividere.
-  workers: process.env.E2E_BASE_URL ? (process.env.E2E_PRODUCTION ? 4 : 1) : process.env.CI ? 4 : 2,
+  // Production il collaudo dopo il deploy è anonimo e senza sessioni da condividere. In locale
+  // la preview, il D1 e i browser condividono la memoria: un worker ogni 6 GiB, al più come in CI.
+  workers: process.env.E2E_BASE_URL
+    ? process.env.E2E_PRODUCTION
+      ? 4
+      : 1
+    : process.env.CI
+      ? 4
+      : Math.max(1, Math.min(4, Math.floor(totalmem() / (6 * 1024 ** 3)))),
   fullyParallel: true,
   // Sul dominio remoto una sola ripetizione separa l'instabilità della rete da un difetto:
   // una prova che fallisce due volte fa ancora tornare indietro il deploy. La CI delle PR
