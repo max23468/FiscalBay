@@ -12,6 +12,9 @@
  * precedente, ripete soltanto i mutanti con codice o test cambiati.
  * `--incremental-base <file>` scrive quel report dalle prove precedenti della PR o, senza, dal
  * riferimento di `develop` in `MUTATION_REFERENCE`.
+ * `--collect-references <cartella>` riunisce in `.mutation-references/` le parti riuscite di ogni
+ * modulo di una run su `develop`; con `MUTATION_REFERENCES` la matrice della PR prova in un solo
+ * job il modulo che ha un riferimento completo e pochi mutanti da ripetere.
  */
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -204,6 +207,13 @@ export function consumerTests(target, files) {
 export const mutantsPerShard = 150;
 
 /**
+ * Mutanti da ripetere entro i quali la PR prova in un solo job un modulo con il riferimento
+ * completo: ogni parte ripete la prova iniziale della suite, da cinque a nove minuti sul runner,
+ * mentre quaranta mutanti ne richiedono circa sei in un solo processo.
+ */
+export const unsplitRetests = 40;
+
+/**
  * Righe, numerate da 1, dei mutanti che Stryker genera nel modulo, con lo stesso instrumenter e
  * le equivalenze motivate comprese.
  */
@@ -348,6 +358,98 @@ export function completeTimings(parts) {
   );
 }
 
+/**
+ * Righe del sorgente attuale, numerate da 1, fra il primo e l'ultimo punto in cui differisce da
+ * `before`; `null` se sono uguali. Più modifiche distanti contano come un solo blocco: la stima
+ * può soltanto crescere, e allora il modulo si divide come sempre.
+ */
+export function changedRange(before, after) {
+  if (before === after) return null;
+  const old = before.split("\n");
+  const current = after.split("\n");
+  let start = 0;
+  while (start < old.length && start < current.length && old[start] === current[start]) start++;
+  let end = 0;
+  while (
+    end < old.length - start &&
+    end < current.length - start &&
+    old[old.length - 1 - end] === current[current.length - 1 - end]
+  )
+    end++;
+  return { start: start + 1, end: Math.max(start + 1, current.length - end) };
+}
+
+/** Mutanti che toccano le righe cambiate: Stryker ripete questi e quelli dei test cambiati. */
+export const retestEstimate = (mutants, range) =>
+  range ? mutants.filter(({ start, end }) => end >= range.start && start <= range.end).length : 0;
+
+const referenceSlug = (target) => target.replaceAll("/", "_");
+
+/**
+ * Riferimenti completi dei moduli dalle parti di una run: un modulo entra soltanto con tutte le
+ * parti presenti e senza mutanti da correggere, come i riferimenti delle singole parti. Ogni
+ * voce porta modulo, parte, numero di parti, report JSON e report incrementale.
+ */
+export function moduleReferences(parts) {
+  const modules = new Map();
+  for (const part of parts) {
+    const entry = modules.get(part.target) ?? { parts: part.parts, found: new Map(), valid: true };
+    modules.set(part.target, entry);
+    if (entry.parts !== part.parts || evaluate(part.report).length) entry.valid = false;
+    entry.found.set(part.part, part.incremental);
+  }
+  return new Map(
+    [...modules]
+      .filter(([, entry]) => entry.valid && entry.found.size === entry.parts)
+      .map(([target, entry]) => [target, mergeReports([...entry.found.values()])]),
+  );
+}
+
+/** Parti scaricate in `directory`: cartelle `<modulo>` o `<modulo>-<parte>-<parti>`. */
+function downloadedParts(directory) {
+  const parts = [];
+  const visit = (folder) => {
+    for (const entry of readdirSync(folder, { withFileTypes: true }))
+      if (entry.isDirectory()) visit(path.join(folder, entry.name));
+    const report = path.join(folder, "mutation.json");
+    const incremental = path.join(folder, "incremental.json");
+    if (!existsSync(report) || !existsSync(incremental)) return;
+    const parsed = JSON.parse(readFileSync(report, "utf8"));
+    const [target] = Object.keys(parsed.files ?? {});
+    if (!target) return;
+    const shard = /-(\d+)-(\d+)$/u.exec(path.basename(folder));
+    parts.push({
+      target,
+      part: shard ? Number(shard[1]) : 1,
+      parts: shard ? Number(shard[2]) : 1,
+      report: parsed,
+      incremental: JSON.parse(readFileSync(incremental, "utf8")),
+    });
+  };
+  visit(directory);
+  return parts;
+}
+
+/**
+ * Parti della PR: il modulo con il riferimento completo di `develop` e al più `unsplitRetests`
+ * mutanti sulle righe cambiate da allora si prova in un solo job, che ripete la prova iniziale
+ * una volta sola; gli altri si dividono come nella campagna.
+ */
+export async function pullRequestShards(target, references, shardsOf = moduleShards) {
+  const reference = path.join(references, `${referenceSlug(target)}.json`);
+  if (existsSync(reference)) {
+    const source = JSON.parse(readFileSync(reference, "utf8")).files?.[target]?.source;
+    if (typeof source === "string") {
+      const retests = retestEstimate(
+        await mutantLines(target),
+        changedRange(source, readFileSync(target, "utf8")),
+      );
+      if (retests <= unsplitRetests) return [{ mutants: retests, reference }];
+    }
+  }
+  return shardsOf(target);
+}
+
 const timingFile = ".mutation-timings.json";
 function timingHistory() {
   try {
@@ -412,15 +514,17 @@ export async function mutationJobs(targets, shardsOf = moduleShards, testsOf = (
   const jobs = await Promise.all(
     targets.map(async (target) => {
       const shards = await shardsOf(target);
-      return shards.map(({ mutants, estimatedMs }, index) => ({
+      return shards.map(({ mutants, estimatedMs, reference }, index) => ({
         job: {
           target,
           shard: `${index + 1}/${shards.length}`,
           ...(shards.every((range) => Number.isInteger(range.start))
             ? { ranges: JSON.stringify(shards), digest: sourceDigest(target) }
             : {}),
+          ...(reference ? { reference } : {}),
         },
-        weight: estimatedMs ?? mutants * testsOf(target),
+        // Un job con il riferimento completo costa almeno la prova iniziale della suite.
+        weight: estimatedMs ?? Math.max(1, mutants) * testsOf(target),
       }));
     }),
   );
@@ -697,13 +801,19 @@ async function runTarget(target, files, shard = "1/1") {
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const {
     positionals: args,
-    values: { matrix: matrixMode, "incremental-base": baseFile, "collect-timings": collectTimings },
+    values: {
+      matrix: matrixMode,
+      "incremental-base": baseFile,
+      "collect-timings": collectTimings,
+      "collect-references": collectReferences,
+    },
   } = parseArgs({
     allowPositionals: true,
     options: {
       matrix: { type: "boolean" },
       "incremental-base": { type: "string" },
       "collect-timings": { type: "string" },
+      "collect-references": { type: "string" },
     },
   });
   if (collectTimings) {
@@ -722,6 +832,16 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     writeFileSync(timingFile, JSON.stringify(history));
     process.exit(0);
   }
+  // I riferimenti dei moduli assenti dalla run restano quelli precedenti.
+  if (collectReferences) {
+    const output = ".mutation-references";
+    mkdirSync(output, { recursive: true });
+    const references = moduleReferences(downloadedParts(collectReferences));
+    for (const [target, report] of references)
+      writeFileSync(path.join(output, `${referenceSlug(target)}.json`), JSON.stringify(report));
+    console.log(`Riferimenti completi: ${[...references.keys()].join(", ") || "nessuno"}.`);
+    process.exit(0);
+  }
   if (baseFile) {
     await writeIncrementalBase(baseFile);
     process.exit(0);
@@ -733,9 +853,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       files.map(({ path: file }) => file),
     );
     console.log(`Moduli critici: ${matrix.target.join(", ") || "nessuno"}.`);
+    const references = process.env.MUTATION_REFERENCES;
     const jobs = await mutationJobs(
       matrix.target,
-      moduleShards,
+      references ? (target) => pullRequestShards(target, references) : moduleShards,
       (target) => consumerTests(target, files).length,
     );
     console.log(

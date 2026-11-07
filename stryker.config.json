@@ -12,6 +12,7 @@
     "/test-results",
     "/reports",
     "/.mutation-reference",
+    "/.mutation-references",
     "/.claude/worktrees"
   ],
   "reporters": ["clear-text", "progress", "json"],
