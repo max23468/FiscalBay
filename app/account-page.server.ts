@@ -326,7 +326,7 @@ export async function accessAction(request: Request) {
     const session = await readSession(env, request);
     if (!session) return notice("errore");
     return intent === "account-delete"
-      ? requestAccountDeletion(request, { language, session }, field("confirmation"), true)
+      ? requestAccountDeletion(request, { language, session }, form, true)
       : securityAction(request, { language, session }, form, authPath !== null);
   }
 

@@ -15,10 +15,12 @@ import {
   webhookInfo,
   type BotButton,
 } from "../integrations/telegram.server";
+import { exitReasons } from "../exit-reasons";
 import { checkPrices, commerceOverview } from "./admin-commerce.server";
 import { consoleSummary, listAllStores } from "./admin-directory.server";
 import { listAnomalies, receiptStates, taskStates } from "./admin-operations.server";
 import { bulkDataAnomalies, quotaAnomalies, readEbayQuotas } from "./ebay-quotas.server";
+import { exitOverview, type ExitKind } from "./exit-feedback.server";
 import { recentIncidents, subjectsLine } from "./owner-incidents.server";
 import {
   at,
@@ -63,6 +65,7 @@ const consoleSection: Record<OwnerCommand, string> = {
   lavori: "lavori",
   quote: "quote",
   commerciale: "commerciale",
+  uscite: "commerciale",
   metriche: "metriche",
   negozi: "negozi?problemi",
   prestazioni: "prestazioni",
@@ -200,6 +203,8 @@ export async function ownerPanel(
       return quotasPanel(env, fetcher, now);
     case "commerciale":
       return commercePanel(env, fetcher, now);
+    case "uscite":
+      return exitsPanel(env, now);
     case "metriche":
       return metricsPanel(env, windowOf(action.arg), now);
     case "negozi":
@@ -479,6 +484,42 @@ async function commercePanel(env: Env, fetcher: typeof fetch, now: Date): Promis
               ]),
             )
           : [[copy.state, copy.commerce.noPromotions]],
+      },
+    ],
+  };
+}
+
+/**
+ * Motivi di uscita (D314): per disdette e cancellazioni, i motivi degli ultimi 30 giorni e
+ * dei 12 mesi, poi i commenti dei 30 giorni, che restano soltanto in quella finestra.
+ */
+async function exitsPanel(env: Env, now: Date): Promise<Panel> {
+  const { counts, recent } = await exitOverview(env.DB, now);
+  const x = t.exits;
+  const rows = (kind: ExitKind): Row[] =>
+    [...exitReasons, "none" as const]
+      .filter((reason) => counts[kind][reason].months12 > 0)
+      .map((reason) => [
+        x.reasons[reason],
+        copy.exitsView.counts(counts[kind][reason].days30, counts[kind][reason].months12),
+      ]);
+  const cancellations = rows("cancellation");
+  const deletions = rows("account_deletion");
+  return {
+    title: copy.views.uscite,
+    lead: cancellations.length || deletions.length ? copy.exitsView.lead : copy.exitsView.none,
+    sections: [
+      { title: x.cancellations, rows: cancellations },
+      { title: x.deletions, rows: deletions },
+      {
+        title: x.comments,
+        rows: capped(
+          recent.map((exit) => [
+            `${at(exit.recordedAt)} · ${x.kind[exit.kind]} · ${x.reasons[exit.reason ?? "none"]}`,
+            exit.comment,
+          ]),
+          10,
+        ),
       },
     ],
   };

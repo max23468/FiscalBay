@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia, verifica del brand Google e richieste a eBay sulle lacune delle API, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)) e la dismissione di `GetOrders`, un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
+| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)) e la dismissione di `GetOrders`, un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -70,7 +70,7 @@ Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richi
 <a id="correzioni-2-0"></a>
 ## 2.0.x · Correzioni e miglioramenti
 
-**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)), più la provenienza degli iscritti approvata il 2026-11-04 ([D304](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i task procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
+**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)), più la provenienza degli iscritti approvata il 2026-11-04 ([D304](decisions/DECISION_REGISTER.md)) e i motivi di uscita approvati il 2026-11-07 ([D314](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i task procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
 
 <a id="2-0-01"></a>
 #### 2.0-01 · Ordini, eBay e piattaforma
@@ -120,6 +120,13 @@ La mutation divide i moduli secondo le durate misurate sullo stesso sorgente e c
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§29](engineering/SECURITY_AND_PRIVACY.md#s29)
 
 Ogni giovedì, anche senza PR, un workflow ricontrolla avvisi delle dipendenze distribuite, firme dei pacchetti, protezione di `develop` e `main` con il solo `Node 26` richiesto e alert aperti di Dependabot, code scanning e secret scanning; un fallimento arriva all'owner come notifica di GitHub ([D313](decisions/DECISION_REGISTER.md)). Gli alert si leggono con un token in sola lettura la cui scadenza sta nel registro delle credenziali, che resta l'unico controllo delle scadenze.
+
+<a id="2-0-08"></a>
+#### 2.0-08 · Motivi di uscita
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15) · [piani](product/PLANS_AND_BILLING.md) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30) · [retention](engineering/DATA_RETENTION.md)
+
+La disdetta dal portale Stripe porta motivo e commento dei `cancellation_details`, con sei opzioni allineate all'elenco di FiscalBay; la cancellazione dell'account chiede lo stesso elenco, con «Chiudo o sospendo l'attività su eBay», e un commento, entrambi facoltativi. Gli avvisi Telegram di disdetta e cancellazione li mostrano, la pagina Commerciale della console e il comando `/uscite` riassumono i motivi a 30 giorni, 3 e 12 mesi con i commenti recenti. Il commento dura 30 giorni, poi resta un'istantanea anonima per 24 mesi; Privacy IT/EN `2026-11-07` ([D314](decisions/DECISION_REGISTER.md)). Lo scollegamento dell'ultimo negozio non chiede nulla. Le opzioni del portale si applicano sul test dopo `Pubblica` e in live con `Promuovi`, con `scripts/stripe-account.mjs --apply`.
 
 <a id="2-0-10"></a>
 #### 2.0-10 · Username degli acquirenti per le cancellazioni eBay

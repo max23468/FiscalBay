@@ -207,6 +207,26 @@ test.describe("area reale", () => {
           ? "Scrivi il tuo indirizzo email per confermare"
           : "Type your email address to confirm",
       });
+      // Motivo e commento facoltativi: l'elenco si apre sopra la finestra.
+      await dialog
+        .getByRole("combobox", {
+          name: it
+            ? "Perché elimini l’account? (facoltativo)"
+            : "Why are you deleting your account? (optional)",
+        })
+        .click();
+      await page
+        .getByRole("option", {
+          name: it ? "Manca una funzione che mi serve" : "A feature I need is missing",
+        })
+        .click();
+      await dialog
+        .getByRole("textbox", {
+          name: it
+            ? "Vuoi dirci di più? (facoltativo)"
+            : "Anything else you’d like to tell us? (optional)",
+        })
+        .fill("Export per il commercialista");
       await address.fill("altro@example.invalid");
       await expect(send).toBeDisabled();
       await address.fill(`${id}@example.invalid`);
