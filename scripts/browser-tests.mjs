@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -44,7 +45,112 @@ export function browserShards(count) {
   return { include: Array.from({ length: total }, (_, index) => ({ shard: index + 1, total })) };
 }
 
-function main() {
+/** Esito delle prove browser di una run della PR: `passed` con ogni parte riuscita, `failed`, o nulla. */
+export function browserOutcome(jobs) {
+  const own = jobs.filter((job) => /^Browser \d+\/\d+$/u.test(job.name));
+  if (!own.length) return null;
+  if (own.some((job) => ["failure", "timed_out"].includes(job.conclusion))) return "failed";
+  // GitHub elenca soltanto i job partiti: ogni parte deve esserci, riuscita.
+  if (!own.every((job) => job.conclusion === "success")) return null;
+  const parts = own.map((job) => /(\d+)\/(\d+)$/u.exec(job.name));
+  const total = parts[0][2];
+  return parts.every((part) => part[2] === total) &&
+    new Set(parts.map((part) => part[1])).size === Number(total)
+    ? "passed"
+    : null;
+}
+
+/**
+ * Prova browser riusabile nelle run precedenti della CI della PR: l'ultima run che ha concluso le
+ * prove browser, con ogni parte riuscita, lo stesso inventario selezionato (`key`) e nulla che le
+ * cambi da allora fino al commit provato (`unaffected`). Una run annullata o in corso senza tutte
+ * le parti non decide; un fallimento recente non si copre con un successo più vecchio.
+ */
+export async function browserProof(
+  { repository, repositoryId, branch, exclude, key },
+  { api, planKey, unaffected },
+) {
+  const { workflow_runs: runs = [] } = await api(
+    `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&branch=${encodeURIComponent(branch)}&per_page=30`,
+  );
+  const ordered = runs
+    .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  for (const run of ordered) {
+    const jobs = [];
+    for (let page = 1; ; page++) {
+      const batch = await api(
+        `repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=30&page=${page}`,
+      );
+      jobs.push(...batch.jobs);
+      if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
+    }
+    const outcome = browserOutcome(jobs);
+    if (outcome === "failed") return null;
+    if (outcome !== "passed") continue;
+    if ((await planKey(run.id)) !== key || !(await unaffected(run.head_sha))) return null;
+    return { run: run.id, commit: run.head_sha };
+  }
+  return null;
+}
+
+/** Impronta dell'inventario selezionato: prove, browser e filtri. */
+const inventoryKey = (ids, selection) =>
+  createHash("sha256")
+    .update(JSON.stringify({ ids: [...ids].sort(), selection }))
+    .digest("hex");
+
+/** File con l'impronta dell'inventario della run, conservato come artefatto `browser-plan-<run>`. */
+const planFile = path.resolve("test-results", "browser-plan.json");
+
+/**
+ * Prove browser di questa run della PR già concluse in una run precedente: con il commit provato
+ * che le contiene e nessun cambio rilevante per il classificatore, gli otto job non ripartono.
+ */
+async function reusedBrowsers(key) {
+  const { gh, ghJson, retry } = await import("./lib/provider.mjs");
+  const { browserUnaffected } = await import("./classify-changes.mjs");
+  const repositoryId = Number(process.env.REPOSITORY_ID);
+  const { REPOSITORY: repository, BROWSER_PR_BRANCH: branch } = process.env;
+  if (!repository || !repositoryId) throw new Error("Repository non indicato.");
+  const api = (url) =>
+    retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
+  const planKey = (id) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "browser-plan-"));
+    try {
+      gh(
+        "run",
+        "download",
+        String(id),
+        "--repo",
+        repository,
+        "--name",
+        `browser-plan-${id}`,
+        "--dir",
+        directory,
+      );
+      return JSON.parse(readFileSync(path.join(directory, "browser-plan.json"), "utf8")).key;
+    } catch {
+      return null;
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+  const unaffected = (commit) => {
+    try {
+      execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "ignore" });
+    } catch {
+      return false;
+    }
+    return browserUnaffected(commit, "HEAD");
+  };
+  return browserProof(
+    { repository, repositoryId, branch, exclude: process.env.GITHUB_RUN_ID, key },
+    { api, planKey, unaffected },
+  );
+}
+
+async function main() {
   const { values } = parseArgs({
     options: {
       grep: { type: "string", default: "." },
@@ -74,9 +180,23 @@ function main() {
         maxBuffer: 64 * 1024 * 1024,
       }),
     );
-    const count = listedTestIds(listing).length;
+    const ids = listedTestIds(listing);
+    const count = ids.length;
     const matrix = browserShards(count);
-    const result = `browser-matrix=${JSON.stringify(matrix)}\nbrowser-count=${count}\n`;
+    let result = `browser-matrix=${JSON.stringify(matrix)}\nbrowser-count=${count}\n`;
+    if (process.env.BROWSER_PR_BRANCH) {
+      const key = inventoryKey(ids, selection);
+      mkdirSync(path.dirname(planFile), { recursive: true });
+      writeFileSync(planFile, JSON.stringify({ key }));
+      const proof = await reusedBrowsers(key);
+      if (proof) {
+        result += "browser-reused=true\n";
+        const summary = `Prove browser già concluse nella run ${proof.run} su ${proof.commit.slice(0, 8)}: nessun cambio rilevante da allora.\n`;
+        console.log(summary);
+        if (process.env.GITHUB_STEP_SUMMARY)
+          writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary, { flag: "a" });
+      }
+    }
     if (process.env.GITHUB_OUTPUT) writeFileSync(process.env.GITHUB_OUTPUT, result, { flag: "a" });
     console.log(`Browser: ${count} prove, ${matrix.include.length} runner.`);
     return;
@@ -101,4 +221,4 @@ function main() {
   playwright(["--test-list", list], { stdio: "inherit" });
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main();
