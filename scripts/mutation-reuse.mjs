@@ -142,10 +142,14 @@ export function linesProved(run, jobs, target) {
   );
 }
 
-/** Run precedenti con gli esiti per modulo, dalla più recente; gli errori dell'API si ripetono. */
-async function previousRuns(repository, repositoryId) {
-  const api = (url) =>
-    retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
+/**
+ * Run precedenti con gli esiti per modulo, dalla più recente; gli errori dell'API si ripetono.
+ * `reusePlan` usa per ogni modulo soltanto la run più recente che lo ha provato: la lettura si
+ * ferma quando ogni modulo richiesto ha un esito, invece di scaricare i job di tutte le run.
+ */
+export async function previousRuns(repository, repositoryId, targets, api = defaultApi) {
+  if (!targets.length) return [];
+  const pending = new Set(targets);
   const runs = [];
   // Per workflow: fra le run di tutto il repository CI e CodeQL spingono fuori le qualifiche.
   const candidates = [];
@@ -176,14 +180,16 @@ async function previousRuns(repository, repositoryId) {
       jobs.push(...batch.jobs);
       if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
     }
-    runs.push({
-      id: candidate.id,
-      commit: candidate.head_sha,
-      outcomes: moduleOutcomes(jobs, candidate.conclusion === "cancelled"),
-    });
+    const outcomes = moduleOutcomes(jobs, candidate.conclusion === "cancelled");
+    runs.push({ id: candidate.id, commit: candidate.head_sha, outcomes });
+    for (const target of outcomes.keys()) pending.delete(target);
+    if (!pending.size) break;
   }
   return runs;
 }
+
+const defaultApi = (url) =>
+  retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
 
 /**
  * Prova di `target` nelle PR integrate da `since`: ogni commit di `develop` che lo modifica viene
@@ -236,7 +242,7 @@ async function main() {
     retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
   // Senza esiti leggibili la pianificazione fallisce e si ripete: la mutation completa resta
   // alla campagna settimanale, mai un ripiego della prova del candidato.
-  const runs = await previousRuns(repository, repositoryId);
+  const runs = await previousRuns(repository, repositoryId, targets, api);
   const sources = git("ls-files")
     .split("\n")
     .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))

@@ -20,6 +20,13 @@ on:
         type: string
         required: false
 
+# Un nuovo push sulla PR annulla l'intera run superata, mutation compresa: i gruppi dei singoli job
+# fermavano soltanto il job con lo stesso indice, e due run della stessa PR si contendevano i posti.
+# Push e avvii manuali su `develop` hanno un gruppo per run e non si annullano.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Nessuna telemetria della CLI `cf` dalle esecuzioni automatiche.
 env:
   DO_NOT_TRACK: "1"
@@ -162,6 +169,13 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: node scripts/release/release.mjs version-step --base "${BASE_SHA}"
+
+      # Con la build il gate gira nel job `quality`, accanto ai browser: i controlli documentali,
+      # pochi secondi, si anticipano qui perché un errore, per esempio una decisione con lo stesso
+      # numero di un'altra PR, fermi la run prima di browser e mutation.
+      - name: Check documents before browsers
+        if: steps.reuse.outputs.run-id == '' && steps.detect.outputs.build == 'true'
+        run: pnpm verify:documents
 
       # Senza build il gate resta qui; con la build gira nel job `quality`.
       - name: Run selected CI gate
