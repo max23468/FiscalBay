@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -62,13 +62,14 @@ export function browserOutcome(jobs) {
 
 /**
  * Prova browser riusabile nelle run precedenti della CI della PR: l'ultima run che ha concluso le
- * prove browser, con ogni parte riuscita, lo stesso inventario selezionato (`key`) e nulla che le
- * cambi da allora fino al commit provato (`unaffected`). Una run annullata o in corso senza tutte
- * le parti non decide; un fallimento recente non si copre con un successo più vecchio.
+ * prove browser, con ogni parte riuscita e lo stesso inventario selezionato (`key`). `narrowing`
+ * dice che cosa ripetere fino al commit provato: niente (`reuse`), una selezione ridotta (`grep`)
+ * o, con null, tutto. Una run annullata o in corso senza tutte le parti non decide; un fallimento
+ * recente non si copre con un successo più vecchio.
  */
 export async function browserProof(
   { repository, repositoryId, branch, exclude, key },
-  { api, planKey, unaffected },
+  { api, planKey, narrowing },
 ) {
   const { workflow_runs: runs = [] } = await api(
     `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&branch=${encodeURIComponent(branch)}&per_page=30`,
@@ -88,8 +89,9 @@ export async function browserProof(
     const outcome = browserOutcome(jobs);
     if (outcome === "failed") return null;
     if (outcome !== "passed") continue;
-    if ((await planKey(run.id)) !== key || !(await unaffected(run.head_sha))) return null;
-    return { run: run.id, commit: run.head_sha };
+    if ((await planKey(run.id)) !== key) return null;
+    const rest = await narrowing(run.head_sha);
+    return rest ? { run: run.id, commit: run.head_sha, ...rest } : null;
   }
   return null;
 }
@@ -109,7 +111,7 @@ const planFile = path.resolve("test-results", "browser-plan.json");
  */
 async function reusedBrowsers(key) {
   const { gh, ghJson, retry } = await import("./lib/provider.mjs");
-  const { browserUnaffected } = await import("./classify-changes.mjs");
+  const { browserNarrowing } = await import("./classify-changes.mjs");
   const repositoryId = Number(process.env.REPOSITORY_ID);
   const { REPOSITORY: repository, BROWSER_PR_BRANCH: branch } = process.env;
   if (!repository || !repositoryId) throw new Error("Repository non indicato.");
@@ -136,17 +138,23 @@ async function reusedBrowsers(key) {
       rmSync(directory, { recursive: true, force: true });
     }
   };
-  const unaffected = (commit) => {
+  // Nella PR il commit provato è l'unione con la base: il primo genitore è la base.
+  const sources = execFileSync("git", ["ls-files"], { encoding: "utf8" })
+    .split("\n")
+    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
+    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+  const narrowing = (commit) => {
     try {
       execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "ignore" });
+      execFileSync("git", ["rev-parse", "--verify", "HEAD^2"], { stdio: "ignore" });
     } catch {
-      return false;
+      return null;
     }
-    return browserUnaffected(commit, "HEAD");
+    return browserNarrowing(commit, "HEAD", "HEAD^1", sources);
   };
   return browserProof(
     { repository, repositoryId, branch, exclude: process.env.GITHUB_RUN_ID, key },
-    { api, planKey, unaffected },
+    { api, planKey, narrowing },
   );
 }
 
@@ -164,39 +172,56 @@ async function main() {
   const browsers = values.browsers.split(",");
   if (browsers.some((browser) => !["chromium", "webkit"].includes(browser)))
     throw new Error("Browser non supportato.");
-  const selection = [
+  const selectionFor = (grep) => [
     ...(values.pages ? ["e2e/pages.spec.ts"] : []),
     "--grep",
-    values.grep,
+    grep,
     ...(values["grep-invert"] ? ["--grep-invert", values["grep-invert"]] : []),
     ...browsers.flatMap((browser) => ["--project", browser]),
   ];
-  const playwright = (args, options) =>
-    execFileSync("pnpm", ["exec", "playwright", "test", ...args, ...selection], options);
-  if (values.plan) {
-    const listing = JSON.parse(
-      playwright(["--list", "--reporter", "json"], {
-        encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
-      }),
+  const selection = selectionFor(values.grep);
+  const playwright = (args, options, chosen = selection) =>
+    execFileSync("pnpm", ["exec", "playwright", "test", ...args, ...chosen], options);
+  const inventory = (chosen) =>
+    listedTestIds(
+      JSON.parse(
+        playwright(
+          ["--list", "--reporter", "json"],
+          { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+          chosen,
+        ),
+      ),
     );
-    const ids = listedTestIds(listing);
-    const count = ids.length;
-    const matrix = browserShards(count);
-    let result = `browser-matrix=${JSON.stringify(matrix)}\nbrowser-count=${count}\n`;
+  if (values.plan) {
+    const ids = inventory(selection);
+    let count = ids.length;
+    let matrix = browserShards(count);
+    let result = "";
     if (process.env.BROWSER_PR_BRANCH) {
       const key = inventoryKey(ids, selection);
       mkdirSync(path.dirname(planFile), { recursive: true });
       writeFileSync(planFile, JSON.stringify({ key }));
       const proof = await reusedBrowsers(key);
-      if (proof) {
-        result += "browser-reused=true\n";
-        const summary = `Prove browser già concluse nella run ${proof.run} su ${proof.commit.slice(0, 8)}: nessun cambio rilevante da allora.\n`;
+      // La selezione ridotta si elenca di nuovo: i runner seguono le prove che restano.
+      const narrowed = proof?.grep ? inventory(selectionFor(proof.grep)) : null;
+      const summary = !proof
+        ? ""
+        : narrowed?.length
+          ? `Prove browser già concluse nella run ${proof.run} su ${proof.commit.slice(0, 8)}: da allora si ripetono ${narrowed.length} prove su ${count}, quelle delle aree toccate sia dai cambi sia dalla PR (\`${proof.grep}\`).\n`
+          : `Prove browser già concluse nella run ${proof.run} su ${proof.commit.slice(0, 8)}: nessun cambio rilevante da allora.\n`;
+      if (proof && !narrowed?.length) result += "browser-reused=true\n";
+      else if (narrowed) {
+        count = narrowed.length;
+        matrix = browserShards(count);
+        result += `browser-grep=${proof.grep}\n`;
+      }
+      if (summary) {
         console.log(summary);
         if (process.env.GITHUB_STEP_SUMMARY)
           writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary, { flag: "a" });
       }
     }
+    result += `browser-matrix=${JSON.stringify(matrix)}\nbrowser-count=${count}\n`;
     if (process.env.GITHUB_OUTPUT) writeFileSync(process.env.GITHUB_OUTPUT, result, { flag: "a" });
     console.log(`Browser: ${count} prove, ${matrix.include.length} runner.`);
     return;

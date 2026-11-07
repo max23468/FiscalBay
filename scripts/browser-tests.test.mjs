@@ -221,7 +221,7 @@ describe("prove browser riusate nella PR", () => {
       run(8, "m2", "2026-11-07T21:09:00Z"),
       run(7, "m1", "2026-11-07T19:00:00Z"),
     ];
-    const ask = ({ jobs, keys = {}, unchanged = () => true, list = runs }) => {
+    const ask = ({ jobs, keys = {}, unchanged = () => ({ reuse: true }), list = runs }) => {
       const calls = [];
       const api = async (url) => {
         calls.push(url);
@@ -231,16 +231,16 @@ describe("prove browser riusate nella PR", () => {
       };
       return browserProof(
         { repository: "o/r", repositoryId: 1, branch: "feat/x", exclude: 9, key: "k" },
-        { api, planKey: async (id) => keys[id] ?? null, unaffected: async (sha) => unchanged(sha) },
+        { api, planKey: async (id) => keys[id] ?? null, narrowing: async (sha) => unchanged(sha) },
       ).then((result) => ({ result, calls }));
     };
     const reused = await ask({ jobs: { 8: all(8) }, keys: { 8: "k" } });
-    assert.deepEqual(reused.result, { run: 8, commit: "m2" });
+    assert.deepEqual(reused.result, { run: 8, commit: "m2", reuse: true });
     assert.ok(!reused.calls.some((url) => url.includes("/runs/9/jobs")));
     // Una run senza prove browser concluse non decide: vale la precedente.
     assert.deepEqual(
       (await ask({ jobs: { 8: all(8).slice(2), 7: all(4) }, keys: { 7: "k" } })).result,
-      { run: 7, commit: "m1" },
+      { run: 7, commit: "m1", reuse: true },
     );
     // Fallimento recente, inventario diverso o assente, cambi rilevanti, altro repository.
     assert.equal(
@@ -251,8 +251,14 @@ describe("prove browser riusate nella PR", () => {
     assert.equal((await ask({ jobs: { 8: all(8) }, keys: { 8: "altro" } })).result, null);
     assert.equal((await ask({ jobs: { 8: all(8) } })).result, null);
     assert.equal(
-      (await ask({ jobs: { 8: all(8) }, keys: { 8: "k" }, unchanged: () => false })).result,
+      (await ask({ jobs: { 8: all(8) }, keys: { 8: "k" }, unchanged: () => null })).result,
       null,
+    );
+    // Dopo un'unione con la base si ripete soltanto la selezione ridotta.
+    assert.deepEqual(
+      (await ask({ jobs: { 8: all(8) }, keys: { 8: "k" }, unchanged: () => ({ grep: "@smoke" }) }))
+        .result,
+      { run: 8, commit: "m2", grep: "@smoke" },
     );
     assert.equal(
       (

@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
+  browserNarrowing,
   browserUnaffected,
   mainProcessChange,
   changelogDayOnly,
@@ -620,6 +621,78 @@ describe("spec browser modificate", () => {
 });
 
 describe("prove browser invariate fra due commit", () => {
+  it("dopo un'unione con la base ripete soltanto le aree toccate sia dai cambi sia dalla PR", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "browser-narrowing-"));
+    const before = process.cwd();
+    const git = (...args) =>
+      spawnSync("git", args, { cwd: directory, encoding: "utf8" }).stdout.trim();
+    const write = (file, text) => {
+      mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+      writeFileSync(path.join(directory, file), text);
+    };
+    const commit = (file, text) => {
+      write(file, text);
+      git("add", "--all");
+      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", file);
+      return git("rev-parse", "HEAD");
+    };
+    // Unione della PR nella base, come il commit che la CI della PR prova.
+    const merge = (base, head) => {
+      git("checkout", "--quiet", "--detach", base);
+      git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "--quiet", "--no-edit", head);
+      return git("rev-parse", "HEAD");
+    };
+    const files = {
+      stores: "app/components/stores/a.tsx",
+      storesOther: "app/components/stores/c.tsx",
+      settings: "app/components/settings/b.tsx",
+      shared: "app/root.tsx",
+    };
+    const sources = Object.values(files).map((file) => ({ path: file, text: "export {};\n" }));
+    try {
+      git("init", "--quiet", "--initial-branch", "develop");
+      for (const file of Object.values(files)) write(file, "export {};\n");
+      const start = commit("README.md", "base\n");
+      git("checkout", "--quiet", "-b", "pr");
+      const green = commit(files.stores, "export const a = 1;\n");
+      process.chdir(directory);
+      const narrowing = (base, extra) => {
+        const head = merge(base, extra ?? green);
+        return browserNarrowing(green, head, base, sources);
+      };
+      // La base cambia un'area che la PR non tocca: basta il nucleo.
+      git("checkout", "--quiet", "develop");
+      const settings = commit(files.settings, "export const b = 1;\n");
+      assert.deepEqual(narrowing(settings), { grep: "@smoke" });
+      // La base cambia la stessa area della PR, in un altro file: si ripete quell'area.
+      git("checkout", "--quiet", "develop");
+      const stores = commit(files.storesOther, "export const c = 1;\n");
+      assert.match(narrowing(stores).grep, /^@smoke\|@pages-stores\|/u);
+      assert.doesNotMatch(narrowing(stores).grep, /settings/u);
+      // Un modulo che ogni pagina attraversa chiede la selezione intera.
+      git("checkout", "--quiet", "develop");
+      const shared = commit(files.shared, "export const r = 1;\n");
+      assert.equal(narrowing(shared), null);
+      // Soli documenti nella base: nessuna prova da ripetere.
+      git("checkout", "--quiet", start);
+      git("checkout", "--quiet", "-b", "docs");
+      const docs = commit("docs/nota.md", "nota\n");
+      assert.deepEqual(narrowing(docs), { reuse: true });
+      // Un nuovo cambio della PR ripete la sua area anche senza cambi della base.
+      git("checkout", "--quiet", "pr");
+      const again = commit(files.stores, "export const a = 2;\n");
+      assert.match(narrowing(start, again).grep, /@pages-stores/u);
+      // Un commit non disponibile non prova nulla.
+      assert.equal(
+        browserNarrowing("0123456789abcdef0123456789abcdef01234567", green, start, sources),
+        null,
+      );
+    } finally {
+      process.chdir(before);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it("documenti e strumenti non cambiano le prove browser, il codice e le spec sì", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "browser-unaffected-"));
     const before = process.cwd();
