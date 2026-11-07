@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { describe, it } from "node:test";
 import {
   consumerTests,
@@ -20,6 +21,12 @@ import {
   validateRanges,
   backgroundConcurrency,
   completeTimings,
+  changedRange,
+  retestEstimate,
+  moduleReferences,
+  mutantsPerShard,
+  pullRequestShards,
+  unsplitRetests,
 } from "./mutation.mjs";
 import { strykerPlugins as mutationPlugins } from "./mutation-vitest.mjs";
 
@@ -235,6 +242,94 @@ describe("esito dei mutation test", () => {
       { target: "app/b.server.ts", shard: "1/2" },
       { target: "app/a.server.ts", shard: "1/1" },
     ]);
+  });
+
+  it("stima le righe cambiate dal riferimento e i mutanti che le toccano", () => {
+    assert.equal(changedRange("a\nb\nc", "a\nb\nc"), null);
+    assert.deepEqual(changedRange("a\nb\nc", "a\nB\nc"), { start: 2, end: 2 });
+    // Due modifiche distanti contano come un solo blocco; una riga tolta tocca il punto del taglio.
+    assert.deepEqual(changedRange("a\nb\nc\nd", "A\nb\nc\nD"), { start: 1, end: 4 });
+    assert.deepEqual(changedRange("a\nb\nc", "a\nc"), { start: 2, end: 2 });
+    assert.deepEqual(changedRange("a\nc", "a\nb\nc"), { start: 2, end: 2 });
+    const mutants = [
+      { start: 1, end: 1 },
+      { start: 2, end: 5 },
+      { start: 6, end: 6 },
+    ];
+    assert.equal(retestEstimate(mutants, null), 0);
+    assert.equal(retestEstimate(mutants, { start: 4, end: 6 }), 2);
+  });
+
+  it("riunisce soltanto i moduli con tutte le parti riuscite", () => {
+    const outcome = (status) => ({
+      files: { x: { mutants: [{ status, location: { start: {} } }] } },
+    });
+    const incremental = (line) => ({
+      files: {
+        x: {
+          source: "s",
+          mutants: [
+            {
+              mutatorName: "M",
+              status: "Killed",
+              location: { start: { line, column: 1 }, end: { line, column: 2 } },
+            },
+          ],
+        },
+      },
+      testFiles: {},
+    });
+    const part = (target, index, parts, status = "Killed") => ({
+      target,
+      part: index,
+      parts,
+      report: outcome(status),
+      incremental: incremental(index),
+    });
+    const references = moduleReferences([
+      part("app/a.server.ts", 1, 2),
+      part("app/a.server.ts", 2, 2),
+      part("app/b.server.ts", 1, 2),
+      part("app/c.server.ts", 1, 1, "Survived"),
+      part("app/d.server.ts", 1, 1),
+    ]);
+    assert.deepEqual([...references.keys()], ["app/a.server.ts", "app/d.server.ts"]);
+    assert.equal(references.get("app/a.server.ts").files.x.mutants.length, 2);
+  });
+
+  it("prova in un solo job il modulo con il riferimento completo e pochi mutanti da ripetere", async () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "mutation-references-"));
+    const split = async () => [{ mutants: 20 }, { mutants: 17 }];
+    try {
+      // Senza riferimento completo il modulo si divide come nella campagna.
+      assert.deepEqual(await pullRequestShards("app/time.ts", directory, split), await split());
+      const reference = path.join(directory, "app_time.ts.json");
+      const source = readFileSync("app/time.ts", "utf8");
+      writeFileSync(reference, JSON.stringify({ files: { "app/time.ts": { source } } }));
+      assert.deepEqual(await pullRequestShards("app/time.ts", directory, split), [
+        { mutants: 0, reference },
+      ]);
+      // Un sorgente riscritto ripete tutti i suoi 264 mutanti: oltre il limite si divide.
+      writeFileSync(
+        path.join(directory, "app_tax-quality.ts.json"),
+        JSON.stringify({ files: { "app/tax-quality.ts": { source: "" } } }),
+      );
+      assert.ok(unsplitRetests < mutantsPerShard);
+      assert.deepEqual(
+        await pullRequestShards("app/tax-quality.ts", directory, split),
+        await split(),
+      );
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("porta il riferimento completo nel job del modulo", async () => {
+    const reference = ".mutation-references/app_a.server.ts.json";
+    const { include } = await mutationJobs(["app/a.server.ts"], async () => [
+      { mutants: 0, reference },
+    ]);
+    assert.deepEqual(include, [{ target: "app/a.server.ts", shard: "1/1", reference }]);
   });
 
   it("riusa la base incrementale soltanto dopo cambi di test e documenti", () => {

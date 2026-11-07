@@ -109,10 +109,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Anche con un modulo fallito: misure e riferimenti entrano soltanto per i moduli con tutte le
+  # parti riuscite, gli altri restano quelli precedenti.
   timings:
     name: Preserve measured durations
     needs: mutation
-    if: success() && github.ref == 'refs/heads/develop'
+    if: ${{ !cancelled() && needs.mutation.result != 'skipped' && github.ref == 'refs/heads/develop' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     # Il codice della raccolta è quello della run su `develop`: le misure portano già digest e
@@ -138,3 +140,15 @@ jobs:
         with:
           path: .mutation-timings.json
           key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
+      # Il riferimento completo di ogni modulo, riunito dalle sue parti, permette alla PR di
+      # provarlo in un solo job: le chiavi sono immutabili e la PR legge la più recente.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-references
+          key: mutation-references-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-references-
+      - run: node scripts/mutation.mjs --collect-references reports/mutation-timings
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-references
+          key: mutation-references-${{ github.run_id }}-${{ github.run_attempt }}

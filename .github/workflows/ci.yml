@@ -156,11 +156,20 @@ jobs:
           path: .mutation-timings.json
           key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: mutation-timings-
+      # Con il riferimento completo di `develop` e pochi mutanti da ripetere il modulo resta in un
+      # solo job: ogni parte ripeterebbe la prova iniziale della suite.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name == 'pull_request' && steps.detect.outputs.mutation-pr != '{"target":[]}'
+        with:
+          path: .mutation-references
+          key: mutation-references-${{ github.sha }}
+          restore-keys: mutation-references-
       - name: Split module mutation
         id: modules
         if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && steps.detect.outputs.mutation-pr != '{"target":[]}'
         env:
           TARGETS: ${{ steps.detect.outputs.mutation-pr }}
+          MUTATION_REFERENCES: .mutation-references
         run: node scripts/mutation.mjs --matrix "${TARGETS}"
 
       # Una nuova sezione in cima al changelog sale di un solo passo dall'ultima versione pubblicata.
@@ -367,9 +376,19 @@ jobs:
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
 
+      # Il modulo in un solo job parte dal riferimento completo che ha deciso la matrice.
+      - name: Restore complete develop reference
+        if: matrix.reference
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-references
+          key: mutation-references-${{ github.sha }}
+          restore-keys: mutation-references-
+
       # Il riferimento della stessa parte, salvato su `develop` dall'ultima qualifica o campagna
       # riuscita; con parti diverse quello più recente del modulo, che copre comunque i suoi mutanti.
       - name: Restore develop reference
+        if: ${{ !matrix.reference }}
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .mutation-reference
@@ -387,7 +406,7 @@ jobs:
           REPOSITORY_ID: ${{ github.repository_id }}
           HEAD_REF: ${{ github.head_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          MUTATION_REFERENCE: .mutation-reference/incremental.json
+          MUTATION_REFERENCE: ${{ matrix.reference || '.mutation-reference/incremental.json' }}
         run: node scripts/mutation.mjs --incremental-base "${RUNNER_TEMP}/mutation-base.json"
 
       - name: Qualify critical module
