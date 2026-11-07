@@ -37,36 +37,10 @@ import { parseArgs } from "node:util";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
 import { gh, ghJson } from "./lib/provider.mjs";
+import { criticalModule } from "./lib/critical-modules.mjs";
+import { pullRequestProof } from "./mutation-reuse.mjs";
 
-/**
- * Regole condivise dei moduli critici: dati fiscali, orari, lista ordini, coda,
- * sospensione del servizio e periodicità degli abbonamenti.
- */
-const criticalShared = new Set([
-  "app/service-activity.server.ts",
-  "app/markup.ts",
-  "app/tax-quality.ts",
-  "app/time.ts",
-  "app/orders/order-list.ts",
-  "app/domain/work-timing.ts",
-  "app/domain/subscription-offers.ts",
-  "app/domain/auth-attempts.server.ts",
-  "app/domain/deletion-steps.server.ts",
-  "app/domain/webhook-receipts.server.ts",
-]);
-
-/**
- * Moduli server di Auth, filtro delle richieste, sessioni, chiavi derivate, isolamento, ordini, export e file XLSX, negozi
- * e loro segni, integrazioni, diritti e destinatari Telegram.
- */
-export function criticalModule(file) {
-  return (
-    criticalShared.has(file) ||
-    /^app\/(?:auth(?:-route)?|request-limits|sealed|domain\/(?:billing|refunds|orders|order-import|order-observation|order-acquisition|order-sync|order-export|quota|grants|cycles|sessions|sign-in-methods|registration|stores|store-marks|export|xlsx|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:environment|notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
-      file,
-    )
-  );
-}
+export { criticalModule };
 
 /**
  * Moduli non critici importati dai moduli critici: testi, link, tipi, errori e servizi provati
@@ -710,7 +684,6 @@ export function prTargets(changed, files) {
  * riusati finiscono nel riepilogo della run, con la run che li ha provati.
  */
 async function withoutProvedModules(targets, files) {
-  const { pullRequestProof } = await import("./mutation-reuse.mjs");
   const repositoryId = Number(process.env.REPOSITORY_ID);
   const { REPOSITORY: repository, MUTATION_PR_BRANCH: branch, HEAD_SHA: head } = process.env;
   if (!repository || !repositoryId || !head)
