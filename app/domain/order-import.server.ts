@@ -461,6 +461,8 @@ function prepareOrderWrites(input: {
   stored: StoredItem[];
   guards: { guarded: string; orderExists: string };
   checkAt: string;
+  /** Istante della lettura: ultima lettura dello username dell'acquirente. */
+  observedAt: string;
 }) {
   const {
     db,
@@ -474,6 +476,7 @@ function prepareOrderWrites(input: {
     stored,
     guards,
     checkAt,
+    observedAt,
   } = input;
   const { guarded, orderExists } = guards;
   const buyer = keepMaskedValues(observation.buyer, matched?.buyer_json ?? null);
@@ -509,12 +512,13 @@ function prepareOrderWrites(input: {
           `INSERT INTO orders
              (id, store_id, ebay_order_id, creation_time, last_modified_time, currency,
               total_minor, is_provisional, marketplace_id, payment_status, fulfillment_status,
-              cancel_status, buyer_json, listed_at, retention_until, purge_after)
-           SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, term, term
+              cancel_status, buyer_json, listed_at, retention_until, purge_after,
+              buyer_checked_at)
+           SELECT ?3, ?1, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, term, term, ?16
              FROM (SELECT ${newOrderEndSql(observation.creationTime, checkAt)} AS term)
             WHERE ${guarded}`,
         )
-        .bind(...scope, orderId, ...orderValues, listedAt),
+        .bind(...scope, orderId, ...orderValues, listedAt, observedAt),
     );
   } else if (ownsFields) {
     // La sola data di modifica non è una variazione dell'ordine. Un acquisto provvisorio
@@ -526,14 +530,14 @@ function prepareOrderWrites(input: {
                     ELSE listed_at END, ebay_order_id = ?4, creation_time = ?5, last_modified_time = ?6,
                   currency = ?7, total_minor = ?8, is_provisional = ?9, marketplace_id = ?10,
                   payment_status = ?11, fulfillment_status = ?12, cancel_status = ?13,
-                  buyer_json = ?14
+                  buyer_json = ?14, buyer_checked_at = ?17
             WHERE id = ?3 AND (?15 OR last_modified_time <= ?6) AND ${guarded}
               AND (ebay_order_id IS NOT ?4 OR creation_time IS NOT ?5 OR currency IS NOT ?7
                 OR total_minor IS NOT ?8 OR is_provisional IS NOT ?9 OR marketplace_id IS NOT ?10
                 OR payment_status IS NOT ?11 OR fulfillment_status IS NOT ?12
                 OR cancel_status IS NOT ?13 OR buyer_json IS NOT ?14)`,
         )
-        .bind(...scope, orderId, ...orderValues, takeover ? 1 : 0, listedAt),
+        .bind(...scope, orderId, ...orderValues, takeover ? 1 : 0, listedAt, observedAt),
     );
   }
   if (observation.buyerEiasToken !== undefined) {
@@ -707,6 +711,7 @@ export async function recordOrderObservation(
       stored,
       guards,
       checkAt,
+      observedAt,
     });
   const add = (...added: D1PreparedStatement[]) => statements.push(...added) - added.length;
   if (ownsFields) {

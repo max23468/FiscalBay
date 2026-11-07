@@ -13,6 +13,7 @@ import {
   type Context,
 } from "./order-acquisition-context.server";
 import { readDetail, readDetails, stopsReads } from "./order-acquisition-details.server";
+import { checkBuyerNames } from "./buyer-check.server";
 import { serviceSetting } from "./service-settings.server";
 import { refreshStoreProfile } from "./store-profile.server";
 import { logFailure } from "../errors";
@@ -45,6 +46,8 @@ import { inSequence } from "../sequence";
  *    in `order-acquisition-details.server.ts`.
  *
  * Dopo i recenti, al massimo una volta a settimana, si rileggono nome e logo del negozio eBay.
+ * Dopo il dettaglio, gli ordini senza token eIAS letti da più di una settimana rileggono lo
+ * username dell'acquirente, in `buyer-check.server.ts`.
  *
  * Recenti e storico si leggono per tratti di tempo, ciascuno con una sola pagina: una pagina
  * è una fotografia coerente, quindi un ordine che cambia o compare durante la lettura non
@@ -471,6 +474,8 @@ export async function acquireOrders(input: {
       recent && (!!state.history_done_at || (await runPass(ctx, historyPass(ctx, state))));
     const details = !(await callsOff(ctx)) && (await readDetails(ctx));
     outcome = { ok: true, served: true };
+    // Il budget rimasto verifica gli username degli acquirenti, con le chiamate ancora accese.
+    if (!(await callsOff(ctx))) await checkBuyerNames(ctx);
     return trading && history && details ? "complete" : "budget";
   } catch (error) {
     if (error instanceof NotWritable) return "not_writable";
