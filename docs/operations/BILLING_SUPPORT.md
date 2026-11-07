@@ -120,7 +120,7 @@ Esito: **Clienti Stripe** mostra «Dati finanziari cancellati» con l'origine, l
 Le concessioni si danno dalla scheda dello spazio, con motivo obbligatorio; non figurano come incasso e non toccano quota, prova o ciclo. Non esiste un comando per revocarle: si verifica spazio e durata prima di confermare.
 
 - **Concedi Pro**, da 1 a 366 giorni: parte dalla fine dell'ultima copertura in corso, così non consuma il periodo pagato, e concessioni successive si sommano. Con un abbonamento che si rinnova ne rinvia su Stripe il rinnovo, o il primo addebito scelto durante la prova, senza conguaglio; un rinnovo disdetto non si riattiva. Rifiutata con il lifetime in vigore; con Stripe irraggiungibile non registra nulla.
-- **Concedi lifetime**: consuma uno dei venti posti e chiude subito l'abbonamento dello spazio, senza conguaglio né rimborso. Uno spazio con il lifetime revocato per rimborso o disputa lo riceve di nuovo sullo stesso posto. Con **Posto da riprendere** il cliente che torna dopo la cancellazione dell'account riprende il posto lasciato, senza ordini né prova; non vale se quella vendita è stata rimborsata o persa in disputa. Rifiutata con un acquisto lifetime in corso o a posti esauriti.
+- **Concedi lifetime**: consuma uno dei venti posti, mai uno oltre il ventesimo, e chiude subito l'abbonamento dello spazio, senza conguaglio né rimborso. Uno spazio con il lifetime revocato per rimborso o disputa lo riceve di nuovo sullo stesso posto. Con **Posto da riprendere** il cliente che torna dopo la cancellazione dell'account riprende il posto lasciato, senza ordini né prova; non vale se quella vendita è stata rimborsata o persa in disputa. Rifiutata con un acquisto lifetime in corso o a posti esauriti.
 - **Estendi lo storico**, da 13 a 24 mesi, dopo l'accordo con l'assistenza; questa sì si revoca con **Revoca**.
 
 Esito: la scheda mostra la copertura «Concesso» con autore e motivo, o il posto «omaggio»; il **Registro** riporta l'operazione.
@@ -128,13 +128,13 @@ Esito: la scheda mostra la copertura «Concesso» con autore e motivo, o il post
 <a id="lifetime-non-assegnato"></a>
 ## Lifetime pagato senza assegnazione
 
-Un pagamento lifetime confermato quando nessun posto è libero non attribuisce il diritto e apre la P1 «Lifetime pagato senza assegnazione» sullo spazio. Il tetto dei posti non cambia.
+Un pagamento lifetime confermato quando i venti posti sono occupati riceve comunque il diritto, su un posto oltre il ventesimo, e non richiede interventi ([D316](../decisions/DECISION_REGISTER.md)). Resta senza diritto soltanto l'incasso di uno spazio che ha già un altro posto, per esempio un secondo acquisto o un omaggio arrivato prima: apre la P1 «Lifetime pagato senza assegnazione» sullo spazio.
 
-Controllare: nella scheda dello spazio la sessione e il cliente da verificare; nella Dashboard il pagamento. Se un posto si libera nei due giorni successivi, il turno orario lo assegna da solo.
+Controllare: nella scheda dello spazio la sessione e il cliente da verificare e il posto già presente; nella Dashboard il pagamento.
 
-Fare: altrimenti si rimborsa per intero il pagamento dalla Dashboard e si informa il cliente. Il rimborso chiude la segnalazione alla rilettura dell'evento o, al più tardi, a quella giornaliera.
+Fare: se lo spazio ha già il lifetime in vigore, il secondo pagamento non dà nulla in più: si rimborsa per intero dalla Dashboard e si informa il cliente. Il rimborso chiude la segnalazione alla lettura dell'evento o, al più tardi, alla rilettura giornaliera.
 
-Non fare: **Concedi lifetime** per sistemare il caso, perché non è legato al pagamento e lascia aperta la segnalazione; superare il tetto dei posti.
+Non fare: **Concedi lifetime** per sistemare il caso, perché non è legato al pagamento e lascia aperta la segnalazione.
 
 Esito: la segnalazione sparisce da **Panoramica** e dalla scheda.
 

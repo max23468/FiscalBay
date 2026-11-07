@@ -38,7 +38,7 @@ export async function lifetimeSlotsLeft(db: D1Database) {
   const row = await db
     .prepare("SELECT COUNT(*) AS taken FROM lifetime_allocations")
     .first<{ taken: number }>();
-  return lifetimeSlots - (row?.taken ?? 0);
+  return Math.max(0, lifetimeSlots - (row?.taken ?? 0));
 }
 
 /**
@@ -326,8 +326,9 @@ export function isLifetimeSession(session: Stripe.Checkout.Session) {
  * senza scadenza con la prova dell'incasso e chiusura dell'abbonamento sostituito. Completata
  * con il pagamento in conferma: il posto resta. Scaduta, o con il pagamento asincrono fallito:
  * il posto si libera. Ripetuta produce lo stesso risultato; un pagamento confermato senza
- * posto, dopo una liberazione, occupa il primo libero o, a posti finiti, si segnala senza
- * attribuire il diritto né rimborsare. Un rimborso totale o una disputa persa revocano il
+ * posto, dopo una liberazione, occupa il primo libero o, a posti finiti, un posto oltre il
+ * ventesimo. Uno spazio che ha già un altro posto non ne riceve un secondo: l'incasso si segnala
+ * all'assistenza senza diritto né rimborso. Un rimborso totale o una disputa persa revocano il
  * diritto e il posto resta occupato.
  */
 export async function reconcileLifetime(
@@ -406,6 +407,16 @@ export async function reconcileLifetime(
         AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
       ORDER BY slot LIMIT 1
       ON CONFLICT DO NOTHING`).bind(workspaceId, session.id, customer, at),
+    // A posti finiti il pagamento confermato riceve comunque il diritto, su un posto oltre il
+    // ventesimo: il tetto ferma la vendita, non un incasso già avvenuto.
+    env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
+        provider_reference, customer_id, completed_at, activated_at, created_at)
+      SELECT MAX(${lifetimeSlots}, COALESCE((SELECT MAX(slot) FROM lifetime_allocations), 0)) + 1,
+        w.id, 'active', 'sale', ?2, ?3, ?4, ?4, ?4 FROM workspaces w
+      WHERE w.id = ?1
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE provider_reference = ?2)
+        AND NOT EXISTS (SELECT 1 FROM lifetime_allocations WHERE workspace_id = ?1)
+      ON CONFLICT DO NOTHING`).bind(workspaceId, session.id, customer, at),
     // Uno spazio in cancellazione, rimasto soltanto per fermare i rinnovi, non riceve coperture:
     // il posto pagato resta occupato con i riferimenti dell'acquisto, per l'assistenza.
     env.DB.prepare(`INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at,
@@ -432,7 +443,7 @@ export async function reconcileLifetime(
     .bind(session.id)
     .first<{ revoked_at: string | null }>();
   if (!granted) {
-    // Incasso senza posto: lo gestisce l'assistenza, il tetto non cambia.
+    // Incasso senza posto, perché lo spazio ne ha già un altro: lo gestisce l'assistenza.
     if (!reversal?.revocation)
       await recordUnallocatedLifetime(
         env,

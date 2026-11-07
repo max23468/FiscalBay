@@ -63,7 +63,9 @@ export async function lifetimeSeats(db: D1Database): Promise<LifetimeSeats> {
     reserved: row?.reserved ?? 0,
     refunded: row?.refunded ?? 0,
     regranted: row?.regranted ?? 0,
-    available: lifetimeSlots - (row?.taken ?? 0),
+    // I posti oltre il ventesimo, assegnati a pagamenti confermati a posti finiti, non
+    // rendono negativi quelli liberi.
+    available: Math.max(0, lifetimeSlots - (row?.taken ?? 0)),
   };
 }
 
