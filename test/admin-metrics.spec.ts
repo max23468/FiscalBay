@@ -424,6 +424,7 @@ describe("prestazioni da Analytics Engine", () => {
           measures: {
             ttfb: { p75: 120, p95: 180 },
             lcp: { p75: null, p95: null },
+            inp: { p75: null, p95: null },
             server_ebay: { p75: null, p95: null },
           },
         },

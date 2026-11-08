@@ -12,7 +12,14 @@ import {
   Settings,
   User,
 } from "lucide-react";
-import { useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from "react";
+import {
+  startTransition,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Link } from "react-router";
 
 import { useCopy, useLinks } from "~/components/copy-context";
@@ -306,6 +313,11 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
   );
   const items = useRef<Partial<Record<SettingsSection, HTMLElement | null>>>({});
   const [indicator, setIndicator] = useState<{ top: number; height: number } | null>(null);
+  // Il documento porta le categorie fino a quella aperta, le altre arrivano appena la pagina è
+  // interattiva: stanno più in basso, quindi niente di quello che si vede si sposta.
+  const [complete, setComplete] = useState(false);
+  useEffect(() => startTransition(() => setComplete(true)), []);
+  const firstDeferred = sectionIds.indexOf(current) + 1;
 
   useLayoutEffect(() => {
     const item = items.current[active];
@@ -389,8 +401,9 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
             <ChevronLeft aria-hidden="true" className="size-4" />
             {t.settings.title}
           </Link>
-          {sectionIds.map((id) => {
+          {sectionIds.map((id, index) => {
             const icon = sectionIcons[id];
+            const shown = complete || index < firstDeferred;
             return (
               <section
                 key={id}
@@ -407,7 +420,9 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
                   <IconTile icon={icon} tone="neutral" />
                   {t.settings.sections[id].title}
                 </h2>
-                <div className="grid gap-6">{content[id]}</div>
+                <div className={cn("grid gap-6", !shown && "min-h-64")}>
+                  {shown ? content[id] : null}
+                </div>
               </section>
             );
           })}

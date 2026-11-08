@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { getSessionCookie } from "better-auth/cookies";
 
 import { appCopy } from "./app-copy";
 import {
@@ -38,12 +39,15 @@ import { languageFromPath, languages, localizedPath, type Language } from "./i18
  * dell'account e l'app, raggiunta da `Accedi`, dice che non è disponibile.
  */
 export async function publicPage(request: Request) {
-  const session = await createAuth(env)
-    .$context.then(() => readSession(env, request))
-    .catch((error: unknown) => {
-      logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
-      return null;
-    });
+  // Senza il cookie di sessione non c'è nulla da leggere: niente Auth né database.
+  const session = getSessionCookie(request)
+    ? await createAuth(env)
+        .$context.then(() => readSession(env, request))
+        .catch((error: unknown) => {
+          logFailure({ request, code: "UPSTREAM_UNAVAILABLE", error, operation: "route" });
+          return null;
+        })
+    : null;
   tracePhase(request, "session");
   return {
     language: languageFromPath(new URL(request.url).pathname),

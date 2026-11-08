@@ -43,10 +43,16 @@ const changelog = withChanges(
     .map((file) => fragments[file]),
 );
 
-/** Novità del changelog versionato, lette alla build. */
-export const whatsNew: WhatsNewRelease[] = parseChangelog(
-  releaseChangelog(changelog, import.meta.env.VITE_RELEASE_DAY),
-).releases;
+let parsed: WhatsNewRelease[] | undefined;
+
+/**
+ * Novità del changelog versionato. Il testo è fissato alla build e si analizza alla prima
+ * lettura: l'avvio dell'isolate, pagato dalla prima richiesta, resta senza questo lavoro.
+ */
+export function whatsNewReleases(): WhatsNewRelease[] {
+  parsed ??= parseChangelog(releaseChangelog(changelog, import.meta.env.VITE_RELEASE_DAY)).releases;
+  return parsed;
+}
 
 /** Errori di forma del changelog versionato: il test li richiede vuoti. */
 export const whatsNewProblems = (text = changelog) => parseChangelog(text).problems;
@@ -69,7 +75,7 @@ export function whatsNewView(
   language: Language,
   now = new Date(),
   context = served(),
-  releases: WhatsNewRelease[] = whatsNew,
+  releases: WhatsNewRelease[] = whatsNewReleases(),
 ): WhatsNewView[] {
   return releases
     .filter((release) =>
@@ -90,7 +96,7 @@ export function whatsNewNotifications(
   language: Language,
   now = new Date(),
   context = served(),
-  releases: WhatsNewRelease[] = whatsNew,
+  releases: WhatsNewRelease[] = whatsNewReleases(),
 ): NotificationView[] {
   const since = now.getTime() - notificationWindowMilliseconds;
   return whatsNewView(language, now, context, releases).flatMap((release) => {
@@ -115,7 +121,7 @@ export function whatsNewNotifications(
 export function hasWhatsNew(
   now = new Date(),
   context = served(),
-  releases: WhatsNewRelease[] = whatsNew,
+  releases: WhatsNewRelease[] = whatsNewReleases(),
 ): boolean {
   return whatsNewView("it", now, context, releases).length > 0;
 }

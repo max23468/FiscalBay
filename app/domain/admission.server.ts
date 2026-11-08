@@ -82,8 +82,26 @@ export async function storeLinkAdmitted(db: D1Database, userId: string, now = ne
 const activityStep = 60 * 60_000;
 
 /**
- * Registra l'attività umana dell'utente a ogni pagina dell'area e, con la lista d'attesa
- * spenta, lo ammette se era in attesa. Nessun effetto senza spazio o senza cambiamenti.
+ * Scritture che una pagina dell'area deve fare prima di leggere, in una sola lettura: il
+ * riallineamento dopo un cambiamento del piano e la registrazione dell'attività, dovuta una
+ * volta l'ora o per ammettere chi era in attesa con la lista spenta.
+ */
+export async function pendingVisitWrites(db: D1Database, userId: string, now = new Date()) {
+  const member = `FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
+    WHERE wm.user_id = ?1`;
+  const row = await db
+    .prepare(`SELECT EXISTS (SELECT 1 ${member} AND w.plan_changed_at IS NOT NULL) AS plan,
+      (EXISTS (SELECT 1 ${member} AND (w.active_at IS NULL OR w.active_at <= ?2))
+        OR EXISTS (SELECT 1 FROM user_profiles WHERE user_id = ?1
+          AND waitlisted_at IS NOT NULL AND NOT ${waitlistOnSql})) AS activity`)
+    .bind(userId, new Date(now.getTime() - activityStep).toISOString())
+    .first<{ plan: number; activity: number }>();
+  return { plan: row?.plan === 1, activity: row?.activity === 1 };
+}
+
+/**
+ * Registra l'attività umana dell'utente e, con la lista d'attesa spenta, lo ammette se era in
+ * attesa. Nessun effetto senza spazio o senza cambiamenti.
  */
 export async function recordActivity(db: D1Database, userId: string, now = new Date()) {
   const at = now.toISOString();

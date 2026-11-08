@@ -12,10 +12,13 @@
  *   pnpm build && E2E_PORT=5300 node scripts/local-preview.mjs
  *   node node_modules/vite/bin/vite.js preview .cloudflare/preview --config vite.config.ts --port 5300
  *   pnpm site:screenshots http://localhost:5300
+ * Ogni schermata porta nell'indirizzo una versione ricavata dai suoi file, così il browser la
+ * conserva a lungo: dopo una modifica a mano dei file, `node scripts/site-screenshots.mjs --versions`.
  */
 import { chromium } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 const base = process.argv[2] ?? "http://localhost:5186";
@@ -349,6 +352,38 @@ async function captureHtml(browser, html, scheme) {
   return encoded;
 }
 
+/** Versione di una schermata per lingua: cambia con il contenuto di una qualsiasi variante. */
+const shotVersion = (name, language) => {
+  const hash = createHash("sha256");
+  const variant = new RegExp(`^${name}-${language}-(?:light|dark)(?:-\\d+)?\\.\\w+$`, "u");
+  for (const file of readdirSync(output)
+    .filter((file) => variant.test(file))
+    .sort())
+    hash.update(file).update(readFileSync(path.join(output, file)));
+  return hash.digest("hex").slice(0, 10);
+};
+
+/** Dimensioni salvate più la versione di ogni schermata, dai file presenti in `public/site`. */
+const versionedShots = (sizes) =>
+  Object.fromEntries(
+    Object.entries(sizes).map(([name, byLanguage]) => [
+      name,
+      Object.fromEntries(
+        Object.entries(byLanguage).map(([language, size]) => [
+          language,
+          { ...size, version: shotVersion(name, language) },
+        ]),
+      ),
+    ]),
+  );
+
+// Con `--versions` ricalcola le sole versioni, senza browser né nuove schermate.
+if (process.argv[2] === "--versions") {
+  const saved = JSON.parse(readFileSync("app/site-shots.json", "utf8"));
+  writeFileSync("app/site-shots.json", `${JSON.stringify(versionedShots(saved), null, 2)}\n`);
+  process.exit(0);
+}
+
 const browser = await chromium.launch();
 mkdirSync(output, { recursive: true });
 const sizes = {};
@@ -429,4 +464,4 @@ for (const language of languages)
     );
   }
 await browser.close();
-writeFileSync("app/site-shots.json", `${JSON.stringify(sizes, null, 2)}\n`);
+writeFileSync("app/site-shots.json", `${JSON.stringify(versionedShots(sizes), null, 2)}\n`);

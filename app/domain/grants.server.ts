@@ -325,8 +325,26 @@ type FreeCycle = { id: string; used: number; quota: number; ends_at: string; nex
  */
 export async function orderAllowance(db: D1Database, userId: string, now = new Date()) {
   const at = now.toISOString();
-  const workspace = await db
-    .prepare(`SELECT w.id, w.free_cycle_anchor_at, ${activeEntitlementSql("w.id", "?1")} AS premium,
+  type Workspace = {
+    id: string;
+    free_cycle_anchor_at: string | null;
+    premium: number;
+    coverage: EntitlementSource | null;
+    coverage_ends_at: string | null;
+    trial_available: number;
+    suspended: number;
+    waiting: number;
+    purchases_open: number;
+  };
+  const cycleSql = (workspace: string) =>
+    `SELECT c.id, c.used, c.quota, c.ends_at, ${cycleQuotaSql("c.ends_at")} AS next_quota
+    FROM free_cycles c WHERE c.workspace_id = ${workspace}
+      AND julianday(c.starts_at) <= julianday(?1)
+      AND julianday(?1) < julianday(c.ends_at) ORDER BY c.starts_at DESC LIMIT 1`;
+  // Spazio e ciclo in corso viaggiano insieme: un solo passaggio fino al database.
+  const [{ results: spaces }, { results: cycles }] = await db.batch<Workspace | FreeCycle>([
+    db
+      .prepare(`SELECT w.id, w.free_cycle_anchor_at, ${activeEntitlementSql("w.id", "?1")} AS premium,
       ${activeCoverageSql("source", "w.id", "?1")} AS coverage,
       ${activeCoverageSql("ends_at", "w.id", "?1")} AS coverage_ends_at,
       ${trialAvailableSql("w.id", "?1")} AS trial_available, ${waitingSql("w.id")} AS waiting,
@@ -334,29 +352,22 @@ export async function orderAllowance(db: D1Database, userId: string, now = new D
       ${purchasesOpenSql} AS purchases_open
     FROM workspaces w JOIN workspace_members wm ON wm.workspace_id = w.id
     WHERE wm.user_id = ?2`)
-    .bind(at, userId)
-    .first<{
-      id: string;
-      free_cycle_anchor_at: string | null;
-      premium: number;
-      coverage: EntitlementSource | null;
-      coverage_ends_at: string | null;
-      trial_available: number;
-      suspended: number;
-      waiting: number;
-      purchases_open: number;
-    }>();
+      .bind(at, userId),
+    db
+      .prepare(
+        cycleSql(
+          "(SELECT wm.workspace_id FROM workspace_members wm WHERE wm.user_id = ?2 LIMIT 1)",
+        ),
+      )
+      .bind(at, userId),
+  ]);
+  const workspace = spaces[0] as Workspace | undefined;
   if (!workspace) return null;
-  const current = db
-    .prepare(`SELECT c.id, c.used, c.quota, c.ends_at, ${cycleQuotaSql("c.ends_at")} AS next_quota
-    FROM free_cycles c WHERE c.workspace_id = ?1 AND julianday(c.starts_at) <= julianday(?2)
-      AND julianday(?2) < julianday(c.ends_at) ORDER BY c.starts_at DESC LIMIT 1`)
-    .bind(workspace.id, at);
-  let cycle = await current.first<FreeCycle>();
+  let cycle = (cycles[0] as FreeCycle | undefined) ?? null;
   const create = freeCycleStatement(db, workspace.id, workspace.free_cycle_anchor_at, now);
   if (!cycle && create) {
     await create.run();
-    cycle = await current.first<FreeCycle>();
+    cycle = await db.prepare(cycleSql("?2")).bind(at, workspace.id).first<FreeCycle>();
   }
   return {
     workspaceId: workspace.id,

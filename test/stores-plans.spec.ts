@@ -3,6 +3,7 @@ import { insertOrder } from "./fixtures/database-fixtures";
 
 import { describe, expect, it, vi } from "vitest";
 
+import { pendingVisitWrites } from "../app/domain/admission.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
 
 import { disconnectStore, listStores } from "../app/domain/stores.server";
@@ -379,20 +380,131 @@ describe("negozio attivo del Free e downgrade", () => {
     ]);
   });
 
-  it("il cron rivede i termini soltanto dopo un downgrade recente, la visita sempre", async () => {
+  const alignedPlans = () => env.DB.prepare("UPDATE workspaces SET plan_changed_at = NULL").run();
+  const planChanged = async (workspaceId: string) =>
+    (await env.DB.prepare("SELECT plan_changed_at AS at FROM workspaces WHERE id = ?")
+      .bind(workspaceId)
+      .first<{ at: string | null }>())!.at;
+
+  it("il cron rivede i termini dopo un downgrade recente o un cambiamento non riallineato", async () => {
     const seller = await linkedSeller("termini@example.invalid");
     await resetOrderFixtures();
     const end = Date.parse("2026-10-01T12:00:00.000Z");
     await addOrder("lungo", seller.storeId, end - 60 * day, end + 300 * day);
     await coverage(seller.workspaceId, "trial", end - 14 * day, end);
+    await alignedPlans();
     const term = async () =>
       (await env.DB.prepare("SELECT retention_until FROM orders").first<{
         retention_until: string;
       }>())!.retention_until;
     await applyFreePlans(env.DB, new Date(end + 8 * day));
     expect(await term()).toBe(iso(end + 300 * day));
-    await applyFreePlan(env.DB, seller.userId, new Date(end + 8 * day));
+    await env.DB.prepare("UPDATE workspaces SET plan_changed_at = ?").bind(iso(end)).run();
+    await applyFreePlans(env.DB, new Date(end + 8 * day));
     expect(await term()).toBe(iso(end - 30 * day));
+    expect(await planChanged(seller.workspaceId)).toBeNull();
+  });
+
+  it("ogni cambiamento del piano chiede un riallineamento, quello del negozio predefinito no", async () => {
+    const seller = await twoStores("cambiamenti@example.invalid");
+    const marked = async (change: () => Promise<unknown>) => {
+      await alignedPlans();
+      await change();
+      return (await planChanged(seller.workspaceId)) !== null;
+    };
+    const now = Date.now();
+    expect(await marked(() => coverage(seller.workspaceId, "trial", now - day, now + day))).toBe(
+      true,
+    );
+    expect(
+      await marked(() =>
+        env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
+          .bind(iso(now), seller.workspaceId)
+          .run(),
+      ),
+    ).toBe(true);
+    expect(
+      await marked(() =>
+        env.DB.prepare("DELETE FROM workspace_entitlements WHERE workspace_id = ?")
+          .bind(seller.workspaceId)
+          .run(),
+      ),
+    ).toBe(true);
+    expect(
+      await marked(() =>
+        env.DB.prepare(
+          `INSERT INTO history_extensions (id, workspace_id, months, reason, actor, granted_at)
+          VALUES ('estensione', ?, 18, 'prova', 'console', ?)`,
+        )
+          .bind(seller.workspaceId, iso(now))
+          .run(),
+      ),
+    ).toBe(true);
+    expect(
+      await marked(() =>
+        env.DB.prepare("UPDATE history_extensions SET revoked_at = ? WHERE id = 'estensione'")
+          .bind(iso(now))
+          .run(),
+      ),
+    ).toBe(true);
+    // Le letture aggiornano il negozio: soltanto i suoi campi che decidono il piano contano.
+    expect(
+      await marked(() =>
+        env.DB.prepare("UPDATE ebay_stores SET store_profile_read_at = ? WHERE id = ?")
+          .bind(iso(now), seller.storeId)
+          .run(),
+      ),
+    ).toBe(false);
+    expect(await marked(() => disconnectStore(env.DB, seller.userId, seller.storeId))).toBe(true);
+    expect(
+      await marked(() =>
+        env.DB.prepare(
+          `INSERT INTO free_store_changes (id, workspace_id, store_id, kind, changed_at)
+          VALUES ('riallineato', ?, ?, 'default', ?)`,
+        )
+          .bind(seller.workspaceId, seller.storeId, iso(now))
+          .run(),
+      ),
+    ).toBe(false);
+    expect(
+      await marked(() =>
+        env.DB.prepare(
+          `INSERT INTO free_store_changes (id, workspace_id, store_id, kind, changed_at)
+          VALUES ('scelto', ?, 'secondo', 'choice', ?)`,
+        )
+          .bind(seller.workspaceId, iso(now))
+          .run(),
+      ),
+    ).toBe(true);
+    expect(
+      await marked(() => env.DB.prepare("DELETE FROM ebay_stores WHERE id = 'secondo'").run()),
+    ).toBe(true);
+    // Il riallineamento azzera il cambiamento, ma non uno successivo all'istante della lettura.
+    await applyFreePlan(env.DB, seller.userId, new Date(now - day));
+    expect(await planChanged(seller.workspaceId)).not.toBeNull();
+    await applyFreePlan(env.DB, seller.userId, new Date(now + day));
+    expect(await planChanged(seller.workspaceId)).toBeNull();
+  });
+
+  it("una pagina riallinea il piano e scrive l'attività soltanto quando serve", async () => {
+    const seller = await twoStores("visita@example.invalid");
+    const pending = (at = new Date()) => pendingVisitWrites(env.DB, seller.userId, at);
+    await env.DB.prepare("UPDATE workspaces SET active_at = ?").bind(iso(Date.now())).run();
+    await alignedPlans();
+    expect(await pending()).toEqual({ plan: false, activity: false });
+    expect(await pending(new Date(Date.now() + 2 * 3_600_000))).toEqual({
+      plan: false,
+      activity: true,
+    });
+    await coverage(seller.workspaceId, "trial", Date.now() - day, Date.now() + day);
+    expect((await pending()).plan).toBe(true);
+    await alignedPlans();
+    // Chi è in attesa con la lista spenta va ammesso anche con l'attività già registrata.
+    await env.DB.prepare("UPDATE user_profiles SET waitlisted_at = ? WHERE user_id = ?")
+      .bind(iso(Date.now()), seller.userId)
+      .run();
+    expect((await pending()).activity).toBe(true);
+    expect(await pendingVisitWrites(env.DB, "nessuno")).toEqual({ plan: false, activity: false });
   });
 
   it("il cron porta l'anno agli ordini di una copertura senza visite prima che scadano", async () => {
@@ -412,6 +524,7 @@ describe("negozio attivo del Free e downgrade", () => {
       (await env.DB.prepare("SELECT retention_until FROM orders WHERE id = ?")
         .bind(id)
         .first<{ retention_until: string }>())!.retention_until;
+    await alignedPlans();
     // Il cron non rivede ogni giorno tutti gli ordini: soltanto quelli che scadono entro un giorno.
     await applyFreePlans(env.DB, new Date(at - 2 * day));
     expect(await term("coperto")).toBe(iso(at + 0.5 * day));

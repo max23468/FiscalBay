@@ -10,7 +10,17 @@ import { budgetKiB } from "./check-bundle-size.mjs";
 describe("budget del JavaScript client", () => {
   // KiB di ogni file della build sintetica; `lazy` non è nel manifest, come un import dinamico,
   // mentre i testi di una lingua (`copy-it`) si scaricano prima dell'idratazione.
-  const run = ({ entry = 10, site = 10, orders = 10, area = 0, lazy = 0, copy = 0 }) => {
+  const permanent = "  Cache-Control: public, max-age=31536000, immutable";
+  const validHeaders = `/assets/*\n${permanent}\n\n/site/*\n${permanent}\n`;
+  const run = ({
+    entry = 10,
+    site = 10,
+    orders = 10,
+    area = 0,
+    lazy = 0,
+    copy = 0,
+    headers = validHeaders,
+  }) => {
     const directory = mkdtempSync(path.join(tmpdir(), "bundle-"));
     mkdirSync(path.join(directory, "assets"));
     // Byte casuali: gzip non li comprime, quindi la dimensione misurata è nota.
@@ -46,6 +56,7 @@ describe("budget del JavaScript client", () => {
       path.join(directory, "assets", "manifest-abc.js"),
       `window.__reactRouterManifest=${JSON.stringify(manifest)};`,
     );
+    writeFileSync(path.join(directory, "_headers"), headers);
     return spawnSync(process.execPath, ["scripts/check-bundle-size.mjs", directory]).status;
   };
 
@@ -66,6 +77,10 @@ describe("budget del JavaScript client", () => {
     assert.equal(run({ entry: 100, lazy: budgetKiB.app + 10 }), 0));
   it("conta i testi della lingua più pesante, scaricati prima dell'idratazione", () =>
     assert.equal(run({ entry: 100, orders: budgetKiB.app - 110, copy: 20 }), 1));
+  it("fa fallire la build senza la cache permanente degli asset con l'hash", () => {
+    assert.equal(run({ headers: `/assets/*\n  Cache-Control: public, max-age=60\n` }), 1);
+    assert.equal(run({ headers: `/assets/*\n${permanent}\n` }), 1);
+  });
   it("fallisce senza manifest", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "bundle-"));
     writeFileSync(path.join(directory, "entry.js"), randomBytes(1024));

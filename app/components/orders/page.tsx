@@ -95,13 +95,24 @@ export interface UnlockResult {
   error?: boolean;
 }
 
+/** Attesa massima del primo momento libero: le animazioni arrivano comunque subito dopo. */
+const motionIdleTimeout = 1_500;
+
 // Le animazioni sono un complemento: se il modulo non arriva, per esempio perché si lascia
-// la pagina mentre si carica, le schede restano ferme senza un errore non gestito.
+// la pagina mentre si carica, le schede restano ferme senza un errore non gestito. Il modulo
+// si scarica quando il browser è libero, senza contendere il primo disegno alla pagina; le
+// animazioni, una volta caricate, sono le stesse.
 const loadMotionFeatures = () =>
-  import("./motion-features").then(
-    (module) => module.default,
-    () => new Promise<never>(() => {}),
-  );
+  new Promise<void>((resolve) => {
+    if (typeof requestIdleCallback === "function")
+      requestIdleCallback(() => resolve(), { timeout: motionIdleTimeout });
+    else setTimeout(resolve, motionIdleTimeout);
+  })
+    .then(() => import("./motion-features"))
+    .then(
+      (module) => module.default,
+      () => new Promise<never>(() => {}),
+    );
 
 type Unlock = ReturnType<typeof useUnlock>;
 

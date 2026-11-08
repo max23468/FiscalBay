@@ -81,11 +81,14 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   metrics: string;
   database: { name: string; id: string };
   limits: { attempts: string; emails: string; work: string };
+  /** Esecuzione del Worker vicino al database; assente: nel data center della richiesta. */
+  placement?: { mode: "smart" };
   vars: Vars;
 }) => ({
   name: target.name,
   compatibilityDate: "2026-09-13",
   compatibilityFlags: ["nodejs_compat"],
+  ...(target.placement ? { placement: target.placement } : {}),
   entrypoint: "./workers/app.ts",
   workersDev: false,
   // Tetto della CPU per invocazione, uguale per pagine, coda e cron: un ciclo fuori controllo si
@@ -185,6 +188,8 @@ export default defineConfig((ctx) => ({
           metrics: "fiscalbay_test_metrics",
           database: databases.test,
           limits: requestLimitNamespaces.test,
+          // In prova sul solo test: ogni pagina fa più passaggi fino a D1 (runbook di capacità).
+          placement: { mode: "smart" },
           vars: {
             APP_ORIGIN: bindings.text("https://test.fiscalbay.it"),
             REGISTRATION_MODE: bindings.text("approval"),
