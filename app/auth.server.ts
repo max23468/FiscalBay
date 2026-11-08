@@ -165,11 +165,8 @@ async function activateStoreGrant(env: Env, userId: string, request?: Request) {
  * Il consenso al negozio vive nella tabella delle autorizzazioni: la riga dell'accesso eBay non
  * ne conserva i token, che servono soltanto al collegamento.
  */
-async function settleStoreGrant(
-  env: Env,
-  account: { id: string; providerId: string; userId: string },
-) {
-  if (account.providerId !== "ebay" || !(await storeGrantLanguage())) return;
+async function settleStoreGrant(env: Env, account: { id: string; userId: string }) {
+  if (!(await storeGrantLanguage())) return;
   await env.DB.prepare(
     `UPDATE "account" SET "accessToken" = NULL, "refreshToken" = NULL, "accessTokenExpiresAt" = NULL,
        "refreshTokenExpiresAt" = NULL WHERE "id" = ?`,
