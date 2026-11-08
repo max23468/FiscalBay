@@ -2,7 +2,9 @@
 
 **Dove:** nuovo ticket al supporto sviluppatori eBay, con riferimento a quello del 27 ottobre 2026; in alternativa il referente del Partner Program, se FiscalBay viene ammesso.
 
-**Prima dell'invio:** azione interna 1 del [dossier](README.md#azioni-interne-prima-degli-invii). È l'invio più urgente: `GetOrders` si spegne il 30 giugno 2027.
+**Stato:** non inviata, superata dal [ticket inviato](README.md#ticket-inviato). Il punto 3 parte da una premessa corretta dopo la stesura: il CF non dipende da `GetOrders`, e le fatture combinate senza checkout eBay non hanno CF in nessuna fonte. Per un invio futuro restano utili i punti 1 e 2.
+
+**Prima di un eventuale invio:** azione interna 1 del [dossier](README.md#azioni-interne-prima-degli-invii).
 
 **Verifica:** 7 novembre 2026, specifica Fulfillment `v1.20.7` e schema GraphQL `listing.graphqls`; prove del 10 e del 27 ottobre nel [confronto fiscale](../../reference/EBAY_TAX_COMPARISON.md).
 

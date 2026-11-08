@@ -1,5 +1,7 @@
 # Bozza 1: header del marketplace e identificativo fiscale
 
+**Stato:** non inviata; nota interna per un eventuale invio futuro.
+
 **Dove:** risposta al ticket del supporto sviluppatori eBay del 27 ottobre 2026, che ha confermato l'header; poi il feedback della pagina di reference di `getOrder`.
 
 **Verifica:** 7 novembre 2026, specifica OpenAPI Fulfillment `v1.20.7`; qualifica del 10 ottobre nel [confronto fiscale](../../reference/EBAY_TAX_COMPARISON.md#qualifica-production-del-2026-10-10).
