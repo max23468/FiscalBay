@@ -98,7 +98,8 @@ type DirectMatch = StoredOrder & { source_modified: string | null };
 
 /**
  * Ordine già noto con lo stesso identificativo esterno, da qualunque fonte, e data dell'ultima
- * lettura applicata per la fonte dell'osservazione.
+ * lettura applicata per la fonte dell'osservazione. `CROSS JOIN` fissa l'ordine di accesso: si
+ * parte dagli identificativi trovati, così ogni import costa poche righe a qualunque dimensione.
  */
 function findDirect(db: D1Database, storeId: string, observation: Observation) {
   return db
@@ -106,11 +107,15 @@ function findDirect(db: D1Database, storeId: string, observation: Observation) {
       `SELECT ${storedOrderColumns},
               (SELECT last_modified_time FROM order_source_refs
                 WHERE store_id = ?1 AND source = ?2 AND external_order_id = ?3) AS source_modified
-         FROM orders o
-        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IN (
-          SELECT COALESCE(original.merged_into, original.id) FROM orders original
-          WHERE original.store_id = ?1 AND (original.ebay_order_id = ?3 OR original.id IN (
-            SELECT order_id FROM order_source_refs WHERE store_id = ?1 AND external_order_id = ?3)))
+         FROM (
+          SELECT COALESCE(original.merged_into, original.id) AS id FROM orders original
+           WHERE original.store_id = ?1 AND original.ebay_order_id = ?3
+          UNION
+          SELECT COALESCE(original.merged_into, original.id)
+            FROM order_source_refs ref JOIN orders original ON original.id = ref.order_id
+           WHERE ref.store_id = ?1 AND ref.external_order_id = ?3 AND original.store_id = ?1) found
+        CROSS JOIN orders o ON o.id = found.id
+        WHERE o.store_id = ?1 AND o.merged_into IS NULL
         LIMIT 1`,
     )
     .bind(storeId, observation.source, observation.externalOrderId)
@@ -128,7 +133,10 @@ type Match = {
   overlappingIds: string[];
 };
 
-/** Abbina la lettura agli ordini del negozio che ne condividono le identità di riga. */
+/**
+ * Abbina la lettura agli ordini del negozio che ne condividono le identità di riga. Le chiavi
+ * Trading stanno in JSON e si scorrono soltanto sugli ordini che le hanno, con l'indice parziale.
+ */
 async function matchOrder(
   db: D1Database,
   storeId: string,
@@ -142,11 +150,16 @@ async function matchOrder(
       `SELECT ${storedOrderColumns},
               COALESCE(CASE WHEN ?4 = 'trading' THEN o.trading_line_keys END,
                 (SELECT json_group_array(stable_key) FROM order_items WHERE order_id = o.id)) AS keys
-         FROM orders o
-        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IS NOT ?3 AND (o.id IN (
-          SELECT order_id FROM order_items
-           WHERE stable_key IN (SELECT value FROM json_each(?2))) OR EXISTS (
-             SELECT 1 FROM json_each(o.trading_line_keys) WHERE value IN (SELECT value FROM json_each(?2))))
+         FROM (
+          SELECT order_id AS id FROM order_items
+           WHERE stable_key IN (SELECT value FROM json_each(?2))
+          UNION
+          SELECT keyed.id FROM orders keyed INDEXED BY orders_trading_keys_idx,
+                 json_each(keyed.trading_line_keys) line
+           WHERE keyed.store_id = ?1 AND keyed.trading_line_keys IS NOT NULL
+             AND line.value IN (SELECT value FROM json_each(?2))) overlapping
+        CROSS JOIN orders o ON o.id = overlapping.id
+        WHERE o.store_id = ?1 AND o.merged_into IS NULL AND o.id IS NOT ?3
         ORDER BY o.creation_time, o.id`,
     )
     .bind(storeId, JSON.stringify(keys), direct?.id ?? null, observation.source)

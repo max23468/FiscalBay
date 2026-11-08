@@ -24,6 +24,35 @@ import {
 
 setupScenarios();
 
+it("il costo di un import non cresce con gli ordini del negozio", async () => {
+  await recordOrderObservation(env.DB, target(), observation());
+  await env.DB.prepare(
+    `WITH RECURSIVE seq(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM seq WHERE n < 400)
+     INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor)
+     SELECT 'altro-' || n, ?, 'ALTRO-' || n, ?2, ?2, 'EUR', 100 FROM seq`,
+  )
+    .bind(target().storeId, now)
+    .run();
+  const lookups: D1PreparedStatement[] = [];
+  const prepare = env.DB.prepare.bind(env.DB);
+  const spy = vi.spyOn(env.DB, "prepare").mockImplementation((query) => {
+    const statement = prepare(query);
+    if (!query.includes("CROSS JOIN orders o")) return statement;
+    const bind = statement.bind.bind(statement);
+    statement.bind = (...values) => {
+      const bound = bind(...values);
+      lookups.push(bound);
+      return bound;
+    };
+    return statement;
+  });
+  await recordOrderObservation(env.DB, target(), observation());
+  spy.mockRestore();
+
+  expect(lookups).toHaveLength(2);
+  for (const lookup of lookups) expect((await lookup.all()).meta.rows_read).toBeLessThan(40);
+});
+
 it("conserva i campi noti e lascia mascherati quelli annidati mai acquisiti", async () => {
   await recordOrderObservation(env.DB, target(), observation());
   await recordOrderObservation(
