@@ -62,6 +62,26 @@ describe("provenienza dal Referer", () => {
     });
   });
 
+  it("da un altro sito ignora il valore propagato e tiene l'etichetta pubblicata", () => {
+    const referer = from("www.google.com");
+    expect(page("/en/faq?via=direct%3A%2F", { referer })).toEqual({
+      channel: "google",
+      firstPage: "/en/faq",
+    });
+    expect(page("/prezzi?via=telegram", { referer })).toEqual({
+      channel: "telegram",
+      firstPage: "/prezzi",
+    });
+    expect(page("/prezzi?via=direct%3A%2Fguide", { referer: `${origin}/guide` })).toEqual({
+      channel: "direct",
+      firstPage: "/guide",
+    });
+    expect(page("/prezzi?via=direct%3A%2Fguide")).toEqual({
+      channel: "direct",
+      firstPage: "/guide",
+    });
+  });
+
   it("senza Referer è diretto, dalla stessa origine non è un nuovo arrivo", () => {
     expect(page("/")).toEqual({ channel: "direct", firstPage: "/" });
     expect(page("/funzionalita", { referer: `${origin}/prezzi` })).toBeNull();

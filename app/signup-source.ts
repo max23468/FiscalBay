@@ -100,15 +100,15 @@ export function formatSource(source: SignupSource): string {
 }
 
 /**
- * Provenienza di una richiesta di pagina: il parametro vale più del Referer; un Referer della
- * stessa origine non è un nuovo arrivo e dà null, l'assenza di Referer vale «direct». La prima
- * pagina è il percorso richiesto, se non arriva già con il parametro.
+ * Provenienza di una richiesta di pagina: l'etichetta di un link pubblicato vale più del Referer,
+ * un valore propagato solo se non si arriva da un altro sito, perché un motore di ricerca può
+ * averlo salvato seguendo i link interni. Un Referer della stessa origine non è un nuovo arrivo e
+ * dà null, l'assenza di Referer vale «direct». La prima pagina è il percorso richiesto, se non
+ * arriva già con il parametro.
  */
 export function arrivalSource(request: Request, appOrigin: string): SignupSource | null {
   const url = new URL(request.url);
   const page = pagePattern.test(url.pathname) ? url.pathname : null;
-  const labelled = parseSource(url.searchParams.get(sourceParam));
-  if (labelled) return { channel: labelled.channel, firstPage: labelled.firstPage ?? page };
   const referer = request.headers.get("referer");
   let from: URL | null = null;
   try {
@@ -116,8 +116,12 @@ export function arrivalSource(request: Request, appOrigin: string): SignupSource
   } catch {
     // Un Referer illeggibile non dice da dove si arriva.
   }
+  const external = from !== null && from.host !== new URL(appOrigin).host;
+  const labelled = parseSource(url.searchParams.get(sourceParam));
+  if (labelled && !(labelled.firstPage && external))
+    return { channel: labelled.channel, firstPage: labelled.firstPage ?? page };
   if (!from) return { channel: "direct", firstPage: page };
-  if (from.host === new URL(appOrigin).host) return null;
+  if (!external) return null;
   const channel = /^https?:$/u.test(from.protocol) ? channelFromHost(from.hostname) : "other_site";
   return { channel, firstPage: page };
 }
