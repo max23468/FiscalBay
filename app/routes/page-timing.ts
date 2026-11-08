@@ -5,7 +5,7 @@ import { isSameOrigin } from "../account-area.server";
 import { postOnly } from "../error-response";
 import { readBounded } from "../integrations/http.server";
 import { pagePoint, writePoints } from "../metrics.server";
-import { maxTimingMs, serverPhases, timedPages } from "../page-timing";
+import { maxLayoutShift, maxTimingMs, serverPhases, timedPages } from "../page-timing";
 import { redeemTimingTicket } from "../domain/page-timing.server";
 import type { Route } from "./+types/page-timing";
 
@@ -17,6 +17,8 @@ const pageTimingSchema = z.strictObject({
   ttfb: duration,
   fcp: duration.optional(),
   lcp: duration.optional(),
+  inp: duration.optional(),
+  cls: z.number().int().min(0).max(maxLayoutShift).optional(),
   ready: duration.optional(),
   server: z.partialRecord(z.enum(serverPhases), duration),
   ticket: z.string().max(200),

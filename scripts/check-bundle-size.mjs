@@ -7,6 +7,7 @@
  * dopo il primo disegno e restano fuori. La build fallisce se una pagina supera la soglia
  * della sua classe; rivedere i valori solo con una motivazione. Il totale di tutti i
  * file è soltanto informativo: cresce con ogni pagina anche se nessuna diventa più pesante.
+ * La build fallisce anche se `_headers` perde la cache permanente degli asset con l'hash.
  * Uso: node scripts/check-bundle-size.mjs [cartella]
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -96,14 +97,33 @@ export function measure(directory) {
   return { pages, total, files: files.length };
 }
 
+/** Percorsi con l'hash o la versione nel nome: senza cache permanente il browser li riconvalida. */
+const immutablePaths = ["/assets/*", "/site/*"];
+
+/** Percorsi della cache permanente che `_headers` non dichiara. */
+export function missingCacheRules(directory) {
+  const rules = readFileSync(path.join(directory, "_headers"), "utf8").split("\n");
+  return immutablePaths.filter((rule) => {
+    const line = rules.indexOf(rule);
+    return line < 0 || !/max-age=31536000, immutable/u.test(rules[line + 1] ?? "");
+  });
+}
+
 const kib = (bytes) => (bytes / 1024).toFixed(1);
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  const directory = process.argv[2] ?? ".cloudflare/output/v0/workers/default/assets";
   let result;
+  let missing;
   try {
-    result = measure(process.argv[2] ?? ".cloudflare/output/v0/workers/default/assets");
+    result = measure(directory);
+    missing = missingCacheRules(directory);
   } catch (error) {
     console.error(error.message);
+    process.exit(1);
+  }
+  if (missing.length > 0) {
+    console.error(`Cache permanente assente in _headers: ${missing.join(", ")}.`);
     process.exit(1);
   }
   const { pages, total, files } = result;

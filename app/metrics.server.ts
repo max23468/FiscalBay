@@ -20,8 +20,9 @@ import type { TimedPage } from "./page-timing";
  *   HTTP e cron) e la durata è quella dell'invocazione intera; una richiesta HTTP dura fino alla
  *   risposta pronta, senza lo streaming del corpo;
  * - pagine: `double1` TTFB, `double2` FCP, `double3` LCP, `double4` pronta, `double5`..`double7`
- *   fasi del server Auth, D1 ed eBay, in millisecondi; -1 per una misura assente. I punti scritti
- *   prima portano in `double8` un rendering sempre nullo, che le query non leggono.
+ *   fasi del server Auth, D1 ed eBay, `double9` INP, in millisecondi, `double10` CLS in
+ *   millesimi; -1 per una misura assente. `double8` resta vuoto: i punti scritti prima portano lì
+ *   un rendering sempre nullo, che le query non leggono.
  */
 
 export type Invocation = "http" | "queue" | "cron";
@@ -134,6 +135,8 @@ export function pagePoint(input: {
   ttfb: number;
   fcp?: number;
   lcp?: number;
+  inp?: number;
+  cls?: number;
   ready?: number;
   server: Partial<Record<Phase, number>>;
   version?: string;
@@ -151,6 +154,9 @@ export function pagePoint(input: {
       value(input.server.auth),
       value(input.server.d1),
       value(input.server.ebay),
+      absentValue,
+      value(input.inp),
+      value(input.cls),
     ],
   );
 }

@@ -24,15 +24,18 @@ import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
 import { sharedResponse } from "./page-cache.server";
-import { appCopy, loadCopy, pageTitle } from "./app-copy";
+import { appCopy, copyModules, loadCopy, pageTitle } from "./app-copy";
 import { appBase, previewBase } from "./app-links";
 import { canonicalPath, languageFromPath, localizedPath } from "./i18n";
 import { revalidateUnlessSnapshot } from "./orders/order-list";
 import { defaultDisplay, matchedShell } from "./preferences";
 import { arrivalSource, formatSource } from "./signup-source";
+import interLatin from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
+  // Il testo della pagina usa questo font: il browser lo scopre altrimenti soltanto dopo il CSS.
+  { rel: "preload", as: "font", type: "font/woff2", href: interLatin, crossOrigin: "anonymous" },
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
   { rel: "icon", href: "/favicon.ico", sizes: "any" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
@@ -50,8 +53,11 @@ declare global {
 
 export function loader({ request }: Route.LoaderArgs) {
   const arrival = arrivalSource(request, env.APP_ORIGIN);
+  const language = languageFromPath(new URL(request.url).pathname);
   return {
-    language: languageFromPath(new URL(request.url).pathname),
+    language,
+    // Testi della lingua: il browser li attende per idratare, quindi partono con il documento.
+    copyModules: copyModules[language],
     // Una pagina condivisa dalla cache non porta il riferimento di una sola richiesta.
     correlationId: sharedResponse() ? null : correlationId(request),
     // Chiave pubblica del widget Turnstile dell'ambiente, per i moduli che la usano.
@@ -89,6 +95,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="theme-color" content="#0e3372" />
         <Meta />
         <Links />
+        {data?.copyModules.map((href) => (
+          <link key={href} rel="modulepreload" href={href} />
+        ))}
       </head>
       <body>
         <TimeZoneContext value={display.timeZone}>{children}</TimeZoneContext>

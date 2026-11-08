@@ -359,10 +359,12 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
             `TTFB ${m.quantiles}`,
             `FCP ${m.quantiles}`,
             `LCP ${m.quantiles}`,
+            `INP ${m.quantiles}`,
+            `CLS × 1000 ${m.quantiles}`,
             `${m.ready} ${m.quantiles}`,
             m.server,
           ]}
-          numeric={[1, 2, 3, 4, 5]}
+          numeric={[1, 2, 3, 4, 5, 6, 7]}
           rows={metrics.pages.map((row) => ({
             key: row.page,
             cells: [
@@ -373,6 +375,8 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
               pair(row.measures.ttfb),
               pair(row.measures.fcp),
               pair(row.measures.lcp),
+              pair(row.measures.inp),
+              pair(row.measures.cls),
               pair(row.measures.ready),
               <span key="server" className="grid gap-0.5">
                 {(["auth", "d1", "ebay"] as const).map((phase) => (

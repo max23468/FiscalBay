@@ -12,7 +12,9 @@ const source = (
   language: Language,
   scheme: "light" | "dark",
   format: "webp" | "avif" = "webp",
-) => `/site/${name}-${language}-${scheme}.${format}`;
+  width?: number,
+) =>
+  `/site/${name}-${language}-${scheme}${width ? `-${width}` : ""}.${format}?v=${shots[name][language].version}`;
 
 /** Larghezze ridotte della schermata del primo schermo, oltre all'originale. */
 const priorityWidths = [640, 960] as const;
@@ -32,10 +34,7 @@ const sourceSet = (
   width: number,
 ) =>
   [
-    ...priorityWidths.map(
-      (size) =>
-        `${source(name, language, scheme, format).replace(/\.\w+$/u, `-${size}.${format}`)} ${size}w`,
-    ),
+    ...priorityWidths.map((size) => `${source(name, language, scheme, format, size)} ${size}w`),
     `${source(name, language, scheme, format)} ${width}w`,
   ].join(", ");
 

@@ -12,7 +12,7 @@ import { loader as loadFaq, meta as faqMeta } from "../app/routes/faq";
 import { loader as loadSupport } from "../app/routes/support";
 import { loader as loadLegal } from "../app/routes/legal";
 import { loader as loadRobots, robots } from "../app/routes/robots";
-import { llms, sitemap } from "../app/site.server";
+import { llms, publicPage, sitemap } from "../app/site.server";
 import { indexable, isProductionOrigin } from "../app/app-links";
 import { appCopy, infoEmail } from "../app/app-copy";
 import { adminCopy } from "../app/copy/admin-copy";
@@ -167,6 +167,15 @@ describe("radice pubblica e area riservata", () => {
     expect((await callRoute(loadPricing, "/en/pricing")).copy.purchaseNote).toBe(
       sitePages.en.pricing.closed,
     );
+  });
+
+  it("senza il cookie di sessione la pagina pubblica non legge il database", async () => {
+    const read = vi.spyOn(env.DB, "prepare");
+    const page = await publicPage(
+      new Request("http://localhost:5173/faq", { headers: { cookie: "fiscalbay_visita=1" } }),
+    );
+    expect(page.session).toBeNull();
+    expect(read).not.toHaveBeenCalled();
   });
 
   it("visita il sito pubblico mantenendo la sessione e torna all'app senza ciclo", async () => {
