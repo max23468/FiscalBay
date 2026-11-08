@@ -1,6 +1,6 @@
 import { maxListedOrders } from "../orders/order-list";
 import { minorToDecimal } from "../money";
-import { taxIdentifierType } from "../tax-quality";
+import { shownTaxType } from "../tax-quality";
 import type { AppCopy } from "../copy/copy-it";
 import type { EbayEnvironment } from "../view-models";
 import { fiscalNotice } from "./order-view.server";
@@ -44,7 +44,7 @@ function taxCells(order: VisibleOrder) {
   const vat: string[] = [];
   const other: string[] = [];
   for (const tax of order.taxIdentifiers) {
-    const type = taxIdentifierType(tax.type, tax.issuingCountry);
+    const type = shownTaxType(tax);
     if (type === "CF") cf.push(tax.value);
     else if (type === "PIVA") vat.push(tax.value);
     else
@@ -85,7 +85,8 @@ export function exportRecords(
   timeZone: string,
 ): Array<Record<ExportColumn, string>> {
   const { buyer, lineItems } = order.summary;
-  const billing = buyer?.billingAddress;
+  // Senza indirizzo di fatturazione il file porta quello di spedizione, mai un misto dei due.
+  const billing = buyer?.billingAddress ?? buyer?.shipTo?.address;
   const tax = taxCells(order);
   const total = minorToDecimal(order.totalMinor, order.currency);
   const common = {

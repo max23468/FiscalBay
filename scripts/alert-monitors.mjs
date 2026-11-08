@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Monitor degli avvisi (OPERATIONS.md, incidenti): query della SQL API che Cloudflare valuta
+ * Monitor degli avvisi (OBSERVABILITY.md, incidenti): query della SQL API che Cloudflare valuta
  * fuori dal Worker, con l'avviso per email all'owner. Coprono ciò che il compito
  * `owner_incidents` non può segnalare: cron fermo, eccezioni, coda dei falliti, spazio D1 ed
  * email non consegnate. Sono policy `custom_analytics` dell'account, riconosciute dal nome:
@@ -29,14 +29,15 @@ import { alertEmail } from "./zone-protection.mjs";
 /** Spazio D1 oltre il quale si apre il punto di arresto della tabella delle quote. */
 export const d1StopBytes = 8_000_000_000;
 
-/** Worker, account, coda dei falliti e database dell'ambiente, da `cloudflare.config.ts`. */
+/** Worker, account, code dei falliti e database dell'ambiente, da `cloudflare.config.ts`. */
 export function targetOf(mode) {
   const worker = workerOf(mode);
-  const queue = worker.triggers.find((trigger) => trigger.type === "queue");
   return {
     worker: worker.name,
     account: worker.env.CLOUDFLARE_ACCOUNT_ID.value,
-    failedQueue: queue.deadLetterQueue,
+    failedQueues: worker.triggers
+      .filter((trigger) => trigger.type === "queue")
+      .map(({ deadLetterQueue }) => deadLetterQueue),
     database: databases[mode === "live" ? "live" : "test"].id,
   };
 }
@@ -65,22 +66,24 @@ function monitor({ name, description, query, operator, value, window }) {
 }
 
 /**
- * Monitor previsti per l'ambiente. `queueId` è l'identificativo della coda dei falliti, che la
- * SQL API registra al posto del nome.
+ * Monitor previsti per l'ambiente. `queueIds` sono gli identificativi delle code dei falliti, che
+ * la SQL API registra al posto del nome: un solo monitor le copre, nel limite di cinque policy.
  */
-export function desiredMonitors(target, queueId) {
+export function desiredMonitors(target, queueIds) {
   const account = quote(target.account);
   const outcome = `"attributes"['$workers.outcome']`;
   const events = `FROM logs.workersLogs WHERE accountTag = ${account} AND scriptName = ${quote(target.worker)} AND logType = 'cf-worker-event'`;
   return [
     monitor({
       name: `${target.worker} cron fermo`,
-      description: `Nessuna esecuzione del cron del Worker ${target.worker} negli ultimi 30 minuti.`,
+      description: `Nessuna esecuzione del cron del Worker ${target.worker} nell'ultima ora.`,
       query: `SELECT COUNT(*) AS value ${events} AND invocationType = 'scheduled'`,
-      // Un cron ogni dieci minuti: in 30 minuti ne mancano almeno due prima dell'avviso.
+      // Un cron ogni dieci minuti: in un'ora ne mancano sei prima dell'avviso. Con 30 minuti la
+      // valutazione del provider ha contato zero esecuzioni presenti nei log (2026-11-07 01:01 UTC,
+      // tre esecuzioni nella finestra): un'ora assorbe questi conteggi mancati.
       operator: "<",
       value: 1,
-      window: "30m",
+      window: "1h",
     }),
     monitor({
       name: `${target.worker} eccezioni`,
@@ -93,8 +96,8 @@ export function desiredMonitors(target, queueId) {
     }),
     monitor({
       name: `${target.worker} coda dei falliti`,
-      description: `Messaggi scritti nella coda ${target.failedQueue} nell'ultima ora.`,
-      query: `SELECT COUNT(*) AS value FROM events.queuesMessages WHERE accountTag = ${account} AND queueId = ${quote(queueId)} AND actionType = 'WriteMessage'`,
+      description: `Messaggi scritti nelle code ${target.failedQueues.join(" e ")} nell'ultima ora.`,
+      query: `SELECT COUNT(*) AS value FROM events.queuesMessages WHERE accountTag = ${account} AND queueId IN (${queueIds.map(quote).join(", ")}) AND actionType = 'WriteMessage'`,
       operator: ">",
       value: 0,
       window: "1h",
@@ -149,11 +152,13 @@ export function checkReadback(desired, policies) {
 
 const withBodyFile = (body, run) => provider.withBodyFile(body, run, "alert-monitors");
 
-function failedQueueId(target) {
+function failedQueueIds(target) {
   const queues = provider.cfJson(["queues", "list"]);
-  const queue = queues.find(({ queue_name }) => queue_name === target.failedQueue);
-  if (!queue) throw new Error(`Coda ${target.failedQueue} non trovata.`);
-  return queue.queue_id;
+  return target.failedQueues.map((name) => {
+    const queue = queues.find(({ queue_name }) => queue_name === name);
+    if (!queue) throw new Error(`Coda ${name} non trovata.`);
+    return queue.queue_id;
+  });
 }
 
 const readPolicies = () => provider.cfJson(["alerting", "policies", "list"]) ?? [];
@@ -191,8 +196,14 @@ async function main() {
   const target = targetOf(mode);
   if (!["plan", "apply", "readback"].includes(name))
     throw new Error("Comandi: plan, apply, readback");
-  if (name === "plan") return print(desiredMonitors(target, "<id della coda dei falliti>"));
-  const desired = desiredMonitors(target, failedQueueId(target));
+  if (name === "plan")
+    return print(
+      desiredMonitors(
+        target,
+        target.failedQueues.map((queue) => `<id di ${queue}>`),
+      ),
+    );
+  const desired = desiredMonitors(target, failedQueueIds(target));
   if (name === "apply") apply(desired, targetOf(mode === "live" ? "test" : "live").worker);
   const result = checkReadback(desired, readPolicies());
   print(result);

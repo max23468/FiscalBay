@@ -87,12 +87,11 @@ export default function WhatsNew({ loaderData }: Route.ComponentProps) {
                     <IconTile icon={kindIcons[kind]} tone="neutral" size="sm" />
                     {whatsNewKinds[kind][language]}
                   </h3>
-                  <ul className="columns-[18rem] gap-x-8">
+                  {/* Le voci si affiancano soltanto dove ci stanno: un gruppo da solo non lascia
+                      colonne vuote fra una voce e l'altra. */}
+                  <ul className="grid gap-3 md:grid-cols-[repeat(auto-fit,minmax(min(100%,24rem),1fr))] md:gap-x-8">
                     {items.map((item) => (
-                      <li
-                        key={item.title}
-                        className="mb-3 grid break-inside-avoid gap-0.5 text-sm last:mb-0"
-                      >
+                      <li key={item.title} className="grid content-start gap-0.5 text-sm">
                         <h4 className="font-medium">{item.title}</h4>
                         <p className="leading-relaxed text-pretty text-muted-foreground">
                           {item.body}

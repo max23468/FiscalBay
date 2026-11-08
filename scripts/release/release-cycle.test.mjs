@@ -21,7 +21,9 @@ import {
   candidateRun,
   assertQualificationBase,
   independentBase,
+  waitMutationJobs,
   waitUpdatedHead,
+  mutationSettled,
   expectedRun,
   runTimings,
   checkCycleJobs,
@@ -37,7 +39,9 @@ import {
   pullRequestView,
   pullRequestAction,
   checksOutcome,
-  pullRequestFiles,
+  coordinatorRunner,
+  requiredPassed,
+  mergeDeploys,
   cycleCommand,
   lockObject,
   assertCyclePullRequest,
@@ -52,6 +56,20 @@ import {
   lotReview,
   promotionMetrics,
   candidateReadiness,
+  addedDecisions,
+  addedLineNumbers,
+  enableAutoMerge,
+  transientGitHub,
+  assertNotWithdrawn,
+  candidatePhases,
+  decisionRenumbering,
+  mergedCommit,
+  promotionTarget,
+  receiptPrefix,
+  remoteLockStore,
+  renumberDecisions,
+  resumeEnvironment,
+  withRemoteLock,
 } from "./release-cycle.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
@@ -317,22 +335,20 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     }
   });
 
-  it("legge soltanto i nomi dei file della PR, su tutte le pagine", () => {
+  it("decide il deploy del commit integrato con il piano della CI rispetto al precedente", () => {
     const calls = [];
-    const files = pullRequestFiles("example/project", 462, (...args) => {
-      calls.push(args);
-      return "app/root.tsx\ndocs/README.md\n";
-    });
-    assert.deepEqual(files, ["app/root.tsx", "docs/README.md"]);
-    assert.deepEqual(calls, [
-      [
-        "api",
-        "--paginate",
-        "--jq",
-        ".[].filename",
-        "repos/example/project/pulls/462/files?per_page=100",
-      ],
-    ]);
+    assert.equal(
+      mergeDeploys("abc", (base, head) => {
+        calls.push([base, head]);
+        return false;
+      }),
+      false,
+    );
+    assert.deepEqual(calls, [["abc^", "abc"]]);
+    assert.equal(
+      mergeDeploys("abc", () => true),
+      true,
+    );
   });
 
   it("esegue status in sola lettura, conserva modifiche e riconcilia una qualifica riusata", () => {
@@ -590,6 +606,52 @@ describe("coordinamento e provenienza della pubblicazione", () => {
       ),
       /non aggiornata/u,
     );
+  });
+
+  it("prima di aggiornare la base attende i job della mutation in corso", async () => {
+    const running = { status: "in_progress" };
+    const job = (name, status = "completed") => ({ name, status });
+    const verify = job("Verify");
+    // Nessuna run, o run conclusa: nulla da attendere.
+    assert.ok(mutationSettled(undefined, []));
+    assert.ok(mutationSettled({ status: "completed" }, []));
+    // Prima della matrice i job della mutation non esistono ancora.
+    assert.ok(!mutationSettled(running, [job("Verify", "in_progress")]));
+    assert.ok(!mutationSettled(running, [verify]));
+    assert.ok(
+      !mutationSettled(running, [verify, job("Mutation app/auth.server.ts 1/2", "queued")]),
+    );
+    assert.ok(
+      !mutationSettled(running, [verify, job("Mutation app/auth.server.ts 2/2", "in_progress")]),
+    );
+    // Browser ancora in corso non contano.
+    assert.ok(
+      mutationSettled(running, [
+        verify,
+        job("Mutation app/auth.server.ts 1/2"),
+        job("Mutation app/auth.server.ts 2/2"),
+        job("Browser 1/8", "in_progress"),
+      ]),
+    );
+    let clock = 0;
+    const reads = [];
+    const states = [
+      [verify, job("Mutation app/auth.server.ts 1/1", "in_progress")],
+      [verify, job("Mutation app/auth.server.ts 1/1")],
+    ];
+    const read = async () => {
+      reads.push(clock);
+      return { run: running, jobs: states[Math.min(reads.length - 1, states.length - 1)] };
+    };
+    const now = () => clock;
+    assert.equal(await waitMutationJobs(read, { limit: 100, delay: 0, now }), true);
+    assert.equal(reads.length, 2);
+    // Allo scadere il ciclo aggiorna comunque la base.
+    const stuck = async () => {
+      clock += 60;
+      return { run: running, jobs: states[0] };
+    };
+    assert.equal(await waitMutationJobs(stuck, { limit: 100, delay: 0, now }), false);
   });
 
   it("non chiude un ciclo con un tag di un altro commit", () => {
@@ -856,6 +918,36 @@ describe("PR tramite API REST", () => {
     ]);
   });
 
+  it("porta il coordinatore sul Mac soltanto con un suo runner acceso e libero", () => {
+    const runner = (status, busy, name = "fiscalbay-coordinator") => ({
+      status,
+      busy,
+      labels: [{ name: "self-hosted" }, { name }],
+    });
+    assert.equal(coordinatorRunner([runner("online", false)], true), "mac");
+    assert.equal(
+      coordinatorRunner([runner("online", true), runner("offline", false)], true),
+      "github",
+    );
+    assert.equal(coordinatorRunner([runner("online", false, "altro")], true), "github");
+    assert.equal(coordinatorRunner([], true), "github");
+    // Un `cycle.yml` senza l'input rifiuterebbe il parametro.
+    assert.equal(coordinatorRunner([runner("online", false)], false), undefined);
+  });
+
+  it("legge soltanto l'ultima esecuzione di Node 26", () => {
+    const check = (id, name, conclusion) => ({ id, name, conclusion });
+    assert.equal(
+      requiredPassed([check(1, "Node 26", "failure"), check(2, "Node 26", "success")]),
+      true,
+    );
+    assert.equal(
+      requiredPassed([check(3, "Node 26", "cancelled"), check(2, "Node 26", "success")]),
+      false,
+    );
+    assert.equal(requiredPassed([check(1, "Verify", "success")]), false);
+  });
+
   it("attende i controlli in corso e conta solo l'ultima esecuzione di ognuno", () => {
     const check = (id, name, status, conclusion) => ({ id, name, status, conclusion });
     assert.equal(
@@ -892,6 +984,9 @@ describe("comandi del ciclo", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "cycle-cli-"));
     try {
       cpSync("scripts", path.join(directory, "scripts"), { recursive: true });
+      // Gli script leggono il changelog con i frammenti tramite il modulo dell'app.
+      mkdirSync(path.join(directory, "app"));
+      cpSync("app/changelog-fragments.mjs", path.join(directory, "app/changelog-fragments.mjs"));
       const git = (...args) => {
         const result = spawnSync("git", args, { cwd: directory, encoding: "utf8" });
         assert.equal(result.status, 0, result.stderr);
@@ -960,7 +1055,10 @@ process.stdout.write(JSON.stringify(result));`,
     assert.equal(lockObject("pr", "12"), "pr-12");
     assert.equal(lockObject("resume", "34"), "run-34");
     assert.equal(lockObject("promote", undefined), "promote");
-    for (const command of ["rc", "production", "promotion-source"])
+    // Pubblica in Production blocca la PR come il suo ciclo.
+    assert.deepEqual(cycleCommand(["production", "12"]), { command: "production", number: "12" });
+    assert.equal(lockObject("production", "12"), "pr-12");
+    for (const command of ["rc", "promotion-source"])
       assert.throws(() => cycleCommand([command]), /^Error: Uso: release:cycle/u);
   });
 
@@ -1270,5 +1368,329 @@ process.stdout.write(JSON.stringify(result));`,
     };
     assert.equal(promotionMetrics(runs, [active]).published, 1);
     assert.equal(promotionMetrics(runs, [{ ...active, completedAt: undefined }]).published, 0);
+  });
+});
+
+describe("pubblicazioni in parallelo", () => {
+  /** Blocco in memoria con la stessa interfaccia di `remoteLockStore`. */
+  const memoryStore = () => {
+    let held = null;
+    let count = 0;
+    return {
+      get held() {
+        return held;
+      },
+      read: async () => held,
+      create: async (entry) => {
+        if (held) return false;
+        held = { sha: `s${++count}`, ...entry };
+        return true;
+      },
+      remove: async (sha) => {
+        if (held?.sha === sha) held = null;
+      },
+    };
+  };
+
+  it("mette in fila i merge di cicli diversi e rilascia il blocco anche dopo un errore", async () => {
+    const store = memoryStore();
+    const order = [];
+    let release;
+    const first = withRemoteLock(
+      store,
+      () =>
+        new Promise((resolve) => {
+          order.push("primo");
+          release = resolve;
+        }),
+      { owner: "a", delay: 1 },
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    const second = withRemoteLock(store, async () => order.push("secondo"), {
+      owner: "b",
+      delay: 1,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.deepEqual(order, ["primo"]);
+    release();
+    await Promise.all([first, second]);
+    assert.deepEqual(order, ["primo", "secondo"]);
+    assert.equal(store.held, null);
+    await assert.rejects(
+      withRemoteLock(
+        store,
+        async () => {
+          throw new Error("merge fallito");
+        },
+        { owner: "c" },
+      ),
+      /merge fallito/u,
+    );
+    assert.equal(store.held, null);
+  });
+
+  it("rimuove un blocco scaduto, riconosce il proprio e non toglie quello di un altro", async () => {
+    const store = memoryStore();
+    await store.create({ owner: "vecchio", at: "2026-11-04T07:30:00.000Z" });
+    const now = () => Date.parse("2026-11-04T09:00:00.000Z");
+    assert.equal(
+      await withRemoteLock(store, async () => "fatto", { owner: "nuovo", now }),
+      "fatto",
+    );
+    assert.equal(store.held, null);
+    // Una risposta persa dopo la creazione: il titolare ritrova il proprio blocco.
+    await store.create({ owner: "io", at: new Date(now()).toISOString() });
+    assert.equal(
+      await withRemoteLock(store, async () => "ripreso", { owner: "io", now }),
+      "ripreso",
+    );
+    // Durante il lavoro un altro ha preso il blocco scaduto: il titolare non lo toglie.
+    await withRemoteLock(
+      store,
+      async () => {
+        await store.remove(store.held.sha);
+        await store.create({ owner: "altro", at: new Date(now()).toISOString() });
+      },
+      { owner: "io", now },
+    );
+    assert.equal(store.held.owner, "altro");
+  });
+
+  it("usa un riferimento Git creato una sola volta come blocco", () => {
+    const calls = [];
+    let ref = null;
+    const run = (...args) => {
+      calls.push(args);
+      const url = args.find((arg) => arg.startsWith("repos/"));
+      const error = (status) =>
+        Object.assign(new Error(`HTTP ${status}`), { stderr: `gh: HTTP ${status}` });
+      if (args.includes("POST") && url.endsWith("/git/commits"))
+        return JSON.stringify({ sha: "c1" });
+      if (args.includes("POST") && url.endsWith("/git/refs")) {
+        if (ref) throw Object.assign(error(422), { stderr: "Reference already exists (HTTP 422)" });
+        ref = "c1";
+        return "{}";
+      }
+      if (url.endsWith("/git/ref/locks/merge")) {
+        if (!ref) throw error(404);
+        return JSON.stringify({ object: { sha: ref } });
+      }
+      if (url.endsWith("/git/ref/heads/develop")) return JSON.stringify({ object: { sha: "d1" } });
+      if (url.endsWith("/git/commits/d1")) return JSON.stringify({ tree: { sha: "t1" } });
+      if (url.endsWith("/git/commits/c1"))
+        return JSON.stringify({
+          message: JSON.stringify({ owner: "a", at: "2026-11-04T09:00:00Z" }),
+        });
+      throw new Error(`Chiamata inattesa ${args.join(" ")}`);
+    };
+    const pushes = [];
+    // La rimozione è un push con lease: riesce soltanto se il riferimento è ancora quello letto.
+    const push = (...args) => {
+      pushes.push(args);
+      if (ref !== args[0].split(":").at(-1))
+        throw Object.assign(new Error("rejected"), { stderr: "! [rejected] (stale info)" });
+      ref = null;
+      return "";
+    };
+    const store = remoteLockStore("example/project", "merge", run, push);
+    assert.equal(store.read(), null);
+    assert.equal(store.create({ owner: "a", at: "2026-11-04T09:00:00Z" }), true);
+    assert.equal(store.create({ owner: "b", at: "2026-11-04T09:00:00Z" }), false);
+    assert.deepEqual(store.read(), { sha: "c1", owner: "a", at: "2026-11-04T09:00:00Z" });
+    // Si rimuove soltanto il riferimento letto.
+    store.remove("altro");
+    assert.notEqual(store.read(), null);
+    store.remove("c1");
+    assert.equal(store.read(), null);
+    assert.ok(calls.some((args) => args.includes("ref=refs/locks/merge")));
+    assert.deepEqual(pushes.at(-1), [
+      "--force-with-lease=refs/locks/merge:c1",
+      "https://github.com/example/project.git",
+      ":refs/locks/merge",
+    ]);
+  });
+
+  it("promuove il commit certificato più recente, anche con la versione richiesta", () => {
+    const commits = [
+      { sha: "c3", tree: "t3" },
+      { sha: "c2", tree: "t2" },
+      { sha: "c1", tree: "t1" },
+    ];
+    const certified = (tree) => ["t2", "t1"].includes(tree);
+    assert.deepEqual(promotionTarget(commits, certified), { sha: "c2", later: 1, certified: true });
+    const versions = { c3: "2.0.4", c2: "2.0.3", c1: "2.0.3" };
+    assert.deepEqual(
+      promotionTarget(
+        commits,
+        () => true,
+        "2.0.3",
+        (sha) => versions[sha],
+      ),
+      { sha: "c2", later: 1, certified: true },
+    );
+    // Senza un commit certificato si promuove la testa, dopo la sua qualifica.
+    assert.deepEqual(
+      promotionTarget(commits, () => false),
+      {
+        sha: "c3",
+        later: 0,
+        certified: false,
+      },
+    );
+  });
+
+  it("promuove il commit integrato di Pubblica in Production", () => {
+    const pr = { state: "MERGED", baseRefName: "develop", mergeCommit: { oid: "m1" } };
+    assert.equal(mergedCommit(pr), "m1");
+    for (const other of [{ state: "OPEN", mergeCommit: null }, { baseRefName: "main" }])
+      assert.throws(() => mergedCommit({ ...pr, ...other }), /non integrata/u);
+  });
+
+  it("riprende il test senza aspettare Production e si ferma su una ricevuta ritirata", () => {
+    const ci = { path: ".github/workflows/ci.yml" };
+    const publish = { path: ".github/workflows/publish.yml" };
+    const candidate = { path: ".github/workflows/candidate.yml" };
+    assert.deepEqual([ci, publish, candidate].map(resumeEnvironment), [
+      "test",
+      "production",
+      "test",
+    ]);
+    assert.deepEqual([ci, publish, candidate].map(receiptPrefix), [
+      "deployed",
+      "release-receipt",
+      null,
+    ]);
+    assert.doesNotThrow(() => assertNotWithdrawn(null));
+    assert.doesNotThrow(() => assertNotWithdrawn({ rolledBack: false }));
+    assert.throws(() => assertNotWithdrawn({ rolledBack: true }), /Candidato ritirato/u);
+    const workflow = readFileSync(".github/workflows/cycle.yml", "utf8");
+    assert.match(workflow, /format\('pr-\{0\}', inputs\.object\)/u);
+    assert.match(workflow, /inputs\.environment == 'test' && format\('run-\{0\}'/u);
+  });
+
+  it("non aspetta i coordinatori di altri cicli sulla stessa testa", () => {
+    const check = (id, name, status, conclusion) => ({ id, name, status, conclusion });
+    assert.equal(
+      checksOutcome([
+        check(1, "Node 26", "completed", "success"),
+        check(2, "Coordinatore PR", "in_progress", null),
+        check(3, "Coordinatore promozione", "queued", null),
+      ]),
+      "passed",
+    );
+  });
+
+  it("misura coda, browser, mutation e minuti di runner della qualifica", () => {
+    const job = (name, start, end, conclusion = "success") => ({
+      name,
+      conclusion,
+      started_at: `2026-11-04T10:${String(start).padStart(2, "0")}:00Z`,
+      completed_at: `2026-11-04T10:${String(end).padStart(2, "0")}:00Z`,
+    });
+    assert.deepEqual(
+      candidatePhases([
+        job("Pianifica", 0, 2),
+        job("Qualifica candidato / select", 12, 13),
+        job("Qualifica candidato / browser (source, 1)", 13, 25),
+        job("Qualifica candidato / browser (source, 2)", 14, 24),
+        job("Qualifica candidato / Mutation / Select modules", 13, 14),
+        job("Qualifica candidato / Mutation / app/auth.server.ts 1/2", 14, 40),
+        job("Qualifica candidato / Mutation / app/auth.server.ts 2/2", 15, 30),
+        job("Qualifica candidato / production", 0, 0, "skipped"),
+      ]),
+      { queueSeconds: 600, browserSeconds: 720, mutationSeconds: 1560, runnerMinutes: 67 },
+    );
+    assert.deepEqual(candidatePhases([job("Pianifica", 0, 2)]), {
+      queueSeconds: null,
+      browserSeconds: null,
+      mutationSeconds: null,
+      runnerMinutes: 2,
+    });
+  });
+
+  it("rinumera le decisioni nuove già prese sulla base da un'altra PR", () => {
+    const diff =
+      "+| D295 | Ambito | Sintesi |\n+| D296 | a | b |\n-| D010 | x | y |\n+| D010 | x | Superato |\n+testo D295\n";
+    // Una riga esistente modificata non è una decisione nuova.
+    assert.deepEqual(addedDecisions(diff, ["D010"]), ["D295", "D296"]);
+    assert.deepEqual(addedDecisions(diff), ["D295", "D296", "D010"]);
+    const mapping = decisionRenumbering(["D295", "D296"], ["D294", "D295"]);
+    assert.deepEqual(mapping, { D295: "D297" });
+    assert.deepEqual(decisionRenumbering(["D296"], ["D294", "D295"]), {});
+    assert.equal(
+      renumberDecisions("[D295](x) e D2950, D295.", mapping),
+      "[D297](x) e D2950, D297.",
+    );
+    // Soltanto nelle righe aggiunte dalla PR: le altre citano la D295 dell'altra PR.
+    const lines = addedLineNumbers("@@ -1,0 +2,1 @@\n+nuova D295\n@@ -5 +6,2 @@\n-x\n+a\n+b\n");
+    assert.deepEqual([...lines], [2, 6, 7]);
+    assert.equal(
+      renumberDecisions("D295 altrui\nnuova D295\nD295", mapping, new Set([2])),
+      "D295 altrui\nnuova D297\nD295",
+    );
+  });
+});
+
+describe("merge automatico con risposte incerte", () => {
+  const failure = (stderr) => Object.assign(new Error("gh"), { stderr });
+  const bad = "non-200 OK status code: 502 Bad Gateway body: nginx";
+
+  it("ripete la richiesta dopo un 502 se la PR non ha ancora il merge automatico", async () => {
+    const calls = [];
+    const waits = [];
+    const run = (...args) => {
+      calls.push(args[0]);
+      if (calls.length === 1) throw failure(bad);
+      return "";
+    };
+    await enableAutoMerge("example/project", "12", "a".repeat(40), {
+      run,
+      read: () => ({ state: "OPEN", autoMergeRequest: null }),
+      wait: async (ms) => waits.push(ms),
+    });
+    assert.equal(calls.length, 2);
+    assert.deepEqual(waits, [5000]);
+  });
+
+  it("non ripete un effetto già arrivato e si ferma sugli altri errori", async () => {
+    let calls = 0;
+    const run = () => {
+      calls += 1;
+      throw failure(bad);
+    };
+    for (const pr of [
+      { state: "OPEN", autoMergeRequest: { enabledAt: "x" } },
+      { state: "MERGED" },
+    ]) {
+      calls = 0;
+      await enableAutoMerge("example/project", "12", "a".repeat(40), {
+        run,
+        read: () => pr,
+        wait: async () => {},
+      });
+      assert.equal(calls, 1);
+    }
+    await assert.rejects(
+      enableAutoMerge("example/project", "12", "a".repeat(40), {
+        run: () => {
+          throw failure("GraphQL: Pull request is not mergeable");
+        },
+        read: () => ({ state: "OPEN" }),
+        wait: async () => {},
+      }),
+      /gh/u,
+    );
+    // Dopo quattro risposte 5xx l'errore resta: il ciclo si riprende dalla stessa PR.
+    calls = 0;
+    await assert.rejects(
+      enableAutoMerge("example/project", "12", "a".repeat(40), {
+        run,
+        read: () => ({ state: "OPEN", autoMergeRequest: null }),
+        wait: async () => {},
+      }),
+    );
+    assert.equal(calls, 4);
+    assert.ok(transientGitHub(failure("HTTP 503: Service Unavailable")));
+    assert.ok(!transientGitHub(failure("HTTP 422: Unprocessable")));
   });
 });

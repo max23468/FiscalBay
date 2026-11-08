@@ -198,22 +198,25 @@ export function checkInvocations(rows) {
   ];
 }
 
-/** Voci delle code: arretrato oltre un turno e messaggi nella coda dei falliti. */
+/**
+ * Voci delle code del lavoro e degli ingressi: arretrato oltre un turno e messaggi nella coda dei
+ * falliti. `metrics` porta le metriche per nome della coda.
+ */
 export function checkQueues(target, metrics) {
-  return [
+  return target.queues.flatMap(({ name, deadLetterQueue }) => [
     {
       area: "Code",
-      item: `arretrato di ${target.queue.name}`,
-      ok: metrics.work?.backlog_count <= backlogWarning,
-      detail: String(metrics.work?.backlog_count ?? "?"),
+      item: `arretrato di ${name}`,
+      ok: metrics[name]?.backlog_count <= backlogWarning,
+      detail: String(metrics[name]?.backlog_count ?? "?"),
     },
     {
       area: "Code",
-      item: `coda ${target.queue.deadLetterQueue} vuota`,
-      ok: metrics.failed?.backlog_count === 0,
-      detail: String(metrics.failed?.backlog_count ?? "?"),
+      item: `coda ${deadLetterQueue} vuota`,
+      ok: metrics[deadLetterQueue]?.backlog_count === 0,
+      detail: String(metrics[deadLetterQueue]?.backlog_count ?? "?"),
     },
-  ];
+  ]);
 }
 
 /** Voci delle quote dell'account condiviso, sugli ultimi 30 giorni, e del database dell'ambiente. */
@@ -268,7 +271,11 @@ function readQueues(target) {
     if (!queue) throw new Error(`coda ${name} assente`);
     return cfJson(["queues", "metrics", "get", queue.queue_id]);
   };
-  return { work: metrics(target.queue.name), failed: metrics(target.queue.deadLetterQueue) };
+  return Object.fromEntries(
+    target.queues
+      .flatMap(({ name, deadLetterQueue }) => [name, deadLetterQueue])
+      .map((name) => [name, metrics(name)]),
+  );
 }
 
 async function main() {

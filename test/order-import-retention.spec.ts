@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { expect, it, vi } from "vitest";
 
 import { readDetail } from "../app/domain/order-acquisition-details.server";
+import { openBudget } from "./fixtures/ebay-client-fixtures";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 
@@ -29,6 +30,65 @@ import {
 } from "./fixtures/order-import-scenarios";
 
 setupScenarios();
+
+// In testa al file: la mutation del dettaglio parte dai file che lo importano direttamente.
+it("un dettaglio conservato senza chiamate disponibili resta da leggere", async () => {
+  await recordOrderObservation(env.DB, target(), observation());
+  const fetcher = vi.fn<typeof fetch>();
+  expect(
+    await readDetail(
+      {
+        db: env.DB,
+        storeId: "s-a",
+        grantedAt,
+        access: {
+          configuration: ebayConfiguration(env, "production"),
+          fetcher,
+          accessToken: "sintetico",
+        },
+        at: now,
+        budget: { calls: 0, pages: 0 },
+        created: 0,
+        quota: openBudget,
+      },
+      {
+        external_order_id: "D-1",
+        last_modified_time: "2026-09-10T11:00:00.000Z",
+        detail_attempts: 0,
+        marketplace_id: null,
+        creation_time: now,
+      },
+    ),
+  ).toBe(false);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
+it("una riga cancellata non torna con un nuovo identificativo dell'ordine", async () => {
+  await env.DB.prepare(
+    `INSERT INTO deleted_order_keys (store_id, kind, external_key, deleted_at)
+       VALUES ('s-a', 'line', 'k2', ?1)`,
+  )
+    .bind(now)
+    .run();
+  expect(
+    await recordOrderObservation(
+      env.DB,
+      target(),
+      observation({ externalOrderId: "D-nuovo", items: [line("k2")] }),
+    ),
+  ).toEqual({ outcome: "stale" });
+  expect(await orders()).toEqual([]);
+  // Una riga diversa dello stesso venditore entra.
+  expect(
+    (
+      await recordOrderObservation(
+        env.DB,
+        target(),
+        observation({ externalOrderId: "D-altro", items: [line("k3")] }),
+      )
+    ).outcome,
+  ).toBe("created");
+});
 
 it("nega l'accesso alla scadenza anche senza pulizia e non rinnova il grant", async () => {
   const result = await recordOrderObservation(
@@ -138,14 +198,12 @@ it("la pulizia elimina tutte le copie dell'ordine e il replay non le ricrea", as
       n: 0,
     });
   }
-  // Anche una data successiva e un nuovo identificativo esterno non aggirano il marker.
-  expect(await recordOrderObservation(env.DB, target(), value)).toEqual({ outcome: "stale" });
+  // La scadenza non lascia marker: una lettura successiva non lo ricrea perché l'ordine è fuori
+  // dalla finestra, anche con un nuovo identificativo esterno dello stesso acquisto.
+  const later = target("s-a", expiry.toISOString());
+  expect(await recordOrderObservation(env.DB, later, value)).toEqual({ outcome: "stale" });
   expect(
-    await recordOrderObservation(env.DB, target(), {
-      ...value,
-      externalOrderId: "nuovo-id",
-      creationTime: now,
-    }),
+    await recordOrderObservation(env.DB, later, { ...value, externalOrderId: "nuovo-id" }),
   ).toEqual({ outcome: "stale" });
   expect(await orders()).toEqual([]);
   expect((await recordOrderObservation(env.DB, target("s-b"), value)).outcome).toBe("created");
@@ -365,12 +423,14 @@ it.each(["scadenza", "cancellazione"])(
           at: now,
           budget,
           created: 0,
+          quota: openBudget,
         },
         {
           external_order_id: "D-1",
           last_modified_time: "2026-09-10T11:00:00.000Z",
           detail_attempts: 0,
           marketplace_id: null,
+          creation_time: now,
         },
       ),
     ).toBe(true);
@@ -401,12 +461,14 @@ it("un errore arrivato dopo la scadenza non riapre il retry del dettaglio", asyn
         at: now,
         budget: { calls: 12, pages: 1 },
         created: 0,
+        quota: openBudget,
       },
       {
         external_order_id: "D-1",
         last_modified_time: "2026-09-10T11:00:00.000Z",
         detail_attempts: 0,
         marketplace_id: null,
+        creation_time: now,
       },
     ),
   ).toBe(true);
@@ -463,7 +525,7 @@ it.each([true, false])(
     expect(
       await recordOrderObservation(
         env.DB,
-        target(),
+        target("s-a", "2026-11-01T00:00:00.000Z"),
         provisional({ externalOrderId: "P-2", items: [line("k2")] }),
       ),
     ).toEqual({ outcome: "stale" });

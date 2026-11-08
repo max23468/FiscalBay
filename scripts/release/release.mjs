@@ -18,6 +18,7 @@ import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
 import { cf as cfCli, cfJson, ghJson, retry } from "../lib/provider.mjs";
+import { fragmentEntries, headings, withChanges } from "../../app/changelog-fragments.mjs";
 import { downloadRecord, observedRelease } from "./records.mjs";
 
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -179,6 +180,207 @@ export function datedChangelog(changelog, version, day) {
 
 const releasedTags = () => git("tag", "--list", "v2.*").split("\n");
 
+/** Frammento di una PR: voci del changelog e righe del registro delle decisioni. */
+export const changeFile = /^changes\/[^/]+\.md$/u;
+export const decisionRegister = "docs/decisions/DECISION_REGISTER.md";
+
+/** Frammenti di `changes/` in ordine di nome, nel checkout o in un commit. */
+export function changeFiles(ref) {
+  const files = ref
+    ? git("ls-tree", "--name-only", ref, "changes/").split("\n")
+    : existsSync("changes")
+      ? readdirSync("changes").map((name) => `changes/${name}`)
+      : [];
+  return files.filter((file) => changeFile.test(file)).sort();
+}
+
+/** Changelog con i frammenti, nel checkout o in un commit: quello che build e note leggono. */
+export function fullChangelog(ref) {
+  const read = (file) => (ref ? git("show", `${ref}:${file}`) : readFileSync(file, "utf8"));
+  return withChanges(read("CHANGELOG.md"), changeFiles(ref).map(read));
+}
+
+/** Righe delle decisioni nella parte `## Decisioni` di un frammento. */
+export function fragmentDecisions(fragment) {
+  const lines = fragment.split("\n");
+  const start = lines.findIndex((line) => line.trim() === "## Decisioni");
+  if (start === -1) return [];
+  const end = lines.findIndex((line, index) => index > start && line.startsWith("## "));
+  return lines
+    .slice(start + 1, end === -1 ? undefined : end)
+    .filter((line) => /^\| D\d+ \|/u.test(line));
+}
+
+/**
+ * Registro con le righe dei frammenti dopo l'ultima decisione della tabella. Una decisione già
+ * registrata non si ripete: un secondo giorno della stessa versione rilegge frammenti già riuniti.
+ */
+export function withDecisions(register, rows) {
+  if (!rows.length) return register;
+  const lines = register.split("\n");
+  const last = lines.findLastIndex((line) => /^\| D\d+ \|/u.test(line));
+  if (last === -1) throw new Error("Tabella delle decisioni non trovata.");
+  const id = (line) => /^\| (D\d+) \|/u.exec(line)?.[1];
+  const known = new Set(lines.map(id).filter(Boolean));
+  lines.splice(last + 1, 0, ...rows.filter((row) => !known.has(id(row))));
+  return lines.join("\n");
+}
+
+/** Link relativi di un testo spostato dalla cartella `from` alla cartella `to`. */
+export function rebaseLinks(text, from, to) {
+  return text.replace(/(\]\()([^\s)#]+)((?:#[^\s)]*)?\))/gu, (match, open, target, rest) =>
+    /^[a-z][a-z\d+.-]*:/iu.test(target) || target.startsWith("/")
+      ? match
+      : `${open}${path.posix.relative(to, path.posix.join(from, target)) || "."}${rest}`,
+  );
+}
+
+/**
+ * Voci di un frammento per gli utenti dell'app, nelle parti «Novità» e «What's new»: soltanto
+ * queste chiedono una versione nuova e cambiano ciò che l'app mostra. «Altre modifiche», come i
+ * cambi del sito pubblico, della console o interni, viaggiano con la versione già pubblicata.
+ * @param {string} fragment
+ */
+export const userEntries = (fragment) =>
+  fragmentEntries(fragment).filter(({ title }) => title === headings.it || title === headings.en);
+
+/**
+ * Ciò che la pagina Novità mostra di un changelog: per ogni versione con Novità, intestazione con
+ * il giorno e righe delle parti «Novità» e «What's new». Due changelog con la stessa impronta
+ * producono la stessa pagina, anche se cambiano le altre parti o versioni senza Novità.
+ * @param {string} changelog
+ */
+export function visibleNews(changelog) {
+  /** @type {string[]} */
+  const visible = [];
+  /** @type {string | null} */
+  let header = null;
+  let shown = false;
+  /** @type {string[]} */
+  let own = [];
+  const flush = () => {
+    if (header && own.some((line) => line.trim())) visible.push(header, ...own);
+  };
+  for (const line of changelog.split("\n")) {
+    if (line.startsWith("## ")) {
+      flush();
+      header = line.trim();
+      own = [];
+      shown = false;
+    } else if (line.startsWith("### ")) {
+      const title = line.slice(4).trim();
+      shown = title === headings.it || title === headings.en;
+      if (shown) own.push(line.trim());
+    } else if (shown && line.trim()) own.push(line.trim());
+  }
+  flush();
+  return visible.join("\n");
+}
+
+/**
+ * Giorno della pubblicazione su `develop`: i frammenti del commit pubblicato entrano nella
+ * versione, che riceve il giorno, e le loro decisioni nel registro; poi si eliminano. Frammenti
+ * con Novità entrati dopo quel commit restano e aprono la versione di correzione successiva, perché
+ * non appartengono a quella pubblicata; quelli con le sole altre modifiche restano senza aprirla.
+ * Un lotto senza Novità ripubblica la versione già datata: i suoi frammenti vi si aggiungono.
+ */
+export function publicationDay({ changelog, register, published, later }, version, day) {
+  const dated = datedChangelog(
+    withChanges(
+      changelog,
+      published.map((fragment) => rebaseLinks(fragment, "changes", ".")),
+      version,
+    ),
+    version,
+    day,
+  );
+  const open =
+    later.some((fragment) => userEntries(fragment).length) && topSection(dated)?.day
+      ? openedChangelog(dated, nextVersions(version)[0])
+      : dated;
+  return {
+    changelog: open,
+    register: withDecisions(
+      register,
+      published
+        .flatMap(fragmentDecisions)
+        .map((row) => rebaseLinks(row, "changes", "docs/decisions")),
+    ),
+  };
+}
+
+/**
+ * Parte di un frammento entrata dopo la pubblicazione: senza le voci e le decisioni già
+ * pubblicate; vuota se non resta nessuna voce né decisione.
+ */
+export function laterPart(current, published) {
+  if (current === published) return "";
+  const sent = new Set(
+    published.split("\n").filter((line) => line.startsWith("- ") || /^\| D\d+ \|/u.test(line)),
+  );
+  const rest = current
+    .split("\n")
+    .filter((line) => !sent.has(line))
+    .join("\n");
+  return fragmentEntries(rest).length || fragmentDecisions(rest).length ? rest : "";
+}
+
+/**
+ * Le Novità di un frammento appartengono alla versione in preparazione: con la versione in cima
+ * già pubblicata la PR apre prima quella successiva. Le sole altre modifiche non la chiedono.
+ */
+export function assertChangesVersion(changelog, fragments, releasedTags = []) {
+  const top = topVersion(changelog);
+  if (
+    fragments.some((fragment) => userEntries(fragment).length) &&
+    (topSection(changelog)?.day || releasedTags.includes(`v${top}`))
+  )
+    throw new Error(
+      `Le Novità di changes/ richiedono una versione in preparazione: in cima c'è la ${top}, già pubblicata.`,
+    );
+}
+
+/**
+ * Il controllo al merge: le voci della PR vanno nella versione in cima a `develop`, oppure in
+ * quella che la PR stessa apre sopra, come chiede la prima PR con una modifica visibile dopo una
+ * pubblicazione. Con la stessa versione in cima vale `develop`, che può averla pubblicata nel
+ * frattempo.
+ */
+export function assertMergedChangesVersion(developChangelog, headChangelog, fragments, tags) {
+  const opened = topVersion(headChangelog) !== topVersion(developChangelog);
+  assertChangesVersion(opened ? headChangelog : developChangelog, fragments, tags);
+}
+
+/**
+ * Versione che il ciclo apre quando unisce la PR alla base: le voci dei frammenti vogliono una
+ * versione in preparazione e, se quella in cima è stata pubblicata mentre la PR aspettava, si
+ * apre la patch successiva all'ultima pubblicata. Una PR che apre già una versione libera la
+ * tiene. Null quando non serve aprirne una.
+ */
+export function versionToOpen(developChangelog, headChangelog, fragments, releasedTags) {
+  try {
+    assertMergedChangesVersion(developChangelog, headChangelog, fragments, releasedTags);
+    return null;
+  } catch {
+    return nextVersions(latestReleased(releasedTags))[0];
+  }
+}
+
+/** Changelog con `version` aperta in cima, sopra la prima versione. */
+export function openedChangelog(changelog, version) {
+  const at = changelog.search(/^## /mu);
+  if (at < 0) throw new Error("Nessuna versione nel changelog.");
+  return `${changelog.slice(0, at)}## [${version}]\n\n${changelog.slice(at)}`;
+}
+
+/** Versione in cima senza testo propria: le sue voci stanno ancora soltanto nei frammenti. */
+const emptyTop = (changelog) => {
+  const lines = changelog.split("\n");
+  const top = lines.findIndex((line) => line.startsWith("## "));
+  const next = lines.findIndex((line, index) => index > top && line.startsWith("## "));
+  return lines.slice(top + 1, next === -1 ? undefined : next).every((line) => !line.trim());
+};
+
 export const latestReleased = (releasedTags) =>
   releasedTags
     .map((tag) => tag.replace(/^v/u, ""))
@@ -189,17 +391,23 @@ export const latestReleased = (releasedTags) =>
     .at(-1);
 
 /**
- * Il lotto su `develop` porta una sola versione: la prima PR con una modifica visibile apre in
- * cima al changelog la versione successiva all'ultima pubblicata, di un solo passo; le seguenti la
- * riusano o ne alzano il livello.
+ * Il lotto su `develop` porta una sola versione: la prima PR con una Novità apre in cima al
+ * changelog la versione successiva all'ultima pubblicata, di un solo passo; le seguenti la riusano
+ * o ne alzano il livello. Una PR può richiudere una versione aperta e mai pubblicata, tornando
+ * all'ultima pubblicata.
  */
 export function assertVersionStep(changelog, baseChangelog, releasedTags = []) {
   const head = topVersion(changelog);
   const base = topVersion(baseChangelog);
   if (head === base) return;
   const released = latestReleased(releasedTags);
-  // Una versione promossa e ritirata perde il tag e la sezione: torna l'ultima pubblicata.
-  if (head === released && topSection(baseChangelog)?.day && !releasedTags.includes(`v${base}`))
+  // Una versione promossa e ritirata perde il tag e la sezione, una aperta e ancora vuota si può
+  // richiudere: in entrambi i casi torna l'ultima pubblicata.
+  if (
+    head === released &&
+    !releasedTags.includes(`v${base}`) &&
+    (topSection(baseChangelog)?.day || emptyTop(baseChangelog))
+  )
     return;
   const next = parseVersion(head);
   if (!next) throw new Error(`In cima al changelog serve una versione, non "${head ?? ""}".`);
@@ -266,6 +474,20 @@ export function assertAppliedMigrations(migrations, previous, applied) {
     if (!current || !prior || current.digest !== prior.digest)
       throw new Error(`Migration applicata modificata: ${name}.`);
   }
+}
+
+/**
+ * SQL di una migration applicata secondo la versione attiva. Una migration che quella versione non
+ * contiene vale soltanto se, fra la versione e il candidato, il file è stato aggiunto una volta e
+ * mai modificato: ogni candidato intermedio, anche ritirato dopo averla applicata, ne aveva gli
+ * stessi byte del candidato.
+ * @param {(sha: string) => Buffer | undefined} show
+ * @param {string[]} changes commit che toccano il file fra la versione attiva e il candidato
+ */
+export function previousMigration(previousSha, sha, show, changes) {
+  const before = show(previousSha);
+  if (before !== undefined) return before;
+  return changes.length === 1 ? show(sha) : undefined;
 }
 
 /** SQL precedente oppure piano salvato prima dell'effetto D1, per una ripresa parziale. */
@@ -391,8 +613,13 @@ export async function activate(manifest, io, receipt) {
       if ((await io.current()).identity !== identity) throw error;
     }
   }
-  const active = await io.current();
-  if (active.identity !== identity) throw new Error("Attivazione non confermata.");
+  // L'API del provider può riportare per qualche secondo il deployment precedente: la conferma
+  // rilegge entro la stessa finestra del readback prima di dichiarare l'attivazione fallita.
+  const active = await (io.confirm ?? retryReadback)(async () => {
+    const current = await io.current();
+    if (current.identity !== identity) throw new Error("Attivazione non confermata.");
+    return current;
+  });
   state.version = active.version;
   state.deployed = true;
   state.activatedAt ??= new Date().toISOString();
@@ -911,15 +1138,29 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
         if (/^[0-9a-f]{40}$/u.test(previousSha ?? "") && previousSha !== manifest.sha) {
           const previous = appliedMigrationHistory(
             names,
-            (name) => {
-              try {
-                return execFileSync("git", ["show", `${previousSha}:migrations/${name}`], {
-                  stdio: ["ignore", "pipe", "ignore"],
-                });
-              } catch {
-                return undefined;
-              }
-            },
+            (name) =>
+              previousMigration(
+                previousSha,
+                manifest.sha,
+                (sha) => {
+                  try {
+                    return execFileSync("git", ["show", `${sha}:migrations/${name}`], {
+                      stdio: ["ignore", "pipe", "ignore"],
+                    });
+                  } catch {
+                    return undefined;
+                  }
+                },
+                git(
+                  "log",
+                  "--format=%H",
+                  `${previousSha}..${manifest.sha}`,
+                  "--",
+                  `migrations/${name}`,
+                )
+                  .split("\n")
+                  .filter(Boolean),
+              ),
             receipt,
           );
           assertAppliedMigrations(manifest.migrations, previous, names);
@@ -1059,6 +1300,7 @@ async function main() {
       base: { type: "string" },
       version: { type: "string" },
       day: { type: "string" },
+      sha: { type: "string" },
     },
   });
   const environment = values.environment;
@@ -1066,18 +1308,53 @@ async function main() {
   if (!target) throw new Error("Ambiente non supportato.");
   const command = positionals[0];
   if (command === "review") return reviewMigrations(values.base);
-  if (command === "date")
-    return writeFileSync(
-      "CHANGELOG.md",
-      datedChangelog(readFileSync("CHANGELOG.md", "utf8"), values.version, values.day),
+  if (command === "date") {
+    if (!/^[0-9a-f]{40}$/u.test(values.sha ?? "")) throw new Error("Commit pubblicato richiesto.");
+    // Si riunisce il contenuto pubblicato, non quello attuale: una PR successiva può aver
+    // modificato lo stesso frammento, e quelle righe restano al lotto seguente.
+    const published = changeFiles(values.sha).map((file) => ({
+      file,
+      text: git("show", `${values.sha}:${file}`),
+    }));
+    const read = (file) => readFileSync(file, "utf8");
+    const remaining = changeFiles()
+      .map((file) => {
+        const sent = published.find((entry) => entry.file === file)?.text;
+        return { file, text: sent === undefined ? read(file) : laterPart(read(file), sent) };
+      })
+      .filter(({ text }) => text !== "");
+    const day = publicationDay(
+      {
+        changelog: read("CHANGELOG.md"),
+        register: read(decisionRegister),
+        published: published.map(({ text }) => text),
+        later: remaining.map(({ text }) => text),
+      },
+      values.version,
+      values.day,
     );
+    writeFileSync("CHANGELOG.md", day.changelog);
+    writeFileSync(decisionRegister, day.register);
+    for (const { file } of published) if (existsSync(file)) rmSync(file);
+    for (const { file, text } of remaining) writeFileSync(file, text);
+    return;
+  }
   if (command === "version-step") {
     const changelog = readFileSync("CHANGELOG.md", "utf8");
     const baseChangelog = execFileSync("git", ["show", `${values.base}:CHANGELOG.md`], {
       encoding: "utf8",
     });
     assertVersionStep(changelog, baseChangelog, releasedTags());
-    console.log(`Versione in preparazione: ${topVersion(changelog)}.`);
+    assertChangesVersion(
+      changelog,
+      changeFiles().map((file) => readFileSync(file, "utf8")),
+      releasedTags(),
+    );
+    console.log(
+      topSection(changelog)?.day || releasedTags().includes(`v${topVersion(changelog)}`)
+        ? `Nessuna versione nuova: senza Novità il lotto resta sulla ${topVersion(changelog)}.`
+        : `Versione in preparazione: ${topVersion(changelog)}.`,
+    );
     return;
   }
   // Senza artefatto: il Worker dichiara le versioni, Git la loro compatibilità.

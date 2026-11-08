@@ -33,7 +33,13 @@ import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessError, homeFor } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { orderView } from "../app/domain/order-view.server";
-import { callRoute, routeData, routeResponse, testOrigin } from "./fixtures/route-fixtures";
+import {
+  callRoute,
+  routeData,
+  routeResponse,
+  testOrigin,
+  pagePath,
+} from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -389,7 +395,7 @@ describe("collegamento negozio eBay", () => {
       const { userId, cookie } = await verifiedSession(
         `spazio${prefix.replace("/", "-")}-${fromStores}@example.invalid`,
       );
-      const start = await routeResponse(startStoreLink, `${prefix}/app/negozi/collega`, {
+      const start = await routeResponse(startStoreLink, pagePath(prefix, "/app/negozi/collega"), {
         cookie,
         fields: fromStores ? { da: "negozi" } : {},
       });
@@ -713,7 +719,7 @@ describe("collegamento negozio eBay", () => {
     const codeVerifier = new URLSearchParams(requests[0]!.body).get("code_verifier");
     const fulfillmentList = (field: string) => ({
       url: expect.stringContaining(
-        `https://api.ebay.com/sell/fulfillment/v1/order?limit=25&filter=${field}%3A%5B`,
+        `https://api.ebay.com/sell/fulfillment/v1/order?limit=200&filter=${field}%3A%5B`,
       ),
       method: "GET",
       headers: { authorization: "Bearer token-sintetico" },
@@ -765,6 +771,7 @@ describe("collegamento negozio eBay", () => {
           "<Version>1455</Version><DetailLevel>ReturnAll</DetailLevel>" +
           "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
           "<OrderIDArray><OrderID>12-&lt;0&gt;&amp;1</OrderID></OrderIDArray>" +
+          "<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>1</PageNumber></Pagination>" +
           "</GetOrdersRequest>",
       },
     ]);
@@ -814,9 +821,9 @@ describe("collegamento negozio eBay", () => {
     }));
     const ebay = syntheticEbay({ orders });
     await handleAuthRequest(storeCallback(`state=${state}&code=codice`, cookie), env, ebay);
-    // Token e identità, tre pagine e due dettagli da due chiamate entro il budget di otto, più
-    // il profilo del negozio, che non scala il budget.
-    expect(ebay).toHaveBeenCalledTimes(11);
+    // Token e identità, poi entro il budget di otto tre pagine, quattro dettagli e una sola
+    // lettura fiscale Trading per tutti, più il profilo del negozio, che non scala il budget.
+    expect(ebay).toHaveBeenCalledTimes(12);
     expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM orders").first()).toEqual({
       total: 4,
     });
@@ -824,7 +831,7 @@ describe("collegamento negozio eBay", () => {
       await env.DB.prepare(
         "SELECT COUNT(*) AS total FROM order_source_refs WHERE detail_for IS NULL",
       ).first(),
-    ).toEqual({ total: 2 });
+    ).toEqual({ total: 0 });
   });
 
   it("non collega il negozio con token o identità eBay non validi", async () => {
@@ -925,7 +932,9 @@ describe("collegamento negozio eBay", () => {
   it("mostra la schermata preparatoria solo a chi può collegare e parte per eBay dal suo invio", async () => {
     const { cookie } = await verifiedSession("preparatoria@example.invalid");
     for (const base of ["", "/en"]) {
-      const page = await routeData(loadStoreLink, `${base}/app/negozi/collega`, { cookie });
+      const page = await routeData(loadStoreLink, pagePath(base, "/app/negozi/collega"), {
+        cookie,
+      });
       expect(page).toEqual({
         language: base ? "en" : "it",
         reconnect: false,
@@ -993,20 +1002,16 @@ describe("collegamento negozio eBay", () => {
     const row = await env.DB.prepare(
       `SELECT c.* FROM ebay_store_credentials c JOIN ebay_stores s ON s.id = c.store_id`,
     ).first<Record<string, string | null>>();
-    expect(row!.access_token).toMatch(/^v1\./u);
+    expect(row!.access_token).toMatch(/^v2\./u);
     expect(JSON.stringify(row)).not.toMatch(/token-sintetico|refresh-sintetico/u);
     const storeId = row!.store_id!;
-    const secret = env.BETTER_AUTH_SECRET;
-    expect(await openToken(secret, storeId, "access", row!.access_token!)).toBe("token-sintetico");
-    expect(await openToken(secret, storeId, "refresh", row!.refresh_token!)).toBe(
-      "refresh-sintetico",
-    );
+    expect(await openToken(env, storeId, "access", row!.access_token!)).toBe("token-sintetico");
+    expect(await openToken(env, storeId, "refresh", row!.refresh_token!)).toBe("refresh-sintetico");
     // Lo stesso valore non si apre come altro tipo, per un altro negozio o con un altro segreto.
-    await expect(openToken(secret, storeId, "refresh", row!.access_token!)).rejects.toThrow();
-    await expect(openToken(secret, "altro", "access", row!.access_token!)).rejects.toThrow();
-    await expect(
-      openToken(`${secret}-diverso`, storeId, "access", row!.access_token!),
-    ).rejects.toThrow();
+    await expect(openToken(env, storeId, "refresh", row!.access_token!)).rejects.toThrow();
+    await expect(openToken(env, "altro", "access", row!.access_token!)).rejects.toThrow();
+    const other = { ...env, EBAY_TOKEN_SECRET: `${env.EBAY_TOKEN_SECRET}-diverso` };
+    await expect(openToken(other, storeId, "access", row!.access_token!)).rejects.toThrow();
 
     const grantedAt = Date.parse(row!.granted_at!);
     expect(Date.parse(row!.access_expires_at!) - grantedAt).toBe(7200 * 1000);
@@ -1197,14 +1202,14 @@ describe("collegamento negozio eBay", () => {
           "location",
         )!,
       ).searchParams.get("state")!;
-    const english = await begin("/en/app/negozi/collega");
+    const english = await begin("/en/app/stores/link");
     const linked = await handleAuthRequest(
       storeCallback(`state=${english}&code=codice-sintetico`, cookie),
       env,
       syntheticEbay(),
     );
     expect(linked.headers.get("location")).toBe(
-      "http://localhost:5173/en/app/ordini?negozio=collegato",
+      "http://localhost:5173/en/app/orders?negozio=collegato",
     );
     // Senza sessione nessun collegamento, e nessun errore del server.
     const anonymous = await handleAuthRequest(

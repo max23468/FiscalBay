@@ -18,7 +18,7 @@ Vitest per dominio, integrazioni e risposte delle route; Playwright per componen
 | Sblocco | Assente/errore/locked/unlocked; due richieste simultanee; ultimo credito; CF+P.IVA; dato incoerente; quota finita; perdita risposta |
 | Cicli | 7×24h, timezone/DST, evento nella prima notte del ciclo con fuso a est e a ovest di UTC, promo finita nel ciclo, reconnect/sostituzione senza reset, storico+nuovo stesso contatore |
 | Diritti | Trial volontario, acquisto mensile/annuale durante la prova con primo addebito alla sua fine, senza doppio incasso, scadenza, omaggi, lifetime, refund per grant, grandfathering e switch |
-| Downgrade | Dati Premium mai aperti; primo ID arrivato dopo; 30 giorni/negozio; grace retention e riacquisto; first connected default |
+| Downgrade | Dati Pro mai aperti; primo ID arrivato dopo; 30 giorni/negozio; grace retention e riacquisto; first connected default |
 | Auth | 4 login, linking attendibile, email non verificata, ultimo metodo, MFA admin, reauth, revoca sessioni, OAuth error/replay |
 | Isolamento | IDOR su query/dettagli/export/file/admin, CF locked non deducibile da search/count/cache/URL |
 | eBay | Paging, overlap, checkpoint, versioni tardive, mascheramento vs rimozione, pagato/non pagato, conflitti fonti, quote condivise, ordine combinato con ID nuovo senza doppia quota, `next` fuori origine, XML con DOCTYPE o oltre limite, omesso vs `null` senza nuova versione |

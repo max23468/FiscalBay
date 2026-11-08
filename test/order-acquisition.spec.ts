@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers";
 
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { acquireOrders } from "../app/domain/order-acquisition.server";
+
+import { checkBuyerNames } from "../app/domain/buyer-check.server";
 
 import { setSwitch } from "../app/domain/service-settings.server";
 
@@ -10,14 +12,14 @@ import { listVisibleOrders } from "../app/domain/orders.server";
 
 import { listStores } from "../app/domain/stores.server";
 
-import { access, order } from "./fixtures/ebay-client-fixtures";
+import { access, openBudget, order } from "./fixtures/ebay-client-fixtures";
 
 import {
   grantedAt,
   image,
   ebay,
   calls,
-  pages,
+  slices,
   acquire,
   syncState,
   count,
@@ -216,7 +218,11 @@ it("conclude un dettaglio fiscale qualificato con una sola chiamata disponibile"
 it("rimanda il fallback quando resta budget soltanto per Fulfillment", async () => {
   const fetcher = ebay();
   await acquire(fetcher);
-  await env.DB.prepare("UPDATE order_source_refs SET detail_for = NULL").run();
+  // Senza la lettura Trading già fatta la versione torna a chiedere il fallback.
+  await env.DB.batch([
+    env.DB.prepare("UPDATE order_source_refs SET detail_for = NULL"),
+    env.DB.prepare("DELETE FROM order_tax_checks"),
+  ]);
   fetcher.mockClear();
   const budget = { calls: 2, pages: 1 };
   expect(await acquire(fetcher, undefined, budget)).toBe("budget");
@@ -253,11 +259,12 @@ it("legge dati fiscali e immagini una volta per versione, senza bloccare l'ordin
   await acquire(same, "2026-09-02T01:00:00.000Z");
   expect([calls(same, "GetItem"), calls(same, "GetOrders")]).toEqual([0, 0]);
 
-  // Una nuova versione rilegge immagini e dati fiscali.
+  // Una nuova versione rilegge le immagini mancanti; i dati fiscali Trading di un ordine già
+  // pagato non si rileggono, perché la passata periodica ne vede comunque le modifiche.
   failing.orders[0] = { ...failing.orders[0]!, lastModifiedDate: "2026-09-02T02:00:00.000Z" };
   const working = ebay({ orders: failing.orders });
   await acquire(working, "2026-09-02T03:00:00.000Z");
-  expect([calls(working, "GetItem"), calls(working, "GetOrders")]).toEqual([1, 1]);
+  expect([calls(working, "GetItem"), calls(working, "GetOrders")]).toEqual([1, 0]);
   expect(await env.DB.prepare("SELECT image_url FROM order_items").all()).toMatchObject({
     results: [{ image_url: image }, { image_url: image }],
   });
@@ -266,37 +273,71 @@ it("legge dati fiscali e immagini una volta per versione, senza bloccare l'ordin
   failing.orders[0] = { ...failing.orders[0]!, lastModifiedDate: "2026-09-02T04:00:00.000Z" };
   const again = ebay({ orders: failing.orders });
   await acquire(again, "2026-09-02T05:00:00.000Z");
-  expect([calls(again, "GetItem"), calls(again, "GetOrders")]).toEqual([0, 1]);
+  expect([calls(again, "GetItem"), calls(again, "GetOrders")]).toEqual([0, 0]);
   expect(await env.DB.prepare("SELECT image_url FROM order_items").all()).toMatchObject({
     results: [{ image_url: image }, { image_url: image }],
   });
 });
 
-it("importa lo storico a pagine e riprende dall'ultima pagina applicata", async () => {
-  let interrupted = false;
+it("legge l'immagine di un'inserzione una sola volta anche in ordini diversi", async () => {
+  const [line] = order().lineItems;
+  const first = ebay({ orders: [order()] });
+  await acquire(first);
+  expect(calls(first, "GetItem")).toBe(1);
+
+  // Un altro acquisto della stessa inserzione riusa l'immagine già salvata.
+  const second = ebay({
+    orders: [
+      ...first.orders,
+      order({
+        orderId: "12-34567-89013",
+        lastModifiedDate: "2026-09-02T00:30:00.000Z",
+        lineItems: [{ ...line, lineItemId: "10000000003" }],
+      }),
+    ],
+  });
+  await acquire(second, "2026-09-02T01:00:00.000Z");
+  expect(calls(second, "GetItem")).toBe(0);
+  expect(
+    await env.DB.prepare(
+      "SELECT i.image_url FROM order_items i JOIN orders o ON o.id = i.order_id WHERE o.ebay_order_id = '12-34567-89013'",
+    ).first(),
+  ).toEqual({ image_url: image });
+});
+
+it("importa lo storico a tratti e riprende dal primo tratto non applicato", async () => {
+  let requests = 0;
   const failing = ebay({
     orders: series("12-storico", 60, "2026-09-02T00:00:00.000Z"),
+    pageLimit: 25,
     fail: (url) => {
-      if (url.searchParams.get("offset") !== "50" || interrupted) return undefined;
-      interrupted = true;
-      return new Response(null, { status: 503 });
+      if (!url.searchParams.get("filter")?.startsWith("creationdate:")) return undefined;
+      requests += 1;
+      return requests === 4 ? new Response(null, { status: 503 }) : undefined;
     },
   });
   await expect(acquire(failing)).rejects.toMatchObject({ failure: "unavailable" });
-  expect(pages(failing, "creationdate")).toEqual([0, 25, 50]);
+  const applied = "2026-08-31T19:00:00.000Z";
+  expect(slices(failing, "creationdate")).toEqual([
+    "2026-08-03T00:00:00.000Z..2026-09-02T00:00:00.000Z",
+    "2026-09-01T15:00:00.000Z..2026-09-02T00:00:00.000Z",
+    `${applied}..2026-09-01T15:00:00.000Z`,
+    expect.stringMatching(new RegExp(`\\.\\.${applied}$`, "u")),
+  ]);
   expect(await syncState()).toMatchObject({
-    cursor: "2026-09-02T00:00:00.000Z",
-    history_from: "2026-08-03T00:00:00.000Z",
-    history_until: "2026-09-02T00:00:00.000Z",
-    history_next: expect.stringContaining("offset=50"),
+    history_through: applied,
     history_done_at: null,
     locked_until: null,
   });
-  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(50);
+  // I due tratti applicati, estremi compresi: un ordine all'ora fra le 19 e la mezzanotte.
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(29);
 
-  const resumed = ebay({ orders: failing.orders });
+  const resumed = ebay({ orders: failing.orders, pageLimit: 25 });
   expect(await acquire(resumed, "2026-09-02T00:30:00.000Z")).toBe("complete");
-  expect(pages(resumed, "creationdate")).toEqual([50]);
+  // Nessun tratto già applicato si rilegge.
+  expect(slices(resumed, "creationdate").every((range) => range.split("..")[1]! <= applied)).toBe(
+    true,
+  );
   expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
   expect(
     await count(
@@ -304,67 +345,102 @@ it("importa lo storico a pagine e riprende dall'ultima pagina applicata", async 
     ),
   ).toBe(60);
   expect(await syncState()).toMatchObject({
-    history_next: null,
+    history_through: null,
     history_done_at: "2026-09-02T00:30:00.000Z",
   });
   // Storico completo: le esecuzioni successive non lo rileggono.
   const later = ebay({ orders: failing.orders });
   await acquire(later, "2026-09-02T01:00:00.000Z");
-  expect(pages(later, "creationdate")).toEqual([]);
+  expect(slices(later, "creationdate")).toEqual([]);
 });
 
-it("con le chiamate eBay spente durante la lettura si ferma prima della pagina successiva", async () => {
+it("con le chiamate eBay spente durante la lettura si ferma prima del tratto successivo", async () => {
   const stopping = ebay({
     orders: series("12-spento", 60, "2026-09-02T00:00:00.000Z"),
+    pageLimit: 25,
     before: async (url) => {
-      if (
-        url.searchParams.get("filter")?.startsWith("creationdate:") &&
-        !url.searchParams.has("offset")
-      )
+      if (url.searchParams.get("filter")?.startsWith("creationdate:"))
         await setSwitch(env.DB, "ebay_calls", false, new Date("2026-09-02T00:00:00.000Z"));
     },
   });
   expect(await acquire(stopping)).toBe("budget");
-  expect(pages(stopping, "creationdate")).toEqual([0]);
-  // Nemmeno il dettaglio parte: la pagina applicata resta da completare.
+  expect(slices(stopping, "creationdate")).toEqual([
+    "2026-08-03T00:00:00.000Z..2026-09-02T00:00:00.000Z",
+  ]);
+  // Nemmeno il dettaglio parte: lo storico resta da completare.
   expect(stopping.mock.calls.filter(([input]) => String(input).includes("/order/"))).toEqual([]);
-  expect(await syncState()).toMatchObject({ history_next: expect.stringContaining("offset=25") });
 
   await setSwitch(env.DB, "ebay_calls", true, new Date("2026-09-02T00:20:00.000Z"));
-  const resumed = ebay({ orders: stopping.orders });
+  const resumed = ebay({ orders: stopping.orders, pageLimit: 25 });
   expect(await acquire(resumed, "2026-09-02T00:30:00.000Z")).toBe("complete");
-  expect(pages(resumed, "creationdate")).toEqual([25, 50]);
+  expect(slices(resumed, "creationdate")[0]).toBe(
+    "2026-08-03T00:00:00.000Z..2026-09-02T00:00:00.000Z",
+  );
   expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
 
   // Spente durante i recenti: la lettura non conta come sincronizzazione e non prosegue.
   const recent = series("12-recente", 60, "2026-09-02T00:00:00.000Z").map((item, index) => ({
     ...item,
-    lastModifiedDate: new Date(Date.parse("2026-09-02T00:40:00.000Z") + index).toISOString(),
+    lastModifiedDate: new Date(
+      Date.parse("2026-09-02T00:40:00.000Z") + index * 1_000,
+    ).toISOString(),
   }));
+  let reads = 0;
   const paused = ebay({
     orders: recent,
+    pageLimit: 25,
     before: async (url) => {
-      if (
-        url.searchParams.get("filter")?.startsWith("lastmodifieddate:") &&
-        !url.searchParams.has("offset")
-      )
+      if (!url.searchParams.get("filter")?.startsWith("lastmodifieddate:")) return;
+      reads += 1;
+      if (reads === 2)
         await setSwitch(env.DB, "ebay_calls", false, new Date("2026-09-02T01:00:00.000Z"));
     },
   });
   expect(await acquire(paused, "2026-09-02T01:00:00.000Z")).toBe("budget");
-  expect(pages(paused, "lastmodifieddate")).toEqual([0]);
+  // Spente durante il tratto vuoto prima degli ordini: il tratto è applicato e il successivo non parte.
+  expect(slices(paused, "lastmodifieddate")).toEqual([
+    "2026-09-02T00:15:00.000Z..2026-09-02T01:00:00.000Z",
+    "2026-09-02T00:15:00.000Z..2026-09-02T00:37:30.000Z",
+  ]);
   expect(calls(paused, "GetStore")).toBe(0);
   expect(await syncState()).toMatchObject({
-    recent_next: expect.stringContaining("offset=25"),
+    cursor: "2026-09-02T00:37:30.000Z",
+    recent_end: "2026-09-02T01:00:00.000Z",
     last_success_at: "2026-09-02T00:30:00.000Z",
   });
 
   await setSwitch(env.DB, "ebay_calls", true, new Date("2026-09-02T01:05:00.000Z"));
-  const caught = ebay({ orders: recent });
+  const caught = ebay({ orders: recent, pageLimit: 25 });
   expect(await acquire(caught, "2026-09-02T01:10:00.000Z")).toBe("complete");
-  expect(pages(caught, "lastmodifieddate")).toEqual([25, 50]);
+  // La passata riprende dal tratto non applicato, senza sovrapposizione.
+  expect(slices(caught, "lastmodifieddate")[0]).toBe(
+    "2026-09-02T00:37:30.000Z..2026-09-02T01:00:00.000Z",
+  );
   expect(await syncState()).toMatchObject({
-    recent_next: null,
+    cursor: "2026-09-02T01:00:00.000Z",
+    last_success_at: "2026-09-02T01:10:00.000Z",
+  });
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(120);
+
+  // Spente durante un tratto denso: la passata si ferma senza concludersi né avanzare.
+  const dense = series("12-denso", 60, "2026-09-02T00:00:00.000Z").map((item, index) => ({
+    ...item,
+    lastModifiedDate: new Date(
+      Date.parse("2026-09-02T01:15:00.000Z") + index * 1_000,
+    ).toISOString(),
+  }));
+  const crowded = ebay({
+    orders: [...recent, ...dense],
+    pageLimit: 25,
+    before: async (url) => {
+      if (url.searchParams.get("filter")?.startsWith("lastmodifieddate:"))
+        await setSwitch(env.DB, "ebay_calls", false, new Date("2026-09-02T01:30:00.000Z"));
+    },
+  });
+  expect(await acquire(crowded, "2026-09-02T01:30:00.000Z")).toBe("budget");
+  expect(slices(crowded, "lastmodifieddate")).toHaveLength(1);
+  expect(await syncState()).toMatchObject({
+    cursor: "2026-09-02T01:00:00.000Z",
     last_success_at: "2026-09-02T01:10:00.000Z",
   });
   expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(120);
@@ -407,7 +483,94 @@ it("con le chiamate eBay spente durante la lettura Trading la riprende dalla pag
   ).toEqual({ trading_cursor: "2026-09-02T00:00:00.000Z", trading_page: null });
 });
 
-it("ricomincia la passata se l'elenco cambia sotto la paginazione, senza saltare ordini", async () => {
+it("una passata lasciata a metà dalla paginazione precedente riparte con la sovrapposizione", async () => {
+  await acquire(ebay({ orders: [] }));
+  await env.DB.prepare("UPDATE sync_state SET recent_end = ?1, recent_next = ?2, recent_total = 60")
+    .bind("2026-09-02T00:30:00.000Z", "https://api.ebay.com/sell/fulfillment/v1/order?offset=25")
+    .run();
+  const fetcher = ebay({ orders: [] });
+  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(slices(fetcher, "lastmodifieddate")).toEqual([
+    "2026-09-01T23:45:00.000Z..2026-09-02T01:00:00.000Z",
+  ]);
+});
+
+it("stringe un tratto denso dal campione della pagina, nell'ordine delle date", async () => {
+  await acquire(ebay({ orders: [] }));
+  // Creati e modificati in ordine: eBay restituisce per primi i più recenti, i più lontani
+  // dall'inizio del tratto, e il confine si ricava dal campione ordinato per data.
+  const orders = series("12-denso", 60, "2026-09-02T00:30:00.000Z").map((item, index) => ({
+    ...item,
+    lastModifiedDate: new Date(
+      Date.parse("2026-09-02T00:06:00.000Z") - index * 20_000,
+    ).toISOString(),
+  }));
+  const fetcher = ebay({ orders, pageLimit: 25 });
+  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(slices(fetcher, "lastmodifieddate").slice(0, 2)).toEqual([
+    "2026-09-01T23:45:00.000Z..2026-09-02T01:00:00.000Z",
+    "2026-09-01T23:45:00.000Z..2026-09-02T00:00:40.000Z",
+  ]);
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
+});
+
+it("nello stesso secondo segue le pagine di eBay ed entro il budget si ferma senza concludere", async () => {
+  await acquire(ebay({ orders: [] }));
+  // Sessanta ordini modificati nello stesso istante: nessun tratto ne contiene una pagina.
+  const orders = series("12-istante", 60, "2026-09-02T00:30:00.000Z").map((item) => ({
+    ...item,
+    lastModifiedDate: "2026-09-02T00:40:00.000Z",
+  }));
+  const ample = ebay({ orders, pageLimit: 25 });
+  expect(await acquire(ample, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  const reads = slices(ample, "lastmodifieddate");
+  expect(reads.filter((range) => range.includes("@"))).toHaveLength(2);
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
+
+  // Il budget finisce prima della terza pagina: i recenti non si concludono.
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM orders"),
+    env.DB.prepare("DELETE FROM deleted_order_keys"),
+    env.DB.prepare(
+      "UPDATE sync_state SET cursor = ?1, last_success_at = ?1, recent_end = NULL",
+    ).bind("2026-09-02T00:00:00.000Z"),
+  ]);
+  const short = ebay({ orders, pageLimit: 25 });
+  const budget = reads.findIndex((range) => range.endsWith("@50"));
+  expect(await acquire(short, "2026-09-02T01:00:00.000Z", { calls: budget, pages: budget })).toBe(
+    "budget",
+  );
+  expect(slices(short, "lastmodifieddate")).toEqual(reads.slice(0, budget));
+  expect(await syncState()).toMatchObject({ last_success_at: "2026-09-02T00:00:00.000Z" });
+});
+
+it("una data illeggibile nella pagina non ferma la lettura dei tratti", async () => {
+  await acquire(ebay({ orders: [] }));
+  const orders = series("12-leggibile", 30, "2026-09-02T00:30:00.000Z").map((item, index) => ({
+    ...item,
+    lastModifiedDate: new Date(
+      Date.parse("2026-09-02T00:40:00.000Z") + index * 1_000,
+    ).toISOString(),
+  }));
+  let first = true;
+  const fetcher = ebay({
+    orders,
+    pageLimit: 25,
+    fail: (url) => {
+      if (!first || !url.searchParams.get("filter")?.startsWith("lastmodifieddate:")) return;
+      first = false;
+      return Response.json({
+        orders: orders.slice(0, 25).map((order) => ({ ...order, lastModifiedDate: undefined })),
+        total: 30,
+        next: `${url.href}&offset=25`,
+      });
+    },
+  });
+  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(30);
+});
+
+it("non salta ordini se l'elenco cambia durante la lettura dei tratti", async () => {
   await acquire(ebay({ orders: [] }));
   // Ordini ancora conservabili, modificati dopo l'ultimo limite dei recenti.
   const orders = series("12-recente", 60, "2026-09-01T00:00:00.000Z").map((item, index) => ({
@@ -417,21 +580,26 @@ it("ricomincia la passata se l'elenco cambia sotto la paginazione, senza saltare
   let moved = false;
   const fetcher = ebay({
     orders,
-    // Dopo la prima pagina un ordine già letto esce dall'intervallo: senza ripartire,
-    // l'offset della seconda pagina salterebbe il primo ordine non ancora letto.
-    before: (url) => {
-      if (moved || url.searchParams.get("offset") !== "25") return;
+    pageLimit: 25,
+    // Appena applicato, un ordine esce dall'intervallo: con la paginazione per offset la
+    // pagina seguente salterebbe il primo ordine non ancora letto.
+    before: async (url) => {
+      if (moved || !url.searchParams.get("filter")?.startsWith("lastmodifieddate:")) return;
+      const read = await env.DB.prepare("SELECT 1 FROM orders WHERE ebay_order_id = ?")
+        .bind(orders[0]!.orderId)
+        .first();
+      if (!read) return;
       moved = true;
       orders[0] = { ...orders[0]!, lastModifiedDate: "2026-09-03T00:00:00.000Z" };
     },
   });
   expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
-  expect(pages(fetcher, "lastmodifieddate")).toEqual([0, 25, 0, 25, 50]);
+  expect(moved).toBe(true);
   expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(60);
   expect(await count("SELECT COUNT(*) AS total FROM order_source_refs")).toBe(60);
   expect(await syncState()).toMatchObject({
     cursor: "2026-09-02T01:00:00.000Z",
-    recent_next: null,
+    recent_end: null,
     last_success_at: "2026-09-02T01:00:00.000Z",
   });
 
@@ -451,16 +619,46 @@ it("ricomincia la passata se l'elenco cambia sotto la paginazione, senza saltare
   ).toEqual({ last_modified_time: "2026-09-03T00:00:00.000Z" });
 });
 
+it("conclude i recenti con oltre 75 ordini modificati anche se eBay li cambia durante la lettura", async () => {
+  await acquire(ebay({ orders: [] }));
+  const orders = series("12-attivo", 80, "2026-09-01T00:00:00.000Z").map((item, index) => ({
+    ...item,
+    lastModifiedDate: new Date(Date.parse("2026-09-02T00:30:00.000Z") + index).toISOString(),
+  }));
+  const fetcher = ebay({
+    orders,
+    // Ogni lettura dell'elenco trova un ordine in più, indicizzato da eBay in ritardo.
+    before: (url) => {
+      if (!url.searchParams.get("filter")?.startsWith("lastmodifieddate:")) return;
+      orders.push(
+        order({
+          orderId: `12-ritardo-${orders.length}`,
+          creationDate: "2026-09-01T12:00:00.000Z",
+          lastModifiedDate: "2026-09-02T00:40:00.000Z",
+          lineItems: [],
+        }),
+      );
+    },
+  });
+  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBeGreaterThan(80);
+  expect(await syncState()).toMatchObject({
+    cursor: "2026-09-02T01:00:00.000Z",
+    last_success_at: "2026-09-02T01:00:00.000Z",
+  });
+});
+
 it("acquisisce i nuovi ordini prima di completare lo storico e ne mostra l'avanzamento", async () => {
   // Le letture riuscite non scrivono log: restano soltanto gli aggregati e l'ultimo stato.
   const log = vi.spyOn(console, "log");
   const info = vi.spyOn(console, "info");
   const orders = series("12-storico", 60, "2026-09-02T00:00:00.000Z");
-  const small = { calls: 3, pages: 3 };
+  const small = { calls: 4, pages: 4 };
   // Prima del primo avvio lo storico non ha ancora una finestra.
   expect((await listStores(env.DB, "u-a"))[0]).toMatchObject({ history: null, syncing: false });
-  await acquire(ebay({ orders }), "2026-09-02T00:00:00.000Z", { ...small });
-  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(25);
+  await acquire(ebay({ orders, pageLimit: 25 }), "2026-09-02T00:00:00.000Z", { ...small });
+  // Un tratto troppo denso e poi le ultime nove ore, un ordine all'ora.
+  expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(9);
   expect((await listStores(env.DB, "u-a", new Date("2026-09-02T00:10:00.000Z")))[0]).toMatchObject({
     id: "s-a",
     history: { days: 30, done: false },
@@ -475,20 +673,20 @@ it("acquisisce i nuovi ordini prima di completare lo storico e ne mostra l'avanz
       lineItems: [],
     }),
   );
-  const fetcher = ebay({ orders });
-  expect(await acquire(fetcher, "2026-09-02T00:30:00.000Z", { calls: 2, pages: 2 })).toBe("budget");
-  // Prima i recenti, poi una sola pagina dello storico: il nuovo ordine non attende lo
-  // storico. Trading, letto da meno di due ore, non usa il budget.
+  const fetcher = ebay({ orders, pageLimit: 25 });
+  expect(await acquire(fetcher, "2026-09-02T00:30:00.000Z", { calls: 3, pages: 3 })).toBe("budget");
+  // Prima i recenti, poi un tratto troppo denso e uno applicato dello storico: il nuovo ordine
+  // non attende lo storico. Trading, letto da meno di due ore, non usa il budget.
   expect(
     fetcher.mock.calls.map(
       ([input]) => new URL(String(input)).searchParams.get("filter")?.split(":")[0],
     ),
-  ).toEqual(["lastmodifieddate", "creationdate"]);
+  ).toEqual(["lastmodifieddate", "creationdate", "creationdate"]);
   expect(
     await env.DB.prepare("SELECT 1 AS found FROM orders WHERE ebay_order_id = '12-nuovo'").first(),
   ).toEqual({ found: 1 });
   expect(await syncState()).toMatchObject({
-    history_next: expect.stringContaining("offset=50"),
+    history_through: "2026-09-01T06:00:00.000Z",
     history_done_at: null,
   });
 
@@ -639,5 +837,201 @@ it("classifica gli ordini non pagati senza rappresentarli come incassati", async
     orderPaymentStatus: "PENDING",
     payment: "unpaid",
     shipping: null,
+  });
+});
+
+it("rilegge i dati fiscali Trading finché l'ordine non è pagato e non dopo una lettura più recente", async () => {
+  const pending = ebay({ orders: [order({ orderPaymentStatus: "PENDING" })] });
+  const version = async (modified: string, at: string, paid = false) => {
+    pending.orders[0] = {
+      ...pending.orders[0]!,
+      lastModifiedDate: modified,
+      orderPaymentStatus: paid ? "PAID" : "PENDING",
+    };
+    const fetcher = ebay({ orders: pending.orders });
+    await acquire(fetcher, at);
+    return calls(fetcher, "GetOrders");
+  };
+  await acquire(pending);
+  expect(calls(pending, "GetOrders")).toBe(1);
+  // Ordine non ancora pagato: ogni nuova versione chiede di nuovo il dato fiscale.
+  expect(await version("2026-09-02T01:30:00.000Z", "2026-09-02T02:00:00.000Z")).toBe(1);
+  // Una lettura Trading successiva alla versione, come quella della passata periodica, la copre.
+  await env.DB.prepare(
+    "UPDATE order_tax_checks SET observed_at = '2026-09-02T02:45:00.000Z'",
+  ).run();
+  expect(await version("2026-09-02T02:30:00.000Z", "2026-09-02T03:00:00.000Z")).toBe(0);
+  // Al pagamento si rilegge una volta, poi le versioni successive non lo chiedono più.
+  expect(await version("2026-09-02T03:30:00.000Z", "2026-09-02T04:00:00.000Z", true)).toBe(1);
+  expect(
+    await env.DB.prepare(
+      "SELECT paid FROM order_tax_checks WHERE source = 'ebay_trading_get_orders'",
+    ).first(),
+  ).toEqual({ paid: 1 });
+  expect(await version("2026-09-02T04:30:00.000Z", "2026-09-02T05:00:00.000Z", true)).toBe(0);
+  // Una lettura Trading non riuscita non copre le versioni successive.
+  await env.DB.prepare("UPDATE order_tax_checks SET verification = 'error'").run();
+  expect(await version("2026-09-02T05:30:00.000Z", "2026-09-02T06:00:00.000Z", true)).toBe(1);
+});
+
+describe("username degli acquirenti senza token eIAS", () => {
+  const after = (days: number) =>
+    new Date(Date.parse("2026-09-02T00:00:00.000Z") + days * 86_400_000).toISOString();
+  /** Ordini richiesti per ID, una voce per chiamata. */
+  const byIds = (fetcher: ReturnType<typeof ebay>) =>
+    fetcher.mock.calls
+      .map(([input]) => new URL(String(input)).searchParams.get("orderIds"))
+      .filter((ids) => ids !== null)
+      .map((ids) => ids.split(","));
+  const checkedAt = (orderId = "12-34567-89012") =>
+    env.DB.prepare("SELECT buyer_checked_at AS at FROM orders WHERE ebay_order_id = ?")
+      .bind(orderId)
+      .first<{ at: string | null }>()
+      .then((row) => row!.at);
+  const context = (fetcher: typeof fetch, at: string, budget = { calls: 10, pages: 10 }) => ({
+    db: env.DB,
+    storeId: "s-a",
+    grantedAt,
+    access: access(fetcher),
+    at,
+    budget,
+    created: 0,
+    quota: openBudget,
+  });
+
+  it("registra la lettura all'import e rilegge lo username dopo una settimana", async () => {
+    const fetcher = ebay();
+    await acquire(fetcher);
+    expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
+    expect(byIds(fetcher)).toEqual([]);
+    const renamed = ebay({
+      orders: [
+        order({
+          buyer: { ...order().buyer, username: "acquirente-rinominato" },
+        }),
+      ],
+    });
+    await acquire(renamed, after(6));
+    expect(byIds(renamed)).toEqual([]);
+    await acquire(renamed, after(8));
+    expect(byIds(renamed)).toEqual([["12-34567-89012"]]);
+    expect(
+      await env.DB.prepare(
+        "SELECT json_extract(buyer_json, '$.username') AS username FROM orders",
+      ).first(),
+    ).toEqual({ username: "acquirente-rinominato" });
+    expect(await checkedAt()).toBe(after(8));
+    // Una variazione dell'ordine importata è anch'essa una lettura dello username.
+    const paid = ebay({
+      orders: [
+        order({
+          ...renamed.orders[0],
+          lastModifiedDate: after(9),
+          orderPaymentStatus: "FULLY_REFUNDED",
+        }),
+      ],
+    });
+    await acquire(paid, after(9));
+    expect(await checkedAt()).toBe(after(9));
+  });
+
+  it("verifica soltanto ordini definitivi senza token, con marketplace ed entro due anni", async () => {
+    const orders = series("V", 6, "2026-09-01T23:00:00.000Z");
+    await acquire(ebay({ orders }));
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE orders SET buyer_checked_at = '2026-08-01T00:00:00.000Z', marketplace_id = 'EBAY_IT'",
+      ),
+      env.DB.prepare("UPDATE orders SET buyer_eias_token = 'eias' WHERE ebay_order_id = 'V-00000'"),
+      env.DB.prepare("UPDATE orders SET is_provisional = 1 WHERE ebay_order_id = 'V-00001'"),
+      env.DB.prepare("UPDATE orders SET marketplace_id = NULL WHERE ebay_order_id = 'V-00002'"),
+      env.DB.prepare(
+        "UPDATE orders SET creation_time = '2024-09-04T00:00:00.000Z' WHERE ebay_order_id = 'V-00003'",
+      ),
+      env.DB.prepare(
+        "UPDATE orders SET creation_time = '2024-09-04T00:00:01.000Z' WHERE ebay_order_id = 'V-00004'",
+      ),
+      env.DB.prepare(
+        "UPDATE orders SET buyer_checked_at = '2026-08-27T00:00:01.000Z' WHERE ebay_order_id = 'V-00005'",
+      ),
+    ]);
+    const fetcher = ebay({ orders });
+    await checkBuyerNames(context(fetcher, "2026-09-03T00:00:00.000Z"));
+    // Due anni meno un giorno: l'ordine creato al limite esatto resta fuori, uno un secondo dopo entra.
+    expect(byIds(fetcher)).toEqual([["V-00004"]]);
+  });
+
+  it("legge al massimo 50 ordini per chiamata, dalla verifica più vecchia", async () => {
+    const orders = series("M", 52, "2026-09-01T23:00:00.000Z");
+    await acquire(ebay({ orders }));
+    await env.DB.prepare(
+      "UPDATE orders SET buyer_checked_at = NULL, marketplace_id = 'EBAY_IT'",
+    ).run();
+    await env.DB.prepare(
+      "UPDATE orders SET buyer_checked_at = '2026-08-01T00:00:00.000Z' WHERE ebay_order_id = 'M-00000'",
+    ).run();
+    const fetcher = ebay({ orders });
+    const at = "2026-09-03T00:00:00.000Z";
+    const ctx = context(fetcher, at);
+    await checkBuyerNames(ctx);
+    expect(ctx.budget).toEqual({ calls: 9, pages: 9 });
+    const [first] = byIds(fetcher);
+    // Prima le mai verificate, dalla più vecchia; quella già verificata resta per ultima.
+    expect(first).toHaveLength(50);
+    expect(first![0]).toBe("M-00051");
+    expect(first).not.toContain("M-00000");
+    await checkBuyerNames(context(fetcher, at));
+    expect(byIds(fetcher)[1]).toEqual(["M-00001", "M-00000"]);
+    expect(
+      await count("SELECT COUNT(*) AS total FROM orders WHERE buyer_checked_at = '" + at + "'"),
+    ).toBe(52);
+    await checkBuyerNames(context(fetcher, at));
+    expect(byIds(fetcher)).toHaveLength(2);
+  });
+
+  it("con le chiamate eBay spente dalla console non verifica gli username", async () => {
+    await acquire(ebay());
+    await env.DB.prepare("UPDATE orders SET buyer_checked_at = '2026-08-01T00:00:00.000Z'").run();
+    await setSwitch(env.DB, "ebay_calls", false, new Date(after(8)));
+    const off = ebay();
+    await acquire(off, after(8));
+    expect(byIds(off)).toEqual([]);
+    expect(await checkedAt()).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("senza budget non chiama eBay", async () => {
+    await acquire(ebay());
+    const fetcher = ebay();
+    await checkBuyerNames(context(fetcher, after(8), { calls: 0, pages: 1 }));
+    await checkBuyerNames(context(fetcher, after(8), { calls: 1, pages: 0 }));
+    expect(byIds(fetcher)).toEqual([]);
+    expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
+  });
+
+  it("su errore conserva la lettura del negozio e riprova soltanto i casi passeggeri", async () => {
+    await acquire(ebay());
+    const failing = (status: number, headers: Record<string, string> = {}) =>
+      ebay({
+        fail: (url) =>
+          url.searchParams.has("orderIds") ? new Response(null, { status, headers }) : undefined,
+      });
+    await checkBuyerNames(context(failing(503), after(8)));
+    expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
+    await checkBuyerNames(context(failing(429, { "retry-after": "60" }), after(8)));
+    expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
+    expect(
+      await env.DB.prepare(
+        "SELECT until FROM ebay_rate_limits WHERE api_origin = 'https://api.ebay.com'",
+      ).first(),
+    ).toEqual({ until: new Date(Date.parse(after(8)) + 60_000).toISOString() });
+    await checkBuyerNames(context(failing(400), after(8)));
+    expect(await checkedAt()).toBe(after(8));
+    await expect(checkBuyerNames(context(failing(401), after(16)))).rejects.toMatchObject({
+      failure: "credentials",
+    });
+    expect(await checkedAt()).toBe(after(8));
+    // Nell'esecuzione periodica l'errore passeggero non rende la lettura non riuscita.
+    expect(await acquire(failing(503), after(16))).toBe("complete");
+    expect(await checkedAt()).toBe(after(8));
   });
 });

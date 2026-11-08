@@ -2,6 +2,7 @@
 APP_ORIGIN=http://localhost:5173
 REGISTRATION_ALLOWED_EMAILS=[]
 BETTER_AUTH_SECRET=replace-with-at-least-32-random-bytes
+EBAY_TOKEN_SECRET=replace-with-other-32-random-bytes
 GOOGLE_CLIENT_ID=replace-with-test-client-id
 GOOGLE_CLIENT_SECRET=replace-with-test-client-secret
 EBAY_CLIENT_ID=replace-with-test-client-id
@@ -16,6 +17,7 @@ STRIPE_SECRET_KEY=replace-with-restricted-test-key
 STRIPE_WEBHOOK_SECRET=replace-with-test-webhook-secret
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_WEBHOOK_SECRET=
+TELEGRAM_OWNER_ID=
 ANALYTICS_READ_TOKEN=
 WEB_ANALYTICS_TOKEN=
 BETTER_AUTH_API_KEY=

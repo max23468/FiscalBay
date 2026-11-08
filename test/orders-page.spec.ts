@@ -8,11 +8,15 @@ import { action as unlockAction, loader as loadHome } from "../app/routes/orders
 import { action as storesAction, loader as loadStores } from "../app/routes/stores";
 import { action as startStoreLink } from "../app/routes/store-link";
 import { listNotifications } from "../app/domain/notifications.server";
-import { markNotificationsRead } from "../app/domain/notification-reads.server";
+import {
+  dismissNotifications,
+  markNotificationsRead,
+  restoreNotifications,
+} from "../app/domain/notification-reads.server";
 import { completeRegistration, marketingTextVersions } from "../app/domain/registration.server";
 import { loader as loadWhatsNew } from "../app/routes/whats-new";
 import versionedChangelog from "../CHANGELOG.md?raw";
-import { parseChangelog, releaseChangelog } from "../app/changelog";
+import { parseChangelog, releaseChangelog, withChanges } from "../app/changelog";
 import {
   hasWhatsNew,
   whatsNew,
@@ -113,6 +117,81 @@ describe("pagina Ordini reale", () => {
     // Una versione più in basso senza giorno è un errore del changelog: la build non lo copre.
     const second = "## [2.0.3] - 2026-11-04\n\n## [2.0.2]\n";
     expect(releaseChangelog(second, "2026-11-05")).toBe(second);
+  });
+
+  it("i frammenti delle PR entrano nella versione in cima, nei loro gruppi e in entrambe le lingue", () => {
+    const top = [
+      "# Changelog",
+      "",
+      "## [2.0.3]",
+      "",
+      "### Novità",
+      "",
+      "#### Correzioni",
+      "",
+      "- **Uno.** Primo.",
+      "",
+      "### What's new",
+      "",
+      "#### Fixes",
+      "",
+      "- **One.** First.",
+      "",
+      "## [2.0.2] - 2026-11-03",
+      "",
+      "### Altre modifiche",
+      "",
+      "- Vecchia.",
+      "",
+    ].join("\n");
+    const fragment = (it: string, en: string, group: [string, string]) =>
+      [
+        "# Frammento",
+        "",
+        "## Changelog",
+        "",
+        "### Novità",
+        "",
+        `#### ${group[0]}`,
+        "",
+        `- **${it}.** Testo.`,
+        "",
+        "### What's new",
+        "",
+        `#### ${group[1]}`,
+        "",
+        `- **${en}.** Text.`,
+        "",
+        "### Altre modifiche",
+        "",
+        `- Interna ${it}.`,
+        "",
+        "## Decisioni",
+        "",
+        "| D999 | Ambito | Sintesi | Provenienza | Stato |",
+      ].join("\n");
+    const merged = withChanges(top, [
+      fragment("Due", "Two", ["Correzioni", "Fixes"]),
+      fragment("Tre", "Three", ["Funzionalità", "Features"]),
+    ]);
+    const { releases, problems } = parseChangelog(merged);
+    expect(problems).toEqual([]);
+    expect(releases[0].items.map(({ kind, it, en }) => [kind, it.title, en.title])).toEqual([
+      ["features", "Tre", "Three"],
+      ["fixes", "Uno", "One"],
+      ["fixes", "Due", "Two"],
+    ]);
+    // Le altre modifiche restano nella versione in cima, le decisioni fuori dal changelog.
+    const section = merged.slice(0, merged.indexOf("## [2.0.2]"));
+    expect(section).toContain("### Altre modifiche\n\n- Interna Due.\n- Interna Tre.");
+    expect(merged).not.toContain("D999");
+    expect(merged.slice(merged.indexOf("## [2.0.2]"))).toBe(
+      "## [2.0.2] - 2026-11-03\n\n### Altre modifiche\n\n- Vecchia.\n",
+    );
+    expect(withChanges(top, [])).toBe(top);
+    expect(
+      withChanges(top, ["# Solo decisioni\n\n## Decisioni\n\n| D999 | a | b | c | d |\n"]),
+    ).toBe(top);
   });
 
   it("ricava le Novità dal changelog e le annuncia nella campanella e nel menu, solo se ci sono", async () => {
@@ -273,8 +352,9 @@ describe("pagina Ordini reale", () => {
     expect(whatsNewNotifications("it", at, test, releases)).toEqual([
       {
         id: "whats-new:2.0.3",
+        kind: "whats-new",
         tone: "info",
-        title: "Novità di FiscalBay",
+        title: "Novità di FiscalBay 2.0.3",
         body: "Filtro per negozio",
         at: "2026-11-19T15:00:00.000Z",
         read: false,
@@ -282,8 +362,9 @@ describe("pagina Ordini reale", () => {
       },
       {
         id: "whats-new:2.0.1",
+        kind: "whats-new",
         tone: "info",
-        title: "Novità di FiscalBay",
+        title: "Novità di FiscalBay 2.0.1",
         body: "Esportazione · Telegram",
         at: "2026-11-10T00:00:00.000Z",
         read: false,
@@ -309,7 +390,7 @@ describe("pagina Ordini reale", () => {
       whatsNew.push(...releases);
       expect((await areaShell(cookie)).whatsNew).toBe(true);
       expect(
-        (await routeData(loadWhatsNew, "/en/app/novita", { cookie })).releases.map(
+        (await routeData(loadWhatsNew, "/en/app/whats-new", { cookie })).releases.map(
           (release: { version: string; date: string | null }) => [release.version, release.date],
         ),
       ).toEqual([
@@ -317,9 +398,19 @@ describe("pagina Ordini reale", () => {
         ["2.0.1", "2026-11-10"],
       ]);
       const news = (await bell("en")).find(({ id }) => id === "whats-new:2.0.1");
-      expect(news).toMatchObject({ title: "What’s new in FiscalBay", body: "Export · Telegram" });
+      expect(news).toMatchObject({
+        title: "What’s new in FiscalBay 2.0.1",
+        body: "Export · Telegram",
+      });
       await markNotificationsRead(env.DB, userId, ["whats-new:2.0.1"], at);
       expect((await bell("it")).find(({ id }) => id === "whats-new:2.0.1")).toMatchObject({
+        read: true,
+      });
+      // Eliminata esce dalla campanella e l'annullamento la riporta, già letta.
+      await dismissNotifications(env.DB, userId, ["whats-new:2.0.3"], at);
+      expect((await bell("it")).map(({ id }) => id)).toEqual(["whats-new:2.0.1"]);
+      await restoreNotifications(env.DB, userId, ["whats-new:2.0.3"]);
+      expect((await bell("it")).find(({ id }) => id === "whats-new:2.0.3")).toMatchObject({
         read: true,
       });
     } finally {
@@ -903,7 +994,7 @@ describe("pagina Ordini reale", () => {
     expect(await stores()).toMatchObject({ ebayDown: [], ebayMaintenance: false });
   });
 
-  it("con eBay, Telegram e acquisti spenti e i provider irraggiungibili il Premium resta e sblocca", async () => {
+  it("con eBay, Telegram e acquisti spenti e i provider irraggiungibili il Pro resta e sblocca", async () => {
     const { cookie } = await owner();
     await premiumCoverage();
     for (const name of ["ebay_calls", "telegram_sends", "purchases_open"] as const)
@@ -985,8 +1076,8 @@ describe("pagina Ordini reale", () => {
     await env.DB.prepare("DELETE FROM marketing_consents WHERE user_id = ? AND text_version = ?")
       .bind(userId, marketingTextVersions.proposal)
       .run();
-    expect(await proposal("/en/app/ordini")).toBe(true);
-    expect(await answer("/en/app/ordini", "true")).toEqual({
+    expect(await proposal("/en/app/orders")).toBe(true);
+    expect(await answer("/en/app/orders", "true")).toEqual({
       ok: true,
       notice: appCopy.en.orders.marketingProposal.accepted,
     });
@@ -994,7 +1085,7 @@ describe("pagina Ordini reale", () => {
       registration,
       { granted: 1, text_version: marketingTextVersions.proposal, language: "en" },
     ]);
-    expect(await proposal("/en/app/ordini")).toBe(false);
+    expect(await proposal("/en/app/orders")).toBe(false);
     // Chi aderisce in registrazione non riceve la proposta; la revoca resta nelle Impostazioni.
     await register(true);
     expect(await proposal()).toBe(false);

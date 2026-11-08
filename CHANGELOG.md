@@ -2,6 +2,173 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
+## [2.0.7] - 2026-11-07
+
+### Novità
+
+#### Miglioramenti
+
+- **Sincronizzazione dei negozi.** Dopo «Sincronizza ordini recenti» la pagina Negozi eBay mostra la lettura in corso e si aggiorna da sola con l'esito.
+- **Ricerca con i filtri.** Dalla pagina Ordini la ricerca in alto tiene i filtri attivi, anche nei suggerimenti e nel numero dei risultati.
+- **Esportazione più chiara.** Quando esporti dagli Ordini vedi quali filtri e quale ricerca compongono il file.
+
+#### Correzioni
+
+- **Suggerimenti dagli ordini precedenti.** Quando FiscalBay non può proporre un Codice Fiscale da un ordine precedente, il dettaglio dell'ordine spiega il motivo in parole semplici.
+- **Numeri più leggibili.** Il numero degli ordini usa il separatore delle migliaia, per esempio 1.094.
+- **Pagina Novità su Safari.** Le voci di una versione con un solo gruppo stanno una accanto all'altra, senza uno spazio vuoto in mezzo.
+- **«Elimina tutte» sempre disponibile.** Dopo aver eliminato una notifica, «Elimina tutte» resta nel menu accanto ad «Annulla».
+- **Partita IVA con il suo nome.** Quando l'acquirente scrive la Partita IVA nel campo del Codice Fiscale, FiscalBay la chiama Partita IVA negli ordini, nell'export e su Telegram, dove si copia con un tocco e dà il titolo alla notifica.
+- **Nomi più chiari.** Filtri, export, prova e bot nominano Codice Fiscale e Partita IVA quando valgono per entrambi, e le etichette di controllo dicono se riguardano il CF o la P. IVA.
+
+### What's new
+
+#### Improvements
+
+- **Store sync.** After “Sync recent orders” the eBay stores page shows the read in progress and updates by itself with the result.
+- **Search with filters.** From the Orders page the search at the top keeps the active filters, in suggestions and in the result count too.
+- **Clearer export.** When you export from Orders you see which filters and search make up the file.
+
+#### Fixes
+
+- **Suggestions from previous orders.** When FiscalBay cannot suggest a tax code from a previous order, the order details explain why in plain words.
+- **Easier-to-read numbers.** Order counts use a thousands separator, for example 1,094.
+- **What's new page in Safari.** The entries of a version with a single group sit next to each other, without an empty gap between them.
+- **“Delete all” always available.** After you delete a notification, “Delete all” stays in the menu next to “Undo”.
+- **VAT numbers named correctly.** When the buyer enters a VAT number (Partita IVA) in the tax code (Codice Fiscale) field, FiscalBay calls it a VAT number in orders, exports and Telegram, where you can copy it with one tap and it titles the notification.
+- **Clearer names.** Filters, exports, the trial and the bot mention both the tax code and the VAT number when they apply to both, and check labels say which one they refer to. In English, app, site and guides use “tax code” and “VAT number”.
+
+### Altre modifiche
+
+- **Prezzi.** Chi ha già Premium a vita vede il piano attivo al posto delle offerte, e i pulsanti dei tre piani stanno alla stessa altezza.
+- **Il piano a pagamento si chiama Pro.** App, sito, guide, email, Telegram, console e prodotto Stripe usano il nome Pro al posto di Premium; Termini e Privacy passano alla versione del 6 novembre 2026 con il solo cambio del nome. La pagina Novità non lo annuncia, per scelta dell'owner.
+- **Controllo di sicurezza settimanale.** Un workflow pianificato ricontrolla ogni settimana avvisi delle dipendenze distribuite, firme dei pacchetti, protezione di `develop` e `main` e alert aperti del repository, anche senza nuove PR.
+- **Pubblicazione meno in coda.** I coordinatori di `Pubblica` e `Promuovi` girano sul Mac dell'owner quando è acceso, una qualifica automatica superata lascia il posto a quella della testa più recente, i job paralleli di PR e qualifiche hanno un tetto e `Promuovi` su un commit certificato non attende altri controlli.
+- **Cancellazioni eBay degli acquirenti più affidabili.** Gli ordini che eBay non collega a un identificativo stabile dell'acquirente rileggono ogni settimana il suo nome utente, così una richiesta di cancellazione trova anche gli ordini più vecchi. Il dossier sulle lacune delle API eBay raccoglie le richieste da inviare a eBay.
+- **Motivi di uscita.** La disdetta dal portale Stripe e la cancellazione dell'account raccolgono un motivo da un elenco chiuso e un commento, entrambi facoltativi; avvisi Telegram, pagina Commerciale della console e comando `/uscite` li mostrano. Privacy IT/EN `2026-11-07`.
+- **Meno chiamate a eBay.** I negozi senza fatture combinate dal venditore rileggono Trading ogni sei ore anziché ogni due, i dati fiscali Trading si chiedono a gruppi e non si ripetono per un ordine già pagato, e i negozi di uno spazio che nessuno segue si leggono ogni due ore. Gli ordini nuovi continuano ad arrivare subito con l'avviso di eBay.
+
+## [2.0.6] - 2026-11-06
+
+### Novità
+
+#### Miglioramenti
+
+- **Notifiche da eliminare.** Nella campanella puoi eliminare una notifica o tutte insieme, con «Annulla» per qualche secondo. Una notifica eliminata non torna; se lo stesso problema si ripresenta più avanti, arriva una notifica nuova.
+- **Campanella più leggibile.** Ogni tipo di notifica ha la sua icona, la campanella mostra quante sono da leggere, e titolo e azioni restano in vista mentre l'elenco scorre. La notifica delle Novità indica la versione.
+
+### What's new
+
+#### Improvements
+
+- **Notifications you can delete.** In the bell you can delete one notification or all of them, with “Undo” for a few seconds. A deleted notification does not come back; if the same problem happens again later, you get a new notification.
+- **A clearer bell.** Each kind of notification has its own icon, the bell shows how many are unread, and the title and actions stay in view while the list scrolls. The What's new notification shows the version.
+
+## [2.0.5] - 2026-11-05
+
+### Novità
+
+#### Miglioramenti
+
+- **Offerta scelta in evidenza.** Se scegli un'offerta Pro prima di registrarti, la pagina Piano te la mostra in evidenza.
+- **Indirizzi in inglese.** In inglese anche le pagine dell'app hanno indirizzi in inglese; i vecchi indirizzi portano a quelli nuovi.
+
+#### Correzioni
+
+- **Negozi su schermi stretti.** L'ultima sincronizzazione di un negozio va a capo invece di uscire dalla pagina.
+
+### What's new
+
+#### Improvements
+
+- **Chosen offer highlighted.** If you choose a Pro offer before signing up, the Plan page highlights it.
+- **English addresses.** In English, app pages have English addresses too; old addresses lead to the new ones.
+
+#### Fixes
+
+- **Stores on narrow screens.** A store's last sync wraps instead of running off the page.
+
+### Altre modifiche
+
+- Sito pubblico: Guide per i venditori eBay, «Inizia gratis» nella barra accanto ad «Accedi», un pulsante per ogni offerta Premium e domande sui pagamenti in Prezzi, «Vai al contenuto principale» e listino di riserva per Home e Prezzi durante un disservizio.
+- La barra del sito porta le pagine nella seconda riga fino a 1024 px e mostra «Accedi» da 440 px, così «Inizia gratis» non esce dallo schermo a nessuna larghezza.
+- Le prove delle pagine misurano lo scorrimento orizzontale a ogni bordo dei breakpoint, da 320 a 1280 px, già nelle PR: prima le larghezze fra 390 e 1280 px si provavano soltanto nella qualifica del candidato.
+- Home e Prezzi arrivano da una copia di un minuto nella cache di Cloudflare a chi non ha cookie, con il listino di riserva senza database; i vecchi indirizzi inglesi rispondono 301, o 308 ai moduli.
+- Titoli con la parola chiave davanti, offerte e articoli nei dati strutturati, un'immagine social per pagina, `lastmod` nella sitemap, manifest con icone e colore del tema, immagine principale in AVIF a più larghezze e trenta giorni di cache per le immagini del sito; `security.txt` pubblicato.
+- Il testo inglese segue la regola del 27 settembre: «Codice Fiscale» in titoli ed etichette, «tax code» nelle frasi.
+- Un hook degli agenti ferma reset, stash, push forzati, Wrangler fuori dai casi ammessi, modifiche di migration applicate ed em dash; `verify:repo` controlla anche gli indirizzi degli account delle verifiche live e la scadenza di `security.txt`.
+- Le decisioni superate per intero passano in un archivio e le operazioni sono divise in runbook.
+- La mutation divide un modulo in parti di al più 150 mutanti anche quando i tagli fra le funzioni le sbilanciano: una parte troppo grande superava il limite di 60 minuti del job.
+- Console su smartphone: email, identificativi ed etichette di stato vanno a capo nelle schede invece di uscire, e i campi data delle promozioni non allargano più il pannello. Le prove delle pagine misurano i bordi dei breakpoint con i pannelli richiudibili aperti.
+- Sito pubblico: Guide riscritte, con un riquadro su come FiscalBay risolve il problema, la schermata della funzione e il menu di tutte le guide; titoli brevi per i risultati di ricerca e dati strutturati del percorso. Le Guide passano dal footer alla barra.
+- La barra del sito mostra «Accedi» a ogni larghezza: sotto i 1024 px la lingua mostra soltanto il codice dell'altra e sotto i 360 px passa nel footer.
+- Le Novità dell'app contengono soltanto i cambi dell'area dell'app: le voci sul sito pubblico passano nelle altre modifiche.
+- Sotto i 640 px le pagine della seconda riga della barra del sito si distribuiscono con spazi uguali, anche ai lati, invece di restare raccolte a sinistra.
+- Una versione nuova nasce soltanto da Novità per gli utenti dell'app: i cambi del sito pubblico, della console o interni vanno in Production con la versione già pubblicata, senza tag né release. La 2.0.6, pubblicata senza Novità, è ritirata: le sue voci passano nella 2.0.5, release e tag `v2.0.6` sono eliminati e la prossima versione con Novità sarà la 2.0.6. La 2.0.7, aperta per la sola barra del sito, è richiusa.
+- Un cambio del changelog o dei frammenti distribuisce soltanto se cambia ciò che la pagina Novità mostra: le altre modifiche restano documentazione, senza deploy test né qualifica, e la loro PR si unisce in pochi minuti.
+- Alla creazione dell'account si salvano la categoria del canale da cui si è arrivati sul sito e la prima pagina vista, senza cookie né dati salvati nel browser; la console ne mostra gli aggregati e l'esportazione dei dati dell'account li include.
+- Funzionalità, Prezzi, Sicurezza e Domande frequenti tornano ad avere il solo nome della pagina come titolo; il titolo della scheda di queste pagine, di Supporto e delle Guide mette il nome della pagina e poi «Codice Fiscale degli ordini eBay».
+
+## [2.0.4] - 2026-11-05
+
+### Novità
+
+#### Miglioramenti
+
+- **Ultimo metodo di accesso.** La pagina di accesso segna Google, eBay o la passkey quando li hai usati per l'ultimo accesso da questo browser.
+- **Password violate rifiutate sempre.** Una nuova password che compare in violazioni di dati note viene rifiutata anche quando il controllo nel browser non può partire.
+- **Accesso più protetto.** Dopo alcuni tentativi non riusciti, l'accesso con password chiede una breve verifica di sicurezza.
+
+### What's new
+
+#### Improvements
+
+- **Last sign-in method.** The sign-in page marks Google, eBay or your passkey when you used it for your last sign-in on this browser.
+- **Breached passwords always refused.** A new password that appears in known data breaches is refused even when the check in your browser cannot run.
+- **Better protected sign-in.** After a few failed attempts, signing in with a password asks for a short security check.
+
+### Altre modifiche
+
+- La preparazione dell'accesso con passkey ha il limite per IP e la pulizia delle tabelle di Auth usa indici sulla scadenza.
+- La regola di zona contro le raffiche copre anche le pagine di accesso e assistenza.
+- Il token tecnico della console scade dopo 90 giorni e dieci token rifiutati dallo stesso IP bloccano i tentativi per 15 minuti.
+- I token dei negozi eBay si cifrano con un segreto proprio, separato da quello di Auth; quelli cifrati con la chiave precedente si ricifrano al rinnovo.
+- Stripe usa una versione dell'API fissata, un timeout di 8 secondi nelle richieste dell'utente e chiavi di idempotenza su sessioni di pagamento e coupon.
+
+## [2.0.3] - 2026-11-04
+
+### Novità
+
+#### Miglioramenti
+
+- **Storico dopo il passaggio a Pro.** Gli ordini eliminati alla scadenza della finestra Free tornano quando attivi Pro e l'importazione arriva al loro periodo.
+- **Indirizzo nell'export.** Se eBay non fornisce l'indirizzo di fatturazione, il file riporta quello di spedizione.
+
+#### Correzioni
+
+- **Lettura degli ordini.** La lettura si conclude anche quando molti ordini cambiano mentre FiscalBay li legge, e dopo una pausa recupera tutti gli ordini modificati nel frattempo.
+- **Negozio da ricollegare.** Se eBay rifiuta più volte le credenziali, la pagina Negozi chiede di ricollegare il negozio.
+
+### What's new
+
+#### Improvements
+
+- **History after upgrading to Pro.** Orders deleted when the Free window ended come back when you activate Pro and the import reaches their period.
+- **Address in the export.** If eBay does not provide the billing address, the file shows the shipping address.
+
+#### Fixes
+
+- **Order reading.** Reading completes even when many orders change while FiscalBay reads them, and after a pause it recovers every order modified in the meantime.
+- **Store to reconnect.** If eBay rejects the credentials several times, the Stores page asks you to reconnect the store.
+
+### Altre modifiche
+
+- Gli ordini si leggono per tratti di tempo da 200 ordini e Trading per finestre di trenta giorni concatenate; nessuna ricerca fiscale su Trading oltre i novanta giorni e l'immagine di un'inserzione si legge una volta.
+- La sottoscrizione agli ordini di eBay si ricontrolla ogni settimana; i webhook di eBay, Stripe e Telegram hanno una coda propria e un messaggio perso si riprende dopo due ore.
+- Le richieste HTTP non scrivono più nel registro delle attività; la CPU per invocazione è limitata a 30 secondi e l'ID Telegram dell'owner è un segreto.
+- Le chiamate alla Bot API passano da un Worker separato con il token del bot, e le tracce del Worker principale sono accese.
+- La pulizia degli ordini scaduti procede a blocchi e le chiavi anti-reimport si eliminano dopo due anni.
+
 ## [2.0.2] - 2026-11-03
 
 ### Novità
@@ -70,24 +237,24 @@ Prima versione di FiscalBay 2.0, applicazione web su Cloudflare che sostituisce 
 #### Funzionalità
 
 - **Nuova FiscalBay.** Un'app web in italiano e in inglese, da usare nel browser su computer e smartphone.
-- **Ordini e dati fiscali.** Gli ordini eBay arrivano con il codice fiscale o la partita IVA già controllati, con ricerca e filtri.
+- **Ordini con Codice Fiscale e Partita IVA.** Gli ordini eBay arrivano con il Codice Fiscale o la Partita IVA già controllati, con ricerca e filtri.
 - **Negozi eBay.** Colleghi uno o più negozi in sola lettura: FiscalBay legge gli ordini senza modificarli e mostra i nuovi appena arrivano.
-- **Messaggi all'acquirente.** Un messaggio già scritto, in italiano o in inglese, per chiedere il dato fiscale.
+- **Messaggi all'acquirente.** Un messaggio già scritto, in italiano o in inglese, per chiedere il Codice Fiscale.
 - **Esportazione.** Gli ordini si scaricano in CSV, Excel o ZIP.
 - **Telegram.** Il bot segnala i nuovi ordini e risponde ai comandi del tuo account.
-- **Accesso e piani.** Accedi con email, Google, passkey o eBay; i piani sono Free, prova gratuita e Premium.
+- **Accesso e piani.** Accedi con email, Google, passkey o eBay; i piani sono Free, prova gratuita e Pro.
 
 ### What's new
 
 #### Features
 
 - **New FiscalBay.** A web app in Italian and English, to use in the browser on computer and smartphone.
-- **Orders and tax data.** eBay orders arrive with tax code or VAT number already checked, with search and filters.
+- **Orders with tax code and VAT number.** eBay orders arrive with tax code (Codice Fiscale) or VAT number (Partita IVA) already checked, with search and filters.
 - **eBay stores.** Connect one or more stores read-only: FiscalBay reads orders without changing them and shows new ones as soon as they arrive.
-- **Buyer messages.** A ready-made message, in Italian or English, to ask for tax data.
+- **Buyer messages.** A ready-made message, in Italian or English, to ask for the tax code.
 - **Export.** Orders can be downloaded as CSV, Excel or ZIP.
 - **Telegram.** The bot announces new orders and answers the commands of your account.
-- **Sign-in and plans.** Sign in with email, Google, passkey or eBay; plans are Free, free trial and Premium.
+- **Sign-in and plans.** Sign in with email, Google, passkey or eBay; plans are Free, free trial and Pro.
 
 ### Contenuto
 

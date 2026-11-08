@@ -242,12 +242,12 @@ describe("stato sintetico dell'anteprima", () => {
       expect(trialDaysLeft("2026-09-28T12:59:59Z", previewNow)).toBe(0);
       expect(appCopy[language].orders.trialStatus(0)).toBe(
         language === "it"
-          ? "Prova Premium: meno di un giorno rimasto"
-          : "Premium trial: less than a day left",
+          ? "Prova Pro: meno di un giorno rimasto"
+          : "Pro trial: less than a day left",
       );
       // Durante la prova nessun ordine resta da sbloccare.
       expect(active.orders.some((order) => order.fiscal.state === "locked")).toBe(false);
-      expect(active.diagnostics.rights).toBe(language === "it" ? "Prova Premium" : "Premium trial");
+      expect(active.diagnostics.rights).toBe(language === "it" ? "Prova Pro" : "Pro trial");
       expect(ended.account).toMatchObject({ plan: "free", trialAvailable: false });
       expect(ended.account.trial).toBeUndefined();
       // Prima della prima lettura riuscita la prova non si offre.
@@ -305,9 +305,7 @@ describe("stato sintetico dell'anteprima", () => {
         plan: "premium",
         premium: { period: "monthly", renewsAt: null, endsAt: "2026-10-13T10:00:00Z" },
       });
-      expect(cancelled.diagnostics.rights).toBe(
-        language === "it" ? "Premium mensile" : "Premium, monthly",
-      );
+      expect(cancelled.diagnostics.rights).toBe(language === "it" ? "Pro mensile" : "Pro, monthly");
       // Rimborsati: il periodo con il rinnovo che riporta Premium, il lifetime senza offerta.
       expect(loadScenario("pagamento-rimborsato", language, new Set()).account).toMatchObject({
         plan: "free",
@@ -343,8 +341,8 @@ describe("stato sintetico dell'anteprima", () => {
       );
       const t = appCopy[language];
       for (const text of [t.settings.support.faqItems[1]!.a, t.orders.quotaBody("date")]) {
-        expect(text).toContain("Codice Fiscale");
-        expect(text).toContain("Partita IVA");
+        expect(text).toMatch(language === "it" ? /Codice Fiscale/u : /tax code/iu);
+        expect(text).toMatch(language === "it" ? /Partita IVA/u : /VAT number/u);
       }
       expect(t.legal.version("2026-10-29")).toBe(
         language === "it" ? "Versione del 29 ottobre 2026" : "Version of 29 October 2026",
@@ -453,9 +451,9 @@ describe("ricerca dell'anteprima", () => {
     // Un valore da sbloccare non trova l'ordine; uno disponibile sì, anche normalizzato.
     expect(((await (await search("BNCLCU75C12F205G")).json()) as SearchResults).total).toBe(0);
     const english = (await (
-      await search("rossi", true, "/en/anteprima/ricerca")
+      await search("rossi", true, "/en/preview/search")
     ).json()) as SearchResults;
-    expect(english.href).toMatch(/^\/en\/anteprima\/ordini\?ricerca=/u);
+    expect(english.href).toMatch(/^\/en\/preview\/orders\?ricerca=/u);
     const submitted = await search("rossi", false);
     expect(submitted.status).toBe(303);
     const listed = await routeData(previewOrders, submitted.headers.get("location")!);
@@ -848,9 +846,9 @@ describe("stati dell'area reale nell'anteprima", () => {
     ).toBe("/anteprima/ordini");
     expect(
       await redirected(
-        await routeResponse(previewSettings, "/en/anteprima/impostazioni/piano", { cookie }),
+        await routeResponse(previewSettings, "/en/preview/settings/plan", { cookie }),
       ),
-    ).toBe("/en/anteprima/ordini");
+    ).toBe("/en/preview/orders");
     // Il nuovo invio del link resta simulato.
     expect(
       await routeData(previewOrdersAction, "/anteprima/ordini", {
@@ -890,4 +888,19 @@ describe("stati dell'area reale nell'anteprima", () => {
       loading: true,
     });
   });
+});
+
+it("cambia lingua dell'anteprima conservando pagina e filtri", async () => {
+  const change = (returnTo: string, language: string) =>
+    callRoute(previewRootAction, "/en/preview", { fields: { language, returnTo } }).catch(
+      (thrown: Response) => thrown,
+    ) as Promise<Response>;
+  expect((await change("/en/preview/orders?negozio=x", "it")).headers.get("location")).toBe(
+    "/anteprima/ordini?negozio=x",
+  );
+  expect(
+    (await change("/anteprima/impostazioni/piano?checkout=1", "en")).headers.get("location"),
+  ).toBe("/en/preview/settings/plan?checkout=1");
+  // Fuori dall'anteprima si torna alle sue Impostazioni.
+  expect((await change("/app/ordini", "en")).headers.get("location")).toBe("/en/preview/settings");
 });

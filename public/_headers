@@ -2,3 +2,12 @@
 # quindi il browser conserva per un anno quelli già scaricati senza riconvalidarli.
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# Immagini del sito, icone e immagini delle condivisioni hanno nomi stabili: restano in cache per
+# trenta giorni, e una versione rigenerata arriva entro quel termine.
+/site/*
+  Cache-Control: public, max-age=2592000
+/og/*
+  Cache-Control: public, max-age=2592000
+/icon-*
+  Cache-Control: public, max-age=2592000

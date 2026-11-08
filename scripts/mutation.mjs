@@ -7,54 +7,40 @@
  *      node scripts/mutation.mjs --matrix [<file>... | <matrice JSON>]
  * `--matrix` scrive la matrice dei job per GitHub; senza file comprende tutti i moduli critici.
  * Un modulo con molti mutanti si divide in parti, eseguite in job paralleli: con
- * `MUTATION_SHARD=<parte>/<parti>` lo script prova soltanto la parte indicata. Con
- * `MUTATION_LINES=<inizio>-<fine>,...`, nelle PR, prova soltanto le righe cambiate del modulo.
+ * `MUTATION_SHARD=<parte>/<parti>` lo script prova soltanto la parte indicata.
+ * Stryker gira in modo incrementale: con `MUTATION_INCREMENTAL_BASE`, il report di una prova
+ * precedente, ripete soltanto i mutanti con codice o test cambiati.
+ * `--incremental-base <file>` scrive quel report dalle prove precedenti della PR o, senza, dal
+ * riferimento di `develop` in `MUTATION_REFERENCE`.
+ * `--collect-references <cartella>` riunisce in `.mutation-references/` le parti riuscite di ogni
+ * modulo di una run su `develop`; con `MUTATION_REFERENCES` la matrice della PR prova in un solo
+ * job il modulo che ha un riferimento completo e pochi mutanti da ripetere.
  */
 import { execFileSync, spawn } from "node:child_process";
 import {
   appendFileSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
+import { gh, ghJson, git } from "./lib/provider.mjs";
+import { criticalModule } from "./lib/critical-modules.mjs";
+import { pullRequestCoverage, pullRequestParts } from "./mutation-reuse.mjs";
 
-/**
- * Regole condivise dei moduli critici: dati fiscali, orari, lista ordini, coda,
- * sospensione del servizio e periodicità degli abbonamenti.
- */
-const criticalShared = new Set([
-  "app/service-activity.server.ts",
-  "app/markup.ts",
-  "app/tax-quality.ts",
-  "app/time.ts",
-  "app/orders/order-list.ts",
-  "app/domain/work-timing.ts",
-  "app/domain/subscription-offers.ts",
-  "app/domain/auth-attempts.server.ts",
-  "app/domain/deletion-steps.server.ts",
-  "app/domain/webhook-receipts.server.ts",
-]);
-
-/**
- * Moduli server di Auth, filtro delle richieste, sessioni, chiavi derivate, isolamento, ordini, export e file XLSX, negozi
- * e loro segni, integrazioni, diritti e destinatari Telegram.
- */
-export function criticalModule(file) {
-  return (
-    criticalShared.has(file) ||
-    /^app\/(?:auth(?:-route)?|request-limits|sealed|domain\/(?:billing|refunds|orders|order-import|order-observation|order-acquisition|order-sync|order-export|quota|grants|cycles|sessions|sign-in-methods|registration|stores|store-marks|export|xlsx|telegram)|integrations\/(?:webhooks|stripe|telegram|ebay\/(?:environment|notifications|seller-credentials|store-link|tax-identifiers|fulfillment))).*\.server\.ts$/u.test(
-      file,
-    )
-  );
-}
+export { criticalModule };
 
 /**
  * Moduli non critici importati dai moduli critici: testi, link, tipi, errori e servizi provati
@@ -74,7 +60,9 @@ export const supportModules = new Set([
   "app/domain/account-deletion.server.ts",
   "app/domain/admission-state.server.ts",
   "app/domain/admission.server.ts",
+  "app/domain/buyer-check.server.ts",
   "app/domain/email-change.server.ts",
+  "app/domain/exit-feedback.server.ts",
   "app/domain/history-window.server.ts",
   "app/domain/lifetime.server.ts",
   "app/domain/order-events.server.ts",
@@ -82,6 +70,7 @@ export const supportModules = new Set([
   "app/domain/order-view.server.ts",
   "app/domain/owner-notifications.server.ts",
   "app/domain/service-settings.server.ts",
+  "app/domain/signup-sources.server.ts",
   "app/domain/sql.server.ts",
   "app/domain/store-link.server.ts",
   "app/domain/store-profile.server.ts",
@@ -102,6 +91,7 @@ export const supportModules = new Set([
   "app/request-limits.ts",
   "app/response-cookies.server.ts",
   "app/sequence.ts",
+  "app/signup-source.ts",
   "app/view-models.ts",
 ]);
 
@@ -139,15 +129,12 @@ export function mutationConcurrency(configured, cpu = availableParallelism(), me
 
 const accepted = new Set(["Killed", "Ignored"]);
 
-/**
- * Mutanti che fanno fallire la prova, dal report JSON di Stryker. Sulle sole righe cambiate può
- * non esserci nessun mutante: una riga di soli tipi o commenti non ha nulla da provare.
- */
-export function evaluate(report, partial = false) {
+/** Mutanti che fanno fallire la prova, dal report JSON di Stryker. */
+export function evaluate(report) {
   const mutants = Object.entries(report.files ?? {}).flatMap(([file, { mutants }]) =>
     mutants.map((mutant) => ({ file, ...mutant })),
   );
-  if (mutants.length === 0) return partial ? [] : ["nessun mutante generato"];
+  if (mutants.length === 0) return ["nessun mutante generato"];
   return mutants
     .filter(
       ({ status, statusReason }) =>
@@ -195,6 +182,13 @@ export function consumerTests(target, files) {
 export const mutantsPerShard = 150;
 
 /**
+ * Mutanti da ripetere entro i quali la PR prova in un solo job un modulo con il riferimento
+ * completo: ogni parte ripete la prova iniziale della suite, da cinque a nove minuti sul runner,
+ * mentre quaranta mutanti ne richiedono circa sei in un solo processo.
+ */
+export const unsplitRetests = 40;
+
+/**
  * Righe, numerate da 1, dei mutanti che Stryker genera nel modulo, con lo stesso instrumenter e
  * le equivalenze motivate comprese.
  */
@@ -228,10 +222,12 @@ export async function mutantLines(file) {
  */
 export function shardRanges(mutants, shards, lastLine) {
   const crossed = (line) => mutants.some(({ start, end }) => start < line && end >= line);
-  const before = (line) => mutants.filter(({ end }) => end < line).length;
+  const before = (line) =>
+    mutants.filter(({ end }) => end < line).reduce((sum, mutant) => sum + (mutant.weight ?? 1), 0);
+  const total = before(lastLine + 1);
   const cuts = [];
   for (let part = 1; part < shards; part++) {
-    const target = (part * mutants.length) / shards;
+    const target = (part * total) / shards;
     let best = null;
     for (let line = (cuts.at(-1) ?? 1) + 1; line <= lastLine; line++)
       if (
@@ -247,32 +243,275 @@ export function shardRanges(mutants, shards, lastLine) {
   }));
 }
 
-/** Intervalli delle parti del modulo, una ogni `mutantsPerShard` mutanti dove i tagli lo consentono. */
+/**
+ * Parti del modulo con al più `mutantsPerShard` mutanti ciascuna dove i tagli lo consentono.
+ * I tagli cadono fra le funzioni, quindi le parti escono sbilanciate: se la più grande supera
+ * il limite si prova con una parte in più, fino a quattro oltre il minimo, tenendo la divisione
+ * con la parte più piccola. Con due parti `stores.server.ts` ne aveva una da 162 mutanti che
+ * superava i 60 minuti del job.
+ */
+export function shardPlan(mutants, lastLine, preparationMs = 0) {
+  const inside = (range) =>
+    mutants.filter(({ start, end }) => start >= range.start && end <= range.end).length;
+  const minimum = Math.max(1, Math.ceil(mutants.length / mutantsPerShard));
+  let best = null;
+  const timed = mutants.some((mutant) => mutant.weight !== undefined);
+  for (let shards = minimum; shards <= minimum + 4; shards++) {
+    const plan = shardRanges(mutants, shards, lastLine).map((range) => ({
+      ...range,
+      mutants: inside(range),
+      ...(timed
+        ? {
+            estimatedMs:
+              preparationMs +
+              mutants
+                .filter(({ start, end }) => start >= range.start && end <= range.end)
+                .reduce((sum, mutant) => sum + mutant.weight, 0),
+          }
+        : {}),
+    }));
+    const largest = timed
+      ? Math.max(
+          ...plan.map((range) =>
+            mutants
+              .filter(({ start, end }) => start >= range.start && end <= range.end)
+              .reduce((sum, mutant) => sum + mutant.weight, 0),
+          ),
+        ) +
+        (preparationMs * plan.length) / 4
+      : Math.max(...plan.map((part) => part.mutants));
+    if (best === null || largest < best.largest) best = { plan, largest };
+    if (!timed && largest <= mutantsPerShard) break;
+  }
+  return best.plan;
+}
+
+/** Intervalli delle parti del modulo, secondo `shardPlan`. */
+export function timedMutants(mutants, history, digest) {
+  if (
+    !Array.isArray(history) ||
+    !history.length ||
+    history.some(
+      (entry) =>
+        entry.digest !== digest ||
+        !Number.isFinite(entry.mutationMs) ||
+        !(entry.mutationMs > 0) ||
+        !(entry.mutants > 0) ||
+        !Number.isFinite(entry.preparationMs) ||
+        entry.preparationMs < 0,
+    )
+  )
+    return mutants;
+  return mutants.map((mutant) => {
+    const sample = history.find(({ start, end }) => mutant.start >= start && mutant.end <= end);
+    return { ...mutant, weight: sample ? sample.mutationMs / sample.mutants : 1000 };
+  });
+}
+
+const sourceDigest = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
+
+/**
+ * Vero se le parti misurate coprono tutto il modulo, contigue e con lo stesso digest. Digest e
+ * righe vengono dalle misure: la raccolta non legge i sorgenti del commit qualificato.
+ */
+export function completeTimings(parts) {
+  const [first] = parts;
+  return (
+    parts.length > 0 &&
+    /^[a-f0-9]{64}$/u.test(first.digest ?? "") &&
+    Number.isSafeInteger(first.lines) &&
+    first.start === 1 &&
+    parts.at(-1).end === first.lines &&
+    parts.every(
+      (part, index) =>
+        part.digest === first.digest &&
+        part.lines === first.lines &&
+        Number.isFinite(part.mutationMs) &&
+        Number.isFinite(part.preparationMs) &&
+        (index === 0 || part.start === parts[index - 1].end + 1),
+    )
+  );
+}
+
+/**
+ * Righe del sorgente attuale, numerate da 1, fra il primo e l'ultimo punto in cui differisce da
+ * `before`; `null` se sono uguali. Più modifiche distanti contano come un solo blocco: la stima
+ * può soltanto crescere, e allora il modulo si divide come sempre.
+ */
+export function changedRange(before, after) {
+  if (before === after) return null;
+  const old = before.split("\n");
+  const current = after.split("\n");
+  let start = 0;
+  while (start < old.length && start < current.length && old[start] === current[start]) start++;
+  let end = 0;
+  while (
+    end < old.length - start &&
+    end < current.length - start &&
+    old[old.length - 1 - end] === current[current.length - 1 - end]
+  )
+    end++;
+  return { start: start + 1, end: Math.max(start + 1, current.length - end) };
+}
+
+/** Mutanti che toccano le righe cambiate: Stryker ripete questi e quelli dei test cambiati. */
+export const retestEstimate = (mutants, range) =>
+  range ? mutants.filter(({ start, end }) => end >= range.start && start <= range.end).length : 0;
+
+const referenceSlug = (target) => target.replaceAll("/", "_");
+
+/**
+ * Riferimenti completi dei moduli dalle parti di una run: un modulo entra soltanto con tutte le
+ * parti presenti e senza mutanti da correggere, come i riferimenti delle singole parti. Ogni
+ * voce porta modulo, parte, numero di parti, report JSON e report incrementale.
+ */
+export function moduleReferences(parts) {
+  const modules = new Map();
+  for (const part of parts) {
+    const entry = modules.get(part.target) ?? { parts: part.parts, found: new Map(), valid: true };
+    modules.set(part.target, entry);
+    if (entry.parts !== part.parts || evaluate(part.report).length) entry.valid = false;
+    entry.found.set(part.part, part.incremental);
+  }
+  return new Map(
+    [...modules]
+      .filter(([, entry]) => entry.valid && entry.found.size === entry.parts)
+      .map(([target, entry]) => [target, mergeReports([...entry.found.values()])]),
+  );
+}
+
+/** Parti scaricate in `directory`: cartelle `<modulo>` o `<modulo>-<parte>-<parti>`. */
+function downloadedParts(directory) {
+  const parts = [];
+  const visit = (folder) => {
+    for (const entry of readdirSync(folder, { withFileTypes: true }))
+      if (entry.isDirectory()) visit(path.join(folder, entry.name));
+    const report = path.join(folder, "mutation.json");
+    const incremental = path.join(folder, "incremental.json");
+    if (!existsSync(report) || !existsSync(incremental)) return;
+    const parsed = JSON.parse(readFileSync(report, "utf8"));
+    const [target] = Object.keys(parsed.files ?? {});
+    if (!target) return;
+    const shard = /-(\d+)-(\d+)$/u.exec(path.basename(folder));
+    parts.push({
+      target,
+      part: shard ? Number(shard[1]) : 1,
+      parts: shard ? Number(shard[2]) : 1,
+      report: parsed,
+      incremental: JSON.parse(readFileSync(incremental, "utf8")),
+    });
+  };
+  visit(directory);
+  return parts;
+}
+
+/**
+ * Parti della PR: il modulo con il riferimento completo di `develop` e al più `unsplitRetests`
+ * mutanti sulle righe cambiate da allora si prova in un solo job, che ripete la prova iniziale
+ * una volta sola; gli altri si dividono come nella campagna.
+ */
+export async function pullRequestShards(target, references, shardsOf = moduleShards) {
+  const reference = path.join(references, `${referenceSlug(target)}.json`);
+  if (existsSync(reference)) {
+    const source = JSON.parse(readFileSync(reference, "utf8")).files?.[target]?.source;
+    if (typeof source === "string") {
+      const retests = retestEstimate(
+        await mutantLines(target),
+        changedRange(source, readFileSync(target, "utf8")),
+      );
+      if (retests <= unsplitRetests) return [{ mutants: retests, reference }];
+    }
+  }
+  return shardsOf(target);
+}
+
+const timingFile = ".mutation-timings.json";
+function timingHistory() {
+  try {
+    return JSON.parse(readFileSync(timingFile, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
 export async function moduleShards(file) {
-  const mutants = await mutantLines(file);
-  const lastLine = readFileSync(file, "utf8").split("\n").length;
-  return shardRanges(
-    mutants,
-    Math.max(1, Math.ceil(mutants.length / mutantsPerShard)),
-    lastLine,
-  ).map((range) => ({
-    ...range,
-    mutants: mutants.filter(({ start, end }) => start >= range.start && end <= range.end).length,
-  }));
+  const history = timingHistory()[file];
+  const mutants = timedMutants(await mutantLines(file), history, sourceDigest(file));
+  const preparation = mutants.some((entry) => entry.weight !== undefined)
+    ? Math.max(...history.map((entry) => entry.preparationMs || 0))
+    : 0;
+  return shardPlan(mutants, readFileSync(file, "utf8").split("\n").length, preparation);
+}
+
+export function validateRanges(ranges, lastLine, mutants) {
+  if (
+    !Array.isArray(ranges) ||
+    !ranges.length ||
+    ranges[0].start !== 1 ||
+    ranges.at(-1).end !== lastLine ||
+    ranges.some(
+      (range, index) =>
+        !Number.isSafeInteger(range.start) ||
+        !Number.isSafeInteger(range.end) ||
+        range.end < range.start ||
+        (index > 0 && range.start !== ranges[index - 1].end + 1),
+    ) ||
+    mutants.some(
+      ({ start, end }) =>
+        ranges.filter((range) => start >= range.start && end <= range.end).length !== 1,
+    )
+  )
+    throw new Error("Intervalli mutation incompleti o sovrapposti.");
+  return ranges;
+}
+
+/**
+ * Job mutation contemporanei, fissati una volta alla pianificazione. Con PR o cicli attivi la
+ * qualifica del candidato, che precede `Promuovi`, tiene sei posti e le campagne quattro: la coda
+ * dell'account resta corta e i job brevi di merge, deploy e pubblicazione partono presto. Di notte,
+ * senza altro lavoro, le campagne usano quasi tutti i venti posti dell'account.
+ */
+export function backgroundConcurrency(runs, { qualification = false, campaign = false } = {}) {
+  const busy = runs.some(
+    (run) =>
+      run.status !== "completed" &&
+      (run.event === "pull_request" || run.path === ".github/workflows/cycle.yml"),
+  );
+  if (busy) return qualification ? 6 : 4;
+  return campaign ? 16 : 8;
 }
 
 /**
  * Job della matrice, una parte per intervallo di ogni modulo. GitHub li avvia in quest'ordine:
  * i più pesanti, mutanti per test che coprono il modulo, entrano per primi nei posti disponibili.
+ * `keep` limita un modulo alle parti indicate, numerate da 1: le altre sono già provate.
+ * Ogni voce porta l'impronta del sorgente, che il piano conserva per le run seguenti.
  */
-export async function mutationJobs(targets, shardsOf = moduleShards, testsOf = () => 1) {
+export async function mutationJobs(
+  targets,
+  shardsOf = moduleShards,
+  testsOf = () => 1,
+  { keep = new Map(), digestOf = sourceDigest } = {},
+) {
   const jobs = await Promise.all(
     targets.map(async (target) => {
       const shards = await shardsOf(target);
-      return shards.map(({ mutants }, index) => ({
-        job: { target, shard: `${index + 1}/${shards.length}` },
-        weight: mutants * testsOf(target),
-      }));
+      const digest = digestOf(target);
+      return shards
+        .map(({ mutants, estimatedMs, reference }, index) => ({
+          job: {
+            target,
+            shard: `${index + 1}/${shards.length}`,
+            ...(shards.every((range) => Number.isInteger(range.start))
+              ? { ranges: JSON.stringify(shards) }
+              : {}),
+            digest,
+            ...(reference ? { reference } : {}),
+          },
+          // Un job con il riferimento completo costa almeno la prova iniziale della suite.
+          weight: estimatedMs ?? Math.max(1, mutants) * testsOf(target),
+        }))
+        .filter((_, index) => keep.get(target)?.has(index + 1) ?? true);
     }),
   );
   return {
@@ -307,19 +546,252 @@ function sources() {
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
 }
 
-/** Porzioni di `mutate` per le righe cambiate, nel formato di Stryker. */
-export function changedRanges(target, lines) {
-  if (!/^\d+-\d+(?:,\d+-\d+)*$/u.test(lines)) throw new Error(`Righe non valide: ${lines}`);
-  return lines.split(",").map((range) => `${target}:${range}`);
+const mutantKey = ({ mutatorName, replacement, location }) =>
+  `${mutatorName}|${replacement ?? ""}|${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`;
+
+/** Esiti che dipendono soltanto da codice e test: timeout ed errori si provano di nuovo. */
+const stableStatuses = new Set(["Killed", "Survived", "NoCoverage", "Ignored"]);
+
+/**
+ * Un solo report incrementale dalle parti di una prova precedente: mutanti dello stesso sorgente
+ * riuniti senza doppioni, test per nome. Stryker identifica mutanti e test per contenuto e
+ * posizione, non per numero, quindi le parti si sommano. Timeout ed errori, che possono dipendere
+ * dal carico del runner, restano fuori e si ripetono.
+ */
+export function mergeReports(reports) {
+  if (!reports.length) return undefined;
+  const files = {};
+  const testFiles = {};
+  for (const report of reports) {
+    for (const [file, entry] of Object.entries(report.files ?? {})) {
+      const mutants = entry.mutants.filter(({ status }) => stableStatuses.has(status));
+      const current = files[file];
+      if (!current) files[file] = { ...entry, mutants };
+      else if (current.source === entry.source) {
+        const known = new Set(current.mutants.map(mutantKey));
+        current.mutants.push(...mutants.filter((mutant) => !known.has(mutantKey(mutant))));
+      }
+    }
+    for (const [file, entry] of Object.entries(report.testFiles ?? {})) testFiles[file] ??= entry;
+  }
+  return { ...reports[0], files, testFiles };
 }
 
-async function runTarget(target, files, shard = "1/1", lines = "") {
+/** Report incrementali di `target` in una cartella di artefatti, per la parte `shard` o tutti. */
+function incrementalReports(directory, target, shard) {
+  const slug = target.replaceAll("/", "_");
+  const [part, parts] = (shard ?? "").split("/");
+  const own = parts && parts !== "1" ? `${slug}-${part}-${parts}` : slug;
+  const found = [];
+  const visit = (folder) => {
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      const file = path.join(folder, entry.name);
+      if (entry.isDirectory()) visit(file);
+      else if (
+        entry.name === "incremental.json" &&
+        (shard ? path.basename(folder) === own : path.basename(folder).startsWith(slug))
+      )
+        found.push(JSON.parse(readFileSync(file, "utf8")));
+    }
+  };
+  visit(directory);
+  return found;
+}
+
+/** Run della PR lette dalla base incrementale prima di ripiegare sul riferimento di `develop`. */
+const incrementalRuns = 5;
+
+/**
+ * Report della base incrementale fra le run della PR `runs`: la più recente dello stesso
+ * repository su un commit antenato di `head` (`status` del confronto `ahead` o `identical`) con un
+ * report della stessa parte, altrimenti la più recente con un report di altre parti. La run in
+ * corso vale soltanto per una ripetizione dei job falliti, che parte dai tentativi precedenti.
+ * `reports(run)` restituisce i report riuniti `{ same, any }`, o null senza artefatti.
+ */
+export async function incrementalBase(
+  { runs, head, current, attempt = "1", repositoryId },
+  { status, reports },
+) {
+  let fallback = null;
+  let read = 0;
+  const ordered = runs
+    .filter(
+      (entry) =>
+        (String(entry.id) !== String(current) || Number(attempt) > 1) &&
+        entry.head_repository?.id === repositoryId,
+    )
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  for (const run of ordered) {
+    if (read >= incrementalRuns) break;
+    if (run.head_sha !== head && !["ahead", "identical"].includes(await status(run.head_sha)))
+      continue;
+    const found = await reports(run.id);
+    if (!found) continue;
+    read++;
+    if (found.same) return { run: run.id, report: found.same, same: true };
+    if (found.any) fallback ??= { run: run.id, report: found.any, same: false };
+  }
+  return fallback;
+}
+
+/**
+ * Base incrementale della mutation della PR (`incrementalBase`). Stryker non vede le altre righe
+ * del modulo né i moduli importati: un loro cambio può lasciare valido un esito che non lo è più,
+ * e lo ripete la campagna settimanale completa. Senza report il riferimento di `develop`
+ * (`MUTATION_REFERENCE`), salvato dall'ultima qualifica o campagna riuscita del modulo; senza
+ * riferimento il modulo si prova per intero.
+ */
+async function writeIncrementalBase(output) {
+  const { REPOSITORY: repository, HEAD_REF: branch, GITHUB_RUN_ID: current } = process.env;
+  const { HEAD_SHA: head, GITHUB_RUN_ATTEMPT: attempt = "1" } = process.env;
+  const { MUTATION_TARGET: target, MUTATION_SHARD: shard = "1/1" } = process.env;
+  const repositoryId = Number(process.env.REPOSITORY_ID);
+  if (!repository || !branch || !target || !repositoryId || !head)
+    throw new Error("PR, repository, testa o modulo della base incrementale non indicati.");
+  const { workflow_runs: runs } = ghJson(
+    "api",
+    `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&branch=${encodeURIComponent(branch)}&per_page=20`,
+  );
+  const base = await incrementalBase(
+    { runs, head, current, attempt, repositoryId },
+    {
+      status: (commit) => ghJson("api", `repos/${repository}/compare/${commit}...${head}`).status,
+      reports: (run) => {
+        const directory = mkdtempSync(path.join(tmpdir(), "mutation-base-"));
+        try {
+          gh(
+            "run",
+            "download",
+            String(run),
+            "--repo",
+            repository,
+            "--pattern",
+            `mutation-pr-${run}-*`,
+            "--dir",
+            directory,
+          );
+          return {
+            same: mergeReports(incrementalReports(directory, target, shard)),
+            any: mergeReports(incrementalReports(directory, target)),
+          };
+        } catch {
+          return null;
+        } finally {
+          rmSync(directory, { recursive: true, force: true });
+        }
+      },
+    },
+  );
+  if (base) {
+    writeFileSync(output, JSON.stringify(base.report));
+    console.log(
+      `Base incrementale di ${target} ${shard}: run ${base.run}${base.same ? "" : ", altre parti"}.`,
+    );
+    return;
+  }
+  const reference = process.env.MUTATION_REFERENCE;
+  if (reference && existsSync(reference)) {
+    copyFileSync(reference, output);
+    console.log(`Base incrementale di ${target}: riferimento di develop.`);
+  } else console.log(`Nessuna base incrementale di ${target}: mutation dell'intero modulo.`);
+}
+
+/**
+ * Moduli critici che la PR prova: quelli con il sorgente cambiato e quelli importati direttamente
+ * da un test cambiato, perché un test indebolito lascia vivo un mutante anche su righe invariate.
+ * I moduli raggiunti soltanto attraverso altri import restano al candidato e alla campagna: ogni
+ * modulo in più costa la prova iniziale dell'intera suite che lo copre.
+ */
+export function prTargets(changed, files) {
+  const present = new Set(files.map(({ path: file }) => file));
+  const targets = new Set(changed.filter((file) => criticalModule(file) && present.has(file)));
+  const tests = changed.filter(
+    (file) => /^test\/.+\.(?:spec|unit)\.ts$/u.test(file) && present.has(file),
+  );
+  if (tests.length) {
+    const graph = importGraph(files, /^(?:app|workers|test)\/.+\.tsx?$/u);
+    for (const test of tests)
+      for (const file of graph.get(test) ?? []) if (criticalModule(file)) targets.add(file);
+  }
+  return [...targets].sort();
+}
+
+/**
+ * Moduli della PR ancora da provare e parti mancanti dei moduli provati in parte. Una parte vale
+ * se è riuscita in una run precedente della stessa PR con lo stesso piano del modulo
+ * (`pullRequestParts`), per esempio prima di un'unione di `develop` o di un annullamento. Un
+ * sorgente critico che la PR non modifica rispetto alla base del commit di merge (`HEAD^1`) e che
+ * è cambiato da quella prova non la invalida se ogni commit di `develop` che lo tocca da allora
+ * viene da una PR con la mutation riuscita. Il modulo provato in parte ripete soltanto le parti
+ * mancanti, con gli intervalli del piano di riferimento; quello provato per intero non parte.
+ * Riusati e parti finiscono nel riepilogo della run.
+ */
+async function withoutProvedModules(targets, files) {
+  const repositoryId = Number(process.env.REPOSITORY_ID);
+  const { REPOSITORY: repository, MUTATION_PR_BRANCH: branch, HEAD_SHA: head } = process.env;
+  if (!repository || !repositoryId || !head)
+    throw new Error("PR, repository o testa non indicati.");
+  const graph = importGraph(files, /^(?:app|workers|test)\/.+\.tsx?$/u);
+  const base = git("rev-parse", "HEAD^1").trim();
+  const own = new Set(git("diff", "--name-only", base, "HEAD").split("\n").filter(Boolean));
+  const covered = pullRequestCoverage({ repository, repositoryId, graph });
+  const excused = async (source, proved) => {
+    if (own.has(source)) return false;
+    try {
+      return await covered(source, git("merge-base", proved, base).trim(), base);
+    } catch {
+      return false;
+    }
+  };
+  const run = [];
+  const partial = new Map();
+  const lines = [];
+  for (const target of targets) {
+    const parts = await pullRequestParts({
+      repository,
+      repositoryId,
+      branch,
+      head,
+      target,
+      graph,
+      digest: sourceDigest(target),
+      exclude: process.env.GITHUB_RUN_ID,
+      excused,
+    });
+    const proved = parts?.proved ?? [];
+    const runs = [...new Set(proved.map(({ run: id }) => id))].join(", ");
+    if (proved.length && !parts.missing.length) lines.push(`${target}: run ${runs}`);
+    else if (proved.length && parts.ranges) {
+      partial.set(target, { ranges: JSON.parse(parts.ranges), missing: new Set(parts.missing) });
+      lines.push(
+        `${target}: parti ${proved.map(({ part }) => part).join(", ")} di ${parts.total} dalle run ${runs}`,
+      );
+    } else run.push(target);
+  }
+  const summary = `Mutation della PR: ${run.length + partial.size} moduli da provare, ${lines.length - partial.size} già provati, ${partial.size} in parte.${lines.length ? `\n\nRiusati:\n${lines.map((line) => `- ${line}`).join("\n")}` : ""}\n`;
+  console.log(summary);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+  return { run, partial };
+}
+
+async function runTarget(target, files, shard = "1/1") {
   if (!criticalModule(target) || !existsSync(target))
     throw new Error(`Modulo critico inesistente: ${target}`);
   const [part, shards] = shard.split("/").map(Number);
   if (!Number.isInteger(part) || !Number.isInteger(shards) || part < 1 || part > shards)
     throw new Error(`Parte mutation non valida: ${shard}`);
-  const ranges = shards > 1 ? await moduleShards(target) : [null];
+  if (process.env.MUTATION_DIGEST && process.env.MUTATION_DIGEST !== sourceDigest(target))
+    throw new Error("Sorgente mutation diverso dal piano.");
+  const mutants = await mutantLines(target);
+  const ranges = process.env.MUTATION_RANGES
+    ? validateRanges(
+        JSON.parse(process.env.MUTATION_RANGES),
+        readFileSync(target, "utf8").split("\n").length,
+        mutants,
+      )
+    : shards > 1
+      ? await moduleShards(target)
+      : [null];
   // La matrice e il job leggono lo stesso sorgente: parti diverse indicano un altro commit.
   if (ranges.length !== shards) throw new Error(`Parti mutation diverse per ${target}: ${shard}`);
   const range = ranges[part - 1];
@@ -329,14 +801,19 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
   const reportPath = `${directory}/mutation.json`;
   const settings = JSON.parse(readFileSync("stryker.config.json", "utf8"));
   const configPath = `${directory}/stryker.json`;
+  // Senza base Stryker prova tutti i mutanti e scrive comunque il report per la prova seguente.
+  const incrementalFile = `${directory}/incremental.json`;
+  const base = process.env.MUTATION_INCREMENTAL_BASE;
+  if (base && existsSync(base)) copyFileSync(base, incrementalFile);
   writeFileSync(
     configPath,
     JSON.stringify({
       ...settings,
+      reporters: [...settings.reporters, "timing"],
+      incremental: true,
+      incrementalFile,
       concurrency: mutationConcurrency(settings.concurrency),
-      mutate: lines
-        ? changedRanges(target, lines)
-        : [range ? `${target}:${range.start}-${range.end}` : target],
+      mutate: [range ? `${target}:${range.start}-${range.end}` : target],
       jsonReporter: { fileName: reportPath },
       vitest: { configFile: "vitest.mutation.config.ts" },
     }),
@@ -349,6 +826,8 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
       env: {
         ...process.env,
         MUTATION_TARGET: target,
+        MUTATION_STARTED_AT: String(start),
+        MUTATION_TIMING_FILE: path.resolve(directory, "preparation.json"),
         MUTATION_TEST_FILES: JSON.stringify(tests),
       },
     });
@@ -356,11 +835,32 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
     child.on("close", resolve);
   });
   const report = existsSync(reportPath) ? JSON.parse(readFileSync(reportPath, "utf8")) : undefined;
-  const failures = report ? evaluate(report, Boolean(lines)) : ["report mutation assente"];
+  const failures = report ? evaluate(report) : ["report mutation assente"];
   if (code !== 0) failures.push(`Stryker terminato con codice ${code}`);
   const counts = {};
   for (const { status } of Object.values(report?.files ?? {}).flatMap(({ mutants }) => mutants))
     counts[status] = (counts[status] ?? 0) + 1;
+  // Solo esecuzioni complete alimentano il bilanciamento: l'incrementale costa meno.
+  if (!base && failures.length === 0) {
+    const preparationMs = existsSync(`${directory}/preparation.json`)
+      ? JSON.parse(readFileSync(`${directory}/preparation.json`, "utf8")).preparationMs
+      : 0;
+    writeFileSync(
+      `${directory}/timing.json`,
+      JSON.stringify({
+        target,
+        digest: sourceDigest(target),
+        start: range?.start ?? 1,
+        end: range?.end ?? readFileSync(target, "utf8").split("\n").length,
+        lines: readFileSync(target, "utf8").split("\n").length,
+        mutants: mutants.filter(
+          ({ start, end }) => !range || (start >= range.start && end <= range.end),
+        ).length,
+        preparationMs,
+        mutationMs: Math.max(1, Date.now() - start - preparationMs),
+      }),
+    );
+  }
   const summary = `${target}${shards > 1 ? ` (parte ${shard})` : ""}: ${Math.round((Date.now() - start) / 1000)}s, ${tests.length} file di test, ${JSON.stringify(counts)}, ${failures.length} problemi.\n`;
   console.log(summary);
   if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
@@ -371,8 +871,51 @@ async function runTarget(target, files, shard = "1/1", lines = "") {
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const {
     positionals: args,
-    values: { matrix: matrixMode },
-  } = parseArgs({ allowPositionals: true, options: { matrix: { type: "boolean" } } });
+    values: {
+      matrix: matrixMode,
+      "incremental-base": baseFile,
+      "collect-timings": collectTimings,
+      "collect-references": collectReferences,
+    },
+  } = parseArgs({
+    allowPositionals: true,
+    options: {
+      matrix: { type: "boolean" },
+      "incremental-base": { type: "string" },
+      "collect-timings": { type: "string" },
+      "collect-references": { type: "string" },
+    },
+  });
+  if (collectTimings) {
+    const history = timingHistory();
+    const samples = readdirSync(collectTimings, { recursive: true })
+      .filter((file) => file.endsWith("timing.json"))
+      .map((file) => JSON.parse(readFileSync(path.join(collectTimings, file), "utf8")));
+    // Una run con parti incrementali misura soltanto una parte del modulo: le durate si
+    // sostituiscono quando le parti complete coprono tutto il sorgente corrente.
+    for (const target of new Set(samples.map((entry) => entry.target))) {
+      const parts = samples
+        .filter((entry) => entry.target === target)
+        .sort((a, b) => a.start - b.start);
+      if (completeTimings(parts)) history[target] = parts;
+    }
+    writeFileSync(timingFile, JSON.stringify(history));
+    process.exit(0);
+  }
+  // I riferimenti dei moduli assenti dalla run restano quelli precedenti.
+  if (collectReferences) {
+    const output = ".mutation-references";
+    mkdirSync(output, { recursive: true });
+    const references = moduleReferences(downloadedParts(collectReferences));
+    for (const [target, report] of references)
+      writeFileSync(path.join(output, `${referenceSlug(target)}.json`), JSON.stringify(report));
+    console.log(`Riferimenti completi: ${[...references.keys()].join(", ") || "nessuno"}.`);
+    process.exit(0);
+  }
+  if (baseFile) {
+    await writeIncrementalBase(baseFile);
+    process.exit(0);
+  }
   const files = sources();
   if (matrixMode) {
     const matrix = mutationMatrix(
@@ -380,22 +923,46 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
       files.map(({ path: file }) => file),
     );
     console.log(`Moduli critici: ${matrix.target.join(", ") || "nessuno"}.`);
+    let partial = new Map();
+    if (process.env.MUTATION_PR_BRANCH) {
+      const plan = await withoutProvedModules(matrix.target, files);
+      partial = plan.partial;
+      matrix.target = [...plan.run, ...partial.keys()];
+    }
+    const references = process.env.MUTATION_REFERENCES;
+    const shardsOf = references ? (target) => pullRequestShards(target, references) : moduleShards;
     const jobs = await mutationJobs(
       matrix.target,
-      moduleShards,
+      (target) => partial.get(target)?.ranges ?? shardsOf(target),
       (target) => consumerTests(target, files).length,
+      { keep: new Map([...partial].map(([target, { missing }]) => [target, missing])) },
     );
     console.log(
       `Job: ${jobs.include.map(({ target, shard }) => `${target} ${shard}`).join(", ")}.`,
     );
+    // Il piano della matrice decide quali parti delle run seguenti valgono ancora.
+    if (process.env.MUTATION_PLAN) writeFileSync(process.env.MUTATION_PLAN, JSON.stringify(jobs));
     if (process.env.GITHUB_OUTPUT)
       appendFileSync(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(jobs)}\n`);
+    if (process.env.GITHUB_OUTPUT && process.env.GH_TOKEN) {
+      const runs = ["queued", "in_progress", "waiting", "pending"].flatMap((status) =>
+        ghJson(
+          "api",
+          "--paginate",
+          "--slurp",
+          `repos/${process.env.GITHUB_REPOSITORY}/actions/runs?status=${status}&per_page=100`,
+        ).flatMap((page) => page.workflow_runs),
+      );
+      appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        `parallel=${backgroundConcurrency(runs, { qualification: process.env.MUTATION_QUALIFICATION === "true", campaign: process.env.MUTATION_CAMPAIGN === "true" })}\n`,
+      );
+    }
   } else if (args.length === 0) {
     console.error("Uso: node scripts/mutation.mjs <file>...");
     process.exitCode = 2;
   } else {
     for (const target of args)
-      if (!(await runTarget(target, files, process.env.MUTATION_SHARD, process.env.MUTATION_LINES)))
-        process.exitCode = 1;
+      if (!(await runTarget(target, files, process.env.MUTATION_SHARD))) process.exitCode = 1;
   }
 }

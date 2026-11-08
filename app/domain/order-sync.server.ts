@@ -2,15 +2,28 @@ import { z } from "zod";
 
 import { acquireOrders, storeAccess, type ActiveStore } from "./order-acquisition.server";
 import { ensureOrderEvents } from "./order-events.server";
-import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-context.server";
+import {
+  defaultRateLimitSeconds,
+  rateLimitWait,
+  workerShare,
+} from "./order-acquisition-context.server";
 import { servedSql } from "./admission.server";
 import { switchOnSql } from "./service-settings.server";
 import { activeEntitlementSql } from "./grants.server";
 import { historyStartSql, storeWorkspaceSql } from "./history-window.server";
-import { activeStore, renewableConsent, writableStore } from "./store-state.server";
+import {
+  activeStore,
+  dormantWorkspaceSql,
+  renewableConsent,
+  writableStore,
+} from "./store-state.server";
 import { deliverTelegram } from "./telegram-deliveries.server";
 import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
+import {
+  clearCredentialFailures,
+  countCredentialFailure,
+} from "../integrations/ebay/seller-credentials.server";
 import type { EbayEnvironment } from "../view-models";
 import {
   ebayConfiguration,
@@ -31,6 +44,11 @@ export type SyncPlan = "free" | "premium";
 
 /** Cadenza della lettura dei recenti per piano, in minuti: obiettivo, non garanzia. */
 export const syncMinutes: Record<SyncPlan, number> = { premium: 10, free: 30 };
+/**
+ * Cadenza di uno spazio che nessuno segue, con qualunque piano (D322): gli ordini nuovi arrivano
+ * comunque come evento, e al ritorno di un utente il negozio torna subito alla cadenza del piano.
+ */
+export const dormantSyncMinutes = 120;
 
 // Il cron parte ogni dieci minuti; il margine assorbe un avvio in ritardo rispetto al turno.
 const toleranceMilliseconds = 60_000;
@@ -59,6 +77,8 @@ export type SyncCandidate = {
   requestedAt: string | null;
   /** Storico, passata dei recenti o dettagli ancora da leggere dopo una lettura riuscita. */
   backlog: boolean;
+  /** Spazio senza sessioni aperte né Telegram collegato. */
+  dormant?: boolean;
 };
 
 /**
@@ -75,7 +95,9 @@ export function syncOrder<T extends SyncCandidate>(candidates: T[], now: Date): 
       candidate.requestedAt !== null ||
       candidate.polledAt === null ||
       Date.parse(candidate.polledAt) <=
-        now.getTime() - syncMinutes[candidate.plan] * 60_000 + toleranceMilliseconds;
+        now.getTime() -
+          (candidate.dormant ? dormantSyncMinutes : syncMinutes[candidate.plan]) * 60_000 +
+          toleranceMilliseconds;
     if (due) return plan;
     return candidate.backlog ? 2 + plan : null;
   };
@@ -98,6 +120,7 @@ type CandidateRow = ActiveStore & {
   requested_at: string | null;
   backlog: number;
   premium: number;
+  dormant: number;
 };
 
 /**
@@ -120,13 +143,14 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
               -- Dopo una lettura non riuscita l'arretrato attende la cadenza del piano.
               (EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.store_id = c.store_id
                           AND sr.started_at = ss.polled_at AND sr.ok = 1)
-               AND (ss.history_done_at IS NULL OR ss.recent_next IS NOT NULL
+               AND (ss.history_done_at IS NULL OR ss.recent_end IS NOT NULL
                     OR ss.trading_end IS NOT NULL OR EXISTS (
                  SELECT 1 FROM order_source_refs r
                   WHERE r.store_id = c.store_id AND r.source = 'fulfillment'
                     AND r.detail_for IS NOT r.last_modified_time
                     AND (r.detail_retry_at IS NULL OR r.detail_retry_at <= ?1)))) AS backlog,
-              ${activeEntitlementSql("s.workspace_id", "?1")} AS premium
+              ${activeEntitlementSql("s.workspace_id", "?1")} AS premium,
+              ${dormantWorkspaceSql("s.workspace_id", "?1")} AS dormant
          FROM ebay_store_credentials c
          JOIN ebay_stores s ON s.id = c.store_id
          LEFT JOIN sync_state ss ON ss.store_id = c.store_id
@@ -166,6 +190,7 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
       polledAt: row.polled_at,
       requestedAt: row.requested_at,
       backlog: row.backlog === 1,
+      dormant: row.dormant === 1,
     })),
     now,
   ).filter((store) => !limited.has(store.apiOrigin));
@@ -391,10 +416,12 @@ async function serveStore(
         access,
         now,
         budget: { ...storeBudget },
+        workerShare: workerShare(env),
       });
       if (result === "busy")
         // Stryker disable next-line StringLiteral: lo scopo conta soltanto nel confronto con «origin».
         return { delaySeconds: 60, scope: "store" };
+      await clearCredentialFailures(env.DB, store.store_id, store.granted_at);
       // Con il consenso appena usato, una volta per consenso: gli ordini nuovi arrivano anche
       // come evento, fuori dalla cadenza del piano.
       await ensureOrderEvents(env, store, access, now);
@@ -405,6 +432,8 @@ async function serveStore(
       );
     } catch (error) {
       logFailure({ error, operation: "order_acquisition" });
+      if (error instanceof UpstreamError && error.failure === "credentials")
+        await countCredentialFailure(env.DB, store.store_id, store.granted_at, now);
       if (error instanceof UpstreamError && error.failure === "rate_limited")
         return {
           delaySeconds: Math.min(

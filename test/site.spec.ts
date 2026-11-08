@@ -12,8 +12,7 @@ import { loader as loadFaq, meta as faqMeta } from "../app/routes/faq";
 import { loader as loadSupport } from "../app/routes/support";
 import { loader as loadLegal } from "../app/routes/legal";
 import { loader as loadRobots, robots } from "../app/routes/robots";
-import { sitemap } from "../app/routes/sitemap";
-import { llms } from "../app/site.server";
+import { llms, sitemap } from "../app/site.server";
 import { indexable, isProductionOrigin } from "../app/app-links";
 import { appCopy, infoEmail } from "../app/app-copy";
 import { adminCopy } from "../app/copy/admin-copy";
@@ -25,14 +24,53 @@ import { trialDays } from "../app/domain/grants.server";
 import { legalVersions } from "../app/domain/registration.server";
 import { freeHistoryDays } from "../app/domain/history-window.server";
 import { formatDate } from "../app/format";
-import { siteMeta } from "../app/site-meta";
-import { resetDatabase, insertWorkspace } from "./fixtures/database-fixtures";
+import { ogImage, siteMeta } from "../app/site-meta";
+import { loader as loadRoot } from "../app/root";
+import { resetDatabase, insertEntitlement, insertWorkspace } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { accessForm } from "./fixtures/account-route-fixtures";
-import { callRoute } from "./fixtures/route-fixtures";
+import { callRoute, pagePath } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
+
+describe("provenienza dei visitatori", () => {
+  /** Referer di un sito esterno: soltanto l'origine, come la manda il browser. */
+  const from = (host: string) => `https://${host}/`;
+  const arrival = async (path: string, referer?: string) =>
+    (await callRoute(loadRoot, path, referer ? { headers: { referer } } : {})).arrival;
+
+  it("ricava categoria e prima pagina dal Referer, con l'etichetta che vale di più", async () => {
+    expect(await arrival("/prezzi?utm=x", from("www.google.it"))).toBe("google:/prezzi");
+    expect(await arrival("/en/faq", from("community.ebay.it"))).toBe("ebay_community:/en/faq");
+    expect(await arrival("/", from("www.google.com"))).toBe("google:/");
+    expect(await arrival("/?via=github", from("www.google.com"))).toBe("github:/");
+    expect(await arrival("/?via=newsletter", from("www.bing.com"))).toBe("bing:/");
+    expect(await arrival("/funzionalita")).toBe("direct:/funzionalita");
+    // Fra le pagine del sito la provenienza viaggia soltanto nel parametro.
+    expect(await arrival("/faq", "http://localhost:5173/prezzi")).toBeNull();
+    expect(
+      await arrival("/accesso?registrati&via=google%3A%2Fprezzi", "http://localhost:5173/"),
+    ).toBe("google:/prezzi");
+  });
+
+  it("non cambia canonical, dati strutturati né sitemap e non scrive cookie", async () => {
+    const plain = siteRouteMeta({
+      loaderData: await callRoute(loadSite, "/"),
+    } as Parameters<typeof siteRouteMeta>[0]);
+    const tagged = siteRouteMeta({
+      loaderData: await callRoute(loadSite, "/?via=google%3A%2Fprezzi", {
+        headers: { referer: from("www.google.com") },
+      }),
+    } as Parameters<typeof siteRouteMeta>[0]);
+    expect(tagged).toEqual(plain);
+    expect(JSON.stringify(tagged)).not.toContain("via=");
+    expect(sitemap("https://fiscalbay.it")).not.toContain("via=");
+    expect(new Headers(siteHeaders()).has("set-cookie")).toBe(false);
+    const pricing = await callRoute(loadPricing, "/prezzi?via=reddit");
+    expect(pricing).not.toBeInstanceOf(Response);
+  });
+});
 
 describe("radice pubblica e area riservata", () => {
   const root = (path: string, cookie?: string) =>
@@ -53,7 +91,7 @@ describe("radice pubblica e area riservata", () => {
       for (const base of ["", "/en"]) {
         const response = (await root(base || "/", cookie)) as Response;
         expect(response.status).toBe(302);
-        expect(response.headers.get("location")).toBe(`${base}/app/ordini`);
+        expect(response.headers.get("location")).toBe(pagePath(base, "/app/ordini"));
         expect(response.headers.get("cache-control")).toBe("no-store");
       }
     }
@@ -123,12 +161,10 @@ describe("radice pubblica e area riservata", () => {
     const { copy } = await callRoute(loadSite, "/en");
     expect(copy).toMatchObject({
       premiumGross: "€5.98 per month or €59.78 per year with 22% Italian VAT",
-      premiumBody: expect.stringMatching(
-        /\. New Premium purchases and trials are paused for now\.$/u,
-      ),
+      premiumBody: expect.stringMatching(/\. New Pro purchases and trials are paused for now\.$/u),
     });
     expect(copy.premiumBody).not.toContain("14-day");
-    expect((await callRoute(loadPricing, "/en/prezzi")).copy.purchaseNote).toBe(
+    expect((await callRoute(loadPricing, "/en/pricing")).copy.purchaseNote).toBe(
       sitePages.en.pricing.closed,
     );
   });
@@ -150,7 +186,7 @@ describe("radice pubblica e area riservata", () => {
     expect(await root("/", "fiscalbay_visita=1")).toMatchObject({ signedIn: false });
 
     const back = (await root("/en?visita=0", visiting)) as Response;
-    expect(back.headers.get("location")).toBe("/en/app/ordini");
+    expect(back.headers.get("location")).toBe("/en/app/orders");
     expect(back.headers.getSetCookie()).toEqual([
       "fiscalbay_visita=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax",
     ]);
@@ -167,11 +203,11 @@ describe("radice pubblica e area riservata", () => {
       "/",
       "/en",
       "/funzionalita",
-      "/en/prezzi",
+      "/en/pricing",
       "/sicurezza",
       "/en/faq",
       "/supporto",
-      "/en/supporto",
+      "/en/support",
     ]) {
       expect(indexable("https://fiscalbay.it", path)).toBe(true);
       expect(indexable("https://test.fiscalbay.it", path)).toBe(false);
@@ -181,7 +217,7 @@ describe("radice pubblica e area riservata", () => {
       "/termini",
       "/en/privacy",
       "/app/ordini",
-      "/en/app/negozi/x",
+      "/en/app/stores/x",
       "/app/novita",
       "/accesso",
       "/admin",
@@ -224,18 +260,19 @@ describe("radice pubblica e area riservata", () => {
       "/og/fiscalbay-it.png",
       "/site/ordini-it-light.webp",
       "/prezzi",
-      "/en/sicurezza",
+      "/en/security",
     ])
       expect(disallowed(path), path).toBe(false);
     for (const path of [
       "/app/ordini",
-      "/en/app/negozi",
+      "/en/app/stores",
       "/admin",
       "/anteprima/ordini",
       "/api/v1/x",
     ])
       expect(disallowed(path), path).toBe(true);
-    expect(production).toContain("Disallow: /anteprima\nDisallow: /en/anteprima\n");
+    expect(production).toContain("Disallow: /anteprima\nDisallow: /en/preview\n");
+    expect(production).toContain("Disallow: /accesso\nDisallow: /en/sign-in\n");
     expect(production).toMatch(/\nSitemap: https:\/\/fiscalbay\.it\/sitemap\.xml\n$/u);
     expect(production).not.toMatch(/termini|privacy|prezzi/u);
     // Ricerca, risposte AI e addestramento ammessi, nel gruppo che vale per ogni crawler.
@@ -254,21 +291,37 @@ describe("radice pubblica e area riservata", () => {
         .map((loc) => loc.slice(5, -6)),
     );
     expect(new Set(links.map(([, url]) => url))).toEqual(listed);
-    expect(text).toContain(`[${sitePages.en.pricing.title}](https://fiscalbay.it/en/prezzi)`);
+    expect(text).toContain(`[${sitePages.en.pricing.title}](https://fiscalbay.it/en/pricing)`);
   });
 
   it("elenca nella sitemap le sole pagine canoniche, in ogni lingua con le alternate", () => {
     const xml = sitemap("https://fiscalbay.it");
     const locations = [...xml.matchAll(/<loc>([^<]+)<\/loc>/gu)].map((match) => match[1]);
     expect(locations).toEqual(
-      ["", "/funzionalita", "/prezzi", "/sicurezza", "/faq", "/supporto"].flatMap((path) => [
-        `https://fiscalbay.it${path || "/"}`,
-        `https://fiscalbay.it/en${path}`,
-      ]),
+      [
+        ["/", "/en"],
+        ["/funzionalita", "/en/features"],
+        ["/prezzi", "/en/pricing"],
+        ["/sicurezza", "/en/security"],
+        ["/faq", "/en/faq"],
+        ["/supporto", "/en/support"],
+        ["/guide", "/en/guides"],
+        ["/guide/trovare-codice-fiscale-ordini-ebay", "/en/guides/find-tax-code-ebay-orders"],
+        [
+          "/guide/codice-fiscale-non-visibile-ordine-ebay",
+          "/en/guides/tax-code-not-visible-ebay-order",
+        ],
+        ["/guide/chiedere-codice-fiscale-acquirente-ebay", "/en/guides/ask-ebay-buyer-tax-code"],
+        ["/guide/codice-fiscale-fattura-elettronica-ebay", "/en/guides/tax-code-e-invoice-ebay"],
+        ["/guide/esportare-ordini-ebay-excel-csv", "/en/guides/export-ebay-orders-excel-csv"],
+        ["/guide/partita-iva-acquirente-ebay", "/en/guides/buyer-vat-number-ebay"],
+      ].flatMap((paths) => paths.map((path) => `https://fiscalbay.it${path}`)),
     );
+    // Ogni pagina porta il giorno dell'ultima modifica del contenuto.
     expect(xml).toContain(
-      '<url><loc>https://fiscalbay.it/en/prezzi</loc><xhtml:link rel="alternate" hreflang="it" href="https://fiscalbay.it/prezzi"/><xhtml:link rel="alternate" hreflang="en" href="https://fiscalbay.it/en/prezzi"/><xhtml:link rel="alternate" hreflang="x-default" href="https://fiscalbay.it/prezzi"/></url>',
+      '<url><loc>https://fiscalbay.it/en/pricing</loc><lastmod>2026-11-06</lastmod><xhtml:link rel="alternate" hreflang="it" href="https://fiscalbay.it/prezzi"/><xhtml:link rel="alternate" hreflang="en" href="https://fiscalbay.it/en/pricing"/><xhtml:link rel="alternate" hreflang="x-default" href="https://fiscalbay.it/prezzi"/></url>',
     );
+    expect(xml.match(/<lastmod>\d{4}-\d{2}-\d{2}<\/lastmod>/gu)).toHaveLength(locations.length);
     expect(xml).not.toMatch(/termini|privacy|accesso|\/app/u);
   });
 
@@ -278,7 +331,7 @@ describe("radice pubblica e area riservata", () => {
     } as Parameters<typeof siteRouteMeta>[0]);
     expect(home).toEqual(
       expect.arrayContaining([
-        { title: "FiscalBay | Recupera il Codice Fiscale dagli ordini eBay" },
+        { title: "Recupera il Codice Fiscale dagli ordini eBay | FiscalBay" },
         { tagName: "link", rel: "canonical", href: "http://localhost:5173/" },
         { tagName: "link", rel: "alternate", hrefLang: "en", href: "http://localhost:5173/en" },
         {
@@ -304,6 +357,8 @@ describe("radice pubblica e area riservata", () => {
         name: "FiscalBay",
         url: "http://localhost:5173/",
         logo: "http://localhost:5173/apple-touch-icon.png",
+        description: sitePages.it.home.description,
+        sameAs: ["https://t.me/FiscalBayTestBot"],
         email: infoEmail,
       },
       {
@@ -356,8 +411,8 @@ describe("radice pubblica e area riservata", () => {
     });
     expect(meta).toEqual(
       expect.arrayContaining([
-        { title: "FiscalBay | Pricing" },
-        { tagName: "link", rel: "canonical", href: "https://fiscalbay.it/en/prezzi" },
+        { title: "Pricing | FiscalBay" },
+        { tagName: "link", rel: "canonical", href: "https://fiscalbay.it/en/pricing" },
         { tagName: "link", rel: "alternate", hrefLang: "it", href: "https://fiscalbay.it/prezzi" },
         {
           tagName: "link",
@@ -367,9 +422,14 @@ describe("radice pubblica e area riservata", () => {
         },
         { property: "og:locale", content: "en_GB" },
         { property: "og:locale:alternate", content: "it_IT" },
-        { property: "og:url", content: "https://fiscalbay.it/en/prezzi" },
-        { property: "og:image", content: "https://fiscalbay.it/og/fiscalbay-en.png" },
+        { property: "og:url", content: "https://fiscalbay.it/en/pricing" },
+        { property: "og:image", content: "https://fiscalbay.it/og/prezzi-en.png" },
       ]),
+    );
+    // Le pagine fuori dalla sitemap usano l'immagine della home.
+    expect(ogImage("it", "/termini")).toBe("/og/fiscalbay-it.png");
+    expect(ogImage("en", "/guide/trovare-codice-fiscale-ordini-ebay")).toBe(
+      "/og/guide-trovare-codice-fiscale-ordini-ebay-en.png",
     );
   });
 });
@@ -378,11 +438,11 @@ describe("pagine del sito pubblico", () => {
   const visit = (cookie?: string) =>
     Promise.all([
       callRoute(loadFeatures, "/funzionalita", { cookie }),
-      callRoute(loadPricing, "/en/prezzi", { cookie }),
+      callRoute(loadPricing, "/en/pricing", { cookie }),
       callRoute(loadSecurity, "/sicurezza", { cookie }),
       callRoute(loadFaq, "/en/faq", { cookie }),
       callRoute(loadSupport, "/supporto", { cookie }),
-      callRoute(loadLegal, "/en/termini", { cookie }),
+      callRoute(loadLegal, "/en/terms", { cookie }),
     ]);
 
   it("restano sul sito anche con la sessione, che porta «Apri l'app» nella barra", async () => {
@@ -396,7 +456,30 @@ describe("pagine del sito pubblico", () => {
     );
   });
 
-  it("con Auth o database non disponibili restano le pagine informative, Home e Prezzi rispondono 503", async () => {
+  it("in Prezzi chi ha già Pro a vita vede il piano attivo al posto delle offerte", async () => {
+    const { userId, cookie } = await verifiedSession("sito-lifetime@example.invalid");
+    const visitor = await callRoute(loadPricing, "/prezzi", { cookie });
+    expect(visitor).toMatchObject({ signedIn: true, owned: false });
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-a", userId, name: "Spazio" }),
+      env.DB.prepare(
+        `INSERT INTO lifetime_allocations (slot, workspace_id, status, created_at, activated_at)
+         VALUES (1, 'w-a', 'active', ?1, ?1)`,
+      ).bind(new Date().toISOString()),
+      insertEntitlement({
+        workspaceId: "w-a",
+        source: "lifetime",
+        grantedBy: "admin@example.invalid",
+        grantReason: "Omaggio di prova",
+      }),
+    ]);
+    const owner = await callRoute(loadPricing, "/en/pricing", { cookie });
+    expect(owner).toMatchObject({ owned: true });
+    expect(owner.copy.owned).toBe(sitePages.en.pricing.owned);
+    expect(await callRoute(loadPricing, "/prezzi")).toMatchObject({ owned: false });
+  });
+
+  it("con Auth o database non disponibili le pagine pubbliche restano, Home e Prezzi con il listino di riserva", async () => {
     const { cookie } = await verifiedSession("sito-guasto@example.invalid");
     const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const prepare = vi.spyOn(env.DB, "prepare").mockImplementation(() => {
@@ -412,17 +495,40 @@ describe("pagine del sito pubblico", () => {
         callRoute(loadLegal, "/privacy", { cookie }),
       ]);
       expect(pages).toMatchObject(pages.map(() => ({ signedIn: false })));
-      // Senza prova, quota, promozione e posti letti, Home e Prezzi non promettono nulla.
+      // Senza prova, quota, promozione e posti letti, Home e Prezzi mostrano i soli prezzi del
+      // catalogo e non promettono nulla.
       for (const visitor of [cookie, undefined]) {
-        for (const page of [
-          callRoute(loadSite, "/", { cookie: visitor }),
-          callRoute(loadPricing, "/en/prezzi", { cookie: visitor }),
-        ]) {
-          expect(await page.catch((error: unknown) => error)).toMatchObject({
-            data: null,
-            init: { status: 503, headers: { "cache-control": "no-store", "retry-after": "60" } },
-          });
-        }
+        const home = await callRoute(loadSite, "/", { cookie: visitor });
+        expect(home).toMatchObject({
+          signedIn: false,
+          copy: {
+            quota: null,
+            premiumBody: sitePages.it.home.premiumBody,
+            premiumOffers: [
+              expect.objectContaining({ amount: "4,90\u00a0€" }),
+              expect.objectContaining({ amount: "49\u00a0€" }),
+            ],
+          },
+        });
+        const pricing = await callRoute(loadPricing, "/en/pricing", { cookie: visitor });
+        expect(pricing).toMatchObject({
+          signedIn: false,
+          purchasesOpen: false,
+          freePromotion: null,
+          lifetime: { left: null },
+          copy: {
+            promotion: null,
+            freeItems: expect.arrayContaining(["Orders to unlock every 7 days"]),
+            purchaseNote: sitePages.en.pricing.purchaseNote,
+          },
+        });
+        expect(
+          pricing.copy.offers.map(({ price, seats, soldOut }) => ({ price, seats, soldOut })),
+        ).toEqual([
+          { price: "€4.90", seats: null, soldOut: false },
+          { price: "€49", seats: null, soldOut: false },
+          { price: "€149", seats: null, soldOut: false },
+        ]);
       }
       expect(new Set(log.mock.calls.map(([line]) => JSON.parse(String(line)).code))).toEqual(
         new Set(["UPSTREAM_UNAVAILABLE"]),
@@ -471,7 +577,7 @@ describe("pagine del sito pubblico", () => {
       version: legalVersions.privacy,
       sections: legalDocuments.it.privacy,
     });
-    expect(await callRoute(loadLegal, "/en/termini")).toMatchObject({
+    expect(await callRoute(loadLegal, "/en/terms")).toMatchObject({
       document: "termini",
       version: legalVersions.terms,
       sections: legalDocuments.en.termini,
@@ -542,7 +648,7 @@ describe("pagine del sito pubblico", () => {
     // Il Free mostra la quota della promozione; il prezzo netto ha accanto il totale con IVA.
     expect(pricing.copy).toMatchObject({
       freeItems: expect.arrayContaining(["10 ordini da sbloccare ogni 7 giorni"]),
-      purchaseNote: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
+      purchaseNote: "I nuovi acquisti di Pro e le prove sono sospesi per ora.",
       offers: [
         {
           offer: "monthly",
@@ -569,7 +675,7 @@ describe("pagine del sito pubblico", () => {
         ).bind(index + 1, `w-${index}`, at),
       ]).flat(),
     );
-    const { copy } = await callRoute(loadPricing, "/en/prezzi");
+    const { copy } = await callRoute(loadPricing, "/en/pricing");
     expect(copy.offers.at(-1)).toMatchObject({
       offer: "lifetime",
       price: "€149",

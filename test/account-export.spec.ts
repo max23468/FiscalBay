@@ -42,7 +42,7 @@ it("lo ZIP dell'account in inglese scrive le date nel fuso dell'utente, senza cl
          VALUES ('e-paid', 'w-a', 'premium', ?1, ?2, 'in_segreta', 73914286, 'EUR', ?1)`,
     ).bind(now, hours(24 * 30)),
   ]);
-  const result = (await callRoute(settingsAction, "/en/app/impostazioni/esportazione", {
+  const result = (await callRoute(settingsAction, "/en/app/settings/export", {
     cookie,
     fields: { intent: "account-export" },
   })) as { ok: boolean; download: string };
@@ -111,6 +111,10 @@ it("i dati dell'account si scaricano in uno ZIP senza segreti né ordini", async
       `INSERT INTO export_configurations (id, user_id, name, format, granularity, columns, updated_at)
          VALUES ('cfg-1', ?1, '=Commercialista', 'xlsx', 'order', 'order,taxCode', ?2)`,
     ).bind(userId, now),
+    env.DB.prepare(
+      `INSERT INTO signup_sources (user_id, channel, first_page, recorded_at)
+         VALUES (?1, 'ebay_community', '/faq', ?2)`,
+    ).bind(userId, now),
   ]);
   await insertEntitlement({
     source: "admin",
@@ -165,6 +169,7 @@ it("i dati dell'account si scaricano in uno ZIP senza segreti né ordini", async
   const data = JSON.parse(strFromU8(files["fiscalbay-account.json"]!));
   expect(data).toMatchObject({
     exportedAt: now,
+    profile: { signupSource: { channel: "ebay_community", firstPage: "/faq" } },
     signIn: [
       { method: "credential", name: null, createdAt: now },
       { method: "passkey", name: "MacBook", createdAt: now },
@@ -187,6 +192,9 @@ it("i dati dell'account si scaricano in uno ZIP senza segreti né ordini", async
     '"Nome","Formato","Una riga per","Colonne"\r\n"\'=Commercialista","xlsx","order","order, taxCode"\r\n',
   );
   expect(strFromU8(files["profilo.csv"]!)).toContain('"Chat Telegram","\'@venditore"\r\n');
+  expect(strFromU8(files["profilo.csv"]!)).toContain(
+    '"Provenienza dell\'iscrizione","ebay_community"\r\n"Prima pagina vista","/faq"\r\n',
+  );
   // Il file vale 24 ore e una revoca dello spazio lo nega come gli altri.
   expect(await expiry(id)).toBe(hours(24));
   await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ?").bind(now).run();

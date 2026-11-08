@@ -8,12 +8,17 @@ import {
   leakedPasswordField,
   ordersPath,
   originUrl,
+  planChoice,
+  planChoiceParam,
+  planPath,
   securityReturnPath,
   visitCookie,
 } from "./app-links";
 import { readSession } from "./domain/sessions.server";
 import { authLimitWait, forwardToAuth, redirectWithCookies } from "./auth-route.server";
-import { limitedHeaders } from "./request-limits.server";
+import { clientKey, limitedHeaders } from "./request-limits.server";
+import { authAttemptWait, countAuthAttempt } from "./domain/auth-attempts.server";
+import { lastLoginMethodCookie } from "./auth.server";
 import {
   completeRegistration,
   parseProfile,
@@ -30,12 +35,53 @@ import { tooManyRequests } from "./area-actions.server";
 import { errorResponse, unavailableData } from "./error-response";
 import { isSameOrigin } from "./account-area.server";
 import { registeredUserExists } from "./domain/registration.server";
+import { recordSignupSource } from "./domain/signup-sources.server";
+import { formatSource, parseSource, sourceParam } from "./signup-source";
 import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
 import { turnstileActions, turnstileField } from "./turnstile";
 import { turnstileFailure } from "./turnstile.server";
 
 const noStore = { "cache-control": "no-store" };
+
+/**
+ * Accessi con password non riusciti dallo stesso IP prima che il modulo chieda Turnstile: chi
+ * sbaglia una volta non lo vede, chi prova molte password sì.
+ */
+const signInFailures = { window: 900, max: 3 };
+
+const signInFailureKey = (request: Request) => {
+  const ip = request.headers.get("cf-connecting-ip");
+  return ip ? `sign-in-failures|${clientKey(ip)}` : null;
+};
+
+/** Il modulo di accesso con password richiede Turnstile per l'IP della richiesta. */
+async function signInChallenge(request: Request): Promise<boolean> {
+  const key = signInFailureKey(request);
+  return key ? (await authAttemptWait(env.DB, key, signInFailures, Date.now())) !== null : false;
+}
+
+const loginMethods = ["email", "google", "ebay", "passkey"] as const;
+export type LoginMethod = (typeof loginMethods)[number];
+
+/** Ultimo metodo di accesso usato da questo browser, dal cookie del plugin di Better Auth. */
+function lastLoginMethod(request: Request): LoginMethod | null {
+  const value = (request.headers.get("cookie") ?? "")
+    .split(";")
+    .map((part) => part.trim().split("="))
+    .find(([name]) => name === lastLoginMethodCookie)?.[1];
+  return loginMethods.find((method) => method === value) ?? null;
+}
+
+/** Rifiuto di Auth per una password presente nelle violazioni note (Have I Been Pwned). */
+async function compromisedPassword(response: Response): Promise<boolean> {
+  if (response.status !== 400) return false;
+  const error = await response
+    .clone()
+    .json<{ code?: string }>()
+    .catch(() => null);
+  return error?.code === "PASSWORD_COMPROMISED";
+}
 
 /**
  * Dati della cancellazione self-service per chi non raggiunge le Impostazioni (registrazione
@@ -74,6 +120,8 @@ export async function accessLoader(request: Request) {
       resetToken: search.get("token") || null,
       // «Inizia gratis» del sito apre direttamente la registrazione.
       tab: search.has("registrati") ? "registrati" : "accedi",
+      challenge: await signInChallenge(request),
+      lastMethod: lastLoginMethod(request),
     };
   }
   const status = await registrationStatus(env.DB, session.user.id);
@@ -127,6 +175,8 @@ export async function accessAction(request: Request) {
   const returnTo = securityReturnPath(language, field("returnTo"));
   const destination = returnTo ?? base;
   const accessReturn = returnTo ? `${access}?${new URLSearchParams({ returnTo })}` : access;
+  // Provenienza portata dall'indirizzo del modulo, per un account che nasce da questo invio.
+  const source = parseSource(new URL(request.url).searchParams.get(sourceParam));
   const notice = (value: SignInNotice, page = access) => {
     const query = new URLSearchParams({ accesso: value });
     if (returnTo) query.set("returnTo", returnTo);
@@ -178,6 +228,8 @@ export async function accessAction(request: Request) {
       provider: intent,
       callbackURL: destination,
       errorCallbackURL: `${localizedPath(language, "/auth/error")}?${new URLSearchParams({ provider: intent, ...(returnTo ? { returnTo } : {}) })}`,
+      // Lo state firmato la porta al callback, dove Better Auth crea l'eventuale nuovo utente.
+      ...(source ? { additionalData: { signupSource: formatSource(source) } } : {}),
     });
     if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
     const { url } = await response.clone().json<{ url: string }>();
@@ -206,6 +258,11 @@ export async function accessAction(request: Request) {
       token,
       newPassword: field("password"),
     });
+    // La password violata non consuma il link: la pagina resta sul modulo con lo stesso token.
+    if (await compromisedPassword(response)) {
+      const query = new URLSearchParams({ token, accesso: "password-violata" });
+      return redirect(`${access}?${query}`, 303);
+    }
     return notice(response.ok ? "password-reimpostata" : "recupero-scaduto");
   }
 
@@ -218,13 +275,17 @@ export async function accessAction(request: Request) {
     if (wait) return failed("troppi-tentativi", "registrati", wait);
     const check = await turnstileFailure(env, request, form, turnstileActions.signUp);
     if (check) return failed(check, "registrati");
+    // La conferma dell'email apre la pagina Piano con l'offerta scelta in Prezzi, se c'è.
+    const chosen = planChoice(field(planChoiceParam));
     const response = await forward(
       "/sign-up/email",
       {
         email: field("email"),
         password: field("password"),
         name: `${profile.firstName} ${profile.lastName}`,
-        callbackURL: base,
+        callbackURL: chosen
+          ? `${localizedPath(language, planPath)}?${planChoiceParam}=${chosen}`
+          : base,
       },
       true,
     );
@@ -234,6 +295,7 @@ export async function accessAction(request: Request) {
         if (error.code === "registration_approval_required")
           return failed("autorizzazione", "registrati");
       }
+      if (await compromisedPassword(response)) return failed("password-violata", "registrati");
       return failed(response.status === 429 ? "troppi-tentativi" : "registrazione", "registrati");
     }
     // Per un indirizzo già registrato Better Auth risponde con un utente fittizio, senza
@@ -249,6 +311,7 @@ export async function accessAction(request: Request) {
         profile,
         agreement: { marketing: field("marketing") === "on" },
       });
+      await recordSignupSource(env.DB, user.id, source, new Date());
     }
     return notice("registrato");
   }
@@ -263,7 +326,7 @@ export async function accessAction(request: Request) {
     const session = await readSession(env, request);
     if (!session) return notice("errore");
     return intent === "account-delete"
-      ? requestAccountDeletion(request, { language, session }, field("confirmation"), true)
+      ? requestAccountDeletion(request, { language, session }, form, true)
       : securityAction(request, { language, session }, form, authPath !== null);
   }
 
@@ -305,10 +368,17 @@ export async function accessAction(request: Request) {
     return redirect(base, 303);
   }
 
+  if (await signInChallenge(request)) {
+    const check = await turnstileFailure(env, request, form, turnstileActions.signIn);
+    if (check) return failed(check, "accedi");
+  }
   const response = await forward("/sign-in/email", {
     email: field("email"),
     password: field("password"),
   });
+  const failureKey = signInFailureKey(request);
+  if (response.status === 401 && failureKey)
+    await countAuthAttempt(env.DB, failureKey, signInFailures, Date.now());
   if (response.ok) {
     // Password trapelata secondo il controllo del browser: l'avviso arriva nella prima pagina.
     if (field(leakedPasswordField) !== "1") return redirectWithCookies(destination, response);

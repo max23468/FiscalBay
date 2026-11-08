@@ -63,7 +63,7 @@ const it = {
       removed: "Dati eliminati",
     },
     operations: {
-      "grant-premium": "Premium concesso",
+      "grant-premium": "Pro concesso",
       "grant-lifetime": "Lifetime concesso",
       "grant-history": "Storico esteso",
       "revoke-history": "Estensione revocata",
@@ -134,7 +134,7 @@ const it = {
     waitlisted: (count: number) => `${count} in lista d’attesa`,
     paid: "Spazi coperti",
     paidNote: (premium: number, lifetime: number, trial: number, granted: number) =>
-      `Premium ${premium} · lifetime ${lifetime} · prova ${trial} · concessi ${granted}`,
+      `Pro ${premium} · lifetime ${lifetime} · prova ${trial} · concessi ${granted}`,
     stores: "Negozi attivi",
     storeProblems: (count: number) =>
       count === 0 ? "Nessun problema" : count === 1 ? "1 con problemi" : `${count} con problemi`,
@@ -171,7 +171,7 @@ const it = {
       ebay_quota: {
         title: "Quota eBay oltre la soglia",
         consequence: "Al limite eBay sospende la chiamata e le letture che la usano si fermano.",
-        action: "Avvia l’Application Growth Check",
+        action: "Se il consumo viene dai negozi Production, avvia l’Application Growth Check",
       },
       ebay_bulk_data: {
         title: "Soglia eBay sul trasferimento di dati",
@@ -269,7 +269,7 @@ const it = {
     noWorkspace: "Senza spazio",
   },
   coverage: {
-    premium: "Premium",
+    premium: "Pro",
     trial: "Prova",
     lifetime: "Lifetime",
     admin: "Concesso",
@@ -329,7 +329,7 @@ const it = {
       transfer: "Trasferisci",
     },
     actions: "Azioni",
-    grantPremium: "Concedi Premium",
+    grantPremium: "Concedi Pro",
     days: "Giorni",
     grantLifetime: "Concedi lifetime",
     grantLifetimeHint:
@@ -351,7 +351,7 @@ const it = {
   },
   results: {
     grantPremium: {
-      done: (end: string) => `Premium concesso fino al ${end}.`,
+      done: (end: string) => `Pro concesso fino al ${end}.`,
       lifetime: "Lo spazio ha già il lifetime.",
       unavailable: "Stripe non risponde: nessuna concessione registrata.",
     },
@@ -465,6 +465,8 @@ const it = {
           ? `ogni ${Math.round(seconds / 3600)} h`
           : `ogni ${Math.round(seconds / 60)} min`,
     shared: (calls: number) => `Quota condivisa, ${calls} di questa chiamata`,
+    own: (calls: number) => `${calls} da questo ambiente oggi (UTC)`,
+    orderReads: (calls: number) => `Letture Fulfillment degli ordini: ${calls} oggi (UTC)`,
     otherCalls: (count: number) => `Altre chiamate dell’API (${count})`,
     suspended: "Chiamate sospese",
     allCalls: "Tutte le chiamate dell’ambiente",
@@ -473,7 +475,8 @@ const it = {
     anomalies: "Anomalie delle quote",
     bulkData: "Soglie Bulk Data Transfer",
     resolved: (when: string) => `Rientrata il ${when}`,
-    request: "Per una quota più alta completa l’Application Growth Check del Developer Program.",
+    request:
+      "Se il consumo viene dai negozi Production, per una quota più alta completa l’Application Growth Check del Developer Program.",
   },
   performance: {
     unconfigured: "Lettura non configurata: manca il token ANALYTICS_READ_TOKEN del Worker.",
@@ -554,6 +557,37 @@ const it = {
     newPromotion: "Nuova promozione",
     edit: "Modifica",
     end: "Termina",
+  },
+  exits: {
+    title: "Motivi di uscita",
+    cancellations: "Disdette",
+    deletions: "Cancellazioni dell’account",
+    reason: "Motivo",
+    days30: "30 giorni",
+    months3: "3 mesi",
+    months12: "12 mesi",
+    comments: "Commenti degli ultimi 30 giorni",
+    comment: "Commento",
+    kind: { cancellation: "Disdetta", account_deletion: "Cancellazione" },
+    reasons: {
+      too_expensive: "Costa troppo",
+      unused: "Non lo usa abbastanza",
+      switched_service: "Passa a un altro servizio",
+      missing_features: "Manca una funzione",
+      low_quality: "Non funziona come si aspettava",
+      closing_business: "Chiude o sospende l’attività eBay",
+      other: "Altro",
+      none: "Nessuna risposta",
+    },
+    plans: {
+      free: "Free",
+      trial: "Prova",
+      monthly: "Mensile",
+      annual: "Annuale",
+      lifetime: "Lifetime",
+      granted: "Concesso",
+    },
+    deletedAccount: "Account cancellato",
   },
   abuse: {
     kinds: {
@@ -647,6 +681,29 @@ const it = {
       purchase: "Primo acquisto",
     },
     of: (count: number, step: string) => `${count} · ${step}`,
+    sources: "Provenienza degli iscritti",
+    sourcesNote:
+      "Stessa coorte dei primi passi, per canale d’arrivo. Attivazioni e paganti contano la prima lettura riuscita e il primo acquisto, fino a oggi.",
+    channel: "Canale",
+    signups: "Iscritti",
+    activations: "Attivazioni",
+    payers: "Paganti",
+    channels: {
+      google: "Google",
+      bing: "Bing",
+      other_search: "Altro motore di ricerca",
+      ai_assistant: "Assistente AI",
+      ebay_community: "Community eBay",
+      ebay_other: "Altro sito eBay",
+      github: "GitHub",
+      youtube: "YouTube",
+      reddit: "Reddit",
+      telegram: "Telegram",
+      email: "Email",
+      other_site: "Altro sito",
+      direct: "Diretto",
+      unknown: "Sconosciuto",
+    },
     syncWithoutOrders: (count: number) =>
       count === 1
         ? "1 spazio ha la prima lettura riuscita senza ordini."
@@ -667,7 +724,7 @@ const it = {
     trialsOpen: "Prove in corso",
     gifts: "Omaggi",
     giftsNote: (lifetime: number, granted: number) =>
-      `Lifetime ${lifetime} · Premium concesso ${granted}`,
+      `Lifetime ${lifetime} · Pro concesso ${granted}`,
     cancelling: "Disdette programmate",
     trialConversion: "Prove concluse con un acquisto",
     trialConversionNote: (converted: number, ended: number) =>
@@ -775,7 +832,7 @@ const en: AdminCopy = {
       removed: "Data deleted",
     },
     operations: {
-      "grant-premium": "Premium granted",
+      "grant-premium": "Pro granted",
       "grant-lifetime": "Lifetime granted",
       "grant-history": "History extended",
       "revoke-history": "Extension revoked",
@@ -846,7 +903,7 @@ const en: AdminCopy = {
     waitlisted: (count: number) => `${count} on the waiting list`,
     paid: "Covered spaces",
     paidNote: (premium: number, lifetime: number, trial: number, granted: number) =>
-      `Premium ${premium} · lifetime ${lifetime} · trial ${trial} · granted ${granted}`,
+      `Pro ${premium} · lifetime ${lifetime} · trial ${trial} · granted ${granted}`,
     stores: "Active stores",
     storeProblems: (count: number) =>
       count === 0 ? "No problems" : count === 1 ? "1 with problems" : `${count} with problems`,
@@ -883,7 +940,7 @@ const en: AdminCopy = {
       ebay_quota: {
         title: "eBay quota over the threshold",
         consequence: "At the limit eBay suspends the call and the reads that use it stop.",
-        action: "Start the Application Growth Check",
+        action: "If the usage comes from Production stores, start the Application Growth Check",
       },
       ebay_bulk_data: {
         title: "eBay data transfer threshold",
@@ -981,7 +1038,7 @@ const en: AdminCopy = {
     noWorkspace: "No space",
   },
   coverage: {
-    premium: "Premium",
+    premium: "Pro",
     trial: "Trial",
     lifetime: "Lifetime",
     admin: "Granted",
@@ -1041,7 +1098,7 @@ const en: AdminCopy = {
       transfer: "Transfer",
     },
     actions: "Actions",
-    grantPremium: "Grant Premium",
+    grantPremium: "Grant Pro",
     days: "Days",
     grantLifetime: "Grant lifetime",
     grantLifetimeHint: "Uses a seat, or reuses the seat of a refunded lifetime in the same space.",
@@ -1062,7 +1119,7 @@ const en: AdminCopy = {
   },
   results: {
     grantPremium: {
-      done: (end: string) => `Premium granted until ${end}.`,
+      done: (end: string) => `Pro granted until ${end}.`,
       lifetime: "The space already has lifetime.",
       unavailable: "Stripe is not responding: no grant recorded.",
     },
@@ -1173,6 +1230,8 @@ const en: AdminCopy = {
           ? `every ${Math.round(seconds / 3600)} h`
           : `every ${Math.round(seconds / 60)} min`,
     shared: (calls: number) => `Shared quota, ${calls} from this call`,
+    own: (calls: number) => `${calls} from this environment today (UTC)`,
+    orderReads: (calls: number) => `Fulfillment order reads: ${calls} today (UTC)`,
     otherCalls: (count: number) => `Other API calls (${count})`,
     suspended: "Suspended calls",
     allCalls: "Every call in the environment",
@@ -1181,7 +1240,8 @@ const en: AdminCopy = {
     anomalies: "Quota issues",
     bulkData: "Bulk Data Transfer thresholds",
     resolved: (when: string) => `Back to normal on ${when}`,
-    request: "For a higher quota, complete the Developer Program’s Application Growth Check.",
+    request:
+      "If the usage comes from Production stores, complete the Developer Program’s Application Growth Check for a higher quota.",
   },
   performance: {
     unconfigured: "Read not configured: the Worker has no ANALYTICS_READ_TOKEN.",
@@ -1262,6 +1322,37 @@ const en: AdminCopy = {
     newPromotion: "New promotion",
     edit: "Edit",
     end: "End now",
+  },
+  exits: {
+    title: "Exit reasons",
+    cancellations: "Cancellations",
+    deletions: "Account deletions",
+    reason: "Reason",
+    days30: "30 days",
+    months3: "3 months",
+    months12: "12 months",
+    comments: "Comments from the last 30 days",
+    comment: "Comment",
+    kind: { cancellation: "Cancellation", account_deletion: "Deletion" },
+    reasons: {
+      too_expensive: "Costs too much",
+      unused: "Doesn’t use it enough",
+      switched_service: "Switching to another service",
+      missing_features: "Missing feature",
+      low_quality: "Doesn’t work as expected",
+      closing_business: "Closing or pausing the eBay business",
+      other: "Other",
+      none: "No answer",
+    },
+    plans: {
+      free: "Free",
+      trial: "Trial",
+      monthly: "Monthly",
+      annual: "Annual",
+      lifetime: "Lifetime",
+      granted: "Granted",
+    },
+    deletedAccount: "Account deleted",
   },
   abuse: {
     kinds: {
@@ -1344,12 +1435,35 @@ const en: AdminCopy = {
       store_linked: "Store connected",
       first_sync: "First successful read",
       first_order: "First order",
-      first_tax_id: "First tax code",
+      first_tax_id: "First tax identifier",
       first_unlock: "First unlock",
       trial: "Trial started",
       purchase: "First purchase",
     },
     of: (count: number, step: string) => `${count} · ${step}`,
+    sources: "Where sign-ups come from",
+    sourcesNote:
+      "Same cohort as first steps, by arrival channel. Activations and payers count the first successful read and the first purchase, up to today.",
+    channel: "Channel",
+    signups: "Sign-ups",
+    activations: "Activations",
+    payers: "Payers",
+    channels: {
+      google: "Google",
+      bing: "Bing",
+      other_search: "Other search engine",
+      ai_assistant: "AI assistant",
+      ebay_community: "eBay Community",
+      ebay_other: "Other eBay site",
+      github: "GitHub",
+      youtube: "YouTube",
+      reddit: "Reddit",
+      telegram: "Telegram",
+      email: "Email",
+      other_site: "Other website",
+      direct: "Direct",
+      unknown: "Unknown",
+    },
     syncWithoutOrders: (count: number) =>
       count === 1
         ? "1 space has its first successful read with no orders."
@@ -1370,7 +1484,7 @@ const en: AdminCopy = {
     trialsOpen: "Trials in progress",
     gifts: "Gifts",
     giftsNote: (lifetime: number, granted: number) =>
-      `Lifetime ${lifetime} · Premium granted ${granted}`,
+      `Lifetime ${lifetime} · Pro granted ${granted}`,
     cancelling: "Scheduled cancellations",
     trialConversion: "Trials ended with a purchase",
     trialConversionNote: (converted: number, ended: number) =>

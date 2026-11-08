@@ -20,6 +20,13 @@ on:
         type: string
         required: false
 
+# Un nuovo push sulla PR annulla l'intera run superata, mutation compresa: i gruppi dei singoli job
+# fermavano soltanto il job con lo stesso indice, e due run della stessa PR si contendevano i posti.
+# Push e avvii manuali su `develop` hanno un gruppo per run e non si annullano.
+concurrency:
+  group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Nessuna telemetria della CLI `cf` dalle esecuzioni automatiche.
 env:
   DO_NOT_TRACK: "1"
@@ -54,7 +61,9 @@ jobs:
       browsers: ${{ steps.detect.outputs.browsers }}
       matrix: ${{ steps.detect.outputs.matrix }}
       browser-matrix: ${{ steps.browser-plan.outputs.browser-matrix }}
-      mutation-lines: ${{ steps.detect.outputs.mutation-lines }}
+      browser-reused: ${{ steps.browser-plan.outputs.browser-reused }}
+      browser-grep: ${{ steps.browser-plan.outputs.browser-grep }}
+      mutation-pr: ${{ steps.modules.outputs.matrix || '{"include":[]}' }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
       artifact-run: ${{ steps.reuse.outputs.run-id || github.run_id }}
@@ -109,13 +118,15 @@ jobs:
             echo "playwright=$(node -p 'require("./package.json").devDependencies["@playwright/test"]')"
           } >> "${GITHUB_OUTPUT}"
 
-      # Un tree già verificato su develop non ripete il gate:
-      # il deploy distribuisce l'artefatto prodotto da quella verifica.
+      # Un tree già verificato su develop, o dalla PR del merge che non tocca il processo, non
+      # ripete il gate: il deploy distribuisce l'artefatto prodotto da quella verifica.
       - name: Find verified artifact
         id: reuse
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && steps.detect.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          DEPLOYED_SHA: ${{ steps.deployed.outputs.sha }}
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
         run: node scripts/find-build.mjs
@@ -140,12 +151,62 @@ jobs:
           PR_BODY="$(gh api "repos/${REPOSITORY}/pulls/${NUMBER}" --jq '.body // ""')" \
             node scripts/release/release.mjs review --base "${BASE_SHA}"
 
+      # I moduli critici della PR si dividono nelle stesse parti del riferimento di `develop`.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name == 'pull_request' && steps.detect.outputs.mutation-pr != '{"target":[]}'
+        with:
+          path: .mutation-timings.json
+          key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-timings-
+      # Con il riferimento completo di `develop` e pochi mutanti da ripetere il modulo resta in un
+      # solo job: ogni parte ripeterebbe la prova iniziale della suite.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: github.event_name == 'pull_request' && steps.detect.outputs.mutation-pr != '{"target":[]}'
+        with:
+          path: .mutation-references
+          key: mutation-references-${{ github.sha }}
+          restore-keys: mutation-references-
+      - name: Split module mutation
+        id: modules
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && steps.detect.outputs.mutation-pr != '{"target":[]}'
+        # Un modulo già provato in una run precedente della stessa PR, e non toccato da allora, per
+        # esempio dopo un'unione di `develop`, non si ripete; di un modulo provato in parte, anche
+        # in run diverse con lo stesso piano, ripartono soltanto le parti mancanti.
+        env:
+          TARGETS: ${{ steps.detect.outputs.mutation-pr }}
+          MUTATION_REFERENCES: .mutation-references
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          MUTATION_PR_BRANCH: ${{ github.head_ref }}
+          # Il commit di merge provato: una base avanzata senza unione nel branch conta come cambio.
+          HEAD_SHA: ${{ github.sha }}
+          MUTATION_PLAN: ${{ runner.temp }}/mutation-plan.json
+        run: node scripts/mutation.mjs --matrix "${TARGETS}"
+
+      # Il piano della matrice: le run seguenti della PR vi leggono parti, intervalli e sorgente.
+      - name: Preserve mutation plan
+        if: steps.modules.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/mutation-plan.json
+          overwrite: true
+          retention-days: 7
+
       # Una nuova sezione in cima al changelog sale di un solo passo dall'ultima versione pubblicata.
       - name: Check version step
         if: github.event_name == 'pull_request'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: node scripts/release/release.mjs version-step --base "${BASE_SHA}"
+
+      # Con la build il gate gira nel job `quality`, accanto ai browser: i controlli documentali,
+      # pochi secondi, si anticipano qui perché un errore, per esempio una decisione con lo stesso
+      # numero di un'altra PR, fermi la run prima di browser e mutation.
+      - name: Check documents before browsers
+        if: steps.reuse.outputs.run-id == '' && steps.detect.outputs.build == 'true'
+        run: pnpm verify:documents
 
       # Senza build il gate resta qui; con la build gira nel job `quality`.
       - name: Run selected CI gate
@@ -173,15 +234,51 @@ jobs:
       - name: Size browser jobs from selected inventory
         id: browser-plan
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
+        # Nella PR le prove già concluse in una run precedente, con lo stesso inventario, non
+        # ripartono senza cambi rilevanti per i browser; dopo un'unione con la base ripartono soltanto
+        # le aree toccate sia dai cambi sia dalla PR, con il nucleo `@smoke`.
         env:
           BROWSER_GREP: ${{ steps.detect.outputs.grep }}
           BROWSERS: ${{ steps.detect.outputs.browsers }}
           E2E_MATRIX: ${{ steps.detect.outputs.matrix }}
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          BROWSER_PR_BRANCH: ${{ github.event_name == 'pull_request' && github.head_ref || '' }}
         run: node scripts/browser-tests.mjs --plan --grep "${BROWSER_GREP}" --browsers "${BROWSERS}"
+
+      - name: Preserve browser inventory
+        if: steps.browser-plan.outcome == 'success' && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: browser-plan-${{ github.run_id }}
+          path: test-results/browser-plan.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Record build provenance
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id
         run: node scripts/release/release.mjs manifest --environment test
+
+      # Una build riusata dalla PR diventa anche artefatto di questa run su `develop`: la qualifica
+      # del candidato e le run successive dello stesso tree la riconoscono come verificata qui.
+      - name: Download pull request build
+        if: steps.reuse.outputs.source == 'pull'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ steps.reuse.outputs.artifact }}
+          path: .cloudflare/output/
+          run-id: ${{ steps.reuse.outputs.run-id }}
+          github-token: ${{ github.token }}
+      - name: Republish pull request build
+        if: steps.reuse.outputs.source == 'pull'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: build-${{ steps.tree.outputs.tree }}
+          path: .cloudflare/output/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload verified build
         if: steps.detect.outputs.build == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
@@ -217,6 +314,7 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || needs.verify.outputs.base }}
           HEAD_SHA: ${{ github.event_name == 'pull_request' && github.sha || github.event.after }}
+          VERIFIED_TEST_BUILD: "true"
         # I browser restano nei rispettivi job; il gate locale usa la stessa sequenza.
         run: node scripts/classify-changes.mjs --base "${BASE_SHA}" --head "${HEAD_SHA}" --run
 
@@ -235,7 +333,7 @@ jobs:
     name: Browser ${{ matrix.shard }}/${{ matrix.total }}
     needs: verify
     # Una PR in bozza esegue soltanto `Verify`: le prove complete partono quando è pronta.
-    if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && github.event.pull_request.draft != true
+    if: needs.verify.outputs.e2e == 'true' && needs.verify.outputs.reused != 'true' && needs.verify.outputs.browser-reused != 'true' && github.event.pull_request.draft != true
     runs-on: ubuntu-26.04
     container:
       image: mcr.microsoft.com/playwright:v${{ needs.verify.outputs.playwright }}-noble
@@ -246,6 +344,9 @@ jobs:
       cancel-in-progress: true
     strategy:
       fail-fast: false
+      # Venti job contemporanei per l'account: con un tetto per run la coda resta corta e i job
+      # brevi di merge, deploy e pubblicazione trovano un posto in pochi minuti.
+      max-parallel: 4
       matrix: ${{ fromJSON(needs.verify.outputs.browser-matrix) }}
 
     steps:
@@ -270,7 +371,8 @@ jobs:
           E2E_PREBUILT: "1"
           E2E_RETRIES: "1"
           E2E_MATRIX: ${{ needs.verify.outputs.matrix }}
-          BROWSER_GREP: ${{ needs.verify.outputs.grep }}
+          # Dopo un'unione con la base, le sole aree toccate sia dai cambi sia dalla PR.
+          BROWSER_GREP: ${{ needs.verify.outputs.browser-grep || needs.verify.outputs.grep }}
           BROWSERS: ${{ needs.verify.outputs.browsers }}
           SHARD: ${{ matrix.shard }}/${{ matrix.total }}
         run: node scripts/browser-tests.mjs --grep "${BROWSER_GREP}" --browsers "${BROWSERS}" --shard "${SHARD}"
@@ -283,25 +385,30 @@ jobs:
           path: test-results/
           retention-days: 7
 
-  # Righe cambiate dei moduli critici: un mutante sopravvissuto si corregge nella PR, non alla
-  # qualifica del candidato. Il modulo intero resta alla qualifica e alla campagna settimanale.
-  mutation-lines:
-    name: Mutation ${{ matrix.target }}
+  # Moduli critici cambiati o importati da un test cambiato, per intero e in modo incrementale: un
+  # mutante sopravvissuto si corregge nella PR, non alla qualifica del candidato, che riusa questa
+  # prova per lo stesso contenuto. I consumatori restano al candidato e alla campagna settimanale.
+  mutation-pr:
+    name: Mutation ${{ matrix.target }} ${{ matrix.shard }}
     needs: verify
-    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.verify.outputs.mutation-lines != '{"include":[]}'
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && needs.verify.outputs.mutation-pr != '{"include":[]}'
     runs-on: ubuntu-26.04
-    # Come la mutation della qualifica: le righe cambiate stanno in una sola parte, e uno
-    # spostamento di codice in un modulo critico può superare la mezz'ora.
+    # Senza riferimento una parte prova circa 150 mutanti, dopo la prova iniziale della suite che
+    # può durare fino a venti minuti.
     timeout-minutes: 60
     concurrency:
-      group: mutation-lines-${{ github.event.pull_request.number }}-${{ strategy.job-index }}
+      group: mutation-pr-${{ github.event.pull_request.number }}-${{ strategy.job-index }}
       cancel-in-progress: true
     strategy:
       fail-fast: false
-      matrix: ${{ fromJSON(needs.verify.outputs.mutation-lines) }}
+      # Venti job contemporanei per l'account: il resto alla qualifica del candidato e alle altre PR.
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.verify.outputs.mutation-pr) }}
     env:
       MUTATION_TARGET: ${{ matrix.target }}
-      MUTATION_LINES: ${{ matrix.lines }}
+      MUTATION_SHARD: ${{ matrix.shard }}
+      MUTATION_RANGES: ${{ matrix.ranges }}
+      MUTATION_DIGEST: ${{ matrix.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -311,13 +418,57 @@ jobs:
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
 
-      - name: Check changed lines
+      # Il modulo in un solo job parte dal riferimento completo che ha deciso la matrice.
+      - name: Restore complete develop reference
+        if: matrix.reference
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-references
+          key: mutation-references-${{ github.sha }}
+          restore-keys: mutation-references-
+
+      # Il riferimento della stessa parte, salvato su `develop` dall'ultima qualifica o campagna
+      # riuscita; con parti diverse quello più recente del modulo, che copre comunque i suoi mutanti.
+      - name: Restore develop reference
+        if: ${{ !matrix.reference }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-reference
+          key: mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: |
+            mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-
+            mutation-reference-${{ matrix.target }}-
+
+      # La prova più recente della stessa PR su un antenato della testa, preferendo la stessa parte,
+      # altrimenti il riferimento: Stryker ripete soltanto i mutanti con codice o test cambiati.
+      - name: Restore incremental base
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_ID: ${{ github.repository_id }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MUTATION_REFERENCE: ${{ matrix.reference || '.mutation-reference/incremental.json' }}
+        run: node scripts/mutation.mjs --incremental-base "${RUNNER_TEMP}/mutation-base.json"
+
+      - name: Qualify critical module
+        env:
+          MUTATION_INCREMENTAL_BASE: ${{ runner.temp }}/mutation-base.json
         run: pnpm test:mutation "${MUTATION_TARGET}"
+
+      - name: Preserve incremental report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-pr-${{ github.run_id }}-${{ github.run_attempt }}-${{ strategy.job-index }}
+          path: reports/mutation/
+          if-no-files-found: ignore
+          retention-days: 7
 
   # Unico controllo richiesto dalla protezione dei branch: riassume gli esiti dei job.
   gate:
     name: Node 26
-    needs: [verify, quality, browser, mutation-lines]
+    needs: [verify, quality, browser, mutation-pr]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5

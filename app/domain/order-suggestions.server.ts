@@ -1,6 +1,6 @@
 import { activeEntitlementSql, orderAccessSql } from "./grants.server";
 import { consultableStore, listedOrder, storeNameSql } from "./store-state.server";
-import { buyerTaxKey, taxIdentifierType, taxQuality } from "../tax-quality";
+import { buyerTaxKey, shownTaxType, taxIdentifierType, taxQuality } from "../tax-quality";
 import type { SuggestionView, EbayEnvironment } from "../view-models";
 
 type Suggestions = {
@@ -93,7 +93,13 @@ export async function orderSuggestions(
         continue;
       }
       const row = latest.find((item) => item.source === "ebay_fulfillment") ?? latest[0]!;
-      const type = taxIdentifierType(row.identifier_type!, row.issuing_country);
+      const shown = (item: (typeof rows)[number]) =>
+        shownTaxType({
+          type: item.identifier_type!,
+          issuingCountry: item.issuing_country,
+          value: item.value,
+        });
+      const type = shown(row);
       result.suggestions.push({
         value: row.value,
         identifier: {
@@ -111,6 +117,7 @@ export async function orderSuggestions(
         sourceStore: row.store_name,
         source: row.source,
         conflict: new Set(rows.map(normalized)).size > 1,
+        ...(new Set(rows.map(shown)).size > 1 ? { mixedConflict: true as const } : {}),
       });
     }
   }

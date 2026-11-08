@@ -53,7 +53,13 @@ describe("integrità dei documenti", () => {
         assert.equal(result.status, 1);
         assert.ok(result.errors.some((error) => error.code === code));
       }
-      mkdirSync(path.join(directory, "docs"));
+      mkdirSync(path.join(directory, "docs/archive"), { recursive: true });
+      // Una decisione superata e archiviata resta citabile da quella che la supera.
+      writeFileSync(
+        path.join(directory, "docs/archive/superseded-decisions.md"),
+        "| D998 | Superata | [Assente](mancante.md) |\n",
+      );
+      assert.equal(check("Supera D998.").status, 0);
       const roadmapFile = path.join(directory, "docs/ROADMAP.md");
       const pending = "# Roadmap\n";
       writeFileSync(roadmapFile, pending);

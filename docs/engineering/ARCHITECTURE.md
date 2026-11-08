@@ -35,17 +35,17 @@ Inventario read-only delle risorse condivise; nessuna migrazione di altri prodot
 
 | Servizio | Uso in FiscalBay |
 |---|---|
-| Workers | Web app, ingresso webhook, consumer Queue e lavoro pianificato in un solo Worker per ambiente |
+| Workers | Web app, ingresso webhook, consumer delle due code (lavoro e ingressi dei webhook) e lavoro pianificato in un Worker per ambiente; accanto, il Worker del bot Telegram con il token, raggiunto soltanto con un Service binding |
 | Workers Static Assets | Asset della build serviti dalla piattaforma, quelli con l'hash nel nome in cache per un anno (`public/_headers`); download privati e risposte dipendenti dalla sessione restano nel Worker |
 | DNS, TLS e Custom Domains | Zona esistente e domini canonici di [§24](../operations/OPERATIONS.md#s24); Register.it resta registrar, senza trasferimenti o nuovi domini richiesti |
 | Protezioni e report della zona | HSTS/header, WAF/rate limit edge, rilevamento delle credenziali trapelate, DMARC Management e Certificate Transparency secondo [§24](../operations/OPERATIONS.md#s24), qualificati sul test |
-| Monitor degli avvisi | Query della SQL API valutate da Cloudflare fuori dal Worker per la Production, da `scripts/alert-monitors.mjs`: cron fermo, coda dei falliti, eccezioni, spazio D1 ed email non consegnate ([incidenti](../operations/OPERATIONS.md#incidenti)) |
+| Monitor degli avvisi | Query della SQL API valutate da Cloudflare fuori dal Worker per la Production, da `scripts/alert-monitors.mjs`: cron fermo, coda dei falliti, eccezioni, spazio D1 ed email non consegnate ([incidenti](../operations/OBSERVABILITY.md#incidenti)) |
 | D1 (UE) | Unica fonte autorevole di dati applicativi, sessioni, checkpoint, ricevute, contatori per indirizzo e audit |
 | Queues e DLQ (UE) | Consegna, ritardi, retry e dead-letter di eventi e lavori ([§11](../product/ORDERS_AND_SYNC.md#s11)) |
 | Cron Triggers | Un solo trigger per ambiente che smista il lavoro periodico per `scheduledTime` ([§31](../operations/OPERATIONS.md#s31)) |
 | R2 (UE) | File export a 24 ore ([§12.1](../product/ORDERS_AND_SYNC.md#s12)) e archivio dei log a 90 giorni ([§31](../operations/OPERATIONS.md#s31)) |
 | Rate Limiting | Primo filtro nel Worker per IP e percorso davanti ad Auth e operazioni costose ([§29](SECURITY_AND_PRIVACY.md#s29)) |
-| Turnstile | Verifica anti-automazione su registrazione, richieste di link email e form di supporto ([§29](SECURITY_AND_PRIVACY.md#s29)) |
+| Turnstile | Verifica anti-automazione su registrazione, richieste di link email, form di supporto e accesso con password dopo alcuni errori ([§29](SECURITY_AND_PRIVACY.md#s29)) |
 | Analytics Engine | Metriche tecniche aggregate e budget di prestazione, senza dati personali ([§31](../operations/OPERATIONS.md#s31)) |
 | Web Analytics | Visite e tempi di caricamento delle sole pagine pubbliche, senza cookie ([§23](../product/EXPERIENCE.md#s23), D242) |
 | Email Service | Trasporto di `noreply@` verso destinatari qualsiasi con Workers Paid e invio gratuito agli indirizzi verificati dell'owner ([§14](../product/CHANNELS_AND_ADMIN.md#s14), D169) |
@@ -76,7 +76,8 @@ Dal 2026-10-08, su indicazione dell'owner, nessuna attesa minima di 24 ore dalla
 | Icone | Lucide |
 | Schemi runtime | Zod, usato ai confini dati/contratti |
 | Localizzazione | Dizionari IT/EN tipizzati nel codice (`app/app-copy.ts`) e formatter `Intl` nativi, senza libreria di localizzazione (D149) |
-| Stripe | SDK ufficiale server-side, Hosted Checkout; niente Elements per il solo redirect |
+| Stripe | SDK ufficiale server-side, Hosted Checkout; niente Elements per il solo redirect. Versione dell'API fissata nel client, timeout di 8 secondi nelle richieste dell'utente e chiave di idempotenza del turno su sessioni e coupon |
+| Have I Been Pwned | Controllo gratuito delle password nuove con il plugin di Better Auth, che invia soltanto il prefisso dell'hash ([§29](SECURITY_AND_PRIVACY.md#s29)) |
 | HTTP, UUID, crittografia | fetch, crypto.randomUUID, Web Crypto del runtime ove qualificato |
 | Test | Vitest (progetti Node e Cloudflare), Playwright, axe con Playwright |
 | Qualità | Oxlint, Oxfmt, React Doctor bloccante dai warning, typecheck compiler, CI e sicurezza dipendenze |
@@ -121,7 +122,7 @@ Default: UUID interni; univocità per namespace/tenant; FK o integrità equivale
 
 Invarianti bloccanti: un account eBay attivo in uno spazio; niente saldo Free negativo; un solo primo sblocco per ordine; nessun secondo addebito per tipo fiscale; lifetime allocati+prenotati non oltre disponibilità; nessun diritto dal redirect; grant rimborsato distinto da grant indipendente; job stale incapace di reinserire dato cancellato; dato non autorizzato non esposto da cache/export/search; ordine e importi non modificabili dal client.
 
-Diritti Premium creati quando il dato è acquisito/disponibile nel periodo valido, non quando aperto (Q568). Concorrenza tra acquisizione e scadenza gestita con istante autorevole e transazione: non concedere retroattività arbitraria al completamento di un job iniziato prima.
+Diritti Pro creati quando il dato è acquisito/disponibile nel periodo valido, non quando aperto (Q568). Concorrenza tra acquisizione e scadenza gestita con istante autorevole e transazione: non concedere retroattività arbitraria al completamento di un job iniziato prima.
 
 Audit e raw separati dal modello operativo, con retention propria. Buyer senza ordini giustificanti viene eliminato quando non necessario; conservazioni commerciali minime distinte dai dati fiscali buyer. Persistono tutte le variazioni fiscali effettive fino alla cancellazione dell’ordine; non duplicare versioni identiche o l’intero ordine per un cambiamento irrilevante. Misurare il volume delle informazioni effettivamente conservate. La modifica del dato di un buyer canonico non riscrive gli snapshot storici.
 

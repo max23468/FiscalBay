@@ -6,8 +6,12 @@ import { abortedDataRequest } from "./page-cases";
 
 export { expect } from "@playwright/test";
 
+export { pagePath } from "./page-cases";
+
 interface Traffic {
   pending: Set<Request>;
+  /** Istante di partenza di ogni richiesta aperta. */
+  started: Map<Request, number>;
   /** Navigazione del frame principale non ancora confermata da un nuovo documento. */
   navigation: Request | null;
   changed: number;
@@ -29,6 +33,18 @@ function frameOf(request: Request) {
 }
 
 /**
+ * Un caricamento `.data` senza risposta dopo questo tempo è stato annullato: dopo il redirect
+ * dalla radice agli Ordini Chromium annulla quello del documento lasciato senza riportarne la
+ * fine, e nessun caricamento o documento successivo lo chiude. Il Worker lo vede annullato dal
+ * browser entro un paio di secondi.
+ */
+const abandonedDataMilliseconds = 10_000;
+
+/** Dati di una navigazione del router: un solo caricamento per volta. */
+const dataRequest = (request: Request) =>
+  request.method() === "GET" && new URL(request.url()).pathname.endsWith(".data");
+
+/**
  * Osserva le richieste delle pagine del contesto per `networkIdle`. Il contesto della prova lo è
  * già; un contesto creato nella prova va osservato prima di aprirne le pagine.
  */
@@ -39,7 +55,7 @@ export function watchNetwork(context: BrowserContext) {
   const state = (page: Page) => {
     let current = pages.get(page);
     if (!current) {
-      current = { pending: new Set(), navigation: null, changed: Date.now() };
+      current = { pending: new Set(), started: new Map(), navigation: null, changed: Date.now() };
       pages.set(page, current);
       const tracked = current;
       // Come in Playwright, il nuovo documento chiude le richieste del precedente: Chromium non
@@ -65,7 +81,13 @@ export function watchNetwork(context: BrowserContext) {
     const current = state(frame.page());
     if (request.isNavigationRequest() && frame === frame.page().mainFrame())
       current.navigation = request;
+    // Una navigazione interna annulla i dati di quella precedente, e Chromium non ne riporta
+    // sempre la fine: un caricamento `.data` più recente supera quelli ancora aperti.
+    if (dataRequest(request))
+      for (const previous of current.pending)
+        if (dataRequest(previous)) current.pending.delete(previous);
     current.pending.add(request);
+    current.started.set(request, Date.now());
     current.changed = Date.now();
   });
   const done = (request: Request) => {
@@ -90,6 +112,15 @@ export async function networkIdle(page: Page) {
   await page.waitForLoadState("load");
   for (;;) {
     const current = pages.get(page);
+    if (current)
+      for (const request of current.pending)
+        if (
+          dataRequest(request) &&
+          Date.now() - (current.started.get(request) ?? Date.now()) >= abandonedDataMilliseconds
+        ) {
+          current.pending.delete(request);
+          current.changed = Date.now();
+        }
     if (!current || (current.pending.size === 0 && Date.now() - current.changed >= 500)) return;
     // Le richieste ancora aperte dicono quale attesa non finisce; la query resta fuori.
     if (page.isClosed()) {

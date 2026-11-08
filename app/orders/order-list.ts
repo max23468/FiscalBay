@@ -39,6 +39,28 @@ export function snapshotInstant(cursor: string | null): Date | null {
   return Number.isNaN(at.getTime()) ? null : at;
 }
 
+/** Filtri della barra degli Ordini, nell'indirizzo dell'elenco. */
+export const listFilterParams = [
+  "negozio",
+  "periodo",
+  "pagamento",
+  "spedizione",
+  "fiscale",
+] as const;
+
+/**
+ * Soli filtri dell'elenco da un indirizzo, con valori brevi: li conserva la ricerca della barra
+ * superiore avviata dagli Ordini.
+ */
+export function listFilters(params: URLSearchParams): URLSearchParams {
+  const next = new URLSearchParams();
+  for (const name of listFilterParams) {
+    const value = params.get(name);
+    if (value && value.length <= 64) next.set(name, value);
+  }
+  return next;
+}
+
 /** Parametri che appartengono all'elenco aperto: un nuovo filtro o una nuova ricerca li toglie. */
 export function withoutListPosition(params: URLSearchParams): URLSearchParams {
   const next = new URLSearchParams(params);

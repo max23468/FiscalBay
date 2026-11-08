@@ -26,11 +26,13 @@ export type FakeOrder = ReturnType<typeof order>;
 
 /**
  * eBay sintetico con paginazione reale: filtra per data, ordina dal più recente e restituisce
- * `next` con l'offset. `before` interviene prima di ogni richiesta.
+ * `next` con l'offset, al più `pageLimit` ordini per pagina. `before` interviene prima di ogni
+ * richiesta.
  */
 export const ebay = (
   options: {
     orders?: FakeOrder[];
+    pageLimit?: number;
     getItem?: () => Response;
     trading?: () => Response;
     fail?: (url: URL, init?: RequestInit) => Response | undefined;
@@ -64,13 +66,23 @@ export const ebay = (
     }
     if (call === "GetOrders") {
       if (String(init?.body).includes("<ModTimeFrom>")) return new Response(emptyTradingOrders);
-      const id = /<OrderID>([^<]*)<\/OrderID>/u.exec(String(init?.body))![1];
+      // Un ordine per ogni ID richiesto, nell'ordine della richiesta.
+      const ids = [...String(init?.body).matchAll(/<OrderID>([^<]*)<\/OrderID>/gu)].map(
+        ([, id]) => id!,
+      );
       return (
         options.trading?.() ??
         new Response(
-          `<GetOrdersResponse><Ack>Success</Ack><OrderArray><Order><OrderID>${id}</OrderID>` +
-            `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier>` +
-            `</Order></OrderArray></GetOrdersResponse>`,
+          `<GetOrdersResponse><Ack>Success</Ack><OrderArray>` +
+            ids
+              .map(
+                (id) =>
+                  `<Order><OrderID>${id}</OrderID>` +
+                  `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier>` +
+                  `</Order>`,
+              )
+              .join("") +
+            `</OrderArray></GetOrdersResponse>`,
         )
       );
     }
@@ -79,12 +91,18 @@ export const ebay = (
       const found = orders.find(({ orderId }) => orderId === decodeURIComponent(single));
       return found ? Response.json(found) : new Response(null, { status: 404 });
     }
+    const ids = url.searchParams.get("orderIds");
+    if (ids !== null) {
+      const wanted = ids.split(",");
+      const found = orders.filter(({ orderId }) => wanted.includes(orderId));
+      return Response.json({ orders: found, total: found.length });
+    }
     const [, field, from, to] = /^(\w+):\[(.+)\.\.(.+)\]$/u.exec(url.searchParams.get("filter")!)!;
     const key = field === "creationdate" ? "creationDate" : "lastModifiedDate";
     const matching = orders
       .filter((item) => item[key] >= from! && item[key] <= to!)
       .sort((a, b) => b.creationDate.localeCompare(a.creationDate));
-    const limit = Number(url.searchParams.get("limit"));
+    const limit = Math.min(Number(url.searchParams.get("limit")), options.pageLimit ?? Infinity);
     const offset = Number(url.searchParams.get("offset") ?? 0);
     const next = new URL(url);
     next.searchParams.set("offset", String(offset + limit));
@@ -106,11 +124,15 @@ export const calls = (fetcher: ReturnType<typeof ebay>, name: string) =>
       !String(init?.body).includes("<ModTimeFrom>"),
   ).length;
 
-export const pages = (fetcher: ReturnType<typeof ebay>, field: string) =>
+/** Intervalli delle letture dell'elenco per il campo indicato, con l'offset delle pagine seguite. */
+export const slices = (fetcher: ReturnType<typeof ebay>, field: string) =>
   fetcher.mock.calls
-    .map(([input]) => new URL(String(input)))
-    .filter((url) => url.searchParams.get("filter")?.startsWith(`${field}:`))
-    .map((url) => Number(url.searchParams.get("offset") ?? 0));
+    .map(([input]) => new URL(String(input)).searchParams)
+    .filter((params) => params.get("filter")?.startsWith(`${field}:`))
+    .map((params) => {
+      const [, range] = /\[(.+)\]/u.exec(params.get("filter")!)!;
+      return params.has("offset") ? `${range}@${params.get("offset")}` : range!;
+    });
 
 export const acquire = (
   fetcher: typeof fetch,
@@ -130,7 +152,7 @@ export const acquire = (
 
 export const syncState = () =>
   env.DB.prepare(
-    `SELECT cursor, recent_next, history_from, history_until, history_next, history_done_at,
+    `SELECT cursor, recent_end, history_from, history_until, history_through, history_done_at,
               locked_until, last_success_at FROM sync_state WHERE store_id = 's-a'`,
   ).first<Record<string, string | null>>();
 
@@ -183,5 +205,19 @@ export function setupScenarios() {
     await seed();
     await env.DB.prepare("DELETE FROM orders").run();
     await insertCredentials({ accessExpiresAt: now, grantedAt }).run();
+    // Ogni utente ha una sessione aperta: gli spazi sono seguiti e leggono con la cadenza del piano.
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
+       SELECT user_id, user_id, user_id || '@example.test', 1, ?1, ?1 FROM workspace_members`,
+    )
+      .bind(now)
+      .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+       SELECT 'sessione-' || user_id, '2099-01-01T00:00:00.000Z', 'token-' || user_id, ?1, ?1,
+              user_id FROM workspace_members`,
+    )
+      .bind(now)
+      .run();
   });
 }

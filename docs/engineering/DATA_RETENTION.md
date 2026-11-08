@@ -5,10 +5,10 @@
 millisecondi. Il termine parte dalla creazione dell'ordine, mai dalla lettura o
 dall'ultimo aggiornamento, e segue la finestra dello spazio
 (`app/domain/history-window.server.ts`): trenta giorni nel Free, un anno calendariale
-con una copertura in corso (Premium, prova, lifetime o concessa), fino a ventiquattro
+con una copertura in corso (Pro, prova, lifetime o concessa), fino a ventiquattro
 mesi con un'estensione concessa. La stessa finestra fissa l'inizio dello storico da
 importare. Una pausa o uno scollegamento non fermano il tempo. Il modello non deduce
-un piano attivo dalla presenza di un vecchio grant Premium, trial o lifetime: vale la
+un piano attivo dalla presenza di un vecchio grant Pro, trial o lifetime: vale la
 copertura in corso.
 
 Un'estensione oltre l'anno è una riga `history_extensions` con mesi, motivo e autore,
@@ -39,10 +39,10 @@ letture dell'utente lo trovano già applicato anche prima della pulizia. Il cron
 i termini degli ordini per gli spazi la cui copertura è finita o la cui estensione è
 cambiata nell'ultima settimana, e per quelli che perderebbero entro un giorno un
 ordine ancora dentro la finestra della copertura; le visite coprono gli altri. Il
-ritorno a Premium toglie le pause e riporta all'intera finestra della copertura il
+ritorno a Pro toglie le pause e riporta all'intera finestra della copertura il
 termine degli ordini ancora conservati, anche durante i trenta giorni transitori;
-quelli già eliminati non tornano, perché i marker ne impediscono il reimport anche
-dallo storico più ampio importato dopo l'attivazione. La Sandbox eBay, disponibile
+quelli già eliminati per scadenza tornano con lo storico più ampio importato dopo
+l'attivazione, perché la scadenza non ne blocca il reimport. La Sandbox eBay, disponibile
 soltanto sul test, resta fuori dal limite.
 
 Elenco, dettaglio e conteggi leggono soltanto ordini non scaduti. I dati fiscali
@@ -52,18 +52,26 @@ di sblocco e non restituisce quota. Per gli acquisti assorbiti da un combinato,
 il termine dell'ordine corrente governa anche la cancellazione delle copie originali,
 così storico e grant seguono il definitivo.
 
-La manutenzione giornaliera esistente elimina gli ordini scaduti, normalmente entro
-24 ore dal termine fisico. Le FK cancellano articoli, snapshot buyer, identificativi,
+La manutenzione giornaliera elimina gli ordini scaduti a blocchi di 200, fino a
+10.000 per esecuzione, normalmente entro 24 ore dal termine fisico. Le FK cancellano articoli, snapshot buyer, identificativi,
 versioni, verifiche fiscali, riferimenti, anomalie e grant. La quota del ciclo resta
 consumata. Un errore lascia il compito da riprovare; non estende l'accesso.
 
-Prima della cancellazione un trigger conserva in `deleted_order_keys` soltanto
+Prima di una cancellazione voluta (dell'utente, richiesta da eBay o con
+l'eliminazione del negozio) un trigger conserva in `deleted_order_keys` soltanto
 negozio, chiavi esterne degli ordini e delle righe, tipo e istante. Non conserva
 buyer, titoli, importi o dati fiscali. Queste chiavi restano associate all'identità
 del negozio, anche dopo il ricollegamento, per impedirne il reimport con vecchi job,
-alias o nuovi ID dello stesso acquisto. La cancellazione dell'intera identità
-elimina anche i marker. La loro conservazione residua rientra nella qualifica privacy,
-separata dallo storico buyer.
+alias o nuovi ID dello stesso acquisto, e si eliminano due anni dopo la
+cancellazione, quando eBay non restituisce più l'ordine. La scadenza non lascia
+chiavi: la pulizia segna il proprio batch con una riga di `order_expiry_purges`,
+visibile soltanto al suo interno, e un ordine eliminato per scadenza torna se una
+finestra più ampia lo comprende. I blocchi registrati prima per scadenza si sono
+tolti dove l'origine era dimostrabile (migration `0074`): negli ultimi trenta giorni,
+lontano dall'eliminazione dei dati del negozio e da cancellazioni richieste da eBay
+in corso; i più vecchi restano fino ai due anni. La cancellazione dell'intera
+identità elimina anche i marker. La loro conservazione residua rientra nella
+qualifica privacy, separata dallo storico buyer.
 
 `Scollega ed elimina negozio` prevale sulla grace e registra inoltre
 `orders_deleted_through`: nessun acquisto creato prima o all'istante di eliminazione
@@ -88,20 +96,22 @@ anche i dettagli e i retry pendenti.
 | Checkpoint e letture sync | Cursori, date, contatori ed esiti minimizzati; nessun ordine o identificativo fiscale serializzato. |
 | Buyer e storico fiscale | Legati all'ordine tramite FK, senza anagrafica globale o snapshot indipendente. |
 | Elenco, dettaglio e conteggi | Filtro server sulla scadenza, applicato prima di limite e risposta; i valori revocati non entrano nella risposta. |
-| Suggerimenti | Calcolati a ogni lettura dai valori correnti di ordini autorizzati e non scaduti, senza cache o copie persistenti; il piano Premium deve essere attivo. Identità stabile conservata soltanto sull'ordine. |
+| Suggerimenti | Calcolati a ogni lettura dai valori correnti di ordini autorizzati e non scaduti, senza cache o copie persistenti; il piano Pro deve essere attivo. Identità stabile conservata soltanto sull'ordine. |
 | Ricerca | Stesso filtro dell'elenco sul termine della fonte e sul grant corrente all'istante della richiesta; il testo cercabile vive sull'ordine e si elimina con esso. |
 | Richieste di assistenza | Testo, argomento e riepilogo diagnostico allowlistato (versione, riferimento interno del negozio, fase ed esito della lettura, codice errore, diritti, correlation ID) vanno soltanto alla casella `supporto@` con Reply-To sull'utente; nessun CF, token, payload, nome eBay o dato di un altro spazio. D1 conserva l'istante di invio per il limite di cinque richieste per account, eliminato dopo 24 ore. Nella casella iCloud le conversazioni restano 24 mesi dall'ultima risposta, poi l'owner le elimina (D230). |
 | Verifica Turnstile | Il token del modulo va a Siteverify con l'IP della richiesta e non si conserva: D1 non registra né token né esito, il modulo che torna dopo un errore lo esclude dai valori da ricompilare. Un guasto di Siteverify lascia nei log soltanto codice, operazione `turnstile`, tipo di guasto e stato HTTP. Widget e segnali del browser restano presso Cloudflare secondo le sue condizioni (D231). |
-| Export | Il CSV e l'XLSX degli ordini si creano a ogni richiesta autenticata, o dal lavoro in coda oltre 2.000 ordini, con lo stesso filtro dell'elenco su negozi, scadenza e grant all'istante della generazione. Il file sta nel bucket R2 UE con chiave casuale e vale al più 24 ore, non oltre la copertura Premium che lo permette né oltre il primo termine di conservazione o di sblocco degli ordini inclusi; una revoca dello spazio lo nega subito, la pulizia oraria elimina byte e righe, la regola a un giorno del bucket resta la rete di sicurezza. Il lavoro conserva ambito e opzioni cifrati soltanto finché non si conclude e si elimina 24 ore dopo la richiesta. Lo ZIP dei dati dell'account segue le stesse regole e non contiene ordini, segreti o documenti di pagamento. Le configurazioni salvate contengono soltanto nome, formato, granularità e colonne, nessun ordine o valore fiscale, e si eliminano con l'account. |
-| Accesso tecnico alla console | Soltanto l'impronta SHA-256 del token, con etichetta, creazione, revoca e ultimo uso; il token resta nella custodia dell'owner. Le letture con il token entrano nel registro della console e ne seguono la conservazione. |
+| Export | Il CSV e l'XLSX degli ordini si creano a ogni richiesta autenticata, o dal lavoro in coda oltre 2.000 ordini, con lo stesso filtro dell'elenco su negozi, scadenza e grant all'istante della generazione. Il file sta nel bucket R2 UE con chiave casuale e vale al più 24 ore, non oltre la copertura Pro che lo permette né oltre il primo termine di conservazione o di sblocco degli ordini inclusi; una revoca dello spazio lo nega subito, la pulizia oraria elimina byte e righe, la regola a un giorno del bucket resta la rete di sicurezza. Il lavoro conserva ambito e opzioni cifrati soltanto finché non si conclude e si elimina 24 ore dopo la richiesta. Lo ZIP dei dati dell'account segue le stesse regole e non contiene ordini, segreti o documenti di pagamento. Le configurazioni salvate contengono soltanto nome, formato, granularità e colonne, nessun ordine o valore fiscale, e si eliminano con l'account. |
+| Accesso tecnico alla console | Soltanto l'impronta SHA-256 del token, con etichetta, creazione, scadenza, revoca e ultimo uso; il token resta nella custodia dell'owner. Le letture con il token entrano nel registro della console e ne seguono la conservazione. |
 | Metriche della console | Per spazio, il nome e l'istante del primo di ciascun passaggio del funnel, senza ordini, buyer, valori fiscali o identificativi eBay: escono con lo spazio. Le letture sono conteggi giornalieri di tutti i negozi, eliminati dopo novanta giorni. I report del browser lasciano soltanto il nonce del biglietto, eliminato dopo la scadenza di quindici minuti. |
 | Cancellazione dell'account | La richiesta conserva utente e spazio come identificativi, gli istanti dei passi e, cifrati fino all'invio dell'email finale, indirizzo e lingua. Conclusa, resta come marker per un restore e si elimina dopo 30 giorni, la finestra di Time Travel. Lo spazio con abbonamenti e sessioni di acquisto resta soltanto finché Stripe non conferma lo stop dei rinnovi. |
 | Segno dei negozi | Dopo la cancellazione dello spazio, per ogni negozio l'impronta SHA-256 dell'identità eBay, la prova già usata e il ciclo Free in corso con quota e sblocchi. Il segno della prova dura due anni (D220), quello del ciclo fino alla sua fine; nessun nome, ordine o dato fiscale. La cancellazione dell'account eBay richiesta da eBay lo elimina subito: quell'identità non può più collegarsi. |
 | Cancellazione richiesta da eBay | La notifica `MARKETPLACE_ACCOUNT_DELETION`, firmata, lascia una richiesta soltanto se FiscalBay conserva dati dell'utente nell'ambiente: negozio, segno, accesso con eBay o ordini da acquirente. La richiesta porta identificativo, token eIAS e username comunicati da eBay, con gli istanti dei passi; conclusa, resta come marker per un restore e si elimina dopo 30 giorni. Le notifiche di utenti sconosciuti non lasciano righe, ricevute o log con l'identità. |
 | Console amministrativa | Il registro delle operazioni porta autore, operazione, oggetto, motivo ed esito, mai dati dei buyer o valori fiscali, non si modifica e si elimina un anno dopo l'operazione. Comunicazioni di servizio e anomalie chiuse si eliminano un anno dopo la fine; una preparazione di trasferimento mai confermata con la pulizia dopo la scadenza, una eseguita dopo un anno. Le revisioni antiabuso conservano un'impronta della chiave del segnale, non il valore condiviso. |
-| Log del Worker | Workers Logs conserva sette giorni ogni invocazione con indirizzo completo, IP, browser e posizione approssimativa della richiesta, senza il cookie di sessione; i codici monouso nell'indirizzo sono già consumati (D230); l'[archivio](../operations/OPERATIONS.md#archivio-log) a 90 giorni è un bucket R2 UE per ambiente, senza binding o accesso pubblico, con istante, tipo ed esito dell'invocazione, versione, CPU, durata ed eventi applicativi da elenchi chiusi (codice errore, operazione, correlation ID, fase, conteggi). Mai URL, header, testo delle eccezioni, email, dati dei buyer o valori fiscali. La regola del bucket elimina gli oggetti dopo 90 giorni. |
+| Log del Worker | Workers Logs conserva sette giorni ogni invocazione con indirizzo completo, IP, browser e posizione approssimativa della richiesta, senza il cookie di sessione; le tracce del Worker principale aggiungono gli indirizzi delle chiamate in uscita, senza il token del bot, che sta nel Worker del bot con le tracce spente; i codici monouso nell'indirizzo sono già consumati (D230); l'[archivio](../operations/OBSERVABILITY.md#archivio-log) a 90 giorni è un bucket R2 UE per ambiente, senza binding o accesso pubblico, con istante, tipo ed esito dell'invocazione, versione, CPU, durata ed eventi applicativi da elenchi chiusi (codice errore, operazione, correlation ID, fase, conteggi). Mai URL, header, testo delle eccezioni, email, dati dei buyer o valori fiscali. La regola del bucket elimina gli oggetti dopo 90 giorni. |
 | Incidenti comunicati all'owner | Una riga per anomalia P1 o P2 con tipo, gravità, istanti, conteggio e al più cinque etichette di negozi, lavori, provider o interruttori, l'ultimo stato comunicato su Telegram e l'ultimo copiato per email a `info@`; mai dati dei buyer, email o valori fiscali. Si elimina un anno dopo il rientro comunicato, come le anomalie chiuse. |
 | Avvisi commerciali all'owner | Una riga per fatto commerciale (registrazione, ammissione, primo negozio, prova, acquisto, disdetta, rinnovo non pagato, chiusura, rimborso, disputa, cancellazione finanziaria, posti lifetime, cancellazione dell'account) con la chiave del fatto, lo spazio, piano, importi, istanti e stato dell'invio; mai email, nomi, dati dei buyer o valori fiscali. Gli avvisi di uno spazio escono con lo spazio e quelli con l'identificativo dell'utente con l'utente; resta l'avviso della cancellazione dell'account, senza spazio. La pulizia giornaliera li elimina 30 giorni dopo il fatto. |
+| Motivi di uscita | Una riga per disdetta dal portale e per cancellazione dell'account (D314): nei primi 30 giorni la chiave dell'avviso, lo spazio, il commento facoltativo e l'istante, poi soltanto tipo, motivo, piano, fascia di anzianità e mese, eliminati dopo 24 mesi. La cancellazione dello spazio toglie subito commento, spazio e chiave delle sue disdette; il motivo scelto nella richiesta di cancellazione aspetta la conferma al più un giorno e segue l'utente. Non entra nell'esportazione dell'account. |
+| Provenienza dell'iscrizione | Una riga per account con la categoria del canale di arrivo e il percorso della prima pagina, senza query, indirizzo di provenienza, IP o identificativi del visitatore; nessuna riga per chi visita senza registrarsi. Si scrive una volta alla creazione dell'account, entra nell'esportazione dei dati e si elimina con l'utente; la console ne legge soltanto aggregati ([D304](../decisions/DECISION_REGISTER.md)). |
 | Registro delle scadenze | Nomi logici delle credenziali dell'ambiente e date di scadenza, copiati dall'inventario privato con `scripts/credential-expiries.mjs`; mai valori o riferimenti di custodia. Ogni copia sostituisce la precedente. |
 
 Un restore deve riapplicare marker, limite di cancellazione e revoche successivi
@@ -134,7 +144,11 @@ la riga del negozio resta senza identità eBay né profilo, con i dati eliminati
 le righe commerciali che la citano (scelta del negozio Free, trasferimenti eseguiti).
 Per l'acquirente elimina in ogni negozio dell'ambiente gli ordini con il suo token
 eIAS e, per quelli che non lo riportano, con il suo username: è l'unico uso dello
-username per trovare ordini. I marker di `deleted_order_keys` impediscono il reimport
+username per trovare ordini. Il token arriva soltanto da Trading, entro novanta giorni;
+lo username può cambiare, quindi ogni ordine senza token registra l'ultima lettura
+dello username e, dopo una settimana, si rilegge da Fulfillment, fino a 50 ordini per
+chiamata del budget della lettura periodica ([D319](../decisions/DECISION_REGISTER.md)).
+I marker di `deleted_order_keys` impediscono il reimport
 da letture, conferme o ricevute già in coda. Restano i diritti commerciali minimi
 dello spazio: quota del ciclo già usata, prova usata, coperture e posti lifetime,
 nessuno dei quali porta l'identità eBay. L'utente FiscalBay e i suoi altri metodi di
@@ -160,7 +174,7 @@ Il campo non viene restituito al browser e viene eliminato con l'ordine. La sua
 assenza nelle letture Fulfillment non cancella un'identità già acquisita; una
 nuova identità autorevole invalida immediatamente il collegamento precedente.
 
-Il suggerimento è riservato a Premium attivo, fra ordini dello stesso spazio e
+Il suggerimento è riservato a Pro attivo, fra ordini dello stesso spazio e
 ambiente eBay. Ogni fonte deve essere consultabile, non assorbita, ancora entro
 retention e con diritto fiscale valido. Le fonti in pausa per piano sono escluse.
 Si usa soltanto il valore fiscale corrente; la modifica, rimozione o cancellazione

@@ -49,7 +49,7 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | [Glossario](../GLOSSARY.md)                       | Linguaggio vincolante del prodotto                                       |
 | [Prodotto](product/PRODUCT.md), [piani](product/PLANS_AND_BILLING.md), [account](product/ACCOUNTS_AND_STORES.md), [ordini](product/ORDERS_AND_SYNC.md), [canali](product/CHANNELS_AND_ADMIN.md), [esperienza](product/EXPERIENCE.md) | Requisiti del prodotto per dominio |
 | [Architettura](engineering/ARCHITECTURE.md), [sicurezza e privacy](engineering/SECURITY_AND_PRIVACY.md), [conservazione](engineering/DATA_RETENTION.md), [test](engineering/TESTING.md) | Requisiti tecnici |
-| [Operazioni](operations/OPERATIONS.md), [pubblicazione](operations/RELEASE.md) | Runbook, stato dei servizi, Git, CI e rilascio |
+| [Operazioni](operations/OPERATIONS.md) con i suoi [runbook](operations/OPERATIONS.md#runbook), [pubblicazione](operations/RELEASE.md) | Requisiti operativi, stato dei servizi, procedure, Git, CI e rilascio |
 | PR, CI e ricevute di pubblicazione            | Modifiche/verifiche dell'intervento e stato remoto osservato |
 | [Decision Register](decisions/DECISION_REGISTER.md) | Scelte sintetiche, motivazioni e alternative superate                    |
 | [Agent Setup](operations/AGENT_SETUP.md) | Strumenti, input, ambienti, custodia e responsabilità documentali        |
@@ -57,6 +57,8 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | [Riferimenti brand](brand/REFERENCES.md)  | Concept e immagini originali, non asset finali già approvati             |
 | [Design system](brand/DESIGN_SYSTEM.md)  | Token, componenti, catalogo dei riferimenti e provenienza                |
 | [Audit UI/UX del test](audits/AUDIT_UI_UX.md) | Problemi rilevati sul test e correzioni verificate |
+| [Audit UI/UX di Production](audits/2026-11-06-audit-ui-ux-production.md) | Problemi rilevati in Production e correzioni verificate |
+| [Lacune delle API eBay](audits/2026-11-07-lacune-api-ebay/README.md) | Limiti delle API eBay usate, prove e bozze delle richieste a eBay |
 
 
 Questa guida è l’unico ingresso e indice generale. `CLAUDE.md` importa AGENTS senza una seconda policy. `docs/archive/` contiene la procedura di adozione e il Master Plan della 2.0, con milestone e gate: sono storici, non requisiti, e stanno fuori dai controlli ordinari di `verify-docs`.

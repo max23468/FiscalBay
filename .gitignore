@@ -22,3 +22,5 @@ node_modules/
 # Mutation test
 /.stryker-tmp/
 /reports/
+.mutation-timings.json
+/.mutation-references/

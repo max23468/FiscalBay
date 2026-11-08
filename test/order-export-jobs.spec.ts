@@ -99,6 +99,7 @@ it("oltre la soglia prepara il file dalla coda e la campanella lo annuncia", asy
   expect(await bell()).toEqual([
     {
       id: `export:${id}`,
+      kind: "export-ready",
       tone: "success",
       title: it_.shell.storeNotifications.exportReadyTitle,
       body: it_.shell.storeNotifications.exportReadyBody("fiscalbay-ordini-2026-09-13.csv"),
@@ -144,6 +145,7 @@ it("un lavoro accodato prima di una revoca non pubblica il file", async () => {
   expect(await bell()).toEqual([
     expect.objectContaining({
       id: `export:${id}`,
+      kind: "export-failed",
       tone: "warning",
       title: it_.shell.storeNotifications.exportFailedTitle,
       href: "impostazioni/esportazione",
@@ -151,7 +153,7 @@ it("un lavoro accodato prima di una revoca non pubblica il file", async () => {
   ]);
 });
 
-it("un lavoro rilegge Premium all'avvio e non parte dopo 24 ore dalla richiesta", async () => {
+it("un lavoro rilegge Pro all'avvio e non parte dopo 24 ore dalla richiesta", async () => {
   await insertEntitlement({
     source: "admin",
     endsAt: hours(1),
@@ -552,7 +554,7 @@ it("ammette due lavori in preparazione per utente, anche con richieste concorren
   ).toBe(maxQueuedExports);
 });
 
-it("dalla sezione, un CSV standard resta senza Premium e oltre due file in preparazione c'è l'avviso", async () => {
+it("dalla sezione, un CSV standard resta senza Pro e oltre due file in preparazione c'è l'avviso", async () => {
   await env.DB.prepare(
     `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?1)
        INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time,

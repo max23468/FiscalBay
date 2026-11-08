@@ -45,8 +45,17 @@ const alertIconColor: Record<StatusTone, string> = {
 const actionable = new Set<StatusTone>(["warning", "danger", "locked"]);
 
 /** Icona decorativa del tono, per elenchi in cui il testo accanto porta il significato. */
-export function StatusIcon({ tone, className }: { tone: StatusTone; className?: string }) {
-  const Icon = icons[tone];
+export function StatusIcon({
+  tone,
+  icon,
+  className,
+}: {
+  tone: StatusTone;
+  /** Icona propria del contenuto, colorata secondo il tono. */
+  icon?: StatusIconType;
+  className?: string;
+}) {
+  const Icon = icon ?? icons[tone];
   return <Icon aria-hidden="true" className={cn("size-4 shrink-0", iconColor[tone], className)} />;
 }
 

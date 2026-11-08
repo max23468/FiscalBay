@@ -44,6 +44,9 @@ export interface ExportContext {
   returnHref: string;
   /** Ambito trasmesso alla creazione del file, nella forma dell'indirizzo. */
   query: string;
+  /** Ricerca attiva già decifrata e nome del negozio filtrato, per nominare l'ambito. */
+  search: string | null;
+  store: string | null;
   estimate: ExportTally;
 }
 
@@ -54,6 +57,7 @@ export function exportContext(
   ordersPath: string,
   order: string | null,
   estimate: ExportTally,
+  names: { search: string | null; store: string | null } = { search: null, store: null },
 ): ExportContext {
   return {
     kind: scope.kind,
@@ -64,6 +68,8 @@ export function exportContext(
       [...scope.criteria.keys()].some((key) => key !== snapshotParam && key !== "environment"),
     returnHref: exportReturnHref(ordersPath, query),
     query: query.toString(),
+    search: scope.kind === "filtered" ? names.search : null,
+    store: scope.kind === "filtered" ? names.store : null,
     estimate,
   };
 }

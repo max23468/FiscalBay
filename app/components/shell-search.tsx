@@ -7,7 +7,9 @@ import { useHydrated } from "~/components/hydrated";
 import { Button } from "~/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "~/components/ui/sheet";
 import { useCopy, useLinks } from "~/components/copy-context";
-import type { Language } from "../i18n";
+import { ordersPath } from "../app-links";
+import { localizedPath, type Language } from "../i18n";
+import { listFilters } from "../orders/order-list";
 import { maxSearchLength, minSuggestionLength } from "../orders/order-search";
 
 export interface SearchSuggestion {
@@ -40,11 +42,13 @@ async function requestSearch(
   action: string,
   query: string,
   language: Language,
+  filters: string,
   signal?: AbortSignal,
 ): Promise<SearchResults> {
   const body = new FormData();
   body.set("q", query);
   body.set("language", language);
+  if (filters) body.set("filters", filters);
   const response = await fetch(action, {
     method: "POST",
     body,
@@ -58,13 +62,13 @@ async function requestSearch(
 /** Attesa dopo l'ultima battuta prima di chiedere i suggerimenti. */
 const suggestionDelay = 150;
 
-type SearchAnswer = ({ query: string } & SearchResults) | { query: string; failed: true };
+type SearchAnswer = { query: string; filters: string } & (SearchResults | { failed: true });
 
 /**
  * Suggerimenti per il testo scritto, chiesti dopo una breve pausa di battitura: una richiesta
  * superata da un nuovo testo si annulla.
  */
-function useSearchSuggestions(action: string, language: Language) {
+function useSearchSuggestions(action: string, language: Language, filters: string) {
   const [answer, setAnswer] = useState<SearchAnswer | null>(null);
   const pending = useRef<{
     timer: ReturnType<typeof setTimeout>;
@@ -83,10 +87,10 @@ function useSearchSuggestions(action: string, language: Language) {
     if (query.length < minSuggestionLength) return;
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      requestSearch(action, query, language, controller.signal).then(
-        (found) => setAnswer({ query, ...found }),
+      requestSearch(action, query, language, filters, controller.signal).then(
+        (found) => setAnswer({ query, filters, ...found }),
         () => {
-          if (!controller.signal.aborted) setAnswer({ query, failed: true });
+          if (!controller.signal.aborted) setAnswer({ query, filters, failed: true });
         },
       );
     }, suggestionDelay);
@@ -170,13 +174,18 @@ export function GlobalSearch({
     if (search.query !== null) setQuery(search.query);
   }
   const [open, setOpen] = useState(false);
-  const { answer, suggest } = useSearchSuggestions(search.action, links.language);
+  // Dagli Ordini la ricerca conserva i filtri attivi dell'elenco.
+  const onOrders = location.pathname.startsWith(localizedPath(links.language, ordersPath));
+  const filters = onOrders ? listFilters(new URLSearchParams(location.search)).toString() : "";
+  const { answer, suggest } = useSearchSuggestions(search.action, links.language, filters);
   const ready = useHydrated();
   const id = useId();
   const trimmed = query.trim();
   // Soltanto la risposta per il testo attuale: una precedente non descrive ciò che è scritto.
   const current =
-    trimmed.length >= minSuggestionLength && answer?.query === trimmed ? answer : null;
+    trimmed.length >= minSuggestionLength && answer?.query === trimmed && answer.filters === filters
+      ? answer
+      : null;
   const found = current && !("failed" in current) ? current : null;
 
   // Una nuova pagina chiude i suggerimenti rimasti aperti.
@@ -193,7 +202,10 @@ export function GlobalSearch({
   };
   /** Elenco della ricerca; senza risposta del server il modulo si invia in modo ordinario. */
   const openResults = (form: HTMLFormElement) =>
-    (found ? Promise.resolve(found) : requestSearch(search.action, trimmed, links.language))
+    (found
+      ? Promise.resolve(found)
+      : requestSearch(search.action, trimmed, links.language, filters)
+    )
       .then(({ href }) => {
         close();
         void navigate(href);
@@ -221,6 +233,7 @@ export function GlobalSearch({
         }}
       >
         <input type="hidden" name="language" value={links.language} />
+        {filters ? <input type="hidden" name="filters" value={filters} /> : null}
         <label htmlFor={`${id}-input`} className="sr-only">
           {t.shell.search}
         </label>

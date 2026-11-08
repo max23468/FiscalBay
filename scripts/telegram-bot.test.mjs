@@ -63,12 +63,14 @@ const sellers = {
 };
 
 describe("bot Telegram dell'ambiente", () => {
-  it("legge indirizzo del webhook e owner da cloudflare.config.ts", () => {
-    assert.deepEqual(targetOf("test"), target);
-    assert.deepEqual(targetOf("live"), {
+  it("legge l'indirizzo del webhook da cloudflare.config.ts e chiede l'ID dell'owner", () => {
+    assert.deepEqual(targetOf("test", "573159993"), target);
+    assert.deepEqual(targetOf("live", "573159993"), {
       webhookUrl: "https://fiscalbay.it/webhooks/telegram",
       ownerId: "573159993",
     });
+    for (const id of [undefined, "", "owner"])
+      assert.throws(() => targetOf("test", id), /TELEGRAM_OWNER_ID/u);
   });
 
   it("segnala webhook e menu diversi dal codice, poi li allinea", async () => {
@@ -124,6 +126,7 @@ describe("bot Telegram dell'ambiente", () => {
         "lavori",
         "quote",
         "commerciale",
+        "uscite",
         "metriche",
         "negozi",
         "prestazioni",

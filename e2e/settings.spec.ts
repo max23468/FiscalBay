@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 import { areas, clickHydrated, enter, noPageOverflow, open } from "./components";
-import { expect, networkIdle, test, watchNetwork } from "./fixtures";
+import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { localPassword, useLocalAccount, writeLocalDatabase } from "./local-account";
 import { bellName } from "./page-cases";
 
@@ -97,13 +97,46 @@ test.describe("area reale", () => {
     await page.reload();
     await expect(page.getByRole("button", { name: "Notifiche", exact: true })).toBeVisible();
 
+    // Eliminata, la notifica esce dalla campanella; «Annulla», anche subito, la riporta sul
+    // server, e un'eliminazione resta dopo una nuova lettura della pagina.
+    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    const dismiss = dialog.getByRole("button", { name: "Elimina notifica: Collegamento scaduto" });
+    const restored = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/notifications") &&
+        Boolean(response.request().postData()?.includes("restore")),
+    );
+    await dismiss.click();
+    await expect(dialog).toContainText("Notifica eliminata");
+    await dialog.getByRole("button", { name: "Annulla" }).click();
+    await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
+    await expect(dismiss).toBeFocused();
+    expect((await restored).status()).toBe(200);
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    await expect(dialog).toContainText("Negozio preferenze: la sincronizzazione è sospesa.");
+    const dismissed = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/v1/notifications") &&
+        Boolean(response.request().postData()?.includes("dismiss")),
+    );
+    await dialog.getByRole("button", { name: "Elimina tutte" }).click();
+    expect((await dismissed).status()).toBe(200);
+    await expect(dialog).toContainText("Nessuna notifica negli ultimi 30 giorni.");
+    await page.keyboard.press("Escape");
+    await page.reload();
+    await page.getByRole("button", { name: "Notifiche", exact: true }).click();
+    await expect(dialog).toContainText("Nessuna notifica negli ultimi 30 giorni.");
+    await page.keyboard.press("Escape");
+
     // La lingua scelta resta anche aprendo l'area in italiano.
     const appearance = page.locator('section[aria-labelledby="settings-aspetto"]');
     await clickHydrated(appearance.getByRole("button", { name: "English", exact: true }));
-    await expect(page).toHaveURL(/\/en\/app\/impostazioni\/aspetto$/u);
+    await expect(page).toHaveURL(/\/en\/app\/settings\/appearance$/u);
     await page.goto("/app/ordini");
-    await expect(page).toHaveURL(/\/en\/app\/ordini$/u);
-    await page.goto("/en/app/impostazioni/aspetto");
+    await expect(page).toHaveURL(/\/en\/app\/orders$/u);
+    await page.goto("/en/app/settings/appearance");
     await networkIdle(page);
     await appearance.getByRole("button", { name: "Italiano", exact: true }).click();
     await expect(page).toHaveURL(/\/app\/impostazioni\/aspetto$/u);
@@ -154,7 +187,7 @@ test.describe("area reale", () => {
       const prefix = it ? "" : "/en";
       const id = `account-delete-${language}-${browserName}`;
       await useLocalAccount(context, "member", baseURL!, id);
-      await page.goto(`${prefix}/app/impostazioni/privacy`);
+      await page.goto(pagePath(prefix, "/app/impostazioni/privacy"));
       await networkIdle(page);
       await page
         .getByRole("button", { name: it ? "Elimina account" : "Delete account", exact: true })
@@ -174,6 +207,26 @@ test.describe("area reale", () => {
           ? "Scrivi il tuo indirizzo email per confermare"
           : "Type your email address to confirm",
       });
+      // Motivo e commento facoltativi: l'elenco si apre sopra la finestra.
+      await dialog
+        .getByRole("combobox", {
+          name: it
+            ? "Perché elimini l’account? (facoltativo)"
+            : "Why are you deleting your account? (optional)",
+        })
+        .click();
+      await page
+        .getByRole("option", {
+          name: it ? "Manca una funzione che mi serve" : "A feature I need is missing",
+        })
+        .click();
+      await dialog
+        .getByRole("textbox", {
+          name: it
+            ? "Vuoi dirci di più? (facoltativo)"
+            : "Anything else you’d like to tell us? (optional)",
+        })
+        .fill("Export per il commercialista");
       await address.fill("altro@example.invalid");
       await expect(send).toBeDisabled();
       await address.fill(`${id}@example.invalid`);
@@ -198,15 +251,17 @@ test.describe("area reale", () => {
           '${new Date(Date.now() + 3_600_000).toISOString()}', '${new Date().toISOString()}',
           '${new Date().toISOString()}');`);
       await page.goto(
-        `/api/auth/delete-user/callback?token=${token}&callbackURL=${encodeURIComponent(`${prefix}/cancellazione-account`)}`,
+        `/api/auth/delete-user/callback?token=${token}&callbackURL=${encodeURIComponent(pagePath(prefix, "/cancellazione-account"))}`,
       );
-      await expect(page).toHaveURL(new RegExp(`${prefix}/cancellazione-account$`, "u"));
+      await expect(page).toHaveURL(
+        new RegExp(`${pagePath(prefix, "/cancellazione-account")}$`, "u"),
+      );
       await expect(
         page.getByRole("heading", { name: it ? "Cancellazione avviata" : "Deletion started" }),
       ).toBeVisible();
       // Sessioni chiuse: l'area torna all'accesso.
-      await page.goto(`${prefix}/app/ordini`);
-      await expect(page).toHaveURL(new RegExp(`${prefix}/accesso`, "u"));
+      await page.goto(pagePath(prefix, "/app/ordini"));
+      await expect(page).toHaveURL(new RegExp(pagePath(prefix, "/accesso"), "u"));
       expect(errors).toEqual([]);
     });
 
@@ -226,12 +281,12 @@ test.describe("area reale", () => {
         page.getByRole("button", { name: it ? "Elimina account" : "Delete account", exact: true });
       // Email da verificare: l'avviso degli Ordini offre la cancellazione.
       await writeLocalDatabase(`UPDATE "user" SET "emailVerified" = 0 WHERE id = '${id}';`);
-      await page.goto(`${prefix}/app/ordini`);
+      await page.goto(pagePath(prefix, "/app/ordini"));
       await networkIdle(page);
       await expect(deleteButton()).toBeVisible();
       // Termini da accettare: la pagina di completamento offre lo stesso flusso.
       await writeLocalDatabase(`DELETE FROM terms_acceptances WHERE user_id = '${id}';`);
-      await page.goto(`${prefix}/accesso`);
+      await page.goto(pagePath(prefix, "/accesso"));
       await networkIdle(page);
       await expect(
         page.getByRole("heading", {
@@ -283,14 +338,16 @@ for (const width of [390, 768, 1440]) {
       const prefix = it ? "" : "/en";
       await page.getByRole("button", { name: it ? "Italiano" : "English", exact: true }).click();
       await expect(page).toHaveURL(
-        `${testInfo.project.use.baseURL}${prefix}/anteprima/impostazioni/aspetto`,
+        `${testInfo.project.use.baseURL}${pagePath(prefix, "/anteprima/impostazioni/aspetto")}`,
       );
       const appearance = page.locator("#settings-aspetto");
       await expect(appearance).toHaveText(it ? "Aspetto e lingua" : "Appearance and language");
       await expect(appearance).toBeInViewport({ ratio: 1 });
       if (width >= 768) {
         await expect(
-          page.locator('a[aria-current="true"][href$="/impostazioni/aspetto"]'),
+          page.locator(
+            `a[aria-current="true"][href$="${it ? "/impostazioni/aspetto" : "/settings/appearance"}"]`,
+          ),
         ).toBeVisible();
         await expect
           .poll(async () => {
@@ -302,7 +359,9 @@ for (const width of [390, 768, 1440]) {
         await expect
           .poll(() =>
             page
-              .locator('a[aria-current="true"][href$="/impostazioni/aspetto"]')
+              .locator(
+                `a[aria-current="true"][href$="${it ? "/impostazioni/aspetto" : "/settings/appearance"}"]`,
+              )
               .evaluate((link) => {
                 const item = link.parentElement!.getBoundingClientRect();
                 const indicator = link
@@ -330,13 +389,13 @@ for (const width of [390, 768, 1440]) {
     for (const locale of ["it", "en"] as const) {
       const it = locale === "it";
       const prefix = it ? "" : "/en";
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "premium");
       // Premium non anticipa il downgrade: la scelta del negozio attivo è solo nel Free.
       await expect(page.locator("main")).not.toContainText(
         it ? "Negozio attivo se torni al piano Free" : "Active store if you return to Free",
       );
       // Il ciclo iniziato nella promozione conserva la quota e annuncia quella seguente.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "fine-promozione");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "fine-promozione");
       await expect(page.locator("main")).toContainText(it ? "7 di 10" : "7 of 10");
       await expect(page.locator("main")).toContainText(
         it ? "Il prossimo ciclo avrà 5 sblocchi." : "The next cycle will have 5 unlocks.",
@@ -349,22 +408,22 @@ for (const width of [390, 768, 1440]) {
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
       await expect(page).toHaveURL(/\?checkout=processing$/u);
       await expect(
-        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+        page.getByText(it ? "Attivazione Pro in corso" : "Activating Pro"),
       ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`checkout-processing-${locale}.png`) });
       // Prima della prima lettura riuscita i prezzi restano visibili, l'acquisto no.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prima-sincronizzazione");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "prima-sincronizzazione");
       await expect(
         page.getByText(
           it
-            ? "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio."
-            : "You can buy Premium once a store has been read successfully.",
+            ? "Potrai acquistare Pro dopo la prima lettura riuscita di un negozio."
+            : "You can buy Pro once a store has been read successfully.",
         ),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: /Scegli mensile|Choose monthly/u }),
       ).toHaveCount(0);
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "premium-a-vita");
       const documents = page.getByRole("button", {
         name: it ? "Consulta ricevute e fatture su Stripe" : "View receipts and invoices on Stripe",
       });
@@ -376,14 +435,16 @@ for (const width of [390, 768, 1440]) {
       await expect(page.getByRole("status").filter({ hasText: "simulat" }).first()).toBeVisible({
         timeout: 20_000,
       });
-      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
+      await expect(page).toHaveURL(
+        new RegExp(`${pagePath(prefix, "/anteprima/impostazioni/piano")}$`),
+      );
       // Con il lifetime non resta nulla da acquistare.
       await expect(
         page.getByRole("button", { name: /Scegli a vita|Choose lifetime/u }),
       ).toHaveCount(0);
       await page.screenshot({ path: testInfo.outputPath(`lifetime-${locale}.png`) });
       // Dall'abbonamento si passa a vita detraendo il periodo pagato non usato.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "cambio-rinnovo");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "cambio-rinnovo");
       const upgrade = page.getByRole("region", {
         name: it ? "Passa a vita" : "Switch to lifetime",
       });
@@ -400,7 +461,7 @@ for (const width of [390, 768, 1440]) {
       ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`lifetime-upgrade-${locale}.png`) });
       // A posti finiti il lifetime resta visibile come esaurito; mensile e annuale restano.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "lifetime-esaurito");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "lifetime-esaurito");
       await expect(page.locator("main")).toContainText(it ? "Posti esauriti" : "Sold out");
       await expect(
         page.getByRole("button", { name: /Scegli a vita|Choose lifetime/u }),
@@ -409,15 +470,19 @@ for (const width of [390, 768, 1440]) {
         page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }),
       ).toBeVisible();
       // Passaggio a vita pagato e in conferma: l'abbonamento resta, nessun secondo acquisto.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "passaggio-a-vita");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "passaggio-a-vita");
       await expect(
-        page.getByText(it ? "Premium a vita in attivazione" : "Activating lifetime Premium"),
+        page.getByText(it ? "Pro a vita in attivazione" : "Activating lifetime Pro"),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: /Scegli a vita|Choose lifetime/u }),
       ).toHaveCount(0);
       // Lifetime in omaggio: nessun rinnovo e nessun documento su Stripe.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-a-vita-concesso");
+      await open(
+        page,
+        pagePath(prefix, "/anteprima/impostazioni/piano"),
+        "premium-a-vita-concesso",
+      );
       await expect(page.locator("main")).toContainText(
         it ? "Concesso da FiscalBay, senza rinnovi." : "Granted by FiscalBay, no renewals.",
       );
@@ -429,22 +494,26 @@ for (const width of [390, 768, 1440]) {
         }),
       ).toHaveCount(0);
       // Premium concesso: la sua fine, senza gestione su Stripe.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "premium-concesso");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "premium-concesso");
       await expect(page.locator("main")).toContainText(
-        it ? "Premium concesso fino al" : "Premium granted until",
+        it ? "Pro concesso fino al" : "Pro granted until",
       );
       await expect(
         page.getByRole("button", { name: /Gestisci abbonamento|Manage subscription/u }),
       ).toHaveCount(0);
       // Pagamento da confermare o rinnovo da regolarizzare: Free, senza un secondo acquisto.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "pagamento-in-attivazione");
+      await open(
+        page,
+        pagePath(prefix, "/anteprima/impostazioni/piano"),
+        "pagamento-in-attivazione",
+      );
       await expect(
-        page.getByText(it ? "Attivazione Premium in corso" : "Activating Premium"),
+        page.getByText(it ? "Attivazione Pro in corso" : "Activating Pro"),
       ).toBeVisible();
       await expect(
         page.getByRole("button", { name: /Scegli (mensile|annuale)|Choose (monthly|annual)/u }),
       ).toHaveCount(0);
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "rinnovo-non-riuscito");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "rinnovo-non-riuscito");
       await expect(
         page.locator("main").getByText(it ? "Rinnovo non riuscito" : "Renewal failed"),
       ).toBeVisible();
@@ -458,7 +527,7 @@ for (const width of [390, 768, 1440]) {
         }),
       ).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`renewal-failed-${locale}.png`) });
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "stripe-non-disponibile");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "stripe-non-disponibile");
       await page.getByRole("button", { name: it ? "Scegli mensile" : "Choose monthly" }).click();
       await expect(
         page
@@ -470,7 +539,9 @@ for (const width of [390, 768, 1440]) {
           })
           .first(),
       ).toBeVisible({ timeout: 20_000 });
-      await expect(page).toHaveURL(new RegExp(`${prefix}/anteprima/impostazioni/piano$`));
+      await expect(page).toHaveURL(
+        new RegExp(`${pagePath(prefix, "/anteprima/impostazioni/piano")}$`),
+      );
     }
   });
 
@@ -480,7 +551,7 @@ for (const width of [390, 768, 1440]) {
     for (const locale of ["it", "en"] as const) {
       const it = locale === "it";
       const prefix = it ? "" : "/en";
-      await open(page, `${prefix}/anteprima/impostazioni/supporto`);
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/supporto"));
       await page.getByRole("button", { name: it ? "Invia" : "Send", exact: true }).click();
       const message = page.getByRole("textbox", {
         name: it ? "Messaggio" : "Message",
@@ -508,7 +579,7 @@ for (const width of [390, 768, 1440]) {
         .toBe(true);
       await page.screenshot({ path: testInfo.outputPath(`support-${locale}.png`) });
 
-      await open(page, `${prefix}/anteprima/impostazioni/account`);
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/account"));
       const profile = page.getByRole("region", { name: "Account", exact: true });
       const first = profile.getByRole("textbox", {
         name: it ? "Nome" : "First name",
@@ -549,9 +620,9 @@ for (const width of [390, 768, 1440]) {
     for (const locale of ["en", "it"] as const) {
       const it = locale === "it";
       const prefix = it ? "" : "/en";
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-premium");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "prova-premium");
       const main = page.locator("main");
-      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(main).toContainText(it ? "Prova Pro" : "Pro trial");
       await expect(main).toContainText(
         it ? "Con mensile o annuale oggi non paghi" : "With monthly or annual you don't pay today",
       );
@@ -571,24 +642,24 @@ for (const width of [390, 768, 1440]) {
       // Il ritorno da Stripe durante la prova non parla di pagamento: la prova continua.
       await page.getByRole("button", { name: it ? "Scegli annuale" : "Choose annual" }).click();
       await expect(page).toHaveURL(/\?checkout=processing$/u);
-      await expect(main).toContainText(it ? "Prova Premium" : "Premium trial");
+      await expect(main).toContainText(it ? "Prova Pro" : "Pro trial");
       await expect(
         page.getByText(it ? "Scelta del piano in corso" : "Confirming your plan"),
       ).toBeVisible();
       // Il lifetime durante la prova si paga subito: il ritorno non parla del primo addebito.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-premium");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "prova-premium");
       await page.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }).click();
       await expect(page).toHaveURL(/\?checkout=lifetime$/u);
       await expect(
-        page.getByText(it ? "Premium a vita in attivazione" : "Activating lifetime Premium"),
+        page.getByText(it ? "Pro a vita in attivazione" : "Activating lifetime Pro"),
       ).toBeVisible();
       await expect(
         page.getByText(it ? "Scelta del piano in corso" : "Confirming your plan"),
       ).toHaveCount(0);
       // Con l'abbonamento scelto la prova continua senza addebiti né un secondo acquisto.
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "prova-con-abbonamento");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "prova-con-abbonamento");
       await expect(
-        page.getByText(it ? "Premium mensile scelto" : "You chose Premium, monthly"),
+        page.getByText(it ? "Pro mensile scelto" : "You chose Pro, monthly"),
       ).toBeVisible();
       await expect(main).toContainText(
         it ? "Fino ad allora non paghi nulla." : "Until then you pay nothing.",
@@ -596,8 +667,8 @@ for (const width of [390, 768, 1440]) {
       // La prova non annuncia più il ritorno al Free.
       await expect(main).toContainText(
         it
-          ? "Alla fine Premium continua con il primo addebito."
-          : "When it ends, Premium continues with the first charge.",
+          ? "Alla fine Pro continua con il primo addebito."
+          : "When it ends, Pro continues with the first charge.",
       );
       await expect(main).not.toContainText(
         it ? "alla fine torni al Free" : "when it ends you go back to Free",
@@ -675,7 +746,7 @@ test.describe("assistenza reale", () => {
       const sent = page.waitForResponse(
         (response) =>
           response.request().method() === "POST" &&
-          response.url().includes("/app/impostazioni/supporto"),
+          /\/app\/(?:impostazioni\/supporto|settings\/support)/u.test(response.url()),
       );
       await send.click();
       expect((await sent).status()).toBe(200);
@@ -717,7 +788,7 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(page.context(), baseURL!, area);
-    await open(page, `${area.base}/impostazioni/supporto`);
+    await open(page, pagePath(area.base, "/impostazioni/supporto"));
     const summary = page.locator("details summary").first();
     expect(await summary.evaluate((node) => getComputedStyle(node).display)).toBe("flex");
     await summary.focus();
@@ -731,11 +802,11 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(page.context(), baseURL!, area);
-    await open(page, `/en${area.base}/impostazioni/aspetto`);
+    await open(page, `/en${pagePath(area.base, "/impostazioni/aspetto")}`);
     // In entrambe le aree la scelta passa da un pulsante; nell'anteprima cambia soltanto pagina.
     const language = page.getByRole("region", { name: "Language" }).getByRole("button");
     await expect(language.filter({ hasText: /^Italiano$/u })).toHaveAttribute("lang", "it");
-    await open(page, `/en${area.base}/impostazioni/messaggio`);
+    await open(page, `/en${pagePath(area.base, "/impostazioni/messaggio")}`);
     await expect(page.getByRole("tab", { name: "Italiano", exact: true })).toHaveAttribute(
       "lang",
       "it",
@@ -759,7 +830,7 @@ test.describe("negozio attivo del Free", () => {
       const prefix = it ? "" : "/en";
       const id = `free-store-${language}-${browserName}-${testInfo.retry}`;
       await useLocalAccount(context, "member", baseURL!, id);
-      await page.goto(`${prefix}/app/negozi`);
+      await page.goto(pagePath(prefix, "/app/negozi"));
       const paused = it ? "In pausa per il piano Free" : "Paused on the Free plan";
       const row = (name: string) =>
         page.getByRole("table", { name: it ? "Elenco negozi" : "Store list" }).getByRole("row", {
@@ -767,10 +838,12 @@ test.describe("negozio attivo del Free", () => {
         });
       await expect(row("Negozio secondario")).toContainText(paused);
       await expect(row("Negozio principale")).not.toContainText(paused);
-      await page.goto(`${prefix}/app/negozi/${id}-2`);
+      await page.goto(`${pagePath(prefix, "/app/negozi")}/${id}-2`);
       const choose = it ? "Scegli il negozio attivo" : "Choose the active store";
       await page.getByRole("dialog").getByRole("link", { name: choose }).click();
-      await expect(page).toHaveURL(new RegExp(`${prefix}/app/impostazioni/piano$`, "u"));
+      await expect(page).toHaveURL(
+        new RegExp(`${pagePath(prefix, "/app/impostazioni/piano")}$`, "u"),
+      );
       const selection = page.getByRole("combobox", { name: choose });
       await expect(selection).toContainText("Negozio principale");
       await selection.click();
@@ -794,7 +867,7 @@ test.describe("negozio attivo del Free", () => {
             : /^You can replace the active store from /,
         ),
       ).toBeVisible();
-      await page.goto(`${prefix}/app/negozi`);
+      await page.goto(pagePath(prefix, "/app/negozi"));
       await expect(row("Negozio principale")).toContainText(paused);
       await expect(row("Negozio secondario")).not.toContainText(paused);
     });
@@ -817,7 +890,7 @@ test.describe("inattività e ammissione", () => {
     }, testInfo) => {
       const id = `inactive-${language}-${browserName}-${testInfo.retry}`;
       await useLocalAccount(context, "member", baseURL!, id);
-      await page.goto(`${prefix}/app/negozi`);
+      await page.goto(pagePath(prefix, "/app/negozi"));
       await networkIdle(page);
       const main = page.locator("main");
       await expect(main).toContainText(it ? "In pausa per inattività" : "Paused for inactivity");
@@ -832,7 +905,7 @@ test.describe("inattività e ammissione", () => {
         it ? "In pausa per inattività" : "Paused for inactivity",
       );
       // Quota, ciclo e prova restano: la ripresa non tocca il piano.
-      await page.goto(`${prefix}/app/impostazioni/piano`);
+      await page.goto(pagePath(prefix, "/app/impostazioni/piano"));
       await expect(
         page.getByRole("region", { name: it ? "Piano e pagamenti" : "Plan and billing" }),
       ).toContainText("Free");
@@ -841,7 +914,7 @@ test.describe("inattività e ammissione", () => {
     test(`anteprima: Free inattivo, lista d'attesa e acquisti sospesi ${language}`, async ({
       page,
     }, testInfo) => {
-      await open(page, `${prefix}/anteprima/negozi`, "free-inattivo");
+      await open(page, pagePath(prefix, "/anteprima/negozi"), "free-inattivo");
       await page.screenshot({ path: testInfo.outputPath(`inactive-${language}.png`) });
       await page
         .getByRole("button", { name: it ? "Riprendi le letture" : "Resume reading" })
@@ -850,7 +923,7 @@ test.describe("inattività e ammissione", () => {
         page.getByRole("button", { name: it ? "Riprendi le letture" : "Resume reading" }),
       ).toHaveCount(0);
 
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "lista-d-attesa");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "lista-d-attesa");
       const plan = page.getByRole("region", {
         name: it ? "Piano e pagamenti" : "Plan and billing",
       });
@@ -860,16 +933,16 @@ test.describe("inattività e ammissione", () => {
       await expect(
         plan.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
       ).toBeVisible();
-      await open(page, `${prefix}/anteprima/ordini`, "lista-d-attesa");
+      await open(page, pagePath(prefix, "/anteprima/ordini"), "lista-d-attesa");
       await expect(page.locator("main")).toContainText(
         it ? "Sei in lista d’attesa per il Free" : "You are on the Free waiting list",
       );
 
-      await open(page, `${prefix}/anteprima/impostazioni/piano`, "acquisti-sospesi");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "acquisti-sospesi");
       await expect(plan).toContainText(
         it
-          ? "I nuovi acquisti di Premium e le prove sono sospesi per ora."
-          : "New Premium purchases and trials are paused for now.",
+          ? "I nuovi acquisti di Pro e le prove sono sospesi per ora."
+          : "New Pro purchases and trials are paused for now.",
       );
       await expect(
         plan.getByRole("button", {
@@ -912,44 +985,42 @@ test.describe("abbonamento nel piano", () => {
           const prefix = it ? "" : "/en";
           const expected = {
             active: {
-              title: it ? /^Premium (mensile|annuale)$/u : /^Premium, (monthly|annual)$/u,
+              title: it ? /^Pro (mensile|annuale)$/u : /^Pro, (monthly|annual)$/u,
               text: it ? "Si rinnova il" : "Renews on",
             },
             switching: {
-              title: it ? "Premium mensile" : "Premium, monthly",
+              title: it ? "Pro mensile" : "Pro, monthly",
               text: it ? "come annuale" : "as annual",
             },
             cancelled: {
-              title: it ? "Premium mensile" : "Premium, monthly",
+              title: it ? "Pro mensile" : "Pro, monthly",
               text: it
-                ? "Rinnovo disdetto: Premium resta attivo fino al"
-                : "Renewal cancelled: Premium stays active until",
+                ? "Rinnovo disdetto: Pro resta attivo fino al"
+                : "Renewal cancelled: Pro stays active until",
             },
             pending: {
               title: "Free",
-              text: it ? "Attivazione Premium in corso" : "Activating Premium",
+              text: it ? "Attivazione Pro in corso" : "Activating Pro",
             },
             lapsed: {
               title: "Free",
               text: it ? "per mantenere il tuo prezzo" : "to keep your price",
             },
             scheduled: {
-              title: it ? "Prova Premium" : "Premium trial",
+              title: it ? "Prova Pro" : "Pro trial",
               text: it
-                ? "Alla fine Premium continua con il primo addebito."
-                : "When it ends, Premium continues with the first charge.",
+                ? "Alla fine Pro continua con il primo addebito."
+                : "When it ends, Pro continues with the first charge.",
             },
             // Disdetto durante la prova: nessun addebito e ritorno al Free alla fine.
             "scheduled-cancelled": {
-              title: it ? "Prova Premium" : "Premium trial",
-              text: it ? "Premium mensile disdetto" : "Premium, monthly cancelled",
+              title: it ? "Prova Pro" : "Pro trial",
+              text: it ? "Pro mensile disdetto" : "Pro, monthly cancelled",
             },
             // Periodo rimborsato: Free subito, Premium torna con il rinnovo.
             refunded: {
               title: "Free",
-              text: it
-                ? "Premium riprende con il rinnovo del"
-                : "Premium resumes with the renewal on",
+              text: it ? "Pro riprende con il rinnovo del" : "Pro resumes with the renewal on",
             },
           }[account];
           const check = async (target: Page, surface: "real" | "preview") => {
@@ -975,10 +1046,10 @@ test.describe("abbonamento nel piano", () => {
             });
           };
           await useLocalAccount(context, "member", baseURL!, `subscription-${account}`);
-          await page.goto(`${prefix}/app/impostazioni/piano`);
+          await page.goto(pagePath(prefix, "/app/impostazioni/piano"));
           await check(page, "real");
           if (account === "pending" || account === "lapsed" || account === "refunded") {
-            await page.goto(`${prefix}/app/ordini`);
+            await page.goto(pagePath(prefix, "/app/ordini"));
             await expect(
               page.getByRole("button", { name: it ? "Attiva la prova" : "Start trial" }),
             ).toHaveCount(0);
@@ -988,7 +1059,7 @@ test.describe("abbonamento nel piano", () => {
           try {
             watchNetwork(preview);
             const previewPage = await preview.newPage();
-            await open(previewPage, `${prefix}/anteprima/impostazioni/piano`, scenario);
+            await open(previewPage, pagePath(prefix, "/anteprima/impostazioni/piano"), scenario);
             await check(previewPage, "preview");
           } finally {
             await preview.unrouteAll({ behavior: "wait" });
@@ -1015,8 +1086,8 @@ test.describe("abbonamento nel piano", () => {
         await expect(section.getByText("Free", { exact: true })).toBeVisible();
         await expect(section).toContainText(
           it
-            ? "Il pagamento di Premium a vita è stato rimborsato"
-            : "The lifetime Premium payment was refunded",
+            ? "Il pagamento di Pro a vita è stato rimborsato"
+            : "The lifetime Pro payment was refunded",
         );
         await expect(
           section.getByRole("button", { name: it ? "Scegli a vita" : "Choose lifetime" }),
@@ -1035,13 +1106,17 @@ test.describe("abbonamento nel piano", () => {
         });
       };
       await useLocalAccount(context, "member", baseURL!, "lifetime-refunded");
-      await page.goto(`${prefix}/app/impostazioni/piano`);
+      await page.goto(pagePath(prefix, "/app/impostazioni/piano"));
       await check(page, "real");
       const preview = await browser.newContext({ baseURL });
       try {
         watchNetwork(preview);
         const previewPage = await preview.newPage();
-        await open(previewPage, `${prefix}/anteprima/impostazioni/piano`, "lifetime-rimborsato");
+        await open(
+          previewPage,
+          pagePath(prefix, "/anteprima/impostazioni/piano"),
+          "lifetime-rimborsato",
+        );
         await check(previewPage, "preview");
       } finally {
         await preview.unrouteAll({ behavior: "wait" });
@@ -1064,7 +1139,7 @@ function deliveryAlert(page: Page, failure: "blocked" | "unreachable", it: boole
 }
 
 async function openNotifications(page: Page, prefix: string, it: boolean) {
-  await page.goto(`${prefix}/app/impostazioni/notifiche`);
+  await page.goto(pagePath(prefix, "/app/impostazioni/notifiche"));
   await networkIdle(page);
   await expect(
     page.getByRole("switch", {
@@ -1103,7 +1178,10 @@ test.describe("notifiche Telegram", () => {
         );
       await expect(
         page.getByRole("radio", {
-          name: t("Solo ordini con Codice Fiscale", "Only orders with a tax code"),
+          name: t(
+            "Solo ordini con Codice Fiscale o Partita IVA",
+            "Only orders with a tax code or VAT number",
+          ),
         }),
       ).toBeChecked();
       let done = saved("telegram-filter");
@@ -1141,18 +1219,18 @@ test.describe("notifiche Telegram", () => {
       ).not.toBeChecked();
 
       // I Negozi mostrano lo stesso stato, con la scorciatoia verso le Notifiche.
-      await page.goto(`${prefix}/app/negozi`);
+      await page.goto(pagePath(prefix, "/app/negozi"));
       const row = (name: string) =>
         page.getByRole("table", { name: t("Elenco negozi", "Store list") }).getByRole("row", {
           name: new RegExp(`^${name}`, "u"),
         });
       await expect(row("Secondo negozio notifiche")).toContainText(t("Disattivate", "Off"));
-      await page.goto(`${prefix}/app/negozi/${id}-2`);
+      await page.goto(`${pagePath(prefix, "/app/negozi")}/${id}-2`);
       await expect(
         page.getByRole("dialog").getByRole("link", {
           name: t("Apri le notifiche", "Open notifications"),
         }),
-      ).toHaveAttribute("href", `${prefix}/app/impostazioni/notifiche`);
+      ).toHaveAttribute("href", pagePath(prefix, "/app/impostazioni/notifiche"));
 
       // Una consegna ferma compare nelle Notifiche, con gli stessi testi dell'anteprima.
       for (const failure of ["blocked", "unreachable"] as const) {
@@ -1227,7 +1305,7 @@ test.describe("notifiche Telegram", () => {
         ["telegram-bloccato", "blocked"],
         ["telegram-non-consegnato", "unreachable"],
       ] as const) {
-        await open(page, `${prefix}/anteprima/impostazioni/notifiche`, scenario);
+        await open(page, pagePath(prefix, "/anteprima/impostazioni/notifiche"), scenario);
         await expect(page.getByText("Magazzino Vintage")).toBeVisible();
         await expect(deliveryAlert(page, failure, it)).toBeVisible();
         await expect(
@@ -1242,25 +1320,25 @@ test.describe("notifiche Telegram", () => {
       }
     });
 
-  test("su desktop «Passa a Premium» da Telegram scorre fino al piano", async ({ page }) => {
+  test("su desktop «Passa a Pro» da Telegram scorre fino al piano", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 720 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await open(page, "/anteprima/impostazioni/notifiche");
     await expect(page.locator("#settings-notifiche")).toBeInViewport();
     // Il primo collegamento al piano è quello della sezione Telegram, in testa alla pagina.
-    await page.getByRole("link", { name: "Passa a Premium", exact: true }).first().click();
+    await page.getByRole("link", { name: "Passa a Pro", exact: true }).first().click();
     await expect(page).toHaveURL(/\/anteprima\/impostazioni\/piano$/u);
     await expect(page.locator("#settings-piano")).toBeInViewport();
     await expect(page.locator('a[aria-current="true"][href$="/impostazioni/piano"]')).toBeVisible();
   });
 
   for (const language of ["it", "en"] as const)
-    test(`anteprima: Premium senza chat propone il collegamento simulato, ${language}`, async ({
+    test(`anteprima: Pro senza chat propone il collegamento simulato, ${language}`, async ({
       page,
     }) => {
       const it = language === "it";
       const prefix = it ? "" : "/en";
-      await open(page, `${prefix}/anteprima/impostazioni/notifiche`, "prova-premium");
+      await open(page, pagePath(prefix, "/anteprima/impostazioni/notifiche"), "prova-premium");
       await page
         .getByRole("button", { name: it ? "Collega Telegram" : "Connect Telegram" })
         .click();

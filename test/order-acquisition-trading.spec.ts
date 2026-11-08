@@ -1,12 +1,16 @@
 import { env } from "cloudflare:workers";
 
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { listVisibleOrders } from "../app/domain/orders.server";
 
 import { recordOrderObservation } from "../app/domain/order-import.server";
 
+import { setSwitch } from "../app/domain/service-settings.server";
+
 import { now } from "./fixtures/database-fixtures";
+
+import { line, observation } from "./fixtures/order-import-scenarios";
 
 import {
   grantedAt,
@@ -134,28 +138,83 @@ it("con la quota GetOrders esaurita sospende soltanto Trading", async () => {
   logged.mockRestore();
 });
 
-it("legge Trading ogni due ore, subito al collegamento e su richiesta manuale", async () => {
-  const page = () =>
-    new Response(
-      `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>0</TotalNumberOfEntries></PaginationResult>` +
-        `<HasMoreOrders>false</HasMoreOrders><OrderArray></OrderArray></GetOrdersResponse>`,
-    );
-  const provider = ebay({
-    orders: [],
-    fail: (_, init) => (String(init?.body).includes("<ModTimeFrom>") ? page() : undefined),
+describe("cadenza della passata Trading", () => {
+  const emptyTrading = () =>
+    ebay({
+      orders: [],
+      fail: (_, init) =>
+        String(init?.body).includes("<ModTimeFrom>")
+          ? new Response(
+              `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>0</TotalNumberOfEntries></PaginationResult>` +
+                `<HasMoreOrders>false</HasMoreOrders><OrderArray></OrderArray></GetOrdersResponse>`,
+            )
+          : undefined,
+    });
+  // Passate Trading dopo la prima, alla mezz'ora e poi a ogni ora indicata.
+  const passesAt = async (provider: ReturnType<typeof ebay>, hours: number[]) => {
+    const passes: number[] = [];
+    for (const hour of hours) {
+      const at = new Date(Date.parse("2026-09-02T00:00:00.000Z") + hour * 3_600_000);
+      expect(await acquire(provider, at.toISOString())).toBe("complete");
+      passes.push(tradingPasses(provider));
+    }
+    return passes;
+  };
+
+  it("ogni sei ore senza fatture combinate, subito al collegamento e su richiesta manuale", async () => {
+    const provider = emptyTrading();
+    expect(await acquire(provider)).toBe("complete");
+    expect(tradingPasses(provider)).toBe(1);
+    expect(await acquire(provider, "2026-09-02T01:00:00.000Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(1);
+    // A metà intervallo la richiesta manuale legge Trading subito e riparte da lì.
+    await env.DB.prepare("UPDATE sync_state SET requested_at = '2026-09-02T01:20:00.000Z'").run();
+    expect(await acquire(provider, "2026-09-02T01:30:00.000Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(2);
+    expect(await acquire(provider, "2026-09-02T03:30:00.000Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(2);
+    expect(await acquire(provider, "2026-09-02T07:29:59.999Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(2);
+    expect(await acquire(provider, "2026-09-02T07:30:00.000Z")).toBe("complete");
+    expect(tradingPasses(provider)).toBe(3);
   });
-  expect(await acquire(provider)).toBe("complete");
-  expect(tradingPasses(provider)).toBe(1);
-  expect(await acquire(provider, "2026-09-02T01:00:00.000Z")).toBe("complete");
-  expect(tradingPasses(provider)).toBe(1);
-  // A metà intervallo la richiesta manuale legge Trading subito e riparte da lì.
-  await env.DB.prepare("UPDATE sync_state SET requested_at = '2026-09-02T01:20:00.000Z'").run();
-  expect(await acquire(provider, "2026-09-02T01:30:00.000Z")).toBe("complete");
-  expect(tradingPasses(provider)).toBe(2);
-  expect(await acquire(provider, "2026-09-02T03:29:59.999Z")).toBe("complete");
-  expect(tradingPasses(provider)).toBe(2);
-  expect(await acquire(provider, "2026-09-02T03:30:00.000Z")).toBe("complete");
-  expect(tradingPasses(provider)).toBe(3);
+
+  it("ogni due ore con una fattura combinata senza checkout negli ultimi trenta giorni", async () => {
+    await recordOrderObservation(
+      env.DB,
+      { storeId: "s-a", consentGrantedAt: grantedAt, observedAt: "2026-09-01T10:00:00.000Z" },
+      observation({
+        source: "trading",
+        externalOrderId: "T-COMBINATA",
+        creationTime: "2026-08-20T10:00:00Z",
+        items: [line("k9", "t-9")],
+      }),
+    );
+    const provider = emptyTrading();
+    expect(await passesAt(provider, [0, 1.99, 2, 4])).toEqual([1, 1, 2, 3]);
+    // Fino a trenta giorni dalla fattura la cadenza resta di due ore, poi torna di sei.
+    const late = emptyTrading();
+    await env.DB.prepare("UPDATE sync_state SET trading_cursor = '2026-09-19T05:00:00.000Z'").run();
+    expect(await acquire(late, "2026-09-19T09:00:00.000Z")).toBe("complete");
+    expect(tradingPasses(late)).toBe(1);
+    await env.DB.prepare("UPDATE sync_state SET trading_cursor = '2026-09-19T08:00:00.000Z'").run();
+    expect(await acquire(late, "2026-09-19T12:00:00.000Z")).toBe("complete");
+    expect(tradingPasses(late)).toBe(1);
+  });
+
+  it("ogni dodici ore in uno spazio senza sessioni aperte né Telegram", async () => {
+    await env.DB.prepare(`DELETE FROM "session"`).run();
+    const provider = emptyTrading();
+    expect(await passesAt(provider, [0, 6, 11.99, 12])).toEqual([1, 1, 1, 2]);
+    // Con Telegram collegato lo spazio è seguito anche senza visite.
+    await env.DB.prepare(
+      `INSERT INTO telegram_links (workspace_id, id, chat_id, language, linked_at)
+       VALUES ('w-a', 'link-a', '1', 'it', ?)`,
+    )
+      .bind(now)
+      .run();
+    expect(await passesAt(provider, [17.99, 18])).toEqual([2, 3]);
+  });
 });
 
 it("legge Trading nella finestra dello storico, salta l'ordine illeggibile e ricomincia se il totale cambia", async () => {
@@ -231,13 +290,13 @@ it("legge Trading nella finestra dello storico, salta l'ordine illeggibile e ric
     () => tradingPage(3, true, [tradingOrder("LIMITE", "2026-08-03T00:00:00.001Z", ["2"])]),
     () => tradingPage(3, false, [tradingOrder("VALIDO", "2026-09-01T10:00:00Z", ["3"])]),
   ];
-  expect(await acquire(provider, "2026-09-02T02:00:00.000Z")).toBe("complete");
+  expect(await acquire(provider, "2026-09-02T06:00:00.000Z")).toBe("complete");
   expect(requested.slice(2).map((body) => field(body, "PageNumber"))).toEqual(["1", "2", "1"]);
   expect(field(requested[2]!, "ModTimeFrom")).toBe("2026-09-01T23:45:00.000Z");
 
   // Budget finito durante Trading: l'esecuzione non si dichiara completa.
   responses = [() => tradingPage(2, true, [tradingOrder("VALIDO", "2026-09-01T10:00:00Z", ["3"])])];
-  expect(await acquire(provider, "2026-09-02T04:00:00.000Z", { calls: 2, pages: 2 })).toBe(
+  expect(await acquire(provider, "2026-09-02T12:00:00.000Z", { calls: 2, pages: 2 })).toBe(
     "budget",
   );
 
@@ -265,8 +324,14 @@ it("legge Trading nella finestra dello storico, salta l'ordine illeggibile e ric
           "2026-10-03T00:00:00Z",
         ),
       ]),
+    // Un mese dopo il limite: la seconda finestra arriva fino all'istante corrente.
+    () => tradingPage(0, false, []),
   ];
   expect(await acquire(provider, "2026-10-03T00:00:00.000Z")).toBe("complete");
+  expect(requested.slice(-2).map((body) => field(body, "ModTimeTo"))).toEqual([
+    "2026-10-02T05:45:00.000Z",
+    "2026-10-03T00:00:00.000Z",
+  ]);
   expect(
     await env.DB.prepare(
       "SELECT last_modified_time FROM order_source_refs WHERE external_order_id = 'VALIDO'",
@@ -299,4 +364,108 @@ it("non salta l'ordine Trading se cambia il consenso durante la passata", async 
   expect(await acquire(provider)).toBe("not_writable");
   expect(logged).not.toHaveBeenCalled();
   logged.mockRestore();
+});
+
+it("dopo una pausa di 45 giorni legge Trading per finestre di 30 giorni senza buchi", async () => {
+  const windows: Array<[string, string]> = [];
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      windows.push([
+        /<ModTimeFrom>([^<]+)</u.exec(body)![1]!,
+        /<ModTimeTo>([^<]+)</u.exec(body)![1]!,
+      ]);
+      return undefined;
+    },
+  });
+  expect(await acquire(provider)).toBe("complete");
+  expect(await env.DB.prepare("SELECT trading_cursor FROM sync_state").first()).toEqual({
+    trading_cursor: "2026-09-02T00:00:00.000Z",
+  });
+
+  windows.length = 0;
+  expect(await acquire(provider, "2026-10-17T00:00:00.000Z")).toBe("complete");
+  expect(windows).toEqual([
+    ["2026-09-01T23:45:00.000Z", "2026-10-01T23:45:00.000Z"],
+    ["2026-10-01T23:45:00.000Z", "2026-10-17T00:00:00.000Z"],
+  ]);
+  expect(
+    await env.DB.prepare("SELECT trading_cursor, trading_end FROM sync_state").first(),
+  ).toEqual({ trading_cursor: "2026-10-17T00:00:00.000Z", trading_end: null });
+
+  // Oltre i 90 giorni Trading non risponde: la lettura parte dal limite di eBay.
+  windows.length = 0;
+  expect(await acquire(provider, "2027-02-01T00:00:00.000Z")).toBe("complete");
+  expect(windows[0]![0]).toBe("2026-11-03T00:00:00.000Z");
+  expect(windows).toHaveLength(3);
+  expect(windows.at(-1)![1]).toBe("2027-02-01T00:00:00.000Z");
+});
+
+it("fra due finestre Trading si ferma con le chiamate spente e continua fino al confine delle due ore", async () => {
+  const windows: string[] = [];
+  let stop = false;
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      windows.push(/<ModTimeTo>([^<]+)</u.exec(body)![1]!);
+      return undefined;
+    },
+    before: async (_, init) => {
+      if (stop && String(init?.body).includes("<ModTimeFrom>"))
+        await setSwitch(env.DB, "ebay_calls", false, new Date("2026-10-17T00:00:00.000Z"));
+    },
+  });
+  await acquire(provider);
+  windows.length = 0;
+  // Spente durante la prima finestra: la seconda resta al turno successivo.
+  stop = true;
+  expect(await acquire(provider, "2026-10-17T00:00:00.000Z")).toBe("budget");
+  expect(windows).toEqual(["2026-10-01T23:45:00.000Z"]);
+  expect(
+    await env.DB.prepare("SELECT trading_cursor, trading_end FROM sync_state").first(),
+  ).toEqual({ trading_cursor: "2026-10-01T23:45:00.000Z", trading_end: null });
+
+  // Una finestra che finisce esattamente due ore prima dell'istante corrente continua.
+  stop = false;
+  await setSwitch(env.DB, "ebay_calls", true, new Date("2026-10-17T00:01:00.000Z"));
+  await env.DB.prepare("UPDATE sync_state SET trading_cursor = ?")
+    .bind("2026-09-01T00:15:00.000Z")
+    .run();
+  windows.length = 0;
+  expect(await acquire(provider, "2026-10-01T02:00:00.000Z")).toBe("complete");
+  expect(windows).toEqual(["2026-10-01T00:00:00.000Z", "2026-10-01T02:00:00.000Z"]);
+});
+
+it("una finestra Trading interrotta e ormai oltre i novanta giorni ricomincia dal limite", async () => {
+  const requests: Array<[string, string]> = [];
+  const provider = ebay({
+    orders: [],
+    fail: (_, init) => {
+      const body = String(init?.body);
+      if (!body.includes("<ModTimeFrom>")) return;
+      requests.push([
+        /<ModTimeFrom>([^<]+)</u.exec(body)![1]!,
+        /<PageNumber>([^<]+)</u.exec(body)![1]!,
+      ]);
+      return undefined;
+    },
+  });
+  await acquire(provider);
+  const at = "2027-02-01T00:00:00.000Z";
+  const reach = "2026-11-03T00:00:00.000Z";
+  // Anche una fine esattamente sul limite è ormai fuori portata.
+  for (const end of ["2026-10-01T00:00:00.000Z", reach]) {
+    await env.DB.prepare(
+      "UPDATE sync_state SET trading_cursor = '2026-09-01T00:00:00.000Z', trading_end = ?, trading_page = 3, trading_total = 250",
+    )
+      .bind(end)
+      .run();
+    requests.length = 0;
+    expect(await acquire(provider, at)).toBe("complete");
+    expect(requests[0]).toEqual([reach, "1"]);
+  }
 });

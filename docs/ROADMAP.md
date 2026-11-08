@@ -7,8 +7,8 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 
 | Filone | Stato | Contenuto |
 |---|---|---|
-| [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia e verifica del brand Google, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | Da completare | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, un task per PR. |
+| [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia, verifica del brand Google e richieste a eBay sulle lacune delle API, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
+| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)), la dismissione di `GetOrders` e la coda della pubblicazione ([D321](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -25,9 +25,9 @@ Decidono soltanto l'owner: requisiti non realizzabili, conflitti di diritti, nuo
 <a id="re-01"></a>
 #### RE-01 · Application Growth Check
 
-**Stato:** Da completare · **Prerequisiti:** `2.0.0` in Production, raggiunta · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§15](product/CHANNELS_AND_ADMIN.md#s15)
+**Stato:** Da completare · **Prerequisiti:** consumo giornaliero di una quota oltre il 70% con le chiamate di Production, dopo le riduzioni del [§11](product/ORDERS_AND_SYNC.md#s11) · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§15](product/CHANNELS_AND_ADMIN.md#s15)
 
-Completare l'Application Growth Check sull'applicazione Production per i limiti delle chiamate di lettura degli ordini, senza attendere che l'anomalia della soglia del 70% ([D188](decisions/DECISION_REGISTER.md)) lo imponga. Il keyset è condiviso con altri progetti: la richiesta riguarda le sole chiamate di FiscalBay e non cambia impostazioni, RuName o notifiche altrui.
+Completare l'Application Growth Check sull'applicazione Production per i limiti delle chiamate di lettura degli ordini soltanto quando serve davvero: quando l'anomalia della soglia del 70% ([D188](decisions/DECISION_REGISTER.md)) nasce dalle letture dei negozi Production, non da importazioni o collaudi del test ([D322](decisions/DECISION_REGISTER.md)). Il keyset `botCF` è usato soltanto da FiscalBay, con i Worker di test e Production: la richiesta non cambia impostazioni, RuName o notifiche.
 
 **Criterio di completamento:** esito di eBay registrato e nuovi limiti riletti nelle quote della console; con un rifiuto, motivazione registrata e soglia del 70% invariata.
 
@@ -58,55 +58,105 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 
 **Criterio di completamento:** verifica approvata e schermata di consenso riletta su Production con nome, logo e link legali di FiscalBay.
 
+<a id="re-05"></a>
+#### RE-05 · Lacune delle API eBay
+
+**Stato:** In corso · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
+
+Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) analizza cinque lacune, con le bozze in inglese. L'owner ha inviato il 2026-11-07 un solo [ticket](audits/2026-11-07-lacune-api-ebay/README.md#ticket-inviato), limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta: fatture combinate senza checkout eBay, identità immutabile dell'acquirente e scope delle API sostitute. Le altre lacune restano note interne. Misura e rilettura settimanale degli username per le cancellazioni sono fatte ([D319](decisions/DECISION_REGISTER.md)); la risposta orienta [2.0-11](#2-0-11).
+
+**Criterio di completamento:** risposta di eBay registrata nel dossier e conseguenze portate nei documenti competenti.
+
 <a id="correzioni-2-0"></a>
 ## 2.0.x · Correzioni e miglioramenti
 
-**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i tre procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
+**Prerequisiti:** nessuno. **Attività:** correggere i difetti e rafforzare i punti deboli emersi dall'analisi trasversale del 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)), più la provenienza degli iscritti approvata il 2026-11-04 ([D304](decisions/DECISION_REGISTER.md)) i motivi di uscita approvati il 2026-11-07 ([D314](decisions/DECISION_REGISTER.md)) e le riduzioni del consumo delle API eBay dello stesso giorno ([D322](decisions/DECISION_REGISTER.md)). Ogni task è una sola PR e i task procedono in parallelo su file distinti. Nessun nuovo costo; l'unico servizio esterno nuovo è il controllo gratuito delle password violate di Have I Been Pwned.
 
 <a id="2-0-01"></a>
 #### 2.0-01 · Ordini, eBay e piattaforma
 
-**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§12](product/ORDERS_AND_SYNC.md#s12) · [retention](engineering/DATA_RETENTION.md) · [§25](engineering/ARCHITECTURE.md#s25) · [§31](operations/OPERATIONS.md#s31)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§12](product/ORDERS_AND_SYNC.md#s12) · [retention](engineering/DATA_RETENTION.md) · [§25](engineering/ARCHITECTURE.md#s25) · [§31](operations/OPERATIONS.md#s31)
 
-- Lettura dei recenti per tratti di tempo, senza ripartire da capo quando il totale di eBay cambia; lettura Trading per finestre di 30 giorni concatenate fino a 90 dopo una pausa.
-- Meno chiamate eBay: nessuna ricerca fiscale Trading oltre i 90 giorni, più ordini per chiamata, immagine letta una volta per inserzione.
-- Ordini scaduti cancellati a blocchi e chiavi anti-reimport eliminate dopo due anni. Il blocco del reimport resta soltanto per le cancellazioni volute (utente, eBay, scollegamento); i blocchi esistenti si ricostruiscono dove l'origine da scadenza è dimostrabile, così chi passa a Premium recupera lo storico.
-- Export con l'indirizzo di spedizione quando manca quello di fatturazione.
-- Negozio da ricollegare dopo errori ripetuti di credenziali e ricontrollo periodico della sottoscrizione alle notifiche degli ordini.
-- Nessuna scrittura D1 per richiesta HTTP nel registro delle attività; coda separata per webhook e pagamenti; messaggi persi ripresi entro due ore.
-- Allarme sul cron fermo senza nuovi provider; chiamate Telegram in un Worker separato per riaccendere le tracce del Worker principale; limite di CPU; ID Telegram dell'owner in un segreto.
-
-**Criterio di completamento:** ogni difetto riprodotto da un test prima della correzione; lettura conclusa con oltre 75 ordini modificati e dopo 45 giorni di pausa; migration non additiva rivista; retention e operazioni aggiornate.
+Recenti e storico si leggono per tratti di una pagina e Trading per finestre di trenta giorni concatenate, con meno chiamate eBay; la scadenza non blocca più il reimport e i blocchi dimostrabilmente nati da scadenza sono stati tolti; export con l'indirizzo di spedizione, ricollegamento dopo tre rifiuti delle credenziali, sottoscrizione ricontrollata ogni settimana, coda propria per webhook e pagamenti con ripresa in due ore, registro senza scritture per richiesta, CPU limitata, ID dell'owner in un segreto e Worker del bot con le tracce del principale riaccese ([D293](decisions/DECISION_REGISTER.md)). Il cron fermo resta al Monitor dell'account. Restano sul provider le nuove code, il Worker del bot, il segreto dell'owner e il readback dei Monitor.
 
 <a id="2-0-02"></a>
 #### 2.0-02 · Accesso, console e pagamenti
 
-**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§7](product/ACCOUNTS_AND_STORES.md#s07) · [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§29](engineering/SECURITY_AND_PRIVACY.md#s29) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§7](product/ACCOUNTS_AND_STORES.md#s07) · [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§29](engineering/SECURITY_AND_PRIVACY.md#s29) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30)
 
-- Limite per IP anche sulla preparazione dell'accesso con passkey e pulizia indicizzata delle tabelle di Auth.
-- Password: controllo delle password violate, che invia soltanto i primi cinque caratteri dell'hash; Turnstile dopo alcuni tentativi falliti; regola di zona estesa ai moduli di accesso e assistenza.
-- Ultimo metodo di accesso indicato e verifica in due passaggi facoltativa per chi usa la password.
-- Token tecnico della console con lettura e scrittura come oggi, più scadenza e limite di tentativi.
-- Segreto di cifratura dei token eBay separato da quello di Auth, con versione della chiave e ricifratura progressiva.
-- Stripe: timeout breve, chiavi di idempotenza sulle creazioni, versione dell'API fissata.
-
-**Criterio di completamento:** limiti e Turnstile provati con test negativi; un token eBay cifrato con la chiave precedente si legge e viene ricifrato; Privacy e fornitori aggiornati; ciò che solo l'owner può provare dichiarato prima di `Pubblica`.
+Preparazione della passkey limitata per IP e pulizia di Auth indicizzata; password nuove confrontate con Have I Been Pwned, Turnstile all'accesso dopo tre errori dallo stesso IP e regola di zona estesa ad accesso e assistenza; ultimo metodo segnato da un cookie; token tecnico con scadenza e blocco dei tentativi; token eBay con un segreto proprio, versionati e ricifrati al rinnovo; Stripe con versione fissata, timeout breve e idempotenza ([D293](decisions/DECISION_REGISTER.md)). La verifica in due passaggi esce dal task per scelta owner. Dopo `Pubblica` restano l'applicazione della regola di zona e la prova reale di Turnstile sul test.
 
 <a id="2-0-03"></a>
 #### 2.0-03 · Sito, processi e documenti
 
-**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§23](product/EXPERIENCE.md#s23) · [§34](operations/RELEASE.md#s34) · [§35](engineering/TESTING.md#s35)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§23](product/EXPERIENCE.md#s23) · [§34](operations/RELEASE.md#s34) · [§35](engineering/TESTING.md#s35)
 
-- Home e Prezzi in cache breve per chi non ha sessione, con listino di riserva invece del 503.
-- Indirizzi inglesi con redirect permanenti, titoli con la parola chiave davanti, dati strutturati delle offerte, immagine social per pagina, `lastmod` nella sitemap.
-- Manifest con icone e colore del tema, immagine principale prioritaria in AVIF, cache lunga per le immagini del sito.
-- «Inizia gratis» nella barra, piano scelto portato alla registrazione, domande sui pagamenti in Prezzi, «Salta al contenuto», terminologia inglese unica, `security.txt`.
-- Sezione Guide con articoli stabili sulle domande reali dei venditori.
-- Actions fissate per SHA; mutation fuori dal gate delle PR, al candidato e alla campagna settimanale.
-- Insidie ricorrenti degli agenti trasformate in hook e controlli di `verify:repo`.
-- Decisioni superate del registro in archivio e operazioni divise in runbook; ciclo di rilascio invariato.
+Home e Prezzi restano consultabili senza database con il listino di riserva e arrivano dalla cache di un minuto a chi non ha cookie. Sito, area e anteprima hanno indirizzi inglesi, con 301 dai vecchi; titoli con la parola chiave davanti, offerte e Guide nei dati strutturati, immagine social per pagina, `lastmod`, manifest, AVIF e cache delle immagini. «Inizia gratis» sta nella barra, l'offerta scelta arriva alla pagina Piano, Prezzi risponde sui pagamenti, «Vai al contenuto principale» apre ogni pagina, l'inglese segue la regola del 27 settembre e `security.txt` è pubblicato. Hook degli agenti e nuovi controlli di `verify:repo`; decisioni superate in archivio e operazioni in runbook ([D293](decisions/DECISION_REGISTER.md)). Le Actions erano già fissate per SHA; la mutation resta nelle PR per [D301](decisions/DECISION_REGISTER.md); meno JavaScript resta alla 2.x.
 
-**Criterio di completamento:** pagine pubbliche servite anche con D1 non disponibile; vecchi indirizzi inglesi in 301; §23 aggiornato per le Guide; `verify-docs` verde dopo la riorganizzazione.
+<a id="2-0-04"></a>
+#### 2.0-04 · Provenienza degli iscritti
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15) · [§23](product/EXPERIENCE.md#s23) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30) · [retention](engineering/DATA_RETENTION.md)
+
+Ogni nuovo account salva una volta sola la categoria del canale d'arrivo e il percorso della prima pagina: il Worker li ricava dal Referer o da un'etichetta `via` dell'elenco chiuso, i link interni li portano fino all'accesso senza cookie né archivi del browser e i provider li passano nello state firmato. La console li mostra in aggregato con iscritti, attivazioni e paganti; il dato entra nell'esportazione, sparisce con l'account ed è nella Privacy IT/EN `2026-11-05` ([D304](decisions/DECISION_REGISTER.md)). Senza JavaScript la provenienza non si propaga e vale «unknown»; le iscrizioni reali con Google ed eBay si provano sul test dopo `Pubblica`.
+
+<a id="2-0-05"></a>
+#### 2.0-05 · Rilievi dell'audit Production
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§11](product/ORDERS_AND_SYNC.md#s11) · [§12](product/ORDERS_AND_SYNC.md#s12) · [§23](product/EXPERIENCE.md#s23) · [audit Production](audits/2026-11-06-audit-ui-ux-production.md)
+
+I rilievi dell'audit Production del 2026-11-06 sono corretti: Negozi eBay mostra in corso la lettura richiesta e si rilegge fino all'esito, gli avvisi dei suggerimenti usano parole comuni, i conteggi di ordini raggruppano le migliaia, l'Esportazione nomina filtri e ricerca, la ricerca della barra avviata dagli Ordini ne conserva i filtri e Prezzi mostra a chi ha Pro a vita il piano attivo, con i pulsanti dei piani allineati ([D308](decisions/DECISION_REGISTER.md)). Web Analytics conta di nuovo le visite con un sito per host senza inserimento automatico. La notifica dei Termini resta eliminabile per scelta dell'owner. Le correzioni sono verificate su Chrome in Production con la 2.0.7.
+
+<a id="2-0-06"></a>
+#### 2.0-06 · Proporzione delle verifiche di pubblicazione
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [Pubblicazione](operations/RELEASE.md#controlli-proporzionati)
+
+La mutation divide i moduli secondo le durate misurate sullo stesso sorgente e cede posti alle PR e ai cicli attivi soltanto nel lavoro di fondo; ogni ambiente si compila una volta per run, i browser del candidato si dimensionano sulle prove rimaste e quelli Production partono dalla propria build, roadmap e documenti di prodotto passano dal gate documentale, `.gitignore` e gli script del manifest estranei all'artefatto da quello degli strumenti changelog e frammenti invalidano soltanto le aree che mostrano le Novità, il runner browser prova il nucleo e il merge di una PR che non tocca il processo distribuisce la build già provata nella PR ([D309](decisions/DECISION_REGISTER.md)). Inventari, provenienza, migration e readback restano obbligatori; la riduzione dei tempi si misura sulle qualifiche successive.
+
+<a id="2-0-07"></a>
+#### 2.0-07 · Controllo di sicurezza pianificato
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§29](engineering/SECURITY_AND_PRIVACY.md#s29)
+
+Ogni giovedì, anche senza PR, un workflow ricontrolla avvisi delle dipendenze distribuite, firme dei pacchetti, protezione di `develop` e `main` con il solo `Node 26` richiesto e alert aperti di Dependabot, code scanning e secret scanning; un fallimento arriva all'owner come notifica di GitHub ([D313](decisions/DECISION_REGISTER.md)). Gli alert si leggono con un token in sola lettura la cui scadenza sta nel registro delle credenziali, che resta l'unico controllo delle scadenze.
+
+<a id="2-0-08"></a>
+#### 2.0-08 · Motivi di uscita
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§15](product/CHANNELS_AND_ADMIN.md#s15) · [piani](product/PLANS_AND_BILLING.md) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30) · [retention](engineering/DATA_RETENTION.md)
+
+La disdetta dal portale Stripe porta motivo e commento dei `cancellation_details`, con sei opzioni allineate all'elenco di FiscalBay; la cancellazione dell'account chiede lo stesso elenco, con «Chiudo o sospendo l'attività su eBay», e un commento, entrambi facoltativi. Gli avvisi Telegram di disdetta e cancellazione li mostrano, la pagina Commerciale della console e il comando `/uscite` riassumono i motivi a 30 giorni, 3 e 12 mesi con i commenti recenti. Il commento dura 30 giorni, poi resta un'istantanea anonima per 24 mesi; Privacy IT/EN `2026-11-07` ([D314](decisions/DECISION_REGISTER.md)). Lo scollegamento dell'ultimo negozio non chiede nulla. Le opzioni del portale si applicano sul test dopo `Pubblica` e in live con `Promuovi`, con `scripts/stripe-account.mjs --apply`.
+
+<a id="2-0-09"></a>
+#### 2.0-09 · Consumo delle API eBay
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11) · [§15](product/CHANNELS_AND_ADMIN.md#s15) · [capacità](operations/CAPACITY.md#capacita)
+
+L'Application Growth Check serve soltanto con il carico reale dei negozi Production ([D322](decisions/DECISION_REGISTER.md)): Trading si rilegge ogni due ore con fatture combinate senza checkout recenti, altrimenti ogni sei, e ogni dodici negli spazi che nessuno segue, che leggono Fulfillment ogni due ore; le letture fiscali Trading viaggiano a lotti e non si ripetono dopo una risposta più recente o su un ordine pagato; il lavoro non urgente si ferma a metà quota, il test al 10% e la console mostra le chiamate di ogni ambiente. Il banco di capacità stima il 70% verso i 600 negozi per `GetOrders` e i 350 per `GetItem`: i consumi reali di Production si confrontano con la stima.
+
+<a id="2-0-10"></a>
+#### 2.0-10 · Username degli acquirenti per le cancellazioni eBay
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [retention](engineering/DATA_RETENTION.md#cancellazione-ebay)
+
+Ogni ordine registra l'ultima lettura dello username dell'acquirente e quelli senza token eIAS, l'89% in Production il 2026-11-07, lo rileggono ogni settimana da Fulfillment, fino a 50 per chiamata del budget della lettura periodica ([D319](decisions/DECISION_REGISTER.md)). Resta scoperto un cambio di username a ridosso della cancellazione, chiesto a eBay in [RE-05](#re-05).
+
+<a id="2-0-11"></a>
+#### 2.0-11 · Dismissione di Trading `GetOrders`
+
+**Stato:** Da completare · **Prerequisiti:** scelte dell'owner su scope e consenso · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11) · [retention](engineering/DATA_RETENTION.md#cancellazione-ebay)
+
+eBay ha deprecato `GetOrders` il 2026-11-06 e lo spegne il 2027-06-30 ([stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status)). FiscalBay lo usa per il fallback fiscale, gli acquisti prima del checkout e il loro consolidamento, le fatture combinate senza checkout eBay e il token eIAS degli acquirenti. Le sostitute indicate da eBay sono Fulfillment per gli ordini pagati e la Order API GraphQL con impegni e `PurchaseQuote` per il resto: chiedono scope nuovi e un nuovo consenso dei negozi ([D216](decisions/DECISION_REGISTER.md)) e non espongono CF, indirizzo di fatturazione né token eIAS ([lacune](audits/2026-11-07-lacune-api-ebay/README.md#2-dati-fiscali-dellacquirente-nelle-letture-di-elenco-e-nelle-api-moderne)). Prima di progettare decide l'owner quali funzioni visibili si riducono e quali scope chiedere.
+
+**Criterio di completamento:** nessuna chiamata `GetOrders` prima del 2027-06-30, funzioni ridotte approvate dall'owner, documenti di ordini e conservazione allineati.
+
+<a id="2-0-12"></a>
+#### 2.0-12 · Coda della pubblicazione
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [Pubblicazione](operations/RELEASE.md#qualifica-del-candidato) · [Runner del Mac](operations/AGENT_SETUP.md#runner-del-mac)
+
+I coordinatori di `Pubblica` e `Promuovi` aspettano sui runner del Mac dell'owner quando è acceso, una qualifica automatica superata lascia il posto alla testa più recente, PR e qualifiche hanno un tetto di job paralleli e `Promuovi` su un commit certificato non attende altri controlli ([D321](decisions/DECISION_REGISTER.md)). Con il Mac spento i coordinatori restano sulle Actions; un coordinatore a eventi resta un'evoluzione possibile.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni
@@ -118,7 +168,7 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 
 **Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§19](product/EXPERIENCE.md#s19) · [§30](engineering/SECURITY_AND_PRIVACY.md#s30)
 
-Pagina dell'area riservata, raggiunta dalla campanella, con tutte le voci degli ultimi 30 giorni: filtri per categoria e stato di lettura, testo completo e link all'azione. Stessa fonte, stesse letture e stessa retention del popover, che resta com'è.
+Pagina dell'area riservata, raggiunta dalla campanella, con tutte le voci degli ultimi 30 giorni: filtri per categoria e stato di lettura, testo completo e link all'azione. Stessa fonte, stesse letture ed eliminazioni e stessa retention del popover, che resta com'è.
 
 **Criterio di completamento:** una lettura o «Segna tutte come lette» su una delle due superfici si riflette sull'altra dal server, IT/EN e mobile compresi; nessuna voce oltre i 30 giorni.
 
@@ -129,7 +179,7 @@ Pagina dell'area riservata, raggiunta dalla campanella, con tutte le voci degli 
 
 Registrare per FiscalBay, eBay, Telegram, Stripe, accessi ed email l'esito dell'ultimo controllo e la sua ora, dai controlli interni e dalle pagine di stato dei fornitori dove sono leggibili. eBay risulta non disponibile secondo la definizione del [§20](product/EXPERIENCE.md#s20): le ultime letture di tutti i negozi attivi non riescono, mai per un errore isolato. I segnali sono aggregati, senza dati di merchant o negozi, e non si conserva uno storico.
 
-**Criterio di completamento:** ogni servizio ha un esito con ora, provato con un guasto simulato per ciascuno, senza quote di lettura aggiuntive oltre il margine del [runbook di capacità](operations/OPERATIONS.md#capacita).
+**Criterio di completamento:** ogni servizio ha un esito con ora, provato con un guasto simulato per ciascuno, senza quote di lettura aggiuntive oltre il margine del [runbook di capacità](operations/CAPACITY.md#capacita).
 
 <a id="2-1-03"></a>
 #### 2.1-03 · Comunicazioni pubbliche
@@ -145,7 +195,7 @@ Nella console ogni comunicazione di servizio dichiara se è pubblica o riservata
 
 **Stato:** Da completare · **Prerequisiti:** 2.1-02, 2.1-03 · **Contratto:** [§20](product/EXPERIENCE.md#s20) · [§23](product/EXPERIENCE.md#s23)
 
-Pagina del sito su `/stato` e `/en/stato`, collegata dal piè di pagina: una riga per servizio con stato e ora dell'ultimo controllo, più le comunicazioni pubbliche attive. Niente esito complessivo, storico o percentuali di disponibilità, e nessuna promessa di SLA. Un controllo non recente mostra «Stato non verificato» e mai l'ultimo esito positivo.
+Pagina del sito su `/stato` e `/en/stato`, collegata dal piè di pagina: una riga per servizio con stato e ora dell'ultimo controllo, più le comunicazioni pubbliche attive. Niente esito complessivo, storico o percentuali di disponibilità, e nessuna promessa di SLA. Un controllo non recente mostra «Stato non verificato» e mai l'ultimo esito positivo. La pagina risponde `noindex, follow` e resta fuori dalla sitemap: un servizio non disponibile non deve comparire nei risultati di ricerca di FiscalBay.
 
 **Criterio di completamento:** la pagina funziona senza sessione e resta raggiungibile con il servizio sospeso o con D1 non disponibile, dove mostra «Stato non verificato»; il divieto di semaforo globale del [§20](product/EXPERIENCE.md#s20) resta rispettato.
 
@@ -166,21 +216,21 @@ Elenco delle funzioni previste per la 2.x, approvato dall'owner il 2026-10-31, n
 | Versione | Contesto | Funzioni |
 |---|---|---|
 | 2.1 | Comunicazioni | Pagina Notifiche completa; pagina pubblica dello stato di FiscalBay e dei servizi da cui dipende (eBay, Telegram, Stripe, accessi ed email), dai controlli interni e dalle pagine di stato dei fornitori dove esistono; riepiloghi settimanali o mensili e avvisi su ordini senza CF, negozi fermi e CF mancanti |
-| 2.2 | Ordini | Filtri salvati e personalizzazione delle schede Premium; elenco degli ordini senza codice fiscale da richiedere, con la data in cui il merchant ha copiato il messaggio, senza invii all'acquirente; periodi di calendario per filtri ed export (dal… al…, mese scorso, trimestre); ricerca indicizzata e stato fiscale salvato |
-| 2.3 | Dati | Analisi Premium su ordini, presenza del CF, andamento, negozi e marketplace; metriche di prodotto per l'owner, con l'aggiornamento della Privacy |
+| 2.2 | Ordini | Filtri salvati e personalizzazione delle schede Pro; elenco degli ordini senza codice fiscale da richiedere, con la data in cui il merchant ha copiato il messaggio, senza invii all'acquirente; periodi di calendario per filtri ed export (dal… al…, mese scorso, trimestre); ricerca indicizzata e stato fiscale salvato |
+| 2.3 | Dati | Analisi Pro su ordini, presenza del CF, andamento, negozi e marketplace; metriche di prodotto per l'owner, con l'aggiornamento della Privacy |
 | 2.4 | Crescita | Coupon; invito di un collega con premio e regole antiabuso decisi sui numeri delle metriche; prova sociale reale con numeri aggregati e testimonianze autorizzate |
 | 2.5 | Team | Collaboratori nello stesso spazio, con un ruolo in sola lettura per il commercialista |
 | 3.x | App native | iOS/Android nativi con React Native/Expo e riuso ragionato; Apple login da riesaminare, offline solo eventuale |
 
 Da collocare in una versione 2.x ([D293](decisions/DECISION_REGISTER.md)): dati economici dell'ordine già forniti da Fulfillment (commissioni, netto, IVA riscossa da eBay, rimborsi, spedizione), senza la Finances API, che richiederebbe lo scope `sell.finances`, un nuovo consenso dei negozi e le firme digitali per i venditori UE; comandi Telegram di ricerca, riepilogo della giornata ed export; chat di supporto Tawk.to con una pagina Supporto migliorata, subordinata all'inventario dei cookie e alla Privacy, unica eccezione alle integrazioni con altri servizi; JavaScript ridotto nelle pagine pubbliche.
 
-L'accessibilità entra nelle correzioni `2.2.x`, dopo i cambi della pagina Ordini: prove manuali con VoiceOver e NVDA sui percorsi principali e correzioni conseguenti, senza dichiarazione di accessibilità pubblicata. Restano fuori dalla 2.x le integrazioni con altri servizi e l'accesso con codice via email o con conferma Telegram. Le dismissioni delle API Trading annunciate da eBay si coprono con le sostitute moderne in una versione di correzione appena eBay fissa la data; se una funzione visibile si riduce o sparisce decide l'owner prima della pubblicazione.
+L'accessibilità entra nelle correzioni `2.2.x`, dopo i cambi della pagina Ordini: prove manuali con VoiceOver e NVDA sui percorsi principali e correzioni conseguenti, senza dichiarazione di accessibilità pubblicata. Restano fuori dalla 2.x le integrazioni con altri servizi e l'accesso con codice via email o con conferma Telegram. Le dismissioni delle API Trading annunciate da eBay si coprono con le sostitute moderne in una versione di correzione appena eBay fissa la data, come per `GetOrders` in [2.0-11](#2-0-11); se una funzione visibile si riduce o sparisce decide l'owner prima della pubblicazione.
 
 La disponibilità PayPal **come pagamento** può entrare in 2.0 solo se supportata dal MoR scelto, senza account PayPal personale separato e con costo accettabile; non è garanzia di roadmap o collegamento login. Niente Microsoft login, nessuna app desktop promessa.
 
 Nella 2.0 FiscalBay non invia né legge messaggi eBay (Message API, `NEW_MESSAGE`), non mostra le linee guida normative di `REGULATORY_GUIDELINE` e non sottoscrive topic con scope propri per spedizioni, annullamenti, resi o preventivi, già coperti dalla lettura periodica (D215, D216). La candidatura all'eBay Partner Program presenta FiscalBay per gestione degli ordini, analisi e conformità fiscale, senza aggiungere gestione di inserzioni o spedizioni ([D255](decisions/DECISION_REGISTER.md), [RE-02](#re-02)). Restano fuori anche le novità eBay estranee agli ordini: Inventory Mapping, garanzia di durabilità UE, taglie moda, condizione delle monete, resi facilitati in Germania, Media API e video, API Buy, annunci video del Marketing, VeRO ed eDIS.
 
-API pubblica fuori dalla roadmap: si valuta caso per caso soltanto per chi ne ha un bisogno concreto, mantenendo servizi e contratti riusabili; endpoint solo quando necessari a un client reale. Analisi non diventa una suite e-commerce generale. Lifetime mantiene livello equivalente e riceve tutte le funzioni Premium della 2.x, team compreso (conferma dell'owner del 2026-10-31); non dà licenza di cambiare indiscriminatamente l'offerta già acquistata.
+API pubblica fuori dalla roadmap: si valuta caso per caso soltanto per chi ne ha un bisogno concreto, mantenendo servizi e contratti riusabili; endpoint solo quando necessari a un client reale. Analisi non diventa una suite e-commerce generale. Lifetime mantiene livello equivalente e riceve tutte le funzioni Pro della 2.x, team compreso (conferma dell'owner del 2026-10-31); non dà licenza di cambiare indiscriminatamente l'offerta già acquistata.
 
 <a id="questioni-aperte"></a>
 ## Questioni aperte
@@ -190,12 +240,13 @@ Conservare soltanto pendenze che cambiano una decisione, impediscono una prova o
 | Ambito | Pendenza e condizione di chiusura |
 |---|---|
 | Dipendenze dei tool | `pnpm audit --prod` non segnala avvisi. Nello sviluppo restano `deepmerge`, da shadcn, senza versione corretta indicata ([GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)), e `minimatch` sotto 11.0.1, da Stryker. Chiudere con release corrette e qualificate delle catene, senza sopprimere gli avvisi nell'audit. `vitest` e `@vitest/coverage-istanbul` restano a 5.0.3: con 5.0.4 e 5.0.5 il worker del pool Cloudflare termina nel dry-run di Stryker anche con Stryker 10.1.1 e, dal 2026-11-02, con `@cloudflare/vitest-plugin` 1.4.12, che con la 5.0.3 supera la mutation. Dependabot ignora quelle versioni e propone runner e mutation in una PR propria, senza merge automatico; aggiornarli soltanto a una versione che superi la mutation di un file Cloudflare, avviata a mano sul branch della PR. |
-| Qualifica del ciclo | D172 e D173 qualificate; D265-D288 implementate. Il primo `Promuovi` del 2026-11-02 ha provato coordinatore remoto, upload al 0%, override, avanzamento protetto di `main` e conferma finale. La guardia a tempo è rimossa dal ciclo ([D288](decisions/DECISION_REGISTER.md)). Restano da osservare un merge durante una promozione, qualifica automatica, scrittura del giorno su una versione nuova, ritiro per collaudo fallito e `rollback`. `publication` è limitato a `develop` con `PUBLISH_TOKEN`; la protezione di `main` richiede `Node 26`. |
+| Qualifica del ciclo | D172 e D173 qualificate; D265-D288 e D295-D300 implementate. Il primo `Promuovi` del 2026-11-02 ha provato coordinatore remoto, upload al 0%, override, avanzamento protetto di `main` e conferma finale. La guardia a tempo è rimossa dal ciclo ([D288](decisions/DECISION_REGISTER.md)). Restano da osservare un merge durante una promozione, qualifica automatica, scrittura del giorno su una versione nuova con frammenti, ritiro per collaudo fallito e `rollback`; poi due cicli `pr` insieme con il blocco del merge, `production`, la scelta del commit certificato, la rinumerazione di una decisione e la prima mutation delle righe in parti con base incrementale. `publication` è limitato a `develop` con `PUBLISH_TOKEN`; la protezione di `main` richiede `Node 26`. |
 | CI alleggerita | D190 e [D200](decisions/DECISION_REGISTER.md): browser nel container ufficiale di Playwright, campagna mutation settimanale e avvio manuale su `develop`; i moduli con più di 150 mutanti si dividono in parti parallele ([pubblicazione](operations/RELEASE.md#mutation-test)). Chiudere con la prima campagna settimanale riuscita. |
+| Runner della mutation | Runner GitHub più capienti accorcerebbero ogni parte della mutation, ma esistono soltanto per organizzazioni GitHub Team o Enterprise Cloud, e il repository è su un account personale gratuito. Decide l'owner, con il costo. |
 | Prima vendita reale | `commercial.mjs verify` del 2026-11-02 non trova vendite: si ripete alla prima vendita reale. |
 | Sandbox e dati fiscali | Sul test la Sandbox è spenta su richiesta dell'owner (`EBAY_SANDBOX_ENABLED` a `false`) e si riattiva soltanto su sua indicazione. I pagamenti Sandbox non riescono (`CashOnPickup` rimosso per managed payments, acquisto confermato non pagato e assente da Fulfillment) e Buy API è esclusa dall'owner: serve un pagamento Sandbox riuscito con importazione, oppure una soluzione concordata. La consultazione Production autorizzata della lettura fiscale non prova il pagamento o l'import Sandbox. Nessun permesso implicito di modificare ordini Production o introdurre import Trading. |
 | Protezioni della zona | HSTS/header, WAF/rate limit edge, report DMARC e alert certificati configurati per ambiente da `scripts/zone-protection.mjs` (D229): applicati e riletti sul test il 2026-10-29 e in Production il 2026-11-01. HSTS è a un anno sui due ambienti dal 2026-11-02, su indicazione dell'owner, senza `includeSubDomains` né `preload`. Primo report DMARC ricevuto il 2026-11-01, con DMARC, SPF e DKIM superati; primo alert dei certificati ancora da osservare. Rilevamento delle credenziali trapelate attivo sulla zona dal 2026-11-03 ([D294](decisions/DECISION_REGISTER.md)): il readback con la password nota e la cache degli asset si ripete sul test dopo il deploy della PR e in Production dopo `Promuovi`. |
-| Piano e costi | Workers Paid continuativo e Cloudflare Email Service (D169); nessun costo variabile (D227), con avvisi di budget da 0,01 USD all'owner. Il cron supera ancora i 10 ms in ogni esecuzione dopo D167. Coda e DLQ del test in UE a 14 giorni (D171); quelle di Production nascono allo stesso modo secondo la [pubblicazione](operations/OPERATIONS.md#webhook). Prezzi Observability dal 1° dicembre 2026 riletti il 2026-11-02 ([runbook](operations/OPERATIONS.md#capacita)): consumo stimato ben sotto i 50 GB inclusi, da confermare con il volume reale alla prima fattura successiva. Lo smistamento resta idempotente rispetto alle invocazioni ripetute del cron già osservate. Le misure della qualifica iniziale non autorizzano capacità pubblica né costi oltre il canone. |
+| Piano e costi | Workers Paid continuativo e Cloudflare Email Service (D169); nessun costo variabile (D227), con avvisi di budget da 0,01 USD all'owner. Il cron supera ancora i 10 ms in ogni esecuzione dopo D167. Coda e DLQ del test in UE a 14 giorni (D171); quelle di Production nascono allo stesso modo secondo la [pubblicazione](operations/WEBHOOKS.md#webhook). Prezzi Observability dal 1° dicembre 2026 riletti il 2026-11-02 ([runbook](operations/CAPACITY.md#capacita)): consumo stimato ben sotto i 50 GB inclusi, da confermare con il volume reale alla prima fattura successiva. Lo smistamento resta idempotente rispetto alle invocazioni ripetute del cron già osservate. Le misure della qualifica iniziale non autorizzano capacità pubblica né costi oltre il canone. |
 | CLI Cloudflare | `cf` (D170) qualificata sul test per deploy, migration, ripresa e rollback; il primo deploy Production con `cf` avviene con `Promuovi`. Rimuovere la patch che limita la rilevazione al pacchetto della radice quando una versione qualificata di `cf` corregge i workspace, il collegamento `build/client` in `vite.config.ts` quando plugin Vite 2.x e React Router concordano sulla cartella client, e `scripts/local-d1.mjs` quando `cf --local` termina da solo ([cloudflare/cf#64](https://github.com/cloudflare/cf/issues/64)). Aggiornare `cf` e plugin solo a versioni esatte riprovate. |
 | Cutover provider | OAuth eBay attivo sul RuName Production dal 2026-10-31 ([D247](decisions/DECISION_REGISTER.md)): sul test non funzionano più Accedi con eBay né il collegamento di nuovi negozi. Non modificare `botCF 2` (SyncBay) o il callback condiviso con Hub Fatture. Branding finale Checkout ancora da osservare. |
 

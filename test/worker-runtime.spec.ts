@@ -2,13 +2,11 @@ import { env } from "cloudflare:workers";
 
 import { expect, it, vi } from "vitest";
 
-import {
-  duringRequestActivity,
-  duringServiceActivity,
-  waitUntil,
-} from "../app/service-activity.server";
+import { duringServiceActivity, waitUntil } from "../app/service-activity.server";
 
 import worker from "../workers/app";
+import { pageCacheKey, sharedResponse, skipPageCache } from "../app/page-cache.server";
+import { canonicalPath, localizedPath, movedEnglishPath, settingsSectionParam } from "../app/i18n";
 
 import * as site from "../app/routes/site";
 
@@ -79,7 +77,7 @@ it("il Worker intercetta il webhook prima di caricare la build React Router", as
 
 it.each([
   ["https://test.fiscalbay.it", "/", "noindex, nofollow", undefined],
-  ["https://fiscalbay.it", "/en/prezzi", null, undefined],
+  ["https://fiscalbay.it", "/en/pricing", null, undefined],
   // Termini e Privacy restano raggiungibili ma fuori dagli indici (D204).
   ["https://fiscalbay.it", "/en/privacy", "noindex, nofollow", undefined],
   ["https://fiscalbay.it", "/app/ordini", "noindex, nofollow", "synthetic-version"],
@@ -132,7 +130,7 @@ it("il Worker risponde no-store a ogni pagina pubblica e in Production noindex a
     "/privacy": legal,
   };
   router.handle.mockImplementation(async (request: Request) => {
-    const path = new URL(request.url).pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
+    const path = canonicalPath(new URL(request.url).pathname);
     const page = pages[path]!;
     const data = await page.loader({ request, params: {}, context: {} } as never);
     return Response.json(data, { headers: page.headers?.() ?? {} });
@@ -140,7 +138,7 @@ it("il Worker risponde no-store a ogni pagina pubblica e in Production noindex a
   try {
     for (const prefix of ["", "/en"])
       for (const path of Object.keys(pages)) {
-        const url = `https://fiscalbay.it${prefix}${path === "/" && prefix ? "" : path}`;
+        const url = `https://fiscalbay.it${localizedPath(prefix ? "en" : "it", path)}`;
         const response = await workerFetch(new Request(url), {
           ...environment,
           APP_ORIGIN: "https://fiscalbay.it",
@@ -151,6 +149,142 @@ it("il Worker risponde no-store a ogni pagina pubblica e in Production noindex a
           path === "/termini" || path === "/privacy" ? "noindex, nofollow" : null,
         );
       }
+  } finally {
+    router.handle.mockReset();
+  }
+});
+
+it("porta i vecchi indirizzi inglesi a quelli nuovi con un solo redirect permanente", async () => {
+  router.handle.mockReset();
+  const moved = async (path: string, method = "GET") => {
+    const response = await workerFetch(
+      new Request(`https://fiscalbay.it${path}`, { method }),
+      environment,
+    );
+    return [response.status, response.headers.get("location")];
+  };
+  expect(await moved("/en/prezzi")).toEqual([301, "https://fiscalbay.it/en/pricing"]);
+  expect(await moved("/en/app/impostazioni/piano?checkout=1")).toEqual([
+    301,
+    "https://fiscalbay.it/en/app/settings/plan?checkout=1",
+  ]);
+  expect(await moved("/en/app/ordini/ord-1")).toEqual([
+    301,
+    "https://fiscalbay.it/en/app/orders/ord-1",
+  ]);
+  expect(await moved("/en/anteprima/negozi/collega.data")).toEqual([
+    301,
+    "https://fiscalbay.it/en/preview/stores/link.data",
+  ]);
+  // Un invio di modulo mantiene metodo e corpo.
+  expect(await moved("/en/accesso", "POST")).toEqual([308, "https://fiscalbay.it/en/sign-in"]);
+  expect(router.handle).not.toHaveBeenCalled();
+  for (const path of ["/en/pricing", "/prezzi", "/en/admin/negozi", "/en/api/v1/exports/x"])
+    expect(movedEnglishPath(path), path).toBeNull();
+  expect(canonicalPath("/en/app/settings/plan")).toBe("/app/impostazioni/piano");
+  expect(canonicalPath("/en")).toBe("/");
+  expect(localizedPath("en", "/app/negozi/abc?x=1#y")).toBe("/en/app/stores/abc?x=1#y");
+  expect(settingsSectionParam("appearance")).toBe("aspetto");
+  expect(settingsSectionParam("nuova")).toBe("nuova");
+});
+
+it("serve Home e Prezzi a chi non ha cookie dalla copia di un minuto, sempre no-store al browser", async () => {
+  let renders = 0;
+  router.handle.mockImplementation(async () => {
+    renders += 1;
+    return new Response(`pagina ${renders}`, { headers: { "cache-control": "no-store" } });
+  });
+  const visit = (path: string, headers: Record<string, string> = {}) =>
+    workerFetch(new Request(`https://fiscalbay.it${path}`, { headers }), {
+      ...environment,
+      VERSION_METADATA: { id: `cache-${crypto.randomUUID()}` },
+    } as Env);
+  try {
+    const environmentWithVersion = { id: `cache-${crypto.randomUUID()}` };
+    const fixed = (path: string, headers: Record<string, string> = {}) =>
+      workerFetch(new Request(`https://fiscalbay.it${path}`, { headers }), {
+        ...environment,
+        VERSION_METADATA: environmentWithVersion,
+      } as Env);
+    const first = await fixed("/en/pricing");
+    expect(await first.text()).toBe("pagina 1");
+    const again = await fixed("/en/pricing");
+    expect(await again.text()).toBe("pagina 1");
+    expect(again.headers.get("cache-control")).toBe("no-store");
+    // Una sessione, un parametro o un'altra pagina leggono sempre di nuovo.
+    expect(await (await fixed("/en/pricing", { cookie: "a=1" })).text()).toBe("pagina 2");
+    expect(await (await fixed("/en/pricing?visita=1")).text()).toBe("pagina 3");
+    expect(await (await fixed("/funzionalita")).text()).toBe("pagina 4");
+    expect(await (await fixed("/funzionalita")).text()).toBe("pagina 5");
+    // Una nuova versione del Worker non riusa la copia della precedente.
+    expect(await (await visit("/en/pricing")).text()).toBe("pagina 6");
+  } finally {
+    router.handle.mockReset();
+  }
+});
+
+it("tiene una copia per ogni provenienza, che la pagina porta nei link interni", async () => {
+  let renders = 0;
+  router.handle.mockImplementation(async () => {
+    renders += 1;
+    return new Response(`pagina ${renders}`);
+  });
+  const version = { id: `provenienza-${crypto.randomUUID()}` };
+  // Referer esterni dal solo nome dell'host, come per i test della provenienza.
+  const visit = (host?: string) =>
+    workerFetch(
+      new Request("https://fiscalbay.it/prezzi", {
+        headers: host ? { referer: `https://${host}/` } : {},
+      }),
+      { ...environment, APP_ORIGIN: "https://fiscalbay.it", VERSION_METADATA: version } as Env,
+    );
+  try {
+    expect(await (await visit()).text()).toBe("pagina 1");
+    expect(await (await visit("www.google.it")).text()).toBe("pagina 2");
+    expect(await (await visit("www.google.com")).text()).toBe("pagina 2");
+    expect(await (await visit("github.com")).text()).toBe("pagina 3");
+    expect(await (await visit("fiscalbay.it")).text()).toBe("pagina 4");
+    expect(await (await visit()).text()).toBe("pagina 1");
+  } finally {
+    router.handle.mockReset();
+  }
+});
+
+it("nella chiave della copia mette la sola categoria, mai l'host del Referer", () => {
+  const key = (referer: string) =>
+    pageCacheKey(
+      new Request("https://fiscalbay.it/", { headers: { referer } }),
+      "v1",
+      "https://fiscalbay.it",
+    ).url;
+  expect(key("https://qualunque-host.invalid/")).toBe(
+    "https://fiscalbay.it/?versione=v1&via=other_site",
+  );
+  expect(key("https://altro.invalid/")).toBe(key("https://qualunque-host.invalid/"));
+});
+
+it("non conserva il listino di riserva e toglie il riferimento d'errore dalle pagine condivise", async () => {
+  let renders = 0;
+  const shared: boolean[] = [];
+  router.handle.mockImplementation(async () => {
+    renders += 1;
+    shared.push(sharedResponse());
+    // La prima risposta è quella di riserva, senza database: la seconda richiesta la rifà.
+    if (renders === 1) skipPageCache();
+    return new Response(`pagina ${renders}`);
+  });
+  const version = { id: `riserva-${crypto.randomUUID()}` };
+  const visit = (headers: Record<string, string> = {}) =>
+    workerFetch(new Request("https://fiscalbay.it/prezzi", { headers }), {
+      ...environment,
+      VERSION_METADATA: version,
+    } as Env);
+  try {
+    expect(await (await visit()).text()).toBe("pagina 1");
+    expect(await (await visit()).text()).toBe("pagina 2");
+    expect(await (await visit()).text()).toBe("pagina 2");
+    expect(await (await visit({ cookie: "a=1" })).text()).toBe("pagina 3");
+    expect(shared).toEqual([true, true, false]);
   } finally {
     router.handle.mockReset();
   }
@@ -302,7 +436,7 @@ it("durante la sospensione pagine, webhook, coda e cron non toccano i dati", asy
   expect(page.headers.get("retry-after")).toBe("600");
   expect(page.headers.get("cache-control")).toBe("no-store");
   expect(page.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
-  expect(await page.text()).toContain("<title>FiscalBay | Manutenzione</title>");
+  expect(await page.text()).toContain("<title>Manutenzione | FiscalBay</title>");
   const webhook = await workerFetch(
     new Request("https://test.fiscalbay.it/webhooks/stripe", { method: "POST", body: "{}" }),
     suspended,
@@ -325,17 +459,11 @@ it("durante la sospensione pagine, webhook, coda e cron non toccano i dati", asy
   expect(open.status).toBe(405);
 });
 
-it("il blocco D1 impedisce nuovi ingressi anche senza il segreto aggiornato", async () => {
+it("il blocco D1 ferma coda e cron; le pagine si fermano con il segreto", async () => {
   await env.DB.prepare(`INSERT INTO service_settings (name, value, updated_at)
     VALUES ('recovery_frozen', 'true', ?)`)
     .bind(now.toISOString())
     .run();
-  router.handle.mockImplementationOnce(async () => {
-    await env.DB.prepare("SELECT 1").first();
-    return new Response("unexpected");
-  });
-  const page = await workerFetch(new Request("https://test.fiscalbay.it/app/ordini"), environment);
-  expect(page.status).toBe(503);
   const sync = { body: { syncStore: "synthetic-store" }, retry: vi.fn() };
   await worker.queue({ messages: [sync] } as unknown as MessageBatch<unknown>, environment);
   expect(sync.retry).toHaveBeenCalledWith({ delaySeconds: 43_200 });
@@ -344,41 +472,13 @@ it("il blocco D1 impedisce nuovi ingressi anche senza il segreto aggiornato", as
   expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM scheduled_tasks").first("n")).toBe(0);
 });
 
-it("il filtro senza accessi D1 non scrive e le letture successive usano il contesto della richiesta", async () => {
-  const blocked = () => new Response(null, { status: 503 });
-  const response = await duringRequestActivity(
-    environment,
-    async () => new Response(null, { status: 429 }),
-    blocked,
-  );
-  expect(response.status).toBe(429);
-  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
-  const imported: Env[] = [];
-  const databases: D1Database[] = [];
-  for (let index = 0; index < 2; index++) {
-    await duringRequestActivity(
-      environment,
-      async (target) => {
-        imported.push(env);
-        databases.push(target.DB);
-        const a = target.DB.prepare("SELECT 1 AS n");
-        const b = env.DB.prepare("SELECT ? AS n").bind(2);
-        const results = await target.DB.batch<{ n: number }>([a, b]);
-        expect(env.DB).toBe(target.DB);
-        expect(results.map(({ results }) => results[0].n)).toEqual([1, 2]);
-        expect(
-          await target.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n"),
-        ).toBe(1);
-        await target.DB.exec("SELECT 1");
-      },
-      () => {
-        throw new Error("unexpected block");
-      },
-    );
-    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n")).toBe(0);
-  }
-  expect(imported[0]).toBe(imported[1]);
-  expect(databases[0]).toBe(databases[1]);
+it("una richiesta HTTP non scrive nel registro delle attività", async () => {
+  router.handle.mockImplementationOnce(async () => {
+    const active = await env.DB.prepare("SELECT COUNT(*) AS n FROM service_activity").first("n");
+    return new Response(String(active));
+  });
+  const page = await workerFetch(new Request("https://test.fiscalbay.it/app/ordini"), environment);
+  expect(await page.text()).toBe("0");
 });
 
 it("il ripristino vede un lavoro già entrato fino alla sua conclusione", async () => {

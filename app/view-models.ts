@@ -208,6 +208,8 @@ export interface SuggestionView {
   sourceDate: string;
   /** Precedenti con codici diversi: si propone il più recente con un avviso. */
   conflict: boolean;
+  /** I codici discordanti sono in parte CF e in parte P. IVA. */
+  mixedConflict?: true;
   identifier?: TaxIdentifierView;
   issuingCountry?: string | null;
   sourceStore?: string;
@@ -319,8 +321,22 @@ export interface TelegramView {
 /** Identificativi letti al massimo in una sola richiesta della campanella. */
 export const maxReadNotifications = 50;
 
+/** Origine della notifica, che ne sceglie l'icona; il tono ne sceglie il colore. */
+export type NotificationKind =
+  | "store-expired"
+  | "store-expiring"
+  | "ebay-down"
+  | "store-read-failed"
+  | "inactivity"
+  | "export-ready"
+  | "export-failed"
+  | "service"
+  | "whats-new"
+  | "terms";
+
 export interface NotificationView {
   id: string;
+  kind: NotificationKind;
   tone: StatusTone;
   title: string;
   body: string;

@@ -1,5 +1,15 @@
 import { legalDate, plural } from "./format";
 import type { AppCopy } from "./copy-it";
+import type { ExitReason } from "../exit-reasons";
+
+/**
+ * Conteggi con il separatore delle migliaia anche a quattro cifre, come `formatNumber`. Il formato
+ * nasce al primo uso: creato al caricamento renderebbe il modulo non eliminabile dai bundle che
+ * non usano i testi.
+ */
+let groupedFormat: Intl.NumberFormat | undefined;
+const grouped = (value: number) =>
+  (groupedFormat ??= new Intl.NumberFormat("en-GB", { useGrouping: "always" })).format(value);
 
 const registrationRestricted = "Private test environment. Registration requires prior approval.";
 
@@ -7,9 +17,9 @@ const inactivityTitle = "Reading paused for inactivity";
 
 const contactSupport = "Contact support";
 
-const premiumMonthly = "Premium, monthly";
-const premiumAnnual = "Premium, annual";
-const premiumLifetime = "Premium, lifetime";
+const premiumMonthly = "Pro, monthly";
+const premiumAnnual = "Pro, annual";
+const premiumLifetime = "Pro, lifetime";
 
 const termsTitle = "Terms of service";
 const privacyTitle = "Privacy policy";
@@ -39,24 +49,31 @@ export const en: AppCopy = {
         back: "Back to orders",
       },
     },
-    skipToContent: "Skip to content",
+    skipToContent: "Skip to main content",
     mainNav: "Main navigation",
     orders: "Orders",
     stores: "eBay stores",
     settings: "Settings",
     search: "Search orders",
     searchPlaceholder: "Order, buyer, item or SKU",
-    searchSeeAll: (count) => `See all results (${count})`,
+    searchSeeAll: (count) => `See all results (${grouped(count)})`,
     searchEmpty: "No orders match your search.",
     searchFailed: "Search failed. Try again.",
     searchSummary: (count) =>
-      count === 0 ? "No suggestions" : `${count} ${plural(count, "suggestion", "suggestions")}`,
+      count === 0
+        ? "No suggestions"
+        : `${grouped(count)} ${plural(count, "suggestion", "suggestions")}`,
     notifications: "Notifications",
     notificationsUnread: (count) =>
-      count === 0 ? "Notifications" : `Notifications, ${count} unread`,
+      count === 0 ? "Notifications" : `Notifications, ${grouped(count)} unread`,
     notificationsWindow: "Last 30 days",
     notificationsEmpty: "No notifications in the last 30 days.",
     markAllRead: "Mark all as read",
+    dismissNotification: (title) => `Delete notification: ${title}`,
+    dismissAll: "Delete all",
+    dismissed: (count) =>
+      count === 1 ? "Notification deleted" : `${grouped(count)} notifications deleted`,
+    undo: "Undo",
     storeNotifications: {
       expiredTitle: "Connection expired",
       expiredBody: (store) => `${store}: syncing is paused. Reconnect the store.`,
@@ -83,7 +100,7 @@ export const en: AppCopy = {
     visitSite: "Visit fiscalbay.it",
     console: "Console",
     whatsNew: "What’s new",
-    whatsNewTitle: "What’s new in FiscalBay",
+    whatsNewTitle: (version: string) => `What’s new in FiscalBay ${version}`,
     whatsNewUpcoming: "Upcoming",
     whatsNewVersion: (version: string) => `Version ${version}`,
     signOut: "Sign out",
@@ -98,14 +115,14 @@ export const en: AppCopy = {
   },
   orders: {
     title: "Orders",
-    count: (count) => `${count} ${plural(count, "order", "orders")}`,
+    count: (count) => `${grouped(count)} ${plural(count, "order", "orders")}`,
     sortedBy: "Newest first",
     filters: "Filters",
     store: "Store",
     period: "Period",
     paymentStatus: "Payment",
     shippingStatus: "Shipping",
-    fiscalStatus: "Codice Fiscale",
+    fiscalStatus: "Tax code",
     all: "All",
     periods: {
       "7": "Last 7 days",
@@ -117,7 +134,7 @@ export const en: AppCopy = {
     searchActive: (query) => `Search: ${query}`,
     clearSearch: "Clear search",
     resetFilters: "Reset filters",
-    premiumOption: "Available with Premium",
+    premiumOption: "Available with Pro",
     payment: {
       paid: "Paid",
       unpaid: "Unpaid",
@@ -160,19 +177,19 @@ export const en: AppCopy = {
     },
     select: "Select",
     selectOrder: (id) => `Select order ${id}`,
-    selected: (count) => `${count} selected`,
+    selected: (count) => `${grouped(count)} selected`,
     selectedLocked: (count) =>
       count === 0
         ? "No orders to unlock"
-        : `${count} ${plural(count, "order to unlock", "orders to unlock")}`,
+        : `${grouped(count)} ${plural(count, "order to unlock", "orders to unlock")}`,
     unlock: "Unlock order",
-    unlockSelected: (count) => `Unlock ${count}`,
+    unlockSelected: (count) => `Unlock ${grouped(count)}`,
     exportSelected: "Export",
-    unlockTitle: (count) => `Unlock ${count} ${plural(count, "order", "orders")}?`,
+    unlockTitle: (count) => `Unlock ${grouped(count)} ${plural(count, "order", "orders")}?`,
     unlockConfirmText: (count, remaining) =>
       `After unlocking, you will have ${remaining - count} ${plural(remaining - count, "unlock", "unlocks")} left this cycle.`,
     unlockExceeds: (count, remaining) =>
-      `You selected ${count} orders to unlock, but you have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. Reduce the selection.`,
+      `You selected ${grouped(count)} orders to unlock, but you have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle. Reduce the selection.`,
     unlockConfirm: "Unlock",
     dontAskUnlock: "Don’t ask again",
     unlockFailed: "Unlock failed. Check the orders and remaining unlocks, then try again.",
@@ -181,7 +198,7 @@ export const en: AppCopy = {
       remaining === null
         ? "Order unlocked."
         : `Order unlocked. You have ${remaining} ${plural(remaining, "unlock", "unlocks")} left this cycle.`,
-    unlockedMany: (count) => `${count} orders unlocked.`,
+    unlockedMany: (count) => `${grouped(count)} orders unlocked.`,
     loadMore: "Load more",
     allShown: "You have seen all orders in this period.",
     allShownAll: "You have seen all available orders.",
@@ -191,11 +208,11 @@ export const en: AppCopy = {
     moreActions: (id) => `More actions for order ${id}`,
     openOnEbay: "Open on eBay",
     exportOrder: "Export order",
-    itemsMore: (count) => `+ ${count} more ${plural(count, "item", "items")}`,
+    itemsMore: (count) => `+ ${grouped(count)} more ${plural(count, "item", "items")}`,
     quantity: "Quantity",
-    newOrders: (count) => `${count} new ${plural(count, "order", "orders")}`,
+    newOrders: (count) => `${grouped(count)} new ${plural(count, "order", "orders")}`,
     showNew: "Show",
-    identifier: { CF: "Codice Fiscale", PIVA: "Partita IVA" },
+    identifier: { CF: "Tax code", PIVA: "VAT number" },
     copy: (label, order) => `Copy ${label}: order ${order}`,
     copied: "Copied to clipboard",
     copyFailed: "Copy failed. Try again, or select and copy the code.",
@@ -226,10 +243,15 @@ export const en: AppCopy = {
       checksum: "The check character does not match.",
       name: "The letters of the code do not match the name on the order.",
       unverifiable: "We cannot verify that the code matches the buyer’s name.",
-      unchecked: "FiscalBay does not check the format of this identifier type.",
+      unchecked: "FiscalBay does not check the format of this type of code.",
     },
-    codeToCheck: "Check code",
-    differentCodes: "Different codes",
+    codeToCheck: { CF: "Check tax code", PIVA: "Check VAT number", OTHER: "Check code" },
+    differentCodes: {
+      CF: "Different tax codes",
+      PIVA: "Different VAT numbers",
+      OTHER: "Different codes",
+      MIXED: "Different tax codes and VAT numbers",
+    },
     updated: "Updated by eBay",
     updatedHint: "eBay changed this value after it was first read.",
     suggestion: "Suggestion from a previous order",
@@ -238,11 +260,10 @@ export const en: AppCopy = {
     suggestionHint: (order, date) => `From order ${order} on ${date}.`,
     suggestionConflict: "Previous orders show different codes: this is the most recent.",
     suggestionStatus: {
-      identity_missing:
-        "Stable buyer identity unavailable: previous orders cannot be linked automatically.",
-      none: "No authorised previous orders with a usable tax code.",
+      identity_missing: "eBay does not let us recognise this buyer in their previous orders.",
+      none: "No previous order from this buyer has a tax code or VAT number to suggest.",
       ambiguous:
-        "The most recent orders do not identify a unique value for one or more identifiers: no value is suggested for those identifiers.",
+        "This buyer’s previous orders show different details: we suggest nothing for those details.",
     },
     messageLanguage: "Message language",
     messageText: "Text for the buyer",
@@ -267,15 +288,15 @@ export const en: AppCopy = {
       `Orders from this store are up to date as of ${time}. Other stores continue and FiscalBay retries automatically.`,
     quotaTitle: "No unlocks left this cycle",
     quotaBody: (date) =>
-      `You can still view and search all orders. Codice Fiscale and Partita IVA of new orders stay locked until ${date}.`,
-    quotaAction: "Upgrade to Premium",
+      `You can still view and search all orders. Tax codes and VAT numbers of new orders stay locked until ${date}.`,
+    quotaAction: "Upgrade to Pro",
     waitlistTitle: "You are on the Free waiting list",
-    trialOffer: "Try Premium free for 14 days, no card needed.",
+    trialOffer: "Try Pro free for 14 days, no card needed.",
     trialStatus: (days) =>
-      `Premium trial: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left`,
-    trialEndingTitle: (date) => `Your Premium trial ends on ${date}`,
+      `Pro trial: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left`,
+    trialEndingTitle: (date) => `Your Pro trial ends on ${date}`,
     trialEndingBody:
-      "After that, the Codice Fiscale of new orders goes back to Free unlocks. Orders whose data arrived during the trial stay unlocked.",
+      "After that, tax codes and VAT numbers of new orders go back to Free unlocks. Orders whose data arrived during the trial stay unlocked.",
     trialEndingAction: "View plan",
     reconciliationTitle: "Order to check",
     reconciliationBody:
@@ -287,9 +308,11 @@ export const en: AppCopy = {
     consentExpiringTitle: (store) => `${store}: authorisation expiring`,
     consentExpiringBody: (date) =>
       `The eBay authorisation expires on ${date}. Reconnect the store by then to keep syncing.`,
-    importingStatus: (count) => `Importing: ${count} ${plural(count, "order", "orders")} so far`,
+    importingStatus: (count) =>
+      `Importing: ${grouped(count)} ${plural(count, "order", "orders")} so far`,
     firstUseTitle: "No store connected",
-    firstUseBody: "Connect your eBay store to view orders and available tax codes.",
+    firstUseBody:
+      "Connect your eBay store to view orders and available tax codes (Codici Fiscali).",
     connectStore: "Connect eBay store",
     marketingProposal: {
       title: "Would you like news and offers about FiscalBay?",
@@ -369,7 +392,7 @@ export const en: AppCopy = {
     notificationsOff: "Off",
     notificationsHeld: "Paused",
     notificationsHeldHint: "Paused until sync resumes",
-    notificationsFree: "Telegram notifications for new orders are available with Premium.",
+    notificationsFree: "Telegram notifications for new orders are available with Pro.",
     freeLimit: "The Free plan includes one active store.",
     sectionConnection: "Connection",
     sectionSync: "Sync",
@@ -401,7 +424,7 @@ export const en: AppCopy = {
     recentOk: (count) =>
       count === 0
         ? "Succeeded, no new orders"
-        : `Succeeded, ${count} new ${plural(count, "order", "orders")}`,
+        : `Succeeded, ${grouped(count)} new ${plural(count, "order", "orders")}`,
     recentFailed: "Failed",
     notificationsLink: "Open notifications",
     syncNow: "Sync recent orders",
@@ -423,9 +446,9 @@ export const en: AppCopy = {
     deleteStore: "Delete store",
     disconnectTitle: (name) => `Disconnect ${name}?`,
     disconnectBody:
-      "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later. To also revoke the authorization on eBay, remove FiscalBay from third-party apps in your eBay account’s security settings.",
+      "FiscalBay will stop reading this store on eBay. Imported orders remain available for the retention period and you can reconnect the same store later. To also revoke the authorisation on eBay, remove FiscalBay from third-party apps in your eBay account’s security settings.",
     disconnectSubscription:
-      "Disconnecting the store does not cancel the Premium subscription: scheduled charges still apply.",
+      "Disconnecting the store does not cancel the Pro subscription: scheduled charges still apply.",
     disconnectSubscriptionLink: "Manage subscription",
     deleteBody:
       "The store will be removed from FiscalBay and all its imported orders will be deleted. This cannot be undone. Your store on eBay and your FiscalBay subscription will not change.",
@@ -488,28 +511,28 @@ export const en: AppCopy = {
       currentPlan: "Current plan",
       unlockConfirmation: "Ask before unlocking an order",
       free: "Free",
-      premium: "Premium",
+      premium: "Pro",
       freeSummary: "One active store, the last 30 days of orders, CSV.",
       waitlisted:
         "The Free plan is full and your account is on the waiting list: FiscalBay does not read your stores or offer Free unlocks until you are admitted.",
-      waitlistedPurchase: "Meanwhile you can connect a store and choose the trial or Premium.",
+      waitlistedPurchase: "Meanwhile you can connect a store and choose the trial or Pro.",
       unlocksCycle: "Orders unlocked this cycle",
       unlocksUsed: (used, limit) => `${used} of ${limit}`,
       cycleEnds: (date) => `The cycle renews on ${date}.`,
       nextCycleLimit: (limit) => `The next cycle will have ${limit} unlocks.`,
-      trialTitle: "Try Premium for 14 days",
+      trialTitle: "Try Pro for 14 days",
       trialBody: "No card and no automatic renewal: when it ends you go back to Free.",
       trialAction: "Start trial",
-      trialStarted: "Premium trial started.",
-      trialUnavailable: "The Premium trial is not available for this account.",
-      trialPlan: "Premium trial",
+      trialStarted: "Pro trial started.",
+      trialUnavailable: "The Pro trial is not available for this account.",
+      trialPlan: "Pro trial",
       trialEnds: (date, days) =>
         `Ends on ${date}: ${days ? `${days} ${plural(days, "day", "days")}` : "less than a day"} left.`,
       trialAfter:
         "No charge: when it ends you go back to Free. Orders whose data arrived during the trial stay unlocked.",
       trialAfterChosen:
-        "When it ends, Premium continues with the first charge. Orders whose data arrived during the trial stay unlocked.",
-      buyTitle: "Upgrade to Premium",
+        "When it ends, Pro continues with the first charge. Orders whose data arrived during the trial stay unlocked.",
+      buyTitle: "Upgrade to Pro",
       buyBody:
         "No limit on orders to unlock per cycle, more active stores, one year of history, XLSX and Telegram notifications.",
       priceMonthly: (price) => `${price} per month`,
@@ -526,9 +549,9 @@ export const en: AppCopy = {
       lifetimeRenewing:
         "Your subscription renews shortly: you can switch to lifetime right after the renewal.",
       lifetimeUpgradeTitle: "Switch to lifetime",
-      lifetimeProcessingTitle: "Activating lifetime Premium",
+      lifetimeProcessingTitle: "Activating lifetime Pro",
       lifetimeProcessingBody:
-        "Lifetime Premium starts as soon as Stripe confirms the payment; until then your plan stays as it is.",
+        "Lifetime Pro starts as soon as Stripe confirms the payment; until then your plan stays as it is.",
       trialPurchaseNote:
         "With monthly or annual you don't pay today: your trial days stay and the first charge comes when the trial ends.",
       trialEndingPurchaseNote:
@@ -545,12 +568,12 @@ export const en: AppCopy = {
         `No charge: on ${date}, when the trial ends, you go back to Free. Until then you can reactivate it on Stripe.`,
       pricesNote:
         "Before paying, Stripe shows the total with your country’s taxes, in your currency too.",
-      purchaseNeedsSync: "You can buy Premium once a store has been read successfully.",
-      purchaseClosed: "New Premium purchases and trials are paused for now.",
+      purchaseNeedsSync: "You can buy Pro once a store has been read successfully.",
+      purchaseClosed: "New Pro purchases and trials are paused for now.",
       checkoutUnavailable: "Payment is not available right now. Try again later.",
-      checkoutCovered: "Your account already has Premium.",
-      checkoutProcessingTitle: "Activating Premium",
-      checkoutProcessingBody: "Premium starts as soon as Stripe confirms the payment.",
+      checkoutCovered: "Your account already has Pro.",
+      checkoutProcessingTitle: "Activating Pro",
+      checkoutProcessingBody: "Pro starts as soon as Stripe confirms the payment.",
       checkoutCancelled: "Payment cancelled. You have not been charged.",
       buyPeriod: {
         monthly: "Choose monthly",
@@ -572,15 +595,15 @@ export const en: AppCopy = {
       },
       premiumLifetime: "One-off purchase, no renewals.",
       premiumLifetimeGranted: "Granted by FiscalBay, no renewals.",
-      grantEnds: (date: string) => `Premium granted until ${date}.`,
+      grantEnds: (date: string) => `Pro granted until ${date}.`,
       premiumRenews: (date) => `Renews on ${date}.`,
-      premiumEnds: (date) => `Renewal cancelled: Premium stays active until ${date}.`,
+      premiumEnds: (date) => `Renewal cancelled: Pro stays active until ${date}.`,
       refundedTitle: "Payment refunded",
       refundedBody: (renewsAt) =>
         renewsAt
-          ? `The payment for the current period was refunded and you are on Free. Premium resumes with the renewal on ${renewsAt}.`
+          ? `The payment for the current period was refunded and you are on Free. Pro resumes with the renewal on ${renewsAt}.`
           : "The payment for the current period was refunded and you are back on Free.",
-      lifetimeRefundedBody: "The lifetime Premium payment was refunded and you are back on Free.",
+      lifetimeRefundedBody: "The lifetime Pro payment was refunded and you are back on Free.",
       renewalFailedTitle: "Renewal failed",
       renewalFailedBody: (date) =>
         `You are back on Free. Complete the payment Stripe asks for by ${date} to keep your price.`,
@@ -599,13 +622,13 @@ export const en: AppCopy = {
     },
     notifications: {
       telegramTitle: "Telegram notifications",
-      telegramPremium: "Order notifications on Telegram are included in Premium.",
+      telegramPremium: "Order notifications on Telegram are included in Pro.",
       telegramChat: "Connected chat",
       telegramChange: "Change chat",
       telegramEnabled: "Send order notifications",
       telegramFilter: "Which orders",
       telegramFilterAll: "All new orders",
-      telegramFilterFiscal: "Only orders with a tax code",
+      telegramFilterFiscal: "Only orders with a tax code or VAT number",
       telegramMode: "Frequency",
       telegramModeEach: "One message per order",
       telegramModeDigest: "Daily summary",
@@ -641,16 +664,16 @@ export const en: AppCopy = {
       exportColumns: "Columns",
       exportFiscal: "Orders included",
       exportFiscalAll: "All",
-      exportFiscalAvailable: "Only with the tax code available",
+      exportFiscalAvailable: "Only with a tax code or VAT number",
       exportCount: (orders, locked) =>
-        `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, the tax code stays empty.`}`,
+        `${orders} ${plural(orders, "order", "orders")}.${locked === 0 ? "" : ` For ${locked} ${plural(locked, "order", "orders")} to unlock, tax code and VAT number stay empty.`}`,
       exportNone: {
         scope: "No orders to export: the chosen orders are no longer available.",
         period: "No orders in this period.",
-        available: "None of these orders has the tax code available.",
+        available: "None of these orders has a tax code or VAT number available.",
       },
       exportTextHint:
-        "To keep leading zeros in Codice Fiscale, Partita IVA, SKU, postal code and phone, open the file in Excel from Data > From Text/CSV and set those columns to Text.",
+        "To keep leading zeros in tax code, VAT number, SKU, postal code and phone, open the file in Excel from Data > From Text/CSV and set those columns to Text.",
       exportContextSelection: "Orders selected on the Orders page.",
       exportContextOrder: (id) => `Order ${id}.`,
       exportContextFiltered: "Orders in the list with the active filters and search.",
@@ -672,10 +695,10 @@ export const en: AppCopy = {
       exportFileQueued: "Being prepared",
       exportFileFailed: "Not created: create it again",
       exportDownload: "Download",
-      exportPremium: "XLSX, chosen columns and saved configurations are included in Premium.",
+      exportPremium: "XLSX, chosen columns and saved configurations are included in Pro.",
       exportColumnsInvalid: "Choose at least one column.",
       exportXlsxHint:
-        "In the XLSX file Codice Fiscale, Partita IVA and SKU are text columns and keep leading zeros.",
+        "In the XLSX file tax code, VAT number and SKU are text columns and keep leading zeros.",
       exportMoveUp: (column) => `Move up: ${column}`,
       exportMoveDown: (column) => `Move down: ${column}`,
       exportColumnMoved: (column, position, total) =>
@@ -720,11 +743,11 @@ export const en: AppCopy = {
           total: "Order total",
           payment: "Payment",
           shipping: "Shipping",
-          taxCode: "Codice Fiscale",
-          vat: "Partita IVA",
-          otherTax: "Other tax identifiers",
-          fiscal: "Tax data status",
-          checkedAt: "Last tax check",
+          taxCode: "Tax code",
+          vat: "VAT number",
+          otherTax: "Foreign tax codes",
+          fiscal: "Tax code status",
+          checkedAt: "Last tax code check",
           updatedAt: "Last modified on eBay",
         },
         fiscalNotice: {
@@ -817,6 +840,18 @@ export const en: AppCopy = {
       deleteAccountExport:
         "You can download the account data first. Orders are exported from Export.",
       deleteAccountOpenExport: "Open Export",
+      deleteAccountReason: "Why are you deleting your account? (optional)",
+      deleteAccountNoReason: "I’d rather not say",
+      deleteAccountReasons: {
+        too_expensive: "It costs too much",
+        unused: "I don’t use it enough",
+        switched_service: "I’m switching to another service",
+        missing_features: "A feature I need is missing",
+        low_quality: "It doesn’t work as I expected",
+        closing_business: "I’m closing or pausing my eBay business",
+        other: "Other",
+      } satisfies Record<ExitReason, string>,
+      deleteAccountComment: "Anything else you’d like to tell us? (optional)",
       deleteAccountEmail: "Type your email address to confirm",
       deleteAccountConfirm: "Send confirmation link",
       deleteAccountSent: (email: string) =>
@@ -829,16 +864,16 @@ export const en: AppCopy = {
       faq: "Frequently asked questions",
       faqItems: [
         {
-          q: "Why does an order have no Codice Fiscale?",
+          q: "Why does an order have no tax code (Codice Fiscale)?",
           a: "eBay does not provide it for every order. When it is missing, you can ask the buyer with the message template.",
         },
         {
           q: "When does an order count as unlocked?",
-          a: "When at least one of its tax identifiers, Codice Fiscale or Partita IVA, becomes visible. Each order counts only once, even if it contains both. Orders without data or with an error do not count, and you can copy and export as often as you like.",
+          a: "When its tax code or VAT number becomes visible. Each order counts only once, even if it contains both. Orders without a code or with an error do not count, and you can copy and export as often as you like.",
         },
         {
           q: "Does FiscalBay change orders on eBay?",
-          a: "No. FiscalBay reads your orders to show you the tax details: everything on your eBay store stays as it is.",
+          a: "No. FiscalBay reads your orders to show you the tax code: everything on your eBay store stays as it is.",
         },
       ],
       contact: contactSupport,
@@ -880,8 +915,8 @@ export const en: AppCopy = {
           free: "Free",
           freeQuota: (used, limit) => `Free, ${used} of ${limit} orders unlocked`,
           waitlist: "Free, waiting list",
-          trial: "Premium trial",
-          granted: "Premium, granted",
+          trial: "Pro trial",
+          granted: "Pro, granted",
           lifetime: premiumLifetime,
           monthly: premiumMonthly,
           annual: premiumAnnual,
@@ -1004,9 +1039,9 @@ export const en: AppCopy = {
     reconnectIntro:
       "We’ll take you to eBay to renew the authorisation. Sign in with the seller account of the store you want to reconnect: FiscalBay recognises it and keeps the orders already imported.",
     intro:
-      "We’ll take you to eBay to authorize FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
+      "We’ll take you to eBay to authorise FiscalBay. Sign in with the seller account of the store you want to connect: it can differ from the one you use to sign in to FiscalBay.",
     points: [
-      "FiscalBay reads orders and the tax codes eBay makes available, read-only.",
+      "FiscalBay reads orders and the tax codes (Codici Fiscali) eBay makes available, read-only.",
       "It changes nothing on eBay and never contacts buyers.",
       "It doesn’t ask for the email address of your eBay account.",
       "An eBay store can be connected to only one FiscalBay account.",
@@ -1031,12 +1066,14 @@ export const en: AppCopy = {
       pricing: "Pricing",
       security: "Security",
       faq: "FAQ",
+      guides: "Guides",
     },
     independent: "Independent service, not affiliated with eBay.",
     support: "Support",
   },
   supportPage: {
     title: "Support",
+    metaTitle: "Support | Tax code (Codice Fiscale) for eBay orders",
     description:
       "FiscalBay support: questions about using the app, the in-app support form and email.",
     contact: contactSupport,
@@ -1048,7 +1085,7 @@ export const en: AppCopy = {
   },
   access: {
     description: "eBay orders available in FiscalBay",
-    headline: "The Codice Fiscale of your eBay orders, in one place.",
+    headline: "The tax code (Codice Fiscale) of your eBay orders, in one place.",
     features: [
       {
         title: "All your orders together",
@@ -1056,7 +1093,7 @@ export const en: AppCopy = {
       },
       {
         title: "Ready to copy",
-        body: "You find the tax code provided by eBay, or the VAT number if that is all it has, ready to paste wherever you need it.",
+        body: "You find the tax code provided by eBay, or the VAT number (Partita IVA) if that is all it has, ready to paste wherever you need it.",
       },
       {
         title: "Connect in a few steps",
@@ -1088,6 +1125,7 @@ export const en: AppCopy = {
     sendEmailLink: "Send the link",
     setPassword: "Set password",
     passkeySignIn: "Sign in with a passkey",
+    lastUsed: "Last used",
     passkeyRecovery: "Sign in with your fingerprint, face or device screen lock.",
     passkeyEmpty: "No passkeys added.",
     passkeyErrors: {
@@ -1193,6 +1231,7 @@ export const en: AppCopy = {
       "password-trapelata":
         "The password you signed in with appears in known data breaches. Change it from Settings › Account.",
       "recupero-scaduto": "This link is invalid or expired. Request a new one.",
+      "password-violata": "This password appears in known data breaches. Choose a different one.",
     },
   },
 };

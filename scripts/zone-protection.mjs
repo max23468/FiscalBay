@@ -60,6 +60,14 @@ export const staticHeaders = {
 /** Raffiche verso gli endpoint di accesso, per IP: sul Free un periodo e un blocco di 10 s. */
 export const authBurst = { path: "/api/auth/", requests: 30, period: 10, timeout: 10 };
 
+/**
+ * Pagine dei moduli di accesso e assistenza, nelle due lingue e con i dati delle route: sul Free
+ * la regola non distingue il metodo, quindi conta anche le aperture della pagina.
+ */
+export const formPaths = ["/accesso", "/supporto"].flatMap((path) =>
+  [path, `/en${path}`].flatMap((page) => [page, `${page}.data`]),
+);
+
 /** Percorsi delle sonde osservate: nessuna pagina, asset o API dell'app li usa. */
 export const probeSuffixes = [".php", ".env", ".sql", ".bak", ".git", ".yml", ".yaml", ".ini"];
 export const probePrefixes = ["/wp-", "/phpinfo", "/symfony/", "/vendor/", "/appsettings"];
@@ -155,8 +163,8 @@ export function probeRule(target) {
 export function authRule() {
   return {
     ref: "fiscalbay-auth-burst",
-    description: "Raffiche verso gli endpoint di accesso",
-    expression: `starts_with(http.request.uri.path, ${quote(authBurst.path)})`,
+    description: "Raffiche verso gli endpoint e i moduli di accesso",
+    expression: `starts_with(http.request.uri.path, ${quote(authBurst.path)}) or http.request.uri.path in ${set(formPaths)}`,
     action: "block",
     ratelimit: {
       characteristics: ["cf.colo.id", "ip.src"],

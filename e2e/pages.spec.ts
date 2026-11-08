@@ -1,6 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import type { BrowserContext, Response } from "@playwright/test";
-import { expect, networkIdle, test } from "./fixtures";
+import { expect, networkIdle, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { abortedDataRequest, pageCases, knownPagePath, expectedPageError } from "./page-cases";
 import { testAccount } from "./test-account";
@@ -24,6 +24,9 @@ const matrix =
           { width: 390, scheme: "dark" },
           { width: 1280, scheme: "light" },
         ] as const);
+
+// Bordi dei breakpoint usati dai layout: 360 e 400 px, poi `sm`, `md`, `lg` e `xl`.
+const breakpointEdges = [320, 359, 360, 399, 400, 639, 640, 767, 768, 1023, 1024, 1279, 1280];
 
 const scenarios = production
   ? pageCases.filter(
@@ -111,7 +114,7 @@ for (const scenario of scenarios) {
               page.waitForResponse(
                 (response) =>
                   response.request().method() === "POST" &&
-                  new URL(response.url()).pathname.endsWith("/accesso"),
+                  /\/(?:accesso|sign-in)$/u.test(new URL(response.url()).pathname),
                 { timeout: 30_000 },
               ),
               signIn.getByRole("button", { name: "Accedi", exact: true }).click(),
@@ -119,7 +122,7 @@ for (const scenario of scenarios) {
             await expect(
               page,
               `Accesso: HTTP ${answer.status()} in ${Date.now() - started} ms`,
-            ).toHaveTitle("FiscalBay | Ordini", { timeout: 15_000 });
+            ).toHaveTitle("Ordini | FiscalBay", { timeout: 15_000 });
             remoteSession = await context.cookies();
           }
         }
@@ -161,7 +164,7 @@ for (const scenario of scenarios) {
             const text = await response.text();
             const origin = production ? "https://fiscalbay.it" : baseURL;
             expect(text).toMatch(/^# FiscalBay\n/u);
-            expect(text).toContain(`(${new URL("/en/prezzi", origin).href})`);
+            expect(text).toContain(`(${new URL("/en/pricing", origin).href})`);
             checked("HTTP e llms.txt");
             return;
           }
@@ -236,7 +239,7 @@ for (const scenario of scenarios) {
         expect(nonces.length).toBeGreaterThan(0);
         expect(new Set(nonces)).toEqual(new Set([nonce]));
         checked("CSP e nonce degli script");
-        await expect(page).toHaveTitle(/^FiscalBay \| /);
+        await expect(page).toHaveTitle(/ \| FiscalBay$/);
         await expect(page.locator("main")).toBeVisible();
         await expect(page.getByRole("heading").first()).toBeVisible();
         await expect(page.locator("html")).toHaveAttribute(
@@ -251,6 +254,26 @@ for (const scenario of scenarios) {
         expect(
           await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
         ).toBe(true);
+        // I layout cambiano ai bordi dei breakpoint: una sola combinazione per pagina li prova
+        // tutti, così uno scorrimento orizzontale fra le larghezze della matrice emerge nella PR.
+        if (width === matrix[0].width && scheme === matrix[0].scheme) {
+          const overflowing: number[] = [];
+          // I pannelli richiudibili si misurano aperti: il loro contenuto non deve uscire.
+          await page.evaluate(() =>
+            document.querySelectorAll("details").forEach((details) => (details.open = true)),
+          );
+          for (const edge of breakpointEdges) {
+            await page.setViewportSize({ width: edge, height: 844 });
+            // Le media query si aggiornano al frame successivo al ridimensionamento.
+            await page.evaluate(
+              () => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done))),
+            );
+            if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1))
+              overflowing.push(edge);
+          }
+          await page.setViewportSize({ width, height: 844 });
+          expect(overflowing, "Scorrimento orizzontale alle larghezze").toEqual([]);
+        }
         // Le immagini sotto la piega si caricano tardi: qui si caricano tutte, così una rotta emerge.
         await page.locator("img").evaluateAll((images) =>
           Promise.all(
@@ -376,7 +399,8 @@ for (const scenario of scenarios) {
         await networkIdle(page);
         // Con la sessione la radice porta agli Ordini: la pagina iniziale è quella dell'app.
         const prefix = scenario.path.startsWith("/en") ? "/en" : "";
-        const home = scenario.role === "anonymous" ? prefix || "/" : `${prefix}/app/ordini`;
+        const home =
+          scenario.role === "anonymous" ? prefix || "/" : pagePath(prefix, "/app/ordini");
         const homeLink = page.locator(`a[href="${home}"]`).first();
         // I pannelli dichiarati dal catalogo coprono i collegamenti sotto: l'assenza prima
         // dell'idratazione non rende navigabile il logo.
@@ -434,9 +458,15 @@ for (const scenario of scenarios) {
           await searchFor(testAccount.taxCodes.unlocked);
           // L'indirizzo cambia dopo due richieste in sequenza, la ricerca e i dati dell'elenco:
           // sul dominio remoto possono superare insieme i 5 secondi predefiniti.
-          await expect(page).toHaveURL(/\/app\/ordini\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u, {
-            timeout: 15_000,
-          });
+          await expect(page).toHaveURL(
+            new RegExp(
+              `${pagePath(prefix, "/app/ordini")}\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`,
+              "u",
+            ),
+            {
+              timeout: 15_000,
+            },
+          );
           expect(page.url()).not.toContain(testAccount.taxCodes.unlocked);
           await expect(page.getByText(testAccount.taxCodes.unlocked).first()).toBeVisible();
           await searchFor(testAccount.taxCodes.locked);

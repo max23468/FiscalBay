@@ -23,17 +23,20 @@ import { StandalonePage } from "./components/standalone-page";
 import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
 import { correlationId } from "./errors";
+import { sharedResponse } from "./page-cache.server";
 import { appCopy, loadCopy, pageTitle } from "./app-copy";
 import { appBase, previewBase } from "./app-links";
-import { languageFromPath, localizedPath } from "./i18n";
+import { canonicalPath, languageFromPath, localizedPath } from "./i18n";
 import { revalidateUnlessSnapshot } from "./orders/order-list";
 import { defaultDisplay, matchedShell } from "./preferences";
+import { arrivalSource, formatSource } from "./signup-source";
 import "./app.css";
 
 export const links: Route.LinksFunction = () => [
   { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
   { rel: "icon", href: "/favicon.ico", sizes: "any" },
   { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+  { rel: "manifest", href: "/site.webmanifest" },
 ];
 
 // Facoltativo: dichiararlo con `bindings.secret()` lo renderebbe obbligatorio in ogni ambiente.
@@ -46,14 +49,18 @@ declare global {
 }
 
 export function loader({ request }: Route.LoaderArgs) {
+  const arrival = arrivalSource(request, env.APP_ORIGIN);
   return {
     language: languageFromPath(new URL(request.url).pathname),
-    correlationId: correlationId(request),
+    // Una pagina condivisa dalla cache non porta il riferimento di una sola richiesta.
+    correlationId: sharedResponse() ? null : correlationId(request),
     // Chiave pubblica del widget Turnstile dell'ambiente, per i moduli che la usano.
     turnstileSiteKey: env.TURNSTILE_SITE_KEY,
     // Token pubblico del sito Web Analytics dell'ambiente; senza, le pagine pubbliche non
     // caricano il beacon, come in locale e nelle prove.
     webAnalyticsToken: env.WEB_ANALYTICS_TOKEN ?? null,
+    // Provenienza del visitatore per i link del sito e la registrazione (D304), mai salvata qui.
+    arrival: arrival ? formatSource(arrival) : null,
   };
 }
 
@@ -79,6 +86,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#0e3372" />
         <Meta />
         <Links />
       </head>
@@ -93,10 +101,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App({ loaderData }: Route.ComponentProps) {
   const { pathname } = useLocation();
-  const preview = new RegExp(`^(/en)?${previewBase}(/|$)`, "u").test(pathname);
+  const page = canonicalPath(pathname);
+  const preview = new RegExp(`^${previewBase}(/|$)`, "u").test(page);
   const revalidator = useRevalidator();
   useEffect(() => {
-    if (!/^\/(en\/)?(app(?:\/|$)|accesso$)/u.test(pathname)) return;
+    if (!/^\/(app(?:\/|$)|accesso$)/u.test(page)) return;
     let refreshing = false;
     const refresh = () => {
       if (document.visibilityState !== "visible" || refreshing) return;
@@ -111,7 +120,7 @@ export default function App({ loaderData }: Route.ComponentProps) {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [pathname, revalidator]);
+  }, [page, revalidator]);
   return (
     <LinksProvider value={{ language: loaderData.language, base: preview ? previewBase : appBase }}>
       <Outlet />
@@ -123,7 +132,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   const location = useLocation();
   const root = useRouteLoaderData<typeof loader>("root");
   const language = root?.language ?? languageFromPath(location.pathname);
-  const reference = root?.correlationId;
+  const reference = root?.correlationId ?? undefined;
   const t = appCopy[language].errors;
   const status = isRouteErrorResponse(error) ? error.status : 500;
   // Auth o database non rispondono: la stessa pagina si riapre appena tornano disponibili.

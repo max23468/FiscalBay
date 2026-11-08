@@ -2,6 +2,7 @@ import { Link } from "react-router";
 
 import { StatusBadge } from "~/components/status";
 import type { SectionData } from "../../admin-console.server";
+import { exitReasons } from "../../exit-reasons";
 import { ActionForm, DataTable, Disclosure, Panel, Stat, StatGrid, TextField } from "./kit";
 import { localValue, useAdmin } from "./use-admin";
 
@@ -11,7 +12,7 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
   const { t, date } = useAdmin();
   const c = t.commerce;
   const fields = (id?: string, startsAt?: string, endsAt?: string | null, quota?: number) => (
-    <div className="grid gap-3 sm:grid-cols-3">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
       <TextField
         label={c.startsAt}
         name="inizio"
@@ -81,6 +82,66 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
           {fields()}
         </ActionForm>
       </Disclosure>
+    </Panel>
+  );
+}
+
+/**
+ * Motivi di uscita (D314): disdette e cancellazioni per motivo negli ultimi 30 giorni, tre e
+ * dodici mesi, poi i commenti dei 30 giorni con lo spazio, finché esiste.
+ */
+function Exits({ exits }: { exits: CommerceData["exits"] }) {
+  const { t, date, href } = useAdmin();
+  const x = t.exits;
+  const table = (kind: keyof typeof exits.counts) => (
+    <DataTable
+      head={[x.reason, x.days30, x.months3, x.months12]}
+      numeric={[1, 2, 3]}
+      rows={[...exitReasons, "none" as const]
+        .filter((reason) => exits.counts[kind][reason].months12 > 0)
+        .map((reason) => {
+          const count = exits.counts[kind][reason];
+          return {
+            key: reason,
+            cells: [x.reasons[reason], count.days30, count.months3, count.months12],
+          };
+        })}
+    />
+  );
+  return (
+    <Panel title={x.title}>
+      <h3 className="text-sm font-medium">{x.cancellations}</h3>
+      {table("cancellation")}
+      <h3 className="text-sm font-medium">{x.deletions}</h3>
+      {table("account_deletion")}
+      <h3 className="text-sm font-medium">{x.comments}</h3>
+      <DataTable
+        head={[t.audit.at, t.stores.workspace, x.reason, t.accounts.plan, x.comment]}
+        rows={exits.recent.map((exit) => ({
+          key: exit.id,
+          cells: [
+            date(exit.recordedAt),
+            exit.workspaceId ? (
+              <Link
+                key="workspace"
+                to={href(`spazi/${encodeURIComponent(exit.workspaceId)}`)}
+                className="text-primary underline-offset-4 hover:underline"
+              >
+                {x.kind[exit.kind]}
+              </Link>
+            ) : exit.kind === "account_deletion" ? (
+              x.deletedAccount
+            ) : (
+              x.kind[exit.kind]
+            ),
+            x.reasons[exit.reason ?? "none"],
+            x.plans[exit.plan],
+            <span key="comment" className="whitespace-pre-line">
+              {exit.comment}
+            </span>,
+          ],
+        }))}
+      />
     </Panel>
   );
 }
@@ -207,6 +268,8 @@ export function CommerceView({ data, now }: { data: CommerceData; now: string })
           </ActionForm>
         </Disclosure>
       </Panel>
+
+      <Exits exits={data.exits} />
 
       <Promotions promotions={data.promotions} now={now} />
     </>

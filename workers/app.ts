@@ -6,12 +6,14 @@ import {
   receiveWebhook,
 } from "../app/webhooks.server";
 import { indexable } from "../app/app-links";
+import { movedEnglishPath } from "../app/i18n";
 import { correlateResponse, correlationHeader, logFailure, tracePhase } from "../app/errors";
 import type { InvocationDetail, InvocationOutcome } from "../app/metrics.server";
 import { withInvocationMetrics, withPhaseTimings } from "../app/observability.server";
 import { withResponseCookies } from "../app/response-cookies.server";
+import { withPageCache } from "../app/page-cache.server";
 import { queueRetryDelay } from "../app/domain/work-timing";
-import { duringRequestActivity, duringServiceActivity } from "../app/service-activity.server";
+import { duringServiceActivity } from "../app/service-activity.server";
 import { consumeStoreSync, isSyncMessage } from "../app/domain/order-sync.server";
 import { consumeExportJob, isExportJobMessage } from "../app/domain/export-jobs.server";
 import {
@@ -48,7 +50,7 @@ const frozenRetrySeconds = 600;
 const frozenQueueDelaySeconds = 43_200;
 
 const frozenPage = `<!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>FiscalBay | Manutenzione</title></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Manutenzione | FiscalBay</title></head>
 <body><main><h1>FiscalBay è in manutenzione</h1><p>Riprova fra qualche minuto.</p><p lang="en">FiscalBay is under maintenance. Please try again in a few minutes.</p></main></body></html>
 `;
 
@@ -122,6 +124,15 @@ const handlers = {
         async () => (await receiveWebhook(request, env)) ?? new Response(null, { status: 404 }),
         { ...metrics, tracing: ctx?.tracing, serverTiming: false },
       );
+    const url = new URL(request.url);
+    const moved = movedEnglishPath(url.pathname);
+    // I vecchi indirizzi inglesi con i segmenti italiani portano a quelli nuovi con un solo
+    // redirect permanente; un invio di modulo mantiene metodo e corpo.
+    if (moved)
+      return Response.redirect(
+        new URL(`${moved}${url.search}`, url).href,
+        ["GET", "HEAD"].includes(request.method) ? 301 : 308,
+      );
     requestHandler ??= await loadRequestHandler();
     const id = crypto.randomUUID();
     const headers = new Headers(request.headers);
@@ -132,7 +143,10 @@ const handlers = {
       const handler = requestHandler;
       const response = await withPhaseTimings(
         correlatedRequest,
-        () => withResponseCookies(() => handler(correlatedRequest)),
+        () =>
+          withPageCache(correlatedRequest, env.VERSION_METADATA?.id, env.APP_ORIGIN, ctx, () =>
+            withResponseCookies(() => handler(correlatedRequest)),
+          ),
         { ...metrics, tracing: ctx?.tracing },
       );
       tracePhase(correlatedRequest, "response");
@@ -243,8 +257,10 @@ const handlers = {
 export default {
   async fetch(request, env, ctx) {
     const blocked = () => frozenResponse(new URL(request.url).pathname);
+    // Le richieste non si registrano in D1: il segreto le blocca, e il ripristino attende il
+    // drenaggio di quelle già avviate.
     if (frozen(env)) return blocked();
-    return duringRequestActivity(env, (target) => handlers.fetch(request, target, ctx), blocked);
+    return handlers.fetch(request, env, ctx);
   },
   async queue(batch, env, ctx?: ExecutionContext) {
     const blocked = () => {

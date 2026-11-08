@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 
 import { isProductionOrigin } from "../app-links";
+import { localizedPath } from "../i18n";
 
 // Indicazione per i motori di ricerca, non un controllo d'accesso: l'area riservata richiede
 // comunque la sessione e ogni risposta non pubblica porta `x-robots-tag: noindex`. Termini e
@@ -16,7 +17,10 @@ const contentSignal = "Content-Signal: search=yes, ai-input=yes, ai-train=yes";
 
 export function robots(origin: string) {
   if (!isProductionOrigin(origin)) return "User-agent: *\nDisallow: /\n";
-  const rules = privatePaths.flatMap((path) => [`Disallow: ${path}`, `Disallow: /en${path}`]);
+  const rules = privatePaths.flatMap((path) => [
+    `Disallow: ${path}`,
+    `Disallow: ${localizedPath("en", path)}`,
+  ]);
   return `User-agent: *\n${contentSignal}\n${rules.join("\n")}\n\nSitemap: ${new URL(origin).origin}/sitemap.xml\n`;
 }
 

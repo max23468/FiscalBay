@@ -474,11 +474,11 @@ it("mostra elenco e pannello del negozio con i soli dati posseduti e il piano de
   ).toBeNull();
 
   // Link diretto e refresh del pannello, anche in inglese.
-  const detail = await storesPage(`/en/app/negozi/${seller.storeId}`, seller.cookie);
+  const detail = await storesPage(`/en/app/stores/${seller.storeId}`, seller.cookie);
   expect(detail.data).toMatchObject({
     language: "en",
     notFound: false,
-    page: { detail: { id: seller.storeId }, connectHref: "/en/app/negozi/collega" },
+    page: { detail: { id: seller.storeId }, connectHref: "/en/app/stores/link" },
   });
 
   // Un negozio di un altro spazio risponde come uno inesistente, dentro la shell.
@@ -670,8 +670,9 @@ it("chiede letture e reimportazione dalla schermata con l'esito della richiesta"
       { ok: true, notice: "Sincronizzazione già richiesta: parte appena possibile." },
     );
     expect(send).toHaveBeenCalledExactlyOnceWith({ syncStore: seller.storeId });
+    // La lettura richiesta e non ancora partita vale come in corso: la pagina ne attende l'esito.
     const [store] = (await storesPage("/app/negozi", seller.cookie)).data.page.stores;
-    expect(store).toMatchObject({ syncing: false, targetMinutes: 30 });
+    expect(store).toMatchObject({ syncing: true, targetMinutes: 30 });
 
     // Lo storico importato al collegamento si può reimportare; mentre riparte, no.
     expect(
@@ -693,6 +694,9 @@ it("chiede letture e reimportazione dalla schermata con l'esito della richiesta"
       store: seller.storeId,
     });
     expect((paused as { init: ResponseInit }).init.status).toBe(409);
+    // In pausa la richiesta rimasta non tiene la pagina in attesa.
+    const [held] = (await storesPage("/app/negozi", seller.cookie)).data.page.stores;
+    expect(held).toMatchObject({ syncing: false });
     expect(send).toHaveBeenCalledOnce();
   } finally {
     send.mockRestore();
@@ -704,7 +708,7 @@ it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
   // Il vecchio indirizzo del profilo porta alla categoria Account delle Impostazioni.
   for (const [path, target] of [
     ["/app/profilo", "/app/impostazioni/account"],
-    ["/en/app/profilo", "/en/app/impostazioni/account"],
+    ["/en/app/profile", "/en/app/settings/account"],
   ]) {
     const moved = await routeResponse(loadProfile, path);
     expect(moved.status).toBe(302);
@@ -714,7 +718,7 @@ it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
   // inviate, ci portano conservando la query.
   for (const [path, target] of [
     ["/app/impostazioni/profilo", "/app/impostazioni/account"],
-    ["/en/app/impostazioni/sicurezza?accesso=x", "/en/app/impostazioni/account?accesso=x"],
+    ["/en/app/settings/sicurezza?accesso=x", "/en/app/settings/account?accesso=x"],
   ]) {
     const moved = await routeResponse(loadSettings, path, {
       cookie: seller.cookie,
@@ -723,7 +727,7 @@ it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
     expect(moved.status).toBe(301);
     expect(moved.headers.get("location")).toBe(target);
   }
-  const loaded = await routeData(loadSettings, "/en/app/impostazioni/account", {
+  const loaded = await routeData(loadSettings, "/en/app/settings/account", {
     cookie: seller.cookie,
     params: { sezione: "account" },
   });

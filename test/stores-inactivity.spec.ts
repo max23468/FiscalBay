@@ -421,7 +421,7 @@ describe("inattività del Free e ammissione", () => {
     expect(await dispatchStoreSyncs(cron, ahead)).toEqual([storeId]);
   });
 
-  it("senza capacità per nuovi Premium ferma acquisti, prova e collegamenti in attesa", async () => {
+  it("senza capacità per nuovi Pro ferma acquisti, prova e collegamenti in attesa", async () => {
     const admitted = await linkedSeller("ammesso@example.invalid");
     await admissionSettings(1, 0);
     expect(await purchaseState(env.DB, admitted.userId)).toMatchObject({ state: "closed" });

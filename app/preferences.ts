@@ -93,7 +93,7 @@ const buyerMessages: Record<Language, { template: string; subject: (order: strin
   },
   en: {
     template:
-      "Hello and thank you for your purchase. To issue the electronic invoice for order {ordine} we need your Italian tax code (Codice Fiscale). If you are buying with a VAT number, please send that and your company name instead. Thank you.",
+      "Hello and thank you for your purchase. To issue the electronic invoice for order {ordine} we need your Italian tax code (Codice Fiscale). If you are buying with an Italian VAT number (Partita IVA), please send that and your company name instead. Thank you.",
     subject: (order) => `eBay order ${order}: tax code for the invoice`,
   },
 };

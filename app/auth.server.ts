@@ -7,7 +7,7 @@ import {
   getAuthoritativeSessionFromCtx,
   getOAuthState,
 } from "better-auth/api";
-import { genericOAuth } from "better-auth/plugins";
+import { genericOAuth, haveIBeenPwned, lastLoginMethod } from "better-auth/plugins";
 import { waitUntil } from "./service-activity.server";
 import { z } from "zod";
 
@@ -22,8 +22,10 @@ import { logFailure } from "./errors";
 import { localizedPath } from "./i18n";
 import { maxPasswordLength, minPasswordLength } from "./limits";
 import { emailVerificationSeconds } from "./domain/email-change.server";
+import { recordSignupSource } from "./domain/signup-sources.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
+import { parseSource } from "./signup-source";
 
 // Chiave del progetto dell'ambiente su dash.better-auth.com: senza, il plugin non viene caricato,
 // così sviluppo locale e prove restano fuori dalla dashboard.
@@ -150,6 +152,14 @@ function databaseHooks(env: Env): BetterAuthOptions["databaseHooks"] {
         before: async (user) => {
           // Include i callback OAuth; non modifica accessi e collegamenti esistenti.
           requireRegistrationApproval(env, user.email);
+        },
+        // Nuovo utente da Google o eBay: la provenienza arriva nello state firmato (D304). La
+        // registrazione con password la salva l'azione dell'accesso, che ne ha l'indirizzo.
+        after: async (user) => {
+          const state = await getOAuthState().catch(() => null);
+          if (!state) return;
+          const value = (state as { signupSource?: unknown }).signupSource;
+          await recordSignupSource(env.DB, user.id, parseSource(value), new Date());
         },
       },
     },
@@ -319,11 +329,23 @@ function verificationOptions(env: Env): BetterAuthOptions["emailVerification"] {
   };
 }
 
+/** Cookie dell'ultimo metodo di accesso, letto dalla pagina di accesso per indicarlo. */
+export const lastLoginMethodCookie = "fiscalbay.ultimo_accesso";
+
 function authPlugins(env: Env, appOrigin: URL): BetterAuthPlugin[] {
   return [
     ...(env.BETTER_AUTH_API_KEY
       ? [dash({ apiKey: env.BETTER_AUTH_API_KEY }), durableBackground]
       : []),
+    // Una nuova password si confronta con Have I Been Pwned, che riceve soltanto i primi cinque
+    // caratteri del suo SHA-1. Attivo sui domini HTTPS: le prove locali non escono in rete.
+    haveIBeenPwned({
+      enabled: appOrigin.protocol === "https:",
+      paths: ["/sign-up/email", "/change-password", "/reset-password"],
+    }),
+    // Solo nel cookie del browser, senza campo nel database: la pagina di accesso evidenzia il
+    // metodo usato l'ultima volta su questo dispositivo.
+    lastLoginMethod({ cookieName: lastLoginMethodCookie, storeInDatabase: false }),
     passkey({
       origin: appOrigin.origin,
       rpID: appOrigin.hostname,

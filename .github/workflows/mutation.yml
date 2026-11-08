@@ -1,7 +1,8 @@
 name: Mutation
 
 # Campagna settimanale su `develop` e avvio manuale; la qualifica del candidato la richiama per i
-# moduli critici del diff cumulativo. Le PR provano soltanto le righe cambiate, nella CI.
+# moduli critici del diff cumulativo. Su `develop` ogni parte riuscita salva il riferimento da cui
+# la CI delle PR prova i moduli in modo incrementale.
 on:
   # Pianificazione e avvio manuale leggono il workflow dal branch predefinito, `develop`.
   schedule:
@@ -28,6 +29,7 @@ env:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   select:
@@ -36,6 +38,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       matrix: ${{ steps.targets.outputs.matrix }}
+      parallel: ${{ steps.targets.outputs.parallel }}
     steps:
       # La pianificazione parte dal branch predefinito: la campagna prova `develop`.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -44,10 +47,19 @@ jobs:
           persist-credentials: false
       # L'instrumenter di Stryker conta i mutanti di ogni modulo per dividerlo in parti.
       - uses: ./.github/actions/setup
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-timings.json
+          key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-timings-
       - name: List critical modules
         id: targets
         env:
           TARGETS: ${{ inputs.targets }}
+          GH_TOKEN: ${{ github.token }}
+          # Soltanto la qualifica del candidato richiama il workflow con il commit atteso.
+          MUTATION_QUALIFICATION: ${{ inputs.expected_sha != '' }}
+          MUTATION_CAMPAIGN: ${{ github.event.schedule == '17 3 * * 1' || github.event.schedule == '23 3 * * 1' }}
         run: node scripts/mutation.mjs --matrix "${TARGETS}"
 
   mutation:
@@ -59,13 +71,14 @@ jobs:
     strategy:
       # Ogni modulo conclude la propria prova: un fallimento non nasconde gli altri esiti.
       fail-fast: false
-      # Venti job contemporanei per l'account: con gli otto browser del candidato restano liberi i
-      # posti per la CI di una PR quando la mutation gira da sola.
-      max-parallel: 12
+      # Con PR o cicli attivi le sole campagne lasciano spazio ai job che sbloccano il deploy.
+      max-parallel: ${{ fromJSON(needs.select.outputs.parallel) }}
       matrix: ${{ fromJSON(needs.select.outputs.matrix) }}
     env:
       MUTATION_TARGET: ${{ matrix.target }}
       MUTATION_SHARD: ${{ matrix.shard }}
+      MUTATION_RANGES: ${{ matrix.ranges }}
+      MUTATION_DIGEST: ${{ matrix.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -74,6 +87,19 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Qualify critical module
         run: pnpm test:mutation "${MUTATION_TARGET}"
+      # Soltanto una parte senza superstiti: un esito sopravvissuto nel riferimento si ripeterebbe
+      # in ogni PR che tocca il modulo. Le chiavi sono immutabili: la run le distingue.
+      - name: Keep develop reference
+        if: success() && github.ref == 'refs/heads/develop'
+        run: |
+          mkdir -p .mutation-reference
+          cp reports/mutation/*/incremental.json .mutation-reference/incremental.json
+      - name: Save develop reference
+        if: success() && github.ref == 'refs/heads/develop'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-reference
+          key: mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Preserve mutation evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -82,3 +108,47 @@ jobs:
           path: reports/mutation/
           if-no-files-found: ignore
           retention-days: 7
+
+  # Anche con un modulo fallito: misure e riferimenti entrano soltanto per i moduli con tutte le
+  # parti riuscite, gli altri restano quelli precedenti.
+  timings:
+    name: Preserve measured durations
+    needs: mutation
+    if: ${{ !cancelled() && needs.mutation.result != 'skipped' && github.ref == 'refs/heads/develop' }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # Il codice della raccolta è quello della run su `develop`: le misure portano già digest e
+    # righe del sorgente provato, e decidono soltanto come dividere le parti, mai cosa provare.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          install: "false"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-timings.json
+          key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-timings-
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: mutation-${{ github.run_id }}-${{ github.run_attempt }}-*
+          path: reports/mutation-timings/
+      - run: node scripts/mutation.mjs --collect-timings reports/mutation-timings
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-timings.json
+          key: mutation-timings-${{ github.run_id }}-${{ github.run_attempt }}
+      # Il riferimento completo di ogni modulo, riunito dalle sue parti, permette alla PR di
+      # provarlo in un solo job: le chiavi sono immutabili e la PR legge la più recente.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-references
+          key: mutation-references-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: mutation-references-
+      - run: node scripts/mutation.mjs --collect-references reports/mutation-timings
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-references
+          key: mutation-references-${{ github.run_id }}-${{ github.run_attempt }}

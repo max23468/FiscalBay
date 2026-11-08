@@ -6,11 +6,12 @@
  * registra webhook, menu dell'owner e profilo, poi rilegge; il menu dei venditori lo riallinea
  * il compito giornaliero del Worker, che riallinea anche il profilo.
  *
- * Token e segreto del webhook arrivano dalle variabili `TELEGRAM_BOT_TOKEN` e
- * `TELEGRAM_WEBHOOK_SECRET` del processo, letti per esempio dal Portachiavi dentro il comando:
- * non entrano mai nel resoconto, che riporta soltanto l'esito di ogni controllo.
+ * Token, segreto del webhook e ID dell'owner arrivano dalle variabili `TELEGRAM_BOT_TOKEN`,
+ * `TELEGRAM_WEBHOOK_SECRET` e `TELEGRAM_OWNER_ID` del processo, letti per esempio dal
+ * Portachiavi dentro il comando: non entrano mai nel resoconto, che riporta soltanto l'esito di
+ * ogni controllo.
  *
- * Uso: TELEGRAM_BOT_TOKEN=… TELEGRAM_WEBHOOK_SECRET=… node scripts/telegram-bot.mjs
+ * Uso: TELEGRAM_BOT_TOKEN=… TELEGRAM_WEBHOOK_SECRET=… TELEGRAM_OWNER_ID=… node scripts/telegram-bot.mjs
  *        [--mode live] [--apply]
  */
 import path from "node:path";
@@ -25,13 +26,14 @@ import { workerOf } from "./lib/worker.mjs";
 
 const allowedUpdates = ["message", "callback_query"];
 
-/** Ambiente letto da `cloudflare.config.ts` con la stessa modalità della build. */
-export function targetOf(mode) {
+/**
+ * Ambiente letto da `cloudflare.config.ts` con la stessa modalità della build; l'ID dell'owner è
+ * il segreto `TELEGRAM_OWNER_ID` del Worker, passato al comando come il token.
+ */
+export function targetOf(mode, ownerId) {
   const { env } = workerOf(mode);
-  return {
-    webhookUrl: `${new URL(env.APP_ORIGIN.value).origin}/webhooks/telegram`,
-    ownerId: env.TELEGRAM_OWNER_ID.value,
-  };
+  if (!/^\d{1,20}$/u.test(ownerId ?? "")) throw new Error("Serve TELEGRAM_OWNER_ID.");
+  return { webhookUrl: `${new URL(env.APP_ORIGIN.value).origin}/webhooks/telegram`, ownerId };
 }
 
 /** Menu dei venditori come lo imposta il Worker: italiano con `language_code`, inglese senza. */
@@ -164,7 +166,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
   if (!token || (values.apply && !/^[A-Za-z0-9_-]{32,256}$/u.test(secret ?? "")))
     throw new Error("Servono TELEGRAM_BOT_TOKEN e, con --apply, TELEGRAM_WEBHOOK_SECRET.");
-  const target = targetOf(values.mode);
+  const target = targetOf(values.mode, process.env.TELEGRAM_OWNER_ID?.trim());
   const request = botRequest(token);
   if (values.apply) await applyBot(request, target, secret);
   const results = await checkBot(request, target);

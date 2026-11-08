@@ -296,7 +296,7 @@ describe("negozio attivo del Free e downgrade", () => {
       }>()
     ).results;
 
-  it("al downgrade l'eccedenza non è più consultabile, resta 30 giorni e poi non torna con Premium", async () => {
+  it("al downgrade l'eccedenza non è più consultabile, resta 30 giorni e poi non torna con Pro", async () => {
     const { seller, end, applied } = await downgraded("downgrade@example.invalid");
     await applyFreePlans(env.DB, new Date(end - 60_000));
     expect(await visible(seller.userId, end - 60_000)).toEqual([
@@ -339,14 +339,15 @@ describe("negozio attivo del Free e downgrade", () => {
     // Dopo la pulizia il ritorno a Premium non ripristina i dati eliminati.
     await purgeExpiredRecords(env.DB, new Date(applied + 30 * day));
     expect(await count("orders")).toBe(0);
-    expect(await count("deleted_order_keys")).toBe(3);
+    // La scadenza non blocca il reimport: lo storico torna con una nuova lettura.
+    expect(await count("deleted_order_keys")).toBe(0);
     const again = applied + 31 * day;
     await coverage(seller.workspaceId, "admin", again, again + day);
     await applyFreePlan(env.DB, seller.userId, new Date(again));
     expect(await visible(seller.userId, again)).toEqual([]);
   });
 
-  it("il ritorno a Premium prima della pulizia riporta l'anno di storico agli ordini conservati", async () => {
+  it("il ritorno a Pro prima della pulizia riporta l'anno di storico agli ordini conservati", async () => {
     const { seller, end, applied } = await downgraded("ritorno@example.invalid");
     await applyFreePlan(env.DB, seller.userId, new Date(applied));
     const back = applied + 10 * day;

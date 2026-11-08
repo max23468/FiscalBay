@@ -6,11 +6,11 @@ import { alertEmail } from "./zone-protection.mjs";
 
 describe("monitor degli avvisi", () => {
   const live = targetOf("live");
-  const desired = desiredMonitors(live, "coda-falliti");
+  const desired = desiredMonitors(live, ["coda-falliti", "ingressi-falliti"]);
 
   it("legge Worker, coda dei falliti e database dell'ambiente", () => {
     assert.equal(live.worker, "fiscalbay");
-    assert.equal(live.failedQueue, "fiscalbay-webhooks-failed");
+    assert.deepEqual(live.failedQueues, ["fiscalbay-webhooks-failed", "fiscalbay-ingress-failed"]);
     assert.equal(targetOf("test").worker, "fiscalbay-test");
     assert.notEqual(targetOf("test").database, live.database);
   });
@@ -25,7 +25,7 @@ describe("monitor degli avvisi", () => {
     }
     const [cron, , failed, storage, email] = desired.map(({ filters }) => filters);
     assert.match(cron.selectors[0], /scriptName = 'fiscalbay' .*invocationType = 'scheduled'/u);
-    assert.match(failed.selectors[0], /queueId = 'coda-falliti'/u);
+    assert.match(failed.selectors[0], /queueId IN \('coda-falliti', 'ingressi-falliti'\)/u);
     assert.deepEqual(storage.alert_trigger_preferences_value, [String(d1StopBytes)]);
     assert.deepEqual(storage.execution_interval, ["1h"]);
     assert.match(email.selectors[0], /NOT LIKE '%\.invalid'/u);

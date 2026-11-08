@@ -14,14 +14,19 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
 import {
-  changedLines,
+  browserNarrowing,
+  browserUnaffected,
+  mainProcessChange,
   changelogDayOnly,
+  sameNews,
   configFile,
   dependencyChange,
+  scriptsChange,
   editedMigrations,
   fileImpact,
   fileLevel,
   levelScripts,
+  ciGateScript,
   moduleAreas,
   plan,
   sharedModules,
@@ -38,6 +43,17 @@ const testValue = config.replace(
 );
 
 describe("livello del gate dai file modificati", () => {
+  it("conserva i controlli del gate senza ricompilare la build test già prodotta", () => {
+    assert.equal(ciGateScript("full", true), "verify:gate");
+    assert.equal(ciGateScript("build", true), "verify:unit");
+    for (const level of Object.keys(levelScripts))
+      assert.equal(ciGateScript(level), levelScripts[level]);
+    const scripts = JSON.parse(readFileSync("package.json", "utf8")).scripts;
+    assert.equal(
+      scripts[ciGateScript("full", true)],
+      "pnpm verify:unit && pnpm doctor:react && pnpm build:live",
+    );
+  });
   it("ferma le migration già presenti modificate o eliminate, non quelle nuove", () => {
     const base = {
       "migrations/0001_a.sql": "-- commento\nCREATE TABLE a (id TEXT);",
@@ -65,6 +81,10 @@ describe("livello del gate dai file modificati", () => {
       "README.md",
       "docs/decisions/DECISION_REGISTER.md",
       "docs/brand/README.md",
+      "docs/ROADMAP.md",
+      "docs/product/PRODUCT.md",
+      "docs/engineering/ARCHITECTURE.md",
+      "docs/operations/RELEASE.md",
       "docs/archive/screenshot.png",
     ])
       assert.equal(fileLevel(file), "docs", file);
@@ -72,10 +92,6 @@ describe("livello del gate dai file modificati", () => {
     assert.deepEqual(fileImpact("CHANGELOG.md"), { level: "build", e2e: false, deploy: true });
     for (const file of [
       "AGENTS.md",
-      "docs/ROADMAP.md",
-      "docs/product/PRODUCT.md",
-      "docs/engineering/ARCHITECTURE.md",
-      "docs/operations/RELEASE.md",
       "scripts/classify-changes.mjs",
       "scripts/classify-changes.test.mjs",
       "scripts/release/release.mjs",
@@ -274,6 +290,66 @@ describe("dipendenze per tipo", () => {
     assert.equal(dependencyChange(undefined, tools.after), undefined);
   });
 
+  it("gli script del manifest prendono il gate che li esegue", () => {
+    const base = {
+      scripts: {
+        build: "cf build && pnpm bundle:check",
+        "bundle:check": "node scripts/check-bundle-size.mjs",
+        postinstall: "pnpm typegen",
+        typegen: "react-router typegen",
+        "verify:documents": "pnpm verify:copy",
+        "verify:copy": "node scripts/verify-copy.mjs",
+        "verify:tooling": "pnpm verify:documents && pnpm lint",
+        lint: "oxlint .",
+        "verify:unit": "pnpm verify:tooling && pnpm test",
+        test: "vitest run",
+        "verify:build": "pnpm verify:unit && pnpm build",
+        verify: "pnpm verify:build",
+      },
+    };
+    const edit = (apply) => {
+      const after = structuredClone(base);
+      apply(after);
+      return [JSON.stringify(base), JSON.stringify(after)];
+    };
+    assert.equal(
+      scriptsChange(...edit((next) => (next.scripts.lint = "oxlint --deny-warnings ."))),
+      "tooling",
+    );
+    assert.equal(
+      scriptsChange(...edit((next) => (next.scripts.test = "vitest run --bail 1"))),
+      "unit",
+    );
+    assert.equal(
+      scriptsChange(...edit((next) => (next.scripts["verify:copy"] += " --strict"))),
+      "docs",
+    );
+    assert.equal(
+      scriptsChange(...edit((next) => (next.scripts["verify:gate"] = "pnpm verify:unit"))),
+      "tooling",
+    );
+    // Build, installazione e ciò che richiamano restano al livello completo, con il deploy.
+    for (const name of ["build", "bundle:check", "postinstall", "typegen"])
+      assert.equal(
+        scriptsChange(...edit((next) => (next.scripts[name] += " --x"))),
+        undefined,
+        name,
+      );
+    assert.equal(scriptsChange(...edit((next) => (next.scripts.predeploy = "true"))), undefined);
+    assert.equal(
+      scriptsChange(...edit((next) => ((next.scripts.lint += " -q"), (next.private = true)))),
+      undefined,
+    );
+    assert.equal(scriptsChange("{", "{}"), undefined);
+    const [before, after] = edit((next) => (next.scripts.lint += " -q"));
+    assert.deepEqual(fileImpact("package.json", { before, after }), {
+      level: "tooling",
+      e2e: false,
+      deploy: false,
+    });
+    assert.deepEqual(fileImpact(".gitignore"), { level: "tooling", e2e: false, deploy: false });
+  });
+
   it("gli strumenti di sviluppo non aprono browser né deploy, il gate resta completo", () => {
     const selected = plan(["package.json", "pnpm-lock.yaml"], [], false, {
       "package.json": tools,
@@ -301,7 +377,8 @@ describe("dipendenze per tipo", () => {
 });
 
 describe("giorno della versione", () => {
-  const undated = "## [2.0.3]\n\n- voce\n\n## [2.0.1] - 2026-11-01\n";
+  const undated =
+    "## [2.0.3]\n\n### Novità\n\n#### Correzioni\n\n- voce\n\n## [2.0.1] - 2026-11-01\n";
   const dated = undated.replace("## [2.0.3]", "## [2.0.3] - 2026-11-02");
 
   it("il solo giorno non distribuisce e non prova nulla", () => {
@@ -311,6 +388,43 @@ describe("giorno della versione", () => {
     const change = { "CHANGELOG.md": { before: undated, after: dated } };
     const selected = plan(["CHANGELOG.md"], [], false, change);
     assert.deepEqual([selected.gate, selected.deploy, selected.e2e], ["docs", false, false]);
+  });
+
+  it("un frammento di changes/ distribuisce, e riunito nel changelog con il giorno no", () => {
+    const fragment = "changes/filtro.md";
+    const merged = { before: undated, after: undated.replace("- voce", "- voce\n- nuova") };
+    const added = plan([fragment], [], false, { [fragment]: merged });
+    assert.deepEqual([added.gate, added.deploy, added.e2e], ["build", true, false]);
+    // Il giorno riunisce i frammenti: il changelog completo resta lo stesso, con il giorno.
+    const day = { before: undated, after: dated };
+    const folded = plan(["CHANGELOG.md", fragment], [], false, {
+      "CHANGELOG.md": day,
+      [fragment]: day,
+    });
+    assert.deepEqual([folded.gate, folded.deploy], ["docs", false]);
+    // Un frammento con le sole decisioni non cambia il changelog: resta un documento.
+    const same = { before: undated, after: undated };
+    assert.deepEqual(plan([fragment], [], false, { [fragment]: same }).gate, "docs");
+  });
+
+  it("distribuisce soltanto un cambio di ciò che la pagina Novità mostra", () => {
+    const fragment = "changes/sito.md";
+    const other = `${undated}### Altre modifiche\n\n- sito\n`;
+    // Altre modifiche, versioni senza Novità aperte o richiuse: la pagina resta la stessa.
+    for (const after of [
+      undated.replace("- voce", "- voce\n\n### Altre modifiche\n\n- sito"),
+      `## [2.0.4]\n\n${undated}`,
+      undated.replace("## [2.0.1] - 2026-11-01", "## [2.0.2] - 2026-11-01\n\n- interna"),
+    ]) {
+      assert.equal(sameNews(undated, after), true, after);
+      const selected = plan([fragment], [], false, { [fragment]: { before: undated, after } });
+      assert.deepEqual([selected.gate, selected.deploy], ["docs", false]);
+    }
+    assert.equal(sameNews(other, other.replace("- sito", "- console")), true);
+    // Una Novità nuova, cambiata o il giorno di una versione con Novità cambiano la pagina.
+    assert.equal(sameNews(undated, undated.replace("- voce", "- altra")), false);
+    assert.equal(sameNews(undated, undated.replace("[2.0.3]", "[2.0.4]")), false);
+    assert.equal(sameNews(undefined, undated), false);
   });
 });
 
@@ -480,14 +594,137 @@ describe("spec browser modificate", () => {
   });
 
   it("esegue tutto per gli strumenti condivisi delle prove browser", () => {
-    for (const file of [
-      "e2e/fixtures.ts",
-      "e2e/page-cases.ts",
-      "playwright.config.ts",
-      "scripts/browser-tests.mjs",
-    ])
+    for (const file of ["e2e/fixtures.ts", "e2e/page-cases.ts", "playwright.config.ts"])
       assert.equal(plan([file, "e2e/stores.spec.ts"], sources).browserGrep, ".", file);
     assert.equal(plan(["e2e/stores.spec.ts"], sources, true).browserGrep, ".");
+  });
+
+  it("prova runner, anteprima e D1 locale con il nucleo nei due browser", () => {
+    for (const file of [
+      "scripts/browser-tests.mjs",
+      "scripts/local-preview.mjs",
+      "scripts/local-d1.mjs",
+    ]) {
+      const selected = plan([file], sources);
+      assert.deepEqual(
+        [selected.gate, selected.e2e, selected.browserGrep, selected.browsers, selected.deploy],
+        ["build", true, "@smoke", "chromium,webkit", false],
+        file,
+      );
+    }
+    assert.equal(
+      plan(["scripts/browser-tests.mjs", "e2e/stores.spec.ts"], sources).browserGrep,
+      "@smoke|stores.spec",
+    );
+    assert.equal(plan(["scripts/browser-evidence.mjs"], sources).e2e, false);
+  });
+});
+
+describe("prove browser invariate fra due commit", () => {
+  it("dopo un'unione con la base ripete soltanto le aree toccate sia dai cambi sia dalla PR", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "browser-narrowing-"));
+    const before = process.cwd();
+    const git = (...args) =>
+      spawnSync("git", args, { cwd: directory, encoding: "utf8" }).stdout.trim();
+    const write = (file, text) => {
+      mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+      writeFileSync(path.join(directory, file), text);
+    };
+    const commit = (file, text) => {
+      write(file, text);
+      git("add", "--all");
+      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", file);
+      return git("rev-parse", "HEAD");
+    };
+    // Unione della PR nella base, come il commit che la CI della PR prova.
+    const merge = (base, head) => {
+      git("checkout", "--quiet", "--detach", base);
+      git("-c", "user.name=t", "-c", "user.email=t@t", "merge", "--quiet", "--no-edit", head);
+      return git("rev-parse", "HEAD");
+    };
+    const files = {
+      stores: "app/components/stores/a.tsx",
+      storesOther: "app/components/stores/c.tsx",
+      settings: "app/components/settings/b.tsx",
+      shared: "app/root.tsx",
+    };
+    const sources = Object.values(files).map((file) => ({ path: file, text: "export {};\n" }));
+    try {
+      git("init", "--quiet", "--initial-branch", "develop");
+      for (const file of Object.values(files)) write(file, "export {};\n");
+      const start = commit("README.md", "base\n");
+      git("checkout", "--quiet", "-b", "pr");
+      const green = commit(files.stores, "export const a = 1;\n");
+      process.chdir(directory);
+      const narrowing = (base, extra) => {
+        const head = merge(base, extra ?? green);
+        return browserNarrowing(green, head, base, sources);
+      };
+      // La base cambia un'area che la PR non tocca: basta il nucleo.
+      git("checkout", "--quiet", "develop");
+      const settings = commit(files.settings, "export const b = 1;\n");
+      assert.deepEqual(narrowing(settings), { grep: "@smoke" });
+      // La base cambia la stessa area della PR, in un altro file: si ripete quell'area.
+      git("checkout", "--quiet", "develop");
+      const stores = commit(files.storesOther, "export const c = 1;\n");
+      assert.match(narrowing(stores).grep, /^@smoke\|@pages-stores\|/u);
+      assert.doesNotMatch(narrowing(stores).grep, /settings/u);
+      // Un modulo che ogni pagina attraversa chiede la selezione intera.
+      git("checkout", "--quiet", "develop");
+      const shared = commit(files.shared, "export const r = 1;\n");
+      assert.equal(narrowing(shared), null);
+      // Soli documenti nella base: nessuna prova da ripetere.
+      git("checkout", "--quiet", start);
+      git("checkout", "--quiet", "-b", "docs");
+      const docs = commit("docs/nota.md", "nota\n");
+      assert.deepEqual(narrowing(docs), { reuse: true });
+      // Un nuovo cambio della PR ripete la sua area anche senza cambi della base.
+      git("checkout", "--quiet", "pr");
+      const again = commit(files.stores, "export const a = 2;\n");
+      assert.match(narrowing(start, again).grep, /@pages-stores/u);
+      // Un commit non disponibile non prova nulla.
+      assert.equal(
+        browserNarrowing("0123456789abcdef0123456789abcdef01234567", green, start, sources),
+        null,
+      );
+    } finally {
+      process.chdir(before);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("documenti e strumenti non cambiano le prove browser, il codice e le spec sì", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "browser-unaffected-"));
+    const before = process.cwd();
+    const git = (...args) =>
+      spawnSync("git", args, { cwd: directory, encoding: "utf8" }).stdout.trim();
+    const commit = (file, text) => {
+      mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+      writeFileSync(path.join(directory, file), text);
+      git("add", "--all");
+      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", file);
+      return git("rev-parse", "HEAD");
+    };
+    try {
+      git("init", "--quiet", "--initial-branch", "develop");
+      const base = commit("README.md", "base\n");
+      process.chdir(directory);
+      const docs = commit("docs/nota.md", "nota\n");
+      assert.ok(browserUnaffected(base, docs));
+      const tooling = commit("scripts/mutation.mjs", "// strumento\n");
+      assert.ok(browserUnaffected(base, tooling));
+      const unitTest = commit("test/a.spec.ts", "// prova\n");
+      assert.ok(browserUnaffected(docs, unitTest));
+      const spec = commit("e2e/a.spec.ts", "// prova browser\n");
+      assert.ok(!browserUnaffected(unitTest, spec));
+      const app = commit("app/a.ts", "export const a = 1;\n");
+      assert.ok(!browserUnaffected(spec, app));
+      assert.ok(browserUnaffected(app, app));
+      assert.ok(!browserUnaffected("0123456789abcdef0123456789abcdef01234567", app));
+    } finally {
+      process.chdir(before);
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 
@@ -509,23 +746,36 @@ describe("mutation e riuso nel candidato", () => {
       "app/domain/stores.server.ts",
     ]);
     assert.deepEqual(plan(["app/tax-quality.ts"], files, true).mutation, ["app/tax-quality.ts"]);
+    // Né la pubblicazione, né il classificatore, né gli strumenti della mutation la ripetono.
+    for (const file of [
+      "scripts/release/release.mjs",
+      "scripts/classify-changes.mjs",
+      "scripts/mutation.mjs",
+      ".github/workflows/mutation.yml",
+      "stryker.config.json",
+    ])
+      assert.deepEqual(plan([file], files, true).mutation, [], file);
   });
 
-  it("indica i moduli critici modificati, non i consumatori, per la mutation della PR", () => {
-    const files = [
-      { path: "app/domain/stores.server.ts", text: "" },
-      { path: "app/auth.server.ts", text: 'import { load } from "./domain/stores.server";' },
-      { path: "app/format.ts", text: "" },
-    ];
-    assert.deepEqual(plan([files[0].path, files[2].path], files).changedCritical, [files[0].path]);
-    assert.deepEqual(plan([files[0].path], files, true).changedCritical, []);
-  });
-
-  it("ricava dal diff le righe nuove di ogni blocco", () => {
-    assert.deepEqual(changedLines("@@ -3,2 +3 @@ a\n-b\n@@ -10 +9,3 @@ c\n@@ -20,2 +21,0 @@ d\n"), [
-      "3-3",
-      "9-11",
-    ]);
+  it("attende il candidato senza deploy soltanto se cambia la procedura che gira da main", () => {
+    for (const file of [
+      ".github/workflows/publish.yml",
+      ".github/workflows/qualify.yml",
+      ".github/actions/setup/action.yml",
+      "scripts/release/release.mjs",
+      "e2e/pages.spec.ts",
+      "playwright.config.ts",
+    ])
+      assert.ok(mainProcessChange([file]), file);
+    for (const file of [
+      ".github/workflows/ci.yml",
+      ".github/workflows/candidate.yml",
+      "scripts/release/release.test.mjs",
+      "docs/operations/RELEASE.md",
+      "AGENTS.md",
+      "test/orders.spec.ts",
+    ])
+      assert.ok(!mainProcessChange([file]), file);
   });
 });
 
@@ -561,6 +811,8 @@ describe("esecuzione del classificatore", () => {
     const directory = mkdtempSync(path.join(tmpdir(), "local-green-"));
     const bin = path.join(directory, "bin");
     const log = path.join(directory, "commands");
+    // Ogni gate locale parte dal controllo della versione di `Verify`.
+    const version = "scripts/release/release.mjs version-step --base origin/develop\n";
     const repo = path.join(directory, "repo");
     const runner = `#!${process.execPath}\nrequire("node:fs").appendFileSync(process.env.GATE_TEST_LOG, process.argv.slice(2).join(" ") + "\\n");\n`;
     const git = (...args) => spawnSync("git", args, { cwd: repo, encoding: "utf8" });
@@ -573,12 +825,16 @@ describe("esecuzione del classificatore", () => {
       for (const file of [
         "classify-changes.mjs",
         "mutation.mjs",
+        "mutation-reuse.mjs",
         "verify-repo.mjs",
         "release/release.mjs",
         "release/records.mjs",
         "lib/provider.mjs",
+        "lib/critical-modules.mjs",
       ])
         cpSync(path.join("scripts", file), path.join(repo, "scripts", file));
+      mkdirSync(path.join(repo, "app"));
+      cpSync("app/changelog-fragments.mjs", path.join(repo, "app/changelog-fragments.mjs"));
       writeFileSync(path.join(repo, "README.md"), "base\n");
       git("init", "--quiet", "--initial-branch", "develop");
       git("add", "--all");
@@ -596,27 +852,37 @@ describe("esecuzione del classificatore", () => {
             GATE_TEST_LOG: log,
             GITHUB_OUTPUT: "",
             GITHUB_STEP_SUMMARY: "",
+            VERIFIED_TEST_BUILD: "",
           },
         });
         assert.equal(result.status, 0, result.stderr);
         return { output: result.stdout, commands: readFileSync(log, "utf8").trim() };
       };
       writeFileSync(path.join(repo, "AGENTS.md"), "regole\n");
-      assert.equal(classify().commands, "verify:tooling");
+      assert.equal(classify().commands, `${version}verify:tooling`);
       assert.match(classify().output, /Nessuna modifica dall'ultimo verde locale/u);
       assert.equal(classify().commands, "");
       writeFileSync(path.join(repo, "notes.md"), "nota\n");
       const incremental = classify();
-      assert.equal(incremental.commands, "verify:documents");
+      assert.equal(incremental.commands, `${version}verify:documents`);
       assert.match(incremental.output, /ultimo verde locale/u);
       assert.doesNotMatch(incremental.output, /tooling: AGENTS\.md/u);
       mkdirSync(path.join(repo, "app/routes"), { recursive: true });
+      // In locale il livello completo esegue i controlli statici e i test collegati al diff:
+      // copertura e build restano alla CI.
       writeFileSync(path.join(repo, "app/routes/stores.tsx"), "export const stores = 1;\n");
-      assert.equal(classify().commands, "verify");
+      assert.equal(
+        classify().commands,
+        `${version}verify:static:full\ntest:related app/routes/stores.tsx`,
+      );
       writeFileSync(path.join(repo, "app/routes/settings.tsx"), "export const settings = 1;\n");
-      assert.equal(classify().commands, "verify");
+      assert.equal(
+        classify().commands,
+        `${version}verify:static:full\ntest:related app/routes/settings.tsx`,
+      );
       const browser = classify("--browser");
       assert.match(browser.commands, /scripts\/browser-tests\.mjs/u);
+      assert.match(browser.commands, /--browsers chromium(?!,)/u);
       assert.match(browser.commands, /@pages-stores/u);
       assert.match(browser.commands, /@pages-settings/u);
       assert.equal(classify("--browser").commands, "");
@@ -625,6 +891,23 @@ describe("esecuzione del classificatore", () => {
       const selected = classify("--browser");
       assert.match(selected.commands, /@pages-settings/u);
       assert.doesNotMatch(selected.commands, /@pages-stores/u);
+      // Un modulo server cambia soltanto ciò che Chromium proverebbe: i browser restano alla CI.
+      mkdirSync(path.join(repo, "app/domain"), { recursive: true });
+      writeFileSync(path.join(repo, "app/domain/stores.server.ts"), "export const load = 1;\n");
+      writeFileSync(
+        path.join(repo, "app/routes/stores.tsx"),
+        'import { load } from "../domain/stores.server";\nexport const stores = load;\n',
+      );
+      classify();
+      classify("--browser");
+      writeFileSync(path.join(repo, "app/domain/stores.server.ts"), "export const load = 2;\n");
+      classify();
+      const server = classify("--browser");
+      assert.equal(server.commands, "");
+      assert.match(server.output, /Prove browser lasciate alla CI/u);
+      // Un file che i test leggono fuori da `app/`, `workers/` e `test/` esegue l'intera suite.
+      writeFileSync(path.join(repo, "package.json"), '{"name":"prova"}\n');
+      assert.equal(classify().commands, `${version}verify:static:full\ntest`);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
@@ -649,6 +932,7 @@ describe("esecuzione del classificatore", () => {
             GATE_TEST_LOG: log,
             GITHUB_OUTPUT: "",
             GITHUB_STEP_SUMMARY: "",
+            VERIFIED_TEST_BUILD: "",
           },
         },
       );

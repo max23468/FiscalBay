@@ -44,7 +44,7 @@ import { hashPassword, verifyPassword } from "../app/password.server";
 
 import { emailSender, mailEnv, sessionCookie, verifiedSession } from "./fixtures/account-fixtures";
 
-import { routeData, routeResponse } from "./fixtures/route-fixtures";
+import { routeData, routeResponse, pagePath } from "./fixtures/route-fixtures";
 
 it("i tentativi di accesso rispettano soglia, secondi di attesa e riapertura della finestra", async () => {
   const at = Date.parse("2026-09-01T12:00:00.000Z");
@@ -124,11 +124,14 @@ it("non segue redirect esterni nei GET di accesso e collegamento", async () => {
   for (const base of ["", "/en"]) {
     const query = "?token=synthetic&redirectTo=https://example.invalid";
     // L'accesso mostra il modulo per la nuova password, senza seguire il redirect richiesto.
-    const access = await routeData(signInLoader, `${base}/accesso${query}`);
+    const access = await routeData(signInLoader, `${pagePath(base, "/accesso")}${query}`);
     expect(access).toMatchObject({ authenticated: false, resetToken: "synthetic" });
-    const response = await routeResponse(storeLinkLoader, `${base}/app/negozi/collega${query}`);
+    const response = await routeResponse(
+      storeLinkLoader,
+      `${pagePath(base, "/app/negozi/collega")}${query}`,
+    );
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(`${base}/accesso`);
+    expect(response.headers.get("location")).toBe(pagePath(base, "/accesso"));
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.getSetCookie()).toEqual([]);
   }
@@ -138,16 +141,21 @@ it("conserva il rifiuto POST da origine estranea e del collegamento senza sessio
   for (const base of ["", "/en"]) {
     for (const origin of ["https://example.invalid", null]) {
       const foreign = { origin, fields: {} };
-      expect((await routeResponse(signInAction, `${base}/accesso`, foreign)).status).toBe(403);
+      expect((await routeResponse(signInAction, pagePath(base, "/accesso"), foreign)).status).toBe(
+        403,
+      );
       expect(
-        (await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, foreign)).status,
+        (await routeResponse(storeLinkAction, pagePath(base, "/app/negozi/collega"), foreign))
+          .status,
       ).toBe(403);
     }
-    const response = await routeResponse(storeLinkAction, `${base}/app/negozi/collega`, {
+    const response = await routeResponse(storeLinkAction, pagePath(base, "/app/negozi/collega"), {
       fields: {},
     });
     expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe(`${base}/app/ordini?negozio=accesso`);
+    expect(response.headers.get("location")).toBe(
+      `${pagePath(base, "/app/ordini")}?negozio=accesso`,
+    );
   }
 });
 
@@ -536,6 +544,44 @@ describe("Better Auth su Workers e D1", () => {
       ).status,
     ).toBe(404);
     await env.DB.prepare('DELETE FROM "user" WHERE "id" = ?').bind(id).run();
+  });
+
+  it("rifiuta una password violata inviando a Have I Been Pwned solo il prefisso dell'hash", async () => {
+    const origin = "https://test.fiscalbay.it";
+    const auth = createAuth(mailEnv(emailSender(), { APP_ORIGIN: origin }));
+    const password = "Password-violata-di-prova";
+    const digest = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(password));
+    const sha1 = [...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+      .toUpperCase();
+    const requested: string[] = [];
+    const range = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      requested.push(input instanceof Request ? input.url : String(input));
+      return new Response(`0000000000000000000000000000000000A:0\r\n${sha1.slice(5)}:42`);
+    });
+    const signUp = (email: string, value: string) =>
+      auth.handler(
+        new Request(`${origin}/api/auth/sign-up/email`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin },
+          body: JSON.stringify({ name: "Password violata", email, password: value }),
+        }),
+      );
+    try {
+      const rejected = await signUp("violata@example.invalid", password);
+      expect(rejected.status).toBe(400);
+      expect(await rejected.json()).toMatchObject({ code: "PASSWORD_COMPROMISED" });
+      expect(requested).toEqual([`https://api.pwnedpasswords.com/range/${sha1.slice(0, 5)}`]);
+      expect((await signUp("sicura@example.invalid", "Un-altra-password-lunga")).ok).toBe(true);
+      expect(
+        await env.DB.prepare('SELECT email FROM "user" WHERE email IN (?, ?)')
+          .bind("violata@example.invalid", "sicura@example.invalid")
+          .all(),
+      ).toMatchObject({ results: [{ email: "sicura@example.invalid" }] });
+    } finally {
+      range.mockRestore();
+    }
   });
 
   it("recupera l'accesso con una password nuova e revoca le sessioni precedenti", async () => {

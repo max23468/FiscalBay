@@ -113,6 +113,9 @@ function Usage({ row, t }: { row: QuotaRow; t: AdminCopy }) {
       {row.rate.consumed > row.rate.used ? (
         <span className="text-xs text-muted-foreground">{t.quotas.shared(row.rate.used)}</span>
       ) : null}
+      {row.own !== null && row.daily ? (
+        <span className="text-xs text-muted-foreground">{t.quotas.own(row.own)}</span>
+      ) : null}
     </span>
   );
 }
@@ -203,6 +206,9 @@ export function QuotasView({
             ) : (
               <>
                 <QuotaTable rows={used} />
+                <p className="text-sm text-muted-foreground">
+                  {q.orderReads(environment.orderReads)}
+                </p>
                 {others.length > 0 ? (
                   <Disclosure label={q.otherCalls(others.length)}>
                     <QuotaTable rows={others} />

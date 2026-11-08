@@ -127,6 +127,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: node scripts/release/release.mjs restore --environment production --receipt-prefix release-receipt
 
+      # Browser e librerie dall'installer ufficiale di Playwright, prima del deploy: un mirror lento
+      # ferma il job senza effetti sul provider, e la ripresa resta possibile.
+      - name: Install browsers
+        timeout-minutes: 20
+        run: pnpm exec playwright install --with-deps chromium webkit
+
       # La versione arriva al 0% del traffico, salvo una configurazione diversa.
       - name: Deploy or resume confirmed deployment
         id: deploy
@@ -148,11 +154,6 @@ jobs:
           PRODUCTION_PUBLISH_ENABLED: ${{ vars.PRODUCTION_PUBLISH_ENABLED }}
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: node scripts/release/release.mjs staged-check --environment production --expected-sha "${EXPECTED_SHA}"
-      # Il job distribuisce e può tornare indietro: resta sul runner, con browser e librerie
-      # installati dall'installer ufficiale di Playwright.
-      - name: Install browsers
-        timeout-minutes: 10
-        run: pnpm exec playwright install --with-deps chromium webkit
       # Ogni pagina una volta in due browser, sul dominio reale e prima del traffico: il resto è
       # già certificato sul tree, e questa build differisce soltanto per il giorno.
       - name: Check Production public pages and preview exclusion
@@ -173,7 +174,7 @@ jobs:
           EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: node scripts/release/release.mjs activate --environment production --expected-sha "${EXPECTED_SHA}"
       - name: Rollback compatible deployment
-        if: failure()
+        if: failure() && steps.deploy.conclusion != 'skipped'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
@@ -222,17 +223,21 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           install: "false"
+      # Con il giorno, i frammenti di `changes/` del commit pubblicato entrano nel changelog e nel
+      # registro delle decisioni; quelli arrivati dopo restano al lotto seguente.
       - name: Write the day on develop
         env:
           VERSION: ${{ inputs.version }}
           DAY: ${{ inputs.day }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
         run: |
           git config user.name github-actions
           git config user.email github-actions@users.noreply.github.com
+          git fetch --quiet --depth=1 origin "${EXPECTED_SHA}"
           for attempt in 1 2 3; do
             git fetch --quiet --depth=1 origin develop
             git reset --quiet --hard FETCH_HEAD
-            node scripts/release/release.mjs date --version "${VERSION}" --day "${DAY}"
+            node scripts/release/release.mjs date --version "${VERSION}" --day "${DAY}" --sha "${EXPECTED_SHA}"
             if git diff --quiet; then echo "Il changelog porta già il giorno."; exit 0; fi
             git commit --quiet -am "chore: giorno della ${VERSION}"
             if git push --quiet origin HEAD:refs/heads/develop; then exit 0; fi

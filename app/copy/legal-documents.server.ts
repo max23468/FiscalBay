@@ -24,7 +24,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "Cosa fa FiscalBay",
         blocks: [
-          "FiscalBay legge gli ordini dei negozi eBay che colleghi e ti mostra il Codice Fiscale e la Partita IVA dell’acquirente quando eBay li rende disponibili, con ricerca, export e, con Premium, notifiche su Telegram.",
+          "FiscalBay legge gli ordini dei negozi eBay che colleghi e ti mostra il Codice Fiscale e la Partita IVA dell’acquirente quando eBay li rende disponibili, con ricerca, export e, con Pro, notifiche su Telegram.",
           {
             items: [
               "FiscalBay chiede a eBay soltanto di leggere gli ordini e l’identità del negozio e di avvisarlo dei nuovi ordini. Non modifica ordini, annunci o messaggi e non contatta gli acquirenti.",
@@ -40,7 +40,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           {
             items: [
               "Devi avere almeno 18 anni e la capacità di concludere questo contratto.",
-              "I dati del profilo devono essere veri e aggiornati. Un account corrisponde a una sola attività; il piano Free e la prova Premium valgono una volta per attività.",
+              "I dati del profilo devono essere veri e aggiornati. Un account corrisponde a una sola attività; il piano Free e la prova Pro valgono una volta per attività.",
               "Custodisci i tuoi metodi di accesso. Dalle Impostazioni vedi e chiudi le sessioni attive.",
               "Per collegare un negozio serve l’indirizzo email confermato.",
             ],
@@ -59,8 +59,8 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           {
             items: [
               "Free: gratuito, un negozio attivo sostituibile ogni 90 giorni, gli ultimi 30 giorni di ordini e un numero di ordini da sbloccare ogni 7 giorni indicato nella pagina Prezzi. Gli ordini senza dato fiscale non consumano sblocchi. Dopo 30 giorni senza attività ti avvisiamo; se non confermi entro 7 giorni le letture automatiche si fermano finché non rientri.",
-              "Premium: più negozi, un anno di storico, ordini da sbloccare senza limite per ciclo, XLSX, suggerimenti e notifiche Telegram. Restano limiti tecnici e antiabuso.",
-              "Prova Premium: 14 giorni, senza carta e senza rinnovo automatico, attivabile dopo la prima lettura riuscita di un negozio. Alla fine torni al Free senza addebiti e gli ordini già sbloccati restano tali.",
+              "Pro: più negozi, un anno di storico, ordini da sbloccare senza limite per ciclo, XLSX, suggerimenti e notifiche Telegram. Restano limiti tecnici e antiabuso.",
+              "Prova Pro: 14 giorni, senza carta e senza rinnovo automatico, attivabile dopo la prima lettura riuscita di un negozio. Alla fine torni al Free senza addebiti e gli ordini già sbloccati restano tali.",
             ],
           },
           "Contenuto dei piani e promozioni in corso sono descritti nella pagina Prezzi.",
@@ -71,10 +71,10 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
         blocks: [
           {
             items: [
-              "Premium si acquista dall’app, dopo la prima lettura riuscita di un negozio, con il checkout di Stripe. Per questi acquisti Stripe è il venditore (merchant of record): conclude la vendita con te, calcola le imposte del tuo paese e il totale prima del pagamento, anche nella tua valuta, ed emette ricevute e fatture. FiscalBay non vede i dati della carta.",
+              "Pro si acquista dall’app, dopo la prima lettura riuscita di un negozio, con il checkout di Stripe. Per questi acquisti Stripe è il venditore (merchant of record): conclude la vendita con te, calcola le imposte del tuo paese e il totale prima del pagamento, anche nella tua valuta, ed emette ricevute e fatture. FiscalBay non vede i dati della carta.",
               "I prezzi sono indicati IVA esclusa.",
-              "Mensile e annuale si rinnovano automaticamente. Puoi disdire quando vuoi da Stripe: Premium resta attivo fino alla fine del periodo pagato. Il cambio fra mensile e annuale vale dalla fine del periodo in corso.",
-              "A vita: pagamento unico, senza rinnovi, con venti posti in tutto. Comprende il livello Premium anche nelle versioni future e nelle eventuali app, non ogni funzione futura o risorse illimitate.",
+              "Mensile e annuale si rinnovano automaticamente. Puoi disdire quando vuoi da Stripe: Pro resta attivo fino alla fine del periodo pagato. Il cambio fra mensile e annuale vale dalla fine del periodo in corso.",
+              "A vita: pagamento unico, senza rinnovi, con venti posti in tutto. Comprende il livello Pro anche nelle versioni future e nelle eventuali app, non ogni funzione futura o risorse illimitate.",
               "Recesso e rimborsi seguono le condizioni di Stripe mostrate nel checkout. Restano fermi i diritti che la legge ti riconosce come consumatore. Per altri casi scrivi all’assistenza, che li valuta uno per uno. Un rimborso totale o una contestazione persa revocano il diritto acquistato.",
             ],
           },
@@ -190,7 +190,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
               [
                 "Acquisti: riferimenti del cliente e degli abbonamenti presso Stripe, piano, periodi e importi pagati",
-                "Attribuire i diritti Premium e riconciliare i pagamenti (contratto, obblighi di legge)",
+                "Attribuire i diritti Pro e riconciliare i pagamenti (contratto, obblighi di legge)",
                 "Finché l’account esiste; per il piano a vita, la prova dell’acquisto resta finché il diritto è recuperabile",
               ],
               [
@@ -219,6 +219,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "6 mesi presso il fornitore di rete, in forma aggregata dopo 7 giorni",
               ],
               [
+                "Provenienza dell’iscrizione: categoria del canale da cui sei arrivato sul sito (per esempio un motore di ricerca, la Community eBay, un altro sito o l’accesso diretto) e percorso della prima pagina vista, ricavati dal sito di provenienza o da un’etichetta nei nostri link e salvati soltanto alla creazione dell’account, senza cookie né dati salvati nel browser",
+                "Contare in forma aggregata quali canali portano nuovi iscritti, senza profilazione né effetti sul tuo account (legittimo interesse)",
+                "Finché l’account esiste",
+              ],
+              [
                 "Archivio dei log: istante, tipo ed esito delle operazioni, codici di errore, riferimenti interni, senza IP, indirizzi delle pagine, email, dati degli acquirenti o valori fiscali",
                 "Diagnosi e sicurezza (legittimo interesse)",
                 "90 giorni",
@@ -229,9 +234,14 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "Poche ore, al più un giorno",
               ],
               [
-                "Verifica anti-automazione, alla registrazione con password, alla richiesta di una nuova password o di un nuovo link e all’invio di una richiesta di assistenza: indirizzo IP e caratteristiche tecniche del browser e del dispositivo, esaminati dal fornitore di rete",
-                "Impedire registrazioni e invii automatici (legittimo interesse)",
+                "Verifica anti-automazione, alla registrazione con password, alla richiesta di una nuova password o di un nuovo link, all’invio di una richiesta di assistenza e all’accesso con password dopo alcuni tentativi non riusciti: indirizzo IP e caratteristiche tecniche del browser e del dispositivo, esaminati dal fornitore di rete",
+                "Impedire registrazioni, accessi e invii automatici (legittimo interesse)",
                 "Non conserviamo l’esito; presso il fornitore di rete per il tempo da lui stabilito",
+              ],
+              [
+                "Controllo delle password violate, quando scegli una nuova password: i primi cinque caratteri della sua impronta, inviati a un servizio pubblico che raccoglie le password comparse in violazioni di dati, da cui non si risale alla password né a te",
+                "Rifiutare password comparse in violazioni di dati note (legittimo interesse)",
+                "Non conserviamo né l’impronta né l’esito",
               ],
               [
                 "Eventi di accesso e dell’account: tipo di evento (accesso, accesso non riuscito, sessione, modifica dell’account), email, nome, identificativi dell’account e della sessione, metodo di accesso, indirizzo IP, posizione approssimativa e browser",
@@ -269,6 +279,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "30 giorni",
               ],
               [
+                "Motivo dell’uscita, quando disdici l’abbonamento sulla pagina del fornitore dei pagamenti o cancelli l’account: motivo scelto da un elenco e commento, entrambi facoltativi",
+                "Capire perché gli utenti lasciano il servizio e migliorarlo (legittimo interesse)",
+                "Il commento 30 giorni, o fino alla cancellazione dell’account se lo hai lasciato disdicendo; poi resta un riepilogo anonimo con motivo, piano, anzianità e mese, per 24 mesi",
+              ],
+              [
                 "Cancellazione dei dati chiesta a Stripe: riferimento del cliente, origine e istante",
                 "Rispettare la richiesta e non ricreare i dati (legittimo interesse)",
                 "Senza scadenza",
@@ -282,14 +297,14 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
             ],
           },
-          "Quando cancelli l’account eliminiamo i dati sopra, salvo quelli per cui la tabella indica una durata propria: l’impronta antiabuso, il registro della console, i trasferimenti di negozio eseguiti, gli avvisi interni, la cancellazione chiesta a Stripe, la prova dell’acquisto a vita e le email di assistenza. Resta inoltre per 30 giorni un’indicazione della cancellazione, che ne impedisce l’annullamento con un ripristino. Le copie di ripristino del database scadono entro 30 giorni.",
+          "Quando cancelli l’account eliminiamo i dati sopra, salvo quelli per cui la tabella indica una durata propria: l’impronta antiabuso, il registro della console, i trasferimenti di negozio eseguiti, gli avvisi interni, il motivo lasciato cancellando l’account, la cancellazione chiesta a Stripe, la prova dell’acquisto a vita e le email di assistenza. Resta inoltre per 30 giorni un’indicazione della cancellazione, che ne impedisce l’annullamento con un ripristino. Le copie di ripristino del database scadono entro 30 giorni.",
           "I dati dell’account sono necessari per usare FiscalBay. Il consenso a novità e offerte è facoltativo e non cambia il servizio.",
         ],
       },
       {
         title: "Cookie e tecnologie simili",
         blocks: [
-          "FiscalBay usa soltanto cookie tecnici: quelli necessari all’accesso e alla sicurezza della sessione e quelli che ricordano una tua scelta, cioè il fuso orario del dispositivo, il negozio scelto nei filtri degli ordini e la visita al sito pubblico senza uscire dall’account. La memoria del browser conserva temporaneamente una selezione di ordini da esportare. Nei moduli di registrazione, recupero della password, nuovo link e assistenza, la verifica anti-automazione del fornitore di rete legge caratteristiche tecniche del browser per distinguere le persone dai programmi automatici. Le pagine pubbliche del sito contano le visite con lo strumento statistico del fornitore di rete, che non usa cookie né altri identificativi salvati nel browser e non segue il visitatore su altri siti. Nessun cookie di analisi, profilazione o pubblicità: per questo non c’è un banner dei cookie.",
+          "FiscalBay usa soltanto cookie tecnici: quelli necessari all’accesso e alla sicurezza della sessione e quelli che ricordano una tua scelta, cioè il fuso orario del dispositivo, il negozio scelto nei filtri degli ordini, la visita al sito pubblico senza uscire dall’account e il metodo usato per l’ultimo accesso, che la pagina di accesso indica per 30 giorni. La memoria del browser conserva temporaneamente una selezione di ordini da esportare. Nei moduli di registrazione, recupero della password, nuovo link e assistenza, e nell’accesso con password dopo alcuni tentativi non riusciti, la verifica anti-automazione del fornitore di rete legge caratteristiche tecniche del browser per distinguere le persone dai programmi automatici. Le pagine pubbliche del sito contano le visite con lo strumento statistico del fornitore di rete, che non usa cookie né altri identificativi salvati nel browser e non segue il visitatore su altri siti. Nessun cookie di analisi, profilazione o pubblicità: per questo non c’è un banner dei cookie.",
         ],
       },
       {
@@ -345,7 +360,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
       {
         title: "What FiscalBay does",
         blocks: [
-          "FiscalBay reads the orders of the eBay stores you connect and shows you the buyer’s Italian tax code (Codice Fiscale) and VAT number when eBay makes them available, with search, export and, with Premium, Telegram notifications.",
+          "FiscalBay reads the orders of the eBay stores you connect and shows you the buyer’s Italian tax code (Codice Fiscale) and VAT number when eBay makes them available, with search, export and, with Pro, Telegram notifications.",
           {
             items: [
               "FiscalBay only asks eBay to read orders and the store identity and to notify it of new orders. It does not change orders, listings or messages and does not contact buyers.",
@@ -361,7 +376,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           {
             items: [
               "You must be at least 18 and able to enter into this contract.",
-              "Your profile details must be true and up to date. One account corresponds to one business; the Free plan and the Premium trial apply once per business.",
+              "Your profile details must be true and up to date. One account corresponds to one business; the Free plan and the Pro trial apply once per business.",
               "Keep your sign-in methods safe. In Settings you can see and close active sessions.",
               "Connecting a store requires a confirmed email address.",
             ],
@@ -380,8 +395,8 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
           {
             items: [
               "Free: free of charge, one active store replaceable every 90 days, the last 30 days of orders and a number of orders to unlock every 7 days shown on the Pricing page. Orders without tax data do not use unlocks. After 30 days without activity we notify you; if you do not confirm within 7 days, automatic reads stop until you come back.",
-              "Premium: more stores, one year of history, unlimited unlocks per cycle, XLSX, suggestions and Telegram notifications. Technical and anti-abuse limits still apply.",
-              "Premium trial: 14 days, no card and no automatic renewal, available after the first successful read of a store. At the end you go back to Free with no charge and orders already unlocked stay unlocked.",
+              "Pro: more stores, one year of history, unlimited unlocks per cycle, XLSX, suggestions and Telegram notifications. Technical and anti-abuse limits still apply.",
+              "Pro trial: 14 days, no card and no automatic renewal, available after the first successful read of a store. At the end you go back to Free with no charge and orders already unlocked stay unlocked.",
             ],
           },
           "Plan contents and current promotions are described on the Pricing page.",
@@ -392,10 +407,10 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
         blocks: [
           {
             items: [
-              "Premium is bought in the app, after the first successful read of a store, through Stripe checkout. For these purchases Stripe is the seller (merchant of record): it concludes the sale with you, calculates your country’s taxes and the total before payment, also in your currency, and issues receipts and invoices. FiscalBay does not see card details.",
+              "Pro is bought in the app, after the first successful read of a store, through Stripe checkout. For these purchases Stripe is the seller (merchant of record): it concludes the sale with you, calculates your country’s taxes and the total before payment, also in your currency, and issues receipts and invoices. FiscalBay does not see card details.",
               "Prices are shown excluding VAT.",
-              "Monthly and annual plans renew automatically. You can cancel at any time from Stripe: Premium stays active until the end of the paid period. Switching between monthly and annual applies from the end of the current period.",
-              "Lifetime: one payment, no renewals, twenty seats in total. It includes the Premium level in future versions and in any apps, not every future feature or unlimited resources.",
+              "Monthly and annual plans renew automatically. You can cancel at any time from Stripe: Pro stays active until the end of the paid period. Switching between monthly and annual applies from the end of the current period.",
+              "Lifetime: one payment, no renewals, twenty seats in total. It includes the Pro level in future versions and in any apps, not every future feature or unlimited resources.",
               "Withdrawal and refunds follow Stripe’s terms shown at checkout. The rights the law grants you as a consumer are unaffected. For other cases write to support, which assesses them one by one. A full refund or a lost dispute revokes the purchased right.",
             ],
           },
@@ -511,7 +526,7 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
               [
                 "Purchases: customer and subscription references at Stripe, plan, periods and amounts paid",
-                "Granting Premium rights and reconciling payments (contract, legal obligations)",
+                "Granting Pro rights and reconciling payments (contract, legal obligations)",
                 "As long as the account exists; for lifetime, proof of purchase stays as long as the right can be recovered",
               ],
               [
@@ -540,6 +555,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "6 months at the network provider, aggregated after 7 days",
               ],
               [
+                "Sign-up source: the category of the channel you came to the site from (for example a search engine, the eBay Community, another website or a direct visit) and the path of the first page you viewed, taken from the referring site or from a label in our links and saved only when the account is created, without cookies or data stored in the browser",
+                "Counting in aggregate which channels bring new sign-ups, without profiling or any effect on your account (legitimate interest)",
+                "As long as the account exists",
+              ],
+              [
                 "Log archive: time, type and result of operations, error codes, internal references, without IP, page addresses, emails, buyer data or tax values",
                 "Diagnosis and security (legitimate interest)",
                 "90 days",
@@ -550,9 +570,14 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "A few hours, at most one day",
               ],
               [
-                "Automation check, when signing up with a password, requesting a new password or a new link and sending a support request: IP address and technical characteristics of the browser and device, examined by the network provider",
-                "Preventing automated sign-ups and submissions (legitimate interest)",
+                "Automation check, when signing up with a password, requesting a new password or a new link, sending a support request and signing in with a password after a few failed attempts: IP address and technical characteristics of the browser and device, examined by the network provider",
+                "Preventing automated sign-ups, sign-ins and submissions (legitimate interest)",
                 "We do not keep the result; at the network provider for the time it sets",
+              ],
+              [
+                "Breached password check, when you choose a new password: the first five characters of its hash, sent to a public service that collects passwords exposed in data breaches, which cannot trace them back to the password or to you",
+                "Rejecting passwords that appear in known data breaches (legitimate interest)",
+                "We keep neither the hash nor the result",
               ],
               [
                 "Sign-in and account events: event type (sign-in, failed sign-in, session, account change), email, name, account and session identifiers, sign-in method, IP address, approximate location and browser",
@@ -590,6 +615,11 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
                 "30 days",
               ],
               [
+                "Reason for leaving, when you cancel the subscription on the payment provider’s page or delete the account: a reason chosen from a list and a comment, both optional",
+                "Understanding why users leave the service and improving it (legitimate interest)",
+                "The comment 30 days, or until the account is deleted if you left it when cancelling; then an anonymous summary with reason, plan, account age and month remains for 24 months",
+              ],
+              [
                 "Data deletion requested through Stripe: customer reference, source and time",
                 "Honouring the request and not recreating the data (legitimate interest)",
                 "No expiry",
@@ -603,14 +633,14 @@ export const legalDocuments: Record<Language, Record<"termini" | "privacy", Lega
               ],
             ],
           },
-          "When you delete your account we delete the data above, except where the table gives its own retention: the anti-abuse fingerprint, the console log, completed store transfers, internal alerts, deletions requested through Stripe, lifetime proof of purchase and support emails. A record of the deletion also stays for 30 days so that a restore cannot undo it. Database restore copies expire within 30 days.",
+          "When you delete your account we delete the data above, except where the table gives its own retention: the anti-abuse fingerprint, the console log, completed store transfers, internal alerts, the reason given when deleting the account, deletions requested through Stripe, lifetime proof of purchase and support emails. A record of the deletion also stays for 30 days so that a restore cannot undo it. Database restore copies expire within 30 days.",
           "Account data is needed to use FiscalBay. Consent to news and offers is optional and does not change the service.",
         ],
       },
       {
         title: "Cookies and similar technologies",
         blocks: [
-          "FiscalBay only uses technical cookies: those needed for sign-in and session security, and those that remember a choice of yours, namely the device time zone, the store chosen in the order filters and visiting the public website without leaving your account. Browser storage temporarily keeps a selection of orders to export. In the sign-up, password recovery, new link and support forms, the network provider’s automation check reads technical characteristics of the browser to tell people from automated programs. The public website pages count visits with the network provider’s statistics tool, which uses no cookies or other identifiers stored in the browser and does not follow the visitor across other sites. No analytics, profiling or advertising cookies: that is why there is no cookie banner.",
+          "FiscalBay only uses technical cookies: those needed for sign-in and session security, and those that remember a choice of yours, namely the device time zone, the store chosen in the order filters, visiting the public website without leaving your account and the method used for the last sign-in, which the sign-in page points out for 30 days. Browser storage temporarily keeps a selection of orders to export. In the sign-up, password recovery, new link and support forms, and when signing in with a password after a few failed attempts, the network provider’s automation check reads technical characteristics of the browser to tell people from automated programs. The public website pages count visits with the network provider’s statistics tool, which uses no cookies or other identifiers stored in the browser and does not follow the visitor across other sites. No analytics, profiling or advertising cookies: that is why there is no cookie banner.",
         ],
       },
       {

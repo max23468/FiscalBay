@@ -1,4 +1,14 @@
 import { legalDate, plural } from "./format";
+import type { ExitReason } from "../exit-reasons";
+
+/**
+ * Conteggi con il separatore delle migliaia anche a quattro cifre, come `formatNumber`. Il formato
+ * nasce al primo uso: creato al caricamento renderebbe il modulo non eliminabile dai bundle che
+ * non usano i testi.
+ */
+let groupedFormat: Intl.NumberFormat | undefined;
+const grouped = (value: number) =>
+  (groupedFormat ??= new Intl.NumberFormat("it-IT", { useGrouping: "always" })).format(value);
 
 /** Registrazione chiusa sul test: la stessa frase nell'errore di accesso, nel modulo e nell'esito. */
 const registrationRestricted =
@@ -14,9 +24,9 @@ const contactSupport = "Contatta l’assistenza";
  * Periodi di Premium, nella pagina del piano e nel riepilogo diagnostico. Stringhe e non un
  * oggetto condiviso: un oggetto usato in due punti terrebbe i testi nel bundle del browser.
  */
-const premiumMonthly = "Premium mensile";
-const premiumAnnual = "Premium annuale";
-const premiumLifetime = "Premium a vita";
+const premiumMonthly = "Pro mensile";
+const premiumAnnual = "Pro annuale";
+const premiumLifetime = "Pro a vita";
 
 /** Titoli dei documenti legali, nelle Impostazioni, nelle pagine legali e nel consenso. */
 const termsTitle = "Termini di servizio";
@@ -48,26 +58,31 @@ export const it = {
         back: "Torna agli ordini",
       },
     },
-    skipToContent: "Vai al contenuto",
+    skipToContent: "Vai al contenuto principale",
     mainNav: "Navigazione principale",
     orders: "Ordini",
     stores: "Negozi eBay",
     settings: "Impostazioni",
     search: "Cerca ordini",
     searchPlaceholder: "Ordine, acquirente, articolo o SKU",
-    searchSeeAll: (count: number) => `Vedi tutti i risultati (${count})`,
+    searchSeeAll: (count: number) => `Vedi tutti i risultati (${grouped(count)})`,
     searchEmpty: "Nessun ordine corrisponde alla ricerca.",
     searchFailed: "Ricerca non riuscita. Riprova.",
     searchSummary: (count: number) =>
       count === 0
         ? "Nessun suggerimento"
-        : `${count} ${plural(count, "suggerimento", "suggerimenti")}`,
+        : `${grouped(count)} ${plural(count, "suggerimento", "suggerimenti")}`,
     notifications: "Notifiche",
     notificationsUnread: (count: number) =>
-      count === 0 ? "Notifiche" : `Notifiche, ${count} da leggere`,
+      count === 0 ? "Notifiche" : `Notifiche, ${grouped(count)} da leggere`,
     notificationsWindow: "Ultimi 30 giorni",
     notificationsEmpty: "Nessuna notifica negli ultimi 30 giorni.",
     markAllRead: "Segna tutte come lette",
+    dismissNotification: (title: string) => `Elimina notifica: ${title}`,
+    dismissAll: "Elimina tutte",
+    dismissed: (count: number) =>
+      count === 1 ? "Notifica eliminata" : `${grouped(count)} notifiche eliminate`,
+    undo: "Annulla",
     storeNotifications: {
       expiredTitle: "Collegamento scaduto",
       expiredBody: (store: string) =>
@@ -96,7 +111,7 @@ export const it = {
     visitSite: "Visita fiscalbay.it",
     console: "Console",
     whatsNew: "Novità",
-    whatsNewTitle: "Novità di FiscalBay",
+    whatsNewTitle: (version: string) => `Novità di FiscalBay ${version}`,
     whatsNewUpcoming: "In preparazione",
     whatsNewVersion: (version: string) => `Versione ${version}`,
     signOut: "Esci",
@@ -111,7 +126,7 @@ export const it = {
   },
   orders: {
     title: "Ordini",
-    count: (count: number) => `${count} ${plural(count, "ordine", "ordini")}`,
+    count: (count: number) => `${grouped(count)} ${plural(count, "ordine", "ordini")}`,
     sortedBy: "Dal più recente",
     filters: "Filtri",
     store: "Negozio",
@@ -130,7 +145,7 @@ export const it = {
     searchActive: (query: string) => `Ricerca: ${query}`,
     clearSearch: "Cancella ricerca",
     resetFilters: "Reimposta filtri",
-    premiumOption: "Disponibile con Premium",
+    premiumOption: "Disponibile con Pro",
     payment: {
       paid: "Pagato",
       unpaid: "Non pagato",
@@ -174,19 +189,20 @@ export const it = {
     },
     select: "Seleziona",
     selectOrder: (id: string) => `Seleziona l’ordine ${id}`,
-    selected: (count: number) => `${count} ${plural(count, "selezionato", "selezionati")}`,
+    selected: (count: number) => `${grouped(count)} ${plural(count, "selezionato", "selezionati")}`,
     selectedLocked: (count: number) =>
       count === 0
         ? "Nessun ordine da sbloccare"
-        : `${count} ${plural(count, "ordine da sbloccare", "ordini da sbloccare")}`,
+        : `${grouped(count)} ${plural(count, "ordine da sbloccare", "ordini da sbloccare")}`,
     unlock: "Sblocca ordine",
-    unlockSelected: (count: number) => `Sblocca ${count}`,
+    unlockSelected: (count: number) => `Sblocca ${grouped(count)}`,
     exportSelected: "Esporta",
-    unlockTitle: (count: number) => `Sbloccare ${count} ${plural(count, "ordine", "ordini")}?`,
+    unlockTitle: (count: number) =>
+      `Sbloccare ${grouped(count)} ${plural(count, "ordine", "ordini")}?`,
     unlockConfirmText: (count: number, remaining: number) =>
       `Dopo lo sblocco ${plural(remaining - count, "ti resterà", "ti resteranno")} ${remaining - count} ${plural(remaining - count, "sblocco", "sblocchi")} in questo ciclo.`,
     unlockExceeds: (count: number, remaining: number) =>
-      `Hai selezionato ${count} ordini da sbloccare, ma hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Riduci la selezione.`,
+      `Hai selezionato ${grouped(count)} ordini da sbloccare, ma hai ${remaining} ${plural(remaining, "sblocco disponibile", "sblocchi disponibili")} in questo ciclo. Riduci la selezione.`,
     unlockConfirm: "Sblocca",
     dontAskUnlock: "Non chiedermelo più",
     unlockFailed: "Sblocco non riuscito. Controlla gli ordini e gli sblocchi rimasti, poi riprova.",
@@ -195,7 +211,7 @@ export const it = {
       remaining === null
         ? "Ordine sbloccato."
         : `Ordine sbloccato. ${plural(remaining, "Ti resta", "Ti restano")} ${remaining} ${plural(remaining, "sblocco", "sblocchi")} in questo ciclo.`,
-    unlockedMany: (count: number) => `${count} ordini sbloccati.`,
+    unlockedMany: (count: number) => `${grouped(count)} ordini sbloccati.`,
     loadMore: "Carica altri",
     allShown: "Hai visto tutti gli ordini del periodo.",
     allShownAll: "Hai visto tutti gli ordini disponibili.",
@@ -205,9 +221,11 @@ export const it = {
     moreActions: (id: string) => `Altre azioni per l’ordine ${id}`,
     openOnEbay: "Apri su eBay",
     exportOrder: "Esporta ordine",
-    itemsMore: (count: number) => `+ ${count} ${plural(count, "altro articolo", "altri articoli")}`,
+    itemsMore: (count: number) =>
+      `+ ${grouped(count)} ${plural(count, "altro articolo", "altri articoli")}`,
     quantity: "Quantità",
-    newOrders: (count: number) => `${count} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
+    newOrders: (count: number) =>
+      `${grouped(count)} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
     showNew: "Mostra",
     identifier: { CF: "Codice Fiscale", PIVA: "Partita IVA" },
     copy: (label: string, order: string) => `Copia ${label}: ordine ${order}`,
@@ -240,10 +258,19 @@ export const it = {
       checksum: "Il carattere di controllo non corrisponde.",
       name: "Le lettere del codice non corrispondono al nome dell’ordine.",
       unverifiable: "Non possiamo verificare che il codice corrisponda al nome dell’acquirente.",
-      unchecked: "FiscalBay non verifica il formato di questo tipo di identificativo.",
+      unchecked: "FiscalBay non verifica il formato di questo tipo di codice.",
     },
-    codeToCheck: "Codice da controllare",
-    differentCodes: "Codici diversi",
+    codeToCheck: {
+      CF: "CF da controllare",
+      PIVA: "P. IVA da controllare",
+      OTHER: "Codice da controllare",
+    },
+    differentCodes: {
+      CF: "CF diversi",
+      PIVA: "P. IVA diverse",
+      OTHER: "Codici diversi",
+      MIXED: "CF e P. IVA diversi",
+    },
     updated: "Aggiornato da eBay",
     updatedHint: "eBay ha modificato questo dato dopo la prima lettura.",
     suggestion: "Suggerimento da un ordine precedente",
@@ -253,10 +280,10 @@ export const it = {
     suggestionConflict: "Gli ordini precedenti riportano codici diversi: questo è il più recente.",
     suggestionStatus: {
       identity_missing:
-        "Identità stabile dell’acquirente non disponibile: nessun collegamento automatico con i precedenti.",
-      none: "Nessun precedente autorizzato con un Codice Fiscale utilizzabile.",
+        "eBay non permette di riconoscere questo acquirente nei suoi ordini precedenti.",
+      none: "Nessun ordine precedente di questo acquirente ha un Codice Fiscale o una Partita IVA da proporre.",
       ambiguous:
-        "I precedenti più recenti non permettono una scelta univoca per uno o più identificativi: nessun valore proposto per quei dati.",
+        "Gli ordini precedenti di questo acquirente riportano dati diversi: per quei dati non proponiamo nulla.",
     },
     messageLanguage: "Lingua del messaggio",
     messageText: "Testo per l’acquirente",
@@ -282,14 +309,14 @@ export const it = {
     quotaTitle: "Sblocchi esauriti per questo ciclo",
     quotaBody: (date: string) =>
       `Puoi consultare e cercare tutti gli ordini. Codice Fiscale e Partita IVA dei nuovi ordini restano da sbloccare fino al ${date}.`,
-    quotaAction: "Passa a Premium",
+    quotaAction: "Passa a Pro",
     waitlistTitle: "Sei in lista d’attesa per il Free",
-    trialOffer: "Prova Premium gratis per 14 giorni, senza carta.",
+    trialOffer: "Prova Pro gratis per 14 giorni, senza carta.",
     trialStatus: (days: number) =>
-      `Prova Premium: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}`,
-    trialEndingTitle: (date: string) => `La prova Premium finisce il ${date}`,
+      `Prova Pro: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}`,
+    trialEndingTitle: (date: string) => `La prova Pro finisce il ${date}`,
     trialEndingBody:
-      "Poi i Codici Fiscali dei nuovi ordini tornano agli sblocchi del Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+      "Poi Codice Fiscale e Partita IVA dei nuovi ordini tornano agli sblocchi del Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
     trialEndingAction: "Vedi il piano",
     reconciliationTitle: "Ordine da verificare",
     reconciliationBody:
@@ -303,7 +330,7 @@ export const it = {
     consentExpiringBody: (date: string) =>
       `L’autorizzazione eBay scade il ${date}. Ricollega il negozio entro quella data per non interrompere la sincronizzazione.`,
     importingStatus: (count: number) =>
-      `Importazione in corso: ${count} ${plural(count, "ordine", "ordini")} finora`,
+      `Importazione in corso: ${grouped(count)} ${plural(count, "ordine", "ordini")} finora`,
     firstUseTitle: "Nessun negozio collegato",
     firstUseBody:
       "Collega il tuo negozio eBay per consultare gli ordini e i Codici\u00a0Fiscali disponibili.",
@@ -387,7 +414,7 @@ export const it = {
     notificationsOff: "Disattivate",
     notificationsHeld: "Sospese",
     notificationsHeldHint: "Sospese finché la sincronizzazione non riprende",
-    notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Premium.",
+    notificationsFree: "Le notifiche Telegram dei nuovi ordini sono disponibili con Pro.",
     freeLimit: "Il piano Free include un solo negozio attivo.",
     sectionConnection: "Collegamento",
     sectionSync: "Sincronizzazione",
@@ -419,7 +446,7 @@ export const it = {
     recentOk: (count: number) =>
       count === 0
         ? "Riuscito, nessun nuovo ordine"
-        : `Riuscito, ${count} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
+        : `Riuscito, ${grouped(count)} ${plural(count, "nuovo ordine", "nuovi ordini")}`,
     recentFailed: "Non riuscito",
     notificationsLink: "Apri le notifiche",
     syncNow: "Sincronizza ordini recenti",
@@ -443,7 +470,7 @@ export const it = {
     disconnectBody:
       "FiscalBay smette di leggere il negozio su eBay. Gli ordini già importati restano consultabili per il periodo di conservazione e puoi ricollegare lo stesso negozio in seguito. Per revocare anche l’autorizzazione su eBay, rimuovi FiscalBay dalle app di terze parti nelle impostazioni di sicurezza del tuo account eBay.",
     disconnectSubscription:
-      "Scollegare il negozio non disdice l’abbonamento Premium: gli addebiti previsti restano.",
+      "Scollegare il negozio non disdice l’abbonamento Pro: gli addebiti previsti restano.",
     disconnectSubscriptionLink: "Gestisci l’abbonamento",
     deleteBody:
       "Il negozio verrà rimosso da FiscalBay e tutti i suoi ordini importati saranno eliminati. Questa operazione non può essere annullata. Il negozio su eBay e l’abbonamento FiscalBay non vengono modificati.",
@@ -507,28 +534,28 @@ export const it = {
       currentPlan: "Piano attuale",
       unlockConfirmation: "Chiedi conferma prima di sbloccare un ordine",
       free: "Free",
-      premium: "Premium",
+      premium: "Pro",
       freeSummary: "Un negozio attivo, ultimi 30 giorni di ordini, CSV.",
       waitlisted:
         "Il piano Free è al completo e il tuo account è in lista d’attesa: FiscalBay non legge i tuoi negozi e non offre gli sblocchi del Free finché non verrai ammesso.",
-      waitlistedPurchase: "Intanto puoi collegare un negozio e scegliere la prova o Premium.",
+      waitlistedPurchase: "Intanto puoi collegare un negozio e scegliere la prova o Pro.",
       unlocksCycle: "Ordini sbloccati in questo ciclo",
       unlocksUsed: (used: number, limit: number) => `${used} di ${limit}`,
       cycleEnds: (date: string) => `Il ciclo si rinnova il ${date}.`,
       nextCycleLimit: (limit: number) => `Il prossimo ciclo avrà ${limit} sblocchi.`,
-      trialTitle: "Prova Premium per 14 giorni",
+      trialTitle: "Prova Pro per 14 giorni",
       trialBody: "Senza carta e senza rinnovo automatico: alla fine torni al Free.",
       trialAction: "Attiva la prova",
-      trialStarted: "Prova Premium attivata.",
-      trialUnavailable: "La prova Premium non è disponibile per questo account.",
-      trialPlan: "Prova Premium",
+      trialStarted: "Prova Pro attivata.",
+      trialUnavailable: "La prova Pro non è disponibile per questo account.",
+      trialPlan: "Prova Pro",
       trialEnds: (date: string, days: number) =>
         `Finisce il ${date}: ${days ? `${days} ${plural(days, "giorno rimasto", "giorni rimasti")}` : "meno di un giorno rimasto"}.`,
       trialAfter:
         "Nessun addebito: alla fine torni al Free. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
       trialAfterChosen:
-        "Alla fine Premium continua con il primo addebito. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
-      buyTitle: "Passa a Premium",
+        "Alla fine Pro continua con il primo addebito. Gli ordini con il dato arrivato durante la prova restano sbloccati.",
+      buyTitle: "Passa a Pro",
       buyBody:
         "Ordini da sbloccare senza limite per ciclo, più negozi attivi, un anno di storico, XLSX e notifiche Telegram.",
       priceMonthly: (price: string) => `${price} al mese`,
@@ -546,9 +573,9 @@ export const it = {
       lifetimeRenewing:
         "Il tuo abbonamento si rinnova a breve: potrai passare a vita subito dopo il rinnovo.",
       lifetimeUpgradeTitle: "Passa a vita",
-      lifetimeProcessingTitle: "Premium a vita in attivazione",
+      lifetimeProcessingTitle: "Pro a vita in attivazione",
       lifetimeProcessingBody:
-        "Premium a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale.",
+        "Pro a vita si attiva appena Stripe conferma il pagamento; fino ad allora il piano resta quello attuale.",
       trialPurchaseNote:
         "Con mensile o annuale oggi non paghi: i giorni di prova restano e il primo addebito arriva quando la prova finisce.",
       trialEndingPurchaseNote:
@@ -565,12 +592,12 @@ export const it = {
         `Nessun addebito: il ${date}, alla fine della prova, torni al Free. Fino ad allora puoi riattivarlo su Stripe.`,
       pricesNote:
         "Su Stripe vedi il totale con le imposte del tuo paese, anche nella tua valuta, prima di pagare.",
-      purchaseNeedsSync: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
-      purchaseClosed: "I nuovi acquisti di Premium e le prove sono sospesi per ora.",
+      purchaseNeedsSync: "Potrai acquistare Pro dopo la prima lettura riuscita di un negozio.",
+      purchaseClosed: "I nuovi acquisti di Pro e le prove sono sospesi per ora.",
       checkoutUnavailable: "Pagamento non disponibile ora. Riprova più tardi.",
-      checkoutCovered: "Il tuo account ha già Premium attivo.",
-      checkoutProcessingTitle: "Attivazione Premium in corso",
-      checkoutProcessingBody: "Premium si attiva appena Stripe conferma il pagamento.",
+      checkoutCovered: "Il tuo account ha già Pro attivo.",
+      checkoutProcessingTitle: "Attivazione Pro in corso",
+      checkoutProcessingBody: "Pro si attiva appena Stripe conferma il pagamento.",
       checkoutCancelled: "Pagamento annullato. Nessun addebito.",
       buyPeriod: { monthly: "Scegli mensile", annual: "Scegli annuale", lifetime: "Scegli a vita" },
       freeStoreHint: "Puoi sostituire il negozio attivo ogni 90 giorni.",
@@ -588,16 +615,16 @@ export const it = {
       },
       premiumLifetime: "Acquisto una tantum, senza rinnovi.",
       premiumLifetimeGranted: "Concesso da FiscalBay, senza rinnovi.",
-      grantEnds: (date: string) => `Premium concesso fino al ${date}.`,
+      grantEnds: (date: string) => `Pro concesso fino al ${date}.`,
       premiumRenews: (date: string) => `Si rinnova il ${date}.`,
-      premiumEnds: (date: string) => `Rinnovo disdetto: Premium resta attivo fino al ${date}.`,
+      premiumEnds: (date: string) => `Rinnovo disdetto: Pro resta attivo fino al ${date}.`,
       refundedTitle: "Pagamento rimborsato",
       refundedBody: (renewsAt: string | null) =>
         renewsAt
-          ? `Il pagamento del periodo in corso è stato rimborsato e sei nel piano Free. Premium riprende con il rinnovo del ${renewsAt}.`
+          ? `Il pagamento del periodo in corso è stato rimborsato e sei nel piano Free. Pro riprende con il rinnovo del ${renewsAt}.`
           : "Il pagamento del periodo in corso è stato rimborsato e sei di nuovo nel piano Free.",
       lifetimeRefundedBody:
-        "Il pagamento di Premium a vita è stato rimborsato e sei di nuovo nel piano Free.",
+        "Il pagamento di Pro a vita è stato rimborsato e sei di nuovo nel piano Free.",
       renewalFailedTitle: "Rinnovo non riuscito",
       renewalFailedBody: (date: string) =>
         `Sei di nuovo nel piano Free. Completa il pagamento richiesto da Stripe entro il ${date} per mantenere il tuo prezzo.`,
@@ -616,13 +643,13 @@ export const it = {
     },
     notifications: {
       telegramTitle: "Notifiche Telegram",
-      telegramPremium: "Le notifiche degli ordini su Telegram sono incluse in Premium.",
+      telegramPremium: "Le notifiche degli ordini su Telegram sono incluse in Pro.",
       telegramChat: "Chat collegata",
       telegramChange: "Cambia chat",
       telegramEnabled: "Invia notifiche degli ordini",
       telegramFilter: "Quali ordini",
       telegramFilterAll: "Tutti i nuovi ordini",
-      telegramFilterFiscal: "Solo ordini con Codice Fiscale",
+      telegramFilterFiscal: "Solo ordini con Codice Fiscale o Partita IVA",
       telegramMode: "Frequenza",
       telegramModeEach: "Un messaggio per ordine",
       telegramModeDigest: "Riepilogo giornaliero",
@@ -658,13 +685,13 @@ export const it = {
       exportColumns: "Colonne",
       exportFiscal: "Ordini inclusi",
       exportFiscalAll: "Tutti",
-      exportFiscalAvailable: "Solo con il Codice Fiscale disponibile",
+      exportFiscalAvailable: "Solo con Codice Fiscale o Partita IVA",
       exportCount: (orders: number, locked: number) =>
-        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} il Codice Fiscale resta vuoto.`}`,
+        `${orders} ${plural(orders, "ordine", "ordini")}.${locked === 0 ? "" : ` Per ${locked} ${plural(locked, "ordine da sbloccare", "ordini da sbloccare")} Codice Fiscale e Partita IVA restano vuoti.`}`,
       exportNone: {
         scope: "Nessun ordine da esportare: gli ordini scelti non sono più disponibili.",
         period: "Nessun ordine nel periodo.",
-        available: "Nessuno di questi ordini ha il Codice Fiscale disponibile.",
+        available: "Nessuno di questi ordini ha Codice Fiscale o Partita IVA disponibili.",
       },
       exportTextHint:
         "Per conservare gli zeri iniziali di Codice Fiscale, Partita IVA, SKU, CAP e telefono, apri il file in Excel da Dati > Da testo/CSV e imposta quelle colonne come Testo.",
@@ -689,7 +716,7 @@ export const it = {
       exportFileQueued: "In preparazione",
       exportFileFailed: "Non creato: crealo di nuovo",
       exportDownload: "Scarica",
-      exportPremium: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Premium.",
+      exportPremium: "XLSX, colonne scelte e configurazioni salvate sono inclusi in Pro.",
       exportColumnsInvalid: "Scegli almeno una colonna.",
       exportXlsxHint:
         "Nel file XLSX Codice Fiscale, Partita IVA e SKU sono colonne di testo e conservano gli zeri iniziali.",
@@ -739,9 +766,9 @@ export const it = {
           shipping: "Spedizione",
           taxCode: "Codice Fiscale",
           vat: "Partita IVA",
-          otherTax: "Altri identificativi fiscali",
-          fiscal: "Situazione fiscale",
-          checkedAt: "Ultima verifica fiscale",
+          otherTax: "Codici fiscali esteri",
+          fiscal: "Stato del Codice Fiscale",
+          checkedAt: "Ultima verifica del Codice Fiscale",
           updatedAt: "Ultima modifica su eBay",
         },
         // Dato disponibile con la stessa avvertenza della pagina Ordini.
@@ -836,6 +863,18 @@ export const it = {
       deleteAccountExport:
         "Prima puoi scaricare i dati dell’account. Gli ordini si esportano da Esportazione.",
       deleteAccountOpenExport: "Apri Esportazione",
+      deleteAccountReason: "Perché elimini l’account? (facoltativo)",
+      deleteAccountNoReason: "Preferisco non dirlo",
+      deleteAccountReasons: {
+        too_expensive: "Costa troppo",
+        unused: "Non lo uso abbastanza",
+        switched_service: "Passo a un altro servizio",
+        missing_features: "Manca una funzione che mi serve",
+        low_quality: "Non funziona come mi aspettavo",
+        closing_business: "Chiudo o sospendo l’attività su eBay",
+        other: "Altro",
+      } satisfies Record<ExitReason, string>,
+      deleteAccountComment: "Vuoi dirci di più? (facoltativo)",
       deleteAccountEmail: "Scrivi il tuo indirizzo email per confermare",
       deleteAccountConfirm: "Invia il link di conferma",
       deleteAccountSent: (email: string) =>
@@ -853,7 +892,7 @@ export const it = {
         },
         {
           q: "Quando un ordine conta come sbloccato?",
-          a: "Quando almeno un suo dato fiscale, Codice Fiscale o Partita IVA, diventa visibile. Ogni ordine conta una sola volta, anche se contiene entrambi. Ordini senza dato o con un errore non contano, e puoi copiare ed esportare quanto vuoi.",
+          a: "Quando il suo Codice Fiscale o la sua Partita IVA diventano visibili. Ogni ordine conta una sola volta, anche se li contiene entrambi. Ordini senza codice o con un errore non contano, e puoi copiare ed esportare quanto vuoi.",
         },
         {
           q: "FiscalBay modifica gli ordini su eBay?",
@@ -900,8 +939,8 @@ export const it = {
           free: "Free",
           freeQuota: (used: number, limit: number) => `Free, ${used} di ${limit} ordini sbloccati`,
           waitlist: "Free, in lista d’attesa",
-          trial: "Prova Premium",
-          granted: "Premium concesso",
+          trial: "Prova Pro",
+          granted: "Pro concesso",
           lifetime: premiumLifetime,
           monthly: premiumMonthly,
           annual: premiumAnnual,
@@ -1055,6 +1094,7 @@ export const it = {
       pricing: "Prezzi",
       security: "Sicurezza",
       faq: "FAQ",
+      guides: "Guide",
     },
     independent: "Servizio indipendente, non affiliato a eBay.",
     support: "Supporto",
@@ -1062,6 +1102,7 @@ export const it = {
   /** Pagina pubblica dell'assistenza: domande d'uso e contatti. */
   supportPage: {
     title: "Supporto",
+    metaTitle: "Supporto | Codice Fiscale degli ordini eBay",
     description:
       "Assistenza FiscalBay: domande sull’uso, modulo di assistenza nell’app e indirizzo email.",
     contact: contactSupport,
@@ -1114,6 +1155,7 @@ export const it = {
     sendEmailLink: "Invia il link",
     setPassword: "Imposta password",
     passkeySignIn: "Accedi con passkey",
+    lastUsed: "Ultimo usato",
     passkeyRecovery: "Accedi con impronta, volto o blocco schermo del dispositivo.",
     passkeyEmpty: "Nessuna passkey aggiunta.",
     passkeyErrors: {
@@ -1222,6 +1264,7 @@ export const it = {
       "password-trapelata":
         "La password usata per accedere compare in violazioni di dati note. Cambiala da Impostazioni › Account.",
       "recupero-scaduto": "Link non valido o scaduto. Richiedine uno nuovo.",
+      "password-violata": "Questa password compare in violazioni di dati note. Scegline un’altra.",
     },
   },
 };

@@ -398,6 +398,33 @@ describe("limiti dei tentativi", () => {
     },
   );
 
+  it("limita per IP anche il GET che prepara la sfida della passkey", async () => {
+    const prepare = (ip = "203.0.113.4") =>
+      handle("/api/auth/passkey/generate-authenticate-options", {
+        headers: { "cf-connecting-ip": ip },
+      });
+    for (let count = 0; count < 3; count++) expect((await prepare()).status).toBe(202);
+    const response = await prepare();
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("10");
+    expect(services.handler).toHaveBeenCalledTimes(3);
+    expect((await prepare("203.0.113.5")).status).toBe(202);
+    await handle("/api/auth/passkey/generate-register-options", {
+      headers: { "cf-connecting-ip": "203.0.113.4" },
+    });
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toContain(
+      "auth/passkey/generate-register-options|203.0.113.4",
+    );
+  });
+
+  it("limita la preparazione della passkey soltanto dalla radice di Auth", async () => {
+    // Lo stesso nome più in profondità non è la preparazione della passkey e non consuma il limite.
+    await handle("/api/auth/altro/passkey/generate-register-options", {
+      headers: { "cf-connecting-ip": "203.0.113.6" },
+    });
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([]);
+  });
+
   it("scarta la richiesta oltre il limite prima di sessione, corpo e indirizzo", async () => {
     const send = () =>
       handle("/api/auth/change-email", {
@@ -705,7 +732,7 @@ describe("cancellazione dell'account", () => {
     await check("/api/auth/delete-user/callback?token=");
     await check(link, { method: "POST" });
     await check(
-      `${link.replace("/cancellazione-account", "/en/cancellazione-account")}`,
+      `${link.replace("/cancellazione-account", "/en/account-deletion")}`,
       {
         method: "POST",
       },
@@ -780,13 +807,13 @@ describe("callback eBay", () => {
 
   it.each([
     ["s", "production", "collegato", "/app/ordini?negozio=collegato"],
-    ["en_s", "sandbox", "collegato", "/en/app/ordini?negozio=collegato&environment=sandbox"],
+    ["en_s", "sandbox", "collegato", "/en/app/orders?negozio=collegato&environment=sandbox"],
     ["english", "production", null, "/app/ordini"],
-    ["en_s", "sandbox", null, "/en/app/ordini?environment=sandbox"],
+    ["en_s", "sandbox", null, "/en/app/orders?environment=sandbox"],
     // Partito da Negozi torna lì, che elenca tutti gli ambienti.
     ["it-negozi_s", "sandbox", "negozio-diverso", "/app/negozi?negozio=negozio-diverso"],
-    ["en-negozi_s", "production", "collegato", "/en/app/negozi?negozio=collegato"],
-    ["en-ordini_s", "sandbox", null, "/en/app/ordini?environment=sandbox"],
+    ["en-negozi_s", "production", "collegato", "/en/app/stores?negozio=collegato"],
+    ["en-ordini_s", "sandbox", null, "/en/app/orders?environment=sandbox"],
   ])(
     "ripete l'esito del callback per il suo utente (%s, %s, %s)",
     async (state, ebayEnvironment, outcome, destination) => {

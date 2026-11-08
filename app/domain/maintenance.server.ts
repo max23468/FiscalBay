@@ -1,6 +1,7 @@
 import { orderSearchText } from "../orders/order-search";
 import { purgeDeletionMarkers } from "./account-deletion.server";
 import { purgeEbayDeletionMarkers } from "./ebay-account-deletion.server";
+import { purgeExitFeedback } from "./exit-feedback.server";
 import { auditRetentionDays } from "./admin-audit.server";
 import { notificationWindowMilliseconds } from "./notification-reads.server";
 import { notificationRetentionDays } from "./owner-notifications.server";
@@ -9,18 +10,46 @@ import { purgeSupportRequests } from "./support-requests.server";
 import { purgeTelegramLinks } from "./telegram.server";
 import { purgeTelegramDeliveries } from "./telegram-deliveries.server";
 
+/** Ordini scaduti per istruzione e istruzioni per esecuzione; i residui restano al giorno dopo. */
+const purgeBatch = 200;
+const purgeBatches = 50;
+/** Le chiavi anti-reimport durano quanto eBay restituisce un ordine: due anni. */
+const deletionKeyDays = 730;
+
+/**
+ * Ordini scaduti a blocchi. Le FK eliminano anche buyer, articoli, fonti, verifiche, versioni e
+ * grant. La riga di `order_expiry_purges`, visibile soltanto dentro il batch, dice al trigger
+ * che la scadenza non blocca il reimport: con una finestra più ampia l'ordine torna. Il `+`
+ * lascia l'indice di `merged_into`, che vale per quasi ogni ordine, e fa leggere soltanto quelli
+ * scaduti dall'indice di `purge_after`.
+ */
+async function purgeExpiredOrders(db: D1Database, at: string) {
+  for (let batch = 0; batch < purgeBatches; batch++) {
+    const [, deleted] = await db.batch([
+      db.prepare("INSERT INTO order_expiry_purges (at) VALUES (?)").bind(at),
+      db
+        .prepare(
+          `DELETE FROM orders WHERE id IN (SELECT id FROM orders
+            WHERE +merged_into IS NULL AND purge_after <= ? LIMIT ${purgeBatch})`,
+        )
+        .bind(at),
+      db.prepare("DELETE FROM order_expiry_purges"),
+    ]);
+    if (deleted!.meta.changes < purgeBatch) return;
+  }
+}
+
 /**
  * Pulizia periodica degli ordini e dei dati tecnici scaduti, eseguita dal consumer
  * del compito giornaliero. L'accesso è già negato prima della cancellazione fisica.
  */
 export async function purgeExpiredRecords(db: D1Database, now = new Date()): Promise<void> {
   const at = now.toISOString();
+  await purgeExpiredOrders(db, at);
   await db.batch([
-    // Le FK eliminano anche buyer, articoli, fonti, verifiche, versioni e grant.
-    // Il trigger registra prima i riferimenti necessari a impedire il reimport. Il `+` lascia
-    // l'indice di `merged_into`, che vale per quasi ogni ordine, e fa leggere soltanto quelli
-    // scaduti dall'indice di `purge_after`.
-    db.prepare("DELETE FROM orders WHERE +merged_into IS NULL AND purge_after <= ?").bind(at),
+    db
+      .prepare("DELETE FROM deleted_order_keys WHERE julianday(deleted_at) < julianday(?) - ?")
+      .bind(at, deletionKeyDays),
     db.prepare("DELETE FROM webhook_receipts WHERE expires_at <= ?").bind(at),
     db
       .prepare(
@@ -32,6 +61,8 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     // Le finestre più lunghe durano un'ora.
     db.prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?').bind(now.getTime() - 3_600_000),
     db.prepare("DELETE FROM ebay_store_link_sessions WHERE expires_at <= ?").bind(at),
+    // Conteggi delle chiamate eBay: il budget usa il giorno corrente, la diagnosi una settimana.
+    db.prepare("DELETE FROM ebay_call_counts WHERE day < date(?, '-7 days')").bind(at),
     db.prepare("DELETE FROM account_email_changes WHERE expires_at <= ?").bind(at),
     purgeTelegramLinks(db, now),
     purgeTelegramDeliveries(db, now),
@@ -61,6 +92,8 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db
       .prepare("DELETE FROM owner_notifications WHERE julianday(occurred_at) < julianday(?) - ?")
       .bind(at, notificationRetentionDays),
+    // Motivi di uscita: dettaglio dopo 30 giorni, istantanee dopo 24 mesi, attese scadute.
+    ...purgeExitFeedback(db, now),
     // Aggregati giornalieri delle letture e ricevute dei report del browser.
     db
       .prepare("DELETE FROM sync_daily WHERE julianday(day) < julianday(?) - ?")

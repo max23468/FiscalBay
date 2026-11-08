@@ -33,10 +33,17 @@ import {
   homeFor,
 } from "./fixtures/account-route-fixtures";
 import { beginStoreLink, storeLinkSessions } from "./fixtures/store-link-fixtures";
-import { areaShell, callRoute, routeData, routeResponse } from "./fixtures/route-fixtures";
+import {
+  areaShell,
+  callRoute,
+  routeData,
+  routeResponse,
+  pagePath,
+} from "./fixtures/route-fixtures";
 import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
 import { turnstileField } from "../app/turnstile";
+import { recordSignupSource } from "../app/domain/signup-sources.server";
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
@@ -52,9 +59,9 @@ it("mostra l'autorizzazione preventiva in entrambe le lingue senza creare profil
     env.REGISTRATION_ALLOWED_EMAILS = "[]";
     for (const language of ["it", "en"] as const) {
       const prefix = language === "it" ? "" : "/en";
-      const page = await routeData(loadAccess, `${prefix}/accesso`);
+      const page = await routeData(loadAccess, pagePath(prefix, "/accesso"));
       expect(page).toMatchObject({ registrationRestricted: true });
-      const response = await accessForm(`${prefix}/accesso`, {
+      const response = await accessForm(pagePath(prefix, "/accesso"), {
         intent: "registrati",
         ...person,
         email: "non-invitato@example.invalid",
@@ -216,9 +223,9 @@ describe("registrazione e verifica del contatto", () => {
     const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
     const register = (path: string) =>
       accessForm(path, { intent: "registrati", ...person, email, password, termini: "on" });
-    const created = await register("/en/accesso");
+    const created = await register("/en/sign-in");
     expect(created.status).toBe(303);
-    expect(created.headers.get("location")).toBe("/en/accesso?accesso=registrato");
+    expect(created.headers.get("location")).toBe("/en/sign-in?accesso=registrato");
     expect(created.headers.getSetCookie()).toEqual([]);
     const user = await env.DB.prepare(
       'SELECT id, name, "emailVerified" FROM "user" WHERE email = ?',
@@ -260,12 +267,12 @@ describe("registrazione e verifica del contatto", () => {
       subject: "Hai già un account FiscalBay",
     });
     // Dalla pagina inglese l'avviso è in inglese e porta all'accesso inglese.
-    await register("/en/accesso");
+    await register("/en/sign-in");
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(3));
     expect(send.mock.calls[2]![0]).toMatchObject({
       to: email,
       subject: "You already have a FiscalBay account",
-      text: expect.stringContaining("/en/accesso"),
+      text: expect.stringContaining("/en/sign-in"),
     });
     expect(
       await env.DB.prepare('SELECT COUNT(*) AS total FROM "user" WHERE email = ?')
@@ -298,7 +305,7 @@ describe("registrazione e verifica del contatto", () => {
 
     // Il link di conferma apre la sessione verificata.
     const verified = await handleAuthRequest(new Request(emailLink(confirmation.text)), env);
-    expect(verified.headers.get("location")).toBe("/en/app/ordini");
+    expect(verified.headers.get("location")).toBe("/en/app/orders");
     const verifiedCookie = sessionCookie(verified);
     expect(await homeFor(verifiedCookie)).toMatchObject({ verified: true });
     send.mockRestore();
@@ -319,7 +326,7 @@ describe("registrazione e verifica del contatto", () => {
     try {
       const request = new Request("http://localhost:5173/api/auth/sign-up/email", {
         method: "POST",
-        body: JSON.stringify({ email, callbackURL: "/en/app/ordini" }),
+        body: JSON.stringify({ email, callbackURL: "/en/app/orders" }),
       });
       // Come per un indirizzo nuovo, la risposta non aspetta il provider dell'email.
       const outcome = await Promise.race([
@@ -701,7 +708,7 @@ describe("registrazione e verifica del contatto", () => {
   });
 
   it("avvia eBay dal modulo e richiede una sessione verificata per collegarlo", async () => {
-    const response = await accessForm("/en/accesso", { intent: "ebay" });
+    const response = await accessForm("/en/sign-in", { intent: "ebay" });
     expect(response.status).toBe(303);
     const location = new URL(response.headers.get("location")!);
     expect(location.hostname).toBe("auth.ebay.com");
@@ -709,11 +716,11 @@ describe("registrazione e verifica del contatto", () => {
       "https://api.ebay.com/oauth/api_scope",
       "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
     ]);
-    const refused = await securityForm("/en/app/impostazioni/account", {
+    const refused = await securityForm("/en/app/settings/account", {
       intent: "collega-metodo",
       metodo: "ebay",
     });
-    expect(refused.headers.get("location")).toBe("/en/accesso");
+    expect(refused.headers.get("location")).toBe("/en/sign-in");
     const session = await verifiedSession("link-modulo@example.invalid");
     const allowed = await securityForm(
       "/app/impostazioni/account",
@@ -739,7 +746,7 @@ describe("registrazione e verifica del contatto", () => {
 
   it("conserva provider e lingua nel ritorno di un accesso OAuth rifiutato", async () => {
     for (const provider of ["google", "ebay"]) {
-      const start = await accessForm("/en/accesso", { intent: provider });
+      const start = await accessForm("/en/sign-in", { intent: provider });
       const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
       const cookie = sessionCookie(start);
       const result = await handleAuthRequest(
@@ -754,6 +761,124 @@ describe("registrazione e verifica del contatto", () => {
       expect(destination.searchParams.get("provider")).toBe(provider);
       expect(destination.searchParams.get("error")).toBe("access_denied");
     }
+  });
+});
+
+describe("provenienza dell'iscrizione", () => {
+  const password = "Una-password-provenienza-lunga";
+  const person = { tipo: "privato", nome: "Mario", cognome: "Rossi" };
+  const via = (value: string) => `via=${encodeURIComponent(value)}`;
+  const sourceOf = (email: string) =>
+    env.DB.prepare(
+      `SELECT s.channel, s.first_page FROM signup_sources s JOIN "user" u ON u.id = s.user_id
+        WHERE u.email = ?`,
+    )
+      .bind(email)
+      .first<{ channel: string; first_page: string | null }>();
+
+  /** Callback del provider con un profilo sintetico, dopo l'avvio dal modulo d'accesso. */
+  async function oauthCallback(start: Response, provider: "google" | "ebay", subject: string) {
+    const state = new URL(start.headers.get("location")!).searchParams.get("state")!;
+    const email = `${subject}@example.invalid`;
+    const segment = (value: object) => btoa(JSON.stringify(value)).replace(/=+$/u, "");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (provider === "google") {
+        const idToken = `${segment({ alg: "none" })}.${segment({
+          aud: "google-test-client",
+          sub: subject,
+          email,
+          email_verified: true,
+          name: "Provenienza sintetica",
+        })}.`;
+        return Response.json({
+          access_token: "sintetico",
+          id_token: idToken,
+          token_type: "Bearer",
+        });
+      }
+      if (url.endsWith("/identity/v1/oauth2/token")) {
+        return Response.json({ access_token: "sintetico", token_type: "Bearer", expires_in: 7200 });
+      }
+      return Response.json({ userId: subject, username: subject, businessAccount: { email } });
+    });
+    try {
+      const response = await handleAuthRequest(
+        new Request(
+          `http://localhost:5173/api/auth/callback/${provider}?code=synthetic&state=${encodeURIComponent(state)}`,
+          { headers: { cookie: sessionCookie(start) } },
+        ),
+        env,
+      );
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).not.toContain("error");
+    } finally {
+      fetchMock.mockRestore();
+    }
+    return email;
+  }
+
+  it("salva con la password categoria e prima pagina una volta sola, senza segnale «unknown»", async () => {
+    vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    const register = (path: string, email: string) =>
+      accessForm(path, { intent: "registrati", ...person, email, password, termini: "on" });
+    const email = "provenienza-password@example.invalid";
+    const created = await register(`/accesso?registrati&${via("google:/prezzi")}`, email);
+    expect(created.headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect(created.headers.getSetCookie()).toEqual([]);
+    expect(await sourceOf(email)).toEqual({ channel: "google", first_page: "/prezzi" });
+    // Un nuovo invio per lo stesso indirizzo non crea un account e non cambia la provenienza.
+    await register(`/accesso?${via("reddit:/")}`, email);
+    expect(await sourceOf(email)).toEqual({ channel: "google", first_page: "/prezzi" });
+    const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
+      .bind(email)
+      .first<{ id: string }>();
+    await recordSignupSource(
+      env.DB,
+      user!.id,
+      { channel: "github", firstPage: "/" },
+      new Date(now),
+    );
+    expect(await sourceOf(email)).toEqual({ channel: "google", first_page: "/prezzi" });
+
+    const silent = "provenienza-assente@example.invalid";
+    await register("/accesso", silent);
+    expect(await sourceOf(silent)).toEqual({ channel: "unknown", first_page: null });
+    // Un valore fuori elenco non si indovina.
+    const forged = "provenienza-falsa@example.invalid";
+    await register(`/accesso?${via("newsletter")}`, forged);
+    expect(await sourceOf(forged)).toEqual({ channel: "unknown", first_page: null });
+  });
+
+  it("porta la provenienza nello state di Google ed eBay, senza cookie aggiuntivi", async () => {
+    const start = await accessForm(`/accesso?${via("youtube:/faq")}`, { intent: "google" });
+    const plain = await accessForm("/accesso", { intent: "google" });
+    // Gli stessi cookie dell'avvio senza provenienza: il valore viaggia soltanto nello state.
+    expect(start.headers.getSetCookie().map((cookie) => cookie.split("=")[0])).toEqual(
+      plain.headers.getSetCookie().map((cookie) => cookie.split("=")[0]),
+    );
+    const google = await oauthCallback(start, "google", "google-provenienza");
+    expect(await sourceOf(google)).toEqual({ channel: "youtube", first_page: "/faq" });
+    // Un nuovo accesso con un'altra provenienza non la sovrascrive.
+    await oauthCallback(
+      await accessForm(`/accesso?${via("reddit:/")}`, { intent: "google" }),
+      "google",
+      "google-provenienza",
+    );
+    expect(await sourceOf(google)).toEqual({ channel: "youtube", first_page: "/faq" });
+
+    const ebay = await oauthCallback(
+      await accessForm(`/en/accesso?${via("ebay_community:/en/accesso")}`, { intent: "ebay" }),
+      "ebay",
+      "ebay-provenienza",
+    );
+    expect(await sourceOf(ebay)).toEqual({ channel: "ebay_community", first_page: "/en/accesso" });
+    const unknown = await oauthCallback(
+      await accessForm("/accesso", { intent: "ebay" }),
+      "ebay",
+      "ebay-senza-provenienza",
+    );
+    expect(await sourceOf(unknown)).toEqual({ channel: "unknown", first_page: null });
   });
 });
 
@@ -840,6 +965,71 @@ describe("Turnstile sugli ingressi pubblici", () => {
       expect((await accessForm("/accesso", { intent, [turnstileField]: "" })).status).toBe(303);
     }
     expect(siteverify.requests).toEqual([]);
+  });
+
+  it("chiede la verifica all'accesso con password soltanto dopo tre errori dallo stesso IP", async () => {
+    const from = (ip: string) => ({ "cf-connecting-ip": ip });
+    const attempt = (fields: Record<string, string> = {}) =>
+      routeResponse(signIn, "/accesso", {
+        headers: from("198.51.100.30"),
+        fields: { email, password: "Password-sbagliata-123", [turnstileField]: "", ...fields },
+      });
+    for (let count = 0; count < 3; count++)
+      expect(await accessError(await attempt())).toMatchObject({ status: 400, key: "errore" });
+    expect(siteverify.requests).toEqual([]);
+    expect(
+      await routeData(loadAccess, "/accesso", { headers: from("198.51.100.30") }),
+    ).toMatchObject({ challenge: true });
+    expect(
+      await routeData(loadAccess, "/accesso", { headers: from("198.51.100.31") }),
+    ).toMatchObject({ challenge: false });
+    // Senza token il modulo si ferma prima di Auth; con il token verificato l'accesso prosegue.
+    expect(await accessError(await attempt())).toMatchObject({
+      status: 400,
+      key: "verifica-non-riuscita",
+      tab: "accedi",
+      values: { email },
+    });
+    expect(siteverify.requests).toEqual([]);
+    expect(await accessError(await attempt({ [turnstileField]: testToken }))).toMatchObject({
+      key: "errore",
+    });
+    expect(siteverify.requests).toEqual([
+      { secret: env.TURNSTILE_SECRET_KEY, response: testToken, remoteip: "198.51.100.30" },
+    ]);
+    // Senza IP, come nelle prove locali, il contatore non esiste.
+    expect(await routeData(loadAccess, "/accesso")).toMatchObject({ challenge: false });
+  });
+
+  it("indica nell'accesso l'ultimo metodo usato da questo browser, senza salvarlo nel database", async () => {
+    const auth = createAuth(env);
+    await auth.handler(
+      new Request("http://localhost:5173/api/auth/sign-up/email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name: "Ultimo metodo", email, password: "Password-ultimo-metodo" }),
+      }),
+    );
+    const response = await auth.handler(
+      new Request("http://localhost:5173/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "content-type": "application/json", origin: "http://localhost:5173" },
+        body: JSON.stringify({ email, password: "Password-ultimo-metodo" }),
+      }),
+    );
+    expect(response.headers.getSetCookie()).toContainEqual(
+      expect.stringMatching(/^fiscalbay\.ultimo_accesso=email;.*Max-Age=2592000/u),
+    );
+    const page = (cookie: string) => routeData(loadAccess, "/accesso", { cookie });
+    expect(await page("fiscalbay.ultimo_accesso=email")).toMatchObject({ lastMethod: "email" });
+    expect(await page("altro=1; fiscalbay.ultimo_accesso=passkey")).toMatchObject({
+      lastMethod: "passkey",
+    });
+    expect(await page("fiscalbay.ultimo_accesso=sconosciuto")).toMatchObject({ lastMethod: null });
+    const columns = await env.DB.prepare(`SELECT name FROM pragma_table_info('user')`).all<{
+      name: string;
+    }>();
+    expect(columns.results.map(({ name }) => name)).not.toContain("lastLoginMethod");
   });
 
   it("non accetta registrazione, recupero e nuovo link chiamati direttamente su Auth", async () => {

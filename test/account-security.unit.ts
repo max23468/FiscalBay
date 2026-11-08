@@ -20,11 +20,11 @@ it("distingue le cause passkey riconoscibili e non indovina quelle ambigue", () 
     "https://example.invalid",
     "/app/impostazioni/account?delete=1",
     "/app/impostazioni/account#unknown",
-    "/en/app/impostazioni/account",
+    "/en/app/settings/account",
   ]) {
     expect(securityReturnPath("it", value)).toBeNull();
   }
-  expect(securityReturnPath("en", "/en/app/impostazioni/account#security-methods")).toBe(
-    "/en/app/impostazioni/account#security-methods",
+  expect(securityReturnPath("en", "/en/app/settings/account#security-methods")).toBe(
+    "/en/app/settings/account#security-methods",
   );
 });

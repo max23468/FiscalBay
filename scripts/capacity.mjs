@@ -74,6 +74,11 @@ export const referenceModel = {
   premiumTurnsPerDay: 144,
   freeTurnsPerDay: 48,
   newOrdersPerStoreMonth: 100,
+  /**
+   * Passate Trading periodiche al giorno per negozio: ogni sei ore senza fatture combinate dal
+   * venditore, il caso di riferimento (D322); con fatture recenti sarebbero dodici.
+   */
+  tradingPassesPerDay: 4,
   dailyVisits: { orders: 10, search: 2, detail: 5 },
   /** Tempo CPU medio per invocazione del Worker test negli ultimi 30 giorni (readback account). */
   cpuMsPerInvocation: 16,
@@ -169,7 +174,8 @@ export function monthlyProjection(costs, model = referenceModel) {
         ((fresh.ebayCalls["fulfillment-detail"] ?? 0) / fresh.fresh +
           ((fresh.ebayCalls["fulfillment-list"] ?? 0) - fresh.turns) / fresh.fresh),
     getOrders:
-      stores * 12 + (newOrders / model.days) * ((fresh.ebayCalls.GetOrders ?? 0) / fresh.fresh),
+      stores * model.tradingPassesPerDay +
+      (newOrders / model.days) * ((fresh.ebayCalls.GetOrders ?? 0) / fresh.fresh),
     getItem: (newOrders / model.days) * ((fresh.ebayCalls.GetItem ?? 0) / fresh.fresh),
   };
   return {

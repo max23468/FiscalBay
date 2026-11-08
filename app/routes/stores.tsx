@@ -4,6 +4,7 @@ import { data, redirect } from "react-router";
 import { AccessNotice } from "~/components/access-notice";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores/page";
+import { useReadWait } from "~/components/stores/read-wait";
 import { accessNotice } from "../access-notice";
 import { unconfirmedOnFailure } from "../client-action";
 import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
@@ -235,6 +236,7 @@ export function clientAction(args: Route.ClientActionArgs) {
 
 export default function Stores({ loaderData }: Route.ComponentProps) {
   const { page, notice } = loaderData;
+  useReadWait(page.stores);
   return loaderData.notFound ? (
     <NotFoundState kind="store" />
   ) : (

@@ -78,7 +78,7 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
     en: {
       name: "No unlocks left",
       focus:
-        "Orders remain available. Codice Fiscale and Partita IVA of new orders wait for the next cycle.",
+        "Orders remain available. Tax codes and VAT numbers of new orders wait for the next cycle.",
     },
   },
   "proposta-consenso": {
@@ -121,24 +121,24 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
     it: {
       name: "Lista d’attesa",
       focus:
-        "Account registrato con il Free al completo: la prima lettura del negozio è fatta, nessuna lettura successiva né sblocco del Free. Prova e Premium restano disponibili.",
+        "Account registrato con il Free al completo: la prima lettura del negozio è fatta, nessuna lettura successiva né sblocco del Free. Prova e Pro restano disponibili.",
     },
     en: {
       name: "Waiting list",
       focus:
-        "Account registered while the Free plan is full: the store's first read is done, with no further reads or Free unlocks. Trial and Premium remain available.",
+        "Account registered while the Free plan is full: the store's first read is done, with no further reads or Free unlocks. Trial and Pro remain available.",
     },
   },
   "acquisti-sospesi": {
     it: {
       name: "Acquisti sospesi",
       focus:
-        "Senza capacità per nuovi Premium prova e acquisti sono sospesi; il Free continua come prima.",
+        "Senza capacità per nuovi Pro prova e acquisti sono sospesi; il Free continua come prima.",
     },
     en: {
       name: "Purchases paused",
       focus:
-        "Without capacity for new Premium accounts, trial and purchases are paused; the Free plan continues as before.",
+        "Without capacity for new Pro accounts, trial and purchases are paused; the Free plan continues as before.",
     },
   },
   aggiornamento: {
@@ -179,12 +179,12 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
     it: {
       name: "Problema su un negozio",
       focus:
-        "Premium con quattro negozi: uno con l’aggiornamento non riuscito, uno da ricollegare, uno con autorizzazione incompleta, uno non verificabile.",
+        "Pro con quattro negozi: uno con l’aggiornamento non riuscito, uno da ricollegare, uno con autorizzazione incompleta, uno non verificabile.",
     },
     en: {
       name: "Problem with one store",
       focus:
-        "Premium with four stores: one whose update failed, one to reconnect, one with incomplete authorisation, one that cannot be verified.",
+        "Pro with four stores: one whose update failed, one to reconnect, one with incomplete authorisation, one that cannot be verified.",
     },
   },
   "negozio-sospeso": {
@@ -294,12 +294,12 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
   },
   "prova-premium": {
     it: {
-      name: "Prova Premium",
+      name: "Prova Pro",
       focus:
         "Prova attivata cinque giorni fa: giorni rimasti in Ordini e in Piano, nessun ordine da sbloccare, due negozi attivi.",
     },
     en: {
-      name: "Premium trial",
+      name: "Pro trial",
       focus:
         "Trial started five days ago: days left in Orders and Plan, no orders to unlock, two active stores.",
     },
@@ -380,24 +380,24 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
     it: {
       name: "Pagamento rimborsato",
       focus:
-        "Il periodo in corso è stato rimborsato: di nuovo Free subito e Premium riprende con il rinnovo, senza prova né secondo acquisto.",
+        "Il periodo in corso è stato rimborsato: di nuovo Free subito e Pro riprende con il rinnovo, senza prova né secondo acquisto.",
     },
     en: {
       name: "Payment refunded",
       focus:
-        "The current period was refunded: back on Free right away and Premium resumes with the renewal, with no trial or second purchase.",
+        "The current period was refunded: back on Free right away and Pro resumes with the renewal, with no trial or second purchase.",
     },
   },
   "lifetime-rimborsato": {
     it: {
       name: "Lifetime rimborsato",
       focus:
-        "Il pagamento di Premium a vita è stato rimborsato: di nuovo Free, il posto resta occupato e mensile e annuale restano in vendita.",
+        "Il pagamento di Pro a vita è stato rimborsato: di nuovo Free, il posto resta occupato e mensile e annuale restano in vendita.",
     },
     en: {
       name: "Lifetime refunded",
       focus:
-        "The lifetime Premium payment was refunded: back on Free, the place stays taken and monthly and annual remain on sale.",
+        "The lifetime Pro payment was refunded: back on Free, the place stays taken and monthly and annual remain on sale.",
     },
   },
   "stripe-non-disponibile": {
@@ -426,22 +426,22 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
   },
   "premium-a-vita-concesso": {
     it: {
-      name: "Premium a vita concesso",
+      name: "Pro a vita concesso",
       focus:
         "Lifetime in omaggio da FiscalBay: nessun rinnovo, nessun acquisto né documenti su Stripe.",
     },
     en: {
-      name: "Lifetime Premium granted",
+      name: "Lifetime Pro granted",
       focus: "Lifetime granted by FiscalBay: no renewals, no purchase and no documents on Stripe.",
     },
   },
   premium: {
     it: {
-      name: "Premium, più negozi",
+      name: "Pro, più negozi",
       focus: "Tre negozi, notifiche Telegram, XLSX. Il primo salvataggio automatico fallisce.",
     },
     en: {
-      name: "Premium, several stores",
+      name: "Pro, several stores",
       focus: "Three stores, Telegram notifications, XLSX. The first autosave fails.",
     },
   },
@@ -473,58 +473,57 @@ export const scenarioText: Record<ScenarioId, Record<Language, { name: string; f
     it: {
       name: "Cambio di rinnovo",
       focus:
-        "Premium mensile che passa all'annuale al rinnovo, senza conguaglio; un solo negozio, che scollegato non disdice l'abbonamento.",
+        "Pro mensile che passa all'annuale al rinnovo, senza conguaglio; un solo negozio, che scollegato non disdice l'abbonamento.",
     },
     en: {
       name: "Renewal change",
       focus:
-        "Monthly Premium switching to annual at renewal, with no proration; a single store, which does not cancel the subscription when disconnected.",
+        "Monthly Pro switching to annual at renewal, with no proration; a single store, which does not cancel the subscription when disconnected.",
     },
   },
   "rinnovo-disdetto": {
     it: {
       name: "Rinnovo disdetto",
-      focus:
-        "Premium mensile disdetto: resta attivo fino alla fine del periodo pagato, senza rinnovo.",
+      focus: "Pro mensile disdetto: resta attivo fino alla fine del periodo pagato, senza rinnovo.",
     },
     en: {
       name: "Renewal cancelled",
       focus:
-        "Monthly Premium cancelled: it stays active until the end of the paid period, with no renewal.",
+        "Monthly Pro cancelled: it stays active until the end of the paid period, with no renewal.",
     },
   },
   "passaggio-a-vita": {
     it: {
       name: "Passaggio a vita in conferma",
       focus:
-        "Premium mensile con il lifetime pagato e in attesa della conferma di Stripe: l'abbonamento resta finché il pagamento non è confermato, senza un secondo acquisto.",
+        "Pro mensile con il lifetime pagato e in attesa della conferma di Stripe: l'abbonamento resta finché il pagamento non è confermato, senza un secondo acquisto.",
     },
     en: {
       name: "Lifetime switch being confirmed",
       focus:
-        "Monthly Premium with lifetime paid and awaiting Stripe's confirmation: the subscription stays until the payment is confirmed, with no second purchase.",
+        "Monthly Pro with lifetime paid and awaiting Stripe's confirmation: the subscription stays until the payment is confirmed, with no second purchase.",
     },
   },
   "premium-concesso": {
     it: {
-      name: "Premium concesso",
+      name: "Pro concesso",
       focus:
-        "Premium concesso da FiscalBay senza abbonamento: la data di fine e il passaggio a vita, senza gestione su Stripe.",
+        "Pro concesso da FiscalBay senza abbonamento: la data di fine e il passaggio a vita, senza gestione su Stripe.",
     },
     en: {
-      name: "Premium granted",
+      name: "Pro granted",
       focus:
-        "Premium granted by FiscalBay with no subscription: the end date and the switch to lifetime, with no Stripe management.",
+        "Pro granted by FiscalBay with no subscription: the end date and the switch to lifetime, with no Stripe management.",
     },
   },
   "premium-a-vita": {
     it: {
-      name: "Premium a vita",
+      name: "Pro a vita",
       focus:
         "Acquisto una tantum senza rinnovi, negozio messo in pausa dall'utente, Codice Fiscale con carattere di controllo errato.",
     },
     en: {
-      name: "Premium, lifetime",
+      name: "Pro, lifetime",
       focus:
         "One-off purchase with no renewals, a store paused by the user, a tax code with a wrong check character.",
     },

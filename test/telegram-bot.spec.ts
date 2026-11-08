@@ -33,6 +33,7 @@ import {
   receipt,
   callbackId,
 } from "./fixtures/telegram-scenarios";
+import { pagePath } from "./fixtures/route-fixtures";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -47,9 +48,9 @@ describe("comandi e pulsanti del bot", () => {
     const api = bot();
     await deliver("/stato", seller.chat, api.fetcher);
     const status = api.texts()[0]!;
-    expect(String(status.params.text)).toContain("Premium fino al");
+    expect(String(status.params.text)).toContain("Pro fino al");
     expect(String(status.params.text)).toContain(
-      "🔔 Notifiche attive · solo con dato fiscale\n📨 Un messaggio per ordine",
+      "🔔 Notifiche attive · solo con Codice Fiscale o P. IVA\n📨 Un messaggio per ordine",
     );
     const gen = await generation(seller.workspace);
     expect(keyboard(status)[0]![0]).toEqual({ text: "⚙️ Preferenze", callback_data: `${gen}:pr` });
@@ -199,7 +200,7 @@ describe("comandi e pulsanti del bot", () => {
     expect(sentTexts(api)[1]).toContain("🛒 /latest · the latest orders");
   });
 
-  it("senza Premium lo stato dice Free e le preferenze rimandano al piano", async () => {
+  it("senza Pro lo stato dice Free e le preferenze rimandano al piano", async () => {
     const seller = await linked("free");
     await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
       .bind(now, seller.workspace)
@@ -210,7 +211,7 @@ describe("comandi e pulsanti del bot", () => {
     await deliver("/aiuto", seller.chat, api.fetcher, later(3));
     expect(sentTexts(api)).toEqual([
       expect.stringContaining("Con il piano Free le notifiche sono ferme."),
-      expect.stringContaining("compresi in Premium"),
+      expect.stringContaining("compresi in Pro"),
       expect.stringContaining("/ultimi"),
     ]);
   });
@@ -327,7 +328,7 @@ describe("comandi e pulsanti del bot", () => {
       params: {
         language_code: "it",
         short_description:
-          "Notifiche degli ordini eBay con codice fiscale o partita IVA dell’acquirente.",
+          "Notifiche degli ordini eBay con Codice Fiscale o Partita IVA dell’acquirente.",
       },
     });
     expect(writes).toContainEqual({ method: "setMyName", params: { name: "FiscalBay" } });
@@ -357,15 +358,15 @@ describe("comandi e pulsanti del bot", () => {
   const replies = {
     it: {
       path: "",
-      premium: "Premium fino al 13 ott",
-      trial: "Prova Premium fino al 20 set",
-      lifetime: "Premium a vita",
+      premium: "Pro fino al 13 ott",
+      trial: "Prova Pro fino al 20 set",
+      lifetime: "Pro a vita",
       freeNote: "Con il piano Free le notifiche sono ferme.",
       enabled: "Notifiche attive",
       paused: "Notifiche in pausa",
-      fiscal: "solo con dato fiscale",
+      fiscal: "solo con Codice Fiscale o P. IVA",
       all: "tutti gli ordini",
-      fiscalTitle: "Solo ordini con dato fiscale",
+      fiscalTitle: "Solo ordini con Codice Fiscale o Partita IVA",
       allTitle: "Tutti gli ordini",
       each: "Un messaggio per ordine",
       digest: "Riepilogo alle 18:00 · Roma (Italia)",
@@ -380,10 +381,10 @@ describe("comandi e pulsanti del bot", () => {
       settings: "Impostazioni",
       choosePlan: "Scegli il piano",
       premiumRequired:
-        "Notifiche e ultimi ordini nel bot sono compresi in Premium, nella prova e nel lifetime.",
+        "Notifiche e ultimi ordini nel bot sono compresi in Pro, nella prova e nel lifetime.",
       pause: "Metti in pausa",
       resume: "Riprendi le notifiche",
-      fiscalOnly: "Solo con dato fiscale",
+      fiscalOnly: "Solo con Codice Fiscale o P. IVA",
       allOrders: "Tutti gli ordini",
       eachShort: "Uno per ordine",
       digestShort: "Riepilogo",
@@ -409,15 +410,15 @@ describe("comandi e pulsanti del bot", () => {
     },
     en: {
       path: "/en",
-      premium: "Premium until 13 Oct",
-      trial: "Premium trial until 20 Sept",
-      lifetime: "Lifetime Premium",
+      premium: "Pro until 13 Oct",
+      trial: "Pro trial until 20 Sept",
+      lifetime: "Lifetime Pro",
       freeNote: "Notifications are stopped on the Free plan.",
       enabled: "Notifications on",
       paused: "Notifications paused",
-      fiscal: "only with a tax ID",
+      fiscal: "only with a tax code or VAT",
       all: "all orders",
-      fiscalTitle: "Only orders with a tax ID",
+      fiscalTitle: "Only orders with a tax code or VAT number",
       allTitle: "All orders",
       each: "One message per order",
       digest: "Summary at 18:00 · Rome (Italy)",
@@ -432,10 +433,10 @@ describe("comandi e pulsanti del bot", () => {
       settings: "Settings",
       choosePlan: "Choose a plan",
       premiumRequired:
-        "Notifications and latest orders in the bot are included in Premium, the trial and lifetime.",
+        "Notifications and latest orders in the bot are included in Pro, the trial and lifetime.",
       pause: "Pause",
       resume: "Resume notifications",
-      fiscalOnly: "Only with a tax ID",
+      fiscalOnly: "Only with tax code or VAT",
       allOrders: "All orders",
       eachShort: "One per order",
       digestShort: "Summary",
@@ -532,9 +533,12 @@ describe("comandi e pulsanti del bot", () => {
       const { seller, gen, api, say, press } = await storefront(language);
       const settings = {
         text: `🔗 ${t.settings}`,
-        url: `${origin}${t.path}/app/impostazioni/notifiche`,
+        url: `${origin}${pagePath(t.path, "/app/impostazioni/notifiche")}`,
       };
-      const plan = { text: `⭐ ${t.choosePlan}`, url: `${origin}${t.path}/app/impostazioni/piano` };
+      const plan = {
+        text: `⭐ ${t.choosePlan}`,
+        url: `${origin}${pagePath(t.path, "/app/impostazioni/piano")}`,
+      };
       const stores = [
         `🏪 <b>${t.stores}</b>`,
         `🔴 Da ricollegare · <i>${t.notes.reconnect}</i>`,
@@ -973,7 +977,7 @@ describe("comandi e pulsanti del bot", () => {
       .run();
     await deliver("/stato", seller.chat, api.fetcher, later(++minute));
     expect(last().params.text).toBe(
-      "⭐ <b>Premium fino al 13 ott</b>\n🔔 Notifiche attive · solo con dato fiscale\n📨 Un messaggio per ordine\n\n📨 <i>Nessun invio finora</i>",
+      "⭐ <b>Pro fino al 13 ott</b>\n🔔 Notifiche attive · solo con Codice Fiscale o P. IVA\n📨 Un messaggio per ordine\n\n📨 <i>Nessun invio finora</i>",
     );
     // Senza negozi e con un messaggio per ordine la riga di orario e negozi non c'è.
     await deliver("/preferenze", seller.chat, api.fetcher, later(++minute));
@@ -1047,7 +1051,7 @@ describe("comandi e pulsanti del bot", () => {
     expect(String(first.params.text)).toContain("🛒 <b>Latest orders</b> · <i>1–5 of 20</i>");
     expect(keyboard(first)).toEqual([
       [{ text: "5 more ›", callback_data: `${gen}:la:5` }],
-      [{ text: "🔗 Open orders", url: `${origin}/en/app/ordini` }],
+      [{ text: "🔗 Open orders", url: `${origin}/en/app/orders` }],
     ]);
     await tap(`${gen}:la:15`, seller.chat, api.fetcher, later(6));
     const lastPage = api.calls.at(-1)!;

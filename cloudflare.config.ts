@@ -37,15 +37,14 @@ export const logArchives = { test: "fiscalbay-test-logs", live: "fiscalbay-logs"
  */
 export const zone = "fiscalbay.it";
 
-/** ID Telegram dell'owner: lo stesso utente in ogni bot, quindi in entrambi gli ambienti. */
-const ownerTelegramId = "573159993";
-
 /** Account Cloudflare del progetto, comune ai due ambienti. */
 const account = "98195e505f42abaaeb4827f71a924b1a";
 
 const secrets = {
   REGISTRATION_ALLOWED_EMAILS: bindings.secret(),
   BETTER_AUTH_SECRET: bindings.secret(),
+  // Chiave dei token dei negozi eBay, separata da quella di Auth (vedi seller-credentials).
+  EBAY_TOKEN_SECRET: bindings.secret(),
   GOOGLE_CLIENT_ID: bindings.secret(),
   GOOGLE_CLIENT_SECRET: bindings.secret(),
   EBAY_CLIENT_ID: bindings.secret(),
@@ -74,6 +73,10 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   name: string;
   domain: string;
   queue: string;
+  ingress: string;
+  telegram: string;
+  /** Build da distribuire: soltanto lì esiste il Worker del bot da collegare. */
+  deployed: boolean;
   exports: string;
   metrics: string;
   database: { name: string; id: string };
@@ -85,34 +88,42 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   compatibilityFlags: ["nodejs_compat"],
   entrypoint: "./workers/app.ts",
   workersDev: false,
+  // Tetto della CPU per invocazione, uguale per pagine, coda e cron: un ciclo fuori controllo si
+  // ferma prima di consumare la quota inclusa (D227). Il cron e la coda hanno 15 minuti di clock.
+  limits: { cpuMs: 30_000 },
   // Eventi di invocazione verso il job Logpush dell'archivio, che ne esporta i soli campi ammessi.
   logpush: true,
   observability: {
     enabled: true,
     logs: { enabled: true, headSamplingRate: 1 },
-    // Spente come in CF Ready: gli span delle chiamate in uscita registrano l'URL completo, e
-    // l'API Telegram vuole il token del bot nel percorso (D225).
-    traces: { enabled: false },
+    // Gli span delle chiamate in uscita registrano l'URL completo: il token del bot resta nel
+    // Worker del bot, raggiunto con il binding `TELEGRAM` (D293).
+    traces: { enabled: true },
   },
   domains: [target.domain],
   triggers: [
     triggers.scheduled({ schedule: "*/10 * * * *" }),
-    triggers.queue({
-      name: target.queue,
-      deadLetterQueue: `${target.queue}-failed`,
-      maxBatchSize: 1,
-      maxConcurrency: 5,
-      maxRetries: 5,
-    }),
+    ...[target.queue, target.ingress].map((name) =>
+      triggers.queue({
+        name,
+        deadLetterQueue: `${name}-failed`,
+        maxBatchSize: 1,
+        maxConcurrency: 5,
+        maxRetries: 5,
+      }),
+    ),
   ],
   env: {
     ...target.vars,
     ...secrets,
     DB: bindings.d1(target.database),
     AUTH_EMAIL: bindings.sendEmail({ allowedSenderAddresses: ["noreply@fiscalbay.it"] }),
-    // Una sola coda per webhook, letture dei negozi e compiti periodici; la risorsa conserva il
-    // nome con cui è nata.
+    // Letture dei negozi, compiti periodici, esportazioni e cancellazioni; la risorsa conserva il
+    // nome con cui è nata, quando portava anche i webhook.
     WORK_QUEUE: bindings.queue({ name: target.queue }),
+    // Ricevute dei webhook di eBay, Stripe e Telegram: eventi e pagamenti non attendono
+    // l'arretrato delle letture.
+    INGRESS_QUEUE: bindings.queue({ name: target.ingress }),
     // File delle esportazioni: bucket UE raggiungibile soltanto da questo binding, senza dominio
     // pubblico, `r2.dev` o URL prefirmati; il download passa sempre dal Worker.
     EXPORT_FILES: bindings.r2({ name: target.exports, jurisdiction: "eu" }),
@@ -131,6 +142,9 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     WORKER_NAME: bindings.text(target.name),
     CLOUDFLARE_ACCOUNT_ID: bindings.text(account),
     VERSION_METADATA: bindings.versionMetadata(),
+    // Worker del bot Telegram (`telegram-worker/`), che aggiunge il token alle chiamate della Bot
+    // API. Nelle prove e in locale manca, e le chiamate usano il token dell'ambiente.
+    ...(target.deployed ? { TELEGRAM: bindings.worker({ worker: target.telegram }) } : {}),
   },
 });
 
@@ -141,6 +155,9 @@ export default defineConfig((ctx) => ({
           name: "fiscalbay",
           domain: "fiscalbay.it",
           queue: "fiscalbay-webhooks",
+          ingress: "fiscalbay-ingress",
+          telegram: "fiscalbay-telegram",
+          deployed: true,
           exports: "fiscalbay-exports",
           metrics: "fiscalbay_metrics",
           database: databases.live,
@@ -149,19 +166,21 @@ export default defineConfig((ctx) => ({
             APP_ORIGIN: bindings.text("https://fiscalbay.it"),
             REGISTRATION_MODE: bindings.text("open"),
             EBAY_SANDBOX_ENABLED: bindings.text("false"),
+            EBAY_WORKER_SHARE: bindings.text("100"),
             STRIPE_PRICE_MONTHLY: bindings.text("price_1UHl21JP7SSN14ZpQyiVmdoP"),
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UHl21JP7SSN14ZpqDoFn3Sb"),
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UHl21JP7SSN14Zp0J41hMVs"),
             // Bot attuale, riusato come identità della 2.0; token e segreto restano in custodia.
             TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_bot"),
-            // Utente e chat privata dell'owner per il Control Center (D198).
-            TELEGRAM_OWNER_ID: bindings.text(ownerTelegramId),
           },
         })
       : worker({
           name: "fiscalbay-test",
           domain: "test.fiscalbay.it",
           queue: "fiscalbay-test-webhooks",
+          ingress: "fiscalbay-test-ingress",
+          telegram: "fiscalbay-test-telegram",
+          deployed: ctx.mode === "production",
           exports: "fiscalbay-test-exports",
           metrics: "fiscalbay_test_metrics",
           database: databases.test,
@@ -171,12 +190,13 @@ export default defineConfig((ctx) => ({
             REGISTRATION_MODE: bindings.text("approval"),
             // Spenta su richiesta dell'owner finché non la riattiva: segreti e dati restano.
             EBAY_SANDBOX_ENABLED: bindings.text("false"),
+            // Il keyset è quello di Production: il test ne usa al massimo un decimo (D322).
+            EBAY_WORKER_SHARE: bindings.text("10"),
             STRIPE_PRICE_MONTHLY: bindings.text("price_1UUABwJqfZnQjIbKpQPYZhKu"),
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UUABwJqfZnQjIbKjc1m9dc0"),
             STRIPE_PRICE_LIFETIME: bindings.text("price_1UUABxJqfZnQjIbK0m1dpfRa"),
             // Bot separato dal bot Production, con foto e profilo che lo dichiarano di prova.
             TELEGRAM_BOT_USERNAME: bindings.text("fiscalbay_test_bot"),
-            TELEGRAM_OWNER_ID: bindings.text(ownerTelegramId),
           },
         }),
 }));

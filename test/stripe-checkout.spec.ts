@@ -13,8 +13,10 @@ import {
 import {
   buildManagedCheckoutParams,
   closeCheckoutSession,
+  createLifetimeCredit,
   createManagedCheckout,
   createStripeClient,
+  stripeApiVersion,
   verifyStripeEvent,
 } from "../app/integrations/stripe.server";
 import { receiveWebhook } from "../app/webhooks.server";
@@ -191,7 +193,14 @@ describe("Stripe Managed Payments", () => {
         proration_behavior: "none",
         cancellation_reason: {
           enabled: true,
-          options: ["too_expensive", "switched_service", "unused", "other"],
+          options: [
+            "too_expensive",
+            "unused",
+            "switched_service",
+            "missing_features",
+            "low_quality",
+            "other",
+          ],
         },
       },
       subscription_update: { enabled: false },
@@ -216,24 +225,28 @@ describe("Stripe Managed Payments", () => {
     const transport = vi.spyOn(Stripe, "createFetchHttpClient");
     const request = vi
       .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
+      .mockImplementation(async () =>
         Response.json(session, { headers: { "request-id": "req_test_transport" } }),
       );
     try {
       const client = await createStripeClient("sk_test_transport");
       expect(transport).toHaveBeenCalledOnce();
       expect(
-        await createManagedCheckout(client, {
-          ...checkoutInput,
-          offer: "annual",
-          priceId: "price_test_annual",
-        }),
+        await createManagedCheckout(
+          client,
+          { ...checkoutInput, offer: "annual", priceId: "price_test_annual" },
+          "turno-test",
+        ),
       ).toMatchObject(session);
       expect(request).toHaveBeenCalledOnce();
       const [url, options] = request.mock.calls[0]!;
       expect(new URL(String(url)).pathname).toBe("/v1/checkout/sessions");
       expect(options?.method).toBe("POST");
-      expect(new Headers(options?.headers).get("authorization")).toBe("Bearer sk_test_transport");
+      const headers = new Headers(options?.headers);
+      expect(headers.get("authorization")).toBe("Bearer sk_test_transport");
+      // Versione fissata e chiave di idempotenza del turno, uguale a ogni nuovo tentativo.
+      expect(headers.get("stripe-version")).toBe(stripeApiVersion);
+      expect(headers.get("idempotency-key")).toBe("checkout-turno-test");
       const body = new URLSearchParams(String(options?.body));
       expect(body.get("line_items[0][price]")).toBe("price_test_annual");
       expect(body.get("managed_payments[enabled]")).toBe("true");
@@ -242,6 +255,37 @@ describe("Stripe Managed Payments", () => {
     } finally {
       request.mockRestore();
       transport.mockRestore();
+    }
+  });
+
+  it("crea il coupon del credito con la chiave di idempotenza del turno", async () => {
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () =>
+        Response.json(
+          { id: "coupon_test", object: "coupon" },
+          { headers: { "request-id": "req_test_coupon" } },
+        ),
+      );
+    try {
+      const client = await createStripeClient("sk_test_transport");
+      // Un nuovo tentativo dello stesso turno non crea un secondo coupon.
+      await createLifetimeCredit(
+        client,
+        {
+          amount: 245,
+          product: "prod_lifetime",
+          redeemBy: "2026-10-01T00:00:00.000Z",
+          workspaceId: "workspace-test",
+          name: "Periodo pagato non usato",
+        },
+        "turno-test",
+      );
+      const [url, options] = request.mock.calls.at(-1)!;
+      expect(new URL(String(url)).pathname).toBe("/v1/coupons");
+      expect(new Headers(options?.headers).get("idempotency-key")).toBe("credit-turno-test");
+    } finally {
+      request.mockRestore();
     }
   });
 
@@ -330,7 +374,7 @@ describe("Stripe Managed Payments", () => {
       expect(body.get("metadata[price_generation]")).toBe(priceGeneration.id);
       expect(body.get("locale")).toBe("en");
       expect(body.get("success_url")).toBe(
-        "http://localhost:5173/en/app/impostazioni/piano?checkout=processing&session_id={CHECKOUT_SESSION_ID}",
+        "http://localhost:5173/en/app/settings/plan?checkout=processing&session_id={CHECKOUT_SESSION_ID}",
       );
     } finally {
       api.mockRestore();
@@ -391,7 +435,7 @@ describe("Stripe Managed Payments", () => {
       expect(await buy(cookie, "monthly")).toMatchObject({
         data: {
           ok: false,
-          notice: "Potrai acquistare Premium dopo la prima lettura riuscita di un negozio.",
+          notice: "Potrai acquistare Pro dopo la prima lettura riuscita di un negozio.",
         },
         init: { status: 409 },
       });
@@ -412,7 +456,7 @@ describe("Stripe Managed Payments", () => {
         endsAt: "2026-10-13T20:00:00.000Z",
       }).run();
       expect(await buy(cookie, "annual")).toMatchObject({
-        data: { ok: false, notice: "Il tuo account ha già Premium attivo." },
+        data: { ok: false, notice: "Il tuo account ha già Pro attivo." },
       });
       expect(paths(api)).toEqual([
         "GET /v1/prices/price_test_monthly",
@@ -562,7 +606,11 @@ describe("Stripe Managed Payments", () => {
     const verified = await verifyStripeEvent(body, signature, secret);
     expect(verified).toEqual(event);
     const send = vi.fn().mockResolvedValue(queued);
-    const environment = { ...env, WORK_QUEUE: fakeQueue({ send }) };
+    const environment = {
+      ...env,
+      WORK_QUEUE: fakeQueue({ send }),
+      INGRESS_QUEUE: fakeQueue({ send }),
+    };
     const request = () =>
       new Request("https://test.fiscalbay.it/webhooks/stripe", {
         method: "POST",
@@ -622,7 +670,7 @@ describe("Stripe Managed Payments", () => {
         headers: { "stripe-signature": signature },
         body,
       }),
-      { ...env, WORK_QUEUE: fakeQueue({ send }) },
+      { ...env, WORK_QUEUE: fakeQueue({ send }), INGRESS_QUEUE: fakeQueue({ send }) },
       fetch,
       new Date(event.created * 1000),
     );

@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, networkIdle, test, watchNetwork } from "./fixtures";
+import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { areas, clickHydrated, enter, open, searched, setScenario } from "./components";
 import { useLocalAccount } from "./local-account";
 import { whatsNew } from "./page-cases";
@@ -14,7 +14,7 @@ import { testAccount } from "./test-account";
 
 /** Navigazione principale degli Ordini, uguale nell'anteprima e nell'area reale. */
 async function expectOrdersNavigation(page: Page) {
-  await expect(page).toHaveTitle("FiscalBay | Ordini");
+  await expect(page).toHaveTitle("Ordini | FiscalBay");
   const nav = page.getByRole("navigation", { name: "Navigazione principale" });
   await expect(nav.getByRole("link")).toHaveText(["Ordini", "Negozi eBay", "Impostazioni"]);
   await expect(nav.getByRole("link", { name: "Ordini" })).toHaveAttribute("aria-current", "page");
@@ -34,7 +34,7 @@ async function openAccountFromMenu(page: Page, base: string) {
     "Esci",
   ]);
   await menu.getByRole("menuitem", { name: "Account" }).click();
-  await expect(page).toHaveURL(new RegExp(`${base}/impostazioni/account$`, "u"));
+  await expect(page).toHaveURL(new RegExp(`${pagePath(base, "/impostazioni/account")}$`, "u"));
   await expect(page.getByRole("heading", { name: "Account", level: 2 })).toBeVisible();
 }
 
@@ -49,7 +49,7 @@ async function searchFromTopBar(page: Page, base: string, query: string, suggest
   await expect(link).toBeVisible();
   await page.getByRole("link", { name: "Vedi tutti i risultati (1)" }).click();
   await expect(page).toHaveURL(
-    new RegExp(`${base}/ordini\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+    new RegExp(`${pagePath(base, "/ordini")}\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`, "u"),
   );
   expect(page.url()).not.toContain(query);
   await expect(search).toHaveValue(query);
@@ -60,21 +60,26 @@ async function searchFromTopBar(page: Page, base: string, query: string, suggest
   await search.fill(query);
   await link.click();
   await expect(page).toHaveURL(
-    new RegExp(`${base}/ordini/[^/?]+\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+    new RegExp(
+      `${pagePath(base, "/ordini")}/[^/?]+\\?ricerca=[\\w-]+(?:[?&]vista=[0-9a-z]+)?$`,
+      "u",
+    ),
   );
   return page.getByRole("dialog");
 }
 
 /** Indirizzo inesistente, filtro sconosciuto e ricerca senza risultati restano nell'app. */
 async function expectOrdersFallbacks(page: Page, base: string, missing: string, total: string) {
-  const response = await page.goto(`${base}/ordini/${missing}`);
+  const response = await page.goto(`${pagePath(base, "/ordini")}/${missing}`);
   expect(response?.status()).toBe(404);
   await expect(page.getByRole("heading", { level: 1, name: "Ordine non trovato" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Navigazione principale" })).toBeVisible();
   await page.getByRole("link", { name: "Torna agli ordini" }).click();
-  await expect(page).toHaveURL(new RegExp(`${base}/ordini(?:[?&]vista=[0-9a-z]+)?$`, "u"));
+  await expect(page).toHaveURL(
+    new RegExp(`${pagePath(base, "/ordini")}(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+  );
 
-  await open(page, `${base}/ordini?pagamento=sconosciuto`);
+  await open(page, `${pagePath(base, "/ordini")}?pagamento=sconosciuto`);
   await expect(page.getByRole("combobox", { name: "Pagamento" })).toContainText("Tutti");
   await expect(page.getByText(total)).toBeVisible();
 
@@ -125,13 +130,16 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(context, baseURL!, area);
-    await open(page, `${area.base}/ordini?fiscale=available`);
+    await open(page, `${pagePath(area.base, "/ordini")}?fiscale=available`);
     const list = page.getByRole("region", { name: "Elenco ordini" });
     const first = list.getByRole("article").first();
     const buyer = (await first.getByRole("heading", { level: 2 }).textContent()) ?? "";
     await first.getByRole("link", { name: "Dettaglio" }).click();
     await expect(page).toHaveURL(
-      new RegExp(`${area.base}/ordini/[^/?]+\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+      new RegExp(
+        `${pagePath(area.base, "/ordini")}/[^/?]+\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`,
+        "u",
+      ),
     );
     const dialog = page.getByRole("dialog");
     await expect(dialog).toContainText(buyer);
@@ -142,7 +150,10 @@ for (const area of areas)
     await page.goBack();
     await expect(dialog).toBeHidden();
     await expect(page).toHaveURL(
-      new RegExp(`${area.base}/ordini\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`, "u"),
+      new RegExp(
+        `${pagePath(area.base, "/ordini")}\\?fiscale=available(?:[?&]vista=[0-9a-z]+)?$`,
+        "u",
+      ),
     );
     const entries = await page.evaluate(() => history.length);
     const details = first.getByRole("link", { name: "Dettaglio" });
@@ -177,7 +188,7 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(context, baseURL!, area);
-    await open(page, `${area.base}/ordini`);
+    await open(page, pagePath(area.base, "/ordini"));
     const list = page.getByRole("region", { name: "Elenco ordini" });
     const period = page.getByRole("combobox", { name: "Periodo" });
     let release = await holdData(page);
@@ -205,7 +216,7 @@ for (const area of areas)
       .poll(async () => (await nav.locator("li[aria-hidden]").boundingBox())?.x)
       .toBeCloseTo(link!.x + 12, 0);
     release();
-    await expect(page).toHaveTitle("FiscalBay | Negozi eBay");
+    await expect(page).toHaveTitle("Negozi eBay | FiscalBay");
     await expect(stores).toHaveAttribute("aria-current", "page");
   });
 
@@ -216,11 +227,11 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(context, baseURL!, area);
-    await open(page, `${area.base}/ordini`);
+    await open(page, pagePath(area.base, "/ordini"));
     await page.getByRole("button", { name: "Account" }).click();
     await page.getByRole("menu").getByRole("menuitem", { name: "Visita fiscalbay.it" }).click();
     await expect(page).toHaveURL(/\/$/u);
-    await expect(page).toHaveTitle("FiscalBay | Recupera il Codice Fiscale dagli ordini eBay");
+    await expect(page).toHaveTitle("Recupera il Codice Fiscale dagli ordini eBay | FiscalBay");
     const bar = page.getByRole("banner");
     if (area.base !== "/app") {
       // L'anteprima non ha una sessione: il sito propone l'accesso.
@@ -230,6 +241,61 @@ for (const area of areas)
     await bar.getByRole("link", { name: "Apri l’app" }).click();
     await expectOrdersNavigation(page);
   });
+
+test("nelle Novità le voci di un gruppo si affiancano senza colonne vuote", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  test.skip(!whatsNew, "Non applicabile: senza voci nel changelog la pagina Novità non esiste.");
+  await useLocalAccount(context, "member", baseURL!);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open(page, "/app/novita");
+  // Due voci sulla stessa riga distano al più lo spazio fra le colonne: nessuna colonna vuota.
+  const gaps = await page.locator("main section ul").evaluateAll((lists) =>
+    lists.flatMap((list) => {
+      const boxes = [...list.children].map((item) => item.getBoundingClientRect());
+      return boxes.slice(1).flatMap((box, index) => {
+        const before = boxes[index]!;
+        return Math.abs(box.top - before.top) < 1 ? [box.left - before.right] : [];
+      });
+    }),
+  );
+  for (const gap of gaps) expect(gap).toBeLessThanOrEqual(33);
+});
+
+test("con molte notifiche e dopo un'eliminazione «Elimina tutte» resta visibile", async ({
+  page,
+  context,
+  baseURL,
+}) => {
+  test.skip(
+    !whatsNew,
+    "Non applicabile: senza voci nel changelog la campanella ha poche notifiche.",
+  );
+  await useLocalAccount(context, "member", baseURL!);
+  for (const size of [
+    { width: 1280, height: 720 },
+    { width: 390, height: 664 },
+  ]) {
+    await page.setViewportSize(size);
+    await open(page, "/app/ordini");
+    await page.getByRole("button", { name: /^Notifiche/u }).click();
+    const dialog = page.getByRole("dialog", { name: "Notifiche" });
+    expect(await dialog.getByRole("listitem").count()).toBeGreaterThan(3);
+    const all = dialog.getByRole("button", { name: "Elimina tutte" });
+    await expect(all).toBeInViewport({ ratio: 1 });
+    // Dopo un'eliminazione «Annulla» compare accanto, senza togliere «Elimina tutte».
+    await dialog
+      .getByRole("button", { name: /^Elimina notifica: / })
+      .first()
+      .click();
+    await expect(dialog.getByRole("button", { name: "Annulla" })).toBeVisible();
+    await expect(all).toBeInViewport({ ratio: 1 });
+    await dialog.getByRole("button", { name: "Annulla" }).click();
+    await page.keyboard.press("Escape");
+  }
+});
 
 test("il menu dell'avatar porta l'admin alla console", async ({ page, context, baseURL }) => {
   await useLocalAccount(context, "admin-granted", baseURL!);
@@ -269,7 +335,7 @@ for (const area of areas)
     baseURL,
   }) => {
     await enter(context, baseURL!, area);
-    await open(page, `${area.base}/ordini?fiscale=locked`);
+    await open(page, `${pagePath(area.base, "/ordini")}?fiscale=locked`);
     await page.getByRole("button", { name: "Seleziona" }).click();
     const checkbox = page.getByRole("checkbox", { name: `Seleziona l’ordine ${area.locked}` });
     await checkbox.click();
@@ -295,7 +361,7 @@ for (const area of areas)
   }) => {
     await enter(context, baseURL!, area);
     await page.setViewportSize({ width: 375, height: 740 });
-    await open(page, `${area.base}/ordini`);
+    await open(page, pagePath(area.base, "/ordini"));
     await page.getByRole("article").first().getByRole("link", { name: "Dettaglio" }).click();
     // Si attende la fine dell'ingresso, che trasla il pannello.
     await expect
@@ -373,7 +439,7 @@ test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno
   const section = page.locator("main");
   await expect(section).toContainText("Ordini selezionati nella pagina Ordini.");
   await expect(section).toContainText(
-    "2 ordini. Per 2 ordini da sbloccare il Codice Fiscale resta vuoto.",
+    "2 ordini. Per 2 ordini da sbloccare Codice Fiscale e Partita IVA restano vuoti.",
   );
   // Il periodo è già nei filtri degli Ordini; il file nasce soltanto da «Crea file».
   await expect(page.getByRole("combobox", { name: "Periodo" })).toHaveCount(0);
@@ -438,11 +504,11 @@ for (const language of ["it", "en"] as const) {
         });
         watchNetwork(context);
         const page = await context.newPage();
-        const base = language === "it" ? "/anteprima" : "/en/anteprima";
+        const base = language === "it" ? "/anteprima" : "/en/preview";
         const reset = (scenario: string) => setScenario(page, scenario, base);
         try {
           await reset("ordinario");
-          await open(page, `${base}/ordini?fiscale=locked`);
+          await open(page, `${pagePath(base, "/ordini")}?fiscale=locked`);
           await expect(page.getByText(/Europe\/Rome/)).toContainText(
             language === "it"
               ? "Simulazione fissata al 27 set 2026, 15:00"
@@ -451,10 +517,11 @@ for (const language of ["it", "en"] as const) {
           const card = page.getByRole("article", {
             name: language === "it" ? "Ordine 02-44519-70831" : "Order 02-44519-70831",
           });
-          await expect(card).toContainText("Partita IVA");
+          await expect(card).toContainText(language === "it" ? "Partita IVA" : "VAT number");
           const unlocked = page.waitForResponse(
             (response) =>
-              response.url().endsWith("/ordini.data") && response.request().method() === "POST",
+              /\/(?:ordini|orders)\.data$/u.test(response.url()) &&
+              response.request().method() === "POST",
           );
           await card
             .getByRole("button", {
@@ -469,11 +536,11 @@ for (const language of ["it", "en"] as const) {
           expect((await unlocked).status()).toBe(200);
           await page.goto(await searched(page, "Conti", base));
           await expect(page.getByText("04567890126")).toBeVisible();
-          await open(page, `${base}/impostazioni/piano`);
+          await open(page, pagePath(base, "/impostazioni/piano"));
           await expect(
             page.getByText(language === "it" ? "4 di 5" : "4 of 5", { exact: true }),
           ).toBeVisible();
-          await open(page, `${base}/impostazioni/supporto`);
+          await open(page, pagePath(base, "/impostazioni/supporto"));
           const diagnostic = page.getByText(
             language === "it" ? "Free, 4 di 5 ordini sbloccati" : "Free, 4 of 5 orders unlocked",
             { exact: true },
@@ -492,11 +559,11 @@ for (const language of ["it", "en"] as const) {
                 : "When does an order count as unlocked?",
           });
           await faq.locator("summary").click();
-          await expect(faq).toContainText("Partita IVA");
+          await expect(faq).toContainText(language === "it" ? "Partita IVA" : "VAT number");
           await expect(faq).toContainText(
             language === "it" ? "Ogni ordine conta una sola volta" : "Each order counts only once",
           );
-          await open(page, `${base}/impostazioni/account`);
+          await open(page, pagePath(base, "/impostazioni/account"));
           for (const device of language === "it"
             ? ["Safari su macOS", "Safari su iPhone", "Chrome su Windows"]
             : ["Safari on macOS", "Safari on iPhone", "Chrome on Windows"]) {
@@ -505,7 +572,7 @@ for (const language of ["it", "en"] as const) {
             await expect(session).toBeVisible();
           }
           await reset("quota-esaurita");
-          await open(page, `${base}/ordini`);
+          await open(page, pagePath(base, "/ordini"));
           await expect(
             page.getByRole("button", {
               name: language === "it" ? "Sblocca ordine" : "Unlock order",
@@ -518,9 +585,9 @@ for (const language of ["it", "en"] as const) {
                 ? /^Puoi consultare e cercare tutti gli ordini\./
                 : /^You can still view and search all orders\./,
             ),
-          ).toContainText("Partita IVA");
+          ).toContainText(language === "it" ? "Partita IVA" : "VAT number");
           await reset("caricamento");
-          await open(page, `${base}/ordini`);
+          await open(page, pagePath(base, "/ordini"));
           const grid = page.locator('[aria-busy="true"]');
           await expect(grid).toBeVisible();
           expect(
@@ -539,7 +606,7 @@ for (const language of ["it", "en"] as const) {
             }),
             contentType: "image/png",
           });
-          await page.goto(language === "it" ? "/termini" : "/en/termini");
+          await page.goto(language === "it" ? "/termini" : "/en/terms");
           await expect(
             page.getByText(
               language === "it"
@@ -563,7 +630,7 @@ test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page 
   await expect(quota).toBeVisible();
   // Con la prova disponibile l'avviso la offre e non c'è un secondo invito.
   await expect(quota.getByRole("button", { name: "Attiva la prova" })).toBeVisible();
-  await expect(page.getByText("Prova Premium gratis per 14 giorni, senza carta.")).toHaveCount(0);
+  await expect(page.getByText("Prova Pro gratis per 14 giorni, senza carta.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
     "Sblocco disponibile dal 2 ott 2026.",
@@ -636,7 +703,7 @@ test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) 
 
 test("il salvataggio automatico fallito ripristina il valore", async ({ page }) => {
   await open(page);
-  await chooseScenario(page, "Premium, più negozi");
+  await chooseScenario(page, "Pro, più negozi");
   // Un clic prima dell'idratazione non chiama il salvataggio.
   await open(page, "/anteprima/impostazioni/notifiche");
   await expect(page.locator("#settings-notifiche")).toBeInViewport();
@@ -671,7 +738,7 @@ for (const area of areas)
           ? { nav: "Navigazione principale", settings: "Impostazioni", notifications: "Notifiche" }
           : { nav: "Main navigation", settings: "Settings", notifications: "Notifications" };
       try {
-        await open(page, `${prefix}${area.base}/ordini`);
+        await open(page, `${pagePath(`${prefix}${area.base}`, "/ordini")}`);
         await expect(page.locator("html")).toHaveAttribute("lang", locale);
         // Anche su mobile l'anteprima dichiara che le azioni sono simulate.
         if (area.base === "/anteprima")
@@ -685,7 +752,9 @@ for (const area of areas)
           page.evaluate(() => document.documentElement.scrollWidth <= innerWidth);
         await expect.poll(noOverflow).toBe(true);
         await bottom.getByRole("link", { name: labels.settings }).tap();
-        await expect(page).toHaveURL(new RegExp(`${prefix}${area.base}/impostazioni$`, "u"));
+        await expect(page).toHaveURL(
+          new RegExp(`${pagePath(`${prefix}${area.base}`, "/impostazioni")}$`, "u"),
+        );
         const categories = page.getByRole("navigation", {
           name: locale === "it" ? "Categorie" : "Categories",
         });
@@ -708,7 +777,9 @@ for (const area of areas)
         await bottom
           .getByRole("link", { name: locale === "it" ? "Negozi eBay" : "eBay stores" })
           .tap();
-        await expect(page).toHaveURL(new RegExp(`${prefix}${area.base}/negozi$`, "u"));
+        await expect(page).toHaveURL(
+          new RegExp(`${pagePath(`${prefix}${area.base}`, "/negozi")}$`, "u"),
+        );
         await networkIdle(page);
         await expect.poll(noOverflow).toBe(true);
       } finally {
@@ -718,7 +789,7 @@ for (const area of areas)
     });
   }
 
-test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinnova", async ({
+test("con Pro nessun ordine resta da sbloccare e il piano a vita non si rinnova", async ({
   page,
 }) => {
   await open(page);
@@ -726,12 +797,12 @@ test("con Premium nessun ordine resta da sbloccare e il piano a vita non si rinn
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByText("BNCLCU75C12F205G")).toBeVisible();
 
-  await chooseScenario(page, "Premium a vita");
+  await chooseScenario(page, "Pro a vita");
   await expect(page.getByText("Il carattere di controllo non corrisponde.")).toBeVisible();
   await page.goto("/anteprima/impostazioni/piano");
   // Su desktop tutte le categorie stanno nella stessa pagina: la prova resta sulla sezione del piano.
   const plan = page.getByRole("region", { name: "Piano e pagamenti" });
-  await expect(plan.getByText("Premium a vita")).toBeVisible();
+  await expect(plan.getByText("Pro a vita")).toBeVisible();
   await expect(plan.getByText("Acquisto una tantum, senza rinnovi.")).toBeVisible();
   await expect(page.getByRole("button", { name: /Gestisci abbonamento/u })).toHaveCount(0);
 });
@@ -740,22 +811,20 @@ test("la prova si attiva volontariamente, poi la fine è in evidenza e non si ri
   page,
 }) => {
   await open(page);
-  await expect(page.getByText("Prova Premium gratis per 14 giorni, senza carta.")).toBeVisible();
+  await expect(page.getByText("Prova Pro gratis per 14 giorni, senza carta.")).toBeVisible();
   await page.getByRole("button", { name: "Attiva la prova", exact: true }).click();
-  await expect(
-    page.getByRole("status").filter({ hasText: "Prova Premium attivata." }),
-  ).toBeVisible();
-  await expect(page.getByText("Prova Premium: 14 giorni rimasti")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Prova Pro attivata." })).toBeVisible();
+  await expect(page.getByText("Prova Pro: 14 giorni rimasti")).toBeVisible();
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Attiva la prova" })).toHaveCount(0);
 
   await chooseScenario(page, "Prova in scadenza");
-  const ending = page.getByRole("status").filter({ hasText: "La prova Premium finisce il" });
+  const ending = page.getByRole("status").filter({ hasText: "La prova Pro finisce il" });
   await expect(ending).toContainText("29 set 2026");
   await ending.getByRole("link", { name: "Vedi il piano" }).click();
   await expect(page).toHaveURL(/\/anteprima\/impostazioni\/piano$/u);
   const plan = page.getByRole("region", { name: "Piano e pagamenti" });
-  await expect(plan.getByText("Prova Premium", { exact: true })).toBeVisible();
+  await expect(plan.getByText("Prova Pro", { exact: true })).toBeVisible();
   await expect(plan.getByText(/1 giorno rimasto/u)).toBeVisible();
 
   await chooseScenario(page, "Prova terminata");
@@ -936,7 +1005,7 @@ test.describe("fuso del dispositivo", () => {
   for (const area of areas)
     test(`Impostazioni con il fuso rilevato, ${area.name}`, async ({ page, context, baseURL }) => {
       await enter(context, baseURL!, area);
-      await open(page, `${area.base}/impostazioni/aspetto`);
+      await open(page, pagePath(area.base, "/impostazioni/aspetto"));
       await expect(page.getByRole("combobox", { name: "Fuso orario" })).toContainText(
         "Automatico: Roma (Italia)",
       );

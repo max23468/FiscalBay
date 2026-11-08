@@ -140,6 +140,9 @@ async function tradingRequest(access: EbayAccess, call: string, fields: string):
   return xml;
 }
 
+/** Trading non restituisce ordini né modifiche più vecchi di novanta giorni. */
+export const tradingReachDays = 90;
+
 /** Elenco Trading: include gli acquisti non ancora disponibili in Fulfillment. */
 export async function readTradingOrders(
   access: EbayAccess,
@@ -154,7 +157,7 @@ export async function readTradingOrders(
     "GetOrders",
     `<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>` +
       `<ModTimeFrom>${from}</ModTimeFrom><ModTimeTo>${until}</ModTimeTo>` +
-      `<Pagination><EntriesPerPage>25</EntriesPerPage><PageNumber>${input.page}</PageNumber></Pagination>`,
+      `<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>${input.page}</PageNumber></Pagination>`,
   );
   return parseTradingOrders(xml);
 }
@@ -346,15 +349,19 @@ export function parseTradingOrders(xml: string) {
   return { orders, total: Number(totalText), more: moreText === "true", skipped };
 }
 
-/** Distingue ordine non restituito e ordine presente senza identificativi. */
-export async function readTradingTaxObservation(access: EbayAccess, orderId: string) {
-  const xml = await tradingCall(
-    access,
-    "GetOrders",
-    "<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
-      `<OrderIDArray><OrderID>${escapeXml(orderId)}</OrderID></OrderIDArray>`,
-  );
-  const matching = orderBlocks(xml).filter((block) => isOrder(block, orderId));
+/** Ordini per richiesta della lettura fiscale: una pagina intera di `GetOrders`. */
+export const tradingTaxBatch = 100;
+
+export type TradingTaxObservation = {
+  orderFound: boolean;
+  buyerEiasToken?: string;
+  lastModifiedTime?: string;
+  values: EbayTaxIdentifierObservation[];
+};
+
+/** Lettura fiscale di un ordine dai blocchi della risposta; un blocco ambiguo è un errore. */
+function taxObservation(blocks: string[], orderId: string): TradingTaxObservation {
+  const matching = blocks.filter((block) => isOrder(block, orderId));
   if (matching.length > 1) throw new UpstreamError("invalid_response");
   if (matching.length === 0) return { orderFound: false, lastModifiedTime: undefined, values: [] };
   const order = matching[0]!;
@@ -370,6 +377,44 @@ export async function readTradingTaxObservation(access: EbayAccess, orderId: str
     lastModifiedTime: parsed?.data,
     values: mapTradingTaxIdentifiers(completeTaxIdentifiers(order)),
   };
+}
+
+/**
+ * Letture fiscali di più ordini con una sola chiamata `GetOrders`, fino a `tradingTaxBatch`: per
+ * ogni ordine la lettura o l'errore che lo riguarda soltanto. Distingue ordine non restituito e
+ * ordine presente senza identificativi. Una risposta su più pagine non è attesa ed è un errore.
+ */
+export async function readTradingTaxObservations(
+  access: EbayAccess,
+  orderIds: readonly string[],
+): Promise<Map<string, TradingTaxObservation | UpstreamError>> {
+  if (orderIds.length === 0 || orderIds.length > tradingTaxBatch)
+    throw new UpstreamError("invalid_response");
+  const xml = await tradingCall(
+    access,
+    "GetOrders",
+    "<DetailLevel>ReturnAll</DetailLevel><OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
+      `<OrderIDArray>${orderIds.map((id) => `<OrderID>${escapeXml(id)}</OrderID>`).join("")}</OrderIDArray>` +
+      `<Pagination><EntriesPerPage>${tradingTaxBatch}</EntriesPerPage><PageNumber>1</PageNumber></Pagination>`,
+  );
+  if (xmlField(xml, "HasMoreOrders") === "true") throw new UpstreamError("invalid_response");
+  const blocks = orderBlocks(xml);
+  return new Map<string, TradingTaxObservation | UpstreamError>(
+    orderIds.map((id) => {
+      try {
+        return [id, taxObservation(blocks, id)];
+      } catch (error) {
+        return [id, error as UpstreamError];
+      }
+    }),
+  );
+}
+
+/** Lettura fiscale di un solo ordine. */
+export async function readTradingTaxObservation(access: EbayAccess, orderId: string) {
+  const result = (await readTradingTaxObservations(access, [orderId])).get(orderId)!;
+  if (result instanceof UpstreamError) throw result;
+  return result;
 }
 
 export function mapTradingTaxIdentifiers(

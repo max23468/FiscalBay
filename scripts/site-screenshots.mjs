@@ -4,7 +4,9 @@
  * esempio: ogni immagine è ritagliata sull'elemento, senza la barra dell'anteprima, in italiano e
  * inglese e nei temi chiaro e scuro. Il messaggio Telegram, che l'app non mostra, è ricostruito
  * con il formato di `orderMessage` sul tema di Telegram. Scrive i WebP in `public/site/` e le
- * dimensioni in `app/site-shots.json`, letto dalle pagine per riservare lo spazio.
+ * dimensioni in `app/site-shots.json`, letto dalle pagine per riservare lo spazio. L'immagine del
+ * primo schermo della home ha anche la versione AVIF e le larghezze di 640 e 960 px, convertite
+ * dal WebP con ImageMagick (`brew install imagemagick`): Chromium non codifica AVIF.
  *
  * Da rieseguire quando cambiano le schermate mostrate dal sito, su una preview locale della build:
  *   pnpm build && E2E_PORT=5300 node scripts/local-preview.mjs
@@ -12,6 +14,7 @@
  *   pnpm site:screenshots http://localhost:5300
  */
 import { chromium } from "@playwright/test";
+import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -32,6 +35,7 @@ const shots = [
     name: "ordini",
     path: "/anteprima/ordini",
     scenario: "premium",
+    avif: true,
     viewport: { width: 1280, height: 800 },
     scale: 1,
     mobile: { viewport: { width: 390, height: 640 }, scale: 2 },
@@ -163,7 +167,7 @@ const sheet = {
   },
   en: {
     file: "fiscalbay-orders-2026-09-27.xlsx",
-    columns: ["Order number", "Date", "Buyer", "Codice Fiscale", "Partita IVA", "Order total"],
+    columns: ["Order number", "Date", "Buyer", "Tax code", "VAT number", "Order total"],
     decimal: ".",
   },
 };
@@ -295,9 +299,14 @@ async function capture(browser, shot, language, scheme) {
   });
   const page = await context.newPage();
   const prefix = language === "it" ? "" : "/en";
+  const preview = language === "it" ? "/anteprima" : "/en/preview";
   // Le azioni dell'app rifiutano le richieste senza l'origine del sito, come un browser la invia.
-  const scenario = await page.request.post(`${base}${prefix}/anteprima`, {
-    form: { scenario: shot.scenario, redirectTo: `${prefix}/anteprima/ordini` },
+  // Le pagine inglesi si aprono dal percorso italiano con il redirect al nome inglese.
+  const scenario = await page.request.post(`${base}${preview}`, {
+    form: {
+      scenario: shot.scenario,
+      redirectTo: `${preview}/${language === "it" ? "ordini" : "orders"}`,
+    },
     headers: { origin: new URL(base).origin },
     maxRedirects: 0,
   });
@@ -343,10 +352,27 @@ async function captureHtml(browser, html, scheme) {
 const browser = await chromium.launch();
 mkdirSync(output, { recursive: true });
 const sizes = {};
-const write = async (name, language, scheme, image, scale) => {
+const write = async (name, language, scheme, image, scale, avif = false) => {
   const file = `${name}-${language}-${scheme}.webp`;
   const bytes = Buffer.from(image.data, "base64");
   writeFileSync(path.join(output, file), bytes);
+  if (avif) {
+    const convert = (target, quality, width) =>
+      execFileSync("magick", [
+        path.join(output, file),
+        ...(width ? ["-resize", `${width}x`] : []),
+        "-quality",
+        String(quality),
+        path.join(output, file.replace(/\.webp$/u, target)),
+      ]);
+    convert(".avif", 60);
+    // Le larghezze ridotte servono alla sola schermata grande: quella per smartphone è già piccola.
+    if (!name.endsWith("-mobile"))
+      for (const width of [640, 960]) {
+        convert(`-${width}.webp`, 86, width);
+        convert(`-${width}.avif`, 60, width);
+      }
+  }
   // Dimensioni CSS della variante chiara: il tema scuro ha la stessa impaginazione.
   if (scheme === "light") {
     sizes[name] ??= {};
@@ -366,6 +392,7 @@ for (const language of languages)
         scheme,
         await capture(browser, shot, language, scheme),
         shot.scale,
+        shot.avif,
       );
       if (shot.mobile) {
         const mobile = { ...shot, ...shot.mobile };
@@ -375,6 +402,7 @@ for (const language of languages)
           scheme,
           await capture(browser, mobile, language, scheme),
           mobile.scale,
+          shot.avif,
         );
       }
     }

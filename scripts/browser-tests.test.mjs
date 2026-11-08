@@ -3,11 +3,13 @@ import { spawnSync } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import {
+  browserOutcome,
+  browserProof,
   shardTests,
   listedTestIds,
-  assertCandidateReports,
   browserShards,
 } from "./browser-tests.mjs";
+import { assertCandidateReports } from "./browser-evidence.mjs";
 
 describe("coordinamento e provenienza della pubblicazione", () => {
   it("certifica tutte le partizioni browser solo con prove coerenti e complete", () => {
@@ -188,6 +190,85 @@ describe("prove browser divise fra macchine", () => {
         ],
       }),
       ["chromium-a", "webkit-b"],
+    );
+  });
+});
+
+describe("prove browser riusate nella PR", () => {
+  const job = (name, conclusion = "success") => ({ name, conclusion });
+  const all = (total) =>
+    Array.from({ length: total }, (_, index) => job(`Browser ${index + 1}/${total}`));
+
+  it("considera concluse le prove soltanto con ogni parte riuscita", () => {
+    assert.equal(browserOutcome(all(8)), "passed");
+    assert.equal(browserOutcome([job("Gate"), job("Mutation app/a.server.ts 1/1")]), null);
+    assert.equal(browserOutcome(all(8).slice(1)), null);
+    assert.equal(browserOutcome([...all(7).slice(0, 6), job("Browser 7/8", "cancelled")]), null);
+    assert.equal(browserOutcome([...all(8).slice(1), job("Browser 1/8", "failure")]), "failed");
+    assert.equal(browserOutcome([...all(8).slice(1), job("Browser 1/8", "timed_out")]), "failed");
+    assert.equal(browserOutcome([job("Browser 1/2"), job("Browser 2/3")]), null);
+  });
+
+  it("riusa l'ultima run conclusa con lo stesso inventario e senza cambi rilevanti", async () => {
+    const run = (id, sha, created, repo = 1) => ({
+      id,
+      head_sha: sha,
+      created_at: created,
+      head_repository: { id: repo },
+    });
+    const runs = [
+      run(9, "m3", "2026-11-07T22:20:00Z"),
+      run(8, "m2", "2026-11-07T21:09:00Z"),
+      run(7, "m1", "2026-11-07T19:00:00Z"),
+    ];
+    const ask = ({ jobs, keys = {}, unchanged = () => ({ reuse: true }), list = runs }) => {
+      const calls = [];
+      const api = async (url) => {
+        calls.push(url);
+        if (url.includes("/workflows/ci.yml/runs")) return { workflow_runs: list };
+        const id = /runs\/(\d+)\/jobs/u.exec(url)[1];
+        return { jobs: jobs[id] ?? [], total_count: (jobs[id] ?? []).length };
+      };
+      return browserProof(
+        { repository: "o/r", repositoryId: 1, branch: "feat/x", exclude: 9, key: "k" },
+        { api, planKey: async (id) => keys[id] ?? null, narrowing: async (sha) => unchanged(sha) },
+      ).then((result) => ({ result, calls }));
+    };
+    const reused = await ask({ jobs: { 8: all(8) }, keys: { 8: "k" } });
+    assert.deepEqual(reused.result, { run: 8, commit: "m2", reuse: true });
+    assert.ok(!reused.calls.some((url) => url.includes("/runs/9/jobs")));
+    // Una run senza prove browser concluse non decide: vale la precedente.
+    assert.deepEqual(
+      (await ask({ jobs: { 8: all(8).slice(2), 7: all(4) }, keys: { 7: "k" } })).result,
+      { run: 7, commit: "m1", reuse: true },
+    );
+    // Fallimento recente, inventario diverso o assente, cambi rilevanti, altro repository.
+    assert.equal(
+      (await ask({ jobs: { 8: [job("Browser 1/1", "failure")], 7: all(1) }, keys: { 7: "k" } }))
+        .result,
+      null,
+    );
+    assert.equal((await ask({ jobs: { 8: all(8) }, keys: { 8: "altro" } })).result, null);
+    assert.equal((await ask({ jobs: { 8: all(8) } })).result, null);
+    assert.equal(
+      (await ask({ jobs: { 8: all(8) }, keys: { 8: "k" }, unchanged: () => null })).result,
+      null,
+    );
+    // Dopo un'unione con la base si ripete soltanto la selezione ridotta.
+    assert.deepEqual(
+      (await ask({ jobs: { 8: all(8) }, keys: { 8: "k" }, unchanged: () => ({ grep: "@smoke" }) }))
+        .result,
+      { run: 8, commit: "m2", grep: "@smoke" },
+    );
+    assert.equal(
+      (
+        await ask({
+          jobs: { 8: all(8) },
+          keys: { 8: "k" },
+          list: [run(8, "m2", "2026-11-07T21:09:00Z", 2)],
+        })
+      ).result,
+      null,
     );
   });
 });

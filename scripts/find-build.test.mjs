@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
-import { verifiedBuildOrigin } from "./find-build.mjs";
+import { proofProducer, pullRequestBuildOrigin, verifiedBuildOrigin } from "./find-build.mjs";
 
 const tree = "a".repeat(40);
 const sha = "b".repeat(40);
@@ -176,7 +176,7 @@ console.log(JSON.stringify(result));
           assert.equal(result.status, 0, result.stderr);
           assert.equal(
             readFileSync(output, "utf8"),
-            valid ? `run-id=12\nartifact=${kind}-${target}\n` : "",
+            valid ? `run-id=12\nartifact=${kind}-${target}\nsource=develop\n` : "",
           );
           assert.equal(readFileSync(calls, "utf8").includes(`/git/commits/${sha}`), valid);
         }
@@ -184,5 +184,88 @@ console.log(JSON.stringify(result));
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  });
+});
+
+describe("riuso della build della PR al merge", () => {
+  const parent = "e".repeat(40);
+  const head = "f".repeat(40);
+  const pullRun = { ...run, id: 20, event: "pull_request", head_branch: "feature", head_sha: head };
+  const base = {
+    candidate: {
+      ...artifact,
+      workflow_run: { id: 20, repository_id: 1, head_repository_id: 1, head_sha: head },
+    },
+    run: pullRun,
+    pull: {
+      number: 7,
+      merged_at: "2026-11-07T10:00:00Z",
+      base: { ref: "develop" },
+      head: { sha: head, repo: { id: 1 } },
+    },
+    repositoryId: 1,
+    tree,
+    parents: [parent],
+    deployed: parent,
+    files: ["app/routes/home.tsx", "e2e/home.spec.ts", "docs/ROADMAP.md"],
+  };
+  const reuse = (change = {}) => pullRequestBuildOrigin({ ...base, ...change });
+
+  it("riusa la build della PR integrata sullo stesso tree e sulla base distribuita", () => {
+    assert.equal(reuse(), true);
+  });
+
+  it("ripete le prove se la PR cambia chi produce o giudica la prova", () => {
+    for (const file of [
+      ".github/workflows/ci.yml",
+      ".github/actions/setup/action.yml",
+      "scripts/classify-changes.mjs",
+      "package.json",
+      "pnpm-lock.yaml",
+      "pnpm-workspace.yaml",
+      "playwright.config.ts",
+      "vitest.cloudflare.config.ts",
+      "tsconfig.json",
+      "e2e/report.ts",
+      "e2e/fixtures.ts",
+    ]) {
+      assert.equal(reuse({ files: [...base.files, file] }), false, file);
+      assert.equal(proofProducer.test(file), true, file);
+    }
+    assert.equal(proofProducer.test("e2e/home.spec.ts"), false);
+  });
+
+  it("ripete le prove se base, tree, PR o esito non coincidono", () => {
+    for (const change of [
+      { deployed: "1".repeat(40) },
+      { parents: [parent, "2".repeat(40)] },
+      { parents: [] },
+      { files: [] },
+      { tree: "c".repeat(40) },
+      { candidate: { ...base.candidate, expired: true } },
+      {
+        candidate: { ...base.candidate, workflow_run: { ...base.candidate.workflow_run, id: 21 } },
+      },
+      {
+        candidate: {
+          ...base.candidate,
+          workflow_run: { ...base.candidate.workflow_run, head_repository_id: 2 },
+        },
+      },
+      { run: { ...pullRun, conclusion: "failure" } },
+      { run: { ...pullRun, event: "pull_request_target" } },
+      { run: { ...pullRun, path: ".github/workflows/candidate.yml" } },
+      { run: { ...pullRun, head_sha: "3".repeat(40) } },
+      { run: { ...pullRun, head_repository: { id: 2 } } },
+      { pull: null },
+      { pull: { ...base.pull, merged_at: null } },
+      { pull: { ...base.pull, base: { ref: "main" } } },
+      { pull: { ...base.pull, head: { sha: head, repo: { id: 2 } } } },
+    ])
+      assert.equal(reuse(change), false, JSON.stringify(change));
+  });
+
+  it("la verifica di develop continua a rifiutare la stessa build", () => {
+    assert.equal(check(base.candidate, pullRun), false);
   });
 });

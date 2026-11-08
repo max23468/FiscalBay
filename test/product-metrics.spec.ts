@@ -45,6 +45,8 @@ async function merchant(options: {
   verified?: boolean;
   admin?: boolean;
   numeric?: boolean;
+  /** Provenienza salvata all'iscrizione; senza, nessuna riga. */
+  channel?: string;
 }) {
   users += 1;
   const userId = `kpi-u-${users}-${crypto.randomUUID()}`;
@@ -61,6 +63,12 @@ async function merchant(options: {
       options.admin ? 1 : 0,
     ),
     ...insertWorkspace({ id: workspaceId, userId, createdAt: options.createdAt }),
+    ...(options.channel
+      ? [
+          env.DB.prepare(`INSERT INTO signup_sources (user_id, channel, first_page, recorded_at)
+              VALUES (?, ?, '/', ?)`).bind(userId, options.channel, options.createdAt),
+        ]
+      : []),
   ]);
   return workspaceId;
 }
@@ -296,6 +304,40 @@ describe("KPI della console", () => {
     expect(week.funnel.syncWithoutOrders).toBe(0);
   });
 
+  it("conta iscritti, attivazioni e paganti per provenienza, senza dati dei singoli", async () => {
+    const searched = await merchant({ createdAt: before(20), channel: "google" });
+    await merchant({ createdAt: before(10), channel: "google" });
+    const forum = await merchant({ createdAt: before(5), channel: "reddit" });
+    await merchant({ createdAt: before(3) });
+    // Fuori dalla coorte, come nei primi passi: un admin e un iscritto prima della finestra.
+    await merchant({ createdAt: before(4), channel: "google", admin: true });
+    const old = await merchant({ createdAt: before(40), channel: "google" });
+    const searchedStore = await store(searched, before(20, -2));
+    const forumStore = await store(forum, before(5, -1));
+    const oldStore = await store(old, before(39));
+    await env.DB.batch([
+      run(searchedStore, before(19), true),
+      run(forumStore, before(4), false),
+      run(oldStore, before(38), true),
+      paid(searched, "premium", before(15)),
+      paid(old, "premium", before(30)),
+    ]);
+
+    const { funnel } = await productMetrics(env, 30);
+    expect(funnel.sources).toEqual([
+      { channel: "google", signups: 2, activations: 1, payers: 1 },
+      { channel: "reddit", signups: 1, activations: 0, payers: 0 },
+      { channel: "unknown", signups: 1, activations: 0, payers: 0 },
+    ]);
+    expect(JSON.stringify(funnel.sources)).not.toMatch(/kpi-|example\.invalid/u);
+    // Lo stesso periodo delle altre metriche: in sette giorni restano reddit e lo sconosciuto.
+    const week = await productMetrics(env, 7);
+    expect(week.funnel.sources.map((row) => [row.channel, row.signups])).toEqual([
+      ["reddit", 1],
+      ["unknown", 1],
+    ]);
+  });
+
   it("separa paganti, ricavo ricorrente, prove, omaggi e incassi", async () => {
     const monthly = await merchant({ createdAt: before(60) });
     const annual = await merchant({ createdAt: before(60) });
@@ -421,6 +463,12 @@ describe("KPI della console", () => {
       run(readingStore, before(2), false),
       run(lateStore, before(2), true),
       run(lateStore, before(40), false),
+      // Uno spazio seguito: senza sessioni aperte né Telegram il ritardo atteso sarebbe di due ore.
+      env.DB.prepare(
+        `INSERT INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+         SELECT 'kpi-' || user_id, '2099-01-01T00:00:00.000Z', 'kpi-token-' || user_id, ?2, ?2, user_id
+           FROM workspace_members WHERE workspace_id = ?1`,
+      ).bind(late, clock),
       env.DB.prepare("UPDATE workspaces SET active_at = ? WHERE id = ?").bind(before(2), reading),
       env.DB.prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota, used)
         VALUES ('kpi-c1', ?, ?, ?, 5, 5), ('kpi-c2', ?, ?, ?, 5, 1)`).bind(

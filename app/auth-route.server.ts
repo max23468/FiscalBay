@@ -79,10 +79,17 @@ function noStore(response: Response): Response {
 }
 
 // Soglie per IP e percorso sui soli invii sensibili, come le regole predefinite di Better Auth:
-// il binding Rate Limiting le applica prima di qualunque lettura o scrittura (§29).
-const attemptLimits: Array<{ paths: RegExp; limit: RequestLimit }> = [
+// il binding Rate Limiting le applica prima di qualunque lettura o scrittura (§29). La
+// preparazione della passkey è un GET, ma scrive in D1 una sfida a ogni chiamata. L'elenco si
+// compone a ogni richiesta, così la mutation prova ogni regola con i test che la usano.
+const attemptLimits = (): Array<{ paths: RegExp; limit: RequestLimit; anyMethod?: true }> => [
   { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, limit: "attempts" },
   { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, limit: "attempts" },
+  {
+    paths: /^\/passkey\/generate-(authenticate|register)-options(\/|$)/u,
+    limit: "attempts",
+    anyMethod: true,
+  },
   {
     paths: /^\/(send-verification-email|request-password-reset|forget-password|delete-user)(\/|$)/u,
     limit: "emails",
@@ -103,8 +110,8 @@ function authPath(request: Request): string {
  * chiamano prima di Turnstile e poi inoltrano la richiesta già ammessa.
  */
 export function authLimitWait(env: Env, request: Request, path = authPath(request)) {
-  const rule = attemptLimits.find(({ paths }) => paths.test(path));
-  return request.method === "POST" && rule
+  const rule = attemptLimits().find(({ paths }) => paths.test(path));
+  return rule && (rule.anyMethod || request.method === "POST")
     ? requestLimitWait(env, request, rule.limit, `auth${path}`)
     : Promise.resolve(null);
 }
@@ -313,7 +320,7 @@ async function handleEbayCallback(
   // Lo state comincia con la lingua e, se il collegamento parte da Negozi, con «-negozi».
   const [language, place] = state.split("_", 1)[0]!.split("-");
   const target = place === "negozi" ? `${appBase}/negozi` : ordersPath;
-  const home = language === "en" ? localizedPath("en", target) : target;
+  const home = localizedPath(language === "en" ? language : "it", target);
   const query = new URLSearchParams();
   if (outcome) query.set("negozio", outcome);
   // Negozi elenca tutti gli ambienti; gli Ordini mostrano quello del negozio collegato.

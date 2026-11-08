@@ -20,6 +20,14 @@ import { listAnomalies } from "../app/domain/admin-operations.server";
 import { reconcileOwnerIncidents } from "../app/domain/owner-incidents.server";
 import { applyStripeEvent } from "../app/domain/billing.server";
 import { consumeExportJob } from "../app/domain/export-jobs.server";
+import {
+  deletionFeedbackStatements,
+  exitMonth,
+  exitOverview,
+  normalizeExitComment,
+  saveDeletionFeedback,
+  tenureBand,
+} from "../app/domain/exit-feedback.server";
 import { orderAllowance } from "../app/domain/grants.server";
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 import { vacantLifetimeSeats } from "../app/domain/lifetime.server";
@@ -258,6 +266,25 @@ async function everyTable(userId: string) {
     row("INSERT INTO support_requests (id, user_id, sent_at) VALUES ('sr-1', ?1, ?2)", userId, now),
     row("INSERT INTO unlock_preferences VALUES (?, 0)", userId),
     row(
+      `INSERT INTO signup_sources (user_id, channel, first_page, recorded_at)
+       VALUES (?1, 'google', '/prezzi', ?2)`,
+      userId,
+      now,
+    ),
+    row(
+      `INSERT INTO account_deletion_feedback (user_id, reason, comment, recorded_at)
+       VALUES (?1, 'unused', 'Vendo poco', ?2)`,
+      userId,
+      now,
+    ),
+    row(
+      `INSERT INTO exit_feedback (id, kind, reason, plan, tenure, month, source_key,
+         workspace_id, comment, recorded_at)
+       VALUES ('x-1', 'cancellation', 'too_expensive', 'monthly', '1_3', '2026-09',
+         'cancel_scheduled:sub_vecchio:2026-09-20', 'w-a', 'Troppo caro', ?)`,
+      now,
+    ),
+    row(
       `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter",
          "deviceType", "backedUp") VALUES ('pk-1', 'chiave', ?, 'credenziale', 0, 'singleDevice', 0)`,
       userId,
@@ -491,8 +518,21 @@ describe("cancellazione dell'account", () => {
     const { userId, cookie } = await populatedAccount(email);
     await callRoute(settingsAction, `/en${privacy}`, {
       cookie,
-      fields: { intent: "account-delete", confirmation: email },
+      fields: {
+        intent: "account-delete",
+        confirmation: email,
+        reason: "closing_business",
+        comment: "Chiudo il negozio",
+      },
     });
+    // Il motivo aspetta la conferma dal link.
+    expect(
+      await env.DB.prepare(
+        "SELECT reason, comment FROM account_deletion_feedback WHERE user_id = ?",
+      )
+        .bind(userId)
+        .first(),
+    ).toEqual({ reason: "closing_business", comment: "Chiudo il negozio" });
     await vi.waitFor(() => expect(sentTo(send, email).length).toBeGreaterThan(0));
     const message = sentTo(send, email).find((sent) => sent.subject.includes("deletion"))!;
     expect(message.subject).toBe("Confirm the deletion of your FiscalBay account");
@@ -509,7 +549,7 @@ describe("cancellazione dell'account", () => {
 
     const confirmed = await open(cookie);
     expect(confirmed.status).toBe(302);
-    expect(confirmed.headers.get("location")).toBe("/en/cancellazione-account");
+    expect(confirmed.headers.get("location")).toBe("/en/account-deletion");
     expect(confirmed.headers.getSetCookie().join("\n")).toContain("Max-Age=0");
     // L'utente resta fino all'ultimo passo del lavoro; sessioni, consenso e chat no.
     expect(await leftovers(userId)).toMatchObject({ user: 1, sessions: 0, orders: 2, stores: 1 });
@@ -527,6 +567,18 @@ describe("cancellazione dell'account", () => {
     expect(deletion).toMatchObject({ workspace_id: "w-a", notice_sealed: expect.any(String) });
     expect(deletion!.notice_sealed).not.toContain(email);
     expect(queue).toHaveBeenCalledWith({ accountDeletion: deletion!.id });
+    expect(
+      await env.DB.prepare("SELECT kind, reason, comment FROM exit_feedback WHERE source_key = ?")
+        .bind(`account_deleted:${deletion!.id}`)
+        .first(),
+    ).toEqual({
+      kind: "account_deletion",
+      reason: "closing_business",
+      comment: "Chiudo il negozio",
+    });
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM account_deletion_feedback").first("n"),
+    ).toBe(0);
 
     // Già usato: anche con una nuova sessione il link è rifiutato.
     expect((await open(cookie)).headers.get("location")).toContain("error=delete_link");
@@ -916,6 +968,7 @@ describe("cancellazione dell'account", () => {
     expect(await remainingRows(userId)).toEqual({
       sync_daily: 1,
       owner_notifications: 1,
+      exit_feedback: 2,
       account_deletions: 1,
       store_identity_marks: 1,
       lifetime_allocations: 1,
@@ -930,6 +983,31 @@ describe("cancellazione dell'account", () => {
     ).first<{ key: string; workspace_id: string | null; detail: string }>();
     expect(notice).toMatchObject({ key: `account_deleted:${id}`, workspace_id: null });
     expect(JSON.parse(notice!.detail)).toMatchObject({ email });
+    // Il motivo della richiesta diventa l'uscita dell'avviso; la disdetta dello spazio perde
+    // subito commento, spazio e chiave, e resta come istantanea anonima.
+    expect(
+      (
+        await env.DB.prepare(`SELECT kind, reason, plan, source_key, workspace_id, comment
+          FROM exit_feedback ORDER BY kind`).all()
+      ).results,
+    ).toEqual([
+      {
+        kind: "account_deletion",
+        reason: "unused",
+        plan: "free",
+        source_key: `account_deleted:${id}`,
+        workspace_id: null,
+        comment: "Vendo poco",
+      },
+      {
+        kind: "cancellation",
+        reason: "too_expensive",
+        plan: "monthly",
+        source_key: null,
+        workspace_id: null,
+        comment: null,
+      },
+    ]);
     expect(
       await env.DB.prepare("SELECT workspace_id, customer_id FROM lifetime_allocations").first(),
     ).toEqual({ workspace_id: null, customer_id: "cus_lifetime" });
@@ -1826,5 +1904,215 @@ describe("cancellazione dell'account", () => {
     expect(await startAccountDeletion(env, { id: userId, email }, "it", at(now))).toBe(id);
     await resumeAccountDeletions(env, fetch, later(10));
     expect(await leftovers(userId)).toMatchObject({ user: 0 });
+  });
+});
+
+describe("motivi di uscita", () => {
+  beforeEach(() => resetDatabase());
+
+  const day = 86_400_000;
+  const base = new Date(now);
+  const ago = (days: number) => new Date(base.getTime() - days * day).toISOString();
+
+  it("ripulisce il commento e calcola anzianità e mese", () => {
+    expect(normalizeExitComment(42)).toBeNull();
+    expect(normalizeExitComment(" ​ \n ")).toBeNull();
+    expect(normalizeExitComment("a\u0007b⁧c\r\nd\n\n\n\ne  f\t g")).toBe("a b c\nd\n\ne f g");
+    expect(normalizeExitComment("é".repeat(600))).toHaveLength(500);
+    expect(normalizeExitComment(`${"a".repeat(499)} b`)).toBe("a".repeat(499));
+    expect(tenureBand(null, base)).toBe("under_1");
+    expect(tenureBand("non una data", base)).toBe("under_1");
+    expect([30, 31, 91, 92, 182, 183, 365, 366].map((days) => tenureBand(ago(days), base))).toEqual(
+      ["under_1", "1_3", "1_3", "3_6", "3_6", "6_12", "6_12", "over_12"],
+    );
+    expect(exitMonth(base)).toBe("2026-09");
+  });
+
+  it("il piano viene dalla copertura in vigore e il motivo in attesa scade dopo un giorno", async () => {
+    const soon = later(60 * 24 * 10).toISOString();
+    const paid = (workspaceId: string) =>
+      insertEntitlement({
+        workspaceId,
+        source: "premium",
+        endsAt: soon,
+        stripeInvoiceId: `in_${workspaceId}`,
+        amountPaid: 490,
+        currency: "eur",
+        paidAt: now,
+      });
+    const subscription = (workspaceId: string, offer: string) =>
+      env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+          customer_id, offer, price_generation, status, current_period_start,
+          current_period_end, cancel_at_period_end, synced_at, checked_at)
+        VALUES (?1, ?2, 'test', ?3, ?4, 'g1', 'active', ?5, ?6, 0, ?5, ?5)`).bind(
+        `sub_${workspaceId}`,
+        workspaceId,
+        `cus_${workspaceId}`,
+        offer,
+        now,
+        soon,
+      );
+    const cases = {
+      "x-free": [],
+      "x-trial": [insertEntitlement({ workspaceId: "x-trial", source: "trial", endsAt: soon })],
+      "x-life": [
+        env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status,
+            provider_reference, created_at, activated_at, customer_id)
+          VALUES (1, 'x-life', 'active', 'cs_x', ?1, ?1, 'cus_x')`).bind(now),
+        insertEntitlement({
+          workspaceId: "x-life",
+          source: "lifetime",
+          grantedBy: "admin",
+          grantReason: "Omaggio",
+        }),
+      ],
+      "x-admin": [
+        insertEntitlement({
+          workspaceId: "x-admin",
+          source: "admin",
+          endsAt: soon,
+          grantedBy: "admin",
+          grantReason: "Prova",
+        }),
+      ],
+      "x-annual": [paid("x-annual"), subscription("x-annual", "annual")],
+      "x-month": [paid("x-month"), subscription("x-month", "monthly")],
+    } as const;
+    const plans: Record<string, unknown> = {};
+    for (const [workspaceId, rows] of Object.entries(cases)) {
+      const userId = `u-${workspaceId}`;
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO "user" ("id", "name", "email", "emailVerified", "createdAt",
+            "updatedAt") VALUES (?1, 'Sintetico', ?2, 1, ?3, ?3)`).bind(
+          userId,
+          `${userId}@example.invalid`,
+          ago(100),
+        ),
+        ...insertWorkspace({ id: workspaceId, userId, createdAt: ago(200) }),
+        ...rows,
+      ]);
+      const id = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare(`INSERT INTO account_deletions (id, user_id, workspace_id, requested_at)
+          VALUES (?, ?, ?, ?)`).bind(id, userId, workspaceId, now),
+        ...(await deletionFeedbackStatements(env.DB, { id, userId, workspaceId }, base)),
+      ]);
+      plans[workspaceId] = await env.DB.prepare(
+        "SELECT plan, tenure, reason, comment FROM exit_feedback WHERE source_key = ?",
+      )
+        .bind(`account_deleted:${id}`)
+        .first();
+    }
+    const quiet = { tenure: "6_12", reason: null, comment: null };
+    expect(plans).toEqual({
+      "x-free": { plan: "free", ...quiet },
+      "x-trial": { plan: "trial", ...quiet },
+      "x-life": { plan: "lifetime", ...quiet },
+      "x-admin": { plan: "granted", ...quiet },
+      "x-annual": { plan: "annual", ...quiet },
+      "x-month": { plan: "monthly", ...quiet },
+    });
+
+    // Senza spazio l'anzianità viene dall'account; un altro utente o una richiesta già
+    // registrata non creano uscite.
+    await env.DB.prepare(`INSERT INTO "user" ("id", "name", "email", "emailVerified",
+        "createdAt", "updatedAt") VALUES ('u-solo', 'Sintetico', 'solo@example.invalid', 1, ?1, ?1)`)
+      .bind(ago(400))
+      .run();
+    await saveDeletionFeedback(env.DB, "u-solo", { reason: "inventato", comment: "  " }, base);
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM account_deletion_feedback").first("n"),
+    ).toBe(0);
+    await saveDeletionFeedback(env.DB, "u-solo", { reason: "unused", comment: null }, base);
+    await saveDeletionFeedback(env.DB, "u-solo", { reason: null, comment: "Solo testo" }, base);
+    expect(
+      await env.DB.prepare("SELECT reason, comment FROM account_deletion_feedback").first(),
+    ).toEqual({ reason: null, comment: "Solo testo" });
+    const solo = crypto.randomUUID();
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO account_deletions (id, user_id, requested_at)
+        VALUES (?, 'u-solo', ?)`).bind(solo, now),
+      ...(await deletionFeedbackStatements(
+        env.DB,
+        { id: crypto.randomUUID(), userId: "u-solo", workspaceId: null },
+        base,
+      )),
+      ...(await deletionFeedbackStatements(
+        env.DB,
+        { id: solo, userId: "u-x-free", workspaceId: null },
+        base,
+      )),
+    ]);
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM exit_feedback WHERE kind = ?")
+        .bind("account_deletion")
+        .first("n"),
+    ).toBe(6);
+    await env.DB.batch(
+      await deletionFeedbackStatements(
+        env.DB,
+        { id: solo, userId: "u-solo", workspaceId: null },
+        base,
+      ),
+    );
+    expect(
+      await env.DB.prepare("SELECT tenure, comment FROM exit_feedback WHERE source_key = ?")
+        .bind(`account_deleted:${solo}`)
+        .first(),
+    ).toEqual({ tenure: "over_12", comment: null });
+
+    // Un motivo mai confermato resta un giorno.
+    await saveDeletionFeedback(env.DB, "u-x-free", { reason: "other", comment: null }, base);
+    await purgeExpiredRecords(env.DB, new Date(base.getTime() + 23 * 3_600_000));
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM account_deletion_feedback").first("n"),
+    ).toBe(1);
+    await purgeExpiredRecords(env.DB, new Date(base.getTime() + 25 * 3_600_000));
+    expect(
+      await env.DB.prepare("SELECT COUNT(*) AS n FROM account_deletion_feedback").first("n"),
+    ).toBe(0);
+  });
+
+  it("conta le uscite per finestra e tiene i commenti dei 30 giorni", async () => {
+    const row = (
+      id: string,
+      kind: string,
+      reason: string | null,
+      month: string,
+      recordedAt: string | null,
+      comment: string | null = null,
+    ) =>
+      env.DB.prepare(`INSERT INTO exit_feedback (id, kind, reason, plan, tenure, month,
+          comment, recorded_at) VALUES (?1, ?2, ?3, 'monthly', '1_3', ?4, ?5, ?6)`).bind(
+        id,
+        kind,
+        reason,
+        month,
+        comment,
+        recordedAt,
+      );
+    await env.DB.batch([
+      row("a", "cancellation", "unused", "2026-09", ago(2), "Poco tempo"),
+      row("b", "cancellation", "unused", "2026-09", ago(40)),
+      row("c", "cancellation", "unused", "2026-07", null),
+      row("d", "cancellation", "unused", "2026-06", null),
+      row("e", "account_deletion", null, "2025-10", null),
+      row("f", "account_deletion", null, "2025-09", null),
+    ]);
+    const { counts, recent } = await exitOverview(env.DB, base);
+    expect(counts.cancellation.unused).toEqual({ days30: 1, months3: 3, months12: 4 });
+    expect(counts.account_deletion.none).toEqual({ days30: 0, months3: 0, months12: 1 });
+    expect(counts.cancellation.other).toEqual({ days30: 0, months3: 0, months12: 0 });
+    expect(recent).toEqual([
+      {
+        id: "a",
+        kind: "cancellation",
+        reason: "unused",
+        plan: "monthly",
+        comment: "Poco tempo",
+        workspaceId: null,
+        recordedAt: ago(2),
+      },
+    ]);
   });
 });

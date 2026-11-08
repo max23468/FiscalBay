@@ -290,11 +290,14 @@ function ebay(orders: Array<ReturnType<typeof order>>) {
     if (call === "GetItem") return new Response(ack("<Ack>Success</Ack><Item></Item>"));
     if (call === "GetOrders") {
       if (String(init?.body).includes("<ModTimeFrom>")) return new Response(emptyTradingOrders);
-      const id = /<OrderID>([^<]*)<\/OrderID>/u.exec(String(init?.body))![1];
+      // Un ordine per ogni ID del lotto richiesto.
+      const orders = [...String(init?.body).matchAll(/<OrderID>([^<]*)<\/OrderID>/gu)].map(
+        ([, id]) =>
+          `<Order><OrderID>${id}</OrderID>` +
+          `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>`,
+      );
       return new Response(
-        `<GetOrdersResponse><Ack>Success</Ack><OrderArray><Order><OrderID>${id}</OrderID>` +
-          `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier>` +
-          `</Order></OrderArray></GetOrdersResponse>`,
+        `<GetOrdersResponse><Ack>Success</Ack><OrderArray>${orders.join("")}</OrderArray></GetOrdersResponse>`,
       );
     }
     const single = url.pathname.split("/sell/fulfillment/v1/order/")[1];
@@ -344,7 +347,7 @@ it("legge un negozio senza novità e uno con dieci ordini nuovi", async () => {
       "UPDATE ebay_store_credentials SET access_token = ?, access_expires_at = ? WHERE store_id = ?",
     )
       .bind(
-        await sealToken(env.BETTER_AUTH_SECRET, store, "access", `token-${store}`),
+        await sealToken(env, store, "access", `token-${store}`),
         new Date(now.getTime() + 2 * 3_600_000).toISOString(),
         store,
       )

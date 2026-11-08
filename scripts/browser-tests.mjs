@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -44,120 +45,120 @@ export function browserShards(count) {
   return { include: Array.from({ length: total }, (_, index) => ({ shard: index + 1, total })) };
 }
 
-/** Pagine riuscite soltanto alla ripetizione, dalle otto partizioni. */
-export function flakyTests(parts) {
-  return [
-    ...new Set(
-      parts.flatMap(({ report }) =>
-        (report?.rows ?? [])
-          .filter(({ status, retry }) => status === "passed" && retry > 0)
-          .map(({ project, page }) => `${project}: ${page}`),
-      ),
-    ),
-  ].sort();
+/** Esito delle prove browser di una run della PR: `passed` con ogni parte riuscita, `failed`, o nulla. */
+export function browserOutcome(jobs) {
+  const own = jobs.filter((job) => /^Browser \d+\/\d+$/u.test(job.name));
+  if (!own.length) return null;
+  if (own.some((job) => ["failure", "timed_out"].includes(job.conclusion))) return "failed";
+  // GitHub elenca soltanto i job partiti: ogni parte deve esserci, riuscita.
+  if (!own.every((job) => job.conclusion === "success")) return null;
+  const parts = own.map((job) => /(\d+)\/(\d+)$/u.exec(job.name));
+  const total = parts[0][2];
+  return parts.every((part) => part[2] === total) &&
+    new Set(parts.map((part) => part[1])).size === Number(total)
+    ? "passed"
+    : null;
 }
 
 /**
- * Prove instabili anche ora e in almeno `limit` qualifiche recenti: oltre due volte l'instabilità
- * è un difetto, che ferma la certificazione finché la prova non si corregge.
+ * Prova browser riusabile nelle run precedenti della CI della PR: l'ultima run che ha concluso le
+ * prove browser, con ogni parte riuscita e lo stesso inventario selezionato (`key`). `narrowing`
+ * dice che cosa ripetere fino al commit provato: niente (`reuse`), una selezione ridotta (`grep`)
+ * o, con null, tutto. Una run annullata o in corso senza tutte le parti non decide; un fallimento
+ * recente non si copre con un successo più vecchio.
  */
-export function repeatedFlaky(current, history, limit = 2) {
-  return current.filter((test) => history.filter((run) => run.includes(test)).length >= limit);
-}
-
-/** Elenchi delle prove instabili delle ultime qualifiche, dagli artefatti delle run. */
-function flakyHistory(directory) {
-  const repository = process.env.GH_REPO;
-  if (!repository) return [];
-  const name = "flaky-tests";
-  const { artifacts } = JSON.parse(
-    execFileSync("gh", ["api", `repos/${repository}/actions/artifacts?name=${name}&per_page=30`], {
-      encoding: "utf8",
-    }),
+export async function browserProof(
+  { repository, repositoryId, branch, exclude, key },
+  { api, planKey, narrowing },
+) {
+  const { workflow_runs: runs = [] } = await api(
+    `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&branch=${encodeURIComponent(branch)}&per_page=30`,
   );
-  const repositoryId = JSON.parse(
-    execFileSync("gh", ["api", `repos/${repository}`], { encoding: "utf8" }),
-  ).id;
-  const seen = new Set();
-  return artifacts
-    .filter(({ expired, workflow_run: run }) => {
-      if (
-        expired ||
-        run?.repository_id !== repositoryId ||
-        run.head_repository_id !== repositoryId ||
-        String(run.id) === process.env.GITHUB_RUN_ID ||
-        seen.has(run.id)
-      )
-        return false;
-      seen.add(run.id);
-      const origin = JSON.parse(
-        execFileSync("gh", ["api", `repos/${repository}/actions/runs/${run.id}`], {
-          encoding: "utf8",
-        }),
+  const ordered = runs
+    .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+  for (const run of ordered) {
+    const jobs = [];
+    for (let page = 1; ; page++) {
+      const batch = await api(
+        `repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=30&page=${page}`,
       );
-      return origin.path === ".github/workflows/candidate.yml" && origin.conclusion === "success";
-    })
-    .slice(0, 5)
-    .map(({ id, workflow_run: { id: run } }) => {
-      const target = path.join(directory, "history", String(id));
-      execFileSync(
-        "gh",
-        ["run", "download", String(run), "--repo", repository, "--name", name, "--dir", target],
-        { stdio: "inherit" },
-      );
-      return JSON.parse(readFileSync(path.join(target, "flaky.json"), "utf8"));
-    });
-}
-
-/** Partizioni di ogni ambiente nella qualifica del candidato, come nella matrice di `qualify.yml`. */
-const candidateShards = { source: 8, production: 1 };
-
-export function assertCandidateReports(parts, sha, expected) {
-  for (const [kind, shards] of Object.entries(candidateShards)) {
-    const inventory = new Set(expected?.[kind]);
-    if (!inventory.size || inventory.has(undefined) || inventory.size !== expected[kind].length)
-      throw new Error(`Qualifica browser senza inventario valido: ${kind}.`);
-    const ids = new Set();
-    for (let shard = 1; shard <= shards; shard++) {
-      const part = parts
-        .filter((part) => part.kind === kind && part.shard === shard)
-        .sort((a, b) => b.attempt - a.attempt)[0];
-      const report = part?.report;
-      if (
-        !report ||
-        report.sha !== sha ||
-        report.status !== "passed" ||
-        report.partial !== false ||
-        report.dirty !== false ||
-        report.baseURL !== "locale" ||
-        report.environment !== (kind === "source" ? "local" : "production") ||
-        !(report.counts?.passed > 0) ||
-        !report.rows?.length
-      )
-        throw new Error(`Qualifica browser incompleta o diversa: ${kind} ${shard}.`);
-      for (const row of report.rows) {
-        if (!row.id || ids.has(row.id))
-          throw new Error("Partizione browser duplicata o priva di identità.");
-        if (
-          row.status !== "passed" &&
-          !(row.status === "skipped" && row.reason?.startsWith("Non applicabile:"))
-        )
-          throw new Error("Partizione con prove fallite o esclusioni non motivate.");
-        ids.add(row.id);
-      }
-      if (
-        report.counts.passed !== report.rows.filter((row) => row.status === "passed").length ||
-        (report.counts.skipped ?? 0) !==
-          report.rows.filter((row) => row.status === "skipped").length
-      )
-        throw new Error("Conteggi del collaudo incoerenti con le prove.");
+      jobs.push(...batch.jobs);
+      if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
     }
-    if (ids.size !== inventory.size || [...ids].some((id) => !inventory.has(id)))
-      throw new Error(`Qualifica browser diversa dall'inventario atteso: ${kind}.`);
+    const outcome = browserOutcome(jobs);
+    if (outcome === "failed") return null;
+    if (outcome !== "passed") continue;
+    if ((await planKey(run.id)) !== key) return null;
+    const rest = await narrowing(run.head_sha);
+    return rest ? { run: run.id, commit: run.head_sha, ...rest } : null;
   }
+  return null;
 }
 
-function main() {
+/** Impronta dell'inventario selezionato: prove, browser e filtri. */
+const inventoryKey = (ids, selection) =>
+  createHash("sha256")
+    .update(JSON.stringify({ ids: [...ids].sort(), selection }))
+    .digest("hex");
+
+/** File con l'impronta dell'inventario della run, conservato come artefatto `browser-plan-<run>`. */
+const planFile = path.resolve("test-results", "browser-plan.json");
+
+/**
+ * Prove browser di questa run della PR già concluse in una run precedente: con il commit provato
+ * che le contiene e nessun cambio rilevante per il classificatore, gli otto job non ripartono.
+ */
+async function reusedBrowsers(key) {
+  const { gh, ghJson, retry } = await import("./lib/provider.mjs");
+  const { browserNarrowing } = await import("./classify-changes.mjs");
+  const repositoryId = Number(process.env.REPOSITORY_ID);
+  const { REPOSITORY: repository, BROWSER_PR_BRANCH: branch } = process.env;
+  if (!repository || !repositoryId) throw new Error("Repository non indicato.");
+  const api = (url) =>
+    retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
+  const planKey = (id) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "browser-plan-"));
+    try {
+      gh(
+        "run",
+        "download",
+        String(id),
+        "--repo",
+        repository,
+        "--name",
+        `browser-plan-${id}`,
+        "--dir",
+        directory,
+      );
+      return JSON.parse(readFileSync(path.join(directory, "browser-plan.json"), "utf8")).key;
+    } catch {
+      return null;
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+  // Nella PR il commit provato è l'unione con la base: il primo genitore è la base.
+  const sources = execFileSync("git", ["ls-files"], { encoding: "utf8" })
+    .split("\n")
+    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
+    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+  const narrowing = (commit) => {
+    try {
+      execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "ignore" });
+      execFileSync("git", ["rev-parse", "--verify", "HEAD^2"], { stdio: "ignore" });
+    } catch {
+      return null;
+    }
+    return browserNarrowing(commit, "HEAD", "HEAD^1", sources);
+  };
+  return browserProof(
+    { repository, repositoryId, branch, exclude: process.env.GITHUB_RUN_ID, key },
+    { api, planKey, narrowing },
+  );
+}
+
+async function main() {
   const { values } = parseArgs({
     options: {
       grep: { type: "string", default: "." },
@@ -166,94 +167,61 @@ function main() {
       pages: { type: "boolean", default: false },
       plan: { type: "boolean", default: false },
       shard: { type: "string" },
-      "check-evidence": { type: "string" },
     },
   });
-  if (values["check-evidence"]) {
-    const directory = values["check-evidence"];
-    const parts = readdirSync(directory, { recursive: true }).flatMap((file) => {
-      const match = file.match(
-        /candidate-browser-\d+-(\d+)-(source|production)-(\d+)\/browser\/\2-\3\.json$/u,
-      );
-      return match
-        ? [
-            {
-              attempt: Number(match[1]),
-              kind: match[2],
-              shard: Number(match[3]),
-              report: JSON.parse(readFileSync(path.join(directory, file), "utf8")),
-            },
-          ]
-        : [];
-    });
-    const sha = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-    const invert = values["grep-invert"] ? ["--grep-invert", values["grep-invert"]] : [];
-    const expected = Object.fromEntries(
-      Object.keys(candidateShards).map((kind) => [
-        kind,
-        listedTestIds(
-          JSON.parse(
-            execFileSync(
-              "pnpm",
-              [
-                "exec",
-                "playwright",
-                "test",
-                ...(kind === "production" ? ["e2e/pages.spec.ts", ...invert] : invert),
-                "--list",
-                "--reporter",
-                "json",
-                "--project",
-                "chromium",
-                "--project",
-                "webkit",
-              ],
-              {
-                encoding: "utf8",
-                maxBuffer: 64 * 1024 * 1024,
-                stdio: ["ignore", "pipe", "inherit"],
-                env: {
-                  ...process.env,
-                  E2E_BASE_URL: "",
-                  E2E_MATRIX: kind === "production" ? "single" : "full",
-                  E2E_PRODUCTION: kind === "production" ? "1" : "",
-                },
-              },
-            ),
-          ),
-        ),
-      ]),
-    );
-    assertCandidateReports(parts, sha, expected);
-    const flaky = flakyTests(parts);
-    const repeated = repeatedFlaky(flaky, flakyHistory(directory));
-    writeFileSync(path.join(directory, "flaky.json"), JSON.stringify(flaky));
-    if (repeated.length) throw new Error(`Prove instabili da correggere: ${repeated.join("; ")}.`);
-    console.log("Qualifica completa: partizioni browser coerenti, senza prove parziali.");
-    return;
-  }
   const browsers = values.browsers.split(",");
   if (browsers.some((browser) => !["chromium", "webkit"].includes(browser)))
     throw new Error("Browser non supportato.");
-  const selection = [
+  const selectionFor = (grep) => [
     ...(values.pages ? ["e2e/pages.spec.ts"] : []),
     "--grep",
-    values.grep,
+    grep,
     ...(values["grep-invert"] ? ["--grep-invert", values["grep-invert"]] : []),
     ...browsers.flatMap((browser) => ["--project", browser]),
   ];
-  const playwright = (args, options) =>
-    execFileSync("pnpm", ["exec", "playwright", "test", ...args, ...selection], options);
-  if (values.plan) {
-    const listing = JSON.parse(
-      playwright(["--list", "--reporter", "json"], {
-        encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
-      }),
+  const selection = selectionFor(values.grep);
+  const playwright = (args, options, chosen = selection) =>
+    execFileSync("pnpm", ["exec", "playwright", "test", ...args, ...chosen], options);
+  const inventory = (chosen) =>
+    listedTestIds(
+      JSON.parse(
+        playwright(
+          ["--list", "--reporter", "json"],
+          { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
+          chosen,
+        ),
+      ),
     );
-    const count = listedTestIds(listing).length;
-    const matrix = browserShards(count);
-    const result = `browser-matrix=${JSON.stringify(matrix)}\nbrowser-count=${count}\n`;
+  if (values.plan) {
+    const ids = inventory(selection);
+    let count = ids.length;
+    let matrix = browserShards(count);
+    let result = "";
+    if (process.env.BROWSER_PR_BRANCH) {
+      const key = inventoryKey(ids, selection);
+      mkdirSync(path.dirname(planFile), { recursive: true });
+      writeFileSync(planFile, JSON.stringify({ key }));
+      const proof = await reusedBrowsers(key);
+      // La selezione ridotta si elenca di nuovo: i runner seguono le prove che restano.
+      const narrowed = proof?.grep ? inventory(selectionFor(proof.grep)) : null;
+      const summary = !proof
+        ? ""
+        : narrowed?.length
+          ? `Prove browser già concluse nella run ${proof.run} su ${proof.commit.slice(0, 8)}: da allora si ripetono ${narrowed.length} prove su ${count}, quelle delle aree toccate sia dai cambi sia dalla PR (\`${proof.grep}\`).\n`
+          : `Prove browser già concluse nella run ${proof.run} su ${proof.commit.slice(0, 8)}: nessun cambio rilevante da allora.\n`;
+      if (proof && !narrowed?.length) result += "browser-reused=true\n";
+      else if (narrowed) {
+        count = narrowed.length;
+        matrix = browserShards(count);
+        result += `browser-grep=${proof.grep}\n`;
+      }
+      if (summary) {
+        console.log(summary);
+        if (process.env.GITHUB_STEP_SUMMARY)
+          writeFileSync(process.env.GITHUB_STEP_SUMMARY, summary, { flag: "a" });
+      }
+    }
+    result += `browser-matrix=${JSON.stringify(matrix)}\nbrowser-count=${count}\n`;
     if (process.env.GITHUB_OUTPUT) writeFileSync(process.env.GITHUB_OUTPUT, result, { flag: "a" });
     console.log(`Browser: ${count} prove, ${matrix.include.length} runner.`);
     return;
@@ -278,4 +246,4 @@ function main() {
   playwright(["--test-list", list], { stdio: "inherit" });
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) main();
+if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

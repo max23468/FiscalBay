@@ -43,9 +43,25 @@ const integrationIdentifier = "fiscalbay_mp_qnwjrzta";
 // dell'isolate per pagine, cron e webhook eBay.
 const loadStripe = () => import("stripe").then((module) => module.default);
 
+/**
+ * Versione dell'API fissata in ogni client: un aggiornamento dello SDK non cambia da solo la
+ * forma degli oggetti letti, e il controllo dei tipi chiede di rivederla insieme allo SDK.
+ */
+export const stripeApiVersion = "2026-10-28.endive";
+
+// Chi apre un acquisto o il portale attende al più un tentativo breve e un nuovo tentativo:
+// il timeout predefinito dello SDK, 80 secondi, supera quello della richiesta.
+const interactiveTimeoutMs = 8_000;
+
+/** Client delle richieste dell'utente, con versione e timeout fissati. */
 export async function createStripeClient(secretKey: string): Promise<Stripe> {
   const StripeSdk = await loadStripe();
-  return new StripeSdk(secretKey, { httpClient: StripeSdk.createFetchHttpClient() });
+  return new StripeSdk(secretKey, {
+    apiVersion: stripeApiVersion,
+    httpClient: StripeSdk.createFetchHttpClient(),
+    maxNetworkRetries: 1,
+    timeout: interactiveTimeoutMs,
+  });
 }
 
 const readTimeoutMs = 15_000;
@@ -70,6 +86,7 @@ export async function createBoundedStripeClient(
     });
   };
   return new StripeSdk(secretKey, {
+    apiVersion: stripeApiVersion,
     httpClient: StripeSdk.createFetchHttpClient(bounded),
     maxNetworkRetries: 0,
     timeout: readTimeoutMs,
@@ -203,11 +220,18 @@ export async function retrieveCatalogPrice(stripe: Stripe, priceId: string) {
   return stripe.prices.retrieve(priceId, { expand: ["product"] });
 }
 
+/**
+ * Crea la sessione con la chiave di idempotenza del turno dello spazio: un nuovo tentativo dello
+ * stesso turno riceve la sessione già creata invece di aprirne una seconda.
+ */
 export async function createManagedCheckout(
   stripe: Stripe,
   input: Parameters<typeof buildManagedCheckoutParams>[0],
+  idempotencyKey: string,
 ): Promise<Stripe.Checkout.Session> {
-  return stripe.checkout.sessions.create(buildManagedCheckoutParams(input));
+  return stripe.checkout.sessions.create(buildManagedCheckoutParams(input), {
+    idempotencyKey: `checkout-${idempotencyKey}`,
+  });
 }
 
 /**
@@ -218,17 +242,21 @@ export async function createManagedCheckout(
 export async function createLifetimeCredit(
   stripe: Stripe,
   input: { amount: number; product: string; redeemBy: string; workspaceId: string; name: string },
+  idempotencyKey: string,
 ): Promise<Stripe.Coupon> {
-  return stripe.coupons.create({
-    amount_off: input.amount,
-    currency: "eur",
-    duration: "once",
-    max_redemptions: 1,
-    redeem_by: Math.floor(Date.parse(input.redeemBy) / 1000),
-    applies_to: { products: [input.product] },
-    name: input.name,
-    metadata: { workspace_id: input.workspaceId, role: "lifetime_credit" },
-  });
+  return stripe.coupons.create(
+    {
+      amount_off: input.amount,
+      currency: "eur",
+      duration: "once",
+      max_redemptions: 1,
+      redeem_by: Math.floor(Date.parse(input.redeemBy) / 1000),
+      applies_to: { products: [input.product] },
+      name: input.name,
+      metadata: { workspace_id: input.workspaceId, role: "lifetime_credit" },
+    },
+    { idempotencyKey: `credit-${idempotencyKey}` },
+  );
 }
 
 /** Una sessione che Stripe non ha aperto in Managed Payments non arriva mai al cliente. */

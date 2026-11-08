@@ -29,7 +29,7 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
     language,
     origin,
     path: siteSecurityPath,
-    title: t.title,
+    title: t.metaTitle,
     description: t.description,
   });
 }

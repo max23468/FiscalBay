@@ -360,6 +360,17 @@ describe("accesso alla console", () => {
       cookie,
       params: { sezione: "quote" },
     });
+    // La pagina Commerciale porta i motivi di uscita, anche senza uscite.
+    const commerce = await routeData(adminLoader, "/admin/commerciale", {
+      cookie,
+      params: { sezione: "commerciale" },
+    });
+    expect(commerce.page).toMatchObject({
+      exits: {
+        counts: { cancellation: { unused: { days30: 0, months3: 0, months12: 0 } } },
+        recent: [],
+      },
+    });
     // eBay non risponde: la quota resta non letta, non piena né vuota.
     expect(quotas.page).toMatchObject({ quotas: [{ read: "failed", rows: [] }], bulk: [] });
     expect(
@@ -409,12 +420,15 @@ describe("accesso alla console", () => {
 
 describe("accesso tecnico con token", () => {
   const token = "fbat_token-sintetico-del-collaudo-con-lunghezza-sufficiente";
-  async function register(revokedAt: string | null = null) {
+  async function register(
+    revokedAt: string | null = null,
+    expiresAt: string | null = "2099-01-01T00:00:00.000Z",
+  ) {
     const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
     const hash = [...new Uint8Array(bytes)].map((b) => b.toString(16).padStart(2, "0")).join("");
-    await env.DB.prepare(`INSERT INTO admin_agent_tokens (token_hash, label, created_at, revoked_at)
-      VALUES (?, 'agente-test', ?, ?)`)
-      .bind(hash, now, revokedAt)
+    await env.DB.prepare(`INSERT INTO admin_agent_tokens
+      (token_hash, label, created_at, revoked_at, expires_at) VALUES (?, 'agente-test', ?, ?, ?)`)
+      .bind(hash, now, revokedAt, expiresAt)
       .run();
     return hash;
   }
@@ -472,6 +486,36 @@ describe("accesso tecnico con token", () => {
       "grant-premium",
       "grant-premium",
     ]);
+  });
+
+  it.each([
+    ["scaduto", now],
+    ["senza scadenza", null],
+  ])("rifiuta un token %s", async (_, expiresAt) => {
+    await register(null, expiresAt);
+    await expect(routeData(adminLoader, "/admin", { headers: bearer() })).rejects.toMatchObject({
+      init: { status: 404 },
+    });
+  });
+
+  it("blocca per IP dopo dieci token rifiutati, senza contare quelli validi", async () => {
+    await register();
+    const from = (ip: string, value = token) => ({ ...bearer(value), "cf-connecting-ip": ip });
+    for (let count = 0; count < 12; count++)
+      expect(
+        await routeData(adminLoader, "/admin", { headers: from("203.0.113.8") }),
+      ).toMatchObject({ access: "agent" });
+    for (let count = 0; count < 10; count++)
+      await expect(
+        routeData(adminLoader, "/admin", { headers: from("203.0.113.8", "fbat_sbagliato") }),
+      ).rejects.toMatchObject({ init: { status: 404 } });
+    // Oltre il limite anche il token valido attende, e senza leggerlo.
+    await expect(
+      routeData(adminLoader, "/admin", { headers: from("203.0.113.8") }),
+    ).rejects.toMatchObject({ init: { status: 429, headers: { "retry-after": "900" } } });
+    expect(await routeData(adminLoader, "/admin", { headers: from("203.0.113.9") })).toMatchObject({
+      access: "agent",
+    });
   });
 
   it("rifiuta un token revocato, sconosciuto o senza il prefisso", async () => {

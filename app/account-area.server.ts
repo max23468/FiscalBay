@@ -14,7 +14,7 @@ import { errorResponse, unavailablePage } from "./error-response";
 import type { EbayEnvironment } from "./view-models";
 import { sandboxAvailable } from "./integrations/ebay/environment.server";
 import { tracePhase } from "./errors";
-import { languageFromPath, localizedPath, type Language } from "./i18n";
+import { canonicalPath, languageFromPath, localizedPath, type Language } from "./i18n";
 import { hasWhatsNew } from "./whats-new.server";
 import { measure } from "./observability.server";
 import { detectedTimeZone, effectiveTimeZone, type ShellData } from "./preferences";
@@ -126,7 +126,7 @@ export async function requireAccountArea(
   // Una pagina aperta in un'altra lingua, da un nuovo accesso o da un collegamento, segue la
   // lingua scelta; le azioni rispondono nella lingua dell'indirizzo che le ha inviate.
   if (request.method === "GET" && preferences!.language && preferences!.language !== language) {
-    const bare = url.pathname.replace(/^\/en(?=\/|$)/u, "") || "/";
+    const bare = canonicalPath(url.pathname);
     throw redirect(`${localizedPath(preferences!.language, bare)}${url.search}`, {
       headers: { "cache-control": "no-store" },
     });

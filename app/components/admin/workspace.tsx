@@ -5,13 +5,13 @@ import type { AuditRow } from "../../domain/admin-audit.server";
 import type { WorkspaceDetail } from "../../domain/admin-directory.server";
 import { AuditTable } from "./governance";
 import { ActionForm, DataTable, Disclosure, Facts, Panel, Stat, StatGrid, TextField } from "./kit";
-import { lifetimeSlots } from "../../catalog";
+import { formatNumber } from "../../format";
 import { maxGrantDays } from "../../limits";
 import { storeActions } from "./store-actions";
 import { useAdmin } from "./use-admin";
 
 function Stores({ workspace }: { workspace: WorkspaceDetail }) {
-  const { t, date } = useAdmin();
+  const { t, date, language } = useAdmin();
   const w = t.workspace;
   const free = !workspace.coverage;
   const store = (item: WorkspaceDetail["stores"][number]) => {
@@ -49,7 +49,7 @@ function Stores({ workspace }: { workspace: WorkspaceDetail }) {
         <Facts
           items={[
             [w.store.lastSync, item.lastSyncAt ? date(item.lastSyncAt) : w.store.never],
-            [t.stores.orders, item.importedOrders],
+            [t.stores.orders, formatNumber(item.importedOrders, language)],
             ...(item.consentExpiresAt
               ? ([[w.store.consentUntil, date(item.consentExpiresAt, "date")]] as [
                   string,
@@ -312,7 +312,6 @@ export function WorkspaceView({
                     name="posto"
                     type="number"
                     min={1}
-                    max={lifetimeSlots}
                     aria-describedby={undefined}
                   />
                   <p className="text-sm text-muted-foreground">{w.vacantSeatHint}</p>

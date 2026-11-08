@@ -3,6 +3,7 @@ import { readApiQuotas, type ApiRate } from "../integrations/ebay/analytics.serv
 import type { EbayNotification } from "../integrations/ebay/notifications.server";
 import { ebayConfiguration, sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { EbayEnvironment } from "../view-models";
+import { ownCalls, quotaUsageStatements } from "./order-acquisition-context.server";
 import { serviceSetting } from "./service-settings.server";
 
 /**
@@ -41,6 +42,8 @@ export type QuotaRow = {
   over: boolean;
   /** Chiamata usata da FiscalBay. */
   used: boolean;
+  /** Chiamate fatte oggi (UTC) da questo Worker; null per quelle che non conta. */
+  own: number | null;
 };
 
 export type QuotaSuspension = { call: string | null; until: string };
@@ -50,6 +53,8 @@ export type EnvironmentQuotas = {
   read: "ok" | "failed";
   rows: QuotaRow[];
   suspended: QuotaSuspension[];
+  /** Letture Fulfillment degli ordini fatte oggi (UTC) da questo Worker: eBay non ne pubblica la quota. */
+  orderReads: number;
 };
 
 export type QuotaAnomaly = {
@@ -113,6 +118,7 @@ function quotaRow(
     daily,
     over: daily && share > alertShare,
     used: callRank(api, resource) >= 0,
+    own: null,
   };
 }
 
@@ -199,10 +205,18 @@ export async function readEbayQuotas(
     environments(env).map(async (environment): Promise<EnvironmentQuotas> => {
       const suspended = await suspensions(env.DB, env, environment, at);
       let quotas: EnvironmentQuotas;
+      const origin = ebayConfiguration(env, environment).apiOrigin;
       try {
-        const rows = (await readApiQuotas(env, environment, fetcher)).flatMap(
-          (quota) => quotaRow(quota.api, quota.resource, quota.rates, alertShare) ?? [],
-        );
+        const own = await ownCalls(env.DB, origin, now);
+        const rows = (await readApiQuotas(env, environment, fetcher)).flatMap((quota) => {
+          const row = quotaRow(quota.api, quota.resource, quota.rates, alertShare);
+          if (!row) return [];
+          // Fulfillment conta tutte le risorse dell'ordine come una sola chiamata.
+          const counted = row.used
+            ? (own.get(row.api === "Fulfillment" ? "order" : callName(row.resource)) ?? 0)
+            : null;
+          return [{ ...row, own: counted }];
+        });
         quotas = {
           environment,
           read: "ok",
@@ -214,12 +228,16 @@ export async function readEbayQuotas(
             return b.share - a.share;
           }),
           suspended,
+          orderReads: own.get("order") ?? 0,
         };
       } catch (error) {
         logFailure({ error, operation: "admin" });
-        return { environment, read: "failed", rows: [], suspended };
+        return { environment, read: "failed", rows: [], suspended, orderReads: 0 };
       }
-      await env.DB.batch(await anomalyStatements(env.DB, quotas, now));
+      await env.DB.batch([
+        ...(await anomalyStatements(env.DB, quotas, now)),
+        ...quotaUsageStatements(env.DB, origin, quotas.rows, now),
+      ]);
       return quotas;
     }),
   );

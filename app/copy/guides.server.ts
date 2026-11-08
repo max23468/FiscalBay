@@ -1,0 +1,587 @@
+import type { GuidePath } from "../app-links";
+import type { ShotName } from "../components/product-shot";
+import type { Language } from "../i18n";
+
+/** Paragrafi di una parte della guida, sotto il proprio titolo. */
+export interface GuideSection {
+  title: string;
+  body: readonly string[];
+}
+
+export interface Guide {
+  /** Titolo della pagina, che comincia dalla frase cercata. */
+  title: string;
+  /** Titolo della scheda e dei risultati di ricerca, entro i 50 caratteri prima di « | FiscalBay». */
+  metaTitle: string;
+  /** Nome breve nel menu delle guide. */
+  nav: string;
+  description: string;
+  lead: string;
+  /** Prima pubblicazione e ultima modifica sostanziale, per i dati strutturati e la sitemap. */
+  published: string;
+  updated: string;
+  sections: readonly GuideSection[];
+  /**
+   * Come FiscalBay risolve il problema della guida, in evidenza dopo le sezioni sotto il titolo
+   * comune, con la schermata della funzione: la didascalia porta alla funzione in Funzionalità.
+   */
+  solution: { body: readonly string[]; shot: ShotName; caption: string };
+}
+
+/**
+ * Guide del sito pubblico (§23): articoli stabili sulle domande ricorrenti dei venditori, non
+ * notizie. Ogni affermazione resta nei limiti di ciò che FiscalBay fa e di ciò che eBay rende
+ * disponibile; le regole fiscali rimandano al commercialista. Restano sul server come gli altri
+ * testi del sito.
+ */
+export const guides: Record<
+  Language,
+  {
+    index: { title: string; metaTitle: string; description: string; lead: string };
+    solutionTitle: string;
+    start: string;
+    signIn: string;
+    back: string;
+    updated: (date: string) => string;
+    articles: Record<GuidePath, Guide>;
+  }
+> = {
+  it: {
+    index: {
+      title: "Guide",
+      metaTitle: "Guide | Codice Fiscale degli ordini eBay",
+      description:
+        "Guide pratiche per chi vende su eBay: dove trovare il Codice Fiscale e la Partita IVA degli acquirenti, come chiederli e come usarli in fattura.",
+      lead: "Risposte alle domande più comuni di chi vende su eBay sul Codice Fiscale degli acquirenti.",
+    },
+    solutionTitle: "Come ti aiuta FiscalBay",
+    start: "Inizia gratis",
+    signIn: "Accedi",
+    back: "Tutte le guide",
+    updated: (date) => `Aggiornata il ${date}`,
+    articles: {
+      "/guide/trovare-codice-fiscale-ordini-ebay": {
+        title: "Dove trovare il Codice Fiscale dell’acquirente su eBay",
+        metaTitle: "Dove trovare il Codice Fiscale dell’acquirente eBay",
+        nav: "Dove trovare il Codice Fiscale",
+        description:
+          "Il Codice Fiscale dell’acquirente non si vede nell’ordine eBay né nel report di Seller Hub. Dove si trova davvero e come averlo per ogni vendita.",
+        lead: "Apri un ordine su eBay e il Codice Fiscale non c’è, anche se l’acquirente l’ha inserito al pagamento. Non è un errore. eBay lo salva, ma non lo mostra nella pagina dell’ordine.",
+        published: "2026-11-03",
+        updated: "2026-11-06",
+        sections: [
+          {
+            title: "Dove non lo trovi",
+            body: [
+              "Non è nei dettagli di spedizione, non è nella pagina degli ordini di Seller Hub e non è nemmeno nel report degli ordini che puoi scaricare. Cercarlo lì è tempo perso.",
+            ],
+          },
+          {
+            title: "Dove si trova",
+            body: [
+              "eBay tiene il Codice Fiscale insieme ai dati dell’ordine e lo passa ai servizi che colleghi al tuo negozio, se dai il consenso. Il collegamento è in sola lettura, quindi il servizio vede gli ordini ma non può modificare niente del tuo account.",
+            ],
+          },
+          {
+            title: "Come farlo indicare agli acquirenti",
+            body: [
+              "Nelle Preferenze di vendita di eBay, nella sezione Acquirenti, puoi attivare la richiesta del Codice Fiscale, che eBay chiama «numero di identificazione fiscale». Da quel momento il modulo di pagamento lo chiede all’acquirente. Qualche ordine però arriva lo stesso senza.",
+            ],
+          },
+          {
+            title: "Se l’ordine non lo contiene",
+            body: [
+              "Se l’acquirente non l’ha inserito al pagamento, l’ordine resta senza. Quando ti serve, l’unica strada è chiederlo con un messaggio da eBay, indicando il numero dell’ordine.",
+            ],
+          },
+          {
+            title: "Salvalo finché l’ordine è recente",
+            body: [
+              "Dopo 90 giorni eBay nasconde i dati personali dell’acquirente. Se il Codice Fiscale ti serve per la contabilità, copialo o esportalo prima.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "Colleghi il negozio eBay una volta sola, in sola lettura. Da lì FiscalBay legge i nuovi ordini da solo.",
+            "Nella scheda di ogni ordine trovi il Codice Fiscale inserito dall’acquirente, da copiare con un clic o da esportare insieme agli altri dati.",
+            "Gli ordini senza Codice Fiscale li trovi con un filtro, e per ognuno c’è già il messaggio per chiederlo. Con Pro ricevi anche una notifica su Telegram a ogni nuovo ordine, con il dato dentro.",
+          ],
+          shot: "scheda",
+          caption: "Il Codice Fiscale nella scheda dell’ordine",
+        },
+      },
+      "/guide/codice-fiscale-non-visibile-ordine-ebay": {
+        title: "Codice Fiscale non visibile nell’ordine eBay: dove finisce il dato",
+        metaTitle: "Codice Fiscale non visibile nell’ordine eBay",
+        nav: "Codice Fiscale non visibile",
+        description:
+          "L’acquirente dice di aver inserito il Codice Fiscale, ma nell’ordine eBay non c’è. Il dato esiste: dove finisce e come leggerlo senza chiederlo di nuovo.",
+        lead: "Hai attivato la richiesta del Codice Fiscale, l’acquirente giura di averlo inserito e nell’ordine non lo trovi. Ha ragione lui. Il dato c’è, solo che eBay non lo fa vedere.",
+        published: "2026-11-04",
+        updated: "2026-11-06",
+        sections: [
+          {
+            title: "Perché non lo vedi",
+            body: [
+              "eBay salva il Codice Fiscale con l’ordine, ma non lo mette nei dettagli di spedizione, nella pagina degli ordini di Seller Hub o nel report scaricabile. Per questo tanti venditori pensano che l’acquirente non l’abbia mai scritto.",
+            ],
+          },
+          {
+            title: "Come leggerlo",
+            body: [
+              "Il dato arriva agli strumenti per venditori che colleghi al negozio, con il tuo consenso e in sola lettura. Una volta collegato il negozio, lo vedi in ogni ordine che lo contiene.",
+            ],
+          },
+          {
+            title: "Prima di chiederlo di nuovo",
+            body: [
+              "Chiedere a un acquirente un dato che ha già dato lo confonde, e spesso non risponde. Meglio controllare prima se l’ordine lo contiene già.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay legge gli ordini del tuo negozio e ti mostra il Codice Fiscale che l’acquirente ha inserito. Non devi chiederlo una seconda volta.",
+            "Con un filtro vedi solo gli ordini senza il dato e scrivi soltanto a quegli acquirenti.",
+            "Con Pro ogni nuovo ordine arriva su Telegram con il Codice Fiscale già nel messaggio.",
+          ],
+          shot: "telegram",
+          caption: "Un nuovo ordine su Telegram, con il Codice Fiscale",
+        },
+      },
+      "/guide/chiedere-codice-fiscale-acquirente-ebay": {
+        title: "Chiedere il Codice Fiscale all’acquirente eBay: il messaggio da inviare",
+        metaTitle: "Chiedere il Codice Fiscale all’acquirente eBay",
+        nav: "Chiedere il Codice Fiscale",
+        description:
+          "Come chiedere il Codice Fiscale a un acquirente eBay dopo la vendita: quando scrivere, cosa dire e un messaggio da copiare.",
+        lead: "L’ordine non ha il Codice Fiscale e a te serve per la fattura. Puoi chiederlo all’acquirente, e con il messaggio giusto le risposte arrivano più spesso.",
+        published: "2026-11-04",
+        updated: "2026-11-05",
+        sections: [
+          {
+            title: "Prima controlla l’ordine",
+            body: [
+              "Molti acquirenti il Codice Fiscale lo inseriscono già al pagamento, ma eBay non lo mostra nella pagina dell’ordine. Prima di scrivere, verifica che manchi davvero.",
+            ],
+          },
+          {
+            title: "Cosa scrivere",
+            body: [
+              "Usa i messaggi di eBay, così l’acquirente vede subito a quale acquisto ti riferisci e chi sei. Metti il numero dell’ordine e spiega che il dato ti serve per la fattura.",
+              "Chiedi solo il Codice Fiscale, oppure Partita IVA e ragione sociale se compra per un’azienda. Più la richiesta è precisa, meno sembra una truffa.",
+            ],
+          },
+          {
+            title: "Modello di messaggio",
+            body: [
+              "«Buongiorno e grazie per l’acquisto. Per emettere la fattura dell’ordine 12-34567-89012 mi serve il tuo Codice Fiscale, che userò soltanto per questo. Se acquisti con Partita IVA, mandami quella e la ragione sociale. Puoi rispondere direttamente a questo messaggio. Grazie.»",
+            ],
+          },
+          {
+            title: "Se non risponde",
+            body: [
+              "Un promemoria dopo qualche giorno va bene, di più no. Se il dato non arriva, chiedi al tuo commercialista come registrare la vendita.",
+              "Per le prossime vendite attiva la richiesta del dato al pagamento, nelle Preferenze di vendita di eBay.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay ti dice subito se l’ordine ha già il Codice Fiscale, così non scrivi a chi l’ha inserito.",
+            "Se manca, nella scheda dell’ordine trovi il messaggio già scritto con il numero dell’ordine. Lo copi e lo mandi dai messaggi di eBay.",
+          ],
+          shot: "scheda",
+          caption: "La scheda dell’ordine mostra se il Codice Fiscale c’è già",
+        },
+      },
+      "/guide/codice-fiscale-fattura-elettronica-ebay": {
+        title: "Codice Fiscale e fattura elettronica per le vendite su eBay",
+        metaTitle: "Codice Fiscale e fattura elettronica su eBay",
+        nav: "Fattura elettronica",
+        description:
+          "Quali dati dell’acquirente servono per fatturare una vendita eBay, a un privato o a un’azienda, e come averli senza ricopiarli a mano.",
+        lead: "Per la fattura elettronica di una vendita eBay devi identificare l’acquirente. Se è un privato serve il Codice Fiscale, se è un’azienda o un professionista la Partita IVA.",
+        published: "2026-11-03",
+        updated: "2026-11-06",
+        sections: [
+          {
+            title: "Vendita a un privato",
+            body: [
+              "Servono nome e cognome, indirizzo e Codice Fiscale. Se il cliente non ti dà un recapito per la fattura, usa il codice destinatario 0000000. Il Sistema di Interscambio la mette a disposizione nella sua area riservata sul sito dell’Agenzia delle Entrate.",
+            ],
+          },
+          {
+            title: "Vendita a un’azienda o a un professionista",
+            body: [
+              "Servono ragione sociale, indirizzo e Partita IVA, più il codice destinatario o la PEC che ti comunica il cliente.",
+            ],
+          },
+          {
+            title: "Quando la fattura è dovuta",
+            body: [
+              "Dipende dal tuo regime, ordinario o forfettario, e dal tipo di vendita. Su questo il riferimento è il tuo commercialista.",
+            ],
+          },
+          {
+            title: "Dove prendere i dati",
+            body: [
+              "Nome e indirizzo li trovi nell’ordine eBay. Codice Fiscale e Partita IVA invece no, perché eBay non li mostra nella pagina dell’ordine e non li mette nel report.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay mette in un unico file acquirente, indirizzo di fatturazione, Codice Fiscale e Partita IVA dei tuoi ordini eBay.",
+            "Lo esporti in CSV, o in Excel con Pro, e lo importi nel software di fatturazione oppure lo mandi al commercialista. Le fatture le emetti sempre dal tuo software.",
+          ],
+          shot: "esportazione",
+          caption: "Ordini esportati con Codice Fiscale e Partita IVA",
+        },
+      },
+      "/guide/esportare-ordini-ebay-excel-csv": {
+        title: "Esportare gli ordini eBay in Excel o CSV con il Codice Fiscale",
+        metaTitle: "Esportare gli ordini eBay in Excel o CSV",
+        nav: "Export in Excel o CSV",
+        description:
+          "Come esportare gli ordini eBay in Excel o CSV con acquirente, indirizzo, Codice Fiscale e Partita IVA, pronti per il gestionale o il commercialista.",
+        lead: "Il report degli ordini di eBay non ha né il Codice Fiscale né la Partita IVA dell’acquirente. Per averli in un file ti serve uno strumento collegato al negozio.",
+        published: "2026-11-03",
+        updated: "2026-11-06",
+        sections: [
+          {
+            title: "Cosa manca nel report di eBay",
+            body: [
+              "Il report che scarichi da Seller Hub non include Codice Fiscale e Partita IVA che l’acquirente ha inserito al pagamento. Per fatturare dovresti aggiungerli a mano, ordine per ordine.",
+            ],
+          },
+          {
+            title: "CSV o Excel",
+            body: [
+              "Il CSV si apre con Excel, Numbers e Fogli Google, e quasi tutti i gestionali e i software di fatturazione lo importano.",
+              "Il formato Excel (XLSX) è più comodo se il file lo devi leggere, filtrare o mandare al commercialista.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay esporta gli ordini del negozio con numero e data, acquirente, indirizzo di fatturazione, importi e, quando l’acquirente li ha inseriti, Codice Fiscale e Partita IVA.",
+            "Puoi esportare tutto, un periodo, un solo negozio o gli ordini che selezioni, con una riga per ordine o per articolo.",
+            "Il CSV è incluso nel piano Free. Con Pro hai anche l’Excel, scegli le colonne e salvi le configurazioni che usi di più. Il file si scarica solo dal tuo account, entro 24 ore.",
+          ],
+          shot: "esportazione",
+          caption: "Gli ordini esportati in Excel",
+        },
+      },
+      "/guide/partita-iva-acquirente-ebay": {
+        title: "Partita IVA dell’acquirente negli ordini eBay",
+        metaTitle: "Partita IVA dell’acquirente negli ordini eBay",
+        nav: "Partita IVA dell’acquirente",
+        description:
+          "Quando un ordine eBay ha la Partita IVA dell’acquirente, dove trovarla e cosa serve per fatturare a un’azienda o a un professionista.",
+        lead: "Chi compra su eBay per la propria attività può inserire la Partita IVA al pagamento. Come per il Codice Fiscale, eBay la salva con l’ordine ma non la mette nel report.",
+        published: "2026-11-03",
+        updated: "2026-11-05",
+        sections: [
+          {
+            title: "Quando l’ordine la contiene",
+            body: [
+              "Solo se l’acquirente l’ha inserita, di solito quando compra per lavoro. Può esserci da sola o insieme al Codice Fiscale.",
+              "Tieni presente che un’azienda può avere un Codice Fiscale numerico uguale alla Partita IVA.",
+            ],
+          },
+          {
+            title: "Cosa serve per la fattura",
+            body: [
+              "Per fatturare a un’azienda o a un professionista servono ragione sociale, indirizzo e Partita IVA, più il codice destinatario o la PEC che ti comunica il cliente. Se la fattura sia dovuta dipende dal tuo regime, e su questo conviene sentire il commercialista.",
+            ],
+          },
+          {
+            title: "Se manca",
+            body: [
+              "Se l’acquirente compra per un’azienda ma non ha inserito la Partita IVA, chiedila con un messaggio da eBay, insieme alla ragione sociale.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay mostra la Partita IVA nella scheda dell’ordine, accanto al Codice Fiscale o al suo posto, e la copi con un clic.",
+            "Nell’export degli ordini ha la sua colonna, quindi arriva al software di fatturazione insieme al resto.",
+          ],
+          shot: "esportazione",
+          caption: "La Partita IVA nell’export degli ordini",
+        },
+      },
+    },
+  },
+  en: {
+    index: {
+      title: "Guides",
+      metaTitle: "Guides | Tax code (Codice Fiscale) for eBay orders",
+      description:
+        "Practical guides for eBay sellers: where to find buyers’ tax code (Codice Fiscale) and VAT number (Partita IVA), how to ask for them and how to use them on invoices.",
+      lead: "Answers to the questions eBay sellers ask most about their buyers’ tax codes.",
+    },
+    solutionTitle: "How FiscalBay helps",
+    start: "Start for free",
+    signIn: "Sign in",
+    back: "All guides",
+    updated: (date) => `Updated ${date}`,
+    articles: {
+      "/guide/trovare-codice-fiscale-ordini-ebay": {
+        title: "Where to find the buyer’s tax code (Codice Fiscale) on eBay",
+        metaTitle: "Where to find the buyer’s tax code (Codice Fiscale) on eBay",
+        nav: "Where to find the tax code",
+        description:
+          "The buyer’s tax code does not show on the eBay order or in the Seller Hub report. Where it really is and how to get it for every sale.",
+        lead: "Open an order on eBay and the tax code (Codice Fiscale) is not there, even if the buyer entered it at checkout. It is not a mistake. eBay saves it, but does not show it on the order page.",
+        published: "2026-11-03",
+        updated: "2026-11-06",
+        sections: [
+          {
+            title: "Where you will not find it",
+            body: [
+              "It is not in the shipping details, not on the Seller Hub orders page and not in the order report you can download either. Looking for it there is a waste of time.",
+            ],
+          },
+          {
+            title: "Where it is",
+            body: [
+              "eBay keeps the tax code with the order details and passes it to the services you connect to your store, if you give consent. The connection is read-only, so the service sees your orders but cannot change anything on your account.",
+            ],
+          },
+          {
+            title: "How to get buyers to enter it",
+            body: [
+              "In eBay’s selling preferences, in the Buyers section, you can turn on the request for the tax code (Codice Fiscale), which eBay calls “tax identification number”. From then on the checkout form asks the buyer for it. Some orders still arrive without it.",
+            ],
+          },
+          {
+            title: "If the order does not include it",
+            body: [
+              "If the buyer did not enter it at checkout, the order stays without it. When you need it, the only way is to ask through an eBay message that quotes the order number.",
+            ],
+          },
+          {
+            title: "Save it while the order is recent",
+            body: [
+              "After 90 days eBay hides the buyer’s personal details. If you need the tax code for your accounts, copy or export it before then.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "You connect your eBay store once, read-only. From then on FiscalBay reads new orders on its own.",
+            "On each order card you find the tax code the buyer entered, to copy in one click or export with the other details.",
+            "Orders without a tax code are one filter away, and each one comes with a message ready to ask for it. With Pro you also get a Telegram notification for every new order, with the data in it.",
+          ],
+          shot: "scheda",
+          caption: "The tax code on the order card",
+        },
+      },
+      "/guide/codice-fiscale-non-visibile-ordine-ebay": {
+        title: "Tax code (Codice Fiscale) not visible on the eBay order: where the data goes",
+        metaTitle: "Tax code (Codice Fiscale) not visible on the eBay order",
+        nav: "Tax code not visible",
+        description:
+          "The buyer says they entered their tax code, but it is not on the eBay order. The data exists: where it goes and how to read it without asking again.",
+        lead: "You turned on the tax code request, the buyer swears they entered it, and you cannot find it on the order. They are right. The data is there, eBay just does not show it.",
+        published: "2026-11-04",
+        updated: "2026-11-06",
+        sections: [
+          {
+            title: "Why you cannot see it",
+            body: [
+              "eBay saves the tax code with the order but leaves it out of the shipping details, the Seller Hub orders page and the downloadable report. That is why so many sellers think the buyer never wrote it.",
+            ],
+          },
+          {
+            title: "How to read it",
+            body: [
+              "The data reaches the seller tools you connect to your store, with your consent and read-only. Once the store is connected, you see it on every order that has it.",
+            ],
+          },
+          {
+            title: "Before asking again",
+            body: [
+              "Asking a buyer for something they already gave confuses them, and often they do not reply. Better to check first whether the order already has it.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay reads your store’s orders and shows you the tax code the buyer entered. You do not need to ask a second time.",
+            "A filter shows only the orders without it, so you write to those buyers alone.",
+            "With Pro every new order reaches you on Telegram with the tax code already in the message.",
+          ],
+          shot: "telegram",
+          caption: "A new order on Telegram, with the tax code",
+        },
+      },
+      "/guide/chiedere-codice-fiscale-acquirente-ebay": {
+        title: "Asking an eBay buyer for their tax code (Codice Fiscale): the message to send",
+        metaTitle: "Asking an eBay buyer for their tax code (Codice Fiscale)",
+        nav: "Asking for the tax code",
+        description:
+          "How to ask an eBay buyer for their tax code after the sale: when to write, what to say and a message to copy.",
+        lead: "The order has no tax code and you need it for the invoice. You can ask the buyer, and with the right message replies come more often.",
+        published: "2026-11-04",
+        updated: "2026-11-05",
+        sections: [
+          {
+            title: "Check the order first",
+            body: [
+              "Many buyers already enter their tax code at checkout, but eBay does not show it on the order page. Before you write, make sure it is really missing.",
+            ],
+          },
+          {
+            title: "What to write",
+            body: [
+              "Use eBay messages, so the buyer sees at once which purchase you mean and who you are. Include the order number and explain that you need the data for the invoice.",
+              "Ask only for the tax code, or for the VAT number (Partita IVA) and company name if they buy for a business. The more precise the request, the less it looks like a scam.",
+            ],
+          },
+          {
+            title: "Message template",
+            body: [
+              "“Hello and thank you for your purchase. To issue the invoice for order 12-34567-89012 I need your Italian tax code (Codice Fiscale), which I will use only for this. If you are buying with an Italian VAT number (Partita IVA), please send that and your company name. You can reply straight to this message. Thank you.”",
+            ],
+          },
+          {
+            title: "If they do not reply",
+            body: [
+              "One reminder after a few days is fine, more is not. If the data never arrives, ask your accountant how to record the sale.",
+              "For your next sales, turn on the request for the data at checkout in eBay’s selling preferences.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay tells you straight away whether the order already has the tax code, so you do not write to buyers who entered it.",
+            "If it is missing, the order card has the message already written with the order number. Copy it and send it through eBay messages.",
+          ],
+          shot: "scheda",
+          caption: "The order card shows whether the tax code is already there",
+        },
+      },
+      "/guide/codice-fiscale-fattura-elettronica-ebay": {
+        title: "Tax code (Codice Fiscale) and the Italian e-invoice for eBay sales",
+        metaTitle: "Tax code (Codice Fiscale) and the e-invoice on eBay",
+        nav: "Italian e-invoice",
+        description:
+          "Which buyer details you need to invoice an eBay sale, to a private buyer or a business, and how to get them without copying them by hand.",
+        lead: "For the Italian e-invoice of an eBay sale you have to identify the buyer. A private buyer needs the tax code (Codice Fiscale), a business or professional the VAT number (Partita IVA).",
+        published: "2026-11-03",
+        updated: "2026-11-06",
+        sections: [
+          {
+            title: "Selling to a private buyer",
+            body: [
+              "You need full name, address and tax code. If the customer gives you no delivery address for the invoice, use the recipient code 0000000. The Exchange System (Sistema di Interscambio) then makes it available in their private area on the Agenzia delle Entrate website.",
+            ],
+          },
+          {
+            title: "Selling to a business or professional",
+            body: [
+              "You need company name, address and VAT number, plus the recipient code or certified email address the customer gives you.",
+            ],
+          },
+          {
+            title: "When an invoice is due",
+            body: [
+              "It depends on your VAT scheme, standard or flat-rate, and the type of sale. Your accountant is the person to ask.",
+            ],
+          },
+          {
+            title: "Where to get the data",
+            body: [
+              "Name and address are on the eBay order. The tax code and VAT number are not, because eBay does not show them on the order page or put them in the report.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay puts the buyer, billing address, tax code and VAT number of your eBay orders in a single file.",
+            "Export it as CSV, or as Excel with Pro, and import it into your invoicing software or send it to your accountant. You still issue invoices from your own software.",
+          ],
+          shot: "esportazione",
+          caption: "Orders exported with tax code and VAT number",
+        },
+      },
+      "/guide/esportare-ordini-ebay-excel-csv": {
+        title: "Exporting eBay orders to Excel or CSV with the tax code (Codice Fiscale)",
+        metaTitle: "Exporting eBay orders to Excel or CSV",
+        nav: "Export to Excel or CSV",
+        description:
+          "How to export eBay orders to Excel or CSV with buyer, address, tax code (Codice Fiscale) and VAT number (Partita IVA), ready for your management software or accountant.",
+        lead: "eBay’s order report has neither the buyer’s tax code nor their VAT number. To get them in a file you need a tool connected to your store.",
+        published: "2026-11-03",
+        updated: "2026-11-06",
+        sections: [
+          {
+            title: "What eBay’s report leaves out",
+            body: [
+              "The report you download from Seller Hub does not include the tax code and VAT number the buyer entered at checkout. To invoice, you would have to add them by hand, order by order.",
+            ],
+          },
+          {
+            title: "CSV or Excel",
+            body: [
+              "CSV opens in Excel, Numbers and Google Sheets, and almost every management or invoicing program can import it.",
+              "The Excel format (XLSX) is handier if you need to read the file, filter it or send it to your accountant.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay exports your store’s orders with order number and date, buyer, billing address, amounts and, when the buyer entered them, tax code and VAT number.",
+            "You can export everything, a period, a single store or the orders you select, with one row per order or per item.",
+            "CSV is included in the Free plan. With Pro you also get Excel, choose the columns and save the configurations you use most. The file can only be downloaded from your account, within 24 hours.",
+          ],
+          shot: "esportazione",
+          caption: "Orders exported to Excel",
+        },
+      },
+      "/guide/partita-iva-acquirente-ebay": {
+        title: "The buyer’s VAT number (Partita IVA) on eBay orders",
+        metaTitle: "The buyer’s VAT number (Partita IVA) on eBay orders",
+        nav: "The buyer’s VAT number",
+        description:
+          "When an eBay order has the buyer’s VAT number, where to find it and what you need to invoice a business or professional.",
+        lead: "Buyers purchasing on eBay for their business can enter a VAT number (Partita IVA) at checkout. As with the tax code (Codice Fiscale), eBay saves it with the order but leaves it out of the report.",
+        published: "2026-11-03",
+        updated: "2026-11-05",
+        sections: [
+          {
+            title: "When the order includes it",
+            body: [
+              "Only if the buyer entered it, usually when buying for work. It can be there on its own or together with the tax code.",
+              "Bear in mind that a company can have a numeric tax code equal to its VAT number.",
+            ],
+          },
+          {
+            title: "What you need for the invoice",
+            body: [
+              "To invoice a business or professional you need company name, address and VAT number, plus the recipient code or certified email address the customer gives you. Whether an invoice is due depends on your regime, and that is worth checking with your accountant.",
+            ],
+          },
+          {
+            title: "If it is missing",
+            body: [
+              "If the buyer is purchasing for a business but did not enter a VAT number, ask for it through an eBay message, together with the company name.",
+            ],
+          },
+        ],
+        solution: {
+          body: [
+            "FiscalBay shows the VAT number on the order card, next to the tax code or in its place, and you copy it in one click.",
+            "In the order export it has its own column, so it reaches your invoicing software with everything else.",
+          ],
+          shot: "esportazione",
+          caption: "The VAT number in the order export",
+        },
+      },
+    },
+  },
+};

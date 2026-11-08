@@ -192,7 +192,21 @@ describe("suggerimenti fiscali dai precedenti", () => {
     expect((await read(current)).get(current)!.suggestions[0]!.sourceOrder).toBe("old-backfill");
   });
 
-  it("nega i suggerimenti Free e dopo revoca/scadenza Premium, senza restituire valori", async () => {
+  it("segnala un conflitto fra CF e P. IVA dello stesso tipo eBay", async () => {
+    await premium();
+    await imported("cf-old", "2026-09-09T00:00:00.000Z", [cf("RSSMRA80A01H501U")]);
+    await imported("piva-new", "2026-09-11T00:00:00.000Z", [cf("02727380186")]);
+    const current = await imported("current", "2026-09-13T00:00:00.000Z");
+    expect((await read(current)).get(current)!.suggestions).toMatchObject([
+      { value: "02727380186", identifier: { type: "PIVA" }, conflict: true, mixedConflict: true },
+    ]);
+    await imported("cf-old", "2026-09-09T00:00:00.000Z", [cf("02727380187")]);
+    const [same] = (await read(current)).get(current)!.suggestions;
+    expect(same).toMatchObject({ conflict: true });
+    expect(same).not.toHaveProperty("mixedConflict");
+  });
+
+  it("nega i suggerimenti Free e dopo revoca/scadenza Pro, senza restituire valori", async () => {
     await imported("previous", "2026-09-11T00:00:00.000Z", [cf("RSSMRA80A01H501U")]);
     const current = await imported("current", "2026-09-13T00:00:00.000Z");
     expect((await read(current)).size).toBe(0);

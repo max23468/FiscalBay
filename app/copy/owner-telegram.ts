@@ -13,6 +13,7 @@ export const ownerTelegramCopy = {
     lavori: "Lavori periodici, eventi e webhook",
     quote: "Quote delle API eBay",
     commerciale: "Incassi, lifetime e listino",
+    uscite: "Motivi di disdette e cancellazioni",
     metriche: "Funnel e KPI",
     negozi: "Negozi con problemi",
     prestazioni: "Metriche tecniche",
@@ -25,6 +26,7 @@ export const ownerTelegramCopy = {
     lavori: "⚙️ Lavori",
     quote: "📊 Quote eBay",
     commerciale: "💶 Commerciale",
+    uscite: "🚪 Uscite",
     metriche: "📈 Metriche",
     negozi: "🏪 Negozi",
     prestazioni: "⏱ Prestazioni",
@@ -104,6 +106,11 @@ export const ownerTelegramCopy = {
   metrics: {
     window: (days: number) => `Ultimi ${days} giorni`,
   },
+  exitsView: {
+    lead: "Ultimi 30 giorni · ultimi 12 mesi",
+    counts: (days30: number, months12: number) => `${days30} · ${months12}`,
+    none: "Nessuna uscita negli ultimi 12 mesi",
+  },
   storesView: {
     problems: "Negozi con problemi",
     none: "Nessun negozio con problemi",
@@ -164,6 +171,7 @@ export const ownerTelegramCopy = {
       seatsLeft: "Posti liberi",
       requestedAt: "Richiesta",
       paidCoverage: "Copertura pagata in corso",
+      comment: "Commento",
     },
     yes: "Sì",
     no: "No",

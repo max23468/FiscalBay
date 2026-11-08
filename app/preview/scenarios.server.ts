@@ -259,7 +259,13 @@ export function loadScenario(
       { label: "stepSync" as const, done: true },
     ],
     notifications: [
-      note("maintenance", { id: "n-maint", tone: "info", at: minutesAgo(300), read: false }),
+      note("maintenance", {
+        id: "n-maint",
+        kind: "service",
+        tone: "info",
+        at: minutesAgo(300),
+        read: false,
+      }),
     ],
     diagnostics: diagnostics(),
   };
@@ -337,6 +343,7 @@ export function loadScenario(
           : [
               note("inactivity", {
                 id: `inactivity:${pausedAt}`,
+                kind: "inactivity",
                 tone: "warning",
                 at: pausedAt,
                 read: false,
@@ -431,7 +438,13 @@ export function loadScenario(
           },
         ],
         notifications: [
-          note("ebayDown", { id: "n-ebay", tone: "warning", at: minutesAgo(35), read: false }),
+          note("ebayDown", {
+            id: "n-ebay",
+            kind: "ebay-down",
+            tone: "warning",
+            at: minutesAgo(35),
+            read: false,
+          }),
           ...common.notifications,
         ],
         diagnostics: diagnostics({
@@ -549,6 +562,7 @@ export function loadScenario(
           // Come nell'area reale, il consenso in scadenza si segnala da trenta giorni prima.
           {
             id: "n-expiring",
+            kind: "store-expiring",
             tone: "warning",
             title: appCopy[language].shell.storeNotifications.expiringTitle,
             body: appCopy[language].shell.storeNotifications.expiringBody(
@@ -561,6 +575,7 @@ export function loadScenario(
           },
           note("readFailed", {
             id: "n-read-failed",
+            kind: "store-read-failed",
             tone: "warning",
             at: minutesAgo(40),
             read: false,
@@ -568,6 +583,7 @@ export function loadScenario(
           }),
           note("expired", {
             id: "n-expired",
+            kind: "store-expired",
             tone: "warning",
             at: minutesAgo(1_440),
             read: false,

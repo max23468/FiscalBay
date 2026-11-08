@@ -21,8 +21,10 @@ async function readAccount(db: D1Database, userId: string) {
     user: `SELECT u.email, u.emailVerified AS email_verified, u.createdAt AS created_at,
              p.first_name, p.last_name, p.account_type, p.company_name,
              pr.language, pr.theme, pr.time_zone, pr.template_it, pr.template_en,
-             (SELECT confirm_unlock FROM unlock_preferences WHERE user_id = u.id) AS confirm_unlock
+             (SELECT confirm_unlock FROM unlock_preferences WHERE user_id = u.id) AS confirm_unlock,
+             src.channel AS signup_channel, src.first_page AS signup_first_page
         FROM "user" u LEFT JOIN user_profiles p ON p.user_id = u.id
+        LEFT JOIN signup_sources src ON src.user_id = u.id
         LEFT JOIN user_preferences pr ON pr.user_id = u.id WHERE u.id = ?1`,
     marketing: `SELECT granted, text_version, recorded_at FROM marketing_consents
         WHERE user_id = ?1 ORDER BY recorded_at DESC, id DESC LIMIT 1`,
@@ -81,6 +83,9 @@ export async function accountData(db: D1Database, userId: string) {
       accountType: user.account_type,
       companyName: user.company_name,
       createdAt: user.created_at,
+      signupSource: user.signup_channel
+        ? { channel: user.signup_channel, firstPage: user.signup_first_page }
+        : null,
       language: user.language,
       theme: user.theme ?? "system",
       timeZone: user.time_zone ?? "auto",
@@ -201,6 +206,8 @@ export function accountArchive(
     ["accountType", profile.accountType],
     ["companyName", profile.companyName],
     ["createdAt", date(profile.createdAt)],
+    ["signupChannel", profile.signupSource?.channel ?? null],
+    ["signupFirstPage", profile.signupSource?.firstPage ?? null],
     ["language", profile.language],
     ["theme", profile.theme],
     // Il fuso delle date dei CSV; la scelta salvata, anche «auto», resta nel JSON.
