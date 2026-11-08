@@ -25,11 +25,22 @@ export class EmailError extends ApplicationError {
   }
 }
 
-/** Invia con il binding dell'ambiente; ogni rifiuto diventa un `EmailError`. */
+/**
+ * Il dominio `.invalid` è riservato e non riceve posta (RFC 2606): vi scrivono soltanto gli account
+ * sintetici delle prove, e il provider conterebbe ogni invio come consegna fallita.
+ */
+const undeliverableRecipient = /\.invalid$/iu;
+
+/**
+ * Invia con il binding dell'ambiente; ogni rifiuto diventa un `EmailError`. Negli ambienti
+ * distribuiti un destinatario che non può ricevere posta si considera servito, come un invio
+ * accettato dal provider; in locale il binding è simulato e registra anche questi invii.
+ */
 export async function sendEmail(
   env: Env,
   message: { to: string; replyTo: string; subject: string; text: string; html?: string },
 ): Promise<void> {
+  if (env.APP_ORIGIN.startsWith("https:") && undeliverableRecipient.test(message.to)) return;
   try {
     await env.AUTH_EMAIL.send({ ...message, from: emailFrom });
   } catch (error) {

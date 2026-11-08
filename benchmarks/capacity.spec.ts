@@ -370,6 +370,10 @@ it("legge un negozio senza novità e uno con dieci ordini nuovi", async () => {
       });
     });
     const fetcher = ebay(orders);
+    // Username già riletti: questo caso misura la lettura periodica e gli ordini nuovi.
+    await env.DB.prepare("UPDATE orders SET buyer_checked_at = ? WHERE store_id = ?")
+      .bind(now.toISOString(), store)
+      .run();
     // Turni del cron, dieci minuti l'uno dall'altro, finché resta lavoro oltre l'elenco: ogni
     // turno ha un budget di chiamate e i dettagli degli ordini nuovi si completano nei successivi.
     const sync: { cost: Cost; heaviest: Heaviest } = {
