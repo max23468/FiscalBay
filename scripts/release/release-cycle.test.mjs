@@ -37,6 +37,8 @@ import {
   pullRequestView,
   pullRequestAction,
   checksOutcome,
+  coordinatorRunner,
+  requiredPassed,
   mergeDeploys,
   cycleCommand,
   lockObject,
@@ -866,6 +868,36 @@ describe("PR tramite API REST", () => {
       "--repo",
       "example/project",
     ]);
+  });
+
+  it("porta il coordinatore sul Mac soltanto con un suo runner acceso e libero", () => {
+    const runner = (status, busy, name = "fiscalbay-coordinator") => ({
+      status,
+      busy,
+      labels: [{ name: "self-hosted" }, { name }],
+    });
+    assert.equal(coordinatorRunner([runner("online", false)], true), "mac");
+    assert.equal(
+      coordinatorRunner([runner("online", true), runner("offline", false)], true),
+      "github",
+    );
+    assert.equal(coordinatorRunner([runner("online", false, "altro")], true), "github");
+    assert.equal(coordinatorRunner([], true), "github");
+    // Un `cycle.yml` senza l'input rifiuterebbe il parametro.
+    assert.equal(coordinatorRunner([runner("online", false)], false), undefined);
+  });
+
+  it("legge soltanto l'ultima esecuzione di Node 26", () => {
+    const check = (id, name, conclusion) => ({ id, name, conclusion });
+    assert.equal(
+      requiredPassed([check(1, "Node 26", "failure"), check(2, "Node 26", "success")]),
+      true,
+    );
+    assert.equal(
+      requiredPassed([check(3, "Node 26", "cancelled"), check(2, "Node 26", "success")]),
+      false,
+    );
+    assert.equal(requiredPassed([check(1, "Verify", "success")]), false);
   });
 
   it("attende i controlli in corso e conta solo l'ultima esecuzione di ognuno", () => {

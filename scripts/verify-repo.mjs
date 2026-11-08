@@ -227,6 +227,22 @@ export function checkGateJobs(files) {
 }
 
 /**
+ * Il runner del Mac gira nell'account dell'owner: lo usano soltanto i coordinatori di `cycle.yml`,
+ * che eseguono codice di `develop` senza dipendenze, mai i job delle PR o quelli con `pnpm install`.
+ */
+export function checkSelfHostedRunners(files) {
+  const errors = [];
+  for (const { path: file, text } of files) {
+    if (!/^\.github\/(?:workflows|actions)\/.+\.ya?ml$/u.test(file)) continue;
+    if (file === ".github/workflows/cycle.yml") continue;
+    for (const [index, line] of text.split("\n").entries())
+      if (/self-hosted|fiscalbay-coordinator/u.test(line))
+        errors.push(`${file}:${index + 1}: runner del Mac riservato a cycle.yml`);
+  }
+  return errors;
+}
+
+/**
  * Impronte SHA-256 degli indirizzi degli account delle verifiche live, che restano
  * nell'inventario privato (AGENTS): il controllo li riconosce senza scriverli qui.
  */
@@ -275,6 +291,7 @@ export const checks = {
   "versioni degli strumenti": checkToolPins,
   "Action fissate": checkActionPins,
   "job dopo Node 26": checkGateJobs,
+  "runner del Mac": checkSelfHostedRunners,
   "indirizzi privati": (files) => checkPrivateAddresses(files),
   "security.txt": (files) => checkSecurityTxt(files),
 };

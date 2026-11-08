@@ -10,6 +10,7 @@ import {
   checkPlanCodes,
   checkPrivateAddresses,
   checkSecurityTxt,
+  checkSelfHostedRunners,
   checkToolPins,
 } from "./verify-repo.mjs";
 
@@ -147,6 +148,19 @@ describe("em dash", () => {
       checkCopy([{ path: "app/root.tsx", text: "Ordini | FiscalBay - 2026\u2013" }]),
       [],
     );
+  });
+});
+
+describe("runner del Mac", () => {
+  const workflow = (path) => ({
+    path,
+    text: "jobs:\n  a:\n    runs-on: [self-hosted, fiscalbay-coordinator]\n",
+  });
+
+  it("ammette il runner soltanto nei coordinatori", () => {
+    assert.deepEqual(checkSelfHostedRunners([workflow(".github/workflows/cycle.yml")]), []);
+    assert.match(checkSelfHostedRunners([workflow(".github/workflows/ci.yml")])[0], /ci\.yml:3/u);
+    assert.equal(checkSelfHostedRunners([workflow(".github/actions/setup/action.yml")]).length, 1);
   });
 });
 
