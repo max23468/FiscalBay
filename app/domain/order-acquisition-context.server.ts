@@ -129,9 +129,12 @@ const dayOf = (at: Date) => at.toISOString().slice(0, 10);
 export function countedAccess(db: D1Database, access: EbayAccess, now: Date): EbayAccess {
   const origin = access.configuration.apiOrigin;
   const day = dayOf(now);
+  // Senza `this`: nei Workers il `fetch` globale chiamato come metodo di un oggetto rifiuta la
+  // chiamata («Illegal invocation»).
+  const original = access.fetcher;
   const fetcher: typeof fetch = async (input, init) => {
     const call = countedCall(input, init);
-    const response = await access.fetcher(input, init);
+    const response = await original(input, init);
     if (call)
       await db
         .prepare(
