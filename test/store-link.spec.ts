@@ -33,8 +33,15 @@ import {
   syntheticTradingXml,
   withSandbox,
 } from "./fixtures/ebay-fixtures";
-import { verifiedSession } from "./fixtures/account-fixtures";
-import { accessError, homeFor } from "./fixtures/account-route-fixtures";
+import {
+  emailLink,
+  emailSender,
+  mailEnv,
+  sessionCookie,
+  verifiedSession,
+} from "./fixtures/account-fixtures";
+import { accessError, accessForm, homeFor } from "./fixtures/account-route-fixtures";
+import { createAuth } from "../app/auth.server";
 import { beginStoreLink, storeCallback, storeLinkSessions } from "./fixtures/store-link-fixtures";
 import { orderView } from "../app/domain/order-view.server";
 import {
@@ -165,6 +172,98 @@ describe("autorizzazione eBay data in registrazione", () => {
     expect(await activate(owner.userId)).toBe("altro-spazio");
     expect(await listStores(env.DB, owner.userId)).toEqual([]);
     expect(await pendingGrants()).toBe(0);
+  });
+});
+
+describe("collegamento del negozio alla conferma dell'email", () => {
+  const ebayUserId = "ebay-user-sintetico";
+  const password = "Una-password-negozio-molto-lunga";
+  const code = (text: string) => /: (\d{6})/u.exec(text)![1]!;
+  afterEach(() => vi.restoreAllMocks());
+
+  /** Account con accesso eBay, email da confermare, consenso in attesa e un'email di conferma. */
+  async function pendingAccount(email: string) {
+    const owner = await verifiedSession(email);
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 0 WHERE id = ?')
+      .bind(owner.userId)
+      .run();
+    await env.DB.prepare(
+      `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+       VALUES (?, ?, 'ebay', ?, ?, ?)`,
+    )
+      .bind(crypto.randomUUID(), ebayUserId, owner.userId, Date.now(), Date.now())
+      .run();
+    const in2Hours = new Date(Date.now() + 2 * 3_600_000).toISOString();
+    await saveSignupGrant(env, {
+      ebayUserId,
+      username: "venditore",
+      language: "it",
+      tokens: {
+        accessToken: "accesso-sintetico",
+        accessExpiresAt: in2Hours,
+        refreshToken: "rinnovo-sintetico",
+        refreshExpiresAt: in2Hours,
+      },
+    });
+    const send = emailSender();
+    const mail = mailEnv(send);
+    await createAuth(mail).handler(
+      new Request("http://localhost:5173/api/auth/send-verification-email", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, callbackURL: "/app/ordini" }),
+      }),
+    );
+    await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+    const { text } = send.mock.calls[0]![0] as { text: string };
+    return { owner, mail, text };
+  }
+  const openLink = (text: string, cookie: string, mail: Env) =>
+    handleAuthRequest(new Request(emailLink(text), { headers: { cookie } }), mail);
+  const emailCodes = (email: string) =>
+    env.DB.prepare(`SELECT count(*) AS total FROM "verification" WHERE identifier = ?`)
+      .bind(`email-verification-otp-${email}`)
+      .first("total");
+
+  it("con il link collega il negozio e il codice non vale più", async () => {
+    const email = "link-consenso@example.invalid";
+    const { owner, mail, text } = await pendingAccount(email);
+    expect(await emailCodes(email)).toBe(1);
+    vi.spyOn(globalThis, "fetch").mockImplementation(syntheticEbay({ orders: [] }));
+    const opened = await openLink(text, owner.cookie, mail);
+    expect(opened.status).toBe(302);
+    expect(await listStores(env.DB, owner.userId)).toHaveLength(1);
+    expect(await emailCodes(email)).toBe(0);
+  });
+
+  it("un consenso illeggibile non ferma la conferma con il link e resta nei log", async () => {
+    const { owner, mail, text } = await pendingAccount("link-guasto@example.invalid");
+    await env.DB.prepare("UPDATE ebay_signup_grants SET access_token = 'illeggibile'").run();
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const opened = await openLink(text, owner.cookie, mail);
+    expect(opened.status).toBe(302);
+    expect(opened.headers.get("location")).toContain("/app/ordini");
+    expect(errors.mock.calls.map(([line]) => String(line)).join("\n")).toContain("store_link");
+    expect(
+      await env.DB.prepare('SELECT "emailVerified" AS verified FROM "user" WHERE id = ?')
+        .bind(owner.userId)
+        .first("verified"),
+    ).toBe(1);
+    expect(await listStores(env.DB, owner.userId)).toEqual([]);
+  });
+
+  it("con il codice la pagina riceve l'esito del collegamento", async () => {
+    const email = "codice-consenso@example.invalid";
+    const { owner, text } = await pendingAccount(email);
+    const cookie = sessionCookie(await accessForm("/accesso", { email, password }));
+    vi.spyOn(globalThis, "fetch").mockImplementation(syntheticEbay({ orders: [] }));
+    const confirmed = await accessForm(
+      "/accesso",
+      { intent: "conferma-codice", codice: code(text) },
+      cookie,
+    );
+    expect(confirmed.headers.get("location")).toBe("/app/ordini?negozio=collegato");
+    expect(await listStores(env.DB, owner.userId)).toHaveLength(1);
   });
 });
 

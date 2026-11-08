@@ -146,6 +146,7 @@ async function requireConfirmationSession(env: Env, user: LinkUser, request?: Re
 
 /** Lingua dell'autorizzazione al negozio chiesta insieme all'accesso eBay, dallo state firmato. */
 async function storeGrantLanguage(): Promise<Language | null> {
+  // Stryker disable next-line ArrowFunction: null e undefined danno lo stesso esito.
   const state = await getOAuthState().catch(() => null);
   const value = (state as { storeGrantLanguage?: unknown } | null)?.storeGrantLanguage;
   return value === "it" || value === "en" ? value : null;
@@ -406,8 +407,9 @@ async function captureStoreGrant(
 ) {
   const language = await storeGrantLanguage();
   const { accessToken, refreshToken, accessTokenExpiresAt, refreshTokenExpiresAt } = tokens;
-  if (!language || !accessToken || !refreshToken) return;
-  if (!accessTokenExpiresAt || !refreshTokenExpiresAt) return;
+  if (!language || !accessToken || !refreshToken || !refreshTokenExpiresAt) return;
+  // Stryker disable next-line ConditionalExpression: Better Auth assegna sempre una scadenza.
+  if (!accessTokenExpiresAt) return;
   const { saveSignupGrant } = await import("./domain/store-link.server");
   await saveSignupGrant(env, {
     ebayUserId: profile.userId,

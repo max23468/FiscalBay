@@ -5,7 +5,7 @@ import { hashPassword as originalHash } from "better-auth/crypto";
 
 import { getMigrations } from "better-auth/db/migration";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const background = vi.hoisted(() => {
   vi.resetModules();
@@ -865,6 +865,105 @@ describe("Better Auth su Workers e D1", () => {
     expect(await env.DB.prepare("SELECT count(*) AS total FROM ebay_stores").first("total")).toBe(
       0,
     );
+  });
+
+  describe("consenso al negozio nell'accesso eBay", () => {
+    beforeEach(async () => {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM ebay_signup_grants"),
+        env.DB.prepare(`DELETE FROM "user" WHERE email = 'consenso@example.invalid'`),
+      ]);
+    });
+    const completeTokens = {
+      access_token: "accesso-negozio",
+      refresh_token: "rinnovo-negozio",
+      token_type: "Bearer",
+      expires_in: 7200,
+      refresh_token_expires_in: 47_304_000,
+    };
+    const ebayCallback = async (
+      environment: Env,
+      additionalData: Record<string, string> | undefined,
+      tokens: Record<string, unknown> = completeTokens,
+      userId = "ebay-consenso",
+    ) => {
+      const start = await createAuth(environment).handler(
+        new Request("http://localhost:5173/api/auth/sign-in/social", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ provider: "ebay", callbackURL: "/", additionalData }),
+        }),
+      );
+      const state = new URL((await start.json<{ url: string }>()).url).searchParams.get("state");
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (url.endsWith("/identity/v1/oauth2/token")) return Response.json(tokens);
+        return Response.json({
+          userId,
+          username: "venditore-consenso",
+          businessAccount: { email: "consenso@example.invalid" },
+        });
+      });
+      const response = await handleAuthRequest(
+        new Request(`http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${state}`, {
+          headers: { cookie: sessionCookie(start) },
+        }),
+        environment,
+      );
+      fetchMock.mockRestore();
+      return response;
+    };
+    const grant = () =>
+      env.DB.prepare("SELECT language FROM ebay_signup_grants WHERE ebay_user_id = ?")
+        .bind("ebay-consenso")
+        .first<{ language: string }>();
+    const loginTokens = () =>
+      env.DB.prepare(`SELECT "refreshToken" FROM "account" WHERE "accountId" = ?`)
+        .bind("ebay-consenso")
+        .first<{ refreshToken: string | null }>();
+
+    it("conserva la lingua inglese del consenso", async () => {
+      await ebayCallback(mailEnv(emailSender()), { storeGrantLanguage: "en" });
+      expect(await grant()).toEqual({ language: "en" });
+    });
+
+    it.each([
+      ["senza richiesta del negozio", undefined, completeTokens],
+      ["con una lingua sconosciuta", { storeGrantLanguage: "de" }, completeTokens],
+    ])("%s l'accesso resta com'è", async (_, data, tokens) => {
+      const response = await ebayCallback(mailEnv(emailSender()), data, tokens);
+      expect(response.status).toBe(302);
+      expect(await grant()).toBeNull();
+      expect((await loginTokens())?.refreshToken).toEqual(expect.any(String));
+    });
+
+    it.each([
+      ["senza token di accesso", { ...completeTokens, access_token: undefined }],
+      ["senza token di rinnovo", { ...completeTokens, refresh_token: undefined }],
+      ["senza scadenza del rinnovo", { ...completeTokens, refresh_token_expires_in: undefined }],
+    ])("%s non conserva il consenso", async (_, tokens) => {
+      await ebayCallback(mailEnv(emailSender()), { storeGrantLanguage: "it" }, tokens);
+      expect(await grant()).toBeNull();
+    });
+
+    it("un consenso che non si salva non ferma l'accesso e resta nei log", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      // Un identificativo oltre il limite della tabella fa fallire il salvataggio.
+      const response = await ebayCallback(
+        mailEnv(emailSender()),
+        { storeGrantLanguage: "it" },
+        completeTokens,
+        "e".repeat(300),
+      );
+      const logged = errors.mock.calls.map(([line]) => String(line));
+      errors.mockRestore();
+      expect(response.status).toBe(302);
+      expect(response.headers.get("location")).toBe("/");
+      expect(
+        await env.DB.prepare("SELECT count(*) AS total FROM ebay_signup_grants").first("total"),
+      ).toBe(0);
+      expect(logged.join("\n")).toContain("store_link");
+    });
   });
 
   it.each([true, false])(

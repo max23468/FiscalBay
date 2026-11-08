@@ -365,7 +365,12 @@ describe("confine HTTP Auth", () => {
 
 describe("limiti dei tentativi", () => {
   // Registrazione, recupero e nuovo link arrivano soltanto dai moduli, inoltrati ad Auth.
-  const formOnly = ["/sign-up/email", "/request-password-reset", "/send-verification-email"];
+  const formOnly = [
+    "/sign-up/email",
+    "/request-password-reset",
+    "/send-verification-email",
+    "/email-otp/verify-email",
+  ];
   const post = (path: string, init: { headers: Record<string, string>; body?: string }) =>
     formOnly.includes(path)
       ? forwardToAuth(
@@ -388,6 +393,7 @@ describe("limiti dei tentativi", () => {
     ["/send-verification-email", 60],
     ["/request-password-reset", 60],
     ["/forget-password", 60],
+    ["/email-otp/verify-email", 10],
   ])(
     "limita %s per IP e riapre la finestra a %i secondi senza scrivere su D1",
     async (path, seconds) => {
@@ -404,6 +410,24 @@ describe("limiti dei tentativi", () => {
       expect(sqlite.prepare('SELECT count(*) AS total FROM "rateLimit"').get()?.total).toBe(0);
       vi.setSystemTime(now + seconds * 1000);
       expect((await attempt(path)).status).toBe(202);
+    },
+  );
+
+  it.each(["/altro/email-otp/verify-email", "/email-otp/verify-email/altro"])(
+    "il limite del codice di conferma vale soltanto per il suo percorso: %s",
+    async (path) => {
+      const form = request("/accesso", { method: "POST" });
+      expect(await authLimitWait(environment, form, path)).toBeNull();
+      expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([]);
+    },
+  );
+
+  it.each(["/altro/email-otp/verify-email", "/email-otp/verify-email/altro"])(
+    "il limite per indirizzo del codice vale soltanto per il suo percorso: %s",
+    async (path) => {
+      const body = JSON.stringify({ email: "vittima@example.invalid" });
+      await post(path, { headers: { "cf-connecting-ip": "203.0.113.9" }, body });
+      expect(sqlite.prepare('SELECT count(*) AS total FROM "rateLimit"').get()?.total).toBe(0);
     },
   );
 
@@ -469,6 +493,7 @@ describe("limiti dei tentativi", () => {
     ["/request-password-reset", 5, 3600],
     ["/send-verification-email", 5, 3600],
     ["/sign-up/email", 5, 3600],
+    ["/email-otp/verify-email", 10, 900],
   ])(
     "limita %s per indirizzo anche da IP diversi, senza conservare l'email",
     async (path, max, seconds) => {
