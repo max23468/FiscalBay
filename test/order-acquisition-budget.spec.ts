@@ -15,6 +15,8 @@ import { acquireOrders } from "../app/domain/order-acquisition.server";
 
 import { recordOrderObservation } from "../app/domain/order-import.server";
 
+import { insertEntitlement } from "./fixtures/database-fixtures";
+
 import { access, order } from "./fixtures/ebay-client-fixtures";
 
 import { observation } from "./fixtures/order-import-scenarios";
@@ -235,6 +237,60 @@ it("un ordine creato esattamente sette giorni prima non è più corrente", async
   const boundary = ebay({ orders: [foreign(7)] });
   expect(await acquire(boundary)).toBe("complete");
   expect(calls(boundary, "GetOrders")).toBe(0);
+});
+
+/** Copertura a pagamento: gli ordini oltre i trenta giorni del Free restano nello storico. */
+const coverage = () =>
+  insertEntitlement({
+    source: "premium",
+    startsAt: "2026-01-01T00:00:00.000Z",
+    endsAt: "2027-01-01T00:00:00.000Z",
+  }).run();
+
+it("chiede a Trading la lettura fiscale soltanto entro i novanta giorni", async () => {
+  await coverage();
+  const fetcher = ebay({
+    orders: [foreign(89), foreign(90, "12-34567-89013", "110000000002")],
+  });
+  expect(await acquire(fetcher)).toBe("complete");
+  const requested = fetcher.mock.calls
+    .filter(([, init]) => new Headers(init?.headers).get("x-ebay-api-call-name") === "GetOrders")
+    .map(([, init]) => String(init?.body))
+    .filter((body) => !body.includes("<ModTimeFrom>"));
+  expect(requested).toHaveLength(1);
+  expect(requested[0]).toContain("<OrderID>12-34567-89012</OrderID>");
+  expect(requested[0]).not.toContain("<OrderID>12-34567-89013</OrderID>");
+});
+
+it("fuori dal marketplace qualificato non usa il codice fiscale di Fulfillment", async () => {
+  await coverage();
+  const taxIdentifier = {
+    taxpayerId: "RSSMRA80A01H501U",
+    taxIdentifierType: "CODICE_FISCALE",
+    issuingCountry: "IT",
+  };
+  const buyer = { ...order().buyer, taxIdentifier };
+  const fetcher = ebay({ orders: [{ ...foreign(95), buyer }] });
+  expect(await acquire(fetcher)).toBe("complete");
+  expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM tax_identifiers").first()).toEqual({
+    n: 0,
+  });
+});
+
+it("un dettaglio non riuscito non ferma la lettura dei successivi", async () => {
+  const pair = [foreign(18), foreign(19, "12-34567-89013", "110000000002")];
+  const read = new Set<string>();
+  const fetcher = ebay({
+    orders: pair,
+    fail: (url) => {
+      const id = url.pathname.split("/sell/fulfillment/v1/order/")[1];
+      if (id === undefined) return undefined;
+      read.add(id);
+      return read.size === 1 ? new Response(null, { status: 404 }) : undefined;
+    },
+  });
+  expect(await acquire(fetcher)).toBe("complete");
+  expect(read.size).toBe(2);
 });
 
 it("una lettura fiscale non riuscita non copre le versioni di un ordine pagato", async () => {

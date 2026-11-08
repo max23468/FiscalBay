@@ -948,7 +948,7 @@ const cycleCommands = [
 export function cycleCommand([command, number]) {
   if (!cycleCommands.includes(command))
     throw new Error(
-      "Uso: release:cycle status <run> | metrics | preflight --sha <sha> [--version <versione>] | pr <numero> | production <numero> | cleanup | candidate | promote [--version <versione>] [--urgente] [--testa] | resume <run> | rollback | qualification-base --base <sha> --head <sha>.",
+      "Uso: release:cycle status <run> | metrics | preflight --sha <sha> [--version <versione>] | pr <numero> | production <numero> | cleanup | candidate | promote [--version <versione>] [--urgente] | resume <run> | rollback | qualification-base --base <sha> --head <sha>.",
     );
   return { command, number };
 }
@@ -1903,8 +1903,8 @@ async function confirmProduction(repository, jobs, sha, version) {
 }
 
 /**
- * Promuovi: il commit di `develop` già certificato, il più recente, o quello indicato, diventa
- * `main` e si distribuisce. Senza modifiche da distribuire basta avanzare `main`. `--urgente` non attende la
+ * Promuovi: l'ultimo commit di `develop`, o quello indicato, diventa `main` dopo la certificazione
+ * e si distribuisce. Senza modifiche da distribuire basta avanzare `main`. `--urgente` non attende la
  * produzione di nuove prove: riusa soltanto una certificazione già valida sul tree.
  */
 async function promoteCycle({ repository, values }) {
@@ -1997,8 +1997,8 @@ export function mergedCommit(pr) {
 }
 
 /**
- * Commit da promuovere: il più recente di `develop` dopo `main` con il tree già certificato, così
- * `Promuovi` non aspetta la qualifica dei merge appena entrati, che passano al lotto successivo.
+ * Commit più recente di `commits` con il tree già certificato. Serve a «Pubblica in Production»
+ * e a una versione indicata: `Promuovi` senza versione porta sempre la testa di `develop`.
  * Con una versione indicata vale il più recente che la porta in cima al changelog. `commits` va
  * dalla testa all'indietro; senza un commit certificato vale la testa, e il ciclo ne attende la
  * qualifica.
@@ -2013,13 +2013,15 @@ export function promotionTarget(commits, certified, version, topOf = () => versi
 }
 
 /**
- * Destinazione di `Promuovi` sulla storia di `develop` dopo `main`, al più cinquanta commit; con
- * `floor` soltanto quel commit e i suoi discendenti, come il commit integrato di «Pubblica in
- * Production», la cui CI un merge successivo può aver annullato.
+ * Destinazione della promozione. `Promuovi` porta tutto `develop`: il ciclo certifica la testa,
+ * se manca la certificazione, e poi la pubblica; se la qualifica fallisce non promuove nulla. Una
+ * versione indicata o `floor` cercano il commit certificato sulla storia dopo `main`, al più
+ * cinquanta commit; `floor` è il commit integrato di «Pubblica in Production», la cui CI un merge
+ * successivo può aver annullato, e ammette soltanto quel commit e i suoi discendenti.
  */
 function chooseTarget(repository, values, floor) {
   const head = headOf(repository, "develop");
-  if (values.testa) return head;
+  if (!floor && !values.version) return head;
   localGit(() => git("fetch", "--quiet", "origin", "develop", "main"));
   const commits = git(
     "log",
@@ -2303,7 +2305,6 @@ async function main() {
       qui: { type: "boolean", default: false },
       manual: { type: "boolean", default: false },
       weekly: { type: "boolean", default: false },
-      testa: { type: "boolean", default: false },
       pr: { type: "string" },
       "requested-at": { type: "string" },
       "reviewed-migrations": { type: "string", default: "" },
