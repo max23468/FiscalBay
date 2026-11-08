@@ -131,11 +131,9 @@ La disdetta dal portale Stripe porta motivo e commento dei `cancellation_details
 <a id="2-0-09"></a>
 #### 2.0-09 · Consumo delle API eBay
 
-**Stato:** In corso · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11) · [§15](product/CHANNELS_AND_ADMIN.md#s15) · [capacità](operations/CAPACITY.md#capacita)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11) · [§15](product/CHANNELS_AND_ADMIN.md#s15) · [capacità](operations/CAPACITY.md#capacita)
 
-Ridurre le chiamate `GetOrders` e `GetItem` perché l'Application Growth Check serva soltanto con il carico reale dei negozi Production ([D322](decisions/DECISION_REGISTER.md)): passata Trading ogni due ore soltanto con fatture combinate senza checkout recenti, altrimenti ogni sei, e ogni dodici negli spazi che nessuno segue, che leggono Fulfillment ogni due ore; letture fiscali Trading a lotti e non ripetute dopo una risposta più recente o su un ordine pagato; budget giornaliero del lavoro non urgente a metà quota; chiamate contate per Worker e mostrate in console; test entro il 10% delle quote.
-
-**Criterio di completamento:** comportamento provato in locale e nella CI, costi rimisurati con `node scripts/capacity.mjs costs`, chiamate dell'ambiente lette nella console del test dopo il deploy.
+L'Application Growth Check serve soltanto con il carico reale dei negozi Production ([D322](decisions/DECISION_REGISTER.md)): Trading si rilegge ogni due ore con fatture combinate senza checkout recenti, altrimenti ogni sei, e ogni dodici negli spazi che nessuno segue, che leggono Fulfillment ogni due ore; le letture fiscali Trading viaggiano a lotti e non si ripetono dopo una risposta più recente o su un ordine pagato; il lavoro non urgente si ferma a metà quota, il test al 10% e la console mostra le chiamate di ogni ambiente. Il banco di capacità stima il 70% verso i 600 negozi per `GetOrders` e i 350 per `GetItem`: i consumi reali di Production si confrontano con la stima.
 
 <a id="2-0-10"></a>
 #### 2.0-10 · Username degli acquirenti per le cancellazioni eBay

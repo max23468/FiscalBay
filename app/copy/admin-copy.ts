@@ -171,7 +171,7 @@ const it = {
       ebay_quota: {
         title: "Quota eBay oltre la soglia",
         consequence: "Al limite eBay sospende la chiamata e le letture che la usano si fermano.",
-        action: "Avvia l’Application Growth Check",
+        action: "Se il consumo viene dai negozi Production, avvia l’Application Growth Check",
       },
       ebay_bulk_data: {
         title: "Soglia eBay sul trasferimento di dati",
@@ -466,6 +466,7 @@ const it = {
           : `ogni ${Math.round(seconds / 60)} min`,
     shared: (calls: number) => `Quota condivisa, ${calls} di questa chiamata`,
     own: (calls: number) => `${calls} da questo ambiente oggi (UTC)`,
+    orderReads: (calls: number) => `Letture Fulfillment degli ordini: ${calls} oggi (UTC)`,
     otherCalls: (count: number) => `Altre chiamate dell’API (${count})`,
     suspended: "Chiamate sospese",
     allCalls: "Tutte le chiamate dell’ambiente",
@@ -474,7 +475,8 @@ const it = {
     anomalies: "Anomalie delle quote",
     bulkData: "Soglie Bulk Data Transfer",
     resolved: (when: string) => `Rientrata il ${when}`,
-    request: "Per una quota più alta completa l’Application Growth Check del Developer Program.",
+    request:
+      "Se il consumo viene dai negozi Production, per una quota più alta completa l’Application Growth Check del Developer Program.",
   },
   performance: {
     unconfigured: "Lettura non configurata: manca il token ANALYTICS_READ_TOKEN del Worker.",
@@ -938,7 +940,7 @@ const en: AdminCopy = {
       ebay_quota: {
         title: "eBay quota over the threshold",
         consequence: "At the limit eBay suspends the call and the reads that use it stop.",
-        action: "Start the Application Growth Check",
+        action: "If the usage comes from Production stores, start the Application Growth Check",
       },
       ebay_bulk_data: {
         title: "eBay data transfer threshold",
@@ -1229,6 +1231,7 @@ const en: AdminCopy = {
           : `every ${Math.round(seconds / 60)} min`,
     shared: (calls: number) => `Shared quota, ${calls} from this call`,
     own: (calls: number) => `${calls} from this environment today (UTC)`,
+    orderReads: (calls: number) => `Fulfillment order reads: ${calls} today (UTC)`,
     otherCalls: (count: number) => `Other API calls (${count})`,
     suspended: "Suspended calls",
     allCalls: "Every call in the environment",
@@ -1237,7 +1240,8 @@ const en: AdminCopy = {
     anomalies: "Quota issues",
     bulkData: "Bulk Data Transfer thresholds",
     resolved: (when: string) => `Back to normal on ${when}`,
-    request: "For a higher quota, complete the Developer Program’s Application Growth Check.",
+    request:
+      "If the usage comes from Production stores, complete the Developer Program’s Application Growth Check for a higher quota.",
   },
   performance: {
     unconfigured: "Read not configured: the Worker has no ANALYTICS_READ_TOKEN.",

@@ -59,6 +59,12 @@ describe("quote delle API eBay", () => {
     )
       .bind(later(3 * hour))
       .run();
+    await env.DB.prepare(
+      `INSERT INTO ebay_call_counts (day, api_origin, call, count)
+       VALUES (?, 'https://api.ebay.com', 'order', 7)`,
+    )
+      .bind(now.slice(0, 10))
+      .run();
     const over = analytics([
       daily("GetOrders", 3600),
       daily("GetItem", 4600),
@@ -68,6 +74,7 @@ describe("quote delle API eBay", () => {
     expect(production).toMatchObject({
       environment: "production",
       read: "ok",
+      orderReads: 7,
       suspended: [{ call: "GetItem", until: later(3 * hour) }],
     });
     expect(production!.rows.find((row) => row.resource === "GetOrders")).toMatchObject({
@@ -106,6 +113,7 @@ describe("quote delle API eBay", () => {
         read: "failed",
         rows: [],
         suspended: [{ call: "GetItem", until: later(3 * hour) }],
+        orderReads: 0,
       },
     ]);
     expect((await quotaAnomalies(env.DB, at(later(2 * hour)))).every((a) => !a.resolvedAt)).toBe(

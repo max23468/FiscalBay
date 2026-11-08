@@ -53,6 +53,8 @@ export type EnvironmentQuotas = {
   read: "ok" | "failed";
   rows: QuotaRow[];
   suspended: QuotaSuspension[];
+  /** Letture Fulfillment degli ordini fatte oggi (UTC) da questo Worker: eBay non ne pubblica la quota. */
+  orderReads: number;
 };
 
 export type QuotaAnomaly = {
@@ -226,10 +228,11 @@ export async function readEbayQuotas(
             return b.share - a.share;
           }),
           suspended,
+          orderReads: own.get("order") ?? 0,
         };
       } catch (error) {
         logFailure({ error, operation: "admin" });
-        return { environment, read: "failed", rows: [], suspended };
+        return { environment, read: "failed", rows: [], suspended, orderReads: 0 };
       }
       await env.DB.batch([
         ...(await anomalyStatements(env.DB, quotas, now)),
