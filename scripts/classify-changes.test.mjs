@@ -16,6 +16,7 @@ import { describe, it } from "node:test";
 import {
   browserNarrowing,
   browserUnaffected,
+  certificationLineage,
   mainProcessChange,
   changelogDayOnly,
   sameNews,
@@ -687,6 +688,58 @@ describe("prove browser invariate fra due commit", () => {
         browserNarrowing("0123456789abcdef0123456789abcdef01234567", green, start, sources),
         null,
       );
+    } finally {
+      process.chdir(before);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("la certificazione passa ai commit che non cambiano ciò che si distribuisce", () => {
+    const directory = mkdtempSync(path.join(tmpdir(), "certification-lineage-"));
+    const before = process.cwd();
+    const git = (...args) =>
+      spawnSync("git", args, { cwd: directory, encoding: "utf8" }).stdout.trim();
+    const commit = (file, text) => {
+      mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
+      writeFileSync(path.join(directory, file), text);
+      git("add", "--all");
+      git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "--quiet", "-m", file);
+      return { sha: git("rev-parse", "HEAD"), tree: git("rev-parse", "HEAD^{tree}") };
+    };
+    try {
+      git("init", "--quiet", "--initial-branch", "develop");
+      commit("README.md", "base\n");
+      const code = commit("app/a.ts", "export const a = 1;\n");
+      process.chdir(directory);
+      const docs = commit("docs/nota.md", "nota\n");
+      const fragment = commit("changes/voce.md", "# voce\n");
+      const changelog = commit("CHANGELOG.md", "## [2.0.8]\n");
+      const unitTest = commit("test/a.spec.ts", "// prova\n");
+      const spec = commit("e2e/a.spec.ts", "// prova browser\n");
+      assert.deepEqual(certificationLineage(spec.sha), [
+        spec.tree,
+        unitTest.tree,
+        changelog.tree,
+        fragment.tree,
+        docs.tree,
+        code.tree,
+      ]);
+      // Il limite vale anche sulla storia lunga, e un commit che conta chiude l'elenco.
+      assert.deepEqual(certificationLineage(spec.sha, 2), [spec.tree, unitTest.tree]);
+      for (const [file, text] of [
+        ["app/b.ts", "export const b = 1;\n"],
+        ["migrations/0001_a.sql", "SELECT 1;\n"],
+        ["package.json", "{}\n"],
+        ["vite.config.ts", "export default {};\n"],
+        ["scripts/a.mjs", "// script\n"],
+        [".github/workflows/a.yml", "name: a\n"],
+        ["e2e/helper.ts", "// aiuto\n"],
+        ["public/_headers", "/a\n"],
+      ]) {
+        const changed = commit(file, text);
+        assert.deepEqual(certificationLineage(changed.sha), [changed.tree], file);
+      }
+      assert.deepEqual(certificationLineage("0123456789abcdef0123456789abcdef01234567"), []);
     } finally {
       process.chdir(before);
       rmSync(directory, { recursive: true, force: true });

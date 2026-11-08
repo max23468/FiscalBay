@@ -21,7 +21,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { distributes, mainProcessChange, needsDeploy } from "../classify-changes.mjs";
+import {
+  certificationLineage,
+  distributes,
+  mainProcessChange,
+  needsDeploy,
+} from "../classify-changes.mjs";
 import {
   addedMigrations,
   assertMergedChangesVersion,
@@ -715,6 +720,13 @@ function candidateAvailable(repository, tree) {
       return true;
   }
   return false;
+}
+
+/** Il commit ha una certificazione valida, sul proprio tree o ereditata da un antenato (D329). */
+function commitCertified(repository, sha, tree) {
+  return [...new Set([tree, ...certificationLineage(sha)])].some((candidate) =>
+    candidateAvailable(repository, candidate),
+  );
 }
 
 function summary(repository, runId) {
@@ -1750,7 +1762,7 @@ export function candidateRun(runs, sha, since) {
 /** Qualifica completa di un commit di `develop`, senza effetti su `main` né sui provider. */
 async function ensureCandidate(repository, sha) {
   const tree = ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha;
-  if (candidateAvailable(repository, tree)) return console.log("Candidato già qualificato.");
+  if (commitCertified(repository, sha, tree)) return console.log("Candidato già qualificato.");
   const runs = () =>
     ghJson(
       "run",
@@ -1860,7 +1872,7 @@ function candidateReady({ repository, values }) {
     (current === sha || pinned) &&
     candidateReadiness({
       passed,
-      certified: values.manual || values.weekly ? false : candidateAvailable(repository, tree),
+      certified: values.manual || values.weekly ? false : commitCertified(repository, sha, tree),
       manual: values.manual,
       weekly: values.weekly,
       qualifying: running,
@@ -1924,7 +1936,8 @@ async function promoteCycle({ repository, values }) {
   // Un tree certificato ha già superato la qualifica completa: basta `Node 26` del commit, senza
   // attendere gli altri controlli, come una qualifica successiva annullata o ancora in coda.
   const tree = ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha;
-  if (!candidateAvailable(repository, tree)) await waitChecks(repository, sha);
+  const certified = commitCertified(repository, sha, tree);
+  if (!certified) await waitChecks(repository, sha);
   else if (!requiredPassed(commitChecks(repository, sha)))
     throw new Error("Node 26 non riuscito sul commit da promuovere.");
   if (!lot.deploy) {
@@ -1954,7 +1967,7 @@ async function promoteCycle({ repository, values }) {
     return await confirmProduction(repository, jobs, sha, lot.version);
   }
   if (values.urgente) {
-    if (!candidateAvailable(repository, tree))
+    if (!commitCertified(repository, sha, tree))
       throw new Error(
         "Urgenza senza prove valide sul candidato: eseguire release:cycle candidate.",
       );
@@ -2005,7 +2018,7 @@ export function mergedCommit(pr) {
  */
 export function promotionTarget(commits, certified, version, topOf = () => version) {
   const index = commits.findIndex(
-    (commit) => certified(commit.tree) && (!version || topOf(commit.sha) === version),
+    (commit) => certified(commit.tree, commit.sha) && (!version || topOf(commit.sha) === version),
   );
   return index < 0
     ? { sha: commits[0]?.sha, later: 0, certified: false }
@@ -2039,7 +2052,7 @@ function chooseTarget(repository, values, floor) {
   if (!commits.length) return head;
   const target = promotionTarget(
     commits,
-    (tree) => candidateAvailable(repository, tree),
+    (tree, commit) => commitCertified(repository, commit, tree),
     values.version,
     (sha) => topVersion(git("show", `${sha}:CHANGELOG.md`)),
   );

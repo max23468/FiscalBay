@@ -80,7 +80,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           REPOSITORY_ID: ${{ github.repository_id }}
-        run: node scripts/find-build.mjs --candidate
+        run: node scripts/find-build.mjs --candidate --inherited
       - name: Require certified candidate
         if: steps.certified.outputs.run-id == ''
         run: |

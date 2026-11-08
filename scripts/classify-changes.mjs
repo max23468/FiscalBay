@@ -706,6 +706,39 @@ export function distributes(base, head) {
 }
 
 /**
+ * File che non cambiano ciò che si distribuisce né il processo che lo pubblica: documenti, voci
+ * del changelog, test e spec browser. Le Novità entrano nella build come testo, che il gate della
+ * PR controlla e la build Production rilegge. Codice, migration, dipendenze, configurazioni,
+ * script, workflow e helper delle prove restano fuori.
+ */
+const certificationNeutral =
+  /^(?:docs\/|changes\/[^/]+\.md$|[^/]+\.md$|test\/|e2e\/[^/]+\.spec\.ts$)/u;
+
+/**
+ * Tree la cui certificazione vale per `sha`: il suo e quelli degli antenati da cui `sha` differisce
+ * soltanto per file neutri (D329), dal più recente. Il primo antenato con una differenza che
+ * conta chiude l'elenco; un confronto non disponibile non prova nulla e lascia il solo tree noto.
+ */
+export function certificationLineage(sha, limit = 30) {
+  let commits;
+  try {
+    commits = lines(git("log", "--first-parent", `--max-count=${limit}`, "--format=%H %T", sha));
+  } catch {
+    return [];
+  }
+  const trees = [];
+  for (const [index, commit] of commits.entries()) {
+    const [ancestor, tree] = commit.split(" ");
+    if (index > 0) {
+      const files = committedChanges(ancestor, sha);
+      if (!files.length || !files.every((file) => certificationNeutral.test(file))) break;
+    }
+    trees.push(tree);
+  }
+  return trees;
+}
+
+/**
  * Migration già presenti nella base e diverse dalla versione con cui sono entrate nella storia, o
  * eliminate: il deploy confronta le migration applicate con quella versione e rifiuta ogni
  * differenza, anche di un commento, quindi il gate la ferma prima della PR. Un ripristino della
