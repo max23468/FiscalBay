@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  addedTests,
   affectedModules,
   affectingSources,
   lineMutationJob,
@@ -545,6 +546,74 @@ describe("parti della mutation della PR riusate fra run", () => {
     );
     assert.ok(!(await proofStands(["test/billing.spec.ts"], target, tests, yes)));
     assert.ok(!(await proofStands(["migrations/0099_x.sql"], target, tests, yes)));
+  });
+
+  it("riconosce le prove cambiate soltanto con prove aggiunte", () => {
+    const file = (filename, patch, deletions = 0, status = "modified") => ({
+      filename,
+      patch,
+      deletions,
+      status,
+    });
+    const added = addedTests([
+      file("test/a.spec.ts", '@@ -1,2 +1,4 @@\n+it("nuova", () => {\n+});'),
+      file("test/b.unit.ts", "@@ -0,0 +1 @@\n+export {};", 0, "added"),
+      // Una riga tolta, una patch troncata o rinominata, un hook o un mock non valgono.
+      file("test/c.spec.ts", "@@ -1 +1 @@\n-vecchia\n+nuova", 1),
+      file("test/d.spec.ts", undefined),
+      file("test/e.spec.ts", "@@ -1 +1,3 @@\n+beforeEach(async () => {\n+});"),
+      file("test/f.spec.ts", '@@ -1 +1,2 @@\n+vi.mock("../app/x");'),
+      file("test/g.spec.ts", "@@ -1 +1 @@\n+export {};", 0, "renamed"),
+      file("test/fixtures/h.ts", "@@ -1 +1 @@\n+export {};"),
+    ]);
+    assert.deepEqual([...added].sort(), ["test/a.spec.ts", "test/b.unit.ts"]);
+  });
+
+  it("una prova cambiata soltanto con prove aggiunte lascia valida la prova del modulo", async () => {
+    const tests = new Map([...graph, ["test/billing.spec.ts", new Set([target])]]);
+    const added = new Set(["test/billing.spec.ts"]);
+    assert.ok(proofUnaffected(["test/billing.spec.ts"], target, tests, added));
+    assert.ok(await proofStands(["test/billing.spec.ts"], target, tests, undefined, added));
+    assert.ok(!(await proofStands(["test/billing.spec.ts"], target, tests)));
+    // Il modulo stesso cambiato invalida comunque la prova.
+    assert.ok(
+      !(await proofStands([target, "test/billing.spec.ts"], target, tests, undefined, added)),
+    );
+    // Dal confronto dell'API: le parti riuscite restano, quella fallita si ripete.
+    const result = await pullRequestParts(
+      {
+        repository: "o/r",
+        repositoryId: 1,
+        branch: "feat/x",
+        head: "m",
+        target,
+        graph: tests,
+        digest: "d1",
+        exclude: 99,
+      },
+      async (url) => {
+        if (url.includes("/workflows/ci.yml/runs")) return { workflow_runs: [run(3, "c3")] };
+        if (/runs\/3\/jobs/u.test(url))
+          return { jobs: [job(1), job(2), job(3, "failure")], total_count: 3 };
+        return {
+          status: "ahead",
+          files: [
+            {
+              filename: "test/billing.spec.ts",
+              status: "modified",
+              deletions: 0,
+              patch: '@@ -9 +9,3 @@\n+it("uccide il mutante", () => {\n+});',
+            },
+          ],
+        };
+      },
+      async () => plan(),
+    );
+    assert.deepEqual(
+      result.proved.map(({ part }) => part),
+      [1, 2],
+    );
+    assert.deepEqual(result.missing, [3]);
   });
 });
 

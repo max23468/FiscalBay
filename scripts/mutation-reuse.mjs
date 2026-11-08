@@ -151,19 +151,56 @@ export const mutationNeutral = (file) =>
  * importa direttamente e nessun helper o fixture dei test, che possono indebolire qualunque prova;
  * nessuna migration o altro file letto dai test. `graph` comprende anche i test.
  */
-export function proofUnaffected(changed, target, graph) {
+export function proofUnaffected(changed, target, graph, added = new Set()) {
   return (
-    !affectingSources(changed, graph).has(target) && otherFilesUnaffected(changed, target, graph)
+    !affectingSources(changed, graph).has(target) &&
+    otherFilesUnaffected(changed, target, graph, added)
   );
 }
 
-/** File cambiati diversi dai sorgenti che lasciano valida la prova di `target`. */
-function otherFilesUnaffected(changed, target, graph) {
+/**
+ * File cambiati diversi dai sorgenti che lasciano valida la prova di `target`. Una prova che lo
+ * importa vale invariata se è in `added`, cioè cambiata soltanto con prove aggiunte: una prova in
+ * più può uccidere altri mutanti, mai farne sopravvivere uno già ucciso.
+ */
+function otherFilesUnaffected(changed, target, graph, added = new Set()) {
   return changed.every((file) => {
     if (/^(?:app|workers)\/.+\.tsx?$/u.test(file)) return true;
-    if (/^test\/.+\.(?:spec|unit)\.ts$/u.test(file)) return !graph.get(file)?.has(target);
+    if (/^test\/.+\.(?:spec|unit)\.ts$/u.test(file))
+      return added.has(file) || !graph.get(file)?.has(target);
     return mutationNeutral(file);
   });
+}
+
+/**
+ * Righe aggiunte che valgono per ogni prova del file, e quindi possono cambiare quelle esistenti:
+ * hook, mock e stub globali, preparazione degli scenari.
+ */
+const sharedSetup =
+  /\b(?:beforeEach|beforeAll|afterEach|afterAll|setupScenarios)\b|\bvi\.(?:mock|doMock|hoisted|stubGlobal|stubEnv|useFakeTimers|setSystemTime)\b/u;
+
+/**
+ * File di prova cambiati soltanto con prove aggiunte, dai file di un confronto dell'API di GitHub:
+ * nessuna riga tolta, la patch presente e nessuna riga aggiunta che prepari tutte le prove del file.
+ * Un file nuovo vale come aggiunto alle stesse condizioni.
+ */
+export function addedTests(files) {
+  return new Set(
+    files
+      .filter(
+        ({ filename, status, deletions, patch }) =>
+          /^test\/.+\.(?:spec|unit)\.ts$/u.test(filename) &&
+          ["added", "modified"].includes(status) &&
+          deletions === 0 &&
+          typeof patch === "string" &&
+          !patch
+            .split("\n")
+            .some(
+              (line) => line.startsWith("+") && !line.startsWith("+++") && sharedSetup.test(line),
+            ),
+      )
+      .map(({ filename }) => filename),
+  );
 }
 
 /** Esito del modulo nei job di una run della PR: `passed` con ogni parte riuscita, `failed`, o nulla. */
@@ -210,8 +247,14 @@ export function planLayout(plan, target) {
  * Come `proofUnaffected`, ma un sorgente critico diverso dal modulo stesso vale come invariato se
  * `excused(source)` lo conferma, per esempio perché è entrato dalla base già provato nella sua PR.
  */
-export async function proofStands(changed, target, graph, excused = async () => false) {
-  if (!otherFilesUnaffected(changed, target, graph)) return false;
+export async function proofStands(
+  changed,
+  target,
+  graph,
+  excused = async () => false,
+  added = new Set(),
+) {
+  if (!otherFilesUnaffected(changed, target, graph, added)) return false;
   for (const source of affectingSources(changed, graph).get(target) ?? [])
     if (source === target || !criticalModule(source) || !(await excused(source))) return false;
   return true;
@@ -281,8 +324,12 @@ export async function pullRequestParts(
           // Oltre trecento file l'API tronca l'elenco: non si può escludere un cambio rilevante.
           const files = (compare.files ?? []).map(({ filename }) => filename);
           if (!["ahead", "identical"].includes(compare.status) || files.length >= 300) return false;
-          return proofStands(files, target, graph, (source) =>
-            excused ? excused(source, run.head_sha) : false,
+          return proofStands(
+            files,
+            target,
+            graph,
+            (source) => (excused ? excused(source, run.head_sha) : false),
+            addedTests(compare.files ?? []),
           );
         })(),
       );
