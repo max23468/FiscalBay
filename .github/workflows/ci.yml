@@ -62,6 +62,7 @@ jobs:
       matrix: ${{ steps.detect.outputs.matrix }}
       browser-matrix: ${{ steps.browser-plan.outputs.browser-matrix }}
       browser-reused: ${{ steps.browser-plan.outputs.browser-reused }}
+      browser-grep: ${{ steps.browser-plan.outputs.browser-grep }}
       mutation-pr: ${{ steps.modules.outputs.matrix || '{"include":[]}' }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
@@ -233,8 +234,9 @@ jobs:
       - name: Size browser jobs from selected inventory
         id: browser-plan
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
-        # Nella PR le prove già concluse in una run precedente, con lo stesso inventario e senza
-        # cambi che il classificatore giudichi rilevanti per i browser, non ripartono.
+        # Nella PR le prove già concluse in una run precedente, con lo stesso inventario, non
+        # ripartono senza cambi rilevanti per i browser; dopo un'unione con la base ripartono soltanto
+        # le aree toccate sia dai cambi sia dalla PR, con il nucleo `@smoke`.
         env:
           BROWSER_GREP: ${{ steps.detect.outputs.grep }}
           BROWSERS: ${{ steps.detect.outputs.browsers }}
@@ -369,7 +371,8 @@ jobs:
           E2E_PREBUILT: "1"
           E2E_RETRIES: "1"
           E2E_MATRIX: ${{ needs.verify.outputs.matrix }}
-          BROWSER_GREP: ${{ needs.verify.outputs.grep }}
+          # Dopo un'unione con la base, le sole aree toccate sia dai cambi sia dalla PR.
+          BROWSER_GREP: ${{ needs.verify.outputs.browser-grep || needs.verify.outputs.grep }}
           BROWSERS: ${{ needs.verify.outputs.browsers }}
           SHARD: ${{ matrix.shard }}/${{ matrix.total }}
         run: node scripts/browser-tests.mjs --grep "${BROWSER_GREP}" --browsers "${BROWSERS}" --shard "${SHARD}"
