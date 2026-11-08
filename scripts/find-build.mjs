@@ -4,6 +4,7 @@ import { appendFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+import { certificationLineage } from "./classify-changes.mjs";
 import { ghJson, runJobs } from "./lib/provider.mjs";
 
 export function verifiedBuildOrigin(candidate, run, jobs, repositoryId, tree, kind, readTree) {
@@ -97,12 +98,14 @@ function main() {
   const repositoryId = Number(process.env.REPOSITORY_ID);
   if (!repository || !repositoryId) throw new Error("Repository non identificato.");
   const kind = process.argv.includes("--candidate") ? "candidate" : "build";
-  const tree = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim();
+  const current = execFileSync("git", ["rev-parse", "HEAD^{tree}"], { encoding: "utf8" }).trim();
   const api = (url) => ghJson("api", url);
-  const artifact = `${kind}-${tree}`;
-  const candidates = api(
-    `repos/${repository}/actions/artifacts?name=${artifact}&per_page=20`,
-  ).artifacts;
+  // Con `--inherited` vale anche la certificazione di un antenato (D329): la usa soltanto il
+  // controllo di `Promuovi`, perché la qualifica deve ripartire dall'artefatto del proprio tree.
+  const trees = process.argv.includes("--inherited")
+    ? [...new Set([current, ...certificationLineage("HEAD")])]
+    : [current];
+  let candidates = [];
   // Il push di un merge su `develop` può riusare la build della sua PR: commit, genitori e file
   // si leggono dal checkout, la PR dall'API.
   let merge;
@@ -125,52 +128,58 @@ function main() {
     merge = { parents, files, pull: pulls.length === 1 ? pulls[0] : null };
     return merge;
   };
-  for (const candidate of candidates) {
-    const origin = candidate.workflow_run;
-    if (
-      candidate.expired ||
-      origin?.repository_id !== repositoryId ||
-      origin.head_repository_id !== repositoryId
-    )
-      continue;
-    const run = api(`repos/${repository}/actions/runs/${origin.id}`);
-    const jobs = kind === "candidate" ? runJobs(repository, origin.id) : [];
-    const verified = verifiedBuildOrigin(
-      candidate,
-      run,
-      jobs,
-      repositoryId,
-      tree,
-      kind,
-      (sha) => api(`repos/${repository}/git/commits/${sha}`).tree.sha,
-    );
-    const fromPull =
-      !verified &&
-      kind === "build" &&
-      process.env.EVENT === "push" &&
-      run.event === "pull_request" &&
-      pullRequestBuildOrigin({
+  for (const tree of trees) {
+    const artifact = `${kind}-${tree}`;
+    candidates = api(
+      `repos/${repository}/actions/artifacts?name=${artifact}&per_page=20`,
+    ).artifacts;
+    for (const candidate of candidates) {
+      const origin = candidate.workflow_run;
+      if (
+        candidate.expired ||
+        origin?.repository_id !== repositoryId ||
+        origin.head_repository_id !== repositoryId
+      )
+        continue;
+      const run = api(`repos/${repository}/actions/runs/${origin.id}`);
+      const jobs = kind === "candidate" ? runJobs(repository, origin.id) : [];
+      const verified = verifiedBuildOrigin(
         candidate,
         run,
+        jobs,
         repositoryId,
         tree,
-        deployed: process.env.DEPLOYED_SHA,
-        ...mergeContext(),
-      });
-    if (!verified && !fromPull) continue;
-    appendFileSync(
-      process.env.GITHUB_OUTPUT,
-      `run-id=${origin.id}\nartifact=${artifact}\nsource=${fromPull ? "pull" : "develop"}\n`,
-    );
-    console.log(
-      `Tree ${tree}: riuso ${kind} dalla run ${origin.id}${fromPull ? ` della PR #${merge.pull.number}` : ""}.`,
-    );
-    if (process.env.GITHUB_STEP_SUMMARY)
-      appendFileSync(
-        process.env.GITHUB_STEP_SUMMARY,
-        `\nRiuso ${kind}: tree ${tree}, run ${origin.id}.\n`,
+        kind,
+        (sha) => api(`repos/${repository}/git/commits/${sha}`).tree.sha,
       );
-    return;
+      const fromPull =
+        !verified &&
+        kind === "build" &&
+        process.env.EVENT === "push" &&
+        run.event === "pull_request" &&
+        pullRequestBuildOrigin({
+          candidate,
+          run,
+          repositoryId,
+          tree,
+          deployed: process.env.DEPLOYED_SHA,
+          ...mergeContext(),
+        });
+      if (!verified && !fromPull) continue;
+      appendFileSync(
+        process.env.GITHUB_OUTPUT,
+        `run-id=${origin.id}\nartifact=${artifact}\nsource=${fromPull ? "pull" : "develop"}\n`,
+      );
+      console.log(
+        `Tree ${tree}: riuso ${kind} dalla run ${origin.id}${fromPull ? ` della PR #${merge.pull.number}` : ""}.`,
+      );
+      if (process.env.GITHUB_STEP_SUMMARY)
+        appendFileSync(
+          process.env.GITHUB_STEP_SUMMARY,
+          `\nRiuso ${kind}: tree ${tree}, run ${origin.id}.\n`,
+        );
+      return;
+    }
   }
   const reason =
     candidates.length === 0
