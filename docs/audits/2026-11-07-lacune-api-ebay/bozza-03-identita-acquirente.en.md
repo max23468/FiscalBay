@@ -1,5 +1,7 @@
 # Bozza 3: identità immutabile dell'acquirente negli ordini
 
+**Stato:** il contenuto è andato a eBay il 7 novembre 2026 come punto 2 del [ticket inviato](README.md#ticket-inviato).
+
 **Dove:** nuovo ticket al supporto sviluppatori eBay, area Marketplace Account Deletion e Fulfillment.
 
 **Verifica:** 7 novembre 2026, guida [Marketplace user account deletion](https://developer.ebay.com/develop/guides-v2/marketplace-user-account-deletion), specifiche Fulfillment `v1.20.7` e Identity, schema GraphQL; abbinamento descritto nella [conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay).

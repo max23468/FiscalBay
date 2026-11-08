@@ -1,5 +1,7 @@
 # Bozza 5: quote per utente
 
+**Stato:** non inviata; nota interna per un eventuale invio futuro.
+
 **Dove:** nuovo ticket al supporto sviluppatori eBay, area Developer Analytics API. Non chiede limiti più alti: per quelli vale l'[Application Growth Check](../../ROADMAP.md#re-01).
 
 **Verifica:** 7 novembre 2026, specifica OpenAPI della Developer Analytics API `v1_beta.0.1`; rifiuto del token del venditore osservato il 27 ottobre nel [confronto fiscale](../../reference/EBAY_TAX_COMPARISON.md#seller-transactions).
