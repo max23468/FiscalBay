@@ -312,22 +312,6 @@ export function fileImpact(file, change, lock) {
 /** Livello minimo di un singolo file. */
 export const fileLevel = (file, change) => fileImpact(file, change).level;
 
-/** Chiusura inversa: un consumatore di un modulo modificato cambia con esso. */
-function consumers(files, graph) {
-  const affected = new Set(files);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const [file, imports] of graph) {
-      if (!affected.has(file) && [...imports].some((target) => affected.has(target))) {
-        affected.add(file);
-        grew = true;
-      }
-    }
-  }
-  return affected;
-}
-
 /**
  * Area dei moduli applicativi, dichiarata per percorso: i moduli di dominio si importano a catena
  * fino a quasi tutte le route, quindi gli import transitivi non distinguono le aree. Un elenco
@@ -528,15 +512,15 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     : targeted && !specs.length && !core && product.every((file) => serverOnly.test(file))
       ? "chromium"
       : "chromium,webkit";
-  // Il candidato esegue la mutation dei moduli critici modificati e dei loro consumatori critici,
-  // salvo quelli già provati nella PR, che prova in modo incrementale i moduli critici toccati o
-  // coperti da un test cambiato. Le dipendenze non ripetono la mutation: misura le prove del nostro
+  // Il candidato esegue la mutation dei moduli critici modificati, salvo quelli già provati nella
+  // PR, che prova in modo incrementale i moduli critici toccati o coperti da un test cambiato. I
+  // moduli che li importano restano alla campagna settimanale (D330), perché uno di base come
+  // quota e diritti ne trascina decine. Le dipendenze non ripetono la mutation: misura le prove del nostro
   // codice, mentre una libreria aggiornata si prova con test, browser e collaudo remoto.
   // Nemmeno gli strumenti della mutation la ripetono per intero: la campagna settimanale resta
   // completa e prova anche loro (D317).
   const critical = (file) => (sources.length === 0 || graph.has(file)) && criticalModule(file);
-  const mutationInputs = files.filter(critical);
-  const mutation = complete ? [...consumers(mutationInputs, graph)].filter(critical) : [];
+  const mutation = complete ? files.filter(critical) : [];
   return {
     gate,
     script: levelScripts[gate],

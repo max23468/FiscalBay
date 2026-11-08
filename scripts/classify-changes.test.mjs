@@ -782,7 +782,7 @@ describe("prove browser invariate fra due commit", () => {
 });
 
 describe("mutation e riuso nel candidato", () => {
-  it("esegue mutation soltanto nel candidato, sui moduli critici e i consumatori critici", () => {
+  it("esegue mutation soltanto nel candidato, sui soli moduli critici modificati", () => {
     const files = [
       { path: "app/i18n.ts", text: "" },
       { path: "app/domain/stores.server.ts", text: 'import { t } from "../i18n";' },
@@ -794,8 +794,8 @@ describe("mutation e riuso nel candidato", () => {
     ];
     assert.deepEqual(plan(["app/domain/stores.server.ts"], files).mutation, []);
     assert.deepEqual(plan(["app/i18n.ts"], files, true).mutation, []);
-    assert.deepEqual(plan(["app/domain/stores.server.ts"], files, true).mutation.sort(), [
-      "app/auth.server.ts",
+    // `auth.server.ts` importa il modulo cambiato: resta alla campagna settimanale.
+    assert.deepEqual(plan(["app/domain/stores.server.ts"], files, true).mutation, [
       "app/domain/stores.server.ts",
     ]);
     assert.deepEqual(plan(["app/tax-quality.ts"], files, true).mutation, ["app/tax-quality.ts"]);

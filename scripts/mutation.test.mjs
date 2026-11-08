@@ -59,6 +59,13 @@ describe("esito dei mutation test", () => {
       backgroundConcurrency([{ path: ".github/workflows/cycle.yml", status: "in_progress" }]),
       4,
     );
+    // Il ciclo in corso è il `Promuovi` che attende la qualifica: non le toglie posti.
+    assert.equal(
+      backgroundConcurrency([{ path: ".github/workflows/cycle.yml", status: "in_progress" }], {
+        qualification: true,
+      }),
+      8,
+    );
     assert.equal(backgroundConcurrency(pr, { qualification: true }), 6);
     assert.equal(backgroundConcurrency(pr, { qualification: true, campaign: true }), 6);
     assert.equal(backgroundConcurrency([], { qualification: true, campaign: true }), 16);
