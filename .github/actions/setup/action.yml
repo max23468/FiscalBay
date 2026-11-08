@@ -11,11 +11,15 @@ runs:
   steps:
     # Nel container di Playwright l'utente non possiede il workspace montato: senza questa
     # eccezione Git rifiuta il repository. Sul runner non cambia nulla.
-    - shell: bash
+    # Sul runner del Mac la configurazione globale è quella dell'owner: lì non serve e non si tocca.
+    - if: runner.os == 'Linux'
+      shell: bash
       run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
     # Senza `version` l'Action legge `packageManager`: nessuna versione scritta a mano nei workflow.
-    - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+    # Il coordinatore sul Mac non installa dipendenze e non lascia pnpm nella home dell'owner.
+    - if: inputs.install == 'true' || runner.os == 'Linux'
+      uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
 
     - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:

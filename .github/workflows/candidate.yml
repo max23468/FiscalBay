@@ -102,10 +102,12 @@ jobs:
     name: Qualifica candidato
     needs: plan
     if: ${{ !cancelled() && needs.plan.outputs.qualify == 'true' }}
-    # Una qualifica in corso finisce; dopo di lei parte soltanto l'ultima in attesa.
+    # Una qualifica automatica lascia il posto a quella della testa più recente, che contiene anche
+    # i suoi commit: certificare un commit superato occupa decine di job che nessuno promuoverà.
+    # Le qualifiche richieste, come quella di `Promuovi`, e la campagna del lunedì finiscono sempre.
     concurrency:
-      group: candidate-qualification-${{ github.event_name == 'workflow_dispatch' && !inputs.automatic && 'requested' || 'automatic' }}
-      cancel-in-progress: false
+      group: candidate-qualification-${{ github.event_name == 'workflow_dispatch' && !inputs.automatic && 'requested' || github.event.schedule == '23 3 * * 1' && 'weekly' || 'automatic' }}
+      cancel-in-progress: ${{ !(github.event_name == 'workflow_dispatch' && !inputs.automatic) && github.event.schedule != '23 3 * * 1' }}
     uses: ./.github/workflows/qualify.yml
     with:
       expected_sha: ${{ needs.plan.outputs.sha }}
