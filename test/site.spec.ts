@@ -324,6 +324,10 @@ describe("radice pubblica e area riservata", () => {
         ["/guide/codice-fiscale-fattura-elettronica-ebay", "/en/guides/tax-code-e-invoice-ebay"],
         ["/guide/esportare-ordini-ebay-excel-csv", "/en/guides/export-ebay-orders-excel-csv"],
         ["/guide/partita-iva-acquirente-ebay", "/en/guides/buyer-vat-number-ebay"],
+        [
+          "/guide/alternativa-probay-codice-fiscale-ebay",
+          "/en/guides/probay-alternative-ebay-tax-code",
+        ],
       ].flatMap((paths) => paths.map((path) => `https://fiscalbay.it${path}`)),
     );
     // Ogni pagina porta il giorno dell'ultima modifica del contenuto.

@@ -71,6 +71,7 @@ const segments: Record<string, Segment> = {
       "codice-fiscale-fattura-elettronica-ebay": leaf("tax-code-e-invoice-ebay"),
       "esportare-ordini-ebay-excel-csv": leaf("export-ebay-orders-excel-csv"),
       "partita-iva-acquirente-ebay": leaf("buyer-vat-number-ebay"),
+      "alternativa-probay-codice-fiscale-ebay": leaf("probay-alternative-ebay-tax-code"),
     },
   },
   auth: { en: "auth", next: { error: leaf("error") } },

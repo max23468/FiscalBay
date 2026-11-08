@@ -21,6 +21,16 @@ export interface Guide {
   published: string;
   updated: string;
   sections: readonly GuideSection[];
+  /** Tabella di confronto dopo le sezioni, con sotto le fonti dei dati. */
+  comparison?: {
+    title: string;
+    /** La prima colonna dopo le voci è la soluzione messa in evidenza. */
+    headers: readonly [string, string, string];
+    rows: readonly (readonly [string, string, string])[];
+    /** Valore della seconda colonna per ciò che le fonti non dichiarano: non vale come assenza. */
+    notStated: string;
+    note: string;
+  };
   /**
    * Come FiscalBay risolve il problema della guida, in evidenza dopo le sezioni sotto il titolo
    * comune, con la schermata della funzione: la didascalia porta alla funzione in Funzionalità.
@@ -176,7 +186,7 @@ export const guides: Record<
           {
             title: "Modello di messaggio",
             body: [
-              "«Buongiorno e grazie per l’acquisto. Per emettere la fattura dell’ordine 12-34567-89012 mi serve il tuo Codice Fiscale, che userò soltanto per questo. Se acquisti con Partita IVA, mandami quella e la ragione sociale. Puoi rispondere direttamente a questo messaggio. Grazie.»",
+              "«Buongiorno e grazie per l’acquisto. Per emettere la fattura dell’ordine 27-10293-84756 mi serve il tuo Codice Fiscale, che userò soltanto per questo. Se acquisti con Partita IVA, mandami quella e la ragione sociale. Puoi rispondere direttamente a questo messaggio. Grazie.»",
             ],
           },
           {
@@ -313,6 +323,68 @@ export const guides: Record<
           caption: "La Partita IVA nell’export degli ordini",
         },
       },
+      "/guide/alternativa-probay-codice-fiscale-ebay": {
+        title: "Alternativa a ProBay per il Codice Fiscale degli acquirenti eBay",
+        metaTitle: "Alternativa a ProBay per il Codice Fiscale eBay",
+        nav: "Alternativa a ProBay",
+        description:
+          "ProBay non funziona più? FiscalBay è l’alternativa per leggere il Codice Fiscale degli acquirenti eBay dal browser, senza installare nulla. Inizia gratis.",
+        lead: "Cerchi un’alternativa a ProBay per il Codice Fiscale degli acquirenti eBay? Con FiscalBay fai di più: lo leggi dal browser, senza installare nulla, insieme a Partita IVA ed export degli ordini. E inizi gratis.",
+        published: "2026-11-08",
+        updated: "2026-11-08",
+        sections: [
+          {
+            title: "ProBay non funziona più? Continua con FiscalBay",
+            body: [
+              "L’app ProBay per Windows e Android non riceve aggiornamenti da anni ed è sparita dai principali store. Se ProBay si blocca o non mostra più i dati, i Codici Fiscali dei tuoi acquirenti sono ancora lì: eBay li salva con l’ordine e FiscalBay te li mostra.",
+            ],
+          },
+          {
+            title: "Non riesci a scaricare ProBay? Con FiscalBay non serve",
+            body: [
+              "FiscalBay è l’alternativa a ProBay che funziona nel browser: niente da scaricare o installare, su computer e telefono.",
+            ],
+          },
+          {
+            title: "Il Codice Fiscale degli acquirenti eBay senza ProBay",
+            body: [
+              "eBay non mostra il Codice Fiscale nella pagina dell’ordine né nel report di Seller Hub. Con FiscalBay lo trovi nella scheda dell’ordine, insieme alla Partita IVA, quando l’acquirente li ha inseriti.",
+            ],
+          },
+          {
+            title: "Come passare da ProBay a FiscalBay in due mosse",
+            body: [
+              "Crei un account gratis, senza carta, e colleghi il tuo negozio eBay. Da lì i nuovi ordini arrivano da soli, senza importare niente.",
+              "FiscalBay legge soltanto gli ordini: il tuo negozio resta esattamente com’è.",
+            ],
+          },
+        ],
+        comparison: {
+          title: "Perché passare da ProBay a FiscalBay",
+          headers: ["Caratteristica", "FiscalBay", "ProBay"],
+          notStated: "Non indicato",
+          rows: [
+            ["Per iniziare", "Gratis", "0,99 € per scaricarla"],
+            ["Installazione", "Nessuna, si apre nel browser", "App da installare"],
+            ["Aggiornamenti", "Continui", "Fermi da anni"],
+            ["Partita IVA dell’acquirente", "Sì", "Non indicato"],
+            ["Esportazione degli ordini", "CSV, Excel con Pro", "Non indicato"],
+            ["Notifiche su Telegram", "Con Pro", "Non indicato"],
+            ["Più negozi", "Con Pro", "Non indicato"],
+            ["Storico degli ordini", "Fino a un anno con Pro", "Nessun dato salvato"],
+            ["Assistenza", "Sì", "Nessun contatto sul sito"],
+          ],
+          note: "FiscalBay è un servizio indipendente e non ha legami con ProBay.",
+        },
+        solution: {
+          body: [
+            "Apri l’ordine, copi il Codice Fiscale con un clic e fai la fattura. Basta scrivere agli acquirenti per chiedere un dato che hanno già inserito.",
+            "Con Pro ricevi ogni nuovo ordine su Telegram ed esporti tutto in Excel. Inizia gratis e collega il negozio: al resto pensa FiscalBay.",
+          ],
+          shot: "scheda",
+          caption: "Il Codice Fiscale nella scheda dell’ordine",
+        },
+      },
     },
   },
   en: {
@@ -445,7 +517,7 @@ export const guides: Record<
           {
             title: "Message template",
             body: [
-              "“Hello and thank you for your purchase. To issue the invoice for order 12-34567-89012 I need your Italian tax code (Codice Fiscale), which I will use only for this. If you are buying with an Italian VAT number (Partita IVA), please send that and your company name. You can reply straight to this message. Thank you.”",
+              "“Hello and thank you for your purchase. To issue the invoice for order 27-10293-84756 I need your Italian tax code (Codice Fiscale), which I will use only for this. If you are buying with an Italian VAT number (Partita IVA), please send that and your company name. You can reply straight to this message. Thank you.”",
             ],
           },
           {
@@ -580,6 +652,68 @@ export const guides: Record<
           ],
           shot: "esportazione",
           caption: "The VAT number in the order export",
+        },
+      },
+      "/guide/alternativa-probay-codice-fiscale-ebay": {
+        title: "ProBay alternative for eBay buyers’ tax codes (Codice Fiscale)",
+        metaTitle: "ProBay alternative for eBay buyers’ tax codes",
+        nav: "ProBay alternative",
+        description:
+          "ProBay not working? FiscalBay is the alternative for reading eBay buyers’ tax codes (Codice Fiscale) in your browser, with nothing to install. Start for free.",
+        lead: "Looking for a ProBay alternative for eBay buyers’ tax codes (Codice Fiscale)? FiscalBay does more: you read them in your browser, with nothing to install, together with VAT numbers and order exports. And you start for free.",
+        published: "2026-11-08",
+        updated: "2026-11-08",
+        sections: [
+          {
+            title: "ProBay not working? Carry on with FiscalBay",
+            body: [
+              "The ProBay app for Windows and Android has not been updated for years and has gone from the main stores. If ProBay crashes or stops showing data, your buyers’ tax codes are still there: eBay saves them with the order and FiscalBay shows them to you.",
+            ],
+          },
+          {
+            title: "Can’t download ProBay? With FiscalBay you don’t need to",
+            body: [
+              "FiscalBay is the ProBay alternative that works in your browser: nothing to download or install, on computer and phone.",
+            ],
+          },
+          {
+            title: "eBay buyers’ tax codes without ProBay",
+            body: [
+              "eBay does not show the tax code on the order page or in the Seller Hub report. With FiscalBay you find it on the order card, together with the VAT number, when the buyer has entered them.",
+            ],
+          },
+          {
+            title: "How to switch from ProBay to FiscalBay in two steps",
+            body: [
+              "Create a free account, with no card, and connect your eBay store. From then on new orders arrive by themselves, with nothing to import.",
+              "FiscalBay only reads your orders: your store stays exactly as it is.",
+            ],
+          },
+        ],
+        comparison: {
+          title: "Why move from ProBay to FiscalBay",
+          headers: ["Feature", "FiscalBay", "ProBay"],
+          notStated: "Not stated",
+          rows: [
+            ["To get started", "Free", "€0.99 to download"],
+            ["Installation", "None, it opens in the browser", "App to install"],
+            ["Updates", "Ongoing", "Stopped years ago"],
+            ["Buyer’s VAT number", "Yes", "Not stated"],
+            ["Order export", "CSV, Excel with Pro", "Not stated"],
+            ["Telegram notifications", "With Pro", "Not stated"],
+            ["Multiple stores", "With Pro", "Not stated"],
+            ["Order history", "Up to one year with Pro", "No data saved"],
+            ["Support", "Yes", "No contact details on its website"],
+          ],
+          note: "FiscalBay is an independent service with no ties to ProBay.",
+        },
+        solution: {
+          body: [
+            "Open the order, copy the tax code in one click and make the invoice. No more writing to buyers for data they have already entered.",
+            "With Pro you get every new order on Telegram and export everything to Excel. Start for free and connect your store: FiscalBay takes care of the rest.",
+          ],
+          shot: "scheda",
+          caption: "The tax code on the order card",
         },
       },
     },

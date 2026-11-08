@@ -1,12 +1,21 @@
 import { cn } from "cn";
+import { CircleCheckBig, CircleX, Minus } from "lucide-react";
 import { data } from "react-router";
 
 import { ProductShot } from "~/components/product-shot";
 import { siteColumn } from "~/components/site-column";
 import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { buttonLink } from "~/components/ui/button-variants";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "~/components/ui/table";
 import { accessPath, featuresPath, guidePaths, guidesPath, type GuidePath } from "../app-links";
-import { guides } from "../copy/guides.server";
+import { guides, type Guide as GuideCopy } from "../copy/guides.server";
 import { sitePages } from "../copy/site-pages.server";
 import { formatDate } from "../format";
 import { canonicalPath, localizedPath } from "../i18n";
@@ -91,6 +100,75 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   ];
 }
 
+const highlightedColumn = "border-x-2 border-x-primary bg-primary/10";
+
+/**
+ * Confronto con la prima soluzione in evidenza: colonna incorniciata e spunte, croci sull'altra.
+ * Ciò che le fonti non dichiarano ha il trattino, perché non è provato che manchi.
+ */
+function ComparisonTable({
+  headers: [feature, highlighted, other],
+  rows,
+  notStated,
+}: Pick<NonNullable<GuideCopy["comparison"]>, "headers" | "rows" | "notStated">) {
+  return (
+    <Table className="border-separate border-spacing-0">
+      <TableHeader>
+        <TableRow className="hover:bg-transparent">
+          <TableHead className="border-b">
+            <span className="sr-only">{feature}</span>
+          </TableHead>
+          <TableHead
+            className={cn(
+              highlightedColumn,
+              "h-12 rounded-t-xl border-t-2 border-b border-t-primary text-base font-semibold text-primary",
+            )}
+          >
+            {highlighted}
+          </TableHead>
+          <TableHead className="border-b text-muted-foreground">{other}</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.map(([label, first, second], index) => {
+          const last = index === rows.length - 1;
+          const Icon = second === notStated ? Minus : CircleX;
+          return (
+            <TableRow key={label} className="hover:bg-transparent">
+              <TableHead
+                scope="row"
+                className={cn("h-auto py-3 font-normal whitespace-normal", !last && "border-b")}
+              >
+                {label}
+              </TableHead>
+              <TableCell
+                className={cn(
+                  highlightedColumn,
+                  "py-3 font-medium whitespace-normal",
+                  last ? "rounded-b-xl border-b-2 border-b-primary" : "border-b",
+                )}
+              >
+                <span className="flex items-start gap-2">
+                  <CircleCheckBig aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
+                  {first}
+                </span>
+              </TableCell>
+              <TableCell
+                className={cn("py-3 whitespace-normal text-muted-foreground", !last && "border-b")}
+              >
+                <span className="flex items-start gap-2">
+                  <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
+                  {second}
+                </span>
+              </TableCell>
+            </TableRow>
+          );
+        })}
+      </TableBody>
+    </Table>
+  );
+}
+
 /**
  * Articolo delle Guide (§23): sezioni, riquadro con la soluzione di FiscalBay e la sua schermata,
  * menu di tutte le guide a lato da 1024 px e dopo l'articolo sotto.
@@ -118,6 +196,19 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
               ))}
             </section>
           ))}
+          {t.comparison ? (
+            <section className="grid gap-3">
+              <h2 className="text-xl font-semibold text-balance">{t.comparison.title}</h2>
+              <ComparisonTable
+                headers={t.comparison.headers}
+                rows={t.comparison.rows}
+                notStated={t.comparison.notStated}
+              />
+              <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
+                {t.comparison.note}
+              </p>
+            </section>
+          ) : null}
           <section className="grid gap-5 rounded-2xl border bg-muted/40 p-5 sm:p-8">
             <h2 className="text-xl font-semibold text-balance sm:text-2xl">{t.solutionTitle}</h2>
             {t.solution.body.map((paragraph) => (

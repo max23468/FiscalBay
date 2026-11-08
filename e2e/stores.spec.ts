@@ -497,10 +497,10 @@ test.describe("ordini", () => {
 
       await open(page, "/anteprima/ordini", "ordinario");
       await page.getByRole("button", { name: "Seleziona", exact: true }).click();
-      await page.getByRole("checkbox", { name: "Seleziona l’ordine 05-55555-12121" }).click();
+      await page.getByRole("checkbox", { name: "Seleziona l’ordine 05-48217-36194" }).click();
       // Anche durante la selezione «Riprova» risponde con un avviso breve.
       await page
-        .getByRole("article", { name: "Ordine 19-00001-99999" })
+        .getByRole("article", { name: "Ordine 19-62740-31885" })
         .getByRole("button", { name: "Riprova", exact: true })
         .click();
       await expect(notice(page)).toBeVisible();

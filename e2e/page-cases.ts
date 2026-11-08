@@ -179,6 +179,10 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
     make("/guide/trovare-codice-fiscale-ordini-ebay", "public", {
       pattern: pagePath(prefix, "/guide/:guida"),
     }),
+    // L'unica guida con la tabella di confronto.
+    make("/guide/alternativa-probay-codice-fiscale-ebay", "public", {
+      pattern: pagePath(prefix, "/guide/:guida"),
+    }),
     make("/guide/non-esiste", "public", {
       pattern: pagePath(prefix, "/guide/:guida"),
       status: 404,

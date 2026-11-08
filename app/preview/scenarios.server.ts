@@ -20,7 +20,8 @@ import type {
 
 /**
  * Scenari sintetici dell'anteprima. Nessun dato reale: nomi, codici e ordini
- * sono inventati, gli indirizzi email usano il dominio riservato `.invalid`.
+ * sono inventati, gli indirizzi email usano il dominio riservato `.invalid`, che le
+ * schermate del sito sostituiscono con l'aspetto reale (`scripts/site-screenshots.mjs`).
  * I valori da sbloccare restano in questo modulo server e arrivano al browser
  * solo dopo lo sblocco simulato.
  */
@@ -116,7 +117,7 @@ const account = (overrides: Partial<AccountView> = {}): AccountView => ({
     accountType: "business",
     companyName: "Martini ricambi",
   },
-  email: "laura.martini@esempio.invalid",
+  email: "laura@vintagegarageitalia.invalid",
   plan: "free",
   trialAvailable: true,
   quota: { used: 3, limit: 5, cycleEndsAt },
