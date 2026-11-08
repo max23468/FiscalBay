@@ -233,6 +233,7 @@ function AccessForms({
           method="post"
           action={formAction}
           {...signIn.form}
+          onBlur={signInCheck.prepare}
           onSubmit={(event) => {
             if (!signIn.check(event)) return;
             signInCheck.submit(event);
@@ -284,6 +285,10 @@ function AccessForms({
           method="post"
           action={formAction}
           {...signUp.form}
+          // La verifica parte al primo campo toccato e il controllo della password all'uscita
+          // dal campo: all'invio gli esiti sono di solito già pronti.
+          onFocus={registration.prepare}
+          onBlur={signUpCheck.prepare}
           onSubmit={(event) => {
             if (!signUp.check(event)) return;
             signUpCheck.submit(event);
@@ -337,6 +342,7 @@ function ResetPassword({ token }: { token: string }) {
       action={formAction}
       className="grid gap-4"
       {...v.form}
+      onBlur={passwordCheck.prepare}
       onSubmit={(event) => {
         if (v.check(event)) passwordCheck.submit(event);
       }}

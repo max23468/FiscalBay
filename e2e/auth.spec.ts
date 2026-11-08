@@ -846,13 +846,16 @@ for (const language of ["it", "en"] as const) {
     ).toBeVisible();
 
     // Una password nota nelle violazioni ferma la registrazione accanto al campo; il controllo
-    // riceve la sola password, con un nome utente fisso al posto dell'email.
+    // parte all'uscita dal campo, una volta sola, e riceve la sola password, con un nome
+    // utente fisso al posto dell'email.
     const checks: unknown[] = [];
     await page.route("**/api/v1/password-check", async (route) => {
       checks.push(route.request().postDataJSON());
       await route.fulfill({ json: { leaked: true } });
     });
+    await password.fill("una-password-sicura");
     await terms.click();
+    await expect.poll(() => checks.length).toBe(1);
     await submit.click();
     await expect(password).toBeFocused();
     await expect(password).toHaveAccessibleDescription(
@@ -860,7 +863,7 @@ for (const language of ["it", "en"] as const) {
         ? "Questa password compare in violazioni di dati note. Scegline un’altra."
         : "This password appears in known data breaches. Choose a different one.",
     );
-    expect(checks).toEqual([{ username: "fiscalbay", password: "una-password-lunga" }]);
+    expect(checks).toEqual([{ username: "fiscalbay", password: "una-password-sicura" }]);
     await expect(page).toHaveURL(/\/accesso$/u);
     await password.fill("un-altra-password-lunga");
     await expect(password).not.toHaveAttribute("aria-invalid");
