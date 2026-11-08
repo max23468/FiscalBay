@@ -15,7 +15,7 @@ const signInTones: Record<SignInNotice, Tone> = {
   "troppi-tentativi": "warning",
   "verifica-non-riuscita": "warning",
   "verifica-non-disponibile": "warning",
-  registrato: "success",
+  "codice-errato": "warning",
   "verifica-inviata": "success",
   "passkey-rimossa": "success",
   "passkey-rinominata": "success",

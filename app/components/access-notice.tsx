@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "react-router";
 
+import { EmailCodeForm } from "~/components/access/email-code";
 import { useAction } from "~/components/action";
 import { useCopy, useLinks } from "~/components/copy-context";
 import { DeleteAccount, type DeletionAccess } from "~/components/delete-account";
@@ -64,6 +65,18 @@ export function VerifyEmail({
     <>
       <StatusAlert tone="warning" title={t.verifyTitle}>
         <p>{t.verifyBody(email)}</p>
+        <div className="mt-2">
+          <EmailCodeForm
+            onSubmit={
+              preview
+                ? (event) => {
+                    event.preventDefault();
+                    action.run("verifica");
+                  }
+                : undefined
+            }
+          />
+        </div>
         {preview ? (
           <Button
             variant="outline"

@@ -16,7 +16,11 @@ import {
   startStoreLink as beginLink,
   claimStoreLinkSession,
 } from "../app/integrations/ebay/store-link.server";
-import { completeStoreLink } from "../app/domain/store-link.server";
+import {
+  activateSignupGrant,
+  completeStoreLink,
+  saveSignupGrant,
+} from "../app/domain/store-link.server";
 import { ebayConfiguration, sandboxAvailable } from "../app/integrations/ebay/environment.server";
 import { now, resetDatabase } from "./fixtures/database-fixtures";
 import {
@@ -43,6 +47,126 @@ import {
 
 beforeEach(resetDatabase);
 afterEach(() => vi.useRealTimers());
+
+describe("autorizzazione eBay data in registrazione", () => {
+  const ebayUserId = "ebay-user-sintetico";
+  const issued = new Date(now);
+  const inHours = (hours: number) => new Date(issued.getTime() + hours * 3_600_000).toISOString();
+  const pendingGrants = async () =>
+    (await env.DB.prepare("SELECT count(*) AS total FROM ebay_signup_grants").first(
+      "total",
+    )) as number;
+  const grantFor = async (email: string, accessHours = 2, tokenNow = issued) => {
+    const owner = await verifiedSession(email);
+    await env.DB.prepare(
+      `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
+       VALUES (?, ?, 'ebay', ?, ?, ?)`,
+    )
+      .bind(crypto.randomUUID(), ebayUserId, owner.userId, Date.now(), Date.now())
+      .run();
+    await saveSignupGrant(
+      env,
+      {
+        ebayUserId,
+        username: "venditore",
+        language: "it",
+        tokens: {
+          accessToken: "accesso-sintetico",
+          accessExpiresAt: inHours(accessHours),
+          refreshToken: "rinnovo-sintetico",
+          refreshExpiresAt: inHours(24 * 500),
+        },
+      },
+      tokenNow,
+    );
+    return owner;
+  };
+  const activate = (
+    userId: string,
+    fetcher: typeof fetch = syntheticEbay({ orders: [] }),
+    at = issued,
+  ) => activateSignupGrant({ env, userId, fetcher, now: at });
+
+  it("conserva i token cifrati e collega il negozio una volta sola", async () => {
+    const owner = await grantFor("consenso@example.invalid");
+    const row = await env.DB.prepare(
+      "SELECT access_token, refresh_token FROM ebay_signup_grants",
+    ).first<{
+      access_token: string;
+      refresh_token: string;
+    }>();
+    expect(JSON.stringify(row)).not.toContain("sintetico");
+
+    expect(await activate(owner.userId)).toBe("collegato");
+    expect(await pendingGrants()).toBe(0);
+    const [store] = await listStores(env.DB, owner.userId);
+    expect(store).toBeDefined();
+    const saved = await env.DB.prepare(
+      "SELECT access_token FROM ebay_store_credentials WHERE store_id = ?",
+    )
+      .bind(store!.id)
+      .first<{ access_token: string }>();
+    expect(await openToken(env, store!.id, "access", saved!.access_token)).toBe(
+      "accesso-sintetico",
+    );
+    expect(await activate(owner.userId)).toBeNull();
+  });
+
+  it("attende email confermata e profilo completo", async () => {
+    const owner = await grantFor("attesa@example.invalid");
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 0 WHERE id = ?')
+      .bind(owner.userId)
+      .run();
+    expect(await activate(owner.userId)).toBeNull();
+    await env.DB.prepare('UPDATE "user" SET "emailVerified" = 1 WHERE id = ?')
+      .bind(owner.userId)
+      .run();
+    await env.DB.prepare("DELETE FROM user_profiles WHERE user_id = ?").bind(owner.userId).run();
+    expect(await activate(owner.userId)).toBeNull();
+    expect(await pendingGrants()).toBe(1);
+    expect(await listStores(env.DB, owner.userId)).toEqual([]);
+  });
+
+  it("con le chiamate eBay spente resta in attesa, oltre le 24 ore non vale più", async () => {
+    const owner = await grantFor("sospeso@example.invalid");
+    await env.DB.prepare(
+      `INSERT INTO service_settings (name, value, updated_at) VALUES ('ebay_calls', 'false', ?)
+       ON CONFLICT(name) DO UPDATE SET value = excluded.value`,
+    )
+      .bind(issued.toISOString())
+      .run();
+    expect(await activate(owner.userId)).toBe("sospeso");
+    expect(await pendingGrants()).toBe(1);
+    await env.DB.prepare("DELETE FROM service_settings WHERE name = 'ebay_calls'").run();
+    expect(await activate(owner.userId, undefined, new Date(inHours(25)))).toBeNull();
+    expect(await listStores(env.DB, owner.userId)).toEqual([]);
+  });
+
+  it("rinnova il token di accesso scaduto durante l'attesa", async () => {
+    const owner = await grantFor("rinnovo@example.invalid", -1);
+    const source = syntheticEbay({ orders: [] });
+    const fetcher = vi.fn<typeof fetch>(source);
+    expect(await activate(owner.userId, fetcher)).toBe("collegato");
+    const body = fetcher.mock.calls
+      .map(([, init]) => String(init?.body ?? ""))
+      .find((value) => value.includes("grant_type=refresh_token"));
+    expect(body).toBeDefined();
+  });
+
+  it("non tocca un negozio già collegato e non collega quello di un altro spazio", async () => {
+    const other = await verifiedSession("altro-spazio@example.invalid");
+    const initial = await beginStoreLink(other.cookie);
+    await handleAuthRequest(
+      storeCallback(`state=${initial.searchParams.get("state")}&code=sintetico`, other.cookie),
+      env,
+      syntheticEbay({ orders: [] }),
+    );
+    const owner = await grantFor("secondo@example.invalid");
+    expect(await activate(owner.userId)).toBe("altro-spazio");
+    expect(await listStores(env.DB, owner.userId)).toEqual([]);
+    expect(await pendingGrants()).toBe(0);
+  });
+});
 
 describe("collegamento negozio eBay", () => {
   it("riusa lo spazio creato da un primo collegamento concorrente senza lasciare spazi vuoti", async () => {

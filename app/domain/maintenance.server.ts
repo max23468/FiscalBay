@@ -92,6 +92,8 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db
       .prepare("DELETE FROM owner_notifications WHERE julianday(occurred_at) < julianday(?) - ?")
       .bind(at, notificationRetentionDays),
+    // Autorizzazioni eBay date in registrazione e mai confermate.
+    db.prepare("DELETE FROM ebay_signup_grants WHERE expires_at <= ?").bind(at),
     // Motivi di uscita: dettaglio dopo 30 giorni, istantanee dopo 24 mesi, attese scadute.
     ...purgeExitFeedback(db, now),
     // Aggregati giornalieri delle letture e ricevute dei report del browser.

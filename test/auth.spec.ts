@@ -43,6 +43,7 @@ import { action as passwordCheckAction } from "../app/routes/password-check";
 import { hashPassword, verifyPassword } from "../app/password.server";
 
 import { emailSender, mailEnv, sessionCookie, verifiedSession } from "./fixtures/account-fixtures";
+import { ebayStoreGrantScopes, ebayStoreScopes } from "../app/integrations/ebay/store-link.server";
 
 import { routeData, routeResponse, pagePath } from "./fixtures/route-fixtures";
 
@@ -782,6 +783,70 @@ describe("Better Auth su Workers e D1", () => {
       expect(created?.total).toBe(0);
     },
   );
+
+  it("con «Registrati con eBay» chiede il negozio in un solo consenso e ne tiene i token da parte", async () => {
+    const environment = mailEnv(emailSender());
+    const start = await createAuth(environment).handler(
+      new Request("http://localhost:5173/api/auth/sign-in/social", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          provider: "ebay",
+          callbackURL: "/",
+          scopes: [...ebayStoreGrantScopes],
+          additionalData: { storeGrantLanguage: "it" },
+        }),
+      }),
+    );
+    const authorize = new URL((await start.json<{ url: string }>()).url);
+    expect(authorize.searchParams.get("scope")?.split(" ").sort()).toEqual(
+      [...ebayStoreScopes].sort(),
+    );
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url.endsWith("/identity/v1/oauth2/token")) {
+        return Response.json({
+          access_token: "accesso-negozio",
+          refresh_token: "rinnovo-negozio",
+          token_type: "Bearer",
+          expires_in: 7200,
+          refresh_token_expires_in: 47_304_000,
+        });
+      }
+      return Response.json({
+        userId: "ebay-consenso-unico",
+        username: "venditore-unico",
+        businessAccount: { email: "consenso-unico@example.invalid" },
+      });
+    });
+    const response = await handleAuthRequest(
+      new Request(
+        `http://localhost:5173/api/auth/callback/ebay?code=synthetic&state=${authorize.searchParams.get("state")}`,
+        { headers: { cookie: sessionCookie(start) } },
+      ),
+      environment,
+    );
+    fetchMock.mockRestore();
+    expect(response.status).toBe(302);
+    const grant = await env.DB.prepare(
+      "SELECT username, language, refresh_token FROM ebay_signup_grants WHERE ebay_user_id = ?",
+    )
+      .bind("ebay-consenso-unico")
+      .first<{ username: string; language: string; refresh_token: string }>();
+    expect(grant).toMatchObject({ username: "venditore-unico", language: "it" });
+    expect(grant!.refresh_token).not.toContain("rinnovo-negozio");
+    expect(
+      await env.DB.prepare(
+        `SELECT "accessToken", "refreshToken" FROM "account" WHERE "accountId" = ?`,
+      )
+        .bind("ebay-consenso-unico")
+        .first(),
+    ).toEqual({ accessToken: null, refreshToken: null });
+    // Niente negozio finché l'email non è confermata.
+    expect(await env.DB.prepare("SELECT count(*) AS total FROM ebay_stores").first("total")).toBe(
+      0,
+    );
+  });
 
   it.each([true, false])(
     "applica l'autorizzazione alla registrazione eBay business: %s",

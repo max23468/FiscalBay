@@ -87,9 +87,12 @@ export function useTurnstile(action: TurnstileAction | null) {
     // Un secondo invio mentre il primo attende la verifica non ne riusa il token.
     if (claiming.current) return null;
     claiming.current = true;
+    setFailed(false);
     try {
       const value = ready.current ?? (await verify());
       ready.current = null;
+      // L'errore compare all'invio: una verifica anticipata fallita non disturba chi compila.
+      if (!value) setFailed(true);
       return value;
     } finally {
       claiming.current = false;
@@ -97,7 +100,6 @@ export function useTurnstile(action: TurnstileAction | null) {
   }
 
   async function run(): Promise<string | null> {
-    setFailed(false);
     try {
       const api = await loadTurnstile();
       return await new Promise<string>((resolve, reject) => {
@@ -138,7 +140,6 @@ export function useTurnstile(action: TurnstileAction | null) {
         api.execute(widget.current);
       });
     } catch {
-      setFailed(true);
       return null;
     }
   }
@@ -169,10 +170,13 @@ export function useTurnstile(action: TurnstileAction | null) {
       const submitter = (event.nativeEvent as SubmitEvent).submitter;
       void token().then((value) => {
         if (!value) return;
-        field.value = value;
-        form.requestSubmit(submitter);
-        // Il token è già nei dati inviati: tornando indietro la pagina ne chiede uno nuovo.
-        field.value = "";
+        // Con il token già pronto siamo ancora dentro l'evento di invio, che ignorerebbe il nuovo.
+        setTimeout(() => {
+          field.value = value;
+          form.requestSubmit(submitter);
+          // Il token è già nei dati inviati: tornando indietro la pagina ne chiede uno nuovo.
+          field.value = "";
+        });
       });
     },
     field: siteKey ? (

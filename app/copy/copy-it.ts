@@ -1206,8 +1206,19 @@ export const it = {
     agreementSubmit: "Continua",
     verifyTitle: "Conferma l’indirizzo email",
     verifyBody: (email: string) =>
-      `Abbiamo inviato un link a ${email}. Serve per collegare un negozio eBay. Intanto puoi esplorare FiscalBay.`,
-    verifyResend: "Invia di nuovo il link",
+      `Abbiamo inviato un codice e un link a ${email}. Servono per collegare un negozio eBay. Intanto puoi esplorare FiscalBay.`,
+    verifyResend: "Invia di nuovo",
+    emailCodeTitle: "Controlla la posta",
+    emailCodeSent: "Inserisci il codice di 6 cifre che abbiamo inviato a",
+    emailCodeChange: "Modifica",
+    emailCode: "Codice di conferma",
+    emailCodeSubmit: "Conferma",
+    emailCodeChecking: "Verifica in corso",
+    emailCodeNotArrived: "Non è arrivata?",
+    emailCodeResend: "Inviala di nuovo",
+    emailCodeResendIn: (seconds: number) => `Inviala di nuovo tra ${seconds} s`,
+    emailCodeOrLink: "Controlla anche lo spam. Il codice e il link nell’email valgono un’ora.",
+    openMailbox: (name: string) => `Apri ${name}`,
     storeNotices: {
       collegato: "Negozio eBay collegato.",
       eliminato: "Negozio eliminato da FiscalBay.",
@@ -1243,8 +1254,7 @@ export const it = {
       "cancellazione-in-corso":
         "La cancellazione di questo account è in corso: l’accesso non è più possibile.",
       errore: "Operazione non riuscita. Controlla email e password.",
-      registrato:
-        "Controlla la posta: ti abbiamo inviato un link per confermare l’indirizzo email e accedere.",
+      "codice-errato": "Codice non valido o scaduto. Controllalo o chiedine uno nuovo.",
       registrazione: "Account non creato. Controlla l’indirizzo email e la password.",
       autorizzazione: registrationRestricted,
       termini: "Per continuare accetta i Termini di servizio.",
@@ -1253,7 +1263,7 @@ export const it = {
       "verifica-non-riuscita": "Verifica di sicurezza non riuscita o scaduta. Riprova.",
       "verifica-non-disponibile":
         "Verifica di sicurezza non disponibile in questo momento. Riprova tra qualche minuto.",
-      "verifica-inviata": "Link di conferma inviato. Controlla la posta.",
+      "verifica-inviata": "Email di conferma inviata. Controlla la posta.",
       "passkey-rimossa": "Passkey rimossa.",
       "passkey-rinominata": "Nome della passkey aggiornato.",
       "passkey-nome-non-valido": "Indica un nome per la passkey, fino a 80 caratteri.",

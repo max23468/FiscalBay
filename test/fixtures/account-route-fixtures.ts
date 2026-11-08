@@ -16,6 +16,15 @@ export async function accessError(response: Response) {
   return { status: response.status, key: body.notice.key, ...body.remembered };
 }
 
+/** Pagina del codice dopo la registrazione: senza avviso, con l'indirizzo da confermare. */
+export async function codePage(response: Response) {
+  const body = await response.clone().json<{
+    notice: null;
+    remembered: { tab: string; values: Record<string, string> };
+  }>();
+  return { status: response.status, notice: body.notice, ...body.remembered };
+}
+
 /** Azione della pagina Sicurezza; chi non può vederla riceve il redirect lanciato. */
 export function securityForm(path: string, fields: Record<string, string>, cookie?: string) {
   return routeResponse(securityAction, path, { fields, cookie });

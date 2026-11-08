@@ -16,7 +16,8 @@ export function usePasswordCheck(onLeaked?: (input: HTMLInputElement) => void) {
   // Ultimo controllo avviato, con la sua password: l'invio lo riusa se il campo non è cambiato.
   const last = useRef<{ password: string; leaked: Promise<boolean> } | null>(null);
   const check = (password: string) => {
-    if (last.current?.password !== password) last.current = { password, leaked: isLeaked(password) };
+    if (last.current?.password !== password)
+      last.current = { password, leaked: isLeaked(password) };
     return last.current.leaked;
   };
   return {
@@ -41,7 +42,8 @@ export function usePasswordCheck(onLeaked?: (input: HTMLInputElement) => void) {
         if (leaked && onLeaked) return onLeaked(input);
         if (flag.current) flag.current.value = leaked ? "1" : "";
         checked.current = password;
-        form.requestSubmit(submitter);
+        // Con l'esito già pronto siamo ancora dentro l'evento di invio, che ignorerebbe il nuovo.
+        setTimeout(() => form.requestSubmit(submitter));
       });
     },
     field: onLeaked ? null : (

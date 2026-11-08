@@ -141,6 +141,15 @@ describe("confine HTTP Auth", () => {
     "sign-up/email",
     "request-password-reset",
     "send-verification-email",
+    "email-otp/verify-email",
+    "email-otp/send-verification-otp",
+    "email-otp/check-verification-otp",
+    "email-otp/request-password-reset",
+    "email-otp/reset-password",
+    "email-otp/request-email-change",
+    "email-otp/change-email",
+    "forget-password/email-otp",
+    "sign-in/email-otp",
   ])("chiude %s anche con slash finali", async (path) => {
     for (const suffix of ["", "/", "///"]) {
       const response = await handle(`/api/auth/${path}${suffix}`);

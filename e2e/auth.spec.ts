@@ -901,6 +901,49 @@ for (const language of ["it", "en"] as const) {
   });
 }
 
+test("con i controlli già pronti il clic su Crea account invia subito il modulo", async ({
+  page,
+}) => {
+  await page.route("**/turnstile/v0/api.js*", (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: `window.turnstile = {
+        render(_, options) { this.options = options; return "widget"; },
+        execute() { this.options.callback("token-anticipato"); },
+        reset() {}, remove() {},
+      };`,
+    }),
+  );
+  const checks: unknown[] = [];
+  await page.route("**/api/v1/password-check", async (route) => {
+    checks.push(route.request().postDataJSON());
+    await route.fulfill({ json: { leaked: false } });
+  });
+  await page.route(
+    (url) => url.pathname === "/accesso",
+    (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 200, contentType: "text/html", body: "<title>inviato</title>" })
+        : route.continue(),
+  );
+  await page.goto("/accesso?registrati");
+  await networkIdle(page);
+  const signUp = page.getByRole("tabpanel", { name: "Crea account", exact: true });
+  await signUp.getByRole("textbox", { name: "Nome", exact: true }).fill("Maria");
+  await signUp.getByRole("textbox", { name: "Cognome" }).fill("Rossi");
+  await signUp.getByRole("textbox", { name: "Email" }).fill("maria@example.invalid");
+  await signUp.getByLabel(/Password/).fill("una-password-lunga");
+  await signUp.getByRole("checkbox").first().click();
+  await expect.poll(() => checks.length).toBe(1);
+
+  const sent = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname === "/accesso",
+  );
+  await signUp.getByRole("button", { name: "Crea account", exact: true }).click();
+  expect((await sent).postData()).toContain("token-anticipato");
+  expect(checks).toHaveLength(1);
+});
+
 test("l'esito dell'accesso esce dall'indirizzo e non torna alla ricarica", async ({ page }) => {
   const text = "Negozio già collegato a un altro account";
   await page.goto("/accesso?negozio=altro-spazio");
