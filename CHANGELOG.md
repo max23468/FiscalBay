@@ -42,6 +42,10 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 
 - **Prezzi.** Chi ha già Premium a vita vede il piano attivo al posto delle offerte, e i pulsanti dei tre piani stanno alla stessa altezza.
 - **Il piano a pagamento si chiama Pro.** App, sito, guide, email, Telegram, console e prodotto Stripe usano il nome Pro al posto di Premium; Termini e Privacy passano alla versione del 6 novembre 2026 con il solo cambio del nome. La pagina Novità non lo annuncia, per scelta dell'owner.
+- **Controllo di sicurezza settimanale.** Un workflow pianificato ricontrolla ogni settimana avvisi delle dipendenze distribuite, firme dei pacchetti, protezione di `develop` e `main` e alert aperti del repository, anche senza nuove PR.
+- **Pubblicazione meno in coda.** I coordinatori di `Pubblica` e `Promuovi` girano sul Mac dell'owner quando è acceso, una qualifica automatica superata lascia il posto a quella della testa più recente, i job paralleli di PR e qualifiche hanno un tetto e `Promuovi` su un commit certificato non attende altri controlli.
+- **Cancellazioni eBay degli acquirenti più affidabili.** Gli ordini che eBay non collega a un identificativo stabile dell'acquirente rileggono ogni settimana il suo nome utente, così una richiesta di cancellazione trova anche gli ordini più vecchi. Il dossier sulle lacune delle API eBay raccoglie le richieste da inviare a eBay.
+- **Motivi di uscita.** La disdetta dal portale Stripe e la cancellazione dell'account raccolgono un motivo da un elenco chiuso e un commento, entrambi facoltativi; avvisi Telegram, pagina Commerciale della console e comando `/uscite` li mostrano. Privacy IT/EN `2026-11-07`.
 
 ## [2.0.6] - 2026-11-06
 
