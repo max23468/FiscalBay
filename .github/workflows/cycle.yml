@@ -34,6 +34,11 @@ on:
       requested_at:
         type: string
         required: true
+      runner:
+        description: mac quando un runner del Mac dell'owner è libero, altrimenti github
+        type: choice
+        options: [github, mac]
+        default: github
 
 env:
   DO_NOT_TRACK: "1"
@@ -45,11 +50,14 @@ permissions:
 # runner del coordinatore. Promozioni e riprese Production restano una alla volta, senza fermare
 # le PR verso il test; la ripresa di una run del test o di una qualifica ha un gruppo proprio. Il
 # ritiro non aspetta un ciclo in corso: `rollback.yml` condivide il gruppo con `publish.yml`.
+# Un coordinatore passa quasi tutto il tempo ad aspettare altre run: sul runner del Mac non toglie
+# posti alle Actions dell'account. Esegue soltanto codice di `develop` senza installare dipendenze;
+# con il Mac spento o i suoi runner occupati il comando locale sceglie le Actions.
 jobs:
   cycle:
     name: Coordinatore
     if: inputs.operation != 'production'
-    runs-on: ubuntu-26.04
+    runs-on: ${{ inputs.runner == 'mac' && fromJSON('["self-hosted","fiscalbay-coordinator"]') || 'ubuntu-26.04' }}
     timeout-minutes: 240
     concurrency:
       group: publication-cycle-${{ inputs.operation == 'rollback' && 'rollback' || inputs.operation == 'pr' && format('pr-{0}', inputs.object) || inputs.operation == 'resume' && inputs.environment == 'test' && format('run-{0}', inputs.object) || 'release' }}
@@ -57,6 +65,8 @@ jobs:
     # Il token dell'owner: con quello del workflow merge e push non avvierebbero la CI.
     environment: publication
     steps:
+      - name: Check branch
+        run: test "${GITHUB_REF}" = refs/heads/develop
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: develop
@@ -93,13 +103,15 @@ jobs:
   production-pr:
     name: Coordinatore PR
     if: inputs.operation == 'production'
-    runs-on: ubuntu-26.04
+    runs-on: ${{ inputs.runner == 'mac' && fromJSON('["self-hosted","fiscalbay-coordinator"]') || 'ubuntu-26.04' }}
     timeout-minutes: 240
     concurrency:
       group: publication-cycle-pr-${{ inputs.object }}
       cancel-in-progress: false
     environment: publication
     steps:
+      - name: Check branch
+        run: test "${GITHUB_REF}" = refs/heads/develop
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: develop
@@ -118,13 +130,15 @@ jobs:
   production-promote:
     name: Coordinatore promozione
     needs: production-pr
-    runs-on: ubuntu-26.04
+    runs-on: ${{ inputs.runner == 'mac' && fromJSON('["self-hosted","fiscalbay-coordinator"]') || 'ubuntu-26.04' }}
     timeout-minutes: 240
     concurrency:
       group: publication-cycle-release
       cancel-in-progress: false
     environment: publication
     steps:
+      - name: Check branch
+        run: test "${GITHUB_REF}" = refs/heads/develop
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: develop
