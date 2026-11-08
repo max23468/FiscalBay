@@ -10,6 +10,8 @@ import {
   qualifiedImageUrl,
   readItemImage,
   readTradingTaxObservation,
+  readTradingTaxObservations,
+  tradingTaxBatch,
   tradingAck,
 } from "../app/integrations/ebay/trading.server";
 import {
@@ -181,6 +183,47 @@ describe("client eBay e normalizzazione", () => {
     expect(() => tradingAck(ack("<Ack>Success</Ack>") + " ".repeat(2_097_153))).toThrow(
       UpstreamError,
     );
+  });
+
+  it("legge i dati fiscali di più ordini con una sola chiamata, con l'errore del singolo ordine", async () => {
+    const fetcher = trading(
+      ack(
+        "<Ack>Success</Ack><HasMoreOrders>false</HasMoreOrders><OrderArray>" +
+          "<Order><OrderID>A</OrderID><BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>" +
+          "<Order><OrderID>D</OrderID></Order><Order><OrderID>D</OrderID></Order>" +
+          "</OrderArray>",
+      ),
+    );
+    const results = await readTradingTaxObservations(access(fetcher), ["A", "B", "D"]);
+    expect(fetcher).toHaveBeenCalledOnce();
+    const body = String(fetcher.mock.calls[0]![1]?.body);
+    expect(body).toContain(
+      "<OrderIDArray><OrderID>A</OrderID><OrderID>B</OrderID><OrderID>D</OrderID></OrderIDArray>",
+    );
+    expect(body).toContain(`<EntriesPerPage>${tradingTaxBatch}</EntriesPerPage>`);
+    expect(results.get("A")).toMatchObject({
+      orderFound: true,
+      values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
+    });
+    expect(results.get("B")).toEqual({
+      orderFound: false,
+      lastModifiedTime: undefined,
+      values: [],
+    });
+    expect(results.get("D")).toBeInstanceOf(UpstreamError);
+    // Una risposta su più pagine o un lotto vuoto o troppo grande non sono attesi.
+    expect(
+      await failure(
+        readTradingTaxObservations(
+          access(trading(ack("<Ack>Success</Ack><HasMoreOrders>true</HasMoreOrders>"))),
+          ["A"],
+        ),
+      ),
+    ).toEqual({ failure: "invalid_response" });
+    for (const ids of [[], Array.from({ length: tradingTaxBatch + 1 }, (_, index) => `${index}`)])
+      expect(await failure(readTradingTaxObservations(access(trading("")), ids))).toEqual({
+        failure: "invalid_response",
+      });
   });
 
   it("tipizza gli errori Trading con il solo codice eBay", async () => {

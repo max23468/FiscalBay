@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { expect, it, vi } from "vitest";
 
 import { readDetail } from "../app/domain/order-acquisition-details.server";
+import { openBudget } from "./fixtures/ebay-client-fixtures";
 
 import { listVisibleOrders } from "../app/domain/orders.server";
 
@@ -831,6 +832,7 @@ it.each([
         at: now,
         budget: { calls: 10, pages: 1 },
         created: 0,
+        quota: openBudget,
       },
       {
         external_order_id: "D-1",

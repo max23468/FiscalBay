@@ -771,6 +771,7 @@ describe("collegamento negozio eBay", () => {
           "<Version>1455</Version><DetailLevel>ReturnAll</DetailLevel>" +
           "<OrderRole>Seller</OrderRole><OrderStatus>All</OrderStatus>" +
           "<OrderIDArray><OrderID>12-&lt;0&gt;&amp;1</OrderID></OrderIDArray>" +
+          "<Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>1</PageNumber></Pagination>" +
           "</GetOrdersRequest>",
       },
     ]);
@@ -820,9 +821,9 @@ describe("collegamento negozio eBay", () => {
     }));
     const ebay = syntheticEbay({ orders });
     await handleAuthRequest(storeCallback(`state=${state}&code=codice`, cookie), env, ebay);
-    // Token e identità, tre pagine e due dettagli da due chiamate entro il budget di otto, più
-    // il profilo del negozio, che non scala il budget.
-    expect(ebay).toHaveBeenCalledTimes(11);
+    // Token e identità, poi entro il budget di otto tre pagine, quattro dettagli e una sola
+    // lettura fiscale Trading per tutti, più il profilo del negozio, che non scala il budget.
+    expect(ebay).toHaveBeenCalledTimes(12);
     expect(await env.DB.prepare("SELECT COUNT(*) AS total FROM orders").first()).toEqual({
       total: 4,
     });
@@ -830,7 +831,7 @@ describe("collegamento negozio eBay", () => {
       await env.DB.prepare(
         "SELECT COUNT(*) AS total FROM order_source_refs WHERE detail_for IS NULL",
       ).first(),
-    ).toEqual({ total: 2 });
+    ).toEqual({ total: 0 });
   });
 
   it("non collega il negozio con token o identità eBay non validi", async () => {

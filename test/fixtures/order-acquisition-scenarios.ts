@@ -66,13 +66,23 @@ export const ebay = (
     }
     if (call === "GetOrders") {
       if (String(init?.body).includes("<ModTimeFrom>")) return new Response(emptyTradingOrders);
-      const id = /<OrderID>([^<]*)<\/OrderID>/u.exec(String(init?.body))![1];
+      // Un ordine per ogni ID richiesto, nell'ordine della richiesta.
+      const ids = [...String(init?.body).matchAll(/<OrderID>([^<]*)<\/OrderID>/gu)].map(
+        ([, id]) => id!,
+      );
       return (
         options.trading?.() ??
         new Response(
-          `<GetOrdersResponse><Ack>Success</Ack><OrderArray><Order><OrderID>${id}</OrderID>` +
-            `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier>` +
-            `</Order></OrderArray></GetOrdersResponse>`,
+          `<GetOrdersResponse><Ack>Success</Ack><OrderArray>` +
+            ids
+              .map(
+                (id) =>
+                  `<Order><OrderID>${id}</OrderID>` +
+                  `<BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SINTETICO</ID></BuyerTaxIdentifier>` +
+                  `</Order>`,
+              )
+              .join("") +
+            `</OrderArray></GetOrdersResponse>`,
         )
       );
     }
@@ -195,5 +205,19 @@ export function setupScenarios() {
     await seed();
     await env.DB.prepare("DELETE FROM orders").run();
     await insertCredentials({ accessExpiresAt: now, grantedAt }).run();
+    // Ogni utente ha una sessione aperta: gli spazi sono seguiti e leggono con la cadenza del piano.
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO "user" ("id", "name", "email", "emailVerified", "createdAt", "updatedAt")
+       SELECT user_id, user_id, user_id || '@example.test', 1, ?1, ?1 FROM workspace_members`,
+    )
+      .bind(now)
+      .run();
+    await env.DB.prepare(
+      `INSERT OR IGNORE INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+       SELECT 'sessione-' || user_id, '2099-01-01T00:00:00.000Z', 'token-' || user_id, ?1, ?1,
+              user_id FROM workspace_members`,
+    )
+      .bind(now)
+      .run();
   });
 }

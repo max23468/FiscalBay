@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { expect, it, vi } from "vitest";
 
 import { readDetail } from "../app/domain/order-acquisition-details.server";
+import { openBudget } from "./fixtures/ebay-client-fixtures";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 
@@ -29,6 +30,38 @@ import {
 } from "./fixtures/order-import-scenarios";
 
 setupScenarios();
+
+// In testa al file: la mutation del dettaglio parte dai file che lo importano direttamente.
+it("un dettaglio conservato senza chiamate disponibili resta da leggere", async () => {
+  await recordOrderObservation(env.DB, target(), observation());
+  const fetcher = vi.fn<typeof fetch>();
+  expect(
+    await readDetail(
+      {
+        db: env.DB,
+        storeId: "s-a",
+        grantedAt,
+        access: {
+          configuration: ebayConfiguration(env, "production"),
+          fetcher,
+          accessToken: "sintetico",
+        },
+        at: now,
+        budget: { calls: 0, pages: 0 },
+        created: 0,
+        quota: openBudget,
+      },
+      {
+        external_order_id: "D-1",
+        last_modified_time: "2026-09-10T11:00:00.000Z",
+        detail_attempts: 0,
+        marketplace_id: null,
+        creation_time: now,
+      },
+    ),
+  ).toBe(false);
+  expect(fetcher).not.toHaveBeenCalled();
+});
 
 it("una riga cancellata non torna con un nuovo identificativo dell'ordine", async () => {
   await env.DB.prepare(
@@ -390,6 +423,7 @@ it.each(["scadenza", "cancellazione"])(
           at: now,
           budget,
           created: 0,
+          quota: openBudget,
         },
         {
           external_order_id: "D-1",
@@ -427,6 +461,7 @@ it("un errore arrivato dopo la scadenza non riapre il retry del dettaglio", asyn
         at: now,
         budget: { calls: 12, pages: 1 },
         created: 0,
+        quota: openBudget,
       },
       {
         external_order_id: "D-1",

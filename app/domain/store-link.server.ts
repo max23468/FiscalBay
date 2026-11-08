@@ -4,6 +4,7 @@ import type { Language } from "../i18n";
 import { linkReadAdmitted } from "./admission.server";
 import { applyFreePlan } from "./free-store.server";
 import { acquireOrders } from "./order-acquisition.server";
+import { workerShare } from "./order-acquisition-context.server";
 import { serviceSetting } from "./service-settings.server";
 import type { EbayEnvironment } from "../view-models";
 import { saveStoreCredentials } from "../integrations/ebay/seller-credentials.server";
@@ -107,6 +108,7 @@ export async function completeStoreLink(input: {
     access,
     now: issued,
     budget: { calls: 8, pages: 3 },
+    workerShare: workerShare(environment),
   }).catch((error: unknown) => {
     logFailure({ request: input.request, error, operation: "store_link" });
   });

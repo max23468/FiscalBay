@@ -533,7 +533,8 @@ it("rispetta separatamente chiamate e pagine e lascia il dettaglio alle chiamate
   const singles = details.mock.calls.filter(([input]) =>
     new URL(String(input)).pathname.includes("/order/"),
   );
-  expect([singles.length, calls(details, "GetOrders")]).toEqual([4, 4]);
+  // Le letture fiscali Trading dei dettagli viaggiano in una sola chiamata.
+  expect([singles.length, calls(details, "GetOrders")]).toEqual([8, 1]);
   expect(await syncState()).toMatchObject({
     cursor: "2026-09-02T01:10:00.000Z",
     recent_end: null,
@@ -542,10 +543,14 @@ it("rispetta separatamente chiamate e pagine e lascia il dettaglio alle chiamate
 
   // Con chiamate per un solo dettaglio di due, l'esecuzione non si dichiara completa.
   await acquire(ebay({ orders: recent }), "2026-09-02T01:20:00.000Z");
-  await env.DB.prepare(
-    `UPDATE order_source_refs SET detail_for = NULL
-        WHERE external_order_id IN (SELECT external_order_id FROM order_source_refs LIMIT 2)`,
-  ).run();
+  // Senza letture Trading già fatte, così entrambi i dettagli chiedono il fallback.
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE order_source_refs SET detail_for = NULL
+          WHERE external_order_id IN (SELECT external_order_id FROM order_source_refs LIMIT 2)`,
+    ),
+    env.DB.prepare("DELETE FROM order_tax_checks"),
+  ]);
   const last = ebay({ orders: recent });
   expect(await acquire(last, "2026-09-02T01:30:00.000Z", { calls: 3, pages: 1 })).toBe("budget");
   expect(calls(last, "GetOrders")).toBe(1);
@@ -803,8 +808,9 @@ it("il lavoro periodico accoda ogni negozio dovuto, con un budget ciascuno, isol
         tokenOf(init) === "token-s-c" ? new Response(null, { status: 401 }) : undefined,
     });
     await cronTurn(env, fetcher, new Date("2026-09-02T00:00:00.000Z"));
-    // Il budget di A e D più la prima lettura del profilo del negozio, fuori budget.
-    expect(perStore(fetcher)).toEqual({ "token-s-a": 13, "token-s-c": 1, "token-s-d": 13 });
+    // L'intero budget di A e D, con le letture fiscali Trading in una sola chiamata, più la
+    // prima lettura del profilo del negozio, fuori budget.
+    expect(perStore(fetcher)).toEqual({ "token-s-a": 14, "token-s-c": 1, "token-s-d": 14 });
     expect(logged()).toBe(2);
     expect(errors.mock.calls.map(([line]) => JSON.parse(String(line)).failure).sort()).toEqual([
       "credentials",

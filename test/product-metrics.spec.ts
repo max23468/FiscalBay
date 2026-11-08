@@ -463,6 +463,12 @@ describe("KPI della console", () => {
       run(readingStore, before(2), false),
       run(lateStore, before(2), true),
       run(lateStore, before(40), false),
+      // Uno spazio seguito: senza sessioni aperte né Telegram il ritardo atteso sarebbe di due ore.
+      env.DB.prepare(
+        `INSERT INTO "session" ("id", "expiresAt", "token", "createdAt", "updatedAt", "userId")
+         SELECT 'kpi-' || user_id, '2099-01-01T00:00:00.000Z', 'kpi-token-' || user_id, ?2, ?2, user_id
+           FROM workspace_members WHERE workspace_id = ?1`,
+      ).bind(late, clock),
       env.DB.prepare("UPDATE workspaces SET active_at = ? WHERE id = ?").bind(before(2), reading),
       env.DB.prepare(`INSERT INTO free_cycles (id, workspace_id, starts_at, ends_at, quota, used)
         VALUES ('kpi-c1', ?, ?, ?, 5, 5), ('kpi-c2', ?, ?, ?, 5, 1)`).bind(
