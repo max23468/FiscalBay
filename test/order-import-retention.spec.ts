@@ -31,6 +31,38 @@ import {
 
 setupScenarios();
 
+// In testa al file: la mutation del dettaglio parte dai file che lo importano direttamente.
+it("un dettaglio conservato senza chiamate disponibili resta da leggere", async () => {
+  await recordOrderObservation(env.DB, target(), observation());
+  const fetcher = vi.fn<typeof fetch>();
+  expect(
+    await readDetail(
+      {
+        db: env.DB,
+        storeId: "s-a",
+        grantedAt,
+        access: {
+          configuration: ebayConfiguration(env, "production"),
+          fetcher,
+          accessToken: "sintetico",
+        },
+        at: now,
+        budget: { calls: 0, pages: 0 },
+        created: 0,
+        quota: openBudget,
+      },
+      {
+        external_order_id: "D-1",
+        last_modified_time: "2026-09-10T11:00:00.000Z",
+        detail_attempts: 0,
+        marketplace_id: null,
+        creation_time: now,
+      },
+    ),
+  ).toBe(false);
+  expect(fetcher).not.toHaveBeenCalled();
+});
+
 it("una riga cancellata non torna con un nuovo identificativo dell'ordine", async () => {
   await env.DB.prepare(
     `INSERT INTO deleted_order_keys (store_id, kind, external_key, deleted_at)
