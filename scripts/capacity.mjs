@@ -76,7 +76,7 @@ export const referenceModel = {
   newOrdersPerStoreMonth: 100,
   /**
    * Passate Trading periodiche al giorno per negozio: ogni sei ore senza fatture combinate dal
-   * venditore, il caso di riferimento (D319); con fatture recenti sarebbero dodici.
+   * venditore, il caso di riferimento (D322); con fatture recenti sarebbero dodici.
    */
   tradingPassesPerDay: 4,
   dailyVisits: { orders: 10, search: 2, detail: 5 },

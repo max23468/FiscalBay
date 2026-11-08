@@ -89,7 +89,7 @@ export async function record(ctx: Context, observation: OrderObservation) {
 /**
  * Budget giornaliero delle chiamate Trading con quota propria (`GetOrders`, `GetItem`). Le quote
  * eBay sono del keyset, che test e Production condividono; l'Application Growth Check si chiede
- * solo quando il carico corrente le avvicina davvero alla soglia (D319). Per questo:
+ * solo quando il carico corrente le avvicina davvero alla soglia (D322). Per questo:
  *
  * - ogni Worker conta le proprie chiamate per giorno UTC, così la console separa il consumo
  *   dell'ambiente da quello del keyset;

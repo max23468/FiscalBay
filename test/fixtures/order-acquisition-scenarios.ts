@@ -91,6 +91,12 @@ export const ebay = (
       const found = orders.find(({ orderId }) => orderId === decodeURIComponent(single));
       return found ? Response.json(found) : new Response(null, { status: 404 });
     }
+    const ids = url.searchParams.get("orderIds");
+    if (ids !== null) {
+      const wanted = ids.split(",");
+      const found = orders.filter(({ orderId }) => wanted.includes(orderId));
+      return Response.json({ orders: found, total: found.length });
+    }
     const [, field, from, to] = /^(\w+):\[(.+)\.\.(.+)\]$/u.exec(url.searchParams.get("filter")!)!;
     const key = field === "creationdate" ? "creationDate" : "lastModifiedDate";
     const matching = orders

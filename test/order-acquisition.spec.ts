@@ -1,8 +1,10 @@
 import { env } from "cloudflare:workers";
 
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { acquireOrders } from "../app/domain/order-acquisition.server";
+
+import { checkBuyerNames } from "../app/domain/buyer-check.server";
 
 import { setSwitch } from "../app/domain/service-settings.server";
 
@@ -10,7 +12,7 @@ import { listVisibleOrders } from "../app/domain/orders.server";
 
 import { listStores } from "../app/domain/stores.server";
 
-import { access, order } from "./fixtures/ebay-client-fixtures";
+import { access, openBudget, order } from "./fixtures/ebay-client-fixtures";
 
 import {
   grantedAt,
@@ -870,4 +872,166 @@ it("rilegge i dati fiscali Trading finché l'ordine non è pagato e non dopo una
   // Una lettura Trading non riuscita non copre le versioni successive.
   await env.DB.prepare("UPDATE order_tax_checks SET verification = 'error'").run();
   expect(await version("2026-09-02T05:30:00.000Z", "2026-09-02T06:00:00.000Z", true)).toBe(1);
+});
+
+describe("username degli acquirenti senza token eIAS", () => {
+  const after = (days: number) =>
+    new Date(Date.parse("2026-09-02T00:00:00.000Z") + days * 86_400_000).toISOString();
+  /** Ordini richiesti per ID, una voce per chiamata. */
+  const byIds = (fetcher: ReturnType<typeof ebay>) =>
+    fetcher.mock.calls
+      .map(([input]) => new URL(String(input)).searchParams.get("orderIds"))
+      .filter((ids) => ids !== null)
+      .map((ids) => ids.split(","));
+  const checkedAt = (orderId = "12-34567-89012") =>
+    env.DB.prepare("SELECT buyer_checked_at AS at FROM orders WHERE ebay_order_id = ?")
+      .bind(orderId)
+      .first<{ at: string | null }>()
+      .then((row) => row!.at);
+  const context = (fetcher: typeof fetch, at: string, budget = { calls: 10, pages: 10 }) => ({
+    db: env.DB,
+    storeId: "s-a",
+    grantedAt,
+    access: access(fetcher),
+    at,
+    budget,
+    created: 0,
+    quota: openBudget,
+  });
+
+  it("registra la lettura all'import e rilegge lo username dopo una settimana", async () => {
+    const fetcher = ebay();
+    await acquire(fetcher);
+    expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
+    expect(byIds(fetcher)).toEqual([]);
+    const renamed = ebay({
+      orders: [
+        order({
+          buyer: { ...order().buyer, username: "acquirente-rinominato" },
+        }),
+      ],
+    });
+    await acquire(renamed, after(6));
+    expect(byIds(renamed)).toEqual([]);
+    await acquire(renamed, after(8));
+    expect(byIds(renamed)).toEqual([["12-34567-89012"]]);
+    expect(
+      await env.DB.prepare(
+        "SELECT json_extract(buyer_json, '$.username') AS username FROM orders",
+      ).first(),
+    ).toEqual({ username: "acquirente-rinominato" });
+    expect(await checkedAt()).toBe(after(8));
+    // Una variazione dell'ordine importata è anch'essa una lettura dello username.
+    const paid = ebay({
+      orders: [
+        order({
+          ...renamed.orders[0],
+          lastModifiedDate: after(9),
+          orderPaymentStatus: "FULLY_REFUNDED",
+        }),
+      ],
+    });
+    await acquire(paid, after(9));
+    expect(await checkedAt()).toBe(after(9));
+  });
+
+  it("verifica soltanto ordini definitivi senza token, con marketplace ed entro due anni", async () => {
+    const orders = series("V", 6, "2026-09-01T23:00:00.000Z");
+    await acquire(ebay({ orders }));
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE orders SET buyer_checked_at = '2026-08-01T00:00:00.000Z', marketplace_id = 'EBAY_IT'",
+      ),
+      env.DB.prepare("UPDATE orders SET buyer_eias_token = 'eias' WHERE ebay_order_id = 'V-00000'"),
+      env.DB.prepare("UPDATE orders SET is_provisional = 1 WHERE ebay_order_id = 'V-00001'"),
+      env.DB.prepare("UPDATE orders SET marketplace_id = NULL WHERE ebay_order_id = 'V-00002'"),
+      env.DB.prepare(
+        "UPDATE orders SET creation_time = '2024-09-04T00:00:00.000Z' WHERE ebay_order_id = 'V-00003'",
+      ),
+      env.DB.prepare(
+        "UPDATE orders SET creation_time = '2024-09-04T00:00:01.000Z' WHERE ebay_order_id = 'V-00004'",
+      ),
+      env.DB.prepare(
+        "UPDATE orders SET buyer_checked_at = '2026-08-27T00:00:01.000Z' WHERE ebay_order_id = 'V-00005'",
+      ),
+    ]);
+    const fetcher = ebay({ orders });
+    await checkBuyerNames(context(fetcher, "2026-09-03T00:00:00.000Z"));
+    // Due anni meno un giorno: l'ordine creato al limite esatto resta fuori, uno un secondo dopo entra.
+    expect(byIds(fetcher)).toEqual([["V-00004"]]);
+  });
+
+  it("legge al massimo 50 ordini per chiamata, dalla verifica più vecchia", async () => {
+    const orders = series("M", 52, "2026-09-01T23:00:00.000Z");
+    await acquire(ebay({ orders }));
+    await env.DB.prepare(
+      "UPDATE orders SET buyer_checked_at = NULL, marketplace_id = 'EBAY_IT'",
+    ).run();
+    await env.DB.prepare(
+      "UPDATE orders SET buyer_checked_at = '2026-08-01T00:00:00.000Z' WHERE ebay_order_id = 'M-00000'",
+    ).run();
+    const fetcher = ebay({ orders });
+    const at = "2026-09-03T00:00:00.000Z";
+    const ctx = context(fetcher, at);
+    await checkBuyerNames(ctx);
+    expect(ctx.budget).toEqual({ calls: 9, pages: 9 });
+    const [first] = byIds(fetcher);
+    // Prima le mai verificate, dalla più vecchia; quella già verificata resta per ultima.
+    expect(first).toHaveLength(50);
+    expect(first![0]).toBe("M-00051");
+    expect(first).not.toContain("M-00000");
+    await checkBuyerNames(context(fetcher, at));
+    expect(byIds(fetcher)[1]).toEqual(["M-00001", "M-00000"]);
+    expect(
+      await count("SELECT COUNT(*) AS total FROM orders WHERE buyer_checked_at = '" + at + "'"),
+    ).toBe(52);
+    await checkBuyerNames(context(fetcher, at));
+    expect(byIds(fetcher)).toHaveLength(2);
+  });
+
+  it("con le chiamate eBay spente dalla console non verifica gli username", async () => {
+    await acquire(ebay());
+    await env.DB.prepare("UPDATE orders SET buyer_checked_at = '2026-08-01T00:00:00.000Z'").run();
+    await setSwitch(env.DB, "ebay_calls", false, new Date(after(8)));
+    const off = ebay();
+    await acquire(off, after(8));
+    expect(byIds(off)).toEqual([]);
+    expect(await checkedAt()).toBe("2026-08-01T00:00:00.000Z");
+  });
+
+  it("senza budget non chiama eBay", async () => {
+    await acquire(ebay());
+    const fetcher = ebay();
+    await checkBuyerNames(context(fetcher, after(8), { calls: 0, pages: 1 }));
+    await checkBuyerNames(context(fetcher, after(8), { calls: 1, pages: 0 }));
+    expect(byIds(fetcher)).toEqual([]);
+    expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
+  });
+
+  it("su errore conserva la lettura del negozio e riprova soltanto i casi passeggeri", async () => {
+    await acquire(ebay());
+    const failing = (status: number, headers: Record<string, string> = {}) =>
+      ebay({
+        fail: (url) =>
+          url.searchParams.has("orderIds") ? new Response(null, { status, headers }) : undefined,
+      });
+    await checkBuyerNames(context(failing(503), after(8)));
+    expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
+    await checkBuyerNames(context(failing(429, { "retry-after": "60" }), after(8)));
+    expect(await checkedAt()).toBe("2026-09-02T00:00:00.000Z");
+    expect(
+      await env.DB.prepare(
+        "SELECT until FROM ebay_rate_limits WHERE api_origin = 'https://api.ebay.com'",
+      ).first(),
+    ).toEqual({ until: new Date(Date.parse(after(8)) + 60_000).toISOString() });
+    await checkBuyerNames(context(failing(400), after(8)));
+    expect(await checkedAt()).toBe(after(8));
+    await expect(checkBuyerNames(context(failing(401), after(16)))).rejects.toMatchObject({
+      failure: "credentials",
+    });
+    expect(await checkedAt()).toBe(after(8));
+    // Nell'esecuzione periodica l'errore passeggero non rende la lettura non riuscita.
+    expect(await acquire(failing(503), after(16))).toBe("complete");
+    expect(await checkedAt()).toBe(after(8));
+  });
 });

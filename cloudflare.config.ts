@@ -190,7 +190,7 @@ export default defineConfig((ctx) => ({
             REGISTRATION_MODE: bindings.text("approval"),
             // Spenta su richiesta dell'owner finché non la riattiva: segreti e dati restano.
             EBAY_SANDBOX_ENABLED: bindings.text("false"),
-            // Il keyset è quello di Production: il test ne usa al massimo un decimo (D319).
+            // Il keyset è quello di Production: il test ne usa al massimo un decimo (D322).
             EBAY_WORKER_SHARE: bindings.text("10"),
             STRIPE_PRICE_MONTHLY: bindings.text("price_1UUABwJqfZnQjIbKpQPYZhKu"),
             STRIPE_PRICE_ANNUAL: bindings.text("price_1UUABwJqfZnQjIbKjc1m9dc0"),
