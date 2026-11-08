@@ -8,13 +8,14 @@ import {
   loadCallBudget,
   ownCalls,
   quotaUsageStatements,
+  workerShare,
 } from "../app/domain/order-acquisition-context.server";
 
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 
 import { recordOrderObservation } from "../app/domain/order-import.server";
 
-import { access, configuration, order } from "./fixtures/ebay-client-fixtures";
+import { access, order } from "./fixtures/ebay-client-fixtures";
 
 import { observation } from "./fixtures/order-import-scenarios";
 
@@ -154,9 +155,10 @@ it("un Worker con una parte della quota si ferma alla sua parte fino all'azzeram
       db: env.DB,
       storeId: "s-a",
       grantedAt,
-      access: { ...access(fetcher), configuration: { ...configuration, workerShare: 0.1 } },
+      access: access(fetcher),
       now: at,
       budget: { calls: 100, pages: 10 },
+      workerShare: workerShare({ EBAY_WORKER_SHARE: "10" }),
     }),
   ).toBe("budget");
   // Né la passata Trading né il fallback: la chiamata attende come dopo un limite di eBay.
@@ -309,18 +311,22 @@ it("la parte del Worker vale soltanto sotto l'intera quota e con un limite letto
       .run();
   const limited = () =>
     env.DB.prepare("SELECT COUNT(*) AS n FROM ebay_rate_limits").first<{ n: number }>();
-  const shared = (share: number) => ({
-    ...access(ebay()),
-    configuration: { ...configuration, workerShare: share },
-  });
   await quota("GetOrders", 0);
   await own(100);
-  await loadCallBudget(env.DB, shared(1), at);
+  await loadCallBudget(env.DB, access(ebay()), at, 1);
   expect(await limited()).toEqual({ n: 0 });
   await env.DB.prepare("UPDATE ebay_quota_usage SET quota_limit = 0").run();
   await own(0);
-  await loadCallBudget(env.DB, shared(0.1), at);
+  await loadCallBudget(env.DB, access(ebay()), at, 0.1);
   expect(await limited()).toEqual({ n: 0 });
+});
+
+it("legge la parte del Worker in percentuale e ignora un valore non valido", () => {
+  expect(workerShare({ EBAY_WORKER_SHARE: "10" })).toBe(0.1);
+  expect(workerShare({ EBAY_WORKER_SHARE: "1" })).toBe(0.01);
+  expect(workerShare({ EBAY_WORKER_SHARE: "100" })).toBe(1);
+  for (const value of [undefined, "", "0", "101", "10.5", "dieci"])
+    expect(workerShare({ EBAY_WORKER_SHARE: value })).toBe(1);
 });
 
 it("la passata Trading conta nel budget del lavoro non urgente", async () => {

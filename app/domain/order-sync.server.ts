@@ -2,7 +2,11 @@ import { z } from "zod";
 
 import { acquireOrders, storeAccess, type ActiveStore } from "./order-acquisition.server";
 import { ensureOrderEvents } from "./order-events.server";
-import { defaultRateLimitSeconds, rateLimitWait } from "./order-acquisition-context.server";
+import {
+  defaultRateLimitSeconds,
+  rateLimitWait,
+  workerShare,
+} from "./order-acquisition-context.server";
 import { servedSql } from "./admission.server";
 import { switchOnSql } from "./service-settings.server";
 import { activeEntitlementSql } from "./grants.server";
@@ -412,6 +416,7 @@ async function serveStore(
         access,
         now,
         budget: { ...storeBudget },
+        workerShare: workerShare(env),
       });
       if (result === "busy")
         // Stryker disable next-line StringLiteral: lo scopo conta soltanto nel confronto con «origin».

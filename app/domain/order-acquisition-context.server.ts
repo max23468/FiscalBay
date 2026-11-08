@@ -165,14 +165,24 @@ export type CallBudget = {
 };
 
 /**
+ * Parte delle quote `GetOrders` e `GetItem` del keyset riservata alle chiamate di questo Worker,
+ * da `EBAY_WORKER_SHARE` in percentuale fra 1 e 100; assente o non valida vale l'intera quota.
+ */
+export function workerShare(env: { EBAY_WORKER_SHARE?: string }) {
+  const percent = Number(env.EBAY_WORKER_SHARE);
+  return Number.isInteger(percent) && percent >= 1 && percent <= 100 ? percent / 100 : 1;
+}
+
+/**
  * Stato del budget all'inizio di un'esecuzione. Senza una lettura delle quote il limite non è
- * noto: nessuna chiamata si rimanda. Con `workerShare` sotto 1 e le chiamate del Worker già
- * oltre quella parte, la chiamata entra in attesa fino all'azzeramento come un limite di eBay.
+ * noto: nessuna chiamata si rimanda. Con `share` sotto 1 e le chiamate del Worker già oltre
+ * quella parte, la chiamata entra in attesa fino all'azzeramento come un limite di eBay.
  */
 export async function loadCallBudget(
   db: D1Database,
   access: EbayAccess,
   now: Date,
+  share = 1,
 ): Promise<CallBudget> {
   const origin = access.configuration.apiOrigin;
   const midnight = new Date(Date.parse(`${dayOf(now)}T00:00:00.000Z`) + dayMilliseconds);
@@ -208,7 +218,6 @@ export async function loadCallBudget(
       },
     ]),
   );
-  const share = access.configuration.workerShare;
   const capped = [...states].filter(
     ([, state]) => share < 1 && state.limit > 0 && state.own >= state.limit * share,
   );

@@ -13,6 +13,7 @@ import {
   type Context,
   countedAccess,
   loadCallBudget,
+  workerShare,
 } from "./order-acquisition-context.server";
 import { readDetail, readDetails, stopsReads } from "./order-acquisition-details.server";
 import { checkBuyerNames } from "./buyer-check.server";
@@ -416,6 +417,8 @@ export async function acquireOrders(input: {
   budget: AcquisitionBudget;
   /** Evento verificato: rilegge soltanto l'ordine indicato, senza avanzare il polling. */
   confirmedOrderId?: string;
+  /** Parte delle quote del keyset per questo Worker (`workerShare`); senza, l'intera quota. */
+  workerShare?: number;
 }): Promise<AcquisitionResult> {
   const { db, storeId, grantedAt, now } = input;
   const at = now.toISOString();
@@ -425,7 +428,7 @@ export async function acquireOrders(input: {
   const poll = !input.confirmedOrderId;
   // Ogni chiamata del negozio si conta per giorno; il budget del giorno vale per tutta la lettura.
   const access = countedAccess(db, input.access, now);
-  const quota = await loadCallBudget(db, access, now);
+  const quota = await loadCallBudget(db, access, now, input.workerShare);
   const lock = new Date(now.getTime() + lockMilliseconds).toISOString();
   // Con una finestra più ampia, come all'attivazione di una copertura, lo storico concluso
   // riprende dal periodo più vecchio non ancora importato; una passata ormai tutta fuori dalla
@@ -615,6 +618,7 @@ export async function consumeOrderConfirmation(
     // Stryker disable next-line ObjectLiteral: questo percorso usa al massimo 11 chiamate e nessuna pagina; rimuovere il budget non cambia l'esito di un singolo ordine.
     budget: { calls: 12, pages: 0 },
     confirmedOrderId: event.orderId,
+    workerShare: workerShare(env),
   });
   if (result !== "complete" && result !== "not_writable") throw new UpstreamError("unavailable");
 }
