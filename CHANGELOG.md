@@ -46,6 +46,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 - **Pubblicazione meno in coda.** I coordinatori di `Pubblica` e `Promuovi` girano sul Mac dell'owner quando è acceso, una qualifica automatica superata lascia il posto a quella della testa più recente, i job paralleli di PR e qualifiche hanno un tetto e `Promuovi` su un commit certificato non attende altri controlli.
 - **Cancellazioni eBay degli acquirenti più affidabili.** Gli ordini che eBay non collega a un identificativo stabile dell'acquirente rileggono ogni settimana il suo nome utente, così una richiesta di cancellazione trova anche gli ordini più vecchi. Il dossier sulle lacune delle API eBay raccoglie le richieste da inviare a eBay.
 - **Motivi di uscita.** La disdetta dal portale Stripe e la cancellazione dell'account raccolgono un motivo da un elenco chiuso e un commento, entrambi facoltativi; avvisi Telegram, pagina Commerciale della console e comando `/uscite` li mostrano. Privacy IT/EN `2026-11-07`.
+- **Meno chiamate a eBay.** I negozi senza fatture combinate dal venditore rileggono Trading ogni sei ore anziché ogni due, i dati fiscali Trading si chiedono a gruppi e non si ripetono per un ordine già pagato, e i negozi di uno spazio che nessuno segue si leggono ogni due ore. Gli ordini nuovi continuano ad arrivare subito con l'avviso di eBay.
 
 ## [2.0.6] - 2026-11-06
 
