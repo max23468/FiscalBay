@@ -170,24 +170,33 @@ export async function enableAutoMerge(
 const readPullRequest = (repository, number) =>
   pullRequestView(ghJson("api", `repos/${repository}/pulls/${number}`));
 
+/** Esito dell'ultima esecuzione del controllo richiesto `Node 26`. */
+export function requiredPassed(checkRuns) {
+  return (
+    checkRuns.filter((check) => check.name === "Node 26").sort((a, b) => b.id - a.id)[0]
+      ?.conclusion === "success"
+  );
+}
+
+function commitChecks(repository, sha) {
+  return ghJson(
+    "api",
+    "--paginate",
+    "--slurp",
+    `repos/${repository}/commits/${sha}/check-runs?per_page=100`,
+  ).flatMap((page) => page.check_runs);
+}
+
 async function waitChecks(repository, sha, limit = Infinity) {
   for (const deadline = Date.now() + limit; ;) {
     if (Date.now() > deadline)
       throw new Error(
         "Controlli ancora in corso: merge rinviato, ciclo riprendibile dalla stessa PR.",
       );
-    const checks = ghJson(
-      "api",
-      "--paginate",
-      "--slurp",
-      `repos/${repository}/commits/${sha}/check-runs?per_page=100`,
-    ).flatMap((page) => page.check_runs);
+    const checks = commitChecks(repository, sha);
     const outcome = checksOutcome(checks);
     if (outcome === "failed") throw new Error("Monitoraggio terminato con controlli falliti.");
-    const required = checks
-      .filter((check) => check.name === "Node 26")
-      .sort((a, b) => b.id - a.id)[0];
-    if (outcome === "passed" && required?.conclusion === "success") return;
+    if (outcome === "passed" && requiredPassed(checks)) return;
     await pause(30_000);
   }
 }
@@ -1757,15 +1766,7 @@ async function ensureCandidate(repository, sha) {
       "--json",
       "databaseId,displayTitle,headSha,status,event,createdAt",
     );
-  let active = runs().find(
-    (run) =>
-      run.displayTitle === `Candidato ${sha}` &&
-      run.status !== "completed" &&
-      runJobs(repository, run.databaseId).some(
-        (job) => job.name.startsWith("Qualifica candidato /") && job.conclusion !== "skipped",
-      ),
-  );
-  if (!active) {
+  const request = async () => {
     const since = Date.now() - 1000;
     gh(
       "workflow",
@@ -1778,23 +1779,44 @@ async function ensureCandidate(repository, sha) {
       "-f",
       `expected_sha=${sha}`,
     );
-    for (let attempt = 0; attempt < 24 && !active; attempt++) {
+    for (let attempt = 0; attempt < 24; attempt++) {
       await pause(5000);
-      active = candidateRun(runs(), sha, since);
+      const run = candidateRun(runs(), sha, since);
+      if (run) return run;
     }
-    if (!active) throw new Error("Run del candidato non trovata.");
-  }
-  await waitRun(
-    repository,
-    "candidate.yml",
-    active.headSha,
-    "develop",
-    [active.event],
-    0,
-    undefined,
-    // Una run pianificata successiva sullo stesso commit non qualifica: si segue quella attiva.
-    active.databaseId,
+    throw new Error("Run del candidato non trovata.");
+  };
+  const follow = (active) =>
+    waitRun(
+      repository,
+      "candidate.yml",
+      active.headSha,
+      "develop",
+      [active.event],
+      0,
+      undefined,
+      // Una run pianificata successiva sullo stesso commit non qualifica: si segue quella attiva.
+      active.databaseId,
+    );
+  const active = runs().find(
+    (run) =>
+      run.displayTitle === `Candidato ${sha}` &&
+      run.status !== "completed" &&
+      runJobs(repository, run.databaseId).some(
+        (job) => job.name.startsWith("Qualifica candidato /") && job.conclusion !== "skipped",
+      ),
   );
+  if (!active) await follow(await request());
+  else
+    try {
+      await follow(active);
+    } catch (error) {
+      // La qualifica automatica seguita può lasciare il posto a quella di una testa più recente:
+      // la richiesta esplicita sul commit autorizzato non si annulla.
+      if (candidateAvailable(repository, tree)) return;
+      console.log(`Qualifica automatica non conclusa (${error.message}): richiesta esplicita.`);
+      await follow(await request());
+    }
   if (!candidateAvailable(repository, tree)) throw new Error("Candidato non certificato.");
 }
 
@@ -1817,9 +1839,7 @@ function candidateReady({ repository, values }) {
     "--slurp",
     `repos/${repository}/commits/${sha}/check-runs?per_page=100`,
   ).flatMap((page) => page.check_runs);
-  const passed =
-    checks.filter((check) => check.name === "Node 26").sort((a, b) => b.id - a.id)[0]
-      ?.conclusion === "success";
+  const passed = requiredPassed(checks);
   const running = values.manual
     ? false
     : ghJson(
@@ -1901,7 +1921,12 @@ async function promoteCycle({ repository, values }) {
     version: values.version,
     reviewed: values["reviewed-migrations"],
   });
-  await waitChecks(repository, sha);
+  // Un tree certificato ha già superato la qualifica completa: basta `Node 26` del commit, senza
+  // attendere gli altri controlli, come una qualifica successiva annullata o ancora in coda.
+  const tree = ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha;
+  if (!candidateAvailable(repository, tree)) await waitChecks(repository, sha);
+  else if (!requiredPassed(commitChecks(repository, sha)))
+    throw new Error("Node 26 non riuscito sul commit da promuovere.");
   if (!lot.deploy) {
     if (lot.qualify) await ensureCandidate(repository, sha);
     advanceMain(repository, sha);
@@ -1929,7 +1954,6 @@ async function promoteCycle({ repository, values }) {
     return await confirmProduction(repository, jobs, sha, lot.version);
   }
   if (values.urgente) {
-    const tree = ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha;
     if (!candidateAvailable(repository, tree))
       throw new Error(
         "Urgenza senza prove valide sul candidato: eseguire release:cycle candidate.",
@@ -2129,9 +2153,43 @@ function coordinatorAvailable(repository) {
   }
 }
 
+/** Etichetta dei runner del Mac dell'owner riservati ai coordinatori di `cycle.yml`. */
+export const coordinatorLabel = "fiscalbay-coordinator";
+
 /**
- * Avvia il ciclo nel workflow e lo segue: chiudere la sessione non lo ferma, e rilanciare lo stesso
- * comando riaggancia la run attiva.
+ * Dove gira il coordinatore. Sul Mac, se un suo runner è acceso e libero, l'attesa non occupa i
+ * posti delle Actions dell'account; altrimenti le Actions, così il ciclo non aspetta il Mac.
+ * Senza l'input in `cycle.yml` di `develop` non si passa nulla: il workflow lo rifiuterebbe.
+ */
+export function coordinatorRunner(runners, declared) {
+  if (!declared) return undefined;
+  const free = runners.some(
+    (runner) =>
+      runner.status === "online" &&
+      !runner.busy &&
+      runner.labels.some((label) => label.name === coordinatorLabel),
+  );
+  return free ? "mac" : "github";
+}
+
+function chooseRunner(repository) {
+  const workflow = ghJson(
+    "api",
+    `repos/${repository}/contents/.github/workflows/cycle.yml?ref=develop`,
+  );
+  const declared = /^ {6}runner:$/mu.test(Buffer.from(workflow.content, "base64").toString("utf8"));
+  let runners = [];
+  try {
+    runners = ghJson("api", `repos/${repository}/actions/runners`).runners;
+  } catch {
+    // Senza permesso di amministrazione sui runner il ciclo resta sulle Actions.
+  }
+  return coordinatorRunner(runners, declared);
+}
+
+/**
+ * Avvia il ciclo nel workflow e lo segue: chiudere la sessione non lo ferma, salvo che giri sul
+ * runner del Mac e il Mac si spenga, e rilanciare lo stesso comando riaggancia la run attiva.
  */
 async function coordinate({ repository, command, number, values }) {
   const requestedAt = new Date().toISOString();
@@ -2163,6 +2221,7 @@ async function coordinate({ repository, command, number, values }) {
     ).filter((run) => run.displayTitle === title);
   let run = list().find((item) => item.status !== "completed");
   if (!run) {
+    const runner = chooseRunner(repository);
     const since = Date.now() - 1000;
     gh(
       "workflow",
@@ -2187,7 +2246,9 @@ async function coordinate({ repository, command, number, values }) {
       `urgente=${Boolean(values.urgente)}`,
       "-f",
       `reviewed_migrations=${values["reviewed-migrations"]}`,
+      ...(runner ? ["-f", `runner=${runner}`] : []),
     );
+    if (runner) console.log(`Coordinatore su ${runner === "mac" ? "runner del Mac" : "Actions"}.`);
     for (let attempt = 0; attempt < 24 && !run; attempt++) {
       await pause(5000);
       run = list().find((item) => Date.parse(item.createdAt) >= since);

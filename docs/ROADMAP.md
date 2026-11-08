@@ -8,7 +8,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | Filone | Stato | Contenuto |
 |---|---|---|
 | [Riconoscimenti esterni](#riconoscimenti-esterni) | Da completare | Candidatura all'eBay Partner Program 2027 entro il 31 dicembre 2026, Application Growth Check, pagina Solution Provider di eBay Italia, verifica del brand Google e richieste a eBay sulle lacune delle API, senza funzioni in scrittura su eBay né nuovi costi ([D255](decisions/DECISION_REGISTER.md)). Procede in parallelo alle versioni, senza legarsi a nessuna. |
-| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)) e la dismissione di `GetOrders`, un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
+| [2.0.x Correzioni](#correzioni-2-0) | In corso | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)), la dismissione di `GetOrders` e la coda della pubblicazione ([D321](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili e pagina pubblica di stato. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
 
@@ -143,6 +143,13 @@ Ogni ordine registra l'ultima lettura dello username dell'acquirente e quelli se
 eBay ha deprecato `GetOrders` il 2026-11-06 e lo spegne il 2027-06-30 ([stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status)). FiscalBay lo usa per il fallback fiscale, gli acquisti prima del checkout e il loro consolidamento, le fatture combinate senza checkout eBay e il token eIAS degli acquirenti. Le sostitute indicate da eBay sono Fulfillment per gli ordini pagati e la Order API GraphQL con impegni e `PurchaseQuote` per il resto: chiedono scope nuovi e un nuovo consenso dei negozi ([D216](decisions/DECISION_REGISTER.md)) e non espongono CF, indirizzo di fatturazione né token eIAS ([lacune](audits/2026-11-07-lacune-api-ebay/README.md#2-dati-fiscali-dellacquirente-nelle-letture-di-elenco-e-nelle-api-moderne)). Prima di progettare decide l'owner quali funzioni visibili si riducono e quali scope chiedere.
 
 **Criterio di completamento:** nessuna chiamata `GetOrders` prima del 2027-06-30, funzioni ridotte approvate dall'owner, documenti di ordini e conservazione allineati.
+
+<a id="2-0-12"></a>
+#### 2.0-12 · Coda della pubblicazione
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [Pubblicazione](operations/RELEASE.md#qualifica-del-candidato) · [Runner del Mac](operations/AGENT_SETUP.md#runner-del-mac)
+
+I coordinatori di `Pubblica` e `Promuovi` aspettano sui runner del Mac dell'owner quando è acceso, una qualifica automatica superata lascia il posto alla testa più recente, PR e qualifiche hanno un tetto di job paralleli e `Promuovi` su un commit certificato non attende altri controlli ([D321](decisions/DECISION_REGISTER.md)). Con il Mac spento i coordinatori restano sulle Actions; un coordinatore a eventi resta un'evoluzione possibile.
 
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni

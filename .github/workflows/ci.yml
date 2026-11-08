@@ -342,6 +342,9 @@ jobs:
       cancel-in-progress: true
     strategy:
       fail-fast: false
+      # Venti job contemporanei per l'account: con un tetto per run la coda resta corta e i job
+      # brevi di merge, deploy e pubblicazione trovano un posto in pochi minuti.
+      max-parallel: 4
       matrix: ${{ fromJSON(needs.verify.outputs.browser-matrix) }}
 
     steps:
@@ -396,7 +399,7 @@ jobs:
     strategy:
       fail-fast: false
       # Venti job contemporanei per l'account: il resto alla qualifica del candidato e alle altre PR.
-      max-parallel: 6
+      max-parallel: 4
       matrix: ${{ fromJSON(needs.verify.outputs.mutation-pr) }}
     env:
       MUTATION_TARGET: ${{ matrix.target }}
