@@ -1,5 +1,7 @@
 # Bozza 4: notifiche degli ordini
 
+**Stato:** non inviata; nota interna per un eventuale invio futuro.
+
 **Dove:** nuovo ticket al supporto sviluppatori eBay, area Notification API.
 
 **Verifica:** 7 novembre 2026, `getTopics` e `getTopic` Production con il token dell'applicazione (tre chiamate), specifica della Notification API, [release notes](https://developer.ebay.com/api-docs/commerce/notification/release-notes.html).

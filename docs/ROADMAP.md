@@ -63,9 +63,9 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 
 **Stato:** In corso · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
 
-Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) raccoglie cinque richieste a eBay, con le bozze in inglese: header del marketplace non documentato per il CF, dati fiscali dell'acquirente negli elenchi e nella Order API, identità immutabile dell'acquirente per le cancellazioni, notifiche degli ordini e quote per utente. L'agente esegue prima le azioni interne rimaste nel dossier; misura e rilettura settimanale degli username per le cancellazioni sono già fatte ([D319](decisions/DECISION_REGISTER.md)). L'owner ha inviato il 2026-11-07 un solo ticket, limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta; la risposta orienta [2.0-11](#2-0-11).
+Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) analizza cinque lacune, con le bozze in inglese. L'owner ha inviato il 2026-11-07 un solo [ticket](audits/2026-11-07-lacune-api-ebay/README.md#ticket-inviato), limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta: fatture combinate senza checkout eBay, identità immutabile dell'acquirente e scope delle API sostitute. Le altre lacune restano note interne. Misura e rilettura settimanale degli username per le cancellazioni sono fatte ([D319](decisions/DECISION_REGISTER.md)); la risposta orienta [2.0-11](#2-0-11).
 
-**Criterio di completamento:** ticket inviato dall'owner, risposta registrata nel dossier e conseguenze portate nei documenti competenti.
+**Criterio di completamento:** risposta di eBay registrata nel dossier e conseguenze portate nei documenti competenti.
 
 <a id="correzioni-2-0"></a>
 ## 2.0.x · Correzioni e miglioramenti
