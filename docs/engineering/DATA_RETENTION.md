@@ -34,11 +34,15 @@ quella copertura tornano bloccati, mentre gli sblocchi del ciclo Free e quelli d
 un'altra copertura restano.
 
 Il riallineamento parte dal cron ogni dieci minuti, prima dello smistamento delle
-letture, a ogni pagina dell'area riservata e al collegamento di un negozio, quindi le
-letture dell'utente lo trovano già applicato anche prima della pulizia. Il cron rivede
-i termini degli ordini per gli spazi la cui copertura è finita o la cui estensione è
-cambiata nell'ultima settimana, e per quelli che perderebbero entro un giorno un
-ordine ancora dentro la finestra della copertura; le visite coprono gli altri. Il
+letture, al collegamento di un negozio e dalla pagina dell'area riservata che trova un
+cambiamento non ancora applicato ([D327](../decisions/DECISION_REGISTER.md)): trigger D1
+lo segnano su coperture, estensioni, scelta del negozio e stato dei negozi, quindi le
+letture dell'utente lo trovano già applicato anche prima della pulizia. La fine di una
+copertura per il solo passare del tempo arriva con il cron, entro dieci minuti. Il cron
+rivede i termini degli ordini per gli spazi con un cambiamento non applicato, per quelli
+la cui copertura è finita o la cui estensione è cambiata nell'ultima settimana e per
+quelli che perderebbero entro un giorno un ordine ancora dentro la finestra della
+copertura. Il
 ritorno a Pro toglie le pause e riporta all'intera finestra della copertura il
 termine degli ordini ancora conservati, anche durante i trenta giorni transitori;
 quelli già eliminati per scadenza tornano con lo storico più ampio importato dopo

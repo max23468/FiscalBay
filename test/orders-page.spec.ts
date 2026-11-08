@@ -19,7 +19,7 @@ import versionedChangelog from "../CHANGELOG.md?raw";
 import { parseChangelog, releaseChangelog, withChanges } from "../app/changelog";
 import {
   hasWhatsNew,
-  whatsNew,
+  whatsNewReleases,
   whatsNewNotifications,
   whatsNewProblems,
   whatsNewView,
@@ -387,7 +387,7 @@ describe("pagina Ordini reale", () => {
       expect((await areaShell(cookie)).whatsNew).toBe(false);
       expect(await page("/app/novita")).toMatchObject({ status: 404 });
       expect(await bell("it")).toEqual([]);
-      whatsNew.push(...releases);
+      whatsNewReleases().push(...releases);
       expect((await areaShell(cookie)).whatsNew).toBe(true);
       expect(
         (await routeData(loadWhatsNew, "/en/app/whats-new", { cookie })).releases.map(
@@ -414,7 +414,7 @@ describe("pagina Ordini reale", () => {
         read: true,
       });
     } finally {
-      whatsNew.length = 0;
+      whatsNewReleases().length = 0;
     }
   });
 

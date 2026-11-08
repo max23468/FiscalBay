@@ -116,6 +116,46 @@ test("barra del sito su due righe da smartphone e lingua sulla stessa pagina", a
   await expect(page.getByRole("heading", { name: "Come funziona" })).toBeInViewport();
 });
 
+test("il documento di ogni pagina resta entro il peso previsto", async ({ request }) => {
+  const budgets = [
+    { limit: 100, pages: ["/", "/prezzi", "/funzionalita", "/faq"] },
+    { limit: 180, pages: ["/anteprima/ordini", "/anteprima/negozi", "/anteprima/impostazioni"] },
+  ];
+  for (const { limit, pages } of budgets)
+    for (const path of pages) {
+      const html = await (await request.get(path)).text();
+      expect(html.length, path).toBeLessThanOrEqual(limit * 1024);
+    }
+});
+
+test("font e testi della lingua partono con il documento", async ({ request }) => {
+  for (const [path, language] of [
+    ["/", "it"],
+    ["/en", "en"],
+  ] as const) {
+    const html = await (await request.get(path)).text();
+    expect(html).toMatch(/<link[^>]+rel="preload"[^>]+as="font"[^>]+inter-latin-wght-normal/u);
+    expect(html).toMatch(new RegExp(`rel="modulepreload" href="/assets/copy-${language}-`, "u"));
+  }
+});
+
+test("le Impostazioni portano la categoria aperta e completano le altre nella pagina", async ({
+  page,
+  request,
+}) => {
+  const waiting = /class="grid gap-6 min-h-64"/gu;
+  const first = await (await request.get("/anteprima/impostazioni")).text();
+  expect(first.match(waiting)?.length).toBeGreaterThan(3);
+  // Aprendo l'ultima categoria il documento porta anche quelle che la precedono.
+  const last = await (await request.get("/anteprima/impostazioni/supporto")).text();
+  expect(last.match(waiting)).toBeNull();
+  await page.goto("/anteprima/impostazioni");
+  await expect(page.locator("section .min-h-64")).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Supporto" }).getByRole("textbox")).not.toHaveCount(
+    0,
+  );
+});
+
 test("le pagine del sito mostrano le schermate reali nel tema e nella lingua della pagina", async ({
   page,
 }) => {
@@ -127,7 +167,7 @@ test("le pagine del sito mostrano le schermate reali nel tema e nella lingua del
     await card.scrollIntoViewIfNeeded();
     await expect
       .poll(() => card.evaluate((image: HTMLImageElement) => image.currentSrc))
-      .toMatch(new RegExp(`/site/scheda-en-${scheme}\\.webp$`, "u"));
+      .toMatch(new RegExp(`/site/scheda-en-${scheme}\\.webp\\?v=\\w+$`, "u"));
     // Sotto i 640 px la home usa la schermata degli Ordini per smartphone.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
@@ -135,6 +175,6 @@ test("le pagine del sito mostrano le schermate reali nel tema e nella lingua del
     await expect
       .poll(() => hero.evaluate((image: HTMLImageElement) => image.currentSrc))
       // L'immagine del primo schermo arriva in AVIF, con il WebP per i browser che non lo leggono.
-      .toMatch(new RegExp(`/site/ordini-mobile-it-${scheme}\\.(?:avif|webp)$`, "u"));
+      .toMatch(new RegExp(`/site/ordini-mobile-it-${scheme}\\.(?:avif|webp)\\?v=\\w+$`, "u"));
   }
 });

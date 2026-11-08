@@ -2,111 +2,133 @@
   "ordini": {
     "it": {
       "width": 1280,
-      "height": 800
+      "height": 800,
+      "version": "240f69aab0"
     },
     "en": {
       "width": 1280,
-      "height": 800
+      "height": 800,
+      "version": "e758292240"
     }
   },
   "ordini-mobile": {
     "it": {
       "width": 390,
-      "height": 640
+      "height": 640,
+      "version": "7e16441528"
     },
     "en": {
       "width": 390,
-      "height": 640
+      "height": 640,
+      "version": "4423349592"
     }
   },
   "scheda": {
     "it": {
       "width": 688,
-      "height": 401
+      "height": 401,
+      "version": "5f2ea3e3ae"
     },
     "en": {
       "width": 688,
-      "height": 401
+      "height": 401,
+      "version": "5dc8e36a1b"
     }
   },
   "scheda-mobile": {
     "it": {
       "width": 358,
-      "height": 500
+      "height": 500,
+      "version": "905cc8dab3"
     },
     "en": {
       "width": 358,
-      "height": 500
+      "height": 500,
+      "version": "4522f3571b"
     }
   },
   "negozi": {
     "it": {
       "width": 1178,
-      "height": 369
+      "height": 369,
+      "version": "95ab861c1e"
     },
     "en": {
       "width": 1178,
-      "height": 369
+      "height": 369,
+      "version": "ac51e18f83"
     }
   },
   "negozi-mobile": {
     "it": {
       "width": 390,
-      "height": 690
+      "height": 690,
+      "version": "d914b03562"
     },
     "en": {
       "width": 390,
-      "height": 618
+      "height": 618,
+      "version": "358666de43"
     }
   },
   "sicurezza": {
     "it": {
       "width": 670,
-      "height": 870
+      "height": 870,
+      "version": "c307b4a159"
     },
     "en": {
       "width": 670,
-      "height": 870
+      "height": 870,
+      "version": "bdfbc137a8"
     }
   },
   "sicurezza-mobile": {
     "it": {
       "width": 390,
-      "height": 616
+      "height": 616,
+      "version": "0a7019063b"
     },
     "en": {
       "width": 390,
-      "height": 616
+      "height": 616,
+      "version": "30a199d5a0"
     }
   },
   "telegram": {
     "it": {
       "width": 420,
-      "height": 349
+      "height": 349,
+      "version": "6e67879df4"
     },
     "en": {
       "width": 420,
-      "height": 349
+      "height": 349,
+      "version": "d082c7351f"
     }
   },
   "esportazione": {
     "it": {
       "width": 862,
-      "height": 218
+      "height": 218,
+      "version": "99afea6b25"
     },
     "en": {
       "width": 848,
-      "height": 218
+      "height": 218,
+      "version": "26ab21afcf"
     }
   },
   "esportazione-mobile": {
     "it": {
       "width": 382,
-      "height": 192
+      "height": 192,
+      "version": "245efb7144"
     },
     "en": {
       "width": 382,
-      "height": 192
+      "height": 192,
+      "version": "5df9b99dc6"
     }
   }
 }

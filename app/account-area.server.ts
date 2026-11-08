@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import { createAuth } from "./auth.server";
-import { recordActivity } from "./domain/admission.server";
+import { pendingVisitWrites, recordActivity } from "./domain/admission.server";
 import { applyFreePlan } from "./domain/free-store.server";
 import { listNotifications } from "./domain/notifications.server";
 import { readPreferences, type Preferences } from "./domain/preferences.server";
@@ -48,10 +48,11 @@ export async function currentSession(request: Request) {
 
 /**
  * Sessione, registrazione e preferenze. Il piano dello spazio si riallinea prima di ogni
- * lettura della pagina: dopo un downgrade i negozi esclusi sono già in pausa. La pagina aperta
- * con una sessione è l'attività umana che conta per l'inattività del Free. Se Auth o il
- * database non rispondono la pagina non promette dati che non ha letto: risponde 503 con la
- * sola indicazione di riprovare.
+ * lettura della pagina se è cambiato qualcosa da cui dipende; la fine di una copertura per il
+ * solo passare del tempo la raccoglie il cron. La pagina aperta con una sessione è l'attività
+ * umana che conta per l'inattività del Free, scritta una volta l'ora. Se Auth o il database non
+ * rispondono la pagina non promette dati che non ha letto: risponde 503 con la sola indicazione
+ * di riprovare.
  */
 function readAccount(request: Request) {
   // La shell dell'area e la pagina leggono l'account nella stessa richiesta: una sola lettura.
@@ -68,16 +69,22 @@ const accountReads = new WeakMap<Request, ReturnType<typeof loadAccount>>();
 async function loadAccount(request: Request) {
   try {
     const session = await currentSession(request);
-    const [status, preferences] = session
-      ? await measure("d1", "registration", () =>
-          Promise.all([
-            registrationStatus(env.DB, session.user.id),
-            readPreferences(env.DB, session.user.id),
-            applyFreePlan(env.DB, session.user.id),
-            recordActivity(env.DB, session.user.id),
-          ]),
-        )
-      : [null, null];
+    if (!session) return { session, status: null, preferences: null };
+    const userId = session.user.id;
+    const [status, preferences, pending] = await measure("d1", "registration", () =>
+      Promise.all([
+        registrationStatus(env.DB, userId),
+        readPreferences(env.DB, userId),
+        pendingVisitWrites(env.DB, userId),
+      ]),
+    );
+    if (pending.plan || pending.activity)
+      await measure("d1", "registration", () =>
+        Promise.all([
+          pending.plan ? applyFreePlan(env.DB, userId) : null,
+          pending.activity ? recordActivity(env.DB, userId) : null,
+        ]),
+      );
     return { session, status, preferences };
   } catch (error) {
     throw unavailablePage(request, error);
@@ -145,12 +152,20 @@ export async function requireAccountArea(
   };
 }
 
-/** I negozi già letti dalla pagina evitano una seconda lettura. */
-export async function shellData(
-  area: AccountArea,
-  stores?: StoreStatus[],
-  now = new Date(),
-): Promise<ShellData> {
+/** La sessione è la stessa per shell e pagina di una richiesta: i negozi si leggono una volta. */
+const storeReads = new WeakMap<AccountArea["session"], Promise<StoreStatus[]>>();
+
+/** Negozi dello spazio letti per la richiesta in corso, condivisi fra shell e pagina. */
+export function areaStores(area: AccountArea, now = new Date()) {
+  let read = storeReads.get(area.session);
+  if (!read) {
+    read = listStores(env.DB, area.session.user.id, now);
+    storeReads.set(area.session, read);
+  }
+  return read;
+}
+
+export async function shellData(area: AccountArea, now = new Date()): Promise<ShellData> {
   const { session, preferences, language } = area;
   const display = { theme: preferences.theme, timeZone: area.timeZone };
   if (!session.user.emailVerified) return { display, notifications: null, now: now.toISOString() };
@@ -158,7 +173,7 @@ export async function shellData(
     listNotifications(
       env.DB,
       session.user.id,
-      stores ?? (await listStores(env.DB, session.user.id, now)),
+      await areaStores(area, now),
       language,
       display.timeZone,
       now,

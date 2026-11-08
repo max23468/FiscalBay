@@ -1322,15 +1322,20 @@ describe("percorso ordini", () => {
   it("traduce ogni rifiuto del database nel suo codice e lascia invariati gli altri errori", async () => {
     await seed();
     let failure: unknown;
+    // La lettura della quota viaggia in un batch: l'errore colpisce quello dello sblocco.
+    let readings = 0;
     const db = new Proxy(env.DB, {
       get(target, key) {
-        if (key === "batch") return () => Promise.reject(failure);
+        if (key === "batch")
+          return (statements: D1PreparedStatement[]) =>
+            readings-- > 0 ? target.batch(statements) : Promise.reject(failure);
         const value: unknown = Reflect.get(target, key);
         return typeof value === "function" ? value.bind(target) : value;
       },
     });
     const refusal = (error: unknown) => {
       failure = error;
+      readings = 1;
       return unlockOrders(db, "u-a", ["o-a"]);
     };
     for (const code of [

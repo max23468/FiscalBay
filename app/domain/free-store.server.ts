@@ -72,13 +72,14 @@ const lastWeek = (column: string) =>
 
 /**
  * Il cron rivede i negozi di ogni spazio, i termini degli ordini soltanto per gli spazi la cui
- * copertura è finita o la cui estensione dello storico è cambiata nell'ultima settimana, e per
- * quelli che perderebbero entro un giorno un ordine ancora dentro la loro finestra, come dopo
- * una copertura concessa senza visite: le visite dell'utente coprono il resto.
+ * copertura è finita o la cui estensione dello storico è cambiata nell'ultima settimana, per
+ * quelli con un cambiamento non ancora riallineato (`plan_changed_at`) e per quelli che
+ * perderebbero entro un giorno un ordine ancora dentro la loro finestra.
  */
 const allScope: Scope = {
   workspaces: "1 = 1",
-  orders: `(EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = w.id
+  orders: `(w.plan_changed_at IS NOT NULL
+    OR EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = w.id
       AND ${lastWeek("COALESCE(MIN(e.ends_at, e.revoked_at), e.ends_at, e.revoked_at)")})
     OR EXISTS (SELECT 1 FROM history_extensions x WHERE x.workspace_id = w.id
       AND (${lastWeek("x.granted_at")} OR ${lastWeek("x.revoked_at")}))
@@ -100,7 +101,8 @@ const allScope: Scope = {
  * riprendono la finestra intera, anche durante quei trenta giorni; gli altri termini non si
  * allungano mai. La sospensione antiabuso del Free mette la pausa dell'assistenza su ogni
  * negozio reale dello spazio sospeso senza copertura pagata o concessa e la toglie negli altri
- * casi, senza toccare la pausa manuale della console.
+ * casi, senza toccare la pausa manuale della console. L'ultima istruzione segna lo spazio come
+ * riallineato: un cambiamento arrivato durante il batch ha un istante successivo e resta da fare.
  */
 function planStatements(db: D1Database, scope: Scope, at: string) {
   const covered = (workspace: string) => activeEntitlementSql(workspace, "?1");
@@ -173,6 +175,8 @@ function planStatements(db: D1Database, scope: Scope, at: string) {
         AND orders.purge_after > ${graceSql("p.paused_at")} AND orders.store_id IN (
           SELECT s.id FROM ebay_stores s JOIN workspaces w ON w.id = s.workspace_id
            WHERE ${scope.orders})`),
+    statement(`UPDATE workspaces SET plan_changed_at = NULL WHERE plan_changed_at <= ?1
+      AND id IN (SELECT w.id FROM workspaces w WHERE ${scope.workspaces})`),
   ];
 }
 

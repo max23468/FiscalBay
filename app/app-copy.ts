@@ -33,6 +33,14 @@ export async function loadCopy(path: string): Promise<void> {
     language === "it" ? (await import("./copy/copy-it")).it : (await import("./copy/copy-en")).en;
 }
 
+/**
+ * Moduli JavaScript dei testi di ogni lingua, che il documento precarica perché il browser li
+ * attende prima di idratare la pagina. I nomi con l'hash nascono dalla build del client: il plugin
+ * `preloadCopyModules` di `vite.config.ts` sostituisce questo valore nel bundle del server. In
+ * sviluppo e nelle prove resta vuoto.
+ */
+export const copyModules: Record<Language, readonly string[]> = { it: [], en: [] };
+
 /** Indirizzo dell'assistenza clienti, mostrato e usato come risposta delle email. */
 export const supportEmail = "supporto@fiscalbay.it";
 

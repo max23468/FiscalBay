@@ -2,6 +2,16 @@
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/inter";
 
+/* Font di sistema con le metriche di Inter: il testo non si sposta quando arriva quello vero. */
+@font-face {
+  font-family: "Inter Fallback";
+  src: local("Arial");
+  size-adjust: 107.12%;
+  ascent-override: 90.44%;
+  descent-override: 22.52%;
+  line-gap-override: 0%;
+}
+
 /* Tema: segue il sistema; `data-theme` su <html> impone chiaro o scuro. */
 @custom-variant dark {
   @media (prefers-color-scheme: dark) {
@@ -211,7 +221,7 @@
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter Variable", "Inter Fallback", ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-sans);
   --color-brand-blue: var(--brand-blue);
   --color-brand-navy: var(--brand-navy);

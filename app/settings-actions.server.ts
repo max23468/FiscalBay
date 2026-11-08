@@ -2,10 +2,9 @@ import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
 import type { SettingsPageData } from "./components/settings/page";
-import { requestedEbayEnvironment, type AccountArea } from "./account-area.server";
+import { areaStores, requestedEbayEnvironment, type AccountArea } from "./account-area.server";
 import { sendEmail } from "./account-email.server";
 import { planDiagnostics } from "./support";
-import { listStores } from "./domain/stores.server";
 import {
   appVersion,
   parseSupportRequest,
@@ -92,9 +91,7 @@ export async function readDiagnostics(
   reference = correlationId(request),
 ): Promise<DiagnosticsView | null> {
   try {
-    const stores = await measure("d1", "settings", () =>
-      listStores(env.DB, area.session.user.id, now),
-    );
+    const stores = await measure("d1", "settings", () => areaStores(area, now));
     return supportDiagnostics({
       stores,
       plan: planDiagnostics(account, appCopy[area.language]),

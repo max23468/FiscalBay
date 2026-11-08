@@ -3,10 +3,12 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-# Immagini del sito, icone e immagini delle condivisioni hanno nomi stabili: restano in cache per
-# trenta giorni, e una versione rigenerata arriva entro quel termine.
+# Le schermate del sito portano nell'indirizzo la versione del contenuto (`site-shots.json`).
 /site/*
-  Cache-Control: public, max-age=2592000
+  Cache-Control: public, max-age=31536000, immutable
+
+# Icone e immagini delle condivisioni hanno nomi stabili: restano in cache per trenta giorni, e
+# una versione rigenerata arriva entro quel termine.
 /og/*
   Cache-Control: public, max-age=2592000
 /icon-*

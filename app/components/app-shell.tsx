@@ -8,6 +8,7 @@ import { InitialsTile } from "~/components/icon-tile";
 import { Button } from "~/components/ui/button";
 import { NavigationProgress } from "~/components/navigation-progress";
 import { NotificationsMenu } from "~/components/notifications-menu";
+import { prefetchRouteModules } from "~/components/route-modules";
 import { areaSection, type AccountMenuItem, type NavDestination } from "~/components/shell-links";
 import { GlobalSearch, MobileSearch, type ShellSearch } from "~/components/shell-search";
 import { siteColumn } from "~/components/site-column";
@@ -181,6 +182,8 @@ function TopNav({ destinations, label }: { destinations: NavDestination[]; label
             <NavLink
               to={href}
               end={end}
+              onPointerEnter={() => prefetchRouteModules(href)}
+              onFocus={() => prefetchRouteModules(href)}
               className="relative flex items-center gap-2 rounded-md px-3 text-sm font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring aria-[current=page]:text-foreground aria-[current=page]:after:absolute aria-[current=page]:after:inset-x-3 aria-[current=page]:after:bottom-0 aria-[current=page]:after:h-0.5 aria-[current=page]:after:rounded-full aria-[current=page]:after:bg-primary group-has-[a.pending]/nav:aria-[current=page]:text-muted-foreground group-data-indicator/nav:after:hidden [&.pending]:text-foreground!"
             >
               <Icon aria-hidden="true" className="size-4" />
@@ -220,6 +223,8 @@ function BottomNav({ destinations, label }: { destinations: NavDestination[]; la
             <NavLink
               to={href}
               end={end}
+              onPointerEnter={() => prefetchRouteModules(href)}
+              onFocus={() => prefetchRouteModules(href)}
               className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-xs font-medium text-muted-foreground outline-none transition-colors duration-(--duration-quick) focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset aria-[current=page]:text-primary group-has-[a.pending]/nav:aria-[current=page]:text-muted-foreground [&.pending]:text-primary!"
             >
               <Icon aria-hidden="true" className="size-5" />

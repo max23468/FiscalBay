@@ -12,6 +12,7 @@ import { issueTimingTicket } from "../domain/page-timing.server";
 import { unconfirmedOnFailure } from "../client-action";
 import {
   areaPage,
+  areaStores,
   assertSameOrigin,
   requestedEbayEnvironment,
   requireAccountArea,
@@ -39,7 +40,6 @@ import {
   type OrderCriteria,
   visibleOrderFacets,
 } from "../domain/orders.server";
-import { listStores } from "../domain/stores.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
@@ -110,7 +110,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
   const now = new Date();
   const requested = params.ordine && params.ordine.length <= 64 ? params.ordine : null;
   const [stores, allowance, confirmUnlock, ebayCalls] = await Promise.all([
-    verified ? measure("d1", "stores", () => listStores(env.DB, userId)) : [],
+    verified ? measure("d1", "stores", () => areaStores(area, now)) : [],
     verified ? measure("d1", "allowance", () => orderAllowance(env.DB, userId, now)) : null,
     unlockConfirmation(env.DB, userId),
     serviceSetting(env.DB, "ebay_calls"),
@@ -171,7 +171,16 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
         )
       : 0;
   const arrived = { ...filters, listedAfter: snapshot.toISOString() };
-  const [orders, total, incoming, facets, detailOrders] = await Promise.all([
+  const linked = environmentStores.filter((store) => store.connection !== "disconnected");
+  // Ultima lettura riuscita fra i negozi collegati: un negozio scollegato non conta per i
+  // primi passi, e lo stato vuoto nomina il negozio letto per ultimo con il suo orario.
+  const latest =
+    linked
+      .filter((store) => store.lastSyncAt !== null)
+      .sort((a, b) => a.lastSyncAt!.localeCompare(b.lastSyncAt!))
+      .at(-1) ?? linked[0];
+  const lastSync = latest?.lastSyncAt ?? undefined;
+  const [orders, total, incoming, facets, detailOrders, marketing] = await Promise.all([
     verified ? read() : [],
     count(criteria),
     opened ? count(arrived) : 0,
@@ -179,6 +188,8 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
       ? measure("d1", "orders", () => visibleOrderFacets(env.DB, userId, ebayEnvironment, now))
       : { total: 0, locked: false },
     verified && requested ? read([requested]) : [],
+    // La proposta del consenso arriva a primi passi conclusi, cioè dopo la prima lettura.
+    verified && lastSync !== undefined && marketingProposal(env.DB, userId),
   ]);
   // Entrano da soli soltanto i nuovi ordini che stanno tutti sopra il primo mostrato: uno
   // recuperato dallo storico si inserirebbe fra quelli già letti e resta all'indicatore.
@@ -203,7 +214,6 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
       { status: 404 },
     );
   }
-  const linked = environmentStores.filter((store) => store.connection !== "disconnected");
   const path = localizedPath(language, ordersPath);
   const cursor = snapshotCursor(snapshot);
   const next = new URLSearchParams(query);
@@ -231,16 +241,6 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     locked: facets.locked,
     ebayCalls,
   });
-  // Ultima lettura riuscita fra i negozi collegati: un negozio scollegato non conta per i
-  // primi passi, e lo stato vuoto nomina il negozio letto per ultimo con il suo orario.
-  const latest =
-    linked
-      .filter((store) => store.lastSyncAt !== null)
-      .sort((a, b) => a.lastSyncAt!.localeCompare(b.lastSyncAt!))
-      .at(-1) ?? linked[0];
-  const lastSync = latest?.lastSyncAt ?? undefined;
-  // La proposta del consenso arriva a primi passi conclusi, cioè dopo la prima lettura.
-  const marketing = verified && lastSync !== undefined && (await marketingProposal(env.DB, userId));
   const pageData: OrdersPageData = {
     view: facets.total > 0 ? "list" : linked.length > 0 ? "empty" : "no-store",
     ...page,

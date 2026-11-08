@@ -7,7 +7,7 @@ import { StoresPage } from "~/components/stores/page";
 import { useReadWait } from "~/components/stores/read-wait";
 import { accessNotice } from "../access-notice";
 import { unconfirmedOnFailure } from "../client-action";
-import { areaPage, assertSameOrigin, requireAccountArea } from "../account-area.server";
+import { areaPage, areaStores, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { storeLinkPath, storesPath } from "../app-links";
 import { actionFailure, limitedAction, suspendedEbayRead } from "../area-actions.server";
@@ -98,7 +98,7 @@ async function readStores({ request, params }: Route.LoaderArgs) {
   const telegram = telegramConfigured(env);
   const [statuses, renews, notifications, ebayCalls] = await measure("d1", "stores", () =>
     Promise.all([
-      listStores(env.DB, session.user.id, now),
+      areaStores(area, now),
       subscriptionRenews(env.DB, env, session.user.id),
       telegram ? storeNotifications(env.DB, session.user.id, now) : null,
       serviceSetting(env.DB, "ebay_calls"),

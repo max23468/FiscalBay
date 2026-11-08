@@ -9,7 +9,13 @@ import { minorToDecimal, parseMinor } from "../app/money";
 import { formatDate } from "../app/format";
 import { loader as loadAccess } from "../app/routes/sign-in";
 
-import { loadedHere, timingValue } from "../app/page-timing";
+import {
+  addLayoutShift,
+  interactionToNextPaint,
+  layoutShiftValue,
+  loadedHere,
+  timingValue,
+} from "../app/page-timing";
 import { issueTimingTicket } from "../app/domain/page-timing.server";
 import { loader as pageTimingRead, action as pageTiming } from "../app/routes/page-timing";
 import { invocationPoint, writePoints } from "../app/metrics.server";
@@ -281,6 +287,53 @@ describe("misure delle fasi e del browser", () => {
     expect(timingValue(Number.NaN)).toBeUndefined();
   });
 
+  it("calcola INP e CLS come i Core Web Vitals", () => {
+    expect(interactionToNextPaint([])).toBeUndefined();
+    expect(interactionToNextPaint([40, 200, 90])).toBe(200);
+    // Da cinquanta interazioni la più lenta non conta: è il 98° percentile.
+    const many = [900, 300, ...Array.from({ length: 48 }, () => 50)];
+    expect(interactionToNextPaint(many)).toBe(300);
+
+    const start = { worst: 0, current: 0, start: 0, last: 0 };
+    const shifts = (entries: [number, number][]) =>
+      entries.reduce((total, [value, at]) => addLayoutShift(total, value, at), start).worst;
+    // Vicini si sommano; dopo un secondo di pausa inizia un altro gruppo e vale il più pesante.
+    expect(
+      shifts([
+        [0.1, 100],
+        [0.1, 900],
+      ]),
+    ).toBeCloseTo(0.2);
+    expect(
+      shifts([
+        [0.1, 100],
+        [0.05, 1_200],
+      ]),
+    ).toBeCloseTo(0.1);
+    // Un gruppo si chiude dopo cinque secondi, anche con spostamenti ravvicinati.
+    expect(
+      shifts(Array.from({ length: 8 }, (_, index) => [0.1, 100 + index * 900] as [number, number])),
+    ).toBeCloseTo(0.6);
+    expect(layoutShiftValue(0.1234)).toBe(123);
+    expect(layoutShiftValue(0)).toBe(0);
+    expect(layoutShiftValue(101)).toBeUndefined();
+    expect(layoutShiftValue(Number.NaN)).toBeUndefined();
+  });
+
+  it("accetta INP e CLS nel report e li scrive nelle loro colonne", async () => {
+    const written = vi.spyOn(env.METRICS, "writeDataPoint").mockImplementation(() => {});
+    const body = (extra: object) =>
+      issueTimingTicket(env.BETTER_AUTH_SECRET, "orders").then((ticket) =>
+        JSON.stringify({ page: "orders", ttfb: 10, server: {}, ticket, ...extra }),
+      );
+    expect((await timing(await body({ inp: 180, cls: 25 }))).status).toBe(204);
+    expect(written.mock.lastCall?.[0]?.doubles).toEqual([10, -1, -1, -1, -1, -1, -1, -1, 180, 25]);
+    written.mockClear();
+    for (const invalid of [{ cls: 0.1 }, { cls: 100_001 }, { inp: -1 }])
+      expect((await timing(await body(invalid))).status).toBe(400);
+    expect(written).not.toHaveBeenCalled();
+  });
+
   it("scrive le misure del browser su Analytics Engine soltanto con i campi ammessi", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const written = vi.spyOn(env.METRICS, "writeDataPoint").mockImplementation(() => {});
@@ -300,7 +353,7 @@ describe("misure delle fasi e del browser", () => {
     expect(written).toHaveBeenCalledExactlyOnceWith({
       indexes: ["page:browser"],
       blobs: ["page", "browser", "orders", "", "ok", env.VERSION_METADATA.id],
-      doubles: [120, 300, -1, 650, 12, 8, -1],
+      doubles: [120, 300, -1, 650, 12, 8, -1, -1, -1, -1],
     });
     written.mockClear();
     // Una pagina pronta oltre il limite manda il report senza `ready`: la misura resta assente.
@@ -311,7 +364,7 @@ describe("misure delle fasi e del browser", () => {
     };
     expect((await timing(JSON.stringify(late))).status).toBe(204);
     expect(written).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ doubles: [120, 300, -1, -1, 12, 8, -1] }),
+      expect.objectContaining({ doubles: [120, 300, -1, -1, 12, 8, -1, -1, -1, -1] }),
     );
     written.mockClear();
     for (const body of [

@@ -65,6 +65,48 @@ const thirdPartyNotices = (): Plugin => ({
   },
 });
 
+/**
+ * Moduli dei testi di ogni lingua, con i loro import statici, dalla build del client al bundle
+ * del server: il documento li precarica (`copyModules` in `app/app-copy.ts`). Il client si costruisce per
+ * primo; un nome mancante ferma la build invece di togliere il precaricamento in silenzio.
+ */
+const preloadCopyModules = (): Plugin => {
+  let modules: Record<string, string[]> | undefined;
+  return {
+    name: "preload-copy-modules",
+    apply: "build",
+    sharedDuringBuild: true,
+    generateBundle(_options, bundle) {
+      if (this.environment.name !== "client") return;
+      const chunks = Object.values(bundle).flatMap((item) => (item.type === "chunk" ? [item] : []));
+      const files = (fileName: string, seen = new Set<string>()) => {
+        if (seen.has(fileName)) return seen;
+        seen.add(fileName);
+        for (const target of chunks.find((chunk) => chunk.fileName === fileName)?.imports ?? [])
+          files(target, seen);
+        return seen;
+      };
+      modules = Object.fromEntries(
+        ["it", "en"].map((language) => {
+          const entry = chunks.find((chunk) =>
+            chunk.facadeModuleId?.endsWith(`/app/copy/copy-${language}.ts`),
+          );
+          if (!entry) this.error(`Modulo dei testi assente dalla build: ${language}.`);
+          return [language, [...files(entry.fileName)].map((file) => `/${file}`)];
+        }),
+      );
+    },
+    transform(code, id) {
+      if (this.environment.name === "client" || !id.endsWith("/app/app-copy.ts")) return;
+      if (!modules) this.error("Build del server partita prima di quella del client.");
+      // Il codice arriva già compilato: spazi e a capo non sono quelli del sorgente.
+      const empty = /copyModules\s*=\s*\{\s*it:\s*\[\],\s*en:\s*\[\]\s*\}/u;
+      if (!empty.test(code)) this.error("Valore dei moduli dei testi non trovato.");
+      return code.replace(empty, `copyModules = ${JSON.stringify(modules)}`);
+    },
+  };
+};
+
 // La preview serve soltanto la Build Output, anche da un'altra cartella: niente plugin di build.
 export default defineConfig(({ isPreview }) => ({
   plugins: [
@@ -73,7 +115,15 @@ export default defineConfig(({ isPreview }) => ({
       viteEnvironment: { name: "ssr" },
       persistState: { path: path.resolve(import.meta.dirname, ".cloudflare/state") },
     }),
-    ...(isPreview ? [] : [tailwindcss(), reactRouter(), linkClientAssets(), thirdPartyNotices()]),
+    ...(isPreview
+      ? []
+      : [
+          tailwindcss(),
+          reactRouter(),
+          linkClientAssets(),
+          thirdPartyNotices(),
+          preloadCopyModules(),
+        ]),
   ],
   environments: { ssr: { build: { sourcemap: true } } },
   resolve: {
