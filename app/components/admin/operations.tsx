@@ -206,6 +206,9 @@ export function QuotasView({
             ) : (
               <>
                 <QuotaTable rows={used} />
+                <p className="text-sm text-muted-foreground">
+                  {q.orderReads(environment.orderReads)}
+                </p>
                 {others.length > 0 ? (
                   <Disclosure label={q.otherCalls(others.length)}>
                     <QuotaTable rows={others} />
