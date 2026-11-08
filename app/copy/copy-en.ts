@@ -1144,7 +1144,7 @@ export const en: AppCopy = {
     backToSignIn: "Back to sign in",
     validation: {
       required: "Fill in this field.",
-      email: "Enter a valid email address, for example name@example.com.",
+      email: "Enter a valid email address, for example name@domain.com.",
       tooShort: (min: number) => `Use at least ${min} characters.`,
       checkbox: "Accept the Terms of Service to continue.",
     },

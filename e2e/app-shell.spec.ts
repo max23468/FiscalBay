@@ -372,7 +372,7 @@ for (const area of areas)
 test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async ({ page }) => {
   await open(page);
   expect(await page.content()).not.toContain("BNCLCU75C12F205G");
-  const card = page.getByRole("article", { name: "Ordine 05-55555-12121" });
+  const card = page.getByRole("article", { name: "Ordine 05-48217-36194" });
   await expect(
     page.getByText("2 sblocchi disponibili in questo ciclo.", { exact: true }),
   ).toHaveCount(1);
@@ -383,7 +383,7 @@ test("lo sblocco rivela il dato solo dopo l'azione e aggiorna la quota", async (
     "Ti resta 1 sblocco in questo ciclo",
   );
   await page.reload();
-  await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
+  await expect(page.getByRole("article", { name: "Ordine 05-48217-36194" })).toContainText(
     "BNCLCU75C12F205G",
   );
   await page.getByRole("link", { name: "Carica altri" }).click();
@@ -398,7 +398,7 @@ test("lo sblocco di una scheda conserva la selezione", async ({ page }) => {
   await page.getByRole("button", { name: "Seleziona" }).click();
   await page.getByRole("checkbox", { name: "Seleziona l’ordine 02-44519-70831" }).click();
   await page
-    .getByRole("article", { name: "Ordine 05-55555-12121" })
+    .getByRole("article", { name: "Ordine 05-48217-36194" })
     .getByRole("button", { name: "Sblocca ordine" })
     .click();
   await page.getByRole("alertdialog").getByRole("button", { name: "Sblocca", exact: true }).click();
@@ -412,7 +412,7 @@ test("lo sblocco di una scheda conserva la selezione", async ({ page }) => {
 test("la selezione sblocca più ordini entro la quota", async ({ page }) => {
   await open(page, "/anteprima/ordini?fiscale=locked");
   await page.getByRole("button", { name: "Seleziona" }).click();
-  await page.getByRole("checkbox", { name: "Seleziona l’ordine 05-55555-12121" }).click();
+  await page.getByRole("checkbox", { name: "Seleziona l’ordine 05-48217-36194" }).click();
   await page.getByRole("checkbox", { name: "Seleziona l’ordine 02-44519-70831" }).click();
   await expect(page.getByText("2 ordini da sbloccare")).toBeVisible();
   await page.getByRole("button", { name: "Sblocca 2" }).click();
@@ -431,7 +431,7 @@ test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno
 }) => {
   await open(page, "/anteprima/ordini?fiscale=locked");
   await page.getByRole("button", { name: "Seleziona" }).click();
-  for (const id of ["05-55555-12121", "02-44519-70831"])
+  for (const id of ["05-48217-36194", "02-44519-70831"])
     await page.getByRole("checkbox", { name: `Seleziona l’ordine ${id}` }).click();
   const bar = page.getByRole("button", { name: "Esporta", exact: true });
   await bar.click();
@@ -444,7 +444,7 @@ test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno
   // Il periodo è già nei filtri degli Ordini; il file nasce soltanto da «Crea file».
   await expect(page.getByRole("combobox", { name: "Periodo" })).toHaveCount(0);
   await page.goBack();
-  for (const id of ["05-55555-12121", "02-44519-70831"])
+  for (const id of ["05-48217-36194", "02-44519-70831"])
     await expect(page.getByRole("checkbox", { name: `Seleziona l’ordine ${id}` })).toBeChecked();
   await expect(page.getByText("2 selezionati")).toBeVisible();
   await bar.click();
@@ -456,7 +456,7 @@ test("Esporta porta la selezione con conteggio esplicito e la ritrova al ritorno
   await page.getByRole("checkbox", { name: "Seleziona l’ordine 02-44519-70831" }).click();
   await expect(page.getByText("1 selezionato")).toBeVisible();
   await page
-    .getByRole("article", { name: "Ordine 05-55555-12121" })
+    .getByRole("article", { name: "Ordine 05-48217-36194" })
     .getByRole("link", { name: "Dettaglio" })
     .focus();
   await page.keyboard.press("Enter");
@@ -482,9 +482,9 @@ test("Esporta senza selezione usa l'elenco filtrato e il menu il solo ordine", a
   await expect(page.getByRole("status").filter({ hasText: "nessun file creato" })).toBeVisible();
   await page.getByRole("link", { name: "Torna agli ordini" }).click();
   await expect(page).toHaveURL(/\/anteprima\/ordini\?fiscale=locked&vista=[0-9a-z]+$/u);
-  await page.getByRole("button", { name: "Altre azioni per l’ordine 05-55555-12121" }).click();
+  await page.getByRole("button", { name: "Altre azioni per l’ordine 05-48217-36194" }).click();
   await page.getByRole("menuitem", { name: "Esporta ordine" }).click();
-  await expect(section).toContainText("Ordine 05-55555-12121.");
+  await expect(section).toContainText("Ordine 05-48217-36194.");
   await expect(section).toContainText("1 ordine. Per 1 ordine da sbloccare");
 });
 
@@ -632,7 +632,7 @@ test("con gli sblocchi esauriti gli ordini restano consultabili", async ({ page 
   await expect(quota.getByRole("button", { name: "Attiva la prova" })).toBeVisible();
   await expect(page.getByText("Prova Pro gratis per 14 giorni, senza carta.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Sblocca ordine" })).toHaveCount(0);
-  await expect(page.getByRole("article", { name: "Ordine 05-55555-12121" })).toContainText(
+  await expect(page.getByRole("article", { name: "Ordine 05-48217-36194" })).toContainText(
     "Sblocco disponibile dal 2 ott 2026.",
   );
   await expect(page.getByRole("article", { name: "Ordine 08-33110-45672" })).toContainText(
@@ -660,9 +660,7 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
     continueHydration();
   }
   await expect(search).toBeEnabled();
-  await expect(
-    await searchFromTopBar(page, "/anteprima", "carburatore", /Maria Rossi/),
-  ).toBeVisible();
+  await expect(await searchFromTopBar(page, "/anteprima", "casco", /Maria Rossi/)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
   await search.fill("Conti");
@@ -865,7 +863,7 @@ test("stati coerenti: aggiornamento, eBay fermo e collegamento già usato", asyn
 
   await chooseScenario(page, "eBay non risponde");
   await expect(
-    page.getByRole("article", { name: "Ordine 19-00001-99999" }).getByRole("button", {
+    page.getByRole("article", { name: "Ordine 19-62740-31885" }).getByRole("button", {
       name: "Riprova",
     }),
   ).toBeDisabled();
@@ -916,21 +914,21 @@ test("contatti cliccabili e copiabili, senza richiesta fiscale precompilata agli
   await page.goto("/anteprima/ordini/ord-11");
   await expect(
     page.getByRole("dialog").getByRole("link", { name: "Scrivi all’acquirente via email" }),
-  ).toHaveAttribute("href", /^mailto:fra\.colombo@esempio\.invalid\?subject=/u);
+  ).toHaveAttribute("href", /^mailto:francesca@colomborestauri\.it\?subject=/u);
   // Alias eBay e numero non riconoscibile: niente email precompilata né chiamata.
   await page.goto("/anteprima/ordini/ord-14");
   const alias = page.getByRole("dialog");
   await expect(alias.getByText("interno 14", { exact: true })).toBeVisible();
   await expect(alias.locator('a[href^="tel:"]')).toHaveCount(0);
-  await expect(alias.getByText("c3f0a1b2@members.ebay.invalid", { exact: true })).toBeVisible();
+  await expect(alias.getByText("c3f0a1b2@members.ebay.com", { exact: true })).toBeVisible();
   await expect(
-    alias.getByRole("link", { name: /^c3f0a1b2\s*@members\.ebay\.invalid$/u }),
-  ).toHaveAttribute("href", "mailto:c3f0a1b2@members.ebay.invalid");
+    alias.getByRole("link", { name: /^c3f0a1b2\s*@members\.ebay\.com$/u }),
+  ).toHaveAttribute("href", "mailto:c3f0a1b2@members.ebay.com");
   const copyEmail = alias.getByRole("button", { name: /^Copia email:/u });
   await copyEmail.click();
   await expect(copyEmail).toHaveAttribute("data-state", "copied");
   expect(await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toBe(
-    "c3f0a1b2@members.ebay.invalid",
+    "c3f0a1b2@members.ebay.com",
   );
   await expect(alias.getByRole("link", { name: "Scrivi all’acquirente via email" })).toHaveCount(0);
   await expect(alias.getByRole("button", { name: /^Copia messaggio/u })).toBeVisible();

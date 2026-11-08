@@ -839,7 +839,7 @@ describe("stati dell'area reale nell'anteprima", () => {
     const orders = await routeData(previewOrders, "/anteprima/ordini", { cookie });
     if ("loading" in orders) throw new Error("elenco atteso");
     expect(orders).toMatchObject({ exportable: false, connectHref: null });
-    expect(orders.email?.address).toMatch(/@esempio\.invalid$/u);
+    expect(orders.email?.address).toBe("laura@vintagegarageitalia.it");
     const redirected = async (response: Response) => response.headers.get("location");
     expect(
       await redirected(await routeResponse(previewStores, "/anteprima/negozi", { cookie })),

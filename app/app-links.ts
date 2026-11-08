@@ -47,6 +47,7 @@ export const guidePaths = [
   `${guidesPath}/codice-fiscale-fattura-elettronica-ebay`,
   `${guidesPath}/esportare-ordini-ebay-excel-csv`,
   `${guidesPath}/partita-iva-acquirente-ebay`,
+  `${guidesPath}/alternativa-probay-codice-fiscale-ebay`,
 ] as const;
 export type GuidePath = (typeof guidePaths)[number];
 

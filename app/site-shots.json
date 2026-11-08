@@ -3,48 +3,48 @@
     "it": {
       "width": 1280,
       "height": 800,
-      "version": "240f69aab0"
+      "version": "a369375884"
     },
     "en": {
       "width": 1280,
       "height": 800,
-      "version": "e758292240"
+      "version": "4ec8f40535"
     }
   },
   "ordini-mobile": {
     "it": {
       "width": 390,
       "height": 640,
-      "version": "7e16441528"
+      "version": "2acd33ce9d"
     },
     "en": {
       "width": 390,
       "height": 640,
-      "version": "4423349592"
+      "version": "c03414e911"
     }
   },
   "scheda": {
     "it": {
       "width": 688,
       "height": 401,
-      "version": "5f2ea3e3ae"
+      "version": "5f635aee06"
     },
     "en": {
       "width": 688,
       "height": 401,
-      "version": "5dc8e36a1b"
+      "version": "69fb8ad217"
     }
   },
   "scheda-mobile": {
     "it": {
       "width": 358,
       "height": 500,
-      "version": "905cc8dab3"
+      "version": "7f6b16c42c"
     },
     "en": {
       "width": 358,
       "height": 500,
-      "version": "4522f3571b"
+      "version": "4c93fd245a"
     }
   },
   "negozi": {
@@ -98,37 +98,37 @@
   "telegram": {
     "it": {
       "width": 420,
-      "height": 349,
-      "version": "6e67879df4"
+      "height": 448,
+      "version": "0bec06ed39"
     },
     "en": {
       "width": 420,
-      "height": 349,
-      "version": "d082c7351f"
+      "height": 448,
+      "version": "a184c6129b"
     }
   },
   "esportazione": {
     "it": {
       "width": 862,
       "height": 218,
-      "version": "99afea6b25"
+      "version": "fae6b73599"
     },
     "en": {
       "width": 848,
       "height": 218,
-      "version": "26ab21afcf"
+      "version": "f285844e30"
     }
   },
   "esportazione-mobile": {
     "it": {
       "width": 382,
       "height": 192,
-      "version": "245efb7144"
+      "version": "a956d11fae"
     },
     "en": {
       "width": 382,
       "height": 192,
-      "version": "5df9b99dc6"
+      "version": "ab33af5d36"
     }
   }
 }

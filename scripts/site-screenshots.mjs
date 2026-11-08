@@ -88,7 +88,7 @@ const telegram = {
     open: "Apri in FiscalBay",
     ebay: "Apri su eBay",
     copy: "Copia Codice Fiscale",
-    total: "49,90 €",
+    total: "189,00 €",
   },
   en: {
     title: "New order",
@@ -96,9 +96,12 @@ const telegram = {
     open: "Open in FiscalBay",
     ebay: "Open on eBay",
     copy: "Copy tax code",
-    total: "€49.90",
+    total: "€189.00",
   },
 };
+
+/** Immagine dell'articolo del messaggio, letta dalla scheda dell'ordine nell'anteprima. */
+let orderImage = "";
 
 function telegramPage(language, scheme) {
   const t = telegram[language];
@@ -136,6 +139,7 @@ function telegramPage(language, scheme) {
     code { font: 14px ui-monospace, Menlo, monospace; color: ${colors.code}; }
     blockquote { margin: 6px 0 2px; padding: 2px 8px; border-left: 3px solid ${colors.quote}; border-radius: 3px; background: ${colors.quote}1a; }
     .time { text-align: right; color: ${colors.muted}; font-size: 12px; }
+    .media { display: block; width: 72px; height: 72px; margin: 6px 0 2px; border-radius: 8px; }
     .row { display: flex; gap: 6px; }
     .row span { flex: 1; text-align: center; padding: 9px 6px; border-radius: 10px; background: ${colors.button}; color: #fff; font-size: 14px; font-weight: 500; }
   </style></head><body><div id="shot">
@@ -143,7 +147,8 @@ function telegramPage(language, scheme) {
     <div class="chat"><div class="bubble">
       🛒 <b>${t.title}</b> · Vintage Garage Italia<br>
       🧾 <code>RSSMRA80A41H501Y</code>
-      <blockquote>👤 Maria Rossi<br>💶 <b>${t.total}</b><br>📦 1 × Carburatore Dell’Orto PHBG 19 revisionato<br>🕑 <i>${t.today} 14:22 · 27-10293-84756</i></blockquote>
+      <blockquote>👤 Maria Rossi<br>💶 <b>${t.total}</b><br>📦 1 × Casco jet anni 60 in fibra rosso restaurato vintage moto scooter taglia M<br>🕑 <i>${t.today} 14:22 · 27-10293-84756</i></blockquote>
+      <img class="media" src="${orderImage}" alt="">
       <div class="time">14:22</div>
     </div>
     <div class="row"><span>🔗 ${t.open}</span><span>🛍 ${t.ebay}</span></div>
@@ -175,11 +180,11 @@ const sheet = {
   },
 };
 const sheetRows = [
-  ["40-10001-20002", "27/09/2026 14:57", "Giorgio Neri", "NREGRG80A01G337P", "", "18.40"],
-  ["27-10293-84756", "27/09/2026 14:22", "Maria Rossi", "RSSMRA80A41H501Y", "", "49.90"],
-  ["05-55555-12121", "27/09/2026 12:40", "Luca Bianchi", "BNCLCU75C12F205G", "", "12.00"],
+  ["40-73156-20482", "27/09/2026 14:57", "Giorgio Neri", "NREGRG80A01G337P", "", "165.00"],
+  ["27-10293-84756", "27/09/2026 14:22", "Maria Rossi", "RSSMRA80A41H501Y", "", "189.00"],
+  ["05-48217-36194", "27/09/2026 12:40", "Luca Bianchi", "BNCLCU75C12F205G", "", "129.00"],
   [
-    "12-34567-89012",
+    "16-84213-57096",
     "27/09/2026 12:00",
     "Società Cooperativa Agricola Val di Non",
     "",
@@ -332,6 +337,8 @@ async function capture(browser, shot, language, scheme) {
     });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);
+  if (shot.name === "scheda")
+    orderImage = await page.locator(`${shot.element} img`).first().getAttribute("src");
   const png = shot.element
     ? await page.locator(shot.element).first().screenshot({ animations: "disabled" })
     : await page.screenshot({

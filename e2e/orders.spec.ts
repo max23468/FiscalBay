@@ -772,7 +772,7 @@ test.describe("area reale", () => {
     }) => {
       await open(page, pagePath(prefix, "/anteprima/ordini"), "sblocco-non-riuscito");
       const order = page.getByRole("article", {
-        name: `${it ? "Ordine" : "Order"} 05-55555-12121`,
+        name: `${it ? "Ordine" : "Order"} 05-48217-36194`,
       });
       const unlock = order.getByRole("button", {
         name: it ? "Sblocca ordine" : "Unlock order",
@@ -822,7 +822,7 @@ for (const language of ["it", "en"] as const) {
       const t = (it: string, en: string) => (language === "it" ? it : en);
       await open(page, pagePath(prefix, "/anteprima/ordini"), "ordinario");
       const locked = page.getByRole("article", {
-        name: t("Ordine", "Order") + " 05-55555-12121",
+        name: t("Ordine", "Order") + " 05-48217-36194",
       });
       await expect(
         page.getByText(t("2 sblocchi disponibili in questo ciclo.", "2 unlocks left this cycle."), {
@@ -882,7 +882,7 @@ for (const language of ["it", "en"] as const) {
       await page.getByRole("button", { name: t("Annulla", "Cancel"), exact: true }).click();
       await expect(select).toBeFocused();
       const failed = page.getByRole("article", {
-        name: t("Ordine", "Order") + " 19-00001-99999",
+        name: t("Ordine", "Order") + " 19-62740-31885",
       });
       const retried = page.waitForResponse(
         (response) =>
@@ -900,14 +900,14 @@ for (const language of ["it", "en"] as const) {
       // Nel menu della scheda «Apri su eBay» è un collegamento al Seller Hub.
       await clickHydrated(
         failed.getByRole("button", {
-          name: t("Altre azioni per l’ordine", "More actions for order") + " 19-00001-99999",
+          name: t("Altre azioni per l’ordine", "More actions for order") + " 19-62740-31885",
         }),
       );
       await expect(
         page.getByRole("menuitem", { name: t("Apri su eBay", "Open on eBay") }),
       ).toHaveAttribute(
         "href",
-        /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=19-00001-99999$/,
+        /^https:\/\/www\.ebay\.it\/sh\/ord\/details\?orderid=19-62740-31885$/,
       );
       await page.keyboard.press("Escape");
       if (width === 390)
@@ -996,7 +996,7 @@ for (const language of ["it", "en"] as const) {
         ),
       ).toBeVisible();
       await open(page, pagePath(prefix, "/anteprima/ordini"), "dati-discordanti");
-      await expect(page.getByRole("article").filter({ hasText: "05-55555-12121" })).toContainText(
+      await expect(page.getByRole("article").filter({ hasText: "05-48217-36194" })).toContainText(
         t("Ordine da verificare", "Order to check"),
       );
       // Valore letto in precedenza con l'ultima lettura non riuscita, dato nascosto o rimosso.
@@ -1259,7 +1259,7 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await open(page, "/anteprima/ordini");
   await page
-    .getByRole("article", { name: "Ordine 05-55555-12121" })
+    .getByRole("article", { name: "Ordine 05-48217-36194" })
     .getByRole("button", { name: "Sblocca ordine" })
     .click();
   const value = page.getByText("BNCLCU75C12F205G", { exact: true });
@@ -1272,7 +1272,7 @@ test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ 
   await open(page, "/anteprima/ordini", "aggiornamento");
   // La riapertura ripristina lo scorrimento dello sblocco: tornando in cima i nuovi ordini entrano.
   await page.evaluate(() => scrollTo(0, 0));
-  const incoming = page.getByRole("article", { name: "Ordine 40-10001-20002" });
+  const incoming = page.getByRole("article", { name: "Ordine 40-73156-20482" });
   await expect(incoming).toBeVisible();
   await expect(page.getByRole("button", { name: /nuovi ordini/ })).toHaveCount(0);
   await expect(incoming).toHaveCSS("opacity", "1");
@@ -1418,11 +1418,11 @@ test.describe("impostazioni", () => {
     await expect(
       page.getByText("2 sblocchi disponibili in questo ciclo.", { exact: true }),
     ).toHaveCount(1);
-    for (const id of ["19-00001-99999", "31-77421-10058", "05-55555-12121"]) {
+    for (const id of ["19-62740-31885", "31-77421-10058", "05-48217-36194"]) {
       const card = page.getByRole("article", { name: `Ordine ${id}` });
       await expect(card.getByRole("button", { name: /^Copia / })).toHaveCount(0);
     }
-    const locked = page.getByRole("article", { name: "Ordine 05-55555-12121" });
+    const locked = page.getByRole("article", { name: "Ordine 05-48217-36194" });
     await expect(locked.locator(".icon-unlock")).toHaveCount(2);
     await expect(locked.locator(".lucide-crown")).toHaveCount(0);
     await expect(locked).not.toContainText("Questo ordine ne usa uno.");
@@ -1436,7 +1436,7 @@ test.describe("impostazioni", () => {
     await expect(missing).not.toContainText(
       "eBay non riporta il Codice Fiscale per questo ordine.",
     );
-    const failed = page.getByRole("article", { name: "Ordine 19-00001-99999" });
+    const failed = page.getByRole("article", { name: "Ordine 19-62740-31885" });
     await expect(failed).toContainText("Aggiornamento non riuscito");
     await expect(failed.getByRole("button", { name: "Riprova", exact: true })).toBeEnabled();
     await expect(failed).not.toContainText("Non siamo riusciti a recuperare il Codice Fiscale");

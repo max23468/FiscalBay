@@ -430,7 +430,7 @@ test.describe("ordini", () => {
         await open(page, `${pagePath(prefix, "/ordini")}?mostra=2`, "ordinario");
         const email = page
           .getByRole("article")
-          .getByText("amministrazione@galli-restauri.invalid", { exact: true });
+          .getByText("2c91e6a7f04b8d35c6e1@members.ebay.com", { exact: true });
         await expect(email).toBeVisible();
         expect(
           await email.evaluate((e) => {
@@ -443,7 +443,7 @@ test.describe("ordini", () => {
         await expect(
           page
             .getByRole("article")
-            .filter({ hasText: "amministrazione@galli-restauri.invalid" })
+            .filter({ hasText: "2c91e6a7f04b8d35c6e1@members.ebay.com" })
             .getByRole("link", { name: locale === "it" ? "Dettaglio" : "Details", exact: true }),
         ).toBeVisible();
         await expect.poll(() => noPageOverflow(page)).toBe(true);
@@ -454,7 +454,7 @@ test.describe("ordini", () => {
         await expect(
           page
             .getByRole("dialog")
-            .getByText("amministrazione@galli-restauri.invalid", { exact: true }),
+            .getByText("2c91e6a7f04b8d35c6e1@members.ebay.com", { exact: true }),
         ).toBeVisible();
         await open(page, pagePath(prefix, "/ordini/ord-01"));
         await page
@@ -497,10 +497,10 @@ test.describe("ordini", () => {
 
       await open(page, "/anteprima/ordini", "ordinario");
       await page.getByRole("button", { name: "Seleziona", exact: true }).click();
-      await page.getByRole("checkbox", { name: "Seleziona l’ordine 05-55555-12121" }).click();
+      await page.getByRole("checkbox", { name: "Seleziona l’ordine 05-48217-36194" }).click();
       // Anche durante la selezione «Riprova» risponde con un avviso breve.
       await page
-        .getByRole("article", { name: "Ordine 19-00001-99999" })
+        .getByRole("article", { name: "Ordine 19-62740-31885" })
         .getByRole("button", { name: "Riprova", exact: true })
         .click();
       await expect(notice(page)).toBeVisible();
