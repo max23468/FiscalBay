@@ -2,7 +2,33 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
-## [2.0.8]
+## [2.0.8] - 2026-11-08
+
+### Novità
+
+#### Miglioramenti
+
+- **Pagine più rapide.** Ordini, Negozi e Impostazioni si aprono più velocemente e il sito si carica prima quando ci torni.
+- **Conferma con un codice.** Dopo la registrazione puoi inserire il codice di 6 cifre ricevuto via email, senza cambiare scheda, oppure aprire il link come prima.
+- **Un solo passaggio con eBay.** Chi si registra con eBay autorizza insieme account e negozio: il negozio si collega da solo appena l'email è confermata.
+- **Registrazione più veloce.** Il pulsante «Registrati» risponde prima, perché i controlli di sicurezza partono mentre compili il modulo.
+
+### What's new
+
+#### Improvements
+
+- **Faster pages.** Orders, Stores and Settings open more quickly, and the site loads sooner when you come back.
+- **Confirm with a code.** After signing up you can enter the 6-digit code from the email without changing tab, or open the link as before.
+- **One step with eBay.** When you sign up with eBay you authorize account and store together: the store connects by itself as soon as your email is confirmed.
+- **Faster sign-up.** The «Sign up» button responds sooner, because the security checks start while you fill in the form.
+
+### Altre modifiche
+
+- **Import degli ordini più leggero.** Ogni ordine letto da eBay cerca i propri precedenti con gli indici, senza scorrere tutti gli ordini del negozio. Gli ambienti distribuiti non inviano più email ai domini `.invalid` degli account di prova.
+- **Qualifica più rapida.** Il candidato prova in modo incrementale i soli moduli critici modificati; i moduli che li importano restano alla campagna settimanale.
+- **Caricamento e letture più leggeri.** Font e testi partono con il documento, le schermate del sito restano nella cache del browser, le Impostazioni portano subito soltanto la categoria aperta e il codice di una pagina si prepara al passaggio sul suo link. L'apertura di una pagina dell'area riservata fa meno letture e scritture sul database.
+- **Core Web Vitals reali.** I report del browser di Ordini e Negozi aggiungono INP e CLS, che la console mostra accanto a LCP. La build rifiuta la perdita della cache permanente degli asset e le prove limitano il peso dei documenti.
+- **Promozioni più rapide per i soli testi.** Un commit che cambia soltanto documenti, voci del changelog o test riusa la certificazione dell'antenato qualificato.
 
 ## [2.0.7] - 2026-11-07
 
