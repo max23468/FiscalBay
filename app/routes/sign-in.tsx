@@ -5,6 +5,7 @@ import { useLocation, useRouteLoaderData } from "react-router";
 
 import { BrandPanel } from "~/components/access/brand-panel";
 import { EmailField, PasswordField } from "~/components/access/credential-fields";
+import { ConfirmEmail } from "~/components/access/email-code";
 import { usePasswordCheck } from "~/components/access/password-check";
 import { EbayMark, GoogleMark } from "~/components/access/marks";
 import { useLastUsed } from "~/components/access/last-used";
@@ -173,7 +174,13 @@ function PlanChoiceField() {
   return chosen ? <input type="hidden" name={planChoiceParam} value={chosen} /> : null;
 }
 
-function SocialForms({ lastMethod }: { lastMethod?: LoginMethod | null }) {
+function SocialForms({
+  lastMethod,
+  registering = false,
+}: {
+  lastMethod?: LoginMethod | null;
+  registering?: boolean;
+}) {
   const { t: copy } = useCopy();
   const formAction = useAccessAction();
   const t = copy.access;
@@ -198,7 +205,7 @@ function SocialForms({ lastMethod }: { lastMethod?: LoginMethod | null }) {
         type="submit"
         variant="outline"
         name="intent"
-        value="ebay"
+        value={registering ? "ebay-registrazione" : "ebay"}
         className="w-full"
         {...ebay.props}
       >
@@ -271,6 +278,7 @@ function SignInPanel({
         method="post"
         action={formAction}
         {...signIn.form}
+        onBlur={signInCheck.prepare}
         onSubmit={(event) => {
           if (!signIn.check(event)) return;
           signInCheck.submit(event);
@@ -370,6 +378,10 @@ function AccessForms({
           method="post"
           action={formAction}
           {...signUp.form}
+          // La verifica parte al primo campo toccato e il controllo della password all'uscita
+          // dal campo: all'invio gli esiti sono di solito già pronti.
+          onFocus={registration.prepare}
+          onBlur={signUpCheck.prepare}
           onSubmit={(event) => {
             if (!signUp.check(event)) return;
             signUpCheck.submit(event);
@@ -406,7 +418,7 @@ function AccessForms({
           </FieldGroup>
         </form>
         <OrSeparator />
-        <SocialForms />
+        <SocialForms registering />
       </TabsContent>
     </Tabs>
   );
@@ -424,6 +436,7 @@ function ResetPassword({ token }: { token: string }) {
       action={formAction}
       className="grid gap-4"
       {...v.form}
+      onBlur={passwordCheck.prepare}
       onSubmit={(event) => {
         if (v.check(event)) passwordCheck.submit(event);
       }}
@@ -502,9 +515,11 @@ function SignOutForm() {
 function AccessPanel({
   loaderData,
   remembered,
+  codeError,
 }: {
   loaderData: Awaited<ReturnType<typeof loader>>;
   remembered: Remembered | null;
+  codeError: string | null;
 }) {
   const { t: copy } = useCopy();
   const t = copy.access;
@@ -533,6 +548,15 @@ function AccessPanel({
   if (loaderData.resetToken) {
     return <ResetPassword token={loaderData.resetToken} />;
   }
+  if (remembered?.tab === "conferma") {
+    return (
+      <ConfirmEmail
+        email={remembered.values.email ?? ""}
+        plan={remembered.values[planChoiceParam] || undefined}
+        error={codeError}
+      />
+    );
+  }
   return (
     <AccessForms
       remembered={remembered}
@@ -544,13 +568,50 @@ function AccessPanel({
   );
 }
 
-/** Accesso, registrazione e completamento: marchio a sinistra, form a destra. */
-export default function SignIn({ loaderData, actionData }: Route.ComponentProps) {
-  const { language } = loaderData;
+/** Frase del marchio sui telefoni, assente nella pagina del codice, e titolo per i lettori. */
+function AccessIntro({
+  headline,
+  title,
+  tabs,
+  confirming,
+}: {
+  headline: string;
+  title: string;
+  tabs: boolean;
+  confirming: boolean;
+}) {
+  return (
+    <>
+      {confirming ? null : (
+        <div className="grid gap-2 lg:hidden">
+          <p className="text-2xl font-semibold text-balance">{headline}</p>
+        </div>
+      )}
+      {/* Completamento, nuova password e codice hanno un titolo visibile; le schede no. */}
+      {tabs ? <h1 className="sr-only">{title}</h1> : null}
+    </>
+  );
+}
+
+/** Esito da mostrare: quello del modulo inviato o quello arrivato con l'indirizzo. */
+function formOutcome(
+  loaderData: Route.ComponentProps["loaderData"],
+  actionData: Route.ComponentProps["actionData"],
+) {
   // Gli esiti della cancellazione arrivano al suo riquadro: qui soltanto quelli dei moduli.
   const form = actionData && "remembered" in actionData ? actionData : null;
   const notice = form?.notice ?? loaderData.notice;
   const remembered = form?.remembered ?? null;
+  const confirming = remembered?.tab === "conferma";
+  // Il codice errato si legge sotto le caselle, dove si corregge.
+  const codeError = confirming && notice?.key === "codice-errato" ? notice.text : null;
+  return { notice, remembered, confirming, codeError };
+}
+
+/** Accesso, registrazione e completamento: marchio a sinistra, form a destra. */
+export default function SignIn({ loaderData, actionData }: Route.ComponentProps) {
+  const { language } = loaderData;
+  const { notice, remembered, confirming, codeError } = formOutcome(loaderData, actionData);
   const t = appCopy[language].access;
   return (
     <div className="grid min-h-dvh lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
@@ -573,20 +634,21 @@ export default function SignIn({ loaderData, actionData }: Route.ComponentProps)
               : "content-center",
           )}
         >
-          <div className="grid gap-2 lg:hidden">
-            <p className="text-2xl font-semibold text-balance">{t.headline}</p>
-          </div>
-          {/* Completamento e nuova password hanno un titolo visibile; le schede soltanto questo. */}
-          {loaderData.authenticated || loaderData.resetToken ? null : (
-            <h1 className="sr-only">{t.choose}</h1>
-          )}
-          <AccessNotice notice={notice} />
+          <AccessIntro
+            headline={t.headline}
+            title={t.choose}
+            tabs={!loaderData.authenticated && !loaderData.resetToken && !confirming}
+            confirming={confirming}
+          />
+          <AccessNotice notice={codeError ? null : notice} />
           {loaderData.authenticated ? (
             <VerifyEmail email={loaderData.email} verified={loaderData.emailVerified} />
           ) : null}
           <div className={cn("rounded-2xl border bg-card p-4 shadow-sm sm:p-5", rise)}>
-            <p className="mb-3 text-sm text-muted-foreground">{t.requiredFields}</p>
-            <AccessPanel loaderData={loaderData} remembered={remembered} />
+            {confirming ? null : (
+              <p className="mb-3 text-sm text-muted-foreground">{t.requiredFields}</p>
+            )}
+            <AccessPanel loaderData={loaderData} remembered={remembered} codeError={codeError} />
           </div>
           {loaderData.authenticated ? <SignOutForm /> : null}
         </div>

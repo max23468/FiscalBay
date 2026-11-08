@@ -7,7 +7,8 @@ import {
   getAuthoritativeSessionFromCtx,
   getOAuthState,
 } from "better-auth/api";
-import { genericOAuth, haveIBeenPwned, lastLoginMethod } from "better-auth/plugins";
+import type { OAuth2Tokens } from "better-auth";
+import { emailOTP, genericOAuth, haveIBeenPwned, lastLoginMethod } from "better-auth/plugins";
 import { waitUntil } from "./service-activity.server";
 import { z } from "zod";
 
@@ -17,9 +18,9 @@ import {
   sendAuthEmail,
   sendExistingAccountEmail,
 } from "./account-email.server";
-import { accountDeletionPath } from "./app-links";
+import { accountDeletionPath, emailCodeConfirmPath } from "./app-links";
 import { logFailure } from "./errors";
-import { localizedPath } from "./i18n";
+import { localizedPath, type Language } from "./i18n";
 import { maxPasswordLength, minPasswordLength } from "./limits";
 import { emailVerificationSeconds } from "./domain/email-change.server";
 import { recordSignupSource } from "./domain/signup-sources.server";
@@ -143,6 +144,38 @@ async function requireConfirmationSession(env: Env, user: LinkUser, request?: Re
   });
 }
 
+/** Lingua dell'autorizzazione al negozio chiesta insieme all'accesso eBay, dallo state firmato. */
+async function storeGrantLanguage(): Promise<Language | null> {
+  // Stryker disable next-line ArrowFunction: null e undefined danno lo stesso esito.
+  const state = await getOAuthState().catch(() => null);
+  const value = (state as { storeGrantLanguage?: unknown } | null)?.storeGrantLanguage;
+  return value === "it" || value === "en" ? value : null;
+}
+
+/** Collega il negozio autorizzato in registrazione; un guasto non ferma conferma o accesso. */
+async function activateStoreGrant(env: Env, userId: string, request?: Request) {
+  const { activateSignupGrant } = await import("./domain/store-link.server");
+  return activateSignupGrant({ env, userId, request }).catch((error: unknown) => {
+    logFailure({ request, error, operation: "store_link" });
+    return null;
+  });
+}
+
+/**
+ * Il consenso al negozio vive nella tabella delle autorizzazioni: la riga dell'accesso eBay non
+ * ne conserva i token, che servono soltanto al collegamento.
+ */
+async function settleStoreGrant(env: Env, account: { id: string; userId: string }) {
+  if (!(await storeGrantLanguage())) return;
+  await env.DB.prepare(
+    `UPDATE "account" SET "accessToken" = NULL, "refreshToken" = NULL, "accessTokenExpiresAt" = NULL,
+       "refreshTokenExpiresAt" = NULL WHERE "id" = ?`,
+  )
+    .bind(account.id)
+    .run();
+  await activateStoreGrant(env, account.userId);
+}
+
 // Ogni sezione delle opzioni è una funzione propria: la mutation divide il modulo fra le
 // funzioni, mentre un solo oggetto resterebbe una parte indivisibile.
 function databaseHooks(env: Env): BetterAuthOptions["databaseHooks"] {
@@ -181,8 +214,11 @@ function databaseHooks(env: Env): BetterAuthOptions["databaseHooks"] {
               method: account.providerId,
             });
           }
+          await settleStoreGrant(env, account);
         },
       },
+      // Accesso di chi ha già un account FiscalBay, partito da «Registrati» con eBay.
+      update: { after: (account) => settleStoreGrant(env, account) },
     },
     session: {
       create: {
@@ -309,7 +345,7 @@ function verificationOptions(env: Env): BetterAuthOptions["emailVerification"] {
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       // Il secondo link arriva al nuovo indirizzo; l'accesso resta sul precedente fino alla conferma.
-      await env.DB.prepare(
+      const change = await env.DB.prepare(
         "UPDATE account_email_changes SET stage = 'new', expires_at = ? WHERE user_id = ? AND new_email = ?",
       )
         .bind(
@@ -318,25 +354,88 @@ function verificationOptions(env: Env): BetterAuthOptions["emailVerification"] {
           user.email,
         )
         .run();
-      sendAuthEmail(env, "verify", { to: user.email, url });
+      // Il cambio di indirizzo resta con il solo link.
+      const code = change.meta.changes > 0 ? undefined : await newEmailCode(env, user.email);
+      sendAuthEmail(env, "verify", { to: user.email, url, code });
     },
     beforeEmailVerification: (user, request) => requireConfirmationSession(env, user, request),
-    afterEmailVerification: async (user) => {
-      await env.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?")
-        .bind(user.id)
-        .run();
+    afterEmailVerification: async (user, request) => {
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?").bind(user.id),
+        // Confermato con il link, il codice della stessa email non vale più.
+        env.DB.prepare('DELETE FROM "verification" WHERE "identifier" = ?').bind(
+          emailCodeIdentifier(user.email),
+        ),
+      ]);
+      // Con il codice collega il negozio l'azione della pagina, che ne mostra l'esito.
+      if (request && new URL(request.url).pathname.endsWith(emailCodeConfirmPath)) return;
+      await activateStoreGrant(env, user.id, request);
     },
   };
 }
 
+/** Riga del codice di conferma, come la scrive il plugin. */
+const emailCodeIdentifier = (email: string) => `email-verification-otp-${email.toLowerCase()}`;
+
+/** Nuovo codice di conferma, che sostituisce quello di un invio precedente. */
+async function newEmailCode(env: Env, email: string): Promise<string> {
+  await env.DB.prepare('DELETE FROM "verification" WHERE "identifier" = ?')
+    .bind(emailCodeIdentifier(email))
+    .run();
+  // `createAuth` espone il tipo generico, senza gli endpoint dei plugin.
+  const { api } = createAuth(env) as unknown as {
+    api: {
+      createVerificationOTP(input: {
+        body: { email: string; type: "email-verification" };
+      }): Promise<string>;
+    };
+  };
+  return api.createVerificationOTP({ body: { email, type: "email-verification" } });
+}
+
 /** Cookie dell'ultimo metodo di accesso, letto dalla pagina di accesso per indicarlo. */
 export const lastLoginMethodCookie = "fiscalbay.ultimo_accesso";
+
+/** Conserva il consenso al negozio dato con «Registrati con eBay», in attesa della conferma. */
+async function captureStoreGrant(
+  env: Env,
+  profile: z.infer<typeof ebayIdentitySchema>,
+  tokens: OAuth2Tokens,
+) {
+  const language = await storeGrantLanguage();
+  const { accessToken, refreshToken, accessTokenExpiresAt, refreshTokenExpiresAt } = tokens;
+  if (!language || !accessToken || !refreshToken || !refreshTokenExpiresAt) return;
+  // Stryker disable next-line ConditionalExpression: Better Auth assegna sempre una scadenza.
+  if (!accessTokenExpiresAt) return;
+  const { saveSignupGrant } = await import("./domain/store-link.server");
+  await saveSignupGrant(env, {
+    ebayUserId: profile.userId,
+    username: profile.username,
+    language,
+    tokens: {
+      accessToken,
+      accessExpiresAt: accessTokenExpiresAt.toISOString(),
+      refreshToken,
+      refreshExpiresAt: refreshTokenExpiresAt.toISOString(),
+    },
+  }).catch((error: unknown) => logFailure({ error, operation: "store_link" }));
+}
 
 function authPlugins(env: Env, appOrigin: URL): BetterAuthPlugin[] {
   return [
     ...(env.BETTER_AUTH_API_KEY
       ? [dash({ apiKey: env.BETTER_AUTH_API_KEY }), durableBackground]
       : []),
+    // Soltanto la conferma dell'indirizzo: il codice nasce con l'email del link e gli altri
+    // percorsi del plugin sono chiusi nella route di Auth.
+    emailOTP({
+      otpLength: 6,
+      expiresIn: emailVerificationSeconds,
+      allowedAttempts: 5,
+      storeOTP: "hashed",
+      disableSignUp: true,
+      sendVerificationOTP: async () => {},
+    }),
     // Una nuova password si confronta con Have I Been Pwned, che riceve soltanto i primi cinque
     // caratteri del suo SHA-1. Attivo sui domini HTTPS: le prove locali non escono in rete.
     haveIBeenPwned({
@@ -392,6 +491,7 @@ function authPlugins(env: Env, appOrigin: URL): BetterAuthPlugin[] {
               logFailure({ error, operation: "sign_in" });
               return null;
             }
+            await captureStoreGrant(env, profile, tokens);
             // Senza email Better Auth rifiuta il login con `email_not_found` e la pagina di
             // errore indirizza agli altri metodi. L'email business non è verificata da eBay:
             // FiscalBay invia la propria conferma e non la collega da sola a un utente esistente.

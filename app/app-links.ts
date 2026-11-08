@@ -106,6 +106,21 @@ export const notificationsPath = "/api/v1/notifications";
 /** Controllo delle password trapelate, chiesto dal browser prima dell'invio dei moduli. */
 export const passwordCheckPath = "/api/v1/password-check";
 
+/** Conferma dell'email con il codice, raggiunta soltanto dal modulo dell'app. */
+export const emailCodeConfirmPath = "/email-otp/verify-email";
+
+/** Percorsi del plugin dei codici che l'app non usa: la route di Auth li chiude. */
+export const closedEmailCodePaths = [
+  "/email-otp/send-verification-otp",
+  "/email-otp/check-verification-otp",
+  "/email-otp/request-password-reset",
+  "/email-otp/reset-password",
+  "/email-otp/request-email-change",
+  "/email-otp/change-email",
+  "/forget-password/email-otp",
+  "/sign-in/email-otp",
+];
+
 /** Campo nascosto del modulo di accesso: la password usata risulta trapelata. */
 export const leakedPasswordField = "password-trapelata";
 

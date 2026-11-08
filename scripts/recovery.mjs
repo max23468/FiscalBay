@@ -169,7 +169,13 @@ const stampTables = [
 const written = { service_settings: [["telegram_sends"]] };
 
 /** Sessioni, verifiche e collegamenti eBay in corso: nessuno torna valido da una copia. */
-const transientTables = ["session", "verification", "ebay_store_link_sessions", "service_activity"];
+const transientTables = [
+  "session",
+  "verification",
+  "ebay_store_link_sessions",
+  "ebay_signup_grants",
+  "service_activity",
+];
 
 export const ident = (name) => `"${String(name).replaceAll('"', '""')}"`;
 

@@ -5,6 +5,7 @@ import { accessNotice, signInNotice, type SignInNotice } from "./access-notice";
 import { currentSession } from "./account-area.server";
 import {
   accessPath,
+  emailCodeConfirmPath,
   leakedPasswordField,
   ordersPath,
   originUrl,
@@ -37,12 +38,22 @@ import { isSameOrigin } from "./account-area.server";
 import { registeredUserExists } from "./domain/registration.server";
 import { recordSignupSource } from "./domain/signup-sources.server";
 import { formatSource, parseSource, sourceParam } from "./signup-source";
-import { tracePhase } from "./errors";
+import { logFailure, tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
+import { activateSignupGrant } from "./domain/store-link.server";
+import { ebayStoreGrantScopes } from "./integrations/ebay/store-link.server";
 import { turnstileActions, turnstileField } from "./turnstile";
 import { turnstileFailure } from "./turnstile.server";
 
 const noStore = { "cache-control": "no-store" };
+
+/** Collega il negozio autorizzato in registrazione; un guasto non ferma chi ha confermato. */
+function storeGrantOutcome(request: Request, userId: string) {
+  return activateSignupGrant({ env, userId, request }).catch((error: unknown) => {
+    logFailure({ request, error, operation: "store_link" });
+    return null;
+  });
+}
 
 /**
  * Accessi con password non riusciti dallo stesso IP prima che il modulo chieda Turnstile: chi
@@ -186,7 +197,7 @@ export async function accessAction(request: Request) {
   // senza conservarli nel browser; password e token Turnstile non tornano mai indietro.
   const failed = (
     value: SignInNotice,
-    tab: "accedi" | "registrati" | "completa",
+    tab: "accedi" | "registrati" | "completa" | "conferma",
     wait?: number | null,
   ) => {
     const values: Record<string, string> = {};
@@ -216,6 +227,25 @@ export async function accessAction(request: Request) {
     return response;
   };
 
+  // La conferma dell'email apre la pagina Piano con l'offerta scelta in Prezzi, se c'è.
+  const afterConfirmation = () => {
+    const chosen = planChoice(field(planChoiceParam));
+    return chosen ? `${localizedPath(language, planPath)}?${planChoiceParam}=${chosen}` : base;
+  };
+
+  // Pagina del codice dopo la registrazione: restano soltanto indirizzo e offerta scelta.
+  const confirmation = (value: SignInNotice | null, status = 200) =>
+    data(
+      {
+        notice: value ? signInNotice(value, language) : null,
+        remembered: {
+          tab: "conferma",
+          values: { email: field("email"), [planChoiceParam]: field(planChoiceParam) },
+        },
+      },
+      { status, headers: noStore },
+    );
+
   // Dopo l'uscita la radice torna a essere il sito pubblico, senza la scelta di visita.
   if (intent === "esci") {
     const response = redirectWithCookies(localizedPath(language), await forward("/sign-out"));
@@ -223,13 +253,21 @@ export async function accessAction(request: Request) {
     return response;
   }
 
-  if (intent === "google" || intent === "ebay") {
-    const response = await forward("/sign-in/social", {
-      provider: intent,
-      callbackURL: destination,
-      errorCallbackURL: `${localizedPath(language, "/auth/error")}?${new URLSearchParams({ provider: intent, ...(returnTo ? { returnTo } : {}) })}`,
+  if (intent === "google" || intent === "ebay" || intent === "ebay-registrazione") {
+    const provider = intent === "google" ? "google" : "ebay";
+    const registering = intent === "ebay-registrazione";
+    const additionalData = {
       // Lo state firmato la porta al callback, dove Better Auth crea l'eventuale nuovo utente.
-      ...(source ? { additionalData: { signupSource: formatSource(source) } } : {}),
+      ...(source ? { signupSource: formatSource(source) } : {}),
+      ...(registering ? { storeGrantLanguage: language } : {}),
+    };
+    const response = await forward("/sign-in/social", {
+      provider,
+      callbackURL: destination,
+      errorCallbackURL: `${localizedPath(language, "/auth/error")}?${new URLSearchParams({ provider, ...(returnTo ? { returnTo } : {}) })}`,
+      // Chi si registra con eBay autorizza subito anche il negozio: un solo consenso.
+      ...(registering ? { scopes: [...ebayStoreGrantScopes] } : {}),
+      ...(source || registering ? { additionalData } : {}),
     });
     if (!response.ok) return notice(response.status === 429 ? "troppi-tentativi" : "errore");
     const { url } = await response.clone().json<{ url: string }>();
@@ -275,17 +313,13 @@ export async function accessAction(request: Request) {
     if (wait) return failed("troppi-tentativi", "registrati", wait);
     const check = await turnstileFailure(env, request, form, turnstileActions.signUp);
     if (check) return failed(check, "registrati");
-    // La conferma dell'email apre la pagina Piano con l'offerta scelta in Prezzi, se c'è.
-    const chosen = planChoice(field(planChoiceParam));
     const response = await forward(
       "/sign-up/email",
       {
         email: field("email"),
         password: field("password"),
         name: `${profile.firstName} ${profile.lastName}`,
-        callbackURL: chosen
-          ? `${localizedPath(language, planPath)}?${planChoiceParam}=${chosen}`
-          : base,
+        callbackURL: afterConfirmation(),
       },
       true,
     );
@@ -313,7 +347,47 @@ export async function accessAction(request: Request) {
       });
       await recordSignupSource(env.DB, user.id, source, new Date());
     }
-    return notice("registrato");
+    return confirmation(null);
+  }
+
+  // Codice di 6 cifre della conferma dell'email, sulla pagina dopo la registrazione o, con la
+  // sessione aperta, sull'avviso degli Ordini. Un codice errato, scaduto o per un indirizzo già
+  // confermato ha la stessa risposta, così la pagina non rivela chi usa FiscalBay.
+  if (intent === "conferma-codice") {
+    const session = await readSession(env, request);
+    if (session?.user.emailVerified) return redirect(base, 303);
+    const answer = (value: SignInNotice, status: number) =>
+      session ? notice(value, base) : confirmation(value, status);
+    if (await authLimitWait(env, request, emailCodeConfirmPath))
+      return answer("troppi-tentativi", 429);
+    const otp = field("codice").replace(/\D/gu, "");
+    if (otp.length !== 6) return answer("codice-errato", 400);
+    const response = await forward(
+      emailCodeConfirmPath,
+      { email: session?.user.email ?? field("email"), otp },
+      true,
+    );
+    // Account nato da un provider: il codice vale soltanto nel browser che lo ha creato.
+    if (response.status === 302) return redirect(response.headers.get("location")!, 303);
+    if (response.status === 429) return answer("troppi-tentativi", 429);
+    if (!response.ok) return answer("codice-errato", 400);
+    const { user } = await response.clone().json<{ user: { id: string } }>();
+    const store = await storeGrantOutcome(request, user.id);
+    return redirectWithCookies(store ? `${base}?negozio=${store}` : afterConfirmation(), response);
+  }
+
+  if (intent === "reinvia-codice") {
+    if (await authLimitWait(env, request, "/send-verification-email"))
+      return confirmation("troppi-tentativi", 429);
+    const check = await turnstileFailure(env, request, form, turnstileActions.emailLink);
+    if (check) return confirmation(check, 400);
+    const response = await forward(
+      "/send-verification-email",
+      { email: field("email"), callbackURL: afterConfirmation() },
+      true,
+    );
+    if (response.status === 429) return confirmation("troppi-tentativi", 429);
+    return response.ok ? confirmation("verifica-inviata") : confirmation("errore", 400);
   }
 
   // Cancellazione dell'account e conferma dell'identità sul posto, o con uscita e nuovo
@@ -365,7 +439,8 @@ export async function accessAction(request: Request) {
         ? undefined
         : { marketing: status.marketingChosen ? undefined : field("marketing") === "on" },
     });
-    return redirect(base, 303);
+    const store = await storeGrantOutcome(request, session.user.id);
+    return redirect(store ? `${base}?negozio=${store}` : base, 303);
   }
 
   if (await signInChallenge(request)) {

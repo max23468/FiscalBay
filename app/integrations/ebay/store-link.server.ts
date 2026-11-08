@@ -8,11 +8,15 @@ import { basicAuthorization, ebayConfiguration, type EbayAccess } from "./enviro
 
 // Il collegamento del negozio non chiede l'email: resta separato dal login eBay. Le notifiche
 // servono soltanto a sottoscrivere `ORDER_CONFIRMATION` del venditore (D235).
+export const ebayStoreGrantScopes = [
+  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
+  "https://api.ebay.com/oauth/api_scope/commerce.notification.subscription",
+] as const;
+
 export const ebayStoreScopes = [
   "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/commerce.identity.readonly",
-  "https://api.ebay.com/oauth/api_scope/sell.fulfillment.readonly",
-  "https://api.ebay.com/oauth/api_scope/commerce.notification.subscription",
+  ...ebayStoreGrantScopes,
 ] as const;
 
 const linkSessionTtlMilliseconds = 10 * 60 * 1000;
@@ -172,11 +176,14 @@ export async function recordStoreLinkOutcome(
     .run();
 }
 
-/** Consenso concesso dal venditore: identità eBay stabile, token e accesso per le prime letture. */
+/**
+ * Consenso concesso dal venditore: identità eBay stabile, token e accesso per le prime letture;
+ * null se il token di accesso è già scaduto e va rinnovato.
+ */
 export type StoreConsent = {
   identity: EbayStoreIdentity;
   tokens: SellerTokens;
-  access: EbayAccess;
+  access: EbayAccess | null;
 };
 
 /** Scambia il codice del callback con i token del negozio e legge l'identità eBay del venditore. */

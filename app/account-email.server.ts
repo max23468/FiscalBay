@@ -257,17 +257,24 @@ export type AuthEmailKind = "verify" | "reset" | "change-email" | "delete-accoun
 export function sendAuthEmail(
   env: Env,
   kind: AuthEmailKind,
-  input: { to: string; url: string; newEmail?: string },
+  input: { to: string; url: string; newEmail?: string; code?: string },
 ): void {
   const language = linkLanguage(input.url);
+  const email = authEmail(kind, language, input.newEmail);
   waitUntil(
     sendAccountEmail(env, {
       language,
       to: input.to,
       url: input.url,
-      email: authEmail(kind, language, input.newEmail),
+      email: input.code ? withCode(email, input.code, language) : email,
     }).catch((error: unknown) => logFailure({ error, operation: "account_email" })),
   );
+}
+
+/** La conferma dell'indirizzo porta anche il codice da inserire nella pagina. */
+function withCode(email: AccountEmail, code: string, language: Language): AccountEmail {
+  const line = `${language === "en" ? "Your confirmation code:" : "Il tuo codice di conferma:"} ${code}`;
+  return { ...email, preview: line, paragraphs: [line, ...email.paragraphs] };
 }
 
 /**

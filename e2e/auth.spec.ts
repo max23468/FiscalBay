@@ -328,6 +328,11 @@ for (const language of ["it", "en"] as const) {
       page,
       browserErrors: errors,
     }) => {
+      // La verifica parte appena si tocca il modulo: qui si guarda la console della pagina, non
+      // quella del widget di Cloudflare, che su WebKit registra errori propri.
+      await page.route("**/turnstile/v0/api.js*", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: "" }),
+      );
       await page.setViewportSize({ width, height: 666 });
       await page.emulateMedia({ reducedMotion: "reduce" });
       const prefix = language === "it" ? "" : "/en";
@@ -877,13 +882,16 @@ for (const language of ["it", "en"] as const) {
     ).toBeVisible();
 
     // Una password nota nelle violazioni ferma la registrazione accanto al campo; il controllo
-    // riceve la sola password, con un nome utente fisso al posto dell'email.
+    // parte all'uscita dal campo, una volta sola, e riceve la sola password, con un nome
+    // utente fisso al posto dell'email.
     const checks: unknown[] = [];
     await page.route("**/api/v1/password-check", async (route) => {
       checks.push(route.request().postDataJSON());
       await route.fulfill({ json: { leaked: true } });
     });
+    await password.fill("una-password-sicura");
     await terms.click();
+    await expect.poll(() => checks.length).toBe(1);
     await submit.click();
     await expect(password).toBeFocused();
     await expect(password).toHaveAccessibleDescription(
@@ -891,12 +899,55 @@ for (const language of ["it", "en"] as const) {
         ? "Questa password compare in violazioni di dati note. Scegline un’altra."
         : "This password appears in known data breaches. Choose a different one.",
     );
-    expect(checks).toEqual([{ username: "fiscalbay", password: "una-password-lunga" }]);
+    expect(checks).toEqual([{ username: "fiscalbay", password: "una-password-sicura" }]);
     await expect(page).toHaveURL(it ? /\/accesso$/u : /\/en\/sign-in$/u);
     await password.fill("un-altra-password-lunga");
     await expect(password).not.toHaveAttribute("aria-invalid");
   });
 }
+
+test("con i controlli già pronti il clic su Crea account invia subito il modulo", async ({
+  page,
+}) => {
+  await page.route("**/turnstile/v0/api.js*", (route) =>
+    route.fulfill({
+      contentType: "text/javascript",
+      body: `window.turnstile = {
+        render(_, options) { this.options = options; return "widget"; },
+        execute() { this.options.callback("token-anticipato"); },
+        reset() {}, remove() {},
+      };`,
+    }),
+  );
+  const checks: unknown[] = [];
+  await page.route("**/api/v1/password-check", async (route) => {
+    checks.push(route.request().postDataJSON());
+    await route.fulfill({ json: { leaked: false } });
+  });
+  await page.route(
+    (url) => url.pathname === "/accesso",
+    (route) =>
+      route.request().method() === "POST"
+        ? route.fulfill({ status: 200, contentType: "text/html", body: "<title>inviato</title>" })
+        : route.continue(),
+  );
+  await page.goto("/accesso?registrati");
+  await networkIdle(page);
+  const signUp = page.getByRole("tabpanel", { name: "Crea account", exact: true });
+  await signUp.getByRole("textbox", { name: "Nome", exact: true }).fill("Maria");
+  await signUp.getByRole("textbox", { name: "Cognome" }).fill("Rossi");
+  await signUp.getByRole("textbox", { name: "Email" }).fill("maria@example.invalid");
+  await signUp.getByLabel(/Password/).fill("una-password-lunga");
+  await signUp.getByRole("checkbox").first().click();
+  await expect.poll(() => checks.length).toBe(1);
+
+  const sent = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname === "/accesso",
+  );
+  await signUp.getByRole("button", { name: "Crea account", exact: true }).click();
+  expect((await sent).postData()).toContain("token-anticipato");
+  expect(checks).toHaveLength(1);
+});
 
 test("l'esito dell'accesso esce dall'indirizzo e non torna alla ricarica", async ({ page }) => {
   const text = "Negozio già collegato a un altro account";

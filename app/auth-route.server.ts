@@ -15,7 +15,7 @@ import {
 } from "./integrations/ebay/store-link.server";
 import { linkLanguage, notifySecurityEvent } from "./account-email.server";
 import { logFailure, tracePhase } from "./errors";
-import { appBase, ordersPath } from "./app-links";
+import { appBase, closedEmailCodePaths, emailCodeConfirmPath, ordersPath } from "./app-links";
 import { localizedPath } from "./i18n";
 import { sha256Hex } from "./sealed.server";
 import type { RequestLimit } from "./request-limits";
@@ -36,6 +36,7 @@ const closedAuthPaths = new Set([
   "/api/auth/unlink-account",
   "/api/auth/list-sessions",
   "/api/auth/update-session",
+  ...closedEmailCodePaths.map((path) => `/api/auth${path}`),
 ]);
 // Registrazione con password, recupero della password e nuovo link di conferma passano soltanto
 // dai moduli dell'app, che verificano prima Turnstile: chiamati direttamente lo aggirerebbero.
@@ -43,6 +44,7 @@ const formOnlyPaths = new Set([
   "/api/auth/sign-up/email",
   "/api/auth/request-password-reset",
   "/api/auth/send-verification-email",
+  `/api/auth${emailCodeConfirmPath}`,
 ]);
 const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/generate-register-options",
@@ -85,6 +87,7 @@ function noStore(response: Response): Response {
 const attemptLimits = (): Array<{ paths: RegExp; limit: RequestLimit; anyMethod?: true }> => [
   { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, limit: "attempts" },
   { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, limit: "attempts" },
+  { paths: /^\/email-otp\/verify-email$/u, limit: "attempts" },
   {
     paths: /^\/passkey\/generate-(authenticate|register)-options(\/|$)/u,
     limit: "attempts",
@@ -128,9 +131,11 @@ export function tooManyAuthRequests(wait: number): Response {
  * Soglie per indirizzo email, indipendenti dall'IP: chi cambia rete non prova più password
  * sullo stesso account né riempie di email la casella di un altro. Il limite del login vale
  * solo per l'accesso con password: Google, eBay e passkey restano disponibili al titolare.
+ * Come per i tentativi, l'elenco si compone a ogni richiesta per la mutation.
  */
-const addressLimits = [
+const addressLimits = () => [
   { paths: /^\/sign-in\/email$/u, window: 900, max: 10 },
+  { paths: /^\/email-otp\/verify-email$/u, window: 900, max: 10 },
   {
     paths: /^\/(sign-up\/email|send-verification-email|request-password-reset|forget-password)$/u,
     window: 3600,
@@ -196,7 +201,7 @@ function formBody(request: Request): boolean {
 async function addressWait(request: Request, env: Env): Promise<number | "unsupported" | null> {
   if (request.method !== "POST" || !env.APP_ORIGIN.startsWith("https:")) return null;
   const path = authPath(request);
-  const rule = addressLimits.find(({ paths }) => paths.test(path));
+  const rule = addressLimits().find(({ paths }) => paths.test(path));
   if (!rule) return null;
   if (formBody(request)) return "unsupported";
   const address = await addressKey(request);

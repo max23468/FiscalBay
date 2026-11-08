@@ -158,6 +158,15 @@ eBay ha deprecato `GetOrders` il 2026-11-06 e lo spegne il 2027-06-30 ([stato de
 
 I coordinatori di `Pubblica` e `Promuovi` aspettano sui runner del Mac dell'owner quando è acceso, una qualifica automatica superata lascia il posto alla testa più recente, PR e qualifiche hanno un tetto di job paralleli e `Promuovi` su un commit certificato non attende altri controlli ([D321](decisions/DECISION_REGISTER.md)). Con il Mac spento i coordinatori restano sulle Actions; un coordinatore a eventi resta un'evoluzione possibile.
 
+<a id="2-0-13"></a>
+#### 2.0-13 · Registrazione più rapida
+
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§7](product/ACCOUNTS_AND_STORES.md#s07) · [§29](engineering/SECURITY_AND_PRIVACY.md#s29)
+
+Conferma dell'email con codice di 6 cifre o link, pulsante per aprire la casella, un solo consenso eBay per account e negozio, verifica anti automazione e controllo della password anticipati rispetto all'invio ([D328](decisions/DECISION_REGISTER.md)).
+
+**Criterio di completamento:** codice, tentativi, nuovo invio e consenso unico provati con test; il consenso eBay reale con i permessi estesi riletto sul test.
+
 <a id="versione-2-1"></a>
 ## 2.1 · Comunicazioni
 

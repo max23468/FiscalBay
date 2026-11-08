@@ -205,6 +205,9 @@ export async function runEbayAccountDeletion(
             storeIdentity(job.ebay_environment, job.ebay_user_id),
           ),
         ),
+      db
+        .prepare("DELETE FROM ebay_signup_grants WHERE ebay_user_id = ?2 AND ?1 = 'production'")
+        .bind(job.ebay_environment, job.ebay_user_id),
       // L'accesso con eBay esiste soltanto in Production; gli altri metodi dell'utente restano.
       db
         .prepare(`DELETE FROM "account" WHERE "providerId" = 'ebay' AND "accountId" = ?2

@@ -41,9 +41,11 @@ function loadTurnstile(): Promise<TurnstileApi> {
 type Waiting = { resolve: (token: string) => void; reject: () => void };
 
 /**
- * Verifica Turnstile di un modulo (§29), eseguita all'invio: lo script arriva soltanto allora e il
- * token nasce subito prima della richiesta, quindi non scade mentre si compila. Il widget compare
- * soltanto quando Cloudflare chiede un'interazione. Nell'anteprima, senza chiave del sito, e senza azione non c'è verifica.
+ * Verifica Turnstile di un modulo (§29). Senza `prepare` lo script arriva all'invio e il token
+ * nasce subito prima della richiesta; `prepare`, chiamata quando si comincia a compilare, avvia
+ * la verifica in anticipo e l'invio usa il token già pronto, o ne chiede uno nuovo se è scaduto.
+ * Il widget compare soltanto quando Cloudflare chiede un'interazione. Nell'anteprima, senza
+ * chiave del sito, e senza azione non c'è verifica.
  */
 export function useTurnstile(action: TurnstileAction | null) {
   const root = useRouteLoaderData<{ turnstileSiteKey?: string }>("root");
@@ -54,7 +56,10 @@ export function useTurnstile(action: TurnstileAction | null) {
   const input = useRef<HTMLInputElement>(null);
   const widget = useRef<string | null>(null);
   const waiting = useRef<Waiting | null>(null);
-  const busy = useRef(false);
+  // Verifica in corso, condivisa fra anticipo e invio, e token pronto non ancora usato.
+  const pending = useRef<Promise<string | null> | null>(null);
+  const ready = useRef<string | null>(null);
+  const claiming = useRef(false);
   const [failed, setFailed] = useState(false);
   // Senza interazione il widget resta fuori dal flusso del modulo, che non cambia spaziatura.
   const [interactive, setInteractive] = useState(false);
@@ -69,12 +74,32 @@ export function useTurnstile(action: TurnstileAction | null) {
     };
   }, [siteKey]);
 
-  /** Nuovo token per un invio; null se la verifica non è riuscita. */
+  /** Verifica in corso o nuova; null se non è riuscita. */
+  function verify(): Promise<string | null> {
+    pending.current ??= run().finally(() => {
+      pending.current = null;
+    });
+    return pending.current;
+  }
+
+  /** Token per un invio, usato una volta sola: quello anticipato o uno nuovo. */
   async function token(): Promise<string | null> {
-    // Un secondo invio mentre la verifica è in corso non ne avvia un'altra.
-    if (busy.current) return null;
-    busy.current = true;
+    // Un secondo invio mentre il primo attende la verifica non ne riusa il token.
+    if (claiming.current) return null;
+    claiming.current = true;
     setFailed(false);
+    try {
+      const value = ready.current ?? (await verify());
+      ready.current = null;
+      // L'errore compare all'invio: una verifica anticipata fallita non disturba chi compila.
+      if (!value) setFailed(true);
+      return value;
+    } finally {
+      claiming.current = false;
+    }
+  }
+
+  async function run(): Promise<string | null> {
     try {
       const api = await loadTurnstile();
       return await new Promise<string>((resolve, reject) => {
@@ -103,6 +128,9 @@ export function useTurnstile(action: TurnstileAction | null) {
                 return true;
               },
               "timeout-callback": () => settle(null),
+              "expired-callback": () => {
+                ready.current = null;
+              },
               "unsupported-callback": () => settle(null),
               "before-interactive-callback": () => setInteractive(true),
               "after-interactive-callback": () => setInteractive(false),
@@ -112,10 +140,7 @@ export function useTurnstile(action: TurnstileAction | null) {
         api.execute(widget.current);
       });
     } catch {
-      setFailed(true);
       return null;
-    } finally {
-      busy.current = false;
     }
   }
 
@@ -123,6 +148,14 @@ export function useTurnstile(action: TurnstileAction | null) {
     enabled: Boolean(siteKey),
     /** Token per un invio fatto dal codice; stringa vuota senza verifica. */
     token: async () => (siteKey ? token() : ""),
+    /** Avvia la verifica prima dell'invio; senza effetto se un token è già pronto o in arrivo. */
+    prepare() {
+      if (!siteKey || ready.current || pending.current) return;
+      void verify().then((value) => {
+        // Arrivato mentre un invio lo attende: è già suo.
+        if (!claiming.current) ready.current = value;
+      });
+    },
     /**
      * Invio di un modulo nativo, da chiamare in `onSubmit` dopo la convalida: ferma l'invio,
      * scrive il token nel modulo e lo ripete con lo stesso pulsante.
@@ -137,10 +170,13 @@ export function useTurnstile(action: TurnstileAction | null) {
       const submitter = (event.nativeEvent as SubmitEvent).submitter;
       void token().then((value) => {
         if (!value) return;
-        field.value = value;
-        form.requestSubmit(submitter);
-        // Il token è già nei dati inviati: tornando indietro la pagina ne chiede uno nuovo.
-        field.value = "";
+        // Con il token già pronto siamo ancora dentro l'evento di invio, che ignorerebbe il nuovo.
+        setTimeout(() => {
+          field.value = value;
+          form.requestSubmit(submitter);
+          // Il token è già nei dati inviati: tornando indietro la pagina ne chiede uno nuovo.
+          field.value = "";
+        });
       });
     },
     field: siteKey ? (

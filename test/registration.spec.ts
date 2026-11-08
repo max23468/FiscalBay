@@ -29,6 +29,7 @@ import {
   accessError,
   accessFor,
   accessForm,
+  codePage,
   securityForm,
   homeFor,
 } from "./fixtures/account-route-fixtures";
@@ -43,6 +44,7 @@ import {
 import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 import { siteverify, testToken } from "./fixtures/turnstile-fixtures";
 import { turnstileField } from "../app/turnstile";
+import { planChoiceParam } from "../app/app-links";
 import { recordSignupSource } from "../app/domain/signup-sources.server";
 
 beforeEach(resetDatabase);
@@ -196,6 +198,105 @@ describe("registrazione e verifica del contatto", () => {
     expect(batch).not.toHaveBeenCalled();
   });
 
+  describe("codice di conferma", () => {
+    const signUpFor = async (email: string) => {
+      const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+      await accessForm("/accesso", {
+        intent: "registrati",
+        ...person,
+        email,
+        password,
+        termini: "on",
+      });
+      await vi.waitFor(() => expect(send).toHaveBeenCalled());
+      const { text } = send.mock.lastCall![0] as { text: string };
+      return /: (\d{6})/u.exec(text)![1]!;
+    };
+    const submit = (email: string, codice: string) =>
+      accessForm("/accesso", { intent: "conferma-codice", email, codice });
+    const other = (code: string) => (code === "000000" ? "000001" : "000000");
+    afterEach(() => vi.restoreAllMocks());
+
+    it("apre la sessione, si conserva solo come impronta e vale una volta", async () => {
+      const email = "codice@example.invalid";
+      const code = await signUpFor(email);
+      const stored = await env.DB.prepare('SELECT value FROM "verification" WHERE identifier = ?')
+        .bind(`email-verification-otp-${email}`)
+        .first<{ value: string }>();
+      expect(stored!.value).not.toContain(code);
+
+      const wrong = await submit(email, other(code));
+      expect(wrong.headers.getSetCookie()).toEqual([]);
+      expect(await accessError(wrong)).toMatchObject({
+        status: 400,
+        key: "codice-errato",
+        tab: "conferma",
+        values: { email },
+      });
+
+      const confirmed = await submit(email, `${code.slice(0, 3)} ${code.slice(3)}`);
+      expect(confirmed.status).toBe(303);
+      expect(confirmed.headers.get("location")).toBe("/app/ordini");
+      expect(sessionCookie(confirmed)).toContain("session_token");
+      expect(
+        await env.DB.prepare('SELECT "emailVerified" AS verified FROM "user" WHERE email = ?')
+          .bind(email)
+          .first(),
+      ).toEqual({ verified: 1 });
+      expect(await accessError(await submit(email, code))).toMatchObject({ key: "codice-errato" });
+    });
+
+    it("dopo cinque codici errati non vale più, come per un indirizzo senza codice", async () => {
+      const email = "tentativi@example.invalid";
+      const code = await signUpFor(email);
+      for (let attempt = 0; attempt < 5; attempt += 1) await submit(email, other(code));
+      const refused = await accessError(await submit(email, code));
+      expect(refused).toMatchObject({ status: 400, key: "codice-errato" });
+      expect(await accessError(await submit("nessuno@example.invalid", code))).toEqual({
+        ...refused,
+        values: { email: "nessuno@example.invalid", [planChoiceParam]: "" },
+      });
+    });
+
+    it("un nuovo invio sostituisce il codice e la pagina resta quella del codice", async () => {
+      const email = "reinvio@example.invalid";
+      const first = await signUpFor(email);
+      const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+      send.mockClear();
+      const resent = await accessForm("/accesso", {
+        intent: "reinvia-codice",
+        email,
+        [turnstileField]: testToken,
+      });
+      expect((await codePage(resent)).tab).toBe("conferma");
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      const { text } = send.mock.lastCall![0] as { text: string };
+      const second = /: (\d{6})/u.exec(text)![1]!;
+      expect(
+        await env.DB.prepare('SELECT COUNT(*) AS total FROM "verification" WHERE identifier = ?')
+          .bind(`email-verification-otp-${email}`)
+          .first(),
+      ).toEqual({ total: 1 });
+      if (first !== second)
+        expect(await accessError(await submit(email, first))).toMatchObject({
+          key: "codice-errato",
+        });
+      expect((await submit(email, second)).status).toBe(303);
+    });
+
+    it("porta alla pagina Piano l'offerta scelta in Prezzi", async () => {
+      const email = "piano@example.invalid";
+      const code = await signUpFor(email);
+      const confirmed = await accessForm("/accesso", {
+        intent: "conferma-codice",
+        email,
+        codice: code,
+        [planChoiceParam]: "annual",
+      });
+      expect(confirmed.headers.get("location")).toContain(`${planChoiceParam}=annual`);
+    });
+  });
+
   it("registra senza consensi preselezionati, apre la sessione dal link e non rivela gli indirizzi già registrati", async () => {
     const email = "registrazione@example.invalid";
     const rejected = [
@@ -224,8 +325,12 @@ describe("registrazione e verifica del contatto", () => {
     const register = (path: string) =>
       accessForm(path, { intent: "registrati", ...person, email, password, termini: "on" });
     const created = await register("/en/sign-in");
-    expect(created.status).toBe(303);
-    expect(created.headers.get("location")).toBe("/en/sign-in?accesso=registrato");
+    expect(await codePage(created)).toMatchObject({
+      status: 200,
+      notice: null,
+      tab: "conferma",
+      values: { email },
+    });
     expect(created.headers.getSetCookie()).toEqual([]);
     const user = await env.DB.prepare(
       'SELECT id, name, "emailVerified" FROM "user" WHERE email = ?',
@@ -259,7 +364,7 @@ describe("registrazione e verifica del contatto", () => {
     // Lo stesso indirizzo riceve la stessa risposta, senza sessione né nuovo account; il
     // titolare ne riceve avviso.
     const duplicate = await register("/accesso");
-    expect(duplicate.headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect((await codePage(duplicate)).tab).toBe("conferma");
     expect(duplicate.headers.getSetCookie()).toEqual([]);
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
     expect(send.mock.calls[1]![0]).toMatchObject({
@@ -362,7 +467,7 @@ describe("registrazione e verifica del contatto", () => {
       password,
       termini: "on",
     });
-    expect(created.headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect((await codePage(created)).tab).toBe("conferma");
     const user = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
       .bind(email)
       .first<{ id: string }>();
@@ -385,7 +490,7 @@ describe("registrazione e verifica del contatto", () => {
     const privateId = await env.DB.prepare('SELECT id FROM "user" WHERE email = ?')
       .bind("privato@example.invalid")
       .first<{ id: string }>();
-    expect(privateUser.headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect((await codePage(privateUser)).tab).toBe("conferma");
     expect(await profileOf(privateId!.id)).toMatchObject({ company_name: null });
   });
 
@@ -824,7 +929,7 @@ describe("provenienza dell'iscrizione", () => {
       accessForm(path, { intent: "registrati", ...person, email, password, termini: "on" });
     const email = "provenienza-password@example.invalid";
     const created = await register(`/accesso?registrati&${via("google:/prezzi")}`, email);
-    expect(created.headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect((await codePage(created)).tab).toBe("conferma");
     expect(created.headers.getSetCookie()).toEqual([]);
     expect(await sourceOf(email)).toEqual({ channel: "google", first_page: "/prezzi" });
     // Un nuovo invio per lo stesso indirizzo non crea un account e non cambia la provenienza.
@@ -905,7 +1010,7 @@ describe("Turnstile sugli ingressi pubblici", () => {
   afterEach(() => send.mockRestore());
 
   it("registra con il token del modulo verificato da Siteverify con la chiave dell'ambiente", async () => {
-    expect((await signUp()).headers.get("location")).toBe("/accesso?accesso=registrato");
+    expect((await codePage(await signUp())).tab).toBe("conferma");
     expect(siteverify.requests).toEqual([
       { secret: env.TURNSTILE_SECRET_KEY, response: testToken },
     ]);

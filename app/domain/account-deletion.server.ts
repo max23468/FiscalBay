@@ -216,6 +216,10 @@ async function deleteUser(
   await env.DB.batch([
     env.DB.prepare("DELETE FROM workspace_members WHERE user_id = ?").bind(userId),
     env.DB.prepare("DELETE FROM ebay_store_link_sessions WHERE user_id = ?").bind(userId),
+    env.DB.prepare(
+      `DELETE FROM ebay_signup_grants WHERE ebay_user_id IN (
+         SELECT "accountId" FROM "account" WHERE "userId" = ? AND "providerId" = 'ebay')`,
+    ).bind(userId),
     // Link di Auth ancora aperti, come la nuova password, legati all'utente.
     env.DB.prepare('DELETE FROM "verification" WHERE "value" = ?').bind(userId),
     env.DB.prepare('DELETE FROM "user" WHERE "id" = ?').bind(userId),
