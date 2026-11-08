@@ -205,6 +205,20 @@ it("rimanda soltanto le immagini quando è la loro quota a superare metà", asyn
   expect(await refs()).toMatchObject({ detail_retry_at: "2026-09-02T06:00:00.000Z" });
 });
 
+it.each([
+  ["2026-09-02T07:00:00.000Z", "2026-09-02T06:00:00.000Z"],
+  ["2026-09-02T05:00:00.000Z", "2026-09-02T06:00:00.000Z"],
+])(
+  "con lettura fiscale e immagini rimandate riparte al più tardo degli azzeramenti (%s, %s)",
+  async (orders, items) => {
+    await quota("GetOrders", 50, orders);
+    await quota("GetItem", 50, items);
+    const both = ebay({ orders: [foreign(18)] });
+    expect(await acquire(both)).toBe("complete");
+    expect(await refs()).toMatchObject({ detail_retry_at: [orders, items].sort().at(-1) });
+  },
+);
+
 it("conta le immagini già lette nell'esecuzione per il budget del giorno", async () => {
   await quota("GetItem", 49);
   const two = ebay({
@@ -337,5 +351,85 @@ it("conserva l'azzeramento della quota, o nessuno se eBay non lo indica", async 
   ).toEqual([
     { call: "GetItem", reset_at: null },
     { call: "GetOrders", reset_at: reset },
+  ]);
+});
+
+/** Risposta `GetOrders` con un blocco per ogni ordine indicato, senza identificativi fiscali. */
+const tradingOrders =
+  (...ids: string[]) =>
+  () =>
+    new Response(
+      `<GetOrdersResponse><Ack>Success</Ack><HasMoreOrders>false</HasMoreOrders><OrderArray>` +
+        ids.map((id) => `<Order><OrderID>${id}</OrderID></Order>`).join("") +
+        `</OrderArray></GetOrdersResponse>`,
+    );
+
+it("una lettura Trading senza il dato fiscale non toglie quello già letto", async () => {
+  const unpaid = foreign(1);
+  const first = ebay({ orders: [{ ...unpaid, orderPaymentStatus: "PENDING" }] });
+  expect(await acquire(first)).toBe("complete");
+  const next = {
+    ...first.orders[0]!,
+    lastModifiedDate: "2026-09-02T00:30:00.000Z",
+  };
+  const absent = ebay({ orders: [next], trading: tradingOrders(next.orderId) });
+  expect(await acquire(absent, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(calls(absent, "GetOrders")).toBe(1);
+  expect(
+    await env.DB.prepare("SELECT value FROM tax_identifiers WHERE removed_at IS NULL").all(),
+  ).toMatchObject({ results: [{ value: "SINTETICO" }] });
+});
+
+it("la lettura fiscale riservata per il lotto conta subito nel budget del giorno", async () => {
+  // La passata Trading porta il consumo a 49, il lotto a 50: il secondo ordine non corrente aspetta.
+  await quota("GetOrders", 48);
+  const two = ebay({ orders: [foreign(18), foreign(19, "12-34567-89013", "110000000002")] });
+  expect(await acquire(two)).toBe("complete");
+  expect(calls(two, "GetOrders")).toBe(1);
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT detail_retry_at FROM order_source_refs ORDER BY detail_retry_at",
+      ).all()
+    ).results,
+  ).toEqual([{ detail_retry_at: null }, { detail_retry_at: reset }]);
+});
+
+it("oltre cento letture fiscali apre un lotto nuovo, con la sua chiamata nel budget", async () => {
+  // Inserzioni distinte: righe uguali consoliderebbero gli ordini in un solo acquisto.
+  const orders = Array.from({ length: 101 }, (_, index) =>
+    foreign(1, `12-00000-${String(index).padStart(5, "0")}`, `2${String(index).padStart(11, "0")}`),
+  );
+  const many = ebay({ orders });
+  const budget = { calls: 1_000, pages: 100 };
+  expect(await acquire(many, undefined, budget)).toBe("complete");
+  expect(calls(many, "GetOrders")).toBe(2);
+  // Ogni chiamata fatta per il negozio, salvo il profilo fuori budget, scala il budget.
+  const made = many.mock.calls.filter(([input, init]) => {
+    const call = new Headers(init?.headers).get("x-ebay-api-call-name");
+    return call
+      ? !["GetStore", "GetUser"].includes(call)
+      : new URL(String(input)).pathname.startsWith("/sell/fulfillment/");
+  }).length;
+  expect(1_000 - budget.calls).toBe(made);
+});
+
+it("l'errore di un solo ordine del lotto lascia leggere gli altri", async () => {
+  const pair = [foreign(1), foreign(1, "12-34567-89013", "110000000002")];
+  // Due blocchi per il primo ordine: la sua lettura è ambigua, quella del secondo no.
+  const mixed = ebay({
+    orders: pair,
+    trading: tradingOrders(pair[0]!.orderId, pair[0]!.orderId, pair[1]!.orderId),
+  });
+  expect(await acquire(mixed)).toBe("complete");
+  expect(
+    (
+      await env.DB.prepare(
+        "SELECT external_order_id, detail_attempts, detail_for IS NULL AS pending FROM order_source_refs WHERE source = 'fulfillment' ORDER BY external_order_id",
+      ).all()
+    ).results,
+  ).toEqual([
+    { external_order_id: pair[0]!.orderId, detail_attempts: 1, pending: 1 },
+    { external_order_id: pair[1]!.orderId, detail_attempts: 0, pending: 0 },
   ]);
 });

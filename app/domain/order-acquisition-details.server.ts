@@ -92,8 +92,6 @@ export type PendingDetail = {
   detail_attempts: number;
   marketplace_id: string | null;
   creation_time: string;
-  /** Lettura fiscale Trading già coperta per la versione; se assente si legge da D1. */
-  trading_covered?: number;
 };
 
 /** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
@@ -154,7 +152,6 @@ const tradingCoveredSql = (modified: string) =>
    AND (tc.paid = 1 OR tc.observed_at >= ${modified})`;
 
 async function tradingCovered(ctx: Context, pending: PendingDetail): Promise<boolean> {
-  if (pending.trading_covered !== undefined) return pending.trading_covered === 1;
   const row = await ctx.db
     .prepare(
       `SELECT 1 FROM order_source_refs r JOIN order_tax_checks tc ON tc.order_id = r.order_id
@@ -182,6 +179,7 @@ type TradingResult = TradingTaxObservation | { error: unknown } | null;
 type BatchState = { reserved: boolean };
 
 const later = (first: string | null, second: string) =>
+  // Stryker disable next-line EqualityOperator: a parità i due istanti coincidono.
   first === null || second > first ? second : first;
 
 /**
@@ -225,7 +223,11 @@ async function prepareDetail(
   const reserve = (calls: number) => {
     const extra = trading && !batch.reserved ? 1 : 0;
     if (!spend(ctx.budget, calls + extra)) return false;
-    if (extra) batch.reserved = true;
+    if (extra) {
+      // La chiamata del lotto conta subito nel budget del giorno: le letture che seguono la vedono.
+      batch.reserved = true;
+      ctx.quota.spent("GetOrders");
+    }
     return true;
   };
   if (!reserve(1)) return "budget";
@@ -395,7 +397,6 @@ async function finishBatch(ctx: Context, batch: Prepared[]) {
     // Stryker disable next-line StringLiteral: il nome segnala soltanto un limite di quota; il valore non cambia l'esito.
     failure = new UpstreamError("rate_limited", { limit: "GetOrders" });
   else {
-    ctx.quota.spent("GetOrders");
     results = await readTradingTaxObservations(ctx.access, ids).catch(async (error: unknown) => {
       if (callLimit(error))
         await recordRateLimit(
@@ -408,17 +409,14 @@ async function finishBatch(ctx: Context, batch: Prepared[]) {
       return null;
     });
   }
-  // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio.
+  // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio. Una
+  // risposta riuscita ha una voce per ogni ordine richiesto.
   await inSequence(batch, (prepared) => {
     const result = results?.get(prepared.observation.externalOrderId);
     return finishDetail(
       ctx,
       prepared,
-      result === undefined
-        ? { error: failure ?? new UpstreamError("invalid_response") }
-        : result instanceof UpstreamError
-          ? { error: result }
-          : result,
+      !results ? { error: failure } : result instanceof UpstreamError ? { error: result } : result!,
     );
   });
 }
@@ -430,6 +428,7 @@ async function finishBatch(ctx: Context, batch: Prepared[]) {
  */
 async function processDetails(ctx: Context, pendings: PendingDetail[]): Promise<boolean> {
   const batch: Prepared[] = [];
+  // Stryker disable next-line ObjectLiteral: senza la proprietà vale undefined, falso come false.
   const state: BatchState = { reserved: false };
   const stopped = await untilStopped(pendings, async (pending) => {
     const prepared = await prepareDetail(ctx, pending, state);
@@ -446,8 +445,9 @@ async function processDetails(ctx: Context, pendings: PendingDetail[]): Promise<
     }
     return "continue";
   });
+  // Stryker disable next-line ConditionalExpression: un lotto vuoto non chiama eBay e non scrive nulla.
   if (batch.length) await finishBatch(ctx, batch);
-  return stopped === "continue";
+  return stopped !== "budget";
 }
 
 /** Dettaglio di una sola versione, come per l'evento di un ordine confermato. */
@@ -464,9 +464,7 @@ export async function readDetails(ctx: Context): Promise<boolean> {
   const { results } = await ctx.db
     .prepare(
       `SELECT r.external_order_id, r.last_modified_time, r.detail_attempts, o.marketplace_id,
-              o.creation_time,
-              EXISTS (SELECT 1 FROM order_tax_checks tc WHERE tc.order_id = r.order_id
-                AND ${tradingCoveredSql("r.last_modified_time")}) AS trading_covered
+              o.creation_time
          FROM order_source_refs r JOIN orders o ON o.id = r.order_id
         WHERE r.store_id = ?1 AND r.source = 'fulfillment'
           AND r.detail_for IS NOT r.last_modified_time
