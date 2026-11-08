@@ -29,6 +29,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 - **Caricamento e letture più leggeri.** Font e testi partono con il documento, le schermate del sito restano nella cache del browser, le Impostazioni portano subito soltanto la categoria aperta e il codice di una pagina si prepara al passaggio sul suo link. L'apertura di una pagina dell'area riservata fa meno letture e scritture sul database.
 - **Core Web Vitals reali.** I report del browser di Ordini e Negozi aggiungono INP e CLS, che la console mostra accanto a LCP. La build rifiuta la perdita della cache permanente degli asset e le prove limitano il peso dei documenti.
 - **Promozioni più rapide per i soli testi.** Un commit che cambia soltanto documenti, voci del changelog o test riusa la certificazione dell'antenato qualificato.
+- **Worker vicino al database.** Smart Placement è attivo anche in Production, su decisione dell'owner, senza attendere la misura sul test.
 
 ## [2.0.7] - 2026-11-07
 
