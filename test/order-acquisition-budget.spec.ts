@@ -262,6 +262,20 @@ it("una lettura fiscale non riuscita non copre le versioni di un ordine pagato",
   expect(await env.DB.prepare("SELECT paid FROM order_tax_checks").first()).toEqual({ paid: 1 });
 });
 
+it("chiama il fetcher del negozio senza un this, come vuole il fetch dei Workers", async () => {
+  // Il fetch globale dei Workers rifiuta una chiamata come metodo di un altro oggetto.
+  const strict = vi.fn(function (this: unknown) {
+    if (this !== undefined) throw new TypeError("Illegal invocation");
+    return Promise.resolve(new Response("ok"));
+  }) as unknown as typeof fetch;
+  const counted = countedAccess(env.DB, access(strict), new Date("2026-09-02T00:00:00.000Z"));
+  const response = await counted.fetcher("https://api.ebay.com/sell/fulfillment/v1/order/1");
+  expect(await response.text()).toBe("ok");
+  expect(
+    Object.fromEntries(await ownCalls(env.DB, origin, new Date("2026-09-02T00:00:00.000Z"))),
+  ).toEqual({ order: 1 });
+});
+
 it("conta soltanto le chiamate seguite e un errore di D1 non ferma la lettura", async () => {
   const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   const fetcher = vi.fn<typeof fetch>(async () => new Response("ok"));
