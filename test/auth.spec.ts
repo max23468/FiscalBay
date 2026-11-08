@@ -23,6 +23,7 @@ async function drainBackground() {
 
 afterEach(drainBackground);
 
+import { sendEmail } from "../app/account-email.server";
 import { handleAuthRequest } from "../app/auth-route.server";
 import { countAuthAttempt, purgeAuthAttempts } from "../app/domain/auth-attempts.server";
 
@@ -360,6 +361,24 @@ describe("Better Auth su Workers e D1", () => {
         to: user.email,
       });
     }
+  });
+
+  it("negli ambienti distribuiti non invia a un dominio che non riceve posta", async () => {
+    const message = { replyTo: "assistenza@example.invalid", subject: "Oggetto", text: "Testo" };
+    const send = emailSender();
+    const deployed = mailEnv(send, { APP_ORIGIN: "https://test.fiscalbay.it" });
+
+    await sendEmail(deployed, { ...message, to: "collaudo@example.invalid" });
+    await sendEmail(deployed, { ...message, to: "collaudo@EXAMPLE.INVALID" });
+    expect(send).not.toHaveBeenCalled();
+
+    const deliverable = ["persona", "invalid.example.test"].join("@");
+    await sendEmail(deployed, { ...message, to: deliverable });
+    await sendEmail(mailEnv(send), { ...message, to: "locale@example.invalid" });
+    expect(send.mock.calls.map(([sent]) => sent.to)).toEqual([
+      deliverable,
+      "locale@example.invalid",
+    ]);
   });
 
   it("cifra i token OAuth e non li espone tramite le route HTTP", async () => {
