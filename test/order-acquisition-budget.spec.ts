@@ -315,6 +315,10 @@ it("la parte del Worker vale soltanto sotto l'intera quota e con un limite letto
   await own(100);
   await loadCallBudget(env.DB, access(ebay()), at, 1);
   expect(await limited()).toEqual({ n: 0 });
+  // Sotto la propria parte il Worker continua: 9 chiamate su 100 con il 10%.
+  await own(9);
+  await loadCallBudget(env.DB, access(ebay()), at, 0.1);
+  expect(await limited()).toEqual({ n: 0 });
   await env.DB.prepare("UPDATE ebay_quota_usage SET quota_limit = 0").run();
   await own(0);
   await loadCallBudget(env.DB, access(ebay()), at, 0.1);

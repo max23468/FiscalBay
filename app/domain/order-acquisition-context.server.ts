@@ -170,6 +170,7 @@ export type CallBudget = {
  */
 export function workerShare(env: { EBAY_WORKER_SHARE?: string }) {
   const percent = Number(env.EBAY_WORKER_SHARE);
+  // Stryker disable next-line EqualityOperator: con 100 il calcolo e il ripiego valgono entrambi l'intera quota.
   return Number.isInteger(percent) && percent >= 1 && percent <= 100 ? percent / 100 : 1;
 }
 
