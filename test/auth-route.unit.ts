@@ -416,7 +416,10 @@ describe("limiti dei tentativi", () => {
   it.each(["/altro/email-otp/verify-email", "/email-otp/verify-email/altro"])(
     "il limite del codice di conferma vale soltanto per il suo percorso: %s",
     async (path) => {
-      const form = request("/accesso", { method: "POST" });
+      const form = request("/accesso", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "203.0.113.8" },
+      });
       expect(await authLimitWait(environment, form, path)).toBeNull();
       expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([]);
     },
