@@ -85,7 +85,20 @@ jobs:
           ref: ${{ inputs.expected_sha || (github.event_name == 'schedule' && 'develop' || '') }}
           persist-credentials: false
       - uses: ./.github/actions/setup
+      # La qualifica del candidato parte dal riferimento di `develop`, come le PR: Stryker ripete
+      # soltanto i mutanti con codice o test cambiati. La campagna settimanale resta completa.
+      - name: Restore develop reference
+        if: inputs.expected_sha != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .mutation-reference
+          key: mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-${{ github.sha }}
+          restore-keys: |
+            mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-
+            mutation-reference-${{ matrix.target }}-
       - name: Qualify critical module
+        env:
+          MUTATION_INCREMENTAL_BASE: ${{ inputs.expected_sha != '' && '.mutation-reference/incremental.json' || '' }}
         run: pnpm test:mutation "${MUTATION_TARGET}"
       # Soltanto una parte senza superstiti: un esito sopravvissuto nel riferimento si ripeterebbe
       # in ogni PR che tocca il modulo. Le chiavi sono immutabili: la run le distingue.

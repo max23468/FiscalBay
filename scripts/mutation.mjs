@@ -468,14 +468,16 @@ export function validateRanges(ranges, lastLine, mutants) {
 /**
  * Job mutation contemporanei, fissati una volta alla pianificazione. Con PR o cicli attivi la
  * qualifica del candidato, che precede `Promuovi`, tiene sei posti e le campagne quattro: la coda
- * dell'account resta corta e i job brevi di merge, deploy e pubblicazione partono presto. Di notte,
- * senza altro lavoro, le campagne usano quasi tutti i venti posti dell'account.
+ * dell'account resta corta e i job brevi di merge, deploy e pubblicazione partono presto. Per la
+ * qualifica contano soltanto le PR: il ciclo in corso è quasi sempre lo stesso `Promuovi` che la
+ * attende. Di notte, senza altro lavoro, le campagne usano quasi tutti i venti posti dell'account.
  */
 export function backgroundConcurrency(runs, { qualification = false, campaign = false } = {}) {
   const busy = runs.some(
     (run) =>
       run.status !== "completed" &&
-      (run.event === "pull_request" || run.path === ".github/workflows/cycle.yml"),
+      (run.event === "pull_request" ||
+        (!qualification && run.path === ".github/workflows/cycle.yml")),
   );
   if (busy) return qualification ? 6 : 4;
   return campaign ? 16 : 8;
