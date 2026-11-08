@@ -163,7 +163,7 @@ I coordinatori di `Pubblica` e `Promuovi` aspettano sui runner del Mac dell'owne
 
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§7](product/ACCOUNTS_AND_STORES.md#s07) · [§29](engineering/SECURITY_AND_PRIVACY.md#s29)
 
-Conferma dell'email con codice di 6 cifre o link, pulsante per aprire la casella, un solo consenso eBay per account e negozio, verifica anti automazione e controllo della password anticipati rispetto all'invio ([D327](decisions/DECISION_REGISTER.md)).
+Conferma dell'email con codice di 6 cifre o link, pulsante per aprire la casella, un solo consenso eBay per account e negozio, verifica anti automazione e controllo della password anticipati rispetto all'invio ([D328](decisions/DECISION_REGISTER.md)).
 
 **Criterio di completamento:** codice, tentativi, nuovo invio e consenso unico provati con test; il consenso eBay reale con i permessi estesi riletto sul test.
 
