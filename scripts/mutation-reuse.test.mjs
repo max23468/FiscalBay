@@ -7,7 +7,10 @@ import {
   moduleOutcomes,
   mutationJob,
   previousRuns,
+  planLayout,
+  proofStands,
   proofUnaffected,
+  pullRequestParts,
   pullRequestOutcome,
   pullRequestProof,
   reusePlan,
@@ -290,6 +293,7 @@ describe("mutation incrementale della prova del candidato", () => {
           ...extra,
         },
         api,
+        async () => null,
       );
     const runs = [
       run(9, "h3", "2026-11-07T22:20:00Z"),
@@ -299,12 +303,13 @@ describe("mutation incrementale della prova del candidato", () => {
     // La run più recente con un esito, su un antenato, senza cambi del modulo: riusata.
     const merge = { status: "ahead", files: [{ filename: "app/domain/other.server.ts" }] };
     const reused = fake({ runs, jobs: { 8: passed }, compare: { h2: merge } });
-    assert.deepEqual(await ask(reused.api), { run: 8, commit: "h2" });
+    assert.deepEqual(await ask(reused.api), { run: 8, commit: "h2", runs: [8] });
     assert.ok(!reused.calls.some((url) => url.includes("/runs/9/jobs")));
     // La stessa testa non richiede il confronto.
     assert.deepEqual(await ask(fake({ runs, jobs: { 9: passed } }).api, { exclude: 0 }), {
       run: 9,
       commit: "h3",
+      runs: [9],
     });
     // Run 8 senza esito del modulo, annullata o in corso: decide la 7.
     const older = fake({
@@ -312,7 +317,7 @@ describe("mutation incrementale della prova del candidato", () => {
       jobs: { 8: [{ name: `Mutation ${target} 1/2`, conclusion: "success" }], 7: passed },
       compare: { h1: merge },
     });
-    assert.deepEqual(await ask(older.api), { run: 7, commit: "h1" });
+    assert.deepEqual(await ask(older.api), { run: 7, commit: "h1", runs: [7] });
     // Un fallimento recente non si copre con un successo più vecchio.
     const failed = fake({
       runs,
@@ -339,6 +344,207 @@ describe("mutation incrementale della prova del candidato", () => {
     const foreign = [run(8, "h2", "2026-11-07T21:09:00Z", 2)];
     assert.equal(await ask(fake({ runs: foreign, jobs: { 8: passed } }).api), null);
     assert.equal(await ask(fake({ runs: [], jobs: {} }).api), null);
+  });
+});
+
+describe("parti della mutation della PR riusate fra run", () => {
+  const target = "app/domain/billing.server.ts";
+  const graph = new Map([
+    [target, new Set(["app/domain/grants.server.ts"])],
+    ["app/domain/grants.server.ts", new Set()],
+    ["app/domain/other.server.ts", new Set()],
+  ]);
+  const ranges = JSON.stringify([
+    { start: 1, end: 40, mutants: 60 },
+    { start: 41, end: 80, mutants: 70 },
+    { start: 81, end: 120, mutants: 50 },
+  ]);
+  const plan = (digest = "d1", layout = ranges, total = 3) => ({
+    include: Array.from({ length: total }, (_, index) => ({
+      target,
+      shard: `${index + 1}/${total}`,
+      ranges: layout,
+      digest,
+    })),
+  });
+  const job = (part, conclusion = "success", total = 3) => ({
+    name: `Mutation ${target} ${part}/${total}`,
+    conclusion,
+  });
+  const run = (id, sha) => ({
+    id,
+    head_sha: sha,
+    created_at: `2026-11-08T10:${String(id).padStart(2, "0")}:00Z`,
+    head_repository: { id: 1 },
+  });
+  const parts = ({ runs, jobs, plans, compare = {}, excused, digest = "d1" }) =>
+    pullRequestParts(
+      {
+        repository: "o/r",
+        repositoryId: 1,
+        branch: "feat/x",
+        head: "m",
+        target,
+        graph,
+        digest,
+        exclude: 99,
+        excused,
+      },
+      async (url) => {
+        if (url.includes("/workflows/ci.yml/runs")) return { workflow_runs: runs };
+        const id = /runs\/(\d+)\/jobs/u.exec(url)?.[1];
+        if (id) return { jobs: jobs[id] ?? [], total_count: (jobs[id] ?? []).length };
+        const sha = /compare\/(\w+)\.\.\./u.exec(url)[1];
+        return compare[sha] ?? { status: "ahead", files: [{ filename: "docs/a.md" }] };
+      },
+      async (_, id) => plans[id] ?? null,
+    );
+  const runs = [run(3, "c3"), run(2, "c2"), run(1, "c1")];
+
+  it("riconosce la divisione del modulo nel piano della run", () => {
+    assert.deepEqual(planLayout(plan(), target), {
+      total: 3,
+      digest: "d1",
+      ranges,
+      key: "[[1,40],[41,80],[81,120]]",
+    });
+    // Le stime possono cambiare senza cambiare i tagli; una parte sola copre tutto il sorgente.
+    const estimated = JSON.stringify(
+      JSON.parse(ranges).map((range) => ({ ...range, estimatedMs: 9 })),
+    );
+    assert.equal(planLayout(plan("d1", estimated), target).key, planLayout(plan(), target).key);
+    assert.equal(
+      planLayout({ include: [{ target, shard: "1/1", digest: "d1" }] }, target).key,
+      "whole",
+    );
+    assert.equal(planLayout({ include: [] }, target), null);
+    assert.equal(planLayout(null, target), null);
+  });
+
+  it("somma le parti riuscite in run diverse con lo stesso piano", async () => {
+    // La run 3, annullata dopo un push, ha provato la parte 2; la 2 le parti 1 e 3 prima di
+    // un'unione di develop che non tocca il modulo.
+    const result = await parts({
+      runs,
+      jobs: { 3: [job(1, "cancelled"), job(2)], 2: [job(1), job(2, "cancelled"), job(3)] },
+      plans: { 3: plan(), 2: plan() },
+    });
+    assert.deepEqual(result, {
+      total: 3,
+      ranges,
+      proved: [
+        { part: 1, run: 2, commit: "c2" },
+        { part: 2, run: 3, commit: "c3" },
+        { part: 3, run: 2, commit: "c2" },
+      ],
+      missing: [],
+    });
+    // Una parte mai riuscita resta da provare, con gli intervalli del riferimento.
+    const partial = await parts({
+      runs,
+      jobs: { 3: [job(2)], 2: [job(3)] },
+      plans: { 3: plan(), 2: plan() },
+    });
+    assert.deepEqual(partial.missing, [1]);
+    assert.equal(partial.ranges, ranges);
+  });
+
+  it("scarta le parti di un piano diverso o di un sorgente cambiato", async () => {
+    const other = JSON.stringify([
+      { start: 1, end: 60, mutants: 90 },
+      { start: 61, end: 100, mutants: 60 },
+      { start: 101, end: 120, mutants: 30 },
+    ]);
+    // Intervalli diversi nella run 2: contano soltanto le parti della run più recente.
+    const moved = await parts({
+      runs,
+      jobs: { 3: [job(2)], 2: [job(1), job(3)], 1: [job(1), job(3)] },
+      plans: { 3: plan(), 2: plan("d1", other), 1: plan() },
+    });
+    assert.deepEqual(moved.missing, [1, 3]);
+    // Il riferimento con un'altra impronta del sorgente: nessuna parte vale.
+    assert.equal(
+      await parts({ runs, jobs: { 3: [job(1), job(2), job(3)] }, plans: { 3: plan("d0") } }),
+      null,
+    );
+    // La run 2 ha un'altra impronta: le sue parti non si sommano a quelle della 3.
+    const changed = await parts({
+      runs,
+      jobs: { 3: [job(2)], 2: [job(1), job(3)] },
+      plans: { 3: plan(), 2: plan("d0") },
+    });
+    assert.deepEqual(changed.missing, [1, 3]);
+  });
+
+  it("non copre un fallimento recente della stessa parte con un successo più vecchio", async () => {
+    const result = await parts({
+      runs,
+      jobs: { 3: [job(1, "failure"), job(2, "timed_out")], 2: [job(1), job(2), job(3)] },
+      plans: { 3: plan(), 2: plan() },
+    });
+    assert.deepEqual(result.missing, [1, 2]);
+    assert.deepEqual(result.proved, [{ part: 3, run: 2, commit: "c2" }]);
+  });
+
+  it("ripete le parti di una run il cui commit non è antenato o i cui cambi toccano il modulo", async () => {
+    const jobs = { 3: [job(2)], 2: [job(1), job(3)] };
+    const plans = { 3: plan(), 2: plan() };
+    const diverged = await parts({
+      runs,
+      jobs,
+      plans,
+      compare: { c2: { status: "diverged", files: [] } },
+    });
+    assert.deepEqual(diverged.missing, [1, 3]);
+    const touched = { status: "ahead", files: [{ filename: "app/domain/grants.server.ts" }] };
+    const stale = await parts({ runs, jobs, plans, compare: { c2: touched } });
+    assert.deepEqual(stale.missing, [1, 3]);
+  });
+
+  it("riusa la prova dopo una base avanzata su un modulo critico provato nella sua PR", async () => {
+    const jobs = { 3: [job(1), job(2), job(3)] };
+    const plans = { 3: plan() };
+    const advanced = { status: "ahead", files: [{ filename: "app/domain/grants.server.ts" }] };
+    const asked = [];
+    const covered = await parts({
+      runs,
+      jobs,
+      plans,
+      compare: { c3: advanced },
+      excused: async (source, commit) => {
+        asked.push([source, commit]);
+        return true;
+      },
+    });
+    assert.deepEqual(covered.missing, []);
+    assert.deepEqual(asked, [["app/domain/grants.server.ts", "c3"]]);
+    // Senza la prova nella PR di develop la base avanzata ripete il modulo.
+    const uncovered = await parts({
+      runs,
+      jobs,
+      plans,
+      compare: { c3: advanced },
+      excused: async () => false,
+    });
+    assert.deepEqual(uncovered.missing, [1, 2, 3]);
+  });
+
+  it("scusa soltanto sorgenti critici diversi dal modulo, mai test o file non neutri", async () => {
+    const tests = new Map([...graph, ["test/billing.spec.ts", new Set([target])]]);
+    const yes = async () => true;
+    assert.ok(await proofStands(["app/domain/grants.server.ts"], target, tests, yes));
+    assert.ok(!(await proofStands(["app/domain/grants.server.ts"], target, tests)));
+    assert.ok(!(await proofStands([target], target, tests, yes)));
+    assert.ok(
+      !(await proofStands(
+        ["app/money.ts"],
+        target,
+        new Map([[target, new Set(["app/money.ts"])]]),
+        yes,
+      )),
+    );
+    assert.ok(!(await proofStands(["test/billing.spec.ts"], target, tests, yes)));
+    assert.ok(!(await proofStands(["migrations/0099_x.sql"], target, tests, yes)));
   });
 });
 
