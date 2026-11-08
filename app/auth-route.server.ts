@@ -131,8 +131,9 @@ export function tooManyAuthRequests(wait: number): Response {
  * Soglie per indirizzo email, indipendenti dall'IP: chi cambia rete non prova più password
  * sullo stesso account né riempie di email la casella di un altro. Il limite del login vale
  * solo per l'accesso con password: Google, eBay e passkey restano disponibili al titolare.
+ * Come per i tentativi, l'elenco si compone a ogni richiesta per la mutation.
  */
-const addressLimits = [
+const addressLimits = () => [
   { paths: /^\/sign-in\/email$/u, window: 900, max: 10 },
   { paths: /^\/email-otp\/verify-email$/u, window: 900, max: 10 },
   {
@@ -200,7 +201,7 @@ function formBody(request: Request): boolean {
 async function addressWait(request: Request, env: Env): Promise<number | "unsupported" | null> {
   if (request.method !== "POST" || !env.APP_ORIGIN.startsWith("https:")) return null;
   const path = authPath(request);
-  const rule = addressLimits.find(({ paths }) => paths.test(path));
+  const rule = addressLimits().find(({ paths }) => paths.test(path));
   if (!rule) return null;
   if (formBody(request)) return "unsupported";
   const address = await addressKey(request);
