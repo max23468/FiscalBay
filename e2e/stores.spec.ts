@@ -430,7 +430,7 @@ test.describe("ordini", () => {
         await open(page, `${pagePath(prefix, "/ordini")}?mostra=2`, "ordinario");
         const email = page
           .getByRole("article")
-          .getByText("amministrazione@galli-restauri.invalid", { exact: true });
+          .getByText("2c91e6a7f04b8d35c6e1@members.ebay.com", { exact: true });
         await expect(email).toBeVisible();
         expect(
           await email.evaluate((e) => {
@@ -443,7 +443,7 @@ test.describe("ordini", () => {
         await expect(
           page
             .getByRole("article")
-            .filter({ hasText: "amministrazione@galli-restauri.invalid" })
+            .filter({ hasText: "2c91e6a7f04b8d35c6e1@members.ebay.com" })
             .getByRole("link", { name: locale === "it" ? "Dettaglio" : "Details", exact: true }),
         ).toBeVisible();
         await expect.poll(() => noPageOverflow(page)).toBe(true);
@@ -454,7 +454,7 @@ test.describe("ordini", () => {
         await expect(
           page
             .getByRole("dialog")
-            .getByText("amministrazione@galli-restauri.invalid", { exact: true }),
+            .getByText("2c91e6a7f04b8d35c6e1@members.ebay.com", { exact: true }),
         ).toBeVisible();
         await open(page, pagePath(prefix, "/ordini/ord-01"));
         await page

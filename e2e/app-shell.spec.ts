@@ -660,9 +660,7 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
     continueHydration();
   }
   await expect(search).toBeEnabled();
-  await expect(
-    await searchFromTopBar(page, "/anteprima", "carburatore", /Maria Rossi/),
-  ).toBeVisible();
+  await expect(await searchFromTopBar(page, "/anteprima", "casco", /Maria Rossi/)).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toBeHidden();
   await search.fill("Conti");
@@ -916,21 +914,21 @@ test("contatti cliccabili e copiabili, senza richiesta fiscale precompilata agli
   await page.goto("/anteprima/ordini/ord-11");
   await expect(
     page.getByRole("dialog").getByRole("link", { name: "Scrivi all’acquirente via email" }),
-  ).toHaveAttribute("href", /^mailto:francesca@colomborestauri\.invalid\?subject=/u);
+  ).toHaveAttribute("href", /^mailto:francesca@colomborestauri\.it\?subject=/u);
   // Alias eBay e numero non riconoscibile: niente email precompilata né chiamata.
   await page.goto("/anteprima/ordini/ord-14");
   const alias = page.getByRole("dialog");
   await expect(alias.getByText("interno 14", { exact: true })).toBeVisible();
   await expect(alias.locator('a[href^="tel:"]')).toHaveCount(0);
-  await expect(alias.getByText("c3f0a1b2@members.ebay.invalid", { exact: true })).toBeVisible();
+  await expect(alias.getByText("c3f0a1b2@members.ebay.com", { exact: true })).toBeVisible();
   await expect(
-    alias.getByRole("link", { name: /^c3f0a1b2\s*@members\.ebay\.invalid$/u }),
-  ).toHaveAttribute("href", "mailto:c3f0a1b2@members.ebay.invalid");
+    alias.getByRole("link", { name: /^c3f0a1b2\s*@members\.ebay\.com$/u }),
+  ).toHaveAttribute("href", "mailto:c3f0a1b2@members.ebay.com");
   const copyEmail = alias.getByRole("button", { name: /^Copia email:/u });
   await copyEmail.click();
   await expect(copyEmail).toHaveAttribute("data-state", "copied");
   expect(await page.evaluate(() => (window as Window & { copiedText?: string }).copiedText)).toBe(
-    "c3f0a1b2@members.ebay.invalid",
+    "c3f0a1b2@members.ebay.com",
   );
   await expect(alias.getByRole("link", { name: "Scrivi all’acquirente via email" })).toHaveCount(0);
   await expect(alias.getByRole("button", { name: /^Copia messaggio/u })).toBeVisible();

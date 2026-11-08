@@ -20,8 +20,7 @@ import type {
 
 /**
  * Scenari sintetici dell'anteprima. Nessun dato reale: nomi, codici e ordini
- * sono inventati, gli indirizzi email usano il dominio riservato `.invalid`, che le
- * schermate del sito sostituiscono con l'aspetto reale (`scripts/site-screenshots.mjs`).
+ * sono inventati, le email sono alias casuali di eBay o usano domini non registrati.
  * I valori da sbloccare restano in questo modulo server e arrivano al browser
  * solo dopo lo sblocco simulato.
  */
@@ -117,7 +116,7 @@ const account = (overrides: Partial<AccountView> = {}): AccountView => ({
     accountType: "business",
     companyName: "Martini ricambi",
   },
-  email: "laura@vintagegarageitalia.invalid",
+  email: "laura@vintagegarageitalia.it",
   plan: "free",
   trialAvailable: true,
   quota: { used: 3, limit: 5, cycleEndsAt },
@@ -657,7 +656,7 @@ export function loadScenario(
             return {
               ...seed,
               phone: "interno 14",
-              email: "c3f0a1b2@members.ebay.invalid",
+              email: "c3f0a1b2@members.ebay.com",
               fiscal: { state: "missing", reason: "removed" },
             };
           if (seed.id === "ord-05") {

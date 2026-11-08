@@ -838,7 +838,7 @@ for (const language of ["it", "en"] as const) {
     );
     await email.fill("nome");
     await signIn.getByRole("button", { name: it ? "Accedi" : "Sign in", exact: true }).click();
-    await expect(email).toHaveAccessibleDescription(/nome@dominio\.it|name@example\.com/);
+    await expect(email).toHaveAccessibleDescription(/nome@dominio\.it|name@domain\.com/);
     await email.fill("nome@example.invalid");
     await expect(email).not.toHaveAttribute("aria-invalid");
 

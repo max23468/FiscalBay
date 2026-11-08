@@ -42,6 +42,16 @@ const fixtureHosts = new Set([
   "t.me",
   "www.w3.org",
   "schemas.openxmlformats.org",
+  // Indirizzo del negozio negli esempi delle schermate del sito.
+  "www.ebay.it",
+]);
+
+// Domini email ammessi oltre a `.invalid`, per gli esempi credibili delle schermate del sito:
+// gli alias con cui eBay nasconde l'indirizzo e due domini non registrati.
+const fixtureEmailDomains = new Set([
+  "members.ebay.com",
+  "vintagegarageitalia.it",
+  "colomborestauri.it",
 ]);
 
 const isDocumentation = (file) => file.endsWith(".md") || file.startsWith("docs/");
@@ -79,7 +89,8 @@ export function checkFixtures(files) {
       for (const [, domain] of line.matchAll(
         /[\w.%+-]+@([a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,})\b/giu,
       )) {
-        if (!domain.toLowerCase().endsWith(".invalid"))
+        const name = domain.toLowerCase();
+        if (!name.endsWith(".invalid") && !fixtureEmailDomains.has(name))
           errors.push(`${file}:${index + 1}: email con dominio reale «${domain}» in una fixture`);
       }
     }

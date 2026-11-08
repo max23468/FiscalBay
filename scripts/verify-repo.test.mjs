@@ -55,7 +55,7 @@ describe("fixture", () => {
   });
 
   it("rifiuta host ed email reali soltanto nelle fixture", () => {
-    const text = 'const url = "https://www.ebay.it/itm/1"; const email = "mario@gmail.com";';
+    const text = 'const url = "https://www.ebay.de/itm/1"; const email = "mario@gmail.com";';
     assert.equal(checkFixtures([{ path: "e2e/orders.spec.ts", text }]).length, 2);
     assert.equal(checkFixtures([{ path: "app/preview/scenarios.server.ts", text }]).length, 2);
     assert.deepEqual(checkFixtures([{ path: "app/integrations/stripe.server.ts", text }]), []);

@@ -21,8 +21,6 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
-import { productImages } from "../app/preview/product-images.server.ts";
-
 const base = process.argv[2] ?? "http://localhost:5186";
 const output = "public/site";
 const languages = ["it", "en"];
@@ -102,6 +100,9 @@ const telegram = {
   },
 };
 
+/** Immagine dell'articolo del messaggio, letta dalla scheda dell'ordine nell'anteprima. */
+let orderImage = "";
+
 function telegramPage(language, scheme) {
   const t = telegram[language];
   const dark = scheme === "dark";
@@ -147,7 +148,7 @@ function telegramPage(language, scheme) {
       🛒 <b>${t.title}</b> · Vintage Garage Italia<br>
       🧾 <code>RSSMRA80A41H501Y</code>
       <blockquote>👤 Maria Rossi<br>💶 <b>${t.total}</b><br>📦 1 × Casco jet anni 60 in fibra rosso restaurato vintage moto scooter taglia M<br>🕑 <i>${t.today} 14:22 · 27-10293-84756</i></blockquote>
-      <img class="media" src="${productImages.helmet}" alt="">
+      <img class="media" src="${orderImage}" alt="">
       <div class="time">14:22</div>
     </div>
     <div class="row"><span>🔗 ${t.open}</span><span>🛍 ${t.ebay}</span></div>
@@ -324,14 +325,6 @@ async function capture(browser, shot, language, scheme) {
   await page.evaluate(() => {
     document.querySelector("#preview-scenario")?.closest(".border-b")?.remove();
   });
-  // I dati dell'anteprima usano domini riservati: l'immagine mostra quelli che si vedono davvero.
-  await page.evaluate(() => {
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    while (walker.nextNode())
-      walker.currentNode.nodeValue = walker.currentNode.nodeValue
-        .replace("@members.ebay.invalid", "@members.ebay.com")
-        .replace(".invalid", ".it");
-  });
   // Le barre fisse dell'app stanno nelle sole schermate a tutto schermo.
   if (shot.element || shot.region)
     await page.evaluate(() => {
@@ -344,6 +337,8 @@ async function capture(browser, shot, language, scheme) {
     });
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(400);
+  if (shot.name === "scheda")
+    orderImage = await page.locator(`${shot.element} img`).first().getAttribute("src");
   const png = shot.element
     ? await page.locator(shot.element).first().screenshot({ animations: "disabled" })
     : await page.screenshot({
