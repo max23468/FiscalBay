@@ -62,6 +62,7 @@ jobs:
       matrix: ${{ steps.detect.outputs.matrix }}
       browser-matrix: ${{ steps.browser-plan.outputs.browser-matrix }}
       browser-reused: ${{ steps.browser-plan.outputs.browser-reused }}
+      browser-grep: ${{ steps.browser-plan.outputs.browser-grep }}
       mutation-pr: ${{ steps.modules.outputs.matrix || '{"include":[]}' }}
       reused: ${{ steps.reuse.outputs.run-id != '' }}
       artifact: ${{ steps.reuse.outputs.artifact || format('build-{0}', steps.tree.outputs.tree) }}
@@ -169,7 +170,8 @@ jobs:
         id: modules
         if: github.event_name == 'pull_request' && github.event.pull_request.draft != true && steps.detect.outputs.mutation-pr != '{"target":[]}'
         # Un modulo già provato in una run precedente della stessa PR, e non toccato da allora, per
-        # esempio dopo un'unione di `develop`, non si ripete.
+        # esempio dopo un'unione di `develop`, non si ripete; di un modulo provato in parte, anche
+        # in run diverse con lo stesso piano, ripartono soltanto le parti mancanti.
         env:
           TARGETS: ${{ steps.detect.outputs.mutation-pr }}
           MUTATION_REFERENCES: .mutation-references
@@ -179,7 +181,18 @@ jobs:
           MUTATION_PR_BRANCH: ${{ github.head_ref }}
           # Il commit di merge provato: una base avanzata senza unione nel branch conta come cambio.
           HEAD_SHA: ${{ github.sha }}
+          MUTATION_PLAN: ${{ runner.temp }}/mutation-plan.json
         run: node scripts/mutation.mjs --matrix "${TARGETS}"
+
+      # Il piano della matrice: le run seguenti della PR vi leggono parti, intervalli e sorgente.
+      - name: Preserve mutation plan
+        if: steps.modules.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-plan-${{ github.run_id }}
+          path: ${{ runner.temp }}/mutation-plan.json
+          overwrite: true
+          retention-days: 7
 
       # Una nuova sezione in cima al changelog sale di un solo passo dall'ultima versione pubblicata.
       - name: Check version step
@@ -221,8 +234,9 @@ jobs:
       - name: Size browser jobs from selected inventory
         id: browser-plan
         if: steps.detect.outputs.e2e == 'true' && !steps.reuse.outputs.run-id && github.event.pull_request.draft != true
-        # Nella PR le prove già concluse in una run precedente, con lo stesso inventario e senza
-        # cambi che il classificatore giudichi rilevanti per i browser, non ripartono.
+        # Nella PR le prove già concluse in una run precedente, con lo stesso inventario, non
+        # ripartono senza cambi rilevanti per i browser; dopo un'unione con la base ripartono soltanto
+        # le aree toccate sia dai cambi sia dalla PR, con il nucleo `@smoke`.
         env:
           BROWSER_GREP: ${{ steps.detect.outputs.grep }}
           BROWSERS: ${{ steps.detect.outputs.browsers }}
@@ -357,7 +371,8 @@ jobs:
           E2E_PREBUILT: "1"
           E2E_RETRIES: "1"
           E2E_MATRIX: ${{ needs.verify.outputs.matrix }}
-          BROWSER_GREP: ${{ needs.verify.outputs.grep }}
+          # Dopo un'unione con la base, le sole aree toccate sia dai cambi sia dalla PR.
+          BROWSER_GREP: ${{ needs.verify.outputs.browser-grep || needs.verify.outputs.grep }}
           BROWSERS: ${{ needs.verify.outputs.browsers }}
           SHARD: ${{ matrix.shard }}/${{ matrix.total }}
         run: node scripts/browser-tests.mjs --grep "${BROWSER_GREP}" --browsers "${BROWSERS}" --shard "${SHARD}"
@@ -424,7 +439,7 @@ jobs:
             mutation-reference-${{ matrix.target }}-${{ matrix.shard }}-
             mutation-reference-${{ matrix.target }}-
 
-      # Una prova precedente della stessa PR, se da allora sono cambiati soltanto test e documenti,
+      # La prova più recente della stessa PR su un antenato della testa, preferendo la stessa parte,
       # altrimenti il riferimento: Stryker ripete soltanto i mutanti con codice o test cambiati.
       - name: Restore incremental base
         env:

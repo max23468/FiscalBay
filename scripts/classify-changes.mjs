@@ -545,6 +545,8 @@ export function plan(files, sources = [], complete = false, changes = {}) {
     deploy,
     areas: [...areas].sort(),
     browserGrep,
+    specs,
+    core,
     browsers,
     matrix,
     mutation,
@@ -659,6 +661,42 @@ export function browserUnaffected(base, head) {
   if (!files.length) return true;
   const result = plan(files, [], false, committedVersions(files, base, head));
   return !result.e2e && !result.deploy;
+}
+
+/**
+ * Prove browser da ripetere dopo l'ultima run verde della PR (`previous`), con `base` la base del
+ * commit provato ora (`head`). Le aree già provate dalla PR e quelle provate dalla base nella propria
+ * PR possono rompersi soltanto dove si incontrano: si ripetono le aree dei file che la PR cambia e
+ * che sono cambiati da allora, più quelle dei soli cambi della base che la PR tocca anche lei, con il
+ * nucleo `@smoke` e le spec cambiate. `{ reuse: true }` se nulla riguarda i browser, `{ grep }` con
+ * la selezione ridotta, null se serve quella intera: un modulo senza area come layout, router o stili
+ * condivisi, dipendenze di build, il runner delle prove o un confronto non disponibile.
+ */
+export function browserNarrowing(previous, head, base, sources) {
+  let changed;
+  let own;
+  try {
+    changed = lines(git("diff", "--name-only", previous, head));
+    own = new Set(lines(git("diff", "--name-only", base, head)));
+  } catch {
+    return null;
+  }
+  if (!changed.length) return { reuse: true };
+  const versions = committedVersions(changed, previous, head);
+  const since = plan(changed, sources, false, versions);
+  if (!since.e2e && !since.deploy) return { reuse: true };
+  if (since.e2e && (since.browserGrep === "." || since.core)) return null;
+  const areasOf = (files) => {
+    if (!files.length) return [];
+    const result = plan(files, sources, false, versions);
+    return result.e2e && result.browserGrep === "." ? null : result.areas;
+  };
+  const pr = areasOf([...own]);
+  const mine = areasOf(changed.filter((file) => own.has(file)));
+  const shared = areasOf(changed.filter((file) => !own.has(file)));
+  if (!pr || !mine || !shared) return null;
+  const areas = [...new Set([...mine, ...shared.filter((area) => pr.includes(area))])].sort();
+  return { grep: ["@smoke", ...(areas.length ? areaGrep(areas) : []), ...since.specs].join("|") };
 }
 
 /** Se fra due commit cambia ciò che si distribuisce: senza differenze non c'è nulla da pubblicare. */
