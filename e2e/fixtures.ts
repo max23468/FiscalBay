@@ -148,11 +148,6 @@ export const test = base.extend<{ pageErrors: string[]; browserErrors: string[] 
       route.fulfill({ contentType: "text/javascript", body: "" }),
     );
     await context.route(`${webAnalyticsCollector}/**`, (route) => route.fulfill({ status: 204 }));
-    // La verifica anti automazione parte appena si tocca un modulo: le prove non raggiungono
-    // Cloudflare, e chi la esercita la simula con una propria rotta.
-    await context.route("**/turnstile/v0/api.js*", (route) =>
-      route.fulfill({ contentType: "text/javascript", body: "" }),
-    );
     await use(context);
     await context.unrouteAll({ behavior: "ignoreErrors" });
   },

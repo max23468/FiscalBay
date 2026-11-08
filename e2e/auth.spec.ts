@@ -328,6 +328,11 @@ for (const language of ["it", "en"] as const) {
       page,
       browserErrors: errors,
     }) => {
+      // La verifica parte appena si tocca il modulo: qui si guarda la console della pagina, non
+      // quella del widget di Cloudflare, che su WebKit registra errori propri.
+      await page.route("**/turnstile/v0/api.js*", (route) =>
+        route.fulfill({ contentType: "text/javascript", body: "" }),
+      );
       await page.setViewportSize({ width, height: 666 });
       await page.emulateMedia({ reducedMotion: "reduce" });
       const prefix = language === "it" ? "" : "/en";
