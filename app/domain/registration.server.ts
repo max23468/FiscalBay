@@ -1,5 +1,5 @@
 import type { Language } from "../i18n";
-import { maxCompanyName, maxPersonName } from "../limits";
+import { maxCompanyName, maxPersonName } from "../limits.ts";
 
 /**
  * Versioni dei testi presentati alla registrazione, come data del testo in vigore

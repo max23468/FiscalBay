@@ -52,12 +52,17 @@ export async function writeLocalDatabase(sql: string) {
   }
 }
 
+/** Valore del cookie di sessione di Better Auth: il token firmato con il segreto locale. */
+export function signedSessionToken(token: string) {
+  return encodeURIComponent(
+    `${token}.${createHmac("sha256", localSecret).update(token).digest("base64")}`,
+  );
+}
+
 export function localCookie(role: PageRole, baseURL: string, token = `pages-${role}`) {
   return {
     name: `${new URL(baseURL).protocol === "https:" ? "__Secure-" : ""}better-auth.session_token`,
-    value: encodeURIComponent(
-      `${token}.${createHmac("sha256", localSecret).update(token).digest("base64")}`,
-    ),
+    value: signedSessionToken(token),
     url: baseURL,
     httpOnly: true,
     sameSite: "Lax" as const,

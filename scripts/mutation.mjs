@@ -84,7 +84,6 @@ export const supportModules = new Set([
   "app/money.ts",
   "app/orders/ebay-links.ts",
   "app/orders/export-columns.ts",
-  "app/orders/export-scope.server.ts",
   "app/orders/order-search.ts",
   "app/password.server.ts",
   "app/preferences.ts",

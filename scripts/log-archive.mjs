@@ -23,7 +23,7 @@ import { logEvents, logKeys } from "../app/log-records.ts";
 import { logArchives } from "../cloudflare.config.ts";
 import * as provider from "./lib/provider.mjs";
 import { workerOf } from "./lib/worker.mjs";
-import { cf, cfJson, keychain, modeOf } from "./lib/provider.mjs";
+import { cf, cfJson, keychain, modeOf, optionalJson } from "./lib/provider.mjs";
 
 export const retentionDays = 90;
 export const dataset = "workers_trace_events";
@@ -377,13 +377,7 @@ const jurisdiction = ["--cf-r2-jurisdiction", "eu"];
 
 function readState(target) {
   // Le letture facoltative tacciono gli errori, come per un bucket non ancora creato.
-  const optional = (args) => {
-    try {
-      return cfJson(args, { stderr: "ignore" });
-    } catch {
-      return null;
-    }
-  };
+  const optional = optionalJson;
   return {
     bucket: optional(["r2", "buckets", "get", target.bucket, ...jurisdiction]),
     lifecycle: optional(["r2", "buckets", "lifecycle", "get", target.bucket, ...jurisdiction]),

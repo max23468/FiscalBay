@@ -19,7 +19,7 @@
  * Uso: node scripts/capacity.mjs [costs|latency|remote|remote-clean|account] [--prebuilt] [--days 30]
  */
 import { execFileSync, spawn } from "node:child_process";
-import { createHmac, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -41,9 +41,10 @@ import {
 import { hashPassword } from "../app/password.server.ts";
 import { legalVersions } from "../app/domain/registration.server.ts";
 import { taskPeriods } from "../app/domain/work-timing.ts";
-import { localSecret } from "../e2e/local-account.ts";
+import { signedSessionToken } from "../e2e/local-account.ts";
 import { databases } from "../cloudflare.config.ts";
 import { d1Query, keychain } from "./lib/provider.mjs";
+import { workerOf } from "./lib/worker.mjs";
 import { applyLocalMigrations, executeLocal } from "./local-d1.mjs";
 
 const directory = "reports/capacity";
@@ -315,9 +316,7 @@ function measureCosts() {
 
 /** Cookie della sessione sintetica dello spazio, firmato con il segreto della copia locale. */
 function cookieOf(workspace) {
-  const token = sessionToken(workspace);
-  const signature = createHmac("sha256", localSecret).update(token).digest("base64");
-  return `better-auth.session_token=${encodeURIComponent(`${token}.${signature}`)}`;
+  return `better-auth.session_token=${signedSessionToken(sessionToken(workspace))}`;
 }
 
 async function timed(url, init) {
@@ -538,12 +537,12 @@ async function graphql(query, variables) {
 }
 
 async function readWindow(since, until) {
-  const { default: config } = await import("../cloudflare.config.ts");
+  const worker = workerOf("test");
   const data = await graphql(windowQuery, {
-    account: config({ mode: "development" }).worker.env.CLOUDFLARE_ACCOUNT_ID.value,
+    account: worker.env.CLOUDFLARE_ACCOUNT_ID.value,
     since: since.toISOString(),
     until: until.toISOString(),
-    script: "fiscalbay-test",
+    script: worker.name,
     database: databases.test.id,
   });
   const [account] = data.viewer.accounts;
@@ -676,13 +675,12 @@ function analyticsToken() {
 }
 
 export async function readAccount(days) {
-  const { default: config } = await import("../cloudflare.config.ts");
   const until = new Date();
   const since = new Date(until.getTime() - days * 86_400_000);
   const date = (at) => at.toISOString().slice(0, 10);
   return accountUsage(
     await graphql(accountQuery, {
-      account: config({ mode: "development" }).worker.env.CLOUDFLARE_ACCOUNT_ID.value,
+      account: workerOf("test").env.CLOUDFLARE_ACCOUNT_ID.value,
       since: date(since),
       until: date(until),
       sinceTime: since.toISOString(),

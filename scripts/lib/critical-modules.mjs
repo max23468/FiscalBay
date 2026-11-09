@@ -10,7 +10,7 @@ const criticalShared = new Set([
   "app/markup.ts",
   "app/tax-quality.ts",
   "app/time.ts",
-  "app/orders/order-list.ts",
+  "app/orders/order-criteria.ts",
   "app/domain/work-timing.ts",
   "app/domain/subscription-offers.ts",
   "app/domain/auth-attempts.server.ts",
