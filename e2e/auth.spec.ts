@@ -1,13 +1,10 @@
 import { noPageOverflow, open } from "./components";
-import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
+import { expect, localOnly, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { useLocalAccount, localPassword } from "./local-account";
 import { testAccount } from "./test-account";
 
 test.describe("area reale", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   // Accessi e passkey stanno nella categoria Account delle Impostazioni.
   test.describe("impostazioni", () => {

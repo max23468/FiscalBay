@@ -1,13 +1,10 @@
 import { open } from "./components";
-import { expect, test, pagePath } from "./fixtures";
+import { expect, localOnly, test, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
 test.describe("area reale", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   // Il profilo è una categoria delle Impostazioni.
   test.describe("impostazioni", () => {

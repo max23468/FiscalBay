@@ -1,13 +1,10 @@
 import type { Page } from "@playwright/test";
 import { noPageOverflow, open } from "./components";
-import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
+import { expect, localOnly, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 
 test.describe("miglioramenti account e negozi", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   for (const language of ["it", "en"] as const) {
     const prefix = language === "it" ? "" : "/en";
@@ -514,10 +511,7 @@ test.describe("ordini", () => {
 });
 
 test.describe("abbonamento nel piano", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   // Scollegare l'unico negozio con un abbonamento che si rinnova non lo disdice: lo dicono
   // entrambe le superfici.

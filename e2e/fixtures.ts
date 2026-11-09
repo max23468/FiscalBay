@@ -166,3 +166,11 @@ export const test = base.extend<{ pageErrors: string[]; browserErrors: string[] 
     await use(pageErrors);
   },
 });
+
+/** Prove che creano dati sintetici: sul dominio remoto non si eseguono. */
+export function localOnly() {
+  test.skip(
+    Boolean(process.env.E2E_BASE_URL),
+    "Prove con dati sintetici soltanto sul database locale.",
+  );
+}

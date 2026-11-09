@@ -427,9 +427,7 @@ describe("Lifetime e concessioni", () => {
   it("detrae soltanto il periodo pagato non usato, sull'istante UTC", () => {
     const month = { startsAt: "2028-02-01T00:00:00.000Z", endsAt: "2028-03-01T00:00:00.000Z" };
     // Febbraio bisestile: 29 giorni, 15 ancora da usare.
-    expect(unusedCredit(490, month, at("2028-02-15T00:00:00.000Z"))).toBe(
-      Math.floor((490 * 15) / 29),
-    );
+    expect(unusedCredit(490, month, at("2028-02-15T00:00:00.000Z"))).toBe(253);
     // Il periodo non ancora iniziato vale per intero, quello finito niente.
     expect(unusedCredit(490, month, at("2028-01-31T23:00:00.000Z"))).toBe(490);
     expect(unusedCredit(490, month, at("2028-03-01T00:00:00.000Z"))).toBe(0);

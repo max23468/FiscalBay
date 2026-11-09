@@ -2,15 +2,12 @@ import { readFile } from "node:fs/promises";
 import type { Page } from "@playwright/test";
 import { strFromU8, unzipSync } from "fflate";
 import { areas, clickHydrated, enter, noPageOverflow, open } from "./components";
-import { expect, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
+import { expect, localOnly, networkIdle, test, watchNetwork, pagePath } from "./fixtures";
 import { localPassword, useLocalAccount, writeLocalDatabase } from "./local-account";
 import { bellName } from "./page-cases";
 
 test.describe("area reale", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   test("impostazioni reali: tema, fuso, lingua, modello e campanella restano dopo la ricarica", async ({
     page,
@@ -715,10 +712,7 @@ test("il modulo di assistenza allega il riepilogo dalla casella, con il riferime
 });
 
 test.describe("assistenza reale", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   for (const language of ["it", "en"] as const)
     test(`il modulo dell'area reale segnala gli errori e invia la richiesta ${language}`, async ({
@@ -814,10 +808,7 @@ for (const area of areas)
   });
 
 test.describe("negozio attivo del Free", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   for (const language of ["it", "en"] as const)
     test(`negozi reali: il secondo negozio è in pausa e la sostituzione chiede conferma ${language}`, async ({
@@ -874,10 +865,7 @@ test.describe("negozio attivo del Free", () => {
 });
 
 test.describe("inattività e ammissione", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   for (const language of ["it", "en"] as const) {
     const it = language === "it";
@@ -954,10 +942,7 @@ test.describe("inattività e ammissione", () => {
 });
 
 test.describe("abbonamento nel piano", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   // Ogni stato reale si legge accanto allo scenario dell'anteprima che lo rappresenta.
   const states = [
@@ -1151,10 +1136,7 @@ async function openNotifications(page: Page, prefix: string, it: boolean) {
 }
 
 test.describe("notifiche Telegram", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   for (const language of ["it", "en"] as const)
     test(`la chat collegata salva preferenze e negozi, ${language}`, async ({
