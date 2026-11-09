@@ -1,5 +1,6 @@
 import type { Language } from "../i18n";
 import { maxCompanyName, maxPersonName } from "../limits.ts";
+import { waitlistOnSql } from "./admission-state.server.ts";
 
 /**
  * Versioni dei testi presentati alla registrazione, come data del testo in vigore
@@ -143,8 +144,7 @@ export async function completeRegistration(
         .prepare(
           `INSERT INTO user_profiles
              (user_id, first_name, last_name, account_type, company_name, updated_at, waitlisted_at)
-           VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN EXISTS (
-             SELECT 1 FROM admission_settings WHERE free_waitlist = 1) THEN ?6 END)
+           VALUES (?1, ?2, ?3, ?4, ?5, ?6, CASE WHEN ${waitlistOnSql} THEN ?6 END)
            ON CONFLICT (user_id) DO UPDATE SET
              first_name = excluded.first_name,
              last_name = excluded.last_name,

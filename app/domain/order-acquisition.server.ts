@@ -521,6 +521,27 @@ export async function acquireOrders(input: {
   }
 }
 
+/**
+ * Lettura chiesta per il negozio, registrata soltanto con il consenso `grantedAt` ancora valido
+ * e senza pausa; una richiesta già in attesa conserva il proprio istante.
+ */
+export function requestStoreRead(
+  db: D1Database,
+  storeId: string,
+  grantedAt: string | null,
+  at: string,
+) {
+  return db
+    .prepare(
+      `INSERT INTO sync_state (store_id, requested_at, updated_at)
+       SELECT ?1, ?3, ?3 WHERE ${writableStore}
+       ON CONFLICT(store_id) DO UPDATE SET
+         requested_at = COALESCE(sync_state.requested_at, excluded.requested_at)
+       RETURNING requested_at`,
+    )
+    .bind(storeId, grantedAt, at);
+}
+
 export type ActiveStore = {
   store_id: string;
   access_token: string;
@@ -594,14 +615,7 @@ export async function consumeOrderConfirmation(
       .first<ActiveStore & { access_expires_at: string }>();
   if (!store) return;
   if (!(await serviceSetting(env.DB, "ebay_calls"))) {
-    await env.DB.prepare(
-      `INSERT INTO sync_state (store_id, requested_at, updated_at)
-       SELECT ?1, ?3, ?3 WHERE ${writableStore}
-       ON CONFLICT(store_id) DO UPDATE SET
-         requested_at = COALESCE(sync_state.requested_at, excluded.requested_at)`,
-    )
-      .bind(store.store_id, store.granted_at, now.toISOString())
-      .run();
+    await requestStoreRead(env.DB, store.store_id, store.granted_at, now.toISOString()).run();
     return;
   }
   if (store.access_expires_at <= now.toISOString()) throw new UpstreamError("credentials");

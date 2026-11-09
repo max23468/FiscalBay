@@ -1,7 +1,16 @@
-import { sessionPolicy } from "../auth.server";
 import { deviceName } from "../account/device-name";
 import type { Language } from "../i18n";
 import { elapsedMs } from "../time";
+
+/**
+ * Durata delle sessioni in secondi: scadenza, rinnovo con l'uso e accesso recente. Il rinnovo
+ * aggiorna anche l'ultima attività mostrata in Sicurezza, quindi avviene al più una volta l'ora.
+ */
+export const sessionPolicy = {
+  expiresIn: 7 * 86_400,
+  updateAge: 3_600,
+  freshAge: 86_400,
+} as const;
 
 /** Campi della sessione Better Auth usati qui, compresi quelli aggiunti da FiscalBay. */
 export interface AuthSession {

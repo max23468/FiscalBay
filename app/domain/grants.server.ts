@@ -1,18 +1,18 @@
 import { baseFreeQuota, openPromotionEnd } from "../catalog";
 import { purchasesOpenSql, waitingSql } from "./admission-state.server";
 import { openSubscriptionSql } from "./billing-subscriptions.server";
-import { consultableStore } from "./store-state.server";
+import { consultableStore, orderLineageSql } from "./store-state.server";
 import type { EbayEnvironment } from "../view-models";
 import { dayMilliseconds } from "../time";
 
 /** Predicato condiviso: nessun valore fiscale entra nel risultato prima dell'autorizzazione. */
 export function orderAccessSql(order: string, workspace: string, at: string) {
   return `(EXISTS (SELECT 1 FROM order_grants g JOIN orders original ON original.id = g.order_id
-    WHERE g.workspace_id = ${workspace} AND (original.id = ${order} OR original.merged_into = ${order})
+    WHERE g.workspace_id = ${workspace} AND ${orderLineageSql(order)}
       AND julianday(g.granted_at) <= julianday(${at}) AND g.revoked_at IS NULL
       AND (g.expires_at IS NULL OR julianday(g.expires_at) > julianday(${at})))
     OR EXISTS (SELECT 1 FROM workspace_entitlements e
-      JOIN orders original ON original.id = ${order} OR original.merged_into = ${order}
+      JOIN orders original ON ${orderLineageSql(order)}
       JOIN tax_identifiers t ON t.order_id = original.id
       WHERE e.workspace_id = ${workspace} AND e.revoked_at IS NULL
         AND julianday(e.starts_at) <= julianday(${at})

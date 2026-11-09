@@ -3,7 +3,7 @@ import { stalledEbayDeletions } from "./ebay-account-deletion.server";
 import { auditInProgress } from "./admin-audit.server";
 import { bulkDataAnomalies, quotaAnomalies } from "./ebay-quotas.server";
 import { minute, stalledReceiptMilliseconds, taskPeriods, type ScheduledTask } from "./work-timing";
-import { listedOrder, storeLabelSql } from "./store-state.server";
+import { listedOrder, orderLineageSql, storeLabelSql } from "./store-state.server";
 
 /**
  * Stato operativo per la console (§15): lavori periodici, ricevute dei provider, letture dei
@@ -139,7 +139,7 @@ export async function retryOrderDetails(db: D1Database, storeId: string, now = n
 /** L'ordine `o`, anche attraverso gli ordini uniti in lui, non ha un dato fiscale presente. */
 const taxMissingSql = `NOT EXISTS (SELECT 1 FROM tax_identifiers t
   JOIN orders original ON original.id = t.order_id
-  WHERE (original.id = o.id OR original.merged_into = o.id) AND t.removed_at IS NULL)`;
+  WHERE ${orderLineageSql("o.id")} AND t.removed_at IS NULL)`;
 
 const storeHref = (id: string) => `negozi?q=${encodeURIComponent(id)}`;
 const workspaceHref = (id: string) => `spazi/${encodeURIComponent(id)}`;

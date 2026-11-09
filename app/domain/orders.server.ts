@@ -14,7 +14,7 @@ import {
   type EbayEnvironment,
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
-import { consultableStore, storeLabelSql } from "./store-state.server";
+import { consultableStore, orderLineageSql, storeLabelSql } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 import { sqlList } from "./sql.server";
 
@@ -189,7 +189,7 @@ const accessSql = orderAccessSql("o.id", "wm.workspace_id", "?3");
 /** Colonna dell'ultima verifica fiscale dell'ordine, anche degli acquisti confluiti. */
 const latestCheckSql = (column: "availability" | "verification") =>
   `(SELECT tc.${column} FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-     WHERE original.id = o.id OR original.merged_into = o.id
+     WHERE ${orderLineageSql("o.id")}
      ORDER BY tc.observed_at DESC, tc.source LIMIT 1)`;
 
 /**
@@ -201,7 +201,7 @@ const verificationSql = `CASE
   WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
     AND r.source = 'fulfillment' AND r.detail_for IS NOT r.last_modified_time) THEN 'checking'
   WHEN EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-         WHERE original.id = o.id OR original.merged_into = o.id) THEN 'completed'
+         WHERE ${orderLineageSql("o.id")}) THEN 'completed'
   ELSE 'unchecked' END`;
 
 /**
@@ -380,7 +380,7 @@ export async function visibleOrdersTerm(
               MIN((SELECT MIN(g.expires_at) FROM order_grants g
                      JOIN orders original ON original.id = g.order_id
                     WHERE g.workspace_id = wm.workspace_id
-                      AND (original.id = o.id OR original.merged_into = o.id)
+                      AND ${orderLineageSql("o.id")}
                       AND g.revoked_at IS NULL AND julianday(g.expires_at) > julianday(?3))) AS unlock
          ${visibleOrdersSql}`,
     )
@@ -530,12 +530,12 @@ export async function listVisibleOrders(
               o.cancel_status, o.store_id, o.marketplace_id, o.is_provisional,
               (SELECT json_object('availability', availability, 'at', observed_at, 'verification', verification)
                  FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-                WHERE original.id = o.id OR original.merged_into = o.id
+                WHERE ${orderLineageSql("o.id")}
                 ORDER BY tc.observed_at DESC, tc.source LIMIT 1) AS tax_check_json,
               ${verificationSql} AS tax_verification,
               ${fiscalSql(listedAccessSql)} AS fiscal_state,
               (SELECT MIN(t.observed_at) FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
-                WHERE original.id = o.id OR original.merged_into = o.id) AS first_tax_available_at,
+                WHERE ${orderLineageSql("o.id")}) AS first_tax_available_at,
               (EXISTS (SELECT 1 FROM order_reconciliation_issues i
                 WHERE i.order_id = o.id OR i.related_order_id = o.id)
                OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND i.stable_key IS NULL)) AS reconciliation_issue,
@@ -553,7 +553,7 @@ export async function listVisibleOrders(
               ti.identifier_type,
               EXISTS (SELECT 1 FROM tax_identifiers previous
                 JOIN orders original ON original.id = previous.order_id
-                WHERE (original.id = o.id OR original.merged_into = o.id)
+                WHERE ${orderLineageSql("o.id")}
                 AND previous.source = ti.source
                 AND ${taxKind("previous")} = ${taxKind("ti")}
                 AND previous.removed_at <= ti.observed_at) AS tax_updated,

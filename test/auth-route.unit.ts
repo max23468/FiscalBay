@@ -52,7 +52,6 @@ vi.mock("../app/auth.server", () => ({
     }),
   }),
   readSession: (_env: Env, request: Request) => services.session({ headers: request.headers }),
-  sessionPolicy: { freshAge: 86400 },
 }));
 vi.mock("../app/domain/registration.server", () => ({ registrationStatus: services.registration }));
 vi.mock("../app/integrations/ebay/store-link.server", () => ({

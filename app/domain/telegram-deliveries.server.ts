@@ -3,7 +3,12 @@ import { workLockMilliseconds } from "./work-timing";
 import { listVisibleOrders } from "./orders.server";
 import { maxListedOrders } from "../orders/order-criteria";
 import { serviceSetting } from "./service-settings.server";
-import { consultableStore, listedOrder, storeLabelSql } from "./store-state.server";
+import {
+  consultableStore,
+  listedOrder,
+  orderLineageSql,
+  storeLabelSql,
+} from "./store-state.server";
 import { backoffMs, minute } from "./work-timing";
 import {
   telegramPreferencesSql,
@@ -153,10 +158,10 @@ type Candidate = {
 const writtenSince = (column: string) =>
   `julianday(${column}) > julianday(n.evaluated_at) - ${workLockMilliseconds / dayMilliseconds}`;
 const changedSinceSql = `(EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
-      WHERE (original.id = o.id OR original.merged_into = o.id)
+      WHERE ${orderLineageSql("o.id")}
         AND (${writtenSince("t.observed_at")} OR ${writtenSince("t.removed_at")}))
     OR EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-      WHERE (original.id = o.id OR original.merged_into = o.id) AND ${writtenSince("tc.observed_at")}))`;
+      WHERE ${orderLineageSql("o.id")} AND ${writtenSince("tc.observed_at")}))`;
 
 /**
  * Istante dell'ultima variazione dei valori fiscali dell'ordine, anche dei suoi acquisti
@@ -165,7 +170,7 @@ const changedSinceSql = `(EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders or
  */
 const changedAtSql = `(SELECT MAX(max(t.observed_at, COALESCE(t.removed_at, t.observed_at)))
       FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
-      WHERE original.id = o.id OR original.merged_into = o.id)`;
+      WHERE ${orderLineageSql("o.id")})`;
 
 /** Ordini consultabili dello spazio con le loro viste, letti come nel sito dall'utente dello spazio. */
 export async function noticesOf(
@@ -645,7 +650,7 @@ async function compose(
           (SELECT count(*) FROM orders o WHERE o.store_id = s.id AND ${listedOrder("o", "?2")}
             AND o.creation_time >= ss.history_from AND o.creation_time < ss.history_until
             AND EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
-              WHERE (original.id = o.id OR original.merged_into = o.id) AND t.removed_at IS NULL)) AS fiscal
+              WHERE ${orderLineageSql("o.id")} AND t.removed_at IS NULL)) AS fiscal
         FROM ebay_stores s JOIN sync_state ss ON ss.store_id = s.id
         WHERE s.id = ?1 AND ss.history_done_at IS NOT NULL`)
       .bind(delivery.store_id, now.toISOString())

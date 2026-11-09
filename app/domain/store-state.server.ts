@@ -54,6 +54,13 @@ export const listedOrder = (order: string, at: string) =>
   `${order}.merged_into IS NULL AND ${order}.retention_until > ${at} AND ${order}.is_provisional = 0`;
 
 /**
+ * Riga `original` di `orders` che appartiene all'ordine `order`: l'ordine stesso o un acquisto
+ * confluito in lui, con identificativi, verifiche e sblocchi propri.
+ */
+export const orderLineageSql = (order: string) =>
+  `(original.id = ${order} OR original.merged_into = ${order})`;
+
+/**
  * Le scritture di un'importazione valgono solo per il consenso con cui è partita: dopo uno
  * scollegamento, un'eliminazione dei dati, un nuovo consenso o una pausa non scrivono nulla.
  * Parametri: ?1 negozio, ?2 data del consenso.

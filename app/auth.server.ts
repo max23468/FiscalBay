@@ -22,7 +22,12 @@ import { accountDeletionPath, authErrorPath, emailCodeConfirmPath } from "./app-
 import { logFailure } from "./errors";
 import { localizedPath, type Language } from "./i18n";
 import { maxPasswordLength, minPasswordLength } from "./limits";
-import { emailVerificationSeconds } from "./domain/email-change.server";
+import {
+  advanceEmailChange,
+  clearEmailChange,
+  emailVerificationSeconds,
+} from "./domain/email-change.server";
+import { sessionPolicy } from "./domain/sessions.server";
 import { recordSignupSource } from "./domain/signup-sources.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
@@ -64,16 +69,6 @@ const ebayIdentitySchema = z.object({
 
 /** Dominio delle email di cui Google è autorevole oltre ai domini Workspace. */
 export const gmailDomain = "gmail.com";
-
-/**
- * Durata delle sessioni in secondi: scadenza, rinnovo con l'uso e accesso recente. Il rinnovo
- * aggiorna anche l'ultima attività mostrata in Sicurezza, quindi avviene al più una volta l'ora.
- */
-export const sessionPolicy = {
-  expiresIn: 7 * 86_400,
-  updateAge: 3_600,
-  freshAge: 86_400,
-} as const;
 
 // Richieste in cui una passkey ha superato la verifica dell'utente sul dispositivo: la
 // sessione creata dalla stessa richiesta lo registra. La richiesta resta in memoria solo
@@ -358,23 +353,15 @@ function verificationOptions(env: Env): BetterAuthOptions["emailVerification"] {
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       // Il secondo link arriva al nuovo indirizzo; l'accesso resta sul precedente fino alla conferma.
-      const change = await env.DB.prepare(
-        "UPDATE account_email_changes SET stage = 'new', expires_at = ? WHERE user_id = ? AND new_email = ?",
-      )
-        .bind(
-          new Date(Date.now() + emailVerificationSeconds * 1000).toISOString(),
-          user.id,
-          user.email,
-        )
-        .run();
+      const changing = await advanceEmailChange(env.DB, user.id, user.email);
       // Il cambio di indirizzo resta con il solo link.
-      const code = change.meta.changes > 0 ? undefined : await newEmailCode(env, user.email);
+      const code = changing ? undefined : await newEmailCode(env, user.email);
       sendAuthEmail(env, "verify", { to: user.email, url, code });
     },
     beforeEmailVerification: (user, request) => requireConfirmationSession(env, user, request),
     afterEmailVerification: async (user, request) => {
       await env.DB.batch([
-        env.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?").bind(user.id),
+        clearEmailChange(env.DB, user.id),
         // Confermato con il link, il codice della stessa email non vale più.
         env.DB.prepare('DELETE FROM "verification" WHERE "identifier" = ?').bind(
           emailCodeIdentifier(user.email),
