@@ -5,6 +5,20 @@
 
 export const minute = 60_000;
 
+/**
+ * Durata di un blocco su un lavoro in esecuzione: un consumer della coda o un compito del cron
+ * non dura di più, quindi allo scadere il blocco di un'esecuzione interrotta si libera.
+ */
+export const workLockMilliseconds = 15 * minute;
+
+/**
+ * Termine del blocco preso all'istante `now`. Il valore scritto è anche il segno di chi tiene
+ * il blocco: rilascio e proroga lo confrontano, così chi l'ha perso allo scadere non tocca
+ * quello preso dopo da un altro consumer.
+ */
+export const workLockUntil = (now: Date) =>
+  new Date(now.getTime() + workLockMilliseconds).toISOString();
+
 /** Periodo di ogni compito periodico smistato dal cron. */
 export const taskPeriods = {
   maintenance: 24 * 60 * minute,

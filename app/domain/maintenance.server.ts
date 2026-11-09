@@ -1,5 +1,6 @@
 import { orderSearchText } from "../orders/order-search";
 import { purgeDeletionMarkers } from "./account-deletion.server";
+import { purgeAuthAttempts } from "./auth-attempts.server";
 import { purgeEbayDeletionMarkers } from "./ebay-account-deletion.server";
 import { purgeExitFeedback } from "./exit-feedback.server";
 import { auditRetentionDays } from "./admin-audit.server";
@@ -58,8 +59,7 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
       .bind(at),
     db.prepare('DELETE FROM "session" WHERE "expiresAt" <= ?').bind(at),
     db.prepare('DELETE FROM "verification" WHERE "expiresAt" <= ?').bind(at),
-    // Le finestre più lunghe durano un'ora.
-    db.prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?').bind(now.getTime() - 3_600_000),
+    purgeAuthAttempts(db, now.getTime()),
     db.prepare("DELETE FROM ebay_store_link_sessions WHERE expires_at <= ?").bind(at),
     // Conteggi delle chiamate eBay: il budget usa il giorno corrente, la diagnosi una settimana.
     db.prepare("DELETE FROM ebay_call_counts WHERE day < date(?, '-7 days')").bind(at),

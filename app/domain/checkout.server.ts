@@ -25,7 +25,7 @@ import {
   stripeSecretKey,
 } from "../integrations/stripe.server";
 import { purchasesOpenSql } from "./admission-state.server";
-import { reconcileSubscription, workspaceCustomerSql } from "./billing.server";
+import { checkoutRereadDays, reconcileSubscription, workspaceCustomerSql } from "./billing.server";
 import { openSubscriptionSql } from "./billing-subscriptions.server";
 import { entitlementInForce, paidCoverageSql, storeReadSql } from "./grants.server";
 import {
@@ -208,7 +208,7 @@ const subscriptionCheckoutMs = 60 * 60 * 1000;
 const staleClaimMs = 5 * 60 * 1000;
 
 /** Sessioni più vecchie sono già state rilette dal compito `billing`. */
-const recentCheckoutMs = 2 * dayMilliseconds;
+const recentCheckoutMs = checkoutRereadDays * dayMilliseconds;
 
 /**
  * Chiude le sessioni ancora aperte dello spazio prima di aprirne una nuova, così una sola può

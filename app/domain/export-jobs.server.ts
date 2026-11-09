@@ -21,7 +21,7 @@ import {
 import { orderAllowance } from "./grants.server";
 import { exportCsvStream, exportOrderPages, exportXlsxStream } from "./order-export.server";
 import { visibleOrderTallies, visibleOrdersTerm } from "./orders.server";
-import { queueRetryDelay } from "./work-timing";
+import { queueRetryDelay, workLockMilliseconds, workLockUntil } from "./work-timing";
 import { XlsxRowLimitError } from "./xlsx.server";
 
 /**
@@ -46,9 +46,6 @@ export const maxQueuedExports = 2;
 
 /** Lavori riaccodati in un turno della ripresa; gli altri restano al turno successivo. */
 const resumeBatch = 100;
-
-/** Durata del blocco di un lavoro in esecuzione: un consumer interrotto lo cede allo scadere. */
-const lockMilliseconds = 15 * 60_000;
 
 /** Tipo del contenuto di ogni formato. */
 export const contentTypes = {
@@ -189,8 +186,7 @@ export async function consumeExportJob(
 ): Promise<void> {
   const { exportJob: id } = jobMessageSchema.parse(message.body);
   const at = now.toISOString();
-  // Il termine del blocco è anche il segno di chi lo tiene: il rilascio lo confronta.
-  const lock = new Date(now.getTime() + lockMilliseconds).toISOString();
+  const lock = workLockUntil(now);
   const job = await env.DB.prepare(
     `UPDATE export_jobs SET locked_until = ?2
       WHERE id = ?1 AND state = 'queued' AND (locked_until IS NULL OR locked_until <= ?3)
@@ -309,7 +305,7 @@ export async function resumeExportJobs(
     `SELECT id FROM export_jobs WHERE ${unlocked} AND julianday(requested_at) <= julianday(?2)
       ORDER BY requested_at LIMIT ?3`,
   )
-    .bind(at, new Date(now.getTime() - lockMilliseconds).toISOString(), resumeBatch)
+    .bind(at, new Date(now.getTime() - workLockMilliseconds).toISOString(), resumeBatch)
     .all<{ id: string }>();
   if (results.length)
     await env.WORK_QUEUE.sendBatch(results.map(({ id }) => ({ body: { exportJob: id } })));

@@ -19,7 +19,13 @@ import { logFailure } from "../errors";
 import { refreshExpiringTokens } from "./token-refresh.server";
 import { sendReconnectNotices } from "./reconnect-notices.server";
 import { recoverWebhookIngress } from "./webhook-receipts.server";
-import { minute, queueRetryDelay, taskPeriods, type ScheduledTask } from "./work-timing";
+import {
+  minute,
+  queueRetryDelay,
+  taskPeriods,
+  workLockUntil,
+  type ScheduledTask,
+} from "./work-timing";
 
 export type { ScheduledTask };
 
@@ -37,7 +43,6 @@ export type { ScheduledTask };
  */
 
 const staleMilliseconds = 60 * minute;
-const leaseMilliseconds = 15 * minute;
 
 const tasks = {
   // Sessioni, link, ricevute e altri dati tecnici scaduti: la pulizia fisica resta entro un
@@ -235,7 +240,7 @@ export async function consumeTask(
       WHERE task = ?1 AND slot = ?2 AND done_at IS NULL
         AND (locked_until IS NULL OR locked_until <= ?5) RETURNING task`,
   )
-    .bind(task, slot, lease, new Date(now.getTime() + leaseMilliseconds).toISOString(), at)
+    .bind(task, slot, lease, workLockUntil(now), at)
     .first();
   if (!pending) {
     const busy = await env.DB.prepare(

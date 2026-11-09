@@ -1,5 +1,5 @@
 import { activeEntitlementSql } from "./grants.server";
-import { lockMilliseconds } from "./order-acquisition.server";
+import { workLockMilliseconds } from "./work-timing";
 import { listVisibleOrders } from "./orders.server";
 import { maxListedOrders } from "../orders/order-criteria";
 import { serviceSetting } from "./service-settings.server";
@@ -140,12 +140,12 @@ type Candidate = {
 
 /**
  * Variazioni fiscali dell'ordine, anche dei suoi acquisti confluiti, dopo la valutazione. Una
- * lettura registra l'istante in cui è partita e scrive fino a `lockMilliseconds` dopo: una
- * valutazione nel frattempo non l'ha vista, quindi il confronto la include. Rivalutare un
+ * lettura registra l'istante in cui è partita e scrive al massimo per la durata del suo blocco:
+ * una valutazione nel frattempo non l'ha vista, quindi il confronto la include. Rivalutare un
  * ordine senza variazioni non prepara eventi, perché l'impronta resta la stessa.
  */
 const writtenSince = (column: string) =>
-  `julianday(${column}) > julianday(n.evaluated_at) - ${lockMilliseconds / dayMilliseconds}`;
+  `julianday(${column}) > julianday(n.evaluated_at) - ${workLockMilliseconds / dayMilliseconds}`;
 const changedSinceSql = `(EXISTS (SELECT 1 FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
       WHERE (original.id = o.id OR original.merged_into = o.id)
         AND (${writtenSince("t.observed_at")} OR ${writtenSince("t.removed_at")}))

@@ -35,6 +35,7 @@ import {
 import { openToken, rejectCredentials } from "../integrations/ebay/seller-credentials.server";
 import { readTradingOrders, tradingReachDays } from "../integrations/ebay/trading.server";
 import { inSequence } from "../sequence";
+import { workLockUntil } from "./work-timing";
 
 /**
  * Acquisizione degli ordini di un negozio, condivisa da collegamento e lavoro periodico:
@@ -71,11 +72,6 @@ const minimumSliceMilliseconds = 1_000;
 const overlapMilliseconds = 15 * 60_000;
 /** Intervallo massimo di modifica di una lettura Trading `GetOrders`. */
 const tradingWindowDays = 30;
-/**
- * Durata massima di una lettura: le sue scritture portano l'istante d'inizio, quindi arrivano in
- * D1 fino a questo tempo dopo l'istante registrato.
- */
-export const lockMilliseconds = 15 * 60_000;
 /**
  * Cadenza della passata Trading periodica (D177, D322). Il solo dato visibile che Trading aggiunge
  * a Fulfillment sono le fatture combinate dal venditore senza checkout eBay: ogni due ore per un
@@ -429,7 +425,7 @@ export async function acquireOrders(input: {
   // Ogni chiamata del negozio si conta per giorno; il budget del giorno vale per tutta la lettura.
   const access = countedAccess(db, input.access, now);
   const quota = await loadCallBudget(db, access, now, input.workerShare);
-  const lock = new Date(now.getTime() + lockMilliseconds).toISOString();
+  const lock = workLockUntil(now);
   // Con una finestra più ampia, come all'attivazione di una copertura, lo storico concluso
   // riprende dal periodo più vecchio non ancora importato; una passata ormai tutta fuori dalla
   // finestra, come dopo il ritorno al Free, si chiude dove era arrivato lo storico completo.

@@ -1,5 +1,4 @@
-import { countAuthAttempt, purgeAuthAttempts } from "./domain/auth-attempts.server";
-import { waitUntil } from "./service-activity.server";
+import { countAuthAttempt, longestAttemptWindow } from "./domain/auth-attempts.server";
 import { redirect } from "react-router";
 import { z } from "zod";
 
@@ -138,7 +137,7 @@ const addressLimits = () => [
   { paths: /^\/email-otp\/verify-email$/u, window: 900, max: 10 },
   {
     paths: /^\/(sign-up\/email|send-verification-email|request-password-reset|forget-password)$/u,
-    window: 3600,
+    window: longestAttemptWindow,
     max: 5,
   },
 ];
@@ -206,12 +205,7 @@ async function addressWait(request: Request, env: Env): Promise<number | "unsupp
   if (formBody(request)) return "unsupported";
   const address = await addressKey(request);
   if (!address) return null;
-  const now = Date.now();
-  // Pulizia occasionale delle finestre chiuse da oltre un'ora, fuori dal percorso della risposta.
-  if (Math.random() < 0.02) {
-    waitUntil(purgeAuthAttempts(env.DB, now));
-  }
-  return countAuthAttempt(env.DB, `${address}|${path}`, rule, now);
+  return countAuthAttempt(env.DB, `${address}|${path}`, rule, Date.now());
 }
 
 async function authResponse(request: Request, env: Env, admitted = false): Promise<Response> {

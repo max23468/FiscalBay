@@ -72,7 +72,7 @@ it("la pulizia dei tentativi conserva il confine esatto di un'ora", async () => 
       { window: 60, max: 2 },
       at - 3_600_000 + offset,
     );
-  await purgeAuthAttempts(env.DB, at);
+  await purgeAuthAttempts(env.DB, at).run();
   const { results } = await env.DB.prepare(
     'SELECT "key" FROM "rateLimit" WHERE "key" LIKE ? ORDER BY "key"',
   )

@@ -336,7 +336,9 @@ async function scheduleProtectionEnd(
   return subscription;
 }
 
-const sessionWindowMs = 2 * dayMilliseconds;
+/** Giorni in cui il compito `billing` rilegge le sessioni Checkout: oltre, sono già state rilette. */
+export const checkoutRereadDays = 2;
+const sessionWindowMs = checkoutRereadDays * dayMilliseconds;
 const batchSize = 25;
 /** Sessioni completate lette per turno: ben oltre il volume atteso di due giorni. */
 const sessionScanLimit = 1000;
@@ -409,10 +411,10 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
     logFailure({ error, operation: "billing" }),
   );
   const at = now.toISOString();
-  // Le sessioni scadute da oltre due giorni sono già state rilette: il riferimento non serve.
+  // Le sessioni scadute prima della finestra sono già state rilette: il riferimento non serve.
   await env.DB.prepare(`DELETE FROM subscription_checkouts
-      WHERE julianday(expires_at) < julianday(?1, '-2 days')`)
-    .bind(at)
+      WHERE julianday(expires_at) < julianday(?1) - ?2`)
+    .bind(at, checkoutRereadDays)
     .run()
     .catch((error: unknown) => logFailure({ error, operation: "billing" }));
   const { results } = await env.DB.prepare(`UPDATE stripe_subscriptions SET checked_at = ?1
@@ -437,8 +439,8 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
 const dueSql = `(julianday(s.current_period_end) <= julianday(?1)
     AND julianday(s.checked_at) < julianday(s.current_period_end)
   OR s.status IN (${sqlList(lapsedStatuses)})
-    AND julianday(s.current_period_start, '+7 days') <= julianday(?1)
-    AND julianday(s.checked_at) < julianday(s.current_period_start, '+7 days'))`;
+    AND julianday(s.current_period_start) + ${pricePromiseMs / dayMilliseconds} <= julianday(?1)
+    AND julianday(s.checked_at) < julianday(s.current_period_start) + ${pricePromiseMs / dayMilliseconds})`;
 
 /**
  * Abbonamento senza una copertura in corso: pagamento o rinnovo ancora da confermare. Una
