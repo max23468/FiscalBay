@@ -4,7 +4,7 @@ import { upstreamJson } from "../http.server";
 import { base64Url } from "../../sealed.server";
 import type { SellerTokens } from "./seller-credentials.server";
 import type { EbayEnvironment } from "../../view-models";
-import { basicAuthorization, ebayConfiguration, type EbayAccess } from "./environment.server";
+import { ebayConfiguration, requestToken, type EbayAccess } from "./environment.server";
 
 // Il collegamento del negozio non chiede l'email: resta separato dal login eBay. Le notifiche
 // servono soltanto a sottoscrivere `ORDER_CONFIRMATION` del venditore (D235).
@@ -195,18 +195,11 @@ export async function exchangeStoreConsent(
   issued: Date,
 ): Promise<StoreConsent> {
   const configuration = ebayConfiguration(env, link.ebayEnvironment);
-  const token = await upstreamJson(fetcher, configuration.tokenUrl, tokenSchema, {
-    method: "POST",
-    headers: {
-      authorization: basicAuthorization(configuration),
-      "content-type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: configuration.runame,
-      code_verifier: link.codeVerifier,
-    }),
+  const token = await requestToken(configuration, fetcher, tokenSchema, {
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: configuration.runame,
+    code_verifier: link.codeVerifier,
   });
   const identity = await upstreamJson(fetcher, configuration.identityUrl, identitySchema, {
     headers: { authorization: `Bearer ${token.access_token}` },

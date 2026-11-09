@@ -581,7 +581,7 @@ describe("Collegamento e modifica dell'identità", () => {
     expect(await request("email.occupata@example.invalid")).toContain("email-richiesta");
     expect(
       await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
-    ).toMatchObject({ new_email: "email.occupata@example.invalid", stage: "current" });
+    ).toMatchObject({ newEmail: "email.occupata@example.invalid", stage: "current" });
     expect(await request("non-valida")).toContain("email-non-valida");
     expect(send).not.toHaveBeenCalled();
 

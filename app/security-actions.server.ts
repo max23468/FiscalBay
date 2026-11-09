@@ -233,7 +233,7 @@ export async function securityAction(
       intent === "reinvia-email"
         ? await pendingEmailChange(env.DB, session.user.id, session.user.email)
         : null;
-    const email = (intent === "reinvia-email" ? (pending?.new_email ?? "") : field("email")).trim();
+    const email = (intent === "reinvia-email" ? (pending?.newEmail ?? "") : field("email")).trim();
     if (!email || email.length > 254) return notice("email-non-valida");
     const response = await forwardToAuth(
       env,

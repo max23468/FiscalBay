@@ -1,10 +1,10 @@
 import { z } from "zod";
 
 import { seal, unseal } from "../../sealed.server";
-import { UpstreamError, upstreamJson } from "../http.server";
+import { UpstreamError } from "../http.server";
 
 import type { EbayEnvironment } from "../../view-models";
-import { basicAuthorization, ebayConfiguration } from "./environment.server";
+import { ebayConfiguration, requestToken } from "./environment.server";
 
 export type SellerTokens = {
   accessToken: string;
@@ -204,13 +204,9 @@ export async function refreshStoreToken(input: {
   });
   let token: z.infer<typeof refreshSchema>;
   try {
-    token = await upstreamJson(input.fetcher, configuration.tokenUrl, refreshSchema, {
-      method: "POST",
-      headers: {
-        authorization: basicAuthorization(configuration),
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({ grant_type: "refresh_token", refresh_token: refreshToken }),
+    token = await requestToken(configuration, input.fetcher, refreshSchema, {
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
     });
   } catch (error) {
     // Solo `invalid_grant` riguarda il consenso del negozio; credenziali dell'app errate o

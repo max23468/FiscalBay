@@ -1,8 +1,9 @@
 /** Stato della richiesta, distinto dall'indirizzo di accesso effettivo gestito da Auth. */
 export interface PendingEmailChange {
-  new_email: string;
+  newEmail: string;
+  /** Link da confermare: quello al vecchio indirizzo, poi quello al nuovo. */
   stage: "current" | "new";
-  expires_at: string;
+  expiresAt: string;
 }
 
 export const emailVerificationSeconds = 3600;
@@ -17,7 +18,8 @@ export async function pendingEmailChange(db: D1Database, userId: string, email: 
     .bind(userId, new Date().toISOString(), email)
     .run();
   return db
-    .prepare("SELECT new_email, stage, expires_at FROM account_email_changes WHERE user_id = ?")
+    .prepare(`SELECT new_email AS newEmail, stage, expires_at AS expiresAt
+      FROM account_email_changes WHERE user_id = ?`)
     .bind(userId)
     .first<PendingEmailChange>();
 }
