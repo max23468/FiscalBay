@@ -1,6 +1,6 @@
 # Test e pubblicazione
 
-Ciclo dalla PR a Production. Ingressi, incidenti, capacità e ripristino sono nelle [operazioni](OPERATIONS.md). Il ciclo cambia soltanto per un errore riprodotto o su richiesta dell'owner, non per affinamenti ([D279](../decisions/DECISION_REGISTER.md)): ogni modifica costa una qualifica e invalida il riuso.
+Ciclo dalla PR a Production. Ingressi, incidenti, capacità e ripristino sono nelle [operazioni](OPERATIONS.md). Una modifica al ciclo richiede la sua qualifica e invalida il riuso delle prove già fatte.
 
 ## Controlli proporzionati
 
