@@ -10,6 +10,7 @@ import {
   previewStoresPath,
 } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
+import { readRetryForm, retryIntent } from "../orders/page-data";
 import type { ActionResult } from "../view-models";
 import { isScenarioId, loadScenario, scenarioVerified, type ScenarioId } from "./scenarios.server";
 
@@ -189,8 +190,8 @@ export async function simulateAction(request: Request, form: FormData) {
       { ok: true },
       { headers: { "Set-Cookie": await writePreviewState({ ...state, confirmUnlock: true }) } },
     );
-  if (intent === "retry") {
-    const id = String(form.get("order") ?? "");
+  if (intent === retryIntent) {
+    const id = readRetryForm(form);
     if (!scenario.orders.some((order) => order.id === id && order.fiscal.state === "error"))
       return data<ActionResult>({ ok: false, notice: t.stores.failed }, { status: 409 });
     const down = scenario.notices.find((notice) => notice.kind === "ebay-down");

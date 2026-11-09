@@ -98,3 +98,18 @@ export function rememberedStore(cookie: string | null, storeIds: readonly string
     return null;
   }
 }
+
+/**
+ * Un nuovo accesso agli Ordini, senza filtri né ordine aperto, riapre l'elenco `ordersHref` sul
+ * negozio scelto l'ultima volta, se è fra quelli filtrabili; null altrimenti.
+ */
+export function rememberedStoreHref(
+  request: Request,
+  ordersHref: string,
+  openedOrder: string | undefined,
+  storeIds: readonly string[],
+): string | null {
+  if (new URL(request.url).searchParams.size > 0 || openedOrder) return null;
+  const store = rememberedStore(request.headers.get("cookie"), storeIds);
+  return store ? `${ordersHref}?${new URLSearchParams({ negozio: store })}` : null;
+}

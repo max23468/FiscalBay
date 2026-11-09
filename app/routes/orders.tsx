@@ -7,7 +7,9 @@ import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage } from "~/components/orders/page";
 import {
+  readRetryForm,
   readUnlockForm,
+  retryIntent,
   unlockFailure,
   unlockIntent,
   type OrdersPageData,
@@ -54,7 +56,7 @@ import {
 import {
   ordersPageSize,
   pagesParam,
-  rememberedStore,
+  rememberedStoreHref,
   revalidateUnlessSnapshot,
 } from "../orders/order-list";
 import { ordersNotices } from "../orders/notices.server";
@@ -125,17 +127,13 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     .filter((store) => !store.pauseReasons.includes("plan"))
     .map((store) => ({ id: store.id, name: store.name }));
   // Un nuovo accesso agli Ordini riapre il negozio scelto l'ultima volta, visibile nei filtri.
-  const remembered =
-    search.size === 0 && !params.ordine
-      ? rememberedStore(
-          request.headers.get("cookie"),
-          filterStores.map((store) => store.id),
-        )
-      : null;
-  if (remembered)
-    throw redirect(
-      `${localizedPath(language, ordersPath)}?negozio=${encodeURIComponent(remembered)}`,
-    );
+  const remembered = rememberedStoreHref(
+    request,
+    localizedPath(language, ordersPath),
+    params.ordine,
+    filterStores.map((store) => store.id),
+  );
+  if (remembered) throw redirect(remembered);
   // `negozio` porta anche l'esito del collegamento di un negozio, che non è un filtro.
   const query = new URLSearchParams(search);
   if (isStoreNotice(query.get("negozio"))) query.delete("negozio");
@@ -318,7 +316,7 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 async function retryOrderRead({ request, area, form }: AreaActionContext) {
   const t = appCopy[area.language].stores;
   const userId = area.session.user.id;
-  const id = String(form.get("order") ?? "");
+  const id = readRetryForm(form);
   if (!id || id.length > 64) return actionFailure(400, t.failed);
   const environment = requestedEbayEnvironment(request);
   const suspended = await suspendedEbayRead(userId, { environment });
@@ -366,7 +364,7 @@ const orderActions: Record<string, AreaAction> = {
     failureNotice: (t) => t.settings.saveFailed,
   },
   "start-trial": trialAction,
-  retry: { run: retryOrderRead, failureNotice: (t) => t.stores.failed, limit: "work" },
+  [retryIntent]: { run: retryOrderRead, failureNotice: (t) => t.stores.failed, limit: "work" },
 };
 
 /** Sblocco e azioni degli Ordini; il filtro per IP di una nuova lettura precede la sessione. */

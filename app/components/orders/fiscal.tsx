@@ -42,7 +42,13 @@ import {
 } from "../../view-models";
 import { countryName } from "../../format";
 
-import { remainingUnlocks, unlockable, type OrdersAccount } from "../../orders/page-data";
+import {
+  remainingUnlocks,
+  retryFields,
+  retryIntent,
+  unlockable,
+  type OrdersAccount,
+} from "../../orders/page-data";
 import { buyerLanguage, identifierLabel, taxCodeLabels } from "./labels";
 import { CheckboxOption } from "~/components/checkbox-option";
 import { useDate } from "~/components/time-zone";
@@ -307,7 +313,7 @@ export function FiscalCodes({
                 size="sm"
                 disabled={ebayDown || action.pending}
                 focusableWhenDisabled
-                onClick={() => action.run("retry", { order: order.id })}
+                onClick={() => action.run(retryIntent, retryFields(order.id))}
               >
                 {t.orders.retry}
               </Button>

@@ -24,7 +24,7 @@ import { historyWindowDays } from "../domain/history-window.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { languageFromPath, localizedPath } from "../i18n";
 import { defaultTemplate } from "../preferences";
-import { rememberedStore, revalidateUnlessSnapshot } from "../orders/order-list";
+import { rememberedStoreHref, revalidateUnlessSnapshot } from "../orders/order-list";
 import { openSearch } from "../orders/order-search.server";
 import { previewOrderPage, previewSearchScope } from "../preview/order-list.server";
 import { scenarioVerified } from "../preview/scenarios.server";
@@ -51,17 +51,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     .filter((store) => store.pauseReason !== "plan")
     .map((store) => ({ id: store.id, name: store.name }));
   // Come nell'area reale, un nuovo accesso riapre il negozio scelto l'ultima volta.
-  const remembered =
-    search.size === 0 && !params.ordine
-      ? rememberedStore(
-          request.headers.get("cookie"),
-          stores.map((store) => store.id),
-        )
-      : null;
-  if (remembered)
-    throw redirect(
-      `${localizedPath(language, previewOrdersPath)}?negozio=${encodeURIComponent(remembered)}`,
-    );
+  const remembered = rememberedStoreHref(
+    request,
+    localizedPath(language, previewOrdersPath),
+    params.ordine,
+    stores.map((store) => store.id),
+  );
+  if (remembered) throw redirect(remembered);
   const query = await openSearch(env.BETTER_AUTH_SECRET, previewSearchScope, search);
   const page = previewOrderPage(
     scenario.orders,

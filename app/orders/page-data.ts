@@ -113,6 +113,13 @@ export function readUnlockForm(form: FormData) {
   };
 }
 
+/** Nuova verifica del dato fiscale di un ordine, chiesta dalla scheda o dal dettaglio. */
+export const retryIntent = "retry";
+
+export const retryFields = (orderId: string) => ({ order: orderId });
+
+export const readRetryForm = (form: FormData) => String(form.get("order") ?? "");
+
 export interface UnlockResult {
   unlocked: string[];
   remaining: number | null;
