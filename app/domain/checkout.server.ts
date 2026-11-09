@@ -26,12 +26,8 @@ import {
 } from "../integrations/stripe.server";
 import { purchasesOpenSql } from "./admission-state.server";
 import { reconcileSubscription, workspaceCustomerSql } from "./billing.server";
-import {
-  entitlementInForce,
-  openSubscriptionSql,
-  paidCoverageSql,
-  storeReadSql,
-} from "./grants.server";
+import { openSubscriptionSql } from "./billing-subscriptions.server";
+import { entitlementInForce, paidCoverageSql, storeReadSql } from "./grants.server";
 import {
   bindLifetimeSession,
   lifetimeContext,
@@ -493,12 +489,10 @@ async function hasAllocation(db: D1Database, workspaceId: string) {
 }
 
 /** Vendita rifiutata da FiscalBay prima del pagamento: nel log soltanto il motivo. */
-class CheckoutRefused extends ApplicationError {
-  constructor(readonly failure: string) {
-    super("CHECKOUT_PENDING");
-  }
-}
-
 function logCheckoutFailure(request: Request, failure: string) {
-  logFailure({ request, error: new CheckoutRefused(failure), operation: "checkout" });
+  logFailure({
+    request,
+    error: new ApplicationError("CHECKOUT_PENDING", failure),
+    operation: "checkout",
+  });
 }

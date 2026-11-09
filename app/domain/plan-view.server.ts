@@ -1,11 +1,6 @@
 import { lapsedStatuses, pricePromiseMs } from "./billing.server";
-import {
-  accountCoverage,
-  isRenewingSubscription,
-  openSubscriptionStatuses,
-  type orderAllowance,
-} from "./grants.server";
-import { sqlList } from "./sql.server";
+import { isRenewingSubscription, openSubscriptionFilterSql } from "./billing-subscriptions.server";
+import { accountCoverage, type orderAllowance } from "./grants.server";
 import { stripeEnvironment } from "../integrations/stripe.server";
 import type { AccountView } from "../view-models";
 
@@ -99,11 +94,11 @@ export async function subscriptionView(
     : {};
   if (pending.payment && (!coverage || coverage.source === "trial")) return pending;
   const row = await db
-    .prepare(`SELECT offer, renewal_offer, status, current_period_start, current_period_end,
-        cancel_at_period_end
-      FROM stripe_subscriptions WHERE workspace_id = ? AND environment = ?
-        AND unavailable_at IS NULL AND status IN (${sqlList(openSubscriptionStatuses)})
-      ORDER BY julianday(current_period_start) DESC LIMIT 1`)
+    .prepare(`SELECT s.offer, s.renewal_offer, s.status, s.current_period_start,
+        s.current_period_end, s.cancel_at_period_end
+      FROM stripe_subscriptions s WHERE s.workspace_id = ? AND s.environment = ?
+        AND ${openSubscriptionFilterSql}
+      ORDER BY julianday(s.current_period_start) DESC LIMIT 1`)
     .bind(workspaceId, stripeEnvironment(env))
     .first<{
       offer: "monthly" | "annual";

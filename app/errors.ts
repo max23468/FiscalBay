@@ -32,8 +32,15 @@ export function correlateResponse(response: Response, id: string): Response {
   });
 }
 
+/**
+ * Errore con un codice pubblico e, per il log, un motivo da un elenco fisso: mai valori
+ * dell'utente, dell'ordine o del provider.
+ */
 export class ApplicationError extends Error {
-  constructor(readonly code: ErrorCode) {
+  constructor(
+    readonly code: ErrorCode,
+    readonly failure?: string,
+  ) {
     super(code);
     this.name = "ApplicationError";
   }
@@ -86,9 +93,7 @@ export function logFailure(input: {
 }): void {
   if (input.request?.signal.aborted) return;
   const { error } = input;
-  // Il tipo di errore del provider (UpstreamError) è un'etichetta fissa, mai il suo contenuto.
-  const failure =
-    error instanceof ApplicationError && "failure" in error ? String(error.failure) : undefined;
+  const failure = error instanceof ApplicationError ? error.failure : undefined;
   writeLog("error", {
     event: "application_error",
     code: input.code ?? classifyFailure(error),

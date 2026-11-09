@@ -1,9 +1,9 @@
 import { baseFreeQuota, openPromotionEnd } from "../catalog";
 import { purchasesOpenSql, waitingSql } from "./admission-state.server";
+import { openSubscriptionSql } from "./billing-subscriptions.server";
 import { consultableStore } from "./store-state.server";
 import type { EbayEnvironment } from "../view-models";
 import { dayMilliseconds } from "../time";
-import { sqlList } from "./sql.server";
 
 /** Predicato condiviso: nessun valore fiscale entra nel risultato prima dell'autorizzazione. */
 export function orderAccessSql(order: string, workspace: string, at: string) {
@@ -37,40 +37,6 @@ export function entitlementInForce(alias: string, at: string) {
 export function activeEntitlementSql(workspace: string, at: string) {
   return `EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
     AND ${entitlementInForce("e", at)})`;
-}
-
-/** Stati in cui un abbonamento Stripe può ancora incassare. */
-export const openSubscriptionStatuses = [
-  "active",
-  "trialing",
-  "past_due",
-  "unpaid",
-  "incomplete",
-  "paused",
-] as const;
-
-/** Stati finali di un abbonamento Stripe: chiuso, non addebita più. */
-export const closedSubscriptionStatuses = ["canceled", "incomplete_expired"] as const;
-
-/** Stati di un abbonamento che si rinnova da solo, salvo disdetta. */
-export const renewingSubscriptionStatuses = ["active", "trialing"] as const;
-
-export function isRenewingSubscription(status: string) {
-  return (renewingSubscriptionStatuses as readonly string[]).includes(status);
-}
-
-export function isClosedSubscription(status: string) {
-  return (closedSubscriptionStatuses as readonly string[]).includes(status);
-}
-
-/**
- * Abbonamento dello spazio che può ancora incassare, come un pagamento da confermare o un
- * rinnovo da regolarizzare: un nuovo acquisto o la prova lo sovrapporrebbero.
- */
-export function openSubscriptionSql(workspace: string, environment?: string) {
-  return `EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.workspace_id = ${workspace}
-    ${environment ? `AND s.environment = ${environment}` : ""} AND s.unavailable_at IS NULL
-    AND s.status IN (${sqlList(openSubscriptionStatuses)}))`;
 }
 
 /**
