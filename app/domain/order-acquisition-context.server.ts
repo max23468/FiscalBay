@@ -48,8 +48,7 @@ export function limitKey(apiOrigin: string, limit?: string): string {
 
 /** Chiamata con quota propria di una chiave di `limitKey`; null per l'attesa dell'origine API. */
 export function limitedCall(key: string): string | null {
-  const at = key.indexOf("#");
-  return at < 0 ? null : key.slice(at + 1);
+  return key.split("#")[1] ?? null;
 }
 
 /** Attesa fino a `until` per la chiave; un'attesa già più lunga resta. */
