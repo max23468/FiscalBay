@@ -5,7 +5,13 @@ import { maxListedOrders } from "../orders/order-criteria";
 import { serviceSetting } from "./service-settings.server";
 import { consultableStore, listedOrder, storeLabelSql } from "./store-state.server";
 import { backoffMs, minute } from "./work-timing";
-import { telegramPreferencesSql, telegramRecipient, telegramRecipientSql } from "./telegram.server";
+import {
+  telegramPreferencesSql,
+  telegramRecipient,
+  telegramRecipientSql,
+  type TelegramFilter,
+  type TelegramMode,
+} from "./telegram.server";
 import {
   digestMessage,
   emptyFiscalKey,
@@ -57,8 +63,8 @@ type Workspace = {
   userId: string;
   language: Language;
   enabled: number;
-  filter: "fiscal" | "all";
-  mode: "each" | "digest";
+  filter: TelegramFilter;
+  mode: TelegramMode;
   digestTime: string;
   timeZone: string;
 };

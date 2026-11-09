@@ -7,6 +7,11 @@
 export const storeNameSql = (store: string) =>
   `COALESCE(${store}.store_name, ${store}.display_name, ${store}.ebay_account_id, ${store}.ebay_user_id)`;
 
+/** Assegnazioni che tolgono a `ebay_stores` il profilo pubblico del negozio eBay letto da Trading. */
+export const clearedStoreProfileSql = `store_name = NULL, store_logo_url = NULL, store_url = NULL,
+  feedback_score = NULL, feedback_positive_percent = NULL, top_rated_seller = NULL,
+  store_profile_read_at = NULL`;
+
 /** Nome mostrato con «(Sandbox)» per un negozio dell'ambiente di prova eBay. */
 export const storeLabelSql = (store: string) =>
   `${storeNameSql(store)} ||

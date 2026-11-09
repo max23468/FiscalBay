@@ -3,7 +3,7 @@ import { dayMilliseconds } from "../time";
 import { resumeAfterInactivity } from "./admission.server";
 import { activeEntitlementSql } from "./grants.server";
 import { historyStartSql } from "./history-window.server";
-import { listedOrder, storeNameSql } from "./store-state.server";
+import { clearedStoreProfileSql, listedOrder, storeNameSql } from "./store-state.server";
 import type { EbayEnvironment } from "../view-models";
 
 /**
@@ -458,9 +458,7 @@ export async function deleteStoreData(
     ),
     db
       .prepare(
-        `UPDATE ebay_stores SET data_deleted_at = ?3, store_name = NULL, store_logo_url = NULL,
-          store_url = NULL, feedback_score = NULL, feedback_positive_percent = NULL,
-          top_rated_seller = NULL, store_profile_read_at = NULL,
+        `UPDATE ebay_stores SET data_deleted_at = ?3, ${clearedStoreProfileSql},
           orders_deleted_through = MAX(COALESCE(orders_deleted_through, ?3), ?3)
           WHERE id IN (${ownedStoreSql})`,
       )

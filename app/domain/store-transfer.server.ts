@@ -1,6 +1,6 @@
 import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.server";
 import { applyWorkspacePlan } from "./free-store.server";
-import { storeNameSql } from "./store-state.server";
+import { clearedStoreProfileSql, storeNameSql } from "./store-state.server";
 
 /**
  * Trasferimento assistito di un negozio fra spazi (§8, D009). L'assistenza lo prepara dopo la
@@ -181,9 +181,7 @@ export async function confirmStoreTransfer(
     step(`DELETE FROM ebay_store_link_sessions WHERE expected_store_id = ?3 AND ${mine}`),
     step(`UPDATE ebay_stores SET workspace_id = (SELECT to_workspace_id FROM store_transfers
           WHERE id = ?1), linked_at = ?2, disconnected_at = ?2, data_deleted_at = ?2,
-        orders_deleted_through = NULL, store_name = NULL, store_logo_url = NULL, store_url = NULL,
-        feedback_score = NULL, feedback_positive_percent = NULL, top_rated_seller = NULL,
-        store_profile_read_at = NULL
+        orders_deleted_through = NULL, ${clearedStoreProfileSql}
       WHERE id = ?3 AND ${mine}`),
   ]);
   if (!claimed!.meta.changes) {

@@ -21,8 +21,8 @@ import { telegramReplyCopy as replies } from "../copy/telegram";
 // ricevuta riconosce ancora il proprio collegamento.
 const consumedRetention = dayMilliseconds;
 
-type TelegramFilter = TelegramView["filter"];
-type TelegramMode = TelegramView["mode"];
+export type TelegramFilter = TelegramView["filter"];
+export type TelegramMode = TelegramView["mode"];
 
 const defaults = {
   enabled: true,

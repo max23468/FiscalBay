@@ -6,6 +6,8 @@ import {
   consumeTelegramStart,
   saveTelegramChange,
   type TelegramChange,
+  type TelegramFilter,
+  type TelegramMode,
   telegramPreferencesSql,
   unknownChatReply,
 } from "./telegram.server";
@@ -212,8 +214,8 @@ const data = (link: Pick<Link, "id">, ...parts: Array<string | number>) =>
 
 type Preferences = {
   enabled: number;
-  filter: "fiscal" | "all";
-  mode: "each" | "digest";
+  filter: TelegramFilter;
+  mode: TelegramMode;
   digestTime: string;
   timeZone: string;
   lastDelivery: string | null;
