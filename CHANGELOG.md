@@ -30,6 +30,9 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 - **Core Web Vitals reali.** I report del browser di Ordini e Negozi aggiungono INP e CLS, che la console mostra accanto a LCP. La build rifiuta la perdita della cache permanente degli asset e le prove limitano il peso dei documenti.
 - **Promozioni più rapide per i soli testi.** Un commit che cambia soltanto documenti, voci del changelog o test riusa la certificazione dell'antenato qualificato.
 - **Worker vicino al database.** Smart Placement è attivo anche in Production, su decisione dell'owner, senza attendere la misura sul test.
+- **Guida sull'alternativa a ProBay.** Una nuova Guida, in italiano e in inglese, spiega come leggere il Codice Fiscale degli acquirenti eBay quando ProBay non è più disponibile o non funziona, e confronta le due soluzioni.
+- **Esempi più realistici.** Le schermate del sito e l'anteprima mostrano articoli da collezione con immagine, titoli come quelli delle inserzioni e contatti credibili.
+- **Provenienza dalla ricerca.** Chi arriva da un motore di ricerca su un indirizzo salvato con la provenienza interna viene attribuito al motore, non agli arrivi diretti.
 
 ## [2.0.7] - 2026-11-07
 
