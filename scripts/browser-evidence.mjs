@@ -8,7 +8,8 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { listedTestIds } from "./browser-tests.mjs";
+import { inventoryArgs, listedTestIds } from "./browser-tests.mjs";
+import { ghJson } from "./lib/provider.mjs";
 
 /** Pagine riuscite soltanto alla ripetizione, dalle otto partizioni. */
 export function flakyTests(parts) {
@@ -36,14 +37,11 @@ function flakyHistory(directory) {
   const repository = process.env.GH_REPO;
   if (!repository) return [];
   const name = "flaky-tests";
-  const { artifacts } = JSON.parse(
-    execFileSync("gh", ["api", `repos/${repository}/actions/artifacts?name=${name}&per_page=30`], {
-      encoding: "utf8",
-    }),
+  const { artifacts } = ghJson(
+    "api",
+    `repos/${repository}/actions/artifacts?name=${name}&per_page=30`,
   );
-  const repositoryId = JSON.parse(
-    execFileSync("gh", ["api", `repos/${repository}`], { encoding: "utf8" }),
-  ).id;
+  const repositoryId = ghJson("api", `repos/${repository}`).id;
   const seen = new Set();
   return artifacts
     .filter(({ expired, workflow_run: run }) => {
@@ -56,11 +54,7 @@ function flakyHistory(directory) {
       )
         return false;
       seen.add(run.id);
-      const origin = JSON.parse(
-        execFileSync("gh", ["api", `repos/${repository}/actions/runs/${run.id}`], {
-          encoding: "utf8",
-        }),
-      );
+      const origin = ghJson("api", `repos/${repository}/actions/runs/${run.id}`);
       return origin.path === ".github/workflows/candidate.yml" && origin.conclusion === "success";
     })
     .slice(0, 5)
@@ -158,34 +152,30 @@ function main() {
       candidateKinds.map((kind) => [
         kind,
         listedTestIds(
-          JSON.parse(
-            execFileSync(
-              "pnpm",
-              [
-                "exec",
-                "playwright",
-                "test",
-                ...(kind === "production" ? ["e2e/pages.spec.ts", ...invert] : invert),
-                "--list",
-                "--reporter",
-                "json",
-                "--project",
-                "chromium",
-                "--project",
-                "webkit",
-              ],
-              {
-                encoding: "utf8",
-                maxBuffer: 64 * 1024 * 1024,
-                stdio: ["ignore", "pipe", "inherit"],
-                env: {
-                  ...process.env,
-                  E2E_BASE_URL: "",
-                  E2E_MATRIX: kind === "production" ? "single" : "full",
-                  E2E_PRODUCTION: kind === "production" ? "1" : "",
-                },
+          execFileSync(
+            "pnpm",
+            [
+              "exec",
+              "playwright",
+              "test",
+              ...(kind === "production" ? ["e2e/pages.spec.ts", ...invert] : invert),
+              ...inventoryArgs,
+              "--project",
+              "chromium",
+              "--project",
+              "webkit",
+            ],
+            {
+              encoding: "utf8",
+              maxBuffer: 64 * 1024 * 1024,
+              stdio: ["ignore", "pipe", "inherit"],
+              env: {
+                ...process.env,
+                E2E_BASE_URL: "",
+                E2E_MATRIX: kind === "production" ? "single" : "full",
+                E2E_PRODUCTION: kind === "production" ? "1" : "",
               },
-            ),
+            },
           ),
         ),
       ]),

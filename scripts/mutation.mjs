@@ -22,13 +22,11 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
-  mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
@@ -36,7 +34,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
-import { gh, ghJson, git } from "./lib/provider.mjs";
+import { ghJson, git, readRunArtifact } from "./lib/provider.mjs";
 import { criticalModule } from "./lib/critical-modules.mjs";
 import { pullRequestCoverage, pullRequestParts } from "./mutation-reuse.mjs";
 
@@ -657,30 +655,11 @@ async function writeIncrementalBase(output) {
     { runs, head, current, attempt, repositoryId },
     {
       status: (commit) => ghJson("api", `repos/${repository}/compare/${commit}...${head}`).status,
-      reports: (run) => {
-        const directory = mkdtempSync(path.join(tmpdir(), "mutation-base-"));
-        try {
-          gh(
-            "run",
-            "download",
-            String(run),
-            "--repo",
-            repository,
-            "--pattern",
-            `mutation-pr-${run}-*`,
-            "--dir",
-            directory,
-          );
-          return {
-            same: mergeReports(incrementalReports(directory, target, shard)),
-            any: mergeReports(incrementalReports(directory, target)),
-          };
-        } catch {
-          return null;
-        } finally {
-          rmSync(directory, { recursive: true, force: true });
-        }
-      },
+      reports: (run) =>
+        readRunArtifact(repository, run, { pattern: `mutation-pr-${run}-*` }, (directory) => ({
+          same: mergeReports(incrementalReports(directory, target, shard)),
+          any: mergeReports(incrementalReports(directory, target)),
+        })),
     },
   );
   if (base) {

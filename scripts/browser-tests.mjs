@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -29,13 +28,16 @@ export function shardTests(listing, current, total) {
     .map(([, test]) => test);
 }
 
-export function listedTestIds(listing) {
-  const visit = (suite) => [
-    ...(suite.specs ?? []).flatMap((spec) => spec.tests.map(() => spec.id)),
-    ...(suite.suites ?? []).flatMap(visit),
-  ];
-  return visit(listing);
+/** Identità delle prove dall'uscita di `e2e/inventory.ts`, una per prova e progetto. */
+export function listedTestIds(output) {
+  const ids = JSON.parse(output);
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !id))
+    throw new Error("Inventario browser non valido.");
+  return ids;
 }
+
+/** Argomenti di Playwright che elencano l'inventario con le identità per progetto. */
+export const inventoryArgs = ["--list", "--reporter", "./e2e/inventory.ts"];
 
 /** Un centinaio di prove per runner, fino a otto macchine; nessuna partizione vuota. */
 export function browserShards(count) {
@@ -110,42 +112,24 @@ const planFile = path.resolve("test-results", "browser-plan.json");
  * che le contiene e nessun cambio rilevante per il classificatore, gli otto job non ripartono.
  */
 async function reusedBrowsers(key) {
-  const { gh, ghJson, retry } = await import("./lib/provider.mjs");
+  const { ghApi, isAncestor, readRunArtifact, trackedSources } = await import("./lib/provider.mjs");
   const { browserNarrowing } = await import("./classify-changes.mjs");
   const repositoryId = Number(process.env.REPOSITORY_ID);
   const { REPOSITORY: repository, BROWSER_PR_BRANCH: branch } = process.env;
   if (!repository || !repositoryId) throw new Error("Repository non indicato.");
-  const api = (url) =>
-    retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
-  const planKey = (id) => {
-    const directory = mkdtempSync(path.join(tmpdir(), "browser-plan-"));
-    try {
-      gh(
-        "run",
-        "download",
-        String(id),
-        "--repo",
-        repository,
-        "--name",
-        `browser-plan-${id}`,
-        "--dir",
-        directory,
-      );
-      return JSON.parse(readFileSync(path.join(directory, "browser-plan.json"), "utf8")).key;
-    } catch {
-      return null;
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-  };
+  const planKey = (id) =>
+    readRunArtifact(
+      repository,
+      id,
+      { name: `browser-plan-${id}` },
+      (directory) =>
+        JSON.parse(readFileSync(path.join(directory, "browser-plan.json"), "utf8")).key,
+    );
   // Nella PR il commit provato è l'unione con la base: il primo genitore è la base.
-  const sources = execFileSync("git", ["ls-files"], { encoding: "utf8" })
-    .split("\n")
-    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
-    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+  const sources = trackedSources();
   const narrowing = (commit) => {
+    if (!isAncestor(commit)) return null;
     try {
-      execFileSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], { stdio: "ignore" });
       execFileSync("git", ["rev-parse", "--verify", "HEAD^2"], { stdio: "ignore" });
     } catch {
       return null;
@@ -154,7 +138,7 @@ async function reusedBrowsers(key) {
   };
   return browserProof(
     { repository, repositoryId, branch, exclude: process.env.GITHUB_RUN_ID, key },
-    { api, planKey, narrowing },
+    { api: ghApi, planKey, narrowing },
   );
 }
 
@@ -184,13 +168,7 @@ async function main() {
     execFileSync("pnpm", ["exec", "playwright", "test", ...args, ...chosen], options);
   const inventory = (chosen) =>
     listedTestIds(
-      JSON.parse(
-        playwright(
-          ["--list", "--reporter", "json"],
-          { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-          chosen,
-        ),
-      ),
+      playwright(inventoryArgs, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }, chosen),
     );
   if (values.plan) {
     const ids = inventory(selection);

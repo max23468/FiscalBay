@@ -6,7 +6,7 @@ FiscalBay 2.0 usa Workers/D1/Better Auth. I requisiti stanno nei [documenti di p
 
 ## 1. Avvio e ambiente di lavoro
 
-Il checkout è già adottato: lo stato dei lavori è soltanto nella [roadmap](ROADMAP.md#stato), mentre la procedura di adozione iniziale dello ZIP 2.0 è archiviata in [docs/archive](archive/2026-09-adozione-2.0.md) per eventuali ricostruzioni storiche. Ogni nuova sessione segue la [ripresa](#ripresa).
+Lo stato dei lavori è soltanto nella [roadmap](ROADMAP.md#stato); la procedura di adozione iniziale della 2.0 è [archiviata](archive/2026-09-adozione-2.0.md). Ogni nuova sessione segue la [ripresa](#ripresa).
 
 Si lavora con Claude Code: sul Mac nel checkout locale, eventualmente in worktree sotto `.claude/worktrees/`, nelle sessioni cloud e nei thread del progetto Claude. Le regole operative sono in [AGENTS.md](../AGENTS.md), che `CLAUDE.md` importa; la base di lavoro è `develop`. Preparazione e limiti delle sessioni cloud sono nel [ciclo operativo](operations/RELEASE.md#ciclo-operativo).
 
@@ -61,13 +61,13 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | [Lacune delle API eBay](audits/2026-11-07-lacune-api-ebay/README.md) | Limiti delle API eBay usate, prove e bozze delle richieste a eBay |
 
 
-Questa guida è l’unico ingresso e indice generale. `CLAUDE.md` importa AGENTS senza una seconda policy. `docs/archive/` contiene la procedura di adozione e il Master Plan della 2.0, con milestone e gate: sono storici, non requisiti, e stanno fuori dai controlli ordinari di `verify-docs`.
+Questa guida è l’unico ingresso e indice generale. `docs/archive/` contiene la procedura di adozione e il Master Plan della 2.0, con milestone e gate: sono storici, non requisiti, e stanno fuori dai controlli ordinari di `verify-docs`.
 
-Per il prodotto prevale l’ultima decisione esplicita dell’owner, da riportare nel piano. Contratti esterni e condizioni applicabili vanno verificati sulle fonti ufficiali correnti; codice/test/configurazioni attestano ciò che esiste, readback del provider ciò che è attivo. Una discordanza richiede una correzione o una decisione dell’owner, non un cambio tacito dello scope. `AGENTS.md` governa l’esecuzione, non modifica i requisiti.
+Per il prodotto prevale l’ultima decisione esplicita dell’owner, da riportare nel documento di prodotto competente. Contratti esterni e condizioni applicabili vanno verificati sulle fonti ufficiali correnti; codice/test/configurazioni attestano ciò che esiste, readback del provider ciò che è attivo. Una discordanza richiede una correzione o una decisione dell’owner, non un cambio tacito dello scope. `AGENTS.md` governa l’esecuzione, non modifica i requisiti.
 Controllo ordinario dopo modifiche documentali:
 
 ```sh
 node scripts/verify-docs.mjs
 ```
 
-Il controllo rileva link e ancore interni rotti, tabelle incoerenti e decisioni duplicate/inesistenti. Gli stati aperti sono ammessi nella roadmap; autorizzazioni e prerequisiti applicabili si verificano secondo `AGENTS.md` e il ciclo di pubblicazione, senza rileggere i gate storici del go-live a ogni promozione. Rifiuta le sigle delle milestone fuori da archivio e registro. Non impone un tracker separato, un grafo dei task verificato dallo script o ID consecutivi. `--assets` aggiunge la verifica degli originali secondo il manifest. Comandi e gate attuali sono in `package.json` e [Agent Setup](operations/AGENT_SETUP.md); il percorso di pubblicazione è in [RELEASE](operations/RELEASE.md).
+Il controllo rileva link e ancore interni rotti, tabelle incoerenti, decisioni duplicate o inesistenti e sigle delle milestone fuori da archivio e registro. `--assets` aggiunge la verifica degli originali secondo il manifest. Comandi e gate attuali sono in `package.json` e [Agent Setup](operations/AGENT_SETUP.md); il percorso di pubblicazione è in [RELEASE](operations/RELEASE.md).

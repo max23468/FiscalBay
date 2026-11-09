@@ -4,7 +4,7 @@
  * `--zone` e flussi d'uscita.
  */
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -174,6 +174,39 @@ export function gh(...args) {
 }
 
 export const ghJson = (...args) => JSON.parse(gh(...args));
+
+/**
+ * Lettura dell'API GitHub per il riuso delle prove: oltre ai tentativi di `gh`, ripete per un
+ * minuto circa, perché senza esito la pianificazione fallisce invece di ripiegare.
+ */
+export const ghApi = (url) =>
+  retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
+
+/**
+ * Scarica gli artefatti di una run scelti con `--name` o `--pattern` in una cartella temporanea
+ * e restituisce ciò che `read` ne ricava; null se mancano o non si leggono.
+ */
+export function readRunArtifact(repository, run, selector, read) {
+  const directory = mkdtempSync(path.join(tmpdir(), "run-artifact-"));
+  try {
+    const [flag, value] =
+      "name" in selector ? ["--name", selector.name] : ["--pattern", selector.pattern];
+    gh("run", "download", String(run), "--repo", repository, flag, value, "--dir", directory);
+    return read(directory);
+  } catch {
+    return null;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+}
+
+/** Sorgenti versionati e presenti, di `app/` e `workers/` salvo un altro `pattern`, con il testo. */
+export function trackedSources(pattern = /^(?:app|workers)\/.+\.tsx?$/u) {
+  return git("ls-files")
+    .split("\n")
+    .filter((file) => pattern.test(file) && existsSync(file))
+    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+}
 
 /**
  * Job di una run o di un suo tentativo, a pagine da 50: con alcune decine di job GitHub risponde
