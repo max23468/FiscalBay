@@ -8,7 +8,7 @@ import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
-import { listedTestIds } from "./browser-tests.mjs";
+import { inventoryArgs, listedTestIds } from "./browser-tests.mjs";
 
 /** Pagine riuscite soltanto alla ripetizione, dalle otto partizioni. */
 export function flakyTests(parts) {
@@ -158,34 +158,30 @@ function main() {
       candidateKinds.map((kind) => [
         kind,
         listedTestIds(
-          JSON.parse(
-            execFileSync(
-              "pnpm",
-              [
-                "exec",
-                "playwright",
-                "test",
-                ...(kind === "production" ? ["e2e/pages.spec.ts", ...invert] : invert),
-                "--list",
-                "--reporter",
-                "json",
-                "--project",
-                "chromium",
-                "--project",
-                "webkit",
-              ],
-              {
-                encoding: "utf8",
-                maxBuffer: 64 * 1024 * 1024,
-                stdio: ["ignore", "pipe", "inherit"],
-                env: {
-                  ...process.env,
-                  E2E_BASE_URL: "",
-                  E2E_MATRIX: kind === "production" ? "single" : "full",
-                  E2E_PRODUCTION: kind === "production" ? "1" : "",
-                },
+          execFileSync(
+            "pnpm",
+            [
+              "exec",
+              "playwright",
+              "test",
+              ...(kind === "production" ? ["e2e/pages.spec.ts", ...invert] : invert),
+              ...inventoryArgs,
+              "--project",
+              "chromium",
+              "--project",
+              "webkit",
+            ],
+            {
+              encoding: "utf8",
+              maxBuffer: 64 * 1024 * 1024,
+              stdio: ["ignore", "pipe", "inherit"],
+              env: {
+                ...process.env,
+                E2E_BASE_URL: "",
+                E2E_MATRIX: kind === "production" ? "single" : "full",
+                E2E_PRODUCTION: kind === "production" ? "1" : "",
               },
-            ),
+            },
           ),
         ),
       ]),

@@ -6,6 +6,7 @@ import {
   browserOutcome,
   browserProof,
   shardTests,
+  inventoryArgs,
   listedTestIds,
   browserShards,
 } from "./browser-tests.mjs";
@@ -179,18 +180,19 @@ describe("prove browser divise fra macchine", () => {
     assert.ok(parts.every((part) => part.length === 3));
   });
 
-  it("ricava le identità dall'inventario JSON Playwright anche nei gruppi annidati", () => {
-    assert.deepEqual(
-      listedTestIds({
-        suites: [
-          {
-            specs: [{ id: "chromium-a", tests: [{ projectName: "chromium" }] }],
-            suites: [{ specs: [{ id: "webkit-b", tests: [{ projectName: "webkit" }] }] }],
-          },
-        ],
-      }),
-      ["chromium-a", "webkit-b"],
-    );
+  it("elenca un'identità distinta per ogni prova in ogni progetto", () => {
+    assert.deepEqual(listedTestIds('["chromium-a","webkit-a"]\n'), ["chromium-a", "webkit-a"]);
+    assert.throws(() => listedTestIds('[""]'), /non valido/u);
+    assert.throws(() => listedTestIds('{"suites":[]}'), /non valido/u);
+    const result = spawnSync("pnpm", ["exec", "playwright", "test", ...inventoryArgs], {
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      env: { ...process.env, E2E_BASE_URL: "", E2E_PRODUCTION: "", E2E_MATRIX: "single" },
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const ids = listedTestIds(result.stdout);
+    assert.ok(ids.length > 0);
+    assert.equal(new Set(ids).size, ids.length);
   });
 });
 
