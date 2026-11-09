@@ -9,13 +9,14 @@ import {
   type AccountArea,
 } from "../account-area.server";
 import { ordersPath } from "../app-links";
-import { searchVisibleOrders, type OrderCriteria } from "../domain/orders.server";
+import { searchVisibleOrders } from "../domain/orders.server";
 import { orderAllowance } from "../domain/grants.server";
 import { listStores } from "../domain/stores.server";
 import { errorResponse, postOnly } from "../error-response";
 import { localizedPath } from "../i18n";
 import { measure } from "../observability.server";
-import { listCriteria, listFilters } from "../orders/order-list";
+import { listCriteria, type OrderCriteria } from "../orders/order-criteria";
+import { listFilters } from "../orders/order-list";
 import { searchQuery, searchTokens } from "../orders/order-search";
 import { accountSearchScope, searchHref } from "../orders/order-search.server";
 import type { Route } from "./+types/order-search";

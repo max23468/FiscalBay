@@ -37,7 +37,7 @@ import { callRoute, routePage } from "./fixtures/route-fixtures";
 
 import { searchOrders } from "./fixtures/order-search-fixtures";
 
-import { snapshotCursor } from "../app/orders/order-list";
+import { snapshotCursor } from "../app/orders/order-criteria";
 
 import {
   it_,

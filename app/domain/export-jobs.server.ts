@@ -9,7 +9,7 @@ import {
   type ExportColumn,
   type ExportRows,
 } from "../orders/export-columns";
-import type { ExportFilter } from "../orders/export-scope.server";
+import type { OrderScope } from "../orders/order-criteria";
 import { seal, unseal } from "../sealed.server";
 import type { EbayEnvironment } from "../view-models";
 import {
@@ -59,7 +59,7 @@ export const contentTypes = {
 /** Ambito e forma del file, come li ha chiesti l'utente. */
 export interface OrderFileRequest {
   environment: EbayEnvironment;
-  filter: ExportFilter;
+  filter: OrderScope;
   rows: ExportRows;
   format: keyof typeof contentTypes;
   /** Colonne scelte con Premium; null per lo schema standard o per colonne uguali a esso. */

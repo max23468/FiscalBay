@@ -16,7 +16,8 @@ import {
   forgetExportedSelection,
   keepExportedSelection,
 } from "../../orders/export-scope";
-import { pagesParam, rememberStore, snapshotParam } from "../../orders/order-list";
+import { snapshotParam } from "../../orders/order-criteria";
+import { pagesParam, rememberStore } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
 import { usePageTiming } from "../../page-timing";
 import type { Language } from "../../i18n";

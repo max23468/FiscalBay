@@ -32,7 +32,7 @@ import {
   loader as previewStores,
 } from "../app/routes/preview-stores";
 import { previewListing } from "../app/preview/order-list.server";
-import { orderCriteria } from "../app/orders/order-list";
+import { orderCriteria } from "../app/orders/order-criteria";
 import { listVisibleOrders } from "../app/domain/orders.server";
 import { orderView } from "../app/domain/order-view.server";
 import {

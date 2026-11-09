@@ -8,7 +8,7 @@ import {
   useSearchParams,
 } from "react-router";
 
-import { snapshotParam } from "../../orders/order-list";
+import { snapshotParam } from "../../orders/order-criteria";
 import type { OrderView } from "../../view-models";
 import type { OrdersPageData } from "./page";
 

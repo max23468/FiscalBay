@@ -1,7 +1,7 @@
 import { activeEntitlementSql } from "./grants.server";
 import { lockMilliseconds } from "./order-acquisition.server";
 import { listVisibleOrders } from "./orders.server";
-import { maxListedOrders } from "../orders/order-list";
+import { maxListedOrders } from "../orders/order-criteria";
 import { serviceSetting } from "./service-settings.server";
 import { consultableStore, listedOrder, storeLabelSql } from "./store-state.server";
 import { backoffMs, minute } from "./work-timing";

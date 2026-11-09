@@ -39,7 +39,8 @@ import { AppearanceSection } from "./appearance";
 import { Group } from "./controls";
 import type { ExportConfiguration } from "../../domain/export-configurations.server";
 import type { ExportFileView } from "../../domain/export-jobs.server";
-import type { ExportContext, ExportTally } from "../../orders/export-scope";
+import type { ExportContext } from "../../orders/export-scope";
+import type { OrderTally } from "../../orders/order-criteria";
 import type { ExportSample } from "../../orders/export-columns";
 import { ExportSection } from "./export";
 import { NotificationsSection } from "./notifications";
@@ -81,7 +82,7 @@ export interface SettingsPageData {
   /** Notifiche Telegram dello spazio; null senza il servizio o senza uno spazio. */
   telegram: TelegramView | null;
   /** Ordini di ogni periodo dell'esportazione aperta dalle Impostazioni; null con un ambito. */
-  exportPeriods: Record<OrderPeriod, ExportTally> | null;
+  exportPeriods: Record<OrderPeriod, OrderTally> | null;
   /** Ambito ricevuto dagli Ordini, con i suoi ordini; null se l'esportazione è aperta dalle Impostazioni. */
   exportContext: ExportContext | null;
   /** Prime righe del file per l'anteprima tabellare; null fuori dalla sezione Esportazione. */

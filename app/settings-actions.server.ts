@@ -44,7 +44,8 @@ import {
   type DiagnosticsView,
   type OrderPeriod,
 } from "./view-models";
-import { listVisibleOrders, visibleOrderTallies, type OrderTally } from "./domain/orders.server";
+import { listVisibleOrders, visibleOrderTallies } from "./domain/orders.server";
+import { onlyAvailable, type OrderScope, type OrderTally } from "./orders/order-criteria";
 import {
   deleteExportConfiguration,
   maxExportConfigurations,
@@ -55,7 +56,7 @@ import {
 import { exportContext } from "./orders/export-scope";
 import { exportRevision, publishExportFile } from "./domain/export-files.server";
 import { accountArchive, accountArchiveName, accountData } from "./domain/account-export.server";
-import { accountExportScope, onlyAvailable, type ExportFilter } from "./orders/export-scope.server";
+import { accountExportScope } from "./orders/export-scope.server";
 import { exportSampleOrders } from "./domain/order-export.server";
 import type { ExportSample } from "./orders/export-columns";
 import { formatDate } from "./format";
@@ -192,11 +193,11 @@ export async function exportSection(
   const environment = requestedEbayEnvironment(request);
   // Soltanto la sezione Esportazione riceve l'ambito degli Ordini e legge le prime righe.
   const fromOrders = section
-    ? await accountExportScope(area, query, environment, premium, now)
+    ? await accountExportScope(area.session, query, environment, premium, now)
     : null;
-  const sample = async (filter: ExportFilter): Promise<ExportSample | null> => {
+  const sample = async (filter: OrderScope): Promise<ExportSample | null> => {
     if (!section) return null;
-    const read = (scoped: ExportFilter | null) =>
+    const read = (scoped: OrderScope | null) =>
       exportSampleOrders(
         env.DB,
         userId,

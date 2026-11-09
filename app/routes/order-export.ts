@@ -32,11 +32,8 @@ import { logFailure } from "../errors";
 import { localizedPath } from "../i18n";
 import { measure } from "../observability.server";
 import { limitedHeaders, requestLimitWait } from "../request-limits.server";
-import {
-  accountExportScope,
-  onlyAvailable,
-  periodExportFilter,
-} from "../orders/export-scope.server";
+import { onlyAvailable, periodScope } from "../orders/order-criteria";
+import { accountExportScope } from "../orders/export-scope.server";
 import type { ActionResult } from "../view-models";
 import type { Route } from "./+types/order-export";
 
@@ -101,10 +98,10 @@ export async function action({ request }: Route.ActionArgs) {
       return refused(403, t.settings.export.exportPremium);
     if (!columns) return refused(400, t.settings.export.exportColumnsInvalid);
     const fromOrders = await measure("d1", "orders", () =>
-      accountExportScope(area, query, environment, premium, now),
+      accountExportScope(area.session, query, environment, premium, now),
     );
     const scoped =
-      fromOrders?.filter ?? periodExportFilter(String(form.get("period") ?? ""), premium, now);
+      fromOrders?.filter ?? periodScope(String(form.get("period") ?? ""), premium, now);
     const filter = form.get("fiscal") === "available" ? onlyAvailable(scoped) : scoped;
     // Un ambito senza ordini non produce un file con la sola intestazione.
     const [tally] = filter

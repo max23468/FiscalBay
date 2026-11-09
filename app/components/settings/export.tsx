@@ -38,7 +38,8 @@ import {
   type ExportSample,
   type FileLayout,
 } from "../../orders/export-columns";
-import type { ExportContext, ExportTally } from "../../orders/export-scope";
+import type { ExportContext } from "../../orders/export-scope";
+import type { OrderTally } from "../../orders/order-criteria";
 import {
   fiscalSituations,
   orderPeriods,
@@ -315,7 +316,7 @@ function sampleSince(period: OrderPeriod, premium: boolean, now: string): string
 /** Ordini del file con le scelte correnti, oppure perché non ce ne sono. */
 function exportStatus(
   t: AppCopy,
-  tally: ExportTally,
+  tally: OrderTally,
   available: boolean,
   scoped: boolean,
 ): { orders: number; text: string } {
@@ -713,7 +714,7 @@ export function ExportSection({
   configurations: ExportConfiguration[];
   context: ExportContext | null;
   /** Ordini di ogni periodo, quando l'esportazione non viene dagli Ordini. */
-  periods: Record<OrderPeriod, ExportTally> | null;
+  periods: Record<OrderPeriod, OrderTally> | null;
   /** Prime righe del file per l'anteprima tabellare. */
   sample: ExportSample | null;
   now: string;

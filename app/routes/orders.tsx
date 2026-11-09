@@ -34,24 +34,22 @@ import {
   messageTemplates,
   recordMarketingConsent,
 } from "../domain/preferences.server";
-import {
-  countVisibleOrders,
-  listVisibleOrders,
-  type OrderCriteria,
-  visibleOrderFacets,
-} from "../domain/orders.server";
+import { countVisibleOrders, listVisibleOrders, visibleOrderFacets } from "../domain/orders.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
 import {
   listCriteria,
   maxListedOrders,
+  snapshotCursor,
+  snapshotParam,
+  type OrderCriteria,
+} from "../orders/order-criteria";
+import {
   ordersPageSize,
   pagesParam,
   rememberedStore,
   revalidateUnlessSnapshot,
-  snapshotCursor,
-  snapshotParam,
 } from "../orders/order-list";
 import { ordersNotices } from "../orders/notices.server";
 import { serviceSetting } from "../domain/service-settings.server";

@@ -1,11 +1,14 @@
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-observation.server";
 import { buyerNameView } from "../contact";
-import { maxListedOrders } from "../orders/order-list";
+import {
+  maxListedOrders,
+  type OrderCriteria,
+  type OrderScope,
+  type OrderTally,
+} from "../orders/order-criteria";
 import { buyerTaxKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
 import {
   type FiscalSituation,
-  type PaymentStatus,
-  type ShippingStatus,
   type SuggestionView,
   type TaxQuality,
   type EbayEnvironment,
@@ -167,24 +170,6 @@ function summaryOf(row: {
   };
 }
 
-/** Criteri dell'elenco, già validati: un valore assente non filtra. */
-export type OrderCriteria = {
-  storeId?: string;
-  /** Ordini creati da questo istante in poi. */
-  since?: string;
-  payment?: PaymentStatus;
-  shipping?: ShippingStatus;
-  fiscal?: FiscalSituation;
-  /** Parole cercate nella forma di confronto: ognuna deve comparire nei dati consultabili. */
-  tokens?: string[];
-  /** Ordini entrati negli elenchi fino a questo istante: l'istantanea dell'elenco aperto. */
-  listedBefore?: string;
-  /** Ordini entrati negli elenchi dopo questo istante: i nuovi rispetto all'istantanea. */
-  listedAfter?: string;
-  /** Ordini che nell'elenco seguono questo, dal più recente con spareggio per ID. */
-  after?: { creationTime: string; id: string };
-};
-
 // Stryker disable next-line StringLiteral: un altro separatore rende la query invalida e le prove falliscono subito; sotto Stryker il worker supera invece il timeout.
 const clauseSeparator = " ";
 
@@ -310,9 +295,6 @@ function visibleOrdersParams(
   ];
 }
 
-/** Ordini di un insieme, quanti hanno il dato da sbloccare e quanti il dato disponibile. */
-export type OrderTally = { orders: number; locked: number; available: number };
-
 /**
  * Ordini consultabili dei criteri, o fra quelli indicati, contati per ciascun inizio di periodo:
  * il conteggio di un inizio comprende gli ordini creati da quell'istante. Senza inizi conta
@@ -323,7 +305,7 @@ export async function visibleOrderTallies(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean },
+  filter: OrderScope,
   starts: readonly string[] = [],
 ): Promise<OrderTally[]> {
   // Gli inizi soddisfatti da un ordine sono sempre i primi in ordine crescente: basta contarli.
@@ -390,7 +372,7 @@ export async function visibleOrdersTerm(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean },
+  filter: OrderScope,
 ): Promise<string | null> {
   const row = await db
     .prepare(

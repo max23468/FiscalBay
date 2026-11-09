@@ -21,8 +21,8 @@ import {
   exportContext as exportContextView,
   exportScope,
   type ExportContext,
-  type ExportTally,
 } from "../orders/export-scope";
+import type { OrderTally } from "../orders/order-criteria";
 import { openSearch } from "../orders/order-search.server";
 import {
   defaultDisplay,
@@ -170,7 +170,7 @@ async function previewExport(
           const start = orderPeriodStart(period, new Date(scenario.now)).toISOString();
           return [period, previewTally(all.filter((order) => order.createdAt >= start))];
         }),
-      ) as Record<OrderPeriod, ExportTally>,
+      ) as Record<OrderPeriod, OrderTally>,
       exportSample: sample(all),
     };
   }

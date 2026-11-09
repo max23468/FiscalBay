@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { VisibleOrder } from "../app/domain/orders.server";
+import { orderCriteria, snapshotInstant } from "../app/orders/order-criteria";
 import {
-  orderCriteria,
   pendingList,
   rememberedStore,
   rememberStore,
   revalidateUnlessSnapshot,
-  snapshotInstant,
   listFilters,
   withoutListPosition,
 } from "../app/orders/order-list";
