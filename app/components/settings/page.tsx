@@ -27,12 +27,11 @@ import { IconTile, PageTitle } from "~/components/icon-tile";
 import { appHref } from "../../app-links";
 import { canonicalPath, type Language } from "../../i18n";
 import type { Theme, TimeZoneChoice } from "../../preferences";
+import { settingsGroups, type SettingsSection } from "../../area-sections";
 import {
-  settingsGroups,
   type AccountView,
   type DiagnosticsView,
   type OrderPeriod,
-  type SettingsSection,
   type TelegramView,
 } from "../../view-models";
 import { AppearanceSection } from "./appearance";

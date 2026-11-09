@@ -11,7 +11,7 @@ import {
   simulateAction,
   simulateSecurity,
 } from "../preview/state.server";
-import { mergedSettingsSections, settingsSections, type SettingsSection } from "../view-models";
+import { mergedSettingsSections, settingsSections, type SettingsSection } from "../area-sections";
 import type { Route } from "./+types/preview-settings";
 
 function isSection(value: string | undefined): value is SettingsSection {

@@ -11,7 +11,7 @@ import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
 import type { AppCopy } from "../../app-copy";
-import { appHref } from "../../app-links";
+import { appHref, reconnectHref } from "../../app-links";
 import { formatRelative } from "../../format";
 import type { Language } from "../../i18n";
 import { trialDaysLeft, trialEnding } from "../../view-models";
@@ -207,7 +207,11 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
                     </Button>
                   ) : (
                     <a
-                      href={`${appHref(links, "negozi/collega")}?ricollega=${encodeURIComponent(notice.storeId)}&environment=${notice.ebayEnvironment}`}
+                      href={reconnectHref(
+                        appHref(links, "negozi/collega"),
+                        { id: notice.storeId, ebayEnvironment: notice.ebayEnvironment },
+                        false,
+                      )}
                       {...buttonLink({ variant: "outline", size: "sm" })}
                     >
                       {t.orders.reconnectStore}

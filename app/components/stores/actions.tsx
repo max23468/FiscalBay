@@ -29,16 +29,10 @@ import { Field, FieldError, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
 import { useCopy, useLinks } from "~/components/copy-context";
 import type { AppCopy } from "../../app-copy";
-import { appHref, type AppLinks } from "../../app-links";
+import { appHref, reconnectHref, type AppLinks } from "../../app-links";
 import type { StoreView } from "../../view-models";
 import { StoreSection } from "./store";
 import { needsReconnect } from "./state";
-
-/** Ricollegamento dalla schermata preparatoria, nello stesso ambiente eBay del negozio. */
-function reconnectHref(connectHref: string, store: StoreView) {
-  const environment = store.sandbox ? "sandbox" : "production";
-  return `${connectHref}?ricollega=${encodeURIComponent(store.id)}&environment=${environment}&da=negozi`;
-}
 
 /** Azioni del negozio: una colonna di pulsanti uguali, poi le due disconnessioni. */
 export function StoreActions({
@@ -308,7 +302,14 @@ export function ReconnectButton({
   );
   if (connectHref && !ebayDown) {
     return (
-      <Link to={reconnectHref(connectHref, store)} {...buttonLink(look)}>
+      <Link
+        to={reconnectHref(
+          connectHref,
+          { id: store.id, ebayEnvironment: store.sandbox ? "sandbox" : "production" },
+          true,
+        )}
+        {...buttonLink(look)}
+      >
         {content}
       </Link>
     );

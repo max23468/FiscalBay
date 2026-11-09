@@ -6,7 +6,7 @@ import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { buttonLink } from "~/components/ui/button-variants";
-import { accessPath, ordersPath, storeLinkPath, storesPath } from "../app-links";
+import { accessPath, ordersPath, storeLinkParams, storeLinkPath, storesPath } from "../app-links";
 import { appCopy, pageTitle } from "../app-copy";
 import { areaPage } from "../account-area.server";
 import { readSession } from "../auth.server";
@@ -28,7 +28,7 @@ import { detectedTimeZone, effectiveTimeZone, type ShellData } from "../preferen
 const noStore = { headers: { "cache-control": "no-store" } };
 
 /** Arrivando da un avviso di scadenza la schermata parla di ricollegamento. */
-const reconnectParam = "ricollega";
+const reconnectParam = storeLinkParams.reconnect;
 
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)].storeLink;
@@ -98,7 +98,7 @@ async function prepare(request: Request) {
     } satisfies ShellData,
     reconnect: search.has(reconnectParam),
     // Arrivando da Negozi, «Annulla» torna lì.
-    fromStores: search.get("da") === "negozi",
+    fromStores: search.get(storeLinkParams.from) === "negozi",
     sandbox: sandboxAvailable(env),
     ebayEnvironment,
     expectedStoreId: expected?.id ?? null,
@@ -134,7 +134,7 @@ async function start(request: Request) {
     return errorResponse(request, "FORBIDDEN");
   }
   const expectedStoreId = String(form.get("negozio") ?? "");
-  const fromStores = form.get("da") === "negozi";
+  const fromStores = form.get(storeLinkParams.from) === "negozi";
   const back = fromStores ? localizedPath(language, storesPath) : base;
   if (!(await storeLinkAdmitted(env.DB, status.userId))) {
     return redirect(`${back}?negozio=lista-attesa`, { status: 303, ...noStore });
@@ -218,7 +218,9 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
             />
           )
         )}
-        {loaderData.fromStores ? <input type="hidden" name="da" value="negozi" /> : null}
+        {loaderData.fromStores ? (
+          <input type="hidden" name={storeLinkParams.from} value="negozi" />
+        ) : null}
         <Button type="submit">{t.continue}</Button>
         <a href={back} {...buttonLink({ variant: "outline", className: "w-fit" })}>
           {appCopy[language].common.cancel}

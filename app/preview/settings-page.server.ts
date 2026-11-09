@@ -30,14 +30,8 @@ import {
   detectedTimeZone,
   effectiveTimeZone,
 } from "../preferences";
-import {
-  orderPeriods,
-  orderPeriodStart,
-  settingsSections,
-  type OrderPeriod,
-  type OrderView,
-  type SettingsSection,
-} from "../view-models";
+import { settingsSections, type SettingsSection } from "../area-sections";
+import { orderPeriods, orderPeriodStart, type OrderPeriod, type OrderView } from "../view-models";
 import { previewListing, previewSearchScope, previewTally } from "./order-list.server";
 import { previewLifetime } from "./scenarios.server";
 import type { pageScenario } from "./state.server";

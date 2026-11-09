@@ -7,6 +7,7 @@ import {
   accessPath,
   accountDeletionPath,
   appUrl,
+  authErrorPath,
   securityPath,
   securityReturnPath,
 } from "./app-links";
@@ -97,7 +98,7 @@ export async function securityAction(
   const intent = field("intent");
   const security = localizedPath(language, securityPath);
   const notice = (value: string) => redirect(`${security}?accesso=${value}`, 303);
-  const authError = `${localizedPath(language, "/auth/error")}?provider=`;
+  const authError = `${localizedPath(language, authErrorPath)}?provider=`;
 
   if (intent === "riautentica") {
     const target = securityReturnPath(language, field("returnTo")) ?? security;

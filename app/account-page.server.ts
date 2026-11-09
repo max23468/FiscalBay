@@ -5,6 +5,7 @@ import { accessNotice, signInNotice, type SignInNotice } from "./access-notice";
 import { currentSession } from "./account-area.server";
 import {
   accessPath,
+  authErrorPath,
   emailCodeConfirmPath,
   leakedPasswordField,
   ordersPath,
@@ -263,7 +264,7 @@ export async function accessAction(request: Request) {
     const response = await forward("/sign-in/social", {
       provider,
       callbackURL: destination,
-      errorCallbackURL: `${localizedPath(language, "/auth/error")}?${new URLSearchParams({ provider, ...(returnTo ? { returnTo } : {}) })}`,
+      errorCallbackURL: `${localizedPath(language, authErrorPath)}?${new URLSearchParams({ provider, ...(returnTo ? { returnTo } : {}) })}`,
       // Chi si registra con eBay autorizza subito anche il negozio: un solo consenso.
       ...(registering ? { scopes: [...ebayStoreGrantScopes] } : {}),
       ...(source || registering ? { additionalData } : {}),

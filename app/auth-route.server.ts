@@ -14,7 +14,13 @@ import {
 } from "./integrations/ebay/store-link.server";
 import { linkLanguage, notifySecurityEvent } from "./account-email.server";
 import { logFailure, tracePhase } from "./errors";
-import { appBase, closedEmailCodePaths, emailCodeConfirmPath, ordersPath } from "./app-links";
+import {
+  appBase,
+  authErrorPath,
+  closedEmailCodePaths,
+  emailCodeConfirmPath,
+  ordersPath,
+} from "./app-links";
 import { localizedPath } from "./i18n";
 import { sha256Hex } from "./sealed.server";
 import type { RequestLimit } from "./request-limits";
@@ -287,7 +293,7 @@ async function handleEbayCallback(
   fetcher: typeof fetch,
 ): Promise<Response> {
   if (!validEbayCallback(request)) {
-    return noStore(Response.redirect(new URL("/auth/error", env.APP_ORIGIN), 303));
+    return noStore(Response.redirect(new URL(authErrorPath, env.APP_ORIGIN), 303));
   }
   // Il RuName ha un solo callback: lo state distingue il collegamento negozio dal login eBay.
   const search = new URL(request.url).searchParams;
@@ -357,7 +363,7 @@ async function handleDeletionCallback(request: Request, env: Env): Promise<Respo
   const failure = (error: "delete_link" | "delete_failed") =>
     noStore(
       Response.redirect(
-        new URL(`${localizedPath(language, "/auth/error")}?error=${error}`, env.APP_ORIGIN),
+        new URL(`${localizedPath(language, authErrorPath)}?error=${error}`, env.APP_ORIGIN),
         303,
       ),
     );

@@ -30,7 +30,7 @@ import { hasWhatsNew } from "../whats-new.server";
 import { languageFromPath, settingsSectionParam } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction, securityAuthPath } from "../security-actions.server";
-import { mergedSettingsSections, settingsSections, type SettingsSection } from "../view-models";
+import { mergedSettingsSections, settingsSections, type SettingsSection } from "../area-sections";
 import { listExportConfigurations } from "../domain/export-configurations.server";
 import { listExportFiles } from "../domain/export-jobs.server";
 import type { Route } from "./+types/settings";

@@ -1,3 +1,4 @@
+import { englishSettingsSections } from "./area-sections.ts";
 import { currencyExponent } from "./money.ts";
 
 export const languages = ["it", "en"] as const;
@@ -30,16 +31,9 @@ interface Segment {
 
 const leaf = (en: string): Segment => ({ en });
 
-const settingsSections: Record<string, Segment> = {
-  notifiche: leaf("notifications"),
-  esportazione: leaf("export"),
-  messaggio: leaf("message"),
-  account: leaf("account"),
-  piano: leaf("plan"),
-  privacy: leaf("privacy"),
-  aspetto: leaf("appearance"),
-  supporto: leaf("support"),
-};
+const settingsSections: Record<string, Segment> = Object.fromEntries(
+  Object.entries(englishSettingsSections).map(([italian, english]) => [italian, leaf(english)]),
+);
 
 /** Pagine dell'area riservata, uguali nell'anteprima. */
 const areaPages: Record<string, Segment> = {

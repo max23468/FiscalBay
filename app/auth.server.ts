@@ -18,7 +18,7 @@ import {
   sendAuthEmail,
   sendExistingAccountEmail,
 } from "./account-email.server";
-import { accountDeletionPath, emailCodeConfirmPath } from "./app-links";
+import { accountDeletionPath, authErrorPath, emailCodeConfirmPath } from "./app-links";
 import { logFailure } from "./errors";
 import { localizedPath, type Language } from "./i18n";
 import { maxPasswordLength, minPasswordLength } from "./limits";
@@ -153,7 +153,7 @@ async function requireConfirmationSession(env: Env, user: LinkUser, request?: Re
   // Stryker disable next-line StringLiteral: Better Auth passa sempre la richiesta del link.
   const language = request ? linkLanguage(request.url) : "it";
   throw new APIError("FOUND", undefined, {
-    location: `${localizedPath(language, "/auth/error")}?error=verification_session`,
+    location: `${localizedPath(language, authErrorPath)}?error=verification_session`,
   });
 }
 
@@ -545,7 +545,7 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
     // Il limite dei tentativi si applica prima del router, in auth-route.server.ts, anche ai moduli.
     rateLimit: { enabled: false },
     onAPIError: {
-      errorURL: "/auth/error",
+      errorURL: authErrorPath,
       // Un errore imprevisto, come il database che non risponde, esce dal router invece di
       // finire intero nel suo console.error: auth-route.server.ts lo registra con il solo codice.
       throw: true,
