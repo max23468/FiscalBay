@@ -7,6 +7,8 @@ import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersPage } from "~/components/orders/page";
 import {
+  marketingIntent,
+  readMarketingForm,
   readRetryForm,
   readUnlockForm,
   retryIntent,
@@ -342,12 +344,11 @@ const orderActions: Record<string, AreaAction> = {
     },
     failureNotice: (t) => t.settings.saveFailed,
   },
-  marketing: {
+  [marketingIntent]: {
     run: async ({ area, form }) => {
       const t = appCopy[area.language];
-      const value = form.get("value");
-      if (value !== "true" && value !== "false") return actionFailure(400, t.settings.saveFailed);
-      const accepted = value === "true";
+      const accepted = readMarketingForm(form);
+      if (accepted === null) return actionFailure(400, t.settings.saveFailed);
       await recordMarketingConsent(
         env.DB,
         area.session.user.id,

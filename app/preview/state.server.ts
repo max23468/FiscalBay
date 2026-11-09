@@ -11,7 +11,12 @@ import {
 } from "../app-links";
 import { withStoreNotice } from "../access-notice";
 import { languageFromPath, localizedPath } from "../i18n";
-import { readRetryForm, retryIntent } from "../orders/page-data";
+import {
+  marketingIntent,
+  readMarketingForm,
+  readRetryForm,
+  retryIntent,
+} from "../orders/page-data";
 import type { ActionResult } from "../view-models";
 import { isScenarioId, loadScenario, scenarioVerified, type ScenarioId } from "./scenarios.server";
 
@@ -235,17 +240,16 @@ export async function simulateAction(request: Request, form: FormData) {
       { headers: { "Set-Cookie": await writePreviewState({ ...state, resumed: true }) } },
     );
   // Proposta del consenso: la risposta ha l'esito dell'area reale e la proposta non torna.
-  if (intent === "marketing") {
-    const value = form.get("value");
-    if (value !== "true" && value !== "false")
+  if (intent === marketingIntent) {
+    const accepted = readMarketingForm(form);
+    if (accepted === null)
       return data<ActionResult>({ ok: false, notice: t.settings.saveFailed }, { status: 400 });
     return data<ActionResult>(
       {
         ok: true,
-        notice:
-          value === "true"
-            ? t.orders.marketingProposal.accepted
-            : t.orders.marketingProposal.declined,
+        notice: accepted
+          ? t.orders.marketingProposal.accepted
+          : t.orders.marketingProposal.declined,
       },
       {
         headers: {

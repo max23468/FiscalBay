@@ -113,6 +113,17 @@ export function readUnlockForm(form: FormData) {
   };
 }
 
+/** Risposta alla proposta del consenso marketing negli Ordini. */
+export const marketingIntent = "marketing";
+
+export const marketingFields = (accepted: boolean) => ({ value: String(accepted) });
+
+/** Scelta del modulo; null se il valore non è una delle due risposte. */
+export function readMarketingForm(form: FormData): boolean | null {
+  const value = form.get("value");
+  return value === "true" ? true : value === "false" ? false : null;
+}
+
 /** Nuova verifica del dato fiscale di un ordine, chiesta dalla scheda o dal dettaglio. */
 export const retryIntent = "retry";
 
