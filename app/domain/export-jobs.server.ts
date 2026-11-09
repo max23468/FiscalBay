@@ -47,7 +47,6 @@ export const maxQueuedExports = 2;
 /** Lavori riaccodati in un turno della ripresa; gli altri restano al turno successivo. */
 const resumeBatch = 100;
 
-/** Tipo del contenuto di ogni formato. */
 export const contentTypes = {
   csv: "text/csv; charset=utf-8",
   xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

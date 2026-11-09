@@ -188,7 +188,6 @@ export async function shellData(area: AccountArea, now = new Date()): Promise<Sh
   };
 }
 
-/** Richiesta partita dalla propria origine. */
 export const isSameOrigin = (request: Request) =>
   request.headers.get("origin") === new URL(env.APP_ORIGIN).origin;
 

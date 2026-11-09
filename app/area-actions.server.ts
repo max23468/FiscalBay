@@ -53,7 +53,6 @@ export function tooManyRequests(request: Request, wait: number) {
   );
 }
 
-/** L'azione di `intent` fra quelle della pagina, se esiste. */
 export function areaAction(actions: Record<string, AreaAction>, intent: string) {
   return Object.hasOwn(actions, intent) ? actions[intent] : undefined;
 }
