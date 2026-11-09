@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { data } from "react-router";
+import { maxConsoleField } from "./limits";
 
 import { assertSameOrigin } from "./account-area.server";
 import { adminCopy, type AdminCopy, type AuditOutcome } from "./copy/admin-copy";
@@ -299,7 +300,7 @@ const targetFields = [
 async function formTarget(intent: string, field: Field) {
   const id = (name: string) => {
     const value = field(name);
-    return value && value.length <= 128 ? value : null;
+    return value && value.length <= maxConsoleField ? value : null;
   };
   if (intent === "schedule-quota") return "free-quota";
   if (intent === "quota-attention") return `setting:quota_attention:${id("soglia") ?? ""}`;
@@ -764,7 +765,8 @@ export async function runAdminAction(
   // Gli identificativi vengono dal modulo: oltre la lunghezza del registro non sono validi.
   if (
     [...form.keys()].some(
-      (name) => name !== "motivo" && !name.startsWith("testo") && field(name).length > 128,
+      (name) =>
+        name !== "motivo" && !name.startsWith("testo") && field(name).length > maxConsoleField,
     )
   )
     return reject("too_long");

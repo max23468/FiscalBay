@@ -1,6 +1,7 @@
 import { KeyRound } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import { flushSync } from "react-dom";
+import { maxPasskeyName } from "../../limits";
 import { useSubmit } from "react-router";
 
 import { useCopy, useLinks } from "~/components/copy-context";
@@ -35,7 +36,7 @@ export function PasskeyRename({
         name="name"
         defaultValue={passkey.name ?? ""}
         required
-        maxLength={80}
+        maxLength={maxPasskeyName}
         autoFocus
       />
       <div className="flex gap-2">
@@ -157,7 +158,7 @@ export function AddPasskey({
         <Input
           id={id}
           aria-describedby={`${id}-hint`}
-          maxLength={80}
+          maxLength={maxPasskeyName}
           value={name}
           autoFocus
           disabled={pending}

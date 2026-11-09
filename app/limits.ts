@@ -22,3 +22,13 @@ export const adminPageSize = 50;
 
 /** Giorni di Premium concessi con una sola operazione della console. */
 export const maxGrantDays = 366;
+
+/** Campi dei moduli della console diversi da motivo e testi: la lunghezza del registro. */
+export const maxConsoleField = 128;
+
+/** Nome di una passkey scelto dall'utente. */
+export const maxPasskeyName = 80;
+
+/** Nome e cognome del profilo, e ragione sociale di un account aziendale. */
+export const maxPersonName = 100;
+export const maxCompanyName = 200;

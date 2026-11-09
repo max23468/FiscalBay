@@ -5,12 +5,17 @@ import { Field, FieldDescription, FieldLabel, FieldLegend, FieldSet } from "~/co
 import { Input } from "~/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { useCopy } from "~/components/copy-context";
+import { maxCompanyName, maxPersonName } from "../limits";
 
 /** Campi del profilo con i limiti che il server applica. */
 const profileInputs = {
-  nome: { label: "firstName", autoComplete: "given-name", maxLength: 100 },
-  cognome: { label: "lastName", autoComplete: "family-name", maxLength: 100 },
-  ragione_sociale: { label: "companyName", autoComplete: "organization", maxLength: 200 },
+  nome: { label: "firstName", autoComplete: "given-name", maxLength: maxPersonName },
+  cognome: { label: "lastName", autoComplete: "family-name", maxLength: maxPersonName },
+  ragione_sociale: {
+    label: "companyName",
+    autoComplete: "organization",
+    maxLength: maxCompanyName,
+  },
 } as const;
 
 /**

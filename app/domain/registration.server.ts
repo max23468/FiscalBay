@@ -1,4 +1,5 @@
 import type { Language } from "../i18n";
+import { maxCompanyName, maxPersonName } from "../limits";
 
 /**
  * Versioni dei testi presentati alla registrazione, come data del testo in vigore
@@ -52,9 +53,9 @@ export function parseProfile(form: FormData): Profile | null {
   };
   const type = form.get("tipo");
   const accountType = type === "azienda" ? "business" : type === "privato" ? "private" : null;
-  const firstName = text("nome", 100);
-  const lastName = text("cognome", 100);
-  const companyName = accountType === "business" ? text("ragione_sociale", 200) : null;
+  const firstName = text("nome", maxPersonName);
+  const lastName = text("cognome", maxPersonName);
+  const companyName = accountType === "business" ? text("ragione_sociale", maxCompanyName) : null;
   if (!accountType || !firstName || !lastName) return null;
   if (accountType === "business" && !companyName) return null;
   return { firstName, lastName, accountType, companyName };

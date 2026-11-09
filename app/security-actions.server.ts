@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
+import { maxPasskeyName } from "./limits";
 
 import { notifySecurityEvent } from "./account-email.server";
 import type { AccountArea } from "./account-area.server";
@@ -171,7 +172,7 @@ export async function securityAction(
     if (!id || id.length > 128) return notice("errore");
     if (intent === "passkey-rename") {
       const name = field("name").trim();
-      if (!name || name.length > 80) return notice("passkey-nome-non-valido");
+      if (!name || name.length > maxPasskeyName) return notice("passkey-nome-non-valido");
       const response = await forwardToAuth(env, request, "/passkey/update-passkey", { id, name });
       return notice(response.ok ? "passkey-rinominata" : "errore");
     }
