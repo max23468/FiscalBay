@@ -885,6 +885,22 @@ describe("Lifetime e concessioni", () => {
     expect(stripe.requests).toEqual(["GET /v1/checkout/sessions/cs_lifetime_4"]);
   });
 
+  it("alla cancellazione dell'account ignora gli abbonamenti dell'altro ambiente Stripe", async () => {
+    const stripe = stripeAccount();
+    // L'ambiente del Worker di prova è `test`: un abbonamento live non è suo da fermare.
+    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+        customer_id, offer, price_generation, status, current_period_start, current_period_end,
+        cancel_at_period_end, synced_at, checked_at, renewal_offer)
+      VALUES ('sub_live', 'w-a', 'live', 'cus_live', 'monthly', '2026-09', 'active', ?1, ?2,
+        0, ?1, ?1, 'monthly')`)
+      .bind(now, "2026-10-20T09:00:00.000Z")
+      .run();
+    // Senza chiave Stripe resterebbe da fermare e varrebbe false: nulla da fermare vale true.
+    const withoutKey = { ...env, STRIPE_SECRET_KEY: undefined } as unknown as Env;
+    expect(await stopRenewals(withoutKey, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toEqual([]);
+  });
+
   it("il cron rilegge una volta al giorno i lifetime venduti, per i rimborsi senza webhook", async () => {
     const stripe = stripeAccount();
     await buyLifetime(stripe);

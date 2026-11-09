@@ -652,7 +652,8 @@ export async function stopRenewals(
       OR EXISTS (${reservedSql}) AS open`)
     .bind(workspaceId, stripeEnvironment(env), now.toISOString())
     .first<{ open: number }>();
-  if (!open?.open) return true;
+  // Una SELECT senza FROM restituisce sempre una riga.
+  if (!open!.open) return true;
   const key = stripeSecretKey(env);
   if (!key) return false;
   try {
