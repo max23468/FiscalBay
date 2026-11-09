@@ -10,9 +10,12 @@ import {
   accessPath,
   appBase,
   appHref,
+  environmentOf,
+  environmentParam,
   languagePath,
   notificationsPath,
   orderSearchPath,
+  withEnvironment,
 } from "../app-links";
 import { localizedPath } from "../i18n";
 import type { ShellData } from "../preferences";
@@ -43,7 +46,7 @@ export function AccountShell({
   const { pathname, search } = useLocation();
   useDeviceTimeZone();
   // La ricerca resta nell'ambiente eBay mostrato, che sul test può essere la Sandbox.
-  const sandbox = new URLSearchParams(search).get("environment") === "sandbox";
+  const environment = environmentOf(new URLSearchParams(search).get(environmentParam));
   const links = { language, base: appBase };
   // Verso gli Ordini da un'altra sezione la pagina precedente lascia subito il posto allo
   // scheletro dell'elenco; dentro gli Ordini i dati mostrati restano durante la lettura.
@@ -64,7 +67,10 @@ export function AccountShell({
       search={
         security
           ? {
-              action: `${orderSearchPath}${sandbox ? "?environment=sandbox" : ""}`,
+              action:
+                environment === "sandbox"
+                  ? withEnvironment(orderSearchPath, environment)
+                  : orderSearchPath,
               query: searchQuery,
             }
           : undefined

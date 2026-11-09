@@ -1,3 +1,4 @@
+import { environmentParam } from "../app-links";
 import { maxListedOrders, snapshotParam, type OrderTally } from "./order-criteria";
 import { pagesParam } from "./order-list";
 
@@ -59,7 +60,7 @@ export function exportContext(
     // Istantanea e ambiente eBay non restringono l'elenco.
     filtered:
       scope.kind === "filtered" &&
-      [...scope.criteria.keys()].some((key) => key !== snapshotParam && key !== "environment"),
+      [...scope.criteria.keys()].some((key) => key !== snapshotParam && key !== environmentParam),
     returnHref: exportReturnHref(ordersPath, query),
     query: query.toString(),
     search: scope.kind === "filtered" ? names.search : null,

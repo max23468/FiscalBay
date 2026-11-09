@@ -30,10 +30,23 @@ export const englishSettingsSections: Record<SettingsSection, string> = {
  * Categorie riunite in Account: i loro indirizzi, anche nelle email già inviate, portano alla
  * categoria che le contiene.
  */
-export const mergedSettingsSections: Readonly<Record<string, SettingsSection>> = {
+const mergedSettingsSections: Readonly<Record<string, SettingsSection>> = {
   profilo: "account",
   sicurezza: "account",
 };
+
+export function isSettingsSection(value: string | undefined): value is SettingsSection {
+  return (settingsSections as readonly string[]).includes(value ?? "");
+}
+
+/**
+ * Indirizzo della categoria che contiene la sezione `section` riunita in Account, con la stessa
+ * query; null per ogni altra sezione.
+ */
+export function mergedSectionUrl(url: URL, section: string | undefined): string | null {
+  const merged = mergedSettingsSections[section ?? ""];
+  return merged ? `${url.pathname.replace(/[^/]+$/u, merged)}${url.search}` : null;
+}
 
 /** Pagine dell'area, relative alla radice dell'area reale o dell'anteprima. */
 export type AreaPath =

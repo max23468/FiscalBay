@@ -6,33 +6,37 @@ import { StandalonePage } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { buttonLink } from "~/components/ui/button-variants";
-import { accessPath, ordersPath, storeLinkParams, storeLinkPath, storesPath } from "../app-links";
+import {
+  accessPath,
+  environmentParam,
+  fromStoresValue,
+  ordersPath,
+  storeLinkParams,
+  storeLinkPath,
+  storesPath,
+} from "../app-links";
 import { appCopy, pageTitle } from "../app-copy";
-import { areaPage } from "../account-area.server";
+import { areaPage, isSameOrigin, requestedEbayEnvironment } from "../account-area.server";
 import { readSession } from "../auth.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
 import { ebayOutages, listStores } from "../domain/stores.server";
 import { errorResponse } from "../error-response";
-import { isSameOrigin } from "../account-area.server";
 import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
 import { storeLinkAdmitted } from "../domain/admission.server";
 import { serviceSetting } from "../domain/service-settings.server";
 import { startStoreLink } from "../integrations/ebay/store-link.server";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
-import type { EbayEnvironment } from "../view-models";
 import type { Route } from "./+types/store-link";
 import { readPreferences } from "../domain/preferences.server";
 import { detectedTimeZone, effectiveTimeZone, type ShellData } from "../preferences";
 
 const noStore = { headers: { "cache-control": "no-store" } };
 
-/** Arrivando da un avviso di scadenza la schermata parla di ricollegamento. */
-const reconnectParam = storeLinkParams.reconnect;
-
 export function meta({ location }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)].storeLink;
-  const reconnect = new URLSearchParams(location.search).has(reconnectParam);
+  // Arrivando da un avviso di scadenza la schermata parla di ricollegamento.
+  const reconnect = new URLSearchParams(location.search).has(storeLinkParams.reconnect);
   return [
     { title: pageTitle(reconnect ? t.reconnectTitle : t.title) },
     { name: "robots", content: "noindex" },
@@ -72,18 +76,15 @@ async function prepare(request: Request) {
     return redirect(`${localizedPath(language, ordersPath)}?negozio=accesso`, noStore);
   }
   const search = new URL(request.url).searchParams;
-  if (search.get("environment") === "sandbox" && !sandboxAvailable(env)) {
-    throw errorResponse(request, "FORBIDDEN");
-  }
-  const ebayEnvironment: EbayEnvironment =
-    search.get("environment") === "sandbox" ? "sandbox" : "production";
-  const expectedStoreId = search.get(reconnectParam);
+  const ebayEnvironment = requestedEbayEnvironment(request);
+  const expectedStoreId = search.get(storeLinkParams.reconnect);
   const expected = expectedStoreId
     ? (await listStores(env.DB, status.userId)).find(
         (store) => store.id === expectedStoreId && store.ebayEnvironment === ebayEnvironment,
       )
     : null;
-  if (search.has(reconnectParam) && !expected) throw errorResponse(request, "INVALID_REQUEST");
+  if (search.has(storeLinkParams.reconnect) && !expected)
+    throw errorResponse(request, "INVALID_REQUEST");
   const { theme, timeZone } = await readPreferences(env.DB, status.userId);
   return {
     language,
@@ -96,9 +97,9 @@ async function prepare(request: Request) {
       notifications: null,
       now: new Date().toISOString(),
     } satisfies ShellData,
-    reconnect: search.has(reconnectParam),
+    reconnect: search.has(storeLinkParams.reconnect),
     // Arrivando da Negozi, «Annulla» torna lì.
-    fromStores: search.get(storeLinkParams.from) === "negozi",
+    fromStores: search.get(storeLinkParams.from) === fromStoresValue,
     sandbox: sandboxAvailable(env),
     ebayEnvironment,
     expectedStoreId: expected?.id ?? null,
@@ -126,7 +127,7 @@ async function start(request: Request) {
     );
   }
   const form = request.body ? await request.formData() : new FormData();
-  const ebayEnvironment = form.get("environment") ?? "production";
+  const ebayEnvironment = form.get(environmentParam) ?? "production";
   if (ebayEnvironment !== "production" && ebayEnvironment !== "sandbox") {
     return errorResponse(request, "FORBIDDEN");
   }
@@ -134,7 +135,7 @@ async function start(request: Request) {
     return errorResponse(request, "FORBIDDEN");
   }
   const expectedStoreId = String(form.get("negozio") ?? "");
-  const fromStores = form.get(storeLinkParams.from) === "negozi";
+  const fromStores = form.get(storeLinkParams.from) === fromStoresValue;
   const back = fromStores ? localizedPath(language, storesPath) : base;
   if (!(await storeLinkAdmitted(env.DB, status.userId))) {
     return redirect(`${back}?negozio=lista-attesa`, { status: 303, ...noStore });
@@ -207,19 +208,19 @@ export default function StoreLink({ loaderData }: Route.ComponentProps) {
         {loaderData.expectedStoreId ? (
           <>
             <input type="hidden" name="negozio" value={loaderData.expectedStoreId} />
-            <input type="hidden" name="environment" value={ebayEnvironment} />
+            <input type="hidden" name={environmentParam} value={ebayEnvironment} />
           </>
         ) : (
           sandbox && (
             <EbayEnvironmentField
               className="w-full"
-              name="environment"
+              name={environmentParam}
               defaultValue={ebayEnvironment}
             />
           )
         )}
         {loaderData.fromStores ? (
-          <input type="hidden" name={storeLinkParams.from} value="negozi" />
+          <input type="hidden" name={storeLinkParams.from} value={fromStoresValue} />
         ) : null}
         <Button type="submit">{t.continue}</Button>
         <a href={back} {...buttonLink({ variant: "outline", className: "w-fit" })}>

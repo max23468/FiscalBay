@@ -32,7 +32,7 @@ import { serviceSetting } from "../domain/service-settings.server";
 import { logFailure } from "../errors";
 import { describeRequest, measure } from "../observability.server";
 import { issueTimingTicket } from "../domain/page-timing.server";
-import { settle } from "../settle.server";
+import { settleList } from "../settle.server";
 import type { Route } from "./+types/stores";
 import { pageHeaders } from "../request-limits.server";
 
@@ -145,7 +145,7 @@ async function readStores({ request, params }: Route.LoaderArgs) {
       // Lo stato dei negozi in lettura si conferma nella stessa risposta, entro l'attesa.
       confirmation:
         syncing > 0
-          ? settle(read, (current) => !current.some((store) => store.syncing)).catch(() => [])
+          ? settleList(read, (current) => !current.some((store) => store.syncing))
           : undefined,
     },
     { status: payload.notFound ? 404 : 200 },

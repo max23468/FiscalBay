@@ -24,7 +24,7 @@ import {
   requireAccountArea,
 } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { ordersPath, storeLinkPath } from "../app-links";
+import { ordersPath, storeLinkPath, withEnvironment } from "../app-links";
 import {
   orderAllowance,
   restoreUnlockConfirmation,
@@ -60,7 +60,7 @@ import {
 import { ordersNotices } from "../orders/notices.server";
 import { serviceSetting } from "../domain/service-settings.server";
 import { accountSearchScope, openSearch } from "../orders/order-search.server";
-import { settle } from "../settle.server";
+import { settleList } from "../settle.server";
 import type { ActionResult, EbayEnvironment, OrderView } from "../view-models";
 import type { Route } from "./+types/orders";
 import { orderView } from "../domain/order-view.server";
@@ -277,7 +277,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     exportable: verified,
     openOnEbay: ebayEnvironment === "production",
     connectHref: verified
-      ? `${localizedPath(language, storeLinkPath)}?environment=${ebayEnvironment}`
+      ? withEnvironment(localizedPath(language, storeLinkPath), ebayEnvironment)
       : null,
   };
   const pending = [...page.orders, ...(detail ? [detail] : [])]
@@ -298,10 +298,10 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     timing: await issueTimingTicket(env.BETTER_AUTH_SECRET, "orders", now),
     confirmation:
       pending.length > 0
-        ? settle(
+        ? settleList(
             () => read([...new Set(pending)]),
             (confirmed) => !confirmed.some(verifying),
-          ).catch(() => [])
+          )
         : undefined,
   };
 }
@@ -413,7 +413,7 @@ function EnvironmentSelect({ value }: { value: EbayEnvironment }) {
       className="sm:max-w-sm"
       value={value}
       onValueChange={(next) =>
-        void navigate(`${localizedPath(language, ordersPath)}?environment=${next}`)
+        void navigate(withEnvironment(localizedPath(language, ordersPath), next))
       }
     />
   );
@@ -436,7 +436,10 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
   ) : (
     <OrdersPage
       data={loaderData.page}
-      unlockAction={`${localizedPath(language, ordersPath)}?environment=${loaderData.ebayEnvironment}`}
+      unlockAction={withEnvironment(
+        localizedPath(language, ordersPath),
+        loaderData.ebayEnvironment,
+      )}
       confirmation={loaderData.confirmation}
       timing={loaderData.timing}
       notice={

@@ -8,7 +8,7 @@ import { listNotifications } from "./domain/notifications.server";
 import { readPreferences, type Preferences } from "./domain/preferences.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
 import { listStores, type StoreStatus } from "./domain/stores.server";
-import { accessPath, ordersPath } from "./app-links";
+import { accessPath, environmentOf, environmentParam, ordersPath } from "./app-links";
 import { errorResponse, unavailablePage } from "./error-response";
 import type { EbayEnvironment } from "./view-models";
 import { sandboxAvailable } from "./integrations/ebay/environment.server";
@@ -198,8 +198,7 @@ export function assertSameOrigin(request: Request) {
 
 /** Ambiente eBay richiesto dall'indirizzo; la Sandbox esiste soltanto dove è abilitata. */
 export function requestedEbayEnvironment(request: Request): EbayEnvironment {
-  const environment =
-    new URL(request.url).searchParams.get("environment") === "sandbox" ? "sandbox" : "production";
+  const environment = environmentOf(new URL(request.url).searchParams.get(environmentParam));
   if (environment === "sandbox" && !sandboxAvailable(env))
     throw errorResponse(request, "FORBIDDEN");
   return environment;

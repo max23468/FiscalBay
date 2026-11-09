@@ -11,17 +11,13 @@ import {
   simulateAction,
   simulateSecurity,
 } from "../preview/state.server";
-import { mergedSettingsSections, settingsSections, type SettingsSection } from "../area-sections";
+import { isSettingsSection, mergedSectionUrl } from "../area-sections";
 import type { Route } from "./+types/preview-settings";
-
-function isSection(value: string | undefined): value is SettingsSection {
-  return (settingsSections as readonly string[]).includes(value ?? "");
-}
 
 export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
   const section = settingsSectionParam(params.sezione);
-  const title = isSection(section)
+  const title = isSettingsSection(section)
     ? `${t.settings.sections[section].title} | ${t.settings.title}`
     : t.settings.title;
   return [{ title: pageTitle(title) }, { name: "robots", content: "noindex, nofollow" }];
@@ -29,13 +25,10 @@ export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptor
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const sezione = settingsSectionParam(params.sezione);
-  const merged = mergedSettingsSections[sezione ?? ""];
-  if (merged) {
-    const url = new URL(request.url);
-    throw redirect(`${url.pathname.replace(/[^/]+$/u, merged)}${url.search}`, 301);
-  }
+  const merged = mergedSectionUrl(new URL(request.url), sezione);
+  if (merged) throw redirect(merged, 301);
   const current = await verifiedPageScenario(request);
-  if (sezione !== undefined && !isSection(sezione)) {
+  if (sezione !== undefined && !isSettingsSection(sezione)) {
     throw data(null, { status: 404 });
   }
   return previewSettingsPage(request, current, sezione ?? null);

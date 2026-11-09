@@ -19,6 +19,7 @@ import {
   authErrorPath,
   closedEmailCodePaths,
   emailCodeConfirmPath,
+  environmentParam,
   ordersPath,
 } from "./app-links";
 import { localizedPath } from "./i18n";
@@ -329,7 +330,8 @@ async function handleEbayCallback(
   const query = new URLSearchParams();
   if (outcome) query.set("negozio", outcome);
   // Negozi elenca tutti gli ambienti; gli Ordini mostrano quello del negozio collegato.
-  if (link.ebayEnvironment === "sandbox" && place !== "negozi") query.set("environment", "sandbox");
+  if (link.ebayEnvironment === "sandbox" && place !== "negozi")
+    query.set(environmentParam, "sandbox");
   const destination = query.size > 0 ? `${home}?${query}` : home;
   return noStore(Response.redirect(new URL(destination, env.APP_ORIGIN), 303));
 }

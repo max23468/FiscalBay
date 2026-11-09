@@ -17,14 +17,31 @@ export function appHref({ language, base }: AppLinks, path: AreaPath = "") {
 /** Pagina degli errori di accesso, anche di quelli che Better Auth rimanda al browser. */
 export const authErrorPath = "/auth/error";
 
+/**
+ * Ambiente eBay scelto nell'indirizzo, sul solo dominio di test: assente o diverso da
+ * `sandbox` vale Production.
+ */
+export const environmentParam = "environment";
+
+export function environmentOf(value: string | null | undefined): EbayEnvironment {
+  return value === "sandbox" ? "sandbox" : "production";
+}
+
+/** Indirizzo `path` nell'ambiente eBay indicato. */
+export function withEnvironment(path: string, environment: EbayEnvironment) {
+  return `${path}?${new URLSearchParams({ [environmentParam]: environment })}`;
+}
+
 /** Parametri della schermata preparatoria del collegamento di un negozio. */
 export const storeLinkParams = {
   /** Negozio da ricollegare, arrivando da un avviso di scadenza. */
   reconnect: "ricollega",
   /** Pagina da cui si arriva: `negozi` torna a Negozi, altrimenti agli Ordini. */
   from: "da",
-  environment: "environment",
 } as const;
+
+/** Valore di `storeLinkParams.from` arrivando da Negozi. */
+export const fromStoresValue = "negozi";
 
 /** Ricollegamento dalla schermata preparatoria `connectHref`, nell'ambiente eBay del negozio. */
 export function reconnectHref(
@@ -34,9 +51,9 @@ export function reconnectHref(
 ) {
   const query = new URLSearchParams({
     [storeLinkParams.reconnect]: store.id,
-    [storeLinkParams.environment]: store.ebayEnvironment,
+    [environmentParam]: store.ebayEnvironment,
   });
-  if (fromStores) query.set(storeLinkParams.from, "negozi");
+  if (fromStores) query.set(storeLinkParams.from, fromStoresValue);
   return `${connectHref}?${query}`;
 }
 
@@ -216,7 +233,7 @@ export function appUrl(
   filters: Record<string, string> = {},
 ) {
   const query = new URLSearchParams(filters);
-  if (environment === "sandbox") query.set("environment", "sandbox");
+  if (environment === "sandbox") query.set(environmentParam, "sandbox");
   const search = query.size ? `?${query}` : "";
   return originUrl(env, `${localizedPath(language, path)}${search}`);
 }
