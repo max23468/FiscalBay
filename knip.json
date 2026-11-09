@@ -9,7 +9,8 @@
         "vitest.mutation.config.ts",
         "vitest.benchmark.config.ts",
         "vitest.capacity.config.ts",
-        "benchmarks/**/*.bench.ts"
+        "benchmarks/**/*.bench.ts",
+        "e2e/inventory.ts"
       ],
       "ignoreBinaries": ["stripe", "magick"]
     }

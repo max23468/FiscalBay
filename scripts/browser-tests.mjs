@@ -29,13 +29,16 @@ export function shardTests(listing, current, total) {
     .map(([, test]) => test);
 }
 
-export function listedTestIds(listing) {
-  const visit = (suite) => [
-    ...(suite.specs ?? []).flatMap((spec) => spec.tests.map(() => spec.id)),
-    ...(suite.suites ?? []).flatMap(visit),
-  ];
-  return visit(listing);
+/** Identità delle prove dall'uscita di `e2e/inventory.ts`, una per prova e progetto. */
+export function listedTestIds(output) {
+  const ids = JSON.parse(output);
+  if (!Array.isArray(ids) || ids.some((id) => typeof id !== "string" || !id))
+    throw new Error("Inventario browser non valido.");
+  return ids;
 }
+
+/** Argomenti di Playwright che elencano l'inventario con le identità per progetto. */
+export const inventoryArgs = ["--list", "--reporter", "./e2e/inventory.ts"];
 
 /** Un centinaio di prove per runner, fino a otto macchine; nessuna partizione vuota. */
 export function browserShards(count) {
@@ -184,13 +187,7 @@ async function main() {
     execFileSync("pnpm", ["exec", "playwright", "test", ...args, ...chosen], options);
   const inventory = (chosen) =>
     listedTestIds(
-      JSON.parse(
-        playwright(
-          ["--list", "--reporter", "json"],
-          { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
-          chosen,
-        ),
-      ),
+      playwright(inventoryArgs, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }, chosen),
     );
   if (values.plan) {
     const ids = inventory(selection);
