@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 import routes from "../app/routes.ts";
 import { localizedPath } from "../app/i18n.ts";
+import { settingsSections } from "../app/area-sections.ts";
 import { pageCases } from "../e2e/page-cases.ts";
 import { fileURLToPath } from "node:url";
-import { readFileSync } from "node:fs";
 
 export function routePatterns(entries, prefix = "") {
   return entries.flatMap((entry) => {
@@ -37,17 +37,8 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     throw new Error(
       `Scenari di route rimosse: ${obsolete.map(({ pattern }) => pattern).join(", ")}`,
     );
-  // Node non carica direttamente il modulo runtime con i suoi import TS senza estensioni.
-  const declared = readFileSync("app/view-models.ts", "utf8").match(
-    /export const settingsGroups = \[([\s\S]*?)\] as const/u,
-  )?.[1];
-  if (!declared)
-    throw new Error("Elenco delle sezioni non riconosciuto: copertura non attestabile.");
-  const sections = [...declared.matchAll(/sections: \[([^\]]*)\]/gu)].flatMap((group) =>
-    [...group[1].matchAll(/"([^"]+)"/gu)].map((match) => match[1]),
-  );
-  const missingSettings = missingSections(sections, pageCases);
-  if (!sections.length || missingSettings.length)
+  const missingSettings = missingSections(settingsSections, pageCases);
+  if (missingSettings.length)
     throw new Error(`Sezioni senza collaudo: ${missingSettings.join(", ")}`);
   console.log(
     `Pagine: ${routePatterns(routes).length} route, ${pageCases.length} scenari dichiarati.`,
