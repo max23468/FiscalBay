@@ -189,9 +189,9 @@ test.describe("area reale", () => {
       await useLocalAccount(context, "member", baseURL!, id);
       await page.goto(pagePath(prefix, "/app/impostazioni/privacy"));
       await networkIdle(page);
-      await page
-        .getByRole("button", { name: it ? "Elimina account" : "Delete account", exact: true })
-        .click();
+      await clickHydrated(
+        page.getByRole("button", { name: it ? "Elimina account" : "Delete account", exact: true }),
+      );
       const dialog = page.getByRole("alertdialog");
       // L'esportazione si propone senza obbligo.
       await expect(

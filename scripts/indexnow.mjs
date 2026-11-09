@@ -16,7 +16,9 @@ export const indexNowKey = "e18a76586e78da26adeda32bf01becbf";
 
 export const productionOrigin = "https://fiscalbay.it";
 
-const endpoint = "https://api.indexnow.org/indexnow";
+// Yandex condivide gli invii con Bing; gli endpoint di Bing e `api.indexnow.org` rispondono 403
+// senza leggere il file della chiave.
+const endpoint = "https://yandex.com/indexnow";
 
 /** Indirizzi `<loc>` della sitemap, nell'ordine in cui compaiono. */
 export function sitemapUrls(xml) {

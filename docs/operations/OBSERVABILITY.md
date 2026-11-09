@@ -124,7 +124,7 @@ Il robots.txt della Production dichiara i Content Signals `search=yes, ai-input=
 
 Search Console si verifica sul dominio `fiscalbay.it` con il record TXT `google-site-verification`, aggiunto da Google nella zona con l'integrazione Cloudflare il 2026-10-31, e ha ricevuto `https://fiscalbay.it/sitemap.xml` il 2026-11-01. Non aggiunge nulla alle pagine.
 
-Bing Webmaster Tools importa il sito da Search Console con l'account dell'owner. Dopo una promozione che aggiunge, rinomina o toglie pagine pubbliche, `node scripts/indexnow.mjs submit` invia a IndexNow le pagine della sitemap Production; `plan` mostra l'invio senza eseguirlo. La chiave è pubblica per protocollo e il file `public/<chiave>.txt` la serve dal dominio. Crawler Hints di Cloudflare resta spento: segnala i MISS della cache, e le pagine del sito escono dal Worker senza passare dalla cache.
+Bing Webmaster Tools importa il sito da Search Console con l'account dell'owner. Dopo una promozione che aggiunge, rinomina o toglie pagine pubbliche, `node scripts/indexnow.mjs submit` invia a IndexNow le pagine della sitemap Production; `plan` mostra l'invio senza eseguirlo. L'invio passa da Yandex, che lo condivide con Bing: gli endpoint diretti di Bing e `api.indexnow.org` rispondono 403 senza leggere il file della chiave, e il riscontro si legge nella pagina IndexNow di Bing Webmaster Tools. La chiave è pubblica per protocollo e il file `public/<chiave>.txt` la serve dal dominio. Crawler Hints di Cloudflare resta spento: segnala i MISS della cache, e le pagine del sito escono dal Worker senza passare dalla cache.
 
 Il collaudo browser non conta come visita: i fixture di Playwright sostituiscono script e raccolta su ogni dominio, compresa la Production di `publish.yml`.
 
