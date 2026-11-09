@@ -1,7 +1,7 @@
 import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
 
-import { accessNotice, signInNotice, type SignInNotice } from "./access-notice";
+import { accessNotice, signInNotice, withStoreNotice, type SignInNotice } from "./access-notice";
 import { currentSession } from "./account-area.server";
 import {
   accessPath,
@@ -19,7 +19,7 @@ import {
 import { authLimitWait, forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import { clientKey, limitedHeaders } from "./request-limits.server";
 import { authAttemptWait, countAuthAttempt } from "./domain/auth-attempts.server";
-import { lastLoginMethodCookie, readSession } from "./auth.server";
+import { activateStoreGrant, lastLoginMethodCookie, readSession } from "./auth.server";
 import {
   completeRegistration,
   parseProfile,
@@ -38,22 +38,13 @@ import { isSameOrigin } from "./account-area.server";
 import { registeredUserExists } from "./domain/registration.server";
 import { recordSignupSource } from "./domain/signup-sources.server";
 import { formatSource, parseSource, sourceParam } from "./signup-source";
-import { logFailure, tracePhase } from "./errors";
+import { tracePhase } from "./errors";
 import { languageFromPath, localizedPath } from "./i18n";
-import { activateSignupGrant } from "./domain/store-link.server";
 import { ebayStoreGrantScopes } from "./integrations/ebay/store-link.server";
 import { turnstileActions, turnstileField } from "./turnstile";
 import { turnstileFailure } from "./turnstile.server";
 
 const noStore = { "cache-control": "no-store" };
-
-/** Collega il negozio autorizzato in registrazione; un guasto non ferma chi ha confermato. */
-function storeGrantOutcome(request: Request, userId: string) {
-  return activateSignupGrant({ env, userId, request }).catch((error: unknown) => {
-    logFailure({ request, error, operation: "store_link" });
-    return null;
-  });
-}
 
 /**
  * Accessi con password non riusciti dallo stesso IP prima che il modulo chieda Turnstile: chi
@@ -372,8 +363,11 @@ export async function accessAction(request: Request) {
     if (response.status === 429) return answer("troppi-tentativi", 429);
     if (!response.ok) return answer("codice-errato", 400);
     const { user } = await response.clone().json<{ user: { id: string } }>();
-    const store = await storeGrantOutcome(request, user.id);
-    return redirectWithCookies(store ? `${base}?negozio=${store}` : afterConfirmation(), response);
+    const store = await activateStoreGrant(env, user.id, request);
+    return redirectWithCookies(
+      store ? withStoreNotice(base, store) : afterConfirmation(),
+      response,
+    );
   }
 
   if (intent === "reinvia-codice") {
@@ -439,8 +433,8 @@ export async function accessAction(request: Request) {
         ? undefined
         : { marketing: status.marketingChosen ? undefined : field("marketing") === "on" },
     });
-    const store = await storeGrantOutcome(request, session.user.id);
-    return redirect(store ? `${base}?negozio=${store}` : base, 303);
+    const store = await activateStoreGrant(env, session.user.id, request);
+    return redirect(store ? withStoreNotice(base, store) : base, 303);
   }
 
   if (await signInChallenge(request)) {

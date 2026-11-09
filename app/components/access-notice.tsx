@@ -8,7 +8,7 @@ import { DeleteAccount, type DeletionAccess } from "~/components/delete-account"
 import { StatusAlert } from "~/components/status";
 import { useTurnstile } from "~/components/turnstile";
 import { Button } from "~/components/ui/button";
-import type { AccessNoticeView } from "../access-notice";
+import { storeNoticeParam, type AccessNoticeView } from "../access-notice";
 import { supportEmail } from "../app-copy";
 import { accessPath, securityPath } from "../app-links";
 import { localizedPath } from "../i18n";
@@ -129,7 +129,7 @@ export function AccessNotice({ notice }: { notice: AccessNoticeView | null }) {
     const url = new URL(window.location.href);
     const before = url.search;
     url.searchParams.delete("accesso");
-    url.searchParams.delete("negozio");
+    url.searchParams.delete(storeNoticeParam);
     if (!url.searchParams.has("token")) url.searchParams.delete("error");
     if (url.search !== before) window.history.replaceState(window.history.state, "", url);
   }, [notice]);

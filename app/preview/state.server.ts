@@ -9,6 +9,7 @@ import {
   previewSettingsPath,
   previewStoresPath,
 } from "../app-links";
+import { withStoreNotice } from "../access-notice";
 import { languageFromPath, localizedPath } from "../i18n";
 import { readRetryForm, retryIntent } from "../orders/page-data";
 import type { ActionResult } from "../view-models";
@@ -289,7 +290,10 @@ export async function simulateAction(request: Request, form: FormData) {
   }
   // Come il ritorno da eBay nell'area reale: l'esito «già collegato altrove» arriva in Negozi.
   if ((intent === "store-connect" || intent === "store-fix") && scenario.elsewhere)
-    return redirect(`${localizedPath(language, previewStoresPath)}?negozio=altro-spazio`, 303);
+    return redirect(
+      withStoreNotice(localizedPath(language, previewStoresPath), "altro-spazio"),
+      303,
+    );
   const notice = Object.hasOwn(notices, intent) ? notices[intent]!(t) : t.preview.simulated;
   return { ok: true, notice } satisfies ActionResult;
 }

@@ -161,7 +161,7 @@ async function storeGrantLanguage(): Promise<Language | null> {
 }
 
 /** Collega il negozio autorizzato in registrazione; un guasto non ferma conferma o accesso. */
-async function activateStoreGrant(env: Env, userId: string, request?: Request) {
+export async function activateStoreGrant(env: Env, userId: string, request?: Request) {
   const { activateSignupGrant } = await import("./domain/store-link.server");
   return activateSignupGrant({ env, userId, request }).catch((error: unknown) => {
     logFailure({ request, error, operation: "store_link" });

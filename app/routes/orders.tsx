@@ -14,7 +14,7 @@ import {
   unlockIntent,
   type OrdersPageData,
 } from "../orders/page-data";
-import { accessNotice, isStoreNotice } from "../access-notice";
+import { accessNotice, isStoreNotice, storeNoticeParam } from "../access-notice";
 import { deletionAccess } from "../account-page.server";
 import { issueTimingTicket } from "../domain/page-timing.server";
 import { unconfirmedOnFailure } from "../client-action";
@@ -136,7 +136,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
   if (remembered) throw redirect(remembered);
   // `negozio` porta anche l'esito del collegamento di un negozio, che non è un filtro.
   const query = new URLSearchParams(search);
-  if (isStoreNotice(query.get("negozio"))) query.delete("negozio");
+  if (isStoreNotice(query.get(storeNoticeParam))) query.delete(storeNoticeParam);
   // La ricerca arriva cifrata e legata alla sessione: fuori da essa si dimentica.
   const searchText = await openSearch(env.BETTER_AUTH_SECRET, accountSearchScope(session), query);
   // L'istantanea dell'elenco aperto: un ordine arrivato dopo non entra fra quelli già letti.

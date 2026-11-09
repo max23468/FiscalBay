@@ -15,6 +15,7 @@ import {
   storeLinkPath,
   storesPath,
 } from "../app-links";
+import { withStoreNotice } from "../access-notice";
 import { appCopy, pageTitle } from "../app-copy";
 import { areaPage, isSameOrigin, requestedEbayEnvironment } from "../account-area.server";
 import { readSession } from "../auth.server";
@@ -73,7 +74,7 @@ async function prepare(request: Request) {
   if ("blocked" in status) {
     // Senza sessione o con la registrazione da completare decide l'accesso.
     if (status.blocked !== "email") return redirect(localizedPath(language, accessPath), noStore);
-    return redirect(`${localizedPath(language, ordersPath)}?negozio=accesso`, noStore);
+    return redirect(withStoreNotice(localizedPath(language, ordersPath), "accesso"), noStore);
   }
   const search = new URL(request.url).searchParams;
   const ebayEnvironment = requestedEbayEnvironment(request);
@@ -122,7 +123,7 @@ async function start(request: Request) {
     return redirect(
       status.blocked === "registration"
         ? localizedPath(language, accessPath)
-        : `${base}?negozio=accesso`,
+        : withStoreNotice(base, "accesso"),
       303,
     );
   }
@@ -138,11 +139,11 @@ async function start(request: Request) {
   const fromStores = form.get(storeLinkParams.from) === fromStoresValue;
   const back = fromStores ? localizedPath(language, storesPath) : base;
   if (!(await storeLinkAdmitted(env.DB, status.userId))) {
-    return redirect(`${back}?negozio=lista-attesa`, { status: 303, ...noStore });
+    return redirect(withStoreNotice(back, "lista-attesa"), { status: 303, ...noStore });
   }
   // Chiamate eBay spente dalla console: il collegamento non parte.
   if (!(await serviceSetting(env.DB, "ebay_calls"))) {
-    return redirect(`${back}?negozio=sospeso`, { status: 303, ...noStore });
+    return redirect(withStoreNotice(back, "sospeso"), { status: 303, ...noStore });
   }
   if (expectedStoreId) {
     const stores = await listStores(env.DB, status.userId);
@@ -154,7 +155,7 @@ async function start(request: Request) {
       return errorResponse(request, "INVALID_REQUEST");
     // Come in Ordini e Negozi, con eBay che non risponde il ricollegamento resta sospeso.
     if (ebayOutages(stores).has(ebayEnvironment)) {
-      return redirect(`${back}?negozio=ebay-non-risponde`, { status: 303, ...noStore });
+      return redirect(withStoreNotice(back, "ebay-non-risponde"), { status: 303, ...noStore });
     }
   }
   return redirect(
