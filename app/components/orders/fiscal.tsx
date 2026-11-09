@@ -42,13 +42,8 @@ import {
 } from "../../view-models";
 import { countryName } from "../../format";
 
-import {
-  buyerLanguage,
-  identifierLabel,
-  remainingUnlocks,
-  taxCodeLabels,
-  type OrdersAccount,
-} from "./labels";
+import { remainingUnlocks, unlockable, type OrdersAccount } from "../../orders/page-data";
+import { buyerLanguage, identifierLabel, taxCodeLabels } from "./labels";
 import { CheckboxOption } from "~/components/checkbox-option";
 import { useDate } from "~/components/time-zone";
 import { useCopy } from "~/components/copy-context";
@@ -96,13 +91,13 @@ function UnlockButton({
   unlocking,
   onUnlock,
   remaining,
-  confirmUnlock = true,
+  confirmUnlock,
 }: {
   order: Pick<OrderView, "id" | "ebayOrderId">;
   unlocking: boolean;
   onUnlock: (ids: string[], skipConfirmation?: boolean) => void;
   remaining: number | null;
-  confirmUnlock?: boolean;
+  confirmUnlock: boolean;
 }) {
   const { t } = useCopy();
   const [dontAsk, setDontAsk] = useState(false);
@@ -236,7 +231,7 @@ export interface FiscalProps {
   revealed: boolean;
   unlocking: boolean;
   onUnlock: (ids: string[], skipConfirmation?: boolean) => void;
-  confirmUnlock?: boolean;
+  confirmUnlock: boolean;
 }
 
 function unavailableTone(state: "missing" | "checking" | "error") {
@@ -281,8 +276,7 @@ export function FiscalCodes({
     );
   }
   const remaining = remainingUnlocks(account);
-  // Senza sblocchi, durante una nuova verifica o prima dell'ordine definitivo non si sblocca.
-  const unlockable = fiscal.state === "locked" && remaining !== 0 && !fiscal.hold;
+  const canUnlock = unlockable(fiscal) && remaining !== 0;
   // Prima dello sblocco il nome è Codice Fiscale, o Partita IVA se l'ordine ha solo quella.
   const label = t.orders.identifier[fiscal.state === "locked" ? fiscal.shownAs : "CF"];
   return (
@@ -292,7 +286,7 @@ export function FiscalCodes({
         {fiscal.state === "locked" ? (
           <>
             <TaxCode value={null} labels={taxCodeLabels(label, order.ebayOrderId, t)} />
-            {unlockable ? (
+            {canUnlock ? (
               <UnlockButton
                 order={order}
                 unlocking={unlocking}

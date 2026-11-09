@@ -52,14 +52,8 @@ import {
   serviceNoticeSchema,
   withdrawServiceNotice,
 } from "./domain/service-notices.server";
-import {
-  adminAccess,
-  adminSessionMaxAge,
-  readSession,
-  type AuthSession,
-} from "./domain/sessions.server";
-
-export { adminSessionMaxAge };
+import { readSession } from "./auth.server";
+import { adminAccess, type AuthSession } from "./domain/sessions.server";
 import {
   admitWorkspace,
   isSwitchName,

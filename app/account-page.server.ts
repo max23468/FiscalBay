@@ -15,11 +15,10 @@ import {
   securityReturnPath,
   visitCookie,
 } from "./app-links";
-import { readSession } from "./domain/sessions.server";
 import { authLimitWait, forwardToAuth, redirectWithCookies } from "./auth-route.server";
 import { clientKey, limitedHeaders } from "./request-limits.server";
 import { authAttemptWait, countAuthAttempt } from "./domain/auth-attempts.server";
-import { lastLoginMethodCookie } from "./auth.server";
+import { lastLoginMethodCookie, readSession } from "./auth.server";
 import {
   completeRegistration,
   parseProfile,

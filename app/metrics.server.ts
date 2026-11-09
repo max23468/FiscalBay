@@ -1,6 +1,22 @@
 import type { ErrorCode } from "./errors";
-import type { Phase, PhaseOperation } from "./observability.server";
 import type { TimedPage } from "./page-timing";
+
+/**
+ * Fasi misurate di una richiesta. I nomi, le operazioni e gli attributi sono un elenco chiuso:
+ * mai valori dell'utente, dell'ordine o del provider.
+ */
+export type Phase = "auth" | "d1" | "ebay";
+
+export type PhaseOperation =
+  | "session"
+  | "orders"
+  | "exports"
+  | "stores"
+  | "allowance"
+  | "registration"
+  | "notifications"
+  | "settings"
+  | "request";
 
 /**
  * Metriche tecniche su Workers Analytics Engine (§31): contatori e istogrammi per esito e

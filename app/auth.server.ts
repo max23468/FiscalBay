@@ -26,6 +26,7 @@ import { emailVerificationSeconds } from "./domain/email-change.server";
 import { recordSignupSource } from "./domain/signup-sources.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
+import { queueResponseCookies } from "./response-cookies.server";
 import { parseSource } from "./signup-source";
 
 // Chiave del progetto dell'ambiente su dash.better-auth.com: senza, il plugin non viene caricato,
@@ -129,12 +130,24 @@ async function sendPasswordReset(env: Env, user: LinkUser, url: string) {
 }
 
 /**
+ * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il
+ * browser con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.
+ */
+export async function readSession(env: Env, request: Request) {
+  const { headers, response } = await createAuth(env).api.getSession({
+    headers: request.headers,
+    returnHeaders: true,
+  });
+  queueResponseCookies(headers);
+  return response;
+}
+
+/**
  * Un account nato da eBay o Google si conferma soltanto con la sessione dello stesso utente:
  * chi apre il link senza averla non entra in un account con il metodo di un altro.
  */
 async function requireConfirmationSession(env: Env, user: LinkUser, request?: Request) {
   if (!(await unconfirmedProviderAccount(env, user))) return;
-  const { readSession } = await import("./domain/sessions.server");
   const session = request ? await readSession(env, request) : null;
   if (session?.user.id === user.id) return;
   // Stryker disable next-line StringLiteral: Better Auth passa sempre la richiesta del link.

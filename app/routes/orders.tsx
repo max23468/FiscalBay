@@ -5,7 +5,13 @@ import { AccessNotice, VerifyEmail } from "~/components/access-notice";
 import { useCopy } from "~/components/copy-context";
 import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
-import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
+import { OrdersPage } from "~/components/orders/page";
+import {
+  readUnlockForm,
+  unlockFailure,
+  unlockIntent,
+  type OrdersPageData,
+} from "../orders/page-data";
 import { accessNotice, isStoreNotice } from "../access-notice";
 import { deletionAccess } from "../account-page.server";
 import { issueTimingTicket } from "../domain/page-timing.server";
@@ -373,20 +379,20 @@ export async function action({ request }: Route.ActionArgs) {
   if (limited) return limited;
   const area = await requireAccountArea(request);
   if (chosen) return runAreaAction(chosen, { request, area, form });
-  if (intent !== "unlock")
-    return data<UnlockResult>({ unlocked: [], remaining: null, error: true }, { status: 400 });
+  if (intent !== unlockIntent) return data(unlockFailure(), { status: 400 });
+  const { ids, skipConfirmation } = readUnlockForm(form);
   try {
     return await unlockOrders(
       env.DB,
       area.session.user.id,
-      String(form.get("ids") ?? "").split(","),
-      form.get("skipConfirmation") === "true",
+      ids,
+      skipConfirmation,
       requestedEbayEnvironment(request),
     );
   } catch (error) {
     // Le violazioni del dominio non espongono ordine, quota altrui o testo SQL.
     if (!(error instanceof UnlockError)) throw error;
-    return data<UnlockResult>({ unlocked: [], remaining: null, error: true }, { status: 409 });
+    return data(unlockFailure(), { status: 409 });
   }
 }
 
@@ -394,9 +400,7 @@ export async function action({ request }: Route.ActionArgs) {
 export async function clientAction(args: Route.ClientActionArgs) {
   const intent = (await args.request.clone().formData()).get("intent");
   return unconfirmedOnFailure(args, (notice) =>
-    intent === "unlock"
-      ? ({ unlocked: [], remaining: null, error: true } satisfies UnlockResult)
-      : ({ ok: false, notice } satisfies ActionResult),
+    intent === unlockIntent ? unlockFailure() : ({ ok: false, notice } satisfies ActionResult),
   );
 }
 

@@ -1,13 +1,12 @@
 import { env } from "cloudflare:workers";
 import { redirect } from "react-router";
 
-import { createAuth } from "./auth.server";
+import { createAuth, readSession } from "./auth.server";
 import { pendingVisitWrites, recordActivity } from "./domain/admission.server";
 import { applyFreePlan } from "./domain/free-store.server";
 import { listNotifications } from "./domain/notifications.server";
 import { readPreferences, type Preferences } from "./domain/preferences.server";
 import { registrationStatus, type Profile } from "./domain/registration.server";
-import { readSession } from "./domain/sessions.server";
 import { listStores, type StoreStatus } from "./domain/stores.server";
 import { accessPath, ordersPath } from "./app-links";
 import { errorResponse, unavailablePage } from "./error-response";

@@ -9,7 +9,7 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { accessPath, ordersPath, storeLinkPath, storesPath } from "../app-links";
 import { appCopy, pageTitle } from "../app-copy";
 import { areaPage } from "../account-area.server";
-import { readSession } from "../domain/sessions.server";
+import { readSession } from "../auth.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
 import { ebayOutages, listStores } from "../domain/stores.server";
 import { errorResponse } from "../error-response";

@@ -6,11 +6,18 @@ import {
   type ShouldRevalidateFunctionArgs,
 } from "react-router";
 
-import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
+import { OrdersPage } from "~/components/orders/page";
 import { VerifyEmail } from "~/components/access-notice";
 import { NotFoundState } from "~/components/not-found";
 import { OrdersLoading } from "~/components/orders/loading";
-import { remainingUnlocks } from "~/components/orders/labels";
+import {
+  readUnlockForm,
+  remainingUnlocks,
+  unlockFailure,
+  unlockIntent,
+  type OrdersPageData,
+  type UnlockResult,
+} from "../orders/page-data";
 import { useLinks } from "~/components/copy-context";
 import { appHref, previewOrdersPath } from "../app-links";
 import { historyWindowDays } from "../domain/history-window.server";
@@ -124,31 +131,22 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 export async function action({ request }: Route.ActionArgs) {
   assertPreviewAction(request);
   const form = await request.formData();
-  if (form.get("intent") !== "unlock") return simulateAction(request, form);
+  if (form.get("intent") !== unlockIntent) return simulateAction(request, form);
   const { state, scenario } = await currentScenario(request);
-  const ids = [
-    ...new Set(
-      String(form.get("ids") ?? "")
-        .split(",")
-        .filter(Boolean),
-    ),
-  ];
+  const { ids, skipConfirmation } = readUnlockForm(form);
   const remaining = remainingUnlocks(scenario.account);
   if (ids.length === 0 || ids.some((id) => !scenario.lockedValues[id])) {
-    return data<UnlockResult>({ unlocked: [], remaining, error: true }, { status: 400 });
+    return data(unlockFailure(remaining), { status: 400 });
   }
   if (remaining !== null && ids.length > remaining)
-    return data<UnlockResult>({ unlocked: [], remaining, error: true }, { status: 409 });
+    return data(unlockFailure(remaining), { status: 409 });
   if (state.scenario === "sblocco-non-riuscito" && !state.saveFailed)
-    return data<UnlockResult>(
-      { unlocked: [], remaining, error: true },
-      {
-        status: 409,
-        headers: {
-          "Set-Cookie": await writePreviewState({ ...state, saveFailed: true }),
-        },
+    return data(unlockFailure(remaining), {
+      status: 409,
+      headers: {
+        "Set-Cookie": await writePreviewState({ ...state, saveFailed: true }),
       },
-    );
+    });
   const result: UnlockResult = {
     unlocked: ids,
     remaining: remaining === null ? null : remaining - ids.length,
@@ -158,8 +156,7 @@ export async function action({ request }: Route.ActionArgs) {
       "Set-Cookie": await writePreviewState({
         ...state,
         unlocked: [...state.unlocked, ...ids],
-        confirmUnlock:
-          ids.length === 1 && form.get("skipConfirmation") === "true" ? false : state.confirmUnlock,
+        confirmUnlock: ids.length === 1 && skipConfirmation ? false : state.confirmUnlock,
       }),
     },
   });

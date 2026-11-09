@@ -9,7 +9,7 @@ import { useDate } from "~/components/time-zone";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
 import { appHref } from "../../app-links";
-import type { OrdersPageData } from "./page";
+import type { OrdersPageData } from "../../orders/page-data";
 
 /** Collegamento del primo negozio: pagina reale, azione simulata o, finché non è possibile, nessuna. */
 function ConnectAction({ data }: { data: OrdersPageData }) {

@@ -20,11 +20,11 @@ afterEach(drainBackground);
 
 import { forwardToAuth, handleAuthRequest } from "../app/auth-route.server";
 
-import { createAuth } from "../app/auth.server";
+import { createAuth, readSession } from "../app/auth.server";
 
 import { completeRegistration } from "../app/domain/registration.server";
 
-import { adminAccess, readSession, recentSignIn } from "../app/domain/sessions.server";
+import { adminAccess, recentSignIn } from "../app/domain/sessions.server";
 
 import { withResponseCookies } from "../app/response-cookies.server";
 

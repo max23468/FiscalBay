@@ -15,8 +15,7 @@ import { appHref } from "../../app-links";
 import { formatRelative } from "../../format";
 import type { Language } from "../../i18n";
 import { trialDaysLeft, trialEnding } from "../../view-models";
-import { importingNotice, isEbayDown } from "./labels";
-import type { OrdersPageData } from "./page";
+import { ebayDownNotice, importingNotice, type OrdersPageData } from "../../orders/page-data";
 
 export function OrdersHeader({ data }: { data: OrdersPageData }) {
   const { t } = useCopy();
@@ -42,7 +41,7 @@ export function OrdersHeader({ data }: { data: OrdersPageData }) {
 }
 
 function syncLabel(data: OrdersPageData, t: AppCopy, language: Language) {
-  const down = data.notices.find((notice) => notice.kind === "ebay-down");
+  const down = ebayDownNotice(data);
   if (down) return down.maintenance ? t.orders.ebayPausedTitle : t.orders.ebayDownTitle;
   const importing = importingNotice(data);
   if (importing) return t.orders.importingStatus(importing.count);
@@ -57,7 +56,7 @@ function SyncStatus({ data }: { data: OrdersPageData }) {
   const { t, language } = useCopy();
   const importing = importingNotice(data);
   const { running } = data.sync;
-  const down = isEbayDown(data);
+  const down = !!ebayDownNotice(data);
   const label = syncLabel(data, t, language);
   if (!label) return null;
   return (
@@ -202,7 +201,7 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
                   {/* Il consenso è ancora valido: il ricollegamento parte subito dalla
                       schermata preparatoria, fuori dalle route dell'app. Con eBay che non
                       risponde resta sospeso, come in Negozi. */}
-                  {isEbayDown(data) ? (
+                  {ebayDownNotice(data) ? (
                     <Button variant="outline" size="sm" disabled focusableWhenDisabled>
                       {t.orders.reconnectStore}
                     </Button>

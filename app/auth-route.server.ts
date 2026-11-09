@@ -3,10 +3,10 @@ import { waitUntil } from "./service-activity.server";
 import { redirect } from "react-router";
 import { z } from "zod";
 
-import { createAuth } from "./auth.server";
+import { createAuth, readSession } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
 import { recordEmailChange } from "./domain/email-change.server";
-import { passkeyChangeBlock, readSession, recentSignIn } from "./domain/sessions.server";
+import { passkeyChangeBlock, recentSignIn } from "./domain/sessions.server";
 import { completeStoreLink } from "./domain/store-link.server";
 import {
   claimStoreLinkSession,
