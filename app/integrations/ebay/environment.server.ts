@@ -66,7 +66,6 @@ export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironmen
 
 export type EbayConfiguration = ReturnType<typeof ebayConfiguration>;
 
-/** Credenziali dell'applicazione per l'endpoint dei token. */
 /**
  * Richiesta al token endpoint OAuth di eBay con le credenziali dell'applicazione: `grant` porta
  * il tipo di concessione e i suoi campi.

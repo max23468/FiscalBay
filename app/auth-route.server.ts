@@ -20,6 +20,7 @@ import {
   closedEmailCodePaths,
   emailCodeConfirmPath,
   environmentParam,
+  storeNoticeParam,
   ordersPath,
 } from "./app-links";
 import { localizedPath } from "./i18n";
@@ -328,7 +329,7 @@ async function handleEbayCallback(
   const target = place === "negozi" ? `${appBase}/negozi` : ordersPath;
   const home = localizedPath(language === "en" ? language : "it", target);
   const query = new URLSearchParams();
-  if (outcome) query.set("negozio", outcome);
+  if (outcome) query.set(storeNoticeParam, outcome);
   // Negozi elenca tutti gli ambienti; gli Ordini mostrano quello del negozio collegato.
   if (link.ebayEnvironment === "sandbox" && place !== "negozi")
     query.set(environmentParam, "sandbox");

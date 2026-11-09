@@ -322,11 +322,11 @@ export const fileLevel = (file, change) => fileImpact(file, change).level;
 const billing = ["orders", "public", "settings"];
 export const moduleAreas = [
   [
-    /^app\/(?:components\/orders\/|orders\/(?!export-)|preview\/order-list\.server\.ts$|domain\/(?:orders|order-(?:view|suggestions|observation))\.server\.ts$)/u,
+    /^app\/(?:components\/orders\/|orders\/(?!export-|order-criteria\.ts$)|preview\/order-list\.server\.ts$|domain\/(?:orders|order-(?:view|suggestions|observation))\.server\.ts$)/u,
     ["orders"],
   ],
   [
-    /^app\/(?:orders\/export-|domain\/order-export\.server\.ts$|domain\/(?:export-(?:configurations|files|jobs)|account-export|xlsx)\.server\.ts$|copy\/account-export\.ts$)/u,
+    /^app\/(?:orders\/(?:export-|order-criteria\.ts$)|domain\/order-export\.server\.ts$|domain\/(?:export-(?:configurations|files|jobs)|account-export|xlsx)\.server\.ts$|copy\/account-export\.ts$)/u,
     ["orders", "settings"],
   ],
   [

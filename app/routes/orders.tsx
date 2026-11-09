@@ -16,7 +16,7 @@ import {
   unlockIntent,
   type OrdersPageData,
 } from "../orders/page-data";
-import { accessNotice, isStoreNotice, storeNoticeParam } from "../access-notice";
+import { accessNotice, isStoreNotice } from "../access-notice";
 import { deletionAccess } from "../account-page.server";
 import { issueTimingTicket } from "../domain/page-timing.server";
 import { unconfirmedOnFailure } from "../client-action";
@@ -28,7 +28,7 @@ import {
   requireAccountArea,
 } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { ordersPath, storeLinkPath, withEnvironment } from "../app-links";
+import { ordersPath, storeLinkPath, storeNoticeParam, withEnvironment } from "../app-links";
 import {
   orderAllowance,
   restoreUnlockConfirmation,
@@ -299,6 +299,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     confirmation:
       pending.length > 0
         ? settleList(
+            request,
             () => read([...new Set(pending)]),
             (confirmed) => !confirmed.some(verifying),
           )

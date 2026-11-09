@@ -84,7 +84,9 @@ export async function cancelSubscription(env: Env, stripe: Stripe, id: string, n
  * Nessun nuovo addebito per mensile o annuale: la sessione ancora aperta scade, così non può più
  * incassare, e se è stata completata nel frattempo il suo abbonamento si chiude con gli altri.
  * Gli abbonamenti che possono ancora incassare si chiudono subito, senza conguagli né rimborsi
- * automatici. Una chiamata a Stripe alla volta: il turno resta entro i limiti.
+ * automatici. Una chiamata a Stripe alla volta: il turno resta entro i limiti. Il riferimento
+ * della sessione si toglie soltanto dopo la chiusura dei suoi abbonamenti: se una chiusura non
+ * riesce, il tentativo successivo ritrova la sessione e l'abbonamento che ha creato.
  */
 export async function endOpenSubscriptions(
   env: Env,
@@ -103,7 +105,6 @@ export async function endOpenSubscriptions(
   ]);
   const late = await inSequence(checkouts!, async ({ id }) => {
     const session = await closeCheckoutSession(stripe, id);
-    await env.DB.prepare("DELETE FROM subscription_checkouts WHERE session_id = ?").bind(id).run();
     return session.status === "complete" && session.subscription
       ? [stripeId(session.subscription)]
       : [];
@@ -111,4 +112,10 @@ export async function endOpenSubscriptions(
   await inSequence([...new Set([...results!.map(({ id }) => id), ...late.flat()])], (id) =>
     cancelSubscription(env, stripe, id, now),
   );
+  if (checkouts!.length)
+    await env.DB.batch(
+      checkouts!.map(({ id }) =>
+        env.DB.prepare("DELETE FROM subscription_checkouts WHERE session_id = ?").bind(id),
+      ),
+    );
 }

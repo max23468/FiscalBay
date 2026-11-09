@@ -100,15 +100,10 @@ export function unlockForm(ids: readonly string[], skipConfirmation: boolean) {
   return { intent: unlockIntent, ids: ids.join(","), skipConfirmation: String(skipConfirmation) };
 }
 
+/** Ordini e scelta del modulo così come arrivano: la validazione spetta a chi sblocca. */
 export function readUnlockForm(form: FormData) {
   return {
-    ids: [
-      ...new Set(
-        String(form.get("ids") ?? "")
-          .split(",")
-          .filter(Boolean),
-      ),
-    ],
+    ids: String(form.get("ids") ?? "").split(","),
     skipConfirmation: form.get("skipConfirmation") === "true",
   };
 }

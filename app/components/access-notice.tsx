@@ -8,7 +8,8 @@ import { DeleteAccount, type DeletionAccess } from "~/components/delete-account"
 import { StatusAlert } from "~/components/status";
 import { useTurnstile } from "~/components/turnstile";
 import { Button } from "~/components/ui/button";
-import { storeNoticeParam, type AccessNoticeView } from "../access-notice";
+import type { AccessNoticeView } from "../access-notice";
+import { storeNoticeParam } from "../app-links";
 import { supportEmail } from "../app-copy";
 import { accessPath, securityPath } from "../app-links";
 import { localizedPath } from "../i18n";

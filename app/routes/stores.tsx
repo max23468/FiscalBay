@@ -145,7 +145,7 @@ async function readStores({ request, params }: Route.LoaderArgs) {
       // Lo stato dei negozi in lettura si conferma nella stessa risposta, entro l'attesa.
       confirmation:
         syncing > 0
-          ? settleList(read, (current) => !current.some((store) => store.syncing))
+          ? settleList(request, read, (current) => !current.some((store) => store.syncing))
           : undefined,
     },
     { status: payload.notFound ? 404 : 200 },

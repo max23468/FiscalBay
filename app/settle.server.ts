@@ -19,9 +19,14 @@ export async function settle<T>(
 }
 
 /** Conferma di un elenco: una lettura non riuscita lascia la pagina com'è e resta nei log. */
-export function settleList<T>(read: () => Promise<T[]>, confirmed: (value: T[]) => boolean) {
+export function settleList<T>(
+  request: Request,
+  read: () => Promise<T[]>,
+  confirmed: (value: T[]) => boolean,
+) {
   return settle(read, confirmed).catch((error: unknown) => {
-    logFailure({ error, operation: "route" });
+    // Una richiesta interrotta dal browser non è un errore da registrare.
+    logFailure({ request, error, operation: "route" });
     return [];
   });
 }

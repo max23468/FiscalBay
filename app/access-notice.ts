@@ -1,15 +1,10 @@
 import { appCopy, type AppCopy } from "./app-copy";
+import { storeNoticeParam } from "./app-links";
 import type { Language } from "./i18n";
 
 type Tone = "success" | "info" | "warning" | "danger";
 export type SignInNotice = keyof AppCopy["access"]["signInNotices"];
 export type StoreNotice = keyof AppCopy["access"]["storeNotices"];
-
-/**
- * Esito del collegamento di un negozio nell'indirizzo: è il nome del filtro del negozio negli
- * Ordini, che riconosce gli esiti e li toglie dai filtri.
- */
-export const storeNoticeParam = "negozio";
 
 /** Pagina `path` con l'avviso dell'esito `notice`. */
 export function withStoreNotice(path: string, notice: StoreNotice) {

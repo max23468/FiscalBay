@@ -129,7 +129,9 @@ export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
   if (form.get("intent") !== unlockIntent) return simulateAction(request, form);
   const { state, scenario } = await currentScenario(request);
-  const { ids, skipConfirmation } = readUnlockForm(form);
+  const unlock = readUnlockForm(form);
+  const ids = [...new Set(unlock.ids.filter(Boolean))];
+  const { skipConfirmation } = unlock;
   const remaining = remainingUnlocks(scenario.account);
   if (ids.length === 0 || ids.some((id) => !scenario.lockedValues[id])) {
     return data(unlockFailure(remaining), { status: 400 });

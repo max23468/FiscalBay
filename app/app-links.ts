@@ -32,6 +32,12 @@ export function withEnvironment(path: string, environment: EbayEnvironment) {
   return `${path}?${new URLSearchParams({ [environmentParam]: environment })}`;
 }
 
+/**
+ * Esito del collegamento di un negozio nell'indirizzo: è il nome del filtro del negozio negli
+ * Ordini, che riconosce gli esiti e li toglie dai filtri.
+ */
+export const storeNoticeParam = "negozio";
+
 /** Parametri della schermata preparatoria del collegamento di un negozio. */
 export const storeLinkParams = {
   /** Negozio da ricollegare, arrivando da un avviso di scadenza. */
