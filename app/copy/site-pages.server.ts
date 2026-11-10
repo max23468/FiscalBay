@@ -10,7 +10,7 @@ const it = {
     title: "Recupera il Codice Fiscale dagli ordini eBay",
     description:
       "Recupera e gestisci il Codice Fiscale dei tuoi ordini eBay, quando disponibile su eBay, con sincronizzazione automatica, export e notifiche.",
-    hero: "Trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
+    hero: "FiscalBay: trova e gestisci il Codice Fiscale dei tuoi ordini eBay.",
     body: "Colleghi il tuo negozio eBay e FiscalBay riporta il Codice Fiscale dell’acquirente, quando disponibile su eBay, pronto da copiare ed esportare. Anche la Partita IVA, se c’è.",
     howItWorks: "Come funziona",
     trust: [
@@ -370,7 +370,7 @@ const en: SitePagesCopy = {
     title: "Get the tax code (Codice Fiscale) from your eBay orders",
     description:
       "Get and manage the tax code (Codice Fiscale) of your eBay orders, when eBay provides it, with automatic sync, export and notifications.",
-    hero: "Find and manage the tax code (Codice Fiscale) of your eBay orders.",
+    hero: "FiscalBay: find and manage the tax code (Codice Fiscale) of your eBay orders.",
     body: "Connect your eBay store and FiscalBay shows the buyer’s tax code (Codice Fiscale), when eBay provides it, ready to copy and export. The VAT number (Partita IVA) too, when there is one.",
     howItWorks: "How it works",
     trust: ["Official eBay APIs", "Secure payments handled by Stripe", "No card to get started"],
