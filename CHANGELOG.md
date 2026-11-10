@@ -33,6 +33,7 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 - **Guida sull'alternativa a ProBay.** Una nuova Guida, in italiano e in inglese, spiega come leggere il Codice Fiscale degli acquirenti eBay quando ProBay non è più disponibile o non funziona, e confronta le due soluzioni.
 - **Esempi più realistici.** Le schermate del sito e l'anteprima mostrano articoli da collezione con immagine, titoli come quelli delle inserzioni e contatti credibili.
 - **Provenienza dalla ricerca.** Chi arriva da un motore di ricerca su un indirizzo salvato con la provenienza interna viene attribuito al motore, non agli arrivi diretti.
+- **Marchio nel titolo della home.** Il titolo principale della home, in italiano e in inglese, comincia con «FiscalBay», così chi cerca il nome del servizio trova il sito. Anche l'immagine di condivisione della home riporta il nuovo titolo.
 
 ## [2.0.7] - 2026-11-07
 
