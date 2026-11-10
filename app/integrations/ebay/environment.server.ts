@@ -66,9 +66,31 @@ export function ebayConfiguration(env: EbayBindings, environment: EbayEnvironmen
 
 export type EbayConfiguration = ReturnType<typeof ebayConfiguration>;
 
-/** Credenziali dell'applicazione per l'endpoint dei token. */
-export function basicAuthorization(configuration: EbayConfiguration) {
-  return `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`;
+/**
+ * Richiesta al token endpoint OAuth di eBay con le credenziali dell'applicazione: `grant` porta
+ * il tipo di concessione e i suoi campi.
+ */
+export function requestToken<Schema extends z.ZodType>(
+  configuration: EbayConfiguration,
+  fetcher: typeof fetch,
+  schema: Schema,
+  grant: Record<string, string>,
+  options: UpstreamOptions = {},
+) {
+  return upstreamJson(
+    fetcher,
+    configuration.tokenUrl,
+    schema,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Basic ${btoa(`${configuration.clientId}:${configuration.clientSecret}`)}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams(grant),
+    },
+    options,
+  );
 }
 
 /**
@@ -80,21 +102,11 @@ export async function applicationToken(
   fetcher: typeof fetch,
   options: Pick<UpstreamOptions, "timeoutMs"> = {},
 ): Promise<string> {
-  const token = await upstreamJson(
+  const token = await requestToken(
+    configuration,
     fetcher,
-    configuration.tokenUrl,
     z.object({ access_token: z.string().min(1).max(8192) }),
-    {
-      method: "POST",
-      headers: {
-        authorization: basicAuthorization(configuration),
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        scope: "https://api.ebay.com/oauth/api_scope",
-      }),
-    },
+    { grant_type: "client_credentials", scope: "https://api.ebay.com/oauth/api_scope" },
     { ...options, maxBytes: 16_384 },
   );
   return token.access_token;

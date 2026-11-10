@@ -1,4 +1,6 @@
-import { maxListedOrders, pagesParam, snapshotParam } from "./order-list";
+import { environmentParam } from "../app-links";
+import { maxListedOrders, snapshotParam, type OrderTally } from "./order-criteria";
+import { pagesParam } from "./order-list";
 
 /**
  * Ambito dell'esportazione richiamata dagli Ordini, uguale nell'area reale e nell'anteprima.
@@ -26,13 +28,6 @@ export type ExportScope =
   | { kind: "orders"; ids: string[]; detail?: true }
   | { kind: "filtered"; criteria: URLSearchParams };
 
-/** Ordini dell'esportazione, quanti hanno il dato da sbloccare e quanti il dato disponibile. */
-export interface ExportTally {
-  orders: number;
-  locked: number;
-  available: number;
-}
-
 /** Selezione, singolo ordine o elenco filtrato degli Ordini, da esportare così com'è. */
 export interface ExportContext {
   kind: ExportScope["kind"];
@@ -47,7 +42,7 @@ export interface ExportContext {
   /** Ricerca attiva già decifrata e nome del negozio filtrato, per nominare l'ambito. */
   search: string | null;
   store: string | null;
-  estimate: ExportTally;
+  estimate: OrderTally;
 }
 
 /** Ambito ricevuto dagli Ordini nella forma della sezione, uguale nell'area reale e nell'anteprima. */
@@ -56,7 +51,7 @@ export function exportContext(
   query: URLSearchParams,
   ordersPath: string,
   order: string | null,
-  estimate: ExportTally,
+  estimate: OrderTally,
   names: { search: string | null; store: string | null } = { search: null, store: null },
 ): ExportContext {
   return {
@@ -65,7 +60,7 @@ export function exportContext(
     // Istantanea e ambiente eBay non restringono l'elenco.
     filtered:
       scope.kind === "filtered" &&
-      [...scope.criteria.keys()].some((key) => key !== snapshotParam && key !== "environment"),
+      [...scope.criteria.keys()].some((key) => key !== snapshotParam && key !== environmentParam),
     returnHref: exportReturnHref(ordersPath, query),
     query: query.toString(),
     search: scope.kind === "filtered" ? names.search : null,

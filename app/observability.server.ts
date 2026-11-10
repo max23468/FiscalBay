@@ -9,25 +9,10 @@ import {
   type InvocationDetail,
   type InvocationOutcome,
   type MetricPoint,
+  type Phase,
+  type PhaseOperation,
 } from "./metrics.server";
 import { samplePath } from "./metrics-queries";
-
-/**
- * Fasi misurate di una richiesta. I nomi, le operazioni e gli attributi sono un elenco chiuso:
- * mai valori dell'utente, dell'ordine o del provider.
- */
-export type Phase = "auth" | "d1" | "ebay";
-
-export type PhaseOperation =
-  | "session"
-  | "orders"
-  | "exports"
-  | "stores"
-  | "allowance"
-  | "registration"
-  | "notifications"
-  | "settings"
-  | "request";
 
 /** Inizio e fine di una misura, in millisecondi di `performance.now()`. */
 type Interval = readonly [number, number];

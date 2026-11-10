@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 
 import { handleAuthRequest } from "../app/auth-route.server";
-import { consumeStepJob, lockUntil, runToEnd } from "../app/domain/deletion-steps.server";
+import { consumeStepJob, runToEnd } from "../app/domain/deletion-steps.server";
 import { createAuth } from "../app/auth.server";
 import {
   consumeAccountDeletion,
@@ -375,10 +375,6 @@ function sentTo(send: MockInstance<SendEmail["send"]>, email: string) {
     .map(([message]) => message as { to: string; subject: string; text: string })
     .filter((message) => message.to === email);
 }
-
-it("il blocco delle cancellazioni dura quindici minuti", () => {
-  expect(lockUntil(new Date("2026-09-01T12:00:00.000Z"))).toBe("2026-09-01T12:15:00.000Z");
-});
 
 it.each(["more", "done", "busy", "missing"])(
   "la coda delle cancellazioni riaccoda soltanto il lavoro ancora incompleto: %s",

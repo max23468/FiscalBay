@@ -1,18 +1,18 @@
 import { baseFreeQuota, openPromotionEnd } from "../catalog";
 import { purchasesOpenSql, waitingSql } from "./admission-state.server";
-import { consultableStore } from "./store-state.server";
+import { openSubscriptionSql } from "./billing-subscriptions.server";
+import { consultableStore, orderLineageSql } from "./store-state.server";
 import type { EbayEnvironment } from "../view-models";
 import { dayMilliseconds } from "../time";
-import { sqlList } from "./sql.server";
 
 /** Predicato condiviso: nessun valore fiscale entra nel risultato prima dell'autorizzazione. */
 export function orderAccessSql(order: string, workspace: string, at: string) {
   return `(EXISTS (SELECT 1 FROM order_grants g JOIN orders original ON original.id = g.order_id
-    WHERE g.workspace_id = ${workspace} AND (original.id = ${order} OR original.merged_into = ${order})
+    WHERE g.workspace_id = ${workspace} AND ${orderLineageSql(order)}
       AND julianday(g.granted_at) <= julianday(${at}) AND g.revoked_at IS NULL
       AND (g.expires_at IS NULL OR julianday(g.expires_at) > julianday(${at})))
     OR EXISTS (SELECT 1 FROM workspace_entitlements e
-      JOIN orders original ON original.id = ${order} OR original.merged_into = ${order}
+      JOIN orders original ON ${orderLineageSql(order)}
       JOIN tax_identifiers t ON t.order_id = original.id
       WHERE e.workspace_id = ${workspace} AND e.revoked_at IS NULL
         AND julianday(e.starts_at) <= julianday(${at})
@@ -37,40 +37,6 @@ export function entitlementInForce(alias: string, at: string) {
 export function activeEntitlementSql(workspace: string, at: string) {
   return `EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = ${workspace}
     AND ${entitlementInForce("e", at)})`;
-}
-
-/** Stati in cui un abbonamento Stripe può ancora incassare. */
-export const openSubscriptionStatuses = [
-  "active",
-  "trialing",
-  "past_due",
-  "unpaid",
-  "incomplete",
-  "paused",
-] as const;
-
-/** Stati finali di un abbonamento Stripe: chiuso, non addebita più. */
-export const closedSubscriptionStatuses = ["canceled", "incomplete_expired"] as const;
-
-/** Stati di un abbonamento che si rinnova da solo, salvo disdetta. */
-export const renewingSubscriptionStatuses = ["active", "trialing"] as const;
-
-export function isRenewingSubscription(status: string) {
-  return (renewingSubscriptionStatuses as readonly string[]).includes(status);
-}
-
-export function isClosedSubscription(status: string) {
-  return (closedSubscriptionStatuses as readonly string[]).includes(status);
-}
-
-/**
- * Abbonamento dello spazio che può ancora incassare, come un pagamento da confermare o un
- * rinnovo da regolarizzare: un nuovo acquisto o la prova lo sovrapporrebbero.
- */
-export function openSubscriptionSql(workspace: string, environment?: string) {
-  return `EXISTS (SELECT 1 FROM stripe_subscriptions s WHERE s.workspace_id = ${workspace}
-    ${environment ? `AND s.environment = ${environment}` : ""} AND s.unavailable_at IS NULL
-    AND s.status IN (${sqlList(openSubscriptionStatuses)}))`;
 }
 
 /**

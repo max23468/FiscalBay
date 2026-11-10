@@ -18,14 +18,20 @@ import {
   sendAuthEmail,
   sendExistingAccountEmail,
 } from "./account-email.server";
-import { accountDeletionPath, emailCodeConfirmPath } from "./app-links";
+import { accountDeletionPath, authErrorPath, emailCodeConfirmPath } from "./app-links";
 import { logFailure } from "./errors";
 import { localizedPath, type Language } from "./i18n";
 import { maxPasswordLength, minPasswordLength } from "./limits";
-import { emailVerificationSeconds } from "./domain/email-change.server";
+import {
+  advanceEmailChange,
+  clearEmailChange,
+  emailVerificationSeconds,
+} from "./domain/email-change.server";
+import { sessionPolicy } from "./domain/sessions.server";
 import { recordSignupSource } from "./domain/signup-sources.server";
 import { upstreamJson } from "./integrations/http.server";
 import { hashPassword, verifyPassword } from "./password.server";
+import { queueResponseCookies } from "./response-cookies.server";
 import { parseSource } from "./signup-source";
 
 // Chiave del progetto dell'ambiente su dash.better-auth.com: senza, il plugin non viene caricato,
@@ -63,16 +69,6 @@ const ebayIdentitySchema = z.object({
 
 /** Dominio delle email di cui Google è autorevole oltre ai domini Workspace. */
 export const gmailDomain = "gmail.com";
-
-/**
- * Durata delle sessioni in secondi: scadenza, rinnovo con l'uso e accesso recente. Il rinnovo
- * aggiorna anche l'ultima attività mostrata in Sicurezza, quindi avviene al più una volta l'ora.
- */
-export const sessionPolicy = {
-  expiresIn: 7 * 86_400,
-  updateAge: 3_600,
-  freshAge: 86_400,
-} as const;
 
 // Richieste in cui una passkey ha superato la verifica dell'utente sul dispositivo: la
 // sessione creata dalla stessa richiesta lo registra. La richiesta resta in memoria solo
@@ -129,18 +125,30 @@ async function sendPasswordReset(env: Env, user: LinkUser, url: string) {
 }
 
 /**
+ * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il
+ * browser con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.
+ */
+export async function readSession(env: Env, request: Request) {
+  const { headers, response } = await createAuth(env).api.getSession({
+    headers: request.headers,
+    returnHeaders: true,
+  });
+  queueResponseCookies(headers);
+  return response;
+}
+
+/**
  * Un account nato da eBay o Google si conferma soltanto con la sessione dello stesso utente:
  * chi apre il link senza averla non entra in un account con il metodo di un altro.
  */
 async function requireConfirmationSession(env: Env, user: LinkUser, request?: Request) {
   if (!(await unconfirmedProviderAccount(env, user))) return;
-  const { readSession } = await import("./domain/sessions.server");
   const session = request ? await readSession(env, request) : null;
   if (session?.user.id === user.id) return;
   // Stryker disable next-line StringLiteral: Better Auth passa sempre la richiesta del link.
   const language = request ? linkLanguage(request.url) : "it";
   throw new APIError("FOUND", undefined, {
-    location: `${localizedPath(language, "/auth/error")}?error=verification_session`,
+    location: `${localizedPath(language, authErrorPath)}?error=verification_session`,
   });
 }
 
@@ -153,7 +161,7 @@ async function storeGrantLanguage(): Promise<Language | null> {
 }
 
 /** Collega il negozio autorizzato in registrazione; un guasto non ferma conferma o accesso. */
-async function activateStoreGrant(env: Env, userId: string, request?: Request) {
+export async function activateStoreGrant(env: Env, userId: string, request?: Request) {
   const { activateSignupGrant } = await import("./domain/store-link.server");
   return activateSignupGrant({ env, userId, request }).catch((error: unknown) => {
     logFailure({ request, error, operation: "store_link" });
@@ -345,23 +353,15 @@ function verificationOptions(env: Env): BetterAuthOptions["emailVerification"] {
     autoSignInAfterVerification: true,
     sendVerificationEmail: async ({ user, url }) => {
       // Il secondo link arriva al nuovo indirizzo; l'accesso resta sul precedente fino alla conferma.
-      const change = await env.DB.prepare(
-        "UPDATE account_email_changes SET stage = 'new', expires_at = ? WHERE user_id = ? AND new_email = ?",
-      )
-        .bind(
-          new Date(Date.now() + emailVerificationSeconds * 1000).toISOString(),
-          user.id,
-          user.email,
-        )
-        .run();
+      const changing = await advanceEmailChange(env.DB, user.id, user.email);
       // Il cambio di indirizzo resta con il solo link.
-      const code = change.meta.changes > 0 ? undefined : await newEmailCode(env, user.email);
+      const code = changing ? undefined : await newEmailCode(env, user.email);
       sendAuthEmail(env, "verify", { to: user.email, url, code });
     },
     beforeEmailVerification: (user, request) => requireConfirmationSession(env, user, request),
     afterEmailVerification: async (user, request) => {
       await env.DB.batch([
-        env.DB.prepare("DELETE FROM account_email_changes WHERE user_id = ?").bind(user.id),
+        clearEmailChange(env.DB, user.id),
         // Confermato con il link, il codice della stessa email non vale più.
         env.DB.prepare('DELETE FROM "verification" WHERE "identifier" = ?').bind(
           emailCodeIdentifier(user.email),
@@ -532,7 +532,7 @@ export function createAuthOptions(env: Env): BetterAuthOptions {
     // Il limite dei tentativi si applica prima del router, in auth-route.server.ts, anche ai moduli.
     rateLimit: { enabled: false },
     onAPIError: {
-      errorURL: "/auth/error",
+      errorURL: authErrorPath,
       // Un errore imprevisto, come il database che non risponde, esce dal router invece di
       // finire intero nel suo console.error: auth-route.server.ts lo registra con il solo codice.
       throw: true,

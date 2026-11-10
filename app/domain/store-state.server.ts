@@ -7,6 +7,11 @@
 export const storeNameSql = (store: string) =>
   `COALESCE(${store}.store_name, ${store}.display_name, ${store}.ebay_account_id, ${store}.ebay_user_id)`;
 
+/** Assegnazioni che tolgono a `ebay_stores` il profilo pubblico del negozio eBay letto da Trading. */
+export const clearedStoreProfileSql = `store_name = NULL, store_logo_url = NULL, store_url = NULL,
+  feedback_score = NULL, feedback_positive_percent = NULL, top_rated_seller = NULL,
+  store_profile_read_at = NULL`;
+
 /** Nome mostrato con «(Sandbox)» per un negozio dell'ambiente di prova eBay. */
 export const storeLabelSql = (store: string) =>
   `${storeNameSql(store)} ||
@@ -47,6 +52,13 @@ export const reconnectStore = (store: string, at: string) =>
  */
 export const listedOrder = (order: string, at: string) =>
   `${order}.merged_into IS NULL AND ${order}.retention_until > ${at} AND ${order}.is_provisional = 0`;
+
+/**
+ * Riga `original` di `orders` che appartiene all'ordine `order`: l'ordine stesso o un acquisto
+ * confluito in lui, con identificativi, verifiche e sblocchi propri.
+ */
+export const orderLineageSql = (order: string) =>
+  `(original.id = ${order} OR original.merged_into = ${order})`;
 
 /**
  * Le scritture di un'importazione valgono solo per il consenso con cui è partita: dopo uno

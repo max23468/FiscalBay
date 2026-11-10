@@ -21,8 +21,8 @@ import {
   exportContext as exportContextView,
   exportScope,
   type ExportContext,
-  type ExportTally,
 } from "../orders/export-scope";
+import type { OrderTally } from "../orders/order-criteria";
 import { openSearch } from "../orders/order-search.server";
 import {
   defaultDisplay,
@@ -30,14 +30,8 @@ import {
   detectedTimeZone,
   effectiveTimeZone,
 } from "../preferences";
-import {
-  orderPeriods,
-  orderPeriodStart,
-  settingsSections,
-  type OrderPeriod,
-  type OrderView,
-  type SettingsSection,
-} from "../view-models";
+import { settingsSections, type SettingsSection } from "../area-sections";
+import { orderPeriods, orderPeriodStart, type OrderPeriod, type OrderView } from "../view-models";
 import { previewListing, previewSearchScope, previewTally } from "./order-list.server";
 import { previewLifetime } from "./scenarios.server";
 import type { pageScenario } from "./state.server";
@@ -170,7 +164,7 @@ async function previewExport(
           const start = orderPeriodStart(period, new Date(scenario.now)).toISOString();
           return [period, previewTally(all.filter((order) => order.createdAt >= start))];
         }),
-      ) as Record<OrderPeriod, ExportTally>,
+      ) as Record<OrderPeriod, OrderTally>,
       exportSample: sample(all),
     };
   }

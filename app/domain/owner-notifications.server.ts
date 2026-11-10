@@ -9,6 +9,7 @@ import { activeCoverageSql } from "./grants.server";
 import { exitOfNotification } from "./exit-feedback.server";
 import { listSignInMethods } from "./sign-in-methods.server";
 import { at, ownerRetryMs, sendPanel, type Panel, type Row } from "./owner-panels.server";
+import { workLockMilliseconds } from "./work-timing";
 
 /**
  * Avvisi commerciali all'owner (§15, D219): registrazioni, ammissioni, primo negozio, prove,
@@ -47,8 +48,6 @@ export type NotificationKind =
 const perRun = 10;
 /** Tentativi prima di rinunciare a un avviso. */
 export const maxAttempts = 5;
-/** Un claim più vecchio appartiene a un turno interrotto e si riprende. */
-const claimMs = 15 * 60_000;
 /** Giorni dopo cui la pulizia giornaliera elimina gli avvisi, inviati o no. */
 export const notificationRetentionDays = 30;
 /**
@@ -376,7 +375,8 @@ async function spaceOf(db: D1Database, workspaceId: string | null, now: Date) {
  */
 async function claim(db: D1Database, now: Date) {
   const time = now.toISOString();
-  const stale = new Date(now.getTime() - claimMs).toISOString();
+  // Un claim più vecchio di un blocco appartiene a un turno interrotto e si riprende.
+  const stale = new Date(now.getTime() - workLockMilliseconds).toISOString();
   await db
     .prepare(`UPDATE owner_notifications SET status = 'failed', claim_token = NULL,
         claimed_at = NULL WHERE status = 'processing' AND claimed_at <= ?1 AND attempts >= ?2`)

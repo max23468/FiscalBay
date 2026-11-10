@@ -30,7 +30,7 @@ import { hasWhatsNew } from "../whats-new.server";
 import { languageFromPath, settingsSectionParam } from "../i18n";
 import { measure } from "../observability.server";
 import { securityAction, securityAuthPath } from "../security-actions.server";
-import { mergedSettingsSections, settingsSections, type SettingsSection } from "../view-models";
+import { isSettingsSection, mergedSectionUrl, settingsSections } from "../area-sections";
 import { listExportConfigurations } from "../domain/export-configurations.server";
 import { listExportFiles } from "../domain/export-jobs.server";
 import type { Route } from "./+types/settings";
@@ -55,14 +55,10 @@ const services = (): SettingsPageData["services"] => ({
   telegram: telegramConfigured(env),
 });
 
-function isSection(value: string | undefined): value is SettingsSection {
-  return (settingsSections as readonly string[]).includes(value ?? "");
-}
-
 export function meta({ location, params }: Route.MetaArgs): Route.MetaDescriptors {
   const t = appCopy[languageFromPath(location.pathname)];
   const section = settingsSectionParam(params.sezione);
-  const title = isSection(section)
+  const title = isSettingsSection(section)
     ? `${t.settings.sections[section].title} | ${t.settings.title}`
     : t.settings.title;
   return [{ title: pageTitle(title) }, { name: "robots", content: "noindex" }];
@@ -72,11 +68,11 @@ export const headers = pageHeaders;
 
 export function loader(args: Route.LoaderArgs) {
   // Profilo e Sicurezza stanno in Account: i vecchi indirizzi, anche delle email, portano lì.
-  const merged = mergedSettingsSections[settingsSectionParam(args.params.sezione) ?? ""];
-  if (merged) {
-    const url = new URL(args.request.url);
-    throw redirect(`${url.pathname.replace(/[^/]+$/u, merged)}${url.search}`, 301);
-  }
+  const merged = mergedSectionUrl(
+    new URL(args.request.url),
+    settingsSectionParam(args.params.sezione),
+  );
+  if (merged) throw redirect(merged, 301);
   return areaPage(args.request, () => readSettings(args));
 }
 
@@ -88,7 +84,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const sezione = settingsSectionParam(params.sezione);
   const area = await requireAccountArea(request);
   const { language, session, account, profile, preferences } = area;
-  if (sezione !== undefined && !isSection(sezione)) {
+  if (sezione !== undefined && !isSettingsSection(sezione)) {
     return data(
       {
         notFound: true as const,

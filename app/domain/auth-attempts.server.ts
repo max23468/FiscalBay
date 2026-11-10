@@ -36,9 +36,12 @@ export async function authAttemptWait(
   return Math.max(1, Math.ceil((row.lastRequest + windowMs - now) / 1000));
 }
 
+/** Finestra più lunga dei limiti per indirizzo, in secondi: oltre, un tentativo non conta più. */
+export const longestAttemptWindow = 3600;
+
+/** Tentativi le cui finestre sono chiuse, dalla pulizia giornaliera. */
 export function purgeAuthAttempts(db: D1Database, now: number) {
   return db
     .prepare('DELETE FROM "rateLimit" WHERE "lastRequest" < ?')
-    .bind(now - 3_600_000)
-    .run();
+    .bind(now - longestAttemptWindow * 1000);
 }

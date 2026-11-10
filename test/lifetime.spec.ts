@@ -427,9 +427,7 @@ describe("Lifetime e concessioni", () => {
   it("detrae soltanto il periodo pagato non usato, sull'istante UTC", () => {
     const month = { startsAt: "2028-02-01T00:00:00.000Z", endsAt: "2028-03-01T00:00:00.000Z" };
     // Febbraio bisestile: 29 giorni, 15 ancora da usare.
-    expect(unusedCredit(490, month, at("2028-02-15T00:00:00.000Z"))).toBe(
-      Math.floor((490 * 15) / 29),
-    );
+    expect(unusedCredit(490, month, at("2028-02-15T00:00:00.000Z"))).toBe(253);
     // Il periodo non ancora iniziato vale per intero, quello finito niente.
     expect(unusedCredit(490, month, at("2028-01-31T23:00:00.000Z"))).toBe(490);
     expect(unusedCredit(490, month, at("2028-03-01T00:00:00.000Z"))).toBe(0);
@@ -885,6 +883,22 @@ describe("Lifetime e concessioni", () => {
     stripe.requests.length = 0;
     expect(await stopRenewals(env, "w-a", stripe.fetcher, at(now))).toBe(true);
     expect(stripe.requests).toEqual(["GET /v1/checkout/sessions/cs_lifetime_4"]);
+  });
+
+  it("alla cancellazione dell'account ignora gli abbonamenti dell'altro ambiente Stripe", async () => {
+    const stripe = stripeAccount();
+    // L'ambiente del Worker di prova è `test`: un abbonamento live non è suo da fermare.
+    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
+        customer_id, offer, price_generation, status, current_period_start, current_period_end,
+        cancel_at_period_end, synced_at, checked_at, renewal_offer)
+      VALUES ('sub_live', 'w-a', 'live', 'cus_live', 'monthly', '2026-09', 'active', ?1, ?2,
+        0, ?1, ?1, 'monthly')`)
+      .bind(now, "2026-10-20T09:00:00.000Z")
+      .run();
+    // Senza chiave Stripe resterebbe da fermare e varrebbe false: nulla da fermare vale true.
+    const withoutKey = { ...env, STRIPE_SECRET_KEY: undefined } as unknown as Env;
+    expect(await stopRenewals(withoutKey, "w-a", stripe.fetcher, at(now))).toBe(true);
+    expect(stripe.requests).toEqual([]);
   });
 
   it("il cron rilegge una volta al giorno i lifetime venduti, per i rimborsi senza webhook", async () => {

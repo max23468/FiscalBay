@@ -5,7 +5,7 @@ import { AccessNotice } from "~/components/access-notice";
 import { NotFoundState } from "~/components/not-found";
 import { StoresPage } from "~/components/stores/page";
 import { useReadWait } from "~/components/stores/read-wait";
-import { accessNotice } from "../access-notice";
+import { accessNotice, withStoreNotice } from "../access-notice";
 import { unconfirmedOnFailure } from "../client-action";
 import { areaPage, areaStores, assertSameOrigin, requireAccountArea } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
@@ -32,7 +32,7 @@ import { serviceSetting } from "../domain/service-settings.server";
 import { logFailure } from "../errors";
 import { describeRequest, measure } from "../observability.server";
 import { issueTimingTicket } from "../domain/page-timing.server";
-import { settle } from "../settle.server";
+import { settleList } from "../settle.server";
 import type { Route } from "./+types/stores";
 import { pageHeaders } from "../request-limits.server";
 
@@ -145,7 +145,7 @@ async function readStores({ request, params }: Route.LoaderArgs) {
       // Lo stato dei negozi in lettura si conferma nella stessa risposta, entro l'attesa.
       confirmation:
         syncing > 0
-          ? settle(read, (current) => !current.some((store) => store.syncing)).catch(() => [])
+          ? settleList(request, read, (current) => !current.some((store) => store.syncing))
           : undefined,
     },
     { status: payload.notFound ? 404 : 200 },
@@ -226,7 +226,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (result === "invalid")
     return actionFailure(409, intent === "store-delete" ? t.deleteMismatch : t.failed);
   if (intent === "store-delete")
-    return redirect(`${localizedPath(language, storesPath)}?negozio=eliminato`, 303);
+    return redirect(withStoreNotice(localizedPath(language, storesPath), "eliminato"), 303);
   return { ok: true, notice: t.done[intent] } satisfies ActionResult;
 }
 

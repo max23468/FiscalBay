@@ -5,22 +5,20 @@ import { isProduction } from "../app-links";
 import { lifetimeSlots, priceGeneration, type LifetimeOffer, type PremiumOffer } from "../catalog";
 import { ApplicationError, logFailure } from "../errors";
 import {
-  closeCheckoutSession,
   isMissingObject,
   stripeCall,
   stripeEnvironment,
   stripeId,
 } from "../integrations/stripe.server";
-import { cancelSubscription } from "./billing-subscriptions.server";
-import { purchasesOpenSql } from "./admission-state.server";
 import {
-  entitlementInForce,
+  endOpenSubscriptions,
   isRenewingSubscription,
-  lifetimeInForceSql,
+  openCheckoutSql,
   openSubscriptionSql,
   openSubscriptionStatuses,
-  storeReadSql,
-} from "./grants.server";
+} from "./billing-subscriptions.server";
+import { purchasesOpenSql } from "./admission-state.server";
+import { entitlementInForce, lifetimeInForceSql, storeReadSql } from "./grants.server";
 import { erasedCustomerSql, paymentReversal, reversalStatements } from "./refunds.server";
 import { inSequence } from "../sequence";
 import { sqlList } from "./sql.server";
@@ -307,11 +305,8 @@ const lifetimeOwner = z.object({
 });
 
 /** Sessione lifetime senza i riferimenti del nostro checkout: nessun effetto. */
-class UnknownLifetimeSession extends ApplicationError {
-  constructor(readonly failure: string) {
-    super("INVALID_REQUEST");
-  }
-}
+const unknownLifetimeSession = (failure: string) =>
+  new ApplicationError("INVALID_REQUEST", failure);
 
 /** La sessione completata non può più incassare: pagamento annullato o rifiutato. */
 const failedIntentStatuses = ["canceled", "requires_payment_method"];
@@ -351,7 +346,7 @@ export async function reconcileLifetime(
   }
   const owner = lifetimeOwner.safeParse(session.metadata);
   if (!owner.success || !isLifetimeSession(session) || session.livemode !== isProduction(env)) {
-    logFailure({ error: new UnknownLifetimeSession("unknown_session"), operation: "billing" });
+    logFailure({ error: unknownLifetimeSession("unknown_session"), operation: "billing" });
     return;
   }
   const workspaceId = owner.data.workspace_id;
@@ -451,51 +446,12 @@ export async function reconcileLifetime(
         now,
       );
     else await resolveBillingIncident(env.DB, session.id, now);
-    logFailure({ error: new UnknownLifetimeSession("lifetime_unallocated"), operation: "billing" });
+    logFailure({ error: unknownLifetimeSession("lifetime_unallocated"), operation: "billing" });
     return;
   }
   await resolveBillingIncident(env.DB, session.id, now);
   // Rimborsato prima dell'attivazione: l'abbonamento sostituito resta quello in vigore.
-  if (!granted.revoked_at) await endReplacedSubscriptions(env, stripe, workspaceId, now);
-}
-
-/**
- * Con il lifetime l'abbonamento dello spazio non si rinnova più: si chiude subito, senza
- * conguagli né rimborsi automatici, perché il periodo pagato non usato è già stato detratto. Le
- * coperture già pagate restano fino alla loro fine. Anche la sessione di mensile o annuale
- * ancora aperta scade, così non può più incassare; se è stata completata nel frattempo, il suo
- * abbonamento si chiude con gli altri.
- */
-export async function endReplacedSubscriptions(
-  env: Env,
-  stripe: Stripe,
-  workspaceId: string,
-  now = new Date(),
-) {
-  const [{ results }, { results: checkouts }] = await env.DB.batch<{ id: string }>([
-    env.DB.prepare(`SELECT id FROM stripe_subscriptions
-      WHERE workspace_id = ?1 AND environment = ?2 AND unavailable_at IS NULL
-        AND status IN (${sqlList(openSubscriptionStatuses)})`).bind(
-      workspaceId,
-      stripeEnvironment(env),
-    ),
-    env.DB.prepare(`SELECT session_id AS id FROM subscription_checkouts WHERE workspace_id = ?1
-        AND session_id IS NOT NULL AND julianday(expires_at) > julianday(?2)`).bind(
-      workspaceId,
-      now.toISOString(),
-    ),
-  ]);
-  const late = await inSequence(checkouts!, async ({ id }) => {
-    const session = await closeCheckoutSession(stripe, id);
-    await env.DB.prepare("DELETE FROM subscription_checkouts WHERE session_id = ?").bind(id).run();
-    return session.status === "complete" && session.subscription
-      ? [stripeId(session.subscription)]
-      : [];
-  });
-  // Una chiamata a Stripe alla volta: il turno resta entro i limiti.
-  await inSequence([...new Set([...results!.map(({ id }) => id), ...late.flat()])], (id) =>
-    cancelSubscription(env, stripe, id, now),
-  );
+  if (!granted.revoked_at) await endOpenSubscriptions(env, stripe, workspaceId, now);
 }
 
 /** Lifetime venduti riletti per turno, ognuno una volta al giorno. */
@@ -524,10 +480,7 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
         WHERE a.status = 'active' AND ${lifetimeInForceSql("a.workspace_id")}
           AND (${openSubscriptionSql("a.workspace_id", "?1")}
             OR EXISTS (SELECT 1 FROM subscription_checkouts c WHERE c.workspace_id = a.workspace_id
-              AND c.session_id IS NOT NULL AND julianday(c.expires_at) > julianday(?2)))`).bind(
-      stripeEnvironment(env),
-      at,
-    ),
+              AND ${openCheckoutSql("c", "?2")}))`).bind(stripeEnvironment(env), at),
     env.DB.prepare(`UPDATE lifetime_allocations SET checked_at = ?1 WHERE slot IN (
         SELECT a.slot FROM lifetime_allocations a
         WHERE a.status = 'active' AND a.kind = 'sale'
@@ -546,7 +499,7 @@ export async function reconcileLifetimeReservations(env: Env, stripe: Stripe, no
         logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
       ),
       ...replaced!.results.map(({ workspace_id }) =>
-        logged(() => endReplacedSubscriptions(env, stripe, workspace_id!, now)),
+        logged(() => endOpenSubscriptions(env, stripe, workspace_id!, now)),
       ),
       ...sold!.results.map(({ provider_reference }) =>
         logged(() => reconcileLifetime(env, stripe, provider_reference!, now)),
@@ -682,7 +635,7 @@ export async function grantLifetime(
     const recovered = await recoverLifetimeSeat(env, { ...input, slot: input.slot }, at);
     if (recovered !== "done") return recovered;
     if (stripe)
-      await endReplacedSubscriptions(env, stripe, input.workspaceId, now).catch((error: unknown) =>
+      await endOpenSubscriptions(env, stripe, input.workspaceId, now).catch((error: unknown) =>
         logFailure({ error, operation: "billing" }),
       );
     return "done";
@@ -723,7 +676,7 @@ export async function grantLifetime(
     if (!regranted.meta.changes) return "owned";
   }
   if (stripe)
-    await endReplacedSubscriptions(env, stripe, input.workspaceId, now).catch((error: unknown) =>
+    await endOpenSubscriptions(env, stripe, input.workspaceId, now).catch((error: unknown) =>
       // Il cron ripete la chiusura: il diritto concesso resta.
       logFailure({ error, operation: "billing" }),
     );

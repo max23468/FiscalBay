@@ -19,9 +19,9 @@ import { buyerNameView, contactText } from "../../contact";
 import { exportOrderHref, exportSection } from "../../orders/export-scope";
 import { itemPrice, marketplaceLabel, type OrderView } from "../../view-models";
 import { countryName } from "../../format";
-import { BuyerAddress, EmailLink, ItemThumbnail, PhoneNumber, type SecondaryActions } from "./card";
+import type { OrdersAccount, SecondaryActions } from "../../orders/page-data";
+import { BuyerAddress, EmailLink, ItemThumbnail, PhoneNumber } from "./card";
 import { FiscalCodes, FiscalNotes, MissingOrderHelp, type FiscalProps } from "./fiscal";
-import type { OrdersAccount } from "./labels";
 import {
   billingCopyText,
   contactCopyLabels,
@@ -309,7 +309,7 @@ export function OrderSheet({
   account: OrdersAccount;
   ebayDown: boolean;
   templates: Record<Language, string>;
-  confirmUnlock?: boolean;
+  confirmUnlock: boolean;
   unlock: {
     submit: (ids: string[], skipConfirmation?: boolean) => void;
     pending: ReadonlySet<string>;

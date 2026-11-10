@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { orderAllowance, startTrial, trialDays } from "../app/domain/grants.server";
+import { orderAllowance, startTrial } from "../app/domain/grants.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
 import { action as unlockAction, loader as loadHome } from "../app/routes/orders";
 import { action as securityAction, loader as loadSettings } from "../app/routes/settings";
@@ -21,6 +21,8 @@ afterEach(() => vi.useRealTimers());
 
 describe("prova Pro", () => {
   const day = 24 * 60 * 60 * 1000;
+  /** Durata della prova nel prodotto. */
+  const trialDays = 14;
   const at = (offset: number) => new Date(Date.parse(now) + offset);
   /** Prima lettura riuscita di un negozio dello spazio, anche senza ordini. */
   const synced = (store = "s-a") =>

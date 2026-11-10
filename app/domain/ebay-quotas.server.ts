@@ -3,7 +3,7 @@ import { readApiQuotas, type ApiRate } from "../integrations/ebay/analytics.serv
 import type { EbayNotification } from "../integrations/ebay/notifications.server";
 import { ebayConfiguration, sandboxAvailable } from "../integrations/ebay/environment.server";
 import type { EbayEnvironment } from "../view-models";
-import { ownCalls, quotaUsageStatements } from "./order-acquisition-context.server";
+import { limitedCall, ownCalls, quotaUsageStatements } from "./order-acquisition-context.server";
 import { serviceSetting } from "./service-settings.server";
 
 /**
@@ -94,7 +94,7 @@ async function suspensions(db: D1Database, env: Env, environment: EbayEnvironmen
     .bind(at, origin)
     .all<{ api_origin: string; until: string }>();
   return results.map((row) => ({
-    call: row.api_origin.includes("#") ? row.api_origin.split("#")[1]! : null,
+    call: limitedCall(row.api_origin),
     until: row.until,
   }));
 }

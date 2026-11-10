@@ -1,5 +1,6 @@
 import { canonicalPath, localizedPath, type Language } from "./i18n";
 import { premiumOffers, type PremiumOffer } from "./catalog";
+import type { AreaPath } from "./area-sections";
 import type { EbayEnvironment } from "./view-models";
 
 export interface AppLinks {
@@ -9,8 +10,57 @@ export interface AppLinks {
 }
 
 /** Percorso localizzato di una pagina dell'app. */
-export function appHref({ language, base }: AppLinks, path = "") {
+export function appHref({ language, base }: AppLinks, path: AreaPath = "") {
   return localizedPath(language, `${base}${path ? `/${path}` : ""}`);
+}
+
+/** Pagina degli errori di accesso, anche di quelli che Better Auth rimanda al browser. */
+export const authErrorPath = "/auth/error";
+
+/**
+ * Ambiente eBay scelto nell'indirizzo, sul solo dominio di test: assente o diverso da
+ * `sandbox` vale Production.
+ */
+export const environmentParam = "environment";
+
+export function environmentOf(value: string | null | undefined): EbayEnvironment {
+  return value === "sandbox" ? "sandbox" : "production";
+}
+
+/** Indirizzo `path` nell'ambiente eBay indicato. */
+export function withEnvironment(path: string, environment: EbayEnvironment) {
+  return `${path}?${new URLSearchParams({ [environmentParam]: environment })}`;
+}
+
+/**
+ * Esito del collegamento di un negozio nell'indirizzo: è il nome del filtro del negozio negli
+ * Ordini, che riconosce gli esiti e li toglie dai filtri.
+ */
+export const storeNoticeParam = "negozio";
+
+/** Parametri della schermata preparatoria del collegamento di un negozio. */
+export const storeLinkParams = {
+  /** Negozio da ricollegare, arrivando da un avviso di scadenza. */
+  reconnect: "ricollega",
+  /** Pagina da cui si arriva: `negozi` torna a Negozi, altrimenti agli Ordini. */
+  from: "da",
+} as const;
+
+/** Valore di `storeLinkParams.from` arrivando da Negozi. */
+export const fromStoresValue = "negozi";
+
+/** Ricollegamento dalla schermata preparatoria `connectHref`, nell'ambiente eBay del negozio. */
+export function reconnectHref(
+  connectHref: string,
+  store: { id: string; ebayEnvironment: EbayEnvironment },
+  fromStores: boolean,
+) {
+  const query = new URLSearchParams({
+    [storeLinkParams.reconnect]: store.id,
+    [environmentParam]: store.ebayEnvironment,
+  });
+  if (fromStores) query.set(storeLinkParams.from, fromStoresValue);
+  return `${connectHref}?${query}`;
 }
 
 /** Radice dell'area riservata: il resto del dominio è il sito pubblico. */
@@ -189,7 +239,7 @@ export function appUrl(
   filters: Record<string, string> = {},
 ) {
   const query = new URLSearchParams(filters);
-  if (environment === "sandbox") query.set("environment", "sandbox");
+  if (environment === "sandbox") query.set(environmentParam, "sandbox");
   const search = query.size ? `?${query}` : "";
   return originUrl(env, `${localizedPath(language, path)}${search}`);
 }

@@ -1,9 +1,15 @@
 import { appCopy, type AppCopy } from "./app-copy";
+import { storeNoticeParam } from "./app-links";
 import type { Language } from "./i18n";
 
 type Tone = "success" | "info" | "warning" | "danger";
 export type SignInNotice = keyof AppCopy["access"]["signInNotices"];
-type StoreNotice = keyof AppCopy["access"]["storeNotices"];
+export type StoreNotice = keyof AppCopy["access"]["storeNotices"];
+
+/** Pagina `path` con l'avviso dell'esito `notice`. */
+export function withStoreNotice(path: string, notice: StoreNotice) {
+  return `${path}?${new URLSearchParams({ [storeNoticeParam]: notice })}`;
+}
 
 /** Tono degli avvisi: gli errori chiedono un'azione, le conferme no. */
 const signInTones: Record<SignInNotice, Tone> = {
@@ -87,7 +93,7 @@ export function signInNotice(key: SignInNotice, language: Language): AccessNotic
 export function accessNotice(search: URLSearchParams, language: Language): AccessNoticeView | null {
   const { access } = appCopy[language];
   const signIn = search.get("accesso");
-  const store = search.get("negozio");
+  const store = search.get(storeNoticeParam);
   const key = isSignInNotice(signIn) ? signIn : search.has("error") ? "recupero-scaduto" : null;
   if (key) return signInNotice(key, language);
   if (isStoreNotice(store))

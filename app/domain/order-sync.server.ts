@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import { acquireOrders, storeAccess, type ActiveStore } from "./order-acquisition.server";
+import {
+  acquireOrders,
+  requestStoreRead,
+  storeAccess,
+  type ActiveStore,
+} from "./order-acquisition.server";
 import { ensureOrderEvents } from "./order-events.server";
 import {
   defaultRateLimitSeconds,
@@ -300,16 +305,9 @@ export async function requestStoreSync(
   // In lista d'attesa basta la prima lettura del collegamento.
   if (!store.served) return "invalid";
 
-  // Registrata soltanto con un consenso valido e senza pausa.
-  const request = await env.DB.prepare(
-    `INSERT INTO sync_state (store_id, requested_at, updated_at)
-     SELECT ?1, ?3, ?3 WHERE ${writableStore}
-     ON CONFLICT(store_id) DO UPDATE SET
-       requested_at = COALESCE(sync_state.requested_at, excluded.requested_at)
-     RETURNING requested_at`,
-  )
-    .bind(storeId, store.granted_at, at)
-    .first<{ requested_at: string }>();
+  const request = await requestStoreRead(env.DB, storeId, store.granted_at, at).first<{
+    requested_at: string;
+  }>();
   if (!request) return "invalid";
 
   if (options.reimport) {

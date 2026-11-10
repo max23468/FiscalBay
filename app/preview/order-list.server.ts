@@ -1,15 +1,14 @@
 import {
   maxListedOrders,
   orderCriteria,
-  ordersPageSize,
-  pagesParam,
   snapshotCursor,
   snapshotInstant,
   snapshotParam,
-} from "../orders/order-list";
-import type { ExportTally } from "../orders/export-scope";
+  type OrderCriteria,
+  type OrderTally,
+} from "../orders/order-criteria";
+import { ordersPageSize, pagesParam } from "../orders/order-list";
 import { orderSearchText, searchFold, searchTokens } from "../orders/order-search";
-import type { OrderCriteria } from "../domain/orders.server";
 import { displayTaxValue } from "../tax-quality";
 import { fiscalSituation, type OrderView, type Plan } from "../view-models";
 
@@ -132,7 +131,7 @@ export function previewListing(
 }
 
 /** Ordini di un'esportazione dell'anteprima, con quelli da sbloccare e quelli con il dato. */
-export function previewTally(orders: OrderView[]): ExportTally {
+export function previewTally(orders: OrderView[]): OrderTally {
   return {
     orders: orders.length,
     locked: orders.filter((order) => order.fiscal.state === "locked").length,

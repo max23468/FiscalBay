@@ -1,3 +1,5 @@
+import { logFailure } from "./errors";
+
 /**
  * Rilegge uno stato finché non è confermato o finché scade l'attesa, sempre entro il tempo
  * dello streaming della pagina. Restituisce l'ultima lettura, confermata o no.
@@ -14,4 +16,17 @@ export async function settle<T>(
     value = await read();
   }
   return value;
+}
+
+/** Conferma di un elenco: una lettura non riuscita lascia la pagina com'è e resta nei log. */
+export function settleList<T>(
+  request: Request,
+  read: () => Promise<T[]>,
+  confirmed: (value: T[]) => boolean,
+) {
+  return settle(read, confirmed).catch((error: unknown) => {
+    // Una richiesta interrotta dal browser non è un errore da registrare.
+    logFailure({ request, error, operation: "route" });
+    return [];
+  });
 }

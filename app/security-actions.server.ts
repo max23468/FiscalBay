@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { data, redirect } from "react-router";
+import { maxPasskeyName } from "./limits";
 
 import { notifySecurityEvent } from "./account-email.server";
 import type { AccountArea } from "./account-area.server";
@@ -7,6 +8,7 @@ import {
   accessPath,
   accountDeletionPath,
   appUrl,
+  authErrorPath,
   securityPath,
   securityReturnPath,
 } from "./app-links";
@@ -97,7 +99,7 @@ export async function securityAction(
   const intent = field("intent");
   const security = localizedPath(language, securityPath);
   const notice = (value: string) => redirect(`${security}?accesso=${value}`, 303);
-  const authError = `${localizedPath(language, "/auth/error")}?provider=`;
+  const authError = `${localizedPath(language, authErrorPath)}?provider=`;
 
   if (intent === "riautentica") {
     const target = securityReturnPath(language, field("returnTo")) ?? security;
@@ -170,7 +172,7 @@ export async function securityAction(
     if (!id || id.length > 128) return notice("errore");
     if (intent === "passkey-rename") {
       const name = field("name").trim();
-      if (!name || name.length > 80) return notice("passkey-nome-non-valido");
+      if (!name || name.length > maxPasskeyName) return notice("passkey-nome-non-valido");
       const response = await forwardToAuth(env, request, "/passkey/update-passkey", { id, name });
       return notice(response.ok ? "passkey-rinominata" : "errore");
     }
@@ -231,7 +233,7 @@ export async function securityAction(
       intent === "reinvia-email"
         ? await pendingEmailChange(env.DB, session.user.id, session.user.email)
         : null;
-    const email = (intent === "reinvia-email" ? (pending?.new_email ?? "") : field("email")).trim();
+    const email = (intent === "reinvia-email" ? (pending?.newEmail ?? "") : field("email")).trim();
     if (!email || email.length > 254) return notice("email-non-valida");
     const response = await forwardToAuth(
       env,

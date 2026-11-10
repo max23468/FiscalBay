@@ -5,7 +5,17 @@ import { AccessNotice, VerifyEmail } from "~/components/access-notice";
 import { useCopy } from "~/components/copy-context";
 import { EbayEnvironmentField } from "~/components/ebay-environment";
 import { NotFoundState } from "~/components/not-found";
-import { OrdersPage, type OrdersPageData, type UnlockResult } from "~/components/orders/page";
+import { OrdersPage } from "~/components/orders/page";
+import {
+  marketingIntent,
+  readMarketingForm,
+  readRetryForm,
+  readUnlockForm,
+  retryIntent,
+  unlockFailure,
+  unlockIntent,
+  type OrdersPageData,
+} from "../orders/page-data";
 import { accessNotice, isStoreNotice } from "../access-notice";
 import { deletionAccess } from "../account-page.server";
 import { issueTimingTicket } from "../domain/page-timing.server";
@@ -18,7 +28,7 @@ import {
   requireAccountArea,
 } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
-import { ordersPath, storeLinkPath } from "../app-links";
+import { ordersPath, storeLinkPath, storeNoticeParam, withEnvironment } from "../app-links";
 import {
   orderAllowance,
   restoreUnlockConfirmation,
@@ -34,29 +44,27 @@ import {
   messageTemplates,
   recordMarketingConsent,
 } from "../domain/preferences.server";
-import {
-  countVisibleOrders,
-  listVisibleOrders,
-  type OrderCriteria,
-  visibleOrderFacets,
-} from "../domain/orders.server";
+import { countVisibleOrders, listVisibleOrders, visibleOrderFacets } from "../domain/orders.server";
 import { languageFromPath, localizedPath } from "../i18n";
 import { sandboxAvailable } from "../integrations/ebay/environment.server";
 import { describeRequest, measure } from "../observability.server";
 import {
   listCriteria,
   maxListedOrders,
-  ordersPageSize,
-  pagesParam,
-  rememberedStore,
-  revalidateUnlessSnapshot,
   snapshotCursor,
   snapshotParam,
+  type OrderCriteria,
+} from "../orders/order-criteria";
+import {
+  ordersPageSize,
+  pagesParam,
+  rememberedStoreHref,
+  revalidateUnlessSnapshot,
 } from "../orders/order-list";
 import { ordersNotices } from "../orders/notices.server";
 import { serviceSetting } from "../domain/service-settings.server";
 import { accountSearchScope, openSearch } from "../orders/order-search.server";
-import { settle } from "../settle.server";
+import { settleList } from "../settle.server";
 import type { ActionResult, EbayEnvironment, OrderView } from "../view-models";
 import type { Route } from "./+types/orders";
 import { orderView } from "../domain/order-view.server";
@@ -121,20 +129,16 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     .filter((store) => !store.pauseReasons.includes("plan"))
     .map((store) => ({ id: store.id, name: store.name }));
   // Un nuovo accesso agli Ordini riapre il negozio scelto l'ultima volta, visibile nei filtri.
-  const remembered =
-    search.size === 0 && !params.ordine
-      ? rememberedStore(
-          request.headers.get("cookie"),
-          filterStores.map((store) => store.id),
-        )
-      : null;
-  if (remembered)
-    throw redirect(
-      `${localizedPath(language, ordersPath)}?negozio=${encodeURIComponent(remembered)}`,
-    );
+  const remembered = rememberedStoreHref(
+    request,
+    localizedPath(language, ordersPath),
+    params.ordine,
+    filterStores.map((store) => store.id),
+  );
+  if (remembered) throw redirect(remembered);
   // `negozio` porta anche l'esito del collegamento di un negozio, che non è un filtro.
   const query = new URLSearchParams(search);
-  if (isStoreNotice(query.get("negozio"))) query.delete("negozio");
+  if (isStoreNotice(query.get(storeNoticeParam))) query.delete(storeNoticeParam);
   // La ricerca arriva cifrata e legata alla sessione: fuori da essa si dimentica.
   const searchText = await openSearch(env.BETTER_AUTH_SECRET, accountSearchScope(session), query);
   // L'istantanea dell'elenco aperto: un ordine arrivato dopo non entra fra quelli già letti.
@@ -273,7 +277,7 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     exportable: verified,
     openOnEbay: ebayEnvironment === "production",
     connectHref: verified
-      ? `${localizedPath(language, storeLinkPath)}?environment=${ebayEnvironment}`
+      ? withEnvironment(localizedPath(language, storeLinkPath), ebayEnvironment)
       : null,
   };
   const pending = [...page.orders, ...(detail ? [detail] : [])]
@@ -294,10 +298,11 @@ async function readOrders({ request, params }: Route.LoaderArgs) {
     timing: await issueTimingTicket(env.BETTER_AUTH_SECRET, "orders", now),
     confirmation:
       pending.length > 0
-        ? settle(
+        ? settleList(
+            request,
             () => read([...new Set(pending)]),
             (confirmed) => !confirmed.some(verifying),
-          ).catch(() => [])
+          )
         : undefined,
   };
 }
@@ -314,7 +319,7 @@ export function shouldRevalidate(args: ShouldRevalidateFunctionArgs) {
 async function retryOrderRead({ request, area, form }: AreaActionContext) {
   const t = appCopy[area.language].stores;
   const userId = area.session.user.id;
-  const id = String(form.get("order") ?? "");
+  const id = readRetryForm(form);
   if (!id || id.length > 64) return actionFailure(400, t.failed);
   const environment = requestedEbayEnvironment(request);
   const suspended = await suspendedEbayRead(userId, { environment });
@@ -340,12 +345,11 @@ const orderActions: Record<string, AreaAction> = {
     },
     failureNotice: (t) => t.settings.saveFailed,
   },
-  marketing: {
+  [marketingIntent]: {
     run: async ({ area, form }) => {
       const t = appCopy[area.language];
-      const value = form.get("value");
-      if (value !== "true" && value !== "false") return actionFailure(400, t.settings.saveFailed);
-      const accepted = value === "true";
+      const accepted = readMarketingForm(form);
+      if (accepted === null) return actionFailure(400, t.settings.saveFailed);
       await recordMarketingConsent(
         env.DB,
         area.session.user.id,
@@ -362,7 +366,7 @@ const orderActions: Record<string, AreaAction> = {
     failureNotice: (t) => t.settings.saveFailed,
   },
   "start-trial": trialAction,
-  retry: { run: retryOrderRead, failureNotice: (t) => t.stores.failed, limit: "work" },
+  [retryIntent]: { run: retryOrderRead, failureNotice: (t) => t.stores.failed, limit: "work" },
 };
 
 /** Sblocco e azioni degli Ordini; il filtro per IP di una nuova lettura precede la sessione. */
@@ -375,20 +379,20 @@ export async function action({ request }: Route.ActionArgs) {
   if (limited) return limited;
   const area = await requireAccountArea(request);
   if (chosen) return runAreaAction(chosen, { request, area, form });
-  if (intent !== "unlock")
-    return data<UnlockResult>({ unlocked: [], remaining: null, error: true }, { status: 400 });
+  if (intent !== unlockIntent) return data(unlockFailure(), { status: 400 });
+  const { ids, skipConfirmation } = readUnlockForm(form);
   try {
     return await unlockOrders(
       env.DB,
       area.session.user.id,
-      String(form.get("ids") ?? "").split(","),
-      form.get("skipConfirmation") === "true",
+      ids,
+      skipConfirmation,
       requestedEbayEnvironment(request),
     );
   } catch (error) {
     // Le violazioni del dominio non espongono ordine, quota altrui o testo SQL.
     if (!(error instanceof UnlockError)) throw error;
-    return data<UnlockResult>({ unlocked: [], remaining: null, error: true }, { status: 409 });
+    return data(unlockFailure(), { status: 409 });
   }
 }
 
@@ -396,9 +400,7 @@ export async function action({ request }: Route.ActionArgs) {
 export async function clientAction(args: Route.ClientActionArgs) {
   const intent = (await args.request.clone().formData()).get("intent");
   return unconfirmedOnFailure(args, (notice) =>
-    intent === "unlock"
-      ? ({ unlocked: [], remaining: null, error: true } satisfies UnlockResult)
-      : ({ ok: false, notice } satisfies ActionResult),
+    intent === unlockIntent ? unlockFailure() : ({ ok: false, notice } satisfies ActionResult),
   );
 }
 
@@ -411,7 +413,7 @@ function EnvironmentSelect({ value }: { value: EbayEnvironment }) {
       className="sm:max-w-sm"
       value={value}
       onValueChange={(next) =>
-        void navigate(`${localizedPath(language, ordersPath)}?environment=${next}`)
+        void navigate(withEnvironment(localizedPath(language, ordersPath), next))
       }
     />
   );
@@ -434,7 +436,10 @@ export default function Orders({ loaderData }: Route.ComponentProps) {
   ) : (
     <OrdersPage
       data={loaderData.page}
-      unlockAction={`${localizedPath(language, ordersPath)}?environment=${loaderData.ebayEnvironment}`}
+      unlockAction={withEnvironment(
+        localizedPath(language, ordersPath),
+        loaderData.ebayEnvironment,
+      )}
       confirmation={loaderData.confirmation}
       timing={loaderData.timing}
       notice={

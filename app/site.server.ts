@@ -12,7 +12,7 @@ import {
   siteSecurityPath,
   supportPath,
 } from "./app-links";
-import { createAuth } from "./auth.server";
+import { createAuth, readSession } from "./auth.server";
 import {
   formatPrice,
   italianGross,
@@ -24,7 +24,6 @@ import { readPurchasesOpen } from "./domain/admission-state.server";
 import { currentFreePromotion, freeQuotaSettings } from "./domain/grants.server";
 import { lifetimeSlotsLeft } from "./domain/lifetime.server";
 import { skipPageCache } from "./page-cache.server";
-import { readSession } from "./domain/sessions.server";
 import { logFailure, tracePhase } from "./errors";
 import { formatDate } from "./format";
 import { guides } from "./copy/guides.server";

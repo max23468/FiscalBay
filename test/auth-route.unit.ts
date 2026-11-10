@@ -51,7 +51,7 @@ vi.mock("../app/auth.server", () => ({
       },
     }),
   }),
-  sessionPolicy: { freshAge: 86400 },
+  readSession: (_env: Env, request: Request) => services.session({ headers: request.headers }),
 }));
 vi.mock("../app/domain/registration.server", () => ({ registrationStatus: services.registration }));
 vi.mock("../app/integrations/ebay/store-link.server", () => ({
@@ -91,7 +91,6 @@ beforeEach(() => {
   vi.spyOn(Date, "now").mockReturnValue(now);
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(now);
-  vi.spyOn(Math, "random").mockReturnValue(1);
   sqlite = new DatabaseSync(":memory:");
   sqlite.exec(
     'CREATE TABLE "rateLimit" (id TEXT, key TEXT UNIQUE, count INTEGER, lastRequest INTEGER)',
@@ -680,30 +679,6 @@ describe("limiti dei tentativi", () => {
     expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([
       "auth/sign-in/api/auth/email|203.0.113.1",
     ]);
-  });
-
-  it("pulisce soltanto le finestre chiuse da oltre un'ora con probabilità del 2%", async () => {
-    sqlite.exec(
-      `INSERT INTO "rateLimit" VALUES ('old', 'old', 1, ${now - 3600_001}), ('edge', 'edge', 1, ${now - 3600_000})`,
-    );
-    const send = () =>
-      post("/sign-in/email", {
-        headers: { "cf-connecting-ip": "203.0.113.1" },
-        body: JSON.stringify({ email: "vittima@example.invalid" }),
-      });
-    vi.spyOn(Math, "random").mockReturnValue(0.02);
-    await send();
-    expect(services.background).not.toHaveBeenCalled();
-    vi.spyOn(Math, "random").mockReturnValue(0.019);
-    await send();
-    expect(services.background).toHaveBeenCalledOnce();
-    const digest = createHash("sha256").update("vittima@example.invalid").digest("hex");
-    expect(
-      sqlite
-        .prepare('SELECT key FROM "rateLimit" ORDER BY key')
-        .all()
-        .map((row) => row.key),
-    ).toEqual(["edge", `email:${digest}|/sign-in/email`]);
   });
 });
 

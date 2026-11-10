@@ -55,9 +55,10 @@ describe("quote delle API eBay", () => {
 
   it("apre un'anomalia al giorno oltre il 70% e la chiude al rientro", async () => {
     await env.DB.prepare(
-      "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com#GetItem', ?)",
+      `INSERT INTO ebay_rate_limits (api_origin, until)
+       VALUES ('https://api.ebay.com', ?1), ('https://api.ebay.com#GetItem', ?2)`,
     )
-      .bind(later(3 * hour))
+      .bind(later(hour), later(3 * hour))
       .run();
     await env.DB.prepare(
       `INSERT INTO ebay_call_counts (day, api_origin, call, count)
@@ -75,7 +76,11 @@ describe("quote delle API eBay", () => {
       environment: "production",
       read: "ok",
       orderReads: 7,
-      suspended: [{ call: "GetItem", until: later(3 * hour) }],
+      // L'attesa dell'origine API ferma ogni chiamata; quella di GetItem soltanto la sua quota.
+      suspended: [
+        { call: null, until: later(hour) },
+        { call: "GetItem", until: later(3 * hour) },
+      ],
     });
     expect(production!.rows.find((row) => row.resource === "GetOrders")).toMatchObject({
       api: "Trading",

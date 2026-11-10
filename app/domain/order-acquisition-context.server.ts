@@ -46,6 +46,21 @@ export function limitKey(apiOrigin: string, limit?: string): string {
   return limit ? `${apiOrigin}#${limit}` : apiOrigin;
 }
 
+/** Chiamata con quota propria di una chiave di `limitKey`; null per l'attesa dell'origine API. */
+export function limitedCall(key: string): string | null {
+  return key.split("#")[1] ?? null;
+}
+
+/** Attesa fino a `until` per la chiave; un'attesa già più lunga resta. */
+function rateLimitStatement(db: D1Database, key: string, until: string) {
+  return db
+    .prepare(
+      `INSERT INTO ebay_rate_limits (api_origin, until) VALUES (?, ?)
+       ON CONFLICT(api_origin) DO UPDATE SET until = MAX(until, excluded.until)`,
+    )
+    .bind(key, until);
+}
+
 /** Secondi di attesa ancora chiesti da eBay per la chiave; 0 se nessuno. */
 export async function rateLimitWait(db: D1Database, key: string, now: Date): Promise<number> {
   const row = await db
@@ -66,13 +81,7 @@ export async function recordRateLimit(
     maxRateLimitSeconds,
     error.details.retryAfter ?? defaultRateLimitSeconds,
   );
-  await db
-    .prepare(
-      `INSERT INTO ebay_rate_limits (api_origin, until) VALUES (?, ?)
-       ON CONFLICT(api_origin) DO UPDATE SET until = MAX(until, excluded.until)`,
-    )
-    .bind(key, new Date(now.getTime() + seconds * 1000).toISOString())
-    .run();
+  await rateLimitStatement(db, key, new Date(now.getTime() + seconds * 1000).toISOString()).run();
 }
 
 export async function record(ctx: Context, observation: OrderObservation) {
@@ -227,14 +236,7 @@ export async function loadCallBudget(
   );
   if (capped.length)
     await db.batch(
-      capped.map(([call, state]) =>
-        db
-          .prepare(
-            `INSERT INTO ebay_rate_limits (api_origin, until) VALUES (?, ?)
-             ON CONFLICT(api_origin) DO UPDATE SET until = MAX(until, excluded.until)`,
-          )
-          .bind(`${origin}#${call}`, state.resetAt),
-      ),
+      capped.map(([call, state]) => rateLimitStatement(db, limitKey(origin, call), state.resetAt)),
     );
   return {
     background: (call, calls = 1) => {

@@ -48,7 +48,7 @@ export function EmailChange({
       </div>
       {pendingEmail ? (
         <div role="status" className="grid gap-2 rounded-lg border p-3 text-sm">
-          <p>{profile.emailPending(pendingEmail.new_email)}</p>
+          <p>{profile.emailPending(pendingEmail.newEmail)}</p>
           <p className="text-muted-foreground">
             {pendingEmail.stage === "new" ? profile.emailPendingNew : profile.emailPendingCurrent}
           </p>

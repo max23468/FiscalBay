@@ -11,7 +11,8 @@ import { reconcileSubscription } from "./billing.server";
 import { applyWorkspacePlan } from "./free-store.server";
 import { grantLifetime, type LifetimeGrant } from "./lifetime.server";
 import { dayMilliseconds } from "../time";
-import { lifetimeInForceSql, renewingSubscriptionStatuses } from "./grants.server";
+import { renewingSubscriptionStatuses } from "./billing-subscriptions.server";
+import { lifetimeInForceSql } from "./grants.server";
 import { sqlList } from "./sql.server";
 import { maxGrantDays } from "../limits";
 

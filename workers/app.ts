@@ -160,8 +160,8 @@ const handlers = {
       if (env.VERSION_METADATA?.id)
         correlated.headers.set("x-fiscalbay-version", env.VERSION_METADATA.id);
       return correlated;
-    } catch {
-      logFailure({ request: correlatedRequest, code: "INTERNAL_ERROR", operation: "route" });
+    } catch (error) {
+      logFailure({ request: correlatedRequest, error, code: "INTERNAL_ERROR", operation: "route" });
       return new Response(null, { status: 500, headers: { [correlationHeader]: id } });
     }
   },

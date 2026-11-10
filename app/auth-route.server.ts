@@ -1,12 +1,11 @@
-import { countAuthAttempt, purgeAuthAttempts } from "./domain/auth-attempts.server";
-import { waitUntil } from "./service-activity.server";
+import { countAuthAttempt, longestAttemptWindow } from "./domain/auth-attempts.server";
 import { redirect } from "react-router";
 import { z } from "zod";
 
-import { createAuth } from "./auth.server";
+import { createAuth, readSession } from "./auth.server";
 import { registrationStatus } from "./domain/registration.server";
 import { recordEmailChange } from "./domain/email-change.server";
-import { passkeyChangeBlock, readSession, recentSignIn } from "./domain/sessions.server";
+import { passkeyChangeBlock, recentSignIn } from "./domain/sessions.server";
 import { completeStoreLink } from "./domain/store-link.server";
 import {
   claimStoreLinkSession,
@@ -15,7 +14,15 @@ import {
 } from "./integrations/ebay/store-link.server";
 import { linkLanguage, notifySecurityEvent } from "./account-email.server";
 import { logFailure, tracePhase } from "./errors";
-import { appBase, closedEmailCodePaths, emailCodeConfirmPath, ordersPath } from "./app-links";
+import {
+  appBase,
+  authErrorPath,
+  closedEmailCodePaths,
+  emailCodeConfirmPath,
+  environmentParam,
+  storeNoticeParam,
+  ordersPath,
+} from "./app-links";
 import { localizedPath } from "./i18n";
 import { sha256Hex } from "./sealed.server";
 import type { RequestLimit } from "./request-limits";
@@ -138,7 +145,7 @@ const addressLimits = () => [
   { paths: /^\/email-otp\/verify-email$/u, window: 900, max: 10 },
   {
     paths: /^\/(sign-up\/email|send-verification-email|request-password-reset|forget-password)$/u,
-    window: 3600,
+    window: longestAttemptWindow,
     max: 5,
   },
 ];
@@ -206,12 +213,7 @@ async function addressWait(request: Request, env: Env): Promise<number | "unsupp
   if (formBody(request)) return "unsupported";
   const address = await addressKey(request);
   if (!address) return null;
-  const now = Date.now();
-  // Pulizia occasionale delle finestre chiuse da oltre un'ora, fuori dal percorso della risposta.
-  if (Math.random() < 0.02) {
-    waitUntil(purgeAuthAttempts(env.DB, now));
-  }
-  return countAuthAttempt(env.DB, `${address}|${path}`, rule, now);
+  return countAuthAttempt(env.DB, `${address}|${path}`, rule, Date.now());
 }
 
 async function authResponse(request: Request, env: Env, admitted = false): Promise<Response> {
@@ -293,7 +295,7 @@ async function handleEbayCallback(
   fetcher: typeof fetch,
 ): Promise<Response> {
   if (!validEbayCallback(request)) {
-    return noStore(Response.redirect(new URL("/auth/error", env.APP_ORIGIN), 303));
+    return noStore(Response.redirect(new URL(authErrorPath, env.APP_ORIGIN), 303));
   }
   // Il RuName ha un solo callback: lo state distingue il collegamento negozio dal login eBay.
   const search = new URL(request.url).searchParams;
@@ -327,9 +329,10 @@ async function handleEbayCallback(
   const target = place === "negozi" ? `${appBase}/negozi` : ordersPath;
   const home = localizedPath(language === "en" ? language : "it", target);
   const query = new URLSearchParams();
-  if (outcome) query.set("negozio", outcome);
+  if (outcome) query.set(storeNoticeParam, outcome);
   // Negozi elenca tutti gli ambienti; gli Ordini mostrano quello del negozio collegato.
-  if (link.ebayEnvironment === "sandbox" && place !== "negozi") query.set("environment", "sandbox");
+  if (link.ebayEnvironment === "sandbox" && place !== "negozi")
+    query.set(environmentParam, "sandbox");
   const destination = query.size > 0 ? `${home}?${query}` : home;
   return noStore(Response.redirect(new URL(destination, env.APP_ORIGIN), 303));
 }
@@ -363,7 +366,7 @@ async function handleDeletionCallback(request: Request, env: Env): Promise<Respo
   const failure = (error: "delete_link" | "delete_failed") =>
     noStore(
       Response.redirect(
-        new URL(`${localizedPath(language, "/auth/error")}?error=${error}`, env.APP_ORIGIN),
+        new URL(`${localizedPath(language, authErrorPath)}?error=${error}`, env.APP_ORIGIN),
         303,
       ),
     );

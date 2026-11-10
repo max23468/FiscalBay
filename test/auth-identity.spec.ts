@@ -581,7 +581,7 @@ describe("Collegamento e modifica dell'identità", () => {
     expect(await request("email.occupata@example.invalid")).toContain("email-richiesta");
     expect(
       await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
-    ).toMatchObject({ new_email: "email.occupata@example.invalid", stage: "current" });
+    ).toMatchObject({ newEmail: "email.occupata@example.invalid", stage: "current" });
     expect(await request("non-valida")).toContain("email-non-valida");
     expect(send).not.toHaveBeenCalled();
 
@@ -591,7 +591,7 @@ describe("Collegamento e modifica dell'identità", () => {
     expect(await stored()).toEqual({ email: "email.precedente@example.invalid", emailVerified: 1 });
     expect(
       await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
-    ).toMatchObject({ new_email: "email.nuova@example.invalid", stage: "current" });
+    ).toMatchObject({ newEmail: "email.nuova@example.invalid", stage: "current" });
 
     expect((await follow(link(0))).headers.get("location")).toContain("email-confermata");
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
@@ -632,7 +632,7 @@ describe("Collegamento e modifica dell'identità", () => {
     await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
     expect(send.mock.calls[1]![0]).toMatchObject({ to: "email.nuova@example.invalid" });
     expect(await pendingEmailChange(env.DB, user.id, "email.nuova@example.invalid")).toMatchObject({
-      new_email: "email.destinazione@example.invalid",
+      newEmail: "email.destinazione@example.invalid",
       stage: "current",
     });
     expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });

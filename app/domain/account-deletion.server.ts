@@ -58,13 +58,6 @@ const noticeAttempts = 3;
 // Stryker disable next-line StringLiteral: lo scopo deriva la chiave; un altro valore, uguale per chiusura e apertura, dà lo stesso esito.
 const sealPurpose = "account-deletion";
 
-/** Segnalazione all'owner: un'etichetta fissa, senza riferimenti all'account. */
-class DeletionSignal extends ApplicationError {
-  constructor(readonly failure: string) {
-    super("UPSTREAM_UNAVAILABLE");
-  }
-}
-
 /** Sessione aperta abbastanza di recente per chiedere la cancellazione. */
 export function deletionReauthenticated(createdAt: Date | string, now = new Date()): boolean {
   return elapsedMs(createdAt, now) < deletionReauthMilliseconds;
@@ -290,7 +283,7 @@ export async function runAccountDeletion(
           .bind(at, id)
           .run();
         logFailure({
-          error: new DeletionSignal("renewals_not_stopped"),
+          error: new ApplicationError("UPSTREAM_UNAVAILABLE", "renewals_not_stopped"),
           operation: "account_deletion",
         });
       }

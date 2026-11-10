@@ -1,21 +1,11 @@
 import { logFailure } from "../errors";
-import { queueRetryDelay } from "./work-timing";
+import { queueRetryDelay, workLockUntil } from "./work-timing";
 
 /**
  * Lavoro a passi delle cancellazioni, dell'account e chieste da eBay: ogni passo prende il
  * blocco della richiesta, elimina gli ordini entro un budget e restituisce «more» quando ne
  * restano, così la coda o il compito periodico lo ripetono.
  */
-
-/** Durata del blocco di una richiesta in esecuzione: un consumer interrotto la cede allo scadere. */
-const lockMilliseconds = 15 * 60_000;
-
-/**
- * Termine del blocco preso all'istante `now`. Il valore scritto è anche il segno di chi tiene
- * il blocco: rilascio e proroga lo confrontano, così chi l'ha perso allo scadere non tocca
- * quello preso dopo da un altro consumer.
- */
-export const lockUntil = (now: Date) => new Date(now.getTime() + lockMilliseconds).toISOString();
 
 /** Tabelle delle richieste a passi, con le colonne `completed_at` e `locked_until`. */
 type StepTable = "account_deletions" | "ebay_account_deletions";
@@ -34,7 +24,7 @@ export async function claimStepJob<Job>(
   | { outcome: "missing" | "done" | "busy" }
   | { job: Job; lock: string; release: () => Promise<unknown> }
 > {
-  const lock = lockUntil(now);
+  const lock = workLockUntil(now);
   const job = await db
     .prepare(`UPDATE ${table} SET locked_until = ?2
       WHERE id = ?1 AND completed_at IS NULL AND (locked_until IS NULL OR locked_until <= ?3)

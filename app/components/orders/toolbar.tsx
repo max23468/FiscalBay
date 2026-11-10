@@ -11,7 +11,8 @@ import { Select, SelectContent, SelectTrigger, SelectValue } from "~/components/
 import { useCopy } from "~/components/copy-context";
 import { PremiumSelectItem } from "~/components/premium-select-item";
 import { usePendingList } from "./pending-list";
-import { listFilterParams, rememberStore, withoutListPosition } from "../../orders/order-list";
+import { listFilterParams } from "../../orders/order-criteria";
+import { rememberStore, withoutListPosition } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
 import {
   fiscalSituations,

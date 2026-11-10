@@ -115,8 +115,8 @@ export class NotificationLimit extends Error {}
  * schema del corpo. Nessun valore della consegna entra nell'errore.
  */
 export class NotificationRejected extends ApplicationError {
-  constructor(readonly failure: "header" | "signature" | "schema") {
-    super("INVALID_REQUEST");
+  constructor(override readonly failure: "header" | "signature" | "schema") {
+    super("INVALID_REQUEST", failure);
   }
 }
 

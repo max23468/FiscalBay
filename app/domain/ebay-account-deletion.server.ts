@@ -4,6 +4,7 @@ import { logFailure } from "../errors";
 import { inSequence } from "../sequence";
 import type { EbayEnvironment } from "../view-models";
 import { deletionMarkerDays } from "./account-deletion.server";
+import { clearedStoreProfileSql } from "./store-state.server";
 import {
   consumeStepJob,
   deleteOrders,
@@ -135,9 +136,7 @@ function eraseStoreStatements(db: D1Database, storeId: string, at: string) {
     ].map((sql) => db.prepare(sql).bind(storeId)),
     db
       .prepare(`UPDATE ebay_stores SET ebay_user_id = id, ebay_account_id = NULL,
-          display_name = NULL, store_name = NULL, store_logo_url = NULL, store_url = NULL,
-          feedback_score = NULL, feedback_positive_percent = NULL, top_rated_seller = NULL,
-          store_profile_read_at = NULL, data_deleted_at = COALESCE(data_deleted_at, ?2),
+          display_name = NULL, ${clearedStoreProfileSql}, data_deleted_at = COALESCE(data_deleted_at, ?2),
           orders_deleted_through = MAX(COALESCE(orders_deleted_through, ?2), ?2)
         WHERE id = ?1`)
       .bind(storeId, at),

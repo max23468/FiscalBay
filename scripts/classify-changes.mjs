@@ -322,11 +322,11 @@ export const fileLevel = (file, change) => fileImpact(file, change).level;
 const billing = ["orders", "public", "settings"];
 export const moduleAreas = [
   [
-    /^app\/(?:components\/orders\/|orders\/(?!export-)|preview\/order-list\.server\.ts$|domain\/(?:orders|order-(?:view|suggestions|observation))\.server\.ts$)/u,
+    /^app\/(?:components\/orders\/|orders\/(?!export-|order-criteria\.ts$)|preview\/order-list\.server\.ts$|domain\/(?:orders|order-(?:view|suggestions|observation))\.server\.ts$)/u,
     ["orders"],
   ],
   [
-    /^app\/(?:orders\/export-|domain\/order-export\.server\.ts$|domain\/(?:export-(?:configurations|files|jobs)|account-export|xlsx)\.server\.ts$|copy\/account-export\.ts$)/u,
+    /^app\/(?:orders\/(?:export-|order-criteria\.ts$)|domain\/order-export\.server\.ts$|domain\/(?:export-(?:configurations|files|jobs)|account-export|xlsx)\.server\.ts$|copy\/account-export\.ts$)/u,
     ["orders", "settings"],
   ],
   [
@@ -373,7 +373,7 @@ export const moduleAreas = [
 
 /** Moduli che ogni pagina attraversa, oppure senza un'area che li contenga: provano tutto. */
 export const sharedModules =
-  /^(?:workers\/app\.ts|app\/(?:components\/|copy\/|app\.css$|routes\.ts$|root\.tsx$|entry\.(?:client|server)\.tsx$|(?:access-notice|app-copy|app-links|changelog|client-action|error-response|errors|format|i18n|limits|markup|money|preferences|request-limits|support|tax-quality|time|view-models|web-analytics)\.ts$|(?:account-area|account-page|area-actions|auth|content-security|request-limits|response-cookies|sealed|whats-new)\.server\.ts$|domain\/(?:history-window|service-notices|service-settings)\.server\.ts$|preview\/(?:(?:scenarios|scenario-orders|state)\.server|scenario-text)\.ts$))/u;
+  /^(?:workers\/app\.ts|app\/(?:components\/|copy\/|app\.css$|routes\.ts$|root\.tsx$|entry\.(?:client|server)\.tsx$|(?:access-notice|app-copy|app-links|area-sections|changelog|client-action|error-response|errors|format|i18n|limits|markup|money|preferences|request-limits|support|tax-quality|time|view-models|web-analytics)\.ts$|(?:account-area|account-page|area-actions|auth|content-security|request-limits|response-cookies|sealed|whats-new)\.server\.ts$|domain\/(?:history-window|service-notices|service-settings)\.server\.ts$|preview\/(?:(?:scenarios|scenario-orders|state)\.server|scenario-text)\.ts$))/u;
 
 /** Moduli applicativi senza area dichiarata e fuori da `sharedModules`. */
 export const undeclaredModules = (files) =>

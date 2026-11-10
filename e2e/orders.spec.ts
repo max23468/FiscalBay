@@ -9,15 +9,12 @@ import {
   searched,
   setScenario,
 } from "./components";
-import { expect, test, watchNetwork, pagePath } from "./fixtures";
+import { expect, localOnly, test, watchNetwork, pagePath } from "./fixtures";
 import { useLocalAccount } from "./local-account";
 import { testAccount } from "./test-account";
 
 test.describe("area reale", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   for (const language of ["it", "en"] as const) {
     const prefix = language === "it" ? "" : "/en";
@@ -1324,10 +1321,7 @@ test("un nuovo accesso ricorda soltanto il negozio, l'istantanea resta su «Cari
 });
 
 test.describe("caricamento degli Ordini reali", () => {
-  test.skip(
-    Boolean(process.env.E2E_BASE_URL),
-    "Prove con dati sintetici soltanto sul database locale.",
-  );
+  localOnly();
 
   test("da un'altra sezione compare lo scheletro dell'elenco, non la pagina precedente", async ({
     page,
@@ -1454,10 +1448,7 @@ test.describe("impostazioni", () => {
   });
 
   test.describe("prova Pro", () => {
-    test.skip(
-      Boolean(process.env.E2E_BASE_URL),
-      "Prove con dati sintetici soltanto sul database locale.",
-    );
+    localOnly();
 
     for (const language of ["it", "en"] as const)
       test(`ordini reali: la prova si attiva dopo la prima lettura e compare nel Piano ${language}`, async ({

@@ -10,14 +10,20 @@
  */
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { appendFileSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { criticalModule } from "./lib/critical-modules.mjs";
 import { importGraph } from "./verify-repo.mjs";
-import { gh, ghJson, git, isAncestor, retry } from "./lib/provider.mjs";
+import {
+  ghApi,
+  ghJson,
+  git,
+  isAncestor,
+  readRunArtifact,
+  trackedSources,
+} from "./lib/provider.mjs";
 
 /** Workflow le cui mutation valgono come ricevuta. */
 const mutationWorkflows = [".github/workflows/candidate.yml", ".github/workflows/mutation.yml"];
@@ -264,29 +270,13 @@ const plans = new Map();
 
 /** Piano della matrice di una run della PR, o null se l'artefatto manca o non si legge. */
 function defaultPlan(repository, run) {
-  if (!plans.has(run)) {
-    const directory = mkdtempSync(path.join(tmpdir(), "mutation-plan-"));
-    let plan = null;
-    try {
-      gh(
-        "run",
-        "download",
-        String(run),
-        "--repo",
-        repository,
-        "--name",
-        `mutation-plan-${run}`,
-        "--dir",
-        directory,
-      );
-      plan = JSON.parse(readFileSync(path.join(directory, "mutation-plan.json"), "utf8"));
-    } catch {
-      plan = null;
-    } finally {
-      rmSync(directory, { recursive: true, force: true });
-    }
-    plans.set(run, plan);
-  }
+  if (!plans.has(run))
+    plans.set(
+      run,
+      readRunArtifact(repository, run, { name: `mutation-plan-${run}` }, (directory) =>
+        JSON.parse(readFileSync(path.join(directory, "mutation-plan.json"), "utf8")),
+      ),
+    );
   return plans.get(run);
 }
 
@@ -303,7 +293,7 @@ function defaultPlan(repository, run) {
  */
 export async function pullRequestParts(
   { repository, repositoryId, branch, head, target, graph, digest, exclude, excused },
-  api = defaultApi,
+  api = ghApi,
   readPlan = defaultPlan,
 ) {
   const { workflow_runs: runs = [] } = await api(
@@ -394,7 +384,7 @@ export async function pullRequestParts(
  * diverse (`pullRequestParts`). Restituisce la run più recente, il suo commit e tutte le run
  * usate, o null.
  */
-export async function pullRequestProof(args, api = defaultApi, readPlan = defaultPlan) {
+export async function pullRequestProof(args, api = ghApi, readPlan = defaultPlan) {
   const parts = await pullRequestParts(args, api, readPlan);
   if (!parts || parts.missing.length) return null;
   // Gli ID delle run crescono nel tempo: il più alto è la run più recente.
@@ -407,7 +397,7 @@ export async function pullRequestProof(args, api = defaultApi, readPlan = defaul
  * `reusePlan` usa per ogni modulo soltanto la run più recente che lo ha provato: la lettura si
  * ferma quando ogni modulo richiesto ha un esito, invece di scaricare i job di tutte le run.
  */
-export async function previousRuns(repository, repositoryId, targets, api = defaultApi) {
+export async function previousRuns(repository, repositoryId, targets, api = ghApi) {
   if (!targets.length) return [];
   const pending = new Set(targets);
   const runs = [];
@@ -447,9 +437,6 @@ export async function previousRuns(repository, repositoryId, targets, api = defa
   }
   return runs;
 }
-
-const defaultApi = (url) =>
-  retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
 
 /** Impronta SHA-256 di un file in un commit, come quella dei piani della matrice. */
 const commitDigest = (commit, file) =>
@@ -529,7 +516,7 @@ async function prCoverage({
  */
 export function pullRequestCoverage(
   { repository, repositoryId, graph },
-  api = defaultApi,
+  api = ghApi,
   readPlan = defaultPlan,
 ) {
   const cache = new Map();
@@ -560,23 +547,12 @@ async function main() {
   const repositoryId = Number(process.env.REPOSITORY_ID);
   if (!repository || !repositoryId) throw new Error("Repository non identificato.");
   const targets = JSON.parse(process.env.MATRIX ?? '{"target":[]}').target;
-  const api = (url) =>
-    retry(() => ghJson("api", url), { attempts: 6, delay: (attempt) => attempt * 10_000 });
   // Senza esiti leggibili la pianificazione fallisce e si ripete: la mutation completa resta
   // alla campagna settimanale, mai un ripiego della prova del candidato.
-  const runs = await previousRuns(repository, repositoryId, targets, api);
-  const sources = git("ls-files")
-    .split("\n")
-    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
-    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
-  const graph = importGraph(sources);
-  const testGraph = importGraph(
-    git("ls-files")
-      .split("\n")
-      .filter((file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file) && existsSync(file))
-      .map((file) => ({ path: file, text: readFileSync(file, "utf8") })),
-    /^(?:app|workers|test)\/.+\.tsx?$/u,
-  );
+  const runs = await previousRuns(repository, repositoryId, targets, ghApi);
+  const graph = importGraph(trackedSources());
+  const withTests = /^(?:app|workers|test)\/.+\.tsx?$/u;
+  const testGraph = importGraph(trackedSources(withTests), withTests);
   const cache = new Map();
   const affectedSince = (commit) => {
     if (!cache.has(commit))
@@ -589,7 +565,7 @@ async function main() {
       );
     return cache.get(commit);
   };
-  const covered = pullRequestCoverage({ repository, repositoryId, graph: testGraph }, api);
+  const covered = pullRequestCoverage({ repository, repositoryId, graph: testGraph }, ghApi);
   const { run, reused } = await reusePlan(targets, runs, affectedSince, covered);
   const list = (entries) => entries.map((entry) => `- ${entry}`).join("\n");
   const summary = [

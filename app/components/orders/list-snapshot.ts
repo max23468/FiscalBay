@@ -8,9 +8,9 @@ import {
   useSearchParams,
 } from "react-router";
 
-import { snapshotParam } from "../../orders/order-list";
+import { snapshotParam } from "../../orders/order-criteria";
 import type { OrderView } from "../../view-models";
-import type { OrdersPageData } from "./page";
+import type { OrdersPageData } from "../../orders/page-data";
 
 /** Distanza dall'inizio della pagina entro cui l'utente è considerato in cima alla lista. */
 const topThreshold = 120;

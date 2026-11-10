@@ -8,8 +8,7 @@ import {
   stripeId,
   stripeListLimit,
 } from "../integrations/stripe.server";
-import { closedSubscriptionStatuses } from "./grants.server";
-import { sqlList } from "./sql.server";
+import { openSubscriptionFilterSql } from "./billing-subscriptions.server";
 
 /**
  * Rimborsi, dispute e cancellazioni finanziarie (§6.4, §6.6). Con Managed Payments li decide
@@ -24,14 +23,8 @@ import { sqlList } from "./sql.server";
 export type Reversal = { refunded: number; revocation: "refund" | "dispute" | null };
 
 /** Segnalazione per l'assistenza: un'etichetta fissa, senza importi o riferimenti. */
-class BillingSignal extends ApplicationError {
-  constructor(readonly failure: string) {
-    super("INVALID_REQUEST");
-  }
-}
-
 const signal = (failure: string) =>
-  logFailure({ error: new BillingSignal(failure), operation: "billing" });
+  logFailure({ error: new ApplicationError("INVALID_REQUEST", failure), operation: "billing" });
 
 /**
  * Esito di un addebito per la copertura che ha pagato. Le richieste a Stripe partono soltanto
@@ -190,9 +183,8 @@ export async function recordErasure(
     )
     .run();
   if (recorded.meta.changes) signal("financial_erasure");
-  const { results } = await env.DB.prepare(`SELECT id FROM stripe_subscriptions
-      WHERE customer_id = ?1 AND environment = ?2 AND unavailable_at IS NULL
-        AND status NOT IN (${sqlList(closedSubscriptionStatuses)})`)
+  const { results } = await env.DB.prepare(`SELECT s.id FROM stripe_subscriptions s
+      WHERE s.customer_id = ?1 AND s.environment = ?2 AND ${openSubscriptionFilterSql}`)
     .bind(customerId, environment)
     .all<{ id: string }>();
   return results.map(({ id }) => id);

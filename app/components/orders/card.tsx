@@ -30,14 +30,7 @@ import { ebayOrderHref } from "../../orders/ebay-links";
 import { buyerLabel, paymentLabel, shippingLabel } from "./status";
 import { useDate } from "~/components/time-zone";
 import { useCopy } from "~/components/copy-context";
-
-/** Azioni secondarie disponibili nella pagina: eBay ed esportazione del singolo ordine. */
-export interface SecondaryActions {
-  /** Solo per i negozi eBay reali: per la Sandbox non esiste un indirizzo verificato. */
-  openOnEbay: boolean;
-  /** Esiste la sezione Esportazione, che riceve selezione, filtri e ricerca degli Ordini. */
-  exportable: boolean;
-}
+import type { SecondaryActions } from "../../orders/page-data";
 
 /** Area di tocco invisibile di almeno 44 px per i collegamenti testuali, come per i pulsanti. */
 const coarseTarget =

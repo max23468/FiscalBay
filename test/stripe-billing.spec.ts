@@ -11,7 +11,8 @@ import {
 } from "../app/domain/billing.server";
 import { subscriptionOffers } from "../app/domain/subscription-offers";
 import { checkoutConfigured, purchaseState } from "../app/domain/checkout.server";
-import { openSubscriptionSql, orderAllowance, startTrial } from "../app/domain/grants.server";
+import { openSubscriptionSql } from "../app/domain/billing-subscriptions.server";
+import { orderAllowance, startTrial } from "../app/domain/grants.server";
 import {
   createBoundedStripeClient,
   isMissingObject,

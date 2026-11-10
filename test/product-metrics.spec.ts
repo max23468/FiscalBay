@@ -421,7 +421,8 @@ describe("KPI della console", () => {
 
     const { commerce } = await productMetrics(env, 30);
     expect(commerce.subscriptions).toEqual({ monthly: 2, annual: 1, cancelling: 1, unlisted: 1 });
-    expect(commerce.mrr).toBe(Math.round(490 + 4900 / 12));
+    // Mensile da 4,90 € e annuale da 49 € in dodicesimi.
+    expect(commerce.mrr).toBe(898);
     expect(commerce.paying).toBe(4);
     expect(commerce).toMatchObject({
       trialsOpen: 1,

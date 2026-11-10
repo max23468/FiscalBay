@@ -18,7 +18,6 @@ import { FieldError } from "~/components/ui/field";
 import { useCopy } from "~/components/copy-context";
 import { loadPasskeyClient } from "../account/passkey";
 import {
-  adminSessionMaxAge,
   adminSession,
   agentActor,
   recordAgentRead,
@@ -27,6 +26,7 @@ import {
   sectionFrom,
   type SectionData,
 } from "../admin-console.server";
+import { adminSessionMaxAge } from "../domain/sessions.server";
 import { areaPage } from "../account-area.server";
 import { appCopy, pageTitle } from "../app-copy";
 import { adminCopy } from "../copy/admin-copy";

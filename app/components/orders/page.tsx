@@ -16,84 +16,32 @@ import {
   forgetExportedSelection,
   keepExportedSelection,
 } from "../../orders/export-scope";
-import { pagesParam, rememberStore, snapshotParam } from "../../orders/order-list";
+import { snapshotParam } from "../../orders/order-criteria";
+import { pagesParam, rememberStore } from "../../orders/order-list";
 import { searchParam } from "../../orders/order-search";
 import { usePageTiming } from "../../page-timing";
-import type { Language } from "../../i18n";
-import { orderPeriods, type OrdersNotice, type OrderView } from "../../view-models";
-import { OrderCard, type SecondaryActions } from "./card";
+import {
+  ebayDownNotice,
+  importingNotice,
+  remainingUnlocks,
+  unlockable,
+  unlockForm,
+  type OrdersPageData,
+  type UnlockResult,
+} from "../../orders/page-data";
+import { orderPeriods, type OrderView } from "../../view-models";
+import { OrderCard } from "./card";
 import { OrderSheet } from "./detail";
 import { useEnterIndexes, useListSnapshot, useNewOrders } from "./list-snapshot";
 import { OrdersHeader, OrdersNotices, TrialNotice } from "./notices";
 import { MarketingProposal } from "./marketing-proposal";
 import { FirstUse, NoOrders } from "./onboarding";
-import { importingNotice, isEbayDown, remainingUnlocks, type OrdersAccount } from "./labels";
 import { SelectionBar, useOrderSelection } from "./selection";
 import { usePendingList } from "./pending-list";
 import { OrdersToolbar, SearchChip } from "./toolbar";
 import { useCopy, useLinks } from "~/components/copy-context";
 
-/**
- * Dati della pagina Ordini, uguali per l'area reale (ordini persistiti e autorizzati) e per
- * l'anteprima (scenari sintetici). Un valore fiscale da sbloccare non è mai fra questi dati.
- */
-export interface OrdersPageData extends SecondaryActions {
-  view: "list" | "no-store" | "empty";
-  orders: OrderView[];
-  total: number;
-  nextHref: string | null;
-  /** Gli ordini consultabili superano quelli leggibili in una richiesta: servono i filtri. */
-  limited: boolean;
-  /** Istantanea dell'elenco, come cursore opaco: l'indirizzo la conserva. */
-  snapshot: string;
-  /** Ordini arrivati dopo l'istantanea, che entrano soltanto in cima. */
-  incoming: number;
-  /** Elenco con una nuova istantanea, che comprende i nuovi ordini. */
-  freshHref: string | null;
-  /** I nuovi ordini stanno tutti sopra il primo mostrato: possono entrare da soli in cima. */
-  incomingAtTop: boolean;
-  /** Ricerca attiva, decifrata dal server: nell'indirizzo resta soltanto in forma cifrata. */
-  search: string | null;
-  /** Ordine aperto nel pannello, anche se fuori dalla pagina caricata. */
-  detail: OrderView | null;
-  stores: Array<{ id: string; name: string }>;
-  account: OrdersAccount;
-  notices: OrdersNotice[];
-  sync: {
-    running: boolean;
-    lastAt: string | null;
-    storeId: string | null;
-    storeName: string | null;
-    /** Giorni dello storico letto: il periodo di cui un elenco vuoto dà conto. */
-    historyDays: number;
-  };
-  onboarding: Array<{
-    label: "stepAccount" | "stepEmail" | "stepStore" | "stepSync";
-    done: boolean;
-  }>;
-  /** Modello di messaggio scelto per ogni lingua dell'acquirente. */
-  messageTemplates: Record<Language, string>;
-  now: string;
-  confirmUnlock?: boolean;
-  /** Le Impostazioni del piano esistono: l'avviso degli sblocchi esauriti vi rimanda. */
-  settings: boolean;
-  /**
-   * Proposta del consenso marketing, una volta e a primi passi conclusi, a chi in registrazione
-   * non ha aderito e non ha più scelto (§14).
-   */
-  marketingProposal?: boolean;
-  /**
-   * Collegamento di un negozio dal primo accesso: pagina reale, oppure null finché non è
-   * possibile (email da confermare). Assente, l'azione resta quella simulata dell'anteprima.
-   */
-  connectHref?: string | null;
-}
-
-export interface UnlockResult {
-  unlocked: string[];
-  remaining: number | null;
-  error?: boolean;
-}
+const unlockableOrder = (order: OrderView) => unlockable(order.fiscal);
 
 /** Attesa massima del primo momento libero: le animazioni arrivano comunque subito dopo. */
 const motionIdleTimeout = 1_500;
@@ -133,10 +81,10 @@ function useUnlock(unlockAction: string, t: AppCopy) {
   });
   return {
     submit: (ids: string[], skipConfirmation = false) =>
-      void fetcher.submit(
-        { intent: "unlock", ids: ids.join(","), skipConfirmation: String(skipConfirmation) },
-        { method: "post", action: unlockAction },
-      ),
+      void fetcher.submit(unlockForm(ids, skipConfirmation), {
+        method: "post",
+        action: unlockAction,
+      }),
     pending: new Set(
       fetcher.state === "idle" ? [] : String(fetcher.formData?.get("ids") ?? "").split(","),
     ),
@@ -186,11 +134,6 @@ function ChangingList({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Un ordine si sblocca solo se è da sbloccare e nessuna verifica o conferma lo sospende. */
-function unlockable(order: OrderView) {
-  return order.fiscal.state === "locked" && !order.fiscal.hold;
-}
-
 /** Criteri senza risultati, con la strada per toglierli. */
 function NoResults({
   criteria,
@@ -238,7 +181,7 @@ function OrdersList({
   const { t } = useCopy();
   const location = useLocation();
   const navigate = useNavigate();
-  const ebayDown = isEbayDown(data);
+  const ebayDown = !!ebayDownNotice(data);
   const { freshHref } = data;
   // L'esportazione riceve l'intero contesto dell'elenco; la selezione, se c'è, prevale.
   // L'istantanea mostrata dà lo stesso conteggio dell'elenco, anche prima che l'indirizzo la
@@ -274,7 +217,7 @@ function OrdersList({
   const enterIndexes = useEnterIndexes(orders, newIds);
   // La selezione vale soltanto per gli ordini ancora presenti e consultabili nell'elenco.
   const visibleSelected = orders.filter((order) => selected.has(order.id));
-  const lockedSelected = visibleSelected.filter(unlockable).map((order) => order.id);
+  const lockedSelected = visibleSelected.filter(unlockableOrder).map((order) => order.id);
   const onlySearch =
     criteria.has(searchParam) && [...criteria.keys()].every((key) => key === searchParam);
   const remaining = remainingUnlocks(data.account);
@@ -282,7 +225,7 @@ function OrdersList({
     <>
       <OrdersToolbar
         // Senza esportazione la selezione serve soltanto allo sblocco.
-        empty={data.total === 0 || (!data.exportable && !orders.some(unlockable))}
+        empty={data.total === 0 || (!data.exportable && !orders.some(unlockableOrder))}
         exportHref={data.exportable ? (data.total > 0 ? exportOrders() : null) : undefined}
         stores={data.stores}
         plan={data.account.plan}
@@ -292,7 +235,7 @@ function OrdersList({
         onToggleSelect={() => (selecting ? stopSelecting() : startSelecting())}
       />
       <SearchChip query={data.search} clearable={orders.length > 0 || !onlySearch} />
-      {remaining !== null && remaining > 0 && orders.some(unlockable) ? (
+      {remaining !== null && remaining > 0 && orders.some(unlockableOrder) ? (
         <p className="text-sm text-muted-foreground">{t.orders.unlockBalance(remaining)}</p>
       ) : null}
       {freshHref ? (
@@ -404,7 +347,7 @@ export function OrdersPage({
       <OrderSheet
         detail={detail ?? null}
         account={data.account}
-        ebayDown={isEbayDown(data)}
+        ebayDown={!!ebayDownNotice(data)}
         templates={data.messageTemplates}
         confirmUnlock={data.confirmUnlock}
         unlock={unlock}

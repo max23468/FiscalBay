@@ -423,7 +423,7 @@ export function plan(target) {
   return lines.join("\n");
 }
 
-const optional = (args) => optionalJson(args);
+const optional = optionalJson;
 
 const jurisdiction = ["--cf-r2-jurisdiction", "eu"];
 

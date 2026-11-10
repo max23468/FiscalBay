@@ -12,7 +12,7 @@ import { AccountDeletionPage } from "~/components/account-deletion";
 import { AppShell } from "~/components/app-shell";
 import { useDeviceTimeZone } from "~/components/device-time-zone";
 import { UnavailablePage } from "~/components/not-found";
-import type { OrdersPageData } from "~/components/orders/page";
+import type { OrdersPageData } from "../orders/page-data";
 import {
   Select,
   SelectContent,

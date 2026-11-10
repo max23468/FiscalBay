@@ -3,6 +3,7 @@ import { Mail } from "lucide-react";
 import { useAction } from "~/components/action";
 import { useCopy } from "~/components/copy-context";
 import { Button } from "~/components/ui/button";
+import { marketingFields, marketingIntent } from "../../orders/page-data";
 
 /**
  * Proposta del consenso facoltativo dopo i primi passi, separata da quella della registrazione:
@@ -30,14 +31,14 @@ export function MarketingProposal() {
           variant="outline"
           size="sm"
           disabled={action.pending}
-          onClick={() => action.run("marketing", { value: "false" })}
+          onClick={() => action.run(marketingIntent, marketingFields(false))}
         >
           {proposal.decline}
         </Button>
         <Button
           size="sm"
           disabled={action.pending}
-          onClick={() => action.run("marketing", { value: "true" })}
+          onClick={() => action.run(marketingIntent, marketingFields(true))}
         >
           {proposal.accept}
         </Button>

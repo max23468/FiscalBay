@@ -18,8 +18,8 @@ const emailFrom = { email: "noreply@fiscalbay.it", name: "FiscalBay" };
  */
 export class EmailError extends ApplicationError {
   readonly undeliverable: boolean;
-  constructor(readonly failure: string) {
-    super("UPSTREAM_UNAVAILABLE");
+  constructor(override readonly failure: string) {
+    super("UPSTREAM_UNAVAILABLE", failure);
     this.name = "EmailError";
     this.undeliverable = failure === "E_RECIPIENT_SUPPRESSED";
   }

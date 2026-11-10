@@ -1,8 +1,16 @@
-import { createAuth, sessionPolicy } from "../auth.server";
 import { deviceName } from "../account/device-name";
 import type { Language } from "../i18n";
-import { queueResponseCookies } from "../response-cookies.server";
 import { elapsedMs } from "../time";
+
+/**
+ * Durata delle sessioni in secondi: scadenza, rinnovo con l'uso e accesso recente. Il rinnovo
+ * aggiorna anche l'ultima attività mostrata in Sicurezza, quindi avviene al più una volta l'ora.
+ */
+export const sessionPolicy = {
+  expiresIn: 7 * 86_400,
+  updateAge: 3_600,
+  freshAge: 86_400,
+} as const;
 
 /** Campi della sessione Better Auth usati qui, compresi quelli aggiunti da FiscalBay. */
 export interface AuthSession {
@@ -22,19 +30,6 @@ export async function agentTokenLabel(db: D1Database, tokenHash: string, now: Da
     .bind(tokenHash, now.toISOString())
     .first<{ label: string }>();
   return row?.label ?? null;
-}
-
-/**
- * Sessione della richiesta, o null. Quando l'uso la rinnova, il nuovo cookie raggiunge il
- * browser con la risposta: senza, il browser lo scarterebbe alla scadenza del primo accesso.
- */
-export async function readSession(env: Env, request: Request) {
-  const { headers, response } = await createAuth(env).api.getSession({
-    headers: request.headers,
-    returnHeaders: true,
-  });
-  queueResponseCookies(headers);
-  return response;
 }
 
 /** Durata massima della sessione admin dopo la conferma con passkey. */

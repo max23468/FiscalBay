@@ -6,7 +6,7 @@ import type { WorkspaceDetail } from "../../domain/admin-directory.server";
 import { AuditTable } from "./governance";
 import { ActionForm, DataTable, Disclosure, Facts, Panel, Stat, StatGrid, TextField } from "./kit";
 import { formatNumber } from "../../format";
-import { maxGrantDays } from "../../limits";
+import { maxConsoleField, maxGrantDays } from "../../limits";
 import { storeActions } from "./store-actions";
 import { useAdmin } from "./use-admin";
 
@@ -150,7 +150,7 @@ function Transfer({ fields }: { fields: Record<string, string> }) {
           ) : null
         }
       >
-        <TextField label={w.transferTo} name="destinazione" required maxLength={128} />
+        <TextField label={w.transferTo} name="destinazione" required maxLength={maxConsoleField} />
       </ActionForm>
     </Disclosure>
   );
@@ -359,7 +359,12 @@ export function WorkspaceView({
               <Disclosure label={w.erasure}>
                 <ActionForm intent="record-erasure" fields={fields} submit={w.erasure} reason>
                   <p className="text-sm text-muted-foreground">{w.erasureHint}</p>
-                  <TextField label={w.customer} name="cliente" required maxLength={128} />
+                  <TextField
+                    label={w.customer}
+                    name="cliente"
+                    required
+                    maxLength={maxConsoleField}
+                  />
                 </ActionForm>
               </Disclosure>
             ) : null}

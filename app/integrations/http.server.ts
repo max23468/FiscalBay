@@ -25,7 +25,7 @@ const failureCodes: Record<UpstreamFailure, ErrorCode> = {
 
 export class UpstreamError extends ApplicationError {
   constructor(
-    readonly failure: UpstreamFailure,
+    override readonly failure: UpstreamFailure,
     readonly details: {
       status?: number;
       retryAfter?: number;
@@ -34,7 +34,7 @@ export class UpstreamError extends ApplicationError {
       limit?: string;
     } = {},
   ) {
-    super(failureCodes[failure]);
+    super(failureCodes[failure], failure);
     this.name = "UpstreamError";
   }
 }

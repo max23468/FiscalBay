@@ -1,10 +1,10 @@
-import { maxListedOrders } from "../orders/order-list";
+import { maxListedOrders, type OrderScope } from "../orders/order-criteria";
 import { minorToDecimal } from "../money";
 import { shownTaxType } from "../tax-quality";
 import type { AppCopy } from "../copy/copy-it";
 import type { EbayEnvironment } from "../view-models";
 import { fiscalNotice } from "./order-view.server";
-import { listVisibleOrders, type OrderCriteria, type VisibleOrder } from "./orders.server";
+import { listVisibleOrders, type VisibleOrder } from "./orders.server";
 import { xlsxStream, type XlsxCell } from "./xlsx.server";
 import { wallClock } from "../time";
 import {
@@ -199,7 +199,7 @@ export async function exportSampleOrders(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean } | null,
+  filter: OrderScope | null,
   t: AppCopy,
   timeZone: string,
 ): Promise<ExportSampleOrder[]> {
@@ -229,7 +229,7 @@ export async function* exportOrderPages(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean },
+  filter: OrderScope,
 ): AsyncGenerator<VisibleOrder[]> {
   const page = await listVisibleOrders(db, userId, maxListedOrders, ebayEnvironment, now, {
     ids: filter.ids,

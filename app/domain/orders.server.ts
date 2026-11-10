@@ -1,17 +1,20 @@
 import { buyerSnapshotSchema, type BuyerSnapshot } from "./order-observation.server";
 import { buyerNameView } from "../contact";
-import { maxListedOrders } from "../orders/order-list";
+import {
+  maxListedOrders,
+  type OrderCriteria,
+  type OrderScope,
+  type OrderTally,
+} from "../orders/order-criteria";
 import { buyerTaxKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
 import {
   type FiscalSituation,
-  type PaymentStatus,
-  type ShippingStatus,
   type SuggestionView,
   type TaxQuality,
   type EbayEnvironment,
 } from "../view-models";
 import { orderAccessSql } from "./grants.server";
-import { consultableStore, storeLabelSql } from "./store-state.server";
+import { consultableStore, orderLineageSql, storeLabelSql } from "./store-state.server";
 import { orderSuggestions } from "./order-suggestions.server";
 import { sqlList } from "./sql.server";
 
@@ -167,24 +170,6 @@ function summaryOf(row: {
   };
 }
 
-/** Criteri dell'elenco, già validati: un valore assente non filtra. */
-export type OrderCriteria = {
-  storeId?: string;
-  /** Ordini creati da questo istante in poi. */
-  since?: string;
-  payment?: PaymentStatus;
-  shipping?: ShippingStatus;
-  fiscal?: FiscalSituation;
-  /** Parole cercate nella forma di confronto: ognuna deve comparire nei dati consultabili. */
-  tokens?: string[];
-  /** Ordini entrati negli elenchi fino a questo istante: l'istantanea dell'elenco aperto. */
-  listedBefore?: string;
-  /** Ordini entrati negli elenchi dopo questo istante: i nuovi rispetto all'istantanea. */
-  listedAfter?: string;
-  /** Ordini che nell'elenco seguono questo, dal più recente con spareggio per ID. */
-  after?: { creationTime: string; id: string };
-};
-
 // Stryker disable next-line StringLiteral: un altro separatore rende la query invalida e le prove falliscono subito; sotto Stryker il worker supera invece il timeout.
 const clauseSeparator = " ";
 
@@ -204,7 +189,7 @@ const accessSql = orderAccessSql("o.id", "wm.workspace_id", "?3");
 /** Colonna dell'ultima verifica fiscale dell'ordine, anche degli acquisti confluiti. */
 const latestCheckSql = (column: "availability" | "verification") =>
   `(SELECT tc.${column} FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-     WHERE original.id = o.id OR original.merged_into = o.id
+     WHERE ${orderLineageSql("o.id")}
      ORDER BY tc.observed_at DESC, tc.source LIMIT 1)`;
 
 /**
@@ -216,7 +201,7 @@ const verificationSql = `CASE
   WHEN EXISTS (SELECT 1 FROM order_source_refs r WHERE r.order_id = o.id
     AND r.source = 'fulfillment' AND r.detail_for IS NOT r.last_modified_time) THEN 'checking'
   WHEN EXISTS (SELECT 1 FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-         WHERE original.id = o.id OR original.merged_into = o.id) THEN 'completed'
+         WHERE ${orderLineageSql("o.id")}) THEN 'completed'
   ELSE 'unchecked' END`;
 
 /**
@@ -310,9 +295,6 @@ function visibleOrdersParams(
   ];
 }
 
-/** Ordini di un insieme, quanti hanno il dato da sbloccare e quanti il dato disponibile. */
-export type OrderTally = { orders: number; locked: number; available: number };
-
 /**
  * Ordini consultabili dei criteri, o fra quelli indicati, contati per ciascun inizio di periodo:
  * il conteggio di un inizio comprende gli ordini creati da quell'istante. Senza inizi conta
@@ -323,7 +305,7 @@ export async function visibleOrderTallies(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean },
+  filter: OrderScope,
   starts: readonly string[] = [],
 ): Promise<OrderTally[]> {
   // Gli inizi soddisfatti da un ordine sono sempre i primi in ordine crescente: basta contarli.
@@ -390,7 +372,7 @@ export async function visibleOrdersTerm(
   userId: string,
   ebayEnvironment: EbayEnvironment,
   now: Date,
-  filter: { ids?: string[]; criteria: OrderCriteria; provisional?: boolean },
+  filter: OrderScope,
 ): Promise<string | null> {
   const row = await db
     .prepare(
@@ -398,7 +380,7 @@ export async function visibleOrdersTerm(
               MIN((SELECT MIN(g.expires_at) FROM order_grants g
                      JOIN orders original ON original.id = g.order_id
                     WHERE g.workspace_id = wm.workspace_id
-                      AND (original.id = o.id OR original.merged_into = o.id)
+                      AND ${orderLineageSql("o.id")}
                       AND g.revoked_at IS NULL AND julianday(g.expires_at) > julianday(?3))) AS unlock
          ${visibleOrdersSql}`,
     )
@@ -548,12 +530,12 @@ export async function listVisibleOrders(
               o.cancel_status, o.store_id, o.marketplace_id, o.is_provisional,
               (SELECT json_object('availability', availability, 'at', observed_at, 'verification', verification)
                  FROM order_tax_checks tc JOIN orders original ON original.id = tc.order_id
-                WHERE original.id = o.id OR original.merged_into = o.id
+                WHERE ${orderLineageSql("o.id")}
                 ORDER BY tc.observed_at DESC, tc.source LIMIT 1) AS tax_check_json,
               ${verificationSql} AS tax_verification,
               ${fiscalSql(listedAccessSql)} AS fiscal_state,
               (SELECT MIN(t.observed_at) FROM tax_identifiers t JOIN orders original ON original.id = t.order_id
-                WHERE original.id = o.id OR original.merged_into = o.id) AS first_tax_available_at,
+                WHERE ${orderLineageSql("o.id")}) AS first_tax_available_at,
               (EXISTS (SELECT 1 FROM order_reconciliation_issues i
                 WHERE i.order_id = o.id OR i.related_order_id = o.id)
                OR EXISTS (SELECT 1 FROM order_items i WHERE i.order_id = o.id AND i.stable_key IS NULL)) AS reconciliation_issue,
@@ -571,7 +553,7 @@ export async function listVisibleOrders(
               ti.identifier_type,
               EXISTS (SELECT 1 FROM tax_identifiers previous
                 JOIN orders original ON original.id = previous.order_id
-                WHERE (original.id = o.id OR original.merged_into = o.id)
+                WHERE ${orderLineageSql("o.id")}
                 AND previous.source = ti.source
                 AND ${taxKind("previous")} = ${taxKind("ti")}
                 AND previous.removed_at <= ti.observed_at) AS tax_updated,
