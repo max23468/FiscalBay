@@ -64,6 +64,11 @@ export default function Features({ loaderData }: Route.ComponentProps) {
             alt={t.shots[item.shot as ShotName]}
             reverse={index % 2 === 1}
             heading="h2"
+            link={
+              "guide" in item && item.guide
+                ? { label: item.guide.label, href: localizedPath(language, item.guide.path) }
+                : undefined
+            }
           />
         ))}
         <ul className="grid gap-6 border-t pt-12 md:grid-cols-2 md:gap-10">

@@ -1,4 +1,12 @@
+import type { GuidePath } from "../app-links";
 import type { Language } from "../i18n";
+
+/**
+ * Guide richiamate dalle pagine del sito. Percorsi scritti per intero perché lo script delle
+ * immagini social legge questi testi con Node, senza risolvere gli import dell'app.
+ */
+const exportGuidePath = "/guide/esportare-ordini-ebay-excel-csv" satisfies GuidePath;
+const comparisonGuidePath = "/guide/confronto-console-venditori-ebay-ready-pro" satisfies GuidePath;
 
 /**
  * Testi delle pagine del sito pubblico. Restano sul server: i loader li consegnano già
@@ -73,6 +81,7 @@ const it = {
     faqTitle: "Domande frequenti",
     faqLink: "Tutte le domande",
     allFeatures: "Tutte le funzionalità",
+    comparisonLink: "FiscalBay, Console venditori eBay e Ready Pro a confronto",
     pricingLink: "Vedi i prezzi",
     closing: "Prova FiscalBay con il tuo negozio eBay.",
     freeQuota: (base: number) => `Con il piano Free sblocchi ${base} ordini ogni 7 giorni.`,
@@ -95,6 +104,10 @@ const it = {
         title: "Codice Fiscale e Partita IVA",
         body: "FiscalBay mostra il Codice Fiscale indicato dall’acquirente, quando disponibile su eBay, e la Partita IVA se c’è. Lo copi con un clic, senza spazi e in maiuscolo; quando manca, un modello di messaggio ti aiuta a chiederlo.",
         premium: false,
+        guide: {
+          label: "FiscalBay, Console venditori eBay e Ready Pro a confronto",
+          path: comparisonGuidePath,
+        },
       },
       {
         shot: "ordini",
@@ -107,6 +120,7 @@ const it = {
         title: "Export CSV e XLSX",
         body: "Esporti gli ordini in CSV, una riga per ordine o per articolo, pronti per il gestionale o il software di fatturazione. Con Pro anche in XLSX, con le colonne che scegli e le configurazioni salvate.",
         premium: false,
+        guide: { label: "Guida all’esportazione", path: exportGuidePath },
       },
       {
         shot: "telegram",
@@ -195,6 +209,7 @@ const it = {
     taxNote:
       "Prezzi IVA esclusa. Stripe gestisce il pagamento e calcola le imposte del tuo paese e il totale, anche nella tua valuta, prima di pagare. Ricevute e fatture arrivano da Stripe.",
     compare: "Confronto dei piani",
+    comparisonLink: "FiscalBay, Console venditori eBay e Ready Pro a confronto",
     paymentsTitle: "Domande sui pagamenti",
     feature: "Funzione",
     included: "Incluso",
@@ -297,6 +312,7 @@ const it = {
       {
         q: "FiscalBay emette la fattura elettronica?",
         a: "No. FiscalBay ti dà Codice Fiscale e Partita IVA dell’acquirente da usare nel tuo gestionale o nel software di fatturazione, anche con l’export.",
+        guide: { label: "Guida all’esportazione", path: exportGuidePath },
       },
       {
         q: "Dove trovo il Codice Fiscale dell’acquirente di un ordine eBay?",
@@ -305,6 +321,7 @@ const it = {
       {
         q: "Posso esportare gli ordini eBay in Excel con il Codice Fiscale?",
         a: "Sì. Con il piano Free esporti in CSV, che Excel apre direttamente; con Pro anche in XLSX, con le colonne che scegli.",
+        guide: { label: "Guida all’esportazione", path: exportGuidePath },
       },
       {
         q: "Posso ricevere il Codice Fiscale dei nuovi ordini senza aprire FiscalBay?",
@@ -429,6 +446,7 @@ const en: SitePagesCopy = {
     faqTitle: "Frequently asked questions",
     faqLink: "All questions",
     allFeatures: "All features",
+    comparisonLink: "FiscalBay, eBay Seller Hub and Ready Pro compared",
     pricingLink: "See pricing",
     closing: "Try FiscalBay with your eBay store.",
     freeQuota: (base) => `On the Free plan you unlock ${base} orders every 7 days.`,
@@ -450,6 +468,10 @@ const en: SitePagesCopy = {
         title: "Tax code and VAT number",
         body: "FiscalBay shows the tax code (Codice Fiscale) the buyer entered, when eBay provides it, and the VAT number (Partita IVA) when there is one. Copy it in one click, without spaces and in capitals; when it is missing, a message template helps you ask for it.",
         premium: false,
+        guide: {
+          label: "FiscalBay, eBay Seller Hub and Ready Pro compared",
+          path: comparisonGuidePath,
+        },
       },
       {
         shot: "ordini",
@@ -462,6 +484,7 @@ const en: SitePagesCopy = {
         title: "CSV and XLSX export",
         body: "Export your orders as CSV, one row per order or per item, ready for your management or invoicing software. With Pro as XLSX too, with the columns you choose and saved configurations.",
         premium: false,
+        guide: { label: "Export guide", path: exportGuidePath },
       },
       {
         shot: "telegram",
@@ -547,6 +570,7 @@ const en: SitePagesCopy = {
     taxNote:
       "Prices exclude VAT. Stripe handles payment and works out your country’s taxes and the total, in your currency too, before you pay. Receipts and invoices come from Stripe.",
     compare: "Compare plans",
+    comparisonLink: "FiscalBay, eBay Seller Hub and Ready Pro compared",
     paymentsTitle: "Questions about payments",
     feature: "Feature",
     included: "Included",
@@ -646,6 +670,7 @@ const en: SitePagesCopy = {
       {
         q: "Does FiscalBay issue e-invoices?",
         a: "No. FiscalBay gives you the buyer’s tax code and VAT number to use in your management or invoicing software, including through export.",
+        guide: { label: "Export guide", path: exportGuidePath },
       },
       {
         q: "Where do I find the buyer’s tax code for an eBay order?",
@@ -654,6 +679,7 @@ const en: SitePagesCopy = {
       {
         q: "Can I export eBay orders to Excel with the tax code?",
         a: "Yes. On the Free plan you export to CSV, which Excel opens directly; with Pro also to XLSX, with the columns you choose.",
+        guide: { label: "Export guide", path: exportGuidePath },
       },
       {
         q: "Can I get the tax code of new orders without opening FiscalBay?",

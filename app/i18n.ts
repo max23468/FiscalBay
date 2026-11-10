@@ -66,6 +66,7 @@ const segments: Record<string, Segment> = {
       "esportare-ordini-ebay-excel-csv": leaf("export-ebay-orders-excel-csv"),
       "partita-iva-acquirente-ebay": leaf("buyer-vat-number-ebay"),
       "alternativa-probay-codice-fiscale-ebay": leaf("probay-alternative-ebay-tax-code"),
+      "confronto-console-venditori-ebay-ready-pro": leaf("ebay-seller-hub-ready-pro-comparison"),
     },
   },
   auth: { en: "auth", next: { error: leaf("error") } },

@@ -8,6 +8,15 @@ export interface GuideSection {
   body: readonly string[];
 }
 
+/** Pagina ufficiale che conferma un'affermazione della guida. */
+export interface GuideSource {
+  label: string;
+  href: string;
+}
+
+/** Valore di una cella del confronto; con `yes` porta la spunta. */
+export type ComparisonCell = string | { yes: string };
+
 export interface Guide {
   /** Titolo della pagina, che comincia dalla frase cercata. */
   title: string;
@@ -24,19 +33,52 @@ export interface Guide {
   /** Tabella di confronto dopo le sezioni, con sotto le fonti dei dati. */
   comparison?: {
     title: string;
-    /** La prima colonna dopo le voci è la soluzione messa in evidenza. */
-    headers: readonly [string, string, string];
-    rows: readonly (readonly [string, string, string])[];
-    /** Valore della seconda colonna per ciò che le fonti non dichiarano: non vale come assenza. */
+    /** La prima colonna dopo le voci è la soluzione messa in evidenza, poi le altre. */
+    headers: readonly string[];
+    rows: readonly (readonly [string, ...ComparisonCell[]])[];
+    /** Valore per ciò che le fonti non dichiarano: ha il trattino e non vale come assenza. */
     notStated: string;
+    /**
+     * Confronto con una soluzione dismessa: spunte in evidenza e croci sulle altre colonne. Senza,
+     * la spunta va soltanto ai valori `yes` di ogni colonna.
+     */
+    contrast?: boolean;
     note: string;
   };
+  /** Pagine ufficiali che confermano le affermazioni, in fondo all'articolo. */
+  sources?: readonly GuideSource[];
+  /** Guida collegata dal riquadro finale. */
+  related?: { label: string; path: GuidePath };
   /**
    * Come FiscalBay risolve il problema della guida, in evidenza dopo le sezioni sotto il titolo
    * comune, con la schermata della funzione: la didascalia porta alla funzione in Funzionalità.
    */
   solution: { body: readonly string[]; shot: ShotName; caption: string };
 }
+
+/**
+ * Pagine ufficiali citate nelle Fonti, verificate il 10 novembre 2026 nel browser: le pagine
+ * dell'aiuto eBay rispondono con un controllo antibot a chi non esegue JavaScript. Mai siti dei
+ * concorrenti.
+ */
+/**
+ * Guida di confronto, richiamata dalla guida sull'export. Percorso scritto per intero perché lo
+ * script delle immagini social legge questi testi con Node, senza risolvere gli import dell'app.
+ */
+const comparisonGuidePath = "/guide/confronto-console-venditori-ebay-ready-pro" satisfies GuidePath;
+
+const sourceLinks = {
+  sellerHub: "https://www.ebay.it/help/selling/selling-tools/seller-hub?id=4095",
+  reports:
+    "https://www.ebay.it/help/selling/selling-tools/scheda-reportistica-della-console-venditori?id=4096",
+  soldItems:
+    "https://www.ebay.it/help/selling/listings/trovare-gli-oggetti-che-hai-venduto?id=4108",
+  teamAccess: "https://www.ebay.it/help/account/team-access/accesso-per-i-team?id=5197",
+  eInvoice:
+    "https://www.agenziaentrate.gov.it/portale/aree-tematiche/fatturazione-elettronica/guida-fatturazione-elettronica/come-predisporre-inviare-ricevere-fe/come-si-predispone-fe",
+  vatCheck:
+    "https://telematici.agenziaentrate.gov.it/VerificaPIVA/Scegli.do?parameter=verificaPiva",
+} as const;
 
 /**
  * Guide del sito pubblico (§23): articoli stabili sulle domande ricorrenti dei venditori, non
@@ -49,6 +91,7 @@ export const guides: Record<
   {
     index: { title: string; metaTitle: string; description: string; lead: string };
     solutionTitle: string;
+    sourcesTitle: string;
     start: string;
     signIn: string;
     back: string;
@@ -65,6 +108,7 @@ export const guides: Record<
       lead: "Risposte alle domande più comuni di chi vende su eBay sul Codice Fiscale degli acquirenti.",
     },
     solutionTitle: "Come ti aiuta FiscalBay",
+    sourcesTitle: "Fonti",
     start: "Inizia gratis",
     signIn: "Accedi",
     back: "Tutte le guide",
@@ -78,7 +122,10 @@ export const guides: Record<
           "Il Codice Fiscale dell’acquirente non si vede nell’ordine eBay né nel report di Seller Hub. Dove si trova davvero e come averlo per ogni vendita.",
         lead: "Apri un ordine su eBay e il Codice Fiscale non c’è, anche se l’acquirente l’ha inserito al pagamento. Non è un errore. eBay lo salva, ma non lo mostra nella pagina dell’ordine.",
         published: "2026-11-03",
-        updated: "2026-11-06",
+        updated: "2026-11-10",
+        sources: [
+          { label: "eBay: Console venditori e report degli ordini", href: sourceLinks.sellerHub },
+        ],
         sections: [
           {
             title: "Dove non lo trovi",
@@ -129,7 +176,10 @@ export const guides: Record<
           "L’acquirente dice di aver inserito il Codice Fiscale, ma nell’ordine eBay non c’è. Il dato esiste: dove finisce e come leggerlo senza chiederlo di nuovo.",
         lead: "Hai attivato la richiesta del Codice Fiscale, l’acquirente giura di averlo inserito e nell’ordine non lo trovi. Ha ragione lui. Il dato c’è, solo che eBay non lo fa vedere.",
         published: "2026-11-04",
-        updated: "2026-11-06",
+        updated: "2026-11-10",
+        sources: [
+          { label: "eBay: Console venditori e report degli ordini", href: sourceLinks.sellerHub },
+        ],
         sections: [
           {
             title: "Perché non lo vedi",
@@ -214,7 +264,13 @@ export const guides: Record<
           "Quali dati dell’acquirente servono per fatturare una vendita eBay, a un privato o a un’azienda, e come averli senza ricopiarli a mano.",
         lead: "Per la fattura elettronica di una vendita eBay devi identificare l’acquirente. Se è un privato serve il Codice Fiscale, se è un’azienda o un professionista la Partita IVA.",
         published: "2026-11-03",
-        updated: "2026-11-06",
+        updated: "2026-11-10",
+        sources: [
+          {
+            label: "Agenzia delle Entrate: come si predispone una fattura elettronica",
+            href: sourceLinks.eInvoice,
+          },
+        ],
         sections: [
           {
             title: "Vendita a un privato",
@@ -251,34 +307,61 @@ export const guides: Record<
         },
       },
       "/guide/esportare-ordini-ebay-excel-csv": {
-        title: "Esportare gli ordini eBay in Excel o CSV con il Codice Fiscale",
-        metaTitle: "Esportare gli ordini eBay in Excel o CSV",
+        title: "Esportare gli ordini eBay in Excel o CSV con Codice Fiscale e Partita IVA",
+        metaTitle: "Ordini eBay in Excel o CSV con il Codice Fiscale",
         nav: "Export in Excel o CSV",
         description:
-          "Come esportare gli ordini eBay in Excel o CSV con acquirente, indirizzo, Codice Fiscale e Partita IVA, pronti per il gestionale o il commercialista.",
-        lead: "Il report degli ordini di eBay non ha né il Codice Fiscale né la Partita IVA dell’acquirente. Per averli in un file ti serve uno strumento collegato al negozio.",
+          "Come raccogliere Codice Fiscale e Partita IVA degli ordini eBay ed esportarli in CSV o Excel, pronti per il gestionale o il software di fatturazione.",
+        lead: "Colleghi il negozio eBay a FiscalBay in sola lettura. FiscalBay legge gli ordini e riporta Codice Fiscale e Partita IVA quando l’acquirente li ha inseriti ed eBay li rende disponibili. Poi esporti gli ordini in CSV con il piano Free, o in Excel (XLSX) con Pro, e importi il file nel gestionale o nel software di fatturazione.",
         published: "2026-11-03",
-        updated: "2026-11-06",
+        updated: "2026-11-10",
         sections: [
           {
             title: "Cosa manca nel report di eBay",
             body: [
-              "Il report che scarichi da Seller Hub non include Codice Fiscale e Partita IVA che l’acquirente ha inserito al pagamento. Per fatturare dovresti aggiungerli a mano, ordine per ordine.",
+              "Il report degli ordini che scarichi dalla Console venditori ha acquirente, indirizzi e importi, ma nessuna colonna per il Codice Fiscale o la Partita IVA. Per fatturare dovresti aggiungerli a mano, ordine per ordine.",
             ],
           },
           {
-            title: "CSV o Excel",
+            title: "Cosa c’è nel file",
             body: [
-              "Il CSV si apre con Excel, Numbers e Fogli Google, e quasi tutti i gestionali e i software di fatturazione lo importano.",
-              "Il formato Excel (XLSX) è più comodo se il file lo devi leggere, filtrare o mandare al commercialista.",
+              "Numero e data dell’ordine, negozio, acquirente, indirizzo di fatturazione o, se eBay non lo fornisce, quello di spedizione, articoli con SKU e quantità, importi e valuta, stato del pagamento e della spedizione.",
+              "Codice Fiscale e Partita IVA hanno una colonna ciascuno, quando l’acquirente li ha inseriti. Nel piano Free il file li riporta per gli ordini sbloccati nel ciclo; per gli altri la cella resta vuota.",
+            ],
+          },
+          {
+            title: "CSV con Free, Excel con Pro",
+            body: [
+              "Con il piano Free esporti in CSV, con una riga per ordine o per articolo e gli ordini degli ultimi 30 giorni.",
+              "Con Pro esporti anche in Excel (XLSX), scegli e riordini le colonne, salvi fino a 20 configurazioni e hai un anno di ordini.",
+              "In entrambi i piani esporti tutto, un periodo, un solo negozio o gli ordini che selezioni. Il file si scarica solo dal tuo account, entro 24 ore.",
+            ],
+          },
+          {
+            title: "Importarlo nel gestionale",
+            body: [
+              "Ogni gestionale e software di fatturazione ha il suo modello di importazione: abbini le colonne del file a quelle richieste. Importa Codice Fiscale e Partita IVA come testo, così gli zeri iniziali restano.",
+            ],
+          },
+          {
+            title: "Le fatture le emetti dal tuo software",
+            body: [
+              "FiscalBay fornisce i dati degli ordini e non emette fatture elettroniche: le prepari e le invii dal tuo software di fatturazione.",
             ],
           },
         ],
+        sources: [
+          { label: "eBay: Console venditori e report degli ordini", href: sourceLinks.sellerHub },
+          { label: "eBay: scheda Reportistica della Console venditori", href: sourceLinks.reports },
+        ],
+        related: {
+          label: "FiscalBay, Console venditori eBay e Ready Pro a confronto",
+          path: comparisonGuidePath,
+        },
         solution: {
           body: [
-            "FiscalBay esporta gli ordini del negozio con numero e data, acquirente, indirizzo di fatturazione, importi e, quando l’acquirente li ha inseriti, Codice Fiscale e Partita IVA.",
-            "Puoi esportare tutto, un periodo, un solo negozio o gli ordini che selezioni, con una riga per ordine o per articolo.",
-            "Il CSV è incluso nel piano Free. Con Pro hai anche l’Excel, scegli le colonne e salvi le configurazioni che usi di più. Il file si scarica solo dal tuo account, entro 24 ore.",
+            "Colleghi il negozio una volta sola e FiscalBay legge i nuovi ordini da solo, con Codice Fiscale e Partita IVA quando ci sono.",
+            "Dalla sezione Esportazione scegli ordini, formato e colonne e scarichi il file pronto per il gestionale o per il commercialista.",
           ],
           shot: "esportazione",
           caption: "Gli ordini esportati in Excel",
@@ -292,7 +375,17 @@ export const guides: Record<
           "Quando un ordine eBay ha la Partita IVA dell’acquirente, dove trovarla e cosa serve per fatturare a un’azienda o a un professionista.",
         lead: "Chi compra su eBay per la propria attività può inserire la Partita IVA al pagamento. Come per il Codice Fiscale, eBay la salva con l’ordine ma non la mette nel report.",
         published: "2026-11-03",
-        updated: "2026-11-05",
+        updated: "2026-11-10",
+        sources: [
+          {
+            label: "Agenzia delle Entrate: come si predispone una fattura elettronica",
+            href: sourceLinks.eInvoice,
+          },
+          {
+            label: "Agenzia delle Entrate: controllo della partita IVA",
+            href: sourceLinks.vatCheck,
+          },
+        ],
         sections: [
           {
             title: "Quando l’ordine la contiene",
@@ -363,6 +456,7 @@ export const guides: Record<
           title: "Perché passare da ProBay a FiscalBay",
           headers: ["Caratteristica", "FiscalBay", "ProBay"],
           notStated: "Non indicato",
+          contrast: true,
           rows: [
             ["Per iniziare", "Gratis", "0,99 € per scaricarla"],
             ["Installazione", "Nessuna, si apre nel browser", "App da installare"],
@@ -385,6 +479,113 @@ export const guides: Record<
           caption: "Il Codice Fiscale nella scheda dell’ordine",
         },
       },
+      [comparisonGuidePath]: {
+        title: "Codice Fiscale su eBay: FiscalBay, Console venditori e Ready Pro",
+        metaTitle: "FiscalBay, Console venditori eBay e Ready Pro",
+        nav: "Console venditori e Ready Pro",
+        description:
+          "FiscalBay, Console venditori eBay e Ready Pro a confronto: dove vedi Codice Fiscale e Partita IVA degli acquirenti, ricerca, più negozi, export e fatture.",
+        lead: "Per avere Codice Fiscale e Partita IVA degli acquirenti eBay hai tre strade: la Console venditori di eBay, un gestionale completo come Ready Pro o FiscalBay. Ecco cosa fa ciascuna, con le fonti.",
+        published: "2026-11-10",
+        updated: "2026-11-10",
+        sections: [
+          {
+            title: "Console venditori eBay",
+            body: [
+              "È lo strumento gratuito di eBay per chi vende. Cerchi gli ordini per numero, periodo e stato, scarichi report in CSV o XLSX e lavori su un account alla volta.",
+              "Il report degli ordini ha acquirente, indirizzi e importi, ma nessuna colonna per il Codice Fiscale o la Partita IVA.",
+            ],
+          },
+          {
+            title: "Ready Pro",
+            body: [
+              "È un gestionale per Windows da installare, con magazzino, vendite e contabilità. Con il modulo eBay Gateway scarica gli ordini e crea le anagrafiche dei clienti.",
+              "Importa il Codice Fiscale quando eBay lo trasmette; quando manca, il suo manuale indica di ricontattare il cliente. Gestisce più account eBay e altri marketplace ed emette fatture elettroniche con un plugin.",
+            ],
+          },
+          {
+            title: "FiscalBay",
+            body: [
+              "È un servizio web che apri dal browser, collegato al negozio in sola lettura. Legge gli ordini da solo e mostra Codice Fiscale e Partita IVA nella scheda di ogni ordine, quando l’acquirente li ha inseriti ed eBay li rende disponibili.",
+              "Li cerchi come un numero d’ordine e li esporti in CSV, o in Excel con Pro. Con Pro colleghi anche più negozi. Non emette fatture: i dati vanno nel tuo software di fatturazione.",
+            ],
+          },
+          {
+            title: "Quale scegliere",
+            body: [
+              "Se ti bastano gli ordini e i report di eBay, la Console venditori. Se vuoi un gestionale completo su Windows, con magazzino e fatturazione, Ready Pro.",
+              "Se usi già un software di fatturazione e ti servono Codice Fiscale e Partita IVA degli ordini eBay senza cambiare gestionale, FiscalBay.",
+            ],
+          },
+        ],
+        comparison: {
+          title: "FiscalBay, Console venditori e Ready Pro",
+          headers: ["Caratteristica", "FiscalBay", "Console venditori eBay", "Ready Pro"],
+          notStated: "Non indicato",
+          rows: [
+            ["Cos’è", "Servizio web", "Strumento di eBay", "Gestionale per Windows"],
+            ["Installazione", { yes: "Nessuna" }, { yes: "Nessuna" }, "Da installare"],
+            [
+              "Codice Fiscale dell’acquirente",
+              { yes: "Nella scheda dell’ordine" },
+              "Non nel report degli ordini",
+              { yes: "Nell’anagrafica, quando eBay lo trasmette" },
+            ],
+            [
+              "Partita IVA dell’acquirente",
+              { yes: "Nella scheda dell’ordine" },
+              "Non nel report degli ordini",
+              "Non indicato",
+            ],
+            [
+              "Lettura degli ordini",
+              { yes: "Automatica" },
+              "Ordini già in eBay",
+              "Avviata a mano o pianificata",
+            ],
+            [
+              "Ricerca degli ordini",
+              { yes: "Anche per Codice Fiscale e Partita IVA" },
+              { yes: "Per numero, periodo e stato" },
+              { yes: "Viste e filtri del gestionale" },
+            ],
+            [
+              "Più negozi eBay",
+              { yes: "Con Pro" },
+              "Un account alla volta",
+              { yes: "Con account aggiuntivi a pagamento" },
+            ],
+            [
+              "Export degli ordini",
+              { yes: "CSV, Excel con Pro" },
+              { yes: "CSV e XLSX" },
+              { yes: "CSV, TXT e XLS" },
+            ],
+            ["Fatture elettroniche", "No", "Non indicato", { yes: "Con un plugin a pagamento" }],
+            [
+              "Prezzo",
+              "Free gratuito, Pro da 4,90 € al mese + IVA",
+              "Gratuita",
+              "1.100 € + IVA la prima attivazione",
+            ],
+          ],
+          note: "Dati verificati il 10 novembre 2026 sulle pagine di aiuto di eBay e sul sito, il listino e il manuale pubblici di Ready Pro. FiscalBay è un servizio indipendente, senza legami con eBay o Ready Pro.",
+        },
+        sources: [
+          { label: "eBay: Console venditori e report degli ordini", href: sourceLinks.sellerHub },
+          { label: "eBay: scheda Reportistica della Console venditori", href: sourceLinks.reports },
+          { label: "eBay: trovare gli oggetti venduti", href: sourceLinks.soldItems },
+          { label: "eBay: accesso per i team", href: sourceLinks.teamAccess },
+        ],
+        solution: {
+          body: [
+            "Colleghi il negozio eBay in pochi minuti e ritrovi Codice Fiscale e Partita IVA nella scheda di ogni ordine, pronti da copiare o da esportare per il tuo software di fatturazione.",
+            "Inizi gratis, senza installare niente e senza cambiare gestionale.",
+          ],
+          shot: "scheda",
+          caption: "Il Codice Fiscale nella scheda dell’ordine",
+        },
+      },
     },
   },
   en: {
@@ -396,6 +597,7 @@ export const guides: Record<
       lead: "Answers to the questions eBay sellers ask most about their buyers’ tax codes.",
     },
     solutionTitle: "How FiscalBay helps",
+    sourcesTitle: "Sources",
     start: "Start for free",
     signIn: "Sign in",
     back: "All guides",
@@ -409,7 +611,13 @@ export const guides: Record<
           "The buyer’s tax code does not show on the eBay order or in the Seller Hub report. Where it really is and how to get it for every sale.",
         lead: "Open an order on eBay and the tax code (Codice Fiscale) is not there, even if the buyer entered it at checkout. It is not a mistake. eBay saves it, but does not show it on the order page.",
         published: "2026-11-03",
-        updated: "2026-11-06",
+        updated: "2026-11-10",
+        sources: [
+          {
+            label: "eBay: Seller Hub and the order report (in Italian)",
+            href: sourceLinks.sellerHub,
+          },
+        ],
         sections: [
           {
             title: "Where you will not find it",
@@ -460,7 +668,13 @@ export const guides: Record<
           "The buyer says they entered their tax code, but it is not on the eBay order. The data exists: where it goes and how to read it without asking again.",
         lead: "You turned on the tax code request, the buyer swears they entered it, and you cannot find it on the order. They are right. The data is there, eBay just does not show it.",
         published: "2026-11-04",
-        updated: "2026-11-06",
+        updated: "2026-11-10",
+        sources: [
+          {
+            label: "eBay: Seller Hub and the order report (in Italian)",
+            href: sourceLinks.sellerHub,
+          },
+        ],
         sections: [
           {
             title: "Why you cannot see it",
@@ -545,7 +759,13 @@ export const guides: Record<
           "Which buyer details you need to invoice an eBay sale, to a private buyer or a business, and how to get them without copying them by hand.",
         lead: "For the Italian e-invoice of an eBay sale you have to identify the buyer. A private buyer needs the tax code (Codice Fiscale), a business or professional the VAT number (Partita IVA).",
         published: "2026-11-03",
-        updated: "2026-11-06",
+        updated: "2026-11-10",
+        sources: [
+          {
+            label: "Agenzia delle Entrate: how to prepare an e-invoice (in Italian)",
+            href: sourceLinks.eInvoice,
+          },
+        ],
         sections: [
           {
             title: "Selling to a private buyer",
@@ -582,34 +802,65 @@ export const guides: Record<
         },
       },
       "/guide/esportare-ordini-ebay-excel-csv": {
-        title: "Exporting eBay orders to Excel or CSV with the tax code (Codice Fiscale)",
-        metaTitle: "Exporting eBay orders to Excel or CSV",
+        title:
+          "Exporting eBay orders to Excel or CSV with tax code (Codice Fiscale) and VAT number",
+        metaTitle: "eBay orders to Excel or CSV with the tax code",
         nav: "Export to Excel or CSV",
         description:
-          "How to export eBay orders to Excel or CSV with buyer, address, tax code (Codice Fiscale) and VAT number (Partita IVA), ready for your management software or accountant.",
-        lead: "eBay’s order report has neither the buyer’s tax code nor their VAT number. To get them in a file you need a tool connected to your store.",
+          "How to collect the tax code (Codice Fiscale) and VAT number (Partita IVA) of your eBay orders and export them to CSV or Excel, ready for your management or invoicing software.",
+        lead: "Connect your eBay store to FiscalBay, read-only. FiscalBay reads your orders and brings in the tax code (Codice Fiscale) and VAT number (Partita IVA) when the buyer entered them and eBay makes them available. Then export the orders to CSV on the Free plan, or to Excel (XLSX) with Pro, and import the file into your management or invoicing software.",
         published: "2026-11-03",
-        updated: "2026-11-06",
+        updated: "2026-11-10",
         sections: [
           {
             title: "What eBay’s report leaves out",
             body: [
-              "The report you download from Seller Hub does not include the tax code and VAT number the buyer entered at checkout. To invoice, you would have to add them by hand, order by order.",
+              "The order report you download from Seller Hub has the buyer, addresses and amounts, but no column for the tax code or VAT number. To invoice, you would have to add them by hand, order by order.",
             ],
           },
           {
-            title: "CSV or Excel",
+            title: "What the file contains",
             body: [
-              "CSV opens in Excel, Numbers and Google Sheets, and almost every management or invoicing program can import it.",
-              "The Excel format (XLSX) is handier if you need to read the file, filter it or send it to your accountant.",
+              "Order number and date, store, buyer, billing address or, when eBay does not provide it, the shipping address, items with SKU and quantity, amounts and currency, payment and shipping status.",
+              "Tax code and VAT number have a column each, when the buyer entered them. On the Free plan the file includes them for the orders unlocked in the cycle; for the others the cell stays empty.",
+            ],
+          },
+          {
+            title: "CSV with Free, Excel with Pro",
+            body: [
+              "On the Free plan you export to CSV, with one row per order or per item and the orders of the last 30 days.",
+              "With Pro you also export to Excel (XLSX), choose and reorder the columns, save up to 20 configurations and have one year of orders.",
+              "On both plans you export everything, a period, a single store or the orders you select. The file can only be downloaded from your account, within 24 hours.",
+            ],
+          },
+          {
+            title: "Importing it into your software",
+            body: [
+              "Every management and invoicing program has its own import template: match the columns of the file to the ones it asks for. Import the tax code and VAT number as text, so leading zeros are kept.",
+            ],
+          },
+          {
+            title: "You issue invoices from your own software",
+            body: [
+              "FiscalBay provides your order data and does not issue e-invoices: you prepare and send them from your invoicing software.",
             ],
           },
         ],
+        sources: [
+          {
+            label: "eBay: Seller Hub and the order report (in Italian)",
+            href: sourceLinks.sellerHub,
+          },
+          { label: "eBay: Seller Hub Reports tab (in Italian)", href: sourceLinks.reports },
+        ],
+        related: {
+          label: "FiscalBay, eBay Seller Hub and Ready Pro compared",
+          path: comparisonGuidePath,
+        },
         solution: {
           body: [
-            "FiscalBay exports your store’s orders with order number and date, buyer, billing address, amounts and, when the buyer entered them, tax code and VAT number.",
-            "You can export everything, a period, a single store or the orders you select, with one row per order or per item.",
-            "CSV is included in the Free plan. With Pro you also get Excel, choose the columns and save the configurations you use most. The file can only be downloaded from your account, within 24 hours.",
+            "Connect your store once and FiscalBay reads new orders on its own, with tax code and VAT number when they are there.",
+            "In the Export section you choose orders, format and columns and download a file ready for your software or your accountant.",
           ],
           shot: "esportazione",
           caption: "Orders exported to Excel",
@@ -623,7 +874,17 @@ export const guides: Record<
           "When an eBay order has the buyer’s VAT number, where to find it and what you need to invoice a business or professional.",
         lead: "Buyers purchasing on eBay for their business can enter a VAT number (Partita IVA) at checkout. As with the tax code (Codice Fiscale), eBay saves it with the order but leaves it out of the report.",
         published: "2026-11-03",
-        updated: "2026-11-05",
+        updated: "2026-11-10",
+        sources: [
+          {
+            label: "Agenzia delle Entrate: how to prepare an e-invoice (in Italian)",
+            href: sourceLinks.eInvoice,
+          },
+          {
+            label: "Agenzia delle Entrate: VAT number check (in Italian)",
+            href: sourceLinks.vatCheck,
+          },
+        ],
         sections: [
           {
             title: "When the order includes it",
@@ -694,6 +955,7 @@ export const guides: Record<
           title: "Why move from ProBay to FiscalBay",
           headers: ["Feature", "FiscalBay", "ProBay"],
           notStated: "Not stated",
+          contrast: true,
           rows: [
             ["To get started", "Free", "€0.99 to download"],
             ["Installation", "None, it opens in the browser", "App to install"],
@@ -711,6 +973,111 @@ export const guides: Record<
           body: [
             "Open the order, copy the tax code in one click and make the invoice. No more writing to buyers for data they have already entered.",
             "With Pro you get every new order on Telegram and export everything to Excel. Start for free and connect your store: FiscalBay takes care of the rest.",
+          ],
+          shot: "scheda",
+          caption: "The tax code on the order card",
+        },
+      },
+      [comparisonGuidePath]: {
+        title: "Tax codes (Codice Fiscale) on eBay: FiscalBay, Seller Hub and Ready Pro",
+        metaTitle: "FiscalBay, eBay Seller Hub and Ready Pro",
+        nav: "Seller Hub and Ready Pro",
+        description:
+          "FiscalBay, eBay Seller Hub and Ready Pro compared: where you see buyers’ tax codes (Codice Fiscale) and VAT numbers, search, multiple stores, export and invoices.",
+        lead: "To get eBay buyers’ tax codes (Codice Fiscale) and VAT numbers (Partita IVA) you have three options: eBay’s Seller Hub, a full management program such as Ready Pro, or FiscalBay. Here is what each one does, with sources.",
+        published: "2026-11-10",
+        updated: "2026-11-10",
+        sections: [
+          {
+            title: "eBay Seller Hub",
+            body: [
+              "It is eBay’s free tool for sellers. You search orders by number, period and status, download reports as CSV or XLSX and work on one account at a time.",
+              "The order report has the buyer, addresses and amounts, but no column for the tax code or VAT number.",
+            ],
+          },
+          {
+            title: "Ready Pro",
+            body: [
+              "It is a Windows management program to install, with stock, sales and accounting. With its eBay Gateway module it downloads orders and creates customer records.",
+              "It imports the tax code when eBay sends it; when it is missing, its manual says to contact the customer again. It handles multiple eBay accounts and other marketplaces and issues e-invoices with a plugin.",
+            ],
+          },
+          {
+            title: "FiscalBay",
+            body: [
+              "It is a web service you open in the browser, connected to your store read-only. It reads orders on its own and shows the tax code and VAT number on each order card, when the buyer entered them and eBay makes them available.",
+              "You search for them like an order number and export them to CSV, or to Excel with Pro. With Pro you also connect more stores. It does not issue invoices: the data goes into your invoicing software.",
+            ],
+          },
+          {
+            title: "Which one to choose",
+            body: [
+              "If eBay’s orders and reports are enough for you, Seller Hub. If you want a full Windows management program, with stock and invoicing, Ready Pro.",
+              "If you already use invoicing software and need the tax codes and VAT numbers of your eBay orders without changing it, FiscalBay.",
+            ],
+          },
+        ],
+        comparison: {
+          title: "FiscalBay, Seller Hub and Ready Pro",
+          headers: ["Feature", "FiscalBay", "eBay Seller Hub", "Ready Pro"],
+          notStated: "Not stated",
+          rows: [
+            ["What it is", "Web service", "eBay tool", "Windows management program"],
+            ["Installation", { yes: "None" }, { yes: "None" }, "To install"],
+            [
+              "Buyer’s tax code",
+              { yes: "On the order card" },
+              "Not in the order report",
+              { yes: "In the customer record, when eBay sends it" },
+            ],
+            [
+              "Buyer’s VAT number",
+              { yes: "On the order card" },
+              "Not in the order report",
+              "Not stated",
+            ],
+            [
+              "Reading orders",
+              { yes: "Automatic" },
+              "Orders already on eBay",
+              "Started by hand or scheduled",
+            ],
+            [
+              "Order search",
+              { yes: "Also by tax code and VAT number" },
+              { yes: "By number, period and status" },
+              { yes: "Program views and filters" },
+            ],
+            [
+              "Multiple eBay stores",
+              { yes: "With Pro" },
+              "One account at a time",
+              { yes: "With paid extra accounts" },
+            ],
+            [
+              "Order export",
+              { yes: "CSV, Excel with Pro" },
+              { yes: "CSV and XLSX" },
+              { yes: "CSV, TXT and XLS" },
+            ],
+            ["E-invoices", "No", "Not stated", { yes: "With a paid plugin" }],
+            ["Price", "Free plan, Pro from €4.90 a month + VAT", "Free", "€1,100 + VAT to start"],
+          ],
+          note: "Data checked on 10 November 2026 on eBay’s help pages and on Ready Pro’s public website, price list and manual. FiscalBay is an independent service with no ties to eBay or Ready Pro.",
+        },
+        sources: [
+          {
+            label: "eBay: Seller Hub and the order report (in Italian)",
+            href: sourceLinks.sellerHub,
+          },
+          { label: "eBay: Seller Hub Reports tab (in Italian)", href: sourceLinks.reports },
+          { label: "eBay: finding the items you sold (in Italian)", href: sourceLinks.soldItems },
+          { label: "eBay: team access (in Italian)", href: sourceLinks.teamAccess },
+        ],
+        solution: {
+          body: [
+            "Connect your eBay store in a few minutes and find the tax code and VAT number on every order card, ready to copy or export for your invoicing software.",
+            "Start for free, with nothing to install and no need to change your software.",
           ],
           shot: "scheda",
           caption: "The tax code on the order card",

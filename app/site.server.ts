@@ -29,6 +29,19 @@ import { formatDate } from "./format";
 import { guides } from "./copy/guides.server";
 import { sitePages } from "./copy/site-pages.server";
 import { languageFromPath, languages, localizedPath, type Language } from "./i18n";
+import type { FaqItem } from "./components/faq-list";
+
+/** Domande del sito con la guida collegata, portata nella lingua della pagina. */
+export function faqItems(
+  items: readonly { q: string; a: string; guide?: { label: string; path: string } }[],
+  language: Language,
+): FaqItem[] {
+  return items.map(({ q, a, guide }) =>
+    guide
+      ? { q, a, link: { label: guide.label, href: localizedPath(language, guide.path) } }
+      : { q, a },
+  );
+}
 
 /**
  * Dati comuni delle pagine pubbliche: lingua, origine per canonical e Open Graph e sessione,

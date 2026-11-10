@@ -16,6 +16,7 @@ import { annualPaidMonths } from "../catalog";
 import { sitePages } from "../copy/site-pages.server";
 import {
   accessPath,
+  comparisonGuidePath,
   faqPath,
   featuresPath,
   ordersPath,
@@ -25,7 +26,7 @@ import {
 } from "../app-links";
 import { languageFromPath, localizedPath } from "../i18n";
 import { botUrl } from "../integrations/telegram.server";
-import { publicPage, siteListing } from "../site.server";
+import { faqItems, publicPage, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/site";
 
@@ -95,7 +96,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       premiumBody: listing.reserve
         ? premiumBody
         : `${premiumBody} ${purchasesOpen ? premiumTrial : pages.pricing.closed}`,
-      faq: pages.faq.items.slice(0, 4),
+      faq: faqItems(pages.faq.items.slice(0, 4), language),
       shots: pages.shots,
       quota:
         baseQuota === null
@@ -259,9 +260,14 @@ export default function Site({ loaderData }: Route.ComponentProps) {
               reverse={index % 2 === 1}
             />
           ))}
-          <a href={localizedPath(language, featuresPath)} className={cn(textLink, "w-fit")}>
-            {t.allFeatures}
-          </a>
+          <div className="flex flex-wrap gap-x-8 gap-y-3">
+            <a href={localizedPath(language, featuresPath)} className={textLink}>
+              {t.allFeatures}
+            </a>
+            <a href={localizedPath(language, comparisonGuidePath)} className={textLink}>
+              {t.comparisonLink}
+            </a>
+          </div>
         </div>
       </section>
       <section aria-labelledby="piani" className={cn(siteColumn, "grid gap-6 py-14 sm:py-16")}>

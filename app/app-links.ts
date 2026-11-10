@@ -90,14 +90,19 @@ export const faqPath = "/faq";
 
 /** Guide del sito: l'elenco e gli articoli, ciascuno con il proprio indirizzo stabile. */
 export const guidesPath = "/guide";
+/** Guide richiamate da altre pagine del sito: l'export e il confronto con le altre soluzioni. */
+export const exportGuidePath = `${guidesPath}/esportare-ordini-ebay-excel-csv` as const;
+export const comparisonGuidePath =
+  `${guidesPath}/confronto-console-venditori-ebay-ready-pro` as const;
 export const guidePaths = [
   `${guidesPath}/trovare-codice-fiscale-ordini-ebay`,
   `${guidesPath}/codice-fiscale-non-visibile-ordine-ebay`,
   `${guidesPath}/chiedere-codice-fiscale-acquirente-ebay`,
   `${guidesPath}/codice-fiscale-fattura-elettronica-ebay`,
-  `${guidesPath}/esportare-ordini-ebay-excel-csv`,
+  exportGuidePath,
   `${guidesPath}/partita-iva-acquirente-ebay`,
   `${guidesPath}/alternativa-probay-codice-fiscale-ebay`,
+  comparisonGuidePath,
 ] as const;
 export type GuidePath = (typeof guidePaths)[number];
 
