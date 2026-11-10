@@ -101,7 +101,8 @@ export async function action({ request }: Route.ActionArgs) {
       accountExportScope(area.session, query, environment, premium, now),
     );
     const scoped =
-      fromOrders?.filter ?? periodScope(String(form.get("period") ?? ""), premium, now);
+      fromOrders?.filter ??
+      periodScope(String(form.get("period") ?? ""), premium ? "premium" : "free", now);
     const filter = form.get("fiscal") === "available" ? onlyAvailable(scoped) : scoped;
     // Un ambito senza ordini non produce un file con la sola intestazione.
     const [tally] = filter

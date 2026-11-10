@@ -62,7 +62,8 @@ import { dayMilliseconds } from "../time";
 /** Rinnovo rifiutato in modo autorevole: Free subito, prezzo protetto per sette giorni. */
 export const lapsedStatuses = ["past_due", "unpaid"] as const;
 
-export const pricePromiseMs = 7 * dayMilliseconds;
+const pricePromiseDays = 7;
+export const pricePromiseMs = pricePromiseDays * dayMilliseconds;
 
 const ownerSchema = z.object({
   workspace_id: z.string().min(1).max(128),
@@ -439,8 +440,8 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
 const dueSql = `(julianday(s.current_period_end) <= julianday(?1)
     AND julianday(s.checked_at) < julianday(s.current_period_end)
   OR s.status IN (${sqlList(lapsedStatuses)})
-    AND julianday(s.current_period_start) + ${pricePromiseMs / dayMilliseconds} <= julianday(?1)
-    AND julianday(s.checked_at) < julianday(s.current_period_start) + ${pricePromiseMs / dayMilliseconds})`;
+    AND julianday(s.current_period_start) + ${pricePromiseDays} <= julianday(?1)
+    AND julianday(s.checked_at) < julianday(s.current_period_start) + ${pricePromiseDays})`;
 
 /**
  * Abbonamento senza una copertura in corso: pagamento o rinnovo ancora da confermare. Una

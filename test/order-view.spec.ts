@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { VisibleOrder } from "../app/domain/orders.server";
-import { orderCriteria, snapshotInstant } from "../app/orders/order-criteria";
+import {
+  onlyAvailable,
+  orderCriteria,
+  periodScope,
+  snapshotInstant,
+} from "../app/orders/order-criteria";
 import {
   pendingList,
   rememberedStore,
@@ -601,6 +606,23 @@ describe("vista condivisa e criteri degli ordini", () => {
         appCopy.it,
       ),
     ).toBe("");
+  });
+
+  it("l'esportazione dalle Impostazioni usa il periodo del piano e, a richiesta, i soli dati disponibili", () => {
+    const at = new Date(now);
+    const listedBefore = at.toISOString();
+    // Un periodo Premium nel Free non restringe gli ordini, come nell'elenco.
+    expect(periodScope("90", "free", at)).toEqual({ criteria: { since: undefined, listedBefore } });
+    expect(periodScope("90", "premium", at)).toEqual({
+      criteria: { since: new Date(at.getTime() - 90 * 86_400_000).toISOString(), listedBefore },
+    });
+    expect(onlyAvailable({ criteria: {} })).toEqual({ criteria: { fiscal: "available" } });
+    expect(onlyAvailable({ ids: ["o-a"], criteria: { fiscal: "available" } })).toEqual({
+      ids: ["o-a"],
+      criteria: { fiscal: "available" },
+    });
+    // Un filtro fiscale diverso esclude già ogni ordine con il dato disponibile.
+    expect(onlyAvailable({ criteria: { fiscal: "locked" } })).toBeNull();
   });
 
   it("legge i criteri dell'indirizzo con i soli valori previsti", () => {

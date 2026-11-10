@@ -133,12 +133,8 @@ export function listCriteria(
  * Esportazione aperta dalle Impostazioni: gli ordini del periodo scelto, come nell'elenco senza
  * altri filtri. Come nell'elenco, un periodo Premium nel Free non restringe gli ordini.
  */
-export function periodScope(period: string, premium: boolean, now: Date): OrderScope {
-  const { since } = orderCriteria(
-    new URLSearchParams({ periodo: period }),
-    now,
-    premium ? "premium" : "free",
-  );
+export function periodScope(period: string, plan: "free" | "premium", now: Date): OrderScope {
+  const { since } = orderCriteria(new URLSearchParams({ periodo: period }), now, plan);
   return { criteria: { since, listedBefore: now.toISOString() } };
 }
 

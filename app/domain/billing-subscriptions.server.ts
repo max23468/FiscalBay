@@ -105,9 +105,8 @@ export async function endOpenSubscriptions(
   ]);
   const late = await inSequence(checkouts!, async ({ id }) => {
     const session = await closeCheckoutSession(stripe, id);
-    return session.status === "complete" && session.subscription
-      ? [stripeId(session.subscription)]
-      : [];
+    // Stripe assegna l'abbonamento soltanto alla sessione completata.
+    return session.subscription ? [stripeId(session.subscription)] : [];
   });
   await inSequence([...new Set([...results!.map(({ id }) => id), ...late.flat()])], (id) =>
     cancelSubscription(env, stripe, id, now),
