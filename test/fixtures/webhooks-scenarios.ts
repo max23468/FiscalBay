@@ -144,6 +144,34 @@ export function acquire(fetcher: typeof fetch, calls = 12) {
   });
 }
 
+/** D1 fittizio che annota inizio e fine di ogni istruzione, per provare il guscio del registro. */
+export function recordingDatabase() {
+  const calls: string[] = [];
+  const statements: object[] = [];
+  const statement = (sql: string) => ({
+    statement: sql,
+    bind: () => statement(sql),
+    run: async () => {
+      calls.push(sql);
+      for (let tick = 0; tick < 20; tick += 1) await Promise.resolve();
+      calls.push(`fine ${sql}`);
+      return { meta: { changes: 1 } };
+    },
+  });
+  const batch = vi.fn(async (queries: object[]) => queries);
+  const exec = vi.fn(async () => ({ count: 1, duration: 0 }));
+  const db = {
+    prepare(sql: string) {
+      const prepared = statement(sql);
+      statements.push(prepared);
+      return prepared;
+    },
+    batch,
+    exec,
+  };
+  return { db: db as unknown as D1Database, calls, statements, batch, exec };
+}
+
 export async function receipt() {
   return env.DB.prepare("SELECT * FROM webhook_receipts").first<{
     id: string;

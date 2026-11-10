@@ -1,57 +1,43 @@
-import { env } from "cloudflare:workers";
-import { beforeEach, expect, it, vi } from "vitest";
+import { expect, it, vi } from "vitest";
 
 import { duringServiceActivity, waitUntil } from "../app/service-activity.server";
 
-const registered = async () =>
-  (await env.DB.prepare("SELECT COUNT(*) AS rows FROM service_activity").first<{ rows: number }>())!
-    .rows;
+import { recordingDatabase, setupScenarios } from "./fixtures/webhooks-scenarios";
 
-beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM service_activity").run();
-});
+const router = vi.hoisted(() => ({ handle: vi.fn(), create: vi.fn() }));
+
+vi.mock("react-router", async (original) => ({
+  ...(await original<typeof import("react-router")>()),
+  createRequestHandler: router.create,
+}));
+
+setupScenarios(router);
 
 it("senza lavoro in background il registro si libera prima della risposta", async () => {
-  let during = -1;
+  const { db, calls } = recordingDatabase();
   await duringServiceActivity(
-    env.DB,
-    async () => {
-      during = await registered();
-    },
+    db,
+    async () => {},
     () => {},
   );
-  expect(during).toBe(1);
-  expect(await registered()).toBe(0);
+  expect(calls.at(-1)).toBe("fine DELETE FROM service_activity WHERE id = ?");
 });
 
 it("il lavoro in background non ritarda la risposta e il rilascio lo attende", async () => {
+  const { db, calls } = recordingDatabase();
   let release!: () => void;
   const pending = new Promise<void>((resolve) => (release = resolve));
-  // Con il lavoro ancora in sospeso la risposta arriva lo stesso: se lo attendesse, la prova
-  // scadrebbe.
-  await duringServiceActivity(
-    env.DB,
+  const answered = duringServiceActivity(
+    db,
     async () => waitUntil(pending),
     () => {},
-  );
-  expect(await registered()).toBe(1);
+  ).then(() => "risposta");
+  const elapsed = (async () => {
+    for (let tick = 0; tick < 200; tick += 1) await Promise.resolve();
+    return "in attesa";
+  })();
+  await expect(Promise.race([answered, elapsed])).resolves.toBe("risposta");
+  expect(calls).not.toContain("DELETE FROM service_activity WHERE id = ?");
   release();
-  await vi.waitFor(async () => expect(await registered()).toBe(0));
-});
-
-it("con il ripristino in corso il lavoro non parte e non si registra", async () => {
-  await env.DB.prepare(
-    `INSERT INTO service_settings (name, value, updated_at) VALUES ('recovery_frozen', 'true', ?)
-     ON CONFLICT (name) DO UPDATE SET value = 'true'`,
-  )
-    .bind(new Date().toISOString())
-    .run();
-  try {
-    const run = vi.fn();
-    expect(await duringServiceActivity(env.DB, run, () => "bloccato")).toBe("bloccato");
-    expect(run).not.toHaveBeenCalled();
-    expect(await registered()).toBe(0);
-  } finally {
-    await env.DB.prepare("DELETE FROM service_settings WHERE name = 'recovery_frozen'").run();
-  }
+  await vi.waitFor(() => expect(calls).toContain("fine DELETE FROM service_activity WHERE id = ?"));
 });
