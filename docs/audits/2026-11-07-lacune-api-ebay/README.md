@@ -16,7 +16,7 @@ Cinque richieste analizzate e cinque domande secondarie. A eBay è andato un sol
 
 Stato: ticket inviato dall'owner il 7 novembre 2026, area Trading API, in attesa di risposta.
 
-**Dismissione di `GetOrders`.** Il 6 novembre eBay ha deprecato Trading `GetOrders` e fissato lo spegnimento al 30 giugno 2027: per gli ordini pagati rimanda a Fulfillment, per impegni non pagati e `PurchaseQuote` alla Order API GraphQL (documentato, [stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status), letto nel browser il 7 novembre). Con `GetOrders` spariscono il fallback fiscale, che in Production non ha mai aggiunto un CF, le fatture combinate senza checkout eBay e l'unica fonte del token eIAS dell'acquirente. La migrazione interna è [2.0-11](../../ROADMAP.md#2-0-11).
+**Dismissione di `GetOrders`.** Il 6 novembre eBay ha deprecato Trading `GetOrders` e fissato lo spegnimento al 30 giugno 2027: per gli ordini pagati rimanda a Fulfillment, per impegni non pagati e `PurchaseQuote` alla Order API GraphQL (documentato, [stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status), letto nel browser il 7 novembre). Con `GetOrders` spariscono il fallback fiscale, che in Production non ha mai aggiunto un CF, le fatture combinate senza checkout eBay e l'unica fonte del token eIAS dell'acquirente. La migrazione interna è [2.6-01](../../ROADMAP.md#2-6-01).
 
 **Rischio emerso, ridotto internamente.** Il token eIAS dell'acquirente arriva soltanto da Trading `GetOrders`, entro 90 giorni, e sparirà con il suo spegnimento. Il 7 novembre, in Production, 978 dei 1.100 ordini definitivi non lo avevano: tutti gli 891 oltre i 90 giorni e 87 fra 30 e 90, rimasti fuori dalla finestra Trading del primo collegamento (conteggio aggregato in sola lettura, senza identità). Per questi una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Ora ogni ordine registra l'ultima lettura dello username e quelli senza token lo rileggono ogni settimana ([D319](../../decisions/DECISION_REGISTER.md)); resta scoperto un cambio di username a ridosso della cancellazione, che soltanto un identificativo immutabile negli ordini chiude, come chiede il punto 2 del ticket.
 
@@ -44,7 +44,7 @@ The Order API needs sell.order.read and PurchaseQuote needs sell.purchase.quote.
 Thank you.
 ```
 
-La risposta decide il task [2.0-11](../../ROADMAP.md#2-0-11): il punto 1 se le fatture combinate restano in FiscalBay, il punto 2 se suggerimenti Premium e abbinamento delle cancellazioni continuano a funzionare, il punto 3 se serve un nuovo consenso dei negozi.
+La risposta decide il task [2.6-01](../../ROADMAP.md#2-6-01): il punto 1 se le fatture combinate restano in FiscalBay, il punto 2 se suggerimenti Premium e abbinamento delle cancellazioni continuano a funzionare, il punto 3 se serve un nuovo consenso dei negozi.
 
 ## Metodo e livelli di prova
 
