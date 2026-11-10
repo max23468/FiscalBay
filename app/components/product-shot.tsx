@@ -135,11 +135,14 @@ export function ShotRow({
   alt,
   reverse = false,
   heading: Heading = "h3",
+  link,
 }: {
   id: string;
   title: string;
   badge?: React.ReactNode;
   body: string;
+  /** Pagina che approfondisce la funzione, sotto il testo. */
+  link?: { label: string; href: string };
   shot: ShotName;
   language: Language;
   alt: string;
@@ -165,6 +168,14 @@ export function ShotRow({
           {badge}
         </Heading>
         <p className="leading-relaxed text-pretty text-muted-foreground">{body}</p>
+        {link ? (
+          <a
+            href={link.href}
+            className="w-fit font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {link.label}
+          </a>
+        ) : null}
       </div>
       <ProductShot
         name={shot}

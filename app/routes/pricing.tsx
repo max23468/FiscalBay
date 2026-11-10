@@ -19,7 +19,14 @@ import {
 } from "~/components/ui/table";
 import { appCopy } from "../app-copy";
 import { sitePages } from "../copy/site-pages.server";
-import { accessPath, planChoiceParam, planPath, pricingPath, visitParam } from "../app-links";
+import {
+  accessPath,
+  comparisonGuidePath,
+  planChoiceParam,
+  planPath,
+  pricingPath,
+  visitParam,
+} from "../app-links";
 import { annualPaidMonths, lifetimeSlots, premiumOffers, priceGeneration } from "../catalog";
 import { languageFromPath, localizedPath } from "../i18n";
 import { hasLifetime } from "../domain/lifetime.server";
@@ -107,6 +114,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       trialBody: t.trialBody,
       purchaseNote: purchasesOpen || listing.reserve ? t.purchaseNote : t.closed,
       taxNote: t.taxNote,
+      comparisonLink: t.comparisonLink,
       compare: t.compare,
       paymentsTitle: t.paymentsTitle,
       payments: sitePages[language].faq.items
@@ -348,6 +356,12 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
             </TableBody>
           </Table>
           <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{t.taxNote}</p>
+          <a
+            href={localizedPath(language, comparisonGuidePath)}
+            className="w-fit font-medium text-primary underline-offset-4 hover:underline"
+          >
+            {t.comparisonLink}
+          </a>
         </section>
         <section aria-labelledby="pagamenti" className="grid gap-4">
           <h2 id="pagamenti" className="text-2xl font-semibold">

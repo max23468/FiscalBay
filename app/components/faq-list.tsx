@@ -1,7 +1,14 @@
 import { ChevronDown } from "lucide-react";
 
+export interface FaqItem {
+  q: string;
+  a: string;
+  /** Pagina che approfondisce la risposta, con il percorso già nella lingua della pagina. */
+  link?: { label: string; href: string };
+}
+
 /** Domande e risposte apribili una per una, senza JavaScript. */
-export function FaqList({ items }: { items: readonly { q: string; a: string }[] }) {
+export function FaqList({ items }: { items: readonly FaqItem[] }) {
   return (
     <div className="grid divide-y border-y">
       {items.map((item) => (
@@ -14,6 +21,16 @@ export function FaqList({ items }: { items: readonly { q: string; a: string }[] 
             />
           </summary>
           <p className="pr-7 pb-2 leading-relaxed text-pretty text-muted-foreground">{item.a}</p>
+          {item.link ? (
+            <p className="pr-7 pb-3">
+              <a
+                href={item.link.href}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {item.link.label}
+              </a>
+            </p>
+          ) : null}
         </details>
       ))}
     </div>

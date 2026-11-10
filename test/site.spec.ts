@@ -328,6 +328,10 @@ describe("radice pubblica e area riservata", () => {
           "/guide/alternativa-probay-codice-fiscale-ebay",
           "/en/guides/probay-alternative-ebay-tax-code",
         ],
+        [
+          "/guide/confronto-console-venditori-ebay-ready-pro",
+          "/en/guides/ebay-seller-hub-ready-pro-comparison",
+        ],
       ].flatMap((paths) => paths.map((path) => `https://fiscalbay.it${path}`)),
     );
     // Ogni pagina porta il giorno dell'ultima modifica del contenuto.

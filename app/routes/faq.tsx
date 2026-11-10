@@ -6,13 +6,19 @@ import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { sitePages } from "../copy/site-pages.server";
 import { faqPath, supportPath } from "../app-links";
 import { localizedPath } from "../i18n";
-import { publicPage } from "../site.server";
+import { faqItems, publicPage } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/faq";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const { language, origin, session } = await publicPage(request);
-  return { language, origin, signedIn: Boolean(session), copy: sitePages[language].faq };
+  const copy = sitePages[language].faq;
+  return {
+    language,
+    origin,
+    signedIn: Boolean(session),
+    copy: { ...copy, items: faqItems(copy.items, language) },
+  };
 }
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {

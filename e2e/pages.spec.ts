@@ -283,17 +283,21 @@ for (const scenario of scenarios) {
             }),
           ),
         );
-        expect(
-          await page
-            .locator("img")
-            .evaluateAll((images) =>
-              images.every(
-                (image) =>
-                  (image as HTMLImageElement).complete &&
-                  (image as HTMLImageElement).naturalWidth > 0,
+        // Un'immagine lontana dalla piega comincia a scaricarsi soltanto quando diventa eager: il
+        // controllo ne aspetta l'arrivo invece di guardarla nello stesso istante.
+        await expect
+          .poll(() =>
+            page
+              .locator("img")
+              .evaluateAll((images) =>
+                images.every(
+                  (image) =>
+                    (image as HTMLImageElement).complete &&
+                    (image as HTMLImageElement).naturalWidth > 0,
+                ),
               ),
-            ),
-        ).toBe(true);
+          )
+          .toBe(true);
         const links = await page
           .getByRole("link")
           .evaluateAll((elements) => elements.map((element) => element.getAttribute("href")));

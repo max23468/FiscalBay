@@ -1,5 +1,5 @@
 import { cn } from "cn";
-import { CircleCheckBig, CircleX, Minus } from "lucide-react";
+import { ArrowRight, CircleCheckBig, CircleX, ExternalLink, Minus } from "lucide-react";
 import { data } from "react-router";
 
 import { ProductShot } from "~/components/product-shot";
@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { accessPath, featuresPath, guidePaths, guidesPath, type GuidePath } from "../app-links";
-import { guides, type Guide as GuideCopy } from "../copy/guides.server";
+import { guides, type ComparisonCell, type Guide as GuideCopy } from "../copy/guides.server";
 import { sitePages } from "../copy/site-pages.server";
 import { formatDate } from "../format";
 import { canonicalPath, localizedPath } from "../i18n";
@@ -50,6 +50,10 @@ export async function loader({ request }: Route.LoaderArgs) {
       guidesTitle: t.index.title,
       guidesHref: localizedPath(language, guidesPath),
       featureHref: `${localizedPath(language, featuresPath)}#funzione-${article.solution.shot}`,
+      sourcesTitle: t.sourcesTitle,
+      related: article.related
+        ? { label: article.related.label, href: localizedPath(language, article.related.path) }
+        : null,
       menu: guidePaths.map((guide) => ({
         href: localizedPath(language, guide),
         label: t.articles[guide].nav,
@@ -83,6 +87,7 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
         dateModified: copy.updated,
         mainEntityOfPage: url,
         image: `${origin}${ogImage(language, path)}`,
+        ...(copy.sources ? { citation: copy.sources.map((source) => source.href) } : {}),
         author: { "@id": `${origin}/#organization` },
         publisher: { "@id": `${origin}/#organization` },
       },
@@ -102,17 +107,50 @@ export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
 
 const highlightedColumn = "border-x-2 border-x-primary bg-primary/10";
 
+/** Icona di una cella: spunta per ciò che c'è, trattino per ciò che le fonti non dichiarano. */
+function cellIcon(
+  cell: ComparisonCell,
+  notStated: string,
+  highlighted: boolean,
+  contrast: boolean,
+) {
+  if (typeof cell !== "string") return CircleCheckBig;
+  if (cell === notStated) return Minus;
+  if (contrast) return highlighted ? CircleCheckBig : CircleX;
+  return null;
+}
+
 /**
- * Confronto con la prima soluzione in evidenza: colonna incorniciata e spunte, croci sull'altra.
- * Ciò che le fonti non dichiarano ha il trattino, perché non è provato che manchi.
+ * Confronto con la prima soluzione in evidenza, in una colonna incorniciata. Ciò che le fonti non
+ * dichiarano ha il trattino, perché non è provato che manchi. Con `contrast` le altre colonne
+ * hanno le croci; altrimenti la spunta va a ciò che ogni soluzione offre, senza croci. Con più di
+ * due soluzioni la tabella compare dai 768 px e, se serve, scorre invece di schiacciare le colonne.
  */
 function ComparisonTable({
-  headers: [feature, highlighted, other],
+  headers: [feature, highlighted, ...others],
   rows,
   notStated,
-}: Pick<NonNullable<GuideCopy["comparison"]>, "headers" | "rows" | "notStated">) {
+  contrast = false,
+  title,
+}: Pick<
+  NonNullable<GuideCopy["comparison"]>,
+  "headers" | "rows" | "notStated" | "contrast" | "title"
+>) {
   return (
-    <Table className="border-separate border-spacing-0">
+    <Table
+      className={cn("border-separate border-spacing-0", others.length > 1 && "min-w-[40rem]")}
+      // L'area che scorre sui telefoni si raggiunge anche da tastiera, con il nome della tabella.
+      container={
+        others.length > 1
+          ? {
+              tabIndex: 0,
+              role: "region",
+              "aria-label": title,
+              className: "rounded-xl outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+            }
+          : undefined
+      }
+    >
       <TableHeader>
         <TableRow className="hover:bg-transparent">
           <TableHead className="border-b">
@@ -126,13 +164,16 @@ function ComparisonTable({
           >
             {highlighted}
           </TableHead>
-          <TableHead className="border-b text-muted-foreground">{other}</TableHead>
+          {others.map((other) => (
+            <TableHead key={other} className="border-b whitespace-normal text-muted-foreground">
+              {other}
+            </TableHead>
+          ))}
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map(([label, first, second], index) => {
+        {rows.map(([label, ...cells], index) => {
           const last = index === rows.length - 1;
-          const Icon = second === notStated ? Minus : CircleX;
           return (
             <TableRow key={label} className="hover:bg-transparent">
               <TableHead
@@ -141,31 +182,94 @@ function ComparisonTable({
               >
                 {label}
               </TableHead>
-              <TableCell
-                className={cn(
-                  highlightedColumn,
-                  "py-3 font-medium whitespace-normal",
-                  last ? "rounded-b-xl border-b-2 border-b-primary" : "border-b",
-                )}
-              >
-                <span className="flex items-start gap-2">
-                  <CircleCheckBig aria-hidden className="mt-0.5 size-4 shrink-0 text-success" />
-                  {first}
-                </span>
-              </TableCell>
-              <TableCell
-                className={cn("py-3 whitespace-normal text-muted-foreground", !last && "border-b")}
-              >
-                <span className="flex items-start gap-2">
-                  <Icon aria-hidden className="mt-0.5 size-4 shrink-0" />
-                  {second}
-                </span>
-              </TableCell>
+              {cells.map((cell, column) => {
+                const first = column === 0;
+                const Icon = cellIcon(cell, notStated, first, contrast);
+                return (
+                  <TableCell
+                    key={column}
+                    className={cn(
+                      "py-3 whitespace-normal",
+                      first
+                        ? cn(
+                            highlightedColumn,
+                            "font-medium",
+                            last ? "rounded-b-xl border-b-2 border-b-primary" : "border-b",
+                          )
+                        : cn("text-muted-foreground", !last && "border-b"),
+                    )}
+                  >
+                    <span className="flex items-start gap-2">
+                      {Icon ? (
+                        <Icon
+                          aria-hidden
+                          className={cn(
+                            "mt-0.5 size-4 shrink-0",
+                            Icon === CircleCheckBig && "text-success",
+                          )}
+                        />
+                      ) : null}
+                      {typeof cell === "string" ? cell : cell.yes}
+                    </span>
+                  </TableCell>
+                );
+              })}
             </TableRow>
           );
         })}
       </TableBody>
     </Table>
+  );
+}
+
+/**
+ * Confronto fra più di due soluzioni sotto i 768 px: una scheda per voce con le soluzioni una
+ * sotto l'altra, la prima in evidenza, così nessuna colonna resta fuori dallo schermo.
+ */
+function ComparisonCards({
+  headers: [, ...solutions],
+  rows,
+  notStated,
+}: Pick<NonNullable<GuideCopy["comparison"]>, "headers" | "rows" | "notStated">) {
+  return (
+    <ul className="grid gap-3 md:hidden">
+      {rows.map(([label, ...cells]) => (
+        <li key={label} className="rounded-xl border p-4">
+          <h3 className="font-medium">{label}</h3>
+          <dl className="mt-3 grid gap-1.5 text-sm">
+            {cells.map((cell, column) => {
+              const first = column === 0;
+              const Icon = cellIcon(cell, notStated, first, false);
+              return (
+                <div
+                  key={solutions[column]}
+                  className={cn(
+                    "grid grid-cols-[7.5rem_minmax(0,1fr)] gap-3 rounded-lg px-3 py-2",
+                    first ? "bg-primary/10" : "bg-muted/40",
+                  )}
+                >
+                  <dt className={first ? "font-semibold text-primary" : "text-muted-foreground"}>
+                    {solutions[column]}
+                  </dt>
+                  <dd className={cn("flex items-start gap-1.5", first && "font-medium")}>
+                    {Icon ? (
+                      <Icon
+                        aria-hidden
+                        className={cn(
+                          "mt-0.5 size-4 shrink-0",
+                          Icon === CircleCheckBig ? "text-success" : "text-muted-foreground",
+                        )}
+                      />
+                    ) : null}
+                    {typeof cell === "string" ? cell : cell.yes}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -199,11 +303,22 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
           {t.comparison ? (
             <section className="grid gap-3">
               <h2 className="text-xl font-semibold text-balance">{t.comparison.title}</h2>
-              <ComparisonTable
-                headers={t.comparison.headers}
-                rows={t.comparison.rows}
-                notStated={t.comparison.notStated}
-              />
+              {t.comparison.headers.length > 3 ? (
+                <ComparisonCards
+                  headers={t.comparison.headers}
+                  rows={t.comparison.rows}
+                  notStated={t.comparison.notStated}
+                />
+              ) : null}
+              <div className={cn("min-w-0", t.comparison.headers.length > 3 && "max-md:hidden")}>
+                <ComparisonTable
+                  headers={t.comparison.headers}
+                  rows={t.comparison.rows}
+                  notStated={t.comparison.notStated}
+                  contrast={t.comparison.contrast}
+                  title={t.comparison.title}
+                />
+              </div>
               <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
                 {t.comparison.note}
               </p>
@@ -232,6 +347,15 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
                 </a>
               </figcaption>
             </figure>
+            {t.related ? (
+              <a
+                href={t.related.href}
+                className="flex w-fit items-center gap-1.5 font-medium text-primary underline-offset-4 hover:underline"
+              >
+                {t.related.label}
+                <ArrowRight aria-hidden className="size-4 shrink-0" />
+              </a>
+            ) : null}
             {signedIn ? null : (
               <div className="flex flex-wrap items-center gap-3">
                 <a
@@ -249,6 +373,26 @@ export default function Guide({ loaderData }: Route.ComponentProps) {
               </div>
             )}
           </section>
+          {t.sources ? (
+            <section className="grid gap-2 border-t pt-6">
+              <h2 className="text-sm font-semibold">{t.sourcesTitle}</h2>
+              <ul className="grid gap-1.5 text-sm">
+                {t.sources.map((source) => (
+                  <li key={source.href}>
+                    <a
+                      href={source.href}
+                      target="_blank"
+                      rel="noopener"
+                      className="inline-flex items-start gap-1.5 text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+                    >
+                      {source.label}
+                      <ExternalLink aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </article>
         <nav aria-label={t.guidesTitle} className="lg:sticky lg:top-8 lg:self-start">
           <a
