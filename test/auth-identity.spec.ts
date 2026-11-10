@@ -485,7 +485,7 @@ describe("Collegamento e modifica dell'identità", () => {
       await signUp(env, email, true);
       await vi.waitFor(() => expect(send).toHaveBeenCalled());
       const verify = send.mock.calls[0]![0] as { subject: string; text: string };
-      expect(verify.subject).toBe("Conferma l’indirizzo email di FiscalBay");
+      expect(verify.subject).toMatch(/^\d{6} è il tuo codice di conferma di FiscalBay$/u);
       expect(verify.text).toContain("Conferma email: ");
       expect(verify.text).toContain("Il link vale un’ora.");
       expect(emailVerificationSeconds).toBe(3600);
