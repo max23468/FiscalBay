@@ -271,10 +271,17 @@ export function sendAuthEmail(
   );
 }
 
-/** La conferma dell'indirizzo porta anche il codice da inserire nella pagina. */
+/**
+ * La conferma dell'indirizzo porta anche il codice da inserire nella pagina. Nell'oggetto lo
+ * riconosce Mail di Apple, che lo propone nel campo del codice su iPhone, iPad e Mac.
+ */
 function withCode(email: AccountEmail, code: string, language: Language): AccountEmail {
   const line = `${language === "en" ? "Your confirmation code:" : "Il tuo codice di conferma:"} ${code}`;
-  return { ...email, preview: line, paragraphs: [line, ...email.paragraphs] };
+  const subject =
+    language === "en"
+      ? `${code} is your FiscalBay confirmation code`
+      : `${code} è il tuo codice di conferma di FiscalBay`;
+  return { ...email, subject, preview: line, paragraphs: [line, ...email.paragraphs] };
 }
 
 /**

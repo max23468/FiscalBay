@@ -358,8 +358,10 @@ describe("registrazione e verifica del contatto", () => {
     const confirmation = send.mock.calls[0]![0] as { to: string; subject: string; text: string };
     expect(confirmation).toMatchObject({
       to: email,
-      subject: "Confirm your FiscalBay email address",
+      subject: expect.stringMatching(/^\d{6} is your FiscalBay confirmation code$/u),
     });
+    // L'oggetto e il testo portano lo stesso codice.
+    expect(confirmation.text).toContain(`code: ${confirmation.subject.slice(0, 6)}`);
 
     // Lo stesso indirizzo riceve la stessa risposta, senza sessione né nuovo account; il
     // titolare ne riceve avviso.

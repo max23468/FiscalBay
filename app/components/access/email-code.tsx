@@ -125,7 +125,9 @@ function CodeCells({
         onInput={change}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        className="absolute inset-0 size-full cursor-text text-base opacity-0"
+        // Trasparente nel testo, non nell'opacità: Safari non propone il codice ricevuto in un
+        // campo a opacità zero.
+        className="absolute inset-0 size-full cursor-text border-0 bg-transparent text-base text-transparent caret-transparent outline-none selection:bg-transparent"
       />
     </div>
   );
