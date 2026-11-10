@@ -221,7 +221,7 @@ Ridurre il JavaScript scaricato ed eseguito dalle pagine del sito, Guide e pagin
 <a id="versione-2-6"></a>
 ## 2.6 · Ordini con le API moderne
 
-**Prerequisiti:** risposta di eBay alle richieste di [RE-05](#re-05) e scelte dell'owner su scope e consenso. **Attività:** sostituire Trading `GetOrders` con le API indicate da eBay e leggere dalle stesse API i dati economici dell'ordine ([D333](decisions/DECISION_REGISTER.md)). Si prepara verso giugno 2027, con le sostitute stabili, e va in Production prima dello spegnimento del 2027-06-30.
+**Prerequisiti:** risposta di eBay alle richieste di [RE-05](#re-05) e scelte dell'owner su scope e consenso. **Attività:** sostituire Trading `GetOrders` con le API indicate da eBay e leggere dalle stesse API i dati economici dell'ordine ([D333](decisions/DECISION_REGISTER.md)). Va in Production entro giugno 2027, prima dello spegnimento del 2027-06-30, lasciando ai negozi il tempo del nuovo consenso.
 
 <a id="2-6-01"></a>
 #### 2.6-01 · Dismissione di Trading `GetOrders`
