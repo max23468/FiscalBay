@@ -12,13 +12,14 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const indexNowKey = "e18a76586e78da26adeda32bf01becbf";
+// Bing aveva memorizzato come non valida la chiave precedente per fiscalbay.it e rifiutava ogni
+// invio con `UserForbiddedToAccessSite`, mentre la stessa chiave valeva per test.fiscalbay.it.
+export const indexNowKey = "0be556bd7bf90b7ed9f32568ef05ac3d";
 
 export const productionOrigin = "https://fiscalbay.it";
 
-// Yandex condivide gli invii con Bing; gli endpoint di Bing e `api.indexnow.org` rispondono 403
-// senza leggere il file della chiave.
-const endpoint = "https://yandex.com/indexnow";
+// L'endpoint comune condivide gli invii con tutti i motori che aderiscono, Bing compreso.
+const endpoint = "https://api.indexnow.org/indexnow";
 
 /** Indirizzi `<loc>` della sitemap, nell'ordine in cui compaiono. */
 export function sitemapUrls(xml) {
