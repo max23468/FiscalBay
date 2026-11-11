@@ -39,6 +39,7 @@ import {
   pullRequestView,
   pullRequestAction,
   checksOutcome,
+  temporaryBranches,
   coordinatorRunner,
   requiredPassed,
   mergeDeploys,
@@ -948,6 +949,23 @@ describe("PR tramite API REST", () => {
     assert.equal(requiredPassed([check(1, "Verify", "success")]), false);
   });
 
+  it("la pulizia esamina ogni branch tranne le basi e Dependabot", () => {
+    assert.deepEqual(
+      temporaryBranches([
+        "develop",
+        "main",
+        "chore/revisione",
+        "",
+        "origin",
+        "HEAD",
+        "dependabot/npm_and_yarn/develop/x",
+        "chore/revisione",
+        "codex/vecchio",
+      ]),
+      ["chore/revisione", "codex/vecchio"],
+    );
+  });
+
   it("attende i controlli in corso e conta solo l'ultima esecuzione di ognuno", () => {
     const check = (id, name, status, conclusion) => ({ id, name, status, conclusion });
     assert.equal(
@@ -973,6 +991,14 @@ describe("PR tramite API REST", () => {
       checksOutcome([
         check(3, "Node 26", "completed", "success"),
         check(2, "Node 26", "completed", "cancelled"),
+      ]),
+      "passed",
+    );
+    assert.equal(
+      checksOutcome([
+        check(1, "Node 26", "completed", "success"),
+        check(2, "Qualifica candidato / Gate", "completed", "cancelled"),
+        check(3, "Qualifica candidato / Browser 1/8", "in_progress", null),
       ]),
       "passed",
     );

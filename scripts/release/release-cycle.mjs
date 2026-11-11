@@ -115,9 +115,13 @@ export function pullRequestAction(action, repository, number, head, env = proces
 export function checksOutcome(checkRuns) {
   // Come GitHub, conta soltanto l'ultima esecuzione di ogni controllo: una run annullata da
   // quella successiva non fa fallire la PR. I coordinatori girano sulla testa di `develop`, anche
-  // quelli di altre PR in parallelo: nessuno aspetta sé stesso o un altro ciclo.
+  // quelli di altre PR in parallelo: nessuno aspetta sé stesso o un altro ciclo. La qualifica del
+  // candidato ha la propria attesa in `ensureCandidate`: una automatica, annullata da quella di
+  // una testa più recente, non ferma `Promuovi` prima della richiesta esplicita.
   const latest = new Map();
-  for (const check of checkRuns.filter(({ name }) => !name.startsWith("Coordinatore")))
+  for (const check of checkRuns.filter(
+    ({ name }) => !name.startsWith("Coordinatore") && !name.startsWith("Qualifica candidato"),
+  ))
     if (!latest.has(check.name) || latest.get(check.name).id < check.id)
       latest.set(check.name, check);
   const current = [...latest.values()];
@@ -889,27 +893,29 @@ export function cleanup(pr, cwd = process.cwd()) {
   git("fetch", "--prune", "origin");
 }
 
+/** Branch da esaminare nella pulizia: tutti, tranne le basi, Dependabot e i riferimenti remoti simbolici. */
+export const temporaryBranches = (branches) => [
+  ...new Set(
+    branches.filter(
+      (branch) =>
+        branch &&
+        !["main", "develop", "origin", "HEAD"].includes(branch) &&
+        !branch.startsWith("dependabot/"),
+    ),
+  ),
+];
+
 function cleanupIntegrated(repository) {
   localGit(() => cleanupIntegratedBranches(repository));
 }
 
 function cleanupIntegratedBranches(repository) {
-  const locals = git(
-    "for-each-ref",
-    "--format=%(refname:short)",
-    "refs/heads/codex",
-    "refs/heads/riallinea",
-  ).split("\n");
-  const remotes = git(
-    "for-each-ref",
-    "--format=%(refname:short)",
-    "refs/remotes/origin/codex",
-    "refs/remotes/origin/riallinea",
-  )
+  const locals = git("for-each-ref", "--format=%(refname:short)", "refs/heads").split("\n");
+  const remotes = git("for-each-ref", "--format=%(refname:short)", "refs/remotes/origin")
     .split("\n")
     .map((ref) => ref.replace(/^origin\//u, ""));
   const residuals = [];
-  for (const branch of new Set([...locals, ...remotes].filter(Boolean))) {
+  for (const branch of temporaryBranches([...locals, ...remotes])) {
     const owner = repository.split("/")[0];
     const pr = ghJson(
       "api",
@@ -1990,8 +1996,6 @@ async function promoteCycle({ repository, values }) {
     `day=${romeDay()}`,
     "-f",
     `reviewed_migrations=${lot.reviewed}`,
-    "-f",
-    `urgente=${Boolean(values.urgente)}`,
     "-f",
     `requested_at=${requestedAt}`,
     "-f",

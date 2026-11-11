@@ -39,6 +39,19 @@ const readOutput = () => ({
   worker: JSON.parse(readFileSync(`${output}/v0/workers/default/worker.config.json`, "utf8")),
 });
 
+/**
+ * Segreti dei servizi attivi nei due ambienti che la configurazione non dichiara, perché in
+ * locale e nei test restano facoltativi: senza di loro il Worker distribuito perde acquisti,
+ * webhook Stripe, Telegram o notifiche eBay, quindi il deploy li pretende.
+ */
+export const serviceSecrets = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "TELEGRAM_OWNER_ID",
+  "TELEGRAM_WEBHOOK_SECRET",
+  "EBAY_NOTIFICATION_VERIFICATION_TOKEN",
+];
+
 export function digestDirectory(directory) {
   const files = [];
   const visit = (relative) => {
@@ -1126,9 +1139,10 @@ async function deployRelease(manifest, target, remote, receipt, reviewed) {
         if (!process.env.CLOUDFLARE_API_TOKEN || !process.env.CLOUDFLARE_ACCOUNT_ID)
           throw new Error("Accesso provider non configurato.");
         const bindings = json("workers", "secrets", "list", "--worker", target.worker);
-        const required = Object.keys(config.env).filter(
-          (name) => config.env[name].type === "secret",
-        );
+        const required = [
+          ...Object.keys(config.env).filter((name) => config.env[name].type === "secret"),
+          ...serviceSecrets,
+        ];
         if (required.some((name) => !bindings.some((binding) => binding.name === name)))
           throw new Error("Segreti runtime richiesti assenti.");
       },

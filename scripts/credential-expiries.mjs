@@ -36,9 +36,9 @@ export const defaultFile = () =>
   path.join(homedir(), ".config", "fiscalbay", "credential-expiries.json");
 
 /**
- * Segreti facoltativi letti dal codice: il deploy non li richiede, ma senza di loro si fermano
- * acquisti, Telegram, notifiche eBay, metriche o statistiche del sito, quindi anche la loro
- * scadenza va registrata.
+ * Segreti che la configurazione non dichiara: senza di loro si fermano acquisti, Telegram,
+ * notifiche eBay, metriche o statistiche del sito, quindi anche la loro scadenza va registrata.
+ * Il deploy pretende quelli dei servizi (`serviceSecrets` in `release.mjs`).
  */
 const optionalSecrets = [
   "ANALYTICS_READ_TOKEN",

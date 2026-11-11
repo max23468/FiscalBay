@@ -21,10 +21,6 @@ on:
         description: Digest delle migration non additive, ricavato dalle PR del lotto
         type: string
         required: false
-      urgente:
-        description: Usa soltanto una certificazione già valida sul candidato
-        type: boolean
-        default: false
       requested_at:
         type: string
         required: false
