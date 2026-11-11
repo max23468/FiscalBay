@@ -218,6 +218,7 @@ export async function refreshStoreToken(input: {
   }
 
   // Anche il refresh token si ricifra: uno salvato con una chiave precedente passa alla corrente.
+  // `refreshed_at` serve alla sola diagnosi sul database: nessun codice lo legge.
   const result = await environment.DB.prepare(
     `UPDATE ebay_store_credentials
         SET access_token = ?, access_expires_at = ?, refreshed_at = ?, refresh_token = ?

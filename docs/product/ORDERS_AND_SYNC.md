@@ -35,7 +35,7 @@ Un ordine verificato senza ID è già consultabile: nessun pulsante di sblocco i
 
 Dato modificato: visualizzare quello corrente, registrare versioni protette e notificare secondo preferenze. Rimozione autorevole: non mostrarlo come dato attuale, conservare lo storico interno fino a cancellazione applicabile. Nessun rimborso retroattivo quota se in precedenza il dato fu davvero fornito. Ordine non riconfermabile: ultimo stato noto con avviso, non cancellazione automatica dall'assenza di una risposta.
 
-**Osservazioni tardive e falsi cambiamenti.** Un'osservazione con `lastModifiedDate` precedente a quella già applicata viene scartata prima di ogni scrittura e contata. Il confronto che decide se creare una versione normalizza prima i valori: campo omesso e `null` equivalgono, timestamp e importi si confrontano nello stesso formato e alla stessa precisione, i soli campi tecnici o di provenienza non producono una variazione. Una rilettura invariata non crea versioni, notifiche né consumi.
+**Osservazioni tardive e falsi cambiamenti.** Un'osservazione con `lastModifiedDate` precedente a quella già applicata viene scartata prima di ogni scrittura e contata. Il confronto che decide se creare una versione normalizza prima i valori: campo omesso e `null` equivalgono, timestamp e importi si confrontano nello stesso formato e alla stessa precisione, i soli campi tecnici o di provenienza non producono una variazione. Una rilettura invariata non crea versioni, notifiche né consumi. Un ordine che eBay restituisce in forma non valida o con righe ripetute si salta e si registra nei log, in Fulfillment come in Trading: la lettura del negozio prosegue con gli altri.
 
 <a id="s10"></a>
 ## 10. Buyer, suggerimenti e dati mancanti

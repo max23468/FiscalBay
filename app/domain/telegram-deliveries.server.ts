@@ -540,7 +540,8 @@ async function recordFailure(
   } else {
     logFailure({ error, operation: "telegram" });
     const attempts = delivery.attempts + 1;
-    // Senza una risposta di Telegram il messaggio può essere arrivato comunque.
+    // Senza una risposta di Telegram il messaggio può essere arrivato comunque: `uncertain_at`
+    // lo ricorda per la sola diagnosi sul database, nessun codice lo legge.
     const uncertain = upstream?.failure === "unavailable" && upstream.details.status === undefined;
     if (attempts >= maxDeliveryAttempts)
       await db.batch([
