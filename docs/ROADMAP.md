@@ -11,7 +11,7 @@ Lavoro futuro e pendenze. La `2.0.0` è in Production dal 2026-11-01: la sua sto
 | [2.0.x Correzioni](#correzioni-2-0) | Completato | Correzioni e miglioramenti della 2.0 decisi dall'owner il 2026-11-03 ([D293](decisions/DECISION_REGISTER.md)): ordini e piattaforma, accesso e pagamenti, sito e processi, più la provenienza degli iscritti ([D304](decisions/DECISION_REGISTER.md)) la proporzione delle verifiche di pubblicazione ([D309](decisions/DECISION_REGISTER.md)) e il controllo di sicurezza pianificato ([D313](decisions/DECISION_REGISTER.md)), più i motivi di uscita ([D314](decisions/DECISION_REGISTER.md)), gli username degli acquirenti per le cancellazioni eBay ([D319](decisions/DECISION_REGISTER.md)) e la coda della pubblicazione ([D321](decisions/DECISION_REGISTER.md)), un task per PR. Comprende i rilievi dell'[audit Production](audits/2026-11-06-audit-ui-ux-production.md). |
 | [2.1 Comunicazioni](#versione-2-1) | Da completare | Prossima versione: pagina Notifiche, avvisi operativi più utili, pagina pubblica di stato e pagine pubbliche più leggere. |
 | [2.2-2.5](#s39) | Da completare | Si dettagliano quando diventano la prossima versione. |
-| [2.6 Ordini con le API moderne](#versione-2-6) | Da completare | Sostituzione di Trading `GetOrders` e dati economici dell'ordine da Fulfillment, in Production prima dello spegnimento del 2027-06-30 ([D333](decisions/DECISION_REGISTER.md)). |
+| [2.6 Ordini con le API moderne](#versione-2-6) | Da completare | Sostituzione di Trading `GetOrders` con Fulfillment, senza scope nuovi ([D334](decisions/DECISION_REGISTER.md)), e dati economici dell'ordine dalla stessa API, in Production prima dello spegnimento del 2027-06-30 ([D333](decisions/DECISION_REGISTER.md)). |
 
 Stati: `Da completare`, `In corso`, `Bloccato`, `Completato`. Ogni task ha codice, stato, prerequisiti, contratto e criterio di completamento: `RE-yy` per i riconoscimenti esterni, `2.x-yy` per le versioni. La chiusura richiede comportamento, prove pertinenti e documenti coerenti; le prove restano in PR, CI e ricevute. La PR che avvia, blocca o chiude un task ne aggiorna lo stato nello stesso diff. Un task completato conserva intestazione, stato e contratto, poi una frase sulla capacità consegnata con le decisioni che la motivano e gli eventuali limiti residui. I codici restano in questo file, mai nel codice o nel runtime.
 
@@ -62,11 +62,9 @@ Far verificare a Google il brand della schermata di consenso del client OAuth Pr
 <a id="re-05"></a>
 #### RE-05 · Lacune delle API eBay
 
-**Stato:** In corso · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
+**Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11)
 
-Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) analizza cinque lacune, con le bozze in inglese. L'owner ha inviato il 2026-11-07 un solo [ticket](audits/2026-11-07-lacune-api-ebay/README.md#ticket-inviato), limitato a ciò che la dismissione di `GetOrders` toglie senza sostituta: fatture combinate senza checkout eBay, identità immutabile dell'acquirente e scope delle API sostitute. Le altre lacune restano note interne. Misura e rilettura settimanale degli username per le cancellazioni sono fatte ([D319](decisions/DECISION_REGISTER.md)); la risposta orienta [2.6-01](#2-6-01).
-
-**Criterio di completamento:** risposta di eBay registrata nel dossier e conseguenze portate nei documenti competenti.
+Il [dossier](audits/2026-11-07-lacune-api-ebay/README.md) registra il ticket sulla dismissione di `GetOrders` e la [risposta](audits/2026-11-07-lacune-api-ebay/README.md#risposta-di-ebay) del 2026-11-11: niente sostituta per le fatture combinate offline pagate, identificativo immutabile dell'acquirente soltanto nella Order API GraphQL, nuovo consenso dei negozi per ogni scope aggiunto. L'owner sceglie la sola Fulfillment ([D334](decisions/DECISION_REGISTER.md)); le altre lacune restano note interne.
 
 <a id="correzioni-2-0"></a>
 ## 2.0.x · Correzioni e miglioramenti
@@ -141,7 +139,7 @@ L'Application Growth Check serve soltanto con il carico reale dei negozi Product
 
 **Stato:** Completato · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [retention](engineering/DATA_RETENTION.md#cancellazione-ebay)
 
-Ogni ordine registra l'ultima lettura dello username dell'acquirente e quelli senza token eIAS, l'89% in Production il 2026-11-07, lo rileggono ogni settimana da Fulfillment, fino a 50 per chiamata del budget della lettura periodica ([D319](decisions/DECISION_REGISTER.md)). Resta scoperto un cambio di username a ridosso della cancellazione, chiesto a eBay in [RE-05](#re-05).
+Ogni ordine registra l'ultima lettura dello username dell'acquirente e quelli senza token eIAS, l'89% in Production il 2026-11-07, lo rileggono ogni settimana da Fulfillment, fino a 50 per chiamata del budget della lettura periodica ([D319](decisions/DECISION_REGISTER.md)). Resta scoperto un cambio di username a ridosso della cancellazione: eBay offre un identificativo immutabile soltanto con un nuovo consenso dei negozi, che l'owner non chiede ([D334](decisions/DECISION_REGISTER.md)).
 
 <a id="2-0-12"></a>
 #### 2.0-12 · Coda della pubblicazione
@@ -221,16 +219,16 @@ Ridurre il JavaScript scaricato ed eseguito dalle pagine del sito, Guide e pagin
 <a id="versione-2-6"></a>
 ## 2.6 · Ordini con le API moderne
 
-**Prerequisiti:** risposta di eBay alle richieste di [RE-05](#re-05) e scelte dell'owner su scope e consenso. **Attività:** sostituire Trading `GetOrders` con le API indicate da eBay e leggere dalle stesse API i dati economici dell'ordine ([D333](decisions/DECISION_REGISTER.md)). Va in Production entro giugno 2027, prima dello spegnimento del 2027-06-30, lasciando ai negozi il tempo del nuovo consenso.
+**Prerequisiti:** nessuno, dopo la risposta di eBay a [RE-05](#re-05). **Attività:** sostituire Trading `GetOrders` con Fulfillment, senza scope nuovi ([D334](decisions/DECISION_REGISTER.md)), e leggere dalla stessa API i dati economici dell'ordine ([D333](decisions/DECISION_REGISTER.md)). Va in Production entro giugno 2027, prima dello spegnimento del 2027-06-30.
 
 <a id="2-6-01"></a>
 #### 2.6-01 · Dismissione di Trading `GetOrders`
 
-**Stato:** Da completare · **Prerequisiti:** scelte dell'owner su scope e consenso · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11) · [retention](engineering/DATA_RETENTION.md#cancellazione-ebay)
+**Stato:** Da completare · **Prerequisiti:** nessuno · **Contratto:** [§9](product/ORDERS_AND_SYNC.md#s09) · [§11](product/ORDERS_AND_SYNC.md#s11) · [retention](engineering/DATA_RETENTION.md#cancellazione-ebay)
 
-eBay ha deprecato `GetOrders` il 2026-11-06 e lo spegne il 2027-06-30 ([stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status)). FiscalBay lo usa per il fallback fiscale, gli acquisti prima del checkout e il loro consolidamento, le fatture combinate senza checkout eBay e il token eIAS degli acquirenti. Le sostitute indicate da eBay sono Fulfillment per gli ordini pagati e la Order API GraphQL con impegni e `PurchaseQuote` per il resto: chiedono scope nuovi e un nuovo consenso dei negozi ([D216](decisions/DECISION_REGISTER.md)) e non espongono CF, indirizzo di fatturazione né token eIAS ([lacune](audits/2026-11-07-lacune-api-ebay/README.md#2-dati-fiscali-dellacquirente-nelle-letture-di-elenco-e-nelle-api-moderne)). Prima di progettare decide l'owner quali funzioni visibili si riducono e quali scope chiedere.
+eBay ha deprecato `GetOrders` il 2026-11-06 e lo spegne il 2027-06-30 ([stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status)). FiscalBay lo usa per il fallback fiscale, gli acquisti prima del checkout e il loro consolidamento, le fatture combinate senza checkout eBay e il token eIAS degli acquirenti. Dopo la [risposta di eBay](audits/2026-11-07-lacune-api-ebay/README.md#risposta-di-ebay) l'owner ha scelto la sola Fulfillment, con gli scope attuali ([D334](decisions/DECISION_REGISTER.md)): il CF resta da `getOrder`, gli ordini definitivi entrano senza provvisori da consolidare, le fatture combinate offline non si leggono più, cancellazioni e acquirenti ricorrenti si abbinano per username con la rilettura di [D319](decisions/DECISION_REGISTER.md).
 
-**Criterio di completamento:** nessuna chiamata `GetOrders` prima del 2027-06-30, funzioni ridotte approvate dall'owner, documenti di ordini e conservazione allineati.
+**Criterio di completamento:** nessuna chiamata `GetOrders` prima del 2027-06-30, documenti di ordini e conservazione allineati a D334.
 
 <a id="2-6-02"></a>
 #### 2.6-02 · Dati economici dell'ordine
@@ -253,7 +251,7 @@ Elenco delle funzioni previste per la 2.x, approvato dall'owner il 2026-10-31 e 
 | 2.3 | Dati | Analisi Pro su ordini, presenza del CF, andamento, negozi e marketplace; metriche di prodotto per l'owner, con l'aggiornamento della Privacy |
 | 2.4 | Crescita | Coupon; invito di un collega con premio e regole antiabuso decisi sui numeri delle metriche; prova sociale reale con numeri aggregati e testimonianze autorizzate; chat di supporto Tawk.to con una pagina Supporto migliorata, dopo l'inventario dei cookie e l'aggiornamento della Privacy, unica eccezione alle integrazioni con altri servizi |
 | 2.5 | Team | Collaboratori nello stesso spazio, con un ruolo in sola lettura per il commercialista |
-| 2.6 | Ordini con le API moderne | Sostituzione di Trading `GetOrders` prima dello spegnimento del 2027-06-30; dati economici dell'ordine già forniti da Fulfillment (commissioni, netto, IVA riscossa da eBay, rimborsi, spedizione), senza la Finances API |
+| 2.6 | Ordini con le API moderne | Sostituzione di Trading `GetOrders` con la sola Fulfillment, senza nuovo consenso dei negozi, prima dello spegnimento del 2027-06-30; dati economici dell'ordine già forniti da Fulfillment (commissioni, netto, IVA riscossa da eBay, rimborsi, spedizione), senza la Finances API |
 | 3.x | App native | iOS/Android nativi con React Native/Expo e riuso ragionato; Apple login da riesaminare, offline solo eventuale |
 
 L'accessibilità entra nelle correzioni `2.2.x`, dopo i cambi della pagina Ordini: prove manuali con VoiceOver e NVDA sui percorsi principali e correzioni conseguenti, senza dichiarazione di accessibilità pubblicata. Restano fuori dalla 2.x le altre integrazioni con altri servizi e l'accesso con codice via email o con conferma Telegram. Le altre dismissioni delle API Trading annunciate da eBay si coprono con le sostitute moderne in una versione di correzione appena eBay fissa la data; `GetOrders`, che chiede scope nuovi e un nuovo consenso dei negozi, ha la [2.6](#versione-2-6). Se una funzione visibile si riduce o sparisce decide l'owner prima della pubblicazione.
