@@ -15,6 +15,7 @@
  * `--collect-references <cartella>` riunisce in `.mutation-references/` le parti riuscite di ogni
  * modulo di una run su `develop`; con `MUTATION_REFERENCES` la matrice della PR prova in un solo
  * job il modulo che ha un riferimento completo e pochi mutanti da ripetere.
+ * `--collect-timings <cartella>` aggiorna le durate misurate delle parti dai `timing.json`.
  */
 import { execFileSync, spawn } from "node:child_process";
 import {
@@ -283,7 +284,10 @@ export function shardPlan(mutants, lastLine, preparationMs = 0) {
   return best.plan;
 }
 
-/** Intervalli delle parti del modulo, secondo `shardPlan`. */
+/**
+ * Mutanti con il peso misurato nelle prove precedenti dello stesso sorgente; senza misure
+ * valide restano senza peso.
+ */
 export function timedMutants(mutants, history, digest) {
   if (
     !Array.isArray(history) ||
@@ -431,6 +435,7 @@ function timingHistory() {
   }
 }
 
+/** Intervalli delle parti del modulo, secondo `shardPlan`. */
 export async function moduleShards(file) {
   const history = timingHistory()[file];
   const mutants = timedMutants(await mutantLines(file), history, sourceDigest(file));

@@ -25,6 +25,7 @@ import {
 } from "./app-links";
 import { localizedPath } from "./i18n";
 import { sha256Hex } from "./sealed.server";
+import { maxPasskeyName } from "./limits";
 import type { RequestLimit } from "./request-limits";
 import { limitedHeaders, requestLimitWait } from "./request-limits.server";
 
@@ -177,7 +178,7 @@ const passkeyBody = z.union([
   z.object({
     name: z
       .string()
-      .refine((name) => name.trim() !== "" && name.length <= 80)
+      .refine((name) => name.trim() !== "" && name.length <= maxPasskeyName)
       .optional(),
   }),
   z.unknown().refine((body) => !z.looseObject({}).safeParse(body).success),

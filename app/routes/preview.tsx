@@ -65,10 +65,10 @@ export async function action({ request }: Route.ActionArgs) {
   const chosen = form.get("language");
   if (chosen === "it" || chosen === "en") {
     // `returnTo` porta anche i filtri: si traduce il solo percorso e la query resta.
-    const target = new URL(String(form.get("returnTo") ?? ""), request.url);
-    const bare = canonicalPath(target.pathname);
+    const target = URL.parse(String(form.get("returnTo") ?? ""), request.url);
+    const bare = target ? canonicalPath(target.pathname) : "";
     throw redirect(
-      bare.startsWith(`${previewBase}/`)
+      target && bare.startsWith(`${previewBase}/`)
         ? `${localizedPath(chosen, bare)}${target.search}`
         : localizedPath(chosen, previewSettingsPath),
       303,

@@ -931,7 +931,6 @@ export const en: AppCopy = {
       whatsNew: "What’s new",
       formErrors: "Fix the highlighted fields.",
       supportEmail: "You can also write to",
-      supportWrite: "Write to",
     },
   },
   profile: {

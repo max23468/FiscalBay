@@ -527,7 +527,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      # L'applicazione non viene ricompilata; Wrangler distribuisce la build verificata.
+      # L'applicazione non viene ricompilata; `cf` distribuisce la build verificata.
       - name: Set up Node and dependencies
         uses: ./.github/actions/setup
 

@@ -36,7 +36,7 @@ const noStore = { "cache-control": "no-store" };
  * Radice pubblica. Con la sessione porta agli Ordini, salvo la scelta «Visita fiscalbay.it»:
  * il parametro diventa un cookie di sessione del browser e l'indirizzo torna pulito, così la
  * pagina resta una sola e non c'è un ciclo fra sito e app. La risposta dipende dalla sessione:
- * nessuna cache la conserva.
+ * soltanto la copia per chi non ha cookie passa dalla cache breve di `page-cache.server.ts`.
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);

@@ -194,7 +194,7 @@ Nella console ogni comunicazione di servizio dichiara se è pubblica o riservata
 
 **Stato:** Da completare · **Prerequisiti:** 2.1-02, 2.1-03 · **Contratto:** [§20](product/EXPERIENCE.md#s20) · [§23](product/EXPERIENCE.md#s23)
 
-Pagina del sito su `/stato` e `/en/stato`, collegata dal piè di pagina: una riga per servizio con stato e ora dell'ultimo controllo, più le comunicazioni pubbliche attive. Niente esito complessivo, storico o percentuali di disponibilità, e nessuna promessa di SLA. Un controllo non recente mostra «Stato non verificato» e mai l'ultimo esito positivo. La pagina risponde `noindex, follow` e resta fuori dalla sitemap: un servizio non disponibile non deve comparire nei risultati di ricerca di FiscalBay.
+Pagina del sito su `/stato` e `/en/status`, collegata dal piè di pagina: una riga per servizio con stato e ora dell'ultimo controllo, più le comunicazioni pubbliche attive. Niente esito complessivo, storico o percentuali di disponibilità, e nessuna promessa di SLA. Un controllo non recente mostra «Stato non verificato» e mai l'ultimo esito positivo. La pagina risponde `noindex, follow` e resta fuori dalla sitemap: un servizio non disponibile non deve comparire nei risultati di ricerca di FiscalBay.
 
 **Criterio di completamento:** la pagina funziona senza sessione e resta raggiungibile con il servizio sospeso o con D1 non disponibile, dove mostra «Stato non verificato»; il divieto di semaforo globale del [§20](product/EXPERIENCE.md#s20) resta rispettato.
 

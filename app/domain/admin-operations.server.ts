@@ -376,6 +376,13 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
     taxGaps,
     unallocated,
   } = await readSignals(db, now, at);
+  // Letture indipendenti: insieme, il compito e la panoramica non le aspettano una dopo l'altra.
+  const [quotas, bulks, tasks, receiptGroups] = await Promise.all([
+    quotaAnomalies(db, now),
+    bulkDataAnomalies(db, now),
+    taskStates(db, now),
+    receiptStates(db, now),
+  ]);
   const anomalies: Anomaly[] = [];
 
   if (unallocated.length > 0)
@@ -392,7 +399,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       })),
     });
 
-  for (const quota of await quotaAnomalies(db, now))
+  for (const quota of quotas)
     if (!quota.resolvedAt)
       anomalies.push({
         key: quota.key,
@@ -403,7 +410,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         subjects: [{ id: quota.subject, label: quota.subject, href: "quote" }],
       });
 
-  for (const bulk of await bulkDataAnomalies(db, now))
+  for (const bulk of bulks)
     anomalies.push({
       key: bulk.key,
       kind: "ebay_bulk_data",
@@ -416,7 +423,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
   anomalies.push(...storeReadAnomalies({ failing, activeStores, details, taxGaps }, at));
 
   // Più lavori fermi insieme hanno di solito una sola causa, come il cron che non parte.
-  const stalled = (await taskStates(db, now)).filter((task) => task.stalled);
+  const stalled = tasks.filter((task) => task.stalled);
   if (stalled.length > 0)
     anomalies.push({
       key: "task_stalled",
@@ -429,7 +436,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       subjects: stalled.map((task) => ({ id: task.task, label: task.task, href: "lavori" })),
     });
 
-  const delayed = (await receiptStates(db, now)).filter((receipts) => receipts.stalled > 0);
+  const delayed = receiptGroups.filter((receipts) => receipts.stalled > 0);
   if (delayed.length > 0)
     anomalies.push({
       key: "receipts_stalled",

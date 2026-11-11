@@ -1,5 +1,6 @@
 import { derivedKey, hex } from "../sealed.server";
 import { dayMilliseconds } from "../time";
+import type { EbayEnvironment } from "../view-models";
 import { entitlementInForce, freeCycleStatement } from "./grants.server";
 
 /**
@@ -20,6 +21,13 @@ const markPurpose = "store-identity-mark";
 /** Chiave HMAC dei segni, derivata dal segreto del server con uno scopo dedicato. */
 const markKey = (secret: string) =>
   derivedKey(secret, markPurpose, { name: "HMAC", hash: "SHA-256", length: 256 }, ["sign"]);
+
+/**
+ * Identità del negozio come la conserva `ebay_stores.ebay_user_id`: l'identificativo eBay in
+ * Production, l'ambiente con l'identificativo per la Sandbox.
+ */
+export const storeIdentity = (environment: EbayEnvironment, userId: string) =>
+  environment === "production" ? userId : JSON.stringify([environment, userId]);
 
 /**
  * Impronta dell'identità eBay di un negozio, come la conserva `ebay_stores.ebay_user_id`: HMAC

@@ -45,7 +45,7 @@ export function LoadingGrid() {
                 <Skeleton className="h-4 w-1/2" />
               </div>
             </div>
-            <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14rem]">
+            <div className="grid gap-3 border-t pt-3 sm:grid-cols-[minmax(0,1fr)_14.5rem]">
               <div className="grid content-start gap-2">
                 <Skeleton className="h-3 w-20" />
                 <Skeleton className="h-4 w-36" />

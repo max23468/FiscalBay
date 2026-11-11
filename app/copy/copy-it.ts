@@ -955,7 +955,6 @@ export const it = {
       whatsNew: "Novità",
       formErrors: "Correggi i campi evidenziati.",
       supportEmail: "Puoi scrivere anche a",
-      supportWrite: "Scrivi a",
     },
   },
   profile: {

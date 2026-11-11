@@ -9,6 +9,8 @@ import {
 import { buyerTaxKey, taxIdentifierType, taxQuality, taxTypeNames } from "../tax-quality";
 import {
   type FiscalSituation,
+  type PaymentStatus,
+  type ShippingStatus,
   type SuggestionView,
   type TaxQuality,
   type EbayEnvironment,
@@ -18,8 +20,8 @@ import { consultableStore, orderLineageSql, storeLabelSql } from "./store-state.
 import { orderSuggestions } from "./order-suggestions.server";
 import { sqlList } from "./sql.server";
 
-export type PaymentState = "paid" | "unpaid" | "partially_refunded" | "refunded" | "unknown";
-export type ShippingState = "to_ship" | "in_progress" | "shipped" | "cancelled" | "unknown";
+export type PaymentState = PaymentStatus | "unknown";
+export type ShippingState = ShippingStatus | "unknown";
 
 const paymentStates: Record<string, PaymentState> = {
   PAID: "paid",

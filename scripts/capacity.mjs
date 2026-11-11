@@ -696,7 +696,9 @@ async function main() {
   });
   const [step] = positionals;
   if (step === "account") {
-    console.log(JSON.stringify(await readAccount(Number(values.days)), null, 2));
+    const days = Number(values.days);
+    if (!Number.isInteger(days) || days < 1) throw new Error("--days intero positivo");
+    console.log(JSON.stringify(await readAccount(days), null, 2));
     return;
   }
   if (step === "remote-clean") {

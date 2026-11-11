@@ -298,8 +298,6 @@ const it = {
     customers: "Clienti Stripe",
     erased: (source: string, when: string) =>
       `Dati finanziari cancellati il ${when} (${source === "support" ? "assistenza" : "webhook"})`,
-    cycle: "Ciclo Free in corso",
-    cycleValue: (used: number, quota: number, end: string) => `${used} su ${quota}, fino al ${end}`,
     freeStore: "Negozio attivo del Free",
     extensions: "Estensioni dello storico",
     months: (months: number) => `${months} mesi`,
@@ -638,7 +636,6 @@ const it = {
     admit: "Ammetti",
   },
   notices: {
-    title: "Comunicazioni",
     new: "Nuova comunicazione",
     tone: { info: "Informazione", warning: "Avviso" },
     toneLabel: "Tipo",
@@ -1067,8 +1064,6 @@ const en: AdminCopy = {
     customers: "Stripe customers",
     erased: (source: string, when: string) =>
       `Financial data deleted on ${when} (${source === "support" ? "support" : "webhook"})`,
-    cycle: "Current Free cycle",
-    cycleValue: (used: number, quota: number, end: string) => `${used} of ${quota}, until ${end}`,
     freeStore: "Active Free store",
     extensions: "History extensions",
     months: (months: number) => `${months} months`,
@@ -1403,7 +1398,6 @@ const en: AdminCopy = {
     admit: "Admit",
   },
   notices: {
-    title: "Announcements",
     new: "New announcement",
     tone: { info: "Information", warning: "Warning" },
     toneLabel: "Type",

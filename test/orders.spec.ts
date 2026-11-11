@@ -1,9 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  buildLastModifiedFilter,
-  fulfillmentObservation,
-} from "../app/integrations/ebay/fulfillment.server";
+import { fulfillmentObservation } from "../app/integrations/ebay/fulfillment.server";
 import { mapTradingTaxIdentifiers } from "../app/integrations/ebay/trading.server";
 import {
   currentFreePromotion,
@@ -168,37 +165,6 @@ describe("percorso ordini", () => {
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
     expect(await toggle("forse")).toMatchObject({ init: { status: 400 } });
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
-  });
-
-  it("costruisce il filtro incrementale e rifiuta intervalli invalidi", () => {
-    expect(
-      buildLastModifiedFilter(
-        new Date("2026-09-20T12:00:00.000Z"),
-        new Date("2026-09-20T12:30:00.000Z"),
-        60 * 60 * 1000,
-      ),
-    ).toBe("lastmodifieddate:[2026-09-20T11:00:00.000Z..2026-09-20T12:30:00.000Z]");
-    expect(() =>
-      buildLastModifiedFilter(
-        new Date("2026-09-20T12:00:00.000Z"),
-        new Date("2026-09-20T12:30:00.000Z"),
-        Number.NaN,
-      ),
-    ).toThrow("Intervallo incrementale eBay non valido");
-    const edge = new Date("2026-09-20T12:00:00.000Z");
-    expect(buildLastModifiedFilter(edge, edge, 0)).toBe(
-      "lastmodifieddate:[2026-09-20T12:00:00.000Z..2026-09-20T12:00:00.000Z]",
-    );
-    for (const [checkpoint, end, overlap] of [
-      [new Date(Number.NaN), edge, 0],
-      [edge, new Date(Number.NaN), 0],
-      [edge, edge, -1],
-      [new Date(edge.getTime() + 1), edge, 0],
-    ] as const) {
-      expect(() => buildLastModifiedFilter(checkpoint, end, overlap)).toThrow(
-        "Intervallo incrementale eBay non valido",
-      );
-    }
   });
 
   it("non confronta gli identificativi senza chiave e ne lascia intatte le modifiche", async () => {

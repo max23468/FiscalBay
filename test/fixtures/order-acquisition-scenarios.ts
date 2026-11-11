@@ -6,7 +6,13 @@ import { acquireOrders } from "../../app/domain/order-acquisition.server";
 
 import { consumeStoreSync, dispatchStoreSyncs } from "../../app/domain/order-sync.server";
 
-import { insertCredentials, now, resetDatabase, seed } from "./database-fixtures";
+import {
+  insertCredentials,
+  now,
+  resetDatabase,
+  resetOrderFixtures,
+  seed,
+} from "./database-fixtures";
 
 import { fakeQueue, queueMessage, queued } from "./queue-fixture";
 
@@ -203,7 +209,7 @@ export function setupScenarios() {
   afterEach(() => vi.useRealTimers());
   beforeEach(async () => {
     await seed();
-    await env.DB.prepare("DELETE FROM orders").run();
+    await resetOrderFixtures();
     await insertCredentials({ accessExpiresAt: now, grantedAt }).run();
     // Ogni utente ha una sessione aperta: gli spazi sono seguiti e leggono con la cadenza del piano.
     await env.DB.prepare(

@@ -1111,10 +1111,6 @@ test.describe("abbonamento nel piano", () => {
     });
 });
 
-/**
- * Notifiche dell'area reale pronte all'uso: rete ferma e pagina idratata, segnalata dal consenso
- * email che resta disattivato fino ad allora.
- */
 /** Avviso delle Impostazioni per una consegna Telegram ferma. */
 function deliveryAlert(page: Page, failure: "blocked" | "unreachable", it: boolean) {
   const title = {
@@ -1124,6 +1120,10 @@ function deliveryAlert(page: Page, failure: "blocked" | "unreachable", it: boole
   return page.getByRole("status").filter({ hasText: title });
 }
 
+/**
+ * Notifiche dell'area reale pronte all'uso: rete ferma e pagina idratata, segnalata dal consenso
+ * email che resta disattivato fino ad allora.
+ */
 async function openNotifications(page: Page, prefix: string, it: boolean) {
   await page.goto(pagePath(prefix, "/app/impostazioni/notifiche"));
   await networkIdle(page);

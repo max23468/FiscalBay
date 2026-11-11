@@ -46,7 +46,8 @@ export function faqItems(
 /**
  * Dati comuni delle pagine pubbliche: lingua, origine per canonical e Open Graph e sessione,
  * che porta `Apri l'app` nella barra al posto di `Accedi`. La pagina dipende quindi dalla
- * sessione e nessuna cache la conserva: il Worker risponde `no-store`. Con Auth o database non
+ * sessione e il Worker risponde `no-store`: soltanto Home e Prezzi, per chi non ha cookie,
+ * passano dalla cache breve di `page-cache.server.ts`. Con Auth o database non
  * disponibili la pagina resta consultabile come per chi non ha una sessione: non contiene dati
  * dell'account e l'app, raggiunta da `Accedi`, dice che non è disponibile.
  */

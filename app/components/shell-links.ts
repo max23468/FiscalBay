@@ -95,7 +95,7 @@ export function shellMenu(
       ? [
           [
             {
-              href: "/admin",
+              href: localizedPath(links.language, "/admin"),
               label: t.shell.console,
               Icon: LayoutDashboard,
               reloadDocument: true,

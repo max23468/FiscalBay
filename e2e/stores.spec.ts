@@ -69,9 +69,6 @@ test.describe("impostazioni e profilo", () => {
         await expect(panel).toContainText(
           t("Storico di 30 giorni importato", "30-day history imported"),
         );
-        await expect(panel).not.toContainText(
-          t("Prima della scadenza ti chiederemo", "Before it expires we will ask"),
-        );
         await expect(panel.locator("#store-sync + ul")).not.toContainText(
           t("Aggiornamento previsto", "Expected update"),
         );

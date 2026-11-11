@@ -28,7 +28,6 @@ const concession = z.object({
   reason: z.string().trim().min(1).max(500),
 });
 
-/** Giorni concessi in una volta: oltre l'anno serve una valutazione separata. */
 const renewing = `s.status IN (${sqlList(renewingSubscriptionStatuses)})`;
 
 export type PremiumGrant =

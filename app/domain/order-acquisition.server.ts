@@ -326,7 +326,7 @@ function recentPass(ctx: Context, state: SyncRow): Pass {
     from,
     to: end,
     forward: true,
-    filter: (start, until) => buildLastModifiedFilter(new Date(start), new Date(until), 0),
+    filter: (start, until) => buildLastModifiedFilter(new Date(start), new Date(until)),
     key: (order) => order.lastModifiedDate,
     // Il limite non torna indietro se un'esecuzione più lenta conclude una passata precedente.
     progress: (reached) =>

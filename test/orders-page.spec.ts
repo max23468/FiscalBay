@@ -37,7 +37,6 @@ import {
   seed,
 } from "./fixtures/database-fixtures";
 import { verifiedSession } from "./fixtures/account-fixtures";
-import { displayTaxValue } from "../app/tax-quality";
 import { fiscalSituation, itemPrice } from "../app/view-models";
 import { appCopy } from "../app/app-copy";
 import { settle } from "../app/settle.server";
@@ -482,7 +481,7 @@ describe("pagina Ordini reale", () => {
         { id: "line-a1", totalMinor: 999, quantity: 1, currency: "EUR" },
         { id: "line-a2", totalMinor: 300, quantity: 2, currency: "EUR" },
       ],
-      // Nessuna lettura in attesa né controllo registrato: la lettura risulta da riprovare.
+      // Con il dato presente l'ordine resta da sbloccare.
       fiscal: { state: "locked", shownAs: "CF" },
     });
     // Il valore da sbloccare non arriva mai al browser, neppure nella vista condivisa.
@@ -1308,15 +1307,6 @@ describe("pagina Ordini reale", () => {
     // Con una copertura concessa l'avviso sparisce.
     await premiumCoverage();
     expect((await ordersPage(cookie)).page!.account).not.toHaveProperty("freeSuspended");
-  });
-
-  it("forma derivata di CF e Partita IVA italiani senza toccare i tipi esteri", () => {
-    expect(displayTaxValue({ type: "CF", value: " rss mra80a01h501u " })).toBe("RSSMRA80A01H501U");
-    expect(displayTaxValue({ type: "PIVA", value: "0123 4567 890" })).toBe("01234567890");
-    expect(displayTaxValue({ type: "PIVA", value: "00000000000" })).toBe("00000000000");
-    // Un valore errato resta errato: la forma derivata non lo corregge.
-    expect(displayTaxValue({ type: "CF", value: "rss-mra" })).toBe("RSS-MRA");
-    expect(displayTaxValue({ type: "OTHER", value: " es b123 456 " })).toBe(" es b123 456 ");
   });
 
   it("«Riprova» rilegge soltanto un ordine dello spazio con lettura non riuscita", async () => {

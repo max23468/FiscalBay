@@ -690,23 +690,19 @@ describe("contratto Fulfillment senza persistenza", () => {
       await expect(page(invalid)).rejects.toMatchObject({ failure: "invalid_response" });
   });
 
-  it("costruisce filtri UTC con overlap e rifiuta intervalli invalidi", () => {
+  it("costruisce filtri UTC e rifiuta intervalli invalidi", () => {
     const date = new Date(created);
     expect(buildCreationDateFilter("inizio", "fine")).toBe("creationdate:[inizio..fine]");
-    expect(buildLastModifiedFilter(date, date, 1000)).toBe(
+    expect(buildLastModifiedFilter(new Date(date.getTime() - 1000), date)).toBe(
       "lastmodifieddate:[2025-12-31T23:59:59.000Z..2026-01-01T00:00:00.000Z]",
     );
-    expect(buildLastModifiedFilter(date, date, 0)).toBe(
-      `lastmodifieddate:[${created}..${created}]`,
-    );
-    for (const [start, end, overlap] of [
-      [new Date(NaN), date, 0],
-      [date, new Date(NaN), 0],
-      [date, date, NaN],
-      [date, date, -1],
-      [date, new Date(0), 0],
+    expect(buildLastModifiedFilter(date, date)).toBe(`lastmodifieddate:[${created}..${created}]`);
+    for (const [start, end] of [
+      [new Date(NaN), date],
+      [date, new Date(NaN)],
+      [date, new Date(0)],
     ] as const)
-      expect(() => buildLastModifiedFilter(start, end, overlap)).toThrow(
+      expect(() => buildLastModifiedFilter(start, end)).toThrow(
         "Intervallo incrementale eBay non valido",
       );
   });

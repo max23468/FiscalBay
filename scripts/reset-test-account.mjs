@@ -6,7 +6,9 @@
  * a ogni esecuzione. L'indirizzo `example.invalid` non riceve email e il recupero password
  * non parte mai da qui.
  *
- * Uso: E2E_ACCOUNT_PASSWORD=... node scripts/reset-test-account.mjs
+ * Uso: E2E_ACCOUNT_PASSWORD=... node scripts/reset-test-account.mjs [--local [--sessions]]
+ * `--local` lavora sulla D1 locale; `--sessions`, soltanto in locale, aggiunge le sessioni
+ * sintetiche delle prove browser.
  */
 import { fileURLToPath } from "node:url";
 

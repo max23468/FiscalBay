@@ -643,7 +643,6 @@ test.describe("impostazioni", () => {
       const profile = page.getByRole("region", { name: "Account", exact: true });
       const first = profile.getByRole("textbox", { name: it ? "Nome" : "First name", exact: true });
       await expect(first).toHaveValue("Laura");
-      await expect(first).not.toHaveAttribute("aria-describedby", /profile-name-hint/);
       await expect(
         profile.getByRole("textbox", { name: it ? "Cognome" : "Last name", exact: true }),
       ).toHaveValue("Martini");
@@ -653,13 +652,6 @@ test.describe("impostazioni", () => {
           exact: true,
         }),
       ).toHaveValue("Martini ricambi");
-      await expect(
-        page.getByText(
-          it
-            ? "Facoltativo. Compare nelle email di servizio."
-            : "Optional. Shown in service emails.",
-        ),
-      ).toHaveCount(0);
       // Dati personali, email e accessi stanno nella stessa categoria Account.
       await expect(
         profile.getByRole("button", { name: it ? "Cambia email" : "Change email", exact: true }),

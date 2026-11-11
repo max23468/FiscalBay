@@ -1,5 +1,5 @@
 import { KeyRound } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 
 import { useFetcherResult } from "~/components/action";
@@ -53,13 +53,22 @@ export function ConfirmIdentity({
   const fetcher = useFetcher<ConfirmResult>();
   const [passkeyError, setPasskeyError] = useState<PasskeyFailure | null>(null);
   const [pending, setPending] = useState(false);
+  // Metodo dell'ultimo invio: `pending` torna falso prima che arrivi l'esito.
+  const submitted = useRef<"password" | "passkey" | null>(null);
   const id = useId();
   const result = fetcher.state === "idle" ? fetcher.data : undefined;
   useFetcherResult(fetcher, (confirmed) => {
     if (confirmed.ok) onConfirmed();
     // Una passkey di un altro account ha aperto la sua sessione: la pagina si rilegge.
-    else if (fetcher.formData === undefined && pending) window.location.reload();
+    else if (submitted.current === "passkey") window.location.reload();
   });
+  const submit = (method: "password" | "passkey", fields: Record<string, string>) => {
+    submitted.current = method;
+    void fetcher.submit(
+      { intent: "conferma-accesso", metodo: method, ...fields },
+      { method: "post", action: actionPath },
+    );
+  };
   const password = methods.accounts.password && !passkeyOnly;
   const passkey = methods.passkeys.length > 0;
   const confirmWithPasskey = async () => {
@@ -67,21 +76,12 @@ export function ConfirmIdentity({
     setPending(true);
     try {
       // Nell'anteprima la passkey non si apre: la conferma va subito alla route simulata.
-      if (preview) {
-        void fetcher.submit(
-          { intent: "conferma-accesso", metodo: "passkey" },
-          { method: "post", action: actionPath },
-        );
-        return;
-      }
+      if (preview) return submit("passkey", {});
       const authClient = await loadPasskeyClient();
       if (!authClient) return setPasskeyError("unsupported");
       const signed = await authClient.signIn.passkey();
       if (signed.error) return setPasskeyError(passkeyFailure(signed.error));
-      void fetcher.submit(
-        { intent: "conferma-accesso", metodo: "passkey", precedente: currentSession ?? "" },
-        { method: "post", action: actionPath },
-      );
+      submit("passkey", { precedente: currentSession ?? "" });
     } catch (failure) {
       setPasskeyError(passkeyFailure(failure));
     } finally {
@@ -107,10 +107,7 @@ export function ConfirmIdentity({
               event.preventDefault();
               event.stopPropagation();
               const value = String(new FormData(event.currentTarget).get("password") ?? "");
-              void fetcher.submit(
-                { intent: "conferma-accesso", metodo: "password", password: value },
-                { method: "post", action: actionPath },
-              );
+              submit("password", { password: value });
             }}
           >
             <FieldLabel htmlFor={`${id}-password`}>{t.password}</FieldLabel>
