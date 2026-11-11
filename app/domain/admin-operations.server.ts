@@ -364,20 +364,26 @@ function credentialAnomalies(credentials: Signals["credentials"]): Anomaly[] {
 /** Anomalie aperte, dalla più grave e poi dalla più vecchia. */
 export async function listAnomalies(db: D1Database, now = new Date()): Promise<Anomaly[]> {
   const at = now.toISOString();
-  const {
-    failing,
-    details,
-    telegram,
-    limits,
-    activeStores,
-    switchedOff,
-    unrecorded,
-    credentials,
-    taxGaps,
-    unallocated,
-  } = await readSignals(db, now, at);
   // Letture indipendenti: insieme, il compito e la panoramica non le aspettano una dopo l'altra.
-  const [quotas, bulks, tasks, receiptGroups] = await Promise.all([
+  const [
+    {
+      failing,
+      details,
+      telegram,
+      limits,
+      activeStores,
+      switchedOff,
+      unrecorded,
+      credentials,
+      taxGaps,
+      unallocated,
+    },
+    quotas,
+    bulks,
+    tasks,
+    receiptGroups,
+  ] = await Promise.all([
+    readSignals(db, now, at),
     quotaAnomalies(db, now),
     bulkDataAnomalies(db, now),
     taskStates(db, now),
