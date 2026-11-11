@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 
 import { canonicalPath } from "./i18n";
 import { pricingPath } from "./app-links";
-import { arrivalSource } from "./signup-source";
+import { arrivalSource } from "./arrival-source.server";
 
 /** Pagine pubbliche servite dalla cache breve: le più visitate, che leggono il listino. */
 const cachedPages = new Set(["/", pricingPath]);

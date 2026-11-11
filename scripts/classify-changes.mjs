@@ -364,7 +364,10 @@ export const moduleAreas = [
     ["public"],
   ],
   [/^app\/components\/language-switch\.tsx$/u, ["auth", "public"]],
-  [/^app\/(?:signup-source\.ts|domain\/signup-sources\.server\.ts)$/u, ["auth", "public"]],
+  [
+    /^app\/(?:signup-source\.ts|arrival-source\.server\.ts|domain\/signup-sources\.server\.ts)$/u,
+    ["auth", "public"],
+  ],
   [
     /^app\/(?:domain\/(?:scheduled-work|sql|page-timing|webhook-receipts)\.server\.ts|domain\/work-timing\.ts|integrations\/http\.server\.ts|log-records\.ts|observability\.server\.ts|page-timing(?:\.server)?\.ts|sequence\.ts|service-activity\.server\.ts|settle\.server\.ts)$/u,
     [],

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { arrivalSource } from "../app/arrival-source.server";
 import {
-  arrivalSource,
   carrySource,
   channelFromHost,
   formatSource,
@@ -93,6 +93,23 @@ describe("provenienza dal Referer", () => {
       channel: "direct",
       firstPage: "/",
     });
+  });
+
+  it("un crawler non è un arrivo, un browser automatico sì", () => {
+    for (const agent of [
+      "Mozilla/5.0 (compatible; Googlebot/2.1)",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; bingbot/2.0) Chrome/116.0.1938.76 Safari/537.36",
+      "Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; GPTBot/1.1)",
+    ]) {
+      expect(page("/", { "user-agent": agent })).toBeNull();
+      expect(page("/en/faq?via=direct%3A%2F", { "user-agent": agent })).toBeNull();
+    }
+    expect(
+      page("/", {
+        "user-agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0.0.0 Safari/537.36",
+      }),
+    ).toEqual({ channel: "direct", firstPage: "/" });
   });
 });
 
