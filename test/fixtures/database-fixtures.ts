@@ -144,6 +144,55 @@ export function insertEntitlement({
   );
 }
 
+type SubscriptionRow = {
+  id?: string;
+  workspaceId?: string;
+  environment?: "test" | "live";
+  customerId?: string;
+  offer?: string;
+  generation?: string;
+  status?: string;
+  /** Inizio del periodo, che vale anche come ultima sincronizzazione e ultimo controllo. */
+  periodStart?: string;
+  periodEnd?: string;
+  renewalOffer?: "monthly" | "annual" | null;
+};
+
+/**
+ * Abbonamento Stripe sintetico, senza disdetta a fine periodo, eseguibile con `run()` o dentro un
+ * `batch`.
+ */
+export function insertSubscription({
+  id = "sub_test",
+  workspaceId = "w-a",
+  environment = "test",
+  customerId = "cus_test",
+  offer = "monthly",
+  generation = "2026-09",
+  status = "active",
+  periodStart = now,
+  periodEnd = "2026-10-13T20:00:00.000Z",
+  renewalOffer = null,
+}: SubscriptionRow = {}) {
+  return env.DB.prepare(
+    `INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id, offer,
+       price_generation, status, current_period_start, current_period_end, cancel_at_period_end,
+       synced_at, checked_at, renewal_offer)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?8, ?8, ?10)`,
+  ).bind(
+    id,
+    workspaceId,
+    environment,
+    customerId,
+    offer,
+    generation,
+    status,
+    periodStart,
+    periodEnd,
+    renewalOffer,
+  );
+}
+
 type CredentialsRow = {
   storeId?: string;
   accessToken?: string;

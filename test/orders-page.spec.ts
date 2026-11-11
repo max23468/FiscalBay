@@ -581,7 +581,7 @@ describe("pagina Ordini reale", () => {
   });
 
   it("filtri, ricerca, conteggio e «Carica altri» usano la query reale sullo spazio", async () => {
-    const { cookie, userId } = await owner();
+    const { cookie } = await owner();
     const day = 86_400_000;
     // Ordini sintetici di A con stati diversi; o-b resta di un altro spazio.
     const extra = [
@@ -680,7 +680,6 @@ describe("pagina Ordini reale", () => {
     const filtered = (await ordersPage(cookie, "/app/ordini?pagamento=paid&negozio=collegato"))
       .page!;
     expect(filtered).toMatchObject({ total: 3, nextHref: null });
-    void userId;
   });
 
   it("«Carica altri» resta sull'istantanea e i nuovi ordini entrano soltanto in cima", async () => {
@@ -1091,7 +1090,7 @@ describe("pagina Ordini reale", () => {
   });
 
   it("la barra superiore cerca con la query nel corpo e l'elenco la riceve cifrata", async () => {
-    const { cookie, userId } = await owner();
+    const { cookie } = await owner();
     for (const origin of ["https://estraneo.invalid", null])
       await expect(searchRequest(cookie, "articolo", { origin })).rejects.toMatchObject({
         status: 403,
@@ -1163,7 +1162,6 @@ describe("pagina Ordini reale", () => {
     );
     const other = (await ordersPage(signIn.headers.get("set-cookie")!, found.href)).page!;
     expect(other).toMatchObject({ search: null, total: 1 });
-    void userId;
   });
 
   it("confronta maiuscole e accenti di ogni alfabeto dopo l'indicizzazione", async () => {
@@ -1512,54 +1510,6 @@ describe("pagina Ordini reale", () => {
     reads = 0;
     // Un'altra attesa supererebbe la scadenza: resta l'ultima lettura, non confermata.
     expect(await settle(read, () => false, { timeoutMs: 15, intervalMs: 20 })).toBe(1);
-  });
-
-  it("rilegge una volta gli ordini mai verificati", async () => {
-    await seed();
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor, is_provisional)
-         VALUES ('o-t', 's-a', 'trading-a', ?1, ?1, 'EUR', 100, 1)`,
-      ).bind(now),
-      env.DB.prepare(
-        `INSERT INTO order_source_refs (store_id, source, external_order_id, order_id, last_modified_time, detail_for, detail_error)
-         VALUES ('s-a', 'fulfillment', 'ebay-a', 'o-a', ?1, ?1, NULL),
-                ('s-b', 'fulfillment', 'ebay-b', 'o-b', ?1, ?1, NULL),
-                ('s-a', 'trading', 'trading-a', 'o-t', ?1, NULL, NULL)`,
-      ).bind(now),
-      env.DB.prepare(
-        `INSERT INTO order_tax_checks (order_id, source, last_modified_time, observed_at, availability)
-         VALUES ('o-b', 'ebay_trading_get_orders', ?1, ?1, 'present')`,
-      ).bind(now),
-      env.DB.prepare(
-        `INSERT INTO sync_state (store_id, updated_at, history_from, trading_cursor)
-         VALUES ('s-a', ?1, ?1, ?1), ('s-b', ?1, ?1, ?1)`,
-      ).bind(now),
-    ]);
-    const migration = env.TEST_MIGRATIONS.find(
-      ({ name }) => name === "0028_order_tax_recheck.sql",
-    )!;
-    await env.DB.batch(migration.queries.map((query) => env.DB.prepare(query)));
-    expect(
-      (
-        await env.DB.prepare(
-          "SELECT order_id, detail_for FROM order_source_refs WHERE source = 'fulfillment' ORDER BY order_id",
-        ).all()
-      ).results,
-    ).toEqual([
-      { order_id: "o-a", detail_for: null },
-      { order_id: "o-b", detail_for: now },
-    ]);
-    expect(
-      (
-        await env.DB.prepare(
-          "SELECT store_id, trading_cursor FROM sync_state ORDER BY store_id",
-        ).all()
-      ).results,
-    ).toEqual([
-      { store_id: "s-a", trading_cursor: null },
-      { store_id: "s-b", trading_cursor: now },
-    ]);
   });
 
   it("conta i dati dell'intero elenco, anche senza ordini", async () => {

@@ -35,6 +35,7 @@ import {
   paths,
   workspace,
   buy,
+  stripeSignature,
 } from "./fixtures/stripe-fixtures";
 
 // Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
@@ -599,44 +600,11 @@ describe("Stripe Managed Payments", () => {
     expect(await charge(late)).toEqual({ trialEnd: null, trialEndsAt: null });
   });
 
-  it("verifica la firma sul corpo grezzo e registra l'evento una sola volta", async () => {
+  it("verifica la firma sul corpo grezzo", async () => {
+    // Presa in carico e deduplica delle consegne firmate sono in `webhooks.spec.ts`.
     const body = JSON.stringify(event);
-    const secret = "whsec_fiscalbay_test";
-    const signature = await Stripe.webhooks.generateTestHeaderStringAsync({
-      payload: body,
-      secret,
-    });
-    const verified = await verifyStripeEvent(body, signature, secret);
-    expect(verified).toEqual(event);
-    const send = vi.fn().mockResolvedValue(queued);
-    const environment = {
-      ...env,
-      WORK_QUEUE: fakeQueue({ send }),
-      INGRESS_QUEUE: fakeQueue({ send }),
-    };
-    const request = () =>
-      new Request("https://test.fiscalbay.it/webhooks/stripe", {
-        method: "POST",
-        headers: { "stripe-signature": signature },
-        body,
-      });
-    for (let delivery = 0; delivery < 2; delivery++)
-      expect(
-        (await receiveWebhook(request(), environment, fetch, new Date(event.created * 1000)))
-          ?.status,
-      ).toBe(204);
-    expect(send).toHaveBeenCalledOnce();
-    expect(
-      await env.DB.prepare(
-        "SELECT topic, object_id, environment FROM webhook_receipts WHERE provider = 'stripe' AND provider_id = ?",
-      )
-        .bind(event.id)
-        .first(),
-    ).toEqual({
-      topic: "checkout.session.completed",
-      object_id: "cs_test_checkout",
-      environment: "test",
-    });
+    const signature = await stripeSignature(body);
+    expect(await verifyStripeEvent(body, signature, "whsec_fiscalbay_test")).toEqual(event);
   });
 
   it("con eBay e Telegram spenti apre il checkout; con gli acquisti chiusi riceve ancora gli eventi", async () => {
@@ -662,10 +630,7 @@ describe("Stripe Managed Payments", () => {
     // Rinnovi, rimborsi e dispute arrivano anche con i nuovi acquisti sospesi.
     await setSwitch(env.DB, "purchases_open", false);
     const body = JSON.stringify(event);
-    const signature = await Stripe.webhooks.generateTestHeaderStringAsync({
-      payload: body,
-      secret: "whsec_fiscalbay_test",
-    });
+    const signature = await stripeSignature(body);
     const send = vi.fn().mockResolvedValue(queued);
     const response = await receiveWebhook(
       new Request("https://test.fiscalbay.it/webhooks/stripe", {

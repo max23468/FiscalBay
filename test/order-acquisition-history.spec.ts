@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   listVisibleOrders,
@@ -76,8 +76,6 @@ describe("finestra dello storico secondo la copertura", () => {
       `SELECT history_from, history_until, history_through, history_done_at
            FROM sync_state WHERE store_id = 's-a'`,
     ).first<Record<string, string | null>>();
-
-  beforeEach(() => env.DB.prepare("DELETE FROM orders").run());
 
   it("all'attivazione importa il resto dell'anno, interrotto e ripreso, senza rileggere il Free", async () => {
     const older = series("12-esteso", 60, iso(linked - 30 * day));

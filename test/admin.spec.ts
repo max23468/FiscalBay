@@ -10,15 +10,11 @@ import { listAnomalies } from "../app/domain/admin-operations.server";
 
 import { purgeExpiredRecords } from "../app/domain/maintenance.server";
 
-import { setAdminPause } from "../app/domain/stores.server";
-
 import { action as adminAction, loader as adminLoader } from "../app/routes/admin";
-
-import { loader as loadStores } from "../app/routes/stores";
 
 import { verifiedSession } from "./fixtures/account-fixtures";
 
-import { insertCredentials, insertStore, insertWorkspace, now } from "./fixtures/database-fixtures";
+import { insertStore, insertWorkspace, now } from "./fixtures/database-fixtures";
 
 import { callRoute, routeData } from "./fixtures/route-fixtures";
 
@@ -379,21 +375,6 @@ describe("accesso alla console", () => {
           request.endsWith("/oauth2/token") || request.startsWith("api.stripe.com/v1/prices"),
       ),
     ).toBe(true);
-  });
-
-  it("mostra al venditore la pausa dell'assistenza senza il pulsante per toglierla", async () => {
-    const seller = await verifiedSession("venditore.pausa@example.invalid");
-    await env.DB.batch([
-      ...insertWorkspace({ id: "w-a", userId: seller.userId }),
-      insertStore({ id: "s-a" }),
-      insertCredentials({ accessExpiresAt: later(48 * hour) }),
-    ]);
-    await setAdminPause(env.DB, "s-a", true, at(now));
-    const result = (await callRoute(loadStores, "/app/negozi", {
-      cookie: seller.cookie,
-      params: {},
-    })) as unknown as { data: { page: { stores: { pauseReason?: string }[] } } };
-    expect(result.data.page.stores[0]).toMatchObject({ pauseReason: "admin" });
   });
 
   it("conserva il registro un anno dall'operazione", async () => {

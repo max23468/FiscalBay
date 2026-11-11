@@ -24,11 +24,11 @@ export const grantedAt = "2026-09-01T00:00:00.000Z";
 
 export const image = "https://i.ebayimg.com/images/g/abc/s-l1600.jpg";
 
-export const storeResponse = ack(
+const storeResponse = ack(
   `<Ack>Success</Ack><Store><Name>Negozio Sintetico</Name><Logo><URL>${image}</URL></Logo></Store>`,
 );
 
-export type FakeOrder = ReturnType<typeof order>;
+type FakeOrder = ReturnType<typeof order>;
 
 /**
  * eBay sintetico con paginazione reale: filtra per data, ordina dal più recente e restituisce

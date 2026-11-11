@@ -141,7 +141,9 @@ it("segue filtri, ricerca cifrata e «Non pagato» dell'elenco", async () => {
   expect(excluded).toMatchObject({ total: 0, items: [] });
 });
 
-it("senza ambito degli Ordini esporta il periodo scelto e ignora quello Pro nel Free", async () => {
+// Nel Free l'elenco tiene soltanto 30 giorni: il periodo Pro di 90 non può escludere nulla di
+// più, quindi qui si prova soltanto che non toglie ordini visibili.
+it("senza ambito degli Ordini esporta il periodo scelto e nel Free il periodo Pro non toglie ordini", async () => {
   await env.DB.prepare(
     `INSERT INTO orders (id, store_id, ebay_order_id, creation_time, last_modified_time, currency, total_minor, retention_until)
        VALUES ('o-old', 's-a', 'ebay-old', ?1, ?1, 'EUR', 100, ?2)`,
@@ -463,9 +465,6 @@ it("la sezione conta l'ambito e ogni periodo con le regole del file", async () =
 });
 
 it("conta per inizio di periodo con una sola lettura", async () => {
-  const userId = (await env.DB.prepare(
-    "SELECT user_id FROM workspace_members WHERE workspace_id = 'w-a'",
-  ).first<{ user_id: string }>())!.user_id;
   const at = (minutes: number) => new Date(Date.parse(now) - minutes * 60_000).toISOString();
   const tallies = await visibleOrderTallies(
     env.DB,

@@ -50,13 +50,12 @@ import { siteverify } from "./fixtures/turnstile-fixtures";
 
 import { turnstileField } from "../app/turnstile";
 
-import { areaShell, callRoute, routeResponse } from "./fixtures/route-fixtures";
+import { areaShell, callRoute, routeResponse, testOrigin } from "./fixtures/route-fixtures";
 
 import {
   day,
   linkedSeller,
   count,
-  origin,
   settings,
   settingsPage,
   saveSetting,
@@ -338,7 +337,7 @@ describe("modulo di assistenza", () => {
     const invalid: Record<string, string>[] = [
       { topic: "spam" },
       { message: " \n " },
-      { message: "x".repeat(4001) },
+      { message: "x".repeat(maxSupportMessage + 1) },
     ];
     for (const fields of invalid)
       expect(await request(seller.cookie, fields)).toMatchObject({
@@ -502,7 +501,7 @@ it("salva il modello di messaggio con Salva e lo usa negli Ordini per lingua", a
 
 it("ricorda la lingua scelta e riapre l'area in quella lingua anche al nuovo accesso", async () => {
   const seller = await verifiedSession("lingua@example.invalid");
-  const choose = (language: string, returnTo: string, from = origin) =>
+  const choose = (language: string, returnTo: string, from = testOrigin) =>
     routeResponse(languageAction, "/app/lingua", {
       cookie: seller.cookie,
       origin: from,
@@ -563,7 +562,7 @@ it("segue il fuso del dispositivo finché non se ne sceglie uno", async () => {
   );
 });
 
-it("chiude dopo una passkey soltanto la sessione precedente dello stesso utente", async () => {
+it("la conferma con passkey rifiuta la sessione di un altro utente e la revoca chiude solo le proprie", async () => {
   const seller = await verifiedSession("precedente@example.invalid");
   const other = await verifiedSession("estraneo.precedente@example.invalid");
   const ids = async (userId: string) =>
@@ -639,7 +638,7 @@ it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture",
       href: `negozi/${seller.storeId}`,
     },
   ]);
-  const read = (ids: string, from = origin, intent?: string) =>
+  const read = (ids: string, from = testOrigin, intent?: string) =>
     routeResponse(notificationsAction, "/api/v1/notifications", {
       cookie: seller.cookie,
       origin: from,
@@ -653,11 +652,11 @@ it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture",
   }
   expect((await read(notification!.id, "https://estraneo.invalid")).status).toBe(403);
   // Eliminata esce dalla campanella finché non si annulla; un'altra azione è rifiutata.
-  expect((await read(notification!.id, origin, "dismiss")).status).toBe(200);
+  expect((await read(notification!.id, testOrigin, "dismiss")).status).toBe(200);
   expect(await bell()).toEqual([]);
-  expect((await read(notification!.id, origin, "restore")).status).toBe(200);
+  expect((await read(notification!.id, testOrigin, "restore")).status).toBe(200);
   expect(await bell()).toEqual([{ ...notification, read: true }]);
-  expect((await read(notification!.id, origin, "toString")).status).toBe(400);
+  expect((await read(notification!.id, testOrigin, "toString")).status).toBe(400);
   expect((await read(notification!.id, "https://estraneo.invalid", "dismiss")).status).toBe(403);
   // Un consenso in scadenza compare con la data nel fuso scelto.
   await env.DB.prepare(
@@ -679,9 +678,7 @@ it("mostra nella campanella i collegamenti da ricollegare e ricorda le letture",
   const expiry = new Date(Date.now() + 10 * day);
   const previousDay = new Date(expiry.getTime() - day);
   expect(expiring!.body).toContain(
-    new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeZone: "UTC" })
-      .format(previousDay)
-      .replace("Sept", "Sep"),
+    new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeZone: "UTC" }).format(previousDay),
   );
   // Una lettura, anche di una notifica non più attuale, resta finché la notifica può comparire, cioè trenta giorni.
   await purgeExpiredRecords(env.DB, new Date(Date.now() + 29 * day));

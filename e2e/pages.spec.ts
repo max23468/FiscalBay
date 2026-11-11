@@ -56,10 +56,6 @@ for (const scenario of scenarios) {
             type: "expected",
             description: `HTTP ${production && scenario.preview ? 404 : scenario.status}; percorso ${scenario.redirect && !(production && scenario.preview) ? scenario.redirect : new URL(scenario.path, baseURL!).pathname}`,
           },
-          {
-            type: "ambito",
-            description: scenario.preview ? "anteprima sintetica" : "pagina reale",
-          },
         );
         const admin = scenario.role.startsWith("admin");
         test.skip(

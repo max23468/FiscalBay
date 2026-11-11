@@ -388,6 +388,33 @@ describe("contratto Fulfillment senza persistenza", () => {
     ).toEqual(["email", "name", "phone", "shipTo.name", "shipTo.phone"]);
   });
 
+  it("legge gli importi secondo le cifre della valuta e rifiuta quelli inesatti", () => {
+    const jpy = (value: string) => ({ value, currency: "JPY" });
+    const address = { addressLine1: "Via Sintetica", countryCode: "IT", county: "NON-ESPORRE" };
+    const result = observe(
+      order({
+        pricingSummary: { total: jpy("2000") },
+        buyer: { buyerRegistrationAddress: { contactAddress: address } },
+        lineItems: [
+          { ...item("EBAY_IT"), lineItemCost: jpy("1000"), taxIdentifier: "NON-ESPORRE" },
+        ],
+        taxIdentifier: "NON-ESPORRE",
+      }),
+    );
+    expect(result.total).toEqual({ minor: 2000, currency: "JPY" });
+    expect(result.items[0]!.total).toEqual({ minor: 1000, currency: "JPY" });
+    expect(JSON.stringify(result)).not.toContain("NON-ESPORRE");
+    // Un destinatario senza campi resta presente con valori nulli.
+    expect(
+      observe(order({ fulfillmentStartInstructions: [{ shippingStep: { shipTo: {} } }] })).buyer
+        .shipTo,
+    ).toEqual({ name: null, phone: null, address: null });
+    expect(() =>
+      observe(order({ pricingSummary: { total: { value: "12.345", currency: "EUR" } } })),
+    ).toThrow("inexact_amount");
+    expect(() => observe(order({ orderId: "" }))).toThrow();
+  });
+
   it("valida la pagina restituita dal provider prima di usarla", async () => {
     const page = (payload: unknown) =>
       readFulfillmentOrders(

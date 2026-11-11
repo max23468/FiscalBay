@@ -336,11 +336,7 @@ describe("invii degli ordini", () => {
   it("una consegna in attesa alla fine di Pro non parte al rinnovo", async () => {
     const seller = await linked("rinnovo");
     await order(seller.store, "o-rinnovo", { cf: "RSSMRA80A01H501U" });
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
-        : undefined,
-    );
+    const limited = rateLimited(600);
     await run(limited.fetcher, 10);
     await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
       .bind(later(12).toISOString(), seller.workspace)
@@ -463,11 +459,7 @@ describe("invii degli ordini", () => {
   it("rispetta l'attesa di Telegram e scarta la consegna di una chat sostituita", async () => {
     const seller = await linked("sostituita");
     await order(seller.store, "o-attesa", { cf: "RSSMRA80A01H501U" });
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
-        : undefined,
-    );
+    const limited = rateLimited(600);
     await run(limited.fetcher, 10);
     expect(
       await env.DB.prepare("SELECT retry_at, attempts FROM telegram_deliveries").first(),
@@ -752,11 +744,7 @@ describe("invii degli ordini", () => {
   it("senza autorizzazione il Codice Fiscale non compare: conservazione scaduta, copertura revocata, piano Free", async () => {
     const seller = await linked("autorizzato");
     await order(seller.store, "o-scaduto", { cf: "RSSMRA80A01H501U" });
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
-        : undefined,
-    );
+    const limited = rateLimited(600);
     await run(limited.fetcher, 10);
     await env.DB.prepare("UPDATE orders SET retention_until = ? WHERE id = 'o-scaduto'")
       .bind(later(12).toISOString())

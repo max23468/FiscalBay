@@ -417,6 +417,11 @@ test.describe("ordini", () => {
         await page.keyboard.press("Escape");
         await expect(remove).toBeFocused();
         await disconnect.click();
+        await expect(
+          page
+            .getByRole("alertdialog")
+            .getByRole("button", { name: locale === "it" ? "Annulla" : "Cancel", exact: true }),
+        ).toBeFocused();
         await expect(page.getByRole("alertdialog").getByRole("textbox")).toHaveCount(0);
         await page.keyboard.press("Escape");
         await expect(disconnect).toBeFocused();

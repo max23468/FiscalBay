@@ -120,7 +120,7 @@ export async function linked(name: string, chat = 601) {
   return { ...seller, chat };
 }
 
-export const buyer = JSON.stringify({
+const buyer = JSON.stringify({
   username: "compratore",
   name: "Mario Rossi",
   email: "mario@example.invalid",

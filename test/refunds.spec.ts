@@ -14,7 +14,12 @@ import { lifetimeContext } from "../app/domain/lifetime.server";
 import { loader as settingsLoader } from "../app/routes/settings";
 import { verifiedSession } from "./fixtures/account-fixtures";
 import { subscriptionView } from "../app/domain/plan-view.server";
-import { insertEntitlement, now, resetDatabase } from "./fixtures/database-fixtures";
+import {
+  insertEntitlement,
+  insertSubscription,
+  now,
+  resetDatabase,
+} from "./fixtures/database-fixtures";
 import { routePage } from "./fixtures/route-fixtures";
 import {
   workspace,
@@ -24,12 +29,8 @@ import {
   type FakeCharge,
   stripeAccount,
   firstInvoice,
+  liveKey,
 } from "./fixtures/stripe-fixtures";
-
-/** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
-// Chiave sintetica, priva di credenziali Stripe, usata soltanto dal provider finto.
-// react-doctor-disable-next-line react-doctor/no-secrets-in-client-code
-const liveKey = "sk_live_fiscalbay";
 
 describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
   let userId: string;
@@ -479,13 +480,14 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
     ).toEqual([{ received_at: "2026-09-22T10:00:00.000Z" }]);
     // In Production vale per i clienti degli abbonamenti live.
     await env.DB.prepare("DELETE FROM stripe_customer_erasures").run();
-    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-        customer_id, offer, price_generation, status, current_period_start, current_period_end,
-        cancel_at_period_end, synced_at, checked_at, renewal_offer)
-      VALUES ('sub_live', 'w-a', 'live', 'cus_live', 'monthly', '2026-09', 'canceled', ?1, ?2,
-        0, ?1, ?1, 'monthly')`)
-      .bind(now, periodEnd)
-      .run();
+    await insertSubscription({
+      id: "sub_live",
+      environment: "live",
+      customerId: "cus_live",
+      status: "canceled",
+      periodEnd,
+      renewalOffer: "monthly",
+    }).run();
     stripe.state.missingCustomers = ["cus_live"];
     const live = { ...env, APP_ORIGIN: "https://fiscalbay.it", STRIPE_SECRET_KEY: liveKey } as Env;
     await applyStripeEvent(

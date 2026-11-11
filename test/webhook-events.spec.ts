@@ -43,14 +43,7 @@ import {
   setupScenarios,
 } from "./fixtures/webhooks-scenarios";
 
-const router = vi.hoisted(() => ({ handle: vi.fn(), create: vi.fn() }));
-
-vi.mock("react-router", async (original) => ({
-  ...(await original<typeof import("react-router")>()),
-  createRequestHandler: router.create,
-}));
-
-setupScenarios(router);
+setupScenarios();
 // Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
 afterEach(() => vi.restoreAllMocks());
 
@@ -166,6 +159,7 @@ it("il 412 di una consegna firmata registra soltanto il motivo, le sonde nulla",
         )
       )?.status,
     ).toBe(412);
+    expect(await receipt()).toBeNull();
     const logged = errors.mock.calls.map(([line]) => JSON.parse(String(line)));
     expect(logged).toEqual(
       ["signature", "schema"].map((failure) => ({

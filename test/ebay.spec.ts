@@ -9,6 +9,7 @@ import {
   parseItemImage,
   parseTradingOrders,
   qualifiedImageUrl,
+  mapTradingTaxIdentifiers,
   readItemImage,
   readTradingOrders,
   readTradingTaxObservations,
@@ -635,6 +636,51 @@ describe("acquisti Trading", () => {
       "<Order><OrderID>ordine</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>",
     );
     await invalid("<Order><OrderID>ordine</OrderID></Order>".repeat(2));
+    // Il valore si decodifica una volta sola e il Paese emittente assente resta nullo.
+    expect(
+      await read(
+        "<Order><OrderID>ordine</OrderID><BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SYNTHETIC&amp;amp;ID</ID></BuyerTaxIdentifier></Order>",
+      ),
+    ).toEqual({
+      orderFound: true,
+      values: [
+        {
+          type: "CODICE_FISCALE",
+          issuingCountry: null,
+          value: "SYNTHETIC&amp;ID",
+          source: "ebay_trading_get_orders",
+        },
+      ],
+    });
+    await expect(
+      readTradingTaxObservations(access(trading(ack("<Ack>Failure</Ack>"))), ["ordine"]),
+    ).rejects.toThrow(UpstreamError);
+  });
+
+  it("mappa la fonte fiscale Trading senza inventare il Paese emittente", () => {
+    expect(
+      mapTradingTaxIdentifiers([
+        { id: "SYNTHETIC-ID", type: "CODICE_FISCALE" },
+        {
+          id: "SYNTHETIC-VAT",
+          type: "VAT_ID",
+          attributes: [{ name: "IssuingCountry", value: "IT" }],
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "CODICE_FISCALE",
+        issuingCountry: null,
+        value: "SYNTHETIC-ID",
+        source: "ebay_trading_get_orders",
+      },
+      {
+        type: "VAT_ID",
+        issuingCountry: "IT",
+        value: "SYNTHETIC-VAT",
+        source: "ebay_trading_get_orders",
+      },
+    ]);
   });
 });
 

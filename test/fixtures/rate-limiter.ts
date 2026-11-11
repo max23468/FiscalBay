@@ -6,7 +6,7 @@ import { requestLimitRules, type RequestLimit } from "../../app/request-limits";
  * Binding Rate Limiting simulato a finestre fisse sull'orologio di `Date.now`, con le soglie
  * dichiarate nella configurazione; registra le chiavi ricevute.
  */
-export function fakeRateLimiter(limit: RequestLimit) {
+function fakeRateLimiter(limit: RequestLimit) {
   const { limit: max, period } = requestLimitRules[limit];
   const windows = new Map<string, { start: number; count: number }>();
   const keys: string[] = [];

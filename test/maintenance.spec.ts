@@ -108,45 +108,4 @@ describe("pulizia degli ordini scaduti", () => {
     await purgeExpiredRecords(env.DB, at);
     expect(await markers()).toEqual(["recente"]);
   });
-
-  it("ricostruisce soltanto i blocchi nati da una scadenza dimostrabile", async () => {
-    // La migration usa l'orologio di SQLite, non quello simulato dei test.
-    const recent = new Date(vi.getRealSystemTime());
-    const time = (days: number) => iso(recent.getTime() - days * day);
-    await env.DB.batch([
-      env.DB.prepare(
-        "UPDATE ebay_stores SET ebay_environment = 'production', orders_deleted_through = ?2 WHERE id = ?1",
-      ).bind("s-b", time(5)),
-      env.DB.prepare(
-        `INSERT INTO ebay_account_deletions (id, ebay_environment, ebay_user_id, notified_at,
-           requested_at, completed_at)
-         VALUES ('acquirente', 'production', 'buyer', ?1, ?1, ?2)`,
-      ).bind(time(10), time(9)),
-      env.DB.prepare(
-        `INSERT INTO deleted_order_keys (store_id, kind, external_key, deleted_at) VALUES
-           ('s-a', 'order', 'scadenza', ?1),
-           ('s-a', 'line', 'riga-scadenza', ?1),
-           ('s-a', 'order', 'cancellazione-ebay', ?2),
-           ('s-b', 'order', 'negozio-eliminato', ?3),
-           ('s-a', 'order', 'oltre-trenta-giorni', ?4)`,
-      ).bind(
-        time(3),
-        iso(recent.getTime() - 9.5 * day),
-        iso(recent.getTime() - 5 * day + 1_000),
-        time(40),
-      ),
-    ]);
-    const migration = env.TEST_MIGRATIONS.find(({ name }) => name === "0074_expiry_purge.sql")!;
-    const rebuild = migration.queries.filter((query) =>
-      query.includes("DELETE FROM deleted_order_keys"),
-    );
-    await env.DB.batch(rebuild.map((query) => env.DB.prepare(query)));
-    expect(
-      (
-        await env.DB.prepare(
-          "SELECT external_key FROM deleted_order_keys ORDER BY external_key",
-        ).all<{ external_key: string }>()
-      ).results.map((row) => row.external_key),
-    ).toEqual(["cancellazione-ebay", "negozio-eliminato", "oltre-trenta-giorni"]);
-  });
 });

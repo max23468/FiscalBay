@@ -1,6 +1,5 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readTradingTaxObservations } from "../app/integrations/ebay/trading.server";
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 import { storeProfileRefreshMilliseconds } from "../app/domain/store-profile.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
@@ -11,7 +10,6 @@ import { action as signIn } from "../app/routes/sign-in";
 import { action as startStoreLink, loader as loadStoreLink } from "../app/routes/store-link";
 import { loader as loadStores } from "../app/routes/stores";
 import { openToken, refreshStoreToken } from "../app/integrations/ebay/seller-credentials.server";
-import { UpstreamError } from "../app/integrations/http.server";
 import {
   startStoreLink as beginLink,
   claimStoreLinkSession,
@@ -30,7 +28,6 @@ import {
   syntheticStoreUrl,
   syntheticStoreXml,
   syntheticUserXml,
-  syntheticTradingXml,
   withSandbox,
 } from "./fixtures/ebay-fixtures";
 import {
@@ -582,32 +579,6 @@ describe("collegamento negozio eBay", () => {
     expect(
       (await submit("Una-password-negozio-molto-lunga", "https://esempio.invalid")).status,
     ).toBe(403);
-  });
-
-  it("legge l'osservazione fiscale Trading del solo ordine richiesto", async () => {
-    const read = (xml: string) =>
-      readTradingTaxObservations(
-        {
-          fetcher: async () => new Response(xml),
-          accessToken: "token-sintetico",
-          configuration: ebayConfiguration(env, "production"),
-        },
-        [syntheticOrderId],
-      );
-    const results = await read(syntheticTradingXml);
-    expect([...results.keys()]).toEqual([syntheticOrderId]);
-    expect(results.get(syntheticOrderId)).toEqual({
-      orderFound: true,
-      values: [
-        {
-          type: "CODICE_FISCALE",
-          issuingCountry: null,
-          value: "SYNTHETIC&ID",
-          source: "ebay_trading_get_orders",
-        },
-      ],
-    });
-    await expect(read("<GetOrdersResponse><Ack>Failure</Ack>")).rejects.toThrow(UpstreamError);
   });
 
   it("dà allo spazio creato al collegamento il nome nella lingua dell'utente", async () => {

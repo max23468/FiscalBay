@@ -979,11 +979,11 @@ describe("provenienza dell'iscrizione", () => {
     expect(await sourceOf(google)).toEqual({ channel: "youtube", first_page: "/faq" });
 
     const ebay = await oauthCallback(
-      await accessForm(`/en/accesso?${via("ebay_community:/en/accesso")}`, { intent: "ebay" }),
+      await accessForm(`/en/sign-in?${via("ebay_community:/en/sign-in")}`, { intent: "ebay" }),
       "ebay",
       "ebay-provenienza",
     );
-    expect(await sourceOf(ebay)).toEqual({ channel: "ebay_community", first_page: "/en/accesso" });
+    expect(await sourceOf(ebay)).toEqual({ channel: "ebay_community", first_page: "/en/sign-in" });
     const unknown = await oauthCallback(
       await accessForm("/accesso", { intent: "ebay" }),
       "ebay",

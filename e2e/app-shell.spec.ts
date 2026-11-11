@@ -261,6 +261,8 @@ test("nelle Novità le voci di un gruppo si affiancano senza colonne vuote", asy
       });
     }),
   );
+  // Il changelog ha gruppi con più voci (2.0.8): senza coppie affiancate la prova non direbbe nulla.
+  expect(gaps.length).toBeGreaterThan(0);
   for (const gap of gaps) expect(gap).toBeLessThanOrEqual(33);
 });
 

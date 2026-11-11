@@ -819,13 +819,12 @@ describe("cancellazione dell'account nell'anteprima", () => {
   });
 
   it("nello scenario della cancellazione in corso l'area non mostra schermate", async () => {
-    const { loader } = await import("../app/routes/preview");
-    const deleting = await routeData(loader, "/anteprima/ordini", {
+    const deleting = await routeData(previewRoot, "/anteprima/ordini", {
       cookie: await cookieFor("cancellazione-in-corso"),
     });
     expect(deleting).toMatchObject({ scenario: "cancellazione-in-corso", deleting: true });
     expect(
-      await routeData(loader, "/anteprima/ordini", { cookie: await cookieFor("ordinario") }),
+      await routeData(previewRoot, "/anteprima/ordini", { cookie: await cookieFor("ordinario") }),
     ).toMatchObject({ deleting: false });
   });
 });

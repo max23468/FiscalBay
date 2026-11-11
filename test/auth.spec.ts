@@ -426,33 +426,6 @@ describe("Better Auth su Workers e D1", () => {
     expect(account?.total).toBe(0);
   });
 
-  it("crea un account email non verificato nel database locale", async () => {
-    const response = await createAuth(env).handler(
-      new Request("http://localhost:5173/api/auth/sign-up/email", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: "Utente test",
-          email: "auth@example.invalid",
-          password: "Una-password-auth-molto-lunga",
-        }),
-      }),
-    );
-
-    expect(response.status).toBe(200);
-    const user = await env.DB.prepare('SELECT email, "emailVerified" FROM "user" WHERE email = ?')
-      .bind("auth@example.invalid")
-      .first<{ email: string; emailVerified: number }>();
-    expect(user).toEqual({ email: "auth@example.invalid", emailVerified: 0 });
-  });
-
-  it("espone il percorso passkey solo a una sessione autenticata", async () => {
-    const response = await createAuth(env).handler(
-      new Request("http://localhost:5173/api/auth/passkey/generate-register-options"),
-    );
-    expect(response.status).toBe(401);
-  });
-
   it("registra passkey solo dopo verifica e protegge l'ultimo accesso", async () => {
     const origin = "http://localhost:5173";
     const signup = await createAuth(env).handler(

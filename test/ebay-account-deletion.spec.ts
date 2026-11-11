@@ -79,7 +79,6 @@ const requestId = async () =>
 
 beforeEach(async () => {
   await resetDatabase();
-  vi.clearAllMocks();
   send.mockResolvedValue(queued);
   const markHash = await storeIdentityHash(env.BETTER_AUTH_SECRET, "seller-x");
   await env.DB.batch([

@@ -37,6 +37,7 @@ import {
   insertCredentials,
   insertEntitlement,
   insertStore,
+  insertSubscription,
   insertWorkspace,
   later,
   now,
@@ -753,6 +754,14 @@ describe("viste", () => {
 });
 
 describe("avvisi degli incidenti", () => {
+  /** Ricevuta webhook in coda da due ore, ancora valida. */
+  const receipt = (provider: string, id: string) =>
+    env.DB.prepare(`INSERT INTO webhook_receipts (id, provider, environment, provider_id, topic,
+        object_id, event_at, expires_at, queued_at)
+      VALUES (?1, ?2, 'test', ?1, 'x', 'o', ?3, ?4, ?3)`)
+      .bind(id, provider, later(-120).toISOString(), later(60 * 24).toISOString())
+      .run();
+
   /** Controllo degli incidenti con i lavori periodici in regola a quell'istante. */
   async function reconcileOwnerIncidents(environment: Env, fetcher: typeof fetch, at: Date) {
     await regularTasks(at);
@@ -797,12 +806,6 @@ describe("avvisi degli incidenti", () => {
   });
 
   it("segnala l'aggravamento, ignora le P3 e non comunica il rientro di un incidente mai annunciato", async () => {
-    const receipt = (provider: string, id: string) =>
-      env.DB.prepare(`INSERT INTO webhook_receipts (id, provider, environment, provider_id, topic,
-          object_id, event_at, expires_at, queued_at)
-        VALUES (?1, ?2, 'test', ?1, 'x', 'o', ?3, ?4, ?3)`)
-        .bind(id, provider, later(-120).toISOString(), later(60 * 24).toISOString())
-        .run();
     await receipt("telegram", "r-telegram");
     // Messaggi Telegram non consegnati: P3, soltanto nella console e in /incidenti.
     await env.DB.batch([
@@ -973,12 +976,6 @@ describe("avvisi degli incidenti", () => {
   });
 
   it("una P1 che torna P2 e poi P1 non ripete l'avviso", async () => {
-    const receipt = (provider: string, id: string) =>
-      env.DB.prepare(`INSERT INTO webhook_receipts (id, provider, environment, provider_id, topic,
-          object_id, event_at, expires_at, queued_at)
-        VALUES (?1, ?2, 'test', ?1, 'x', 'o', ?3, ?4, ?3)`)
-        .bind(id, provider, later(-120).toISOString(), later(60 * 24).toISOString())
-        .run();
     await receipt("telegram", "r-telegram");
     await receipt("stripe", "r-stripe");
     const api = bot();
@@ -1031,17 +1028,14 @@ describe("avvisi commerciali", () => {
   }
 
   function subscription(id: string, workspaceId: string, status = "active") {
-    return env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-        customer_id, offer, price_generation, status, current_period_start, current_period_end,
-        cancel_at_period_end, synced_at, checked_at)
-      VALUES (?1, ?2, 'test', ?3, 'monthly', 'g1', ?4, ?5, ?6, 0, ?5, ?5)`).bind(
+    return insertSubscription({
       id,
       workspaceId,
-      `cus_${id}`,
+      customerId: `cus_${id}`,
+      generation: "g1",
       status,
-      now,
-      later(60 * 24 * 30).toISOString(),
-    );
+      periodEnd: later(60 * 24 * 30).toISOString(),
+    });
   }
 
   const updateSubscription = (id: string, set: string) =>

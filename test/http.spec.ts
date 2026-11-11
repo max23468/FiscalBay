@@ -1,8 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { UpstreamError, upstreamJson, upstreamText } from "../app/integrations/http.server";
-
-afterEach(() => vi.useRealTimers());
 
 describe("confine HTTP dei provider", () => {
   const url = "https://api.ebay.invalid/risorsa";
