@@ -2,7 +2,25 @@
 
 Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate interne del test; la Production riceve soltanto versioni pubblicate con il proprio rilascio, con il giorno scritto dalla promozione. Le parti «Novità» e «What's new» di una versione sono la pagina Novità dell'app.
 
-## [2.0.9]
+## [2.0.9] - 2026-11-11
+
+### Novità
+
+#### Miglioramenti
+
+- **Codice di conferma automatico.** Su iPhone, iPad e Mac il codice ricevuto in Mail compare sopra la tastiera o sotto il campo: basta toccarlo per confermare l'indirizzo.
+
+### What's new
+
+#### Improvements
+
+- **Automatic confirmation code.** On iPhone, iPad and Mac the code received in Mail appears above the keyboard or under the field: tap it to confirm your address.
+
+### Altre modifiche
+
+- **Guida di confronto.** Una nuova Guida, in italiano e in inglese, mette a confronto FiscalBay, la Console venditori di eBay e Ready Pro: dove si vedono Codice Fiscale e Partita IVA degli acquirenti, ricerca, più negozi, export e fatture, con la data di verifica dei dati.
+- **Guida all'export riscritta.** La guida sull'export di Excel e CSV apre con una risposta breve su come raccogliere ed esportare i dati fiscali degli ordini, spiega cosa contiene il file e la differenza tra Free e Pro, e la richiamano FAQ e Funzionalità.
+- **Fonti ufficiali.** Le Guide in cui una pagina di eBay o dell'Agenzia delle Entrate conferma ciò che dicono la elencano in fondo all'articolo.
 
 ## [2.0.8] - 2026-11-08
 
