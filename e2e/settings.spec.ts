@@ -154,9 +154,10 @@ test.describe("area reale", () => {
       await page.goto(`${it ? "" : "/en"}/app/impostazioni/privacy`);
       await networkIdle(page);
       const downloaded = page.waitForEvent("download");
-      await page
-        .getByRole("button", { name: it ? "Richiedi esportazione" : "Request export" })
-        .click();
+      // Il pulsante funziona soltanto dopo l'idratazione: prima il clic non scarica nulla.
+      await clickHydrated(
+        page.getByRole("button", { name: it ? "Richiedi esportazione" : "Request export" }),
+      );
       const download = await downloaded;
       expect(download.suggestedFilename()).toMatch(
         new RegExp(
