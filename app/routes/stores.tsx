@@ -18,7 +18,7 @@ import {
   listStores,
   pauseStore,
   resumeStore,
-  type StoreActionResult,
+  type StoreDeletionResult,
   type StoreStatus,
 } from "../domain/stores.server";
 import { subscriptionRenews } from "../domain/billing.server";
@@ -154,7 +154,7 @@ async function readStores({ request, params }: Route.LoaderArgs) {
 
 const storeActions: Record<
   string,
-  (userId: string, storeId: string, form: FormData) => Promise<StoreActionResult>
+  (userId: string, storeId: string, form: FormData) => Promise<StoreDeletionResult>
 > = {
   "store-pause": (userId, storeId) => pauseStore(env.DB, userId, storeId),
   "store-resume": (userId, storeId) => resumeStore(env.DB, userId, storeId),
@@ -215,7 +215,7 @@ export async function action({ request }: Route.ActionArgs) {
         : t.requested[requested];
     return { ok: true, notice } satisfies ActionResult;
   }
-  let result: StoreActionResult;
+  let result: StoreDeletionResult;
   try {
     result = await run!(session.user.id, storeId, form);
   } catch (error) {
@@ -225,6 +225,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (result === "not_found") return actionFailure(404, t.failed);
   if (result === "invalid")
     return actionFailure(409, intent === "store-delete" ? t.deleteMismatch : t.failed);
+  if (result === "more") return actionFailure(409, t.deleteIncomplete);
   if (intent === "store-delete")
     return redirect(withStoreNotice(localizedPath(language, storesPath), "eliminato"), 303);
   return { ok: true, notice: t.done[intent] } satisfies ActionResult;

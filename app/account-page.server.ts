@@ -16,9 +16,16 @@ import {
   securityReturnPath,
   visitCookie,
 } from "./app-links";
-import { authLimitWait, forwardToAuth, redirectWithCookies } from "./auth-route.server";
-import { clientKey, limitedHeaders } from "./request-limits.server";
-import { authAttemptWait, countAuthAttempt } from "./domain/auth-attempts.server";
+import {
+  authLimitWait,
+  forwardToAuth,
+  redirectWithCookies,
+  signInChallengeWait,
+  signInFailureKey,
+  signInFailures,
+} from "./auth-route.server";
+import { limitedHeaders } from "./request-limits.server";
+import { countAuthAttempt } from "./domain/auth-attempts.server";
 import { activateStoreGrant, lastLoginMethodCookie, readSession } from "./auth.server";
 import {
   completeRegistration,
@@ -46,21 +53,9 @@ import { turnstileFailure } from "./turnstile.server";
 
 const noStore = { "cache-control": "no-store" };
 
-/**
- * Accessi con password non riusciti dallo stesso IP prima che il modulo chieda Turnstile: chi
- * sbaglia una volta non lo vede, chi prova molte password sì.
- */
-const signInFailures = { window: 900, max: 3 };
-
-const signInFailureKey = (request: Request) => {
-  const ip = request.headers.get("cf-connecting-ip");
-  return ip ? `sign-in-failures|${clientKey(ip)}` : null;
-};
-
 /** Il modulo di accesso con password richiede Turnstile per l'IP della richiesta. */
 async function signInChallenge(request: Request): Promise<boolean> {
-  const key = signInFailureKey(request);
-  return key ? (await authAttemptWait(env.DB, key, signInFailures, Date.now())) !== null : false;
+  return (await signInChallengeWait(env, request)) !== null;
 }
 
 const loginMethods = ["email", "google", "ebay", "passkey"] as const;
@@ -345,12 +340,13 @@ export async function accessAction(request: Request) {
   // sessione aperta, sull'avviso degli Ordini. Un codice errato, scaduto o per un indirizzo già
   // confermato ha la stessa risposta, così la pagina non rivela chi usa FiscalBay.
   if (intent === "conferma-codice") {
+    // Il filtro per IP precede la lettura della sessione.
+    const limited = await authLimitWait(env, request, emailCodeConfirmPath);
     const session = await readSession(env, request);
     if (session?.user.emailVerified) return redirect(base, 303);
     const answer = (value: SignInNotice, status: number) =>
       session ? notice(value, base) : confirmation(value, status);
-    if (await authLimitWait(env, request, emailCodeConfirmPath))
-      return answer("troppi-tentativi", 429);
+    if (limited) return answer("troppi-tentativi", 429);
     const otp = field("codice").replace(/\D/gu, "");
     if (otp.length !== 6) return answer("codice-errato", 400);
     const response = await forward(
@@ -437,14 +433,18 @@ export async function accessAction(request: Request) {
     return redirect(store ? withStoreNotice(base, store) : base, 303);
   }
 
+  // Il filtro per IP precede il contatore degli errori su D1 e Turnstile.
+  const wait = await authLimitWait(env, request, "/sign-in/email");
+  if (wait) return failed("troppi-tentativi", "accedi", wait);
   if (await signInChallenge(request)) {
     const check = await turnstileFailure(env, request, form, turnstileActions.signIn);
     if (check) return failed(check, "accedi");
   }
-  const response = await forward("/sign-in/email", {
-    email: field("email"),
-    password: field("password"),
-  });
+  const response = await forward(
+    "/sign-in/email",
+    { email: field("email"), password: field("password") },
+    true,
+  );
   const failureKey = signInFailureKey(request);
   if (response.status === 401 && failureKey)
     await countAuthAttempt(env.DB, failureKey, signInFailures, Date.now());

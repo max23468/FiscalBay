@@ -808,7 +808,8 @@ describe("avvisi degli incidenti", () => {
     await env.DB.batch([
       ...insertWorkspace({ id: "w-p3" }),
       env.DB.prepare(`INSERT INTO telegram_deliveries (id, workspace_id, link_id, kind, event_key,
-          event_at, created_at, failed_at) VALUES ('d-p3', 'w-p3', 'l-p3', 'digest', 'k', ?1, ?1, ?1)`).bind(
+          event_at, created_at, attempts, failed_at)
+        VALUES ('d-p3', 'w-p3', 'l-p3', 'digest', 'k', ?1, ?1, 5, ?1)`).bind(
         later(-5).toISOString(),
       ),
     ]);

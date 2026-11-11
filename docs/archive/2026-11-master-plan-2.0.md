@@ -81,7 +81,7 @@ Il mandato iniziale adotta la baseline e avvia M0; non concede anticipatamente q
 | Fine M0 | 2026-09-23: Workers, una D1 UE, Queues e Better Auth, costi differiti, limiti e rinvii espliciti; avvio di M1. Nessun nuovo costo o go-live autorizzato. Adozione e avvio originari: 2026-09-13. Costo differito deciso il 2026-10-12: Workers Paid continuativo e invio email con Cloudflare Email Service (D169). |
 | M1 | Logo approvato il 2026-09-26, design system il 2026-09-27, prototipo e chiusura M1 il 2026-09-28. Nessuna pubblicazione Production autorizzata. |
 | M5 | 2026-10-26: configurazione dell'account Stripe live secondo [M5-12](#m5-12), cioè impostazioni fiscali, metodi di pagamento, webhook, portale, Smart Retries e contatto di assistenza. Lo stesso giorno l'owner ha completato il checkpoint: segreti del Worker Production e confini degli effetti economici restano al mandato Production; nessuna vendita live di prova prima del go-live ([D240](../decisions/DECISION_REGISTER.md)). |
-| M8 | 2026-10-30: test merchant sul test con il negozio eBay Production dell'owner, secondo il [manifest](../operations/OPERATIONS.md#test-merchant): Stripe sandbox, bot del test, Accedi con eBay reale sul test (D234). Nessun deploy o effetto sul Worker Production né incasso live. |
+| M8 | 2026-10-30: test merchant sul test con il negozio eBay Production dell'owner, secondo il [manifest](2026-11-lancio-2.0.md#test-merchant): Stripe sandbox, bot del test, Accedi con eBay reale sul test (D234). Nessun deploy o effetto sul Worker Production né incasso live. |
 | M9 | 2026-10-31: pubblicazione commerciale della `2.0.0` in Production con `Promuovi`, sul candidato promosso ([D250](../decisions/DECISION_REGISTER.md)); promozione Free attiva dal go-live senza fine (D239). Nessun nuovo costo, provider o Paddle. |
 
 ### 0.3 Una fonte per responsabilità
@@ -1960,7 +1960,7 @@ La versione `2.0.0-rc.1` in cima a `CHANGELOG.md` congela `develop` alle sole co
 
 **Stato:** Completato · **Contratto:** [§30](#s30) · [§35](#s35)
 
-Il [manifest](../operations/OPERATIONS.md#test-merchant) approvato fissa candidato, ambiente, account, dati, credenziali, bot, effetti live e condizioni di uscita: l'owner fa da merchant con il proprio negozio eBay Production sul test, Stripe sandbox e bot del test, e Accedi con eBay reale si prova sul test (D234).
+Il [manifest](2026-11-lancio-2.0.md#test-merchant) approvato fissa candidato, ambiente, account, dati, credenziali, bot, effetti live e condizioni di uscita: l'owner fa da merchant con il proprio negozio eBay Production sul test, Stripe sandbox e bot del test, e Accedi con eBay reale si prova sul test (D234).
 
 <a id="m8-03"></a>
 #### M8-03 · Esecuzione percorsi reali

@@ -410,13 +410,6 @@ export async function readTradingTaxObservations(
   );
 }
 
-/** Lettura fiscale di un solo ordine. */
-export async function readTradingTaxObservation(access: EbayAccess, orderId: string) {
-  const result = (await readTradingTaxObservations(access, [orderId])).get(orderId)!;
-  if (result instanceof UpstreamError) throw result;
-  return result;
-}
-
 export function mapTradingTaxIdentifiers(
   identifiers: ReadonlyArray<TradingTaxIdentifier>,
 ): EbayTaxIdentifierObservation[] {

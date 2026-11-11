@@ -116,23 +116,26 @@ export async function recordCancellationFeedback(
   const details = subscription.cancellation_details;
   const feedback = details?.feedback ? (portalReasons[details.feedback] ?? "other") : null;
   const row = await db
-    .prepare(`SELECT n.key, s.workspace_id AS workspaceId, s.offer, s.status,
+    .prepare(`SELECT n.key, s.workspace_id AS workspaceId, s.offer,
+        ${activeCoverageSql("source", "s.workspace_id", "?3")} AS coverage,
         w.created_at AS createdAt
       FROM stripe_subscriptions s
       JOIN owner_notifications n ON n.key = ?1 || s.current_period_end
       JOIN workspaces w ON w.id = s.workspace_id
       WHERE s.id = ?2`)
-    .bind(prefix, subscription.id)
+    .bind(prefix, subscription.id, now.toISOString())
     .first<{
       key: string;
       workspaceId: string;
       offer: string;
-      status: string;
+      coverage: string | null;
       createdAt: string;
     }>();
   if (!row) return;
+  // Stripe registra come `trialing` anche l'abbonato pagante con un cambio di periodicità o un
+  // rinvio del rinnovo: è una disdetta dalla prova soltanto se la copertura in vigore è la prova.
   const plan: ExitPlan =
-    row.status === "trialing" ? "trial" : row.offer === "annual" ? "annual" : "monthly";
+    row.coverage === "trial" ? "trial" : row.offer === "annual" ? "annual" : "monthly";
   await db
     .prepare(`INSERT INTO exit_feedback (id, kind, reason, plan, tenure, month, source_key,
         workspace_id, comment, recorded_at)

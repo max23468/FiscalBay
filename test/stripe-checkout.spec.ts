@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import Stripe from "stripe";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { supportEmail } from "../app/app-copy";
 import { annualPaidMonths, firstChargeAt, formatPrice, priceGeneration } from "../app/catalog";
 import { purchaseState, startCheckout } from "../app/domain/checkout.server";
@@ -36,6 +36,9 @@ import {
   workspace,
   buy,
 } from "./fixtures/stripe-fixtures";
+
+// Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+afterEach(() => vi.restoreAllMocks());
 
 describe("chiusura di una sessione Checkout", () => {
   /** Client con le sole chiamate usate: ogni lettura restituisce lo stato successivo. */

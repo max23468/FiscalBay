@@ -32,7 +32,11 @@ import { accessForm } from "./fixtures/account-route-fixtures";
 import { callRoute, pagePath } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  // Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+  vi.restoreAllMocks();
+});
 
 describe("provenienza dei visitatori", () => {
   /** Referer di un sito esterno: soltanto l'origine, come la manda il browser. */

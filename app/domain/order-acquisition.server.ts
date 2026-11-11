@@ -15,7 +15,12 @@ import {
   loadCallBudget,
   workerShare,
 } from "./order-acquisition-context.server";
-import { readDetail, readDetails, stopsReads } from "./order-acquisition-details.server";
+import {
+  readDetail,
+  readDetails,
+  recordFulfillmentOrders,
+  stopsReads,
+} from "./order-acquisition-details.server";
 import { checkBuyerNames } from "./buyer-check.server";
 import { serviceSetting } from "./service-settings.server";
 import { refreshStoreProfile } from "./store-profile.server";
@@ -166,14 +171,13 @@ async function runPass(ctx: Context, pass: Pass): Promise<boolean> {
       if (await callsOff(ctx)) return false;
       continue;
     }
-    // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio.
-    await inSequence(page.orders, (order) => record(ctx, fulfillmentObservation(order, ctx.at)));
+    await recordFulfillmentOrders(ctx, page.orders);
     const read = page.total;
     // Stryker disable next-line BlockStatement: senza il corpo il ciclo non termina e Stryker lo conta come Timeout; la prova con sessanta ordini nello stesso istante conta le pagine lette e il budget.
     while (page.next) {
       if (!spend(ctx.budget, 1, 1)) return false;
       page = await readFulfillmentOrders(ctx.access, { next: page.next });
-      await inSequence(page.orders, (order) => record(ctx, fulfillmentObservation(order, ctx.at)));
+      await recordFulfillmentOrders(ctx, page.orders);
     }
     if (pass.forward ? end >= to : start <= from) {
       await pass.finish();
@@ -199,7 +203,6 @@ async function callsOff(ctx: Context) {
 type SyncRow = {
   cursor: string;
   recent_end: string | null;
-  recent_next: string | null;
   history_from: string;
   history_until: string;
   history_through: string | null;
@@ -316,8 +319,8 @@ async function tradingFailure(ctx: Context, error: unknown): Promise<false> {
 
 function recentPass(ctx: Context, state: SyncRow): Pass {
   // Una passata a tratti già iniziata riprende dal limite applicato; una nuova parte da lì
-  // con la sovrapposizione, come una passata lasciata a metà dalla paginazione precedente.
-  const resumed = state.recent_end !== null && state.recent_next === null;
+  // con la sovrapposizione.
+  const resumed = state.recent_end !== null;
   const end = resumed ? state.recent_end! : ctx.at;
   // Un orologio indietro rispetto al limite già applicato non produce un intervallo vuoto.
   const [checkpoint] = [state.cursor, end].sort();
@@ -330,18 +333,8 @@ function recentPass(ctx: Context, state: SyncRow): Pass {
     key: (order) => order.lastModifiedDate,
     // Il limite non torna indietro se un'esecuzione più lenta conclude una passata precedente.
     progress: (reached) =>
-      saveState(
-        ctx,
-        "cursor = MAX(cursor, ?4), recent_end = ?5, recent_next = NULL, recent_total = NULL",
-        reached,
-        end,
-      ),
-    finish: () =>
-      saveState(
-        ctx,
-        "cursor = MAX(cursor, ?4), recent_end = NULL, recent_next = NULL, recent_total = NULL",
-        end,
-      ),
+      saveState(ctx, "cursor = MAX(cursor, ?4), recent_end = ?5", reached, end),
+    finish: () => saveState(ctx, "cursor = MAX(cursor, ?4), recent_end = NULL", end),
   };
 }
 
@@ -352,13 +345,8 @@ function historyPass(ctx: Context, state: SyncRow): Pass {
     forward: false,
     filter: buildCreationDateFilter,
     key: (order) => order.creationDate,
-    progress: (reached) =>
-      saveState(ctx, "history_through = ?4, history_next = NULL, history_total = NULL", reached),
-    finish: () =>
-      saveState(
-        ctx,
-        "history_done_at = ?3, history_through = NULL, history_next = NULL, history_total = NULL",
-      ),
+    progress: (reached) => saveState(ctx, "history_through = ?4", reached),
+    finish: () => saveState(ctx, "history_done_at = ?3, history_through = NULL"),
   };
 }
 
@@ -454,7 +442,7 @@ export async function acquireOrders(input: {
          polled_at = COALESCE(excluded.polled_at, sync_state.polled_at),
          updated_at = excluded.updated_at
        WHERE sync_state.locked_until IS NULL OR sync_state.locked_until <= ?3
-       RETURNING cursor, recent_end, recent_next, history_from, history_until,
+       RETURNING cursor, recent_end, history_from, history_until,
                  history_through, history_done_at,
                  trading_cursor, trading_end, trading_page, trading_total, requested_at`,
     )

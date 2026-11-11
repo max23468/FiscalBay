@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 
 import { sign } from "node:crypto";
 
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { receiveWebhook, consumeWebhooks } from "../app/webhooks.server";
 
@@ -51,6 +51,8 @@ vi.mock("react-router", async (original) => ({
 }));
 
 setupScenarios(router);
+// Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+afterEach(() => vi.restoreAllMocks());
 
 it("la revoca del consenso porta il negozio da ricollegare senza toccare i dati", async () => {
   expect((await receive(ebayRequest(revocation)))?.status).toBe(204);

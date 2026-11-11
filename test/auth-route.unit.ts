@@ -385,7 +385,6 @@ describe("limiti dei tentativi", () => {
   it.each([
     ["/sign-in/email", 10],
     ["/sign-up/email", 10],
-    ["/change-password", 10],
     ["/change-email", 10],
     ["/passkey/verify-authentication", 10],
     ["/passkey/verify-registration", 10],
@@ -601,6 +600,20 @@ describe("limiti dei tentativi", () => {
       expect(json.status).toBe(202);
     },
   );
+
+  it("l'accesso diretto conta gli errori e si rifiuta quando il modulo chiederebbe Turnstile", async () => {
+    const send = () =>
+      handle("/api/auth/sign-in/email", {
+        method: "POST",
+        headers: { "cf-connecting-ip": "198.51.100.9", "content-type": "application/json" },
+        body: JSON.stringify({ email: "vittima@example.invalid", password: "tentativo" }),
+      });
+    services.handler.mockImplementation(async () => new Response(null, { status: 401 }));
+    for (let count = 0; count < 3; count++) expect((await send()).status).toBe(401);
+    services.handler.mockClear();
+    expect((await send()).status).toBe(429);
+    expect(services.handler).not.toHaveBeenCalled();
+  });
 
   it("le pagine trasmettono l'attesa dell'action oltre a no-store", () => {
     expect(pageHeaders({ actionHeaders: new Headers(limitedHeaders(60)) })).toEqual({

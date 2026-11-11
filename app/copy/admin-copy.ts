@@ -117,6 +117,7 @@ const it = {
       same_workspace: "Stesso spazio",
       workspace_not_found: "Spazio inesistente",
       account_deletion: "Cancellazione in corso",
+      more: "Da ripetere",
       overlap: "Sovrapposta",
       started: "Già iniziata",
       reason_required: "Motivo mancante",
@@ -396,6 +397,7 @@ const it = {
       conflict: "Negozio o spazio cambiati dopo la preparazione: nulla eseguito.",
       account_deletion:
         "Uno dei due spazi ha una cancellazione dell’account in corso: nessun trasferimento.",
+      more: "Restano ordini da eliminare: ripeti la conferma per completare il trasferimento.",
     },
     task: { queued: "Lavoro riaccodato.", busy: "Il lavoro è in esecuzione o già concluso." },
     receipts: (count: number) =>
@@ -883,6 +885,7 @@ const en: AdminCopy = {
       same_workspace: "Same space",
       workspace_not_found: "Space not found",
       account_deletion: "Deletion in progress",
+      more: "To repeat",
       overlap: "Overlapping",
       started: "Already started",
       reason_required: "Reason missing",
@@ -1158,6 +1161,7 @@ const en: AdminCopy = {
       expired: "Preparation expired: prepare another one.",
       conflict: "Store or space changed after the preparation: nothing done.",
       account_deletion: "One of the two spaces has an account deletion in progress: no transfer.",
+      more: "Some orders are still to delete: repeat the confirmation to finish the transfer.",
     },
     task: { queued: "Job requeued.", busy: "The job is running or already done." },
     receipts: (count: number) =>

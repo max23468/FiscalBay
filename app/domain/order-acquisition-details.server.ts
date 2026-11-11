@@ -1,4 +1,4 @@
-import { deadlineCheckAt } from "./order-import.server";
+import { deadlineCheckAt, DuplicateLineIdentity } from "./order-import.server";
 import type { OrderObservation } from "./order-observation.server";
 import { writableStore } from "./store-state.server";
 import {
@@ -11,6 +11,7 @@ import {
   type Context,
   urgentDays,
 } from "./order-acquisition-context.server";
+import { logFailure } from "../errors";
 import { UpstreamError } from "../integrations/http.server";
 import {
   fulfillmentObservation,
@@ -64,6 +65,31 @@ async function knownImages(
   return new Map(results.flatMap((row) => (row.image_url ? [[row.listing, row.image_url]] : [])));
 }
 
+/**
+ * Registra gli ordini di una pagina Fulfillment, in sequenza: la riconciliazione delle righe
+ * presuppone scritture serializzate per negozio. Un ordine non conforme, o con righe ripetute, si
+ * salta e si segnala come in Trading: gli altri restano acquisibili e la lettura del negozio non
+ * si ferma a ogni turno sullo stesso ordine.
+ */
+export async function recordFulfillmentOrders(ctx: Context, orders: readonly unknown[]) {
+  let skipped = 0;
+  await inSequence(orders, async (order) => {
+    let observation: OrderObservation;
+    try {
+      observation = fulfillmentObservation(order, ctx.at);
+    } catch {
+      skipped += 1;
+      return;
+    }
+    await record(ctx, observation).catch((error: unknown) => {
+      if (!(error instanceof DuplicateLineIdentity)) throw error;
+      skipped += 1;
+    });
+  });
+  if (skipped > 0)
+    logFailure({ error: new UpstreamError("invalid_response"), operation: "order_acquisition" });
+}
+
 /** Credenziali rifiutate o limite di eBay: nessuna lettura successiva può riuscire. */
 export function stopsReads(error: unknown): error is UpstreamError {
   return (
@@ -80,11 +106,19 @@ function callLimit(error: unknown): error is UpstreamError {
   return error instanceof UpstreamError && error.details.limit !== undefined;
 }
 
+/** Secondi di attesa ancora in corso per la quota di una chiamata Trading; 0 se nessuna. */
+function callWait(ctx: Context, call: string | undefined) {
+  const key = limitKey(ctx.access.configuration.apiOrigin, call);
+  return rateLimitWait(ctx.db, key, new Date(ctx.at));
+}
+
 /** Attesa ancora in corso per la quota di una chiamata Trading. */
 async function callLimited(ctx: Context, call: string) {
-  const key = limitKey(ctx.access.configuration.apiOrigin, call);
-  return (await rateLimitWait(ctx.db, key, new Date(ctx.at))) > 0;
+  return (await callWait(ctx, call)) > 0;
 }
+
+/** Quota `GetOrders` in attesa: per il dettaglio vale come il limite restituito da eBay. */
+const ordersLimited = () => new UpstreamError("rate_limited", { limit: "GetOrders" });
 
 export type PendingDetail = {
   external_order_id: string;
@@ -94,13 +128,23 @@ export type PendingDetail = {
   creation_time: string;
 };
 
-/** Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. */
+/**
+ * Rimanda il dettaglio dopo un errore del singolo ordine o, all'ultimo tentativo, lo chiude. Con
+ * la quota di una chiamata esaurita la versione non è in errore: resta da leggere e riparte alla
+ * fine dell'attesa registrata, senza consumare tentativi né rileggere Fulfillment a ogni turno.
+ */
 async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) {
   const code = error instanceof UpstreamError ? error.failure : "invalid_response";
   // Anche eBay non disponibile riguarda l'esecuzione, non il singolo ordine.
   const runFailure = stopsReads(error) || code === "unavailable";
   const attempts = pending.detail_attempts + 1;
   const delay = detailRetryMinutes[attempts - 1];
+  const waiting = callLimit(error);
+  const retryMilliseconds = waiting
+    ? (await callWait(ctx, error.details.limit)) * 1000
+    : delay === undefined
+      ? null
+      : delay * 60_000;
   const scope = `WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
                    AND last_modified_time = ?7
                    AND NOT EXISTS (SELECT 1 FROM order_tax_checks tc
@@ -110,12 +154,14 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
                    AND ${writableStore}`;
   await ctx.db
     .prepare(
-      runFailure
-        ? `UPDATE order_source_refs SET detail_error = ?4 ${scope}`
-        : delay === undefined
-          ? `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = ?4,
+      waiting
+        ? `UPDATE order_source_refs SET detail_error = NULL, detail_retry_at = ?6 ${scope}`
+        : runFailure
+          ? `UPDATE order_source_refs SET detail_error = ?4 ${scope}`
+          : delay === undefined
+            ? `UPDATE order_source_refs SET detail_for = last_modified_time, detail_error = ?4,
                   detail_attempts = 0, detail_retry_at = NULL ${scope}`
-          : `UPDATE order_source_refs SET detail_error = ?4, detail_attempts = ?5,
+            : `UPDATE order_source_refs SET detail_error = ?4, detail_attempts = ?5,
                   detail_retry_at = ?6 ${scope}`,
     )
     .bind(
@@ -124,7 +170,9 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
       pending.external_order_id,
       code,
       attempts,
-      delay === undefined ? null : new Date(Date.parse(ctx.at) + delay * 60_000).toISOString(),
+      retryMilliseconds === null
+        ? null
+        : new Date(Date.parse(ctx.at) + retryMilliseconds).toISOString(),
       pending.last_modified_time,
       ctx.at,
       deadlineCheckAt(ctx.at),
@@ -135,9 +183,8 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
     .bind(ctx.storeId, ctx.grantedAt)
     .first();
   if (!writable) throw new NotWritable();
-  // Con la quota di una chiamata esaurita la versione resta in attesa senza consumare
-  // tentativi, e la lettura prosegue con gli altri ordini.
-  if (runFailure && !callLimit(error)) throw error;
+  // Con la quota di una chiamata esaurita la lettura prosegue con gli altri ordini.
+  if (runFailure && !waiting) throw error;
 }
 
 /**
@@ -220,6 +267,12 @@ async function prepareDetail(
     return false;
   };
   let trading = fallback && !qualifiedMarketplace && needsTrading();
+  // La lettura fiscale Trading è già certa e la sua quota è in attesa: la versione aspetta senza
+  // spendere la lettura Fulfillment e le immagini, che andrebbero ripetute.
+  if (trading && (await callLimited(ctx, "GetOrders"))) {
+    await failDetail(ctx, pending, ordersLimited());
+    return null;
+  }
   const reserve = (calls: number) => {
     const extra = trading && !batch.reserved ? 1 : 0;
     if (!spend(ctx.budget, calls + extra)) return false;
@@ -393,9 +446,7 @@ async function finishBatch(ctx: Context, batch: Prepared[]) {
   const ids = batch.map((prepared) => prepared.observation.externalOrderId);
   let results: Map<string, TradingTaxObservation | UpstreamError> | null = null;
   let failure: unknown = null;
-  if (await callLimited(ctx, "GetOrders"))
-    // Stryker disable next-line StringLiteral: il nome segnala soltanto un limite di quota; il valore non cambia l'esito.
-    failure = new UpstreamError("rate_limited", { limit: "GetOrders" });
+  if (await callLimited(ctx, "GetOrders")) failure = ordersLimited();
   else {
     results = await readTradingTaxObservations(ctx.access, ids).catch(async (error: unknown) => {
       if (callLimit(error))

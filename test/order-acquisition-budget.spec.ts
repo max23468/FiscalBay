@@ -172,6 +172,17 @@ it("un Worker con una parte della quota si ferma alla sua parte fino all'azzeram
       .bind(`${origin}#GetOrders`)
       .first(),
   ).toEqual({ until: reset });
+  // La lettura fiscale Trading è certa: la versione aspetta l'azzeramento senza errore e senza
+  // spendere la lettura Fulfillment e l'immagine.
+  expect(
+    fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname.includes("/order/")),
+  ).toEqual([]);
+  expect(calls(fetcher, "GetItem")).toBe(0);
+  expect(
+    await env.DB.prepare(
+      "SELECT detail_for, detail_error, detail_retry_at, detail_attempts FROM order_source_refs",
+    ).first(),
+  ).toEqual({ detail_for: null, detail_error: null, detail_retry_at: reset, detail_attempts: 0 });
 });
 
 /** Ordine fuori dal marketplace qualificato, creato `days` giorni prima del 2026-09-02. */

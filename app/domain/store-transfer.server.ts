@@ -1,4 +1,5 @@
 import { storeIdentityHash, storeMarkSql, trialMarkExpiry } from "./store-marks.server";
+import { deleteOrders, requestOrderBudget, storeDataTables } from "./deletion-steps.server";
 import { applyWorkspacePlan } from "./free-store.server";
 import { clearedStoreProfileSql, storeNameSql } from "./store-state.server";
 
@@ -105,19 +106,36 @@ export type TransferResult =
   /** Il negozio o lo spazio di destinazione non sono più quelli verificati. */
   | "conflict"
   /** Uno dei due spazi ha nel frattempo una cancellazione dell'account in corso. */
-  | "account_deletion";
+  | "account_deletion"
+  /** Restano ordini oltre il tetto della richiesta: la stessa conferma, ripetuta, prosegue. */
+  | "more";
 
 /**
- * Esegue il trasferimento preparato in un solo commit. Ogni istruzione dipende dalla prima, che
- * segna la preparazione eseguita soltanto se il negozio è ancora dello spazio di partenza, la
- * destinazione esiste e nessuno dei due spazi si sta cancellando, con l'identificativo casuale
- * di questa esecuzione: due conferme concorrenti o ripetute, anche nello stesso istante, ne
- * eseguono una sola e l'altra non scrive nulla.
+ * Condizioni della conferma, sulla riga `t` di `store_transfers` all'istante `at`: preparazione
+ * non eseguita né scaduta, negozio ancora dello spazio di partenza, destinazione esistente e
+ * nessuno dei due spazi in cancellazione.
+ */
+const confirmableSql = (t: string, at: string) => `${t}.executed_at IS NULL
+  AND julianday(${t}.expires_at) > julianday(${at})
+  AND EXISTS (SELECT 1 FROM ebay_stores s WHERE s.id = ${t}.store_id
+    AND s.workspace_id = ${t}.from_workspace_id)
+  AND EXISTS (SELECT 1 FROM workspaces w WHERE w.id = ${t}.to_workspace_id)
+  AND NOT ${deletionSql(`${t}.from_workspace_id`, `${t}.to_workspace_id`)}`;
+
+/**
+ * Esegue il trasferimento preparato. Prima elimina a lotti gli ordini del negozio, ciascun lotto
+ * soltanto finché la preparazione è ancora confermabile: una sola istruzione su un negozio grande
+ * supera i limiti del database. Il resto sta in un solo commit: ogni istruzione dipende dalla
+ * prima, che segna la preparazione eseguita soltanto se il negozio è ancora dello spazio di
+ * partenza, la destinazione esiste e nessuno dei due spazi si sta cancellando, con
+ * l'identificativo casuale di questa esecuzione: due conferme concorrenti o ripetute, anche
+ * nello stesso istante, ne eseguono una sola e l'altra non scrive altro.
  */
 export async function confirmStoreTransfer(
   env: Pick<Env, "DB" | "BETTER_AUTH_SECRET">,
   input: { id: string; actor: string },
   now = new Date(),
+  budget = requestOrderBudget,
 ): Promise<{ result: TransferResult; transfer?: { storeId: string; from: string; to: string } }> {
   const db = env.DB;
   const at = now.toISOString();
@@ -145,15 +163,21 @@ export async function confirmStoreTransfer(
     .bind(transfer.store_id)
     .first<string>("ebay_user_id");
   if (!identity) return { result: "conflict" };
+  // Un lotto non elimina nulla se la preparazione non è più confermabile: la conferma qui sotto
+  // lo rileva. Gli ordini scritti da una lettura dopo l'ultimo lotto li elimina il commit.
+  const emptied = await deleteOrders(
+    db,
+    `SELECT id FROM orders WHERE store_id = ?3 AND EXISTS (SELECT 1 FROM store_transfers t
+      WHERE t.id = ?1 AND t.store_id = ?3 AND ${confirmableSql("t", "?2")})`,
+    [input.id, at, transfer.store_id],
+    budget,
+  );
+  if (!emptied) return { result: "more" };
   const step = (sql: string) => db.prepare(sql).bind(input.id, at, transfer.store_id, execution);
   const [claimed] = await db.batch([
     db
       .prepare(`UPDATE store_transfers SET executed_at = ?2, execution_id = ?3
-        WHERE id = ?1 AND executed_at IS NULL AND julianday(expires_at) > julianday(?2)
-          AND EXISTS (SELECT 1 FROM ebay_stores s WHERE s.id = store_transfers.store_id
-            AND s.workspace_id = store_transfers.from_workspace_id)
-          AND EXISTS (SELECT 1 FROM workspaces w WHERE w.id = store_transfers.to_workspace_id)
-          AND NOT ${deletionSql("store_transfers.from_workspace_id", "store_transfers.to_workspace_id")}`)
+        WHERE id = ?1 AND ${confirmableSql("store_transfers", "?2")}`)
       .bind(input.id, at, execution),
     // Il segno con i limiti del negozio nello spazio di partenza, prima che lo lasci.
     db
@@ -172,12 +196,8 @@ export async function confirmStoreTransfer(
     step(`DELETE FROM orders WHERE store_id = ?3 AND ${mine}`),
     // I riferimenti eliminati valevano per il vecchio spazio: il nuovo importa il proprio storico.
     step(`DELETE FROM deleted_order_keys WHERE store_id = ?3 AND ${mine}`),
-    step(`DELETE FROM sync_state WHERE store_id = ?3 AND ${mine}`),
-    step(`DELETE FROM sync_runs WHERE store_id = ?3 AND ${mine}`),
+    ...storeDataTables.map((table) => step(`DELETE FROM ${table} WHERE store_id = ?3 AND ${mine}`)),
     step(`DELETE FROM ebay_store_pauses WHERE store_id = ?3 AND ${mine}`),
-    step(`DELETE FROM telegram_store_preferences WHERE store_id = ?3 AND ${mine}`),
-    step(`DELETE FROM telegram_deliveries WHERE store_id = ?3 AND ${mine}`),
-    step(`DELETE FROM webhook_receipts WHERE store_id = ?3 AND ${mine}`),
     step(`DELETE FROM ebay_store_link_sessions WHERE expected_store_id = ?3 AND ${mine}`),
     step(`UPDATE ebay_stores SET workspace_id = (SELECT to_workspace_id FROM store_transfers
           WHERE id = ?1), linked_at = ?2, disconnected_at = ?2, data_deleted_at = ?2,

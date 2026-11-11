@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyStripeEvent,
   recordSupportErasure,
@@ -70,9 +70,15 @@ describe("Rimborsi, dispute e cancellazioni finanziarie", () => {
   const signals = (errors: { mock: { calls: unknown[][] } }) =>
     errors.mock.calls.map(([line]) => (JSON.parse(String(line)) as { failure?: string }).failure);
 
-  beforeEach(async () => {
+  // Il reset conserva utenti e sessioni e nessuna prova li modifica: la registrazione reale si
+  // fa una volta, all'istante fissato dal reset, e ogni prova ricrea soltanto lo spazio.
+  beforeAll(async () => {
     await resetDatabase();
     ({ userId, cookie } = await verifiedSession(`rimborsi-${crypto.randomUUID()}@example.invalid`));
+  });
+
+  beforeEach(async () => {
+    await resetDatabase();
     await workspace(userId);
   });
 

@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react";
 import { createContext, use, useId, type ReactNode } from "react";
 import { Link, useFetcher } from "react-router";
 
+import { useFetcherResult } from "~/components/action";
 import { Button } from "~/components/ui/button";
 import { Field, FieldLabel } from "~/components/ui/field";
 import { Input } from "~/components/ui/input";
@@ -75,6 +76,7 @@ export function ActionForm({
   children,
   className,
   onResult,
+  onSuccess,
 }: {
   intent: string;
   fields?: Record<string, string>;
@@ -85,9 +87,14 @@ export function ActionForm({
   children?: ReactNode;
   className?: string;
   onResult?: (result: AdminActionResult) => ReactNode;
+  /** Dopo un esito riuscito, per esempio per svuotare i campi di una creazione. */
+  onSuccess?: () => void;
 }) {
   const { t } = useAdmin();
   const fetcher = useFetcher<AdminActionResult>();
+  useFetcherResult(fetcher, (outcome) => {
+    if (outcome.ok) onSuccess?.();
+  });
   const pending = fetcher.state !== "idle";
   const result = fetcher.state === "idle" ? fetcher.data : undefined;
   const form = (

@@ -48,7 +48,11 @@ import { planChoiceParam } from "../app/app-links";
 import { recordSignupSource } from "../app/domain/signup-sources.server";
 
 beforeEach(resetDatabase);
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  // Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+  vi.restoreAllMocks();
+});
 
 it("mostra l'autorizzazione preventiva in entrambe le lingue senza creare profili o inviare email", async () => {
   const person = { tipo: "privato", nome: "Mario", cognome: "Rossi" };

@@ -1,19 +1,9 @@
-import {
-  limitKey,
-  record,
-  recordRateLimit,
-  spend,
-  type Context,
-} from "./order-acquisition-context.server";
+import { limitKey, recordRateLimit, spend, type Context } from "./order-acquisition-context.server";
+import { recordFulfillmentOrders } from "./order-acquisition-details.server";
 import { logFailure } from "../errors";
-import { inSequence } from "../sequence";
 import { dayMilliseconds } from "../time";
 import { UpstreamError } from "../integrations/http.server";
-import {
-  fulfillmentObservation,
-  orderIdsLimit,
-  readFulfillmentOrders,
-} from "../integrations/ebay/fulfillment.server";
+import { orderIdsLimit, readFulfillmentOrders } from "../integrations/ebay/fulfillment.server";
 
 /**
  * Rilettura dello username dell'acquirente (§30). Una cancellazione richiesta da eBay trova gli
@@ -65,8 +55,8 @@ export async function checkBuyerNames(ctx: Context): Promise<void> {
   if (orderIds.length === 0 || !spend(ctx.budget, 1, 1)) return;
   try {
     const page = await readFulfillmentOrders(ctx.access, { orderIds });
-    // In sequenza: la riconciliazione delle righe presuppone scritture serializzate per negozio.
-    await inSequence(page.orders, (order) => record(ctx, fulfillmentObservation(order, ctx.at)));
+    // Un ordine non conforme si salta e si segna letto con il gruppo.
+    await recordFulfillmentOrders(ctx, page.orders);
   } catch (error) {
     if (!(error instanceof UpstreamError) || error.failure === "credentials") throw error;
     if (error.failure === "rate_limited") {

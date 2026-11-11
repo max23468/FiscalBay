@@ -71,11 +71,19 @@ export async function removePasskey(db: D1Database, userId: string, id: string):
 }
 import type { Language } from "../i18n";
 
-/** Destinatario e lingua dell'ultimo consenso, per l'avviso sul metodo di accesso. */
+/**
+ * Lingua delle email di servizio all'utente `user`, espressione SQL del suo id: quella scelta
+ * nelle preferenze, altrimenti quella dell'ultima accettazione dei Termini.
+ */
+export const emailLanguageSql = (user: string) => `COALESCE(
+  (SELECT p.language FROM user_preferences p WHERE p.user_id = ${user}),
+  (SELECT t.language FROM terms_acceptances t WHERE t.user_id = ${user}
+    ORDER BY t.accepted_at DESC LIMIT 1))`;
+
+/** Destinatario e lingua dell'avviso sul metodo di accesso. */
 export function securityRecipient(db: D1Database, userId: string) {
   return db
-    .prepare(`SELECT u."email", (SELECT t.language FROM terms_acceptances t
-    WHERE t.user_id = u."id" ORDER BY t.accepted_at DESC LIMIT 1) AS language
+    .prepare(`SELECT u."email", ${emailLanguageSql('u."id"')} AS language
     FROM "user" u WHERE u."id" = ?`)
     .bind(userId)
     .first<{ email: string; language: Language | null }>();

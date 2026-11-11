@@ -440,7 +440,7 @@ function authPlugins(env: Env, appOrigin: URL): BetterAuthPlugin[] {
     // caratteri del suo SHA-1. Attivo sui domini HTTPS: le prove locali non escono in rete.
     haveIBeenPwned({
       enabled: appOrigin.protocol === "https:",
-      paths: ["/sign-up/email", "/change-password", "/reset-password"],
+      paths: ["/sign-up/email", "/reset-password"],
     }),
     // Solo nel cookie del browser, senza campo nel database: la pagina di accesso evidenzia il
     // metodo usato l'ultima volta su questo dispositivo.

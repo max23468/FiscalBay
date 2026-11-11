@@ -93,9 +93,6 @@ export function affectingSources(changed, graph) {
   return reached;
 }
 
-/** Moduli critici raggiunti da almeno un sorgente modificato. */
-export const affectedModules = (changed, graph) => new Set(affectingSources(changed, graph).keys());
-
 /**
  * Divide i moduli fra da provare e riusati. `runs` sono le run precedenti su commit antenati,
  * dalla più recente, con gli esiti per modulo; `affectedSince(commit)` associa a ogni modulo i
@@ -150,19 +147,6 @@ export const mutationNeutral = (file) =>
   /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|stryker\.config\.json|vitest.*\.config\.ts)$/u.test(
     file,
   );
-
-/**
- * Vero se i file cambiati da una prova riuscita lasciano valida la mutation di `target`: nessun
- * sorgente che il modulo importa, anche indirettamente, né il modulo stesso; nessun test che lo
- * importa direttamente e nessun helper o fixture dei test, che possono indebolire qualunque prova;
- * nessuna migration o altro file letto dai test. `graph` comprende anche i test.
- */
-export function proofUnaffected(changed, target, graph, added = new Set()) {
-  return (
-    !affectingSources(changed, graph).has(target) &&
-    otherFilesUnaffected(changed, target, graph, added)
-  );
-}
 
 /**
  * File cambiati diversi dai sorgenti che lasciano valida la prova di `target`. Una prova che lo
@@ -250,8 +234,12 @@ export function planLayout(plan, target) {
 }
 
 /**
- * Come `proofUnaffected`, ma un sorgente critico diverso dal modulo stesso vale come invariato se
- * `excused(source)` lo conferma, per esempio perché è entrato dalla base già provato nella sua PR.
+ * Vero se i file cambiati da una prova riuscita lasciano valida la mutation di `target`: nessun
+ * sorgente che il modulo importa, anche indirettamente, né il modulo stesso; nessun test che lo
+ * importa direttamente e nessun helper o fixture dei test, che possono indebolire qualunque prova;
+ * nessuna migration o altro file letto dai test. `graph` comprende anche i test. Un sorgente
+ * critico diverso dal modulo stesso vale come invariato se `excused(source)` lo conferma, per
+ * esempio perché è entrato dalla base già provato nella sua PR.
  */
 export async function proofStands(
   changed,

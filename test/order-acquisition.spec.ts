@@ -1,10 +1,12 @@
 import { env } from "cloudflare:workers";
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 
 import { checkBuyerNames } from "../app/domain/buyer-check.server";
+
+import { NotWritable } from "../app/domain/order-acquisition-context.server";
 
 import { setSwitch } from "../app/domain/service-settings.server";
 
@@ -28,6 +30,8 @@ import {
 } from "./fixtures/order-acquisition-scenarios";
 
 setupScenarios();
+// Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+afterEach(() => vi.restoreAllMocks());
 
 it("legge il CF Fulfillment italiano con header e conserva lo storico quando manca", async () => {
   const tax = {
@@ -483,18 +487,6 @@ it("con le chiamate eBay spente durante la lettura Trading la riprende dalla pag
   ).toEqual({ trading_cursor: "2026-09-02T00:00:00.000Z", trading_page: null });
 });
 
-it("una passata lasciata a metà dalla paginazione precedente riparte con la sovrapposizione", async () => {
-  await acquire(ebay({ orders: [] }));
-  await env.DB.prepare("UPDATE sync_state SET recent_end = ?1, recent_next = ?2, recent_total = 60")
-    .bind("2026-09-02T00:30:00.000Z", "https://api.ebay.com/sell/fulfillment/v1/order?offset=25")
-    .run();
-  const fetcher = ebay({ orders: [] });
-  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
-  expect(slices(fetcher, "lastmodifieddate")).toEqual([
-    "2026-09-01T23:45:00.000Z..2026-09-02T01:00:00.000Z",
-  ]);
-});
-
 it("stringe un tratto denso dal campione della pagina, nell'ordine delle date", async () => {
   await acquire(ebay({ orders: [] }));
   // Creati e modificati in ordine: eBay restituisce per primi i più recenti, i più lontani
@@ -568,6 +560,41 @@ it("una data illeggibile nella pagina non ferma la lettura dei tratti", async ()
   });
   expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
   expect(await count("SELECT COUNT(*) AS total FROM orders")).toBe(30);
+});
+
+it("un ordine Fulfillment non conforme si salta e si segnala senza fermare la passata", async () => {
+  await acquire(ebay({ orders: [] }));
+  const orders = series("12-conforme", 5, "2026-09-02T00:30:00.000Z").map((item, index) => ({
+    ...item,
+    lastModifiedDate: new Date(
+      Date.parse("2026-09-02T00:40:00.000Z") + index * 1_000,
+    ).toISOString(),
+    // Importo non numerico e quantità non intera: l'osservazione non si costruisce.
+    ...(index === 1
+      ? { pricingSummary: { total: { value: "non-un-importo", currency: "EUR" } } }
+      : {}),
+    ...(index === 3 ? { lineItems: [{ ...order().lineItems[0]!, quantity: 1.5 }] } : {}),
+  }));
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+  const fetcher = ebay({ orders });
+  expect(await acquire(fetcher, "2026-09-02T01:00:00.000Z")).toBe("complete");
+  expect(
+    await env.DB.prepare("SELECT ebay_order_id FROM orders ORDER BY ebay_order_id")
+      .all()
+      .then(({ results }) => results.map((row) => row.ebay_order_id)),
+  ).toEqual(["12-conforme-00000", "12-conforme-00002", "12-conforme-00004"]);
+  // Il limite avanza: il turno successivo non rilegge il tratto con gli ordini saltati.
+  expect(await syncState()).toMatchObject({
+    cursor: "2026-09-02T01:00:00.000Z",
+    recent_end: null,
+    last_success_at: "2026-09-02T01:00:00.000Z",
+  });
+  expect(logged.mock.calls.map(([line]) => JSON.parse(String(line)) as unknown)).toEqual([
+    expect.objectContaining({ operation: "order_acquisition", failure: "invalid_response" }),
+  ]);
+  const next = ebay({ orders });
+  expect(await acquire(next, "2026-09-02T01:20:00.000Z")).toBe("complete");
+  expect(logged).toHaveBeenCalledTimes(1);
 });
 
 it("non salta ordini se l'elenco cambia durante la lettura dei tratti", async () => {
@@ -987,6 +1014,45 @@ describe("username degli acquirenti senza token eIAS", () => {
     ).toBe(52);
     await checkBuyerNames(context(fetcher, at));
     expect(byIds(fetcher)).toHaveLength(2);
+  });
+
+  it("salta l'ordine non conforme del gruppo e lo segna letto con gli altri", async () => {
+    const orders = series("N", 3, "2026-09-01T23:00:00.000Z");
+    await acquire(ebay({ orders }));
+    await env.DB.prepare("UPDATE orders SET marketplace_id = 'EBAY_IT'").run();
+    const line = order().lineItems[0]!;
+    // Importo non numerico, righe ripetute e, per ultimo, un ordine leggibile.
+    const reread = ebay({
+      orders: [
+        { ...orders[0]!, pricingSummary: { total: { value: "non-un-importo", currency: "EUR" } } },
+        { ...orders[1]!, lineItems: [line, line] },
+        { ...orders[2]!, buyer: { ...orders[2]!.buyer, username: "acquirente-rinominato" } },
+      ],
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await checkBuyerNames(context(reread, after(8)));
+    expect(byIds(reread)).toHaveLength(1);
+    expect(
+      await env.DB.prepare(
+        `SELECT ebay_order_id AS id, json_extract(buyer_json, '$.username') AS username,
+                buyer_checked_at AS at FROM orders ORDER BY ebay_order_id`,
+      )
+        .all()
+        .then(({ results }) => results),
+    ).toEqual([
+      { id: "N-00000", username: "acquirente-sintetico", at: after(8) },
+      { id: "N-00001", username: "acquirente-sintetico", at: after(8) },
+      { id: "N-00002", username: "acquirente-rinominato", at: after(8) },
+    ]);
+    expect(logged.mock.calls.map(([entry]) => JSON.parse(String(entry)) as unknown)).toEqual([
+      expect.objectContaining({ operation: "order_acquisition", failure: "invalid_response" }),
+    ]);
+    // Il consenso cambiato ferma l'esecuzione: non è un ordine da saltare.
+    await env.DB.prepare("UPDATE orders SET marketplace_id = 'EBAY_IT'").run();
+    await expect(
+      checkBuyerNames({ ...context(reread, after(16)), grantedAt: "2026-09-01T00:00:01.000Z" }),
+    ).rejects.toBeInstanceOf(NotWritable);
+    expect(await checkedAt("N-00002")).toBe(after(8));
   });
 
   it("con le chiamate eBay spente dalla console non verifica gli username", async () => {

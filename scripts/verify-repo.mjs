@@ -295,8 +295,25 @@ export function checkSecurityTxt(files, now = new Date()) {
   return errors;
 }
 
+// Due migration applicate lo stesso giorno con lo stesso numero: i nomi sono registrati.
+const sharedMigrationNumbers = new Set(["0084"]);
+
+/** Ogni migration ha un numero proprio: due PR con lo stesso numero si accorgono prima del merge. */
+export function checkMigrationNumbers(files, shared = sharedMigrationNumbers) {
+  const seen = new Map();
+  const errors = [];
+  for (const { path: file } of files) {
+    const number = file.match(/^migrations\/(\d{4})_/u)?.[1];
+    if (!number || shared.has(number)) continue;
+    if (seen.has(number)) errors.push(`${file}: numero già usato da ${seen.get(number)}`);
+    else seen.set(number, file);
+  }
+  return errors;
+}
+
 export const checks = {
   "sigle di piano": checkPlanCodes,
+  "numeri delle migration": (files) => checkMigrationNumbers(files),
   fixture: checkFixtures,
   "moduli server raggiungibili": (files) => checkImports(files),
   "versioni degli strumenti": checkToolPins,

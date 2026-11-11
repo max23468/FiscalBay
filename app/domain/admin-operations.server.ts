@@ -175,9 +175,11 @@ async function readSignals(db: D1Database, now: Date, at: string) {
     db.prepare(`SELECT s.id, ${storeLabelSql("s")} AS label, COUNT(*) AS count
           FROM order_source_refs r JOIN ebay_stores s ON s.id = r.store_id
           WHERE r.detail_error IS NOT NULL AND s.data_deleted_at IS NULL GROUP BY s.id`),
+    // Soltanto i guasti: un rifiuto certo di Telegram o i tentativi esauriti contano almeno un
+    // tentativo. Le chiusure volute (fine di Pro, notifiche spente, chat bloccata) non ne hanno.
     db
       .prepare(`SELECT workspace_id AS id, COUNT(*) AS count, MIN(failed_at) AS since
-          FROM telegram_deliveries WHERE failed_at IS NOT NULL
+          FROM telegram_deliveries WHERE failed_at IS NOT NULL AND attempts > 0
             AND julianday(failed_at) > julianday(?1) - 1 GROUP BY workspace_id`)
       .bind(at),
     db.prepare("SELECT api_origin AS id, until FROM ebay_rate_limits WHERE until > ?").bind(at),

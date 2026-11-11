@@ -1,7 +1,9 @@
 import { priceGeneration } from "../catalog";
 import { stripeEnvironment } from "../integrations/stripe.server";
-import { activeCoverageSql, activeEntitlementSql } from "./grants.server";
+import { renewingSubscriptionStatuses } from "./billing-subscriptions.server";
+import { activeCoverageSql, activeEntitlementSql, entitlementInForce } from "./grants.server";
 import { dormantSyncMinutes } from "./order-sync.server";
+import { sqlList } from "./sql.server";
 import { dormantWorkspaceSql } from "./store-state.server";
 import { dayMilliseconds } from "../time";
 import { signupChannels, type SignupChannel } from "../signup-source";
@@ -65,6 +67,19 @@ const julian = (column: string) =>
 const readingStoreSql = `s.data_deleted_at IS NULL AND s.disconnected_at IS NULL
   AND c.rejected_at IS NULL AND c.refresh_expires_at > ?1
   AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id)`;
+
+/**
+ * Abbonamento pagante all'istante `at`: si rinnova da solo e il suo spazio ha una copertura Pro
+ * pagata in vigore. Stripe registra come `trialing` anche l'abbonato che ha programmato un cambio
+ * di periodicità o ricevuto una concessione che rinvia il rinnovo, e lui resta pagante finché
+ * dura il periodo pagato; l'abbonamento scelto durante la prova non lo è ancora. Un rinnovo non
+ * pagato torna subito al Free e resta fuori.
+ */
+const payingSubscriptionSql = (alias: string, at: string) =>
+  `${alias}.status IN (${sqlList(renewingSubscriptionStatuses)}) AND ${alias}.unavailable_at IS NULL
+    AND julianday(${alias}.current_period_end) > julianday(${at})
+    AND EXISTS (SELECT 1 FROM workspace_entitlements e WHERE e.workspace_id = ${alias}.workspace_id
+      AND e.source = 'premium' AND ${entitlementInForce("e", at)})`;
 
 /** Mediana al decimo: oltre, la precisione dei giorni giuliani non è una misura. */
 function median(values: number[]) {
@@ -184,8 +199,7 @@ async function commerce(env: Env, from: string, to: string) {
     db
       .prepare(`SELECT offer, price_generation = ?3 AS listed, COUNT(*) AS count,
           SUM(cancel_at_period_end) AS cancelling
-        FROM stripe_subscriptions WHERE environment = ?2 AND status IN ('active', 'past_due')
-          AND unavailable_at IS NULL AND julianday(current_period_end) > julianday(?1)
+        FROM stripe_subscriptions s WHERE environment = ?2 AND ${payingSubscriptionSql("s", "?1")}
         GROUP BY offer, listed`)
       .bind(to, stripeEnvironment(env), priceGeneration.id),
     db

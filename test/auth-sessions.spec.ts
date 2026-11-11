@@ -474,25 +474,29 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await admin(user.cookie)).toBe(404);
     // Il campo non si imposta da registrazione o modifica del profilo.
     await jsonRequest("update-user", user.cookie, { admin: true });
-    const created = await jsonRequest("sign-up/email", "", {
-      name: "Admin sintetico",
-      email: "admin.registrato@example.invalid",
-      password: "Password-sintetica-123!",
-      admin: true,
-    });
+    // La registrazione diretta è chiusa (solo dai moduli): la prova passa dal router di Auth.
+    const created = await createAuth(env).handler(
+      new Request(`${origin}/api/auth/sign-up/email`, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({
+          name: "Admin sintetico",
+          email: "admin.registrato@example.invalid",
+          password: "Password-sintetica-123!",
+          admin: true,
+        }),
+      }),
+    );
+    expect(created.status).toBe(200);
     expect(
       await env.DB.prepare('SELECT email, "admin" FROM "user" WHERE email IN (?, ?) ORDER BY email')
         .bind("admin.db@example.invalid", "admin.registrato@example.invalid")
         .all()
         .then((rows) => rows.results),
-    ).toEqual(
-      created.ok
-        ? [
-            { email: "admin.db@example.invalid", admin: 0 },
-            { email: "admin.registrato@example.invalid", admin: 0 },
-          ]
-        : [{ email: "admin.db@example.invalid", admin: 0 }],
-    );
+    ).toEqual([
+      { email: "admin.db@example.invalid", admin: 0 },
+      { email: "admin.registrato@example.invalid", admin: 0 },
+    ]);
     expect(await admin(user.cookie)).toBe(404);
 
     await env.DB.prepare('UPDATE "user" SET "admin" = 1 WHERE id = ?').bind(user.id).run();

@@ -27,7 +27,11 @@ import { refreshStoreToken } from "../app/integrations/ebay/seller-credentials.s
 
 import { refreshExpiringTokens } from "../app/domain/token-refresh.server";
 
+import { requestOrderBudget } from "../app/domain/deletion-steps.server";
+
 import {
+  insertOrder,
+  insertStore,
   insertStorePause,
   now,
   resetDatabase,
@@ -356,6 +360,107 @@ it("elimina i dati solo con il nome del negozio, senza restituire quota né resu
   expect((await listStores(env.DB, seller.userId))[0]).toMatchObject({
     connection: "disconnected",
   });
+});
+
+it("elimina oltre un lotto di ordini con ricevute, consegne e preferenze Telegram del negozio", async () => {
+  const seller = await linkedSeller("lotti@example.invalid");
+  const soon = new Date(Date.parse(now) + day).toISOString();
+  const storeData = (store: string) => [
+    env.DB.prepare(`INSERT INTO webhook_receipts (id, provider, environment, provider_id, topic,
+        object_id, store_id, event_at, expires_at)
+      VALUES (?1, 'ebay', 'production', ?1, 'ORDER', 'ordine', ?2, ?3, ?4)`).bind(
+      `r-${store}`,
+      store,
+      now,
+      soon,
+    ),
+    env.DB.prepare(`INSERT INTO telegram_deliveries (id, workspace_id, link_id, kind, store_id,
+        event_key, event_at, created_at)
+      VALUES (?1, ?2, 'collegamento', 'import', ?3, ?1, ?4, ?4)`).bind(
+      `d-${store}`,
+      seller.workspaceId,
+      store,
+      now,
+    ),
+    env.DB.prepare(`INSERT INTO telegram_store_preferences (store_id, enabled, updated_at)
+      VALUES (?, 0, ?)`).bind(store, now),
+  ];
+  await env.DB.batch([
+    insertStore({ id: "s-altro", workspaceId: seller.workspaceId }),
+    ...insertOrder("o-altro", { storeId: "s-altro" }),
+    ...storeData("s-altro"),
+    ...storeData(seller.storeId),
+    ...Array.from(
+      { length: 201 },
+      (_, index) => insertOrder(`o-lotto-${index}`, { storeId: seller.storeId })[0]!,
+    ),
+  ]);
+  const mine = (table: string) => count(`${table} WHERE store_id = '${seller.storeId}'`);
+  expect(await mine("orders")).toBe(202);
+
+  // Il tetto della richiesta ferma l'eliminazione: il negozio resta elencato, scollegato, e la
+  // ripetizione prosegue dagli ordini rimasti.
+  const small = { batch: 200, batches: 1 };
+  const remove = (budget?: typeof small) =>
+    deleteStoreData(
+      env.DB,
+      seller.userId,
+      seller.storeId,
+      "venditore",
+      new Date(now),
+      undefined,
+      budget,
+    );
+  expect(await remove(small)).toBe("more");
+  expect(await mine("orders")).toBe(2);
+  expect(await mine("webhook_receipts")).toBe(1);
+  expect((await listStores(env.DB, seller.userId)).map((store) => store.connection)).toContain(
+    "disconnected",
+  );
+  expect(
+    await env.DB.prepare("SELECT data_deleted_at FROM ebay_stores WHERE id = ?")
+      .bind(seller.storeId)
+      .first(),
+  ).toEqual({ data_deleted_at: null });
+
+  expect(await remove()).toBe("done");
+  for (const table of [
+    "orders",
+    "sync_state",
+    "sync_runs",
+    "webhook_receipts",
+    "telegram_deliveries",
+    "telegram_store_preferences",
+  ]) {
+    expect(await mine(table), table).toBe(0);
+    expect(await count(`${table} WHERE store_id = 's-altro'`), table).toBe(
+      table.startsWith("sync_") ? 0 : 1,
+    );
+  }
+  // Gli ordini eliminati non si reimportano.
+  expect(await mine("deleted_order_keys")).toBeGreaterThanOrEqual(202);
+});
+
+it("un tetto raggiunto chiede di ripetere l'eliminazione del negozio", async () => {
+  const seller = await linkedSeller("tetto@example.invalid");
+  const batches = requestOrderBudget.batches;
+  requestOrderBudget.batches = 1;
+  onTestFinished(() => {
+    requestOrderBudget.batches = batches;
+  });
+  const response = await storeForm(seller.cookie, {
+    intent: "store-delete",
+    store: seller.storeId,
+    conferma: "venditore",
+  });
+  expect(response).toMatchObject({
+    init: { status: 409 },
+    data: {
+      ok: false,
+      notice: "Restano ordini da eliminare: ripeti «Elimina negozio» per completare.",
+    },
+  });
+  expect((await listStores(env.DB, seller.userId))[0]!.connection).toBe("disconnected");
 });
 
 it("agisce solo sui negozi del proprio spazio", async () => {

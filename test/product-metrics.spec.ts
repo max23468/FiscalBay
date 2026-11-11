@@ -346,6 +346,8 @@ describe("KPI della console", () => {
     const trialOpen = await merchant({ createdAt: before(5) });
     const trialBought = await merchant({ createdAt: before(30) });
     const trialLost = await merchant({ createdAt: before(30) });
+    const switching = await merchant({ createdAt: before(60) });
+    const unpaid = await merchant({ createdAt: before(60) });
     const subscription = (
       id: string,
       workspaceId: string,
@@ -381,6 +383,14 @@ describe("KPI della console", () => {
       // Un'altra generazione resta fuori dal ricavo calcolato, un abbonamento chiuso da tutto.
       subscription("sub_old", trialBought, "monthly", { generation: "2025-01" }),
       subscription("sub_closed", trialLost, "annual", { status: "canceled" }),
+      // Stripe registra `trialing` l'annuale pagato con un cambio di periodicità programmato:
+      // resta pagante. L'abbonamento scelto durante la prova non lo è ancora, e un rinnovo non
+      // pagato è già tornato al Free, anche con una copertura pagata ancora aperta.
+      subscription("sub_switching", switching, "annual", { status: "trialing" }),
+      subscription("sub_chosen", trialOpen, "monthly", { status: "trialing" }),
+      subscription("sub_unpaid", unpaid, "monthly", { status: "past_due" }),
+      paid(switching, "premium", before(40), 4900),
+      paid(unpaid, "premium", before(45)),
       paid(monthly, "premium", before(50)),
       paid(monthly, "premium", before(10)),
       paid(annual, "premium", before(40), 4900),
@@ -420,10 +430,10 @@ describe("KPI della console", () => {
     ).run();
 
     const { commerce } = await productMetrics(env, 30);
-    expect(commerce.subscriptions).toEqual({ monthly: 2, annual: 1, cancelling: 1, unlisted: 1 });
-    // Mensile da 4,90 € e annuale da 49 € in dodicesimi.
-    expect(commerce.mrr).toBe(898);
-    expect(commerce.paying).toBe(4);
+    expect(commerce.subscriptions).toEqual({ monthly: 2, annual: 2, cancelling: 1, unlisted: 1 });
+    // Mensile da 4,90 € e due annuali da 49 € in dodicesimi.
+    expect(commerce.mrr).toBe(1307);
+    expect(commerce.paying).toBe(5);
     expect(commerce).toMatchObject({
       trialsOpen: 1,
       lifetimePaid: 1,

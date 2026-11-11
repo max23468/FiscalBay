@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationError, classifyFailure, correlateResponse, logFailure } from "../app/errors";
 import { errorResponse } from "../app/error-response";
@@ -26,6 +26,9 @@ import {
   withPhaseTimings,
 } from "../app/observability.server";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
+
+// Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+afterEach(() => vi.restoreAllMocks());
 
 describe("errors, locale and redacted logs", () => {
   it("adds correlation to redirects with immutable headers", () => {

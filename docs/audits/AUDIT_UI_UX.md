@@ -82,8 +82,8 @@ al rapporto. Scenario riportato a Free, uso ordinario, e tema a Sistema.
 | ID | Problema | Severità | Confidenza | Verifica implementazione · 4 ottobre 2026 |
 | --- | --- | --- | --- | --- |
 | R-H1 | "Rimuovi" su un metodo di accesso agisce al primo clic, senza conferma | Alta | Alta | Non implementato. Chrome: Rimuovi disponibile; codice di MethodAction ancora submit diretto. Nessuna rimozione reale eseguita. |
-| R-H2 | La card dell'ordine reale mostra solo numero, data e importo: nessuno stato del Codice Fiscale | Alta | Alta | Non implementato. Chrome: card reale con numero, data e importo, senza stato fiscale o dettaglio. Funzioni complete con la pagina Ordini definitiva. |
-| R-H3 | Con sessione non recente "Collega", "Rimuovi" e "Cambia email" sembrano attivi e falliscono solo dopo il clic | Media | Alta | Non implementato nel codice. Controlli attivi e verifica recente solo nell’action; nessuna azione reale con sessione scaduta eseguita. |
+| R-H2 | La card dell'ordine reale mostra solo numero, data e importo: nessuno stato del Codice Fiscale | Alta | Alta | Parziale. Card con negozio, acquirente, articoli e dati fiscali, dettaglio in pannello; ciò che resta è in §4.1. |
+| R-H3 | Con sessione non recente "Collega", "Rimuovi" e "Cambia email" sembrano attivi e falliscono solo dopo il clic | Media | Alta | Implementato. Le modifiche bloccate sono disabilitate e offrono «Esci e accedi di nuovo»; prove in §4.1. |
 | T1 | L'anteprima non rappresenta l'app reale: header, card ordini, stato vuoto, Sicurezza e messaggi diversi | Media | Alta | Parziale. Chrome: shell e Sicurezza separate; card reale ancora incompleta. Navigazione e primi passi restano ai task aperti. |
 | T2 | "Nome" facoltativo nel Profilo, Nome e Cognome obbligatori alla registrazione | Media | Alta | Già implementato e riconfermato localmente: Nome e Cognome obbligatori ovunque. Vedi P1 e contratto di registrazione. |
 | N-H1 | Negozio in pausa nel piano Free: "Scegli quale in Piano e pagamenti" porta a una sezione senza scelta | Media | Alta | Implementato e verificato localmente: scelta simulata disponibile nel Free e raggiungibile dal dettaglio. Vedi §6. |

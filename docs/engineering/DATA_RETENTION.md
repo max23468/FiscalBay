@@ -83,7 +83,12 @@ può essere reimportato, compresi gli ordini non ancora osservati. Il ricollegam
 non azzera questo limite. Ogni scrittura dell'import rilegge consenso, marker e
 scadenza nello stesso batch; il tempo finale impedisce a una risposta iniziata
 prima della scadenza di aggiornare i dati dopo. L'eliminazione delle fonti rimuove
-anche i dettagli e i retry pendenti.
+anche i dettagli e i retry pendenti. Con gli ordini il comando elimina letture,
+ricevute webhook, consegne e preferenze Telegram del negozio, come il trasferimento
+assistito. Entrambi tolgono gli ordini a lotti da 200, fino a 50.000 per richiesta:
+oltre, il comando o la conferma ripetuti proseguono dagli ordini rimasti, con il
+negozio già scollegato dopo `Scollega ed elimina negozio` e ancora nello spazio di
+partenza prima del trasferimento.
 
 <a id="copie-derivate"></a>
 ## Copie derivate e lavori pendenti

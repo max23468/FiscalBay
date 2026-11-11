@@ -557,6 +557,38 @@ describe("Collegamento e modifica dell'identità", () => {
     }
   });
 
+  it("l'avviso di sicurezza usa la lingua scelta nelle preferenze, poi quella dei Termini", async () => {
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    try {
+      // Registrato in italiano, poi passato all'inglese dalle preferenze.
+      const user = await signUp(env, "avviso.lingua@example.invalid", true);
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      send.mockClear();
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+           VALUES ('passkey-lingua', 'synthetic', ?, 'passkey-lingua', 0, 'singleDevice', 0)`,
+        ).bind(user.id),
+        env.DB.prepare(
+          "INSERT INTO user_preferences (user_id, language, updated_at) VALUES (?, 'en', ?)",
+        ).bind(user.id, new Date().toISOString()),
+      ]);
+      const removed = await securityAction(user.cookie, {
+        intent: "rimuovi-metodo",
+        metodo: "password",
+      });
+      expect(removed.headers.get("location")).toContain("metodo-rimosso");
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      expect(send.mock.calls[0]![0]).toMatchObject({
+        to: "avviso.lingua@example.invalid",
+        subject: "Sign-in method removed from FiscalBay",
+        html: expect.stringContaining('<html lang="en">'),
+      });
+    } finally {
+      send.mockRestore();
+    }
+  });
+
   it("cambia l'email con la conferma del vecchio e del nuovo indirizzo", async () => {
     // Le azioni dell'app usano il binding email dell'ambiente del Worker.
     const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });

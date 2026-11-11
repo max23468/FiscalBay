@@ -393,6 +393,11 @@ function closeMembers(db: D1Database, digestId: string, at: string) {
  * Terzo passo: invia le consegne dovute dello spazio, in ordine di preparazione. Si ferma alla
  * prima che non riesce, così la chat non riceve un messaggio successivo prima di uno precedente
  * ancora in attesa. Restituisce `stop` se il token del bot non è più valido.
+ *
+ * Con il riepilogo scelto gli ordini del collegamento aspettano il loro riepilogo e restano
+ * fuori dal giro: non tolgono il turno alle altre consegne, e il riepilogo chiude con sé quelli
+ * che il destinatario non riceverebbe più. Gli ordini preparati per una chat poi sostituita non
+ * entrano in alcun riepilogo, quindi passano di qui e si scartano.
  */
 async function sendPending(
   env: Env,
@@ -405,9 +410,15 @@ async function sendPending(
         event_at, attempts, parts_sent
       FROM telegram_deliveries
       WHERE workspace_id = ?1 AND sent_at IS NULL AND failed_at IS NULL
-        AND (retry_at IS NULL OR retry_at <= ?2) AND (kind <> 'order' OR digest_id IS NULL)
+        AND (retry_at IS NULL OR retry_at <= ?2)
+        AND (kind <> 'order' OR (digest_id IS NULL AND link_id IS NOT ?4))
       ORDER BY created_at, id LIMIT ?3`)
-    .bind(workspace.workspaceId, at, deliveriesPerRun)
+    .bind(
+      workspace.workspaceId,
+      at,
+      deliveriesPerRun,
+      workspace.mode === "digest" ? workspace.linkId : null,
+    )
     .all<Delivery>();
   const next = await untilStopped(results, (delivery) =>
     sendOne(env, workspace, delivery, fetcher, now),
@@ -495,9 +506,13 @@ async function recordFailure(
   const release = releaser(db, delivery.id, lease);
   const upstream = error instanceof UpstreamError ? error : null;
   if (upstream?.failure === "rejected" && upstream.details.status !== 403) {
-    // Rifiuto certo del solo messaggio: ritentarlo darebbe lo stesso esito.
+    // Rifiuto certo del solo messaggio: ritentarlo darebbe lo stesso esito. Il tentativo si
+    // conta, così la console distingue il guasto da una chiusura voluta.
     logFailure({ error, operation: "telegram" });
-    await db.batch([release("failed_at = ?3", at), closeMembers(db, delivery.id, at)]);
+    await db.batch([
+      release("attempts = attempts + 1, failed_at = ?3", at),
+      closeMembers(db, delivery.id, at),
+    ]);
     return "skip";
   }
   if (upstream?.failure === "credentials") {
@@ -585,7 +600,8 @@ async function deliver(
 
 /**
  * Testo della consegna dai dati correnti, dopo aver riletto il destinatario: null o un
- * collegamento diverso scartano la consegna; un ordine singolo con il riepilogo scelto aspetta.
+ * collegamento diverso scartano la consegna; un ordine singolo aspetta se il riepilogo è stato
+ * scelto dopo la lettura dello spazio.
  */
 async function compose(
   env: Env,

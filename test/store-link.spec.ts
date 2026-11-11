@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { readTradingTaxObservation } from "../app/integrations/ebay/trading.server";
+import { readTradingTaxObservations } from "../app/integrations/ebay/trading.server";
 import { acquireOrders } from "../app/domain/order-acquisition.server";
 import { storeProfileRefreshMilliseconds } from "../app/domain/store-profile.server";
 import { listVisibleOrders } from "../app/domain/orders.server";
@@ -586,15 +586,17 @@ describe("collegamento negozio eBay", () => {
 
   it("legge l'osservazione fiscale Trading del solo ordine richiesto", async () => {
     const read = (xml: string) =>
-      readTradingTaxObservation(
+      readTradingTaxObservations(
         {
           fetcher: async () => new Response(xml),
           accessToken: "token-sintetico",
           configuration: ebayConfiguration(env, "production"),
         },
-        syntheticOrderId,
+        [syntheticOrderId],
       );
-    expect(await read(syntheticTradingXml)).toEqual({
+    const results = await read(syntheticTradingXml);
+    expect([...results.keys()]).toEqual([syntheticOrderId]);
+    expect(results.get(syntheticOrderId)).toEqual({
       orderFound: true,
       values: [
         {

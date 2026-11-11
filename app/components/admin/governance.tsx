@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router";
 
 import { StatusBadge } from "~/components/status";
@@ -253,6 +254,7 @@ function NoticeFields({ notice }: { notice?: ServiceNotice }) {
 
 export function NoticesView({ notices, now }: { notices: ServiceNotice[]; now: string }) {
   const { t, date } = useAdmin();
+  const [draft, setDraft] = useState(0);
   const n = t.notices;
   const at = Date.parse(now);
   const state = (notice: ServiceNotice) =>
@@ -266,8 +268,14 @@ export function NoticesView({ notices, now }: { notices: ServiceNotice[]; now: s
   return (
     <>
       <Panel title={n.new}>
-        <ActionForm intent="save-notice" submit={t.common.save} primary>
-          <NoticeFields />
+        {/* Dopo il salvataggio i campi tornano vuoti: un secondo clic non crea un doppione. */}
+        <ActionForm
+          intent="save-notice"
+          submit={t.common.save}
+          primary
+          onSuccess={() => setDraft((count) => count + 1)}
+        >
+          <NoticeFields key={draft} />
         </ActionForm>
       </Panel>
       {notices.map((notice) => {

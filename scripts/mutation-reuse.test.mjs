@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   addedTests,
-  affectedModules,
   affectingSources,
   lineMutationJob,
   moduleOutcomes,
@@ -10,7 +9,6 @@ import {
   previousRuns,
   planLayout,
   proofStands,
-  proofUnaffected,
   pullRequestParts,
   pullRequestOutcome,
   pullRequestProof,
@@ -89,7 +87,7 @@ describe("mutation incrementale della prova del candidato", () => {
       ["app/domain/telegram.server.ts", new Set(["app/copy/copy-it.ts"])],
       ["app/copy/copy-it.ts", new Set()],
     ]);
-    assert.deepEqual([...affectedModules(["app/copy/copy-it.ts"], graph)], []);
+    assert.deepEqual([...affectingSources(["app/copy/copy-it.ts"], graph).keys()], []);
   });
 
   it("ripete i moduli critici che importano un sorgente modificato, anche di supporto", () => {
@@ -100,10 +98,15 @@ describe("mutation incrementale della prova del candidato", () => {
       ["app/domain/sql.server.ts", new Set()],
     ]);
     assert.deepEqual(
-      [...affectedModules(["app/domain/sql.server.ts", "test/orders.spec.ts", "docs/x.md"], graph)],
+      [
+        ...affectingSources(
+          ["app/domain/sql.server.ts", "test/orders.spec.ts", "docs/x.md"],
+          graph,
+        ).keys(),
+      ],
       ["app/domain/orders.server.ts", "app/domain/export-jobs.server.ts"],
     );
-    assert.deepEqual([...affectedModules(["test/orders.spec.ts"], graph)], []);
+    assert.deepEqual([...affectingSources(["test/orders.spec.ts"], graph).keys()], []);
   });
 
   it("riusa solo l'ultimo esito riuscito e non toccato", async () => {
@@ -219,7 +222,7 @@ describe("mutation incrementale della prova del candidato", () => {
     assert.equal(pullRequestOutcome([job("Mutation app/sealed.server.ts 1/1")], target), null);
   });
 
-  it("una prova della PR resta valida soltanto se nulla di ciò che usa il modulo è cambiato", () => {
+  it("una prova della PR resta valida soltanto se nulla di ciò che usa il modulo è cambiato", async () => {
     const graph = new Map([
       ["app/domain/billing.server.ts", new Set(["app/domain/grants.server.ts"])],
       ["app/domain/grants.server.ts", new Set()],
@@ -228,14 +231,16 @@ describe("mutation incrementale della prova del candidato", () => {
       ["test/other.spec.ts", new Set(["app/domain/other.server.ts"])],
     ]);
     const target = "app/domain/billing.server.ts";
-    const valid = (...changed) => proofUnaffected(changed, target, graph);
-    assert.ok(valid());
-    assert.ok(valid("docs/ROADMAP.md", "changes/x.md", "e2e/a.spec.ts", "app/app.css"));
-    assert.ok(valid("app/domain/other.server.ts", "test/other.spec.ts"));
-    assert.ok(valid("scripts/indexnow.mjs", ".github/workflows/security.yml", "public/a.png"));
+    const valid = (...changed) => proofStands(changed, target, graph);
+    assert.ok(await valid());
+    assert.ok(await valid("docs/ROADMAP.md", "changes/x.md", "e2e/a.spec.ts", "app/app.css"));
+    assert.ok(await valid("app/domain/other.server.ts", "test/other.spec.ts"));
+    assert.ok(
+      await valid("scripts/indexnow.mjs", ".github/workflows/security.yml", "public/a.png"),
+    );
     // Strumenti della mutation e dipendenze restano alla campagna settimanale.
     assert.ok(
-      valid(
+      await valid(
         "package.json",
         "pnpm-lock.yaml",
         "stryker.config.json",
@@ -253,7 +258,7 @@ describe("mutation incrementale della prova del candidato", () => {
       "migrations/0080_x.sql",
       "app/request-limits.json",
     ])
-      assert.ok(!valid(changed), changed);
+      assert.ok(!(await valid(changed)), changed);
   });
 
   it("riusa la prova di una run precedente della stessa PR dopo un'unione che non tocca il modulo", async () => {
@@ -572,7 +577,6 @@ describe("parti della mutation della PR riusate fra run", () => {
   it("una prova cambiata soltanto con prove aggiunte lascia valida la prova del modulo", async () => {
     const tests = new Map([...graph, ["test/billing.spec.ts", new Set([target])]]);
     const added = new Set(["test/billing.spec.ts"]);
-    assert.ok(proofUnaffected(["test/billing.spec.ts"], target, tests, added));
     assert.ok(await proofStands(["test/billing.spec.ts"], target, tests, undefined, added));
     assert.ok(!(await proofStands(["test/billing.spec.ts"], target, tests)));
     // Il modulo stesso cambiato invalida comunque la prova.

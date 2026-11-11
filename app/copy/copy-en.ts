@@ -316,7 +316,7 @@ export const en: AppCopy = {
     connectStore: "Connect eBay store",
     marketingProposal: {
       title: "Would you like news and offers about FiscalBay?",
-      body: "A few emails about new features and promotions. You can change your choice at any time in Settings, Notifications.",
+      body: "A few emails about new features and promotions. You can change your choice at any time in Settings › Notifications.",
       accept: "Yes, send them",
       decline: "No, thanks",
       accepted: "You will receive news and offers by email.",
@@ -489,6 +489,7 @@ export const en: AppCopy = {
       "store-disconnect": "Store disconnected.",
     },
     deleteMismatch: "The name does not match: no data deleted.",
+    deleteIncomplete: "Some orders are still to delete: repeat “Delete store” to finish.",
     failed: "Something went wrong. Try again.",
   },
   settings: {

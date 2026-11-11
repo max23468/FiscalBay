@@ -418,7 +418,7 @@ function securityEmail(event: SecurityEvent, language: Language): AccountEmail {
 
 /**
  * Avvisa il titolare di una modifica ai metodi di accesso, all'indirizzo corrente e nella lingua
- * con cui ha accettato i Termini. Fuori dal percorso della risposta: un invio fallito si registra
+ * delle sue preferenze o, se non l'ha scelta, dei Termini accettati. Fuori dal percorso della risposta: un invio fallito si registra
  * nei log senza annullare la modifica.
  */
 export function notifySecurityEvent(env: Env, userId: string, event: SecurityEvent): void {

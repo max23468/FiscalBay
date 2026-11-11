@@ -632,25 +632,6 @@ export function needsDeploy(base, head) {
 }
 
 /**
- * Vero se fra due commit nulla cambia per le prove browser: per i file cambiati, valutati per
- * contenuto come nel gate, il classificatore non chiede browser né deploy. Documenti, frammenti
- * senza Novità, strumenti e test unitari non cambiano ciò che le prove browser verificano.
- */
-export function browserUnaffected(base, head) {
-  let files;
-  try {
-    files = lines(git("diff", "--name-only", base, head));
-  } catch {
-    // Un confronto non disponibile non prova nulla: le prove ripartono.
-    return false;
-  }
-  // Senza differenze non c'è nulla da riprovare, anche se il gate proverebbe tutto per prudenza.
-  if (!files.length) return true;
-  const result = plan(files, [], false, committedVersions(files, base, head));
-  return !result.e2e && !result.deploy;
-}
-
-/**
  * Prove browser da ripetere dopo l'ultima run verde della PR (`previous`), con `base` la base del
  * commit provato ora (`head`). Le aree già provate dalla PR e quelle provate dalla base nella propria
  * PR possono rompersi soltanto dove si incontrano: si ripetono le aree dei file che la PR cambia e

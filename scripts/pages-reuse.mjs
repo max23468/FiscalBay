@@ -23,13 +23,6 @@ import {
 import { importGraph } from "./verify-repo.mjs";
 import { ghJson, git, isAncestor } from "./lib/provider.mjs";
 
-/** Aree riusabili dal piano delle modifiche: tutte tranne quelle toccate, oppure nessuna. */
-export function reusableAreas(selected) {
-  if (!selected.e2e) return areaTags;
-  if (selected.browserGrep === "." || selected.matrix || !selected.areas.length) return [];
-  return areaTags.filter((area) => !selected.areas.includes(area));
-}
-
 /** Espressione delle visite da saltare. */
 export const skippedPages = (areas) =>
   areas.length ? `^(?!.*@remote).*@pages-(?:${areas.join("|")})\\b` : "";

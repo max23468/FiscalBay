@@ -38,7 +38,7 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 - [App Insights API](https://developer.ebay.com/develop/api/sell/app_insights_api) e [schema GraphQL unificato](https://developer.ebay.com/develop/api/spec/listing.graphqls)
 - [D.M. 23 dicembre 1976: sistemi di codificazione per l'anagrafe tributaria](https://def.giustiziatributaria.gov.it/DocTribFrontend/getAttoNormativoDetail.do?ACTION=getSommario&id=%7B8D93A450-E5FE-47FC-A6F0-F938769051BF%7D)
 
-**Verifica pertinente:** matrice campo/fonte/età/stato, scope e identità stabili, dati pagati/non pagati, mascheramenti, immagini ed eventi. La precedenza fiscale qualificata è definita in [§9 del piano](../product/ORDERS_AND_SYNC.md#s09): Fulfillment per il CF italiano Production nelle condizioni provate, Trading `GetOrders` come fallback con `BuyerTaxIdentifier` condizionale e ripetibile. Gli eventi non sostituiscono il polling di riconciliazione e la consegna attribuita Production resta nel test merchant. Verifica del 2026-10-27: lo schema GraphQL non espone identificativi fiscali né indirizzo di fatturazione, nessuna data di dismissione riguarda le chiamate Trading usate, il supporto sviluppatori eBay conferma `getOrder` e `GetOrders` per gli identificativi fiscali e oltre le quote predefinite si passa dall'Application Growth Check. Per OAuth eBay usa il RuName al posto della URL nel parametro `redirect_uri`, raccomanda `state` contro CSRF e limita il codice monouso a 1.024 caratteri. Il decreto governa i controlli locali di struttura e carattere di controllo, compresi omocodia e CF numerico; un esito formale non verifica l'Anagrafe tributaria.
+**Verifica pertinente:** matrice campo/fonte/età/stato, scope e identità stabili, dati pagati/non pagati, mascheramenti, immagini ed eventi. La precedenza fiscale qualificata è definita in [§9](../product/ORDERS_AND_SYNC.md#s09): Fulfillment per il CF italiano Production nelle condizioni provate, Trading `GetOrders` come fallback con `BuyerTaxIdentifier` condizionale e ripetibile. Gli eventi non sostituiscono il polling di riconciliazione e la consegna attribuita Production resta nel test merchant. Verifica del 2026-10-27: lo schema GraphQL non espone identificativi fiscali né indirizzo di fatturazione, nessuna data di dismissione riguarda le chiamate Trading usate, il supporto sviluppatori eBay conferma `getOrder` e `GetOrders` per gli identificativi fiscali e oltre le quote predefinite si passa dall'Application Growth Check. Per OAuth eBay usa il RuName al posto della URL nel parametro `redirect_uri`, raccomanda `state` contro CSRF e limita il codice monouso a 1.024 caratteri. Il decreto governa i controlli locali di struttura e carattere di controllo, compresi omocodia e CF numerico; un esito formale non verifica l'Anagrafe tributaria.
 
 <a id="s07"></a>
 ### S07 · Cloudflare · D1 Time Travel
@@ -169,7 +169,7 @@ Non fissare listini dei provider come promesse del prodotto. Costi e quote resid
 
 ## Perimetro della revisione documentale successiva
 
-Il 13 settembre 2026 sono state rilette selettivamente S01/S02/S04–S09, S13/S14 e le nuove S18–S24 per i rilievi della revisione. Le altre voci conservano il perimetro della verifica documentale iniziale; non si dichiara una nuova qualifica integrale di ogni URL, account o condizione commerciale. Node/TypeScript sono stati ricontrollati come fonti di release/compatibilità, senza aggiornare automaticamente alcun pacchetto.
+Il 13 settembre 2026 sono state rilette selettivamente S01, S06–S09, S13/S14 e le nuove S18 e S22–S24 per i rilievi della revisione. Le altre voci conservano il perimetro della verifica documentale iniziale; non si dichiara una nuova qualifica integrale di ogni URL, account o condizione commerciale. Node/TypeScript sono stati ricontrollati come fonti di release/compatibilità, senza aggiornare automaticamente alcun pacchetto.
 
 Il 20 settembre 2026 sono state rilette le fonti S29–S33 per il consolidamento legale preliminare. La lettura qualifica ruoli e gate del candidato corrente; informative, condizioni, accordi applicabili e configurazioni provider vengono riletti sul candidato finale prima della pubblicazione.
 
@@ -257,7 +257,7 @@ Nella 0.4.25 (D241) la dashboard legge anche dal Worker, sugli endpoint `/api/au
 
 - [Debian Sources: licenza di `buffers` 0.1.1](https://sources.debian.org/copyright/license/node-buffers/0.1.1-2/)
 
-**Verifica locale:** `pnpm licenses list --prod --json` sul lockfile candidato ha censito licenze permissive, una scelta duale MIT/GPL per `jszip`, MIT+Zlib per `pako` e un solo metadata mancante per `buffers@0.1.1`, risolto dalla provenienza distribuita come MIT. Il risultato qualifica la dipendenza corrente, non sostituisce il notice distributivo né l'inventario di asset e componenti copiati.
+**Verifica locale del 20 settembre 2026:** `pnpm licenses list --prod --json` sul lockfile di allora aveva censito licenze permissive, una scelta duale MIT/GPL per `jszip`, MIT+Zlib per `pako` e un solo metadata mancante per `buffers@0.1.1`, risolto dalla provenienza distribuita come MIT. I tre pacchetti non sono più dipendenze di produzione. Il risultato non sostituisce il notice distributivo né l'inventario di asset e componenti copiati.
 
 **Uso:** §30.
 

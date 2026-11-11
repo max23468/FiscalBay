@@ -338,7 +338,7 @@ export const it = {
     /** Proposta del consenso facoltativo dopo i primi passi, separata da quella della registrazione. */
     marketingProposal: {
       title: "Vuoi ricevere novità e offerte su FiscalBay?",
-      body: "Poche email su nuove funzioni e promozioni. Puoi cambiare scelta in ogni momento da Impostazioni, Notifiche.",
+      body: "Poche email su nuove funzioni e promozioni. Puoi cambiare scelta in ogni momento da Impostazioni › Notifiche.",
       accept: "Sì, ricevile",
       decline: "No, grazie",
       accepted: "Riceverai novità e offerte via email.",
@@ -512,6 +512,7 @@ export const it = {
       "store-disconnect": "Negozio scollegato.",
     } as Record<string, string>,
     deleteMismatch: "Il nome non corrisponde: nessun dato eliminato.",
+    deleteIncomplete: "Restano ordini da eliminare: ripeti «Elimina negozio» per completare.",
     failed: "Operazione non riuscita. Riprova.",
   },
   settings: {

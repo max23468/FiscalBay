@@ -1,4 +1,8 @@
-import { countAuthAttempt, longestAttemptWindow } from "./domain/auth-attempts.server";
+import {
+  authAttemptWait,
+  countAuthAttempt,
+  longestAttemptWindow,
+} from "./domain/auth-attempts.server";
 import { redirect } from "react-router";
 import { z } from "zod";
 
@@ -27,17 +31,19 @@ import { localizedPath } from "./i18n";
 import { sha256Hex } from "./sealed.server";
 import { maxPasskeyName } from "./limits";
 import type { RequestLimit } from "./request-limits";
-import { limitedHeaders, requestLimitWait } from "./request-limits.server";
+import { clientKey, limitedHeaders, requestLimitWait } from "./request-limits.server";
 
 // I token OAuth restano al codice server; metodi e passkey si rimuovono dalle azioni dell'app,
 // che conservano sempre un accesso valido. L'elenco delle sessioni restituirebbe i token delle
 // altre sessioni: l'app le mostra e le chiude dal server senza esporli. La cancellazione
 // dell'account parte soltanto dalle Impostazioni, che chiedono riautenticazione e conferma.
 // La verifica della password con la sessione non serve all'app e non ha limiti per indirizzo:
-// aperta, chi ha una sessione proverebbe password senza soglia.
+// aperta, chi ha una sessione proverebbe password senza soglia. Lo stesso vale per il cambio
+// con la password corrente: l'app la cambia soltanto dal link di reset.
 const closedAuthPaths = new Set([
   "/api/auth/delete-user",
   "/api/auth/verify-password",
+  "/api/auth/change-password",
   "/api/auth/get-access-token",
   "/api/auth/refresh-token",
   "/api/auth/passkey/delete-passkey",
@@ -93,7 +99,7 @@ function noStore(response: Response): Response {
 // preparazione della passkey è un GET, ma scrive in D1 una sfida a ogni chiamata. L'elenco si
 // compone a ogni richiesta, così la mutation prova ogni regola con i test che la usano.
 const attemptLimits = (): Array<{ paths: RegExp; limit: RequestLimit; anyMethod?: true }> => [
-  { paths: /^\/(sign-in|sign-up|change-password|change-email)(\/|$)/u, limit: "attempts" },
+  { paths: /^\/(sign-in|sign-up|change-email)(\/|$)/u, limit: "attempts" },
   { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, limit: "attempts" },
   { paths: /^\/email-otp\/verify-email$/u, limit: "attempts" },
   {
@@ -391,6 +397,41 @@ async function handleDeletionCallback(request: Request, env: Env): Promise<Respo
   return new Response(null, { status: 302, headers });
 }
 
+/**
+ * Accessi con password non riusciti dallo stesso IP prima che il modulo chieda Turnstile: chi
+ * sbaglia una volta non lo vede, chi prova molte password sì.
+ */
+export const signInFailures = { window: 900, max: 3 };
+
+export const signInFailureKey = (request: Request) => {
+  const ip = request.headers.get("cf-connecting-ip");
+  return ip ? `sign-in-failures|${clientKey(ip)}` : null;
+};
+
+/** Secondi per cui l'accesso con password dell'IP richiede Turnstile, o null. */
+export async function signInChallengeWait(env: Env, request: Request): Promise<number | null> {
+  const key = signInFailureKey(request);
+  return key ? authAttemptWait(env.DB, key, signInFailures, Date.now()) : null;
+}
+
+const signInPath = "/api/auth/sign-in/email";
+
+/**
+ * Accesso con password chiamato direttamente: conta gli errori come il modulo e, quando il
+ * modulo chiederebbe Turnstile, si rifiuta, perché qui la sfida non si può presentare.
+ */
+async function directSignIn(request: Request, env: Env): Promise<Response> {
+  const limited = await authLimitWait(env, request);
+  if (limited !== null) return tooManyAuthRequests(limited);
+  const challenge = await signInChallengeWait(env, request);
+  if (challenge !== null) return tooManyAuthRequests(challenge);
+  const response = await authResponse(request, env, true);
+  const key = signInFailureKey(request);
+  if (response.status === 401 && key)
+    await countAuthAttempt(env.DB, key, signInFailures, Date.now());
+  return response;
+}
+
 export function handleAuthRequest(
   request: Request,
   env: Env,
@@ -400,6 +441,7 @@ export function handleAuthRequest(
   const pathname = `/api/auth${authPath(request)}`;
   if (closedAuthPaths.has(pathname) || formOnlyPaths.has(pathname))
     return new Response(null, { status: 404 });
+  if (pathname === signInPath && request.method === "POST") return directSignIn(request, env);
   if (pathname === deletionCallbackPath) return handleDeletionCallback(request, env);
   if (pathname !== ebayCallbackPath) return authResponse(request, env);
   return handleEbayCallback(request, env, fetcher);

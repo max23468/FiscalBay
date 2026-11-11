@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { comparisonBase, lastDeployed, lastPublished } from "./find-deployed.mjs";
+import { comparisonBase, lastDeployed } from "./find-deployed.mjs";
 import { publicationRecord, publicVersion, receiptActive } from "./release/records.mjs";
 
 describe("base del confronto sui push", () => {
@@ -92,9 +92,11 @@ describe("commit attivo in Production", () => {
 
   it("sceglie la versione osservata, anche dopo rollback o errore nel giorno", () => {
     const records = [receipt(b, "new"), { ...receipt(a, "old"), rolledBack: true }];
-    assert.equal(lastPublished(records, "old"), a);
-    assert.equal(lastPublished(records, "new"), b);
-    assert.equal(lastPublished(records, "unknown"), undefined);
+    const chosen = (version) =>
+      records.map((record) => receiptActive(record, version)?.sha ?? null);
+    assert.deepEqual(chosen("old"), [null, a]);
+    assert.deepEqual(chosen("new"), [b, null]);
+    assert.deepEqual(chosen("unknown"), [null, null]);
     assert.throws(
       () => receiptActive({ ...receipt(a, "old"), active: { ...active(a, "old"), sha: b } }, "old"),
       /incoerente/u,
