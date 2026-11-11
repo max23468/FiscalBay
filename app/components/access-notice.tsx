@@ -9,9 +9,8 @@ import { StatusAlert } from "~/components/status";
 import { useTurnstile } from "~/components/turnstile";
 import { Button } from "~/components/ui/button";
 import type { AccessNoticeView } from "../access-notice";
-import { storeNoticeParam } from "../app-links";
 import { supportEmail } from "../app-copy";
-import { accessPath, securityPath } from "../app-links";
+import { accessPath, securityPath, storeNoticeParam } from "../app-links";
 import { localizedPath } from "../i18n";
 import { turnstileActions } from "../turnstile";
 

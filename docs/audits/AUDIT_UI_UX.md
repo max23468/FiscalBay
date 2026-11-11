@@ -1,7 +1,9 @@
 # Audit UI/UX di FiscalBay 2.0 sul dominio test
 
 **Stato:** documento mantenuto: ogni correzione si registra in [§15](#15-correzioni-verificate)
-dopo la verifica su Chrome live.
+dopo la verifica su Chrome live. Le colonne di stato delle tabelle fotografano il
+4 ottobre 2026 e l'ultima correzione registrata è del 25 ottobre 2026: le voci
+ancora aperte si riverificano dal vivo prima di chiuderle.
 **Data:** 3 ottobre 2026
 **Ambiente:** Worker `fiscalbay-test` su `test.fiscalbay.it`, codice di `develop`
 a `de1fcab`; la diagnostica dell'anteprima riporta `2.0.0 (anteprima)`

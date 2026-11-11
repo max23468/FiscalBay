@@ -98,7 +98,7 @@ export interface SettingsPageData {
  * su Stripe, Telegram, esportazione e cancellazione dell'account, modulo di assistenza. Senza il
  * servizio l'azione non compare.
  */
-export interface SettingsServices {
+interface SettingsServices {
   billing: boolean;
   billingPortal: boolean;
   telegram: boolean;

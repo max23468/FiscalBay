@@ -49,9 +49,11 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
   const at = now.toISOString();
   await purgeExpiredOrders(db, at);
   await db.batch([
+    // `deleted_at` lo scrive soltanto il trigger `order_deletion_marker`, in ISO UTC con
+    // millisecondi: il confronto testuale usa l'indice.
     db
-      .prepare("DELETE FROM deleted_order_keys WHERE julianday(deleted_at) < julianday(?) - ?")
-      .bind(at, deletionKeyDays),
+      .prepare("DELETE FROM deleted_order_keys WHERE deleted_at < ?")
+      .bind(new Date(now.getTime() - deletionKeyDays * dayMilliseconds).toISOString()),
     db.prepare("DELETE FROM webhook_receipts WHERE expires_at <= ?").bind(at),
     db
       .prepare(
@@ -66,7 +68,7 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     db.prepare("DELETE FROM ebay_call_counts WHERE day < date(?, '-7 days')").bind(at),
     db.prepare("DELETE FROM account_email_changes WHERE expires_at <= ?").bind(at),
     purgeTelegramLinks(db, now),
-    purgeTelegramDeliveries(db, now),
+    ...purgeTelegramDeliveries(db, now),
     purgeSupportRequests(db, now),
     // Registro della console e oggetti chiusi da oltre un anno, compresi gli incidenti
     // comunicati all'owner; preparazioni mai confermate.

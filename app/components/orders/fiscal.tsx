@@ -56,7 +56,7 @@ import { useCopy } from "~/components/copy-context";
 
 const cardRow = "flex flex-wrap items-center gap-x-3 gap-y-2";
 
-export function CardLabel({ children }: { children: string }) {
+function CardLabel({ children }: { children: string }) {
   return <p className="text-xs font-medium text-muted-foreground">{children}</p>;
 }
 
@@ -64,13 +64,7 @@ export function CardLabel({ children }: { children: string }) {
  * Spiegazione del dato fiscale. Nella scheda occupa tutta la larghezza sotto
  * acquirente e codice, così non allunga la colonna del codice.
  */
-export function CardNote({
-  tone,
-  children,
-}: {
-  tone?: "info" | "warning";
-  children: React.ReactNode;
-}) {
+function CardNote({ tone, children }: { tone?: "info" | "warning"; children: React.ReactNode }) {
   return (
     <p className="flex gap-1.5 text-sm leading-relaxed text-pretty text-muted-foreground sm:col-span-2">
       {tone ? <StatusIcon tone={tone} className="mt-1 size-3.5" /> : null}
@@ -110,14 +104,7 @@ function UnlockButton({
   const cancel = useRef<HTMLButtonElement>(null);
   if (!confirmUnlock)
     return (
-      <Button
-        size="sm"
-        className="w-fit"
-        disabled={unlocking}
-        focusableWhenDisabled
-        aria-busy={unlocking || undefined}
-        onClick={() => onUnlock([order.id])}
-      >
+      <Button size="sm" className="w-fit" pending={unlocking} onClick={() => onUnlock([order.id])}>
         <UnlockIcon aria-hidden="true" data-icon="inline-start" />
         {t.orders.unlock}
       </Button>

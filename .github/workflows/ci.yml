@@ -22,7 +22,9 @@ on:
 
 # Un nuovo push sulla PR annulla l'intera run superata, mutation compresa: i gruppi dei singoli job
 # fermavano soltanto il job con lo stesso indice, e due run della stessa PR si contendevano i posti.
-# Push e avvii manuali su `develop` hanno un gruppo per run e non si annullano.
+# Push e avvii manuali su `develop` hanno qui un gruppo per run, che non annulla nulla: fra loro
+# valgono i gruppi dei job `verify`, `quality` e `browser`, dove una run successiva annulla il job
+# omonimo di quella precedente.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}

@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-import { listStores } from "../domain/stores.server";
+import { listStoreScopes } from "../domain/stores.server";
 import type { EbayEnvironment } from "../view-models";
 import { listCriteria, type OrderScope } from "./order-criteria";
 import { exportScope, type ExportScope } from "./export-scope";
@@ -27,7 +27,7 @@ export async function accountExportScope(
   const scope = exportScope(query);
   if (!scope) return null;
   const [stores, search] = await Promise.all([
-    listStores(env.DB, session.user.id),
+    listStoreScopes(env.DB, session.user.id),
     openSearch(env.BETTER_AUTH_SECRET, accountSearchScope(session), query),
   ]);
   const storeIds = stores

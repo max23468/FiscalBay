@@ -10,10 +10,9 @@ on:
     branches:
       - develop
       - main
-  workflow_dispatch:
 
 concurrency:
-  group: pr-title-${{ github.event.pull_request.number || github.ref }}
+  group: pr-title-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:
@@ -28,7 +27,7 @@ jobs:
     steps:
       - name: Check title
         env:
-          PR_TITLE: "${{ github.event.pull_request.title || 'chore: manual title check' }}"
+          PR_TITLE: "${{ github.event.pull_request.title }}"
         run: |
           node -e '
             const title = process.env.PR_TITLE.trim();

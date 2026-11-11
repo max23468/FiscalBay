@@ -21,7 +21,8 @@ export const syncDailyRetentionDays = 90;
 export const metricWindows = [7, 30, 90] as const;
 export type MetricWindow = (typeof metricWindows)[number];
 
-export function metricWindowFrom(value: string | null): MetricWindow {
+/** Finestra delle metriche chiesta, 30 giorni se non è fra quelle previste. */
+export function metricWindowFrom(value: string | number | null): MetricWindow {
   const days = Number(value);
   return (metricWindows as readonly number[]).includes(days) ? (days as MetricWindow) : 30;
 }

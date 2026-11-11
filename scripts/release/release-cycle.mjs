@@ -601,12 +601,7 @@ export function checkCycleJobs(jobs, deployRequired) {
 // ne legge l'esito con l'API REST, anche da una sessione senza accesso a Cloudflare.
 const confirmation = {
   test: ["Deploy test", "Confirm provider readback"],
-  production: [
-    "Conferma pubblicazione attiva",
-    "Confirm expected version after day",
-    // La ripresa può ancora leggere una run avviata con il workflow precedente.
-    "Confirm expected version after guard and day",
-  ],
+  production: ["Conferma pubblicazione attiva", "Confirm expected version after day"],
 };
 
 export function assertConfirmed(jobs, environment) {
@@ -634,7 +629,8 @@ export function deploySuperseded(run, jobs) {
 /**
  * Run che chiude il ciclo del commit integrato. Se il deploy è stato lasciato a un merge
  * successivo, segue la run della nuova testa di `develop`, che deve contenere il commit e avere
- * deploy test e readback confermati; fino a tre merge successivi. Ogni altro esito si ferma.
+ * deploy test e readback confermati; segue i discendenti fino a una scadenza complessiva di
+ * un'ora, senza un limite al numero di merge. Ogni altro esito si ferma.
  */
 export async function settleMergeRun(merge, deployRequired, io) {
   const now = io.now ?? Date.now;
@@ -966,9 +962,21 @@ const cycleCommands = [
 export function cycleCommand([command, number]) {
   if (!cycleCommands.includes(command))
     throw new Error(
-      "Uso: release:cycle status <run> | metrics | preflight --sha <sha> [--version <versione>] | pr <numero> | production <numero> | cleanup | candidate | promote [--version <versione>] [--urgente] | resume <run> | rollback | qualification-base --base <sha> --head <sha>.",
+      "Uso: release:cycle status <run> | metrics | preflight --sha <sha> [--version <versione>] [--reviewed-migrations <digest>] | pr <numero> [--qui] | production <numero> [--reviewed-migrations <digest>] | cleanup | candidate | candidate-ready --sha <sha> [--manual] [--weekly] | promote [--version <versione>] [--pr <numero>] [--urgente] [--reviewed-migrations <digest>] | resume <run> | rollback | qualification-base --base <sha> --head <sha>.",
     );
   return { command, number };
+}
+
+/**
+ * `--urgente` vale soltanto per `promote`, su un commit con prove già valide. «Pubblica in
+ * Production» integra prima la PR, e il commit appena integrato attende ancora la qualifica del
+ * candidato: l'urgenza fermerebbe il ciclo dopo il merge, quindi si rifiuta prima di cominciare.
+ */
+export function assertCycleOptions(command, values) {
+  if (command === "production" && values.urgente)
+    throw new Error(
+      "--urgente non vale con production: pubblicare la PR con pr <numero>, poi promote --urgente su un commit già certificato.",
+    );
 }
 
 /** Oggetto del blocco locale: cicli su oggetti diversi procedono insieme. */
@@ -1297,7 +1305,6 @@ async function rerunMigrationReview(repository, pr) {
   }
 }
 
-/** ID delle decisioni nelle righe di tabella aggiunte da un diff `-U0`. */
 /**
  * ID delle decisioni nuove: righe di tabella aggiunte da un diff `-U0` con un ID assente dalla
  * base. Una riga esistente modificata, per esempio con «Superato da», compare come aggiunta ma
@@ -1403,7 +1410,6 @@ function renumberPullRequest(pr, mapping) {
   });
 }
 
-/** Rinumerazione delle decisioni della PR rispetto alla base attuale; vuota se non serve. */
 /**
  * Le voci dei frammenti della PR vanno in una versione non ancora pubblicata della base attuale,
  * o in quella che la PR stessa apre sopra: se nel frattempo la versione in cima ha ricevuto tag o
@@ -1506,6 +1512,7 @@ function decisionIds(ref) {
   }
 }
 
+/** Rinumerazione delle decisioni della PR rispetto alla base attuale; vuota se non serve. */
 function decisionCollisions(pr) {
   const base = git("merge-base", "origin/develop", pr.headRefOid);
   const added = addedDecisions(
@@ -1605,13 +1612,13 @@ async function mergeOpenPullRequest(repository, number, pr) {
           console.log("Base avanzata su file comuni in attesa del merge: nuova qualifica.");
           return true;
         }
-        // Un'altra PR ha già portato sulla base i numeri delle decisioni nuove: si rinumerano.
         const opened = openPendingVersion(pr);
         if (opened) {
           pr = await waitUpdatedHead(read, expectedHead, (sha) => sha === opened);
           return true;
         }
         assertPullRequestChanges(pr);
+        // Un'altra PR ha già portato sulla base i numeri delle decisioni nuove: si rinumerano.
         const mapping = decisionCollisions(pr);
         if (Object.keys(mapping).length) {
           const head = renumberPullRequest(pr, mapping);
@@ -1765,6 +1772,18 @@ export function candidateRun(runs, sha, since) {
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
 }
 
+/**
+ * La qualifica esplicita gira sulla testa di `develop`: un commit superato da un merge non si
+ * può più qualificare, e senza questo controllo la run partirebbe per fallire dopo minuti sul
+ * confronto con il commit atteso.
+ */
+export function assertQualifiable(head, sha) {
+  if (head !== sha)
+    throw new Error(
+      "develop è avanzato e il commit richiesto non è certificato: ripetere il comando sulla nuova testa.",
+    );
+}
+
 /** Qualifica completa di un commit di `develop`, senza effetti su `main` né sui provider. */
 async function ensureCandidate(repository, sha) {
   const tree = ghJson("api", `repos/${repository}/git/commits/${sha}`).tree.sha;
@@ -1785,6 +1804,7 @@ async function ensureCandidate(repository, sha) {
       "databaseId,displayTitle,headSha,status,event,createdAt",
     );
   const request = async () => {
+    assertQualifiable(headOf(repository, "develop"), sha);
     const since = Date.now() - 1000;
     gh(
       "workflow",
@@ -2328,6 +2348,7 @@ async function main() {
     },
   });
   const { command, number } = cycleCommand(positionals);
+  assertCycleOptions(command, values);
   // Gira nei job della CI senza token: nessuna lettura del repository remoto con gh.
   if (command === "qualification-base") return qualificationBase(values);
   const repository = ghJson("api", "repos/{owner}/{repo}").full_name;

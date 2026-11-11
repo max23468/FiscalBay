@@ -7,7 +7,7 @@ import { redirect } from "react-router";
 import { z } from "zod";
 
 import { createAuth, readSession } from "./auth.server";
-import { registrationStatus } from "./domain/registration.server";
+import { registrationComplete, registrationStatus } from "./domain/registration.server";
 import { recordEmailChange } from "./domain/email-change.server";
 import { passkeyChangeBlock, recentSignIn } from "./domain/sessions.server";
 import { completeStoreLink } from "./domain/store-link.server";
@@ -108,7 +108,7 @@ const attemptLimits = (): Array<{ paths: RegExp; limit: RequestLimit; anyMethod?
     anyMethod: true,
   },
   {
-    paths: /^\/(send-verification-email|request-password-reset|forget-password|delete-user)(\/|$)/u,
+    paths: /^\/(send-verification-email|request-password-reset|delete-user)(\/|$)/u,
     limit: "emails",
   },
 ];
@@ -151,7 +151,7 @@ const addressLimits = () => [
   { paths: /^\/sign-in\/email$/u, window: 900, max: 10 },
   { paths: /^\/email-otp\/verify-email$/u, window: 900, max: 10 },
   {
-    paths: /^\/(sign-up\/email|send-verification-email|request-password-reset|forget-password)$/u,
+    paths: /^\/(sign-up\/email|send-verification-email|request-password-reset)$/u,
     window: longestAttemptWindow,
     max: 5,
   },
@@ -262,7 +262,7 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
     const session = await readSession(env, request);
     if (!session) return new Response(null, { status: 401 });
     const status = await registrationStatus(env.DB, session.user.id);
-    if (!session.user.emailVerified || !status.profile || !status.termsAccepted) {
+    if (!session.user.emailVerified || !registrationComplete(status)) {
       return new Response(null, { status: 403 });
     }
     // Una nuova passkey richiede un accesso recente. Per un admin, che con la passkey supera

@@ -17,7 +17,7 @@
  * job il modulo che ha un riferimento completo e pochi mutanti da ripetere.
  * `--collect-timings <cartella>` aggiorna le durate misurate delle parti dai `timing.json`.
  */
-import { execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   appendFileSync,
   copyFileSync,
@@ -35,7 +35,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 import { availableParallelism, totalmem } from "node:os";
 import { importGraph } from "./verify-repo.mjs";
-import { ghJson, git, readRunArtifact } from "./lib/provider.mjs";
+import { ghJson, git, readRunArtifact, trackedSources } from "./lib/provider.mjs";
 import { criticalModule } from "./lib/critical-modules.mjs";
 import { pullRequestCoverage, pullRequestParts } from "./mutation-reuse.mjs";
 
@@ -541,14 +541,7 @@ export function mutationMatrix(argument, files) {
   return { target: requested.length ? requested : files.filter(criticalModule).sort() };
 }
 
-function sources() {
-  return execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], {
-    encoding: "utf8",
-  })
-    .split("\n")
-    .filter((file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file) && existsSync(file))
-    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
-}
+const sources = () => trackedSources(/^(?:app|workers|test)\/.+\.tsx?$/u, { untracked: true });
 
 const mutantKey = ({ mutatorName, replacement, location }) =>
   `${mutatorName}|${replacement ?? ""}|${location.start.line}:${location.start.column}-${location.end.line}:${location.end.column}`;

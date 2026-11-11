@@ -692,13 +692,20 @@ async function compose(
   return orderMessage(env, recipient.language, recipient.timeZone, notice, delivery.change!, now);
 }
 
-/** Consegne chiuse da più di sette giorni: restano per diagnosi, poi si eliminano. */
+/**
+ * Consegne chiuse da più di sette giorni: restano per diagnosi, poi si eliminano; quelle ancora
+ * aperte dopo trenta. Due istruzioni perché ognuna legga il proprio indice parziale, delle
+ * chiuse e delle aperte, invece di scorrere la tabella.
+ */
 export function purgeTelegramDeliveries(db: D1Database, now: Date) {
-  return db
-    .prepare(`DELETE FROM telegram_deliveries WHERE created_at <= ?1
-      AND (sent_at IS NOT NULL OR failed_at IS NOT NULL OR created_at <= ?2)`)
-    .bind(
-      new Date(now.getTime() - 7 * dayMilliseconds).toISOString(),
-      new Date(now.getTime() - 30 * dayMilliseconds).toISOString(),
-    );
+  return [
+    db
+      .prepare(`DELETE FROM telegram_deliveries WHERE created_at <= ?
+        AND (sent_at IS NOT NULL OR failed_at IS NOT NULL)`)
+      .bind(new Date(now.getTime() - 7 * dayMilliseconds).toISOString()),
+    db
+      .prepare(`DELETE FROM telegram_deliveries WHERE created_at <= ?
+        AND sent_at IS NULL AND failed_at IS NULL`)
+      .bind(new Date(now.getTime() - 30 * dayMilliseconds).toISOString()),
+  ];
 }

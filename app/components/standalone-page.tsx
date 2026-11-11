@@ -32,22 +32,19 @@ export function Logo({ className, onDark = false }: { className?: string; onDark
 }
 
 /**
- * Pagine fuori dall'app: logo e riquadro nello stesso gruppo centrato, con il footer del sito
- * in fondo quando la pagina è pubblica.
+ * Pagine fuori dall'app: logo e riquadro nello stesso gruppo centrato.
  */
 export function StandalonePage({
   icon,
   tone,
   title,
   homeHref,
-  footer,
   children,
 }: {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
   tone: TileTone;
   title: string;
   homeHref: string;
-  footer?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -71,7 +68,6 @@ export function StandalonePage({
           </div>
         </main>
       </div>
-      {footer}
     </div>
   );
 }

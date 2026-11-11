@@ -45,7 +45,7 @@ export function LedgerIndicator({
  * Illustrazione geometrica degli stati vuoti: la tessera inclinata di 8°,
  * con contorno e chip neutri e la sola riga blu come accento.
  */
-export function TesseraArt({ className }: { className?: string }) {
+function TesseraArt({ className }: { className?: string }) {
   return (
     <svg
       viewBox="0 0 160 120"

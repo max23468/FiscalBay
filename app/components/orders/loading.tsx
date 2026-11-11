@@ -5,7 +5,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { useCopy } from "~/components/copy-context";
 
 /** Schede segnaposto con il layout dell'elenco: filtri e due colonne di ordini. */
-export function LoadingGrid() {
+function LoadingGrid() {
   const { t } = useCopy();
   return (
     <div
@@ -72,7 +72,7 @@ export function LoadingGrid() {
 }
 
 /** Intestazione degli Ordini prima dei dati: titolo, conteggio segnaposto e nessuno stato. */
-export function LoadingHeader() {
+function LoadingHeader() {
   const { t } = useCopy();
   return (
     <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">

@@ -636,7 +636,7 @@ describe("Collegamento e modifica dell'identità", () => {
     await follow(link(1));
     // Stesso utente, quindi stessi spazi, negozi e piani: cambia soltanto l'indirizzo.
     expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
-    // La conferma elimina subito lo stato temporaneo, prima della pulizia eseguita da un loader.
+    // La conferma elimina subito lo stato temporaneo, senza attendere la manutenzione.
     expect(
       await env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?")
         .bind(user.id)
@@ -668,12 +668,20 @@ describe("Collegamento e modifica dell'identità", () => {
       stage: "current",
     });
     expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
-    await purgeExpiredRecords(env.DB, new Date(Date.now() + 3_600_001));
+    // Una richiesta scaduta, o nata da un indirizzo che non è più quello di accesso, non vale
+    // più anche se la riga resta fino alla manutenzione.
+    const expired = new Date(Date.now() + 3_600_001);
+    const row = () =>
+      env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?").bind(user.id).first();
     expect(
-      await env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?")
-        .bind(user.id)
-        .first(),
+      await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
     ).toBeNull();
+    expect(
+      await pendingEmailChange(env.DB, user.id, "email.nuova@example.invalid", expired),
+    ).toBeNull();
+    expect(await row()).not.toBeNull();
+    await purgeExpiredRecords(env.DB, expired);
+    expect(await row()).toBeNull();
     send.mockRestore();
   });
 });

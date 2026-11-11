@@ -169,7 +169,7 @@ export function Disclosure({
   );
 }
 
-export type TableRow = { key: string; cells: ReactNode[] };
+type TableRow = { key: string; cells: ReactNode[] };
 
 /**
  * Tabella leggera da 768 px; sotto, ogni riga diventa una scheda: la prima cella fa da titolo,
@@ -309,7 +309,7 @@ export function Stat({
   label: string;
   value: ReactNode;
   note?: ReactNode;
-  tone?: "warning" | "danger";
+  tone?: "warning";
   href?: string;
 }) {
   const body = (
@@ -319,7 +319,6 @@ export function Stat({
         className={cn(
           "font-code text-2xl font-semibold tracking-tight",
           tone === "warning" && "text-warning",
-          tone === "danger" && "text-danger",
         )}
       >
         {value}

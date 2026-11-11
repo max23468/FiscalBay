@@ -12,7 +12,7 @@ import { localizedPath, type Language } from "../i18n";
 import { listFilters } from "../orders/order-list";
 import { maxSearchLength, minSuggestionLength } from "../orders/order-search";
 
-export interface SearchSuggestion {
+interface SearchSuggestion {
   id: string;
   ebayOrderId: string;
   buyerName: string;

@@ -166,13 +166,14 @@ describe("Sessioni, revoche e area admin", () => {
 
   it("esce per riautenticare e torna soltanto a una sezione consentita di Sicurezza", async () => {
     for (const prefix of ["", "/en"]) {
-      const user = await createUser(`ritorno${prefix.replace("/", "-")}@example.invalid`);
+      const email = `ritorno${prefix.replace("/", "-")}@example.invalid`;
+      const user = await createUser(email);
       const target = `${pagePath(prefix, "/app/impostazioni/account")}#security-email`;
       const area = await routeData(securityLoader, pagePath(prefix, "/app/impostazioni/account"), {
         cookie: user.cookie,
         params: { sezione: "account" },
       });
-      expect(area.userId).toBe(user.id);
+      expect(area).toMatchObject({ page: { account: { email } } });
       const out = await routeResponse(
         securityRouteAction,
         pagePath(prefix, "/app/impostazioni/account"),

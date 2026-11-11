@@ -514,8 +514,9 @@ it("ricorda la lingua scelta e riapre l'area in quella lingua anche al nuovo acc
   // Le pagine dell'area aperte in italiano, anche da un nuovo accesso, seguono la scelta.
   const home = await homeFor(seller.cookie).catch((thrown: Response) => thrown);
   expect((home as Response).headers.get("location")).toBe("/en/app/orders");
+  // L'indirizzo inglese si apre senza rinvii, con i testi composti dal server in inglese.
   expect(await settings(seller.cookie, "/en/app/settings")).toMatchObject({
-    language: "en",
+    page: { security: { sessions: [{ device: "Unknown device" }] } },
   });
   // Si torna soltanto a una pagina dell'area; altrimenti agli Ordini.
   for (const target of ["https://estraneo.invalid/app/ordini", "/accesso", "//estraneo.invalid"]) {

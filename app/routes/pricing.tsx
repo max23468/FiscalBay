@@ -88,9 +88,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     origin,
     signedIn: Boolean(session),
     owned,
-    baseFreeQuota: baseQuota,
-    freePromotion,
-    lifetime: { left: lifetimeLeft, total: lifetimeSlots },
     purchasesOpen,
     copy: {
       title: t.title,

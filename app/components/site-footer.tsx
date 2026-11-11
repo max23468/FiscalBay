@@ -26,7 +26,8 @@ export function SiteFooter({ className, path }: { className?: string; path?: str
         )}
       >
         <div className="grid gap-1">
-          <p>© {new Date().getFullYear()} FiscalBay</p>
+          {/* A cavallo di Capodanno l'anno del server (UTC) può precedere quello del browser. */}
+          <p suppressHydrationWarning>© {new Date().getFullYear()} FiscalBay</p>
           <p>{t.site.independent}</p>
           <p>
             <a href={`mailto:${supportEmail}`} className="link-underline">
@@ -51,7 +52,6 @@ export function SiteFooter({ className, path }: { className?: string; path?: str
               label={t.access.language}
               current={language}
               hrefFor={(code) => localizedPath(code, path)}
-              reloadDocument
             />
           </div>
         )}

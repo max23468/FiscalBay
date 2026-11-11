@@ -14,30 +14,23 @@ type Labels = { copy: string; copied: string; copyFailed: string; locked: string
 
 // Larghezza minima, non fissa: il riquadro si allarga fino al valore intero, così codice e
 // copia restano sulla stessa riga; va a capo soltanto la conferma di una copia non riuscita.
-const sizes = {
-  default: "min-h-10 w-fit min-w-56 text-[0.9375rem]",
-  compact: "min-h-8 w-fit min-w-48 text-sm",
-};
+const box = "min-h-10 w-fit min-w-56 text-[0.9375rem]";
 
 /**
  * Identificativo fiscale mostrato sempre intero, leggibile e copiabile.
  * Da bloccato non riceve il valore: mostra segnaposto generici, perché il
  * dato non deve arrivare al browser prima dello sblocco. `reveal` anima la
- * comparsa dopo uno sblocco; `compact` serve alle righe dense delle tabelle.
+ * comparsa dopo uno sblocco.
  */
 export function TaxCode({
   value,
   labels,
   reveal = false,
-  size = "default",
-  className,
   warning,
 }: {
   value: string | null;
   labels: Labels;
   reveal?: boolean;
-  size?: keyof typeof sizes;
-  className?: string;
   /** Anomalia formale: riquadro e copia ambra; la spiegazione sta nella nota sotto il codice. */
   warning?: boolean;
 }) {
@@ -46,8 +39,7 @@ export function TaxCode({
       <span
         className={cn(
           "inline-flex max-w-full items-center gap-2 rounded-lg border border-premium/30 bg-premium-surface px-3 py-1 text-muted-foreground dark:bg-premium/10",
-          sizes[size],
-          className,
+          box,
         )}
       >
         <UnlockIcon aria-hidden="true" className="size-4 text-premium" />
@@ -62,12 +54,11 @@ export function TaxCode({
     <span
       className={cn(
         "inline-flex max-w-full flex-wrap items-center justify-between gap-x-1 rounded-lg border pl-3 pr-1 py-1",
-        sizes[size],
+        box,
         reveal && "fiscal-reveal",
         warning
           ? "border-warning/50 bg-warning-surface dark:bg-warning/15"
           : "border-info/50 bg-info-surface shadow-xs shadow-info/15 dark:bg-info/15",
-        className,
       )}
     >
       <span

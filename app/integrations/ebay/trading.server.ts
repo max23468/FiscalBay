@@ -273,7 +273,8 @@ export function parseTradingOrders(xml: string) {
         },
       );
       if (!items.length) throw new Error("missing_transactions");
-      const taxEntries = taxIdentifierEntries(header);
+      // Come nella lettura fiscale, sull'intero blocco: transazioni comprese.
+      const taxEntries = taxIdentifierEntries(block);
       orders.push(
         orderObservationSchema.parse({
           source: "trading",

@@ -2,7 +2,7 @@ import type { AppCopy } from "../../app-copy";
 import { buyerNameView } from "../../contact";
 import type { OrderView, PaymentStatus, ShippingStatus, SourceStatus } from "../../view-models";
 
-export type PillTone = "success" | "warning" | "info" | "neutral";
+type PillTone = "success" | "warning" | "info" | "neutral";
 
 const paymentTone: Record<PaymentStatus, PillTone> = {
   paid: "success",

@@ -177,50 +177,52 @@ export function StoresView({
           s.problemsColumn,
           t.workspace.actions,
         ]}
-        rows={rows.map((row) => ({
-          key: row.id,
-          cells: [
-            <span key="store" className="font-medium break-words">
-              {row.label}
-            </span>,
-            <Link
-              key="workspace"
-              to={href(`spazi/${encodeURIComponent(row.workspaceId)}`)}
-              className="text-primary underline-offset-4 wrap-anywhere hover:underline"
-            >
-              {row.ownerEmail ?? row.workspaceId}
-            </Link>,
-            <StoreState key="state" row={row} />,
-            row.lastSuccessAt ? date(row.lastSuccessAt) : t.workspace.store.never,
-            row.failures >= 2 || row.detailErrors > 0 ? (
-              <span key="problems" className="grid gap-0.5 text-warning">
-                {row.failures >= 2 ? <span>{s.failedReads}</span> : null}
-                {row.detailErrors > 0 ? <span>{s.failedDetails(row.detailErrors)}</span> : null}
-              </span>
-            ) : (
-              ""
-            ),
-            row.removed || row.disconnected ? null : (
-              <div key="actions" className="flex flex-wrap gap-2">
-                {storeActions(row.consent === "valid", row.pauses, row.detailErrors).sync ? (
-                  <ActionForm
-                    intent="store-sync"
-                    fields={{ negozio: row.id, spazio: row.workspaceId }}
-                    submit={t.workspace.store.sync}
-                  />
-                ) : null}
-                {storeActions(row.consent === "valid", row.pauses, row.detailErrors)
-                  .retryDetails ? (
-                  <ActionForm
-                    intent="retry-details"
-                    fields={{ negozio: row.id, spazio: row.workspaceId }}
-                    submit={t.workspace.store.retryDetails}
-                  />
-                ) : null}
-              </div>
-            ),
-          ],
-        }))}
+        rows={rows.map((row) => {
+          const actions = storeActions(row.consent === "valid", row.pauses, row.detailErrors);
+          return {
+            key: row.id,
+            cells: [
+              <span key="store" className="font-medium break-words">
+                {row.label}
+              </span>,
+              <Link
+                key="workspace"
+                to={href(`spazi/${encodeURIComponent(row.workspaceId)}`)}
+                className="text-primary underline-offset-4 wrap-anywhere hover:underline"
+              >
+                {row.ownerEmail ?? row.workspaceId}
+              </Link>,
+              <StoreState key="state" row={row} />,
+              row.lastSuccessAt ? date(row.lastSuccessAt) : t.workspace.store.never,
+              row.failures >= 2 || row.detailErrors > 0 ? (
+                <span key="problems" className="grid gap-0.5 text-warning">
+                  {row.failures >= 2 ? <span>{s.failedReads}</span> : null}
+                  {row.detailErrors > 0 ? <span>{s.failedDetails(row.detailErrors)}</span> : null}
+                </span>
+              ) : (
+                ""
+              ),
+              row.removed || row.disconnected ? null : (
+                <div key="actions" className="flex flex-wrap gap-2">
+                  {actions.sync ? (
+                    <ActionForm
+                      intent="store-sync"
+                      fields={{ negozio: row.id, spazio: row.workspaceId }}
+                      submit={t.workspace.store.sync}
+                    />
+                  ) : null}
+                  {actions.retryDetails ? (
+                    <ActionForm
+                      intent="retry-details"
+                      fields={{ negozio: row.id, spazio: row.workspaceId }}
+                      submit={t.workspace.store.retryDetails}
+                    />
+                  ) : null}
+                </div>
+              ),
+            ],
+          };
+        })}
       />
       <More more={more} offset={offset} query={query} problems={problems} />
     </>

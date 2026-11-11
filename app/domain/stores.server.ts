@@ -186,6 +186,38 @@ export function listStores(db: D1Database, userId: string, now = new Date()) {
   );
 }
 
+/**
+ * Negozi dello spazio dell'utente con i soli campi che servono a filtrare e a nominare: stessa
+ * appartenenza e stesso ordine di `listStores`, senza conteggi, letture e stato del consenso.
+ */
+export async function listStoreScopes(
+  db: D1Database,
+  userId: string,
+): Promise<Pick<StoreStatus, "id" | "ebayEnvironment" | "name" | "pauseReasons">[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT s.id, s.ebay_environment, ${storeNameSql("s")} AS name,
+              (SELECT group_concat(${pauseReasonSql}) FROM ebay_store_pauses p
+                WHERE p.store_id = s.id) AS pauses
+         FROM ebay_stores s
+        WHERE s.workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?1)
+          AND s.data_deleted_at IS NULL
+        ORDER BY s.linked_at, s.id`,
+    )
+    .bind(userId)
+    .all<Pick<StoreRow, "id" | "ebay_environment" | "name" | "pauses">>();
+  return results.map((row) => ({
+    id: row.id,
+    ebayEnvironment: row.ebay_environment,
+    name: row.name,
+    pauseReasons: pauseReasonsOf(row.pauses),
+  }));
+}
+
+/** Ragioni di pausa di un negozio dall'elenco concatenato della sua riga, in ordine alfabetico. */
+const pauseReasonsOf = (pauses: string | null) =>
+  (pauses?.split(",").sort() ?? []) as PauseReason[];
+
 /** Negozi di uno spazio per la console amministrativa, con lo stesso stato mostrato al venditore. */
 export function listWorkspaceStores(db: D1Database, workspaceId: string, now = new Date()) {
   return readStores(db, "s.workspace_id = ?1", workspaceId, now);
@@ -245,7 +277,7 @@ async function readStores(
     ]);
   const at = now.getTime();
   return (results as StoreRow[]).map((row) => {
-    const pauseReasons = (row.pauses?.split(",").sort() ?? []) as PauseReason[];
+    const pauseReasons = pauseReasonsOf(row.pauses);
     const expiresAt = row.refresh_expires_at;
     const expired = !row.credentials || row.rejected_at !== null || Date.parse(expiresAt!) <= at;
     // Un negozio escluso dal piano resta in pausa anche con il consenso scaduto: ricollegarlo

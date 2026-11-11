@@ -108,7 +108,7 @@ const markerTables = [
   // non si riaprono. Gli invii Telegram seguono `telegram`.
   { table: "service_settings", where: "name <> 'telegram_sends'", conflict: "REPLACE" },
   { table: "admission_settings", conflict: "REPLACE" },
-  // La prova Premium iniziata dopo il punto torna con la prova usata, che non si ripete.
+  // La prova Pro iniziata dopo il punto torna con la prova usata, che non si ripete.
   {
     name: "trial_entitlements",
     table: "workspace_entitlements",

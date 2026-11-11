@@ -1,21 +1,18 @@
 import { cn } from "cn";
-import { Unplug } from "lucide-react";
 
 import { EmptyArt, type EmptyArtKind } from "~/components/brand";
 
-type Variant = Exclude<EmptyArtKind, "no-results"> | "search" | "connection";
+type Variant = Exclude<EmptyArtKind, "no-results"> | "search";
 
 /**
  * Stato vuoto: illustrazione contestuale, titolo, conseguenza e azioni.
  * Le varianti ampie (primo utilizzo, tutto aggiornato, pagina inesistente)
- * occupano il posto dell'elenco; ricerca e collegamento restano compatti
- * accanto al proprio contesto.
+ * occupano il posto dell'elenco; la ricerca resta compatta accanto al proprio contesto.
  */
 export function EmptyState({
   title,
   description,
   action,
-  secondaryAction,
   children,
   className,
   variant = "first-use",
@@ -24,7 +21,6 @@ export function EmptyState({
   title: string;
   description: string;
   action?: React.ReactNode;
-  secondaryAction?: React.ReactNode;
   /** Contenuto aggiuntivo sotto le azioni, per esempio i primi passi. */
   children?: React.ReactNode;
   className?: string;
@@ -33,7 +29,7 @@ export function EmptyState({
   headingLevel?: 1 | 2;
 }) {
   const Heading = headingLevel === 1 ? "h1" : "h2";
-  if (variant === "search" || variant === "connection") {
+  if (variant === "search") {
     return (
       <div
         className={cn(
@@ -41,11 +37,7 @@ export function EmptyState({
           className,
         )}
       >
-        {variant === "search" ? (
-          <EmptyArt kind="no-results" className="h-10 w-12" />
-        ) : (
-          <Unplug aria-hidden="true" className="mt-0.5 size-5 justify-self-center text-warning" />
-        )}
+        <EmptyArt kind="no-results" className="h-10 w-12" />
         <div className="grid min-w-0 gap-1">
           <Heading className="text-sm font-medium">{title}</Heading>
           <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{description}</p>
@@ -66,12 +58,7 @@ export function EmptyState({
       <div className="grid min-w-0 gap-2">
         <Heading className="text-xl leading-snug font-semibold text-balance">{title}</Heading>
         <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{description}</p>
-        {action || secondaryAction ? (
-          <div className="flex flex-wrap items-center gap-2 pt-2">
-            {action}
-            {secondaryAction}
-          </div>
-        ) : null}
+        {action ? <div className="flex flex-wrap items-center gap-2 pt-2">{action}</div> : null}
         {children ? <div className="pt-4">{children}</div> : null}
       </div>
     </div>

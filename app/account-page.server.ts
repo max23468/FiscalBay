@@ -30,6 +30,7 @@ import { activateStoreGrant, lastLoginMethodCookie, readSession } from "./auth.s
 import {
   completeRegistration,
   parseProfile,
+  registrationComplete,
   registrationStatus,
 } from "./domain/registration.server";
 import { deletionReauthenticated } from "./domain/account-deletion.server";
@@ -122,7 +123,7 @@ export async function accessLoader(request: Request) {
     };
   }
   const status = await registrationStatus(env.DB, session.user.id);
-  if (status.termsAccepted && status.profile) {
+  if (registrationComplete(status)) {
     const target = securityReturnPath(language, search.get("returnTo"));
     throw redirect(target ?? `${localizedPath(language, ordersPath)}${url.search}`, {
       headers: noStore,

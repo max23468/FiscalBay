@@ -9,12 +9,16 @@ import {
   previousRuns,
   planLayout,
   proofStands,
+  pullRequestCoverage,
   pullRequestParts,
   pullRequestOutcome,
   pullRequestProof,
   reusePlan,
 } from "./mutation-reuse.mjs";
 import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 
 describe("mutation incrementale della prova del candidato", () => {
   it("riconosce i job di mutation della qualifica e della campagna", () => {
@@ -683,4 +687,99 @@ describe("lettura delle run precedenti", () => {
     assert.equal(empty.calls.length, 0);
     assert.ok(calls.length > 0);
   });
+});
+
+describe("prova di un modulo nelle PR integrate", () => {
+  const target = "app/domain/billing.server.ts";
+  const graph = new Map([[target, new Set()]]);
+
+  /** Clone temporaneo con due commit del modulo; `git` degli script legge la cartella corrente. */
+  const inClone = async (task) => {
+    const directory = mkdtempSync(path.join(tmpdir(), "mutation-reuse-"));
+    const origin = process.cwd();
+    const run = (...args) => execFileSync("git", args, { cwd: directory, encoding: "utf8" }).trim();
+    try {
+      run("init", "--quiet");
+      run("config", "user.email", "prova@example.com");
+      run("config", "user.name", "Prova");
+      run("config", "commit.gpgsign", "false");
+      mkdirSync(path.join(directory, "app/domain"), { recursive: true });
+      const commit = (text) => {
+        writeFileSync(path.join(directory, target), text);
+        run("add", ".");
+        run("commit", "--quiet", "-m", "modulo");
+        return run("rev-parse", "HEAD");
+      };
+      const since = commit("export const a = 1;\n");
+      const tip = commit("export const a = 2;\n");
+      process.chdir(directory);
+      return await task({ since, tip, blob: run("rev-parse", `${tip}:${target}`) });
+    } finally {
+      process.chdir(origin);
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+
+  const fake = ({ tip, content }) => {
+    const calls = [];
+    const api = async (url) => {
+      calls.push(url);
+      if (url.endsWith(`/commits/${tip}/pulls`))
+        return [
+          {
+            merged_at: "2026-11-07T10:00:00Z",
+            merge_commit_sha: tip,
+            head: { repo: { id: 1 }, sha: "testa", ref: "feat/x" },
+          },
+        ];
+      if (url.includes("/contents/")) return content();
+      if (url.includes("/workflows/ci.yml/runs"))
+        return {
+          workflow_runs: [
+            {
+              id: 8,
+              head_sha: "testa",
+              created_at: "2026-11-07T09:00:00Z",
+              head_repository: { id: 1 },
+            },
+          ],
+        };
+      const jobs = [{ name: `Mutation ${target} 1/1`, conclusion: "success" }];
+      return { jobs, total_count: jobs.length };
+    };
+    const covered = pullRequestCoverage(
+      { repository: "o/r", repositoryId: 1, graph },
+      api,
+      async () => null,
+    );
+    return { calls, covered };
+  };
+
+  it("legge il contenuto provato con la lettura iniettata e riusa la prova della PR", () =>
+    inClone(async ({ since, tip, blob }) => {
+      const { calls, covered } = fake({ tip, content: () => ({ sha: blob }) });
+      assert.equal(await covered(target, since, tip), true);
+      assert.ok(calls.includes(`repos/o/r/contents/${target}?ref=testa`));
+      // L'esito resta in memoria: la stessa domanda non rilegge.
+      const read = calls.length;
+      assert.equal(await covered(target, since, tip), true);
+      assert.equal(calls.length, read);
+    }));
+
+  it("non riusa un contenuto diverso, assente dalla testa della PR o senza commit integrati", () =>
+    inClone(async ({ since, tip }) => {
+      const other = fake({ tip, content: () => ({ sha: "altro" }) });
+      assert.equal(await other.covered(target, since, tip), false);
+      assert.ok(!other.calls.some((url) => url.includes("/workflows/")));
+      const absent = fake({
+        tip,
+        content: () => {
+          throw new Error("HTTP 404");
+        },
+      });
+      assert.equal(await absent.covered(target, since, tip), false);
+      const still = fake({ tip, content: () => ({ sha: "altro" }) });
+      assert.equal(await still.covered(target, tip, tip), false);
+      assert.equal(still.calls.length, 0);
+    }));
 });

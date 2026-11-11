@@ -20,7 +20,7 @@ import { appCopy, pageTitle } from "../app-copy";
 import { areaPage, isSameOrigin, requestedEbayEnvironment } from "../account-area.server";
 import { readSession } from "../auth.server";
 import { registrationComplete, registrationStatus } from "../domain/registration.server";
-import { ebayOutages, listStores } from "../domain/stores.server";
+import { ebayOutages, listStores, listStoreScopes } from "../domain/stores.server";
 import { errorResponse } from "../error-response";
 import { tracePhase } from "../errors";
 import { languageFromPath, localizedPath } from "../i18n";
@@ -48,18 +48,26 @@ export function headers(): HeadersInit {
   return noStore.headers;
 }
 
-type Eligibility = { blocked: "session" | "email" | "registration" } | { userId: string };
+type VerifiedUser = { blocked: "session" | "email" } | { userId: string };
+type Eligibility = VerifiedUser | { blocked: "registration" };
 
-/** Il collegamento richiede sessione, email verificata e registrazione completa. */
-async function eligibility(request: Request): Promise<Eligibility> {
+/** Utente della sessione con l'email verificata. */
+async function verifiedUser(request: Request): Promise<VerifiedUser> {
   const session = await readSession(env, request);
   tracePhase(request, "session");
   if (!session) return { blocked: "session" };
   if (!session.user.emailVerified) return { blocked: "email" };
-  if (!registrationComplete(await registrationStatus(env.DB, session.user.id))) {
+  return { userId: session.user.id };
+}
+
+/** Il collegamento richiede sessione, email verificata e registrazione completa. */
+async function eligibility(request: Request): Promise<Eligibility> {
+  const user = await verifiedUser(request);
+  if ("blocked" in user) return user;
+  if (!registrationComplete(await registrationStatus(env.DB, user.userId))) {
     return { blocked: "registration" };
   }
-  return { userId: session.user.id };
+  return user;
 }
 
 // Schermata preparatoria: spiega che cosa autorizza il merchant prima di passare a eBay. Con
@@ -70,23 +78,27 @@ export function loader({ request }: Route.LoaderArgs) {
 
 async function prepare(request: Request) {
   const language = languageFromPath(new URL(request.url).pathname);
-  const status = await eligibility(request);
-  if ("blocked" in status) {
-    // Senza sessione o con la registrazione da completare decide l'accesso.
-    if (status.blocked !== "email") return redirect(localizedPath(language, accessPath), noStore);
+  // Senza sessione o con la registrazione da completare decide l'accesso.
+  const access = () => redirect(localizedPath(language, accessPath), noStore);
+  const user = await verifiedUser(request);
+  if ("blocked" in user) {
+    if (user.blocked === "session") return access();
     return redirect(withStoreNotice(localizedPath(language, ordersPath), "accesso"), noStore);
   }
   const search = new URL(request.url).searchParams;
   const ebayEnvironment = requestedEbayEnvironment(request);
   const expectedStoreId = search.get(storeLinkParams.reconnect);
-  const expected = expectedStoreId
-    ? (await listStores(env.DB, status.userId)).find(
-        (store) => store.id === expectedStoreId && store.ebayEnvironment === ebayEnvironment,
-      )
-    : null;
+  const [registration, stores, { theme, timeZone }] = await Promise.all([
+    registrationStatus(env.DB, user.userId),
+    expectedStoreId ? listStoreScopes(env.DB, user.userId) : [],
+    readPreferences(env.DB, user.userId),
+  ]);
+  if (!registrationComplete(registration)) return access();
+  const expected = stores.find(
+    (store) => store.id === expectedStoreId && store.ebayEnvironment === ebayEnvironment,
+  );
   if (search.has(storeLinkParams.reconnect) && !expected)
     throw errorResponse(request, "INVALID_REQUEST");
-  const { theme, timeZone } = await readPreferences(env.DB, status.userId);
   return {
     language,
     // Pagina dell'area senza barra: valgono soltanto tema e fuso scelti.

@@ -44,7 +44,6 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
       label={t.access.language}
       current={language}
       hrefFor={(code) => localizedPath(code, path)}
-      reloadDocument
       compact={compact}
     />
   );

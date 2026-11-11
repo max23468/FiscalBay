@@ -1,9 +1,13 @@
+import { env } from "cloudflare:workers";
+
 import { appCopy, type AppCopy } from "../app-copy";
 import { lifetimeSlots, priceGeneration, type LifetimeOffer } from "../catalog";
 import { planDiagnostics } from "../support";
 import { trialDays } from "../domain/grants.server";
 import { lifetimeOfferState, unusedCredit } from "../domain/lifetime.server";
+import type { ActiveSession } from "../domain/sessions.server";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
+import { appVersion } from "../domain/support.server";
 import type { Language } from "../i18n";
 import { formatDate } from "../format";
 import { dayMilliseconds } from "../time";
@@ -13,7 +17,6 @@ import type {
   DiagnosticsView,
   NotificationView,
   OrderView,
-  SessionView,
   StoreView,
   TaxIdentifierView,
 } from "../view-models";
@@ -81,7 +84,7 @@ export interface Scenario {
   deleting: boolean;
   elsewhere: boolean;
   notifications: NotificationView[];
-  sessions: SessionView[];
+  sessions: ActiveSession[];
   /** Metodi di accesso dimostrativi della Sicurezza. */
   signInMethods: SignInMethods;
   diagnostics: DiagnosticsView;
@@ -167,11 +170,10 @@ const text = {
 };
 
 // Come nell'area reale, ogni sessione riporta il giorno in cui è stata aperta.
-const sessions = (language: Language): SessionView[] => [
+const sessions = (language: Language): ActiveSession[] => [
   {
     id: "ses-1",
     device: language === "it" ? "Safari su macOS" : "Safari on macOS",
-    location: "Trento",
     lastActiveAt: previewNow,
     createdAt: minutesAgo(4_352),
     current: true,
@@ -179,7 +181,6 @@ const sessions = (language: Language): SessionView[] => [
   {
     id: "ses-2",
     device: language === "it" ? "Safari su iPhone" : "Safari on iPhone",
-    location: "Trento",
     lastActiveAt: minutesAgo(180),
     createdAt: minutesAgo(20_213),
     current: false,
@@ -187,7 +188,6 @@ const sessions = (language: Language): SessionView[] => [
   {
     id: "ses-3",
     device: language === "it" ? "Chrome su Windows" : "Chrome on Windows",
-    location: "Milano",
     lastActiveAt: minutesAgo(2_900),
     createdAt: minutesAgo(43_571),
     current: false,
@@ -219,8 +219,11 @@ export function loadScenario(
   // Fasi con le stesse parole e date assolute dell'area reale.
   const phases = appCopy[language].settings.support.diag.phases;
   const readAt = (minutes: number) => formatDate(minutesAgo(minutes), language);
+  // La versione distribuita, come nell'area reale, con il segno dell'anteprima.
+  const version = appVersion(env);
+  const previewLabel = language === "it" ? "anteprima" : "preview";
   const diagnostics = (overrides: Partial<DiagnosticsView> = {}): DiagnosticsView => ({
-    version: language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)",
+    version: version ? `${version} (${previewLabel})` : previewLabel,
     storeRef: "neg_7f3a91c2",
     syncPhase: phases.ok(readAt(5)),
     errorCode: null,

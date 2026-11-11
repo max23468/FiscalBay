@@ -563,6 +563,25 @@ describe("acquisti Trading", () => {
       verification: "completed",
       values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
     });
+    // Dentro una transazione vale lo stesso: il malformato è un errore senza valori, il completo
+    // risulta presente.
+    const inTransaction = (identifier: string) =>
+      parseTradingOrders(
+        xml.replace(
+          "</Transaction>",
+          `<BuyerTaxIdentifier>${identifier}</BuyerTaxIdentifier></Transaction>`,
+        ),
+      ).orders[0]!.taxIdentifiers;
+    expect(inTransaction("<Type>CODICE_FISCALE</Type>")).toMatchObject({
+      verification: "error",
+      availability: "not_included",
+      values: [],
+    });
+    expect(inTransaction("<Type>CODICE_FISCALE</Type><ID>SINTETICO</ID>")).toMatchObject({
+      verification: "completed",
+      availability: "present",
+      values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
+    });
   });
 
   it("distingue ordine Trading assente, assenza del campo e risposta fiscale malformata", async () => {

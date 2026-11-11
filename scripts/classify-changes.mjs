@@ -37,6 +37,7 @@ import {
   visibleNews,
 } from "./release/release.mjs";
 import { importGraph } from "./verify-repo.mjs";
+import { trackedSources } from "./lib/provider.mjs";
 
 /** Script di package.json eseguito da ciascun livello, dal più leggero. */
 export const levelScripts = {
@@ -800,9 +801,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
           read: (file) => (existsSync(file) ? readFileSync(file, "utf8") : undefined),
         },
       );
-  const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
-    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
-    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+  const sources = trackedSources(undefined, { untracked: true });
   const result = plan(files, sources, args.complete, changes);
 
   if (green) console.log(`Confronto con l'ultimo verde locale ${green.slice(0, 12)}.`);
@@ -811,12 +810,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   // da un test cambiato; il candidato prova il diff cumulativo.
   const prMutation =
     committed && !args.complete
-      ? prTargets(
-          files,
-          lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
-            .filter((file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file) && existsSync(file))
-            .map((file) => ({ path: file, text: readFileSync(file, "utf8") })),
-        )
+      ? prTargets(files, trackedSources(/^(?:app|workers|test)\/.+\.tsx?$/u, { untracked: true }))
       : [];
   // In locale il livello esegue lo script statico; la CI quello completo del livello.
   const summary = `Gate ${result.gate} (\`pnpm ${committed ? result.script : localScripts[result.gate]}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;

@@ -25,7 +25,7 @@ import { parseArgs } from "node:util";
 import { databases } from "../cloudflare.config.ts";
 import { cf, modeOf } from "./lib/provider.mjs";
 import { workerOf } from "./lib/worker.mjs";
-import { executeLocal } from "./local-d1.mjs";
+import { database as localDatabase, executeLocal } from "./local-d1.mjs";
 
 export const warningDays = 45;
 const day = 86_400_000;
@@ -161,6 +161,17 @@ export function report(environment, { rows, missing }) {
   return lines.join("\n");
 }
 
+/**
+ * Con `--local` la copia va nella D1 locale di `local-d1.mjs`, che `E2E_PRODUCTION` sceglie fra
+ * test e live: un ambiente diverso scriverebbe le sue voci nel database dell'altro.
+ */
+export function assertLocalTarget(environment, local = localDatabase) {
+  if (databases[environment].id !== local.id)
+    throw new Error(
+      `--local scrive nella D1 locale ${local.name}, non in quella di --mode ${environment}: ${environment === "live" ? "serve E2E_PRODUCTION=1" : "togliere E2E_PRODUCTION"}.`,
+    );
+}
+
 async function main() {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -173,6 +184,7 @@ async function main() {
   const command = positionals[0] ?? "plan";
   if (!["plan", "apply"].includes(command)) throw new Error(`Comando sconosciuto: ${command}`);
   const environment = modeOf(values.mode, "test");
+  if (values.local) assertLocalTarget(environment);
   const entries = parseRegistry(readFileSync(values.file ?? defaultFile(), "utf8"), environment);
   const result = review(entries, declaredSecrets(environment));
   console.log(report(environment, result));
@@ -180,7 +192,9 @@ async function main() {
   const sql = registrySql(entries, result.missing);
   if (values.local) executeLocal(sql);
   else cf(["d1", "raw", databases[environment].id, "--sql", sql], { stdout: "ignore" });
-  console.log(`Registro copiato su ${databases[environment].name}.`);
+  console.log(
+    `Registro copiato su ${databases[environment].name}${values.local ? " locale" : ""}.`,
+  );
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

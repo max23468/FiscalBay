@@ -9,6 +9,7 @@ import {
   deleteStoreData,
   disconnectStore,
   listStores,
+  listStoreScopes,
   pauseStore,
   resumeStore,
 } from "../app/domain/stores.server";
@@ -161,6 +162,13 @@ it("avvisa prima della scadenza del consenso e, dopo, per al massimo trenta gior
     reminder: null,
     consentExpiring: true,
   });
+  // La lettura leggera riporta gli stessi negozi con i soli campi per filtrare e nominare.
+  const [{ id, ebayEnvironment, name, pauseReasons }] = await listStores(env.DB, seller.userId, at);
+  expect(pauseReasons).toEqual(["manual"]);
+  expect(await listStoreScopes(env.DB, seller.userId)).toEqual([
+    { id, ebayEnvironment, name, pauseReasons },
+  ]);
+  expect(await listStoreScopes(env.DB, "altro-utente")).toEqual([]);
   await resumeStore(env.DB, seller.userId, seller.storeId);
 
   // Dopo la scadenza il negozio chiede il ricollegamento: avviso per trenta giorni, poi basta,
@@ -581,7 +589,6 @@ it("mostra elenco e pannello del negozio con i soli dati posseduti e il piano de
   // Link diretto e refresh del pannello, anche in inglese.
   const detail = await storesPage(`/en/app/stores/${seller.storeId}`, seller.cookie);
   expect(detail.data).toMatchObject({
-    language: "en",
     notFound: false,
     page: { detail: { id: seller.storeId }, connectHref: "/en/app/stores/link" },
   });
@@ -837,7 +844,6 @@ it("aggiorna il profilo minimo senza cambiare il tipo di account", async () => {
     params: { sezione: "account" },
   });
   expect(loaded).toMatchObject({
-    language: "en",
     page: {
       section: "account",
       account: {

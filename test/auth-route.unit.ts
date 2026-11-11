@@ -53,7 +53,10 @@ vi.mock("../app/auth.server", () => ({
   }),
   readSession: (_env: Env, request: Request) => services.session({ headers: request.headers }),
 }));
-vi.mock("../app/domain/registration.server", () => ({ registrationStatus: services.registration }));
+vi.mock("../app/domain/registration.server", async (original) => ({
+  ...(await original<typeof import("../app/domain/registration.server")>()),
+  registrationStatus: services.registration,
+}));
 vi.mock("../app/integrations/ebay/store-link.server", () => ({
   claimStoreLinkSession: services.claim,
   recordStoreLinkOutcome: services.record,
@@ -218,7 +221,7 @@ describe("confine HTTP Auth", () => {
         if (condition === "fresh") session.session.createdAt = new Date(now - 86400_000);
         services.session.mockResolvedValue(session);
         services.registration.mockResolvedValue({
-          profile: condition !== "profile",
+          profile: condition === "profile" ? null : true,
           termsAccepted: condition !== "terms",
         });
         expect((await handle(url)).status).toBe(403);
@@ -390,7 +393,6 @@ describe("limiti dei tentativi", () => {
     ["/passkey/verify-registration", 10],
     ["/send-verification-email", 60],
     ["/request-password-reset", 60],
-    ["/forget-password", 60],
     ["/email-otp/verify-email", 10],
   ])(
     "limita %s per IP e riapre la finestra a %i secondi senza scrivere su D1",

@@ -1,7 +1,6 @@
 import { cn } from "cn";
 
 import { StatusAlert, StatusBadge } from "~/components/status";
-import type { AdminCopy } from "../../copy/admin-copy";
 import type { ReceiptState, TaskState } from "../../domain/admin-operations.server";
 import type {
   BulkDataAnomaly,
@@ -99,8 +98,8 @@ export function JobsView({ tasks, receipts }: { tasks: TaskState[]; receipts: Re
 }
 
 /** Barra del consumo della quota, ambra oltre la soglia. */
-function Usage({ row, t }: { row: QuotaRow; t: AdminCopy }) {
-  const { percent } = useAdmin();
+function Usage({ row }: { row: QuotaRow }) {
+  const { t, percent } = useAdmin();
   return (
     <span className="grid min-w-32 gap-1">
       <span className={cn("font-code", row.over && "text-warning")}>{percent(row.share)}</span>
@@ -134,7 +133,7 @@ function QuotaTable({ rows }: { rows: QuotaRow[] }) {
             <span className="font-medium wrap-anywhere">{row.resource}</span>
             <span className="text-xs text-muted-foreground">{row.api}</span>
           </span>,
-          <Usage key="usage" row={row} t={t} />,
+          <Usage key="usage" row={row} />,
           <span key="remaining" className="font-code">
             {row.rate.remaining}
           </span>,

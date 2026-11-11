@@ -6,7 +6,12 @@ const turnstile = "https://challenges.cloudflare.com";
 // Immagini delle inserzioni e loghi dei negozi: soli host qualificati da `qualifiedImageUrl`.
 const ebayImages = ["https://i.ebayimg.com", "https://i.ebayimg.sandbox.ebay.com"];
 
-/** Nonce casuale di una sola risposta, per gli script inline di React Router e di React. */
+/**
+ * Nonce casuale degli script inline di React Router e di React, generato a ogni risposta
+ * preparata dal Worker. La copia di Home e Prezzi servita a chi non ha cookie
+ * (`page-cache.server.ts`) lo ripete, insieme alla CSP che lo dichiara, per i 60 secondi
+ * della sua durata.
+ */
 export function scriptNonce(): string {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
 }

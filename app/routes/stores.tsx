@@ -93,7 +93,7 @@ export function loader(args: Route.LoaderArgs) {
 
 async function readStores({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request);
-  const { language, session, account } = area;
+  const { language, session } = area;
   const now = new Date();
   const telegram = telegramConfigured(env);
   const [statuses, renews, notifications, ebayCalls] = await measure("d1", "stores", () =>
@@ -115,8 +115,6 @@ async function readStores({ request, params }: Route.LoaderArgs) {
   const payload = {
     // Un negozio inesistente o di un altro spazio risponde allo stesso modo, dentro la shell.
     notFound: Boolean(params.negozio) && !detail,
-    language,
-    account,
     // Il collegamento eBay partito da Negozi torna qui con il suo esito.
     notice: accessNotice(new URL(request.url).searchParams, language),
     page: {

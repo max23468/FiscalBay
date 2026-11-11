@@ -11,7 +11,7 @@ type CommerceData = Extract<SectionData, { section: "commerciale" }>;
 function Promotions({ promotions, now }: { promotions: CommerceData["promotions"]; now: string }) {
   const { t, date } = useAdmin();
   const c = t.commerce;
-  const fields = (id?: string, startsAt?: string, endsAt?: string | null, quota?: number) => (
+  const fields = (startsAt?: string, endsAt?: string | null, quota?: number) => (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-3 sm:grid-cols-3">
       <TextField
         label={c.startsAt}
@@ -35,7 +35,6 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
         max={100}
         required
         defaultValue={quota}
-        key={id}
       />
     </div>
   );
@@ -59,7 +58,7 @@ function Promotions({ promotions, now }: { promotions: CommerceData["promotions"
                       submit={t.common.save}
                       reason
                     >
-                      {fields(promotion.id, promotion.startsAt, promotion.endsAt, promotion.quota)}
+                      {fields(promotion.startsAt, promotion.endsAt, promotion.quota)}
                     </ActionForm>
                   </Disclosure>
                   <Disclosure label={c.end} destructive>

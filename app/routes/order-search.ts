@@ -11,7 +11,7 @@ import {
 import { ordersPath } from "../app-links";
 import { searchVisibleOrders } from "../domain/orders.server";
 import { orderAllowance } from "../domain/grants.server";
-import { listStores } from "../domain/stores.server";
+import { listStoreScopes } from "../domain/stores.server";
 import { errorResponse, postOnly } from "../error-response";
 import { localizedPath } from "../i18n";
 import { measure } from "../observability.server";
@@ -89,7 +89,7 @@ async function listedFilters(
 ): Promise<OrderCriteria> {
   const userId = area.session.user.id;
   const [stores, allowance] = await Promise.all([
-    listStores(env.DB, userId),
+    listStoreScopes(env.DB, userId),
     orderAllowance(env.DB, userId, now),
   ]);
   const storeIds = stores

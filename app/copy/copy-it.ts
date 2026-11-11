@@ -1112,7 +1112,7 @@ export const it = {
     email: "Oppure scrivi a",
     faq: "Domande prima di iniziare",
   },
-  /** Pagina minima di accesso e ordini, finché le route reali non usano la shell. */
+  /** Pagina di accesso e registrazione. */
   access: {
     description: "Ordini eBay disponibili in FiscalBay",
     headline: "Il Codice Fiscale dei tuoi ordini eBay, in un posto solo.",

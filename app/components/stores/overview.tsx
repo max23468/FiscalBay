@@ -23,6 +23,7 @@ import {
 } from "./store";
 import {
   connectionStatus,
+  consentExpired,
   ebayDownFor,
   ebayDownText,
   hasSubtitle,
@@ -96,9 +97,7 @@ function OverviewStats({ store, now }: SectionProps & { now: string }) {
   const { t, language } = useCopy();
   const date = useDate();
   const history = historyText(store, t);
-  const expired =
-    store.connection === "reconnect_required" ||
-    (store.consentExpiresAt !== null && store.consentExpiresAt <= now);
+  const expired = consentExpired(store, now);
   return (
     <dl className="grid grid-cols-2 gap-3">
       <OverviewStat label={t.stores.orders}>
