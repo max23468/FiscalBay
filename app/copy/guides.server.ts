@@ -158,6 +158,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Codice Fiscale e fattura elettronica per le vendite su eBay",
+          path: "/guide/codice-fiscale-fattura-elettronica-ebay",
+        },
         solution: {
           body: [
             "Colleghi il negozio eBay una volta sola, in sola lettura. Da lì FiscalBay legge i nuovi ordini da solo.",
@@ -200,6 +204,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Chiedere il Codice Fiscale all’acquirente eBay",
+          path: "/guide/chiedere-codice-fiscale-acquirente-ebay",
+        },
         solution: {
           body: [
             "FiscalBay legge gli ordini del tuo negozio e ti mostra il Codice Fiscale che l’acquirente ha inserito. Non devi chiederlo una seconda volta.",
@@ -247,6 +255,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Dove trovare il Codice Fiscale dell’acquirente su eBay",
+          path: "/guide/trovare-codice-fiscale-ordini-ebay",
+        },
         solution: {
           body: [
             "FiscalBay ti dice subito se l’ordine ha già il Codice Fiscale, così non scrivi a chi l’ha inserito.",
@@ -297,6 +309,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Partita IVA dell’acquirente negli ordini eBay",
+          path: "/guide/partita-iva-acquirente-ebay",
+        },
         solution: {
           body: [
             "FiscalBay mette in un unico file acquirente, indirizzo di fatturazione, Codice Fiscale e Partita IVA dei tuoi ordini eBay.",
@@ -407,6 +423,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Chiedere il Codice Fiscale o la Partita IVA all’acquirente eBay",
+          path: "/guide/chiedere-codice-fiscale-acquirente-ebay",
+        },
         solution: {
           body: [
             "FiscalBay mostra la Partita IVA nella scheda dell’ordine, accanto al Codice Fiscale o al suo posto, e la copi con un clic.",
@@ -469,6 +489,10 @@ export const guides: Record<
             ["Assistenza", "Sì", "Nessun contatto sul sito"],
           ],
           note: "FiscalBay è un servizio indipendente e non ha legami con ProBay.",
+        },
+        related: {
+          label: "Dove trovare il Codice Fiscale dell’acquirente su eBay",
+          path: "/guide/trovare-codice-fiscale-ordini-ebay",
         },
         solution: {
           body: [
@@ -650,6 +674,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Tax code (Codice Fiscale) and the Italian e-invoice for eBay sales",
+          path: "/guide/codice-fiscale-fattura-elettronica-ebay",
+        },
         solution: {
           body: [
             "You connect your eBay store once, read-only. From then on FiscalBay reads new orders on its own.",
@@ -695,6 +723,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Asking an eBay buyer for their tax code (Codice Fiscale)",
+          path: "/guide/chiedere-codice-fiscale-acquirente-ebay",
+        },
         solution: {
           body: [
             "FiscalBay reads your store’s orders and shows you the tax code the buyer entered. You do not need to ask a second time.",
@@ -742,6 +774,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Where to find the buyer’s tax code (Codice Fiscale) on eBay",
+          path: "/guide/trovare-codice-fiscale-ordini-ebay",
+        },
         solution: {
           body: [
             "FiscalBay tells you straight away whether the order already has the tax code, so you do not write to buyers who entered it.",
@@ -792,6 +828,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "The buyer’s VAT number (Partita IVA) on eBay orders",
+          path: "/guide/partita-iva-acquirente-ebay",
+        },
         solution: {
           body: [
             "FiscalBay puts the buyer, billing address, tax code and VAT number of your eBay orders in a single file.",
@@ -906,6 +946,10 @@ export const guides: Record<
             ],
           },
         ],
+        related: {
+          label: "Asking an eBay buyer for their tax code (Codice Fiscale) or VAT number",
+          path: "/guide/chiedere-codice-fiscale-acquirente-ebay",
+        },
         solution: {
           body: [
             "FiscalBay shows the VAT number on the order card, next to the tax code or in its place, and you copy it in one click.",
@@ -968,6 +1012,10 @@ export const guides: Record<
             ["Support", "Yes", "No contact details on its website"],
           ],
           note: "FiscalBay is an independent service with no ties to ProBay.",
+        },
+        related: {
+          label: "Where to find the buyer’s tax code (Codice Fiscale) on eBay",
+          path: "/guide/trovare-codice-fiscale-ordini-ebay",
         },
         solution: {
           body: [

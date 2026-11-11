@@ -29,7 +29,8 @@ import { appBase, previewBase } from "./app-links";
 import { canonicalPath, languageFromPath, localizedPath } from "./i18n";
 import { revalidateUnlessSnapshot } from "./orders/order-list";
 import { defaultDisplay, matchedShell } from "./preferences";
-import { arrivalSource, formatSource } from "./signup-source";
+import { arrivalSource } from "./arrival-source.server";
+import { formatSource } from "./signup-source";
 import interLatin from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
 import "./app.css";
 
