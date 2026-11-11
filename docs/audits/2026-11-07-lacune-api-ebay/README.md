@@ -1,6 +1,6 @@
 # FiscalBay: lacune delle API eBay e richieste
 
-Ricognizione del 7 novembre 2026 sulle API eBay usate da FiscalBay: Fulfillment, Trading, Notification, Identity, cancellazione degli account e quote. Gli invii a eBay li decide e li fa l'owner: il [ticket inviato](#ticket-inviato) è riportato qui sotto, le bozze in inglese sono in questa cartella.
+Ricognizione del 7 novembre 2026 sulle API eBay usate da FiscalBay: Fulfillment, Trading, Notification, Identity, cancellazione degli account e quote. Gli invii a eBay li decide e li fa l'owner: il [ticket inviato](#ticket-inviato) e la [risposta](#risposta-di-ebay) sono riportati qui sotto, le bozze in inglese sono in questa cartella.
 
 ## In sintesi
 
@@ -10,15 +10,15 @@ Cinque richieste analizzate e cinque domande secondarie. A eBay è andato un sol
 | --- | --- | --- | --- |
 | 1 | Header del marketplace necessario per l'identificativo fiscale, assente dalla specifica di `getOrder` | bug documentale | nota interna, non inviata ([bozza](bozza-01-header-marketplace.en.md)) |
 | 2 | Identificativo fiscale dell'acquirente nelle letture di elenco e nelle API moderne, fatture combinate comprese | capacità | nota interna, non inviata; del punto 2.3 il ticket chiede soltanto dove leggere le fatture combinate ([bozza](bozza-02-dati-fiscali-acquirente.en.md)) |
-| 3 | Identità immutabile dell'acquirente negli ordini, per le cancellazioni degli account | capacità e contratto da chiarire | inviata, punto 2 del ticket ([bozza](bozza-03-identita-acquirente.en.md)) |
+| 3 | Identità immutabile dell'acquirente negli ordini, per le cancellazioni degli account | capacità e contratto da chiarire | inviata, punto 2 del ticket; eBay lo offre soltanto nella Order API GraphQL, con un nuovo consenso non chiesto ([bozza](bozza-03-identita-acquirente.en.md)) |
 | 4 | Notifiche degli ordini: versione 1.1 di `ORDER_CONFIRMATION`, variazioni dell'ordine in sola lettura, destinazioni | contratto da chiarire e capacità | nota interna, non inviata ([bozza](bozza-04-notifiche-ordini.en.md)) |
 | 5 | Quote per utente leggibili con gli scope di sola lettura degli ordini | capacità | nota interna, non inviata ([bozza](bozza-05-quote-per-utente.en.md)) |
 
-Stato: ticket inviato dall'owner il 7 novembre 2026, area Trading API, in attesa di risposta.
+Stato: ticket inviato dall'owner il 7 novembre 2026, area Trading API; [risposta](#risposta-di-ebay) ricevuta l'11 novembre e scelta dell'owner registrata in [D334](../../decisions/DECISION_REGISTER.md).
 
 **Dismissione di `GetOrders`.** Il 6 novembre eBay ha deprecato Trading `GetOrders` e fissato lo spegnimento al 30 giugno 2027: per gli ordini pagati rimanda a Fulfillment, per impegni non pagati e `PurchaseQuote` alla Order API GraphQL (documentato, [stato delle dismissioni](https://developer.ebay.com/develop/get-started/api-deprecation-status), letto nel browser il 7 novembre). Con `GetOrders` spariscono il fallback fiscale, che in Production non ha mai aggiunto un CF, le fatture combinate senza checkout eBay e l'unica fonte del token eIAS dell'acquirente. La migrazione interna è [2.6-01](../../ROADMAP.md#2-6-01).
 
-**Rischio emerso, ridotto internamente.** Il token eIAS dell'acquirente arriva soltanto da Trading `GetOrders`, entro 90 giorni, e sparirà con il suo spegnimento. Il 7 novembre, in Production, 978 dei 1.100 ordini definitivi non lo avevano: tutti gli 891 oltre i 90 giorni e 87 fra 30 e 90, rimasti fuori dalla finestra Trading del primo collegamento (conteggio aggregato in sola lettura, senza identità). Per questi una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Ora ogni ordine registra l'ultima lettura dello username e quelli senza token lo rileggono ogni settimana ([D319](../../decisions/DECISION_REGISTER.md)); resta scoperto un cambio di username a ridosso della cancellazione, che soltanto un identificativo immutabile negli ordini chiude, come chiede il punto 2 del ticket.
+**Rischio emerso, ridotto internamente.** Il token eIAS dell'acquirente arriva soltanto da Trading `GetOrders`, entro 90 giorni, e sparirà con il suo spegnimento. Il 7 novembre, in Production, 978 dei 1.100 ordini definitivi non lo avevano: tutti gli 891 oltre i 90 giorni e 87 fra 30 e 90, rimasti fuori dalla finestra Trading del primo collegamento (conteggio aggregato in sola lettura, senza identità). Per questi una cancellazione dell'account eBay si abbina soltanto allo username ([conservazione](../../engineering/DATA_RETENTION.md#cancellazione-ebay)), che l'acquirente può cambiare. Ora ogni ordine registra l'ultima lettura dello username e quelli senza token lo rileggono ogni settimana ([D319](../../decisions/DECISION_REGISTER.md)); resta scoperto un cambio di username a ridosso della cancellazione, che soltanto un identificativo immutabile negli ordini chiude. La [risposta](#risposta-di-ebay) lo colloca nella Order API GraphQL, con un nuovo consenso dei negozi che l'owner non chiede ([D334](../../decisions/DECISION_REGISTER.md)): il rischio resta quello residuo di D319.
 
 **Rapporto con i riconoscimenti esterni.** Il dossier non ripete [RE-01](../../ROADMAP.md#re-01)–[RE-04](../../ROADMAP.md#re-04). L'aumento dei limiti resta nell'Application Growth Check ([RE-01](../../ROADMAP.md#re-01)): l'invio 2 riduce le chiamate necessarie, non chiede quota. `USER_STATUS_CHANGE` e i contatti diretti con eBay potrebbero arrivare con il Partner Program ([RE-02](../../ROADMAP.md#re-02)); se FiscalBay viene ammesso, gli invii 2 e 3 possono passare dal referente del programma.
 
@@ -44,7 +44,15 @@ The Order API needs sell.order.read and PurchaseQuote needs sell.purchase.quote.
 Thank you.
 ```
 
-La risposta decide il task [2.6-01](../../ROADMAP.md#2-6-01): il punto 1 se le fatture combinate restano in FiscalBay, il punto 2 se suggerimenti Premium e abbinamento delle cancellazioni continuano a funzionare, il punto 3 se serve un nuovo consenso dei negozi.
+## Risposta di eBay
+
+Ricevuta per email dal supporto sviluppatori l'11 novembre 2026 (dichiarato dal supporto, non contratto pubblicato).
+
+1. **Fatture combinate pagate fuori dal checkout.** La guida di migrazione conferma Fulfillment per gli ordini pagati e la Order API GraphQL con gli impegni e `PurchaseQuote` per ordini non pagati, impegni e preventivi. `PurchaseQuote` non è documentata come sostituta delle fatture combinate offline già pagate: nessuna API le restituisce dopo lo spegnimento.
+2. **Identità immutabile.** In Fulfillment il campo documentato è `buyer.username`; per alcuni sviluppatori, soprattutto statunitensi, può contenere un ID immutabile. La notifica `MARKETPLACE_ACCOUNT_DELETION` porta `userId` e `eiasToken`, e la documentazione indica `userId` come identificativo immutabile. Secondo lo schema GraphQL interno, la lettura degli ordini del venditore può chiedere `buyer { userId username }`: lo schema pubblico del 7 novembre non lo chiariva.
+3. **Scope e consenso.** `sell.order.read` e `sell.purchase.quote.read` sono scope separati, non coperti da `sell.fulfillment.readonly`. Il refresh token vale soltanto per gli scope del consenso originale: aggiungerne richiede un nuovo consenso di ogni negozio.
+
+**Scelta dell'owner dell'11 novembre ([D334](../../decisions/DECISION_REGISTER.md)).** La sostituzione di `GetOrders` ([2.6-01](../../ROADMAP.md#2-6-01)) usa soltanto Fulfillment, senza scope nuovi né nuovo consenso. Le fatture combinate offline escono da FiscalBay allo spegnimento: 1 su 1.100 ordini il 7 novembre, senza CF in nessuna fonte. Cancellazioni e acquirenti ricorrenti si abbinano per username, con la rilettura settimanale di D319. `buyer.userId` della Order API resta l'unica strada per un identificativo immutabile, da riconsiderare se un nuovo consenso servisse comunque per altri motivi.
 
 ## Metodo e livelli di prova
 
