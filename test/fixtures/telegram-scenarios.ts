@@ -226,6 +226,7 @@ export async function logged(action: () => Promise<unknown>) {
   }
 }
 
+/** Tocco su un pulsante di un messaggio del bot, dall'ingresso alla coda. */
 export async function tap(data: string, chat: number, fetcher: typeof fetch, at = new Date(now)) {
   send.mockClear();
   const body = {

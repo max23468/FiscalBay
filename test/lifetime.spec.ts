@@ -727,15 +727,6 @@ describe("Lifetime e concessioni", () => {
       "covered",
     );
     expect((await lifetimeContext(env.DB, env, userId))?.offer).toBeNull();
-    // Un rimborso, gestito dall'assistenza, non libera il posto né lo rende riassegnabile.
-    stripe.state.sessions.at(-1)!.payment_intent = {
-      ...(stripe.state.sessions.at(-1)!.payment_intent as object),
-      amount_refunded: 18178,
-    };
-    await event(stripe, "checkout.session.completed", "cs_lifetime_3", "2026-09-20T08:00:00.000Z");
-    await reconcileBilling(env, stripe.fetcher, at("2026-09-20T08:00:00.000Z"));
-    expect(await allocations()).toEqual([expect.objectContaining({ slot: 1, status: "active" })]);
-    expect(await lifetimes()).toHaveLength(1);
   });
 
   it("un rimborso revoca il lifetime, lascia occupato il posto e riapre mensile e annuale", async () => {
@@ -988,7 +979,6 @@ describe("Lifetime e concessioni", () => {
     expect(await allocations()).toEqual([expect.objectContaining({ slot: 1, status: "active" })]);
     expect(await lifetimes()).toHaveLength(1);
     await resetDatabase();
-    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
     ({ userId } = await verifiedSession("lifetime-senza-posto@example.invalid"));
     await workspace(userId);
     await taken(20);

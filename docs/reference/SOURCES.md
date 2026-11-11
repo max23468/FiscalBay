@@ -1,6 +1,6 @@
 # Fonti tecniche e normative
 
-Consultare le fonti ufficiali pertinenti al momento della qualifica. I collegamenti orientano la verifica: non sono prove di compatibilità dell’account, test live o pareri sul singolo caso. Le decisioni di prodotto sono nel Master Plan; cronologia delle letture comparative e degli audit è negli snapshot storici della consegna.
+Consultare le fonti ufficiali pertinenti al momento della qualifica. I collegamenti orientano la verifica: non sono prove di compatibilità dell’account, test live o pareri sul singolo caso. Le decisioni di prodotto sono nei [documenti di prodotto](../product/PRODUCT.md); cronologia delle letture comparative e degli audit è negli snapshot storici della consegna.
 
 I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di struttura, non fonti di requisiti propri di FiscalBay. Non serve rileggerli per implementare l’app.
 
@@ -133,7 +133,7 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 
 **Osservato nella revisione:** il cliente vede Link come venditore, con condizioni di pagamento nel checkout, assistenza e rimborsi tramite Link (in alcuni casi entro 60 giorni) e addebito `LINK.COM*` seguito dal descriptor (riletto il 2026-10-29 per D230); vincoli di Checkout e dominio personalizzato; ruolo Link/Portal e contatti di supporto; cancellazione finanziaria tramite Link che può annullare abbonamenti e rimuovere oggetti nell’account del fornitore. Le prove di acquisti visibili in Link e invio ricevute non sono equivalenti tra sandbox e live.
 
-**Uso:** §6.5–6.6, §36.2. Verificare nell’account effettivo; nessuna capability live certificata dalla lettura.
+**Uso:** §6.5–6.6. Verificare nell’account effettivo; nessuna capability live certificata dalla lettura.
 
 <a id="s22"></a>
 ### S22 · Cloudflare R2 · URL firmati
@@ -312,7 +312,7 @@ Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazion
 
 **Verifica del 2026-10-28:** l'API Telemetry dei Workers Logs legge con il solo permesso Workers Observability Read e riporta per ogni invocazione `$workers.cpuTimeMs` e `$workers.wallTimeMs`; query, dashboard e alert non hanno addebiti propri, dal 1° dicembre 2026 si pagano soltanto acquisizione e conservazione dei log già raccolti. Nel Worker l'orologio avanza soltanto con l'I/O, quindi una durata misurata nel codice non coglie il calcolo.
 
-**Uso:** §12, §14, §25, §29, §31; procedura in [RELEASE](../operations/OBSERVABILITY.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
+**Uso:** §12, §14, §25, §29, §31; procedura in [Osservabilità](../operations/OBSERVABILITY.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
 
 <a id="s35"></a>
 ### S35 · Trasporto email alternativo

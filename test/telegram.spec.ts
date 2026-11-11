@@ -626,8 +626,6 @@ describe("testi dei messaggi", () => {
 });
 
 describe("riepiloghi lunghi", () => {
-  beforeEach(resetDatabase);
-
   it("legge gli avvisi di tutti gli ordini, oltre il limite di una lettura", async () => {
     const { userId, workspace } = await account("lungo");
     const ids = Array.from({ length: 301 }, (_, index) => `lungo-${index}`);
@@ -1192,7 +1190,7 @@ describe("collegamento della chat", () => {
       { chatId: "901", linkId: first.id },
     );
     // Fino all'«Avvia» della nuova chat resta la precedente.
-    const token = await linkToken(seller.cookie);
+    await linkToken(seller.cookie);
     expect((await link(seller.workspace))?.chat_id).toBe("901");
     // La stessa chat che riavvia il bot resta lo stesso collegamento.
     await deliver(`/start ${await linkToken(seller.cookie)}`, 901);
@@ -1201,7 +1199,6 @@ describe("collegamento della chat", () => {
     const second = (await link(seller.workspace))!;
     expect(second).toMatchObject({ chat_id: "902" });
     expect(second.id).not.toBe(first.id);
-    expect(token).not.toBe("");
     // La consegna preparata per la chat precedente non va da nessuna parte.
     expect(await telegramRecipient(env.DB, { ...event, linkId: first.id }, later(4))).toBeNull();
     // La nuova chat riceve soltanto gli eventi successivi al proprio collegamento.

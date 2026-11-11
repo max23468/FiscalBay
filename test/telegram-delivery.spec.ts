@@ -1434,5 +1434,3 @@ describe("esiti delle consegne", () => {
     expect(results.map(({ id }) => id)).toEqual(["aperta-8", "aperta-recente", "inviata-recente"]);
   });
 });
-
-/** Tocco su un pulsante di un messaggio del bot, dall'ingresso alla coda. */

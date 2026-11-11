@@ -43,9 +43,11 @@ const fulfillmentReachMilliseconds = 729 * dayMilliseconds;
  */
 export async function checkBuyerNames(ctx: Context): Promise<void> {
   const at = Date.parse(ctx.at);
+  // L'indice parziale va indicato: senza statistiche il piano sceglie quello per data e scorre
+  // tutti gli ordini del negozio.
   const { results } = await ctx.db
     .prepare(
-      `SELECT ebay_order_id FROM orders
+      `SELECT ebay_order_id FROM orders INDEXED BY orders_buyer_check
         WHERE store_id = ? AND buyer_eias_token IS NULL AND is_provisional = 0
           AND merged_into IS NULL AND marketplace_id IS NOT NULL AND creation_time > ?
           AND (buyer_checked_at IS NULL OR buyer_checked_at <= ?)

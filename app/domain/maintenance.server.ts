@@ -1,4 +1,5 @@
 import { orderSearchText } from "../orders/order-search";
+import { dayMilliseconds } from "../time";
 import { purgeDeletionMarkers } from "./account-deletion.server";
 import { purgeAuthAttempts } from "./auth-attempts.server";
 import { purgeEbayDeletionMarkers } from "./ebay-account-deletion.server";
@@ -69,9 +70,10 @@ export async function purgeExpiredRecords(db: D1Database, now = new Date()): Pro
     purgeSupportRequests(db, now),
     // Registro della console e oggetti chiusi da oltre un anno, compresi gli incidenti
     // comunicati all'owner; preparazioni mai confermate.
+    // `at` ha il formato ISO garantito dal vincolo: il confronto testuale usa l'indice.
     db
-      .prepare("DELETE FROM admin_audit WHERE julianday(at) < julianday(?) - ?")
-      .bind(at, auditRetentionDays),
+      .prepare("DELETE FROM admin_audit WHERE at < ?")
+      .bind(new Date(now.getTime() - auditRetentionDays * dayMilliseconds).toISOString()),
     db
       .prepare("DELETE FROM service_notices WHERE julianday(ends_at) < julianday(?) - ?")
       .bind(at, auditRetentionDays),
