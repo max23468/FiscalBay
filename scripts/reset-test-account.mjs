@@ -227,6 +227,14 @@ export function sessionStatements() {
       statements.push(`INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
           VALUES ('${token}', '${token}', ${quote(testAccount.userId)}, '${expires}', '${new Date(Date.now() - day).toISOString()}', '${now}');`);
     }
+  // Sessioni recenti proprie del ritorno ad Account: la prova esce e rientra con la password, e
+  // chiudere `pages-member` toglierebbe la sessione alle visite delle pagine in parallelo.
+  for (const browser of ["chromium", "webkit"])
+    for (const language of ["it", "en"]) {
+      const token = `return-account-${language}-${browser}`;
+      statements.push(`INSERT OR REPLACE INTO session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
+          VALUES ('${token}', '${token}', ${quote(testAccount.userId)}, '${expires}', '${now}', '${now}');`);
+    }
   // Account separati per lingua, browser e flusso: le prove non alterano fixture concorrenti.
   for (const id of [
     ...perLanguageAndBrowser("unlock"),

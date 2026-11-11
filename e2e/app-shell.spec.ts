@@ -549,10 +549,10 @@ for (const language of ["it", "en"] as const) {
           );
           await diagnostic.scrollIntoViewIfNeeded();
           await expect(diagnostic).toBeVisible();
+          // La versione è quella distribuita; in locale non c'è e resta il solo segno.
+          const previewLabel = language === "it" ? "anteprima" : "preview";
           await expect(
-            page.getByText(language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)", {
-              exact: true,
-            }),
+            page.getByText(new RegExp(`^(?:\\S+ \\()?${previewLabel}\\)?$`, "u")),
           ).toBeVisible();
           const faq = page.locator("details").filter({
             hasText:

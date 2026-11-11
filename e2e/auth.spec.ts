@@ -16,14 +16,14 @@ test.describe("area reale", () => {
         context,
         baseURL,
       }, testInfo) => {
-        expect(
-          (
-            await page.request.post("/api/auth/sign-in/email", {
-              headers: { origin: baseURL! },
-              data: { email: testAccount.email, password: localPassword },
-            })
-          ).ok(),
-        ).toBe(true);
+        // Sessione sintetica dell'account: un accesso diretto con password dopo gli errori voluti
+        // di questa e altre prove dallo stesso IP chiederebbe Turnstile e risponderebbe 429.
+        await useLocalAccount(
+          context,
+          "member",
+          baseURL!,
+          `return-account-${language}-${testInfo.project.name}`,
+        );
         const target = `${pagePath(prefix, "/app/impostazioni/account")}#security-email`;
         const response = await page.request.post(pagePath(prefix, "/app/impostazioni/account"), {
           headers: { origin: baseURL! },
