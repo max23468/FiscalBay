@@ -116,7 +116,7 @@ export const guides: Record<
     articles: {
       "/guide/trovare-codice-fiscale-ordini-ebay": {
         title: "Dove trovare il Codice Fiscale dell’acquirente su eBay",
-        metaTitle: "Dove trovare il Codice Fiscale dell’acquirente eBay",
+        metaTitle: "Trovare il Codice Fiscale dell’acquirente eBay",
         nav: "Dove trovare il Codice Fiscale",
         description:
           "Il Codice Fiscale dell’acquirente non si vede nell’ordine eBay né nel report di Seller Hub. Dove si trova davvero e come averlo per ogni vendita.",
@@ -177,7 +177,7 @@ export const guides: Record<
         metaTitle: "Codice Fiscale non visibile nell’ordine eBay",
         nav: "Codice Fiscale non visibile",
         description:
-          "L’acquirente dice di aver inserito il Codice Fiscale, ma nell’ordine eBay non c’è. Il dato esiste: dove finisce e come leggerlo senza chiederlo di nuovo.",
+          "L’acquirente dice di aver inserito il Codice Fiscale, ma nell’ordine eBay non c’è. Dove finisce il dato e come leggerlo senza chiederlo di nuovo.",
         lead: "Hai attivato la richiesta del Codice Fiscale, l’acquirente giura di averlo inserito e nell’ordine non lo trovi. Ha ragione lui. Il dato c’è, solo che eBay non lo fa vedere.",
         published: "2026-11-04",
         updated: "2026-11-10",
@@ -441,7 +441,7 @@ export const guides: Record<
         metaTitle: "Alternativa a ProBay per il Codice Fiscale eBay",
         nav: "Alternativa a ProBay",
         description:
-          "ProBay non funziona più? FiscalBay è l’alternativa per leggere il Codice Fiscale degli acquirenti eBay dal browser, senza installare nulla. Inizia gratis.",
+          "ProBay non funziona più? FiscalBay legge il Codice Fiscale degli acquirenti eBay dal browser, senza installare nulla. Inizia gratis.",
         lead: "Cerchi un’alternativa a ProBay per il Codice Fiscale degli acquirenti eBay? Con FiscalBay fai di più: lo leggi dal browser, senza installare nulla, insieme a Partita IVA ed export degli ordini. E inizi gratis.",
         published: "2026-11-08",
         updated: "2026-11-08",
@@ -508,7 +508,7 @@ export const guides: Record<
         metaTitle: "FiscalBay, Console venditori eBay e Ready Pro",
         nav: "Console venditori e Ready Pro",
         description:
-          "FiscalBay, Console venditori eBay e Ready Pro a confronto: dove vedi Codice Fiscale e Partita IVA degli acquirenti, ricerca, più negozi, export e fatture.",
+          "FiscalBay, Console venditori eBay e Ready Pro a confronto: Codice Fiscale e Partita IVA degli acquirenti, ricerca, più negozi, export e fatture.",
         lead: "Per avere Codice Fiscale e Partita IVA degli acquirenti eBay hai tre strade: la Console venditori di eBay, un gestionale completo come Ready Pro o FiscalBay. Ecco cosa fa ciascuna, con le fonti.",
         published: "2026-11-10",
         updated: "2026-11-10",
@@ -615,9 +615,9 @@ export const guides: Record<
   en: {
     index: {
       title: "Guides",
-      metaTitle: "Guides | Tax code (Codice Fiscale) for eBay orders",
+      metaTitle: "Guides | Tax code (Codice Fiscale) on eBay",
       description:
-        "Practical guides for eBay sellers: where to find buyers’ tax code (Codice Fiscale) and VAT number (Partita IVA), how to ask for them and how to use them on invoices.",
+        "Practical guides for eBay sellers: where to find buyers’ tax code (Codice Fiscale) and VAT number, how to ask for them and how to invoice.",
       lead: "Answers to the questions eBay sellers ask most about their buyers’ tax codes.",
     },
     solutionTitle: "How FiscalBay helps",
@@ -629,7 +629,7 @@ export const guides: Record<
     articles: {
       "/guide/trovare-codice-fiscale-ordini-ebay": {
         title: "Where to find the buyer’s tax code (Codice Fiscale) on eBay",
-        metaTitle: "Where to find the buyer’s tax code (Codice Fiscale) on eBay",
+        metaTitle: "Find an eBay buyer’s tax code (Codice Fiscale)",
         nav: "Where to find the tax code",
         description:
           "The buyer’s tax code does not show on the eBay order or in the Seller Hub report. Where it really is and how to get it for every sale.",
@@ -690,7 +690,7 @@ export const guides: Record<
       },
       "/guide/codice-fiscale-non-visibile-ordine-ebay": {
         title: "Tax code (Codice Fiscale) not visible on the eBay order: where the data goes",
-        metaTitle: "Tax code (Codice Fiscale) not visible on the eBay order",
+        metaTitle: "Tax code (Codice Fiscale) not visible on eBay",
         nav: "Tax code not visible",
         description:
           "The buyer says they entered their tax code, but it is not on the eBay order. The data exists: where it goes and how to read it without asking again.",
@@ -739,10 +739,10 @@ export const guides: Record<
       },
       "/guide/chiedere-codice-fiscale-acquirente-ebay": {
         title: "Asking an eBay buyer for their tax code (Codice Fiscale): the message to send",
-        metaTitle: "Asking an eBay buyer for their tax code (Codice Fiscale)",
+        metaTitle: "Asking an eBay buyer for their tax code",
         nav: "Asking for the tax code",
         description:
-          "How to ask an eBay buyer for their tax code after the sale: when to write, what to say and a message to copy.",
+          "How to ask an eBay buyer for their tax code (Codice Fiscale) after the sale: when to write, what to say and a ready message to copy.",
         lead: "The order has no tax code and you need it for the invoice. You can ask the buyer, and with the right message replies come more often.",
         published: "2026-11-04",
         updated: "2026-11-05",
@@ -789,7 +789,7 @@ export const guides: Record<
       },
       "/guide/codice-fiscale-fattura-elettronica-ebay": {
         title: "Tax code (Codice Fiscale) and the Italian e-invoice for eBay sales",
-        metaTitle: "Tax code (Codice Fiscale) and the e-invoice on eBay",
+        metaTitle: "Tax code (Codice Fiscale) and eBay e-invoices",
         nav: "Italian e-invoice",
         description:
           "Which buyer details you need to invoice an eBay sale, to a private buyer or a business, and how to get them without copying them by hand.",
@@ -847,7 +847,7 @@ export const guides: Record<
         metaTitle: "eBay orders to Excel or CSV with the tax code",
         nav: "Export to Excel or CSV",
         description:
-          "How to collect the tax code (Codice Fiscale) and VAT number (Partita IVA) of your eBay orders and export them to CSV or Excel, ready for your management or invoicing software.",
+          "How to collect the tax code (Codice Fiscale) and VAT number of your eBay orders and export them to CSV or Excel for your invoicing software.",
         lead: "Connect your eBay store to FiscalBay, read-only. FiscalBay reads your orders and brings in the tax code (Codice Fiscale) and VAT number (Partita IVA) when the buyer entered them and eBay makes them available. Then export the orders to CSV on the Free plan, or to Excel (XLSX) with Pro, and import the file into your management or invoicing software.",
         published: "2026-11-03",
         updated: "2026-11-10",
@@ -908,7 +908,7 @@ export const guides: Record<
       },
       "/guide/partita-iva-acquirente-ebay": {
         title: "The buyer’s VAT number (Partita IVA) on eBay orders",
-        metaTitle: "The buyer’s VAT number (Partita IVA) on eBay orders",
+        metaTitle: "The buyer’s VAT number (Partita IVA) on eBay",
         nav: "The buyer’s VAT number",
         description:
           "When an eBay order has the buyer’s VAT number, where to find it and what you need to invoice a business or professional.",
@@ -964,7 +964,7 @@ export const guides: Record<
         metaTitle: "ProBay alternative for eBay buyers’ tax codes",
         nav: "ProBay alternative",
         description:
-          "ProBay not working? FiscalBay is the alternative for reading eBay buyers’ tax codes (Codice Fiscale) in your browser, with nothing to install. Start for free.",
+          "ProBay not working? FiscalBay reads eBay buyers’ tax codes (Codice Fiscale) in your browser, with nothing to install. Start for free.",
         lead: "Looking for a ProBay alternative for eBay buyers’ tax codes (Codice Fiscale)? FiscalBay does more: you read them in your browser, with nothing to install, together with VAT numbers and order exports. And you start for free.",
         published: "2026-11-08",
         updated: "2026-11-08",
@@ -1031,7 +1031,7 @@ export const guides: Record<
         metaTitle: "FiscalBay, eBay Seller Hub and Ready Pro",
         nav: "Seller Hub and Ready Pro",
         description:
-          "FiscalBay, eBay Seller Hub and Ready Pro compared: where you see buyers’ tax codes (Codice Fiscale) and VAT numbers, search, multiple stores, export and invoices.",
+          "FiscalBay, eBay Seller Hub and Ready Pro compared: buyers’ tax codes (Codice Fiscale) and VAT numbers, search, multiple stores, export and invoices.",
         lead: "To get eBay buyers’ tax codes (Codice Fiscale) and VAT numbers (Partita IVA) you have three options: eBay’s Seller Hub, a full management program such as Ready Pro, or FiscalBay. Here is what each one does, with sources.",
         published: "2026-11-10",
         updated: "2026-11-10",

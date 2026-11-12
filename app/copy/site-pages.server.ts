@@ -293,9 +293,9 @@ const it = {
   faq: {
     title: "Domande frequenti",
     /** Titolo della scheda e dei risultati di ricerca, con il nome della pagina e poi la parola chiave. */
-    metaTitle: "Domande frequenti | Codice Fiscale degli ordini eBay",
+    metaTitle: "Domande frequenti | Codice Fiscale su eBay",
     description:
-      "Risposte su FiscalBay: Codice Fiscale e Partita IVA dagli ordini eBay, piani, prova Pro, pagamenti, permessi e dati.",
+      "Risposte su FiscalBay: come ottenere Codice Fiscale e Partita IVA dagli ordini eBay, piani, prova Pro, pagamenti, permessi e dati.",
     items: [
       {
         q: "Cos’è FiscalBay?",
@@ -384,7 +384,7 @@ type SitePagesCopy = typeof it;
 
 const en: SitePagesCopy = {
   home: {
-    title: "Get the tax code (Codice Fiscale) from your eBay orders",
+    title: "Get eBay buyers’ tax code (Codice Fiscale)",
     description:
       "Get and manage the tax code (Codice Fiscale) of your eBay orders, when eBay provides it, with automatic sync, export and notifications.",
     hero: "FiscalBay: find and manage the tax code (Codice Fiscale) of your eBay orders.",
@@ -457,9 +457,9 @@ const en: SitePagesCopy = {
   },
   features: {
     title: "Features",
-    metaTitle: "Features | Tax code (Codice Fiscale) for eBay orders",
+    metaTitle: "Features | Tax code (Codice Fiscale) on eBay",
     description:
-      "Tax code (Codice Fiscale) and VAT number (Partita IVA) from your eBay orders, automatic sync, search, CSV and XLSX export, Telegram notifications and multiple stores.",
+      "Tax code (Codice Fiscale) and VAT number from your eBay orders, automatic sync, search, CSV and XLSX export, Telegram alerts and multiple stores.",
     lead: "The tax code (Codice Fiscale) of your eBay orders at hand, from connecting your store to exporting.",
     premium: "Pro",
     showcase: [
@@ -517,7 +517,7 @@ const en: SitePagesCopy = {
 
   pricing: {
     title: "Pricing",
-    metaTitle: "Pricing | Tax code (Codice Fiscale) for eBay orders",
+    metaTitle: "Pricing | Tax code (Codice Fiscale) on eBay",
     description:
       "Free plan at no cost and Pro monthly, annual or lifetime to get the tax code (Codice Fiscale) from your eBay orders. 14-day Pro trial with no card.",
     lead: "Start for free. Move to Pro when you need more orders, more stores and more history.",
@@ -597,7 +597,7 @@ const en: SitePagesCopy = {
   },
   security: {
     title: "Security",
-    metaTitle: "Security | Tax code (Codice Fiscale) for eBay orders",
+    metaTitle: "Security | Tax code (Codice Fiscale) on eBay",
     description:
       "How FiscalBay protects access to your eBay store and your order data: read-only access, encrypted tokens and data in the European Union.",
     lead: "FiscalBay reads your orders and never changes them. Here is how we protect access and data.",
@@ -651,9 +651,9 @@ const en: SitePagesCopy = {
   },
   faq: {
     title: "Frequently asked questions",
-    metaTitle: "Frequently asked questions | Tax code (Codice Fiscale) for eBay orders",
+    metaTitle: "FAQ | Tax code (Codice Fiscale) on eBay",
     description:
-      "Answers about FiscalBay: tax code (Codice Fiscale) and VAT number (Partita IVA) from eBay orders, plans, the Pro trial, payments, permissions and data.",
+      "Answers about FiscalBay: tax code (Codice Fiscale) and VAT number from eBay orders, plans, the Pro trial, payments, permissions and data.",
     items: [
       {
         q: "What is FiscalBay?",

@@ -50,6 +50,7 @@ export function ProductShot({
   language,
   alt,
   priority = false,
+  eager = priority,
   className,
 }: {
   name: ShotName;
@@ -57,6 +58,8 @@ export function ProductShot({
   alt: string;
   /** Immagine nel primo schermo: caricata subito e con priorità alta. */
   priority?: boolean;
+  /** Caricata subito e con priorità alta, senza le varianti AVIF e per larghezza di `priority`. */
+  eager?: boolean;
   className?: string;
 }) {
   const size = shots[name][language];
@@ -109,9 +112,9 @@ export function ProductShot({
         alt={alt}
         width={size.width}
         height={size.height}
-        loading={priority ? "eager" : "lazy"}
-        fetchPriority={priority ? "high" : undefined}
-        decoding={priority ? undefined : "async"}
+        loading={eager ? "eager" : "lazy"}
+        fetchPriority={eager ? "high" : undefined}
+        decoding={eager ? undefined : "async"}
         className={cn(
           "h-auto w-full rounded-xl border bg-card shadow-lg shadow-brand-navy/10",
           className,
@@ -136,6 +139,7 @@ export function ShotRow({
   reverse = false,
   heading: Heading = "h3",
   link,
+  eager = false,
 }: {
   id: string;
   title: string;
@@ -148,6 +152,8 @@ export function ShotRow({
   alt: string;
   reverse?: boolean;
   heading?: "h2" | "h3";
+  /** Schermata nel primo schermo della pagina, caricata subito. */
+  eager?: boolean;
 }) {
   return (
     <section
@@ -181,6 +187,7 @@ export function ShotRow({
         name={shot}
         language={language}
         alt={alt}
+        eager={eager}
         className={cn(shot === "telegram" && "mx-auto max-w-md")}
       />
     </section>
