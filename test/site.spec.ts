@@ -14,7 +14,8 @@ import { loader as loadLegal } from "../app/routes/legal";
 import { loader as loadRobots, robots } from "../app/routes/robots";
 import { llms, publicPage, sitemap } from "../app/site.server";
 import { indexable, isProductionOrigin } from "../app/app-links";
-import { appCopy, infoEmail } from "../app/app-copy";
+import { appCopy, infoEmail, pageTitle } from "../app/app-copy";
+import { guides } from "../app/copy/guides.server";
 import { adminCopy } from "../app/copy/admin-copy";
 import { legalDocuments, type LegalSection } from "../app/copy/legal-documents.server";
 import { sitePages } from "../app/copy/site-pages.server";
@@ -452,6 +453,28 @@ describe("radice pubblica e area riservata", () => {
     expect(ogImage("en", "/guide/trovare-codice-fiscale-ordini-ebay")).toBe(
       "/og/guide-trovare-codice-fiscale-ordini-ebay-en.png",
     );
+  });
+
+  it("tiene title e description delle pagine pubbliche entro quanto Google mostra", () => {
+    for (const language of ["it", "en"] as const) {
+      const pages = sitePages[language];
+      const t = guides[language];
+      const meta: [string, string][] = [
+        [pages.home.title, pages.home.description],
+        ...[pages.features, pages.pricing, pages.security, pages.faq].map(
+          (page) => [page.metaTitle, page.description] as [string, string],
+        ),
+        [appCopy[language].supportPage.metaTitle, appCopy[language].supportPage.description],
+        [t.index.metaTitle, t.index.description],
+        ...Object.values(t.articles).map(
+          (article) => [article.metaTitle, article.description] as [string, string],
+        ),
+      ];
+      for (const [title, description] of meta) {
+        expect(pageTitle(title).length, pageTitle(title)).toBeLessThanOrEqual(60);
+        expect(description.length, description).toBeLessThanOrEqual(150);
+      }
+    }
   });
 });
 

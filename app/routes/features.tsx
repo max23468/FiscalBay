@@ -64,6 +64,7 @@ export default function Features({ loaderData }: Route.ComponentProps) {
             alt={t.shots[item.shot as ShotName]}
             reverse={index % 2 === 1}
             heading="h2"
+            eager={index === 0}
             link={
               "guide" in item && item.guide
                 ? { label: item.guide.label, href: localizedPath(language, item.guide.path) }

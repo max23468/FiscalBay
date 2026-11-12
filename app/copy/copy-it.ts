@@ -1104,7 +1104,7 @@ export const it = {
     title: "Supporto",
     metaTitle: "Supporto | Codice Fiscale degli ordini eBay",
     description:
-      "Assistenza FiscalBay: domande sull’uso, modulo di assistenza nell’app e indirizzo email.",
+      "Assistenza FiscalBay per chi recupera il Codice Fiscale dagli ordini eBay: domande sull’uso, modulo di assistenza nell’app e indirizzo email.",
     contact: contactSupport,
     member:
       "Dall’app scrivi dal modulo di assistenza: puoi allegare il riepilogo diagnostico del tuo account.",
