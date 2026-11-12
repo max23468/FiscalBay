@@ -21,6 +21,13 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 - **Guida di confronto.** Una nuova Guida, in italiano e in inglese, mette a confronto FiscalBay, la Console venditori di eBay e Ready Pro: dove si vedono Codice Fiscale e Partita IVA degli acquirenti, ricerca, più negozi, export e fatture, con la data di verifica dei dati.
 - **Guida all'export riscritta.** La guida sull'export di Excel e CSV apre con una risposta breve su come raccogliere ed esportare i dati fiscali degli ordini, spiega cosa contiene il file e la differenza tra Free e Pro, e la richiamano FAQ e Funzionalità.
 - **Fonti ufficiali.** Le Guide in cui una pagina di eBay o dell'Agenzia delle Entrate conferma ciò che dicono la elencano in fondo all'articolo.
+- **Guide collegate.** Ogni Guida porta in fondo alla Guida che risponde alla domanda vicina, con il suo titolo: chi cerca come chiedere il Codice Fiscale, la fattura elettronica o la Partita IVA dell'acquirente arriva alla Guida dedicata.
+- **Link puliti per i motori di ricerca.** I crawler dei motori di ricerca e degli assistenti non ricevono più la provenienza nei link interni, quindi seguono soltanto gli indirizzi canonici.
+- **Letture più regolari.** Un ordine che eBay restituisce in forma non valida non ferma più la lettura del negozio, e un ordine in attesa della quota di eBay risulta in verifica invece che non riuscito.
+- **Eliminazione dei dati del negozio.** «Elimina negozio» rimuove gli ordini a lotti, anche per i negozi più grandi, insieme alle preferenze e alle consegne Telegram del negozio.
+- **Notifiche Telegram.** Con il riepilogo giornaliero il messaggio di importazione completata parte subito, senza attendere il riepilogo successivo.
+- **Lingua delle email.** Il preavviso di inattività e l'avviso di sicurezza arrivano nella lingua scelta nelle Impostazioni.
+- **Accesso.** I tentativi ripetuti di accesso con password sono limitati allo stesso modo anche fuori dal modulo.
 
 ## [2.0.8] - 2026-11-08
 
