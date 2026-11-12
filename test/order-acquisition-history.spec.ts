@@ -708,6 +708,17 @@ it("distingue gli errori del dettaglio che fermano l'esecuzione da quelli dell'o
       detail_attempts: 1,
     });
   }
+  // Il limite di eBay sull'intera origine ferma l'esecuzione senza consumare tentativi.
+  await env.DB.prepare(
+    "UPDATE order_source_refs SET detail_attempts = 0, detail_retry_at = NULL",
+  ).run();
+  await expect(
+    acquire(
+      ebay({ fail: single(() => new Response(null, { status: 429 })) }),
+      new Date(at + 60_000).toISOString(),
+    ),
+  ).rejects.toMatchObject({ failure: "rate_limited" });
+  expect(await detail()).toEqual({ ...pending, detail_error: "rate_limited" });
 });
 
 it("non scrive se il consenso cambia dopo una pagina vuota o durante il dettaglio", async () => {

@@ -140,6 +140,7 @@ describe("confine HTTP Auth", () => {
     "list-sessions",
     "update-session",
     "verify-password",
+    "change-password",
     "sign-up/email",
     "request-password-reset",
     "send-verification-email",
@@ -604,17 +605,28 @@ describe("limiti dei tentativi", () => {
   );
 
   it("l'accesso diretto conta gli errori e si rifiuta quando il modulo chiederebbe Turnstile", async () => {
-    const send = () =>
+    const send = (ip = "198.51.100.9", method = "POST") =>
       handle("/api/auth/sign-in/email", {
-        method: "POST",
-        headers: { "cf-connecting-ip": "198.51.100.9", "content-type": "application/json" },
-        body: JSON.stringify({ email: "vittima@example.invalid", password: "tentativo" }),
+        method,
+        headers: { "cf-connecting-ip": ip, "content-type": "application/json" },
+        ...(method === "POST"
+          ? { body: JSON.stringify({ email: "vittima@example.invalid", password: "tentativo" }) }
+          : {}),
       });
     services.handler.mockImplementation(async () => new Response(null, { status: 401 }));
+    // Soltanto l'accesso con password conta gli errori, non altri metodi sullo stesso percorso.
+    for (let count = 0; count < 3; count++) expect((await send(undefined, "GET")).status).toBe(401);
     for (let count = 0; count < 3; count++) expect((await send()).status).toBe(401);
+    // Oltre la finestra del limite per IP resta la soglia degli errori, che dura 15 minuti.
+    vi.setSystemTime(now + 10_000);
     services.handler.mockClear();
-    expect((await send()).status).toBe(429);
+    const blocked = await send();
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("retry-after")).toBe("890");
     expect(services.handler).not.toHaveBeenCalled();
+    // Gli errori di un IP non chiedono la sfida a un altro.
+    expect((await send("198.51.100.10")).status).toBe(401);
+    expect(services.handler).toHaveBeenCalledOnce();
   });
 
   it("le pagine trasmettono l'attesa dell'action oltre a no-store", () => {

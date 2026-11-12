@@ -514,6 +514,31 @@ it("un negozio spostato in un altro spazio dopo la lettura resta intatto", async
   ).toEqual({ disconnected_at: null, data_deleted_at: null });
 });
 
+it("un negozio spostato in un altro spazio durante l'eliminazione degli ordini conserva gli altri dati", async () => {
+  const seller = await linkedSeller("spostato-dopo@example.invalid");
+  await env.DB.batch(insertWorkspace({ id: "spazio-ricevente", name: "Ricevente" }));
+  // Il trasferimento arriva dopo l'arresto e i lotti degli ordini, prima dell'ultima scrittura.
+  const batch = env.DB.batch.bind(env.DB);
+  const spy = vi
+    .spyOn(env.DB, "batch")
+    .mockImplementationOnce(batch)
+    .mockImplementationOnce(async (statements) => {
+      await env.DB.prepare("UPDATE ebay_stores SET workspace_id = 'spazio-ricevente' WHERE id = ?")
+        .bind(seller.storeId)
+        .run();
+      return batch(statements);
+    });
+  expect(await deleteStoreData(env.DB, seller.userId, seller.storeId, "venditore")).toBe(
+    "not_found",
+  );
+  expect(spy).toHaveBeenCalledTimes(2);
+  spy.mockRestore();
+  expect(await count("sync_state")).toBe(1);
+  expect(await env.DB.prepare("SELECT data_deleted_at FROM ebay_stores").first()).toEqual({
+    data_deleted_at: null,
+  });
+});
+
 it("un rinnovo o un import partiti prima dello scollegamento non ripristinano token né dati", async () => {
   const seller = await linkedSeller("concorrenza@example.invalid");
   const refreshed = vi.fn<typeof fetch>(async () => {

@@ -118,7 +118,12 @@ async function callLimited(ctx: Context, call: string) {
 }
 
 /** Quota `GetOrders` in attesa: per il dettaglio vale come il limite restituito da eBay. */
-const ordersLimited = () => new UpstreamError("rate_limited", { limit: "GetOrders" });
+const ordersLimited = () =>
+  new UpstreamError(
+    // Stryker disable next-line StringLiteral: con il nome della chiamata il dettaglio registra soltanto l'attesa, non il codice.
+    "rate_limited",
+    { limit: "GetOrders" },
+  );
 
 export type PendingDetail = {
   external_order_id: string;
@@ -140,11 +145,12 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
   const attempts = pending.detail_attempts + 1;
   const delay = detailRetryMinutes[attempts - 1];
   const waiting = callLimit(error);
-  const retryMilliseconds = waiting
-    ? (await callWait(ctx, error.details.limit)) * 1000
+  const after = (milliseconds: number) => new Date(Date.parse(ctx.at) + milliseconds).toISOString();
+  const retryAt = waiting
+    ? after((await callWait(ctx, error.details.limit)) * 1000)
     : delay === undefined
       ? null
-      : delay * 60_000;
+      : after(delay * 60_000);
   const scope = `WHERE store_id = ?1 AND source = 'fulfillment' AND external_order_id = ?3
                    AND last_modified_time = ?7
                    AND NOT EXISTS (SELECT 1 FROM order_tax_checks tc
@@ -170,9 +176,7 @@ async function failDetail(ctx: Context, pending: PendingDetail, error: unknown) 
       pending.external_order_id,
       code,
       attempts,
-      retryMilliseconds === null
-        ? null
-        : new Date(Date.parse(ctx.at) + retryMilliseconds).toISOString(),
+      retryAt,
       pending.last_modified_time,
       ctx.at,
       deadlineCheckAt(ctx.at),
