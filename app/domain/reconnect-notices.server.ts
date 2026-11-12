@@ -1,6 +1,7 @@
 import { logFailure } from "../errors";
 import type { Language } from "../i18n";
 import { servedSql } from "./admission.server";
+import { emailLanguageSql } from "./sign-in-methods.server";
 import { storeLabelSql, unpausedStore } from "./store-state.server";
 
 /** Email inviate per esecuzione: le altre restano all'esecuzione seguente. */
@@ -30,10 +31,7 @@ export async function sendReconnectNotices(env: Env, now = new Date()): Promise<
   const at = now.toISOString();
   const { results } = await env.DB.prepare(
     `SELECT n.store_id, n.event_at, ${storeLabelSql("s")} AS name, u."email" AS email,
-        COALESCE(
-          (SELECT p.language FROM user_preferences p WHERE p.user_id = u."id"),
-          (SELECT t.language FROM terms_acceptances t WHERE t.user_id = u."id"
-            ORDER BY t.accepted_at DESC LIMIT 1)) AS language
+        ${emailLanguageSql('u."id"')} AS language
        FROM (SELECT store_id, reconnect_notice_at, COALESCE(rejected_at,
                CASE WHEN refresh_expires_at <= ?1 THEN refresh_expires_at END) AS event_at
                FROM ebay_store_credentials) n

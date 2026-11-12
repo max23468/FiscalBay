@@ -78,8 +78,6 @@ export function storeForm(cookie: string, fields: Record<string, string>, origin
   return callRoute(storesAction, "/app/negozi", { cookie, origin, fields });
 }
 
-export const origin = "http://localhost:5173";
-
 export const settings = (cookie: string, path = "/app/impostazioni", sezione?: string) =>
   callRoute(loadSettings, path, { cookie, params: { sezione } }).catch((thrown: unknown) => {
     if (thrown instanceof Response) return thrown;
@@ -92,7 +90,7 @@ export const settingsPage = async (cookie: string) => {
   return loaded;
 };
 
-export const saveSetting = (cookie: string, fields: Record<string, string>, from = origin) =>
+export const saveSetting = (cookie: string, fields: Record<string, string>, from = testOrigin) =>
   callRoute(settingsAction, "/app/impostazioni", { cookie, origin: from, fields }).catch(
     (thrown: unknown) => thrown,
   );

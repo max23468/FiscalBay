@@ -1,13 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { plan } from "./classify-changes.mjs";
-import {
-  lastFullQualification,
-  reusableAreas,
-  skippedPages,
-  pageCoverage,
-  coveredAreas,
-} from "./pages-reuse.mjs";
+import { lastFullQualification, skippedPages, pageCoverage, coveredAreas } from "./pages-reuse.mjs";
 
 describe("riuso delle visite del catalogo", () => {
   it("invalida i contenuti delle Novità soltanto per i consumatori reali, anche transitivi", () => {
@@ -64,20 +57,32 @@ describe("riuso delle visite del catalogo", () => {
     { path: "app/domain/scheduled-work.server.ts", text: "" },
   ];
 
+  /** Aree riusate dopo il cambio di un sorgente o di un file ausiliario. */
+  const reusedAfter = (file, all = sources) => {
+    const edit = (entries) =>
+      entries.map((entry) => (entry.path === file ? { ...entry, text: "changed" } : entry));
+    const auxiliary = ["e2e/fixtures.ts", "e2e/pages.spec.ts", "pnpm-lock.yaml"].map((path) => ({
+      path,
+      text: "",
+    }));
+    return coveredAreas(pageCoverage(all, auxiliary), pageCoverage(edit(all), edit(auxiliary)));
+  };
+
   it("riusa le aree non toccate", () => {
-    const areas = reusableAreas(plan(["app/routes/stores.tsx"], sources));
+    const areas = reusedAfter("app/routes/stores.tsx");
     assert.ok(areas.includes("orders"));
     assert.equal(areas.includes("stores"), false);
   });
 
   it("riusa tutte le aree se cambia ciò che nessuna pagina mostra o soltanto documenti", () => {
     for (const file of ["app/domain/scheduled-work.server.ts", "docs/ROADMAP.md"])
-      assert.equal(reusableAreas(plan([file], sources)).length, 6, file);
+      assert.equal(reusedAfter(file).length, 6, file);
   });
 
   it("non riusa nulla se il cambiamento non ha un'area", () => {
+    const all = [...sources, { path: "app/root.tsx", text: "" }];
     for (const file of ["app/root.tsx", "e2e/fixtures.ts", "e2e/pages.spec.ts", "pnpm-lock.yaml"])
-      assert.deepEqual(reusableAreas(plan([file], sources)), [], file);
+      assert.deepEqual(reusedAfter(file, all), [], file);
   });
 
   it("compone il filtro sui tag delle visite", () => {

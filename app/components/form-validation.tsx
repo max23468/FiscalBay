@@ -3,7 +3,7 @@ import { useId, useState } from "react";
 import { useHydrated } from "~/components/hydrated";
 import { FieldError } from "~/components/ui/field";
 
-export interface ValidationCopy {
+interface ValidationCopy {
   required: string;
   email: string;
   tooShort: (min: number) => string;

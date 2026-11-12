@@ -99,7 +99,7 @@ function StoreIssueAlert({ storeId, storeName }: { storeId: string; storeName: s
 }
 
 export function OrdersNotices({ data }: { data: OrdersPageData }) {
-  const { links } = useLinks();
+  const { links, preview } = useLinks();
   const { t } = useCopy();
   const date = useDate();
   // L'esito arriva anche quando l'avviso, con la prova attivata, non c'è più.
@@ -203,6 +203,15 @@ export function OrdersNotices({ data }: { data: OrdersPageData }) {
                       risponde resta sospeso, come in Negozi. */}
                   {ebayDownNotice(data) ? (
                     <Button variant="outline" size="sm" disabled focusableWhenDisabled>
+                      {t.orders.reconnectStore}
+                    </Button>
+                  ) : preview ? (
+                    // Nell'anteprima il ricollegamento è simulato, come in Negozi.
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => trialAction.run("store-fix", { store: notice.storeId })}
+                    >
                       {t.orders.reconnectStore}
                     </Button>
                   ) : (

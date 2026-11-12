@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 
 import { sign } from "node:crypto";
 
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { receiveWebhook, consumeWebhooks } from "../app/webhooks.server";
 
@@ -43,14 +43,9 @@ import {
   setupScenarios,
 } from "./fixtures/webhooks-scenarios";
 
-const router = vi.hoisted(() => ({ handle: vi.fn(), create: vi.fn() }));
-
-vi.mock("react-router", async (original) => ({
-  ...(await original<typeof import("react-router")>()),
-  createRequestHandler: router.create,
-}));
-
-setupScenarios(router);
+setupScenarios();
+// Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+afterEach(() => vi.restoreAllMocks());
 
 it("la revoca del consenso porta il negozio da ricollegare senza toccare i dati", async () => {
   expect((await receive(ebayRequest(revocation)))?.status).toBe(204);
@@ -164,6 +159,7 @@ it("il 412 di una consegna firmata registra soltanto il motivo, le sonde nulla",
         )
       )?.status,
     ).toBe(412);
+    expect(await receipt()).toBeNull();
     const logged = errors.mock.calls.map(([line]) => JSON.parse(String(line)));
     expect(logged).toEqual(
       ["signature", "schema"].map((failure) => ({

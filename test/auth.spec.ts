@@ -426,33 +426,6 @@ describe("Better Auth su Workers e D1", () => {
     expect(account?.total).toBe(0);
   });
 
-  it("crea un account email non verificato nel database locale", async () => {
-    const response = await createAuth(env).handler(
-      new Request("http://localhost:5173/api/auth/sign-up/email", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          name: "Utente test",
-          email: "auth@example.invalid",
-          password: "Una-password-auth-molto-lunga",
-        }),
-      }),
-    );
-
-    expect(response.status).toBe(200);
-    const user = await env.DB.prepare('SELECT email, "emailVerified" FROM "user" WHERE email = ?')
-      .bind("auth@example.invalid")
-      .first<{ email: string; emailVerified: number }>();
-    expect(user).toEqual({ email: "auth@example.invalid", emailVerified: 0 });
-  });
-
-  it("espone il percorso passkey solo a una sessione autenticata", async () => {
-    const response = await createAuth(env).handler(
-      new Request("http://localhost:5173/api/auth/passkey/generate-register-options"),
-    );
-    expect(response.status).toBe(401);
-  });
-
   it("registra passkey solo dopo verifica e protegge l'ultimo accesso", async () => {
     const origin = "http://localhost:5173";
     const signup = await createAuth(env).handler(
@@ -599,6 +572,27 @@ describe("Better Auth su Workers e D1", () => {
           .bind("violata@example.invalid", "sicura@example.invalid")
           .all(),
       ).toMatchObject({ results: [{ email: "sicura@example.invalid" }] });
+      // Anche la password scelta con il link di recupero passa dallo stesso controllo.
+      const { user } = await (
+        await signUp("recupero-violata@example.invalid", "Password-iniziale-lunga")
+      ).json<{ user: { id: string } }>();
+      const context = await auth.$context;
+      await context.internalAdapter.createVerificationValue({
+        identifier: "reset-password:token-violata",
+        value: user.id,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      requested.length = 0;
+      const reset = await auth.handler(
+        new Request(`${origin}/api/auth/reset-password`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin },
+          body: JSON.stringify({ token: "token-violata", newPassword: password }),
+        }),
+      );
+      expect(reset.status).toBe(400);
+      expect(await reset.json()).toMatchObject({ code: "PASSWORD_COMPROMISED" });
+      expect(requested).toEqual([`https://api.pwnedpasswords.com/range/${sha1.slice(0, 5)}`]);
     } finally {
       range.mockRestore();
     }

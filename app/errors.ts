@@ -68,7 +68,6 @@ export function logFailure(input: {
     | "store_link"
     | "checkout"
     | "billing"
-    | "stripe_webhook"
     | "webhook_ingress"
     | "webhook_consumer"
     | "token_refresh"

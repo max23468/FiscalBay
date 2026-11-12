@@ -4,7 +4,7 @@
 [correzioni verificate](#8-correzioni-verificate) dopo la verifica su Chrome in Production.
 **Data:** 6 novembre 2026, 18:45-20:00 ora italiana.
 **Ambiente:** `fiscalbay.it`, account dell'inventario privato `liveAuditAccount` (piano
-Premium a vita, un negozio eBay reale con oltre mille ordini) e, per la console, il token
+Pro a vita, un negozio eBay reale con oltre mille ordini) e, per la console, il token
 tecnico Production dell'agente.
 **Modello:** l'[audit del test](AUDIT_UI_UX.md) per struttura e severità.
 
@@ -145,7 +145,7 @@ ambito sempre espliciti; il conteggio c'è. Task [2.0-05](../ROADMAP.md#2-0-05).
 
 In Prezzi a 1440 px «Scegli il mensile» sta circa 20 px sopra «Scegli l'annuale» e
 «Scegli a vita», perché la card mensile ha una riga di testo in meno. Da 390 px le card sono
-impilate e il difetto non c'è. Per un account Premium a vita autenticato la pagina propone
+impilate e il difetto non c'è. Per un account Pro a vita autenticato la pagina propone
 gli stessi «Scegli…», che portano a Piano e pagamenti senza un'offerta: va all'owner se
 nasconderli.
 

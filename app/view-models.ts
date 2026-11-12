@@ -402,15 +402,6 @@ export interface AccountView {
     | { state: "renewal-failed"; protectedUntil: string };
 }
 
-export interface SessionView {
-  id: string;
-  device: string;
-  location: string;
-  lastActiveAt: string;
-  createdAt?: string;
-  current: boolean;
-}
-
 export interface DiagnosticsView {
   version: string;
   storeRef: string | null;

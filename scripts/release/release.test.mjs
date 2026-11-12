@@ -46,6 +46,7 @@ import {
   topVersion,
   rollbackRelease,
   reconcileReceipt,
+  serviceSecrets,
 } from "./release.mjs";
 import { releaseNotes } from "./release-notes.mjs";
 
@@ -124,7 +125,7 @@ const persist=()=>fs.writeFileSync(file,JSON.stringify(state)); const out=(value
 state.calls.push(key); let lost=false;
 if(key==='workers deployments list') out({deployments:[state.current,...state.history]});
 else if(key==='workers versions get') out(state.versions[args[3]]);
-else if(key==='workers secrets list') out([]);
+else if(key==='workers secrets list') out(${JSON.stringify(serviceSecrets.map((name) => ({ name })))});
 else if(key==='workers versions list') out(Object.values(state.versions).reverse());
 else if(key==='workers versions create') {
  state.versions['${next}']={id:'${next}',annotations:{'workers/message':value('--message')},bindings:[{name:'DB',id:'database'}]};

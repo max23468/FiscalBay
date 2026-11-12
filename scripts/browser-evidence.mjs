@@ -9,7 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { inventoryArgs, listedTestIds } from "./browser-tests.mjs";
-import { ghJson } from "./lib/provider.mjs";
+import { ghJson, readRunArtifact } from "./lib/provider.mjs";
 
 /** Pagine riuscite soltanto alla ripetizione, dalle otto partizioni. */
 export function flakyTests(parts) {
@@ -32,41 +32,53 @@ export function repeatedFlaky(current, history, limit = 2) {
   return current.filter((test) => history.filter((run) => run.includes(test)).length >= limit);
 }
 
-/** Elenchi delle prove instabili delle ultime qualifiche, dagli artefatti delle run. */
-function flakyHistory(directory) {
-  const repository = process.env.GH_REPO;
-  if (!repository) return [];
-  const name = "flaky-tests";
-  const { artifacts } = ghJson(
-    "api",
-    `repos/${repository}/actions/artifacts?name=${name}&per_page=30`,
+const flakyArtifact = "flaky-tests";
+
+/** Elenco delle prove instabili di una run, dal suo artefatto; null se non si scarica più. */
+const readFlaky = (repository, run) =>
+  readRunArtifact(repository, run, { name: flakyArtifact }, (directory) =>
+    JSON.parse(readFileSync(path.join(directory, "flaky.json"), "utf8")),
   );
-  const repositoryId = ghJson("api", `repos/${repository}`).id;
+
+/**
+ * Elenchi delle prove instabili delle ultime `limit` qualifiche riuscite, dagli artefatti delle
+ * run: la lettura si ferma appena ne ha abbastanza. Un artefatto non più scaricabile non conta
+ * e non ferma la certificazione.
+ */
+export function flakyHistory(
+  repository,
+  {
+    api = (url) => ghJson("api", url),
+    read = readFlaky,
+    exclude = process.env.GITHUB_RUN_ID,
+    limit = 5,
+  } = {},
+) {
+  if (!repository) return [];
+  const { artifacts } = api(
+    `repos/${repository}/actions/artifacts?name=${flakyArtifact}&per_page=30`,
+  );
+  const repositoryId = api(`repos/${repository}`).id;
   const seen = new Set();
-  return artifacts
-    .filter(({ expired, workflow_run: run }) => {
-      if (
-        expired ||
-        run?.repository_id !== repositoryId ||
-        run.head_repository_id !== repositoryId ||
-        String(run.id) === process.env.GITHUB_RUN_ID ||
-        seen.has(run.id)
-      )
-        return false;
-      seen.add(run.id);
-      const origin = ghJson("api", `repos/${repository}/actions/runs/${run.id}`);
-      return origin.path === ".github/workflows/candidate.yml" && origin.conclusion === "success";
-    })
-    .slice(0, 5)
-    .map(({ id, workflow_run: { id: run } }) => {
-      const target = path.join(directory, "history", String(id));
-      execFileSync(
-        "gh",
-        ["run", "download", String(run), "--repo", repository, "--name", name, "--dir", target],
-        { stdio: "inherit" },
-      );
-      return JSON.parse(readFileSync(path.join(target, "flaky.json"), "utf8"));
-    });
+  const history = [];
+  for (const { expired, workflow_run: run } of artifacts) {
+    if (history.length === limit) break;
+    if (
+      expired ||
+      run?.repository_id !== repositoryId ||
+      run.head_repository_id !== repositoryId ||
+      String(run.id) === exclude ||
+      seen.has(run.id)
+    )
+      continue;
+    seen.add(run.id);
+    const origin = api(`repos/${repository}/actions/runs/${run.id}`);
+    if (origin.path !== ".github/workflows/candidate.yml" || origin.conclusion !== "success")
+      continue;
+    const flaky = read(repository, run.id);
+    if (flaky) history.push(flaky);
+  }
+  return history;
 }
 
 const candidateKinds = ["source", "production"];
@@ -182,7 +194,7 @@ function main() {
     );
     assertCandidateReports(parts, sha, expected);
     const flaky = flakyTests(parts);
-    const repeated = repeatedFlaky(flaky, flakyHistory(directory));
+    const repeated = repeatedFlaky(flaky, flakyHistory(process.env.GH_REPO));
     writeFileSync(path.join(directory, "flaky.json"), JSON.stringify(flaky));
     if (repeated.length) throw new Error(`Prove instabili da correggere: ${repeated.join("; ")}.`);
     console.log("Qualifica completa: partizioni browser coerenti, senza prove parziali.");

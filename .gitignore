@@ -8,19 +8,17 @@ node_modules/
 /.react-router/
 /build/
 /test-results/
-/playwright-report/
 
 # Cloudflare
 .cloudflare
-.mf
 .wrangler
 .dev.vars*
 
 !.dev.vars.example
-!.env.example
 
 # Mutation test
 /.stryker-tmp/
 /reports/
 .mutation-timings.json
+/.mutation-reference/
 /.mutation-references/

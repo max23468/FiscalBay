@@ -1,6 +1,7 @@
 import { syncMinutes } from "./order-sync.server";
 import { dayMilliseconds } from "../time";
 import { resumeAfterInactivity } from "./admission.server";
+import { deleteOrders, requestOrderBudget, storeDataTables } from "./deletion-steps.server";
 import { activeEntitlementSql } from "./grants.server";
 import { historyStartSql } from "./history-window.server";
 import { clearedStoreProfileSql, listedOrder, storeNameSql } from "./store-state.server";
@@ -72,6 +73,8 @@ export type StoreStatus = {
 };
 
 export type StoreActionResult = "done" | "not_found" | "invalid";
+/** «more»: l'eliminazione ha raggiunto il tetto della richiesta e, ripetuta, prosegue. */
+export type StoreDeletionResult = StoreActionResult | "more";
 
 /**
  * Le letture di un negozio attivo non riescono: le ultime due sono fallite, quindi un errore
@@ -183,6 +186,38 @@ export function listStores(db: D1Database, userId: string, now = new Date()) {
   );
 }
 
+/**
+ * Negozi dello spazio dell'utente con i soli campi che servono a filtrare e a nominare: stessa
+ * appartenenza e stesso ordine di `listStores`, senza conteggi, letture e stato del consenso.
+ */
+export async function listStoreScopes(
+  db: D1Database,
+  userId: string,
+): Promise<Pick<StoreStatus, "id" | "ebayEnvironment" | "name" | "pauseReasons">[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT s.id, s.ebay_environment, ${storeNameSql("s")} AS name,
+              (SELECT group_concat(${pauseReasonSql}) FROM ebay_store_pauses p
+                WHERE p.store_id = s.id) AS pauses
+         FROM ebay_stores s
+        WHERE s.workspace_id IN (SELECT workspace_id FROM workspace_members WHERE user_id = ?1)
+          AND s.data_deleted_at IS NULL
+        ORDER BY s.linked_at, s.id`,
+    )
+    .bind(userId)
+    .all<Pick<StoreRow, "id" | "ebay_environment" | "name" | "pauses">>();
+  return results.map((row) => ({
+    id: row.id,
+    ebayEnvironment: row.ebay_environment,
+    name: row.name,
+    pauseReasons: pauseReasonsOf(row.pauses),
+  }));
+}
+
+/** Ragioni di pausa di un negozio dall'elenco concatenato della sua riga, in ordine alfabetico. */
+const pauseReasonsOf = (pauses: string | null) =>
+  (pauses?.split(",").sort() ?? []) as PauseReason[];
+
 /** Negozi di uno spazio per la console amministrativa, con lo stesso stato mostrato al venditore. */
 export function listWorkspaceStores(db: D1Database, workspaceId: string, now = new Date()) {
   return readStores(db, "s.workspace_id = ?1", workspaceId, now);
@@ -242,7 +277,7 @@ async function readStores(
     ]);
   const at = now.getTime();
   return (results as StoreRow[]).map((row) => {
-    const pauseReasons = (row.pauses?.split(",").sort() ?? []) as PauseReason[];
+    const pauseReasons = pauseReasonsOf(row.pauses);
     const expiresAt = row.refresh_expires_at;
     const expired = !row.credentials || row.rejected_at !== null || Date.parse(expiresAt!) <= at;
     // Un negozio escluso dal piano resta in pausa anche con il consenso scaduto: ricollegarlo
@@ -433,7 +468,8 @@ export async function disconnectStore(
 
 /**
  * Rimuove il negozio dall'elenco ed elimina i dati, senza ripensamento. La conferma riporta
- * il nome. Il riferimento allo spazio resta per riconoscere l'identità al nuovo collegamento
+ * il nome. Con gli ordini vanno letture, ricevute webhook, consegne e preferenze Telegram del
+ * negozio. Il riferimento allo spazio resta per riconoscere l'identità al nuovo collegamento
  * e preservare quota e diritti commerciali già registrati.
  */
 export async function deleteStoreData(
@@ -443,19 +479,33 @@ export async function deleteStoreData(
   confirmation: string,
   now = new Date(),
   beforeDelete: () => Promise<void> = async () => {},
-): Promise<StoreActionResult> {
+  budget = requestOrderBudget,
+): Promise<StoreDeletionResult> {
   const name = await ownedStoreName(db, userId, storeId);
   if (name === null) return "not_found";
   if (confirmation.trim() !== name) return "invalid";
   // Confermata l'eliminazione, prima che i token spariscano.
   await beforeDelete();
   const at = now.toISOString();
+  const owned = (table: string) =>
+    db.prepare(`DELETE FROM ${table} WHERE store_id IN (${ownedStoreSql})`).bind(storeId, userId);
+  // Prima l'arresto: senza consenso nessuna lettura aggiunge ordini mentre i lotti li eliminano.
+  const stopped = await db.batch(disconnectStatements(db, userId, storeId, at));
+  if (!stopped.at(-1)!.meta.changes) return "not_found";
+  // Gli ordini a lotti: una sola istruzione su un negozio grande supera i limiti del database.
+  // Un'eliminazione interrotta lascia il negozio scollegato e riprende ripetendo il comando.
+  const emptied = await deleteOrders(
+    db,
+    `SELECT id FROM orders WHERE store_id IN (${ownedStoreSql})`,
+    [storeId, userId],
+    budget,
+  );
+  if (!emptied) return "more";
   const results = await db.batch([
     ...disconnectStatements(db, userId, storeId, at),
-    // Articoli, identificativi fiscali e grant seguono gli ordini.
-    ...["orders", "sync_state", "sync_runs"].map((table) =>
-      db.prepare(`DELETE FROM ${table} WHERE store_id IN (${ownedStoreSql})`).bind(storeId, userId),
-    ),
+    // Articoli, identificativi fiscali e grant seguono gli ordini: qui restano soltanto quelli
+    // arrivati dopo l'ultimo lotto, eliminati insieme al segno dell'eliminazione.
+    ...["orders", ...storeDataTables].map(owned),
     db
       .prepare(
         `UPDATE ebay_stores SET data_deleted_at = ?3, ${clearedStoreProfileSql},

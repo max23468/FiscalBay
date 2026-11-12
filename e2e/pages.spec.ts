@@ -40,8 +40,6 @@ const scenarios = production
 // l'accesso ripetuto resta provato dalla suite funzionale remota.
 let remoteSession: Awaited<ReturnType<BrowserContext["cookies"]>> | undefined;
 
-// Le richieste locali ancora intercettate a fine prova non sono errori del collaudo.
-
 for (const scenario of scenarios) {
   for (const { width, scheme } of scenario.endpoint ? [matrix[0]] : matrix) {
     test(
@@ -57,10 +55,6 @@ for (const scenario of scenarios) {
           {
             type: "expected",
             description: `HTTP ${production && scenario.preview ? 404 : scenario.status}; percorso ${scenario.redirect && !(production && scenario.preview) ? scenario.redirect : new URL(scenario.path, baseURL!).pathname}`,
-          },
-          {
-            type: "ambito",
-            description: scenario.preview ? "anteprima sintetica" : "pagina reale",
           },
         );
         const admin = scenario.role.startsWith("admin");

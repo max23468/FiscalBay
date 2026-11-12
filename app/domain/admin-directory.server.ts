@@ -297,6 +297,28 @@ export type StoreRow = {
   detailErrors: number;
 };
 
+/**
+ * Stato delle letture del negozio `s` con le credenziali `c`: collegamento, consenso, esito delle
+ * ultime due letture e dettagli degli ordini non riusciti.
+ */
+const storeHealthSql = (
+  at: string,
+) => `s.disconnected_at IS NOT NULL AS disconnected, s.data_deleted_at IS NOT NULL AS removed,
+  CASE WHEN c.store_id IS NULL THEN 'none' WHEN c.rejected_at IS NOT NULL THEN 'rejected'
+    WHEN c.refresh_expires_at <= ${at} THEN 'expired' ELSE 'valid' END AS consent,
+  (SELECT COUNT(*) FROM (SELECT ok FROM sync_runs r WHERE r.store_id = s.id
+    ORDER BY started_at DESC, id DESC LIMIT 2) WHERE ok = 0) AS failures,
+  (SELECT COUNT(*) FROM order_source_refs r WHERE r.store_id = s.id
+    AND r.detail_error IS NOT NULL) AS detailErrors`;
+
+/**
+ * Negozio con un problema, sulle colonne di `storeHealthSql`: ancora collegato, con il consenso
+ * non valido, due letture fallite di seguito o dettagli non riusciti. Vale per l'elenco e per il
+ * conteggio della panoramica.
+ */
+const storeProblemSql = `(NOT removed AND NOT disconnected
+  AND (failures = 2 OR detailErrors > 0 OR consent <> 'valid'))`;
+
 /** Negozi di tutti gli spazi, eventualmente soltanto quelli con un problema delle letture. */
 export async function listAllStores(
   db: D1Database,
@@ -310,24 +332,17 @@ export async function listAllStores(
         (SELECT u.email FROM workspace_members wm JOIN "user" u ON u.id = wm.user_id
           WHERE wm.workspace_id = s.workspace_id ORDER BY wm.role = 'owner' DESC LIMIT 1)
           AS ownerEmail,
-        s.disconnected_at IS NOT NULL AS disconnected, s.data_deleted_at IS NOT NULL AS removed,
-        CASE WHEN c.store_id IS NULL THEN 'none' WHEN c.rejected_at IS NOT NULL THEN 'rejected'
-          WHEN c.refresh_expires_at <= ?1 THEN 'expired' ELSE 'valid' END AS consent,
+        ${storeHealthSql("?1")},
         (SELECT group_concat(${pauseReasonSql}) FROM ebay_store_pauses p
           WHERE p.store_id = s.id) AS pauses,
         ss.last_success_at AS lastSuccessAt, ss.requested_at AS requestedAt,
         COALESCE(ss.locked_until > ?1, 0) AS syncing,
-        (SELECT COUNT(*) FROM (SELECT ok FROM sync_runs r WHERE r.store_id = s.id
-          ORDER BY started_at DESC, id DESC LIMIT 2) WHERE ok = 0) AS failures,
-        (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id) AS orders,
-        (SELECT COUNT(*) FROM order_source_refs r WHERE r.store_id = s.id
-          AND r.detail_error IS NOT NULL) AS detailErrors
+        (SELECT COUNT(*) FROM orders o WHERE o.store_id = s.id) AS orders
       FROM ebay_stores s LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
       LEFT JOIN sync_state ss ON ss.store_id = s.id
       WHERE ?2 IS NULL OR s.id = ?3 OR s.workspace_id = ?3
         OR instr(lower(${storeLabelSql("s")}), ?2) > 0) x
-      WHERE ?4 = 0 OR (NOT x.removed AND NOT x.disconnected
-        AND (x.failures = 2 OR x.detailErrors > 0 OR x.consent <> 'valid'))
+      WHERE ?4 = 0 OR ${storeProblemSql}
       ORDER BY x.linkedAt DESC, x.id LIMIT ?5 OFFSET ?6`)
     .bind(
       now.toISOString(),
@@ -379,15 +394,12 @@ export async function consoleSummary(db: D1Database, now = new Date()): Promise<
         WHERE coverage IS NOT NULL GROUP BY coverage`)
       .bind(at),
     db
-      .prepare(`SELECT
-          SUM(s.disconnected_at IS NULL AND c.rejected_at IS NULL AND c.refresh_expires_at > ?1
-            AND NOT EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id)) AS active,
-          SUM(s.disconnected_at IS NULL AND (c.store_id IS NULL OR c.rejected_at IS NOT NULL
-              OR c.refresh_expires_at <= ?1
-              OR 2 = (SELECT COUNT(*) FROM (SELECT ok FROM sync_runs r WHERE r.store_id = s.id
-                ORDER BY started_at DESC, id DESC LIMIT 2) WHERE ok = 0))) AS problems
-        FROM ebay_stores s LEFT JOIN ebay_store_credentials c ON c.store_id = s.id
-        WHERE s.data_deleted_at IS NULL`)
+      .prepare(`SELECT SUM(NOT removed AND NOT disconnected AND consent = 'valid' AND NOT paused)
+            AS active,
+          SUM(${storeProblemSql}) AS problems
+        FROM (SELECT ${storeHealthSql("?1")},
+            EXISTS (SELECT 1 FROM ebay_store_pauses p WHERE p.store_id = s.id) AS paused
+          FROM ebay_stores s LEFT JOIN ebay_store_credentials c ON c.store_id = s.id)`)
       .bind(at),
   ]);
   const totals = accounts!.results[0] as { users: number; waitlisted: number };

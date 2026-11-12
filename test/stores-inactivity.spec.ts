@@ -169,6 +169,23 @@ describe("inattività del Free e ammissione", () => {
     errors.mockRestore();
   });
 
+  it("il preavviso usa la lingua scelta nelle preferenze, poi quella dei Termini", async () => {
+    // Registrato in italiano, poi passato all'inglese dalle preferenze.
+    const seller = await linkedSeller("preavviso.lingua@example.invalid");
+    await env.DB.prepare(
+      "INSERT INTO user_preferences (user_id, language, updated_at) VALUES (?, 'en', ?)",
+    )
+      .bind(seller.userId, at(0).toISOString())
+      .run();
+    const { send: email, mail } = mailer();
+    await applyInactivity(mail, at(30.1));
+    expect(email).toHaveBeenCalledOnce();
+    expect(email.mock.calls[0]![0]).toMatchObject({
+      to: "preavviso.lingua@example.invalid",
+      subject: "Your FiscalBay stores will stop updating",
+    });
+  });
+
   it("un indirizzo soppresso vale come preavviso tentato e la pausa segue i suoi tempi", async () => {
     const seller = await linkedSeller("soppresso@example.invalid");
     const { send: email, mail } = mailer();

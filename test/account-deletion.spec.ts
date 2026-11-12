@@ -53,6 +53,7 @@ import {
   insertEntitlement,
   insertOrder,
   insertStore,
+  insertSubscription,
   insertWorkspace,
   later,
   now,
@@ -331,14 +332,9 @@ async function remainingRows(userId: string) {
   return remaining;
 }
 
-/** Abbonamento mensile attivo dello spazio, come dopo il primo pagamento. */
-function insertSubscription(status = "active") {
-  return env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-      customer_id, offer, price_generation, status, current_period_start, current_period_end,
-      cancel_at_period_end, synced_at, checked_at, renewal_offer)
-    VALUES ('sub_test', 'w-a', 'test', 'cus_test', 'monthly', '2026-09', ?1, ?2,
-      '2026-10-13T20:00:00.000Z', 0, ?2, ?2, 'monthly')`).bind(status, now);
-}
+/** Abbonamento mensile dello spazio, come dopo il primo pagamento. */
+const monthlySubscription = (status = "active") =>
+  insertSubscription({ status, renewalOffer: "monthly" });
 
 /** Spazio con negozio, ordini, credenziali, Telegram, prova usata, ciclo con sblocchi e file. */
 async function populatedAccount(email: string) {
@@ -932,7 +928,7 @@ describe("cancellazione dell'account", () => {
     const email = `lavoro-${crypto.randomUUID()}@example.invalid`;
     const { userId } = await populatedAccount(email);
     await everyTable(userId);
-    await insertSubscription().run();
+    await monthlySubscription().run();
     const stripe = stripeAccount();
     const id = await startAccountDeletion(env, { id: userId, email }, "it", at(now));
     expect(await runAccountDeletion(env, id, stripe.fetcher, at(now))).toBe("done");
@@ -1047,7 +1043,7 @@ describe("cancellazione dell'account", () => {
   it("riprende dopo un errore senza doppi effetti", async () => {
     const email = `ripresa-${crypto.randomUUID()}@example.invalid`;
     const { userId } = await populatedAccount(email);
-    await insertSubscription().run();
+    await monthlySubscription().run();
     const stripe = stripeAccount();
     const id = await startAccountDeletion(env, { id: userId, email }, "it", at(now));
     const remove = vi
@@ -1196,7 +1192,7 @@ describe("cancellazione dell'account", () => {
   it("senza lo stop dei rinnovi conserva solo spazio e riferimenti, segnala e riprova", async () => {
     const email = `bloccata-${crypto.randomUUID()}@example.invalid`;
     const { userId } = await populatedAccount(email);
-    await insertSubscription().run();
+    await monthlySubscription().run();
     const stripe = stripeAccount();
     stripe.state.down = true;
     const id = await startAccountDeletion(env, { id: userId, email }, "it", at(now));
@@ -1283,7 +1279,7 @@ describe("cancellazione dell'account", () => {
   it("vecchi lavori, webhook e restore non ricreano i dati", async () => {
     const email = `ricrea-${crypto.randomUUID()}@example.invalid`;
     const { userId } = await populatedAccount(email);
-    await insertSubscription().run();
+    await monthlySubscription().run();
     await env.DB.prepare(
       `INSERT INTO export_jobs (id, user_id, access_revision, request_sealed, file_name, requested_at)
        VALUES ('00000000-0000-4000-8000-000000000001', ?, 0, 'x', 'ordini.csv', ?)`,
@@ -1332,7 +1328,7 @@ describe("cancellazione dell'account", () => {
       session.bind("s-restore", userId, "2026-09-20T00:00:00.000Z", now),
     ]);
     await workspace(userId);
-    await env.DB.batch([...insertOrder("o-1"), insertSubscription("canceled")]);
+    await env.DB.batch([...insertOrder("o-1"), monthlySubscription("canceled")]);
     expect(await leftovers(userId)).toMatchObject({ user: 1, sessions: 1 });
     const columns = Object.keys(marker);
     await env.DB.prepare(
@@ -1806,16 +1802,11 @@ describe("cancellazione dell'account", () => {
     await env.DB.batch(
       blocked.flatMap(({ id, workspace }, index) => [
         ...insertWorkspace({ id: workspace }),
-        env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-            customer_id, offer, price_generation, status, current_period_start,
-            current_period_end, cancel_at_period_end, synced_at, checked_at)
-          VALUES (?1, ?2, 'test', ?3, 'monthly', '2026-09', 'active', ?4,
-            '2026-10-13T20:00:00.000Z', 0, ?4, ?4)`).bind(
-          `sub_bloccato_${index}`,
-          workspace,
-          `cus_bloccato_${index}`,
-          now,
-        ),
+        insertSubscription({
+          id: `sub_bloccato_${index}`,
+          workspaceId: workspace,
+          customerId: `cus_bloccato_${index}`,
+        }),
         env.DB.prepare(`INSERT INTO account_deletions (id, user_id, workspace_id, requested_at)
           VALUES (?1, ?2, ?3, ?4)`).bind(id, `utente-bloccato-${index}`, workspace, now),
       ]),
@@ -1937,17 +1928,14 @@ describe("motivi di uscita", () => {
         paidAt: now,
       });
     const subscription = (workspaceId: string, offer: string) =>
-      env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-          customer_id, offer, price_generation, status, current_period_start,
-          current_period_end, cancel_at_period_end, synced_at, checked_at)
-        VALUES (?1, ?2, 'test', ?3, ?4, 'g1', 'active', ?5, ?6, 0, ?5, ?5)`).bind(
-        `sub_${workspaceId}`,
+      insertSubscription({
+        id: `sub_${workspaceId}`,
         workspaceId,
-        `cus_${workspaceId}`,
+        customerId: `cus_${workspaceId}`,
         offer,
-        now,
-        soon,
-      );
+        generation: "g1",
+        periodEnd: soon,
+      });
     const cases = {
       "x-free": [],
       "x-trial": [insertEntitlement({ workspaceId: "x-trial", source: "trial", endsAt: soon })],

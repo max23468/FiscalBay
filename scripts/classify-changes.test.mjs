@@ -15,7 +15,6 @@ import path from "node:path";
 import { describe, it } from "node:test";
 import {
   browserNarrowing,
-  browserUnaffected,
   certificationLineage,
   mainProcessChange,
   changelogDayOnly,
@@ -762,18 +761,20 @@ describe("prove browser invariate fra due commit", () => {
       git("init", "--quiet", "--initial-branch", "develop");
       const base = commit("README.md", "base\n");
       process.chdir(directory);
+      const since = (previous, head) => browserNarrowing(previous, head, base, []);
       const docs = commit("docs/nota.md", "nota\n");
-      assert.ok(browserUnaffected(base, docs));
+      assert.deepEqual(since(base, docs), { reuse: true });
       const tooling = commit("scripts/mutation.mjs", "// strumento\n");
-      assert.ok(browserUnaffected(base, tooling));
+      assert.deepEqual(since(base, tooling), { reuse: true });
       const unitTest = commit("test/a.spec.ts", "// prova\n");
-      assert.ok(browserUnaffected(docs, unitTest));
+      assert.deepEqual(since(docs, unitTest), { reuse: true });
       const spec = commit("e2e/a.spec.ts", "// prova browser\n");
-      assert.ok(!browserUnaffected(unitTest, spec));
+      assert.deepEqual(since(unitTest, spec), { grep: "@smoke|a.spec" });
       const app = commit("app/a.ts", "export const a = 1;\n");
-      assert.ok(!browserUnaffected(spec, app));
-      assert.ok(browserUnaffected(app, app));
-      assert.ok(!browserUnaffected("0123456789abcdef0123456789abcdef01234567", app));
+      assert.equal(since(spec, app), null);
+      // Senza differenze non c'è nulla da riprovare.
+      assert.deepEqual(since(app, app), { reuse: true });
+      assert.equal(since("0123456789abcdef0123456789abcdef01234567", app), null);
     } finally {
       process.chdir(before);
       rmSync(directory, { recursive: true, force: true });

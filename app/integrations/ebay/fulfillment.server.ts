@@ -183,21 +183,10 @@ const fulfillmentPageSchema = z.looseObject({
 
 export type FulfillmentPage = z.infer<typeof fulfillmentPageSchema>;
 
-export function buildLastModifiedFilter(
-  checkpoint: Date,
-  end: Date,
-  overlapMilliseconds: number,
-): string {
-  if (
-    !Number.isFinite(checkpoint.getTime()) ||
-    !Number.isFinite(end.getTime()) ||
-    !Number.isFinite(overlapMilliseconds) ||
-    overlapMilliseconds < 0 ||
-    checkpoint > end
-  ) {
+export function buildLastModifiedFilter(start: Date, end: Date): string {
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || start > end) {
     throw new RangeError("Intervallo incrementale eBay non valido");
   }
-  const start = new Date(checkpoint.getTime() - overlapMilliseconds);
   return `lastmodifieddate:[${start.toISOString()}..${end.toISOString()}]`;
 }
 

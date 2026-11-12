@@ -117,11 +117,11 @@ function observedMessages<T extends Message<unknown>>(messages: readonly T[]) {
 const handlers = {
   async fetch(request, env, ctx) {
     const metrics = { dataset: env.METRICS, version: env.VERSION_METADATA?.id };
-    if (frozen(env)) return frozenResponse(new URL(request.url).pathname);
     if (isWebhookPath(new URL(request.url).pathname))
       return withPhaseTimings(
         request,
-        async () => (await receiveWebhook(request, env)) ?? new Response(null, { status: 404 }),
+        // Il percorso è fra quelli dei webhook: la risposta c'è sempre.
+        async () => (await receiveWebhook(request, env))!,
         { ...metrics, tracing: ctx?.tracing, serverTiming: false },
       );
     const url = new URL(request.url);
@@ -152,7 +152,8 @@ const handlers = {
       tracePhase(correlatedRequest, "response");
       const correlated = correlateResponse(response, id);
       // Quasi ogni pagina dipende dalla sessione: nessuna cache conserva una risposta del
-      // Worker, salvo una route che dichiari la propria regola. Gli asset statici non passano di qui.
+      // Worker, salvo una route che dichiari la propria regola e la cache breve delle pagine
+      // pubbliche senza cookie. Gli asset statici non passano di qui.
       if (!correlated.headers.has("cache-control"))
         correlated.headers.set("cache-control", "no-store");
       if (!indexable(env.APP_ORIGIN, new URL(request.url).pathname))
@@ -169,12 +170,6 @@ const handlers = {
   // esportazioni grandi e le cancellazioni, dell'account o richieste da eBay: ogni tipo ha il
   // proprio schema e nessuno raccoglie i messaggi degli altri.
   async queue(batch, env, ctx?: ExecutionContext) {
-    // La consegna si sospende sulla coda; un messaggio arrivato comunque non tocca i dati.
-    if (frozen(env)) {
-      for (const message of batch.messages)
-        message.retry({ delaySeconds: frozenQueueDelaySeconds });
-      return;
-    }
     const syncs = batch.messages.filter((message) => isSyncMessage(message.body));
     const tasks = batch.messages.filter((message) => isTaskMessage(message.body));
     const webhooks = batch.messages.filter((message) => isWebhookMessage(message.body));
@@ -244,7 +239,6 @@ const handlers = {
   // Ogni dieci minuti accoda il lavoro dovuto, senza eseguirlo: il consumer lo svolge fuori
   // dal percorso delle pagine e dall'invocazione del cron.
   async scheduled(controller, env, ctx?: ExecutionContext) {
-    if (frozen(env)) return;
     await withInvocationMetrics(
       "cron",
       "dispatch",
@@ -263,6 +257,7 @@ export default {
     return handlers.fetch(request, env, ctx);
   },
   async queue(batch, env, ctx?: ExecutionContext) {
+    // La consegna si sospende sulla coda; un messaggio arrivato comunque non tocca i dati.
     const blocked = () => {
       for (const message of batch.messages)
         message.retry({ delaySeconds: frozenQueueDelaySeconds });

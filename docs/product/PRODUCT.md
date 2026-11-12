@@ -22,4 +22,4 @@ Esclusi dalla 2.0: modifica/completamento manuale dei dati ordine; emissione del
 
 Offline escluso da **tutta la serie 2.x**. I file scaricati non sono una modalità offline dell'app. La 3.x prevede iOS/Android, con React Native/Expo come direzione approvata da qualificare allora; non include come impegno applicazioni native Windows/macOS. Condividere dominio, contratti e token, non forzare componenti React DOM dentro interfacce native. Non creare adesso package Expo vuoti.
 
-Nessuna beta pubblica e nessuna data rigida di sviluppo. Prima della pubblicazione un solo merchant di fiducia, oltre a test automatici/sintetici. Non inventare utenti reali, recensioni, endorsement o roadmap pubblica.
+Nessuna beta pubblica e nessuna data rigida di sviluppo. Non inventare utenti reali, recensioni, endorsement o roadmap pubblica.

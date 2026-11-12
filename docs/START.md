@@ -61,7 +61,7 @@ di pubblicazione sono in `scripts/release/`, i moduli condivisi dagli script in 
 | [Lacune delle API eBay](audits/2026-11-07-lacune-api-ebay/README.md) | Limiti delle API eBay usate, prove e bozze delle richieste a eBay |
 
 
-Questa guida è l’unico ingresso e indice generale. `docs/archive/` contiene la procedura di adozione e il Master Plan della 2.0, con milestone e gate: sono storici, non requisiti, e stanno fuori dai controlli ordinari di `verify-docs`.
+Questa guida è l’unico ingresso e indice generale. `docs/archive/` contiene la procedura di adozione, il Master Plan della 2.0, con milestone e gate, e il [lancio in Production](archive/2026-11-lancio-2.0.md) con il manifest del test merchant: sono storici, non requisiti, e stanno fuori dai controlli ordinari di `verify-docs`.
 
 Per il prodotto prevale l’ultima decisione esplicita dell’owner, da riportare nel documento di prodotto competente. Contratti esterni e condizioni applicabili vanno verificati sulle fonti ufficiali correnti; codice/test/configurazioni attestano ciò che esiste, readback del provider ciò che è attivo. Una discordanza richiede una correzione o una decisione dell’owner, non un cambio tacito dello scope. `AGENTS.md` governa l’esecuzione, non modifica i requisiti.
 Controllo ordinario dopo modifiche documentali:

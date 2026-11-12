@@ -15,10 +15,8 @@ on:
     types:
       - completed
 
-permissions:
-  actions: write
-  contents: write
-  pull-requests: write
+# Ogni job dichiara i propri permessi: quello su `pull_request_target` gestisce soltanto etichette.
+permissions: {}
 
 concurrency:
   group: dependabot-auto-merge-${{ github.event_name == 'pull_request_target' && github.event.pull_request.number || github.event.workflow_run.id }}
@@ -30,6 +28,10 @@ jobs:
     if: github.event_name == 'pull_request_target' && github.event.pull_request.user.login == 'dependabot[bot]' && github.event.pull_request.base.ref == 'develop' && !github.event.pull_request.draft
     runs-on: ubuntu-26.04
     timeout-minutes: 5
+    # Etichetta del repository ed etichette della PR; nessuna scrittura di contenuti o Actions.
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Fetch Dependabot metadata
         id: dependabot-metadata
@@ -65,8 +67,9 @@ jobs:
             exit 0
           fi
 
-          # Runner dei test e della mutation: la CI delle PR non esegue la mutation, quindi
-          # il merge aspetta una campagna manuale riuscita su un modulo Cloudflare.
+          # Runner dei test e della mutation: la CI delle PR prova soltanto i moduli critici che
+          # la PR cambia, e un aggiornamento di dipendenze non ne tocca nessuno, quindi il merge
+          # aspetta una campagna manuale riuscita su un modulo Cloudflare.
           if grep -qE '(^|, )(vitest|@vitest/[^,]+|@stryker-mutator/[^,]+|@cloudflare/vitest-plugin)(,|$)' \
             <<< "${DEPENDENCY_NAMES}"; then
             gh pr edit "${PR_URL}" --remove-label dependabot-automerge || true
@@ -82,6 +85,11 @@ jobs:
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-26.04
     timeout-minutes: 5
+    # Merge con eliminazione del branch e avvio della CI sul commit integrato.
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
     steps:
       - name: Merge eligible Dependabot PR
         env:

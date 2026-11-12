@@ -117,11 +117,13 @@ async function main() {
     const count = Number(values.count);
     if (!Number.isInteger(count) || count < 1 || count > 1000)
       throw new Error("--count fra 1 e 1000");
+    const wait = Number(values.wait);
+    if (!Number.isFinite(wait) || wait < 0) throw new Error("--wait in secondi, non negativo");
     const from = new Date(Date.now() - 1000);
     await sendSample(target.origin, count);
     const to = new Date(Date.now() + 1000);
     // I punti diventano interrogabili dopo qualche decina di secondi.
-    await sleep(Number(values.wait) * 1000);
+    await sleep(wait * 1000);
     const result = query(sampleSql(target.dataset, from, to));
     const comparison = compareSample(count, result.data?.[0]);
     console.log(

@@ -30,6 +30,7 @@ import { createBoundedStripeClient } from "../app/integrations/stripe.server";
 import {
   insertEntitlement,
   insertStore,
+  insertSubscription,
   now,
   resetDatabase,
   insertWorkspace,
@@ -607,13 +608,12 @@ describe("Lifetime e concessioni", () => {
     expect(body.get("customer_email")).toBeNull();
     // Con un cliente diverso, l'abbonamento che può ancora addebitare prevale sul lifetime
     // rimborsato.
-    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-        customer_id, offer, price_generation, status, current_period_start, current_period_end,
-        cancel_at_period_end, synced_at, checked_at, renewal_offer)
-      VALUES ('sub_new', 'w-a', 'test', 'cus_new', 'monthly', '2026-09', 'active', ?1, ?2, 0, ?1,
-        ?1, 'monthly')`)
-      .bind(now, periodEnd)
-      .run();
+    await insertSubscription({
+      id: "sub_new",
+      customerId: "cus_new",
+      periodEnd,
+      renewalOffer: "monthly",
+    }).run();
     expect(await portalCustomer()).toBe("cus_new");
     // Chiuso, l'abbonamento più recente prevale comunque sul lifetime rimborsato.
     await env.DB.prepare(
@@ -626,11 +626,13 @@ describe("Lifetime e concessioni", () => {
     const stripe = stripeAccount();
     vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
     await env.DB.batch([
-      env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-          customer_id, offer, price_generation, status, current_period_start, current_period_end,
-          cancel_at_period_end, synced_at, checked_at, renewal_offer)
-        VALUES ('sub_old', 'w-a', 'test', 'cus_old', 'monthly', '2026-09', 'canceled', ?1, ?2, 0,
-          ?1, ?1, 'monthly')`).bind(now, periodEnd),
+      insertSubscription({
+        id: "sub_old",
+        customerId: "cus_old",
+        status: "canceled",
+        periodEnd,
+        renewalOffer: "monthly",
+      }),
       env.DB.prepare(`INSERT INTO lifetime_allocations (slot, workspace_id, status, kind,
           provider_reference, customer_id, activated_at, created_at)
         VALUES (1, 'w-a', 'active', 'sale', 'cs_paid', 'cus_lifetime', ?1, ?1)`).bind(now),
@@ -727,15 +729,6 @@ describe("Lifetime e concessioni", () => {
       "covered",
     );
     expect((await lifetimeContext(env.DB, env, userId))?.offer).toBeNull();
-    // Un rimborso, gestito dall'assistenza, non libera il posto né lo rende riassegnabile.
-    stripe.state.sessions.at(-1)!.payment_intent = {
-      ...(stripe.state.sessions.at(-1)!.payment_intent as object),
-      amount_refunded: 18178,
-    };
-    await event(stripe, "checkout.session.completed", "cs_lifetime_3", "2026-09-20T08:00:00.000Z");
-    await reconcileBilling(env, stripe.fetcher, at("2026-09-20T08:00:00.000Z"));
-    expect(await allocations()).toEqual([expect.objectContaining({ slot: 1, status: "active" })]);
-    expect(await lifetimes()).toHaveLength(1);
   });
 
   it("un rimborso revoca il lifetime, lascia occupato il posto e riapre mensile e annuale", async () => {
@@ -795,13 +788,12 @@ describe("Lifetime e concessioni", () => {
     expect((await purchaseState(env.DB, userId, at(later)))?.state).toBe("available");
 
     // Un abbonamento acquistato dopo il rimborso non è sostituito dal lifetime revocato.
-    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-        customer_id, offer, price_generation, status, current_period_start, current_period_end,
-        cancel_at_period_end, synced_at, checked_at, renewal_offer)
-      VALUES ('sub_test', 'w-a', 'test', 'cus_lifetime', 'monthly', '2026-09', 'active', ?1, ?2,
-        0, ?1, ?1, 'monthly')`)
-      .bind(later, "2026-10-20T09:00:00.000Z")
-      .run();
+    await insertSubscription({
+      customerId: "cus_lifetime",
+      periodStart: later,
+      periodEnd: "2026-10-20T09:00:00.000Z",
+      renewalOffer: "monthly",
+    }).run();
     stripe.requests.length = 0;
     await reconcileBilling(env, stripe.fetcher, at("2026-09-20T10:00:00.000Z"));
     expect(stripe.requests).not.toContain("DELETE /v1/subscriptions/sub_test");
@@ -888,13 +880,13 @@ describe("Lifetime e concessioni", () => {
   it("alla cancellazione dell'account ignora gli abbonamenti dell'altro ambiente Stripe", async () => {
     const stripe = stripeAccount();
     // L'ambiente del Worker di prova è `test`: un abbonamento live non è suo da fermare.
-    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-        customer_id, offer, price_generation, status, current_period_start, current_period_end,
-        cancel_at_period_end, synced_at, checked_at, renewal_offer)
-      VALUES ('sub_live', 'w-a', 'live', 'cus_live', 'monthly', '2026-09', 'active', ?1, ?2,
-        0, ?1, ?1, 'monthly')`)
-      .bind(now, "2026-10-20T09:00:00.000Z")
-      .run();
+    await insertSubscription({
+      id: "sub_live",
+      environment: "live",
+      customerId: "cus_live",
+      periodEnd: "2026-10-20T09:00:00.000Z",
+      renewalOffer: "monthly",
+    }).run();
     // Senza chiave Stripe resterebbe da fermare e varrebbe false: nulla da fermare vale true.
     const withoutKey = { ...env, STRIPE_SECRET_KEY: undefined } as unknown as Env;
     expect(await stopRenewals(withoutKey, "w-a", stripe.fetcher, at(now))).toBe(true);
@@ -988,7 +980,6 @@ describe("Lifetime e concessioni", () => {
     expect(await allocations()).toEqual([expect.objectContaining({ slot: 1, status: "active" })]);
     expect(await lifetimes()).toHaveLength(1);
     await resetDatabase();
-    await env.DB.prepare("DELETE FROM workspace_entitlements").run();
     ({ userId } = await verifiedSession("lifetime-senza-posto@example.invalid"));
     await workspace(userId);
     await taken(20);

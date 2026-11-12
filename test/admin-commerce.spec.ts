@@ -30,7 +30,7 @@ import { loader as adminLoader } from "../app/routes/admin";
 
 import { verifiedSession } from "./fixtures/account-fixtures";
 
-import { insertWorkspace, now } from "./fixtures/database-fixtures";
+import { insertSubscription, insertWorkspace, now } from "./fixtures/database-fixtures";
 
 import { stripeAccount } from "./fixtures/stripe-fixtures";
 
@@ -236,14 +236,7 @@ describe("configurazioni commerciali", () => {
   });
 
   it("con il lifetime concesso un abbonamento che Stripe non restituisce più resta indisponibile", async () => {
-    await env.DB.batch([
-      ...insertWorkspace({ id: "w-a" }),
-      env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-          customer_id, offer, price_generation, status, current_period_start, current_period_end,
-          cancel_at_period_end, synced_at, checked_at)
-        VALUES ('sub_test', 'w-a', 'test', 'cus_test', 'monthly', '2026-09', 'active', ?1,
-          '2026-10-13T20:00:00.000Z', 0, ?1, ?1)`).bind(now),
-    ]);
+    await env.DB.batch([...insertWorkspace({ id: "w-a" }), insertSubscription()]);
     const stripe = stripeAccount();
     stripe.state.missing = true;
     vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);

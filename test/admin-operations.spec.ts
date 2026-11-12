@@ -111,6 +111,26 @@ describe("anomalie e lavori", () => {
     expect((await listAnomalies(env.DB, check)).some((a) => a.kind === "tax_missing")).toBe(false);
   });
 
+  it("segnala i messaggi Telegram non consegnati per un guasto, non le consegne chiuse di proposito", async () => {
+    const delivery = (id: string, attempts: number) =>
+      env.DB.prepare(`INSERT INTO telegram_deliveries (id, workspace_id, link_id, kind, event_key,
+          event_at, created_at, attempts, failed_at) VALUES (?1, 'w-a', 'l-a', 'digest', ?1, ?2, ?2, ?3, ?2)`).bind(
+        id,
+        later(-5 * 60_000),
+        attempts,
+      );
+    const failed = async () =>
+      (await listAnomalies(env.DB, at(now))).find((a) => a.kind === "telegram_failed");
+    // Fine di Pro, notifiche spente o chat bloccata chiudono la consegna senza alcun tentativo.
+    await env.DB.batch([...insertWorkspace({ id: "w-a" }), delivery("d-chiusa", 0)]);
+    expect(await failed()).toBeUndefined();
+    // Un rifiuto certo di Telegram e i tentativi esauriti sono guasti.
+    await env.DB.batch([delivery("d-rifiutata", 1), delivery("d-esaurita", 5)]);
+    const anomaly = await failed();
+    expect(anomaly).toMatchObject({ severity: "p3", count: 2 });
+    expect(anomaly!.subjects.map((subject) => subject.id)).toEqual(["w-a"]);
+  });
+
   it("conta in ritardo le ricevute ancora aperte da più di un'ora", async () => {
     const receipt = (id: string, eventAt: string, completedAt: string | null = null) =>
       env.DB.prepare(

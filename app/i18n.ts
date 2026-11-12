@@ -42,7 +42,6 @@ const areaPages: Record<string, Segment> = {
   impostazioni: { en: "settings", next: settingsSections },
   novita: leaf("whats-new"),
   profilo: leaf("profile"),
-  lingua: leaf("language"),
   ricerca: leaf("search"),
 };
 

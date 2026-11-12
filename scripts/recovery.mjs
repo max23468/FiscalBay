@@ -108,7 +108,7 @@ const markerTables = [
   // non si riaprono. Gli invii Telegram seguono `telegram`.
   { table: "service_settings", where: "name <> 'telegram_sends'", conflict: "REPLACE" },
   { table: "admission_settings", conflict: "REPLACE" },
-  // La prova Premium iniziata dopo il punto torna con la prova usata, che non si ripete.
+  // La prova Pro iniziata dopo il punto torna con la prova usata, che non si ripete.
   {
     name: "trial_entitlements",
     table: "workspace_entitlements",
@@ -980,6 +980,8 @@ async function main() {
       credenziali: payload.credentials.length,
     });
   }
+  if (!["telegram", "verify", "restore", "reapply"].includes(command))
+    throw new Error("Comando non supportato.");
   if (!values.in) throw new Error("--in richiesto.");
   const { header, payload } = readCapture(values.in, target);
   if (command === "telegram") {
@@ -1011,7 +1013,6 @@ async function main() {
     }
     return console.log("Controlli superati.");
   }
-  if (!["restore", "reapply"].includes(command)) throw new Error("Comando non supportato.");
   await expectFreeze(target, "frozen");
   if (command === "restore") {
     await assertDrained(run);

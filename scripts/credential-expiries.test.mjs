@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { databases } from "../cloudflare.config.ts";
 import {
+  assertLocalTarget,
   declaredSecrets,
   parseRegistry,
   registrySql,
@@ -109,5 +111,18 @@ describe("registro delle scadenze", () => {
       assert.ok(!secrets.includes("TELEGRAM_BOT_TOKEN"));
       assert.equal(secrets.includes("EBAY_SANDBOX_CLIENT_SECRET"), mode !== "live");
     }
+  });
+
+  it("rifiuta la copia locale di un ambiente diverso da quello della D1 locale", () => {
+    assert.doesNotThrow(() => assertLocalTarget("test", databases.test));
+    assert.doesNotThrow(() => assertLocalTarget("live", databases.live));
+    assert.throws(
+      () => assertLocalTarget("live", databases.test),
+      /--local scrive nella D1 locale .+ --mode live: serve E2E_PRODUCTION=1/u,
+    );
+    assert.throws(
+      () => assertLocalTarget("test", databases.live),
+      /--mode test: togliere E2E_PRODUCTION/u,
+    );
   });
 });

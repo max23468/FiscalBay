@@ -21,13 +21,14 @@ export async function action({ request }: Route.ActionArgs) {
   const change = parsePreference("language", String(form.get("language") ?? ""));
   if (change?.name !== "language") return errorResponse(request, "INVALID_REQUEST");
   await savePreference(env.DB, session.user.id, change);
-  const target = new URL(String(form.get("returnTo") ?? ""), env.APP_ORIGIN);
-  const bare = canonicalPath(target.pathname);
+  // Un indirizzo di ritorno illeggibile porta agli Ordini, come uno fuori dall'area.
+  const target = URL.parse(String(form.get("returnTo") ?? ""), env.APP_ORIGIN);
+  const bare = target ? canonicalPath(target.pathname) : "";
   const inArea =
-    target.origin === new URL(env.APP_ORIGIN).origin &&
+    target?.origin === new URL(env.APP_ORIGIN).origin &&
     (bare === appBase || bare.startsWith(`${appBase}/`));
   return redirect(
-    inArea
+    target && inArea
       ? `${localizedPath(change.value, bare)}${target.search}`
       : localizedPath(change.value, ordersPath),
     303,

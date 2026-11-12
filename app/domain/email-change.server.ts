@@ -10,17 +10,20 @@ export const emailVerificationSeconds = 3600;
 
 const linkExpiry = () => new Date(Date.now() + emailVerificationSeconds * 1000).toISOString();
 
-export async function pendingEmailChange(db: D1Database, userId: string, email: string) {
-  await db
-    .prepare(
-      "DELETE FROM account_email_changes WHERE user_id = ? AND (expires_at <= ? OR current_email <> ?)",
-    )
-    .bind(userId, new Date().toISOString(), email)
-    .run();
+/**
+ * Richiesta in corso per l'indirizzo di accesso `email`: una scaduta, o nata da un indirizzo
+ * che non è più quello di accesso, non vale. Le righe scadute le elimina la manutenzione.
+ */
+export function pendingEmailChange(
+  db: D1Database,
+  userId: string,
+  email: string,
+  now = new Date(),
+) {
   return db
     .prepare(`SELECT new_email AS newEmail, stage, expires_at AS expiresAt
-      FROM account_email_changes WHERE user_id = ?`)
-    .bind(userId)
+      FROM account_email_changes WHERE user_id = ? AND expires_at > ? AND current_email = ?`)
+    .bind(userId, now.toISOString(), email)
     .first<PendingEmailChange>();
 }
 

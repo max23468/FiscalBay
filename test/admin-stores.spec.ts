@@ -21,6 +21,8 @@ import {
   reviewAbuseSignal,
 } from "../app/domain/abuse-review.server";
 
+import { consoleSummary, listAllStores } from "../app/domain/admin-directory.server";
+
 import { grantHistoryExtension, revokeHistoryExtension } from "../app/domain/concessions.server";
 
 import {
@@ -59,6 +61,7 @@ import { verifiedSession } from "./fixtures/account-fixtures";
 import {
   insertCredentials,
   insertEntitlement,
+  insertOrder,
   insertStore,
   insertWorkspace,
   now,
@@ -71,6 +74,29 @@ import { callRoute, routeResponse } from "./fixtures/route-fixtures";
 import { at, hour, later, admin, audit, act, setupScenarios } from "./fixtures/admin-scenarios";
 
 setupScenarios();
+
+describe("negozi con problemi", () => {
+  it("la panoramica conta gli stessi negozi dell'elenco, anche con soli dettagli falliti", async () => {
+    await env.DB.batch([
+      ...insertWorkspace({ id: "w-a" }),
+      insertStore({ id: "s-ok" }),
+      insertCredentials({ storeId: "s-ok", accessExpiresAt: later(48 * hour) }),
+      // Consenso valido e letture riuscite: l'unico problema è il dettaglio di un ordine.
+      insertStore({ id: "s-dettagli" }),
+      insertCredentials({ storeId: "s-dettagli", accessExpiresAt: later(48 * hour) }),
+      ...insertOrder("o-dettagli", { storeId: "s-dettagli" }),
+      env.DB.prepare(`INSERT INTO order_source_refs (store_id, source, external_order_id, order_id,
+          last_modified_time, detail_error)
+        VALUES ('s-dettagli', 'fulfillment', 'ebay-o-dettagli', 'o-dettagli', ?, 'unavailable')`).bind(
+        now,
+      ),
+      insertStore({ id: "s-senza-consenso" }),
+    ]);
+    const { rows } = await listAllStores(env.DB, { problems: true }, at(now));
+    expect(rows.map((row) => row.id).sort()).toEqual(["s-dettagli", "s-senza-consenso"]);
+    expect((await consoleSummary(env.DB, at(now))).stores).toEqual({ active: 2, problems: 2 });
+  });
+});
 
 describe("assistenza sui negozi e sugli spazi", () => {
   it("fa eccezione ai 90 giorni del negozio Free con autore e motivo", async () => {
@@ -261,6 +287,47 @@ describe("trasferimento assistito di un negozio", () => {
       ).first(),
     ).toEqual({ store_id: "s-a2" });
     expect(await requestStoreSync(env, owner.userId, "s-a")).toBe("not_found");
+  });
+
+  it("elimina a lotti gli ordini del negozio trasferito e riprende dopo il tetto", async () => {
+    await stores();
+    await env.DB.batch([
+      env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time,
+          last_modified_time, currency, total_minor) VALUES ('o-a2', 's-a2', 'ebay-a2', ?1, ?1, 'EUR', 100)`).bind(
+        now,
+      ),
+      ...Array.from({ length: 201 }, (_, index) =>
+        env.DB.prepare(`INSERT INTO orders (id, store_id, ebay_order_id, creation_time,
+            last_modified_time, currency, total_minor) VALUES (?1, 's-a', ?1, ?2, ?2, 'EUR', 100)`).bind(
+          `o-lotto-${index}`,
+          now,
+        ),
+      ),
+    ]);
+    const prepared = await prepare();
+    if (prepared.result !== "prepared") throw new Error();
+    const confirm = (budget?: { batch: number; batches: number }) =>
+      confirmStoreTransfer(env, { id: prepared.id, actor: "admin" }, at(now), budget);
+    const state = () =>
+      env.DB.prepare(`SELECT
+          (SELECT COUNT(*) FROM orders WHERE store_id = 's-a') AS orders,
+          (SELECT COUNT(*) FROM orders WHERE store_id = 's-a2') AS others,
+          (SELECT workspace_id FROM ebay_stores WHERE id = 's-a') AS workspace,
+          (SELECT executed_at FROM store_transfers WHERE id = ?) AS executed`)
+        .bind(prepared.id)
+        .first();
+    // Oltre il tetto il negozio resta dov'è e la preparazione resta confermabile.
+    expect(await confirm({ batch: 200, batches: 1 })).toEqual({ result: "more" });
+    expect(await state()).toEqual({ orders: 2, others: 1, workspace: "w-a", executed: null });
+    expect(await confirm()).toMatchObject({ result: "done" });
+    expect(await state()).toEqual({ orders: 0, others: 1, workspace: "w-b", executed: now });
+    // Una conferma non più valida non elimina ordini.
+    const stale = await prepare({ storeId: "s-a2" });
+    if (stale.result !== "prepared") throw new Error();
+    expect(await confirmStoreTransfer(env, { id: stale.id, actor: "altro" }, at(now))).toEqual({
+      result: "expired",
+    });
+    expect(await state()).toMatchObject({ others: 1 });
   });
 
   it("esegue una sola fra conferme concorrenti e rifiuta uno stato cambiato o scaduto", async () => {

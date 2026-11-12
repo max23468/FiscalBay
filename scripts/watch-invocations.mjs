@@ -104,6 +104,11 @@ async function main() {
   const code = await new Promise((resolve) => {
     const child = spawn(command, args, { stdio: "inherit" });
     child.on("exit", (status) => resolve(status ?? 1));
+    // Un comando che non parte conta come fallito: il tail si chiude e il riepilogo resta.
+    child.on("error", (error) => {
+      console.error(error.message);
+      resolve(1);
+    });
   });
   // Gli eventi arrivano qualche secondo dopo la fine dell'invocazione.
   await sleep(10_000);

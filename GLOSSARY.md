@@ -18,7 +18,7 @@ Stato di un merchant con almeno un negozio che ha completato la prima lettura de
 La prima volta in cui un merchant diventa attivo; resta contata anche se in seguito smette di esserlo. Distinta dall'attivazione di Pro, della prova o di un servizio.
 
 **Pagante**:
-Merchant con un abbonamento o un lifetime acquistato; la prova e le concessioni gratuite non lo rendono pagante.
+Merchant con una copertura Pro pagata in vigore, per abbonamento o lifetime acquistato; la prova, le concessioni gratuite e un rinnovo non pagato non lo rendono pagante.
 
 **Spazio / workspace**:
 Confine di attività, dati, abbonamento e autorizzazione; termine prevalentemente interno.

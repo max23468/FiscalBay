@@ -19,6 +19,16 @@ export const event = {
   type: "checkout.session.completed",
 } satisfies Stripe.Event;
 
+/** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
+// Chiave sintetica, priva di credenziali Stripe, usata soltanto dal provider finto.
+// react-doctor-disable-next-line react-doctor/no-secrets-in-client-code
+export const liveKey = "sk_live_fiscalbay";
+
+/** Intestazione `stripe-signature` valida per il corpo, firmata con il segreto delle prove. */
+export function stripeSignature(payload: string) {
+  return Stripe.webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_fiscalbay_test" });
+}
+
 export const checkoutInput = {
   priceId: "price_test_monthly",
   generation: "2026-09",

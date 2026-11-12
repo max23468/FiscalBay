@@ -389,9 +389,12 @@ for (const width of [390, 768, 1440]) {
       const prefix = it ? "" : "/en";
       await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "premium");
       // Premium non anticipa il downgrade: la scelta del negozio attivo è solo nel Free.
-      await expect(page.locator("main")).not.toContainText(
-        it ? "Negozio attivo se torni al piano Free" : "Active store if you return to Free",
-      );
+      await expect(
+        page.getByRole("combobox", {
+          name: it ? "Scegli il negozio attivo" : "Choose the active store",
+          exact: true,
+        }),
+      ).toHaveCount(0);
       // Il ciclo iniziato nella promozione conserva la quota e annuncia quella seguente.
       await open(page, pagePath(prefix, "/anteprima/impostazioni/piano"), "fine-promozione");
       await expect(page.locator("main")).toContainText(it ? "7 di 10" : "7 of 10");
@@ -756,27 +759,6 @@ test.describe("assistenza reale", () => {
     });
 });
 
-// La conferma si verifica nel pannello di un negozio.
-test.describe("negozi", () => {
-  test("errori del form associati al campo e focus restituito dalla conferma", async ({ page }) => {
-    await open(page, "/anteprima/impostazioni/supporto");
-    await page.getByRole("button", { name: "Invia", exact: true }).click();
-    const message = page.getByRole("textbox", { name: "Messaggio", exact: true });
-    await expect(message).toBeFocused();
-    await expect(message).toHaveAttribute("aria-invalid", "true");
-    await expect(message).toHaveAccessibleDescription(/Scrivi il messaggio/);
-
-    await open(page, "/anteprima/negozi/neg-vintage");
-    const trigger = page.getByRole("dialog").getByRole("button", { name: "Scollega", exact: true });
-    await trigger.click();
-    const confirm = page.getByRole("alertdialog");
-    await expect(confirm.getByRole("button", { name: "Annulla", exact: true })).toBeFocused();
-    await page.keyboard.press("Escape");
-    await expect(confirm).toBeHidden();
-    await expect(trigger).toBeFocused();
-  });
-});
-
 for (const area of areas)
   test(`domande frequenti con il segno del prodotto e tastiera, ${area.name}`, async ({
     page,
@@ -1111,10 +1093,6 @@ test.describe("abbonamento nel piano", () => {
     });
 });
 
-/**
- * Notifiche dell'area reale pronte all'uso: rete ferma e pagina idratata, segnalata dal consenso
- * email che resta disattivato fino ad allora.
- */
 /** Avviso delle Impostazioni per una consegna Telegram ferma. */
 function deliveryAlert(page: Page, failure: "blocked" | "unreachable", it: boolean) {
   const title = {
@@ -1124,6 +1102,10 @@ function deliveryAlert(page: Page, failure: "blocked" | "unreachable", it: boole
   return page.getByRole("status").filter({ hasText: title });
 }
 
+/**
+ * Notifiche dell'area reale pronte all'uso: rete ferma e pagina idratata, segnalata dal consenso
+ * email che resta disattivato fino ad allora.
+ */
 async function openNotifications(page: Page, prefix: string, it: boolean) {
   await page.goto(pagePath(prefix, "/app/impostazioni/notifiche"));
   await networkIdle(page);

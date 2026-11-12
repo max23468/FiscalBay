@@ -6,7 +6,13 @@ import { acquireOrders } from "../../app/domain/order-acquisition.server";
 
 import { consumeStoreSync, dispatchStoreSyncs } from "../../app/domain/order-sync.server";
 
-import { insertCredentials, now, resetDatabase, seed } from "./database-fixtures";
+import {
+  insertCredentials,
+  now,
+  resetDatabase,
+  resetOrderFixtures,
+  seed,
+} from "./database-fixtures";
 
 import { fakeQueue, queueMessage, queued } from "./queue-fixture";
 
@@ -18,11 +24,11 @@ export const grantedAt = "2026-09-01T00:00:00.000Z";
 
 export const image = "https://i.ebayimg.com/images/g/abc/s-l1600.jpg";
 
-export const storeResponse = ack(
+const storeResponse = ack(
   `<Ack>Success</Ack><Store><Name>Negozio Sintetico</Name><Logo><URL>${image}</URL></Logo></Store>`,
 );
 
-export type FakeOrder = ReturnType<typeof order>;
+type FakeOrder = ReturnType<typeof order>;
 
 /**
  * eBay sintetico con paginazione reale: filtra per data, ordina dal più recente e restituisce
@@ -203,7 +209,7 @@ export function setupScenarios() {
   afterEach(() => vi.useRealTimers());
   beforeEach(async () => {
     await seed();
-    await env.DB.prepare("DELETE FROM orders").run();
+    await resetOrderFixtures();
     await insertCredentials({ accessExpiresAt: now, grantedAt }).run();
     // Ogni utente ha una sessione aperta: gli spazi sono seguiti e leggono con la cadenza del piano.
     await env.DB.prepare(

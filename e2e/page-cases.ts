@@ -239,7 +239,7 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
         role: "member",
         pattern: `${pagePath(prefix, "/app/impostazioni/:sezione")}?`,
         status: suffix === "/non-esiste" ? 404 : 200,
-        remote: !prefix && (suffix === "" || suffix === "/sicurezza"),
+        remote: !prefix && (suffix === "" || suffix === "/account"),
       }),
     ),
     make("/app/novita", "settings", { redirect: access }),

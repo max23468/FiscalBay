@@ -63,7 +63,7 @@ function AddressLines({
   );
 }
 
-export type CopyLabels = { copy: string; copied: string; copyFailed: string };
+type CopyLabels = { copy: string; copied: string; copyFailed: string };
 
 /** Indirizzo anche parziale; l'assenza della via mascherata resta esplicita. */
 export function BuyerAddress({ order, copy }: { order: OrderView; copy?: CopyLabels }) {

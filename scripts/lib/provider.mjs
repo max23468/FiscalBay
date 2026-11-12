@@ -200,12 +200,34 @@ export function readRunArtifact(repository, run, selector, read) {
   }
 }
 
-/** Sorgenti versionati e presenti, di `app/` e `workers/` salvo un altro `pattern`, con il testo. */
-export function trackedSources(pattern = /^(?:app|workers)\/.+\.tsx?$/u) {
-  return git("ls-files")
+/**
+ * Sorgenti versionati e presenti, di `app/` e `workers/` salvo un altro `pattern`, con il testo.
+ * Con `untracked` anche i file nuovi non ignorati da Git, come nell'albero di lavoro locale.
+ */
+export function trackedSources(
+  pattern = /^(?:app|workers)\/.+\.tsx?$/u,
+  { untracked = false } = {},
+) {
+  return git("ls-files", ...(untracked ? ["--cached", "--others", "--exclude-standard"] : []))
     .split("\n")
     .filter((file) => pattern.test(file) && existsSync(file))
     .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+}
+
+/**
+ * Job dell'ultimo tentativo di una run, letti con `api` a pagine da 30: con cento job per pagina
+ * l'API risponde 502 per alcune run ripetute. `api` è la lettura iniettata dal chiamante.
+ */
+export async function latestRunJobs(repository, id, api) {
+  const jobs = [];
+  for (let page = 1; ; page++) {
+    const batch = await api(
+      `repos/${repository}/actions/runs/${id}/jobs?filter=latest&per_page=30&page=${page}`,
+    );
+    jobs.push(...batch.jobs);
+    if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
+  }
+  return jobs;
 }
 
 /**

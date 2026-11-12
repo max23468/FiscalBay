@@ -523,10 +523,11 @@ describe("vista condivisa e criteri degli ordini", () => {
       summary: {
         ...base.summary,
         buyer: {
-          ...base.summary.buyer!,
+          username: null,
           name: null,
           phone: null,
           email: null,
+          billingAddress: null,
           shipTo: null,
           masked: ["email"],
         },
@@ -537,8 +538,11 @@ describe("vista condivisa e criteri degli ordini", () => {
       summary: {
         ...base.summary,
         buyer: {
-          ...base.summary.buyer!,
+          username: null,
+          name: null,
           phone: null,
+          email: null,
+          billingAddress: null,
           shipTo: { name: "Mario", phone: null, address: null },
           masked: ["shipTo.phone"],
         },
@@ -549,10 +553,11 @@ describe("vista condivisa e criteri degli ordini", () => {
       summary: {
         ...base.summary,
         buyer: {
-          ...base.summary.buyer!,
+          username: null,
           name: "Mario Rossi",
           phone: null,
           email: "buyer@example.invalid",
+          billingAddress: null,
           masked: ["name", "email", "phone", "shipTo.name"],
           shipTo: { name: "Mario", phone: "3331234567", address: null },
         },

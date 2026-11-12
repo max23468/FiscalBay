@@ -1,15 +1,17 @@
-import "./ebay-adapters.unit";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { ebayApiUrl, sandboxAvailable } from "../app/integrations/ebay/environment.server";
 import {
   fulfillmentObservation,
   readFulfillmentOrders,
 } from "../app/integrations/ebay/fulfillment.server";
 import {
   parseItemImage,
+  parseTradingOrders,
   qualifiedImageUrl,
+  mapTradingTaxIdentifiers,
   readItemImage,
-  readTradingTaxObservation,
+  readTradingOrders,
   readTradingTaxObservations,
   tradingTaxBatch,
   tradingAck,
@@ -21,9 +23,9 @@ import {
   unsubscribeOrderEvents,
 } from "../app/integrations/ebay/order-events.server";
 import { UpstreamError } from "../app/integrations/http.server";
-import { resetDatabase } from "./fixtures/database-fixtures";
 import {
   access,
+  configuration,
   failure,
   trading,
   withUser,
@@ -31,9 +33,6 @@ import {
   tradingError,
   order,
 } from "./fixtures/ebay-client-fixtures";
-
-beforeEach(resetDatabase);
-afterEach(() => vi.useRealTimers());
 
 describe("client eBay e normalizzazione", () => {
   it("conserva acquirente, destinatario con c/o e telefono così come li fornisce eBay", () => {
@@ -162,7 +161,7 @@ describe("client eBay e normalizzazione", () => {
       `<?xml version="1.0"?><!entity a "b">${ack("<Ack>Success</Ack>")}`,
       ack("<Ack>Success</Ack>\0"),
     ]) {
-      expect(await failure(readTradingTaxObservation(access(trading(body)), "1"))).toEqual({
+      expect(await failure(readTradingTaxObservations(access(trading(body)), ["1"]))).toEqual({
         failure: "invalid_response",
       });
     }
@@ -174,9 +173,9 @@ describe("client eBay e normalizzazione", () => {
     });
     expect(
       await failure(
-        readTradingTaxObservation(
+        readTradingTaxObservations(
           access(vi.fn<typeof fetch>(async () => new Response(oversized))),
-          "1",
+          ["1"],
         ),
       ),
     ).toEqual({ failure: "invalid_response", status: 200 });
@@ -292,6 +291,456 @@ describe("client eBay e normalizzazione", () => {
     const [, init] = getItem.mock.calls[0]!;
     expect((init!.headers as Record<string, string>)["x-ebay-api-call-name"]).toBe("GetItem");
     expect(String(init!.body)).toContain("<ItemID>110&lt;1&gt;&amp;&quot;&apos;</ItemID>");
+  });
+});
+
+describe("acquisti Trading", () => {
+  const xml = `<GetOrdersResponse><Ack>Success</Ack><PaginationResult><TotalNumberOfEntries>1</TotalNumberOfEntries></PaginationResult>
+    <HasMoreOrders>false</HasMoreOrders><OrderArray><Order><OrderID>provvisorio</OrderID><OrderStatus>Active</OrderStatus>
+    <CreatedTime>2026-09-01T10:00:00Z</CreatedTime><CheckoutStatus><LastModifiedTime>2026-09-01T11:00:00Z</LastModifiedTime></CheckoutStatus>
+    <Total currencyID="EUR">12.50</Total><BuyerUserID>buyer</BuyerUserID>
+    <ShippingAddress><Name>Destinatario</Name><Street1>Via Sintetica</Street1><Country>IT</Country></ShippingAddress>
+    <TransactionArray><Transaction><Item><ItemID>123</ItemID><Title>Articolo &amp; altro</Title></Item>
+    <TransactionID>456</TransactionID><OrderLineItemID>123-456</OrderLineItemID><QuantityPurchased>2</QuantityPurchased><TransactionPrice currencyID="EUR">6.25</TransactionPrice></Transaction></TransactionArray>
+    </Order></OrderArray></GetOrdersResponse>`;
+  it("conserva identità, mancato pagamento e campi strutturati", async () => {
+    const result = parseTradingOrders(xml);
+    expect(
+      parseTradingOrders(
+        xml.replace("<BuyerUserID>", "<EIASToken>stable-buyer</EIASToken><BuyerUserID>"),
+      ).orders[0],
+    ).toMatchObject({ buyerEiasToken: "stable-buyer" });
+    expect(result).toMatchObject({
+      total: 1,
+      more: false,
+      orders: [
+        {
+          provisional: true,
+          externalOrderId: "provvisorio",
+          paymentStatus: "PENDING",
+          total: { minor: 1250, currency: "EUR" },
+          buyer: { name: null, username: "buyer", shipTo: { name: "Destinatario" } },
+          items: [
+            { lineItemId: "123-456", stableKey: "123-456", title: "Articolo & altro", quantity: 2 },
+          ],
+        },
+      ],
+    });
+    expect(parseTradingOrders(xml.replace("Active", "Completed")).orders[0]).toMatchObject({
+      provisional: false,
+      paymentStatus: "PAID",
+    });
+    expect(parseTradingOrders(xml.replace("Active", "Cancelled")).orders[0]).toMatchObject({
+      provisional: true,
+      cancelStatus: "CANCELED",
+    });
+    expect(parseTradingOrders(xml).orders[0]!.items[0]!.total).toEqual({
+      minor: 1250,
+      currency: "EUR",
+    });
+    expect(parseTradingOrders(xml.replace("Active", "FutureStatus")).orders[0]!.paymentStatus).toBe(
+      "FutureStatus",
+    );
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(xml));
+    await readTradingOrders(
+      { configuration, fetcher, accessToken: "synthetic" },
+      {
+        from: "2026-09-01T00:00:00Z",
+        until: "2026-09-02T00:00:00Z",
+        page: 2,
+      },
+    );
+    expect(String(fetcher.mock.calls[0]![1]?.body)).toContain("<PageNumber>2</PageNumber>");
+    expect(String(fetcher.mock.calls[0]![1]?.body)).toContain(
+      "<ModTimeFrom>2026-09-01T00:00:00.000Z</ModTimeFrom>",
+    );
+  });
+  it("toglie dal totale la protezione acquisti pagata a eBay", () => {
+    // Un pagamento al venditore e uno a eBay, come nella risposta documentata.
+    const payments = (payee: string, currency = "EUR") =>
+      xml.replace(
+        '<Total currencyID="EUR">12.50</Total>',
+        `<Total currencyID="EUR">13.70</Total><MonetaryDetails><Payments>
+        <Payment><Payee type="eBayUser">venditore</Payee><PaymentAmount currencyID="EUR">12.50</PaymentAmount></Payment>
+        <Payment>${payee}<PaymentAmount currencyID="${currency}">1.20</PaymentAmount></Payment>
+        </Payments></MonetaryDetails>`,
+      );
+    const total = (body: string) => parseTradingOrders(body).orders[0]!.total;
+    expect(total(payments('<Payee type="eBayUser">eBay</Payee>'))).toEqual({
+      minor: 1250,
+      currency: "EUR",
+    });
+    expect(total(payments('<Payee type="eBayPartner">partner</Payee>')).minor).toBe(1250);
+    expect(total(payments('<Payee type="eBayUser">altro</Payee>')).minor).toBe(1370);
+    expect(total(payments('<Payee type="eBayUser">eBay</Payee>', "GBP")).minor).toBe(1370);
+  });
+  it.each([
+    xml.replace("<HasMoreOrders>false</HasMoreOrders>", ""),
+    xml.replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>9007199254740992<"),
+    xml.replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>NaN<"),
+    xml
+      .replace(/<Order>[\s\S]*<\/Order>/u, "")
+      .replace("<HasMoreOrders>false<", "<HasMoreOrders>true<"),
+    xml.replace(
+      "<TotalNumberOfEntries>1</TotalNumberOfEntries>",
+      "<TotalNumberOfEntries>0</TotalNumberOfEntries>",
+    ),
+    xml.replace("</OrderArray>", xml.match(/<Order>[\s\S]*<\/Order>/u)![0] + "</OrderArray>"),
+  ])("rifiuta la pagina incompleta o contraddittoria", (body) => {
+    expect(() => parseTradingOrders(body)).toThrow();
+  });
+  it.each([
+    xml.replace("<QuantityPurchased>2</QuantityPurchased>", ""),
+    xml.replace("<OrderStatus>Active</OrderStatus>", ""),
+    xml.replace(/<CheckoutStatus>[\s\S]*?<\/CheckoutStatus>/u, ""),
+    xml.replace('<Total currencyID="EUR">12.50</Total>', ""),
+    xml.replace("123-456</OrderLineItemID>", "123-789</OrderLineItemID>"),
+    xml.replace("<TransactionArray>", "<Broken>"),
+    xml.replace("<CreatedTime>2026-09-01T10:00:00Z</CreatedTime>", ""),
+    xml.replace("6.25</TransactionPrice>", "6.251</TransactionPrice>"),
+    xml.replace(
+      "</Total>",
+      '</Total><MonetaryDetails><Payments><Payment><Payee>eBay</Payee><PaymentAmount currencyID="EUR">20.00</PaymentAmount></Payment></Payments></MonetaryDetails>',
+    ),
+  ])("salta l'ordine incompleto senza scartare la pagina", (body) => {
+    const page = body
+      .replace("<TotalNumberOfEntries>1<", "<TotalNumberOfEntries>2<")
+      .replace(
+        "</OrderArray>",
+        xml.match(/<Order>[\s\S]*<\/Order>/u)![0].replace(">provvisorio<", ">valido<") +
+          "</OrderArray>",
+      );
+    expect(parseTradingOrders(page)).toMatchObject({
+      skipped: 1,
+      orders: [{ externalOrderId: "valido" }],
+    });
+  });
+  it.each([0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rifiuta la pagina richiesta non valida %s prima di chiamare eBay",
+    async (page) => {
+      const fetcher = vi.fn<typeof fetch>();
+      await expect(
+        readTradingOrders(
+          { configuration, fetcher, accessToken: "synthetic" },
+          {
+            from: "2026-09-01T00:00:00Z",
+            until: "2026-09-02T00:00:00Z",
+            page,
+          },
+        ),
+      ).rejects.toMatchObject({ failure: "invalid_response" });
+      expect(fetcher).not.toHaveBeenCalled();
+    },
+  );
+  it("rifiuta un intervallo invertito prima di chiamare eBay", async () => {
+    const fetcher = vi.fn<typeof fetch>();
+    await expect(
+      readTradingOrders(
+        { configuration, fetcher, accessToken: "synthetic" },
+        {
+          from: "2026-09-02T00:00:00Z",
+          until: "2026-09-01T00:00:00Z",
+          page: 1,
+        },
+      ),
+    ).rejects.toMatchObject({ failure: "invalid_response" });
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("accetta un intervallo con estremi uguali senza perderne gli ordini", async () => {
+    const fetcher = vi.fn<typeof fetch>(async () => new Response(xml));
+    const at = "2026-09-01T00:00:00Z";
+    expect(
+      await readTradingOrders(
+        { configuration, fetcher, accessToken: "synthetic" },
+        {
+          from: at,
+          until: at,
+          page: 1,
+        },
+      ),
+    ).toMatchObject({
+      total: 1,
+      more: false,
+      skipped: 0,
+      orders: [{ externalOrderId: "provvisorio" }],
+    });
+    expect(fetcher).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[0]![1]?.body)).toContain(
+      "<ModTimeFrom>2026-09-01T00:00:00.000Z</ModTimeFrom><ModTimeTo>2026-09-01T00:00:00.000Z</ModTimeTo>",
+    );
+  });
+  it.each([
+    ["&#65;&#x1F600;&#1114111;", "A😀\u{10ffff}"],
+    ["&#0;&#x0;&#1114112;&#x110000;", "&#0;&#x0;&#1114112;&#x110000;"],
+  ])(
+    "decodifica i riferimenti numerici validi senza alterare quelli fuori intervallo: %s",
+    (encoded, decoded) => {
+      const result = parseTradingOrders(xml.replace("Articolo &amp; altro", encoded));
+      expect(result.skipped).toBe(0);
+      expect(result.orders[0]!.items[0]!.title).toBe(decoded);
+    },
+  );
+  it.each([
+    ["<Item><ItemID>123</ItemID><Title>Articolo &amp; altro</Title></Item>", "", null],
+    [
+      "<ItemID>123</ItemID><Title>Articolo &amp; altro</Title>",
+      "<Title>Articolo &amp; altro</Title>",
+      null,
+    ],
+    ["<TransactionID>456</TransactionID>", "", "123"],
+    ["<OrderLineItemID>123-456</OrderLineItemID>", "", "123"],
+  ])(
+    "conserva l'identità di riga disponibile quando manca %s",
+    (field, replacement, legacyItemId) => {
+      const result = parseTradingOrders(xml.replace(field!, replacement!));
+      expect(result.skipped).toBe(0);
+      expect(result.orders[0]!.items[0]).toMatchObject({
+        lineItemId: "123-456",
+        stableKey: "123-456",
+        legacyItemId,
+      });
+    },
+  );
+  it("conserva le assenze facoltative senza inventare titolo, prezzo o indirizzo", () => {
+    const result = parseTradingOrders(
+      xml
+        .replace(/<ShippingAddress>[\s\S]*?<\/ShippingAddress>/u, "")
+        .replace(/<Title>[\s\S]*?<\/Title>/u, "")
+        .replace(/<TransactionPrice[^>]*>[\s\S]*?<\/TransactionPrice>/u, "")
+        .replace("</Order>", "<ShippedTime>2026-09-02T00:00:00Z</ShippedTime></Order>"),
+    );
+    expect(result.skipped).toBe(0);
+    expect(result.orders[0]).toMatchObject({
+      fulfillmentStatus: "FULFILLED",
+      buyer: { shipTo: null },
+      items: [{ title: "", total: null }],
+    });
+  });
+  it("non recupera un'identità di riga assente da un altro campo dell'ordine", () => {
+    const result = parseTradingOrders(
+      xml
+        .replace(/<ItemID>[^<]*<\/ItemID>/u, "")
+        .replace(/<OrderLineItemID>[^<]*<\/OrderLineItemID>/u, ""),
+    );
+    expect(result).toMatchObject({ orders: [], skipped: 1 });
+  });
+  it("classifica come rifiuto l'errore Trading senza codice senza esporne il messaggio", () => {
+    expect(() =>
+      tradingAck("<Ack>Failure</Ack><Errors><ShortMessage>NON-ESPORRE</ShortMessage></Errors>"),
+    ).toThrow(
+      expect.objectContaining({ failure: "rejected", details: { providerCode: undefined } }),
+    );
+  });
+
+  it("un identificativo malformato lascia importabile l'ordine", () => {
+    const result = parseTradingOrders(
+      xml.replace(
+        "</Order>",
+        "<BuyerTaxIdentifier>\n<Type>CODICE_FISCALE</Type>\n</BuyerTaxIdentifier></Order>",
+      ),
+    );
+    expect(result.skipped).toBe(0);
+    expect(result.orders).toHaveLength(1);
+    expect(result.orders[0]!.taxIdentifiers).toMatchObject({
+      verification: "error",
+      complete: false,
+      values: [],
+    });
+    expect(parseTradingOrders(xml).orders[0]!.taxIdentifiers).toMatchObject({
+      complete: false,
+      availability: "not_included",
+      verification: "completed",
+      values: [],
+    });
+    expect(
+      parseTradingOrders(
+        xml.replace(
+          "</Order>",
+          "<BuyerTaxIdentifier>\n<Type>CODICE_FISCALE</Type>\n<ID>SINTETICO</ID>\n</BuyerTaxIdentifier></Order>",
+        ),
+      ).orders[0]!.taxIdentifiers,
+    ).toMatchObject({
+      complete: false,
+      verification: "completed",
+      values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
+    });
+    // Dentro una transazione vale lo stesso: il malformato è un errore senza valori, il completo
+    // risulta presente.
+    const inTransaction = (identifier: string) =>
+      parseTradingOrders(
+        xml.replace(
+          "</Transaction>",
+          `<BuyerTaxIdentifier>${identifier}</BuyerTaxIdentifier></Transaction>`,
+        ),
+      ).orders[0]!.taxIdentifiers;
+    expect(inTransaction("<Type>CODICE_FISCALE</Type>")).toMatchObject({
+      verification: "error",
+      availability: "not_included",
+      values: [],
+    });
+    expect(inTransaction("<Type>CODICE_FISCALE</Type><ID>SINTETICO</ID>")).toMatchObject({
+      verification: "completed",
+      availability: "present",
+      values: [{ type: "CODICE_FISCALE", value: "SINTETICO" }],
+    });
+  });
+
+  it("distingue ordine Trading assente, assenza del campo e risposta fiscale malformata", async () => {
+    const read = async (block: string) => {
+      const results = await readTradingTaxObservations(
+        access(
+          async () =>
+            new Response(
+              `<GetOrdersResponse><Ack>Success</Ack><OrderArray>${block}</OrderArray></GetOrdersResponse>`,
+            ),
+        ),
+        ["ordine"],
+      );
+      expect([...results.keys()]).toEqual(["ordine"]);
+      return results.get("ordine");
+    };
+    // L'errore di un ordine arriva come esito di quell'ordine, senza far fallire il lotto.
+    const invalid = async (block: string) => {
+      const result = await read(block);
+      expect(result).toBeInstanceOf(UpstreamError);
+      expect(result).toMatchObject({ failure: "invalid_response" });
+    };
+    expect(await read("")).toEqual({ orderFound: false, values: [] });
+    expect(await read("<Order><OrderID>ordine</OrderID></Order>")).toEqual({
+      orderFound: true,
+      values: [],
+    });
+    // L'identificativo di un altro ordine della risposta non passa a quello richiesto.
+    expect(
+      await read(
+        "<Order><OrderID>ordine</OrderID></Order>" +
+          "<Order><OrderID>altro</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID><Type>VAT_ID</Type></BuyerTaxIdentifier></Order>",
+      ),
+    ).toEqual({ orderFound: true, values: [] });
+    expect(
+      await read(
+        "<Order><OrderID>ordine</OrderID><EIASToken>buyer-stabile</EIASToken><TransactionArray><Transaction><EIASToken>estraneo</EIASToken></Transaction></TransactionArray></Order>",
+      ),
+    ).toMatchObject({ buyerEiasToken: "buyer-stabile" });
+    expect(
+      await read(
+        "<Order><OrderID>ordine</OrderID><CheckoutStatus>\n<LastModifiedTime>2026-09-10T12:00:00Z</LastModifiedTime>\n</CheckoutStatus></Order>",
+      ),
+    ).toMatchObject({ lastModifiedTime: "2026-09-10T12:00:00.000Z" });
+    for (const date of ["12", "non-data", "2026-09-10T12:00:00"]) {
+      await invalid(
+        `<Order><OrderID>ordine</OrderID><CheckoutStatus><LastModifiedTime>${date}</LastModifiedTime></CheckoutStatus></Order>`,
+      );
+    }
+    await invalid(
+      "<Order><OrderID>ordine</OrderID><BuyerTaxIdentifier><ID>SINTETICO</ID></BuyerTaxIdentifier></Order>",
+    );
+    await invalid("<Order><OrderID>ordine</OrderID></Order>".repeat(2));
+    // Il valore si decodifica una volta sola e il Paese emittente assente resta nullo.
+    expect(
+      await read(
+        "<Order><OrderID>ordine</OrderID><BuyerTaxIdentifier><Type>CODICE_FISCALE</Type><ID>SYNTHETIC&amp;amp;ID</ID></BuyerTaxIdentifier></Order>",
+      ),
+    ).toEqual({
+      orderFound: true,
+      values: [
+        {
+          type: "CODICE_FISCALE",
+          issuingCountry: null,
+          value: "SYNTHETIC&amp;ID",
+          source: "ebay_trading_get_orders",
+        },
+      ],
+    });
+    await expect(
+      readTradingTaxObservations(access(trading(ack("<Ack>Failure</Ack>"))), ["ordine"]),
+    ).rejects.toThrow(UpstreamError);
+  });
+
+  it("mappa la fonte fiscale Trading senza inventare il Paese emittente", () => {
+    expect(
+      mapTradingTaxIdentifiers([
+        { id: "SYNTHETIC-ID", type: "CODICE_FISCALE" },
+        {
+          id: "SYNTHETIC-VAT",
+          type: "VAT_ID",
+          attributes: [{ name: "IssuingCountry", value: "IT" }],
+        },
+      ]),
+    ).toEqual([
+      {
+        type: "CODICE_FISCALE",
+        issuingCountry: null,
+        value: "SYNTHETIC-ID",
+        source: "ebay_trading_get_orders",
+      },
+      {
+        type: "VAT_ID",
+        issuingCountry: "IT",
+        value: "SYNTHETIC-VAT",
+        source: "ebay_trading_get_orders",
+      },
+    ]);
+  });
+});
+
+describe("ambiente eBay", () => {
+  const sandbox = {
+    APP_ORIGIN: "https://test.fiscalbay.it",
+    EBAY_CLIENT_ID: "sintetico",
+    EBAY_CLIENT_SECRET: "sintetico",
+    EBAY_RUNAME: "sintetico",
+    EBAY_SANDBOX_ENABLED: "true",
+    EBAY_SANDBOX_CLIENT_ID: "client",
+    EBAY_SANDBOX_CLIENT_SECRET: "secret",
+    EBAY_SANDBOX_RUNAME: "runame",
+  };
+
+  it.each([
+    "https://test.fiscalbay.it",
+    "http://localhost:5173",
+    "http://127.0.0.1:8787",
+    "http://[::1]:8787",
+  ])("abilita Sandbox sull'origine di test o locale %s", (origin) => {
+    expect(sandboxAvailable({ ...sandbox, APP_ORIGIN: origin })).toBe(true);
+  });
+
+  it.each([
+    ["interruttore spento", { EBAY_SANDBOX_ENABLED: "false" }],
+    ["interruttore assente", { EBAY_SANDBOX_ENABLED: undefined }],
+    ["client id assente", { EBAY_SANDBOX_CLIENT_ID: undefined }],
+    ["segreto assente", { EBAY_SANDBOX_CLIENT_SECRET: undefined }],
+    ["RuName assente", { EBAY_SANDBOX_RUNAME: undefined }],
+    ["dominio Production", { APP_ORIGIN: "https://fiscalbay.it" }],
+  ])("tiene spento Sandbox con %s", (_, override) => {
+    expect(sandboxAvailable({ ...sandbox, ...override })).toBe(false);
+  });
+
+  it("accetta un link relativo o assoluto sotto il percorso atteso", () => {
+    const path = "/sell/fulfillment/v1/order";
+    expect(ebayApiUrl(configuration, `${path}?offset=50`, path).href).toBe(
+      `https://api.ebay.com${path}?offset=50`,
+    );
+    expect(ebayApiUrl(configuration, `https://api.ebay.com${path}/1-2`, path).pathname).toBe(
+      `${path}/1-2`,
+    );
+  });
+
+  /** Link dell'API con credenziali nell'URL. */
+  const withCredentials = (credentials: Partial<Pick<URL, "username" | "password">>) =>
+    Object.assign(new URL("https://api.ebay.com/sell/fulfillment/v1/order"), credentials).href;
+
+  it.each([
+    "http://[",
+    "http://api.ebay.com/sell/fulfillment/v1/order",
+    "https://api.sandbox.ebay.com/sell/fulfillment/v1/order",
+    withCredentials({ username: "utente", password: "segreto" }),
+    withCredentials({ password: "segreto" }),
+    "/sell/fulfillment/v1/orders",
+  ])("rifiuta il link %s prima di inviare il token", (value) => {
+    expect(() => ebayApiUrl(configuration, value, "/sell/fulfillment/v1/order")).toThrow(
+      expect.objectContaining({ failure: "invalid_response" }),
+    );
   });
 });
 

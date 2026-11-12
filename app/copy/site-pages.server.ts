@@ -250,7 +250,7 @@ const it = {
       },
       {
         title: "Dati nell’Unione Europea",
-        body: "Ordini, Codici Fiscali, Partite IVA e file esportati restano su server Cloudflare nell’Unione Europea. Pagamenti, assistenza e Telegram seguono i fornitori indicati nell’Informativa privacy.",
+        body: "Ordini, Codici Fiscali, Partite IVA e file esportati restano sui server del nostro fornitore di hosting nell’Unione Europea. Pagamenti, assistenza e Telegram seguono i fornitori indicati nell’Informativa privacy.",
       },
       {
         title: "Accesso protetto",
@@ -277,7 +277,7 @@ const it = {
       },
       {
         title: "Accesso all’account",
-        body: "Accedi con passkey, Google, eBay oppure email e password. Per collegare un negozio serve l’indirizzo email confermato. In Impostazioni, Sicurezza, vedi le sessioni attive e chiudi quelle che non riconosci.",
+        body: "Accedi con passkey, Google, eBay oppure email e password. Per collegare un negozio serve l’indirizzo email confermato. In Impostazioni › Account vedi le sessioni attive e chiudi quelle che non riconosci.",
       },
     ],
     notTitle: "Cosa non facciamo",
@@ -357,7 +357,7 @@ const it = {
       },
       {
         q: "Dove sono conservati i dati?",
-        a: "Ordini, Codici Fiscali, Partite IVA e file esportati sono conservati su server Cloudflare nell’Unione Europea. Pagamenti, assistenza e Telegram seguono i fornitori indicati nell’Informativa privacy. Quando elimini un negozio o l’account, i suoi dati vengono cancellati, salvo i pochi dati minimi indicati nell’Informativa privacy.",
+        a: "Ordini, Codici Fiscali, Partite IVA e file esportati sono conservati sui server del nostro fornitore di hosting nell’Unione Europea. Pagamenti, assistenza e Telegram seguono i fornitori indicati nell’Informativa privacy. Quando elimini un negozio o l’account, i suoi dati vengono cancellati, salvo i pochi dati minimi indicati nell’Informativa privacy.",
       },
     ],
     more: "Non trovi la risposta?",
@@ -609,7 +609,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "Data in the European Union",
-        body: "Orders, tax codes (Codici Fiscali), VAT numbers (Partite IVA) and exported files stay on Cloudflare servers in the European Union. Payments, support and Telegram follow the providers listed in the Privacy policy.",
+        body: "Orders, tax codes (Codici Fiscali), VAT numbers (Partite IVA) and exported files stay on our hosting provider’s servers in the European Union. Payments, support and Telegram follow the providers listed in the Privacy policy.",
       },
       {
         title: "Protected sign-in",
@@ -636,7 +636,7 @@ const en: SitePagesCopy = {
       },
       {
         title: "Signing in",
-        body: "Sign in with a passkey, Google, eBay or email and password. Connecting a store requires a confirmed email address. In Settings, Security, you see your active sessions and close the ones you do not recognise.",
+        body: "Sign in with a passkey, Google, eBay or email and password. Connecting a store requires a confirmed email address. In Settings › Account you see your active sessions and close the ones you do not recognise.",
       },
     ],
     notTitle: "What we don’t do",
@@ -715,7 +715,7 @@ const en: SitePagesCopy = {
       },
       {
         q: "Where is the data stored?",
-        a: "Orders, tax codes, VAT numbers and exported files are stored on Cloudflare servers in the European Union. Payments, support and Telegram follow the providers listed in the Privacy policy. When you delete a store or your account, its data is erased, except for the minimal data listed in the Privacy policy.",
+        a: "Orders, tax codes, VAT numbers and exported files are stored on our hosting provider’s servers in the European Union. Payments, support and Telegram follow the providers listed in the Privacy policy. When you delete a store or your account, its data is erased, except for the minimal data listed in the Privacy policy.",
       },
     ],
     more: "Can’t find the answer?",

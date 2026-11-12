@@ -220,12 +220,13 @@ export async function loadSection(section: AdminSection, item: string | undefine
         ...(await listAllStores(env.DB, { query, problems, offset }, now)),
       } as const;
     }
-    case "lavori":
-      return {
-        section,
-        tasks: await taskStates(env.DB, now),
-        receipts: await receiptStates(env.DB, now),
-      } as const;
+    case "lavori": {
+      const [tasks, receipts] = await Promise.all([
+        taskStates(env.DB, now),
+        receiptStates(env.DB, now),
+      ]);
+      return { section, tasks, receipts } as const;
+    }
     case "quote": {
       const quotas = await readEbayQuotas(env, fetch, now);
       const [anomalies, bulk] = await Promise.all([

@@ -84,7 +84,7 @@ function AnomalyAction({ anomaly }: { anomaly: Anomaly }) {
   return null;
 }
 
-export function AnomalyList({ anomalies }: { anomalies: Anomaly[] }) {
+function AnomalyList({ anomalies }: { anomalies: Anomaly[] }) {
   const { t, href, date } = useAdmin();
   return (
     <ul className="grid gap-3">

@@ -623,7 +623,6 @@ export default function SignIn({ loaderData, actionData }: Route.ComponentProps)
             label={t.language}
             current={language}
             hrefFor={(code) => localizedPath(code, accessPath)}
-            reloadDocument
           />
         </header>
         <div

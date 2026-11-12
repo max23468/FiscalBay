@@ -29,6 +29,7 @@ import {
   sentTexts,
   keyboard,
   failure,
+  rateLimited,
   tap,
   receipt,
   callbackId,
@@ -101,11 +102,7 @@ describe("comandi e pulsanti del bot", () => {
   it("scollega la chat con due tocchi e annulla le consegne in attesa", async () => {
     const seller = await linked("scollega");
     await order(seller.store, "o-scollega", { cf: "RSSMRA80A01H501U" });
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
-        : undefined,
-    );
+    const limited = rateLimited(600);
     await run(limited.fetcher, 10);
     const gen = await generation(seller.workspace);
     const api = bot();
@@ -182,22 +179,15 @@ describe("comandi e pulsanti del bot", () => {
     ]);
   });
 
-  it("l'aiuto presenta i comandi con le loro icone, nelle due lingue", async () => {
+  it("riconosce /help come alias dell'aiuto", async () => {
+    // Il testo completo dell'aiuto nelle due lingue è verificato con le altre risposte del bot.
     const seller = await linked("aiuto");
-    const api = bot();
-    await deliver("/aiuto", seller.chat, api.fetcher);
-    expect(sentTexts(api)[0]).toBe(
-      [
-        "👋 <b>FiscalBay</b>\nQui arrivano le notifiche degli ordini, secondo le preferenze delle Impostazioni.",
-        "⭐ /stato · piano, notifiche e negozi\n🛒 /ultimi · gli ultimi ordini\n⚙️ /preferenze · pausa, filtro, frequenza e negozi",
-        "<i>Ricerca, sblocco ed esportazione restano sul sito.</i>",
-      ].join("\n\n"),
-    );
     await env.DB.prepare("UPDATE telegram_links SET language = 'en' WHERE workspace_id = ?")
       .bind(seller.workspace)
       .run();
+    const api = bot();
     await deliver("/help", seller.chat, api.fetcher, later(1));
-    expect(sentTexts(api)[1]).toContain("🛒 /latest · the latest orders");
+    expect(sentTexts(api)[0]).toContain("🛒 /latest · the latest orders");
   });
 
   it("senza Pro lo stato dice Free e le preferenze rimandano al piano", async () => {
@@ -261,6 +251,18 @@ describe("comandi e pulsanti del bot", () => {
     const receipts = () =>
       env.DB.prepare("SELECT count(*) AS n FROM webhook_receipts WHERE object_id = '778'").first();
     expect(await receipts()).toEqual({ n: 20 });
+    // Un comando oltre il limite riceve comunque 204, senza ricevuta né coda.
+    expect(
+      (
+        await receiveWebhook(
+          webhook(update("/aiuto", 778)),
+          environment,
+          api.fetcher,
+          new Date(now),
+        )
+      )?.status,
+    ).toBe(204);
+    expect(await receipts()).toEqual({ n: 20 });
     await tap("abcdefgh:pr", 778, api.fetcher);
     expect(send).not.toHaveBeenCalled();
     expect(await receipts()).toEqual({ n: 20 });
@@ -269,16 +271,11 @@ describe("comandi e pulsanti del bot", () => {
     ]);
   });
 
-  it("riconosce i comandi del menu, limita gli aggiornamenti per chat e configura il menu", async () => {
+  it("riconosce i comandi del menu e configura il menu", async () => {
     const parse = (text: string) => verifyTelegramUpdate(JSON.stringify(update(text)), secret, env);
     expect(parse("/stato")).toMatchObject({ kind: "command", command: "status" });
     expect(parse("/latest@FiscalBayTestBot")).toMatchObject({ kind: "command", command: "latest" });
     expect(parse("/stato ora")).toBeNull();
-    for (let index = 0; index < 20; index++)
-      await receiveWebhook(webhook(update("/aiuto", 777)), environment);
-    send.mockClear();
-    expect((await receiveWebhook(webhook(update("/aiuto", 777)), environment))?.status).toBe(204);
-    expect(send).not.toHaveBeenCalled();
     const api = bot();
     await configureBotCommands(environment, api.fetcher);
     // I comandi lasciati da BotFather nell'ambito predefinito si eliminano a ogni riallineamento.

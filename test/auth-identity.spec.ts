@@ -557,6 +557,38 @@ describe("Collegamento e modifica dell'identità", () => {
     }
   });
 
+  it("l'avviso di sicurezza usa la lingua scelta nelle preferenze, poi quella dei Termini", async () => {
+    const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
+    try {
+      // Registrato in italiano, poi passato all'inglese dalle preferenze.
+      const user = await signUp(env, "avviso.lingua@example.invalid", true);
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      send.mockClear();
+      await env.DB.batch([
+        env.DB.prepare(
+          `INSERT INTO "passkey" ("id", "publicKey", "userId", "credentialID", "counter", "deviceType", "backedUp")
+           VALUES ('passkey-lingua', 'synthetic', ?, 'passkey-lingua', 0, 'singleDevice', 0)`,
+        ).bind(user.id),
+        env.DB.prepare(
+          "INSERT INTO user_preferences (user_id, language, updated_at) VALUES (?, 'en', ?)",
+        ).bind(user.id, new Date().toISOString()),
+      ]);
+      const removed = await securityAction(user.cookie, {
+        intent: "rimuovi-metodo",
+        metodo: "password",
+      });
+      expect(removed.headers.get("location")).toContain("metodo-rimosso");
+      await vi.waitFor(() => expect(send).toHaveBeenCalledOnce());
+      expect(send.mock.calls[0]![0]).toMatchObject({
+        to: "avviso.lingua@example.invalid",
+        subject: "Sign-in method removed from FiscalBay",
+        html: expect.stringContaining('<html lang="en">'),
+      });
+    } finally {
+      send.mockRestore();
+    }
+  });
+
   it("cambia l'email con la conferma del vecchio e del nuovo indirizzo", async () => {
     // Le azioni dell'app usano il binding email dell'ambiente del Worker.
     const send = vi.spyOn(env.AUTH_EMAIL, "send").mockResolvedValue({ messageId: "synthetic" });
@@ -604,7 +636,7 @@ describe("Collegamento e modifica dell'identità", () => {
     await follow(link(1));
     // Stesso utente, quindi stessi spazi, negozi e piani: cambia soltanto l'indirizzo.
     expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
-    // La conferma elimina subito lo stato temporaneo, prima della pulizia eseguita da un loader.
+    // La conferma elimina subito lo stato temporaneo, senza attendere la manutenzione.
     expect(
       await env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?")
         .bind(user.id)
@@ -636,12 +668,20 @@ describe("Collegamento e modifica dell'identità", () => {
       stage: "current",
     });
     expect(await stored()).toEqual({ email: "email.nuova@example.invalid", emailVerified: 1 });
-    await purgeExpiredRecords(env.DB, new Date(Date.now() + 3_600_001));
+    // Una richiesta scaduta, o nata da un indirizzo che non è più quello di accesso, non vale
+    // più anche se la riga resta fino alla manutenzione.
+    const expired = new Date(Date.now() + 3_600_001);
+    const row = () =>
+      env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?").bind(user.id).first();
     expect(
-      await env.DB.prepare("SELECT 1 FROM account_email_changes WHERE user_id = ?")
-        .bind(user.id)
-        .first(),
+      await pendingEmailChange(env.DB, user.id, "email.precedente@example.invalid"),
     ).toBeNull();
+    expect(
+      await pendingEmailChange(env.DB, user.id, "email.nuova@example.invalid", expired),
+    ).toBeNull();
+    expect(await row()).not.toBeNull();
+    await purgeExpiredRecords(env.DB, expired);
+    expect(await row()).toBeNull();
     send.mockRestore();
   });
 });

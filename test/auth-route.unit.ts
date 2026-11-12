@@ -53,7 +53,10 @@ vi.mock("../app/auth.server", () => ({
   }),
   readSession: (_env: Env, request: Request) => services.session({ headers: request.headers }),
 }));
-vi.mock("../app/domain/registration.server", () => ({ registrationStatus: services.registration }));
+vi.mock("../app/domain/registration.server", async (original) => ({
+  ...(await original<typeof import("../app/domain/registration.server")>()),
+  registrationStatus: services.registration,
+}));
 vi.mock("../app/integrations/ebay/store-link.server", () => ({
   claimStoreLinkSession: services.claim,
   recordStoreLinkOutcome: services.record,
@@ -137,6 +140,7 @@ describe("confine HTTP Auth", () => {
     "list-sessions",
     "update-session",
     "verify-password",
+    "change-password",
     "sign-up/email",
     "request-password-reset",
     "send-verification-email",
@@ -218,7 +222,7 @@ describe("confine HTTP Auth", () => {
         if (condition === "fresh") session.session.createdAt = new Date(now - 86400_000);
         services.session.mockResolvedValue(session);
         services.registration.mockResolvedValue({
-          profile: condition !== "profile",
+          profile: condition === "profile" ? null : true,
           termsAccepted: condition !== "terms",
         });
         expect((await handle(url)).status).toBe(403);
@@ -385,13 +389,11 @@ describe("limiti dei tentativi", () => {
   it.each([
     ["/sign-in/email", 10],
     ["/sign-up/email", 10],
-    ["/change-password", 10],
     ["/change-email", 10],
     ["/passkey/verify-authentication", 10],
     ["/passkey/verify-registration", 10],
     ["/send-verification-email", 60],
     ["/request-password-reset", 60],
-    ["/forget-password", 60],
     ["/email-otp/verify-email", 10],
   ])(
     "limita %s per IP e riapre la finestra a %i secondi senza scrivere su D1",
@@ -601,6 +603,31 @@ describe("limiti dei tentativi", () => {
       expect(json.status).toBe(202);
     },
   );
+
+  it("l'accesso diretto conta gli errori e si rifiuta quando il modulo chiederebbe Turnstile", async () => {
+    const send = (ip = "198.51.100.9", method = "POST") =>
+      handle("/api/auth/sign-in/email", {
+        method,
+        headers: { "cf-connecting-ip": ip, "content-type": "application/json" },
+        ...(method === "POST"
+          ? { body: JSON.stringify({ email: "vittima@example.invalid", password: "tentativo" }) }
+          : {}),
+      });
+    services.handler.mockImplementation(async () => new Response(null, { status: 401 }));
+    // Soltanto l'accesso con password conta gli errori, non altri metodi sullo stesso percorso.
+    for (let count = 0; count < 3; count++) expect((await send(undefined, "GET")).status).toBe(401);
+    for (let count = 0; count < 3; count++) expect((await send()).status).toBe(401);
+    // Oltre la finestra del limite per IP resta la soglia degli errori, che dura 15 minuti.
+    vi.setSystemTime(now + 10_000);
+    services.handler.mockClear();
+    const blocked = await send();
+    expect(blocked.status).toBe(429);
+    expect(blocked.headers.get("retry-after")).toBe("890");
+    expect(services.handler).not.toHaveBeenCalled();
+    // Gli errori di un IP non chiedono la sfida a un altro.
+    expect((await send("198.51.100.10")).status).toBe(401);
+    expect(services.handler).toHaveBeenCalledOnce();
+  });
 
   it("le pagine trasmettono l'attesa dell'action oltre a no-store", () => {
     expect(pageHeaders({ actionHeaders: new Headers(limitedHeaders(60)) })).toEqual({

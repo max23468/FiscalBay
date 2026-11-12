@@ -145,7 +145,7 @@ export function monthlyProjection(costs, model = referenceModel) {
     turns * idle[key] +
     newOrders * perOrder(key) +
     visits.reduce((total, [cost, count]) => total + cost[key] * count, 0);
-  // Negozi accodati per turno del cron: i Premium a ogni turno, i Free a uno su tre.
+  // Negozi accodati per turno del cron: i Pro a ogni turno, i Free a uno su tre.
   const dispatched = model.premiumStores + model.freeStores / 3;
   // Messaggi della coda: gruppi del cron, un turno per periodo di ogni compito e, come limite
   // superiore, una notifica eBay per ogni ordine nuovo.
@@ -399,7 +399,7 @@ async function measureLatency({ prebuilt }) {
   }
 }
 
-/** Spazi misurati: il grande con tre negozi, un Premium e un Free con un negozio. */
+/** Spazi misurati: il grande con tre negozi, un Pro e un Free con un negozio. */
 const measuredWorkspaces = {
   large: largeWorkspace,
   premium: workspaceId(0),
@@ -696,7 +696,9 @@ async function main() {
   });
   const [step] = positionals;
   if (step === "account") {
-    console.log(JSON.stringify(await readAccount(Number(values.days)), null, 2));
+    const days = Number(values.days);
+    if (!Number.isInteger(days) || days < 1) throw new Error("--days intero positivo");
+    console.log(JSON.stringify(await readAccount(days), null, 2));
     return;
   }
   if (step === "remote-clean") {

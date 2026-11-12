@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it, vi } from "vitest";
 
 import { appCopy } from "../app/app-copy";
+import { appVersion } from "../app/domain/support.server";
 import {
   loadScenario,
   previewLifetime,
@@ -336,9 +337,10 @@ describe("stato sintetico dell'anteprima", () => {
           ? ["Safari su macOS", "Safari su iPhone", "Chrome su Windows"]
           : ["Safari on macOS", "Safari on iPhone", "Chrome on Windows"],
       );
-      expect(scenario.diagnostics.version).toBe(
-        language === "it" ? "2.0.0 (anteprima)" : "2.0.0 (preview)",
-      );
+      // Senza una versione distribuita, come nelle prove, resta il solo segno dell'anteprima.
+      const label = language === "it" ? "anteprima" : "preview";
+      const version = appVersion(env);
+      expect(scenario.diagnostics.version).toBe(version ? `${version} (${label})` : label);
       const t = appCopy[language];
       for (const text of [t.settings.support.faqItems[1]!.a, t.orders.quotaBody("date")]) {
         expect(text).toMatch(language === "it" ? /Codice Fiscale/u : /tax code/iu);
@@ -817,13 +819,12 @@ describe("cancellazione dell'account nell'anteprima", () => {
   });
 
   it("nello scenario della cancellazione in corso l'area non mostra schermate", async () => {
-    const { loader } = await import("../app/routes/preview");
-    const deleting = await routeData(loader, "/anteprima/ordini", {
+    const deleting = await routeData(previewRoot, "/anteprima/ordini", {
       cookie: await cookieFor("cancellazione-in-corso"),
     });
     expect(deleting).toMatchObject({ scenario: "cancellazione-in-corso", deleting: true });
     expect(
-      await routeData(loader, "/anteprima/ordini", { cookie: await cookieFor("ordinario") }),
+      await routeData(previewRoot, "/anteprima/ordini", { cookie: await cookieFor("ordinario") }),
     ).toMatchObject({ deleting: false });
   });
 });

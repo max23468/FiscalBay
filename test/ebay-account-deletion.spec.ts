@@ -79,7 +79,6 @@ const requestId = async () =>
 
 beforeEach(async () => {
   await resetDatabase();
-  vi.clearAllMocks();
   send.mockResolvedValue(queued);
   const markHash = await storeIdentityHash(env.BETTER_AUTH_SECRET, "seller-x");
   await env.DB.batch([
@@ -301,7 +300,7 @@ it("lavora a lotti, ripartendo dalla coda, e una richiesta occupata non si esegu
   expect(await runEbayAccountDeletion(environment, id, at)).toBe("busy");
   expect(await runEbayAccountDeletion(environment, "missing-request", at)).toBe("missing");
 
-  // Dalla coda: «more» si riaccoda, un errore riprova e dopo tre consegne passa al compito.
+  // Dalla coda: un lavoro concluso si conferma, un errore riprova e dopo tre consegne passa al compito.
   await env.DB.prepare("UPDATE ebay_account_deletions SET locked_until = NULL").run();
   const message = queueMessage({ ebayAccountDeletion: id });
   await consumeEbayAccountDeletion(message, environment, at);
@@ -322,7 +321,7 @@ it("lavora a lotti, ripartendo dalla coda, e una richiesta occupata non si esegu
   expect(last.ack).toHaveBeenCalledOnce();
 });
 
-it("il consumer riaccoda il lavoro che supera il budget", async () => {
+it("un giro del consumer elimina oltre un lotto di ordini senza riaccodare", async () => {
   await env.DB.batch(
     Array.from(
       { length: 201 },

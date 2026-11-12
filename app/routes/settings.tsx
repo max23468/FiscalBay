@@ -85,15 +85,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
   const area = await requireAccountArea(request);
   const { language, session, account, profile, preferences } = area;
   if (sezione !== undefined && !isSettingsSection(sezione)) {
-    return data(
-      {
-        notFound: true as const,
-        language,
-        userId: session.user.id,
-        account,
-      },
-      { status: 404 },
-    );
+    return data({ notFound: true as const }, { status: 404 });
   }
   const userId = session.user.id;
   const now = new Date();
@@ -189,13 +181,7 @@ async function readSettings({ request, params }: Route.LoaderArgs) {
     exportFiles,
     now: now.toISOString(),
   };
-  return {
-    notFound: false as const,
-    language,
-    userId,
-    account,
-    page,
-  };
+  return { notFound: false as const, page };
 }
 
 /**

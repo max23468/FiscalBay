@@ -6,7 +6,6 @@
  * settimana la matrice gira per intero. Modifiche che non si riconducono a un'area provano tutto.
  * Uso: REPOSITORY=<owner/repo> REPOSITORY_ID=<id> node scripts/pages-reuse.mjs
  */
-import { execFileSync } from "node:child_process";
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -21,14 +20,7 @@ import {
   undeclaredModules,
 } from "./classify-changes.mjs";
 import { importGraph } from "./verify-repo.mjs";
-import { ghJson, git, isAncestor } from "./lib/provider.mjs";
-
-/** Aree riusabili dal piano delle modifiche: tutte tranne quelle toccate, oppure nessuna. */
-export function reusableAreas(selected) {
-  if (!selected.e2e) return areaTags;
-  if (selected.browserGrep === "." || selected.matrix || !selected.areas.length) return [];
-  return areaTags.filter((area) => !selected.areas.includes(area));
-}
+import { ghJson, git, isAncestor, readRunArtifact } from "./lib/provider.mjs";
 
 /** Espressione delle visite da saltare. */
 export const skippedPages = (areas) =>
@@ -156,13 +148,19 @@ function main() {
     "api",
     `repos/${repository}/actions/artifacts?name=pages-full&per_page=30`,
   );
+  // Una lettura per run: la scelta dell'artefatto ripete la domanda sulle stesse run.
+  const verdicts = new Map();
   const qualified = (id) => {
-    const run = ghJson("api", `repos/${repository}/actions/runs/${id}`);
-    return (
-      run.path === ".github/workflows/candidate.yml" &&
-      run.head_branch === "develop" &&
-      run.conclusion === "success"
-    );
+    if (!verdicts.has(id)) {
+      const run = ghJson("api", `repos/${repository}/actions/runs/${id}`);
+      verdicts.set(
+        id,
+        run.path === ".github/workflows/candidate.yml" &&
+          run.head_branch === "develop" &&
+          run.conclusion === "success",
+      );
+    }
+    return verdicts.get(id);
   };
   const base = lastFullQualification(artifacts, repositoryId, isAncestor, qualified);
   let skip = "";
@@ -171,23 +169,16 @@ function main() {
       (entry) =>
         entry.workflow_run.head_sha === base && !entry.expired && qualified(entry.workflow_run.id),
     );
-    const directory = path.join(process.env.RUNNER_TEMP ?? "/tmp", `page-coverage-${artifact.id}`);
-    execFileSync(
-      "gh",
-      [
-        "run",
-        "download",
-        String(artifact.workflow_run.id),
-        "--repo",
-        repository,
-        "--name",
-        "pages-full",
-        "--dir",
-        directory,
-      ],
-      { stdio: "inherit" },
+    const previous = readRunArtifact(
+      repository,
+      artifact.workflow_run.id,
+      { name: "pages-full" },
+      (directory) => JSON.parse(readFileSync(path.join(directory, "pages-full.json"), "utf8")),
     );
-    const previous = JSON.parse(readFileSync(path.join(directory, "pages-full.json"), "utf8"));
+    if (!previous)
+      throw new Error(
+        `Copertura delle pagine della run ${artifact.workflow_run.id} non scaricabile o illeggibile.`,
+      );
     if (previous.sha !== base) throw new Error("Copertura delle pagine di un altro commit.");
     if (!previous.environments?.includes("test") || !previous.environments.includes("production"))
       throw new Error("Copertura delle pagine senza entrambi gli ambienti qualificati.");

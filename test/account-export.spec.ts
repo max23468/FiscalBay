@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 
 import { action as settingsAction } from "../app/routes/settings";
 
-import { insertEntitlement, now } from "./fixtures/database-fixtures";
+import { insertEntitlement, insertSubscription, now } from "./fixtures/database-fixtures";
 
 import { callRoute } from "./fixtures/route-fixtures";
 
@@ -29,13 +29,12 @@ it("lo ZIP dell'account in inglese scrive le date nel fuso dell'utente, senza cl
       `INSERT INTO user_preferences (user_id, time_zone, updated_at) VALUES (?1, 'America/New_York', ?2)
          ON CONFLICT (user_id) DO UPDATE SET time_zone = excluded.time_zone`,
     ).bind(userId, now),
-    env.DB.prepare(
-      `INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id, offer,
-           price_generation, status, current_period_start, current_period_end,
-           cancel_at_period_end, synced_at, checked_at)
-         VALUES ('sub_segreto', 'w-a', 'test', 'cus_segreto', 'monthly', 'g-segreta', 'active',
-                 ?1, ?2, 0, ?1, ?1)`,
-    ).bind(now, hours(24 * 30)),
+    insertSubscription({
+      id: "sub_segreto",
+      customerId: "cus_segreto",
+      generation: "g-segreta",
+      periodEnd: hours(24 * 30),
+    }),
     env.DB.prepare(
       `INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at,
            stripe_invoice_id, amount_paid, currency, paid_at)

@@ -120,7 +120,7 @@ export async function linked(name: string, chat = 601) {
   return { ...seller, chat };
 }
 
-export const buyer = JSON.stringify({
+const buyer = JSON.stringify({
   username: "compratore",
   name: "Mario Rossi",
   email: "mario@example.invalid",
@@ -226,6 +226,7 @@ export async function logged(action: () => Promise<unknown>) {
   }
 }
 
+/** Tocco su un pulsante di un messaggio del bot, dall'ingresso alla coda. */
 export async function tap(data: string, chat: number, fetcher: typeof fetch, at = new Date(now)) {
   send.mockClear();
   const body = {

@@ -11,8 +11,8 @@ import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { needsDeploy } from "./classify-changes.mjs";
-import { ghJson, isAncestor } from "./lib/provider.mjs";
-import { publicVersion, publicationRecord, receiptActive } from "./release/records.mjs";
+import { ghJson, isAncestor, runJobs } from "./lib/provider.mjs";
+import { publicVersion, publicationRecord } from "./release/records.mjs";
 
 /** Prima run, dalla più recente, con il job di deploy test riuscito su un antenato di HEAD. */
 export function lastDeployRun(runs, jobsOf, isAncestor) {
@@ -49,14 +49,6 @@ export function comparisonBase(runs, jobsOf, isAncestor, needsDeployFrom) {
   return deployed;
 }
 
-/**
- * La ricevuta della versione osservata identifica il commit, indipendentemente dall'esito
- * dell'intero workflow e dai ritiri delle versioni successive.
- */
-export function lastPublished(receipts, version) {
-  return receipts.map((receipt) => receiptActive(receipt, version)).find(Boolean)?.sha;
-}
-
 /** La versione osservata sul dominio sceglie la ricevuta, anche dopo un rollback. */
 export async function publishedCommit(
   repository,
@@ -84,7 +76,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   ).workflow_runs.filter(({ id }) => String(id) !== process.env.GITHUB_RUN_ID);
   const sha = comparisonBase(
     runs,
-    (run) => api(`repos/${repository}/actions/runs/${run.id}/jobs?per_page=50`).jobs,
+    // Tutte le pagine: oltre i 50 job quello di deploy test può stare nella seconda.
+    (run) => runJobs(repository, run.id),
     isAncestor,
     needsDeploy,
   );

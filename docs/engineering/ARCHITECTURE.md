@@ -19,7 +19,7 @@ React Router / job / endpoint necessari
        Cloudflare: Workers / D1 / Queues
 ```
 
-Dominio privo di accessi provider disseminati; modulo dedicato per eBay, Stripe, Telegram, email e persistenza. L'assetto è quello scelto nella qualifica iniziale; le alternative scartate stanno nel [registro](../decisions/DECISION_REGISTER.md). Un’interfaccia serve se rende un confine testabile, non come framework universale di portabilità. Non nascondere differenze reali tra D1 e PostgreSQL dietro un repository generico; transazioni e invarianti sono qualificati sul motore effettivo.
+Dominio privo di accessi provider disseminati; modulo dedicato per eBay, Stripe, Telegram, email e persistenza. L'assetto è quello scelto nella qualifica iniziale; le alternative scartate stanno nel [registro](../decisions/DECISION_REGISTER.md). Un’interfaccia serve se rende un confine testabile, non come framework universale di portabilità. Non nascondere dietro un repository generico i limiti reali di D1; transazioni e invarianti sono qualificati sul motore effettivo.
 
 | Assetto | Ripartizione | Verifiche decisive |
 |---|---|---|
@@ -31,14 +31,14 @@ Una sola fonte autorevole per responsabilità: niente due database per gli stess
 
 Inventario read-only delle risorse condivise; nessuna migrazione di altri prodotti o modifica di keyset comuni senza mandato. Le alternative scartate restano motivazioni nel registro, non implementazioni di riserva da manutenere.
 
-**Servizi Cloudflare previsti nell'assetto (D166).** La tabella descrive le responsabilità, non attesta che tutti i servizi siano già attivi. Workers/D1, asset statici e domini sono nelle configurazioni applicative; Queues e DLQ sono qualificate sul test. Le integrazioni successive sono qualificate. Risorse e binding applicativi restano separati per test e Production.
+**Servizi Cloudflare dell'assetto (D166).** La tabella descrive le responsabilità; lo stato sul provider si legge dai readback. Workers/D1, asset statici, domini, Queues e DLQ sono nelle configurazioni applicative dei due ambienti. Risorse e binding applicativi restano separati per test e Production.
 
 | Servizio | Uso in FiscalBay |
 |---|---|
 | Workers | Web app, ingresso webhook, consumer delle due code (lavoro e ingressi dei webhook) e lavoro pianificato in un Worker per ambiente; accanto, il Worker del bot Telegram con il token, raggiunto soltanto con un Service binding |
 | Workers Static Assets | Asset della build serviti dalla piattaforma, quelli con l'hash nel nome in cache per un anno (`public/_headers`); download privati e risposte dipendenti dalla sessione restano nel Worker |
 | DNS, TLS e Custom Domains | Zona esistente e domini canonici di [§24](../operations/OPERATIONS.md#s24); Register.it resta registrar, senza trasferimenti o nuovi domini richiesti |
-| Protezioni e report della zona | HSTS/header, WAF/rate limit edge, rilevamento delle credenziali trapelate, DMARC Management e Certificate Transparency secondo [§24](../operations/OPERATIONS.md#s24), qualificati sul test |
+| Protezioni e report della zona | HSTS/header, WAF/rate limit edge, rilevamento delle credenziali trapelate, DMARC Management e Certificate Transparency secondo [§24](../operations/OPERATIONS.md#s24) |
 | Monitor degli avvisi | Query della SQL API valutate da Cloudflare fuori dal Worker per la Production, da `scripts/alert-monitors.mjs`: cron fermo, coda dei falliti, eccezioni, spazio D1 ed email non consegnate ([incidenti](../operations/OBSERVABILITY.md#incidenti)) |
 | D1 (UE) | Unica fonte autorevole di dati applicativi, sessioni, checkpoint, ricevute, contatori per indirizzo e audit |
 | Queues e DLQ (UE) | Consegna, ritardi, retry e dead-letter di eventi e lavori ([§11](../product/ORDERS_AND_SYNC.md#s11)) |

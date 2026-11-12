@@ -13,7 +13,7 @@ import {
   runToEnd,
   claimStepJob,
 } from "./deletion-steps.server";
-import { storeIdentityHash } from "./store-marks.server";
+import { storeIdentity, storeIdentityHash } from "./store-marks.server";
 
 /**
  * Cancellazione richiesta da eBay (Marketplace Account Deletion, §30): eBay la invia per ogni
@@ -34,13 +34,6 @@ export type EbayAccountDeletion = {
   username: string | null;
   eventAt: string;
 };
-
-/**
- * Identità del negozio come la conserva `ebay_stores.ebay_user_id`: l'identificativo eBay in
- * Production, l'ambiente con l'identificativo per la Sandbox.
- */
-const storeIdentity = (environment: EbayEnvironment, userId: string) =>
-  environment === "production" ? userId : JSON.stringify([environment, userId]);
 
 /**
  * Ordini dell'acquirente nell'ambiente: per token eIAS e, per gli ordini che non lo riportano,

@@ -9,10 +9,9 @@ on:
       - "pnpm-lock.yaml"
       - ".github/dependabot.yml"
       - ".github/workflows/dependency-review.yml"
-  workflow_dispatch:
 
 concurrency:
-  group: dependency-review-${{ github.event.pull_request.number || github.ref }}
+  group: dependency-review-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 permissions:

@@ -7,6 +7,7 @@ import {
   checkFixtures,
   checkGateJobs,
   checkImports,
+  checkMigrationNumbers,
   checkPlanCodes,
   checkPrivateAddresses,
   checkSecurityTxt,
@@ -17,6 +18,24 @@ import {
 const milestone = "M" + "3";
 const task = `${milestone}-06`;
 const gate = "G-" + "EBAY";
+
+describe("numeri delle migration", () => {
+  it("rifiuta un numero già usato, tranne quelli già applicati in coppia", () => {
+    const file = (path) => ({ path, text: "" });
+    assert.deepEqual(
+      checkMigrationNumbers([
+        file("migrations/0084_a.sql"),
+        file("migrations/0084_b.sql"),
+        file("migrations/0085_a.sql"),
+      ]),
+      [],
+    );
+    assert.deepEqual(
+      checkMigrationNumbers([file("migrations/0085_a.sql"), file("migrations/0085_b.sql")]),
+      ["migrations/0085_b.sql: numero già usato da migrations/0085_a.sql"],
+    );
+  });
+});
 
 describe("sigle di piano", () => {
   it("ammette le sigle nella documentazione e nelle migration già applicate", () => {

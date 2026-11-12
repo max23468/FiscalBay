@@ -1,4 +1,5 @@
 import { env } from "cloudflare:workers";
+import { getSessionCookie } from "better-auth/cookies";
 import { redirect } from "react-router";
 
 import { createAuth, readSession } from "./auth.server";
@@ -6,7 +7,11 @@ import { pendingVisitWrites, recordActivity } from "./domain/admission.server";
 import { applyFreePlan } from "./domain/free-store.server";
 import { listNotifications } from "./domain/notifications.server";
 import { readPreferences, type Preferences } from "./domain/preferences.server";
-import { registrationStatus, type Profile } from "./domain/registration.server";
+import {
+  registrationComplete,
+  registrationStatus,
+  type Profile,
+} from "./domain/registration.server";
 import { listStores, type StoreStatus } from "./domain/stores.server";
 import { accessPath, environmentOf, environmentParam, ordersPath } from "./app-links";
 import { errorResponse, unavailablePage } from "./error-response";
@@ -33,9 +38,13 @@ export type AccountArea = {
   termsUpdate: boolean;
 };
 
-/** Sessione corrente, misurata nella fase Auth. */
+/**
+ * Sessione corrente, misurata nella fase Auth. Senza il cookie di sessione non c'è nulla da
+ * leggere, come nelle pagine pubbliche: Auth non si inizializza.
+ */
 export async function currentSession(request: Request) {
   return measure("auth", "session", async () => {
+    if (!getSessionCookie(request)) return null;
     const auth = createAuth(env);
     await auth.$context;
     tracePhase(request, "auth-context");
@@ -122,7 +131,7 @@ export async function requireAccountArea(
   const language = languageFromPath(url.pathname);
   const { session, status, preferences } = await readAccount(request);
   tracePhase(request, "registration");
-  const complete = !!status?.profile && status.termsAccepted;
+  const complete = !!status && registrationComplete(status);
   if (!session || !complete || (!session.user.emailVerified && !options.unverified)) {
     throw redirect(
       `${localizedPath(language, session && complete ? ordersPath : accessPath)}${url.search}`,

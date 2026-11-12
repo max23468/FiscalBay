@@ -5,7 +5,7 @@ import { turnstileField } from "../../app/turnstile";
 /** Token prodotto dalle chiavi di prova del sito di Cloudflare. */
 export const testToken = "XXXX.DUMMY.TOKEN.XXXX";
 
-export const siteverifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
+const siteverifyUrl = "https://challenges.cloudflare.com/turnstile/v0/siteverify";
 
 /** Risposta reale di Siteverify con la chiave segreta di prova che accetta sempre. */
 export const testingKeyResult = {

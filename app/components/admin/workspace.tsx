@@ -1,4 +1,5 @@
 import { CirclePause } from "lucide-react";
+import { useId } from "react";
 
 import { StatusBadge } from "~/components/status";
 import type { AuditRow } from "../../domain/admin-audit.server";
@@ -236,6 +237,7 @@ export function WorkspaceView({
   const { t, date, money } = useAdmin();
   const w = t.workspace;
   const fields = { spazio: workspace.id };
+  const seatHint = useId();
   return (
     <>
       <WorkspaceSummary workspace={workspace} now={now} />
@@ -312,9 +314,11 @@ export function WorkspaceView({
                     name="posto"
                     type="number"
                     min={1}
-                    aria-describedby={undefined}
+                    aria-describedby={seatHint}
                   />
-                  <p className="text-sm text-muted-foreground">{w.vacantSeatHint}</p>
+                  <p id={seatHint} className="text-sm text-muted-foreground">
+                    {w.vacantSeatHint}
+                  </p>
                 </>
               ) : null}
             </ActionForm>

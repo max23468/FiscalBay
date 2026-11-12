@@ -37,6 +37,7 @@ import {
   visibleNews,
 } from "./release/release.mjs";
 import { importGraph } from "./verify-repo.mjs";
+import { trackedSources } from "./lib/provider.mjs";
 
 /** Script di package.json eseguito da ciascun livello, dal più leggero. */
 export const levelScripts = {
@@ -120,7 +121,7 @@ const tooling = [
   // Git e gli strumenti di formato e lint lo leggono; build e Worker no.
   /^\.gitignore$/u,
   /^scripts\/.+\.test\.mjs$/u,
-  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|indexnow|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|browser-evidence|release\/(?:release(?:-notes|-cycle)?|guard|notify|records)|lib\/(?:provider|worker|critical-modules))\.mjs$/u,
+  /^scripts\/(?:verify-(?:docs|repo|pages)|classify-changes|benchmark|capacity|coverage-report|mutation(?:-vitest|-reuse)?|find-(?:build|deployed)|reset-test-account|site-screenshots|og-images|agent-guard|stripe-account|telegram-bot|telegram-worker|metrics-query|log-archive|zone-protection|alert-monitors|indexnow|credential-expiries|watch-invocations|ebay-mcp|ebay-notifications|recovery|commercial|go-live|surveillance|pages-reuse|browser-evidence|release\/(?:release(?:-notes|-cycle)?|records)|lib\/(?:provider|worker|critical-modules))\.mjs$/u,
   /^benchmarks\//u,
   /^(?:\.oxfmtrc\.json|\.oxlintrc\.json|knip\.json|stryker\.config\.json|vitest\.(?:benchmark|capacity|mutation)\.config\.ts)$/u,
 ];
@@ -632,25 +633,6 @@ export function needsDeploy(base, head) {
 }
 
 /**
- * Vero se fra due commit nulla cambia per le prove browser: per i file cambiati, valutati per
- * contenuto come nel gate, il classificatore non chiede browser né deploy. Documenti, frammenti
- * senza Novità, strumenti e test unitari non cambiano ciò che le prove browser verificano.
- */
-export function browserUnaffected(base, head) {
-  let files;
-  try {
-    files = lines(git("diff", "--name-only", base, head));
-  } catch {
-    // Un confronto non disponibile non prova nulla: le prove ripartono.
-    return false;
-  }
-  // Senza differenze non c'è nulla da riprovare, anche se il gate proverebbe tutto per prudenza.
-  if (!files.length) return true;
-  const result = plan(files, [], false, committedVersions(files, base, head));
-  return !result.e2e && !result.deploy;
-}
-
-/**
  * Prove browser da ripetere dopo l'ultima run verde della PR (`previous`), con `base` la base del
  * commit provato ora (`head`). Le aree già provate dalla PR e quelle provate dalla base nella propria
  * PR possono rompersi soltanto dove si incontrano: si ripetono le aree dei file che la PR cambia e
@@ -819,9 +801,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
           read: (file) => (existsSync(file) ? readFileSync(file, "utf8") : undefined),
         },
       );
-  const sources = lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
-    .filter((file) => /^(?:app|workers)\/.+\.tsx?$/u.test(file) && existsSync(file))
-    .map((file) => ({ path: file, text: readFileSync(file, "utf8") }));
+  const sources = trackedSources(undefined, { untracked: true });
   const result = plan(files, sources, args.complete, changes);
 
   if (green) console.log(`Confronto con l'ultimo verde locale ${green.slice(0, 12)}.`);
@@ -830,12 +810,7 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   // da un test cambiato; il candidato prova il diff cumulativo.
   const prMutation =
     committed && !args.complete
-      ? prTargets(
-          files,
-          lines(git("ls-files", "--cached", "--others", "--exclude-standard"))
-            .filter((file) => /^(?:app|workers|test)\/.+\.tsx?$/u.test(file) && existsSync(file))
-            .map((file) => ({ path: file, text: readFileSync(file, "utf8") })),
-        )
+      ? prTargets(files, trackedSources(/^(?:app|workers|test)\/.+\.tsx?$/u, { untracked: true }))
       : [];
   // In locale il livello esegue lo script statico; la CI quello completo del livello.
   const summary = `Gate ${result.gate} (\`pnpm ${committed ? result.script : localScripts[result.gate]}\`); browser: ${result.e2e ? `${result.browsers}, grep ${result.browserGrep}` : "no"}; deploy test: ${result.deploy ? "sì" : "no"}; mutation: ${result.mutation.join(", ") || "nessuna"}.`;

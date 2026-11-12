@@ -74,6 +74,7 @@ import {
   deliver,
   link,
   nextUpdateId,
+  rateLimited,
 } from "./fixtures/telegram-scenarios";
 
 beforeEach(async () => {
@@ -626,8 +627,6 @@ describe("testi dei messaggi", () => {
 });
 
 describe("riepiloghi lunghi", () => {
-  beforeEach(resetDatabase);
-
   it("legge gli avvisi di tutti gli ordini, oltre il limite di una lettura", async () => {
     const { userId, workspace } = await account("lungo");
     const ids = Array.from({ length: 301 }, (_, index) => `lungo-${index}`);
@@ -664,30 +663,31 @@ describe("riepiloghi lunghi", () => {
 
 describe("ingresso del bot", () => {
   it("rifiuta metodo, segreto e corpo non validi e accoglie soltanto /start in chat privata", async () => {
-    const get = await receiveWebhook(new Request(endpoint), environment);
+    // Bot API simulata: nessuna risposta del bot arriva alla rete.
+    const { fetcher } = bot();
+    const receive = (request: Request) => receiveWebhook(request, environment, fetcher);
+    const get = await receive(new Request(endpoint));
     expect(get?.status).toBe(405);
     expect(get?.headers.get("allow")).toBe("POST");
-    expect((await receiveWebhook(webhook(update("/start")), environment))?.status).toBe(204);
+    expect((await receive(webhook(update("/start"))))?.status).toBe(204);
     send.mockClear();
-    expect((await receiveWebhook(webhook(update("/start"), null), environment))?.status).toBe(401);
-    expect((await receiveWebhook(webhook(update("/start"), "altro"), environment))?.status).toBe(
-      401,
-    );
+    expect((await receive(webhook(update("/start"), null)))?.status).toBe(401);
+    expect((await receive(webhook(update("/start"), "altro")))?.status).toBe(401);
     const garbage = new Request("https://test.fiscalbay.it/webhooks/telegram", {
       method: "POST",
       headers: { "x-telegram-bot-api-secret-token": secret },
       body: "{",
     });
-    expect((await receiveWebhook(garbage, environment))?.status).toBe(412);
+    expect((await receive(garbage))?.status).toBe(412);
     const large = webhook({ update_id: 1, padding: "x".repeat(300_000) });
-    expect((await receiveWebhook(large, environment))?.status).toBe(413);
+    expect((await receive(large))?.status).toBe(413);
     // Gruppi, altri messaggi e aggiornamenti senza messaggio non hanno effetti né ricevute.
     for (const body of [
       update("/start token", 501, "group"),
       update("ciao"),
       { update_id: nextUpdateId(), my_chat_member: {} },
     ])
-      expect((await receiveWebhook(webhook(body), environment))?.status).toBe(204);
+      expect((await receive(webhook(body)))?.status).toBe(204);
     expect(send).not.toHaveBeenCalled();
     const receipts = await env.DB.prepare("SELECT COUNT(*) AS n FROM webhook_receipts").first<{
       n: number;
@@ -742,7 +742,7 @@ describe("ingresso del bot", () => {
     expect(receipt).toMatchObject({ queued_at: null, completed_at: expect.any(String) });
     // Lo stesso aggiornamento con un contenuto diverso non cambia la ricevuta.
     const changed = { ...body, message: { ...body.message, chat: { id: 778, type: "private" } } };
-    expect((await receiveWebhook(webhook(changed), environment))?.status).toBe(409);
+    expect((await receiveWebhook(webhook(changed), environment, api.fetcher))?.status).toBe(409);
   });
 
   it("riconosce il comando con il nome del bot e ignora un token malformato", () => {
@@ -976,14 +976,7 @@ describe("collegamento della chat", () => {
     send.mockClear();
     // Telegram non risponde alla conferma: la ricevuta passa alla coda, che la riprova con
     // l'attesa indicata.
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? Response.json(
-            { ok: false, error_code: 429, parameters: { retry_after: 7 } },
-            { status: 429 },
-          )
-        : undefined,
-    );
+    const limited = rateLimited(7);
     await receiveWebhook(
       webhook(update(`/start ${token}`, 601)),
       environment,
@@ -1036,14 +1029,7 @@ describe("collegamento della chat", () => {
     const seller = await account("riprova-vecchia");
     const token = await linkToken(seller.cookie);
     send.mockClear();
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? Response.json(
-            { ok: false, error_code: 429, parameters: { retry_after: 7 } },
-            { status: 429 },
-          )
-        : undefined,
-    );
+    const limited = rateLimited(7);
     await receiveWebhook(
       webhook(update(`/start ${token}`, 611)),
       environment,
@@ -1192,7 +1178,7 @@ describe("collegamento della chat", () => {
       { chatId: "901", linkId: first.id },
     );
     // Fino all'«Avvia» della nuova chat resta la precedente.
-    const token = await linkToken(seller.cookie);
+    await linkToken(seller.cookie);
     expect((await link(seller.workspace))?.chat_id).toBe("901");
     // La stessa chat che riavvia il bot resta lo stesso collegamento.
     await deliver(`/start ${await linkToken(seller.cookie)}`, 901);
@@ -1201,7 +1187,6 @@ describe("collegamento della chat", () => {
     const second = (await link(seller.workspace))!;
     expect(second).toMatchObject({ chat_id: "902" });
     expect(second.id).not.toBe(first.id);
-    expect(token).not.toBe("");
     // La consegna preparata per la chat precedente non va da nessuna parte.
     expect(await telegramRecipient(env.DB, { ...event, linkId: first.id }, later(4))).toBeNull();
     // La nuova chat riceve soltanto gli eventi successivi al proprio collegamento.
@@ -1469,7 +1454,7 @@ describe("casi limite del collegamento e delle preferenze", () => {
     expect(await link(seller.workspace)).toEqual({ ...first, chat_label: "@nuovo_nome" });
   });
 
-  it("il collegamento fissa il fuso della richiesta e lo conserva", async () => {
+  it("il collegamento fissa il fuso della richiesta e un cambio di frequenza lo sostituisce con quello corrente", async () => {
     const seller = await account("limite-fuso");
     const response = (await settingsAction({
       request: new Request(`${origin}/app/impostazioni/notifiche`, {

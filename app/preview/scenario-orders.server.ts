@@ -129,7 +129,7 @@ const productImages = {
 };
 
 // Logo del negozio eBay, come lo restituisce `GetStore`; gli altri negozi non ne hanno uno.
-export const storeLogo = `data:image/svg+xml,${encodeURIComponent(
+const storeLogo = `data:image/svg+xml,${encodeURIComponent(
   `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48"><rect width="48" height="48" fill="#fff"/><circle cx="24" cy="24" r="17" fill="none" stroke="#b45309" stroke-width="3"/><path d="M 15 27h18M 18 27l3-8h6l3 8M 17 31a2 2 0 1 0 0 .1M 31 31a2 2 0 1 0 0 .1" fill="none" stroke="#1f2937" stroke-width="2.5" stroke-linecap="round"/></svg>`,
 )}`;
 
@@ -208,7 +208,7 @@ export const cf = (
 });
 
 /** Riga con prezzo unitario: l'importo della riga è prezzo per quantità. */
-export const item = (
+const item = (
   id: string,
   title: string,
   priceMinor: number,

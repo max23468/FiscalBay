@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { acquireOrders, consumeOrderConfirmation } from "../app/domain/order-acquisition.server";
 
@@ -51,6 +51,8 @@ import {
 } from "./fixtures/order-acquisition-scenarios";
 
 setupScenarios();
+// Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+afterEach(() => vi.restoreAllMocks());
 
 describe("lettura periodica e richieste manuali", () => {
   const start = Date.parse("2026-09-02T00:00:00.000Z");
@@ -1057,6 +1059,38 @@ describe("lettura periodica e richieste manuali", () => {
       expect(groups.slice(0, -1).every((group) => group.length === 10)).toBe(true);
       expect(groups.at(-1)!.length).toBe(claimed.length - (groups.length - 1) * 10);
       expect((await turns()).every(({ dispatched_at }) => dispatched_at !== null)).toBe(true);
+    });
+
+    it("i negozi non ancora dovuti e l'arretrato non tolgono il turno a un negozio Pro dovuto", async () => {
+      // Con `s-a`, 301 negozi Free letti da venti minuti: più del limite di un turno e non dovuti.
+      await otherStores(300);
+      await env.DB.batch([
+        insertCredentials({ storeId: "s-b", accessExpiresAt: now, grantedAt }),
+        insertEntitlement({
+          workspaceId: "w-b",
+          source: "premium",
+          startsAt: minutes(0).toISOString(),
+          endsAt: minutes(120).toISOString(),
+        }),
+        env.DB.prepare(
+          `INSERT INTO sync_state (store_id, polled_at, updated_at)
+           SELECT id, CASE WHEN id = 's-b' THEN ?2 ELSE ?1 END, ?1 FROM ebay_stores`,
+        ).bind(minutes(40).toISOString(), minutes(49).toISOString()),
+      ]);
+      // Il negozio Pro è il letto più di recente, ma è l'unico dovuto.
+      expect(await dispatchStoreSyncs(cron, minutes(60))).toEqual(["s-b"]);
+
+      // Con una lettura riuscita e lo storico da finire i Free hanno arretrato: seguono il dovuto.
+      await env.DB.batch([
+        env.DB.prepare("UPDATE sync_state SET dispatched_at = NULL"),
+        env.DB.prepare(
+          `INSERT INTO sync_runs (store_id, started_at, ok, new_orders)
+           SELECT store_id, polled_at, 1, 0 FROM sync_state`,
+        ),
+      ]);
+      const claimed = await dispatchStoreSyncs(cron, minutes(60));
+      expect(claimed).toHaveLength(300);
+      expect(claimed[0]).toBe("s-b");
     });
 
     it("un gruppo serve i negozi in sequenza e chiude ogni turno anche dopo un errore", async () => {

@@ -336,11 +336,7 @@ describe("invii degli ordini", () => {
   it("una consegna in attesa alla fine di Pro non parte al rinnovo", async () => {
     const seller = await linked("rinnovo");
     await order(seller.store, "o-rinnovo", { cf: "RSSMRA80A01H501U" });
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
-        : undefined,
-    );
+    const limited = rateLimited(600);
     await run(limited.fetcher, 10);
     await env.DB.prepare("UPDATE workspace_entitlements SET revoked_at = ? WHERE workspace_id = ?")
       .bind(later(12).toISOString(), seller.workspace)
@@ -463,11 +459,7 @@ describe("invii degli ordini", () => {
   it("rispetta l'attesa di Telegram e scarta la consegna di una chat sostituita", async () => {
     const seller = await linked("sostituita");
     await order(seller.store, "o-attesa", { cf: "RSSMRA80A01H501U" });
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
-        : undefined,
-    );
+    const limited = rateLimited(600);
     await run(limited.fetcher, 10);
     expect(
       await env.DB.prepare("SELECT retry_at, attempts FROM telegram_deliveries").first(),
@@ -752,11 +744,7 @@ describe("invii degli ordini", () => {
   it("senza autorizzazione il Codice Fiscale non compare: conservazione scaduta, copertura revocata, piano Free", async () => {
     const seller = await linked("autorizzato");
     await order(seller.store, "o-scaduto", { cf: "RSSMRA80A01H501U" });
-    const limited = bot((call) =>
-      call.method === "sendMessage"
-        ? failure(429, { ok: false, parameters: { retry_after: 600 } })
-        : undefined,
-    );
+    const limited = rateLimited(600);
     await run(limited.fetcher, 10);
     await env.DB.prepare("UPDATE orders SET retention_until = ? WHERE id = 'o-scaduto'")
       .bind(later(12).toISOString())
@@ -994,8 +982,9 @@ describe("esiti delle consegne", () => {
     const logs = await logged(() => run(api.fetcher, 13));
     expect(api.texts()).toHaveLength(3);
     expect(logs).toEqual([expect.objectContaining({ operation: "telegram", failure: "rejected" })]);
+    // Il rifiuto certo conta un tentativo: la console lo distingue da una chiusura voluta.
     expect(await deliveryOf("o-respinto")).toMatchObject({
-      attempts: 0,
+      attempts: 1,
       lease: null,
       sent_at: null,
       failed_at: later(13).toISOString(),
@@ -1097,7 +1086,12 @@ describe("esiti delle consegne", () => {
     await run(rateLimited(60).fetcher, 10);
     await digestMode(seller);
     const api = bot();
-    await run(api.fetcher, 15);
+    // Lo spazio è stato letto con «un messaggio per ordine», il riepilogo è scelto subito dopo.
+    const before = racing("AND (retry_at IS NULL OR retry_at <= ?2)", (bound) => [
+      ...bound.slice(0, 3),
+      null,
+    ]);
+    await deliverTelegram(before, api.fetcher, later(15));
     expect(api.calls).toHaveLength(0);
     expect(await deliveryOf("o-passa")).toMatchObject({
       attempts: 0,
@@ -1109,6 +1103,53 @@ describe("esiti delle consegne", () => {
     await run(api.fetcher, 60);
     expect(sentTexts(api)).toEqual([expect.stringMatching(/Riepilogo del[\s\S]*ebay-o-passa/u)]);
     expect(await deliveryOf("o-passa")).toMatchObject({ sent_at: later(60).toISOString() });
+  });
+
+  it("con il riepilogo scelto gli ordini in attesa non fermano l'importazione completata", async () => {
+    const seller = await linked("riepilogo-importazione");
+    await digestMode(seller);
+    // Più ordini in attesa del riepilogo di quante consegne partono in un'esecuzione.
+    for (let index = 0; index < 21; index++)
+      await order(seller.store, `o-attesa-${index}`, { cf: "RSSMRA80A01H501U" });
+    const api = bot();
+    await run(api.fetcher, 10);
+    expect(api.calls).toHaveLength(0);
+    await env.DB.prepare("UPDATE sync_state SET history_done_at = ? WHERE store_id = ?")
+      .bind(later(12).toISOString(), seller.store)
+      .run();
+    await run(api.fetcher, 20);
+    expect(sentTexts(api)).toEqual([expect.stringContaining("Importazione completata")]);
+    // Gli ordini restano in attesa senza essere presi, poi partono con il riepilogo.
+    const waiting = () =>
+      env.DB.prepare(`SELECT count(*) AS n FROM telegram_deliveries WHERE kind = 'order'
+        AND sent_at IS NULL AND failed_at IS NULL AND digest_id IS NULL AND retry_at IS NULL`).first();
+    expect(await waiting()).toEqual({ n: 21 });
+    await run(api.fetcher, 60);
+    expect(sentTexts(api)[1]).toContain("Riepilogo del");
+    expect(await waiting()).toEqual({ n: 0 });
+    expect(
+      await env.DB.prepare(
+        "SELECT count(*) AS n FROM telegram_deliveries WHERE kind = 'order' AND sent_at = ?",
+      )
+        .bind(later(60).toISOString())
+        .first(),
+    ).toEqual({ n: 21 });
+  });
+
+  it("con il riepilogo scelto l'ordine preparato per una chat sostituita si scarta", async () => {
+    const seller = await linked("riepilogo-sostituita");
+    await order(seller.store, "o-vecchia-chat", { cf: "RSSMRA80A01H501U" });
+    await run(rateLimited(60).fetcher, 10);
+    await digestMode(seller);
+    await deliver(`/start ${await linkToken(seller.cookie)}`, 602, bot().fetcher, later(14));
+    const api = bot();
+    await run(api.fetcher, 25);
+    await run(api.fetcher, 60);
+    expect(api.calls).toHaveLength(0);
+    expect(await deliveryOf("o-vecchia-chat")).toMatchObject({
+      attempts: 0,
+      failed_at: later(25).toISOString(),
+    });
   });
 
   it("il riepilogo riunisce gli eventi di un ordine e omette quelli non più consultabili", async () => {
@@ -1434,5 +1475,3 @@ describe("esiti delle consegne", () => {
     expect(results.map(({ id }) => id)).toEqual(["aperta-8", "aperta-recente", "inviata-recente"]);
   });
 });
-
-/** Tocco su un pulsante di un messaggio del bot, dall'ingresso alla coda. */

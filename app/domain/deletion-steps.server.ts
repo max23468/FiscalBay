@@ -49,7 +49,25 @@ export async function claimStepJob<Job>(
 /** Ordini eliminati per istruzione e istruzioni per giro, poi il lavoro riparte dalla coda. */
 export const orderBudget = { batch: 200, batches: 25 };
 
+/**
+ * Tetto di una richiesta che elimina gli ordini di un negozio senza coda: oltre, chi l'ha
+ * chiesta la ripete e l'eliminazione riprende dagli ordini rimasti.
+ */
+export const requestOrderBudget = { batch: 200, batches: 250 };
+
 export type OrderBudget = typeof orderBudget;
+
+/**
+ * Dati tecnici di un negozio, per `store_id`, che seguono i suoi ordini in ogni eliminazione:
+ * letture, preferenze e consegne Telegram, ricevute webhook.
+ */
+export const storeDataTables = [
+  "sync_state",
+  "sync_runs",
+  "telegram_store_preferences",
+  "telegram_deliveries",
+  "webhook_receipts",
+] as const;
 
 /**
  * Ordini a lotti fra quelli scelti da `select`: le chiavi esterne eliminano articoli,

@@ -194,12 +194,7 @@ jobs:
           VITE_RELEASE_DAY: ${{ inputs.day }}
           SHARD: ${{ matrix.shard }}/${{ matrix.total }}
           SKIP_PAGES: ${{ inputs.skip_pages }}
-        run: |
-          selection=()
-          if [ -n "${SKIP_PAGES}" ]; then
-            selection+=(--grep-invert "${SKIP_PAGES}")
-          fi
-          node scripts/browser-tests.mjs "${selection[@]}" --browsers chromium,webkit --shard "${SHARD}"
+        run: node scripts/browser-tests.mjs --browsers chromium,webkit --grep-invert "${SKIP_PAGES}" --shard "${SHARD}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

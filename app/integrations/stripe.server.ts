@@ -261,7 +261,7 @@ export async function createLifetimeCredit(
 
 /** Una sessione che Stripe non ha aperto in Managed Payments non arriva mai al cliente. */
 export async function expireCheckout(stripe: Stripe, sessionId: string) {
-  await stripe.checkout.sessions.expire(sessionId);
+  await stripeCall(() => stripe.checkout.sessions.expire(sessionId));
 }
 
 /** Chiude una sessione Checkout ancora aperta e la restituisce come è ora su Stripe. */

@@ -109,6 +109,14 @@ export function syncDescription(store: StoreView, ebayDown: string | null, t: Ap
   return t.stores.syncSuspended;
 }
 
+/** Autorizzazione eBay scaduta: da ricollegare, o con la scadenza già passata. */
+export function consentExpired(store: StoreView, now: string) {
+  return (
+    store.connection === "reconnect_required" ||
+    (store.consentExpiresAt !== null && store.consentExpiresAt <= now)
+  );
+}
+
 /** Autorizzazione eBay da rinnovare o lettura bloccata da un problema del negozio. */
 export function needsReconnect(store: StoreView) {
   return (

@@ -99,7 +99,8 @@ jobs:
           fi
 
   # Pubblica in Production: il ciclo della PR nel suo gruppo, poi la promozione del commit
-  # integrato, con la PR e il lotto già su `develop`, nel gruppo delle promozioni.
+  # integrato, con la PR e il lotto già su `develop`, nel gruppo delle promozioni. L'input
+  # `urgente` qui non si legge: il comando locale rifiuta `--urgente` con `production`.
   production-pr:
     name: Coordinatore PR
     if: inputs.operation == 'production'

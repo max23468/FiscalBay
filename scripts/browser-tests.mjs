@@ -5,6 +5,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { latestRunJobs } from "./lib/provider.mjs";
 
 /**
  * Prove dello shard `current` su `total`: l'ordine segue un'impronta del titolo, a turno. In ordine
@@ -80,15 +81,7 @@ export async function browserProof(
     .filter((run) => run.head_repository?.id === repositoryId && String(run.id) !== String(exclude))
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
   for (const run of ordered) {
-    const jobs = [];
-    for (let page = 1; ; page++) {
-      const batch = await api(
-        `repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=30&page=${page}`,
-      );
-      jobs.push(...batch.jobs);
-      if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
-    }
-    const outcome = browserOutcome(jobs);
+    const outcome = browserOutcome(await latestRunJobs(repository, run.id, api));
     if (outcome === "failed") return null;
     if (outcome !== "passed") continue;
     if ((await planKey(run.id)) !== key) return null;

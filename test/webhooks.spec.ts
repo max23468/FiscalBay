@@ -2,8 +2,6 @@ import { env } from "cloudflare:workers";
 
 import { createHash, sign } from "node:crypto";
 
-import Stripe from "stripe";
-
 import { expect, it, vi } from "vitest";
 
 import { receiveWebhook, consumeWebhooks } from "../app/webhooks.server";
@@ -31,6 +29,8 @@ import { insertStorePause } from "./fixtures/database-fixtures";
 
 import { fakeQueue, queued } from "./fixtures/queue-fixture";
 
+import { stripeSignature } from "./fixtures/stripe-fixtures";
+
 import {
   now,
   grantedAt,
@@ -49,14 +49,7 @@ import {
   setupScenarios,
 } from "./fixtures/webhooks-scenarios";
 
-const router = vi.hoisted(() => ({ handle: vi.fn(), create: vi.fn() }));
-
-vi.mock("react-router", async (original) => ({
-  ...(await original<typeof import("react-router")>()),
-  createRequestHandler: router.create,
-}));
-
-setupScenarios(router);
+setupScenarios();
 
 it("verifica direttamente una firma valida e rifiuta header fuori limite", async () => {
   const request = ebayRequest(notification, "direct-validation-key");
@@ -334,15 +327,7 @@ it("verifica il corpo grezzo, deduplica e accoda soltanto il riferimento", async
   expect(fetcher.mock.calls.filter(([url]) => String(url).includes("/public_key/"))).toHaveLength(
     1,
   );
-  const altered = ebayRequest();
-  const body = await altered.text();
-  expect(
-    (
-      await receive(
-        new Request(altered.url, { method: "POST", headers: altered.headers, body: body + " " }),
-      )
-    )?.status,
-  ).toBe(412);
+  // I 412 di firma alterata, header invalido e schema sono in `webhook-events.spec.ts`.
   expect(
     (
       await receive(
@@ -372,11 +357,7 @@ it("rifiuta firma, schema, ambiente e data non validi e ignora venditori senza n
     body: "{}",
   });
   expect((await receive(missing))?.status).toBe(412);
-  const malformed = ebayRequest();
-  malformed.headers.set("x-ebay-signature", "invalid");
-  expect((await receive(malformed))?.status).toBe(412);
   for (const [payload, status] of [
-    [{ ...notification, metadata: { topic: "OTHER", schemaVersion: "1.0" } }, 412],
     [
       {
         ...notification,
@@ -616,6 +597,11 @@ it("consegne concorrenti non producono due effetti e messaggi invalidi vanno in 
   expect((await env.DB.prepare("SELECT COUNT(*) AS n FROM orders").first<{ n: number }>())?.n).toBe(
     1,
   );
+  // Una sola consegna prende la ricevuta: restano le due letture Fulfillment di una sola
+  // acquisizione, come con un consumer unico.
+  expect(
+    fetcher.mock.calls.filter(([url]) => String(url).includes("/sell/fulfillment/")),
+  ).toHaveLength(2);
   const invalid = batch({ payload: "untrusted" });
   await consumeWebhooks(invalid.value, environment, fetcher, now);
   expect(invalid.message.retry).toHaveBeenCalledWith({ delaySeconds: 30 });
@@ -630,10 +616,7 @@ it("prende in carico Stripe con firma valida e rilegge l'oggetto prima degli eff
     data: { object: { id: "cs_synthetic" } },
   };
   const body = JSON.stringify(event);
-  const header = await Stripe.webhooks.generateTestHeaderStringAsync({
-    payload: body,
-    secret: "whsec_fiscalbay_test",
-  });
+  const header = await stripeSignature(body);
   const request = () =>
     new Request("https://test.fiscalbay.it/webhooks/stripe", {
       method: "POST",
@@ -643,6 +626,13 @@ it("prende in carico Stripe con firma valida e rilegge l'oggetto prima degli eff
   expect((await receive(request()))?.status).toBe(204);
   expect((await receive(request()))?.status).toBe(204);
   expect(send).toHaveBeenCalledTimes(1);
+  expect(
+    await env.DB.prepare("SELECT topic, object_id, environment FROM webhook_receipts").all(),
+  ).toMatchObject({
+    results: [
+      { topic: "checkout.session.completed", object_id: "cs_synthetic", environment: "test" },
+    ],
+  });
   // Il payload non è usato: la sessione riletta da Stripe è un pagamento, senza abbonamento.
   const stripe = vi.fn<typeof fetch>(async () =>
     Response.json({ id: "cs_synthetic", object: "checkout.session", mode: "payment" }),
@@ -726,7 +716,7 @@ it("limita i recuperi delle chiavi pubbliche e non accetta una chiave non verifi
       fetcher,
       now.getTime(),
     ),
-  ).rejects.toThrow();
+  ).rejects.toMatchObject({ failure: "signature" });
 });
 
 it("accetta un corpo al limite, legge più chunk senza alterare byte e rifiuta l'algoritmo errato", async () => {
@@ -1076,10 +1066,7 @@ it("separa le ricevute Stripe live e test e non interroga il dominio eBay per St
       livemode: live,
       data: { object: { id: "cs_synthetic" } },
     });
-    const signature = await Stripe.webhooks.generateTestHeaderStringAsync({
-      payload: body,
-      secret: "whsec_fiscalbay_test",
-    });
+    const signature = await stripeSignature(body);
     const request = new Request("https://test.fiscalbay.it/webhooks/stripe", {
       method: "POST",
       headers: { "stripe-signature": signature },

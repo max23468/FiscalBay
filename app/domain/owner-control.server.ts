@@ -36,7 +36,13 @@ import {
   type Row,
   type Section,
 } from "./owner-panels.server";
-import { metricWindows, productMetrics, share, type MetricWindow } from "./product-metrics.server";
+import {
+  metricWindowFrom,
+  metricWindows,
+  productMetrics,
+  share,
+  type MetricWindow,
+} from "./product-metrics.server";
 import { readTechnicalMetrics } from "./technical-metrics.server";
 
 /**
@@ -91,10 +97,6 @@ function validArg(view: OwnerCommand, arg: number) {
   if (view === "negozi") return arg % storesPage === 0;
   return arg === 0;
 }
-
-/** Finestra delle metriche: 30 giorni come nella console, se non scelta. */
-const windowOf = (arg: number): MetricWindow =>
-  (metricWindows as readonly number[]).includes(arg) ? (arg as MetricWindow) : 30;
 
 export type OwnerReceipt = {
   topic: string;
@@ -206,7 +208,8 @@ export async function ownerPanel(
     case "uscite":
       return exitsPanel(env, now);
     case "metriche":
-      return metricsPanel(env, windowOf(action.arg), now);
+      // 30 giorni come nella console, se la finestra non è scelta.
+      return metricsPanel(env, metricWindowFrom(action.arg), now);
     case "negozi":
       return storesPanel(env, action.arg, now);
     case "prestazioni":

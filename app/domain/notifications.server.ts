@@ -103,8 +103,6 @@ export async function listNotifications(
         },
       ]
     : [];
-  // Come i promemoria, un problema delle letture compare soltanto negli ultimi trenta giorni:
-  // oltre, la sua lettura non è più conservata e resta l'avviso di Ordini e Negozi.
   const exports = (await finishedExportJobs(db, userId, now)).map((job): NotificationView => ({
     id: `export:${job.id}`,
     kind: job.ready ? "export-ready" : "export-failed",
@@ -118,6 +116,8 @@ export async function listNotifications(
   const items = [
     ...stores.flatMap(reminder),
     ...exports,
+    // Come i promemoria, un problema delle letture compare soltanto negli ultimi trenta giorni:
+    // oltre, la sua lettura non è più conservata e resta l'avviso di Ordini e Negozi.
     ...[...reads, ...inactivity].filter((item) => Date.parse(item.at) >= since),
     ...(await activeServiceNotices(db, language, now)),
     ...whatsNewNotifications(language, now),

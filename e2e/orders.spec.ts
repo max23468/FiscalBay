@@ -389,7 +389,6 @@ test.describe("area reale", () => {
       }) => {
         // Due lingue nello stesso test: su WebKit in CI supera i 30 secondi predefiniti.
         test.setTimeout(60_000);
-        watchNetwork(context);
         for (const language of ["it", "en"] as const) {
           const it = language === "it";
           const prefix = it ? "" : "/en";
@@ -804,7 +803,6 @@ test.describe("area reale", () => {
   }
 });
 
-/** Elenco con la ricerca: la query va nel corpo e l'indirizzo riceve la sua forma cifrata. */
 for (const language of ["it", "en"] as const) {
   for (const width of [390, 1280]) {
     test(`ordini: conferme, stati e dettaglio ${language} a ${width} px`, async ({
@@ -1461,7 +1459,6 @@ test.describe("impostazioni", () => {
         const prefix = it ? "" : "/en";
         // Spazio con il negozio già letto e ordini da sbloccare, proprio di lingua e browser.
         await useLocalAccount(context, "member", baseURL!, `trial-${language}-${browserName}`);
-        watchNetwork(context);
         // «Attiva la prova» risponde solo dopo l'idratazione: un clic anticipato va perso.
         await open(page, pagePath(prefix, "/app/ordini"));
         const secret = `VALORE-SINTETICO-${language}`;

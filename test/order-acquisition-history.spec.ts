@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   listVisibleOrders,
@@ -76,8 +76,6 @@ describe("finestra dello storico secondo la copertura", () => {
       `SELECT history_from, history_until, history_through, history_done_at
            FROM sync_state WHERE store_id = 's-a'`,
     ).first<Record<string, string | null>>();
-
-  beforeEach(() => env.DB.prepare("DELETE FROM orders").run());
 
   it("all'attivazione importa il resto dell'anno, interrotto e ripreso, senza rileggere il Free", async () => {
     const older = series("12-esteso", 60, iso(linked - 30 * day));
@@ -595,23 +593,36 @@ it("ferma l'acquisizione quando GetItem rifiuta le credenziali", async () => {
 it("con la quota GetOrders già in attesa rimanda la lettura fiscale senza chiamare Trading", async () => {
   const detail = () =>
     env.DB.prepare(
-      "SELECT detail_for, detail_error, detail_attempts FROM order_source_refs",
+      "SELECT detail_for, detail_error, detail_attempts, detail_retry_at FROM order_source_refs",
     ).first();
+  /** Letture Fulfillment del singolo ordine. */
+  const single = (fetcher: ReturnType<typeof ebay>) =>
+    fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname.includes("/order/"))
+      .length;
   await env.DB.prepare(
     "INSERT INTO ebay_rate_limits (api_origin, until) VALUES ('https://api.ebay.com#GetOrders', ?)",
   )
     .bind("2026-09-02T00:15:00.000Z")
     .run();
+  // Sul marketplace qualificato soltanto la lettura Fulfillment dice se Trading serve.
   const limited = ebay();
   expect(await acquire(limited)).toBe("budget");
+  expect(single(limited)).toBe(1);
   expect(limited.mock.calls.some(([, init]) => String(init?.body).includes("GetOrders"))).toBe(
     false,
   );
+  // La versione aspetta la quota: non è in errore e riparte alla fine dell'attesa.
   expect(await detail()).toEqual({
     detail_for: null,
-    detail_error: "rate_limited",
+    detail_error: null,
     detail_attempts: 0,
+    detail_retry_at: "2026-09-02T00:15:00.000Z",
   });
+  expect((await listVisibleOrders(env.DB, "u-a"))[0]?.taxVerification).not.toBe("error");
+  // Durante l'attesa non si rileggono né Fulfillment né le immagini.
+  const waiting = ebay();
+  expect(await acquire(waiting, "2026-09-02T00:14:59.000Z")).toBe("budget");
+  expect([single(waiting), calls(waiting, "GetItem")]).toEqual([0, 0]);
   // Alla scadenza dell'attesa la lettura fiscale riparte e chiude la versione.
   const resumed = ebay();
   expect(await acquire(resumed, "2026-09-02T00:15:00.000Z")).toBe("complete");
@@ -656,12 +667,15 @@ it("distingue gli errori del dettaglio che fermano l'esecuzione da quelli dell'o
     expect(await detail()).toEqual({ ...pending, detail_error: failure });
     expect((await listVisibleOrders(env.DB, "u-a"))[0]?.taxVerification).toBe("error");
   }
-  // La quota GetOrders esaurita lascia il dettaglio in attesa senza consumare tentativi né
-  // fermare la lettura; senza Retry-After si attende il valore prudente.
+  // La quota GetOrders esaurita lascia il dettaglio in attesa, non in errore, senza consumare
+  // tentativi né fermare la lettura; senza Retry-After si attende il valore prudente.
   expect(await acquire(ebay({ trading: () => new Response(null, { status: 429 }) }))).toBe(
     "complete",
   );
-  expect(await detail()).toEqual({ ...pending, detail_error: "rate_limited" });
+  expect(await detail()).toEqual(pending);
+  expect(await env.DB.prepare("SELECT detail_retry_at FROM order_source_refs").first()).toEqual({
+    detail_retry_at: "2026-09-02T00:15:00.000Z",
+  });
   expect(
     await env.DB.prepare("SELECT api_origin, until FROM ebay_rate_limits").all(),
   ).toMatchObject({
@@ -694,6 +708,17 @@ it("distingue gli errori del dettaglio che fermano l'esecuzione da quelli dell'o
       detail_attempts: 1,
     });
   }
+  // Il limite di eBay sull'intera origine ferma l'esecuzione senza consumare tentativi.
+  await env.DB.prepare(
+    "UPDATE order_source_refs SET detail_attempts = 0, detail_retry_at = NULL",
+  ).run();
+  await expect(
+    acquire(
+      ebay({ fail: single(() => new Response(null, { status: 429 })) }),
+      new Date(at + 60_000).toISOString(),
+    ),
+  ).rejects.toMatchObject({ failure: "rate_limited" });
+  expect(await detail()).toEqual({ ...pending, detail_error: "rate_limited" });
 });
 
 it("non scrive se il consenso cambia dopo una pagina vuota o durante il dettaglio", async () => {

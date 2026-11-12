@@ -86,6 +86,11 @@ export type SyncCandidate = {
   dormant?: boolean;
 };
 
+/** Istante entro cui deve cadere l'ultima lettura perché il negozio sia dovuto con la cadenza data. */
+function dueBefore(now: Date, minutes: number): number {
+  return now.getTime() - minutes * 60_000 + toleranceMilliseconds;
+}
+
 /**
  * Ordine della lettura periodica sotto carico: prima i negozi dovuti per cadenza o per una
  * richiesta manuale (Premium, poi Free), poi quelli con lavoro arretrato (Premium, poi Free).
@@ -100,9 +105,7 @@ export function syncOrder<T extends SyncCandidate>(candidates: T[], now: Date): 
       candidate.requestedAt !== null ||
       candidate.polledAt === null ||
       Date.parse(candidate.polledAt) <=
-        now.getTime() -
-          (candidate.dormant ? dormantSyncMinutes : syncMinutes[candidate.plan]) * 60_000 +
-          toleranceMilliseconds;
+        dueBefore(now, candidate.dormant ? dormantSyncMinutes : syncMinutes[candidate.plan]);
     if (due) return plan;
     return candidate.backlog ? 2 + plan : null;
   };
@@ -142,8 +145,13 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
   const [{ results: rows }, { results: limits }] = await env.DB.batch<
     CandidateRow | { api_origin: string }
   >([
+    // La cadenza di ogni negozio si applica prima del limite, e i dovuti precedono l'arretrato:
+    // i negozi letti da più tempo ma non ancora dovuti non tolgono il turno agli altri.
     env.DB.prepare(
-      `SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment,
+      `SELECT *, (polled_at IS NULL OR requested_at IS NOT NULL OR polled_at <=
+                CASE WHEN dormant THEN ?6 WHEN premium THEN ?7 ELSE ?8 END) AS due
+       FROM (
+       SELECT c.store_id, c.access_token, c.granted_at, s.ebay_environment,
               ss.polled_at, ss.requested_at,
               -- Dopo una lettura non riuscita l'arretrato attende la cadenza del piano.
               (EXISTS (SELECT 1 FROM sync_runs sr WHERE sr.store_id = c.store_id
@@ -162,18 +170,20 @@ export async function dispatchStoreSyncs(env: Env, now = new Date()): Promise<st
         WHERE ${activeStore("c", "s")} AND c.access_expires_at > ?2
           AND ${servedSql("s.workspace_id", "?1")} AND ${switchOnSql("ebay_calls")}
           AND (ss.polled_at IS NULL OR ss.requested_at IS NOT NULL OR ss.polled_at <= ?3)
-          AND (ss.dispatched_at IS NULL OR ss.dispatched_at <= ?5)
-        ORDER BY ss.polled_at IS NOT NULL, ss.polled_at, c.store_id
+          AND (ss.dispatched_at IS NULL OR ss.dispatched_at <= ?5))
+        WHERE due OR backlog
+        ORDER BY due DESC, polled_at IS NOT NULL, polled_at, store_id
         LIMIT ?4`,
     ).bind(
       at,
       new Date(now.getTime() + tokenMarginMilliseconds).toISOString(),
-      // Nessun piano legge più spesso della cadenza più breve.
-      new Date(
-        now.getTime() - Math.min(...Object.values(syncMinutes)) * 60_000 + toleranceMilliseconds,
-      ).toISOString(),
+      // Nessun piano legge più spesso della cadenza più breve: vale anche per l'arretrato.
+      new Date(dueBefore(now, Math.min(...Object.values(syncMinutes)))).toISOString(),
       dispatchLimit,
       stale,
+      new Date(dueBefore(now, dormantSyncMinutes)).toISOString(),
+      new Date(dueBefore(now, syncMinutes.premium)).toISOString(),
+      new Date(dueBefore(now, syncMinutes.free)).toISOString(),
     ),
     // Solo le attese dell'origine API: una quota Trading esaurita non ferma le letture.
     env.DB.prepare(
@@ -316,7 +326,7 @@ export async function requestStoreSync(
     await env.DB.prepare(
       `UPDATE sync_state SET history_from = ${historyStartSql(storeWorkspaceSql("?1"), "?3")},
               history_until = ?3, history_through = NULL, history_done_at = NULL,
-              history_next = NULL, history_total = NULL, updated_at = ?3
+              updated_at = ?3
         WHERE store_id = ?1 AND history_done_at IS NOT NULL AND ${writableStore}`,
     )
       .bind(storeId, store.granted_at, at)

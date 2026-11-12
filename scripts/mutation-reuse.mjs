@@ -18,9 +18,9 @@ import { criticalModule } from "./lib/critical-modules.mjs";
 import { importGraph } from "./verify-repo.mjs";
 import {
   ghApi,
-  ghJson,
   git,
   isAncestor,
+  latestRunJobs,
   readRunArtifact,
   trackedSources,
 } from "./lib/provider.mjs";
@@ -93,9 +93,6 @@ export function affectingSources(changed, graph) {
   return reached;
 }
 
-/** Moduli critici raggiunti da almeno un sorgente modificato. */
-export const affectedModules = (changed, graph) => new Set(affectingSources(changed, graph).keys());
-
 /**
  * Divide i moduli fra da provare e riusati. `runs` sono le run precedenti su commit antenati,
  * dalla più recente, con gli esiti per modulo; `affectedSince(commit)` associa a ogni modulo i
@@ -150,19 +147,6 @@ export const mutationNeutral = (file) =>
   /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|stryker\.config\.json|vitest.*\.config\.ts)$/u.test(
     file,
   );
-
-/**
- * Vero se i file cambiati da una prova riuscita lasciano valida la mutation di `target`: nessun
- * sorgente che il modulo importa, anche indirettamente, né il modulo stesso; nessun test che lo
- * importa direttamente e nessun helper o fixture dei test, che possono indebolire qualunque prova;
- * nessuna migration o altro file letto dai test. `graph` comprende anche i test.
- */
-export function proofUnaffected(changed, target, graph, added = new Set()) {
-  return (
-    !affectingSources(changed, graph).has(target) &&
-    otherFilesUnaffected(changed, target, graph, added)
-  );
-}
 
 /**
  * File cambiati diversi dai sorgenti che lasciano valida la prova di `target`. Una prova che lo
@@ -250,8 +234,12 @@ export function planLayout(plan, target) {
 }
 
 /**
- * Come `proofUnaffected`, ma un sorgente critico diverso dal modulo stesso vale come invariato se
- * `excused(source)` lo conferma, per esempio perché è entrato dalla base già provato nella sua PR.
+ * Vero se i file cambiati da una prova riuscita lasciano valida la mutation di `target`: nessun
+ * sorgente che il modulo importa, anche indirettamente, né il modulo stesso; nessun test che lo
+ * importa direttamente e nessun helper o fixture dei test, che possono indebolire qualunque prova;
+ * nessuna migration o altro file letto dai test. `graph` comprende anche i test. Un sorgente
+ * critico diverso dal modulo stesso vale come invariato se `excused(source)` lo conferma, per
+ * esempio perché è entrato dalla base già provato nella sua PR.
  */
 export async function proofStands(
   changed,
@@ -328,14 +316,7 @@ export async function pullRequestParts(
   let layout = null;
   const decided = new Map();
   for (const run of ordered) {
-    const jobs = [];
-    for (let page = 1; ; page++) {
-      const batch = await api(
-        `repos/${repository}/actions/runs/${run.id}/jobs?filter=latest&per_page=30&page=${page}`,
-      );
-      jobs.push(...batch.jobs);
-      if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
-    }
+    const jobs = await latestRunJobs(repository, run.id, api);
     const own = jobs.filter((job) => lineMutationJob(job.name) === target);
     const plan = await readPlan(repository, run.id);
     const entry = planLayout(plan, target);
@@ -421,15 +402,7 @@ export async function previousRuns(repository, repositoryId, targets, api = ghAp
       !isAncestor(candidate.head_sha)
     )
       continue;
-    // Pagine piccole: con cento job per pagina l'API risponde 502 per alcune run ripetute.
-    const jobs = [];
-    for (let page = 1; ; page++) {
-      const batch = await api(
-        `repos/${repository}/actions/runs/${candidate.id}/jobs?filter=latest&per_page=30&page=${page}`,
-      );
-      jobs.push(...batch.jobs);
-      if (batch.jobs.length < 30 || jobs.length >= batch.total_count) break;
-    }
+    const jobs = await latestRunJobs(repository, candidate.id, api);
     const outcomes = moduleOutcomes(jobs, candidate.conclusion === "cancelled");
     runs.push({ id: candidate.id, commit: candidate.head_sha, outcomes });
     for (const target of outcomes.keys()) pending.delete(target);
@@ -474,10 +447,10 @@ async function prCoverage({
     if (!pull || pull.head.repo?.id !== repositoryId) return false;
     const head = pull.head.sha;
     const blob = git("rev-parse", `${commit}:${target}`).trim();
-    // Un modulo assente dalla testa della PR non ha una prova da riusare: nessuna ripetizione.
+    // Un modulo assente dalla testa della PR non ha una prova da riusare.
     let tested;
     try {
-      tested = ghJson("api", `repos/${repository}/contents/${target}?ref=${head}`);
+      tested = await api(`repos/${repository}/contents/${target}?ref=${head}`);
     } catch {
       return false;
     }

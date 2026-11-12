@@ -267,41 +267,10 @@ describe("rinnovo dei token del negozio", () => {
     expect(await openToken(env, storeId, "refresh", row!.refresh_token)).toBe("refresh-sintetico");
   });
 
-  it("apre un token cifrato con la chiave derivata prevista, legato a negozio e tipo", async () => {
-    // Cifratura indipendente con HKDF-SHA-256 e info fissa: cambiare la derivazione rende
-    // illeggibili i token già salvati.
-    const material = await crypto.subtle.importKey(
-      "raw",
-      new TextEncoder().encode(env.EBAY_TOKEN_SECRET),
-      "HKDF",
-      false,
-      ["deriveKey"],
-    );
-    const key = await crypto.subtle.deriveKey(
-      {
-        name: "HKDF",
-        hash: "SHA-256",
-        salt: new Uint8Array(),
-        info: new TextEncoder().encode("fiscalbay/ebay-seller-token/v1"),
-      },
-      material,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt"],
-    );
-    const iv = new Uint8Array(12).fill(7);
-    const sealed = new Uint8Array(
-      await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv, additionalData: new TextEncoder().encode("negozio:access") },
-        key,
-        new TextEncoder().encode("token-noto"),
-      ),
-    );
-    const value = `v2.${btoa(String.fromCharCode(...iv, ...sealed))
-      .replaceAll("+", "-")
-      .replaceAll("/", "_")
-      .replace(/=+$/u, "")}`;
-    expect(await openToken(env, "negozio", "access", value)).toBe("token-noto");
+  it("lega il token cifrato a negozio e tipo e rifiuta un formato illeggibile", async () => {
+    // Cambiare la derivazione rende illeggibili i token già salvati: `sealedAs` cifra in modo
+    // indipendente e la prova precedente verifica che il token si apra.
+    const value = await sealedAs("v2", "negozio", "access", "token-noto");
     await expect(openToken(env, "negozio", "refresh", value)).rejects.toThrow();
     await expect(openToken(env, "negozio", "access", value.slice(3))).rejects.toThrow(
       "unsupported_token_format",

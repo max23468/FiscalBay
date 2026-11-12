@@ -39,9 +39,12 @@ import {
   pullRequestView,
   pullRequestAction,
   checksOutcome,
+  temporaryBranches,
+  assertQualifiable,
   coordinatorRunner,
   requiredPassed,
   mergeDeploys,
+  assertCycleOptions,
   cycleCommand,
   lockObject,
   assertCyclePullRequest,
@@ -841,7 +844,7 @@ describe("coordinamento e provenienza della pubblicazione", () => {
     assert.throws(() => assertConfirmed([job("success")], "test"), /test/u);
     const previous = job("success");
     previous.steps[0].name = "Confirm expected version after guard and day";
-    assert.doesNotThrow(() => assertConfirmed([previous], "production"));
+    assert.throws(() => assertConfirmed([previous], "production"), /production/u);
   });
 });
 
@@ -948,6 +951,28 @@ describe("PR tramite API REST", () => {
     assert.equal(requiredPassed([check(1, "Verify", "success")]), false);
   });
 
+  it("la qualifica esplicita si rifiuta subito se develop è avanzato", () => {
+    assert.doesNotThrow(() => assertQualifiable("a".repeat(40), "a".repeat(40)));
+    assert.throws(() => assertQualifiable("b".repeat(40), "a".repeat(40)), /develop è avanzato/u);
+  });
+
+  it("la pulizia esamina ogni branch tranne le basi e Dependabot", () => {
+    assert.deepEqual(
+      temporaryBranches([
+        "develop",
+        "main",
+        "chore/revisione",
+        "",
+        "origin",
+        "HEAD",
+        "dependabot/npm_and_yarn/develop/x",
+        "chore/revisione",
+        "codex/vecchio",
+      ]),
+      ["chore/revisione", "codex/vecchio"],
+    );
+  });
+
   it("attende i controlli in corso e conta solo l'ultima esecuzione di ognuno", () => {
     const check = (id, name, status, conclusion) => ({ id, name, status, conclusion });
     assert.equal(
@@ -973,6 +998,14 @@ describe("PR tramite API REST", () => {
       checksOutcome([
         check(3, "Node 26", "completed", "success"),
         check(2, "Node 26", "completed", "cancelled"),
+      ]),
+      "passed",
+    );
+    assert.equal(
+      checksOutcome([
+        check(1, "Node 26", "completed", "success"),
+        check(2, "Qualifica candidato / Gate", "completed", "cancelled"),
+        check(3, "Qualifica candidato / Browser 1/8", "in_progress", null),
       ]),
       "passed",
     );
@@ -1060,6 +1093,15 @@ process.stdout.write(JSON.stringify(result));`,
     assert.equal(lockObject("production", "12"), "pr-12");
     for (const command of ["rc", "promotion-source"])
       assert.throws(() => cycleCommand([command]), /^Error: Uso: release:cycle/u);
+  });
+
+  it("rifiuta l'urgenza con Pubblica in Production", () => {
+    assert.throws(
+      () => assertCycleOptions("production", { urgente: true }),
+      /--urgente non vale con production/u,
+    );
+    assert.doesNotThrow(() => assertCycleOptions("production", { urgente: false }));
+    assert.doesNotThrow(() => assertCycleOptions("promote", { urgente: true }));
   });
 
   it("controlla dalla CLI la base della PR rispetto a quella attuale di origin", () => {

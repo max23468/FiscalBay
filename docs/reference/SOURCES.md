@@ -1,6 +1,6 @@
 # Fonti tecniche e normative
 
-Consultare le fonti ufficiali pertinenti al momento della qualifica. I collegamenti orientano la verifica: non sono prove di compatibilità dell’account, test live o pareri sul singolo caso. Le decisioni di prodotto sono nel Master Plan; cronologia delle letture comparative e degli audit è negli snapshot storici della consegna.
+Consultare le fonti ufficiali pertinenti al momento della qualifica. I collegamenti orientano la verifica: non sono prove di compatibilità dell’account, test live o pareri sul singolo caso. Le decisioni di prodotto sono nei [documenti di prodotto](../product/PRODUCT.md); cronologia delle letture comparative e degli audit è negli snapshot storici della consegna.
 
 I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di struttura, non fonti di requisiti propri di FiscalBay. Non serve rileggerli per implementare l’app.
 
@@ -38,7 +38,7 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 - [App Insights API](https://developer.ebay.com/develop/api/sell/app_insights_api) e [schema GraphQL unificato](https://developer.ebay.com/develop/api/spec/listing.graphqls)
 - [D.M. 23 dicembre 1976: sistemi di codificazione per l'anagrafe tributaria](https://def.giustiziatributaria.gov.it/DocTribFrontend/getAttoNormativoDetail.do?ACTION=getSommario&id=%7B8D93A450-E5FE-47FC-A6F0-F938769051BF%7D)
 
-**Verifica pertinente:** matrice campo/fonte/età/stato, scope e identità stabili, dati pagati/non pagati, mascheramenti, immagini ed eventi. La precedenza fiscale qualificata è definita in [§9 del piano](../product/ORDERS_AND_SYNC.md#s09): Fulfillment per il CF italiano Production nelle condizioni provate, Trading `GetOrders` come fallback con `BuyerTaxIdentifier` condizionale e ripetibile. Gli eventi non sostituiscono il polling di riconciliazione e la consegna attribuita Production resta nel test merchant. Verifica del 2026-10-27: lo schema GraphQL non espone identificativi fiscali né indirizzo di fatturazione, nessuna data di dismissione riguarda le chiamate Trading usate, il supporto sviluppatori eBay conferma `getOrder` e `GetOrders` per gli identificativi fiscali e oltre le quote predefinite si passa dall'Application Growth Check. Per OAuth eBay usa il RuName al posto della URL nel parametro `redirect_uri`, raccomanda `state` contro CSRF e limita il codice monouso a 1.024 caratteri. Il decreto governa i controlli locali di struttura e carattere di controllo, compresi omocodia e CF numerico; un esito formale non verifica l'Anagrafe tributaria.
+**Verifica pertinente:** matrice campo/fonte/età/stato, scope e identità stabili, dati pagati/non pagati, mascheramenti, immagini ed eventi. La precedenza fiscale qualificata è definita in [§9](../product/ORDERS_AND_SYNC.md#s09): Fulfillment per il CF italiano Production nelle condizioni provate, Trading `GetOrders` come fallback con `BuyerTaxIdentifier` condizionale e ripetibile. Gli eventi non sostituiscono il polling di riconciliazione. Verifica del 2026-10-27: lo schema GraphQL non espone identificativi fiscali né indirizzo di fatturazione, nessuna data di dismissione riguarda le chiamate Trading usate, il supporto sviluppatori eBay conferma `getOrder` e `GetOrders` per gli identificativi fiscali e oltre le quote predefinite si passa dall'Application Growth Check. Per OAuth eBay usa il RuName al posto della URL nel parametro `redirect_uri`, raccomanda `state` contro CSRF e limita il codice monouso a 1.024 caratteri. Il decreto governa i controlli locali di struttura e carattere di controllo, compresi omocodia e CF numerico; un esito formale non verifica l'Anagrafe tributaria.
 
 <a id="s07"></a>
 ### S07 · Cloudflare · D1 Time Travel
@@ -133,7 +133,7 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 
 **Osservato nella revisione:** il cliente vede Link come venditore, con condizioni di pagamento nel checkout, assistenza e rimborsi tramite Link (in alcuni casi entro 60 giorni) e addebito `LINK.COM*` seguito dal descriptor (riletto il 2026-10-29 per D230); vincoli di Checkout e dominio personalizzato; ruolo Link/Portal e contatti di supporto; cancellazione finanziaria tramite Link che può annullare abbonamenti e rimuovere oggetti nell’account del fornitore. Le prove di acquisti visibili in Link e invio ricevute non sono equivalenti tra sandbox e live.
 
-**Uso:** §6.5–6.6, §36.2. Verificare nell’account effettivo; nessuna capability live certificata dalla lettura.
+**Uso:** §6.5–6.6. Verificare nell’account effettivo; nessuna capability live certificata dalla lettura.
 
 <a id="s22"></a>
 ### S22 · Cloudflare R2 · URL firmati
@@ -158,20 +158,20 @@ I piani di Routally, CF Ready, Hub Fatture e Sequent sono stati riferimenti di s
 **Uso:** §12. Conservare i codici come dati, non introdurre formule per forzare il formato; documentare l’importazione testuale e verificare XLSX tipizzato. Nessuna promessa di compatibilità universale del CSV.
 
 
-## Fonti da qualificare durante l’implementazione, senza presunzione di verifica attuale
+## Fonti da rileggere prima di ogni modifica
 
-Per eBay vanno recuperate le specifiche ufficiali correnti per OAuth/Identity, Selling/Fulfillment, Trading dove indispensabile, notifiche, cancellazione utenti, limiti del keyset e condizioni di utilizzo/marchi. Per Stripe vanno recuperate API/versioni SDK, prezzi applicabili al conto, metodi, portal, refunds e subscription schedule sulla configurazione effettiva. Per l'autenticazione va verificato Better Auth e non assumere compatibilità dei provider da una generica voce “OAuth”.
+Ogni voce riporta la data della sua ultima verifica. Prima di modificare un'integrazione si rileggono le fonti ufficiali correnti: per eBay OAuth/Identity, Fulfillment, Trading dove ancora in uso, notifiche, cancellazione degli utenti, limiti del keyset e condizioni d'uso dei marchi; per Stripe API e versioni dell'SDK, prezzi applicabili al conto, metodi, portale, rimborsi e subscription schedule sulla configurazione effettiva; per l'autenticazione Better Auth, senza assumere la compatibilità di un provider da una generica voce «OAuth».
 
-La revisione legale finalizza il trattamento italiano residuale Temisfera/MoR e l’informativa corretta per dati, fornitori e Codex sulla configurazione che verrà pubblicata. G-UX verifica le licenze dei singoli componenti dei nove riferimenti: un sito di ispirazione non è una concessione di riuso del suo intero codice, marchio o contenuto.
+Un sito di ispirazione non è una concessione di riuso del suo codice, marchio o contenuto: le licenze si verificano componente per componente.
 
 Non fissare listini dei provider come promesse del prodotto. Costi e quote residui reali appartengono alla custodia privata, con fonte, data e account, prima di qualsiasi acquisto.
 
 
 ## Perimetro della revisione documentale successiva
 
-Il 13 settembre 2026 sono state rilette selettivamente S01/S02/S04–S09, S13/S14 e le nuove S18–S24 per i rilievi della revisione. Le altre voci conservano il perimetro della verifica documentale iniziale; non si dichiara una nuova qualifica integrale di ogni URL, account o condizione commerciale. Node/TypeScript sono stati ricontrollati come fonti di release/compatibilità, senza aggiornare automaticamente alcun pacchetto.
+Il 13 settembre 2026 sono state rilette selettivamente S01, S06–S09, S13/S14 e le nuove S18 e S22–S24 per i rilievi della revisione. Le altre voci conservano il perimetro della verifica documentale iniziale; non si dichiara una nuova qualifica integrale di ogni URL, account o condizione commerciale. Node/TypeScript sono stati ricontrollati come fonti di release/compatibilità, senza aggiornare automaticamente alcun pacchetto.
 
-Il 20 settembre 2026 sono state rilette le fonti S29–S33 per il consolidamento legale preliminare. La lettura qualifica ruoli e gate del candidato corrente; informative, condizioni, accordi applicabili e configurazioni provider vengono riletti sul candidato finale prima della pubblicazione.
+Il 20 settembre 2026 sono state rilette le fonti S29–S33 per il consolidamento legale preliminare. Informative, condizioni, accordi applicabili e configurazioni provider si rileggono sulle fonti correnti prima di ogni modifica che li riguarda.
 
 <a id="s25"></a>
 ### S25 · OpenAI/Codex · Discovery delle istruzioni
@@ -195,20 +195,7 @@ Il 20 settembre 2026 sono state rilette le fonti S29–S33 per il consolidamento
 
 **Riletto per il handover:** le skill sono contenuti/strumenti da scoprire e caricare per necessità, non un motivo per copiare tutte le istruzioni nei documenti. Origine, versione, licenza e capability vengono verificate prima dell’uso.
 
-### Riscontro GitHub del conflitto iniziale
-
-Il file `AGENTS.md` di `max23468/FiscalBay`, blob `d0c6b0e34d5493d7206df270d0d34d1eedeec94e`, è stato riletto per questa revisione del pacchetto. Descrive ancora Telegram-first/Python, regole di branch/CI e deploy VPS incompatibili con la baseline 2.0. Questo giustifica il percorso di adozione; non prova che quelle automazioni siano oggi attive sul server. Il loro stato va riletto prima di push/merge o dismissione.
-
-Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corrente. I riferimenti sono ingressi da verificare, non una promessa di permanenza della stessa interfaccia CLI. Nessun audit delle risorse live è stato eseguito in questa revisione documentale.
-
-<a id="s28"></a>
-### S28 · Codex desktop e file iCloud locali
-
-- [Codex desktop · documentazione ufficiale](https://developers.openai.com/codex/app/)
-- [Modello di sicurezza e approvazioni Codex](https://developers.openai.com/codex/security)
-- [Apple · lavorare con i file iCloud Drive sul Mac](https://support.apple.com/en-euro/guide/mac-help/mchl1a02d711/mac)
-
-**Verifica pertinente:** checkout locale corretto, disponibilità effettiva dello ZIP scaricato e permessi del client. Il percorso iCloud indicato nella procedura di adozione archiviata è un candidato standard, non una directory garantita su ogni Mac. Nessun collegamento in questa lista autorizza accesso o scritture.
+Le pagine OpenAI possono essere reindirizzate alla documentazione ufficiale corrente. I riferimenti sono ingressi da verificare, non una promessa di permanenza della stessa interfaccia CLI.
 
 <a id="s29"></a>
 ### S29 · Better Auth Infrastructure · dati, retention e condizioni
@@ -257,7 +244,7 @@ Nella 0.4.25 (D241) la dashboard legge anche dal Worker, sugli endpoint `/api/au
 
 - [Debian Sources: licenza di `buffers` 0.1.1](https://sources.debian.org/copyright/license/node-buffers/0.1.1-2/)
 
-**Verifica locale:** `pnpm licenses list --prod --json` sul lockfile candidato ha censito licenze permissive, una scelta duale MIT/GPL per `jszip`, MIT+Zlib per `pako` e un solo metadata mancante per `buffers@0.1.1`, risolto dalla provenienza distribuita come MIT. Il risultato qualifica la dipendenza corrente, non sostituisce il notice distributivo né l'inventario di asset e componenti copiati.
+**Verifica locale del 20 settembre 2026:** `pnpm licenses list --prod --json` sul lockfile di allora aveva censito licenze permissive, una scelta duale MIT/GPL per `jszip`, MIT+Zlib per `pako` e un solo metadata mancante per `buffers@0.1.1`, risolto dalla provenienza distribuita come MIT. I tre pacchetti non sono più dipendenze di produzione. Il risultato non sostituisce il notice distributivo né l'inventario di asset e componenti copiati.
 
 **Uso:** §30.
 
@@ -312,7 +299,7 @@ Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazion
 
 **Verifica del 2026-10-28:** l'API Telemetry dei Workers Logs legge con il solo permesso Workers Observability Read e riporta per ogni invocazione `$workers.cpuTimeMs` e `$workers.wallTimeMs`; query, dashboard e alert non hanno addebiti propri, dal 1° dicembre 2026 si pagano soltanto acquisizione e conservazione dei log già raccolti. Nel Worker l'orologio avanza soltanto con l'I/O, quindi una durata misurata nel codice non coglie il calcolo.
 
-**Uso:** §12, §14, §25, §29, §31; procedura in [RELEASE](../operations/OBSERVABILITY.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
+**Uso:** §12, §14, §25, §29, §31; procedura in [Osservabilità](../operations/OBSERVABILITY.md#dashboard-test). Limiti e prezzi cambiano: rileggerli prima di una decisione di piano o dell'apertura pubblica.
 
 <a id="s35"></a>
 ### S35 · Trasporto email alternativo
@@ -322,9 +309,9 @@ Analytics Engine conserva tre mesi e ammette fino a 250 datapoint per invocazion
 - [Piani Brevo](https://help.brevo.com/hc/en-us/articles/208589409-About-Brevo-s-pricing-plans)
 - [Limiti Free e invii transazionali Brevo](https://help.brevo.com/hc/en-us/articles/208580669-FAQs-What-are-the-limits-of-the-Free-plan)
 
-**Verifica del 2026-10-12:** la pagina ufficiale Resend conferma 3.000 email al mese, massimo 100 al giorno e tre domini sul Free. La pagina prezzi Brevo non restituisce contenuto leggibile nel canale di consultazione usato; il suo help ufficiale conferma 300 invii al giorno, senza riporto dei crediti inutilizzati, anche per email transazionali. Verificare nell'account selezionato limiti e gestione del superamento prima di qualificare l'invio Auth pubblico. Nessuna opzione selezionata o nuovo provider attivato.
+**Verifica del 2026-10-12:** la pagina ufficiale Resend conferma 3.000 email al mese, massimo 100 al giorno e tre domini sul Free. La pagina prezzi Brevo non restituisce contenuto leggibile nel canale di consultazione usato; il suo help ufficiale conferma 300 invii al giorno, senza riporto dei crediti inutilizzati, anche per email transazionali. Nessuno dei due provider è stato attivato.
 
-**Uso:** §14. Opzioni aperte accanto a Cloudflare Email Service ([S34](#s34)).
+**Uso:** §14. Alternative scartate da [D169](../decisions/DECISION_REGISTER.md), che sceglie Cloudflare Email Service ([S34](#s34)).
 
 <a id="s36"></a>
 ### S36 · Cloudflare · protezioni della zona e della posta

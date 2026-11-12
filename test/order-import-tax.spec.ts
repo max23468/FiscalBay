@@ -1051,13 +1051,14 @@ it("riconosce le righe salvate senza identità e non abbina due righe alla stess
 });
 
 it("valida l'osservazione e salva lo snapshot con tutti i campi", async () => {
-  for (const invalid of [
-    observation({ total: { minor: 1, currency: "EURO" } }),
-    observation({ items: [line("k1", "stessa"), line("k2", "stessa")] }),
-    observation({ items: [line("k1", "a"), line("k1", "b")] }),
-  ]) {
-    await expect(recordOrderObservation(env.DB, target(), invalid)).rejects.toThrow();
-  }
+  // Le identità di riga duplicate sono provate in `order-import.spec.ts`.
+  await expect(
+    recordOrderObservation(
+      env.DB,
+      target(),
+      observation({ total: { minor: 1, currency: "EURO" } }),
+    ),
+  ).rejects.toThrow();
   const address = {
     addressLine1: "Via Roma 1",
     addressLine2: null,

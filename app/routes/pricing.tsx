@@ -37,7 +37,8 @@ import type { Route } from "./+types/pricing";
 /**
  * Prezzi (§23): Free e le tre modalità Premium nello stesso confronto, dal listino del sito
  * comune alla home. Promozione, posti lifetime e sospensione degli acquisti si leggono a ogni
- * richiesta; senza il database resta il listino di riserva, senza quota, prova o posti.
+ * richiesta, entro il minuto della cache breve per chi non ha cookie; senza il database resta
+ * il listino di riserva, senza quota, prova o posti.
  */
 export async function loader({ request }: Route.LoaderArgs) {
   const [{ language, origin, session }, listing] = await Promise.all([
@@ -87,9 +88,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     origin,
     signedIn: Boolean(session),
     owned,
-    baseFreeQuota: baseQuota,
-    freePromotion,
-    lifetime: { left: lifetimeLeft, total: lifetimeSlots },
     purchasesOpen,
     copy: {
       title: t.title,

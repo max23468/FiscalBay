@@ -272,14 +272,14 @@ describe("ripristino senza dati o diritti revocati", () => {
     assert.deepEqual(rows(restored, `SELECT "id" FROM "user" ORDER BY "id"`).length, 2);
   });
 
-  it("riporta interruttori, ammissione e prova Premium successivi al punto", async () => {
+  it("riporta interruttori, ammissione e prova Pro successivi al punto", async () => {
     const { current, restored } = scenario();
     for (const db of [current, restored])
       db.exec(`INSERT INTO admission_settings (id, free_waitlist, purchases_open, updated_at)
           VALUES (1, 0, 1, '${before}');
         INSERT INTO service_settings (name, value, updated_at)
           VALUES ('ebay_calls', 'true', '${before}'), ('telegram_sends', 'true', '${before}');`);
-    // Dopo il punto: acquisti e letture chiusi per un incidente, una prova Premium iniziata.
+    // Dopo il punto: acquisti e letture chiusi per un incidente, una prova Pro iniziata.
     current.exec(`UPDATE admission_settings SET purchases_open = 0, updated_at = '${later}';
       UPDATE service_settings SET value = 'false', updated_at = '${later}' WHERE name = 'ebay_calls';
       INSERT INTO workspace_entitlements (id, workspace_id, source, starts_at, ends_at)

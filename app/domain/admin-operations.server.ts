@@ -175,9 +175,11 @@ async function readSignals(db: D1Database, now: Date, at: string) {
     db.prepare(`SELECT s.id, ${storeLabelSql("s")} AS label, COUNT(*) AS count
           FROM order_source_refs r JOIN ebay_stores s ON s.id = r.store_id
           WHERE r.detail_error IS NOT NULL AND s.data_deleted_at IS NULL GROUP BY s.id`),
+    // Soltanto i guasti: un rifiuto certo di Telegram o i tentativi esauriti contano almeno un
+    // tentativo. Le chiusure volute (fine di Pro, notifiche spente, chat bloccata) non ne hanno.
     db
       .prepare(`SELECT workspace_id AS id, COUNT(*) AS count, MIN(failed_at) AS since
-          FROM telegram_deliveries WHERE failed_at IS NOT NULL
+          FROM telegram_deliveries WHERE failed_at IS NOT NULL AND attempts > 0
             AND julianday(failed_at) > julianday(?1) - 1 GROUP BY workspace_id`)
       .bind(at),
     db.prepare("SELECT api_origin AS id, until FROM ebay_rate_limits WHERE until > ?").bind(at),
@@ -364,18 +366,31 @@ function credentialAnomalies(credentials: Signals["credentials"]): Anomaly[] {
 /** Anomalie aperte, dalla più grave e poi dalla più vecchia. */
 export async function listAnomalies(db: D1Database, now = new Date()): Promise<Anomaly[]> {
   const at = now.toISOString();
-  const {
-    failing,
-    details,
-    telegram,
-    limits,
-    activeStores,
-    switchedOff,
-    unrecorded,
-    credentials,
-    taxGaps,
-    unallocated,
-  } = await readSignals(db, now, at);
+  // Letture indipendenti: insieme, il compito e la panoramica non le aspettano una dopo l'altra.
+  const [
+    {
+      failing,
+      details,
+      telegram,
+      limits,
+      activeStores,
+      switchedOff,
+      unrecorded,
+      credentials,
+      taxGaps,
+      unallocated,
+    },
+    quotas,
+    bulks,
+    tasks,
+    receiptGroups,
+  ] = await Promise.all([
+    readSignals(db, now, at),
+    quotaAnomalies(db, now),
+    bulkDataAnomalies(db, now),
+    taskStates(db, now),
+    receiptStates(db, now),
+  ]);
   const anomalies: Anomaly[] = [];
 
   if (unallocated.length > 0)
@@ -392,7 +407,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       })),
     });
 
-  for (const quota of await quotaAnomalies(db, now))
+  for (const quota of quotas)
     if (!quota.resolvedAt)
       anomalies.push({
         key: quota.key,
@@ -403,7 +418,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
         subjects: [{ id: quota.subject, label: quota.subject, href: "quote" }],
       });
 
-  for (const bulk of await bulkDataAnomalies(db, now))
+  for (const bulk of bulks)
     anomalies.push({
       key: bulk.key,
       kind: "ebay_bulk_data",
@@ -416,7 +431,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
   anomalies.push(...storeReadAnomalies({ failing, activeStores, details, taxGaps }, at));
 
   // Più lavori fermi insieme hanno di solito una sola causa, come il cron che non parte.
-  const stalled = (await taskStates(db, now)).filter((task) => task.stalled);
+  const stalled = tasks.filter((task) => task.stalled);
   if (stalled.length > 0)
     anomalies.push({
       key: "task_stalled",
@@ -429,7 +444,7 @@ export async function listAnomalies(db: D1Database, now = new Date()): Promise<A
       subjects: stalled.map((task) => ({ id: task.task, label: task.task, href: "lavori" })),
     });
 
-  const delayed = (await receiptStates(db, now)).filter((receipts) => receipts.stalled > 0);
+  const delayed = receiptGroups.filter((receipts) => receipts.stalled > 0);
   if (delayed.length > 0)
     anomalies.push({
       key: "receipts_stalled",

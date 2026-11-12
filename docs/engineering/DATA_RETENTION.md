@@ -83,7 +83,12 @@ può essere reimportato, compresi gli ordini non ancora osservati. Il ricollegam
 non azzera questo limite. Ogni scrittura dell'import rilegge consenso, marker e
 scadenza nello stesso batch; il tempo finale impedisce a una risposta iniziata
 prima della scadenza di aggiornare i dati dopo. L'eliminazione delle fonti rimuove
-anche i dettagli e i retry pendenti.
+anche i dettagli e i retry pendenti. Con gli ordini il comando elimina letture,
+ricevute webhook, consegne e preferenze Telegram del negozio, come il trasferimento
+assistito. Entrambi tolgono gli ordini a lotti da 200, fino a 50.000 per richiesta:
+oltre, il comando o la conferma ripetuti proseguono dagli ordini rimasti, con il
+negozio già scollegato dopo `Scollega ed elimina negozio` e ancora nello spazio di
+partenza prima del trasferimento.
 
 <a id="copie-derivate"></a>
 ## Copie derivate e lavori pendenti
@@ -115,7 +120,7 @@ anche i dettagli e i retry pendenti.
 | Console amministrativa | Il registro delle operazioni porta autore, operazione, oggetto, motivo ed esito, mai dati dei buyer o valori fiscali, non si modifica e si elimina un anno dopo l'operazione. Comunicazioni di servizio e anomalie chiuse si eliminano un anno dopo la fine; una preparazione di trasferimento mai confermata con la pulizia dopo la scadenza, una eseguita dopo un anno. Le revisioni antiabuso conservano un'impronta della chiave del segnale, non il valore condiviso. |
 | Log del Worker | Workers Logs conserva sette giorni ogni invocazione con indirizzo completo, IP, browser e posizione approssimativa della richiesta, senza il cookie di sessione; le tracce del Worker principale aggiungono gli indirizzi delle chiamate in uscita, senza il token del bot, che sta nel Worker del bot con le tracce spente; i codici monouso nell'indirizzo sono già consumati (D230); l'[archivio](../operations/OBSERVABILITY.md#archivio-log) a 90 giorni è un bucket R2 UE per ambiente, senza binding o accesso pubblico, con istante, tipo ed esito dell'invocazione, versione, CPU, durata ed eventi applicativi da elenchi chiusi (codice errore, operazione, correlation ID, fase, conteggi). Mai URL, header, testo delle eccezioni, email, dati dei buyer o valori fiscali. La regola del bucket elimina gli oggetti dopo 90 giorni. |
 | Incidenti comunicati all'owner | Una riga per anomalia P1 o P2 con tipo, gravità, istanti, conteggio e al più cinque etichette di negozi, lavori, provider o interruttori, l'ultimo stato comunicato su Telegram e l'ultimo copiato per email a `info@`; mai dati dei buyer, email o valori fiscali. Si elimina un anno dopo il rientro comunicato, come le anomalie chiuse. |
-| Avvisi commerciali all'owner | Una riga per fatto commerciale (registrazione, ammissione, primo negozio, prova, acquisto, disdetta, rinnovo non pagato, chiusura, rimborso, disputa, cancellazione finanziaria, posti lifetime, cancellazione dell'account) con la chiave del fatto, lo spazio, piano, importi, istanti e stato dell'invio; mai email, nomi, dati dei buyer o valori fiscali. Gli avvisi di uno spazio escono con lo spazio e quelli con l'identificativo dell'utente con l'utente; resta l'avviso della cancellazione dell'account, senza spazio. La pulizia giornaliera li elimina 30 giorni dopo il fatto. |
+| Avvisi commerciali all'owner | Una riga per fatto commerciale (registrazione, ammissione, primo negozio, prova, acquisto, disdetta, rinnovo non pagato, chiusura, rimborso, disputa, cancellazione finanziaria, posti lifetime, cancellazione dell'account) con la chiave del fatto, lo spazio, piano, importi, istanti e stato dell'invio; mai dati dei buyer o valori fiscali, e mai email o nomi salvo nell'avviso della cancellazione dell'account. Gli avvisi di uno spazio escono con lo spazio e quelli con l'identificativo dell'utente con l'utente; resta l'avviso della cancellazione dell'account, senza spazio, che conserva email, nome e ragione sociale letti alla richiesta perché l'utente esce prima dell'invio. La pulizia giornaliera li elimina 30 giorni dopo il fatto. |
 | Motivi di uscita | Una riga per disdetta dal portale e per cancellazione dell'account (D314): nei primi 30 giorni la chiave dell'avviso, lo spazio, il commento facoltativo e l'istante, poi soltanto tipo, motivo, piano, fascia di anzianità e mese, eliminati dopo 24 mesi. La cancellazione dello spazio toglie subito commento, spazio e chiave delle sue disdette; il motivo scelto nella richiesta di cancellazione aspetta la conferma al più un giorno e segue l'utente. Non entra nell'esportazione dell'account. |
 | Provenienza dell'iscrizione | Una riga per account con la categoria del canale di arrivo e il percorso della prima pagina, senza query, indirizzo di provenienza, IP o identificativi del visitatore; nessuna riga per chi visita senza registrarsi. Si scrive una volta alla creazione dell'account, entra nell'esportazione dei dati e si elimina con l'utente; la console ne legge soltanto aggregati ([D304](../decisions/DECISION_REGISTER.md)). |
 | Registro delle scadenze | Nomi logici delle credenziali dell'ambiente e date di scadenza, copiati dall'inventario privato con `scripts/credential-expiries.mjs`; mai valori o riferimenti di custodia. Ogni copia sostituisce la precedente. |
@@ -165,8 +170,8 @@ ricollega le righe all'utente eBay. Le copie native del provider (Time Travel pe
 30 giorni) restano fino alla loro scadenza; un restore riapplica le richieste come
 descritto sopra. eBay ritenta finché la consegna non riceve 200, 201, 202 o 204
 ([S23](../reference/SOURCES.md#s23)). Il keyset `botCF`, usato soltanto da FiscalBay, ha un solo
-endpoint per queste notifiche: dal 2026-10-28 è `https://fiscalbay.it/webhooks/ebay`
-e il test non le riceve più.
+endpoint per queste notifiche: è `https://fiscalbay.it/webhooks/ebay` e il test non le
+riceve più ([stato dei servizi](../operations/OPERATIONS.md#stato-dei-servizi)).
 
 <a id="identita-e-suggerimenti"></a>
 ## Identità e suggerimenti

@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ApplicationError, classifyFailure, correlateResponse, logFailure } from "../app/errors";
 import { errorResponse } from "../app/error-response";
@@ -26,6 +26,9 @@ import {
   withPhaseTimings,
 } from "../app/observability.server";
 import { routeData, routeResponse } from "./fixtures/route-fixtures";
+
+// Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+afterEach(() => vi.restoreAllMocks());
 
 describe("errors, locale and redacted logs", () => {
   it("adds correlation to redirects with immutable headers", () => {
@@ -468,7 +471,9 @@ describe("metriche tecniche su Analytics Engine", () => {
     const [count, total, longest] = d1!.doubles!;
     expect(count).toBe(4);
     expect(total).toBeGreaterThanOrEqual(longest!);
-    expect(total).toBeLessThan(longest! * 2.5);
+    // Sommate una per una le quattro misure valgono almeno 3 × 40 + 20 ms; contate una volta sola
+    // ne restano circa 60. La soglia sulla somma regge ai ritardi dei timer sotto carico.
+    expect(total).toBeLessThan(3 * 40 + 20);
     expect(total).toBeLessThanOrEqual(invocation!.doubles![1]! + 1);
     const timing = Number(/d1;dur=([\d.]+)/u.exec(response.headers.get("server-timing")!)![1]);
     expect(Math.abs(timing - total!)).toBeLessThanOrEqual(1);

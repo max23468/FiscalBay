@@ -11,7 +11,9 @@
  * Da rieseguire quando cambiano le schermate mostrate dal sito, su una preview locale della build:
  *   pnpm build && E2E_PORT=5300 node scripts/local-preview.mjs
  *   node node_modules/vite/bin/vite.js preview .cloudflare/preview --config vite.config.ts --port 5300
- *   pnpm site:screenshots http://localhost:5300
+ *   E2E_PORT=5300 pnpm site:screenshots
+ * Senza un indirizzo come argomento vale l'origine della preview locale di `e2e/local-account.ts`:
+ * `E2E_PORT`, la porta fissa in CI o quella del worktree.
  * Ogni schermata porta nell'indirizzo una versione ricavata dai suoi file, così il browser la
  * conserva a lungo: dopo una modifica a mano dei file, `node scripts/site-screenshots.mjs --versions`.
  */
@@ -20,8 +22,9 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { localOrigin } from "../e2e/local-account.ts";
 
-const base = process.argv[2] ?? "http://localhost:5186";
+const base = process.argv[2] ?? localOrigin;
 const output = "public/site";
 const languages = ["it", "en"];
 const schemes = ["light", "dark"];

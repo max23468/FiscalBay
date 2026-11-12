@@ -386,12 +386,13 @@ export async function reconcileBilling(env: Env, fetcher: typeof fetch = fetch, 
       ),
     ];
     const lifetimes = sessions.filter(isLifetimeSession).map((session) => session.id);
+    // Elenchi come JSON: un parametro per identificativo supera il limite di D1 oltre i cento.
     const { results: known } = await env.DB.prepare(
-      `SELECT id FROM stripe_subscriptions WHERE id IN (${ids.map(() => "?").join(", ")})
+      `SELECT id FROM stripe_subscriptions WHERE id IN (SELECT value FROM json_each(?1))
       UNION SELECT provider_reference FROM lifetime_allocations WHERE status = 'active'
-        AND provider_reference IN (${lifetimes.map(() => "?").join(", ")})`,
+        AND provider_reference IN (SELECT value FROM json_each(?2))`,
     )
-      .bind(...ids, ...lifetimes)
+      .bind(JSON.stringify(ids), JSON.stringify(lifetimes))
       .all<{ id: string }>();
     const local = new Set(known.map((row) => row.id));
     await inSequence(

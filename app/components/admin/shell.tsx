@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 
 import { NavigationProgress } from "~/components/navigation-progress";
+import { mainContentId, SkipLink } from "~/components/skip-link";
 import { Logo } from "~/components/standalone-page";
 import { Button } from "~/components/ui/button";
 import { buttonLink } from "~/components/ui/button-variants";
@@ -56,6 +57,7 @@ export function AdminShell({
   const { t, href, language } = useAdmin();
   return (
     <div className="min-h-dvh bg-background">
+      <SkipLink />
       <header className="relative border-b bg-card">
         <NavigationProgress />
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
@@ -126,7 +128,11 @@ export function AdminShell({
           </ul>
         </nav>
       </header>
-      <main className="mx-auto grid max-w-7xl gap-5 px-4 py-6 sm:px-6">
+      <main
+        id={mainContentId}
+        tabIndex={-1}
+        className="mx-auto grid max-w-7xl gap-5 px-4 py-6 outline-none sm:px-6"
+      >
         <div className="grid min-w-0 gap-1">
           <h1 className="text-2xl font-bold tracking-tight text-balance break-words">{title}</h1>
           {subtitle ? <p className="text-sm text-muted-foreground">{subtitle}</p> : null}

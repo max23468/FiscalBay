@@ -28,6 +28,7 @@ import {
 } from "./store";
 import {
   connectionStatus,
+  consentExpired,
   ebayDownFor,
   ebayDownText,
   hasSubtitle,
@@ -165,9 +166,7 @@ function ConnectionSection({ store, now }: SectionProps & { now: string }) {
   const { t } = useCopy();
   const date = useDate();
   const status = connectionStatus(store, t);
-  const expired =
-    store.connection === "reconnect_required" ||
-    (store.consentExpiresAt !== null && store.consentExpiresAt <= now);
+  const expired = consentExpired(store, now);
   const row = "grid gap-0.5";
   return (
     <StoreSection

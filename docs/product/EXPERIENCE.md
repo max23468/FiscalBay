@@ -10,11 +10,11 @@ Desktop: **top navigation**, non sidebar principale. Voci **Ordini · Negozi eBa
 | Superficie | Percorso canonico indicativo |
 |---|---|
 | Pubblico IT / EN | `/`, `/en` e pagine localizzate |
-| Accesso / registrazione / recupero | `/login`, `/registrati`, route Auth coerenti |
+| Accesso / registrazione / recupero | `/accesso` (in inglese il segmento tradotto), route Auth coerenti |
 | Ordini e dettaglio | `/app/ordini`, `/app/ordini/:id` |
 | Negozi e dettaglio | `/app/negozi`, `/app/negozi/:id` |
 | Impostazioni e sottosezioni | `/app/impostazioni/:sezione` |
-| Profilo | `/app/impostazioni/profilo`; `/app/profilo` reindirizza (D191) |
+| Account | `/app/impostazioni/account`; `/app/profilo`, `/app/impostazioni/profilo` e `/app/impostazioni/sicurezza` reindirizzano (D191) |
 | Admin | `/admin` e sottosezioni autorizzate |
 | Endpoint applicativi necessari | `/api/v1/...`, solo con un consumatore concreto |
 | Callback / webhook | Endpoint dedicati, non confusi con pagine pubbliche |

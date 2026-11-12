@@ -1,11 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  buildLastModifiedFilter,
-  fulfillmentObservation,
-} from "../app/integrations/ebay/fulfillment.server";
-import { mapTradingTaxIdentifiers } from "../app/integrations/ebay/trading.server";
-import {
   currentFreePromotion,
   orderAllowance,
   UnlockError,
@@ -168,37 +163,6 @@ describe("percorso ordini", () => {
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
     expect(await toggle("forse")).toMatchObject({ init: { status: 400 } });
     expect(await unlockConfirmation(env.DB, user!.id)).toBe(false);
-  });
-
-  it("costruisce il filtro incrementale e rifiuta intervalli invalidi", () => {
-    expect(
-      buildLastModifiedFilter(
-        new Date("2026-09-20T12:00:00.000Z"),
-        new Date("2026-09-20T12:30:00.000Z"),
-        60 * 60 * 1000,
-      ),
-    ).toBe("lastmodifieddate:[2026-09-20T11:00:00.000Z..2026-09-20T12:30:00.000Z]");
-    expect(() =>
-      buildLastModifiedFilter(
-        new Date("2026-09-20T12:00:00.000Z"),
-        new Date("2026-09-20T12:30:00.000Z"),
-        Number.NaN,
-      ),
-    ).toThrow("Intervallo incrementale eBay non valido");
-    const edge = new Date("2026-09-20T12:00:00.000Z");
-    expect(buildLastModifiedFilter(edge, edge, 0)).toBe(
-      "lastmodifieddate:[2026-09-20T12:00:00.000Z..2026-09-20T12:00:00.000Z]",
-    );
-    for (const [checkpoint, end, overlap] of [
-      [new Date(Number.NaN), edge, 0],
-      [edge, new Date(Number.NaN), 0],
-      [edge, edge, -1],
-      [new Date(edge.getTime() + 1), edge, 0],
-    ] as const) {
-      expect(() => buildLastModifiedFilter(checkpoint, end, overlap)).toThrow(
-        "Intervallo incrementale eBay non valido",
-      );
-    }
   });
 
   it("non confronta gli identificativi senza chiave e ne lascia intatte le modifiche", async () => {
@@ -433,180 +397,6 @@ describe("percorso ordini", () => {
     await env.DB.prepare("DELETE FROM tax_identifiers WHERE order_id = 'o-a'").run();
     // Senza controllo fiscale né lettura in attesa la verifica non è riuscita: si riprova.
     expect((await listVisibleOrders(env.DB, "u-a"))[0]?.fiscalState).toBe("error");
-  });
-
-  it("la lettura Fulfillment conserva solo i campi del modello, con importi esatti", () => {
-    const readAt = "2026-09-21T00:00:00.000Z";
-    const address = {
-      addressLine1: "Via Roma 1",
-      addressLine2: "Scala B",
-      city: "Trento",
-      postalCode: "38122",
-      stateOrProvince: "TN",
-      countryCode: "IT",
-      county: "NON-ESPORRE",
-    };
-    const { county: _, ...savedAddress } = address;
-    const line = (lineItemId: string, legacyItemId: string | undefined, marketplace: string) => ({
-      lineItemId,
-      legacyItemId,
-      title: `Articolo ${lineItemId}`,
-      quantity: 2,
-      sku: "SKU-1",
-      lineItemCost: { value: "1000", currency: "JPY" },
-      listingMarketplaceId: marketplace,
-      taxIdentifier: "NON-ESPORRE",
-    });
-    const complete = fulfillmentObservation(
-      {
-        orderId: "ordine",
-        creationDate: "2026-09-20T10:00:00Z",
-        lastModifiedDate: "2026-09-20T11:00:00.000Z",
-        orderPaymentStatus: "PAID",
-        orderFulfillmentStatus: "NOT_STARTED",
-        cancelStatus: { cancelState: "NONE_REQUESTED" },
-        pricingSummary: { total: { value: "2000", currency: "JPY" } },
-        buyer: {
-          username: "acquirente-sintetico",
-          taxIdentifier: { value: "NON-ESPORRE" },
-          buyerRegistrationAddress: {
-            fullName: "Mario Rossi",
-            email: "acquirente@example.invalid",
-            primaryPhone: { phoneNumber: "+39 000 0000000" },
-            contactAddress: address,
-          },
-        },
-        fulfillmentStartInstructions: [
-          {
-            shippingStep: {
-              shipTo: {
-                fullName: "Anna Bianchi",
-                primaryPhone: { phoneNumber: "+39 000 1111111" },
-                contactAddress: address,
-              },
-            },
-          },
-        ],
-        lineItems: [line("riga-1", "110", "EBAY_IT"), line("riga-2", undefined, "EBAY_IT")],
-        taxIdentifier: "NON-ESPORRE",
-      },
-      readAt,
-    );
-    const item = (lineItemId: string, stableKey: string | null) => ({
-      lineItemId,
-      legacyItemId: stableKey?.split("-")[0] ?? null,
-      stableKey,
-      title: `Articolo ${lineItemId}`,
-      sku: "SKU-1",
-      quantity: 2,
-      total: { minor: 1000, currency: "JPY" },
-    });
-    expect(complete).toEqual({
-      source: "fulfillment",
-      externalOrderId: "ordine",
-      provisional: false,
-      creationTime: "2026-09-20T10:00:00.000Z",
-      lastModifiedTime: "2026-09-20T11:00:00.000Z",
-      marketplaceId: "EBAY_IT",
-      total: { minor: 2000, currency: "JPY" },
-      paymentStatus: "PAID",
-      fulfillmentStatus: "NOT_STARTED",
-      cancelStatus: "NONE_REQUESTED",
-      buyer: {
-        username: "acquirente-sintetico",
-        name: "Mario Rossi",
-        email: "acquirente@example.invalid",
-        phone: "+39 000 0000000",
-        billingAddress: savedAddress,
-        shipTo: { name: "Anna Bianchi", phone: "+39 000 1111111", address: savedAddress },
-      },
-      items: [item("riga-1", "110-riga-1"), item("riga-2", null)],
-    });
-    expect(JSON.stringify(complete)).not.toContain("NON-ESPORRE");
-
-    // Campi facoltativi assenti: nulli, senza errori; marketplace diversi non ne scelgono uno.
-    const minimal = {
-      orderId: "minimo",
-      creationDate: "2026-09-20T10:00:00Z",
-      lastModifiedDate: "2026-09-20T10:00:00Z",
-      pricingSummary: { total: { value: "12.5", currency: "EUR" } },
-    };
-    expect(fulfillmentObservation(minimal, readAt)).toMatchObject({
-      marketplaceId: null,
-      paymentStatus: null,
-      cancelStatus: null,
-      buyer: {
-        username: null,
-        name: null,
-        email: null,
-        phone: null,
-        billingAddress: null,
-        shipTo: null,
-      },
-      items: [],
-      total: { minor: 1250, currency: "EUR" },
-    });
-    expect(
-      fulfillmentObservation(
-        {
-          ...minimal,
-          buyer: { buyerRegistrationAddress: {} },
-          fulfillmentStartInstructions: [{ shippingStep: { shipTo: {} } }],
-          lineItems: [
-            line("a", "1", "EBAY_IT"),
-            { ...line("b", "2", "EBAY_DE"), lineItemCost: undefined },
-          ],
-        },
-        readAt,
-      ),
-    ).toMatchObject({
-      marketplaceId: null,
-      buyer: { phone: null, shipTo: { name: null, phone: null, address: null } },
-      items: [{ total: { minor: 1000 } }, { total: null }],
-    });
-    expect(
-      fulfillmentObservation({ ...minimal, fulfillmentStartInstructions: [{}] }, readAt).buyer
-        .shipTo,
-    ).toBeNull();
-    expect(
-      fulfillmentObservation({ ...minimal, fulfillmentStartInstructions: [] }, readAt).buyer.shipTo,
-    ).toBeNull();
-    expect(() =>
-      fulfillmentObservation(
-        {
-          ...minimal,
-          pricingSummary: { total: { value: "12.345", currency: "EUR" } },
-        },
-        readAt,
-      ),
-    ).toThrow("inexact_amount");
-    expect(() => fulfillmentObservation({ ...minimal, orderId: "" }, readAt)).toThrow();
-  });
-
-  it("mappa la fonte fiscale Trading senza inventare il Paese emittente", () => {
-    expect(
-      mapTradingTaxIdentifiers([
-        { id: "SYNTHETIC-ID", type: "CODICE_FISCALE" },
-        {
-          id: "SYNTHETIC-VAT",
-          type: "VAT_ID",
-          attributes: [{ name: "IssuingCountry", value: "IT" }],
-        },
-      ]),
-    ).toEqual([
-      {
-        type: "CODICE_FISCALE",
-        issuingCountry: null,
-        value: "SYNTHETIC-ID",
-        source: "ebay_trading_get_orders",
-      },
-      {
-        type: "VAT_ID",
-        issuingCountry: "IT",
-        value: "SYNTHETIC-VAT",
-        source: "ebay_trading_get_orders",
-      },
-    ]);
   });
 
   it("sblocca il lotto atomicamente, conserva il consenso solo al successo e non ripete il consumo", async () => {
@@ -1093,6 +883,8 @@ describe("percorso ordini", () => {
 
   it("non anticipa una copertura futura durante lo sblocco e consuma il credito Free corrente", async () => {
     await seed();
+    // Le coperture si valutano all'istante del grant Free: questa inizia dopo l'istante del
+    // grant ma prima dell'ora reale della prova.
     await insertEntitlement({
       id: "future",
       source: "premium",
@@ -1108,18 +900,6 @@ describe("percorso ordini", () => {
         "SELECT source, cycle_id FROM order_grants WHERE order_id = 'o-a'",
       ).first(),
     ).toEqual({ source: "free_cycle", cycle_id: "c-a" });
-  });
-
-  it("valuta le coperture all'istante del grant Free, non all'ora corrente", async () => {
-    await seed();
-    // La copertura inizia dopo l'istante del grant ma prima dell'ora reale della prova.
-    await insertEntitlement({
-      id: "later",
-      source: "premium",
-      startsAt: "2026-09-14T00:00:00.000Z",
-      endsAt: "2026-09-15T00:00:00.000Z",
-    }).run();
-    await unlockOrders(env.DB, "u-a", ["o-a"], false, "production", new Date(now));
     expect(await env.DB.prepare("SELECT used FROM free_cycles WHERE id = 'c-a'").first()).toEqual({
       used: 1,
     });

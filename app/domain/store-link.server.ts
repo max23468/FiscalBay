@@ -1,5 +1,10 @@
 import { logFailure } from "../errors";
-import { applyStoreMark, markAnchorStatement, readStoreMark } from "./store-marks.server";
+import {
+  applyStoreMark,
+  markAnchorStatement,
+  readStoreMark,
+  storeIdentity,
+} from "./store-marks.server";
 import type { Language } from "../i18n";
 import { linkReadAdmitted, storeLinkAdmitted } from "./admission.server";
 import { applyFreePlan } from "./free-store.server";
@@ -320,10 +325,7 @@ async function linkStore(
 ): Promise<string | null> {
   const db = env.DB;
   const workspaceId = await workspaceFor(db, userId, now, language);
-  const ebayUserId =
-    ebayEnvironment === "production"
-      ? identity.userId
-      : JSON.stringify([ebayEnvironment, identity.userId]);
+  const ebayUserId = storeIdentity(ebayEnvironment, identity.userId);
   // Un negozio lasciato da uno spazio cancellato o trasferito porta con sé prova usata e ciclo
   // Free.
   const mark = await readStoreMark(db, env.BETTER_AUTH_SECRET, ebayUserId, new Date(now));

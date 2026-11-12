@@ -24,6 +24,7 @@ import { verifiedSession } from "./fixtures/account-fixtures";
 import { subscriptionView } from "../app/domain/plan-view.server";
 import {
   insertEntitlement,
+  insertSubscription,
   now,
   resetDatabase,
   insertWorkspace,
@@ -39,12 +40,8 @@ import {
   type FakeSubscription,
   stripeAccount,
   firstInvoice,
+  liveKey,
 } from "./fixtures/stripe-fixtures";
-
-/** Chiave segreta live: Production accetta soltanto chiavi live, standard o con limitazioni. */
-// Chiave sintetica, priva di credenziali Stripe, usata soltanto dal provider finto.
-// react-doctor-disable-next-line react-doctor/no-secrets-in-client-code
-const liveKey = "sk_live_fiscalbay";
 
 describe("Webhook e riconciliazione Stripe", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -265,18 +262,52 @@ describe("Webhook e riconciliazione Stripe", () => {
       expect(stripeSecretKey({ ...target, STRIPE_SECRET_KEY: key })).toBeUndefined();
     // Una chiave rifiutata ferma acquisti, portale, ricevute e cron senza chiamare Stripe.
     const stripe = stripeAccount();
-    for (const target of [
-      { ...env, STRIPE_SECRET_KEY: liveKey },
-      { ...production, STRIPE_SECRET_KEY: "sk_test_fiscalbay" },
-    ] as Env[]) {
-      expect(checkoutConfigured(target)).toBe(false);
-      await expect(
-        applyStripeEvent(target, { topic: "invoice.paid", objectId: "in_first" }, stripe.fetcher),
-      ).rejects.toMatchObject({ code: "UPSTREAM_UNAVAILABLE" });
-      await reconcileBilling(target, stripe.fetcher, at(now));
-      expect(await openBillingPortal(target, "u-a", "https://fiscalbay.it/", "it")).toBeNull();
+    // Lo spazio ha un cliente Stripe in entrambi gli ambienti: il portale dipende solo dalla chiave.
+    await env.DB.batch(
+      (["test", "live"] as const).map((environment) =>
+        insertSubscription({
+          id: `sub_${environment}`,
+          environment,
+          customerId: `cus_${environment}`,
+          periodStart,
+          periodEnd,
+          renewalOffer: "monthly",
+        }),
+      ),
+    );
+    // Il portale usa `fetch` globale: sostituito, una chiamata a Stripe risulterebbe qui.
+    const globalFetch = vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    try {
+      for (const target of [
+        { ...env, STRIPE_SECRET_KEY: liveKey },
+        { ...production, STRIPE_SECRET_KEY: "sk_test_fiscalbay" },
+      ] as Env[]) {
+        expect(checkoutConfigured(target)).toBe(false);
+        await expect(
+          applyStripeEvent(target, { topic: "invoice.paid", objectId: "in_first" }, stripe.fetcher),
+        ).rejects.toMatchObject({ code: "UPSTREAM_UNAVAILABLE" });
+        await reconcileBilling(target, stripe.fetcher, at(now));
+        expect(await openBillingPortal(target, userId, "https://fiscalbay.it/", "it")).toBeNull();
+      }
+      expect(stripe.fetcher).not.toHaveBeenCalled();
+      // Con la chiave del proprio ambiente lo stesso utente apre il portale sul cliente giusto.
+      for (const [target, customer] of [
+        [env, "cus_test"],
+        [{ ...production, STRIPE_SECRET_KEY: liveKey } as Env, "cus_live"],
+      ] as const) {
+        expect(await openBillingPortal(target, userId, "https://fiscalbay.it/", "it")).toBe(
+          "https://billing.example.invalid/p/session_test",
+        );
+        expect(
+          stripe.writes
+            .filter((write) => write.path === "/v1/billing_portal/sessions")
+            .at(-1)!
+            .body.get("customer"),
+        ).toBe(customer);
+      }
+    } finally {
+      globalFetch.mockRestore();
     }
-    expect(stripe.fetcher).not.toHaveBeenCalled();
   });
 
   it("in Production registra gli abbonamenti live", async () => {
@@ -301,15 +332,21 @@ describe("Webhook e riconciliazione Stripe", () => {
     const { cookie } = await verifiedSession("redirect-falso@example.invalid");
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const result = (await settingsLoader({
-      request: new Request(
-        "http://localhost:5173/app/impostazioni/piano?checkout=processing&session_id=cs_test",
-        { headers: { cookie } },
-      ),
-      params: { sezione: "piano" },
-    } as unknown as Parameters<typeof settingsLoader>[0])) as { page: { account: unknown } };
-    expect(result.page.account).toMatchObject({ plan: "free" });
-    expect(stripe.fetcher).not.toHaveBeenCalled();
+    // Il loader userebbe `fetch` globale: sostituito, una lettura da Stripe risulterebbe qui.
+    const globalFetch = vi.spyOn(globalThis, "fetch").mockImplementation(stripe.fetcher);
+    try {
+      const result = (await settingsLoader({
+        request: new Request(
+          "http://localhost:5173/app/impostazioni/piano?checkout=processing&session_id=cs_test",
+          { headers: { cookie } },
+        ),
+        params: { sezione: "piano" },
+      } as unknown as Parameters<typeof settingsLoader>[0])) as { page: { account: unknown } };
+      expect(result.page.account).toMatchObject({ plan: "free" });
+      expect(stripe.fetcher).not.toHaveBeenCalled();
+    } finally {
+      globalFetch.mockRestore();
+    }
 
     stripe.state.invoices = [firstInvoice];
     for (const subscription of [
@@ -694,12 +731,14 @@ describe("Webhook e riconciliazione Stripe", () => {
         endsAt: hours(-240),
       }),
     ]);
-    const subscription = (id: string, workspace: string, checked: string, periodEnd: string) =>
-      env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id,
-          offer, price_generation, status, current_period_start, current_period_end,
-          cancel_at_period_end, synced_at, checked_at, renewal_offer)
-        VALUES (?1, ?2, 'test', 'cus_test', 'monthly', '2026-09', 'active', ?3, ?4, 0, ?3, ?3,
-          'monthly')`).bind(id, workspace, checked, periodEnd);
+    const subscription = (id: string, workspaceId: string, checked: string, periodEnd: string) =>
+      insertSubscription({
+        id,
+        workspaceId,
+        periodStart: checked,
+        periodEnd,
+        renewalOffer: "monthly",
+      });
     await env.DB.batch([
       ...Array.from({ length: 3 }, (_, index) =>
         subscription(`dovuto-${index}`, "w-c", hours(80), hours(1)),
@@ -772,14 +811,12 @@ describe("Webhook e riconciliazione Stripe", () => {
       { id: "cs_known", mode: "subscription", subscription: "sub_known" },
       { id: "cs_lifetime", mode: "payment", subscription: null },
     ];
-    await env.DB.prepare(
-      `INSERT INTO stripe_subscriptions (id, workspace_id, environment, customer_id, offer,
-        price_generation, status, current_period_start, current_period_end, cancel_at_period_end,
-        synced_at, checked_at)
-       VALUES ('sub_known', 'w-a', 'test', 'cus_test', 'monthly', '2026-09', 'canceled', ?1, ?2, 0, ?1, ?1)`,
-    )
-      .bind("2026-08-13T20:00:00.000Z", now)
-      .run();
+    await insertSubscription({
+      id: "sub_known",
+      status: "canceled",
+      periodStart: "2026-08-13T20:00:00.000Z",
+      periodEnd: now,
+    }).run();
     stripe.state.invoices = [firstInvoice];
     const errors = vi.spyOn(console, "error");
     await reconcileBilling(env, stripe.fetcher, at(now));
@@ -932,6 +969,27 @@ describe("Webhook e riconciliazione Stripe", () => {
     expect(stripe.writes.at(-1)!.body.get("items[0][price]")).toBe("price_monthly_2026-09");
     expect(await view(now)).toEqual({ premium: { period: "monthly", renewsAt: periodEnd } });
     expect(((await change("trimestrale")) as { init: ResponseInit }).init.status).toBe(400);
+
+    // Con il cambio programmato Stripe registra `trialing`: la disdetta dal portale resta quella
+    // di un mensile pagante, non di una prova.
+    stripe.state.subscription = {
+      status: "trialing",
+      start: periodStart,
+      end: periodEnd,
+      price: { id: "price_annual_2026-09", interval: "year" },
+      metadata: { workspace_id: "w-a", offer: "monthly", price_generation: "2026-09" },
+      cancel: true,
+      feedback: { feedback: "too_expensive", comment: null },
+    };
+    await applyStripeEvent(
+      env,
+      { topic: "customer.subscription.updated", objectId: "sub_test" },
+      stripe.fetcher,
+      at(now),
+    );
+    expect(
+      (await env.DB.prepare("SELECT kind, reason, plan FROM exit_feedback").all()).results,
+    ).toEqual([{ kind: "cancellation", reason: "too_expensive", plan: "monthly" }]);
 
     // Dopo il rinnovo con il nuovo prezzo, il periodo pagato è annuale.
     stripe.state.subscription = {
@@ -1173,13 +1231,7 @@ describe("Webhook e riconciliazione Stripe", () => {
     // Anche il passo dei posti fallisce, sul database.
     vi.spyOn(env.DB, "batch").mockRejectedValueOnce(new Error("d1_unavailable"));
     // L'abbonamento dovuto si rilegge comunque.
-    await env.DB.prepare(`INSERT INTO stripe_subscriptions (id, workspace_id, environment,
-        customer_id, offer, price_generation, status, current_period_start, current_period_end,
-        cancel_at_period_end, synced_at, checked_at, renewal_offer)
-      VALUES ('sub_test', 'w-a', 'test', 'cus_test', 'monthly', '2026-09', 'active', ?1, ?2, 0,
-        ?1, ?1, 'monthly')`)
-      .bind(periodStart, periodEnd)
-      .run();
+    await insertSubscription({ periodStart, periodEnd, renewalOffer: "monthly" }).run();
     await reconcileBilling(env, stripe.fetcher, at("2026-10-13T20:10:00.000Z"));
     expect(logged(errors)).toEqual([
       expect.objectContaining({ operation: "billing", failure: "unavailable" }),

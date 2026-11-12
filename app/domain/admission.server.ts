@@ -3,6 +3,7 @@ import type { Language } from "../i18n";
 import { displayTimeZone, formatDate } from "../format";
 import { purchasesOpenSql, waitingSql, waitlistOnSql } from "./admission-state.server";
 import { activeEntitlementSql } from "./grants.server";
+import { emailLanguageSql } from "./sign-in-methods.server";
 import { unpausedStore } from "./store-state.server";
 import { dayMilliseconds } from "../time";
 
@@ -231,8 +232,7 @@ export async function applyInactivity(env: Env, now = new Date()) {
   ]);
   const { results } = await db
     .prepare(`SELECT w.id, w.active_at, u."email" AS email,
-        (SELECT t.language FROM terms_acceptances t WHERE t.user_id = u."id"
-          ORDER BY t.accepted_at DESC LIMIT 1) AS language,
+        ${emailLanguageSql('u."id"')} AS language,
         (SELECT p.time_zone FROM user_preferences p WHERE p.user_id = u."id") AS time_zone
       FROM workspaces w
       JOIN workspace_members wm ON wm.workspace_id = w.id AND wm.role = 'owner'

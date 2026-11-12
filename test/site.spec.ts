@@ -32,7 +32,11 @@ import { accessForm } from "./fixtures/account-route-fixtures";
 import { callRoute, pagePath } from "./fixtures/route-fixtures";
 
 beforeEach(resetDatabase);
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  // Uno spy lasciato da una prova non sostituisce l'implementazione reale nelle successive.
+  vi.restoreAllMocks();
+});
 
 describe("provenienza dei visitatori", () => {
   /** Referer di un sito esterno: soltanto l'origine, come la manda il browser. */
@@ -531,8 +535,6 @@ describe("pagine del sito pubblico", () => {
         expect(pricing).toMatchObject({
           signedIn: false,
           purchasesOpen: false,
-          freePromotion: null,
-          lifetime: { left: null },
           copy: {
             promotion: null,
             freeItems: expect.arrayContaining(["Orders to unlock every 7 days"]),
@@ -634,10 +636,12 @@ describe("pagine del sito pubblico", () => {
 
   it("mostra i posti lifetime reali, gli acquisti sospesi e la promozione in corso", async () => {
     expect(await callRoute(loadPricing, "/prezzi")).toMatchObject({
-      baseFreeQuota: 5,
-      freePromotion: null,
-      lifetime: { left: 20, total: 20 },
       purchasesOpen: true,
+      copy: {
+        promotion: null,
+        freeItems: expect.arrayContaining(["5 ordini da sbloccare ogni 7 giorni"]),
+        offers: [{ seats: null }, { seats: null }, { seats: "Restano 20 posti su 20" }],
+      },
     });
     const at = new Date().toISOString();
     await env.DB.batch([
@@ -657,11 +661,7 @@ describe("pagine del sito pubblico", () => {
       ).bind(at),
     ]);
     const pricing = await callRoute(loadPricing, "/prezzi");
-    expect(pricing).toMatchObject({
-      freePromotion: { quota: 10, endsAt: "2099-01-01T00:00:00.000Z" },
-      lifetime: { left: 19, total: 20 },
-      purchasesOpen: false,
-    });
+    expect(pricing).toMatchObject({ purchasesOpen: false });
     // Il Free mostra la quota della promozione; il prezzo netto ha accanto il totale con IVA.
     expect(pricing.copy).toMatchObject({
       freeItems: expect.arrayContaining(["10 ordini da sbloccare ogni 7 giorni"]),
@@ -677,7 +677,8 @@ describe("pagine del sito pubblico", () => {
         { offer: "lifetime", soldOut: false, seats: "Restano 19 posti su 20" },
       ],
     });
-    expect(pricing.copy.promotion).toMatch(/^Promozione Free: 10 ordini/u);
+    // La promozione porta la sua quota, la sua fine e la quota di base che torna dopo.
+    expect(pricing.copy.promotion).toMatch(/^Promozione Free: 10 ordini.* 2099, poi 5\.$/u);
   });
 
   it("lascia visibile il lifetime esaurito senza posti residui", async () => {

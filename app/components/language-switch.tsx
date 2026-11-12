@@ -4,8 +4,8 @@ import { Link } from "react-router";
 import { languageNames, languages, type Language } from "../i18n";
 
 /**
- * Scelta della lingua, uguale nell'app e nelle pagine di accesso: ogni lingua
- * con il proprio nome. Fuori dall'app il cambio ricarica la pagina. `compact`, dove lo spazio è
+ * Scelta della lingua nel sito e nelle pagine di accesso: ogni lingua
+ * con il proprio nome. Il cambio ricarica la pagina. `compact`, dove lo spazio è
  * poco, mostra soltanto il codice dell'altra lingua, con il nome come nome accessibile: un
  * collegamento alto quanto un bottone `sm`, con l'area di tocco estesa come nei bottoni.
  */
@@ -13,13 +13,11 @@ export function LanguageSwitch({
   label,
   current,
   hrefFor,
-  reloadDocument,
   compact = false,
 }: {
   label: string;
   current: Language;
   hrefFor: (language: Language) => string;
-  reloadDocument?: boolean;
   compact?: boolean;
 }) {
   return (
@@ -31,7 +29,7 @@ export function LanguageSwitch({
         <Link
           key={code}
           to={hrefFor(code)}
-          reloadDocument={reloadDocument}
+          reloadDocument
           preventScrollReset
           lang={code}
           aria-current={current === code ? "page" : undefined}
