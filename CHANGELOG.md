@@ -28,6 +28,8 @@ Modifiche rilevanti di FiscalBay 2.x. Le versioni `rc` sono release candidate in
 - **Notifiche Telegram.** Con il riepilogo giornaliero il messaggio di importazione completata parte subito, senza attendere il riepilogo successivo.
 - **Lingua delle email.** Il preavviso di inattività e l'avviso di sicurezza arrivano nella lingua scelta nelle Impostazioni.
 - **Accesso.** I tentativi ripetuti di accesso con password sono limitati allo stesso modo anche fuori dal modulo.
+- **Titoli e descrizioni della misura giusta.** I titoli delle pagine pubbliche stanno entro 60 caratteri con « | FiscalBay» e le descrizioni entro 150, così Google li mostra interi; le descrizioni troppo corte di Supporto, Domande frequenti e di una Guida inglese dicono di più. Le pagine più toccate sono quelle inglesi. Le immagini di condivisione riportano i nuovi titoli e un test rifiuta quelli troppo lunghi.
+- **Funzionalità più rapida all'apertura.** La prima schermata della pagina, visibile senza scorrere, si carica subito invece che in differita.
 
 ## [2.0.8] - 2026-11-08
 
