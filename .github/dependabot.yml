@@ -29,9 +29,9 @@ updates:
       # Con queste versioni Stryker termina il worker della suite Cloudflare nel dry-run e
       # nessuna mutation produce un report.
       - dependency-name: "vitest"
-        versions: ["5.0.4", "5.0.5"]
+        versions: ["5.0.4", "5.0.5", "5.1.0"]
       - dependency-name: "@vitest/*"
-        versions: ["5.0.4", "5.0.5"]
+        versions: ["5.0.4", "5.0.5", "5.1.0"]
     groups:
       # Runner dei test e della mutation in una PR propria, fuori dal merge automatico: si
       # accetta soltanto dopo una mutation riuscita su un modulo della suite Cloudflare.
