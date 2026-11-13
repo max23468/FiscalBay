@@ -84,7 +84,7 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   vars: Vars;
 }) => ({
   name: target.name,
-  compatibilityDate: "2026-09-13",
+  compatibilityDate: "2026-11-10",
   compatibilityFlags: ["nodejs_compat"],
   // Ogni pagina dell'area fa più passaggi fino a D1: il Worker può eseguirli vicino al database.
   placement: { mode: "smart" as const },

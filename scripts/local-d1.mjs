@@ -24,7 +24,7 @@ function wrangler(args) {
     config,
     JSON.stringify({
       name: "fiscalbay-test",
-      compatibility_date: "2026-09-13",
+      compatibility_date: "2026-11-10",
       d1_databases: [
         {
           binding: "DB",
