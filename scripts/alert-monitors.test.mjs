@@ -25,6 +25,8 @@ describe("monitor degli avvisi", () => {
     }
     const [cron, , failed, storage, email] = desired.map(({ filters }) => filters);
     assert.match(cron.selectors[0], /scriptName = 'fiscalbay' .*invocationType = 'scheduled'/u);
+    // Due ore: con una sola il provider ha già contato zero esecuzioni presenti nei log.
+    assert.deepEqual(cron.execution_interval, ["2h"]);
     assert.match(failed.selectors[0], /queueId IN \('coda-falliti', 'ingressi-falliti'\)/u);
     assert.deepEqual(storage.alert_trigger_preferences_value, [String(d1StopBytes)]);
     assert.deepEqual(storage.execution_interval, ["1h"]);
