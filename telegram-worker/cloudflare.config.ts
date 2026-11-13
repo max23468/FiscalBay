@@ -11,7 +11,7 @@ export const telegramWorkers = { test: "fiscalbay-test-telegram", live: "fiscalb
 export default defineConfig((ctx) => ({
   worker: {
     name: ctx.mode === "live" ? telegramWorkers.live : telegramWorkers.test,
-    compatibilityDate: "2026-09-13",
+    compatibilityDate: "2026-11-10",
     entrypoint: "./index.ts",
     workersDev: false,
     previewUrls: false,
