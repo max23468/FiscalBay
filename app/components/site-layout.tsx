@@ -135,7 +135,10 @@ export function SiteLayout({
   signedIn: boolean;
   children: React.ReactNode;
 }) {
-  const token = useRouteLoaderData<{ webAnalyticsToken: string | null }>("root")?.webAnalyticsToken;
+  const root = useRouteLoaderData<{ webAnalyticsToken: string | null; speculation: boolean }>(
+    "root",
+  );
+  const token = root?.webAnalyticsToken;
   const nonce = useScriptNonce();
   return (
     <div className="flex min-h-dvh flex-col">
@@ -146,13 +149,15 @@ export function SiteLayout({
       </main>
       <SiteFooter path={path} />
       <SourceLinks />
-      <script
-        type="speculationrules"
-        nonce={nonce}
-        suppressHydrationWarning
-        // JSON generato dal codice, senza dati della richiesta: come testo React ne cambierebbe `&`.
-        dangerouslySetInnerHTML={{ __html: speculationRules(signedIn) }}
-      />
+      {root?.speculation ? (
+        <script
+          type="speculationrules"
+          nonce={nonce}
+          suppressHydrationWarning
+          // JSON generato dal codice, senza dati della richiesta: come testo React ne cambierebbe `&`.
+          dangerouslySetInnerHTML={{ __html: speculationRules(signedIn) }}
+        />
+      ) : null}
       {/* Il beacon conta la visita senza contendere la banda alle risorse della pagina. */}
       {token ? (
         <script

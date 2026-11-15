@@ -39,6 +39,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("regole di speculazione", () => {
+  it("partono soltanto con le pagine servite in HTTPS", async () => {
+    expect((await callRoute(loadRoot, "/faq")).speculation).toBe(false);
+    const secure = await loadRoot({
+      request: new Request("https://fiscalbay.invalid/faq"),
+      params: {},
+    } as never);
+    expect(secure.speculation).toBe(true);
+  });
+});
+
 describe("provenienza dei visitatori", () => {
   /** Referer di un sito esterno: soltanto l'origine, come la manda il browser. */
   const from = (host: string) => `https://${host}/`;
