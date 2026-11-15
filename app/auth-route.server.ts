@@ -67,7 +67,6 @@ const passkeyEnrollmentPaths = new Set([
   "/api/auth/passkey/update-passkey",
 ]);
 const passkeyRegistrationPath = "/api/auth/passkey/verify-registration";
-const passkeyRegistrationOptionsPath = "/api/auth/passkey/generate-register-options";
 const linkSocialPath = "/api/auth/link-social";
 const changeEmailPath = "/api/auth/change-email";
 const ebayCallbackPath = "/api/auth/callback/ebay";
@@ -311,7 +310,8 @@ async function authResponse(request: Request, env: Env, admitted = false): Promi
     notifySecurityEvent(env, enrollingUser.id, { kind: "passkey-added" });
   }
   if (
-    pathname === passkeyRegistrationOptionsPath &&
+    // Il percorso sta qui e non in una costante del modulo: così la mutation lo prova.
+    pathname === "/api/auth/passkey/generate-register-options" &&
     response.ok &&
     response.headers.get("content-type")?.startsWith("application/json") &&
     enrollingUser
