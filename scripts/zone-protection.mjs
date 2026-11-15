@@ -43,12 +43,16 @@ export const alertEmail = "info@fiscalbay.it";
 export const zonePlan = "free";
 
 /**
- * Scala di HSTS: si sale di un gradino soltanto dopo il readback del precedente. Né
- * `includeSubDomains` né `preload`, finché tutti i sottodomini non sono inventariati e provati.
- * I due ambienti sono all'ultimo gradino, un anno.
+ * Scala di HSTS: si sale di un gradino soltanto dopo il readback del precedente. I due ambienti
+ * sono all'ultimo gradino, un anno, con `includeSubDomains` e `preload` per la lista dei
+ * browser: i soli nomi web della zona sono l'apice, `www` e `test`, tutti in HTTPS; gli altri
+ * record servono alla posta. Un nuovo sottodominio deve nascere in HTTPS.
  */
 export const hstsStages = [300, 86_400, 604_800, 31_536_000];
 export const hstsStage = { test: 3, live: 3 };
+
+/** Valore dell'header HSTS al gradino dell'ambiente. */
+export const hstsValue = (target) => `max-age=${target.maxAge}; includeSubDomains; preload`;
 
 /**
  * Header statici di ogni risposta degli host dell'ambiente; la CSP resta del Worker. Fotocamera,
@@ -121,14 +125,15 @@ const hostExpression = (target) => `http.host in ${set(target.hosts)}`;
 /** Regola di header dell'ambiente: HSTS al gradino corrente, header statici e CORP stretto. */
 export function headerRule(target) {
   const headers = {
-    "strict-transport-security": `max-age=${target.maxAge}`,
+    "strict-transport-security": hstsValue(target),
     ...staticHeaders,
     "cross-origin-resource-policy": resourcePolicy.default,
   };
   return {
     ref: `${target.prefix}headers`,
     description: "Header di sicurezza e HSTS",
-    expression: hostExpression(target),
+    // Soltanto in HTTPS: su HTTP il browser ignora HSTS e la lista dei browser lo segnala.
+    expression: `${hostExpression(target)} and ssl`,
     action: "rewrite",
     action_parameters: {
       headers: Object.fromEntries(
@@ -334,7 +339,7 @@ const mitigated = (response) => header(response, "cf-mitigated") !== null;
 /** Header di sicurezza attesi su una risposta reale. */
 function securedHeaders(target, response) {
   return (
-    header(response, "strict-transport-security") === `max-age=${target.maxAge}` &&
+    header(response, "strict-transport-security") === hstsValue(target) &&
     Object.entries(staticHeaders).every(([name, value]) => header(response, name) === value)
   );
 }

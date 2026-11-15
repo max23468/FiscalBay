@@ -28,7 +28,7 @@ Posta umana su iCloud+ già pagato se configurazione verificata, mantenendo info
 
 | Funzione | Contratto e verifica |
 |---|---|
-| HSTS | Introduzione graduale dopo la verifica HTTPS sui domini interessati; `includeSubDomains` soltanto dopo inventario e collaudo di tutti i sottodomini, preload non automatico |
+| HSTS | Introduzione graduale dopo la verifica HTTPS sui domini interessati; a un anno con `includeSubDomains` e `preload`, e iscrizione alla lista di precaricamento dei browser, dopo l'inventario dei sottodomini ([D341](../decisions/DECISION_REGISTER.md)). Ogni nuovo sottodominio nasce in HTTPS |
 | Header di sicurezza | `X-Content-Type-Options`, protezione dall'inclusione in frame e Referrer Policy coerenti sulle risposte reali; header statici da Transform Rules o Worker dove qualificato, CSP applicativa compatibile con Auth, Stripe e Turnstile |
 | WAF e rate limit di zona | Regole mirate per host/percorso e abusi osservati, con quote del piano della zona rilette; il filtro edge precede il binding Workers e i contatori D1, senza duplicare i loro limiti per account |
 | DMARC Management | Report aggregati dei mittenti legittimi e dei fallimenti SPF/DKIM/DMARC, mantenendo MX iCloud e policy DMARC esistente; trasporto transazionale qualificato, inventario dei trattamenti completo; beta documentata e inclusa dall'owner |

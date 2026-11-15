@@ -28,7 +28,7 @@ const dmarc = "v=DMARC1; p=quarantine; adkim=r; aspf=r";
 const withReports = `${dmarc}; rua=mailto:${prefix}@dmarc-reports.cloudflare.net`;
 
 const secured = (overrides = {}) => ({
-  "strict-transport-security": `max-age=${target.maxAge}`,
+  "strict-transport-security": `max-age=${target.maxAge}; includeSubDomains; preload`,
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "strict-origin-when-cross-origin",
@@ -156,15 +156,15 @@ describe("protezioni della zona", () => {
     assert.ok(!authRule().ref.startsWith(target.prefix) && !authRule().ref.startsWith(live.prefix));
   });
 
-  it("limita header e HSTS agli host dell'ambiente, senza sottodomini né preload", () => {
+  it("limita header e HSTS agli host dell'ambiente, con sottodomini e preload per la lista", () => {
     const rule = headerRule(target);
-    assert.equal(rule.expression, 'http.host in {"test.fiscalbay.it"}');
+    assert.equal(rule.expression, 'http.host in {"test.fiscalbay.it"} and ssl');
     const hsts = rule.action_parameters.headers["strict-transport-security"].value;
-    assert.equal(hsts, "max-age=31536000");
-    assert.doesNotMatch(hsts, /includeSubDomains|preload/u);
+    assert.equal(hsts, "max-age=31536000; includeSubDomains; preload");
+    // La lista dei browser chiede almeno un anno, sottodomini e preload sull'apice.
     assert.equal(
       headerRule(live).action_parameters.headers["strict-transport-security"].value,
-      "max-age=31536000",
+      "max-age=31536000; includeSubDomains; preload",
     );
     assert.equal(rule.action_parameters.headers["x-frame-options"].value, "DENY");
     assert.ok(!("content-security-policy" in rule.action_parameters.headers));
@@ -327,7 +327,8 @@ describe("protezioni della zona", () => {
       ),
     };
     for (const name of ["page", "asset", "missing"])
-      liveState.responses[name].headers["strict-transport-security"] = "max-age=31536000";
+      liveState.responses[name].headers["strict-transport-security"] =
+        "max-age=31536000; includeSubDomains; preload";
     const result = checkReadback(live, liveState);
     assert.equal(result.ok, true, JSON.stringify(result.checks));
     liveState.responses.www.headers.location = "https://fiscalbay.it/";

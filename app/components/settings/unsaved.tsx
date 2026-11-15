@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { useBeforeUnload, useBlocker } from "react-router";
+import { useBeforeUnload } from "react-router";
 
 import { useAction } from "~/components/action";
+import { useNavigationGuard } from "~/components/navigation-guard";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -65,7 +66,7 @@ export type Draft<T extends Record<string, string>> = ReturnType<typeof useDraft
  * `area` riduce l'indirizzo alla parte che conta: dentro la stessa area la bozza resta.
  */
 export function useUnsavedGuard(dirty: boolean, area = (pathname: string) => pathname) {
-  const blocker = useBlocker(
+  const blocker = useNavigationGuard(
     ({ currentLocation, nextLocation }) =>
       dirty && area(currentLocation.pathname) !== area(nextLocation.pathname),
   );
@@ -86,7 +87,7 @@ export function UnsavedDialog({
   stay,
   pending = false,
 }: {
-  blocker: ReturnType<typeof useBlocker>;
+  blocker: ReturnType<typeof useNavigationGuard>;
   title: string;
   description: string;
   leave: string;

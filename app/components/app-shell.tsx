@@ -7,6 +7,7 @@ import { NoticeContext } from "~/components/action";
 import { InitialsTile } from "~/components/icon-tile";
 import { Button } from "~/components/ui/button";
 import { NavigationProgress } from "~/components/navigation-progress";
+import { NavigationGuardProvider } from "~/components/navigation-guard";
 import { NotificationsMenu } from "~/components/notifications-menu";
 import { prefetchRouteModules } from "~/components/route-modules";
 import { areaSection, type AccountMenuItem, type NavDestination } from "~/components/shell-links";
@@ -79,94 +80,96 @@ export function AppShell({
   const section = useSectionEntry();
 
   return (
-    <NoticeContext value={notify}>
-      <SkipLink />
-      {before}
-      <header className="sticky top-0 z-40 border-b bg-background">
-        <NavigationProgress />
-        <div className={cn(siteColumn, "flex h-14 items-center gap-2 md:gap-6")}>
-          <Link
-            to={homeHref}
-            className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
-          >
-            <img
-              src={logoUrl}
-              alt="FiscalBay"
-              width="224"
-              height="45"
-              className="h-6 w-auto dark:hidden"
-            />
-            <img
-              src={logoDarkUrl}
-              alt="FiscalBay"
-              width="224"
-              height="45"
-              className="hidden h-6 w-auto dark:block"
-            />
-          </Link>
-          {navigable ? <TopNav destinations={navigation} label={t.shell.mainNav} /> : null}
-          <div className="ml-auto flex items-center gap-1">
-            {search ? (
-              <>
-                <GlobalSearch search={search} className="mr-2 hidden w-72 lg:block xl:w-80" />
-                <MobileSearch search={search} />
-              </>
-            ) : null}
-            {notifications && now ? (
-              <NotificationsMenu
-                notifications={notifications}
-                readAction={notificationsAction}
-                now={now}
+    <NavigationGuardProvider>
+      <NoticeContext value={notify}>
+        <SkipLink />
+        {before}
+        <header className="sticky top-0 z-40 border-b bg-background">
+          <NavigationProgress />
+          <div className={cn(siteColumn, "flex h-14 items-center gap-2 md:gap-6")}>
+            <Link
+              to={homeHref}
+              className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
+            >
+              <img
+                src={logoUrl}
+                alt="FiscalBay"
+                width="224"
+                height="45"
+                className="h-6 w-auto dark:hidden"
               />
-            ) : null}
-            <AccountMenu account={account} menu={menu} onSignOut={() => onSignOut(notify)} />
+              <img
+                src={logoDarkUrl}
+                alt="FiscalBay"
+                width="224"
+                height="45"
+                className="hidden h-6 w-auto dark:block"
+              />
+            </Link>
+            {navigable ? <TopNav destinations={navigation} label={t.shell.mainNav} /> : null}
+            <div className="ml-auto flex items-center gap-1">
+              {search ? (
+                <>
+                  <GlobalSearch search={search} className="mr-2 hidden w-72 lg:block xl:w-80" />
+                  <MobileSearch search={search} />
+                </>
+              ) : null}
+              {notifications && now ? (
+                <NotificationsMenu
+                  notifications={notifications}
+                  readAction={notificationsAction}
+                  now={now}
+                />
+              ) : null}
+              <AccountMenu account={account} menu={menu} onSignOut={() => onSignOut(notify)} />
+            </div>
           </div>
-        </div>
-      </header>
-      {/*
+        </header>
+        {/*
         Una nuova sezione entra con una breve dissolvenza e riceve il focus, così tastiera e
         lettori di schermo ripartono dal suo contenuto; il primo caricamento no.
       */}
-      <main
-        key={section.key}
-        ref={section.focus}
-        id={mainContentId}
-        tabIndex={-1}
-        className={cn(
-          siteColumn,
-          "pt-6 pb-12 outline-none",
-          navigable && "max-md:pb-28",
-          section.fade && "animate-[value-reveal_var(--duration-quick)_var(--ease-smooth-out)]",
-        )}
-      >
-        {children}
-      </main>
-      {navigable ? <BottomNav destinations={navigation} label={t.shell.mainNav} /> : null}
-      {/*
+        <main
+          key={section.key}
+          ref={section.focus}
+          id={mainContentId}
+          tabIndex={-1}
+          className={cn(
+            siteColumn,
+            "pt-6 pb-12 outline-none",
+            navigable && "max-md:pb-28",
+            section.fade && "animate-[value-reveal_var(--duration-quick)_var(--ease-smooth-out)]",
+          )}
+        >
+          {children}
+        </main>
+        {navigable ? <BottomNav destinations={navigation} label={t.shell.mainNav} /> : null}
+        {/*
         Sopra velature e pannelli; `aria-live` esplicito lo tiene annunciato anche quando
         un pannello modale nasconde il resto della pagina. Sale sopra la barra di selezione.
       */}
-      <div
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-        className={cn(
-          "pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))] z-[60] flex justify-center px-4",
-          // Sopra la bottom navigation, quando c'è.
-          navigable &&
-            "max-md:bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))]",
-        )}
-      >
-        {notice ? (
-          <p
-            key={notice.id}
-            className="max-w-md animate-[notice-in_var(--duration-fast)_var(--ease-smooth-out)] rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-md"
-          >
-            {notice.message}
-          </p>
-        ) : null}
-      </div>
-    </NoticeContext>
+        <div
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className={cn(
+            "pointer-events-none fixed inset-x-0 bottom-[calc(1.5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))] z-[60] flex justify-center px-4",
+            // Sopra la bottom navigation, quando c'è.
+            navigable &&
+              "max-md:bottom-[calc(5rem+env(safe-area-inset-bottom)+var(--selection-bar,0px))]",
+          )}
+        >
+          {notice ? (
+            <p
+              key={notice.id}
+              className="max-w-md animate-[notice-in_var(--duration-fast)_var(--ease-smooth-out)] rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-md"
+            >
+              {notice.message}
+            </p>
+          ) : null}
+        </div>
+      </NoticeContext>
+    </NavigationGuardProvider>
   );
 }
 

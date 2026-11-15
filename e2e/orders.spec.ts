@@ -1250,6 +1250,32 @@ for (const area of areas)
     },
   );
 
+test("i nuovi ordini arrivati durante lo scorrimento aspettano scrollend", async ({ page }) => {
+  await open(page, "/anteprima/ordini", "ordinario");
+  await setScenario(page, "aggiornamento");
+  // Gli eventi continui rappresentano un gesto ancora in corso nei primi 120 px. Lo stato
+  // della lista cambia durante quel gesto, prima che il browser ne annunci la fine.
+  const scrolling = await page.evaluate(() => {
+    Object.defineProperty(window, "scrollY", { configurable: true, value: 80 });
+    window.dispatchEvent(new Event("scroll"));
+    return window.setInterval(() => window.dispatchEvent(new Event("scroll")), 30);
+  });
+  try {
+    await page.getByRole("combobox", { name: "Periodo", exact: true }).click();
+    await page.getByRole("option", { name: "Ultimi 30 giorni", exact: true }).click();
+    const incoming = page.getByRole("article", { name: "Ordine 40-73156-20482" });
+    await expect(page.getByRole("link", { name: /nuovi ordini/u })).toBeVisible();
+    await expect(incoming).toHaveCount(0);
+    await page.evaluate((timer) => {
+      clearInterval(timer);
+      window.dispatchEvent(new Event("scrollend"));
+    }, scrolling);
+    await expect(incoming).toBeVisible();
+  } finally {
+    await page.evaluate((timer) => clearInterval(timer), scrolling);
+  }
+});
+
 test("movimento ridotto: dato intero e nuovi ordini senza animazione", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await open(page, "/anteprima/ordini");

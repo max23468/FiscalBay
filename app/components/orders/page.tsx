@@ -1,5 +1,5 @@
 import { LazyMotion, MotionConfig } from "motion/react";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useFetcherResult, useNotice } from "~/components/action";
@@ -32,7 +32,6 @@ import {
 } from "../../orders/page-data";
 import { orderPeriods, type OrderView } from "../../view-models";
 import { OrderCard } from "./card";
-import { OrderSheet } from "./detail";
 import { useEnterIndexes, useListSnapshot, useNewOrders } from "./list-snapshot";
 import { OrdersHeader, OrdersNotices, TrialNotice } from "./notices";
 import { MarketingProposal } from "./marketing-proposal";
@@ -43,6 +42,11 @@ import { OrdersToolbar, SearchChip } from "./toolbar";
 import { useCopy, useLinks } from "~/components/copy-context";
 
 const unlockableOrder = (order: OrderView) => unlockable(order.fiscal);
+
+// Il dettaglio arriva alla prima apertura e resta montato per conservarne la chiusura e il focus.
+const OrderSheet = lazy(() =>
+  import("./detail").then(({ OrderSheet }) => ({ default: OrderSheet })),
+);
 
 /** Attesa massima del primo momento libero: le animazioni arrivano comunque subito dopo. */
 const motionIdleTimeout = 1_500;
@@ -362,6 +366,8 @@ export function OrdersPage({
   const unlock = useUnlock(unlockAction, t);
   const orders = useConfirmed(data.orders, confirmation);
   const [detail] = useConfirmed(data.detail ? [data.detail] : [], confirmation);
+  const [detailOpened, setDetailOpened] = useState(false);
+  if (detail && !detailOpened) setDetailOpened(true);
   usePageTiming("orders", timing);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -377,15 +383,19 @@ export function OrdersPage({
       ) : (
         <OrdersList data={data} orders={orders} unlock={unlock} />
       )}
-      <OrderSheet
-        detail={detail ?? null}
-        account={data.account}
-        ebayDown={!!ebayDownNotice(data)}
-        templates={data.messageTemplates}
-        confirmUnlock={data.confirmUnlock}
-        unlock={unlock}
-        actions={data}
-      />
+      <Suspense fallback={null}>
+        {detailOpened ? (
+          <OrderSheet
+            detail={detail ?? null}
+            account={data.account}
+            ebayDown={!!ebayDownNotice(data)}
+            templates={data.messageTemplates}
+            confirmUnlock={data.confirmUnlock}
+            unlock={unlock}
+            actions={data}
+          />
+        ) : null}
+      </Suspense>
     </div>
   );
 }

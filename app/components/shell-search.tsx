@@ -1,9 +1,10 @@
 import { cn } from "cn";
 import { Search } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { Link, NavigationType, useBlocker, useLocation, useNavigate } from "react-router";
+import { Link, NavigationType, useLocation, useNavigate } from "react-router";
 
 import { useHydrated } from "~/components/hydrated";
+import { useNavigationGuard } from "~/components/navigation-guard";
 import { Button } from "~/components/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "~/components/ui/sheet";
 import { useCopy, useLinks } from "~/components/copy-context";
@@ -282,13 +283,9 @@ export function GlobalSearch({
   );
 }
 
-/**
- * Mentre la ricerca su mobile è aperta, Indietro la chiude e la pagina resta, come per il
- * pannello di un ordine. La cronologia non cambia: lo spostamento viene annullato prima che la
- * pagina si rilegga. Un collegamento seguito dalla ricerca passa senza blocchi.
- */
+/** Indietro chiude prima la ricerca; le altre navigazioni conservano i controlli sulle bozze. */
 function CloseOnBack({ onBack }: { onBack: () => void }) {
-  const blocker = useBlocker(({ historyAction }) => historyAction === NavigationType.Pop);
+  const blocker = useNavigationGuard(({ historyAction }) => historyAction === NavigationType.Pop);
   useEffect(() => {
     if (blocker.state !== "blocked") return;
     blocker.reset();
@@ -318,7 +315,7 @@ export function MobileSearch({ search }: { search: ShellSearch }) {
           {/* Un titolo lungo si tronca invece di allargare il foglio. */}
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3 p-4 pr-14">
             <SheetTitle>{t.shell.search}</SheetTitle>
-            <GlobalSearch search={search} autoFocus onNavigate={() => setOpen(false)} />
+            <GlobalSearch search={search} autoFocus onNavigate={close} />
           </div>
         </SheetContent>
       </Sheet>

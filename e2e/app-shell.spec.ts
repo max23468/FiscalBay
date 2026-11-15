@@ -712,6 +712,102 @@ test("su smartphone Esc chiude prima i suggerimenti e Indietro chiude la ricerca
   await expect(page.getByRole("region", { name: "Elenco ordini" })).toBeVisible();
 });
 
+for (const area of areas) {
+  test(`la ricerca mobile conserva la conferma delle bozze, ${area.name}`, async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await enter(context, baseURL!, area);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, pagePath(area.base, "/impostazioni"));
+    await page.getByRole("link", { name: "Modello di messaggio", exact: true }).click();
+    const template = page.getByRole("textbox", { name: "Italiano", exact: true });
+    const draft = "Bozza da conservare per l’ordine {ordine}";
+    await template.fill(draft);
+    const settingsUrl = page.url();
+    const searchButton = page.getByRole("button", { name: "Cerca ordini", exact: true });
+    await searchButton.click();
+    const sheet = page.getByRole("dialog", { name: "Cerca ordini" });
+    await expect(sheet).toBeVisible();
+    await page.goBack();
+    await expect(sheet).toBeHidden();
+    await expect(page).toHaveURL(settingsUrl);
+    await expect(template).toHaveValue(draft);
+
+    const query = area.base === "/app" ? testAccount.orders.unlocked : "Conti";
+    for (const submit of [false, true]) {
+      await searchButton.click();
+      const search = sheet.getByRole("searchbox", { name: "Cerca ordini" });
+      await search.fill(query);
+      const suggestion = sheet.getByRole("link").filter({ hasText: query }).first();
+      await expect(suggestion).toBeVisible();
+      if (submit) await search.press("Enter");
+      else await suggestion.click();
+      const confirmation = page.getByRole("alertdialog", { name: "Modifiche non salvate" });
+      await expect(confirmation).toBeVisible();
+      if (submit) {
+        await confirmation.getByRole("button", { name: "Lascia la pagina" }).click();
+        await expect(page).toHaveURL(/\/ordini\?ricerca=/u);
+      } else {
+        await confirmation.getByRole("button", { name: "Continua a modificare" }).click();
+        await expect(page).toHaveURL(settingsUrl);
+        await expect(template).toHaveValue(draft);
+      }
+    }
+  });
+
+  for (const width of [390, 768, 1440])
+    test(`la tabulazione dei filtri segue le righe visibili a ${width}px, ${area.name}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }) => {
+      await enter(context, baseURL!, area);
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await open(page, pagePath(area.base, "/ordini"));
+      const filters = page.locator("#orders-filters").getByRole("combobox");
+      // WebKit richiede Alt+Tab per includere i collegamenti, come nelle altre prove di tastiera.
+      const tab = browserName === "webkit" ? "Alt+Tab" : "Tab";
+      const select = page.getByRole("button", { name: "Seleziona", exact: true });
+      const exportLink = page.getByRole("link", { name: "Esporta", exact: true });
+      if (width < 768) {
+        const toggle = page.getByRole("button", { name: "Filtri", exact: true });
+        await toggle.click();
+        await toggle.focus();
+        await page.keyboard.press(tab);
+        await expect(select).toBeFocused();
+        await page.keyboard.press(tab);
+        await expect(exportLink).toBeFocused();
+        await page.keyboard.press(tab);
+      } else await filters.first().focus();
+      for (let index = 0; index < (await filters.count()); index++) {
+        await expect(filters.nth(index)).toBeFocused();
+        await page.keyboard.press(tab);
+      }
+      if (width >= 768) await expect(select).toBeFocused();
+      const firstId = await filters.first().getAttribute("id");
+      const resized = width < 768 ? 1440 : 390;
+      await page.setViewportSize({ width: resized, height: 900 });
+      if (resized < 768) await page.getByRole("button", { name: "Filtri", exact: true }).click();
+      await expect(filters.first()).toHaveAttribute("id", firstId!);
+      await expect
+        .poll(() =>
+          filters.first().evaluate((element) => {
+            const actions = element
+              .closest("#orders-filters")!
+              .parentElement!.parentElement!.querySelector("[aria-pressed]")!;
+            return Boolean(
+              element.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+            );
+          }),
+        )
+        .toBe(resized >= 768);
+    });
+}
+
 test("una nuova sezione riceve il focus senza scorrere, il primo caricamento no", async ({
   page,
 }) => {

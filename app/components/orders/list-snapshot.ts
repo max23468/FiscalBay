@@ -1,4 +1,4 @@
-import { useContext, useEffect, useEffectEvent, useState } from "react";
+import { useContext, useEffect, useEffectEvent, useRef, useState } from "react";
 import {
   UNSAFE_DataRouterContext,
   useFetchers,
@@ -52,10 +52,22 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
   // Lo scorrimento conta quando si ferma, non mentre è in corso: un clic durante lo scorrimento
   // avvia prima la sua navigazione, che la sostituzione altrimenti interromperebbe.
   const [away, setAway] = useState(false);
+  const scrolling = useRef(false);
   useEffect(() => {
-    const settle = () => setAway(window.scrollY >= topThreshold);
+    const scrolled = () => {
+      scrolling.current = true;
+    };
+    const settle = () => {
+      scrolling.current = false;
+      setAway(window.scrollY >= topThreshold);
+    };
     settle();
-    return onScrollEnd(window, settle);
+    window.addEventListener("scroll", scrolled, { passive: true });
+    const stop = onScrollEnd(window, settle);
+    return () => {
+      window.removeEventListener("scroll", scrolled);
+      stop();
+    };
   }, []);
   useEffect(() => {
     if (synced || !idle || !current() || !(held || away || freshHref !== null)) return;
@@ -64,7 +76,14 @@ export function useListSnapshot(data: OrdersPageData, held: boolean) {
     setParams(next, { replace: true, preventScrollReset: true });
   });
   const insertAtTop = useEffectEvent(() => {
-    if (freshHref && incomingAtTop && window.scrollY < topThreshold && !held && current())
+    if (
+      freshHref &&
+      incomingAtTop &&
+      !scrolling.current &&
+      window.scrollY < topThreshold &&
+      !held &&
+      current()
+    )
       void navigate(freshHref, { replace: true, preventScrollReset: true });
   });
   // Si parte dall'indirizzo con l'istantanea: la nuova la cambia o la toglie, mai la aggiunge,
