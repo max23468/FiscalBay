@@ -69,19 +69,6 @@ function reportedSample(sample: unknown, directive: string, blocked: string) {
   return blocked === "inline" ? sample.slice(0, 40) : undefined;
 }
 
-/**
- * Scritture note e innocue per Trusted Types: React inserisce come HTML il JSON dei dati
- * strutturati delle pagine e delle regole di speculazione. Senza questo filtro coprirebbero le
- * violazioni da capire prima di applicare la direttiva.
- */
-const knownScriptData = ['{"@context"', '{"prefetch"'];
-
-function knownTrustedTypesWrite(directive: string, sample: unknown) {
-  if (directive !== "require-trusted-types-for" || typeof sample !== "string") return false;
-  const value = sample.slice(sample.indexOf("|") + 1);
-  return knownScriptData.some((prefix) => value.startsWith(prefix));
-}
-
 type Fields = Record<string, unknown>;
 
 /** Corpo di una segnalazione nei due formati: Reporting API e `report-uri`. */
@@ -118,7 +105,6 @@ export function cspViolations(payload: unknown, origin: string): CspViolation[] 
     .flatMap((body): CspViolation[] => {
       const directive = String(body.effectiveDirective ?? "").split(" ")[0]!;
       if (!directives.test(directive) || typeof body.documentURL !== "string") return [];
-      if (knownTrustedTypesWrite(directive, body.sample)) return [];
       let document: URL;
       try {
         document = new URL(body.documentURL);

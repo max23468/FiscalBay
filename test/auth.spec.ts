@@ -33,7 +33,7 @@ import { withinOneLimitWindow } from "./fixtures/rate-limiter";
 
 import { completeRegistration } from "../app/domain/registration.server";
 
-import { passkeySignals } from "../app/domain/passkey-user.server";
+import { passkeySignals, withPasskeyUser } from "../app/domain/passkey-user.server";
 
 import { action as securityRouteAction } from "../app/routes/settings";
 
@@ -559,7 +559,7 @@ describe("Better Auth su Workers e D1", () => {
       await passkeySignals(env.DB, {
         id,
         email: "passkey@example.invalid",
-        name: "Utente Passkey",
+        name: "  Utente Passkey ",
       }),
     ).toEqual({
       userId: first.user.id,
@@ -567,6 +567,24 @@ describe("Better Auth su Workers e D1", () => {
       name: "passkey@example.invalid",
       displayName: "Utente Passkey",
     });
+    // Senza nome il browser mostra l'email anche come nome visualizzato.
+    expect(
+      (await passkeySignals(env.DB, { id, email: "passkey@example.invalid", name: "  " }))
+        ?.displayName,
+    ).toBe("passkey@example.invalid");
+    for (const [name, displayName] of [
+      ["  Maria Rossi ", "Maria Rossi"],
+      ["  ", "passkey@example.invalid"],
+    ])
+      expect(
+        withPasskeyUser(
+          { challenge: "sfida" },
+          { handle: "handle", email: "passkey@example.invalid", name },
+        ),
+      ).toEqual({
+        challenge: "sfida",
+        user: { id: "handle", name: "passkey@example.invalid", displayName },
+      });
     await env.DB.prepare(
       `INSERT INTO "account" ("id", "accountId", "providerId", "userId", "createdAt", "updatedAt")
        VALUES ('linked-ebay-access', 'synthetic-business-subject', 'ebay', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,

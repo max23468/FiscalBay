@@ -7,6 +7,7 @@ import {
 } from "../app/content-security.server";
 import { cspViolations, logCspViolations, maxViolationsPerReport } from "../app/csp-report.server";
 import { speculationRules } from "../app/speculation-rules";
+import { installTrustedTypes, trustedScriptUrl, trustedText } from "../app/trusted-types";
 
 const directivesOf = (policy: string) =>
   new Map(
@@ -121,24 +122,6 @@ describe("segnalazioni CSP", () => {
       disposition: "report",
       sample: "Element innerHTML",
     });
-    // I JSON dei dati strutturati e delle regole di speculazione scritti da React non contano.
-    for (const sample of [
-      'Element innerHTML|{"@context":"https://dati.invalid"',
-      'Element innerHTML|{"prefetch":[{"source":"document"',
-    ])
-      expect(
-        cspViolations(
-          [
-            violation({
-              effectiveDirective: "require-trusted-types-for",
-              blockedURL: "trusted-types-sink",
-              disposition: "report",
-              sample,
-            }),
-          ],
-          origin,
-        ),
-      ).toEqual([]);
     // Uno script inline porta i primi 40 caratteri del codice; eval nulla.
     expect(
       cspViolations([violation({ blockedURL: "inline", sample: "x".repeat(60) })], origin)[0]
@@ -248,5 +231,49 @@ describe("regole di speculazione delle pagine pubbliche", () => {
     expect(patterns(true)).toEqual(expect.arrayContaining(["/", "/en"]));
     // Le regole viaggiano in ogni pagina pubblica: restano piccole.
     expect(speculationRules(true).length).toBeLessThan(1500);
+  });
+});
+
+describe("policy predefinita di Trusted Types", () => {
+  const site = "https://test.fiscalbay.invalid";
+
+  it("ammette gli script delle sole origini della CSP", () => {
+    expect(trustedScriptUrl("/assets/entry.js", site)).toBe("/assets/entry.js");
+    expect(trustedScriptUrl(`${site}/assets/a.js`, site)).toBe(`${site}/assets/a.js`);
+    expect(
+      trustedScriptUrl("https://challenges.cloudflare.com/turnstile/v0/api.js", site),
+    ).not.toBeNull();
+    expect(
+      trustedScriptUrl("https://static.cloudflareinsights.com/beacon.min.js", site),
+    ).not.toBeNull();
+    for (const url of [
+      "https://script-estraneo.invalid/x.js",
+      "https://challenges.cloudflare.com.invalid/x.js",
+      "data:text/javascript,alert(1)",
+      "javascript:alert(1)",
+      "http://[",
+    ])
+      expect(trustedScriptUrl(url, site), url).toBeNull();
+  });
+
+  it("ammette come HTML o codice soltanto testo senza markup", () => {
+    const json = JSON.stringify({ "@context": "https://dati.invalid", name: "FiscalBay & co" });
+    expect(trustedText(json)).toBe(json);
+    expect(trustedText(speculationRules(false))).toBe(speculationRules(false));
+    expect(trustedText('<img src=x onerror="alert(1)">')).toBeNull();
+    expect(trustedText('{"a":"</script><script>"}')).toBeNull();
+  });
+
+  it("crea la policy predefinita soltanto dove il browser ha Trusted Types", () => {
+    const createPolicy = vi.fn();
+    installTrustedTypes({ trustedTypes: { createPolicy } }, site);
+    expect(createPolicy).toHaveBeenCalledTimes(1);
+    const [name, policy] = createPolicy.mock.calls[0]!;
+    expect(name).toBe("default");
+    expect(policy.createHTML("testo")).toBe("testo");
+    expect(policy.createScript("<b>")).toBeNull();
+    expect(policy.createScriptURL("https://script-estraneo.invalid/x.js")).toBeNull();
+    expect(policy.createScriptURL("/assets/a.js")).toBe("/assets/a.js");
+    expect(() => installTrustedTypes({}, site)).not.toThrow();
   });
 });
