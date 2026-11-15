@@ -9,12 +9,14 @@ import rules from "./request-limits.json";
  * - `work`: lavori costosi chiesti dall'area (file degli ordini, archivio dell'account, letture
  *   eBay).
  * - `reports`: segnalazioni CSP inviate dal browser.
+ * - `challenges`: sfide per l'accesso con passkey, chieste a ogni apertura della pagina di
+ *   accesso per il suggerimento nel campo email.
  *
  * I valori stanno in `request-limits.json` perché anche `cloudflare.config.ts` li legge: il
  * plugin Cloudflare nega al dev server ogni modulo importato dalla configurazione.
  */
 export const requestLimitRules = rules as Record<
-  "attempts" | "emails" | "work" | "reports",
+  "attempts" | "emails" | "work" | "reports" | "challenges",
   { limit: number; period: 10 | 60 }
 >;
 

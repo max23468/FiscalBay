@@ -8,6 +8,7 @@ import {
   redirectWithCookies,
   signedOutRedirect,
 } from "../app/auth-route.server";
+import { requestLimitRules } from "../app/request-limits";
 import { limitedHeaders, pageHeaders } from "../app/request-limits.server";
 import { fakeRateLimiters } from "./fixtures/rate-limiter";
 
@@ -495,11 +496,20 @@ describe("limiti dei tentativi", () => {
       handle("/api/auth/passkey/generate-authenticate-options", {
         headers: { "cf-connecting-ip": ip },
       });
-    for (let count = 0; count < 3; count++) expect((await prepare()).status).toBe(202);
+    // L'accesso la chiede a ogni apertura della pagina: soglia propria, più ampia dei tentativi.
+    const { limit } = requestLimitRules.challenges;
+    expect(limit).toBeGreaterThan(requestLimitRules.attempts.limit);
+    for (let count = 0; count < limit; count++) expect((await prepare()).status).toBe(202);
     const response = await prepare();
     expect(response.status).toBe(429);
     expect(response.headers.get("retry-after")).toBe("10");
-    expect(services.handler).toHaveBeenCalledTimes(3);
+    expect(services.handler).toHaveBeenCalledTimes(limit);
+    expect(limiters.REQUEST_LIMIT_CHALLENGES.keys).toContain(
+      "auth/passkey/generate-authenticate-options|203.0.113.4",
+    );
+    expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).not.toContain(
+      "auth/passkey/generate-authenticate-options|203.0.113.4",
+    );
     expect((await prepare("203.0.113.5")).status).toBe(202);
     await handle("/api/auth/passkey/generate-register-options", {
       headers: { "cf-connecting-ip": "203.0.113.4" },

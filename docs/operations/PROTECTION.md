@@ -33,11 +33,12 @@ Rientro: `node scripts/zone-protection.mjs remove` toglie le regole dell'ambient
 <a id="rate-limiting"></a>
 ## Rate Limiting nativo
 
-Il Worker filtra per IP, rete IPv6 /64 e operazione con quattro binding Rate Limiting ([§29](../engineering/SECURITY_AND_PRIVACY.md#s29)), dichiarati in `cloudflare.config.ts` con namespace separati per ambiente e soglie in `app/request-limits.json`:
+Il Worker filtra per IP, rete IPv6 /64 e operazione con cinque binding Rate Limiting ([§29](../engineering/SECURITY_AND_PRIVACY.md#s29)), dichiarati in `cloudflare.config.ts` con namespace separati per ambiente e soglie in `app/request-limits.json`:
 
 | Binding | Soglia | Operazioni |
 |---|---|---|
-| `REQUEST_LIMIT_ATTEMPTS` | 3 in 10 secondi | accesso e registrazione con password, cambio di password ed email, verifiche passkey |
+| `REQUEST_LIMIT_ATTEMPTS` | 3 in 10 secondi | accesso e registrazione con password, cambio di password ed email, verifiche passkey, preparazione di una nuova passkey |
+| `REQUEST_LIMIT_CHALLENGES` | 20 in 10 secondi | preparazione della sfida per l'accesso con passkey, chiesta a ogni apertura della pagina di accesso per il suggerimento nel campo email |
 | `REQUEST_LIMIT_EMAILS` | 3 in 60 secondi | nuovo link di conferma, recupero della password, cancellazione dell'account, assistenza |
 | `REQUEST_LIMIT_WORK` | 10 in 60 secondi | file degli ordini, archivio dell'account, letture eBay a richiesta da Negozi e Ordini |
 | `REQUEST_LIMIT_REPORTS` | 10 in 60 secondi | segnalazioni CSP e Trusted Types del browser su `/api/v1/csp-report`, con corpo fino a 16 KiB e al più cinque violazioni registrate per invio |
@@ -46,7 +47,7 @@ Il filtro precede sessione, Turnstile e database e risponde 429 con `Retry-After
 
 Readback dopo il deploy, sul test:
 
-1. `pnpm exec cf workers versions get <versione> --worker-id fiscalbay-test` mostra i quattro binding `ratelimit` con i namespace `2910`, `2911`, `2912` e `2913`; la Production usa `2920`-`2923`.
+1. `pnpm exec cf workers versions get <versione> --worker-id fiscalbay-test` mostra i cinque binding `ratelimit` con i namespace da `2910` a `2914`; la Production usa `2920`-`2924`.
 2. Quattro `POST https://test.fiscalbay.it/api/auth/sign-in/email` dallo stesso IP entro 10 secondi, con un indirizzo sintetico e una password sbagliata: il quarto risponde 429 con `Retry-After: 10`, `Cache-Control: no-store` e `TOO_MANY_REQUESTS`, uguale per un indirizzo esistente. La regola di zona `fiscalbay-auth-burst` scatta soltanto oltre 30 richieste.
 3. `pnpm exec cf d1 query <id del test in cloudflare.config.ts> --sql 'SELECT "key", "lastRequest" FROM "rateLimit"'`: le prove del punto 2 non aggiungono chiavi per IP, soltanto l'impronta `email:` dell'indirizzo; quelle scritte prima del deploy scompaiono con la pulizia oraria.
 
