@@ -525,6 +525,17 @@ describe("limiti dei tentativi", () => {
       headers: { "cf-connecting-ip": "203.0.113.6" },
     });
     expect(limiters.REQUEST_LIMIT_ATTEMPTS.keys).toEqual([]);
+    // La sfida dell'accesso vale soltanto per il suo percorso esatto, anche con la barra finale.
+    for (const path of [
+      "/api/auth/altro/passkey/generate-authenticate-options",
+      "/api/auth/passkey/generate-authenticate-options-altro",
+    ])
+      await handle(path, { headers: { "cf-connecting-ip": "203.0.113.6" } });
+    expect(limiters.REQUEST_LIMIT_CHALLENGES.keys).toEqual([]);
+    await handle("/api/auth/passkey/generate-authenticate-options/", {
+      headers: { "cf-connecting-ip": "203.0.113.6" },
+    });
+    expect(limiters.REQUEST_LIMIT_CHALLENGES.keys).toHaveLength(1);
   });
 
   it("scarta la richiesta oltre il limite prima di sessione, corpo e indirizzo", async () => {
