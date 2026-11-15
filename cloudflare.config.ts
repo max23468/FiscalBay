@@ -8,7 +8,7 @@ import { bindings, defineConfig, triggers } from "cf/config";
  */
 const requestLimitRules = JSON.parse(
   readFileSync(new URL("./app/request-limits.json", import.meta.url), "utf8"),
-) as Record<"attempts" | "emails" | "work" | "reports", RequestLimitRule>;
+) as Record<"attempts" | "emails" | "work" | "reports" | "challenges", RequestLimitRule>;
 
 type RequestLimitRule = { limit: number; period: 10 | 60 };
 
@@ -62,8 +62,8 @@ const secrets = {
  * ambienti, stanno in `app/request-limits.json`.
  */
 export const requestLimitNamespaces = {
-  test: { attempts: "2910", emails: "2911", work: "2912", reports: "2913" },
-  live: { attempts: "2920", emails: "2921", work: "2922", reports: "2923" },
+  test: { attempts: "2910", emails: "2911", work: "2912", reports: "2913", challenges: "2914" },
+  live: { attempts: "2920", emails: "2921", work: "2922", reports: "2923", challenges: "2924" },
 };
 
 const requestLimit = (namespace: string, rule: RequestLimitRule) =>
@@ -80,7 +80,7 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   exports: string;
   metrics: string;
   database: { name: string; id: string };
-  limits: { attempts: string; emails: string; work: string; reports: string };
+  limits: { attempts: string; emails: string; work: string; reports: string; challenges: string };
   vars: Vars;
 }) => ({
   name: target.name,
@@ -138,6 +138,7 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     REQUEST_LIMIT_EMAILS: requestLimit(target.limits.emails, requestLimitRules.emails),
     REQUEST_LIMIT_WORK: requestLimit(target.limits.work, requestLimitRules.work),
     REQUEST_LIMIT_REPORTS: requestLimit(target.limits.reports, requestLimitRules.reports),
+    REQUEST_LIMIT_CHALLENGES: requestLimit(target.limits.challenges, requestLimitRules.challenges),
     // La console legge lo stesso dataset dalla SQL API dell'account, con il token facoltativo
     // `ANALYTICS_READ_TOKEN`.
     METRICS_DATASET: bindings.text(target.metrics),

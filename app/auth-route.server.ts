@@ -112,15 +112,22 @@ async function passkeyOptionsResponse(
 
 // Soglie per IP e percorso sui soli invii sensibili, come le regole predefinite di Better Auth:
 // il binding Rate Limiting le applica prima di qualunque lettura o scrittura (§29). La
-// preparazione della passkey è un GET, ma scrive in D1 una sfida a ogni chiamata. L'elenco si
-// compone a ogni richiesta, così la mutation prova ogni regola con i test che la usano.
+// preparazione della passkey è un GET, ma scrive in D1 una sfida a ogni chiamata; quella
+// dell'accesso parte a ogni apertura della pagina di accesso, per il suggerimento nel campo
+// email, e ha una soglia propria più ampia. L'elenco si compone a ogni richiesta, così la
+// mutation prova ogni regola con i test che la usano.
 const attemptLimits = (): Array<{ paths: RegExp; limit: RequestLimit; anyMethod?: true }> => [
   { paths: /^\/(sign-in|sign-up|change-email)(\/|$)/u, limit: "attempts" },
   { paths: /^\/passkey\/verify-(authentication|registration)(\/|$)/u, limit: "attempts" },
   { paths: /^\/email-otp\/verify-email$/u, limit: "attempts" },
   {
-    paths: /^\/passkey\/generate-(authenticate|register)-options(\/|$)/u,
+    paths: /^\/passkey\/generate-register-options(\/|$)/u,
     limit: "attempts",
+    anyMethod: true,
+  },
+  {
+    paths: /^\/passkey\/generate-authenticate-options(\/|$)/u,
+    limit: "challenges",
     anyMethod: true,
   },
   {

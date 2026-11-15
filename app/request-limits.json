@@ -2,5 +2,6 @@
   "attempts": { "limit": 3, "period": 10 },
   "emails": { "limit": 3, "period": 60 },
   "work": { "limit": 10, "period": 60 },
-  "reports": { "limit": 10, "period": 60 }
+  "reports": { "limit": 10, "period": 60 },
+  "challenges": { "limit": 20, "period": 10 }
 }

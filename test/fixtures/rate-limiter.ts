@@ -32,6 +32,7 @@ export function fakeRateLimiters() {
     REQUEST_LIMIT_EMAILS: fakeRateLimiter("emails"),
     REQUEST_LIMIT_WORK: fakeRateLimiter("work"),
     REQUEST_LIMIT_REPORTS: fakeRateLimiter("reports"),
+    REQUEST_LIMIT_CHALLENGES: fakeRateLimiter("challenges"),
   };
 }
 
