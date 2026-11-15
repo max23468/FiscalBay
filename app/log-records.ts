@@ -4,7 +4,12 @@
  * entrano mai errori serializzati, richieste, header, payload o dati dell'utente; la verifica
  * dell'archivio (`scripts/log-archive.mjs`) segnala ogni messaggio esportato fuori da questi elenchi.
  */
-export const logEvents = ["application_error", "phase", "stale_order_observation"] as const;
+export const logEvents = [
+  "application_error",
+  "phase",
+  "stale_order_observation",
+  "csp_violation",
+] as const;
 
 export const logKeys = [
   "event",
@@ -15,6 +20,16 @@ export const logKeys = [
   "status",
   "phase",
   "count",
+  // Violazioni della CSP (`csp-report.server.ts`): direttiva, modalità, risorsa e posizione,
+  // ridotte a origini, percorsi brevi e parole chiave.
+  "directive",
+  "disposition",
+  "blocked",
+  "source",
+  "line",
+  "column",
+  "page",
+  "sample",
 ] as const;
 
 type LogRecord = { event: (typeof logEvents)[number] } & Partial<

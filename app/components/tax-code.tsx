@@ -65,8 +65,7 @@ export function TaxCode({
         className={cn(
           "font-code min-w-0 [overflow-wrap:anywhere] font-semibold",
           warning ? "text-warning" : "text-info",
-          reveal &&
-            "inline-block animate-[value-reveal_var(--duration-quick)_ease-out_both] motion-reduce:animate-none",
+          reveal && "inline-block animate-[value-reveal_var(--duration-quick)_ease-out_both]",
         )}
       >
         {value}
@@ -131,14 +130,15 @@ export function CopyButton({
         onClick={() => copy(value)}
         className={cn("group/copy", copyTones[tone])}
       >
+        {/* Le icone si scambiano rimpicciolendo; con «riduci movimento» soltanto in dissolvenza. */}
         <span className="relative size-4">
           <Copy
             aria-hidden="true"
-            className="absolute inset-0 transition-[opacity,scale,filter] duration-(--duration-fast) ease-in-out group-data-[state=copied]/copy:scale-25 group-data-[state=copied]/copy:opacity-0 group-data-[state=copied]/copy:blur-[2px]"
+            className="absolute inset-0 transition-[opacity,scale,filter] duration-(--duration-fast) ease-in-out group-data-[state=copied]/copy:opacity-0 group-data-[state=copied]/copy:blur-[2px] group-data-[state=copied]/copy:motion-safe:scale-25"
           />
           <Check
             aria-hidden="true"
-            className="absolute inset-0 scale-25 text-success opacity-0 blur-[2px] transition-[opacity,scale,filter] duration-(--duration-fast) ease-in-out group-data-[state=copied]/copy:scale-100 group-data-[state=copied]/copy:opacity-100 group-data-[state=copied]/copy:blur-none"
+            className="absolute inset-0 text-success opacity-0 blur-[2px] motion-safe:scale-25 transition-[opacity,scale,filter] duration-(--duration-fast) ease-in-out group-data-[state=copied]/copy:scale-100 group-data-[state=copied]/copy:opacity-100 group-data-[state=copied]/copy:blur-none"
           />
         </span>
         {text}

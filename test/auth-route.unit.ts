@@ -6,6 +6,7 @@ import {
   forwardToAuth,
   handleAuthRequest,
   redirectWithCookies,
+  signedOutRedirect,
 } from "../app/auth-route.server";
 import { limitedHeaders, pageHeaders } from "../app/request-limits.server";
 import { fakeRateLimiters } from "./fixtures/rate-limiter";
@@ -22,7 +23,12 @@ const services = vi.hoisted(() => ({
   background: vi.fn(),
   notify: vi.fn(),
   verification: vi.fn(),
+  passkeyHandle: vi.fn(),
   secure: { value: true },
+}));
+vi.mock("../app/domain/passkey-user.server", async (original) => ({
+  ...(await original<typeof import("../app/domain/passkey-user.server")>()),
+  passkeyUserHandle: services.passkeyHandle,
 }));
 vi.mock("../app/auth.server", () => ({
   createAuth: () => ({
@@ -295,6 +301,46 @@ describe("confine HTTP Auth", () => {
     ]);
   });
 
+  it("dà alle opzioni di registrazione della passkey lo user handle stabile e l'email", async () => {
+    services.session.mockResolvedValue(member({ name: "Maria Rossi" }));
+    services.passkeyHandle.mockResolvedValue("handle-stabile");
+    const options = {
+      challenge: "sfida",
+      user: { id: "casuale", name: "Chrome su Mac", displayName: "Chrome su Mac" },
+    };
+    const json = (body: unknown, status = 200, type = "application/json") =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": type, "content-length": "999" },
+      });
+    services.handler.mockResolvedValueOnce(json(options, 200, "application/json; charset=utf-8"));
+    const response = await handle("/api/auth/passkey/generate-register-options");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).toBeNull();
+    expect(response.headers.get("content-type")).toBe("application/json; charset=utf-8");
+    expect(await response.json()).toEqual({
+      challenge: "sfida",
+      user: { id: "handle-stabile", name: "member@example.invalid", displayName: "Maria Rossi" },
+    });
+    expect(services.passkeyHandle).toHaveBeenCalledWith(environment.DB, "member");
+    // Errori, risposte non JSON e gli altri percorsi delle passkey restano quelli di Auth.
+    for (const [path, auth] of [
+      ["/api/auth/passkey/generate-register-options", json(options, 400)],
+      ["/api/auth/passkey/generate-register-options", json(options, 200, "text/plain")],
+      ["/api/auth/passkey/verify-registration", json(options)],
+    ] as const) {
+      services.handler.mockResolvedValueOnce(auth);
+      expect(await (await handle(path)).json()).toEqual(options);
+    }
+    // Senza tipo dichiarato la risposta resta quella di Auth.
+    const untyped = new TextEncoder().encode(JSON.stringify(options));
+    services.handler.mockResolvedValueOnce(new Response(untyped, { status: 200 }));
+    const plain = await handle("/api/auth/passkey/generate-register-options");
+    expect(plain.headers.get("content-type")).toBeNull();
+    expect(await plain.json()).toEqual(options);
+    expect(services.passkeyHandle).toHaveBeenCalledTimes(1);
+  });
+
   it("risponde 503 da riprovare quando Auth o il database non rispondono", async () => {
     const error = new Error("synthetic");
     services.handler.mockRejectedValue(error);
@@ -363,6 +409,15 @@ describe("confine HTTP Auth", () => {
     expect(response.headers.get("location")).toBe("/app/ordini");
     expect(response.headers.get("cache-control")).toBe("no-store");
     expect(response.headers.getSetCookie()).toEqual(["first=1; Path=/", "second=2; Path=/"]);
+  });
+
+  it("all'uscita svuota la memoria del sito e conserva i cookie chiusi da Auth", () => {
+    const auth = new Response(null, { headers: { "set-cookie": "fb.session_token=; Max-Age=0" } });
+    const response = signedOutRedirect("/accesso", auth);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/accesso");
+    expect(response.headers.get("clear-site-data")).toBe('"storage"');
+    expect(response.headers.getSetCookie()).toEqual(["fb.session_token=; Max-Age=0"]);
   });
 });
 

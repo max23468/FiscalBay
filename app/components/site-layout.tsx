@@ -18,7 +18,9 @@ import {
   siteSecurityPath,
   visitParam,
 } from "../app-links";
+import { useScriptNonce } from "~/components/script-nonce";
 import { localizedPath } from "../i18n";
+import { speculationRules } from "../speculation-rules";
 import { webAnalyticsBeacon, webAnalyticsScript } from "../web-analytics";
 
 const navItems = [
@@ -31,9 +33,10 @@ const navItems = [
 
 /**
  * Barra superiore delle pagine pubbliche (D202): logo, pagine, lingua, `Accedi` e `Inizia gratis`,
- * oppure `Apri l'app` con una sessione. Sotto i 1024 px le pagine passano in una seconda riga sempre
- * visibile, senza menu da aprire: sotto i 640 px distribuite con spazi uguali anche ai lati, poi
- * allineate al logo con spazi fissi, e la lingua mostra il solo codice.
+ * oppure `Apri l'app` con una sessione. Sotto i 64rem (1024 px con il testo predefinito) le pagine
+ * passano in una seconda riga sempre visibile, senza menu da aprire: sotto i 40rem distribuite con
+ * spazi uguali anche ai lati, poi allineate al logo con spazi fissi, e la lingua mostra il solo
+ * codice. Le soglie sono in rem: con un testo più grande la barra passa prima alla forma compatta.
  * `path` è la pagina corrente senza prefisso di lingua, per lingua e voce attiva.
  */
 function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
@@ -52,21 +55,21 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
       <div
         className={cn(
           siteColumn,
-          "flex h-14 items-center gap-2 min-[400px]:gap-3 md:h-16 md:gap-6",
+          "flex h-14 items-center gap-2 min-[25rem]:gap-3 md:h-16 md:gap-6",
         )}
       >
         <a
           href={localizedPath(language)}
           className="shrink-0 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring"
         >
-          <Logo className="h-5 w-auto min-[400px]:h-6 md:h-7" />
+          <Logo className="h-5 w-auto min-[25rem]:h-6 md:h-7" />
         </a>
         <nav aria-label={t.site.nav.label} className="max-lg:hidden">
           <NavLinks path={path} className="gap-1 text-sm" />
         </nav>
-        <div className="ml-auto flex items-center gap-1 min-[400px]:gap-2">
-          {/* Sotto i 360 px la lingua passa nel footer, per lasciare spazio ad «Accedi». */}
-          <div className="max-[360px]:hidden lg:hidden">{switchFor(true)}</div>
+        <div className="ml-auto flex items-center gap-1 min-[25rem]:gap-2">
+          {/* Sotto i 22,5rem (360 px) la lingua passa nel footer, per lasciare spazio ad «Accedi». */}
+          <div className="max-[22.5rem]:hidden lg:hidden">{switchFor(true)}</div>
           <div className="max-lg:hidden">{switchFor(false)}</div>
           {signedIn ? (
             <a href={`${localizedPath(language)}?${visitParam}=0`} {...buttonLink({ size: "sm" })}>
@@ -76,13 +79,13 @@ function SiteHeader({ path, signedIn }: { path: string; signedIn: boolean }) {
             <>
               <a
                 href={signIn}
-                {...buttonLink({ variant: "ghost", size: "sm", className: "max-[400px]:px-2" })}
+                {...buttonLink({ variant: "ghost", size: "sm", className: "max-[25rem]:px-2" })}
               >
                 {t.site.signIn}
               </a>
               <a
                 href={`${signIn}?registrati`}
-                {...buttonLink({ size: "sm", className: "max-[400px]:px-2" })}
+                {...buttonLink({ size: "sm", className: "max-[25rem]:px-2" })}
               >
                 {t.site.start}
               </a>
@@ -133,6 +136,7 @@ export function SiteLayout({
   children: React.ReactNode;
 }) {
   const token = useRouteLoaderData<{ webAnalyticsToken: string | null }>("root")?.webAnalyticsToken;
+  const nonce = useScriptNonce();
   return (
     <div className="flex min-h-dvh flex-col">
       <SkipLink />
@@ -142,8 +146,23 @@ export function SiteLayout({
       </main>
       <SiteFooter path={path} />
       <SourceLinks />
+      <script
+        type="speculationrules"
+        nonce={nonce}
+        suppressHydrationWarning
+        // JSON generato dal codice, senza dati della richiesta: come testo React ne cambierebbe `&`.
+        dangerouslySetInnerHTML={{ __html: speculationRules(signedIn) }}
+      />
+      {/* Il beacon conta la visita senza contendere la banda alle risorse della pagina. */}
       {token ? (
-        <script defer src={webAnalyticsScript} data-cf-beacon={webAnalyticsBeacon(token)} />
+        <script
+          defer
+          src={webAnalyticsScript}
+          data-cf-beacon={webAnalyticsBeacon(token)}
+          fetchPriority="low"
+          nonce={nonce}
+          suppressHydrationWarning
+        />
       ) : null}
     </div>
   );

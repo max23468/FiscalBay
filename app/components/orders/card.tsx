@@ -85,7 +85,7 @@ export function BuyerAddress({ order, copy }: { order: OrderView; copy?: CopyLab
 }
 
 const contactLink =
-  "rounded-sm underline decoration-muted-foreground/40 underline-offset-4 outline-none hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring";
+  "rounded-sm underline decoration-muted-foreground/40 underline-offset-[0.25em] outline-none hover:decoration-current focus-visible:ring-2 focus-visible:ring-ring";
 
 /**
  * Telefono nella forma internazionale, da toccare per chiamare; un numero non riconosciuto
@@ -134,7 +134,7 @@ export function EmailLink({
         {/* Le parti in blocco non ereditano la sottolineatura del collegamento. */}
         <EmailAddress
           email={view.address}
-          className="underline decoration-muted-foreground/40 underline-offset-4 group-hover/email:decoration-current"
+          className="underline decoration-muted-foreground/40 underline-offset-[0.25em] group-hover/email:decoration-current"
         />
       </a>
       {copy ? <CopyButton value={view.address} labels={copy} tone="neutral" /> : null}
@@ -325,7 +325,7 @@ export function OrderCard({
       }
       className={cn(
         enterIndex !== undefined &&
-          "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both] motion-reduce:animate-none",
+          "animate-[rise-in_var(--duration-fast)_var(--ease-smooth-out)_both]",
         // Da due colonne la scheda occupa quattro righe condivise con quella accanto:
         // intestazione, articolo, acquirente e «Dettaglio» iniziano alla stessa altezza.
         "flex min-w-0 flex-col gap-3 rounded-xl border bg-card p-4 transition-[border-color] duration-(--duration-quick) lg:row-span-4 lg:grid lg:grid-rows-subgrid",
@@ -341,7 +341,7 @@ export function OrderCard({
               preventScrollReset
               data-order-link={order.id}
               className={cn(
-                "rounded-sm break-words outline-none hover:underline hover:underline-offset-4 focus-visible:ring-3 focus-visible:ring-ring",
+                "rounded-sm break-words outline-none hover:underline hover:underline-offset-[0.25em] focus-visible:ring-3 focus-visible:ring-ring",
                 coarseTarget,
               )}
             >
@@ -436,11 +436,13 @@ export function OrderCard({
           state={fromListState}
           preventScrollReset
           className={cn(
-            "inline-flex items-center gap-0.5 rounded-sm text-xs font-medium text-foreground underline decoration-border underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
+            "inline-flex items-center gap-0.5 rounded-sm text-xs font-medium text-foreground underline decoration-border underline-offset-[0.25em] outline-none hover:decoration-foreground focus-visible:ring-3 focus-visible:ring-ring",
             coarseTarget,
           )}
         >
           {t.orders.details}
+          {/* Nell'elenco dei collegamenti ogni «Dettaglio» dice di quale ordine. */}
+          <span className="sr-only"> {t.order.title(order.ebayOrderId)}</span>
           <ChevronRight aria-hidden="true" className="size-3.5" />
         </Link>
       </footer>

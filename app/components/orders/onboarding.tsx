@@ -65,6 +65,8 @@ function OnboardingSteps({ data }: { data: OrdersPageData }) {
               </span>
             )}
             {t.orders[step.label]}
+            {/* Il segno di spunta è decorativo: lo stato lo dice il testo. */}
+            {step.done ? <span className="sr-only">, {t.orders.stepDone}</span> : null}
           </li>
         ))}
       </ol>

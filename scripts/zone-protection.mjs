@@ -43,19 +43,38 @@ export const alertEmail = "info@fiscalbay.it";
 export const zonePlan = "free";
 
 /**
- * Scala di HSTS: si sale di un gradino soltanto dopo il readback del precedente. Né
- * `includeSubDomains` né `preload`, finché tutti i sottodomini non sono inventariati e provati.
- * I due ambienti sono all'ultimo gradino, un anno.
+ * Scala di HSTS: si sale di un gradino soltanto dopo il readback del precedente. I due ambienti
+ * sono all'ultimo gradino, un anno, con `includeSubDomains` e `preload` per la lista dei
+ * browser: i soli nomi web della zona sono l'apice, `www` e `test`, tutti in HTTPS; gli altri
+ * record servono alla posta. Un nuovo sottodominio deve nascere in HTTPS.
  */
 export const hstsStages = [300, 86_400, 604_800, 31_536_000];
 export const hstsStage = { test: 3, live: 3 };
 
-/** Header statici di ogni risposta degli host dell'ambiente; la CSP resta del Worker. */
+/** Valore dell'header HSTS al gradino dell'ambiente. */
+export const hstsValue = (target) => `max-age=${target.maxAge}; includeSubDomains; preload`;
+
+/**
+ * Header statici di ogni risposta degli host dell'ambiente; la CSP resta del Worker. Fotocamera,
+ * microfono, posizione e Payment Request non servono all'app né al widget Turnstile; passkey e
+ * appunti restano al comportamento predefinito. COOP separa la pagina da chi la apre, ma lascia
+ * all'app le finestre che apre lei.
+ */
 export const staticHeaders = {
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "strict-origin-when-cross-origin",
+  "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "cross-origin-opener-policy": "same-origin-allow-popups",
 };
+
+/**
+ * Lettura delle risposte da altre origini (CORP): nessuna, salvo le immagini delle condivisioni,
+ * le icone e il logo delle email, che anteprime e client di posta caricano da altri siti.
+ */
+export const resourcePolicy = { default: "same-origin", shared: "cross-origin" };
+export const sharedResourcePrefixes = ["/og/", "/icon-"];
+export const sharedResourcePaths = ["/favicon.ico", "/favicon.svg", "/apple-touch-icon.png"];
 
 /** Raffiche verso gli endpoint di accesso, per IP: sul Free un periodo e un blocco di 10 s. */
 export const authBurst = { path: "/api/auth/", requests: 30, period: 10, timeout: 10 };
@@ -103,21 +122,47 @@ export function targetOf(mode) {
 
 const hostExpression = (target) => `http.host in ${set(target.hosts)}`;
 
-/** Una sola regola di header per ambiente: HSTS al gradino corrente e header statici. */
+/** Regola di header dell'ambiente: HSTS al gradino corrente, header statici e CORP stretto. */
 export function headerRule(target) {
   const headers = {
-    "strict-transport-security": `max-age=${target.maxAge}`,
+    "strict-transport-security": hstsValue(target),
     ...staticHeaders,
+    "cross-origin-resource-policy": resourcePolicy.default,
   };
   return {
     ref: `${target.prefix}headers`,
     description: "Header di sicurezza e HSTS",
-    expression: hostExpression(target),
+    // Soltanto in HTTPS: su HTTP il browser ignora HSTS e la lista dei browser lo segnala.
+    expression: `${hostExpression(target)} and ssl`,
     action: "rewrite",
     action_parameters: {
       headers: Object.fromEntries(
         Object.entries(headers).map(([name, value]) => [name, { operation: "set", value }]),
       ),
+    },
+    enabled: true,
+  };
+}
+
+/**
+ * Eccezione al CORP stretto per le risorse caricate da altri siti; segue la regola degli header,
+ * quindi il suo valore prevale.
+ */
+export function sharedResourceRule(target) {
+  const uri = "http.request.uri.path";
+  const shared = [
+    ...sharedResourcePrefixes.map((prefix) => `starts_with(${uri}, ${quote(prefix)})`),
+    `${uri} in ${set(sharedResourcePaths)}`,
+  ];
+  return {
+    ref: `${target.prefix}shared-resources`,
+    description: "Immagini e icone leggibili da altri siti",
+    expression: `${hostExpression(target)} and (${shared.join(" or ")})`,
+    action: "rewrite",
+    action_parameters: {
+      headers: {
+        "cross-origin-resource-policy": { operation: "set", value: resourcePolicy.shared },
+      },
     },
     enabled: true,
   };
@@ -181,7 +226,7 @@ export function desiredRules(target) {
   return {
     http_request_firewall_custom: [webhookRule(target), probeRule(target)],
     http_ratelimit: [authRule()],
-    http_response_headers_transform: [headerRule(target)],
+    http_response_headers_transform: [headerRule(target), sharedResourceRule(target)],
   };
 }
 
@@ -294,7 +339,7 @@ const mitigated = (response) => header(response, "cf-mitigated") !== null;
 /** Header di sicurezza attesi su una risposta reale. */
 function securedHeaders(target, response) {
   return (
-    header(response, "strict-transport-security") === `max-age=${target.maxAge}` &&
+    header(response, "strict-transport-security") === hstsValue(target) &&
     Object.entries(staticHeaders).every(([name, value]) => header(response, name) === value)
   );
 }
@@ -345,6 +390,7 @@ export function checkReadback(target, state) {
       hsts.include_subdomains !== true && hsts.preload !== true,
     ],
     ["Bot Fight Mode spento", state.botManagement?.fight_mode === false],
+    ["Speed Brain spento", state.settings?.speed_brain === "off"],
     [
       "crawler AI ammessi",
       state.botManagement?.ai_bots_protection === "disabled" &&
@@ -378,12 +424,19 @@ export function checkReadback(target, state) {
       "pagina con header e CSP",
       responses.page?.status === 200 &&
         securedHeaders(target, responses.page) &&
+        header(responses.page, "cross-origin-resource-policy") === resourcePolicy.default &&
         /frame-ancestors 'none'/u.test(header(responses.page, "content-security-policy") ?? "") &&
+        /'strict-dynamic'/u.test(header(responses.page, "content-security-policy") ?? "") &&
+        /require-trusted-types-for 'script'/u.test(
+          header(responses.page, "content-security-policy-report-only") ?? "",
+        ) &&
         header(responses.page, "cache-control") === "no-store",
     ],
     [
-      "asset con header",
-      responses.asset?.status === 200 && securedHeaders(target, responses.asset),
+      "icona con header, leggibile da altri siti",
+      responses.asset?.status === 200 &&
+        securedHeaders(target, responses.asset) &&
+        header(responses.asset, "cross-origin-resource-policy") === resourcePolicy.shared,
     ],
     [
       "asset con hash in cache per un anno",
@@ -495,6 +548,17 @@ function apply(target) {
   for (const phase of phases) writeRules(phase, rules[phase]);
   applyMail();
   cf(["leaked-credential-checks", "update", "--enabled", "true", "--force", "-q"]);
+  // Speed Brain rifiuta con 503 i precaricamenti delle pagine che non stanno nella cache di
+  // Cloudflare, cioè tutte quelle del Worker: le regole di speculazione sono dell'app.
+  cf([
+    "zones",
+    "settings",
+    "edit",
+    "speed_brain",
+    "--body",
+    JSON.stringify({ value: "off" }),
+    "-q",
+  ]);
 }
 
 function remove(target) {
@@ -574,6 +638,7 @@ async function readState(target, withBurst) {
       always_use_https: setting("always_use_https"),
       min_tls_version: setting("min_tls_version"),
       security_header: setting("security_header"),
+      speed_brain: setting("speed_brain"),
     },
     botManagement: optional(["bot-management", "get"]),
     leakedCredentials: optional(["leaked-credential-checks", "get"]),

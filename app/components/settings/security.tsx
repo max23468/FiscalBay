@@ -2,6 +2,7 @@ import { AccessNotice } from "~/components/access-notice";
 import { AccountSecurity } from "~/components/settings/account-security";
 import type { AccessNoticeView } from "../../access-notice";
 import type { PendingEmailChange } from "../../domain/email-change.server";
+import type { PasskeySignals } from "../../domain/passkey-user.server";
 import type { ActiveSession } from "../../domain/sessions.server";
 import type { SignInMethods } from "../../domain/sign-in-methods.server";
 
@@ -15,6 +16,8 @@ export interface SecurityData {
   deletionReady?: boolean;
   passkeyRestriction?: "conferma-passkey" | "nuovo-accesso" | null;
   pendingEmail?: PendingEmailChange | null;
+  /** Passkey valide e dati dell'account da segnalare al browser; assente nell'anteprima. */
+  passkeySignals?: PasskeySignals | null;
   notice: AccessNoticeView | null;
 }
 
@@ -39,6 +42,7 @@ export function SecuritySection({
         recent={security.recent}
         passkeyRestriction={security.passkeyRestriction}
         pendingEmail={security.pendingEmail}
+        passkeySignals={security.passkeySignals ?? null}
       />
     </>
   );

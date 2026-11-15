@@ -90,13 +90,20 @@ async function expectOrdersFallbacks(page: Page, base: string, missing: string, 
   await expect(page.getByRole("button", { name: "Seleziona" })).toBeDisabled();
 }
 
-/** La conferma forte abilita l'eliminazione soltanto con il nome esatto del negozio. */
+/**
+ * La conferma forte elimina soltanto con il nome esatto del negozio: senza, il pulsante resta
+ * attivo e l'invio si ferma con il messaggio accanto al campo.
+ */
 async function confirmStoreDeletion(page: Page, dialog: Locator, name: string) {
   await dialog.getByRole("button", { name: "Scollega ed elimina negozio" }).click();
   const confirm = page.getByRole("alertdialog");
   const button = confirm.getByRole("button", { name: "Scollega ed elimina negozio" });
-  await expect(button).toBeDisabled();
-  await confirm.getByRole("textbox").fill(name);
+  const field = confirm.getByRole("textbox");
+  await button.click();
+  await expect(confirm.getByText("Il nome non corrisponde: nessun dato eliminato.")).toBeVisible();
+  await expect(field).toBeFocused();
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await field.fill(name);
   await expect(button).toBeEnabled();
   return { confirm, button };
 }
@@ -673,6 +680,165 @@ test("la ricerca della top bar suggerisce e apre l'elenco filtrato", async ({
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/ordini\/ord-\d+\?ricerca=[\w-]+(?:[?&]vista=[0-9a-z]+)?$/u);
   await expect(page.getByRole("dialog")).toContainText("Conti");
+});
+
+test("su smartphone Esc chiude prima i suggerimenti e Indietro chiude la ricerca", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 740 });
+  // Una voce precedente nella cronologia dell'app, dove Indietro porterebbe.
+  await open(page, "/anteprima/negozi");
+  const nav = page.getByRole("navigation", { name: "Navigazione principale" });
+  await clickHydrated(nav.getByRole("link", { name: "Ordini" }));
+  await expect(page).toHaveURL(/\/anteprima\/ordini(?:\?vista=[0-9a-z]+)?$/u);
+  const url = page.url();
+  await clickHydrated(page.getByRole("button", { name: "Cerca ordini" }));
+  const sheet = page.getByRole("dialog", { name: "Cerca ordini" });
+  const search = sheet.getByRole("searchbox", { name: "Cerca ordini" });
+  await search.fill("Conti");
+  const suggestion = sheet.getByRole("link", { name: /Conti/ });
+  await expect(suggestion).toBeVisible();
+  await search.press("Escape");
+  await expect(suggestion).toBeHidden();
+  await expect(sheet).toBeVisible();
+  await search.press("Escape");
+  await expect(sheet).toBeHidden();
+  // Indietro chiude la ricerca e la pagina resta quella di prima.
+  await page.getByRole("button", { name: "Cerca ordini" }).click();
+  await expect(sheet).toBeVisible();
+  await page.goBack();
+  await expect(sheet).toBeHidden();
+  await expect(page).toHaveURL(url);
+  await expect(page.getByRole("region", { name: "Elenco ordini" })).toBeVisible();
+});
+
+for (const area of areas) {
+  test(`la ricerca mobile conserva la conferma delle bozze, ${area.name}`, async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    await enter(context, baseURL!, area);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await open(page, pagePath(area.base, "/impostazioni"));
+    await page.getByRole("link", { name: "Modello di messaggio", exact: true }).click();
+    const template = page.getByRole("textbox", { name: "Italiano", exact: true });
+    const draft = "Bozza da conservare per l’ordine {ordine}";
+    await template.fill(draft);
+    const settingsUrl = page.url();
+    const searchButton = page.getByRole("button", { name: "Cerca ordini", exact: true });
+    await searchButton.click();
+    const sheet = page.getByRole("dialog", { name: "Cerca ordini" });
+    await expect(sheet).toBeVisible();
+    await page.goBack();
+    await expect(sheet).toBeHidden();
+    await expect(page).toHaveURL(settingsUrl);
+    await expect(template).toHaveValue(draft);
+
+    const query = area.base === "/app" ? testAccount.orders.unlocked : "Conti";
+    for (const submit of [false, true]) {
+      await searchButton.click();
+      const search = sheet.getByRole("searchbox", { name: "Cerca ordini" });
+      await search.fill(query);
+      const suggestion = sheet.getByRole("link").filter({ hasText: query }).first();
+      await expect(suggestion).toBeVisible();
+      if (submit) await search.press("Enter");
+      else await suggestion.click();
+      const confirmation = page.getByRole("alertdialog", { name: "Modifiche non salvate" });
+      await expect(confirmation).toBeVisible();
+      if (submit) {
+        await confirmation.getByRole("button", { name: "Lascia la pagina" }).click();
+        await expect(page).toHaveURL(/\/ordini\?ricerca=/u);
+      } else {
+        await confirmation.getByRole("button", { name: "Continua a modificare" }).click();
+        await expect(page).toHaveURL(settingsUrl);
+        await expect(template).toHaveValue(draft);
+      }
+    }
+  });
+
+  for (const width of [390, 768, 1440])
+    test(`la tabulazione dei filtri segue le righe visibili a ${width}px, ${area.name}`, async ({
+      page,
+      context,
+      baseURL,
+      browserName,
+    }) => {
+      await enter(context, baseURL!, area);
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await open(page, pagePath(area.base, "/ordini"));
+      const filters = page.locator("#orders-filters").getByRole("combobox");
+      // WebKit richiede Alt+Tab per includere i collegamenti, come nelle altre prove di tastiera.
+      const tab = browserName === "webkit" ? "Alt+Tab" : "Tab";
+      const select = page.getByRole("button", { name: "Seleziona", exact: true });
+      const exportLink = page.getByRole("link", { name: "Esporta", exact: true });
+      if (width < 768) {
+        const toggle = page.getByRole("button", { name: "Filtri", exact: true });
+        await toggle.click();
+        await toggle.focus();
+        await page.keyboard.press(tab);
+        await expect(select).toBeFocused();
+        await page.keyboard.press(tab);
+        await expect(exportLink).toBeFocused();
+        await page.keyboard.press(tab);
+      } else await filters.first().focus();
+      for (let index = 0; index < (await filters.count()); index++) {
+        await expect(filters.nth(index)).toBeFocused();
+        await page.keyboard.press(tab);
+      }
+      if (width >= 768) await expect(select).toBeFocused();
+      const firstId = await filters.first().getAttribute("id");
+      const resized = width < 768 ? 1440 : 390;
+      await page.setViewportSize({ width: resized, height: 900 });
+      if (resized < 768) await page.getByRole("button", { name: "Filtri", exact: true }).click();
+      await expect(filters.first()).toHaveAttribute("id", firstId!);
+      await expect
+        .poll(() =>
+          filters.first().evaluate((element) => {
+            const actions = element
+              .closest("#orders-filters")!
+              .parentElement!.parentElement!.querySelector("[aria-pressed]")!;
+            return Boolean(
+              element.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+            );
+          }),
+        )
+        .toBe(resized >= 768);
+    });
+}
+
+test("una nuova sezione riceve il focus senza scorrere, il primo caricamento no", async ({
+  page,
+}) => {
+  await open(page, "/anteprima/ordini");
+  const main = page.getByRole("main");
+  await expect(main).not.toBeFocused();
+  const nav = page.getByRole("navigation", { name: "Navigazione principale" });
+  await clickHydrated(nav.getByRole("link", { name: "Negozi eBay" }));
+  await expect(page).toHaveURL(/\/anteprima\/negozi$/u);
+  await expect(main).toBeFocused();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBe(0);
+});
+
+test("«Annulla» delle notifiche resta finché il focus è nel piede", async ({ page }) => {
+  await page.clock.install();
+  await open(page, "/anteprima/ordini");
+  await clickHydrated(page.getByRole("button", { name: "Notifiche, 1 da leggere" }));
+  const dialog = page.getByRole("dialog", { name: "Notifiche" });
+  await dialog
+    .getByRole("button", { name: /^Elimina notifica: / })
+    .first()
+    .click();
+  const undo = dialog.getByRole("button", { name: "Annulla", exact: true });
+  await expect(undo).toBeFocused();
+  await page.clock.fastForward(10_000);
+  await expect(undo).toBeVisible();
+  // Uscito il focus dal piede, «Annulla» scade e il focus resta nel pannello.
+  await dialog.getByRole("heading", { name: "Notifiche" }).click();
+  await page.clock.fastForward(10_000);
+  await expect(undo).toBeHidden();
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(false);
 });
 
 test("negozi con problema e conferma forte dell'eliminazione", async ({ page }) => {

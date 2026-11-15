@@ -162,6 +162,9 @@ export const notificationsPath = "/api/v1/notifications";
 /** Controllo delle password trapelate, chiesto dal browser prima dell'invio dei moduli. */
 export const passwordCheckPath = "/api/v1/password-check";
 
+/** Segnalazioni delle violazioni della CSP, inviate dal browser. */
+export const cspReportPath = "/api/v1/csp-report";
+
 /** Conferma dell'email con il codice, raggiunta soltanto dal modulo dell'app. */
 export const emailCodeConfirmPath = "/email-otp/verify-email";
 

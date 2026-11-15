@@ -152,8 +152,9 @@ const handlers = {
       tracePhase(correlatedRequest, "response");
       const correlated = correlateResponse(response, id);
       // Quasi ogni pagina dipende dalla sessione: nessuna cache conserva una risposta del
-      // Worker, salvo una route che dichiari la propria regola e la cache breve delle pagine
-      // pubbliche senza cookie. Gli asset statici non passano di qui.
+      // Worker, salvo una route che dichiari la propria regola, come le pagine pubbliche
+      // riconvalidate a ogni visita, e la cache breve di quelle senza cookie. Gli asset statici
+      // non passano di qui.
       if (!correlated.headers.has("cache-control"))
         correlated.headers.set("cache-control", "no-store");
       if (!indexable(env.APP_ORIGIN, new URL(request.url).pathname))

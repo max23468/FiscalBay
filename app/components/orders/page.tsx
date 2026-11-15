@@ -1,11 +1,12 @@
 import { LazyMotion, MotionConfig } from "motion/react";
-import { useEffect, useEffectEvent } from "react";
+import { lazy, Suspense, useEffect, useEffectEvent, useRef, useState } from "react";
 import { Link, useFetcher, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useFetcherResult, useNotice } from "~/components/action";
 import { useConfirmed } from "~/components/confirmation";
 import { EmptyState } from "~/components/empty-state";
 import { smoothTransition } from "~/components/motion";
+import { StatusAlert } from "~/components/status";
 import { buttonLink } from "~/components/ui/button-variants";
 import type { AppCopy } from "../../app-copy";
 import { appHref } from "../../app-links";
@@ -31,7 +32,6 @@ import {
 } from "../../orders/page-data";
 import { orderPeriods, type OrderView } from "../../view-models";
 import { OrderCard } from "./card";
-import { OrderSheet } from "./detail";
 import { useEnterIndexes, useListSnapshot, useNewOrders } from "./list-snapshot";
 import { OrdersHeader, OrdersNotices, TrialNotice } from "./notices";
 import { MarketingProposal } from "./marketing-proposal";
@@ -42,6 +42,11 @@ import { OrdersToolbar, SearchChip } from "./toolbar";
 import { useCopy, useLinks } from "~/components/copy-context";
 
 const unlockableOrder = (order: OrderView) => unlockable(order.fiscal);
+
+// Il dettaglio arriva alla prima apertura e resta montato per conservarne la chiusura e il focus.
+const OrderSheet = lazy(() =>
+  import("./detail").then(({ OrderSheet }) => ({ default: OrderSheet })),
+);
 
 /** Attesa massima del primo momento libero: le animazioni arrivano comunque subito dopo. */
 const motionIdleTimeout = 1_500;
@@ -64,13 +69,19 @@ const loadMotionFeatures = () =>
 
 type Unlock = ReturnType<typeof useUnlock>;
 
-/** Sblocco tramite l'azione del server: il dato arriva solo dopo la verifica della quota. */
+/**
+ * Sblocco tramite l'azione del server: il dato arriva solo dopo la verifica della quota. La
+ * conferma è un avviso breve; un errore resta in pagina, con gli ordini interessati, fino al
+ * tentativo successivo.
+ */
 function useUnlock(unlockAction: string, t: AppCopy) {
   const notify = useNotice();
   const fetcher = useFetcher<UnlockResult>();
+  const attempted = useRef<string[]>([]);
+  const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
   useFetcherResult(fetcher, (result) => {
     if (result.error) {
-      notify(t.orders.unlockFailed);
+      setFailed(new Set(attempted.current));
       return;
     }
     notify(
@@ -80,11 +91,15 @@ function useUnlock(unlockAction: string, t: AppCopy) {
     );
   });
   return {
-    submit: (ids: string[], skipConfirmation = false) =>
+    submit: (ids: string[], skipConfirmation = false) => {
+      attempted.current = ids;
+      setFailed(new Set());
       void fetcher.submit(unlockForm(ids, skipConfirmation), {
         method: "post",
         action: unlockAction,
-      }),
+      });
+    },
+    failed,
     pending: new Set(
       fetcher.state === "idle" ? [] : String(fetcher.formData?.get("ids") ?? "").split(","),
     ),
@@ -168,6 +183,31 @@ function NoResults({
   );
 }
 
+/** Esito dello sblocco e sblocchi rimasti, sopra l'elenco. */
+function ListNotices({
+  data,
+  orders,
+  unlock,
+}: {
+  data: OrdersPageData;
+  orders: OrderView[];
+  unlock: Unlock;
+}) {
+  const { t } = useCopy();
+  const remaining = remainingUnlocks(data.account);
+  return (
+    <>
+      {/* Con il dettaglio aperto l'errore sta nel pannello, accanto al dato. */}
+      {unlock.failed.size > 0 && data.detail === null ? (
+        <StatusAlert tone="danger" title={t.orders.unlockFailed} />
+      ) : null}
+      {remaining !== null && remaining > 0 && orders.some(unlockableOrder) ? (
+        <p className="text-sm text-muted-foreground">{t.orders.unlockBalance(remaining)}</p>
+      ) : null}
+    </>
+  );
+}
+
 function OrdersList({
   data,
   orders,
@@ -220,7 +260,6 @@ function OrdersList({
   const lockedSelected = visibleSelected.filter(unlockableOrder).map((order) => order.id);
   const onlySearch =
     criteria.has(searchParam) && [...criteria.keys()].every((key) => key === searchParam);
-  const remaining = remainingUnlocks(data.account);
   return (
     <>
       <OrdersToolbar
@@ -235,9 +274,7 @@ function OrdersList({
         onToggleSelect={() => (selecting ? stopSelecting() : startSelecting())}
       />
       <SearchChip query={data.search} clearable={orders.length > 0 || !onlySearch} />
-      {remaining !== null && remaining > 0 && orders.some(unlockableOrder) ? (
-        <p className="text-sm text-muted-foreground">{t.orders.unlockBalance(remaining)}</p>
-      ) : null}
+      <ListNotices data={data} orders={orders} unlock={unlock} />
       {freshHref ? (
         <div className="flex justify-center">
           <Link to={freshHref} replace preventScrollReset {...buttonLink({ variant: "secondary" })}>
@@ -329,6 +366,8 @@ export function OrdersPage({
   const unlock = useUnlock(unlockAction, t);
   const orders = useConfirmed(data.orders, confirmation);
   const [detail] = useConfirmed(data.detail ? [data.detail] : [], confirmation);
+  const [detailOpened, setDetailOpened] = useState(false);
+  if (detail && !detailOpened) setDetailOpened(true);
   usePageTiming("orders", timing);
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
@@ -344,15 +383,19 @@ export function OrdersPage({
       ) : (
         <OrdersList data={data} orders={orders} unlock={unlock} />
       )}
-      <OrderSheet
-        detail={detail ?? null}
-        account={data.account}
-        ebayDown={!!ebayDownNotice(data)}
-        templates={data.messageTemplates}
-        confirmUnlock={data.confirmUnlock}
-        unlock={unlock}
-        actions={data}
-      />
+      <Suspense fallback={null}>
+        {detailOpened ? (
+          <OrderSheet
+            detail={detail ?? null}
+            account={data.account}
+            ebayDown={!!ebayDownNotice(data)}
+            templates={data.messageTemplates}
+            confirmUnlock={data.confirmUnlock}
+            unlock={unlock}
+            actions={data}
+          />
+        ) : null}
+      </Suspense>
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { PageIntro, SiteLayout } from "~/components/site-layout";
 import { guidePaths, guidesPath } from "../app-links";
 import { guides } from "../copy/guides.server";
 import { localizedPath } from "../i18n";
-import { publicPage } from "../site.server";
+import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/guides";
 
@@ -26,6 +26,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     },
   };
 }
+
+export const headers = publicPageHeaders;
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin, copy } = loaderData;

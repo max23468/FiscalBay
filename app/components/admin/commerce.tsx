@@ -124,7 +124,7 @@ function Exits({ exits }: { exits: CommerceData["exits"] }) {
               <Link
                 key="workspace"
                 to={href(`spazi/${encodeURIComponent(exit.workspaceId)}`)}
-                className="text-primary underline-offset-4 hover:underline"
+                className="text-primary underline-offset-[0.25em] hover:underline"
               >
                 {x.kind[exit.kind]}
               </Link>
@@ -156,7 +156,7 @@ export function CommerceView({ data, now }: { data: CommerceData; now: string })
       <Link
         key="workspace"
         to={href(`spazi/${encodeURIComponent(item.workspaceId)}`)}
-        className="text-primary underline-offset-4 hover:underline"
+        className="text-primary underline-offset-[0.25em] hover:underline"
       >
         {item.ownerEmail ?? item.workspaceId}
       </Link>,

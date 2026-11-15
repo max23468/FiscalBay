@@ -7,7 +7,7 @@ import { buttonLink } from "~/components/ui/button-variants";
 import { appCopy, supportEmail } from "../app-copy";
 import { faqPath, supportPath, supportSettingsPath } from "../app-links";
 import { localizedPath } from "../i18n";
-import { publicPage } from "../site.server";
+import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/support";
 
@@ -15,6 +15,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const { language, origin, session } = await publicPage(request);
   return { language, origin, signedIn: Boolean(session) };
 }
+
+export const headers = publicPageHeaders;
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin } = loaderData;
@@ -40,7 +42,7 @@ export default function Support({ loaderData }: Route.ComponentProps) {
     <SiteLayout path={supportPath} signedIn={signedIn}>
       <PageIntro title={t.supportPage.title} />
       <div className={cn(siteColumn, "py-12 sm:py-16")}>
-        <div className="grid max-w-3xl gap-10">
+        <div className="grid max-w-[65ch] gap-10">
           <section aria-labelledby="faq" className="grid gap-3">
             <h2 id="faq" className="text-xl font-semibold">
               {t.settings.support.faq}
@@ -48,7 +50,7 @@ export default function Support({ loaderData }: Route.ComponentProps) {
             <FaqList items={t.settings.support.faqItems} />
             <a
               href={localizedPath(language, faqPath)}
-              className="w-fit font-medium text-primary underline-offset-4 hover:underline"
+              className="w-fit font-medium text-primary underline-offset-[0.25em] hover:underline"
             >
               {t.supportPage.faq}
             </a>

@@ -23,6 +23,7 @@ import {
 } from "~/components/ui/select";
 import { Textarea } from "~/components/ui/textarea";
 import { useCopy } from "~/components/copy-context";
+import { useFieldErrors } from "~/components/form-validation";
 import { ConfirmIdentity } from "./settings/confirm-identity";
 import { settingsRow, settingsRowText } from "./settings/security-rows";
 import type { SignInMethods } from "../domain/sign-in-methods.server";
@@ -70,6 +71,8 @@ export function DeleteAccount({
   // Identità già confermata in questa pagina: un nuovo invio non la richiede di nuovo.
   const confirmed = useRef(false);
   const matches = typed.trim().toLowerCase() === email.toLowerCase();
+  // Il pulsante resta attivo: un indirizzo diverso ferma l'invio con il messaggio accanto.
+  const v = useFieldErrors(t.access.validation);
   const send = () =>
     action.run("account-delete", { confirmation: typed.trim(), reason, comment: comment.trim() });
   const reasons = [
@@ -109,9 +112,15 @@ export function DeleteAccount({
           {exportOptions}
           <form
             className="grid gap-2"
+            {...v.form}
             onSubmit={(event) => {
               event.preventDefault();
-              if (!matches) return;
+              if (action.pending) return;
+              if (!matches) {
+                const input = event.currentTarget.elements.namedItem("confirmation");
+                v.reject(input as HTMLInputElement, t.settings.privacy.deleteAccountMismatch);
+                return;
+              }
               setOpen(false);
               if (access.ready || confirmed.current) send();
               else setConfirming(true);
@@ -153,19 +162,19 @@ export function DeleteAccount({
             <FieldLabel htmlFor={`${id}-email`}>{t.settings.privacy.deleteAccountEmail}</FieldLabel>
             <Input
               id={`${id}-email`}
+              name="confirmation"
               type="email"
               autoComplete="off"
               spellCheck={false}
+              enterKeyHint="send"
               value={typed}
               onChange={(event) => setTyped(event.currentTarget.value)}
+              {...v.control("confirmation")}
             />
+            {v.error("confirmation")}
             <AlertDialogFooter className="mt-2">
               <AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
-              <Button
-                type="submit"
-                variant="destructive-solid"
-                disabled={!matches || action.pending}
-              >
+              <Button type="submit" variant="destructive-solid" pending={action.pending}>
                 {t.settings.privacy.deleteAccountConfirm}
               </Button>
             </AlertDialogFooter>

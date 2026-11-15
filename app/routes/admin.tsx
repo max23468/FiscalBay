@@ -151,7 +151,9 @@ function PasskeyConfirm({ unverified }: { unverified: boolean }) {
         <KeyRound aria-hidden="true" data-icon="inline-start" />
         {t.verifyTitle}
       </Button>
-      {error || (unverified && !retried) ? <FieldError>{t.verifyFailed}</FieldError> : null}
+      {error || (unverified && !retried) ? (
+        <FieldError role="alert">{t.verifyFailed}</FieldError>
+      ) : null}
     </div>
   );
 }

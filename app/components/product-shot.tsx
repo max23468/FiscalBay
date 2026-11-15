@@ -177,7 +177,7 @@ export function ShotRow({
         {link ? (
           <a
             href={link.href}
-            className="w-fit font-medium text-primary underline-offset-4 hover:underline"
+            className="w-fit font-medium text-primary underline-offset-[0.25em] hover:underline"
           >
             {link.label}
           </a>

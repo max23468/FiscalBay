@@ -152,12 +152,17 @@ export function pagePoint(input: {
   fcp?: number;
   lcp?: number;
   inp?: number;
+  inpInput?: number;
+  inpProcessing?: number;
+  inpPresentation?: number;
+  inpScript?: number;
   cls?: number;
   ready?: number;
   server: Partial<Record<Phase, number>>;
   version?: string;
 }): MetricPoint {
   const value = (measure: number | undefined) => measure ?? absentValue;
+  // Le parti dell'INP seguono le colonne esistenti: i punti già scritti restano leggibili.
   return point(
     "page",
     "browser",
@@ -173,6 +178,10 @@ export function pagePoint(input: {
       absentValue,
       value(input.inp),
       value(input.cls),
+      value(input.inpInput),
+      value(input.inpProcessing),
+      value(input.inpPresentation),
+      value(input.inpScript),
     ],
   );
 }

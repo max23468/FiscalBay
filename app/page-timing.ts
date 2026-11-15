@@ -5,6 +5,18 @@ export const timedPages = ["orders", "stores"] as const;
 export type TimedPage = (typeof timedPages)[number];
 export const serverPhases = ["auth", "d1", "ebay"] as const;
 
+/**
+ * Parti dell'interazione che dà l'INP: attesa prima dei gestori, gestori, disegno successivo e
+ * script dei frame lunghi che la attraversano, dove il browser li espone.
+ */
+export const interactionParts = [
+  "inpInput",
+  "inpProcessing",
+  "inpPresentation",
+  "inpScript",
+] as const;
+export type InteractionParts = Partial<Record<(typeof interactionParts)[number], number>>;
+
 export const pageTimingPath = "/api/v1/page-timing";
 
 /** Durata massima accettata, in millisecondi: oltre non è una misura utile. */
@@ -12,6 +24,30 @@ export const maxTimingMs = 120_000;
 
 // Un solo report per documento: le navigazioni successive non hanno un caricamento da misurare.
 let reported = false;
+
+/**
+ * Ripiego per i browser senza le voci `visibility-state`: il primo momento in cui la pagina è
+ * risultata nascosta da quando questo modulo è stato valutato, 0 se lo era già.
+ */
+let hiddenSince =
+  typeof document === "undefined" || document.visibilityState !== "hidden" ? Infinity : 0;
+if (typeof document !== "undefined")
+  document.addEventListener("visibilitychange", (event) => {
+    if (document.visibilityState === "hidden") hiddenSince = Math.min(hiddenSince, event.timeStamp);
+  });
+
+/**
+ * Primo momento in cui la pagina è stata nascosta: dalle voci `visibility-state`, che partono
+ * dall'apertura del documento, o dal ripiego. FCP e LCP disegnati dopo, come in una scheda
+ * aperta in background, non misurano il caricamento visto dall'utente.
+ */
+export function firstHiddenTime(
+  entries: ReadonlyArray<{ name: string; startTime: number }> | null,
+  fallback: number,
+) {
+  if (!entries) return fallback;
+  return entries.find((entry) => entry.name === "hidden")?.startTime ?? Infinity;
+}
 
 /**
  * Il documento è stato caricato sulla pagina resa: il percorso dell'entry di navigazione è quello
@@ -36,16 +72,67 @@ export function timingValue(value: number | undefined) {
 /** Spostamento del layout massimo accettato, in millesimi: oltre è un valore anomalo. */
 export const maxLayoutShift = 100_000;
 
-/** Attesa del report di una scheda rimasta aperta, entro la validità del biglietto. */
+/** Ultimo invio del report di una scheda rimasta aperta, entro la validità del biglietto. */
 const reportDelay = 14 * 60_000;
+
+/** Attesa prima di aggiornare il report dopo nuove misure: più voci ravvicinate, un solo invio. */
+const updateDelay = 1_000;
+
+/** Frame lunghi conservati per attribuire l'INP: i più vecchi escono per primi. */
+const maxFrames = 200;
 
 /**
  * INP della pagina: l'interazione più lenta, scartandone una ogni cinquanta come fa il
  * 98° percentile della definizione di Core Web Vitals. Senza interazioni resta assente.
  */
 export function interactionToNextPaint(durations: Iterable<number>) {
-  const slowest = [...durations].sort((a, b) => b - a);
+  return inpInteraction([...durations].map((duration) => ({ duration })))?.duration;
+}
+
+/** Interazione che dà l'INP, con la stessa regola di `interactionToNextPaint`. */
+export function inpInteraction<T extends { duration: number }>(entries: Iterable<T>) {
+  const slowest = [...entries].sort((a, b) => b.duration - a.duration);
   return slowest[Math.min(Math.floor(slowest.length / 50), slowest.length - 1)];
+}
+
+/** Voce di Event Timing dell'interazione e frame lunghi con i loro script. */
+export interface InteractionTiming {
+  startTime: number;
+  duration: number;
+  processingStart: number;
+  processingEnd: number;
+}
+export interface FrameTiming {
+  startTime: number;
+  duration: number;
+  scripts: ReadonlyArray<{ startTime: number; duration: number }>;
+}
+
+/**
+ * Parti dell'interazione dell'INP. La durata è arrotondata a 8 ms dal browser: il disegno non
+ * scende sotto zero. Lo script somma il tempo degli script dei frame lunghi dentro l'interazione;
+ * senza Long Animation Frames resta assente.
+ */
+export function interactionAttribution(
+  entry: InteractionTiming,
+  frames: ReadonlyArray<FrameTiming> | null,
+): InteractionParts {
+  const end = entry.startTime + entry.duration;
+  const overlap = (start: number, duration: number) =>
+    Math.max(0, Math.min(start + duration, end) - Math.max(start, entry.startTime));
+  return {
+    inpInput: timingValue(entry.processingStart - entry.startTime),
+    inpProcessing: timingValue(entry.processingEnd - entry.processingStart),
+    inpPresentation: timingValue(Math.max(0, end - entry.processingEnd)),
+    inpScript: frames
+      ? timingValue(
+          frames
+            .filter((frame) => overlap(frame.startTime, frame.duration) > 0)
+            .flatMap((frame) => frame.scripts)
+            .reduce((total, script) => total + overlap(script.startTime, script.duration), 0),
+        )
+      : undefined,
+  };
 }
 
 /** Sessione di spostamenti del layout: gruppo più pesante e gruppo in corso. */
@@ -88,11 +175,47 @@ function observeEntries<T extends PerformanceEntry>(
   return observer;
 }
 
+type DeferredInit = RequestInit & { activateAfter?: number };
+type DeferredFetch = (url: string, init: DeferredInit) => { readonly activated: boolean };
+
 /**
- * Invia una volta, quando la pagina viene nascosta o lasciata, le misure del caricamento in cui
- * la pagina è stata resa, con il biglietto del suo loader: INP e CLS maturano mentre la si usa.
- * Una scheda che resta aperta invia poco prima che il biglietto scada. Senza biglietto, come
- * nell'anteprima, non parte nessun report.
+ * Ripiego di `fetchLater` per i browser che non lo hanno: invia con `keepalive` e priorità bassa
+ * quando la pagina viene nascosta o alla scadenza. Dopo l'invio `activated` è vero, e il report
+ * non si aggiorna più: il biglietto vale una volta sola.
+ */
+const fetchLaterFallback: DeferredFetch = (url, { activateAfter, ...init }) => {
+  let activated = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const destroy = () => {
+    document.removeEventListener("visibilitychange", sendNow);
+    clearTimeout(timer);
+  };
+  function sendNow() {
+    if (!init.signal?.aborted) {
+      void fetch(url, { ...init, keepalive: true, priority: "low" }).catch(() => {});
+      activated = true;
+    }
+    destroy();
+  }
+  if (document.visibilityState === "hidden") queueMicrotask(sendNow);
+  else {
+    document.addEventListener("visibilitychange", sendNow);
+    if (activateAfter !== undefined) timer = setTimeout(sendNow, activateAfter);
+  }
+  init.signal?.addEventListener("abort", destroy);
+  return {
+    get activated() {
+      return activated;
+    },
+  };
+};
+
+/**
+ * Misure del caricamento in cui la pagina è stata resa, con il biglietto del suo loader, per
+ * tutta la permanenza sulla pagina: il report è affidato al browser con `fetchLater`, aggiornato
+ * a ogni nuova misura, e parte quando il documento si chiude o poco prima che il biglietto
+ * scada. INP e CLS maturano mentre la si usa; FCP e LCP restano fuori se la pagina era nascosta
+ * prima di disegnarli. Senza biglietto, come nell'anteprima, non parte nessun report.
  */
 export function usePageTiming(page: TimedPage, ticket: string | undefined) {
   // Il biglietto conta soltanto al primo caricamento: le rivalidazioni non lo rinnovano.
@@ -102,27 +225,44 @@ export function usePageTiming(page: TimedPage, ticket: string | undefined) {
     if (reported || !ticket) return;
     reported = true;
     const ready = performance.now();
+    const deadline = ready + reportDelay;
     const [navigation] = performance.getEntriesByType(
       "navigation",
     ) as PerformanceNavigationTiming[];
-    if (!navigation || typeof navigator.sendBeacon !== "function") return;
+    if (!navigation || typeof fetch !== "function") return;
     if (!loadedHere(navigation.name, location.pathname)) return;
+    const deferredFetch =
+      (globalThis as { fetchLater?: DeferredFetch }).fetchLater ?? fetchLaterFallback;
+    const visibility = PerformanceObserver.supportedEntryTypes?.includes("visibility-state")
+      ? performance.getEntriesByType("visibility-state")
+      : null;
+    // Le voci successive al caricamento non spostano il momento: conta il primo.
+    const hiddenAt = () => firstHiddenTime(visibility, hiddenSince);
     let lcp: number | undefined;
     let shifts: LayoutShifts = { worst: 0, current: 0, start: 0, last: 0 };
-    const interactions = new Map<number, number>();
+    const interactions = new Map<number, PerformanceEventTiming>();
+    const frames: FrameTiming[] = [];
+    let updateTimer: ReturnType<typeof setTimeout> | undefined;
+    const changed = () => {
+      clearTimeout(updateTimer);
+      updateTimer = setTimeout(schedule, updateDelay);
+    };
     const observers = [
       observeEntries({ type: "largest-contentful-paint" }, (entries) => {
-        lcp = entries.at(-1)?.startTime;
+        const visible = entries.filter((entry) => entry.startTime < hiddenAt());
+        lcp = visible.at(-1)?.startTime ?? lcp;
+        changed();
       }),
       observeEntries<PerformanceEventTiming>(
         { type: "event", durationThreshold: 40 },
         (entries) => {
-          for (const { interactionId, duration } of entries)
-            if (interactionId)
-              interactions.set(
-                interactionId,
-                Math.max(interactions.get(interactionId) ?? 0, duration),
-              );
+          for (const entry of entries)
+            if (
+              entry.interactionId &&
+              entry.duration > (interactions.get(entry.interactionId)?.duration ?? -1)
+            )
+              interactions.set(entry.interactionId, entry);
+          changed();
         },
       ),
       observeEntries<PerformanceEntry & { value: number; hadRecentInput: boolean }>(
@@ -131,58 +271,82 @@ export function usePageTiming(page: TimedPage, ticket: string | undefined) {
           for (const entry of entries)
             if (!entry.hadRecentInput)
               shifts = addLayoutShift(shifts, entry.value, entry.startTime);
+          changed();
+        },
+      ),
+      observeEntries<PerformanceEntry & { scripts?: FrameTiming["scripts"] }>(
+        { type: "long-animation-frame" },
+        (entries) => {
+          for (const { startTime, duration, scripts } of entries)
+            frames.push({ startTime, duration, scripts: scripts ?? [] });
+          frames.splice(0, Math.max(0, frames.length - maxFrames));
         },
       ),
     ];
     const measuresLayout = observers[2] !== null;
+    const measuresFrames = observers[3] !== null;
     const stop = () => observers.forEach((observer) => observer?.disconnect());
-    let sent = false;
-    const send = () => {
-      if (sent) return;
-      sent = true;
-      stop();
-      const server = Object.fromEntries(
-        (navigation.serverTiming ?? []).flatMap((entry) => {
-          const value = timingValue(entry.duration);
-          return (serverPhases as readonly string[]).includes(entry.name) && value !== undefined
-            ? [[entry.name, value]]
-            : [];
-        }),
-      );
-      const ttfb = timingValue(navigation.responseStart);
-      if (ttfb === undefined) return;
-      navigator.sendBeacon(
-        pageTimingPath,
-        new Blob(
-          [
-            JSON.stringify({
-              page,
-              ttfb,
-              fcp: timingValue(
-                performance.getEntriesByName("first-contentful-paint")[0]?.startTime,
-              ),
-              lcp: timingValue(lcp),
-              inp: timingValue(interactionToNextPaint(interactions.values())),
-              cls: measuresLayout ? layoutShiftValue(shifts.worst) : undefined,
-              ready: timingValue(ready),
-              server,
-              ticket,
-            }),
-          ],
-          { type: "application/json" },
-        ),
-      );
+    const server = Object.fromEntries(
+      (navigation.serverTiming ?? []).flatMap((entry) => {
+        const value = timingValue(entry.duration);
+        return (serverPhases as readonly string[]).includes(entry.name) && value !== undefined
+          ? [[entry.name, value]]
+          : [];
+      }),
+    );
+    const ttfb = timingValue(navigation.responseStart);
+    const report = () => {
+      const paint = performance.getEntriesByName("first-contentful-paint")[0]?.startTime;
+      const interaction = inpInteraction(interactions.values());
+      return JSON.stringify({
+        page,
+        ttfb,
+        fcp: paint !== undefined && paint < hiddenAt() ? timingValue(paint) : undefined,
+        lcp: timingValue(lcp),
+        inp: timingValue(interaction?.duration),
+        ...(interaction ? interactionAttribution(interaction, measuresFrames ? frames : null) : {}),
+        cls: measuresLayout ? layoutShiftValue(shifts.worst) : undefined,
+        ready: timingValue(ready),
+        server,
+        ticket,
+      });
     };
+    let controller: AbortController | undefined;
+    let pending: { readonly activated: boolean } | undefined;
+    let finished = false;
+    // Il report in attesa prende il posto del precedente; partito una volta, non si rinnova.
+    function schedule() {
+      clearTimeout(updateTimer);
+      if (finished || ttfb === undefined) return;
+      if (pending?.activated) {
+        finished = true;
+        stop();
+        return;
+      }
+      controller?.abort();
+      controller = new AbortController();
+      try {
+        pending = deferredFetch(pageTimingPath, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: report(),
+          signal: controller.signal,
+          activateAfter: Math.max(0, deadline - performance.now()),
+        });
+      } catch {
+        // Quota dei report differiti esaurita: la pagina resta senza misure.
+      }
+    }
     const hidden = () => {
-      if (document.visibilityState === "hidden") send();
+      if (document.visibilityState === "hidden") schedule();
     };
-    const timer = setTimeout(send, reportDelay);
     document.addEventListener("visibilitychange", hidden);
-    // Lasciando la pagina prima della scadenza il report parte con le misure già raccolte.
+    schedule();
+    // Lasciando la pagina nel client il report resta affidato al browser con le misure raccolte.
     return () => {
-      clearTimeout(timer);
       document.removeEventListener("visibilitychange", hidden);
-      send();
+      schedule();
+      finished = true;
       stop();
     };
   }, [page]);

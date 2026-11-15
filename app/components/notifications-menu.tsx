@@ -13,7 +13,7 @@ import {
   RefreshCwOff,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 
 import { StatusIcon, type StatusIconType } from "~/components/status";
@@ -60,7 +60,11 @@ export function NotificationsMenu({
   const [undo, setUndo] = useState<string[] | null>(null);
   const [open, setOpen] = useState(false);
   const undoButton = useRef<HTMLButtonElement>(null);
+  const dismissAllButton = useRef<HTMLButtonElement>(null);
   const list = useRef<HTMLUListElement>(null);
+  const panelHeader = useRef<HTMLDivElement>(null);
+  // Con il focus nel piede «Annulla» non scade.
+  const [held, setHeld] = useState(false);
   const [restored, setRestored] = useState<string | null>(null);
   // Ultima eliminazione inviata: «Annulla» parte dopo, così il server la riceve per seconda.
   const lastDismiss = useRef<Promise<unknown> | null>(null);
@@ -68,13 +72,32 @@ export function NotificationsMenu({
   const visible = notifications.filter((item) => !dismissedIds.has(item.id));
   const unread = visible.filter((item) => !isRead(item)).length;
 
-  // «Annulla» resta per qualche secondo e riceve il focus, così anche da tastiera si recupera.
+  // «Annulla» riceve il focus, così anche da tastiera si recupera, e resta per qualche secondo
+  // dopo che il focus ha lasciato il piede.
   useEffect(() => {
-    if (!undo) return;
-    undoButton.current?.focus();
+    if (undo) undoButton.current?.focus();
+  }, [undo]);
+  useEffect(() => {
+    if (!undo || held) return;
     const timer = setTimeout(() => setUndo(null), undoMilliseconds);
     return () => clearTimeout(timer);
-  }, [undo]);
+  }, [undo, held]);
+  // Tolto «Annulla» mentre aveva il focus, il focus passa a «Elimina tutte», alla prima
+  // notifica o al pannello, invece di finire sulla pagina.
+  const shownUndo = useRef(undo);
+  useLayoutEffect(() => {
+    const removed = shownUndo.current !== null && undo === null;
+    shownUndo.current = undo;
+    if (!removed || !open) return;
+    setHeld(false);
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    const target =
+      dismissAllButton.current ??
+      list.current?.querySelector<HTMLElement>("a, button") ??
+      panelHeader.current?.closest<HTMLElement>('[data-slot="popover-content"]');
+    target?.focus();
+  }, [undo, open]);
 
   // Dopo «Annulla» il focus torna sulla prima notifica ripristinata, non su «Elimina tutte».
   useEffect(() => {
@@ -163,7 +186,10 @@ export function NotificationsMenu({
       open={open}
       onOpenChange={(next) => {
         setOpen(next);
-        if (!next) setUndo(null);
+        if (!next) {
+          setUndo(null);
+          setHeld(false);
+        }
       }}
     >
       <PopoverTrigger
@@ -189,7 +215,10 @@ export function NotificationsMenu({
       {/* Su schermi stretti resta dentro i margini della pagina, quindi centrato. */}
       <PopoverContent align="end" collisionPadding={16} className="w-96 gap-0 p-0">
         {/* Intestazione e azioni restano in vista mentre l'elenco scorre. */}
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-popover px-3 py-2">
+        <div
+          ref={panelHeader}
+          className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b bg-popover px-3 py-2"
+        >
           <div className="grid">
             <PopoverTitle>{t.shell.notifications}</PopoverTitle>
             <span className="text-xs text-muted-foreground">{t.shell.notificationsWindow}</span>
@@ -214,6 +243,10 @@ export function NotificationsMenu({
                 <>
                   <StatusIcon tone={item.tone} icon={kindIcons[item.kind]} className="mt-0.5" />
                   <span className="grid min-w-0 gap-0.5">
+                    {/* Punto e grassetto sono visivi: lo stato lo dice il testo. */}
+                    {unreadItem ? (
+                      <span className="sr-only">{t.shell.notificationUnread}: </span>
+                    ) : null}
                     <span className={cn("text-pretty", unreadItem && "font-medium")}>
                       {item.title}
                     </span>
@@ -271,7 +304,13 @@ export function NotificationsMenu({
         )}
         {/* Piede fisso: «Elimina tutte» resta sempre; dopo un'eliminazione «Annulla» le sta accanto. */}
         {undo || visible.length > 0 ? (
-          <div className="sticky bottom-0 z-10 flex min-h-11 items-center justify-between gap-3 border-t bg-popover px-3 py-1.5">
+          <div
+            onFocus={() => setHeld(true)}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) setHeld(false);
+            }}
+            className="sticky bottom-0 z-10 flex min-h-11 items-center justify-between gap-3 border-t bg-popover px-3 py-1.5"
+          >
             <div className="flex min-w-0 items-center gap-1">
               <span role="status" className="truncate text-muted-foreground">
                 {undo ? t.shell.dismissed(undo.length) : ""}
@@ -284,6 +323,7 @@ export function NotificationsMenu({
             </div>
             {visible.length > 0 ? (
               <Button
+                ref={dismissAllButton}
                 variant="ghost"
                 size="sm"
                 className="shrink-0"

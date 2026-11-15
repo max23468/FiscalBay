@@ -1,6 +1,22 @@
 import * as React from "react";
 import { cn } from "cn";
 
+/**
+ * Ombre ai bordi dell'area che scorre, soltanto dove c'è altro contenuto: le coperture seguono
+ * il contenuto (`local`) e nascondono le ombre ferme sul contenitore (`scroll`) quando si è a un
+ * capo. Le coperture hanno il colore del fondo, `--table-surface`, la pagina se non indicato.
+ */
+const surface = "var(--table-surface, var(--background))";
+const shadow = "color-mix(in oklab, var(--foreground) 14%, transparent)";
+const scrollShadows: React.CSSProperties = {
+  background: [
+    `linear-gradient(to right, ${surface} 40%, transparent) left center / 2rem 100% no-repeat local`,
+    `linear-gradient(to left, ${surface} 40%, transparent) right center / 2rem 100% no-repeat local`,
+    `radial-gradient(farthest-side at 0 50%, ${shadow}, transparent) left center / 0.75rem 100% no-repeat scroll`,
+    `radial-gradient(farthest-side at 100% 50%, ${shadow}, transparent) right center / 0.75rem 100% no-repeat scroll`,
+  ].join(", "),
+};
+
 /** `container` va all'area che scorre, per esempio per darle un nome e raggiungerla da tastiera. */
 function Table({
   className,
@@ -11,6 +27,7 @@ function Table({
     <div
       data-slot="table-container"
       {...container}
+      style={{ ...scrollShadows, ...container?.style }}
       className={cn("relative w-full overflow-x-auto", container?.className)}
     >
       <table

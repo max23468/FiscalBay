@@ -9,7 +9,7 @@ import { ConfirmEmail } from "~/components/access/email-code";
 import { usePasswordCheck } from "~/components/access/password-check";
 import { EbayMark, GoogleMark } from "~/components/access/marks";
 import { useLastUsed } from "~/components/access/last-used";
-import { PasskeyButton } from "~/components/access/passkey-button";
+import { PasskeyButton, usePasskeySignIn } from "~/components/access/passkey-button";
 import { rise } from "~/components/access/rise";
 import { AccessNotice, VerifyEmail } from "~/components/access-notice";
 import { DeleteAccount } from "~/components/delete-account";
@@ -229,18 +229,19 @@ function OrSeparator() {
 function SignInAlternatives({
   recovering,
   lastMethod,
+  passkey,
 }: {
   recovering: boolean;
   lastMethod: LoginMethod | null;
+  passkey: ReturnType<typeof usePasskeySignIn>;
 }) {
-  const target = useReturnTo();
   if (recovering) return null;
   return (
     <>
       <OrSeparator />
       <div className="grid gap-2">
         <SocialForms lastMethod={lastMethod} />
-        <PasskeyButton target={target} lastUsed={lastMethod === "passkey"} />
+        <PasskeyButton passkey={passkey} lastUsed={lastMethod === "passkey"} />
       </div>
     </>
   );
@@ -266,6 +267,8 @@ function SignInPanel({
   const values = remembered?.values;
   const signIn = useFieldErrors(t.validation);
   const signInCheck = usePasswordCheck();
+  // Il suggerimento delle passkey nel campo email resta attivo anche durante il recupero.
+  const passkey = usePasskeySignIn(useReturnTo());
   // Il recupero passa sempre da Turnstile; l'accesso con password soltanto dopo alcuni tentativi
   // falliti dallo stesso IP.
   const recovery = useTurnstile(
@@ -290,7 +293,8 @@ function SignInPanel({
           <EmailField
             id="email"
             label={t.email}
-            autoComplete="username"
+            autoComplete="username webauthn"
+            enterKeyHint={recovering ? "send" : "next"}
             defaultValue={remembered?.tab === "accedi" ? values?.email : undefined}
             v={signIn}
           />
@@ -322,7 +326,7 @@ function SignInPanel({
       >
         {recovering ? t.backToSignIn : t.passwordRecovery}
       </Button>
-      <SignInAlternatives recovering={recovering} lastMethod={lastMethod} />
+      <SignInAlternatives recovering={recovering} lastMethod={lastMethod} passkey={passkey} />
     </>
   );
 }
@@ -396,7 +400,7 @@ function AccessForms({
             <EmailField
               id="signup-email"
               label={t.email}
-              autoComplete="email"
+              autoComplete="username"
               defaultValue={remembered?.tab === "registrati" ? values?.email : undefined}
               v={signUp}
             />
@@ -404,6 +408,7 @@ function AccessForms({
               id="signup-password"
               label={t.newPassword}
               autoComplete="new-password"
+              enterKeyHint="next"
               v={signUp}
             />
             <AgreementFields

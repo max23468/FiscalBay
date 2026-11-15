@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 
 import { useAction } from "~/components/action";
+import { useFieldErrors } from "~/components/form-validation";
 import { useHydrated } from "~/components/hydrated";
 import {
   AlertDialog,
@@ -212,7 +213,7 @@ function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlo
                 </Link>
               </p>
             ) : null}
-            <FieldError>{failure}</FieldError>
+            <FieldError role="alert">{failure}</FieldError>
             <AlertDialogFooter>
               <AlertDialogCancel disabled={action.pending}>{t.common.cancel}</AlertDialogCancel>
               <Button
@@ -245,31 +246,79 @@ function DisconnectActions({ store, renewsAlone }: { store: StoreView; renewsAlo
               <strong>{store.name}</strong>. {t.stores.deleteBody}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <Field>
-            <FieldLabel htmlFor="store-delete-confirm">{t.stores.deleteLabel}</FieldLabel>
-            <Input
-              id="store-delete-confirm"
-              autoComplete="off"
-              value={confirmName}
-              disabled={action.pending}
-              onChange={(event) => setConfirmName(event.target.value)}
-            />
-          </Field>
-          <FieldError>{failure}</FieldError>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={action.pending}>{t.common.cancel}</AlertDialogCancel>
-            <Button
-              disabled={confirmName.trim() !== store.name}
-              pending={action.pending}
-              variant="destructive-solid"
-              onClick={() => run("store-delete", { conferma: confirmName.trim() })}
-            >
-              {action.pending ? t.common.saving : deleteLabel}
-            </Button>
-          </AlertDialogFooter>
+          <StoreDeleteForm
+            store={store}
+            label={deleteLabel}
+            pending={action.pending}
+            failure={failure}
+            confirmName={confirmName}
+            setConfirmName={setConfirmName}
+            onConfirm={() => run("store-delete", { conferma: confirmName.trim() })}
+          />
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+/**
+ * Conferma dell'eliminazione con il nome del negozio. Il pulsante resta attivo: un nome
+ * diverso ferma l'invio con il messaggio accanto al campo, che riceve il focus.
+ */
+function StoreDeleteForm({
+  store,
+  label,
+  pending,
+  failure,
+  confirmName,
+  setConfirmName,
+  onConfirm,
+}: {
+  store: StoreView;
+  label: string;
+  pending: boolean;
+  failure: string | null;
+  confirmName: string;
+  setConfirmName: (name: string) => void;
+  onConfirm: () => void;
+}) {
+  const { t } = useCopy();
+  const v = useFieldErrors(t.access.validation);
+  return (
+    <form
+      className="grid gap-4"
+      {...v.form}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (pending) return;
+        const input = event.currentTarget.elements.namedItem("conferma") as HTMLInputElement;
+        if (confirmName.trim() !== store.name) v.reject(input, t.stores.deleteMismatch);
+        else onConfirm();
+      }}
+    >
+      <Field>
+        <FieldLabel htmlFor="store-delete-confirm">{t.stores.deleteLabel}</FieldLabel>
+        <Input
+          id="store-delete-confirm"
+          name="conferma"
+          autoComplete="off"
+          spellCheck={false}
+          enterKeyHint="done"
+          value={confirmName}
+          disabled={pending}
+          onChange={(event) => setConfirmName(event.target.value)}
+          {...v.control("conferma")}
+        />
+        {v.error("conferma")}
+      </Field>
+      <FieldError role="alert">{failure}</FieldError>
+      <AlertDialogFooter>
+        <AlertDialogCancel disabled={pending}>{t.common.cancel}</AlertDialogCancel>
+        <Button type="submit" pending={pending} variant="destructive-solid">
+          {pending ? t.common.saving : label}
+        </Button>
+      </AlertDialogFooter>
+    </form>
   );
 }
 

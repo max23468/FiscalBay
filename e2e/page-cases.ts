@@ -325,6 +325,8 @@ export const pageCases: PageCase[] = ["", "/en"].flatMap((prefix) => {
           make("/api/v1/password-check", "auth", { endpoint: true, status: 405 }),
           // Riceve soltanto i report del browser: una lettura risponde senza contenuto.
           make("/api/v1/page-timing", "public", { endpoint: true, status: 405 }),
+          // Riceve soltanto le segnalazioni CSP del browser.
+          make("/api/v1/csp-report", "public", { endpoint: true, status: 405 }),
           make("/api/v1/orders/search", "orders", { endpoint: true, status: 405 }),
           // Crea soltanto file con la conferma della sezione Esportazione.
           make("/api/v1/orders/export", "settings", { endpoint: true, status: 405 }),

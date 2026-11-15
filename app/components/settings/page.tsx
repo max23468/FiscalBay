@@ -133,6 +133,8 @@ function profileFields(profile: AccountView["profile"]): Record<string, string> 
 /** Da 768 px tutte le categorie stanno in una pagina che scorre. */
 const wideQuery = "(min-width: 48rem)";
 
+const reducedMotionQuery = "(prefers-reduced-motion: reduce)";
+
 /** Distanza dal bordo superiore oltre la quale una sezione diventa quella attiva. */
 const spyOffset = 140;
 
@@ -171,13 +173,22 @@ function useScrollSpy(
     spy();
   };
 
-  const goTo = (id: SettingsSection, behavior: ScrollBehavior) => {
+  /**
+   * Porta alla sezione. Con «riduci movimento» lo scorrimento è immediato. Con `focus`, scelta
+   * dall'utente, il titolo della sezione riceve anche il focus, senza un secondo scorrimento: la
+   * tastiera riparte da lì invece che dal menu.
+   */
+  const goTo = (id: SettingsSection, behavior: ScrollBehavior, focus = false) => {
     if (!window.matchMedia(wideQuery).matches) return;
+    const motion =
+      behavior === "smooth" && window.matchMedia(reducedMotionQuery).matches ? "instant" : behavior;
     clearTimeout(release.current);
     setActive(id);
-    following.current = behavior === "smooth";
+    following.current = motion === "smooth";
     if (following.current) release.current = setTimeout(finishFollowing, 1000);
-    sections.current[id]?.scrollIntoView({ behavior, block: "start" });
+    const section = sections.current[id];
+    section?.scrollIntoView({ behavior: motion, block: "start" });
+    if (focus) section?.querySelector("h2")?.focus({ preventScroll: true });
   };
 
   const onOpen = useEffectEvent(() => (opened ? goTo(opened, "instant") : spy()));
@@ -204,7 +215,7 @@ function useScrollSpy(
   // Il menu ha già avviato lo scorrimento; un link dalla pagina no. All'apertura la categoria
   // dell'indirizzo è già quella attiva.
   const onNavigate = useEffectEvent(() => {
-    if (opened && opened !== active && !following.current) goTo(opened, "smooth");
+    if (opened && opened !== active && !following.current) goTo(opened, "smooth", true);
   });
   useEffect(() => onNavigate(), [opened]);
 
@@ -324,6 +335,21 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
     if (item) setIndicator({ top: item.offsetTop, height: item.offsetHeight });
   }, [active, language]);
 
+  // Su mobile ogni categoria è una pagina a sé: entrando il focus va al suo titolo, tornando
+  // all'elenco alla voce da cui si era entrati, invece di restare su un elemento nascosto.
+  const shownSection = useRef(data.section);
+  useEffect(() => {
+    const previous = shownSection.current;
+    shownSection.current = data.section;
+    if (previous === data.section || window.matchMedia(wideQuery).matches) return;
+    const target = data.section
+      ? sections.current[data.section]?.querySelector("h2")
+      : previous
+        ? items.current[previous]?.querySelector("a")
+        : null;
+    target?.focus();
+  }, [data.section, sections]);
+
   return (
     <div className="grid grid-cols-[minmax(0,1fr)] gap-6">
       <PageTitle icon={Settings} tone="neutral" className={cn(data.section && "max-md:sr-only")}>
@@ -339,7 +365,7 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
             {indicator ? (
               <li
                 aria-hidden="true"
-                className="absolute inset-x-0 top-0 hidden rounded-lg bg-secondary transition-[translate,height] duration-(--duration-fast) ease-(--ease-smooth-out) md:block"
+                className="absolute inset-x-0 top-0 hidden rounded-lg bg-secondary transition-[translate,height] duration-(--duration-fast) ease-(--ease-smooth-out) motion-reduce:transition-none md:block"
                 style={{ translate: `0 ${indicator.top}px`, height: indicator.height }}
               />
             ) : null}
@@ -369,7 +395,7 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
                           to={appHref(links, `impostazioni/${id}`)}
                           preventScrollReset
                           aria-current={active === id ? "true" : undefined}
-                          onClick={() => goTo(id, "smooth")}
+                          onClick={() => goTo(id, "smooth", true)}
                           className={cn(
                             "flex items-center gap-3 py-3.5 outline-none focus-visible:ring-3 focus-visible:ring-ring md:rounded-lg md:px-2 md:py-1.5 md:text-sm md:text-muted-foreground md:transition-colors md:duration-(--duration-quick) md:hover:text-foreground md:aria-[current=true]:font-medium md:aria-[current=true]:text-foreground",
                             // Prima della misura l'indicatore non c'è: la voce attiva ha il suo fondo.
@@ -416,7 +442,12 @@ export function SettingsPage({ data }: { data: SettingsPageData }) {
                   id !== current && "max-md:hidden",
                 )}
               >
-                <h2 id={`settings-${id}`} className="flex items-center gap-3 text-lg font-semibold">
+                {/* Il titolo riceve il focus quando la categoria si sceglie dal menu. */}
+                <h2
+                  id={`settings-${id}`}
+                  tabIndex={-1}
+                  className="flex items-center gap-3 text-lg font-semibold outline-none"
+                >
                   <IconTile icon={icon} tone="neutral" />
                   {t.settings.sections[id].title}
                 </h2>

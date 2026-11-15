@@ -19,6 +19,7 @@ import { CircleAlert, FileQuestion } from "lucide-react";
 import type { Route } from "./+types/root";
 import { LinksProvider } from "./components/copy-context";
 import { UnavailablePage } from "./components/not-found";
+import { useScriptNonce } from "./components/script-nonce";
 import { StandalonePage } from "./components/standalone-page";
 import { TimeZoneContext } from "./components/time-zone";
 import { buttonLink } from "./components/ui/button-variants";
@@ -88,16 +89,22 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const language = data?.language ?? languageFromPath(location.pathname);
   // Nell'area dell'account tema e fuso sono quelli scelti; altrove valgono i predefiniti.
   const display = matchedShell(useMatches())?.display ?? defaultDisplay;
+  const nonce = useScriptNonce();
   return (
     <html lang={language} data-theme={display.theme === "system" ? undefined : display.theme}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        {/* Il browser conosce i temi della pagina prima del CSS: sfondo e controlli senza lampi. */}
+        <meta
+          name="color-scheme"
+          content={display.theme === "system" ? "light dark" : display.theme}
+        />
         <meta name="theme-color" content="#0e3372" />
         <Meta />
         <Links />
         {data?.copyModules.map((href) => (
-          <link key={href} rel="modulepreload" href={href} />
+          <link key={href} rel="modulepreload" href={href} nonce={nonce} suppressHydrationWarning />
         ))}
       </head>
       <body>

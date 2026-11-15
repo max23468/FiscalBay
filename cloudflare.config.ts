@@ -8,7 +8,7 @@ import { bindings, defineConfig, triggers } from "cf/config";
  */
 const requestLimitRules = JSON.parse(
   readFileSync(new URL("./app/request-limits.json", import.meta.url), "utf8"),
-) as Record<"attempts" | "emails" | "work", RequestLimitRule>;
+) as Record<"attempts" | "emails" | "work" | "reports", RequestLimitRule>;
 
 type RequestLimitRule = { limit: number; period: 10 | 60 };
 
@@ -62,8 +62,8 @@ const secrets = {
  * ambienti, stanno in `app/request-limits.json`.
  */
 export const requestLimitNamespaces = {
-  test: { attempts: "2910", emails: "2911", work: "2912" },
-  live: { attempts: "2920", emails: "2921", work: "2922" },
+  test: { attempts: "2910", emails: "2911", work: "2912", reports: "2913" },
+  live: { attempts: "2920", emails: "2921", work: "2922", reports: "2923" },
 };
 
 const requestLimit = (namespace: string, rule: RequestLimitRule) =>
@@ -80,7 +80,7 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
   exports: string;
   metrics: string;
   database: { name: string; id: string };
-  limits: { attempts: string; emails: string; work: string };
+  limits: { attempts: string; emails: string; work: string; reports: string };
   vars: Vars;
 }) => ({
   name: target.name,
@@ -132,11 +132,12 @@ const worker = <Vars extends Record<string, ReturnType<typeof bindings.text>>>(t
     // Metriche tecniche aggregate, un dataset per ambiente: nasce alla prima scrittura e
     // conserva i punti tre mesi.
     METRICS: bindings.analyticsEngineDataset({ name: target.metrics }),
-    // Primo filtro per IP e operazione davanti ad Auth, invii di email e lavori costosi: il
-    // contatore è del data center e non scrive su D1.
+    // Primo filtro per IP e operazione davanti ad Auth, invii di email, lavori costosi e
+    // segnalazioni CSP: il contatore è del data center e non scrive su D1.
     REQUEST_LIMIT_ATTEMPTS: requestLimit(target.limits.attempts, requestLimitRules.attempts),
     REQUEST_LIMIT_EMAILS: requestLimit(target.limits.emails, requestLimitRules.emails),
     REQUEST_LIMIT_WORK: requestLimit(target.limits.work, requestLimitRules.work),
+    REQUEST_LIMIT_REPORTS: requestLimit(target.limits.reports, requestLimitRules.reports),
     // La console legge lo stesso dataset dalla SQL API dell'account, con il token facoltativo
     // `ANALYTICS_READ_TOKEN`.
     METRICS_DATASET: bindings.text(target.metrics),

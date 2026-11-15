@@ -416,13 +416,13 @@ describe("Sessioni, revoche e area admin", () => {
     expect(await sessionId(user.cookie)).toBeDefined();
     expect(await sessionId(other.cookie)).toBeDefined();
 
-    // Chiudere la sessione corrente dall'elenco equivale al logout.
-    expect(
-      await securityAction(user.cookie, {
-        intent: "esci-sessione",
-        id: (await sessionId(user.cookie))!,
-      }),
-    ).toBe("/");
+    // Chiudere la sessione corrente dall'elenco equivale al logout, memoria del sito compresa.
+    const signedOut = await routeResponse(securityRouteAction, "/app/impostazioni/account", {
+      cookie: user.cookie,
+      fields: { intent: "esci-sessione", id: (await sessionId(user.cookie))! },
+    });
+    expect(signedOut.headers.get("location")).toBe("/");
+    expect(signedOut.headers.get("clear-site-data")).toBe('"storage"');
     await expectRevoked(user.cookie);
   });
 

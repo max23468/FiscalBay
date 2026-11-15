@@ -63,7 +63,7 @@ function More({
   return (
     <Link
       to={{ search: `?${search}` }}
-      className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+      className="text-sm font-medium text-primary underline-offset-[0.25em] hover:underline"
     >
       {t.common.more}
     </Link>
@@ -95,7 +95,7 @@ export function AccountsView({
               {row.workspaceId ? (
                 <Link
                   to={href(`spazi/${encodeURIComponent(row.workspaceId)}`)}
-                  className="font-medium text-primary underline-offset-4 hover:underline"
+                  className="font-medium text-primary underline-offset-[0.25em] hover:underline"
                 >
                   {row.email}
                 </Link>
@@ -188,7 +188,7 @@ export function StoresView({
               <Link
                 key="workspace"
                 to={href(`spazi/${encodeURIComponent(row.workspaceId)}`)}
-                className="text-primary underline-offset-4 wrap-anywhere hover:underline"
+                className="text-primary underline-offset-[0.25em] wrap-anywhere hover:underline"
               >
                 {row.ownerEmail ?? row.workspaceId}
               </Link>,

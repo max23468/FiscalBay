@@ -89,7 +89,7 @@ export function SwitchesView({ data }: { data: SwitchesData }) {
               <Link
                 key="workspace"
                 to={href(`spazi/${encodeURIComponent(item.workspaceId)}`)}
-                className="text-primary underline-offset-4 hover:underline"
+                className="text-primary underline-offset-[0.25em] hover:underline"
               >
                 {item.email}
               </Link>,

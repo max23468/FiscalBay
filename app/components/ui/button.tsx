@@ -2,12 +2,14 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button";
 import type { VariantProps } from "class-variance-authority";
 import { cn } from "cn";
 
+import { useCopy } from "~/components/copy-context";
 import { buttonVariants } from "~/components/ui/button-variants";
 import { Spinner } from "~/components/ui/spinner";
 
 /**
  * `pending` segna la richiesta partita dal pulsante: resta raggiungibile ma non si ripete,
- * annuncia l'attesa con `aria-busy` e mostra lo spinner al posto dell'icona iniziale.
+ * mostra lo spinner al posto dell'icona iniziale e aggiunge l'attesa al nome accessibile,
+ * perché `aria-busy` da solo non viene letto da tutti i lettori di schermo.
  */
 function Button({
   className,
@@ -19,6 +21,7 @@ function Button({
   children,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants> & { pending?: boolean }) {
+  const { t } = useCopy();
   return (
     <ButtonPrimitive
       data-slot="button"
@@ -33,6 +36,7 @@ function Button({
     >
       {pending ? <Spinner data-icon="inline-start" /> : null}
       {children}
+      {pending ? <span className="sr-only">, {t.shell.pending}</span> : null}
     </ButtonPrimitive>
   );
 }

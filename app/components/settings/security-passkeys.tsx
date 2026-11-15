@@ -119,7 +119,7 @@ export function AddPasskey({
   const opener = useRef<HTMLButtonElement>(null);
   const [naming, setNaming] = useState(false);
   const ready = useHydrated();
-  const failure = error ? <FieldError>{t.passkeyErrors[error]}</FieldError> : null;
+  const failure = error ? <FieldError role="alert">{t.passkeyErrors[error]}</FieldError> : null;
   // Il nome si chiede soltanto dopo la scelta di aggiungere una passkey, già compilato.
   if (!naming)
     return (

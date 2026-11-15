@@ -53,10 +53,14 @@ export function pageCacheKey(request: Request, version: string | undefined, appO
   return new Request(`${url.origin}${url.pathname}?versione=${version ?? "locale"}&via=${channel}`);
 }
 
+/** Regola di cache per il browser dichiarata dalla route, conservata accanto a quella della copia. */
+const browserCacheHeader = "x-fiscalbay-browser-cache";
+
 /**
  * Home e Prezzi per chi non ha sessione (§23): una copia per indirizzo, versione del Worker e provenienza resta
  * nella cache di Cloudflare per un minuto, così un picco di visite non legge ogni volta il
- * database. Il browser riceve comunque `no-store`: dopo l'accesso la home porta agli Ordini.
+ * database. Il browser riceve la regola della route, mai quella della copia: `no-store` per la
+ * home, che dopo l'accesso porta agli Ordini, e la riconvalida a ogni visita per Prezzi.
  */
 export async function withPageCache(
   request: Request,
@@ -71,7 +75,8 @@ export async function withPageCache(
   const hit = await cache.match(key).catch(() => undefined);
   if (hit) {
     const response = new Response(hit.body, hit);
-    response.headers.set("cache-control", "no-store");
+    response.headers.set("cache-control", hit.headers.get(browserCacheHeader) ?? "no-store");
+    response.headers.delete(browserCacheHeader);
     return response;
   }
   const page = { stored: true };
@@ -81,6 +86,7 @@ export async function withPageCache(
   // La pagina è piccola: un solo corpo letto per intero serve al browser e alla copia.
   const body = await response.arrayBuffer();
   const copy = new Response(body, response);
+  copy.headers.set(browserCacheHeader, response.headers.get("cache-control") ?? "no-store");
   copy.headers.set("cache-control", `public, max-age=${pageCacheSeconds}`);
   const stored = cache.put(key, copy).catch(() => {});
   if (typeof context?.waitUntil === "function") context.waitUntil(stored);

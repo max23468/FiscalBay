@@ -449,6 +449,10 @@ function authPlugins(env: Env, appOrigin: URL): BetterAuthPlugin[] {
       origin: appOrigin.origin,
       rpID: appOrigin.hostname,
       rpName: "FiscalBay",
+      // L'accesso con passkey non chiede l'email: serve una credenziale rilevabile, altrimenti
+      // una chiave di sicurezza ne registrerebbe una che non permette di entrare. La verifica
+      // dell'utente resta preferita, come nell'accesso.
+      authenticatorSelection: { residentKey: "required", userVerification: "preferred" },
       authentication: {
         // Il plugin accetta anche una passkey senza verifica dell'utente: qui vale come
         // un solo fattore, quindi la sessione non è marcata.

@@ -15,6 +15,7 @@ const userTables = new Set([
   "account",
   "verification",
   "passkey",
+  "passkey_user_handles",
   "rateLimit",
   "user_profiles",
   "user_preferences",

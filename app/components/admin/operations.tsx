@@ -374,7 +374,14 @@ export function PerformanceView({ metrics }: { metrics: TechnicalMetrics }) {
               pair(row.measures.ttfb),
               pair(row.measures.fcp),
               pair(row.measures.lcp),
-              pair(row.measures.inp),
+              <span key="inp" className="grid gap-0.5">
+                <span>{pair(row.measures.inp)}</span>
+                {(["input", "processing", "presentation", "script"] as const).map((part) => (
+                  <span key={part} className="whitespace-nowrap text-xs text-muted-foreground">
+                    {m.inpPart[part]} {pair(row.measures[`inp_${part}`])}
+                  </span>
+                ))}
+              </span>,
               pair(row.measures.cls),
               pair(row.measures.ready),
               <span key="server" className="grid gap-0.5">

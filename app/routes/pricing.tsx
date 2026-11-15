@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { cn } from "cn";
 import { CircleCheckBig, Gift, Minus } from "lucide-react";
+import { data } from "react-router";
 
 import { useCopy } from "~/components/copy-context";
 import { FaqList } from "~/components/faq-list";
@@ -30,7 +31,7 @@ import {
 import { annualPaidMonths, lifetimeSlots, premiumOffers, priceGeneration } from "../catalog";
 import { languageFromPath, localizedPath } from "../i18n";
 import { hasLifetime } from "../domain/lifetime.server";
-import { publicPage, siteListing } from "../site.server";
+import { publicPage, publicPageCache, siteListing } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/pricing";
 
@@ -83,47 +84,57 @@ export async function loader({ request }: Route.LoaderArgs) {
     [t.rows.telegram, false, true],
     [t.rows.support, true, true],
   ];
-  return {
-    language,
-    origin,
-    signedIn: Boolean(session),
-    owned,
-    purchasesOpen,
-    copy: {
-      title: t.title,
-      metaTitle: t.metaTitle,
-      description: t.description,
-      lead: t.lead,
-      promotion:
-        freePromotion && baseQuota !== null
-          ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd, baseQuota)
-          : null,
-      free: t.free,
-      freePrice: t.freePrice,
-      freeItems: t.freeItems(quota),
-      premium: t.premium,
-      premiumItems: t.premiumItems,
-      offers,
-      best: t.best,
-      soldOut: t.soldOut,
-      owned: t.owned,
-      ownedLink: t.ownedLink,
-      trialTitle: t.trialTitle,
-      trialBody: t.trialBody,
-      purchaseNote: purchasesOpen || listing.reserve ? t.purchaseNote : t.closed,
-      taxNote: t.taxNote,
-      comparisonLink: t.comparisonLink,
-      compare: t.compare,
-      paymentsTitle: t.paymentsTitle,
-      payments: sitePages[language].faq.items
-        .filter((item) => "payment" in item)
-        .map(({ q, a }) => ({ q, a })),
-      feature: t.feature,
-      included: t.included,
-      notIncluded: t.notIncluded,
-      rows,
+  // Con la sessione la pagina dice se l'account ha Premium a vita: nessuna copia nel browser.
+  const cache = { "cache-control": session ? "no-store" : publicPageCache };
+  return data(
+    {
+      language,
+      origin,
+      signedIn: Boolean(session),
+      owned,
+      purchasesOpen,
+      copy: {
+        title: t.title,
+        metaTitle: t.metaTitle,
+        description: t.description,
+        lead: t.lead,
+        promotion:
+          freePromotion && baseQuota !== null
+            ? sitePages[language].home.freePromotion(freePromotion.quota, promotionEnd, baseQuota)
+            : null,
+        free: t.free,
+        freePrice: t.freePrice,
+        freeItems: t.freeItems(quota),
+        premium: t.premium,
+        premiumItems: t.premiumItems,
+        offers,
+        best: t.best,
+        soldOut: t.soldOut,
+        owned: t.owned,
+        ownedLink: t.ownedLink,
+        trialTitle: t.trialTitle,
+        trialBody: t.trialBody,
+        purchaseNote: purchasesOpen || listing.reserve ? t.purchaseNote : t.closed,
+        taxNote: t.taxNote,
+        comparisonLink: t.comparisonLink,
+        compare: t.compare,
+        paymentsTitle: t.paymentsTitle,
+        payments: sitePages[language].faq.items
+          .filter((item) => "payment" in item)
+          .map(({ q, a }) => ({ q, a })),
+        feature: t.feature,
+        included: t.included,
+        notIncluded: t.notIncluded,
+        rows,
+      },
     },
-  };
+    { headers: cache },
+  );
+}
+
+/** Regola di cache decisa dal loader: con la sessione `no-store`. */
+export function headers({ loaderHeaders }: Route.HeadersArgs): HeadersInit {
+  return { "cache-control": loaderHeaders.get("cache-control") ?? "no-store" };
 }
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
@@ -356,7 +367,7 @@ export default function Pricing({ loaderData }: Route.ComponentProps) {
           <p className="text-sm leading-relaxed text-pretty text-muted-foreground">{t.taxNote}</p>
           <a
             href={localizedPath(language, comparisonGuidePath)}
-            className="w-fit font-medium text-primary underline-offset-4 hover:underline"
+            className="w-fit font-medium text-primary underline-offset-[0.25em] hover:underline"
           >
             {t.comparisonLink}
           </a>

@@ -35,7 +35,9 @@ function PopoverContent({
         <PopoverPrimitive.Popup
           data-slot="popover-content"
           className={cn(
-            "z-50 flex max-h-(--available-height) w-80 max-w-[calc(100vw-2rem)] motion-popover flex-col gap-2.5 overflow-y-auto rounded-lg bg-popover p-2.5 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden",
+            // Larghezza entro lo spazio misurato da Base UI, senza la barra di scorrimento che
+            // `vw` include; lo scorrimento interno non passa alla pagina sotto.
+            "z-50 flex max-h-(--available-height) w-80 max-w-(--available-width) motion-popover flex-col gap-2.5 overflow-y-auto overscroll-contain rounded-lg bg-popover p-2.5 text-sm text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-hidden",
             className,
           )}
           {...props}

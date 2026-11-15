@@ -1,6 +1,6 @@
 import { cn } from "cn";
 import { FileSpreadsheet, ListChecks, SlidersHorizontal, X } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useState, useSyncExternalStore } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 
 import { useAction } from "~/components/action";
@@ -29,6 +29,15 @@ interface FilterOption {
   /** Opzione del piano Premium: visibile con la corona ma non selezionabile. */
   premium?: boolean;
 }
+
+const wideToolbar = "(min-width: 48rem)";
+const toolbarIsWide = () => window.matchMedia(wideToolbar).matches;
+const serverToolbarIsWide = () => false;
+const watchToolbarWidth = (changed: () => void) => {
+  const media = window.matchMedia(wideToolbar);
+  media.addEventListener("change", changed);
+  return () => media.removeEventListener("change", changed);
+};
 
 function FilterSelect({
   label,
@@ -139,19 +148,60 @@ function ExportListButton({
   );
 }
 
+/** Comandi dell'elenco, nello stesso gruppo quando la finestra cambia larghezza. */
+function ToolbarActions({
+  empty,
+  exportHref,
+  confirmUnlock,
+  selecting,
+  onToggleSelect,
+  selectRef,
+}: {
+  empty: boolean;
+  exportHref?: string | null;
+  confirmUnlock?: boolean;
+  selecting: boolean;
+  onToggleSelect: () => void;
+  selectRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const { t } = useCopy();
+  const action = useAction();
+  return (
+    <div className="col-start-2 row-start-1 flex flex-wrap items-center justify-end gap-2 md:order-last md:shrink-0">
+      {confirmUnlock === false ? (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={action.pending}
+          onClick={() => action.run("unlock-confirmation")}
+        >
+          {t.orders.restoreUnlockConfirmation}
+        </Button>
+      ) : null}
+      <Button
+        variant={selecting ? "secondary" : "outline"}
+        ref={selectRef}
+        aria-pressed={selecting}
+        disabled={empty && !selecting}
+        focusableWhenDisabled
+        onClick={onToggleSelect}
+      >
+        <ListChecks aria-hidden="true" data-icon="inline-start" />
+        {t.orders.select}
+      </Button>
+      <ExportListButton href={exportHref} selecting={selecting} />
+    </div>
+  );
+}
+
 /**
  * Filtri dell'elenco nell'URL, modalità Seleziona, esportazione dell'elenco filtrato e
  * ripristino della conferma di sblocco.
  */
 export function OrdersToolbar({
-  empty,
-  exportHref,
   stores,
   plan,
-  confirmUnlock,
-  selecting,
-  onToggleSelect,
-  selectRef,
+  ...actionsProps
 }: {
   empty: boolean;
   /**
@@ -167,7 +217,6 @@ export function OrdersToolbar({
   selectRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const { t } = useCopy();
-  const action = useAction();
   const [, setParams] = useSearchParams();
   // I filtri mostrano subito la scelta, anche mentre l'elenco si carica.
   const { params } = usePendingList();
@@ -182,132 +231,116 @@ export function OrdersToolbar({
     if (name === "negozio") rememberStore(value || null);
     setParams(next, { preventScrollReset: true });
   };
-  return (
-    <div className="flex flex-col gap-4 md:flex-row md:items-end">
-      <div className="flex flex-wrap items-center justify-end gap-2 md:order-last md:shrink-0">
-        {confirmUnlock === false ? (
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={action.pending}
-            onClick={() => action.run("unlock-confirmation")}
-          >
-            {t.orders.restoreUnlockConfirmation}
-          </Button>
-        ) : null}
-        <Button
-          variant="outline"
-          className="mr-auto md:hidden"
-          aria-expanded={filtersOpen}
-          aria-controls="orders-filters"
-          onClick={() => {
-            setSettled(false);
-            setFiltersOpen((open) => !open);
-          }}
-        >
-          <SlidersHorizontal aria-hidden="true" data-icon="inline-start" />
-          {t.orders.filters}
-          {active > 0 ? <span className="font-code">({active})</span> : null}
-        </Button>
-        <Button
-          variant={selecting ? "secondary" : "outline"}
-          ref={selectRef}
-          aria-pressed={selecting}
-          disabled={empty && !selecting}
-          focusableWhenDisabled
-          onClick={onToggleSelect}
-        >
-          <ListChecks aria-hidden="true" data-icon="inline-start" />
-          {t.orders.select}
-        </Button>
-        <ExportListButton href={exportHref} selecting={selecting} />
-      </div>
-      {/*
-        Su mobile i filtri si aprono in altezza e spingono i risultati verso il basso. Il ritaglio
-        serve soltanto durante l'apertura: a pannello aperto gli anelli di focus restano interi.
-      */}
+  const wide = useSyncExternalStore(watchToolbarWidth, toolbarIsWide, serverToolbarIsWide);
+  const filters = (
+    <div
+      key="filters"
+      data-open={filtersOpen || undefined}
+      onTransitionEnd={(event) => {
+        if (event.target === event.currentTarget && event.propertyName === "grid-template-rows")
+          setSettled(filtersOpen);
+      }}
+      className={cn(
+        // Chiuso non occupa spazio: il margine negativo assorbe la distanza dalla riga sopra.
+        "col-span-2 row-start-2 grid grid-rows-[0fr] transition-[grid-template-rows,margin-top,visibility] duration-(--duration-quick) ease-(--ease-smooth-out) max-md:invisible max-md:-mt-4 motion-reduce:transition-none md:contents",
+        "data-open:grid-rows-[1fr] data-open:duration-(--duration-fast) max-md:data-open:visible max-md:data-open:mt-0",
+      )}
+    >
       <div
-        data-open={filtersOpen || undefined}
-        onTransitionEnd={(event) => {
-          if (event.target === event.currentTarget && event.propertyName === "grid-template-rows")
-            setSettled(filtersOpen);
-        }}
+        id="orders-filters"
         className={cn(
-          // Chiuso non occupa spazio: il margine negativo assorbe la distanza dalla riga sopra.
-          "grid grid-rows-[0fr] transition-[grid-template-rows,margin-top,visibility] duration-(--duration-quick) ease-(--ease-smooth-out) max-md:invisible max-md:-mt-4 md:contents",
-          "data-open:grid-rows-[1fr] data-open:duration-(--duration-fast) max-md:data-open:visible max-md:data-open:mt-0",
+          // Due colonne anche su smartphone: i filtri aperti lasciano in vista i primi risultati.
+          // Da desktop una sola riga: ogni filtro parte dalla larghezza della sua voce più lunga
+          // e, se lo spazio non basta, tutti si restringono in proporzione. Sul tablet le righe
+          // restano piene: quattro filtri su due colonne, cinque su tre.
+          "grid grid-cols-2 gap-3 md:order-first md:flex-1 lg:flex",
+          stores.length > 1 ? "md:grid-cols-3" : "md:grid-cols-2",
+          !settled && "max-md:min-h-0 max-md:overflow-hidden",
         )}
       >
-        <div
-          id="orders-filters"
-          className={cn(
-            // Due colonne anche su smartphone: i filtri aperti lasciano in vista i primi risultati.
-            // Da desktop una sola riga: ogni filtro parte dalla larghezza della sua voce più lunga
-            // e, se lo spazio non basta, tutti si restringono in proporzione. Sul tablet le righe
-            // restano piene: quattro filtri su due colonne, cinque su tre.
-            "grid grid-cols-2 gap-3 md:flex-1 lg:flex",
-            stores.length > 1 ? "md:grid-cols-3" : "md:grid-cols-2",
-            !settled && "max-md:min-h-0 max-md:overflow-hidden",
-          )}
-        >
-          {stores.length > 1 ? (
-            <FilterSelect
-              label={t.orders.store}
-              name="negozio"
-              value={params.get("negozio") ?? ""}
-              options={stores.map((store) => ({ value: store.id, label: store.name }))}
-              fit={false}
-              allLabel={t.orders.all}
-              onChange={change}
-            />
-          ) : null}
+        {stores.length > 1 ? (
           <FilterSelect
-            label={t.orders.period}
-            name="periodo"
-            value={params.get("periodo") ?? ""}
-            options={orderPeriods.map((period) => ({
-              value: period,
-              label: t.orders.periods[period],
-              premium: plan !== "premium" && premiumOrderPeriods.has(period),
-            }))}
+            label={t.orders.store}
+            name="negozio"
+            value={params.get("negozio") ?? ""}
+            options={stores.map((store) => ({ value: store.id, label: store.name }))}
+            fit={false}
             allLabel={t.orders.all}
             onChange={change}
           />
-          <FilterSelect
-            label={t.orders.paymentStatus}
-            name="pagamento"
-            value={params.get("pagamento") ?? ""}
-            options={paymentStatuses.map((status) => ({
-              value: status,
-              label: t.orders.payment[status],
-            }))}
-            allLabel={t.orders.all}
-            onChange={change}
-          />
-          <FilterSelect
-            label={t.orders.shippingStatus}
-            name="spedizione"
-            value={params.get("spedizione") ?? ""}
-            options={shippingStatuses.map((status) => ({
-              value: status,
-              label: t.orders.shipping[status],
-            }))}
-            allLabel={t.orders.all}
-            onChange={change}
-          />
-          <FilterSelect
-            label={t.orders.fiscalStatus}
-            name="fiscale"
-            value={params.get("fiscale") ?? ""}
-            options={fiscalSituations.map((situation) => ({
-              value: situation,
-              label: t.orders.fiscal[situation],
-            }))}
-            allLabel={t.orders.all}
-            onChange={change}
-          />
-        </div>
+        ) : null}
+        <FilterSelect
+          label={t.orders.period}
+          name="periodo"
+          value={params.get("periodo") ?? ""}
+          options={orderPeriods.map((period) => ({
+            value: period,
+            label: t.orders.periods[period],
+            premium: plan !== "premium" && premiumOrderPeriods.has(period),
+          }))}
+          allLabel={t.orders.all}
+          onChange={change}
+        />
+        <FilterSelect
+          label={t.orders.paymentStatus}
+          name="pagamento"
+          value={params.get("pagamento") ?? ""}
+          options={paymentStatuses.map((status) => ({
+            value: status,
+            label: t.orders.payment[status],
+          }))}
+          allLabel={t.orders.all}
+          onChange={change}
+        />
+        <FilterSelect
+          label={t.orders.shippingStatus}
+          name="spedizione"
+          value={params.get("spedizione") ?? ""}
+          options={shippingStatuses.map((status) => ({
+            value: status,
+            label: t.orders.shipping[status],
+          }))}
+          allLabel={t.orders.all}
+          onChange={change}
+        />
+        <FilterSelect
+          label={t.orders.fiscalStatus}
+          name="fiscale"
+          value={params.get("fiscale") ?? ""}
+          options={fiscalSituations.map((situation) => ({
+            value: situation,
+            label: t.orders.fiscal[situation],
+          }))}
+          allLabel={t.orders.all}
+          onChange={change}
+        />
       </div>
+    </div>
+  );
+  const actions = <ToolbarActions key="actions" {...actionsProps} />;
+  return (
+    // I due gruppi conservano posizione e controlli: cambia soltanto il loro ordine nel DOM,
+    // così la tastiera segue le righe visibili anche dopo un ridimensionamento della finestra.
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-4 md:flex md:items-end md:gap-4">
+      <Button
+        variant="outline"
+        className="col-start-1 row-start-1 w-fit md:hidden"
+        aria-expanded={filtersOpen}
+        aria-controls="orders-filters"
+        onClick={() => {
+          // Senza animazione il pannello è subito al suo posto e non serve il ritaglio.
+          setSettled(
+            window.matchMedia("(prefers-reduced-motion: reduce)").matches ? !filtersOpen : false,
+          );
+          setFiltersOpen((open) => !open);
+        }}
+      >
+        <SlidersHorizontal aria-hidden="true" data-icon="inline-start" />
+        {t.orders.filters}
+        {active > 0 ? <span className="font-code">({active})</span> : null}
+      </Button>
+      {wide ? filters : actions}
+      {wide ? actions : filters}
     </div>
   );
 }

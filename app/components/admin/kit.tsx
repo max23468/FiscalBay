@@ -36,7 +36,11 @@ export function Panel({
   return (
     <section
       aria-labelledby={id}
-      className={cn("grid min-w-0 gap-3 rounded-xl border bg-card p-4 sm:p-5", className)}
+      // Le tabelle del pannello coprono le ombre di scorrimento con il fondo della scheda.
+      className={cn(
+        "grid min-w-0 gap-3 rounded-xl border bg-card p-4 [--table-surface:var(--card)] sm:p-5",
+        className,
+      )}
     >
       <h2 id={id} className="text-lg font-semibold text-balance">
         {title}
@@ -161,7 +165,7 @@ export function Disclosure({
         {label}
         <ChevronDown
           aria-hidden="true"
-          className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180"
+          className="size-4 shrink-0 text-muted-foreground transition-[rotate] duration-(--duration-quick) group-open:rotate-180 motion-reduce:transition-none"
         />
       </summary>
       {children}

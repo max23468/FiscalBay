@@ -188,7 +188,7 @@ export function EmailCodeForm({
           {t.emailCodeChecking}
         </p>
       ) : error ? (
-        <FieldError id={errorId} className="text-center">
+        <FieldError id={errorId} role="alert" className="text-center">
           {error}
         </FieldError>
       ) : null}

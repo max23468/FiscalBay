@@ -183,9 +183,12 @@ test.describe("impostazioni e profilo", () => {
           name: t("Scollega ed elimina negozio", "Disconnect and delete store"),
           exact: true,
         });
-        await expect(deleteButton).toBeDisabled();
+        // Senza il nome esatto l'eliminazione non parte: il messaggio è accanto al campo.
+        await deleteButton.click();
+        await expect(confirm.getByRole("textbox")).toBeFocused();
+        await expect(confirm.getByRole("textbox")).toHaveAttribute("aria-invalid", "true");
         await confirm.getByRole("textbox").fill("Vintage Garage Italia");
-        await expect(deleteButton).toBeEnabled();
+        await expect(confirm.getByRole("textbox")).toHaveAttribute("aria-invalid", "false");
         await page.screenshot({ path: testInfo.outputPath("store-confirmation.png") });
         await page.keyboard.press("Escape");
         await expect(remove).toBeFocused();
@@ -305,11 +308,20 @@ test.describe("impostazioni e profilo", () => {
         await page
           .getByRole("button", { name: t("Elimina account", "Delete account"), exact: true })
           .click();
-        await expect(
-          confirm.getByRole("button", {
+        // Senza l'indirizzo dell'account l'invio si ferma con il messaggio accanto al campo.
+        await confirm
+          .getByRole("button", {
             name: t("Invia il link di conferma", "Send confirmation link"),
-          }),
-        ).toBeDisabled();
+          })
+          .click();
+        await expect(
+          confirm.getByText(
+            t(
+              "L’indirizzo non corrisponde a quello dell’account.",
+              "The address does not match the account’s.",
+            ),
+          ),
+        ).toBeVisible();
         await page.keyboard.press("Escape");
         await open(page, pagePath(prefix, "/anteprima/impostazioni/supporto"));
         await expect(
@@ -411,7 +423,8 @@ test.describe("ordini", () => {
           name: locale === "it" ? "Scollega ed elimina negozio" : "Disconnect and delete store",
           exact: true,
         });
-        await expect(deletion).toBeDisabled();
+        await deletion.click();
+        await expect(confirm.getByRole("textbox")).toBeFocused();
         await confirm.getByRole("textbox").fill("Vintage Garage Italia");
         await expect(deletion).toBeEnabled();
         await page.keyboard.press("Escape");
@@ -443,7 +456,9 @@ test.describe("ordini", () => {
           page
             .getByRole("article")
             .filter({ hasText: "2c91e6a7f04b8d35c6e1@members.ebay.com" })
-            .getByRole("link", { name: locale === "it" ? "Dettaglio" : "Details", exact: true }),
+            .getByRole("link", {
+              name: locale === "it" ? /^Dettaglio Ordine / : /^Details Order /,
+            }),
         ).toBeVisible();
         await expect.poll(() => noPageOverflow(page)).toBe(true);
         await email.scrollIntoViewIfNeeded();

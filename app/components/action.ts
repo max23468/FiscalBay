@@ -6,7 +6,10 @@ import type { ActionResult } from "../view-models";
 /** Funzione degli avvisi della shell, fornita da `AppShell`. */
 export const NoticeContext = createContext<(message: string) => void>(() => {});
 
-/** Conferma breve di un'azione, annunciata anche ai lettori di schermo. */
+/**
+ * Conferma breve di un'azione, annunciata anche ai lettori di schermo. Sparisce da sola: un
+ * errore va invece mostrato accanto all'azione, finché non si riprova.
+ */
 export function useNotice() {
   return useContext(NoticeContext);
 }
@@ -32,13 +35,18 @@ export function useFetcherResult<T>(
 /**
  * Azione sulla route corrente, o su quella indicata da `action`, distinta da `intent`: esito e
  * avviso li decide il server. L'anteprima risponde con una simulazione, le route reali
- * eseguono. `onResult` riceve ogni nuovo esito, dopo l'avviso.
+ * eseguono. `onResult` riceve ogni nuovo esito, dopo l'avviso. Con `inlineErrors` l'avviso
+ * a tempo resta per gli esiti riusciti: un errore lo mostra il chiamante accanto all'azione.
  */
-export function useAction(onResult?: (result: ActionResult) => void, action?: string) {
+export function useAction(
+  onResult?: (result: ActionResult) => void,
+  action?: string,
+  { inlineErrors = false }: { inlineErrors?: boolean } = {},
+) {
   const notify = useNotice();
   const fetcher = useFetcher<ActionResult>();
   useFetcherResult(fetcher, (result) => {
-    if (result.notice) notify(result.notice);
+    if (result.notice && (result.ok || !inlineErrors)) notify(result.notice);
     onResult?.(result);
   });
   return {

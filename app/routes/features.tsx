@@ -9,7 +9,7 @@ import { Badge } from "~/components/ui/badge";
 import { sitePages } from "../copy/site-pages.server";
 import { featuresPath, siteSecurityPath } from "../app-links";
 import { localizedPath } from "../i18n";
-import { publicPage } from "../site.server";
+import { publicPage, publicPageHeaders } from "../site.server";
 import { siteMeta } from "../site-meta";
 import type { Route } from "./+types/features";
 
@@ -23,6 +23,8 @@ export async function loader({ request }: Route.LoaderArgs) {
     copy: { ...pages.features, shots: pages.shots },
   };
 }
+
+export const headers = publicPageHeaders;
 
 export function meta({ loaderData }: Route.MetaArgs): Route.MetaDescriptors {
   const { language, origin, copy: t } = loaderData;
@@ -91,7 +93,7 @@ export default function Features({ loaderData }: Route.ComponentProps) {
           <p className="flex-1 basis-60 text-pretty">{t.security}</p>
           <a
             href={localizedPath(language, siteSecurityPath)}
-            className="font-medium text-primary underline-offset-4 hover:underline"
+            className="font-medium text-primary underline-offset-[0.25em] hover:underline"
           >
             {t.securityLink}
           </a>
